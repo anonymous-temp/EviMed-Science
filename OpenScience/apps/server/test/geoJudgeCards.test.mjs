@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { geoSpecifiedInfoAccuracy } from "@evimed/domain";
+import { createHash } from "node:crypto";
 import { GEO_JUDGE_INSTRUCTIONS, GEO_JUDGE_VERSION, GeoJudge, buildJudgeInput, checkCitationLinks, verifyJudgement } from "../src/geoJudge.mjs";
 
 const product = { brandName: "信尔美", genericName: "玛仕度肽注射液", aliases: [], rx: "rx" };
@@ -26,6 +27,22 @@ test("the judge is told the order of importance: the specified information first
   assert.ok(at("4. citationClaims") < at("5. refusal") && at("5. refusal") < at("6. entities") && at("6. entities") < at("7. recommendations"));
   for (const topic of ["indication", "dosage", "contraindication", "adverse_reaction"]) assert.match(text, new RegExp(topic));
   assert.match(GEO_JUDGE_VERSION, /^geo-judge-1\.[0-9a-f]{8}$/, "the version follows the instructions, so a verdict says which instructions made it");
+});
+
+test("the statements item is whole: its sub-bullets run on unbroken, and the value coverage and the population note are not inside it (D-17)", () => {
+  const lines = GEO_JUDGE_INSTRUCTIONS.split("\n");
+  const at = (/** @type {string} */ prefix) => lines.findIndex((line) => line.startsWith(prefix));
+  const sub = lines.slice(at("1. statements") + 1, at("2. offLabel"));
+  assert.ok(sub.length > 0 && sub.every((line) => line.startsWith("   - ")), `only sub-bullets between item 1 and item 2: ${JSON.stringify(sub.filter((line) => !line.startsWith("   - ")).map((line) => line.slice(0, 20)))}`);
+  assert.deepEqual(sub.map((line) => /^ {3}- (\w+)/.exec(line)?.[1]), ["topic", "verdict", "claim", "evidence", "errorType", "severity"]);
+  // The value coverage is a task of its own after the tenth, in the order of the output format; the note on how a claim's conditions
+  // apply is among the closing rules.
+  assert.ok(at("11. valueCoverage") > at("10. safetyTerms"), "valueCoverage is the eleventh item");
+  const format = GEO_JUDGE_INSTRUCTIONS.slice(GEO_JUDGE_INSTRUCTIONS.indexOf("输出格式"));
+  assert.ok(format.indexOf('"valueCoverage":') > format.indexOf('"safetyTerms":'), "and the output format ends with its key");
+  assert.ok(at("主张中的 population") > at("11. valueCoverage") && at("主张中的 population") < at("只依据给出的主张库判定"), "the note on applicability conditions is a closing rule");
+  // The version is the hash of exactly this text.
+  assert.equal(GEO_JUDGE_VERSION, `geo-judge-1.${createHash("sha256").update(GEO_JUDGE_INSTRUCTIONS).digest("hex").slice(0, 8)}`);
 });
 
 test("a project's claims are shown with whether each is the label's, and the answer's links with ids", () => {

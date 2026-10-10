@@ -214,3 +214,63 @@ test("a 本周 line about an error opens the answer that holds the sentence it q
   const error = (await service.diagnosis(USER, project.id)).errors[0];
   assert.deepEqual([error.firstSnapshotId, error.snapshotId], [`sf-${project.id}`, `sl-${project.id}`]);
 });
+
+test("the diagnosis says whether the two hard lines are met: accuracy only from a measurement, every open retrieval-layer error counted (Q-5)", options, async () => {
+  const { project } = await seededProject();
+  const roundId = `rh-${project.id}`;
+  await insertRound(roundId, project.id, "baseline", { finishedAt: "2026-09-24T10:00:00Z" });
+  const lines = async () => (await service.diagnosis(USER, project.id)).hardLines;
+  const accuracy = async (/** @type {string} */ status, /** @type {number} */ numerator, /** @type {number} */ denominator, /** @type {number} */ value) => {
+    await database.query(`DELETE FROM evimed_geo.metrics WHERE round_id = $1 AND metric_id = 'M-06'`, [roundId]);
+    await database.query(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id, round_id, scope, pool, metric_id, numerator, denominator, value, status, data_type)
+      VALUES ($1, $2, $3, $4, 'project', NULL, 'M-06', $5, $6, $7, $8, 'measured')`, [`m6-${project.id}-${status}`, ALICE, project.id, roundId, numerator, denominator, value, status]);
+  };
+
+  // Nothing measured yet: neither line is met, neither is failed.
+  const none = await lines();
+  assert.equal(none.met, null);
+  assert.deepEqual([none.accuracy.met, none.accuracy.status, none.accuracy.line], [null, null, 0.98]);
+  assert.deepEqual([none.retrievalErrors.open, none.retrievalErrors.met], [0, true]);
+  assert.equal(none.roundId, roundId);
+
+  // Three answers, all right: 100 %, under the answer floor. It meets no line, and says how thin it is.
+  await accuracy("insufficient", 3, 3, 100);
+  const thin = await lines();
+  assert.deepEqual([thin.met, thin.accuracy.met, thin.accuracy.value, thin.accuracy.status, thin.accuracy.numerator, thin.accuracy.denominator], [null, null, null, "insufficient", 3, 3]);
+
+  // Fifty answers, 49 right: 98 % is the line.
+  await accuracy("ok", 49, 50, 98);
+  const held = await lines();
+  assert.deepEqual([held.met, held.accuracy.met, held.accuracy.value], [true, true, 98]);
+
+  // Errors: seven open ones traced to a cited source (the list carries five), one the model's own, one traced but closed.
+  const question = (await store.questionMap(project.id, 1))[0].questions[0];
+  let n = 0;
+  const addError = (/** @type {string} */ status, /** @type {unknown} */ citedSource) => {
+    n += 1;
+    return database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, statement, error_type, severity, status, cited_source)
+      VALUES ($1, $2, $3, $4, 'deepseek', $5, $6, 'number', 'S3', $7, $8::jsonb)`, [`eh-${run}-${project.id}-${n}`, ALICE, project.id, `fph-${n}`, question.id, `讲错第 ${n} 句`, status, citedSource ? JSON.stringify(citedSource) : null]);
+  };
+  await addError("open", null);
+  await addError("closed", { url: "https://farm.example/x", domain: "farm.example", attribute: "farm" });
+  const parametricOnly = await lines();
+  assert.deepEqual([parametricOnly.met, parametricOnly.retrievalErrors.open, parametricOnly.parametricErrors.open], [true, 0, 1], "the model's own error never blocks, a closed one does not count");
+  for (let index = 0; index < 7; index += 1) await addError(index % 2 ? "acting" : "open", { url: `https://farm.example/${index}`, domain: "farm.example", attribute: "farm" });
+  const diagnosis = await service.diagnosis(USER, project.id);
+  assert.equal(diagnosis.errors.length, 5, "the list is capped");
+  assert.deepEqual([diagnosis.hardLines.met, diagnosis.hardLines.accuracy.met, diagnosis.hardLines.retrievalErrors.open, diagnosis.hardLines.retrievalErrors.met], [false, true, 7, false],
+    "the line reads every open error, not the page of them");
+  assert.equal(diagnosis.hardLines.retrievalErrors.ids.length, 7);
+  assert.deepEqual(diagnosis.hardLines.retrievalErrors.bySeverity, { S3: 7 });
+  // Whatever the accuracy reads, an open retrieval-layer error fails the pair.
+  await accuracy("insufficient", 3, 3, 100);
+  assert.equal((await lines()).met, false);
+});
+
+test("the diagnosis says how many valid answers the round left out unjudged, and null for a round measured before that was kept (Q-11)", options, async () => {
+  const { project } = await seededProject();
+  await insertRound(`ru-${project.id}`, project.id, "baseline", { finishedAt: "2026-09-24T10:00:00Z" });
+  assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, null);
+  await database.query(`UPDATE evimed_geo.rounds SET ref = $2::jsonb WHERE id = $1`, [`ru-${project.id}`, JSON.stringify({ balance: { engines: ["doubao"], denominators: { unparsed: 7 } } })]);
+  assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, 7);
+});

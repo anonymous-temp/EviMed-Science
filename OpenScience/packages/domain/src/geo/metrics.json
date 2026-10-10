@@ -44,6 +44,24 @@
       "MI_SENTINEL_ENGINE_COUNT": "monitor.py sentinel rounds: engines",
       "PROBE_CIRCUIT_BREAK_CONSECUTIVE": "catalogue.yaml PROBE_CIRCUIT_BREAK_CONSECUTIVE: suspect or failed answers in a row that pause an engine (probe_client.py ask_batch)"
     },
+    "documentation_only": {
+      "PROBE_BASELINE_QUESTION_TARGET": "The plan's target for the measured questions of a baseline. The size of a question set is the researcher's and the run's to choose: the lock refuses an empty set only and advises a range, so nothing reads the target.",
+      "PROBE_PROVIDER_COUNT": "Engines per round in the baseline plan. A project asks the engines it chose that the probe host has a tab for, so nothing reads the count.",
+      "STD_MIN_ENGINES": "T/CAACCHINA sampling disclosure (engines per round). No report states its sampling yet, and the collection city is not recorded (surface.city is always null), so there is nothing to hold the disclosure to.",
+      "STD_ENGINE_SHARE_MAX": "T/CAACCHINA sampling disclosure (the largest share one engine may have of the sample). No report states its sampling yet, so there is no disclosure to hold to it.",
+      "STD_MIN_CITIES": "T/CAACCHINA sampling disclosure (collection cities). The collection city is not recorded (surface.city is always null), so the count cannot be checked.",
+      "SINGLE_STEP_MIN_PER_POOL": "Questions per pool of a single step's minimal set. The quotas on a question set were relaxed to notices (the lock refuses an empty set only, D-15) and no per-pool notice was kept.",
+      "VF_PROVIDER_VALID_SHARE_MIN": "VF-G10: an engine whose valid share falls below this is flagged. The share is stored (M-20 at engine scope) and an engine that gave nothing usable is named in its round's coverage, but no check compares the share with this line and no page carries such a flag.",
+      "IRON_02_SOV_RATIO_MIN": "IRON-02: the ratio of share of voice (M-04) to the mention rate (M-01), lower bound. Both are computed; no gate reads their ratio, which the owner's verification script does.",
+      "IRON_02_SOV_RATIO_MAX": "IRON-02: the ratio of share of voice (M-04) to the mention rate (M-01), upper bound. Both are computed; no gate reads their ratio, which the owner's verification script does.",
+      "IRON_02_SOV_RATIO_BLOCK_ABOVE": "IRON-02: a ratio of share of voice to the mention rate above this blocks. Both are computed; no gate reads their ratio, which the owner's verification script does.",
+      "EC_CLOSE_REPEATS": "The size of the re-measure that closes an error. An error closes on the next judged answer to its question without it (laterJudgedAnswers); a close round of this many asks is not built."
+    },
+    "held_by_copy": {
+      "RECHECK_WEEKS": "The same list sits in geoOrchestrator.mjs as GEO_SCHEDULE.postPublicationWeeks, which sets the post-publication checks; geoRulesAreRead.test.mjs holds the two equal until that module reads this table.",
+      "MI_SENTINEL_ENGINE_COUNT": "The same number sits in geoOrchestrator.mjs as GEO_SCHEDULE.sentinelEngines, which chooses the sentinel engines; geoRulesAreRead.test.mjs holds the two equal until that module reads this table.",
+      "PROBE_SANITY_MIN_ANSWER_CHARS": "The owner's two files declare this number twice; the sanity check reads sanity.json's min_answer_chars, and geoRulesAreRead.test.mjs holds the two equal."
+    },
     "computation": {
       "value_decimals": "compute_metrics.py _metric_value / _wilson / gvi_for_pool: round(x, 2)",
       "wilson_z": "compute_metrics.py _wilson default z",

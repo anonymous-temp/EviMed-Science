@@ -12,11 +12,11 @@ import pg from "pg";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.mjs";
-import { GeoJudge, tickParse } from "../src/geoJudge.mjs";
-import { netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
+import { GEO_JUDGE_VERSION, GeoJudge, tickParse } from "../src/geoJudge.mjs";
+import { measureRound, netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
 import { noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
-import { GEO_TABLES_FOR_TESTS, fakeModel, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
+import { GEO_TABLES_FOR_TESTS, fakeModel, judgeCallParts, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -854,6 +854,102 @@ test("the net effect reads the arms' earlier cells: an insufficient cell with co
     { variant: "M-19", noise_band: 5, noise_measured: false }]);
 });
 
+// ---------------------------------------------------------------- the arms a net effect compares (Q-3)
+
+/**
+ * A finished round whose answers are seeded straight into the tables: `mentions[groupId]` of each group's questions mention our product.
+ * @param {{ project: string, id: string, kind: string, date: string, factsAt: string, groups: Record<string, string[]>, mentions: Record<string, number> }} spec
+ */
+async function seededRound({ project, id, kind, date, factsAt, groups, mentions }) {
+  await database.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, engines, status, planned, done, sample_date, created_at, started_at, finished_at)
+    VALUES ($1, $2, $3, $4, 1, ARRAY['deepseek'], 'done', 0, 0, $5::date, $6, $6, $6)`, [id, `user_${project}`, project, kind, date, factsAt]);
+  for (const [groupId, questionIds] of Object.entries(groups)) {
+    for (const [index, questionId] of questionIds.entries()) {
+      const snapshot = `${id}_${questionId}`;
+      const mentioned = index < (mentions[groupId] ?? 0);
+      await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, citations, surface)
+        VALUES ($1, $2, $3, $4, $5, 'deepseek', $6, 'valid', 'a seeded answer', '[]'::jsonb, '{"mode":"web"}'::jsonb)`, [snapshot, `user_${project}`, id, project, questionId, factsAt]);
+      await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, brands, mentions_ours, first_ours, recommended_ours, retrieval_triggered,
+          statements, failure_mode, judged_at, created_at) VALUES ($1, $2, $3, $4::jsonb, $5, $5, false, false, '[]'::jsonb, $6, $7, $7)`,
+      [snapshot, `user_${project}`, project, JSON.stringify(mentioned ? [{ name: "玛仕度肽", ours: true, competitor: false, position: 1, inRecommendation: false, count: 1 }] : []),
+        mentioned, mentioned ? "correct" : "omitted", factsAt]);
+    }
+  }
+}
+
+test("the net effect compares the groups both windows measured: a control group that leaves after the baseline leaves the baseline's control arm too (Q-3)", options, async () => {
+  await reset();
+  const names = (/** @type {string} */ prefix, /** @type {number} */ count) => Array.from({ length: count }, (_, index) => `${prefix}_q${index + 1}`);
+  const pilot = names("pg", 30);
+  const controls = Object.fromEntries(["c1", "c2", "c3", "c4"].map((id) => [id, names(id, 10)]));
+  await seedGeoProject(database, {
+    id: "geo_arm", userId: "user_geo_arm", projectId: "proj_geo_arm", engines: ["deepseek"],
+    groups: [{ id: "pg", pool: "P2" }, ...Object.keys(controls).map((id) => ({ id, pool: "P2", isControl: true }))],
+    questions: [...pilot.map((id) => ({ id, groupId: "pg", text: `pilot ${id}` })), ...Object.entries(controls).flatMap(([group, ids]) => ids.map((id) => ({ id, groupId: group, text: `control ${id}` })))],
+    claims: [DOSING],
+  });
+  const groups = { pg: pilot, ...controls };
+  const net = async (/** @type {string} */ roundId) => (await rows(`SELECT numerator::float8 AS pilot_change, denominator::float8 AS control_change, value::float8 AS net, status, reason
+    FROM evimed_geo.metrics WHERE round_id = $1 AND metric_id = 'NET' AND scope = 'pool' AND pool = 'P2' AND variant = 'M-01'`, [roundId]))[0];
+
+  // The baseline: the pilot mentions us in 6 of 30 answers, each of the first three control groups in 2 of 10, the fourth in 8 of 10.
+  await seededRound({ project: "geo_arm", id: "r_base", kind: "baseline", date: "2026-08-01", factsAt: "2026-08-01T10:00:00Z", groups,
+    mentions: { pg: 6, c1: 2, c2: 2, c3: 2, c4: 8 } });
+  assert.equal((await tickMetrics({ store, now: () => new Date("2026-08-02T00:00:00Z") })).rounds, 1);
+  assert.deepEqual((await rows(`SELECT value::float8 AS value, denominator::float8 AS denominator FROM evimed_geo.metrics WHERE round_id = 'r_base' AND scope = 'arm' AND arm = 'control'
+    AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => [row.value, row.denominator]), [[35, 40]], "the baseline's control arm was the four groups");
+
+  // The fourth control group is touched by an article after the baseline: it leaves the control arm from now on.
+  await database.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, group_id, status, safety) VALUES ('a_c4', 'user_geo_arm', 'geo_arm', 'c4', 'draft', 'clear')`);
+  // Five weeks on: the pilot has risen to 12 of 30, the three clean control groups have not moved (and the fourth is still answered).
+  await seededRound({ project: "geo_arm", id: "r_week", kind: "weekly", date: "2026-09-05", factsAt: "2026-09-05T10:00:00Z", groups,
+    mentions: { pg: 12, c1: 2, c2: 2, c3: 2, c4: 8 } });
+  assert.equal((await tickMetrics({ store, now: () => new Date("2026-09-06T00:00:00Z") })).rounds, 1);
+
+  // The control arm is c1–c3 in both windows: 20 % then 20 %, no change; the pilot gained 20 points. (Against the baseline's four groups
+  // the control arm read 35 % then 20 %, a fall of 15 points that no group suffered, and the net effect 35.)
+  const effect = await net("r_week");
+  assert.deepEqual({ ...effect }, { pilot_change: 20, control_change: 0, net: 20, status: "ok", reason: "up" });
+  // The cells each round stored stay as they were measured.
+  assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_base' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [35]);
+  assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_week' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [20]);
+  // Each round records which groups its arms were.
+  const [recorded] = await rows(`SELECT ref -> 'balance' -> 'arms' AS arms FROM evimed_geo.rounds WHERE id = 'r_week'`);
+  assert.deepEqual(recorded.arms, { pilot: ["pg"], control: ["c1", "c2", "c3"] });
+  const [baseline] = await rows(`SELECT ref -> 'balance' -> 'arms' AS arms FROM evimed_geo.rounds WHERE id = 'r_base'`);
+  assert.deepEqual(baseline.arms, { pilot: ["pg"], control: ["c1", "c2", "c3", "c4"] });
+
+  // A baseline measured before the arms were recorded is compared by the groups its answers belong to: the same number.
+  await database.query(`UPDATE evimed_geo.rounds SET ref = ref #- '{balance,arms}' WHERE id = 'r_base'`);
+  assert.equal((await rows(`SELECT ref -> 'balance' -> 'arms' AS arms FROM evimed_geo.rounds WHERE id = 'r_base'`))[0].arms, null);
+  await measureRound({ store, now: () => new Date("2026-09-07T00:00:00Z") }, "r_week");
+  assert.deepEqual({ ...(await net("r_week")) }, { pilot_change: 20, control_change: 0, net: 20, status: "ok", reason: "up" });
+
+  // With the fourth group clean again the arm is the same four groups in both windows: the stored cells are the comparison (35 % both times).
+  await database.query(`DELETE FROM evimed_geo.articles WHERE id = 'a_c4'`);
+  await measureRound({ store, now: () => new Date("2026-09-08T00:00:00Z") }, "r_week");
+  assert.deepEqual({ ...(await net("r_week")) }, { pilot_change: 20, control_change: 0, net: 20, status: "ok", reason: "up" });
+  assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_week' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [35]);
+});
+
+test("a round records what it left out: the valid answers nobody judged, beside the counts of every ask (Q-11)", options, async () => {
+  await reset();
+  const ids = Array.from({ length: 12 }, (_, index) => `u_q${index + 1}`);
+  await seedGeoProject(database, {
+    id: "geo_un", userId: "user_geo_un", projectId: "proj_geo_un", engines: ["deepseek"], groups: [{ id: "ug", pool: "P2" }],
+    questions: ids.map((id) => ({ id, groupId: "ug", text: `question ${id}` })), claims: [DOSING],
+  });
+  await seededRound({ project: "geo_un", id: "r_un", kind: "baseline", date: "2026-08-01", factsAt: "2026-08-01T10:00:00Z", groups: { ug: ids }, mentions: { ug: 6 } });
+  // The judge gave up on three of the answers: their facts rows carry no judgement.
+  await database.query(`UPDATE evimed_geo.facts SET judged_at = NULL WHERE snapshot_id = ANY($1::text[])`, [ids.slice(0, 3).map((id) => `r_un_${id}`)]);
+  assert.equal((await tickMetrics({ store, now: () => new Date("2026-08-02T00:00:00Z") })).rounds, 1);
+  const [round] = await rows(`SELECT ref -> 'balance' -> 'denominators' AS denominators FROM evimed_geo.rounds WHERE id = 'r_un'`);
+  assert.deepEqual({ ...round.denominators }, { snapshots: 9, inDenominator: 9, valid: 9, refusal: 0, suspect: 0, failed: 0, noiseExcluded: 0, repeatExcluded: 0, unparsed: 3 },
+    "twelve asks: nine counted answers, three left out unjudged");
+  const [share] = await rows(`SELECT numerator::float8 AS numerator, denominator::float8 AS denominator FROM evimed_geo.metrics WHERE round_id = 'r_un' AND scope = 'project' AND metric_id = 'M-20' AND variant IS NULL`);
+  assert.deepEqual({ ...share }, { numerator: 9, denominator: 9 }, "the three are left out of the share, as of every rate: they are neither answers nor refusals to answer");
+});
+
 // ---------------------------------------------------------------- a probe that is not there
 
 test("an unconfigured probe is a wait, not an absence; an unreachable one fails its asks, is retried, and pauses", options, async () => {
@@ -923,6 +1019,138 @@ test("a provider outage stops the judge without spending attempts; an answer the
     // Every answer unparsed leaves the domain's metrics nothing to count: 未测, never 0 %.
     assert.deepEqual({ status: mention.status, reason: mention.reason }, { status: "absent", reason: "engine_absent" },
       "unjudged answers are left out, never read as mentioning nothing");
+  } finally {
+    await h.probe.close();
+  }
+});
+
+// ---------------------------------------------------------------- judging again (Q-13)
+
+/**
+ * A project whose three answers the judge cannot read, until `mode.ok` says it can: the harness with a judge that returns no JSON.
+ * @param {string} id
+ */
+async function unjudgedRound(id) {
+  await seed(id, { engines: ["deepseek"] });
+  const h = await harness({ answers: ({ question }) => ({ answer: question === Q1 ? A_WRONG : A_RIGHT, searchResults: question === Q1 ? OWNED_LABEL : [] }) });
+  const mode = { ok: false, outage: false, calls: 0 };
+  const judge = new GeoJudge(h.config, {
+    callModel: /** @type {any} */ (async (/** @type {any} */ deps, /** @type {any} */ call) => {
+      mode.calls += 1;
+      if (mode.outage) throw Object.assign(new Error("upstream"), { code: "model_gateway_upstream_error" });
+      return mode.ok ? h.model.callModel(deps, call) : { choices: [{ message: { content: "I cannot produce JSON today." } }] };
+    }),
+  });
+  const deps = { ...h.deps, judge };
+  const round = await enqueueRound(deps, { geoProjectId: id, kind: "baseline" });
+  await tickProbe({ ...deps, maxAsks: 10 });
+  for (let tick = 0; tick < 3; tick += 1) await tickParse({ ...deps, maxParse: 20 });
+  return { h, mode, deps, round };
+}
+
+test("an answer the judge gave up on is judged again after a wait; a judgement counts it again, records its errors and has the round measured again (Q-13)", options, async () => {
+  await reset();
+  const { h, mode, deps, round } = await unjudgedRound("geo_rj");
+  try {
+    const facts = async () => rows(`SELECT f.judged_at, f.parser_version, f.reparsed_at, f.failure_mode, f.statements, f.brands, f.cites_ours FROM evimed_geo.facts f
+      JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id JOIN evimed_geo.questions q ON q.id = s.question_id ORDER BY q.text`);
+    assert.ok((await facts()).every((row) => row.judged_at === null && row.parser_version.endsWith("+unjudged")), "given up on after three tries");
+    await tickMetrics(deps);
+    mode.ok = true;
+
+    // Not yet: an answer waits half an hour after it was given up on.
+    const calls = mode.calls;
+    const early = await tickParse({ ...deps, maxParse: 20 });
+    assert.deepEqual([early.rejudged, early.rejudgeFailed, mode.calls], [0, 0, calls]);
+
+    // Judged again: the wrong statement is found, recorded and told, and the round is measured again with the answers it now counts.
+    h.clock.advance(31 * 60_000);
+    const again = await tickParse({ ...deps, maxParse: 20 });
+    assert.deepEqual([again.rejudged, again.rejudgeFailed, again.errorsCreated, again.notified], [3, 0, 1, 1]);
+    const judged = await facts();
+    assert.ok(judged.every((row) => row.judged_at !== null && row.parser_version.endsWith(GEO_JUDGE_VERSION) && row.reparsed_at !== null));
+    assert.deepEqual((await rows(`SELECT rejudge_attempts AS n FROM evimed_geo.facts`)).map((row) => row.n), [0, 0, 0], "no try was spent");
+    const wrong = judged.find((row) => row.failure_mode === "wrong_ours");
+    assert.deepEqual(wrong.statements.map((/** @type {any} */ statement) => [statement.text, statement.verdict]), [[WRONG, "wrong"]]);
+    assert.equal(wrong.cites_ours, true, "what code counts is counted again from the answer");
+    assert.equal((await rows(`SELECT count(*)::integer AS n FROM evimed_geo.errors`))[0].n, 1);
+    assert.equal(h.notices.filter((notice) => notice.kind === "wrong_ours").length, 1);
+    assert.ok((await rows(`SELECT warnings FROM evimed_geo.snapshots WHERE answer_text = $1`, [A_WRONG]))[0].warnings.includes("judge_rejudged"));
+    assert.deepEqual(Object.fromEntries(Object.entries(h.state.checkTotals).filter(([key]) => key.startsWith("rejudge"))), { rejudged: 3 });
+    const measured = await tickMetrics(deps);
+    assert.equal(measured.rounds, 1, "the round's facts are newer than its numbers");
+    const [accuracy] = await rows(`SELECT status, numerator::float8 AS numerator, denominator::float8 AS denominator FROM evimed_geo.metrics WHERE round_id = $1 AND scope = 'engine' AND engine = 'deepseek' AND metric_id = 'M-06'`, [round.roundId]);
+    assert.ok(accuracy && accuracy.denominator >= 1, "accuracy now rests on judged statements");
+    // Judged answers are not judged again.
+    h.clock.advance(31 * 60_000);
+    const calls2 = mode.calls;
+    assert.equal((await tickParse({ ...deps, maxParse: 20 })).rejudged, 0);
+    assert.equal(mode.calls, calls2);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("the judging again is bounded: three tries spent by an answer's own failures, each after a wait; a provider's failure spends none; an old answer is let go (Q-13)", options, async () => {
+  await reset();
+  const { h, mode, deps } = await unjudgedRound("geo_rb");
+  try {
+    const attempts = async () => (await rows(`SELECT rejudge_attempts AS n FROM evimed_geo.facts ORDER BY snapshot_id`)).map((row) => row.n);
+    const totals = () => ({ failed: h.state.checkTotals.rejudgeFailed ?? 0, givenUp: h.state.checkTotals.rejudgeGivenUp ?? 0 });
+
+    // The provider is down: a tick stops at the first answer it asks, spends nothing, and that answer waits before it is tried again,
+    // so the next tick asks the next one; once each has been tried, nothing is asked until the wait is over.
+    mode.outage = true;
+    h.clock.advance(31 * 60_000);
+    for (let tick = 0; tick < 3; tick += 1) {
+      const outage = await tickParse({ ...deps, maxParse: 20 });
+      assert.deepEqual([outage.skipped, outage.rejudgeFailed], ["model_gateway_upstream_error", 0]);
+    }
+    assert.deepEqual(await attempts(), [0, 0, 0]);
+    const duringOutage = mode.calls;
+    assert.deepEqual([(await tickParse({ ...deps, maxParse: 20 })).rejudged, mode.calls], [0, duringOutage], "every answer is waiting");
+
+    // The provider is back and the answers still cannot be read: a try each, three times, each after the wait; then no more.
+    mode.outage = false;
+    for (const spent of [1, 2, 3]) {
+      h.clock.advance(31 * 60_000);
+      const tick = await tickParse({ ...deps, maxParse: 20 });
+      assert.deepEqual([tick.rejudgeFailed, tick.rejudged], [3, 0], `try ${spent}`);
+      assert.deepEqual(await attempts(), [spent, spent, spent]);
+    }
+    assert.deepEqual(totals(), { failed: 9, givenUp: 3 }, "counted since the process started: nine tries spent, three answers given up on");
+    h.clock.advance(31 * 60_000);
+    const calls = mode.calls;
+    mode.ok = true;
+    const spent = await tickParse({ ...deps, maxParse: 20 });
+    assert.deepEqual([spent.rejudged, spent.rejudgeFailed, mode.calls], [0, 0, calls], "an answer whose tries are spent is final, even with a judge that would answer");
+
+    // An answer older than the limit is let go whatever it has spent.
+    await database.query(`UPDATE evimed_geo.facts SET rejudge_attempts = 0, rejudge_after = NULL`);
+    h.clock.advance(15 * 86_400_000);
+    assert.equal((await tickParse({ ...deps, maxParse: 20 })).rejudged, 0);
+    assert.equal(mode.calls, calls);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an answer longer than the judge reads is counted whole and judged in part, and the row says where the judge stopped (Q-13)", options, async () => {
+  await reset();
+  await seed("geo_cut", { engines: ["deepseek"] });
+  // The product is named once near the start and once past the 8,000 characters the judge is shown.
+  const long = `玛仕度肽每周注射一次。${"这是一段与本品无关的背景介绍。".repeat(700)}玛仕度肽的补充说明。`;
+  const h = await harness({ answers: () => ({ answer: long }) });
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_cut", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    await tickParse({ ...h.deps, maxParse: 20 });
+    const [fact] = await rows(`SELECT f.checks, f.brands, s.warnings FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id LIMIT 1`);
+    assert.deepEqual({ ...fact.checks.answerCut }, { chars: long.length, shown: 8_000 });
+    assert.ok(fact.warnings.includes("judge_answer_truncated"));
+    assert.equal(fact.brands.find((/** @type {any} */ brand) => brand.ours)?.count, 2, "the brand is counted over all of the answer");
+    const seen = judgeCallParts(h.model.calls[0]).item.answer;
+    assert.equal(seen.length, 8_000, "and the judge was shown the first 8,000 characters");
   } finally {
     await h.probe.close();
   }
@@ -1174,6 +1402,79 @@ test("a changed registry counts the stored answers again in code: no judge call,
     assert.equal((await tickMetrics(h.deps)).rounds, 0, "and once");
     h.clock.advance(60_000);
     assert.equal((await tickParse({ ...h.deps, maxParse: 20 })).recounted, 0, "a second pass has nothing left to count");
+  } finally {
+    await h.probe.close();
+  }
+});
+
+// ---------------------------------------------------------------- the basis a round is judged on (Q-9)
+
+test("a round is judged against the claims in force when it starts, not when it was queued (Q-9)", options, async () => {
+  await reset();
+  await seed("geo_f");
+  const plain = { answers: () => ({ answer: A_RIGHT }) };
+  const h = await harness(plain);
+  try {
+    // Two rounds queued together; the second waits (the night window, a weekly cap, a busy probe) and its claim is corrected meanwhile.
+    const first = await enqueueRound(h.deps, { geoProjectId: "geo_f", kind: "baseline" });
+    h.clock.advance(60_000);
+    const second = await enqueueRound(h.deps, { geoProjectId: "geo_f", kind: "weekly" });
+    await tickProbe({ ...h.deps, maxAsks: 6 });
+    const states = Object.fromEntries((await rows(`SELECT id, status FROM evimed_geo.rounds`)).map((row) => [row.id, row.status]));
+    assert.deepEqual([states[first.roundId], states[second.roundId]], ["done", "queued"], "the first round ran; the second is still waiting");
+    await database.query(`INSERT INTO evimed_geo.claims (id, user_id, geo_project_id, claim_key, version, statement, quote, source_ref, source_kind, in_label)
+      VALUES ('geo_f_claim_v2', 'user_geo_f', 'geo_f', 'dosing', 2, '每周一次皮下注射，起始剂量为1 mg', '本品每周一次皮下注射给药，起始剂量为1 mg。', 'label:2026-10', 'label', true)`);
+    h.clock.advance(60 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 6 });
+    await tickParse({ ...h.deps, maxParse: 20 });
+
+    // The first round started under version 1 and is judged against it; the second started after the correction and is judged against version 2.
+    const dosing = h.model.calls.map((call) => judgeCallParts(call).project.claims.find((/** @type {any} */ claim) => claim.quote.includes("每周一次皮下注射给药")).quote);
+    assert.equal(dosing.length, 12);
+    assert.deepEqual([dosing.filter((quote) => quote.includes("起始剂量为2 mg")).length, dosing.filter((quote) => quote.includes("起始剂量为1 mg")).length], [6, 6]);
+    assert.ok(dosing.slice(0, 6).every((quote) => quote.includes("2 mg")) && dosing.slice(6).every((quote) => quote.includes("1 mg")), "oldest answers first");
+    const basis = async (/** @type {string} */ id) => (await rows(`SELECT ref -> 'evaluationBasis' -> 'claims' AS claims FROM evimed_geo.rounds WHERE id = $1`, [id]))[0].claims;
+    assert.deepEqual((await basis(first.roundId)).map((/** @type {any} */ claim) => claim.version), [1, 1]);
+    assert.deepEqual((await basis(second.roundId)).filter((/** @type {any} */ claim) => claim.key === "dosing").map((/** @type {any} */ claim) => claim.version), [2]);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an answer is counted on the basis it was judged on, and the count follows the registry afterwards (Q-9)", options, async () => {
+  await reset();
+  await seed("geo_g");
+  const answer = "玛仕度肽每周注射一次；新竞品也常被提到，用药请遵医嘱，如有不适请及时就医，具体方案请咨询医生或药师。";
+  const h = await harness({ answers: () => ({ answer, searchResults: [{ title: "晚到的自有页", url: "https://late.example.com/a" }] }) });
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_g", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    // Registered after the round started: a rival, and a site that is ours. The judge was shown neither.
+    await database.query(`UPDATE evimed_geo.projects SET competitors = $1::jsonb WHERE id = 'geo_g'`,
+      [JSON.stringify([{ brandName: "诺和泰", genericName: "司美格鲁肽" }, { brandName: "新竞品" }])]);
+    await database.query(`INSERT INTO evimed_geo.sources (id, user_id, geo_project_id, domain, name, layer) VALUES ('geo_g_late', 'user_geo_g', 'geo_g', 'late.example.com', 'late', 'owned')`);
+    h.state.recountAt = h.clock.now().getTime();
+    const facts = async () => rows(`SELECT f.brands, f.cites_ours, f.registry_key FROM evimed_geo.facts f ORDER BY f.snapshot_id`);
+
+    // As written: the row is on the round's basis whole, the judge's and the count's.
+    assert.equal((await tickParse({ ...h.deps, maxParse: 20 })).parsed, 6);
+    const written = await facts();
+    assert.equal(written.length, 6);
+    assert.ok(written.every((row) => row.brands.some((/** @type {any} */ brand) => brand.ours)), "our own product is counted");
+    assert.ok(written.every((row) => !row.brands.some((/** @type {any} */ brand) => brand.name === "新竞品")), "a rival the judge was not told of is not counted beside its verdicts");
+    assert.ok(written.every((row) => row.cites_ours === false), "nor is a site that was not ours when the round started");
+    assert.equal(new Set(written.map((row) => row.registry_key)).size, 1);
+
+    // The recount is the designed way for the count to follow the registry: the verdicts are not touched, the count moves.
+    const verdicts = (await rows(`SELECT statements FROM evimed_geo.facts ORDER BY snapshot_id`)).map((row) => row.statements);
+    h.clock.advance(61_000);
+    const again = await tickParse({ ...h.deps, maxParse: 20 });
+    assert.equal(again.recounted, 6);
+    const moved = await facts();
+    assert.ok(moved.every((row) => row.brands.some((/** @type {any} */ brand) => brand.name === "新竞品" && brand.competitor)));
+    assert.ok(moved.every((row) => row.cites_ours === true));
+    assert.notEqual(moved[0].registry_key, written[0].registry_key);
+    assert.deepEqual((await rows(`SELECT statements FROM evimed_geo.facts ORDER BY snapshot_id`)).map((row) => row.statements), verdicts);
   } finally {
     await h.probe.close();
   }

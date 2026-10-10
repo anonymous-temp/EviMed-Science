@@ -320,6 +320,33 @@ test("the judge's verdicts are kept only when code can re-verify them, and dropp
   assert.deepEqual(verdict.entities, [], "an entity not in the answer is refused");
 });
 
+test("a sentence past the cut was not shown: it is dropped as beyond the limit, not as made up, and the row says where the judge stopped (Q-13)", () => {
+  // The judge reads the first GEO_JUDGE_ANSWER_CHARS of an answer; this one goes on for a few thousand characters more.
+  const tail = "玛仕度肽每周注射一次。";
+  const answer = `${"这是一段与本品无关的背景介绍。".repeat(700)}${tail}`;
+  const input = judgeInput(answer);
+  const built = buildJudgeInput(input);
+  assert.equal(built.truncated, true);
+  assert.equal(built.shown.length, 8_000);
+  const verdict = verifyJudgement({
+    statements: [
+      { text: "玛仕度肽每周注射一次", verdict: "unverifiable" },
+      { text: "玛仕度肽可以口服", verdict: "unverifiable" },
+      // In the part it was shown: kept.
+      { text: "这是一段与本品无关的背景介绍", verdict: "unverifiable" },
+    ],
+    offLabel: ["玛仕度肽每周注射一次", "玛仕度肽可以口服"],
+  }, built, input);
+  assert.deepEqual(verdict.statements.map((statement) => statement.text), ["这是一段与本品无关的背景介绍"]);
+  assert.deepEqual(verdict.dropped.map((entry) => [entry.what, entry.reason]), [
+    ["statement", "statement_beyond_limit"], ["statement", "statement_not_in_answer"], ["off_label", "beyond_limit"], ["off_label", "not_in_answer"],
+  ], "past the cut is not the same as not in the answer");
+  assert.deepEqual(verdict.cut, { chars: answer.length, shown: 8_000 });
+  // An answer the judge reads whole has no cut.
+  const whole = judgeInput("玛仕度肽每周注射一次。");
+  assert.equal(verifyJudgement({ statements: [] }, buildJudgeInput(whole), whole).cut, null);
+});
+
 test("a sentence the judge lists twice keeps the worst verdict it can verify, in the place of the first (Q-12)", () => {
   const answer = "玛仕度肽每天注射一次。出现剧烈腹痛要及时就医。玛仕度肽每周注射一次。";
   const input = judgeInput(answer);

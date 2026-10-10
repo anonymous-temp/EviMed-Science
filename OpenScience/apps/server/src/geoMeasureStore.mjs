@@ -245,7 +245,10 @@ export class GeoMeasureStore {
   /**
    * Everything the parser and the judge read about a project: the product and
    * competitors, the active claims (latest version of each), the care red
-   * flags of the latest journey, and what counts as our source.
+   * flags of the latest journey, and what counts as our source. With a
+   * `roundId` the judge's part (`judgeProduct`, `judgeCompetitors`, `judgeOwned`,
+   * `value`, `claims`, `careFlags`) is the basis the round froze when it
+   * started, when it has one.
    * @param {string} geoProjectId @param {string | null} [roundId]
    */
   async projectContext(geoProjectId, roundId = null) {
@@ -292,19 +295,36 @@ export class GeoMeasureStore {
     const withdrawn = frozen?.claims ? new Set() : await this.#withdrawnCards(claimRows.map((claim) => claim.cardId).filter(Boolean));
     const standing = claimRows.filter((claim) => !claim.cardId || !withdrawn.has(claim.cardId));
     const carded = standing.filter((claim) => claim.cardId);
+    const liveOwned = {
+      domains: owned.rows.map((row) => String(row.domain).toLowerCase()).filter(Boolean),
+      urls: [...published.rows.map((row) => String(row.published_url)),
+        ...ownedLinks.rows.map((row) => String(row.url)).filter((url) => !geoOwnedLinkKey(url).named)].filter(Boolean),
+    };
     return {
       project,
+      // The round's basis (Q-9): what a verdict is judged against and what a count is made of, as they stood when the round started.
+      // `owned` and `project` stay the current ones (error tracing, the metrics and counting again read those).
       judgeProduct: frozen?.product ?? project.product, judgeCompetitors: frozen?.competitors ?? project.competitors,
+      judgeOwned: frozen?.owned ?? liveOwned,
       // What the judge reads of the profile (scope, summary, findings) and nothing it does not: the round freezes this, row by row.
       value: frozen?.value ?? { version: Number(profile.rows[0]?.version ?? 0), data: geoValueJudged(profile.rows[0]?.data) },
       claims: frozen?.claims ?? (carded.length ? carded : standing),
       careFlags: frozen?.careFlags ?? careFlags,
-      owned: {
-        domains: owned.rows.map((row) => String(row.domain).toLowerCase()).filter(Boolean),
-        urls: [...published.rows.map((row) => String(row.published_url)),
-          ...ownedLinks.rows.map((row) => String(row.url)).filter((url) => !geoOwnedLinkKey(url).named)].filter(Boolean),
-      },
+      owned: liveOwned,
     };
+  }
+
+  /**
+   * What a round that starts now is judged and counted against, whole: the product and competitors the judge is told and the brands
+   * are counted by, the sites that are ours, the value profile's scope, summary and findings, the claims, the care red flags. A round
+   * freezes this when it starts (`startRound`), so every answer of the round is held to one basis.
+   * @param {string} geoProjectId
+   */
+  async evaluationBasis(geoProjectId) {
+    const context = await this.projectContext(geoProjectId);
+    if (!context) return null;
+    return { product: context.project.product, competitors: context.project.competitors, owned: context.owned, value: context.value,
+      claims: context.claims, careFlags: context.careFlags };
   }
 
   /**
@@ -530,12 +550,20 @@ export class GeoMeasureStore {
   }
 
   /**
-   * A round's first job was leased: running, started now, sampled today.
-   * @param {string} roundId @param {Date} now @param {string} sampleDate
+   * A round's first job was leased: running, started now, sampled today, and its evaluation basis frozen (Q-9). A round waits for the
+   * night window, the weekly cap or a busy probe, so a basis frozen when it was queued is hours or days old when its first answer is
+   * judged: a claim corrected in between kept producing `wrong` verdicts and notices. Only the first lease of a round pays for the
+   * basis; the later ones find the round running. Returns whether this call started it.
+   * @param {string} roundId @param {Date} now @param {string} sampleDate @returns {Promise<boolean>}
    */
   async startRound(roundId, now, sampleDate) {
-    await this.query(`UPDATE evimed_geo.rounds SET status = 'running', started_at = coalesce(started_at, $2), sample_date = coalesce(sample_date, $3::date)
-      WHERE id = $1 AND status = 'queued'`, [roundId, now.toISOString(), sampleDate]);
+    const queued = (await this.query(`SELECT geo_project_id FROM evimed_geo.rounds WHERE id = $1 AND status = 'queued'`, [roundId])).rows[0];
+    if (!queued) return false;
+    const basis = await this.evaluationBasis(String(queued.geo_project_id));
+    const started = await this.query(`UPDATE evimed_geo.rounds SET status = 'running', started_at = coalesce(started_at, $2), sample_date = coalesce(sample_date, $3::date),
+        ref = CASE WHEN $4::jsonb IS NULL THEN ref ELSE coalesce(ref, '{}'::jsonb) || jsonb_build_object('evaluationBasis', $4::jsonb) END
+      WHERE id = $1 AND status = 'queued' RETURNING id`, [roundId, now.toISOString(), sampleDate, basis ? JSON.stringify(basis) : null]);
+    return started.rows.length > 0;
   }
 
   /**
@@ -662,9 +690,9 @@ export class GeoMeasureStore {
       const result = await client.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, brands, mentions_ours, first_ours,
           recommended_ours, position_ours, brands_mentioned, retrieval_triggered, cites_ours, cites_ours_in_body, care_hint, statements,
           failure_mode, parser_version, judged_at, red_flag_expected, red_flag_hits, safety_terms_hit, created_at, registry_key, judge_extract, checks,
-          errors_owed)
+          errors_owed, rejudge_after)
         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18::jsonb, $19::jsonb, $20::jsonb,
-          coalesce($21::timestamptz, now()), $22, $23::jsonb, $24::jsonb, $25)
+          coalesce($21::timestamptz, now()), $22, $23::jsonb, $24::jsonb, $25, $26::timestamptz)
         ON CONFLICT (snapshot_id) DO NOTHING RETURNING snapshot_id`,
       [snapshot.id, snapshot.userId, snapshot.geoProjectId, JSON.stringify(facts.brands ?? []), facts.mentionsOurs ?? null, facts.firstOurs ?? null,
         facts.recommendedOurs ?? null, facts.positionOurs ?? null, facts.brandsMentioned ?? null, facts.retrievalTriggered ?? null,
@@ -672,11 +700,65 @@ export class GeoMeasureStore {
         facts.failureMode ?? null, facts.parserVersion ?? null, facts.judgedAt ?? null, JSON.stringify(facts.redFlagExpected ?? []),
         JSON.stringify(facts.redFlagHits ?? []), JSON.stringify(facts.safetyTermsHit ?? []), at ? at.toISOString() : null,
         facts.registryKey ?? null, facts.judgeExtract ? JSON.stringify(facts.judgeExtract) : null, JSON.stringify(facts.checks ?? {}),
-        (facts.statements ?? []).some((/** @type {any} */ statement) => statement?.verdict === "wrong")]);
+        (facts.statements ?? []).some((/** @type {any} */ statement) => statement?.verdict === "wrong"), facts.rejudgeAfter ?? null]);
       if (!result.rows.length) return false;
       if (status) await client.query(`UPDATE evimed_geo.snapshots SET status = $2 WHERE id = $1`, [snapshot.id, status]);
       return true;
     });
+  }
+
+  /**
+   * Answers the judge gave up on that are due another try (Q-13), the least tried first: unjudged, written by the judge's failing (an
+   * inclusion check has no judgement to owe), fewer than `maxAttempts` own failures, newer than `maxAgeMs`, and past the time their last
+   * try asked to wait until.
+   * @param {number} limit @param {{ maxAttempts: number, maxAgeMs: number, now: Date }} options
+   */
+  async unjudgedAnswers(limit, { maxAttempts, maxAgeMs, now }) {
+    const result = await this.query(`SELECT s.* FROM evimed_geo.facts f
+        JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
+        JOIN evimed_geo.projects p ON p.id = f.geo_project_id AND p.deleted_at IS NULL
+      WHERE f.judged_at IS NULL AND f.parser_version LIKE '%+unjudged' AND f.rejudge_attempts < $2 AND f.created_at > $3
+        AND (f.rejudge_after IS NULL OR f.rejudge_after <= $4) AND s.status IN ('valid', 'refusal') AND s.answer_text IS NOT NULL
+      ORDER BY f.rejudge_attempts, f.created_at, f.snapshot_id LIMIT $1`,
+    [limit, maxAttempts, new Date(now.getTime() - maxAgeMs).toISOString(), now.toISOString()]);
+    return result.rows.map(snapshotRow);
+  }
+
+  /**
+   * An unjudged answer's facts row, written again with a judgement: everything the judge's reading changes, counted again from the
+   * answer by the caller. Only a row still unjudged is touched, so two workers cannot both write it. `reparsed_at` is what makes the
+   * metrics loop measure the round again. Returns false when the row was not (or no longer) unjudged.
+   * @param {{ id: string }} snapshot @param {Record<string, any>} facts @param {{ status?: string | null, at: Date }} options
+   */
+  async rejudgeFacts(snapshot, facts, { status = null, at }) {
+    return this.transaction(async (client) => {
+      const result = await client.query(`UPDATE evimed_geo.facts SET brands = $2::jsonb, mentions_ours = $3, first_ours = $4, recommended_ours = $5,
+          position_ours = $6, brands_mentioned = $7, retrieval_triggered = $8, cites_ours = $9, cites_ours_in_body = $10, care_hint = $11,
+          statements = $12::jsonb, failure_mode = $13, parser_version = $14, judged_at = $15, red_flag_expected = $16::jsonb, red_flag_hits = $17::jsonb,
+          safety_terms_hit = $18::jsonb, registry_key = $19, judge_extract = $20::jsonb, checks = $21::jsonb, errors_owed = $22, reparsed_at = $23,
+          rejudge_after = NULL
+        WHERE snapshot_id = $1 AND judged_at IS NULL AND parser_version LIKE '%+unjudged' RETURNING snapshot_id`,
+      [snapshot.id, JSON.stringify(facts.brands ?? []), facts.mentionsOurs ?? null, facts.firstOurs ?? null, facts.recommendedOurs ?? null,
+        facts.positionOurs ?? null, facts.brandsMentioned ?? null, facts.retrievalTriggered ?? null, facts.citesOurs ?? null, facts.citesOursInBody ?? null,
+        facts.careHint ?? null, JSON.stringify(facts.statements ?? []), facts.failureMode ?? null, facts.parserVersion ?? null, facts.judgedAt ?? null,
+        JSON.stringify(facts.redFlagExpected ?? []), JSON.stringify(facts.redFlagHits ?? []), JSON.stringify(facts.safetyTermsHit ?? []), facts.registryKey ?? null,
+        facts.judgeExtract ? JSON.stringify(facts.judgeExtract) : null, JSON.stringify(facts.checks ?? {}),
+        (facts.statements ?? []).some((/** @type {any} */ statement) => statement?.verdict === "wrong"), at.toISOString()]);
+      if (!result.rows.length) return false;
+      if (status) await client.query(`UPDATE evimed_geo.snapshots SET status = $2 WHERE id = $1`, [snapshot.id, status]);
+      return true;
+    });
+  }
+
+  /**
+   * A try at judging an unjudged answer again did not give a judgement: wait until `after`, and count the try when the failure was the
+   * answer's own (`spent`); a provider's failure is not the answer's and spends nothing. Returns the tries spent so far.
+   * @param {string} snapshotId @param {{ after: Date, spent: boolean }} options
+   */
+  async rejudgeDeferred(snapshotId, { after, spent }) {
+    const result = await this.query(`UPDATE evimed_geo.facts SET rejudge_attempts = rejudge_attempts + $3::integer, rejudge_after = $2
+      WHERE snapshot_id = $1 AND judged_at IS NULL RETURNING rejudge_attempts`, [snapshotId, after.toISOString(), spent ? 1 : 0]);
+    return Number(result.rows[0]?.rejudge_attempts ?? 0);
   }
 
   /**
@@ -1088,24 +1170,49 @@ export class GeoMeasureStore {
    */
   async armSeries({ geoProjectId, setVersion, metricId, pool, variant = null }) {
     const result = await this.query(`SELECT m.arm, m.value, m.numerator, m.denominator, m.status, r.sample_date, r.id AS round_id,
-        r.ref -> 'balance' -> 'engines' AS engines
+        r.ref -> 'balance' AS balance
       FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id
       WHERE m.geo_project_id = $1 AND m.scope = 'arm' AND m.metric_id = $2 AND m.pool IS NOT DISTINCT FROM $3
         AND m.variant IS NOT DISTINCT FROM $4 AND m.rival IS NULL AND r.kind IN ('baseline', 'weekly')
         AND r.set_version IS NOT DISTINCT FROM $5 AND r.sample_date IS NOT NULL
       ORDER BY r.sample_date, r.created_at`, [geoProjectId, metricId, pool, variant, setVersion]);
-    /** @type {Record<"pilot" | "control", Array<{ date: string, value: number | null, numerator: number | null, denominator: number | null, engines: string[] | null }>>} */
+    /** @type {Record<"pilot" | "control", Array<{ roundId: string, date: string, value: number | null, numerator: number | null, denominator: number | null, engines: string[] | null }>>} */
     const series = { pilot: [], control: [] };
     for (const row of result.rows) {
       const arm = row.arm === "control" ? "control" : row.arm === "pilot" ? "pilot" : null;
       if (!arm) continue;
       const measurable = row.status === "ok" || (row.status === "insufficient" && num(row.denominator) !== null);
       const date = typeof row.sample_date === "string" ? row.sample_date.slice(0, 10) : /** @type {string} */ (iso(row.sample_date)).slice(0, 10);
-      const engines = Array.isArray(row.engines) ? row.engines.map(String).sort() : null;
-      series[arm].push({ date, value: measurable ? num(row.value) : null, numerator: measurable ? num(row.numerator) : null,
+      const engines = Array.isArray(row.balance?.engines) ? row.balance.engines.map(String).sort() : null;
+      series[arm].push({ roundId: String(row.round_id), date, value: measurable ? num(row.value) : null, numerator: measurable ? num(row.numerator) : null,
         denominator: measurable ? num(row.denominator) : null, engines });
     }
     return series;
+  }
+
+  /**
+   * The rounds `armSeries` draws from (baseline or weekly, one question set version, a sample date, arm cells written), oldest
+   * first, each with the engines its cross-engine cells were computed over and the groups its two arms were (`noteRoundBalance`; null
+   * for a round measured before they were recorded). Two rounds' arm cells compare only over the groups both measured (Q-3).
+   * @param {{ geoProjectId: string, setVersion: number | null }} key
+   * @returns {Promise<Array<{ roundId: string, date: string, engines: string[] | null, arms: { pilot: string[], control: string[] } | null }>>}
+   */
+  async armRounds({ geoProjectId, setVersion }) {
+    const result = await this.query(`SELECT r.id, r.sample_date, r.ref -> 'balance' AS balance FROM evimed_geo.rounds r
+      WHERE r.geo_project_id = $1 AND r.kind IN ('baseline', 'weekly') AND r.set_version IS NOT DISTINCT FROM $2 AND r.sample_date IS NOT NULL
+        AND EXISTS (SELECT 1 FROM evimed_geo.metrics m WHERE m.round_id = r.id AND m.scope = 'arm')
+      ORDER BY r.sample_date, r.created_at, r.id`, [geoProjectId, setVersion]);
+    return result.rows.map((row) => {
+      const groups = (/** @type {unknown} */ value) => (Array.isArray(value) ? value.map(String) : null);
+      const pilot = groups(row.balance?.arms?.pilot);
+      const control = groups(row.balance?.arms?.control);
+      return {
+        roundId: String(row.id),
+        date: typeof row.sample_date === "string" ? row.sample_date.slice(0, 10) : /** @type {string} */ (iso(row.sample_date)).slice(0, 10),
+        engines: Array.isArray(row.balance?.engines) ? row.balance.engines.map(String).sort() : null,
+        arms: pilot && control ? { pilot, control } : null,
+      };
+    });
   }
 
   /** The latest noise band of a metric for the project (a `NOISE` row). @param {string} geoProjectId @param {string} metricId */

@@ -574,6 +574,35 @@ test("hard lines: accuracy at the line and no open retrieval-layer 讲错我方;
   assert.equal(unknown.met, null, "not measured is not met and not failed");
 });
 
+test("hard lines are held by a measurement, never by a reading over too few answers (Q-5)", () => {
+  const ourStatement = (/** @type {string} */ verdict) => ({ text: "示例牌每周一次", verdict, claimId: "c1" });
+  const answers = (/** @type {number} */ count) => many(count, () => row({ pool: "P1" }, { ...ours, statements: [ourStatement("correct")] }));
+  const project = (/** @type {any[]} */ rows) => computeGeoMetrics(rows, { scopes: ["project"] }).cells;
+
+  // Three answers, all right: the cell reads 100 %, and says it is under the floor. That meets no line.
+  const thin = project(answers(3));
+  assert.equal(cellOf(thin, { scope: "project", metricId: "M-06" }).status, "insufficient");
+  const unmet = hardLines(thin, []);
+  assert.equal(unmet.met, null, "not measured is not met and not failed");
+  assert.equal(unmet.accuracy.met, null);
+  assert.deepEqual([unmet.accuracy.value, unmet.accuracy.share], [null, null], "a thin rate is kept for the record, not read as a value");
+  assert.deepEqual([unmet.accuracy.status, unmet.accuracy.numerator, unmet.accuracy.denominator], ["insufficient", 3, 3], "and the page can say how thin");
+
+  // Thirty answers are a measurement, and then the line decides.
+  const enough = hardLines(project(answers(30)), []);
+  assert.deepEqual([enough.accuracy.status, enough.accuracy.met, enough.met], ["ok", true, true]);
+  const wrong = [...answers(29), row({ pool: "P1" }, { ...ours, statements: [ourStatement("wrong")] })];
+  const missed = hardLines(project(wrong), []);
+  assert.deepEqual([missed.accuracy.met, missed.met], [false, false], "29 of 30 is under 98 %");
+
+  // A retrieval-layer error that is open fails the line whether or not the accuracy can be read; a parametric one never does.
+  const retrieval = { id: "e1", status: "open", severity: "S3", citedSource: { domain: "farm.example", attribute: "farm" } };
+  const parametric = { id: "e2", status: "open", severity: "S2", citedSource: null };
+  assert.equal(hardLines(thin, [retrieval]).met, false);
+  assert.equal(hardLines(thin, [parametric]).met, null);
+  assert.equal(hardLines([], []).met, null, "no cell at all is not measured");
+});
+
 test("standard names follow X-STDVIS: only metrics with the standard's formula carry one", () => {
   assert.equal(standardName("M-01S"), "可见率");
   assert.equal(standardName("M-01S", "top1"), "首推率");
