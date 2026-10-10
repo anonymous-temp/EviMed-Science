@@ -647,8 +647,11 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     treatmentColumn: { ...COLUMN, default: 'arm' },
     endpoint: ENDPOINT(),
     anchored: boolean({ default: false }),
-    aggregateEstimate: req(gated(number(), is('anchored', 'true'))),
-    aggregateOutcome: req(gated(number(), isNot('anchored', 'true'))),
+    // Anchored: the aggregate trial's contrast, already on the link scale (a log odds ratio, a log risk ratio, a mean difference).
+    // Unanchored: its outcome on the outcome's OWN scale -- a proportion for the logit link, a positive mean or rate for the log link --
+    // with the standard error of that level; the engine applies the link to the level and the delta method to the error.
+    aggregateEstimate: req(gated(number({ unit: 'link scale' }), is('anchored', 'true'))),
+    aggregateOutcome: req(gated(number({ unit: 'the outcome\'s own scale' }), isNot('anchored', 'true'))),
     aggregateSe: req(number({ gt: 0 })),
     outcomeColumn: gated({ ...COLUMN, default: 'y' }, isNot('anchored', 'true')),
     link: string({ values: ['identity', 'log', 'logit'], default: 'identity' }),
@@ -1298,6 +1301,20 @@ function checkDesignSemantics(scenario, path, ctx) {
 }
 
 /**
+ * The aggregate outcome of an unanchored MAIC is on the outcome's own scale -- the engine applies the link to it, and to its standard
+ * error by the delta method -- so it has to lie inside the link's domain: a proportion strictly between 0 and 1 for the logit link, a
+ * positive mean or rate for the log link. Mirrored by protocol.R.
+ * @param {any} scenario @param {string} path @param {WalkContext} ctx
+ */
+function checkMaicSemantics(scenario, path, ctx) {
+  const link = scenario.link ?? 'identity'
+  const value = scenario.aggregateOutcome
+  if (scenario.anchored === true || !isNumber(value)) return
+  if (link === 'logit' && !(value > 0 && value < 1)) raise(ctx, 'scenario_value_invalid', at(path, 'aggregateOutcome'), 'On the logit link the aggregate outcome is a proportion strictly between 0 and 1, on its own scale (not log-odds).')
+  if (link === 'log' && !(value > 0)) raise(ctx, 'scenario_value_invalid', at(path, 'aggregateOutcome'), 'On the log link the aggregate outcome is positive, on its own scale (not its log).')
+}
+
+/**
  * Validate one method's scenario against its schema. Returns issues; empty is
  * valid. `inputIds` is the set of the job's input ids, for keys that name one.
  * @param {string} method @param {unknown} scenario
@@ -1319,6 +1336,7 @@ export function validateScenario(method, scenario, { inputIds = null, path = 'sc
   }
   checkObject(schema, scenario, path, ctx)
   if (method === 'design.simulate' || method === 'design.grid' || method === 'design.analytic') checkDesignSemantics(scenario, path, ctx)
+  if (method === 'comparator.maic') checkMaicSemantics(scenario, path, ctx)
   if (schema.gridCells) checkGrid(schema, scenario, ctx)
 
   // The same defect can be reported by two walkers; say it once.

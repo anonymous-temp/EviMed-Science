@@ -296,7 +296,7 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
   'comparator.entropy_balance': [{ label: 'entropy balancing on three covariates', scenario: { covariates: ['age', 'ecog', 'ldh'], estimand: 'ATT' } }],
   'comparator.propensity_weight': [{ label: 'propensity weights for a binary endpoint', scenario: { covariates: ['age'], endpoint: { type: 'binary' }, estimand: 'ATO' } }],
   'comparator.rmst': [{ label: 'restricted mean survival time to 24 months', scenario: { tau: 24, treatmentColumn: 'arm', timeUnit: 'months' } }],
-  'comparator.maic': [{ label: 'an unanchored indirect comparison on a binary outcome', scenario: {
+  'comparator.maic': [{ label: 'an unanchored indirect comparison on a binary outcome: the aggregate trial\'s response rate is 0.42 (standard error 0.05), on the logit link', scenario: {
     covariates: ['age', 'male'], targets: { age: 60, male: 0.5 }, endpoint: { type: 'binary' }, aggregateOutcome: 0.42, aggregateSe: 0.05, link: 'logit', outcomeColumn: 'response' } }],
   'comparator.evalue': [{ label: 'the E-value of a hazard ratio', scenario: { riskRatio: 0.6, confidenceLimit: 0.8, scale: 'hazard_ratio', rare: true } }],
   'comparator.map_prior': [{ label: 'a robust MAP prior from three historical control arms', scenario: {
@@ -385,12 +385,22 @@ function designNotes(method) {
   return notes
 }
 
+/**
+ * What a row's type and range cannot say: the scale a number is on. Read by the model that writes the scenario, next to the rows.
+ * @type {Readonly<Record<string, readonly string[]>>}
+ */
+const METHOD_NOTES = Object.freeze({
+  'comparator.maic': Object.freeze([
+    'Scales. Unanchored: aggregateOutcome and aggregateSe are the aggregate trial\'s outcome and its standard error on the outcome\'s OWN scale (a proportion for link logit, a positive mean or rate for link log, any number for identity), the scale of the outcomeColumn\'s mean; the engine applies the link to the level and the delta method to the standard error. A level outside the link\'s domain (a proportion not strictly between 0 and 1 on logit, a mean not above 0 on log) is refused (scenario_value_invalid). Anchored: aggregateEstimate and aggregateSe are already the aggregate trial\'s contrast and its standard error on the link scale (a log odds ratio, a log risk ratio, a mean difference).',
+  ]),
+})
+
 /** The file's rendering of one method. @param {string} method */
 function methodEntry(method) {
   const { rows, rules } = vcrScenarioRows(method)
   const schema = /** @type {Record<string, any>} */ (VCR_SCENARIO_SCHEMAS)[method]
   const spec = /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method]
-  const notes = designNotes(method)
+  const notes = [...designNotes(method), .../** @type {Record<string, readonly string[]>} */ (METHOD_NOTES)[method] ?? []]
   return compact({
     endpoints: [...spec.endpoints],
     designs: /** @type {Record<string, any>} */ (VCR_DESIGN_SUPPORT)[method] ? JSON.parse(JSON.stringify(/** @type {Record<string, any>} */ (VCR_DESIGN_SUPPORT)[method])) : undefined,

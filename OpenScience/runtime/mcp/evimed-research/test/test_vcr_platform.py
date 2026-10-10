@@ -240,6 +240,15 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertIn("accrual.rates lists 1 more value than accrual.breaks (when endpoint.type is time_to_event and accrual.kind is piecewise", rules)
         self.assertIn("truth.controlDistribution.rates lists 1 more value than truth.controlDistribution.breaks", rules)
 
+    def test_shape_of_the_unanchored_maic_says_which_scale_the_aggregate_outcome_is_on(self):
+        data = vcr_platform.shape({"kind": "maic_comparator"})["data"]
+        lines = {line.split(":", 1)[0]: line for line in data["keys"]}
+        self.assertIn("(the outcome's own scale)", lines["aggregateOutcome"])
+        self.assertIn("(link scale)", lines["aggregateEstimate"])
+        notes = " ".join(data["notes"])
+        self.assertIn("on the outcome's OWN scale (a proportion for link logit, a positive mean or rate for link log", notes)
+        self.assertIn("already the aggregate trial's contrast", notes)
+
     def test_shape_with_no_kind_lists_the_kinds_and_where_each_object_looks_its_shape_up(self):
         answer = vcr_platform.shape({})
         kinds = answer["data"]["kinds"]

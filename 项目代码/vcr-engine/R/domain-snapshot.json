@@ -3837,6 +3837,7 @@
         },
         "aggregateEstimate": {
           "t": "number",
+          "unit": "link scale",
           "when": {
             "path": "anchored",
             "in": [
@@ -3847,6 +3848,7 @@
         },
         "aggregateOutcome": {
           "t": "number",
+          "unit": "the outcome's own scale",
           "when": {
             "path": "anchored",
             "notIn": [

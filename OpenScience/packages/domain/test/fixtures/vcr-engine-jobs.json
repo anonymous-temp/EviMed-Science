@@ -852,6 +852,90 @@
       }
     },
     {
+      "name": "maic_comparator on the log link, a positive mean",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_comparator",
+        "method": "comparator.maic",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "anchored": false,
+          "treatmentColumn": "arm",
+          "endpoint": {
+            "type": "continuous"
+          },
+          "aggregateOutcome": 12,
+          "aggregateSe": 1.5,
+          "link": "log",
+          "outcomeColumn": "response"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "maic_comparator on the identity link, a negative mean",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_comparator",
+        "method": "comparator.maic",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "anchored": false,
+          "treatmentColumn": "arm",
+          "endpoint": {
+            "type": "continuous"
+          },
+          "aggregateOutcome": -3.5,
+          "aggregateSe": 0.5,
+          "link": "identity",
+          "outcomeColumn": "response"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
       "name": "maic_comparator #17",
       "job": {
         "jobId": "job_1",
@@ -9712,6 +9796,141 @@
       },
       "expected": [
         "scenario_field_missing@scenario.aggregateOutcome"
+      ]
+    },
+    {
+      "name": "an unanchored MAIC on the logit link with an aggregate outcome that is not a proportion",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_comparator",
+        "method": "comparator.maic",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "anchored": false,
+          "treatmentColumn": "arm",
+          "endpoint": {
+            "type": "binary"
+          },
+          "aggregateSe": 0.05,
+          "link": "logit",
+          "outcomeColumn": "response",
+          "aggregateOutcome": 1.2
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.aggregateOutcome"
+      ]
+    },
+    {
+      "name": "an unanchored MAIC on the logit link with an aggregate outcome of zero",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_comparator",
+        "method": "comparator.maic",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "anchored": false,
+          "treatmentColumn": "arm",
+          "endpoint": {
+            "type": "binary"
+          },
+          "aggregateSe": 0.05,
+          "link": "logit",
+          "outcomeColumn": "response",
+          "aggregateOutcome": 0
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.aggregateOutcome"
+      ]
+    },
+    {
+      "name": "an unanchored MAIC on the log link with a non-positive aggregate outcome",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_comparator",
+        "method": "comparator.maic",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "anchored": false,
+          "treatmentColumn": "arm",
+          "endpoint": {
+            "type": "binary"
+          },
+          "aggregateSe": 0.05,
+          "link": "log",
+          "outcomeColumn": "response",
+          "aggregateOutcome": -0.5
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.aggregateOutcome"
       ]
     },
     {

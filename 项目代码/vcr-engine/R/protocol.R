@@ -801,6 +801,18 @@ vcr_pattern_match <- function(pattern, x) {
   invisible(NULL)
 }
 
+# The aggregate outcome of an unanchored MAIC is on the outcome's own scale -- the link is applied to it, and to its standard error by the
+# delta method -- so it has to be inside the link's domain: a proportion strictly between 0 and 1 for the logit link, a positive mean or
+# rate for the log link. Mirrors checkMaicSemantics in the domain.
+.vcrp_check_maic_semantics <- function(sc, path, ctx) {
+  link <- .vcrp_get(sc, "link") %||% "identity"
+  value <- .vcrp_get(sc, "aggregateOutcome")
+  if (isTRUE(.vcrp_get(sc, "anchored")) || !.vcrp_num(value) || !.vcrp_chr(link)) return(invisible(NULL))
+  if (identical(link, "logit") && !(value > 0 && value < 1)) ctx$raise("scenario_value_invalid", .vcrp_at(path, "aggregateOutcome"), "On the logit link the aggregate outcome is a proportion strictly between 0 and 1.")
+  if (identical(link, "log") && !(value > 0)) ctx$raise("scenario_value_invalid", .vcrp_at(path, "aggregateOutcome"), "On the log link the aggregate outcome is positive.")
+  invisible(NULL)
+}
+
 #' Validate one method's scenario against its schema (`validateScenario`).
 vcr_validate_scenario <- function(method, scenario, input_ids = NULL, path = "scenario") {
   schema <- vcr_scenario_schemas()[[method]]
@@ -815,6 +827,7 @@ vcr_validate_scenario <- function(method, scenario, input_ids = NULL, path = "sc
   }
   .vcrp_check_object(schema, scenario, path, ctx)
   if (method %in% c("design.simulate","design.grid","design.analytic")) .vcrp_check_design_semantics(scenario,path,ctx)
+  if (identical(method, "comparator.maic")) .vcrp_check_maic_semantics(scenario, path, ctx)
   if (!is.null(schema$gridCells)) .vcrp_check_grid(schema, scenario, ctx)
   seen <- character(0)
   Filter(function(issue) {

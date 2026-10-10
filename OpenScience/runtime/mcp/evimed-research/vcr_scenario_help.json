@@ -934,6 +934,9 @@
     },
     "comparator.maic": {
       "endpoints": ["continuous","binary","time_to_event"],
+      "notes": [
+        "Scales. Unanchored: aggregateOutcome and aggregateSe are the aggregate trial's outcome and its standard error on the outcome's OWN scale (a proportion for link logit, a positive mean or rate for link log, any number for identity), the scale of the outcomeColumn's mean; the engine applies the link to the level and the delta method to the standard error. A level outside the link's domain (a proportion not strictly between 0 and 1 on logit, a mean not above 0 on log) is refused (scenario_value_invalid). Anchored: aggregateEstimate and aggregateSe are already the aggregate trial's contrast and its standard error on the link scale (a log odds ratio, a log risk ratio, a mean difference)."
+      ],
       "rows": [
         {"path":"covariates","type":"list","count":{"min":1,"max":100},"items":{"type":"string","maxLength":64,"role":"column"},"unique":true,"required":true},
         {"path":"targets","type":"map","of":{"type":"number"},"keysFrom":"covariates","count":{"min":1,"max":100},"required":true},
@@ -941,8 +944,8 @@
         {"path":"endpoint","type":"object"},
         {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true,"within":"endpoint"},
         {"path":"anchored","type":"boolean","default":false},
-        {"path":"aggregateEstimate","type":"number","required":true,"when":[{"path":"anchored","in":["true"]}]},
-        {"path":"aggregateOutcome","type":"number","required":true,"when":[{"path":"anchored","notIn":["true"]}]},
+        {"path":"aggregateEstimate","type":"number","unit":"link scale","required":true,"when":[{"path":"anchored","in":["true"]}]},
+        {"path":"aggregateOutcome","type":"number","unit":"the outcome's own scale","required":true,"when":[{"path":"anchored","notIn":["true"]}]},
         {"path":"aggregateSe","type":"number","gt":0,"required":true},
         {"path":"outcomeColumn","type":"string","maxLength":64,"role":"column","default":"y","when":[{"path":"anchored","notIn":["true"]}]},
         {"path":"link","type":"string","values":["identity","log","logit"],"default":"identity"},
@@ -950,7 +953,7 @@
       ],
       "examples": [
         {
-          "label": "an unanchored indirect comparison on a binary outcome",
+          "label": "an unanchored indirect comparison on a binary outcome: the aggregate trial's response rate is 0.42 (standard error 0.05), on the logit link",
           "scenario": {
             "covariates": ["age","male"],
             "targets": {"age":60,"male":0.5},
