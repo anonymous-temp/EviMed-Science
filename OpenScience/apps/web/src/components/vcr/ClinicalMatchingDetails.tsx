@@ -10,8 +10,15 @@ const assertions: Record<string, string> = { affirmed: '已记录', negated: '�
 const experiencers: Record<string, string> = { patient: '本人', family: '家属', other: '他人', unknown: '主体不明' };
 const medicationStates: Record<string, string> = { prescribed: '处方', administered: '已给药', stopped: '已停药', planned: '计划用药', historical_list: '历史用药清单', unknown: '用药状态不明' };
 
-export function MatchingPanelControls({ studyId, data, canRun, onProtocol, onCandidate, onReload }: {
-  studyId: string; data: VcrMatchingTab; canRun: boolean; onProtocol: (id: string) => void; onCandidate: (id: string) => void; onReload: () => void;
+export function MatchingPanelControls({ studyId, data, direction, protocolId, settling = false, canRun, onProtocol, onCandidate, onReload }: {
+  studyId: string; data: VcrMatchingTab;
+  /** The direction the reader chose: `data` may still be the page of the one before. */
+  direction?: NonNullable<VcrMatchingTab['direction']>;
+  /** The protocol the reader chose, once they have: the select shows it at once, before its page has arrived. */
+  protocolId?: string | null;
+  /** The page for what the reader chose is still being read (or could not be): the controls stay, and a run waits for it. */
+  settling?: boolean;
+  canRun: boolean; onProtocol: (id: string) => void; onCandidate: (id: string) => void; onReload: () => void;
 }) {
   const [panel, setPanel] = useState<string[]>([]);
   const [subject, setSubject] = useState('');
@@ -20,10 +27,11 @@ export function MatchingPanelControls({ studyId, data, canRun, onProtocol, onCan
   const [failed, setFailed] = useState(false);
   const protocols = data.protocols ?? [];
   if (!protocols.length) return null;
+  const way = direction ?? data.direction ?? 'trial_to_patient';
   const run = async () => {
     setBusy(true); setMessage(''); setFailed(false);
     try {
-      const answer = await enqueueVcrMatching(studyId, { protocolVersionIds: panel, direction: data.direction ?? 'trial_to_patient',
+      const answer = await enqueueVcrMatching(studyId, { protocolVersionIds: panel, direction: way,
         ...(subject ? { subjectKeys: [subject] } : {}) });
       setMessage(`已提交 ${answer.jobs.length} 项评估${answer.unavailable.length ? `，${answer.unavailable.length} 项暂不可用` : ''}。`);
       setFailed(answer.jobs.length === 0); onReload();
@@ -34,7 +42,7 @@ export function MatchingPanelControls({ studyId, data, canRun, onProtocol, onCan
     {data.candidateCoverage && <p className="text-caption text-text-2" role="status">
       {`本次选择 ${data.candidateCoverage.requested} 人 · 已评估 ${data.candidateCoverage.evaluated} 人 · 待评估 ${data.candidateCoverage.pending} 人 · 暂不可用 ${data.candidateCoverage.unavailable} 人`}
     </p>}
-    <Select label="查看方案" value={data.protocolVersionId ?? ''} onChange={event => onProtocol(event.target.value)}>
+    <Select label="查看方案" value={protocolId ?? data.protocolVersionId ?? ''} onChange={event => onProtocol(event.target.value)}>
       {protocols.map(protocol => <option key={protocol.id} value={protocol.id}>{protocol.title || `方案版本 ${protocol.version}`}</option>)}
     </Select>
     <Disclosure summary="比较多个方案">
@@ -43,11 +51,11 @@ export function MatchingPanelControls({ studyId, data, canRun, onProtocol, onCan
           {protocols.map(protocol => <option key={protocol.id} value={protocol.id}>{protocol.title || `方案版本 ${protocol.version}`}</option>)}
         </Select>
         <Select label="受试者" value={subject} onChange={event => { setSubject(event.target.value); if (event.target.value) onCandidate(event.target.value); }}>
-          <option value="">{data.direction === 'patient_to_trial' ? '请选择受试者' : '全部已登记受试者'}</option>
+          <option value="">{way === 'patient_to_trial' ? '请选择受试者' : '全部已登记受试者'}</option>
           {(data.candidateRoster ?? []).map(key => <option key={key} value={key}>{key}</option>)}
         </Select>
         <div className="flex flex-wrap gap-2 md:col-span-2">
-          {canRun && <Button loading={busy} disabled={busy || !panel.length || data.direction === 'patient_to_trial' && !subject} onClick={() => void run()}>开始评估所选方案</Button>}
+          {canRun && <Button loading={busy} disabled={busy || settling || !panel.length || way === 'patient_to_trial' && !subject} onClick={() => void run()}>开始评估所选方案</Button>}
           <Button variant="secondary" onClick={onReload}>刷新结果</Button>
         </div>
         {message && <p className="text-caption text-text-2 md:col-span-2" role={failed ? 'alert' : 'status'}>{message}</p>}

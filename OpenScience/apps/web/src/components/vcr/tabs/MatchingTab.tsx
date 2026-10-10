@@ -101,7 +101,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const [direction, setDirection] = useState<Direction>("trial_to_patient");
   const [candidate, setCandidate] = useState<string | null>(null);
   const [protocolVersionId, setProtocolVersionId] = useState<string | null>(null);
-  const { state, reload } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}`, () => getVcrMatching(studyId, {
+  const { state, reload, last } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}`, () => getVcrMatching(studyId, {
     view, direction, ...(protocolVersionId ? { protocolVersionId } : {}), ...(view === "matching" && candidate ? { candidate } : {}),
   }));
   const pick = (id: string) => {
@@ -120,8 +120,17 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       {view === "matching" && <SegmentedControl aria-label="匹配方向" value={direction} onChange={switchDirection} options={[...DIRECTIONS]} />}
     </VcrToolbar>
   );
-  if (state.kind === "loading") return <div className="flex flex-col gap-6">{toolbar()}<VcrTabSkeleton /></div>;
-  if (state.kind === "error") return <div className="flex flex-col gap-6">{toolbar()}<VcrTabError message={state.message} onRetry={reload} /></div>;
+  // The controls are the reader's own instrument: the select they just used, the panel they are filling in. They are drawn from
+  // this key's page once it has arrived and from the newest one before that — also when this one could not be read — so a change
+  // of protocol or direction never unmounts them (focus falls to <body>, a half-made choice is lost; review V-M2).
+  const shown = state.kind === "ready" ? state.data : last;
+  const controls = view === "matching" && shown && shown.available !== false ? (
+    <MatchingPanelControls key="controls" studyId={studyId} data={shown} direction={direction} protocolId={protocolVersionId}
+      settling={state.kind !== "ready"} canRun={study.abilities.includes("run") && study.abilities.includes("read_patient_level")}
+      onProtocol={setProtocolVersionId} onCandidate={pick} onReload={reload} />
+  ) : null;
+  if (state.kind === "loading") return <div className="flex flex-col gap-6">{toolbar()}{controls}<VcrTabSkeleton /></div>;
+  if (state.kind === "error") return <div className="flex flex-col gap-6">{toolbar()}{controls}<VcrTabError message={state.message} onRetry={reload} /></div>;
   const data = state.data;
   if (data.available === false) {
     return (
@@ -133,9 +142,6 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   // Every sub-view counts: a referral ledger with no candidate list is a
   // study whose matching has already run, and offering 「让 AI 做」 there
   // would ask for work that is done.
-  const controls = view === 'matching' ? <MatchingPanelControls studyId={studyId} data={data}
-    canRun={study.abilities.includes('run') && study.abilities.includes('read_patient_level')}
-    onProtocol={setProtocolVersionId} onCandidate={pick} onReload={reload} /> : null;
   const nothing = data.candidates.length === 0 && !data.forecast && !data.pendingReview
     && (data.ledger ?? []).length === 0 && (data.sites ?? []).length === 0 && (data.followup ?? []).length === 0
     && !(data.timeline?.length || data.comparisons?.length);

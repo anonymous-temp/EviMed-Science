@@ -22,10 +22,17 @@ export type VcrLoad<T> =
 export interface VcrLoadResult<T> {
   state: VcrLoad<T>;
   reload: () => void;
+  /**
+   * The newest answer this hook has received, whatever key it was for — what a control that must outlive a change of key (a
+   * select the reader is working in, a panel half filled in) keeps drawing while the next page is read or when it cannot be.
+   * A hook belongs to one study (the study page is keyed by it), so this is never another study's answer.
+   */
+  last: T | null;
 }
 
 export function useVcrLoad<T>(key: string, load: () => Promise<T>): VcrLoadResult<T> {
   const [state, setState] = useState<VcrLoad<T>>({ kind: "loading" });
+  const [last, setLast] = useState<T | null>(null);
   const [round, setRound] = useState(0);
   const loader = useRef(load);
   loader.current = load;
@@ -40,7 +47,7 @@ export function useVcrLoad<T>(key: string, load: () => Promise<T>): VcrLoadResul
     Promise.resolve()
       .then(() => loader.current())
       .then(
-        (data) => { if (live) setState({ kind: "ready", data }); },
+        (data) => { if (live) { setState({ kind: "ready", data }); setLast(data); } },
         (error: unknown) => {
           if (!live) return;
           setState({
@@ -55,7 +62,7 @@ export function useVcrLoad<T>(key: string, load: () => Promise<T>): VcrLoadResul
   }, [key, round]);
 
   const reload = useCallback(() => setRound((value) => value + 1), []);
-  return { state, reload };
+  return { state, reload, last };
 }
 
 /** A route that did not answer, with 重试. */

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -641,6 +641,75 @@ describe("匹配与招募 — the other three views", () => {
 
 const dataPath = (card?: string) => `/app/virtual-research/${STUDY_ID}/data${card ? `?card=${card}` : ""}`;
 const detail = () => document.querySelector("[data-vcr-assumption-detail]") as HTMLElement;
+
+/** The server's matching page with two protocol versions to look at. */
+function withProtocols(change?: (payload: any) => void) {
+  const payload = fixture("ev201/matching.json");
+  payload.protocols = [
+    { id: "prt_1", version: 1, title: "EV-201 方案 v1", sourceRef: null },
+    { id: "prt_2", version: 2, title: "EV-201 方案 v2", sourceRef: null },
+  ];
+  payload.protocolVersionId = "prt_1";
+  change?.(payload);
+  return payload;
+}
+
+describe("匹配与招募 — the controls stay while another page is read", () => {
+  // Review V-M2: the load key holds the protocol and the direction, and while a new key loaded the tab drew its toolbar and a
+  // skeleton alone — the select just used, the comparison panel and a half-made choice were unmounted, and a keyboard reader's
+  // focus fell to <body>.
+  it("keeps the select the reader changed — the same element, still focused — with the open comparison panel and its choice, while the other protocol's page loads", async () => {
+    let arrive: (page: unknown) => void = () => undefined;
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => (query.get("protocolVersionId") === "prt_2"
+        ? new Promise((resolve) => { arrive = resolve; })
+        : withProtocols()),
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByText("比较多个方案"));
+    const panel = screen.getByText("比较多个方案").closest("details")!;
+    expect(panel).toHaveAttribute("open");
+    await userEvent.selectOptions(screen.getByLabelText("选择方案（最多 10 项）"), ["prt_1", "prt_2"]);
+    const select = screen.getByLabelText("查看方案") as HTMLSelectElement;
+    select.focus();
+    fireEvent.change(select, { target: { value: "prt_2" } });
+    await waitFor(() => expect(matchingReads(server).some((query) => query.get("protocolVersionId") === "prt_2")).toBe(true));
+    // The page for prt_2 has not arrived: the tab is loading, and the controls are the ones the reader was using.
+    expect(document.querySelector("[data-vcr-loading='tab']")).not.toBeNull();
+    expect(screen.getByLabelText("查看方案")).toBe(select);
+    expect(select).toHaveFocus();
+    expect(select.value).toBe("prt_2");
+    expect(panel).toHaveAttribute("open");
+    expect([...(screen.getByLabelText("选择方案（最多 10 项）") as HTMLSelectElement).selectedOptions].map((option) => option.value)).toEqual(["prt_1", "prt_2"]);
+    await act(async () => { arrive(withProtocols((payload) => { payload.protocolVersionId = "prt_2"; })); });
+    await waitFor(() => expect(document.querySelector("[data-vcr-loading='tab']")).toBeNull());
+    expect(screen.getByLabelText("查看方案")).toBe(select);
+    expect(select).toHaveFocus();
+    expect(select.value).toBe("prt_2");
+    expect(panel).toHaveAttribute("open");
+    expect([...(screen.getByLabelText("选择方案（最多 10 项）") as HTMLSelectElement).selectedOptions].map((option) => option.value)).toEqual(["prt_1", "prt_2"]);
+  });
+
+  it("keeps the controls when the page for the protocol chosen cannot be read, so another protocol can be chosen", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => {
+        if (query.get("protocolVersionId") === "prt_2") throw new WebApiError("no", { status: 500, code: "vcr_unavailable" });
+        return withProtocols();
+      },
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    const select = screen.getByLabelText("查看方案") as HTMLSelectElement;
+    select.focus();
+    fireEvent.change(select, { target: { value: "prt_2" } });
+    expect(await screen.findByRole("button", { name: "重试" })).toBeInTheDocument();
+    expect(screen.getByLabelText("查看方案")).toBe(select);
+    expect(select.value).toBe("prt_2");
+    fireEvent.change(select, { target: { value: "prt_1" } });
+    expect(await screen.findByRole("heading", { name: "P-0201" })).toBeInTheDocument();
+  });
+});
 
 describe("数据与证据 — which card is open", () => {
   it("opens the card the address names, by key or by id", async () => {
