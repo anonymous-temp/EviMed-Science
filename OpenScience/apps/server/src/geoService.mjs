@@ -39,7 +39,7 @@
  */
 
 import path from "node:path";
-import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoSpecifiedInfoAccuracy, geoValueContext, geoValueImpacts, summarizeGeoValueCoverageCounts } from "@evimed/domain";
+import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoSpecifiedInfoAccuracy, geoValueContext, geoValueImpacts, hardLines, summarizeGeoValueCoverageCounts } from "@evimed/domain";
 
 /** A failure mode as the page says it. @param {string | null} code */
 const failureModeWord = (code) => (code ? /** @type {Record<string, string>} */ (GEO_FAILURE_MODE_LABELS_ZH)[code] ?? null : null);
@@ -900,10 +900,12 @@ export class GeoService {
     const round = await this.#round(project.id, roundId);
     const rounds = (await this.store.query(`SELECT id, kind, sample_date, created_at FROM evimed_geo.rounds WHERE geo_project_id = $1
       AND kind = ANY($2::text[]) ORDER BY created_at DESC LIMIT 20`, [project.id, [...DIAGNOSIS_ROUND_KINDS]])).rows;
-    const [errorRows, errorCounts] = await Promise.all([
+    const [errorRows, errorCounts, openErrors] = await Promise.all([
       this.store.query(`SELECT * FROM evimed_geo.errors WHERE geo_project_id = $1
         ORDER BY (status = 'closed'), severity DESC NULLS LAST, updated_at DESC LIMIT $2`, [project.id, this.errorListLimit]),
       this.#errorCounts(project.id),
+      // Every live error, not the page of them: the hard line reads all of them.
+      this.store.query(`SELECT id, status, severity, cited_source FROM evimed_geo.errors WHERE geo_project_id = $1 AND status <> 'closed'`, [project.id]),
     ]);
     const errors = errorRows.rows.map(errorView);
     const noiseRow = (await this.store.query(`SELECT value, computed_at FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project'
@@ -998,6 +1000,10 @@ export class GeoService {
     await this.#attachSnapshotIds(project.id, traced);
     const coverage = round ? { ...await this.#roundCoverage(round, engines), linklessEngines: await this.#linklessEngines(String(round.id)) }
       : { measuredEngines: [], absent: [], linklessEngines: [] };
+    const accuracyRow = cells.get(`project\u0000\u0000\u0000${GEO_VIEW_METRIC_IDS.accuracy}`);
+    const liveErrors = openErrors.rows.map((/** @type {any} */ row) => ({
+      id: String(row.id), status: String(row.status), severity: text(row.severity), citedSource: row.cited_source && typeof row.cited_source === "object" ? row.cited_source : null,
+    }));
     return {
       round: round ? {
         id: String(round.id), kind: String(round.kind), sampleDate: round.sample_date ? rowDay(round, this.timeZone) : null,
@@ -1010,6 +1016,10 @@ export class GeoService {
       errors,
       // Counted over every error of the project, not over the page of rows above: the list is capped, the counts are not.
       errorCounts,
+      // The two hard lines (Q-5): accuracy (M-06) at or above the owner's line, read from the round's project cell only when it is a
+      // measurement (a thin one is `null`, with its counts), and no open 讲错我方 traced to a cited source. The model's own errors are
+      // listed apart and never block. `met` is null when nothing is missed and the accuracy cannot be read.
+      hardLines: { ...hardLines([], liveErrors, { accuracyCell: /** @type {any} */ (accuracyRow ? geoCellFromRow(accuracyRow) : null) }), roundId: round ? String(round.id) : null },
       noise: noiseRow ? { band: num(noiseRow.value), measuredAt: iso(noiseRow.computed_at) } : null,
       more,
     };
