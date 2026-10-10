@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
 import { productId } from "./productPersistence.mjs";
 import { migrateCapsuleShare } from "./capsuleShareLinks.mjs";
+import { senderDisplayName } from "./capsuleShareLabel.mjs";
 import { recordShareDeclined, recordShareRefused, recordShared, recordTakedown } from "./capsuleShareMetrics.mjs";
 
 /**
@@ -46,6 +47,16 @@ function deliveryView(row) {
     importedAt: row.imported_at ? new Date(row.imported_at).toISOString() : null,
     closedAt: row.closed_at ? new Date(row.closed_at).toISOString() : null,
   };
+}
+
+/**
+ * The sender as a recipient is told of them: the account's display name, never its login id and never an e-mail address
+ * (`senderDisplayName`). Read from the account row each time, so it holds for a delivery made before the rule as well as after
+ * it (2026-10-10 review M-9: the name defaults to the login id, and an external identity's was its address).
+ * @param {{ sender_name?: unknown, owner_id?: unknown }} row
+ */
+function senderOf(row) {
+  return { name: senderDisplayName(row.sender_name, row.owner_id) };
 }
 
 export class CapsuleSharing {
@@ -153,7 +164,7 @@ export class CapsuleSharing {
         (SELECT s.payload->'card' FROM evimed_product.documents s WHERE s.user_id=d.owner_id AND s.kind='preferences' AND s.id=d.snapshot_id) AS card
       FROM evimed_share.deliveries d JOIN evimed_control.users u ON u.id=d.owner_id
       WHERE d.recipient_id=$1 AND d.state IN ('delivered','opened') ORDER BY d.created_at DESC, d.id LIMIT 50`, [productId(userId, "user")])).rows;
-    return rows.map((row) => ({ ...deliveryView(row), sender: { name: row.sender_name }, card: row.card ?? null }));
+    return rows.map((row) => ({ ...deliveryView(row), sender: senderOf(row), card: row.card ?? null }));
   }
 
   /**
@@ -176,7 +187,7 @@ export class CapsuleSharing {
    */
   async open(userId, deliveryId, context = {}) {
     let row = await this.#mine(userId, deliveryId);
-    const view = () => ({ ...deliveryView(row), sender: { name: row.sender_name } });
+    const view = () => ({ ...deliveryView(row), sender: senderOf(row) });
     if (["withdrawn", "taken_down", "declined"].includes(row.state)) return { delivery: view(), preview: null };
     if (row.state === "delivered") {
       const opened = (await this.database.query("UPDATE evimed_share.deliveries SET state='opened', opened_at=clock_timestamp() WHERE id=$1 AND state='delivered' RETURNING *", [row.id])).rows[0];
@@ -214,7 +225,7 @@ export class CapsuleSharing {
   /** A recipient turns a delivery down; the sender sees it. @param {string} userId @param {string} deliveryId */
   async decline(userId, deliveryId) {
     const row = await this.#mine(userId, deliveryId);
-    if (row.state === "declined") return { ...deliveryView(row), sender: { name: row.sender_name } };
+    if (row.state === "declined") return { ...deliveryView(row), sender: senderOf(row) };
     if (!["delivered", "opened"].includes(row.state)) throw new HttpError(409, "capsule_share_delivery_closed", "This delivery is closed.");
     const updated = (await this.database.query(
       "UPDATE evimed_share.deliveries SET state='declined', closed_at=clock_timestamp() WHERE id=$1 AND state IN ('delivered','opened') RETURNING *", [row.id])).rows[0];
@@ -222,7 +233,7 @@ export class CapsuleSharing {
     if (this.notifications && row.notice_id) {
       try { const notice = await this.notifications.get(userId, row.notice_id); await this.notifications.markRead(userId, notice.id, notice.revision); } catch { /* the notice is only a pointer */ }
     }
-    return { ...deliveryView(updated ?? row), sender: { name: row.sender_name } };
+    return { ...deliveryView(updated ?? row), sender: senderOf(row) };
   }
 
   /**
@@ -355,7 +366,8 @@ export class CapsuleSharing {
 
   /** The withdrawal notice of one delivery: said once, as withdrawn, to a recipient who has not taken the pack in. @param {any} delivery */
   async #tellWithdrawn(delivery) {
-    const sender = (await this.database.query("SELECT name FROM evimed_control.users WHERE id=$1", [delivery.owner_id])).rows[0]?.name ?? "";
+    const named = String((await this.database.query("SELECT name FROM evimed_control.users WHERE id=$1", [delivery.owner_id])).rows[0]?.name ?? "").trim();
+    const sender = named ? senderDisplayName(named, delivery.owner_id) : "";
     await this.#notify(delivery.recipient_id, `withdrawn/${delivery.id}`, `share-withdrawn:${delivery.id}`,
       clip(`${sender || "分享的人"}撤回了发给你的一份分享`, 150), "这份分享已被撤回，不能再收下。已经收下的副本不受影响。");
   }
