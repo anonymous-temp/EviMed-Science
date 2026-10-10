@@ -496,7 +496,7 @@
         },
         {
           "alert": "JevFailing",
-          "expr": "sum by (site) (increase(open_science_jev_requests_total{outcome=\"failed\"}[1h])) >= 3 and sum by (site) (increase(open_science_jev_requests_total{outcome=\"failed\"}[1h])) > sum by (site) (increase(open_science_jev_requests_total{outcome=\"answered\"}[1h]))",
+          "expr": "sum by (site) (increase(open_science_jev_requests_total{outcome=\"failed\"}[1h])) >= 3 and sum by (site) (increase(open_science_jev_requests_total{outcome=\"failed\"}[1h])) > (sum by (site) (increase(open_science_jev_requests_total{outcome=\"answered\"}[1h])) or sum by (site) (increase(open_science_jev_requests_total{outcome=\"failed\"}[1h])) * 0)",
           "for": "15m",
           "labels": {
             "severity": "warning"
