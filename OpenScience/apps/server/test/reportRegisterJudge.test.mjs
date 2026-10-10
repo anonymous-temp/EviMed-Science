@@ -168,4 +168,13 @@ test("the run store applies the scope and the cap it was configured with when a 
   assert.deepEqual(capability.judge.skips, [["J4", "run_out_of_scope", 1]]);
   const control = await finishWith("capability-control", { agentRegistry: { get: () => ({ visibility: "public" }) } }, dispatched);
   assert.equal(control.judge.calls.length, 8, "the same run is read when the registry calls its capability public");
+  // An evaluation harness says so when it dispatches (`automated`), and the run store carries that to the end of the run.
+  const evaluation = await finishWith("evaluation-run", {}, { automated: true });
+  assert.deepEqual(evaluation.judge.calls, [], "an evaluation run is not read");
+  assert.deepEqual(evaluation.judge.skips, [["J4", "run_out_of_scope", 1]]);
+  // Managed research a researcher reads is also dispatched by the platform, and stays in scope.
+  const managed = await finishWith("geo-run", {}, { automated: true, effectiveRouteReason: "geo:geo-content" });
+  assert.equal(managed.judge.calls.length, 8, "a GEO step is a researcher's report");
+  const proactive = await finishWith("proactive-run", {}, { automated: true, effectiveRouteReason: "autopilot:literature-sentinel" });
+  assert.equal(proactive.judge.calls.length, 8, "a proactive episode is a researcher's report");
 });
