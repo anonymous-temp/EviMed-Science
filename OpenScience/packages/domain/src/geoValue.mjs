@@ -163,11 +163,18 @@ export const GEO_VALUE_COVERAGE_STATUSES = Object.freeze(['represented', 'partia
 /**
  * The summary of coverage counts, by status: the same arithmetic as {@link summarizeGeoValueCoverage}, for a
  * reader that counted the observations where they are stored instead of loading them.
+ *
+ * The headline is `represented / assessed`, and what is assessed is what the answers said about a finding: expressed completely
+ * (`represented`), expressed without a condition it needs (`partial` — the judge's check turns a `represented` whose conditions
+ * were lost into this) or against the evidence (`contradicted`). Three statuses stay outside the denominator, counted and shown
+ * beside it: `not_applicable` and `uncertain` (nothing was measured), and `not_addressed` — an answer that did not speak of a
+ * finding made no mistake about it, and a question that did not invite it must not count against the product (owner ruling,
+ * 2026-10-10). With nothing assessed the headline is unknown (`null`), never 0. The summary is supplementary and feeds no index.
  * @param {Record<string, number> | null | undefined} counts observations per status; a status outside GEO_VALUE_COVERAGE_STATUSES is not counted
  */
 export function summarizeGeoValueCoverageCounts(counts) {
   const count = (/** @type {string} */ status) => Number(counts?.[status] ?? 0)
-  const assessed = count('represented') + count('partial') + count('contradicted') + count('not_addressed')
+  const assessed = count('represented') + count('partial') + count('contradicted')
   return {
     assessed, represented: count('represented'), partial: count('partial'), contradicted: count('contradicted'),
     notAddressed: count('not_addressed'), uncertain: count('uncertain'), notApplicable: count('not_applicable'),

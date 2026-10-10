@@ -60,10 +60,8 @@ with this page.
   `sources`, `targets`, `strategy`. This is the only source of measured numbers.
 - `mcp__evimed__geo_write` — `strategy` (battlefield, expectations, gaps, layout, and the
   source table as `sources`), `targets` (three tiers; a target is a forecast or
-  a commercial figure, never "measured"), `placement_plan` (preferred layers
-  and outlets — a proposal; the control plane decides and places orders),
-  `step`. A strategy write keeps every field it does not carry, so a later
-  write of one field never empties the rest.
+  a commercial figure, never "measured"), `step`. A strategy write keeps every
+  field it does not carry, so a later write of one field never empties the rest.
   Write in the platform's field names (the method's snake-case names are read
   too, but these are the ones the page shows):
   - each source: `domain`, `name`, `kind` (`news`, `vertical`, `wemedia`,

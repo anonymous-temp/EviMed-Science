@@ -163,10 +163,10 @@ function projectName(value) {
   return name;
 }
 
-/** @param {unknown} value @param {string} field */
-function money(value, field) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > BUDGET_MAX_CNY) {
-    throw new HttpError(400, "geo_budget_invalid", `${field} must be a positive amount of at most ${BUDGET_MAX_CNY} CNY.`);
+/** @param {unknown} value @param {string} field @param {boolean} [zero] whether nothing is an amount: a total of 0 is the stop */
+function money(value, field, zero = false) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || (value === 0 && !zero) || value > BUDGET_MAX_CNY) {
+    throw new HttpError(400, "geo_budget_invalid", `${field} must be ${zero ? "an amount, 0 for none," : "a positive amount"} of at most ${BUDGET_MAX_CNY} CNY.`);
   }
   return Math.round(value * 100) / 100;
 }
@@ -455,7 +455,9 @@ export function createGeoRoutes(dependencies) {
     }
     if (parts.length === 3 && method === "PUT" && tab === "budget") {
       const body = await bodyOf(req, maxJsonBytes, ["totalCny", "dailyCny"]);
-      const budget = { totalCny: money(body.totalCny, "totalCny"), dailyCny: money(body.dailyCny, "dailyCny") };
+      // A total of 0 is the stop (G10h): the market plans, reserves and sends nothing for the project, and the daily cap is 0 with it.
+      const totalCny = money(body.totalCny, "totalCny", true);
+      const budget = { totalCny, dailyCny: money(body.dailyCny, "dailyCny", totalCny === 0) };
       if (budget.dailyCny > budget.totalCny) throw new HttpError(400, "geo_budget_invalid", "dailyCny cannot exceed totalCny.");
       const project = await service.requireProject(user, id, "manage_money");
       if (!hooks.market?.setBudget) throw UNAVAILABLE();

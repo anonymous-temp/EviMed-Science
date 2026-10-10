@@ -1,7 +1,7 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { GeoValue } from "@/lib/geoClient";
 import { geoProject, valueFilled, VALUE_TITLES } from "../__fixtures__/geoTabs";
 import { ValueSection, type ValueMode } from "./ValueSection";
@@ -60,16 +60,28 @@ it("keeps the last round's coverage after the profile moves on, and says which v
   value.coverage = { ...value.coverage, assessed: 3, represented: 2, partial: 1, basisVersion: 3 };
   client.getGeoValue.mockResolvedValue(value);
   show("coverage");
-  expect(await screen.findByText("2 / 3 次相关结论被完整表达，1 次不完整，0 次存在冲突，0 次未涉及。")).toBeInTheDocument();
+  expect(await screen.findByText("2 / 3 次相关结论被完整表达，1 次不完整，0 次存在冲突。")).toBeInTheDocument();
   expect(screen.getByText("以上按第 3 版药品价值分析测得；分析已更新到第 4 版，下一轮测量后按新版本判断。")).toBeInTheDocument();
 });
 
-it("says how many answers did not address the claim, so the four parts add up to what was assessed", async () => {
+it("keeps 未涉及 beside the headline and outside it: the parts of the headline add up to what was assessed, the unspoken ones are a count of their own (G10d)", async () => {
   const value = { ...empty(), version: 3 };
-  value.coverage = { ...value.coverage, assessed: 7, represented: 2, partial: 1, contradicted: 1, notAddressed: 3, basisVersion: 3 };
+  value.coverage = { ...value.coverage, assessed: 4, represented: 2, partial: 1, contradicted: 1, notAddressed: 3, basisVersion: 3 };
   client.getGeoValue.mockResolvedValue(value);
   show("coverage");
-  expect(await screen.findByText("2 / 7 次相关结论被完整表达，1 次不完整，1 次存在冲突，3 次未涉及。")).toBeInTheDocument();
+  const sentence = await screen.findByText("2 / 4 次相关结论被完整表达，1 次不完整，1 次存在冲突；另有 3 次未涉及。");
+  // The tone of a count, like the headline beside it: nothing marks an answer that did not speak of a conclusion as a fault.
+  expect(sentence.className).toBe("text-ui text-text-2");
+  expect(sentence.className).not.toMatch(/danger|warn|error|red/);
+});
+
+it("says what it is when every relevant answer left the conclusions unspoken: no headline to compute, and no zero", async () => {
+  const value = { ...empty(), version: 3 };
+  value.coverage = { ...value.coverage, notAddressed: 5, basisVersion: 3 };
+  client.getGeoValue.mockResolvedValue(value);
+  show("coverage");
+  expect(await screen.findByText("回答还没有谈到这些结论，5 次未涉及。")).toBeInTheDocument();
+  expect(screen.queryByText(/0 \/ 0|0%/)).not.toBeInTheDocument();
 });
 
 it("says nothing about versions when the coverage was measured on the current profile", async () => {
@@ -77,7 +89,7 @@ it("says nothing about versions when the coverage was measured on the current pr
   value.coverage = { ...value.coverage, assessed: 1, represented: 1, basisVersion: 3 };
   client.getGeoValue.mockResolvedValue(value);
   show("coverage");
-  expect(await screen.findByText("1 / 1 次相关结论被完整表达，0 次不完整，0 次存在冲突，0 次未涉及。")).toBeInTheDocument();
+  expect(await screen.findByText("1 / 1 次相关结论被完整表达，0 次不完整，0 次存在冲突。")).toBeInTheDocument();
   expect(screen.queryByText(/下一轮测量后按新版本判断/)).not.toBeInTheDocument();
 });
 
@@ -177,6 +189,45 @@ describe("a finding's sources", () => {
     show();
     await openFold();
     expect(screen.getByRole("link", { name: "给药负担研究" })).toHaveAttribute("href", "https://example.org/study");
+  });
+});
+
+describe("the version the section stands on (G10a)", () => {
+  /** The server's clock is not the test's: "this year" is the year of the day the tests say it is. */
+  const today = (iso: string) => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(iso)); };
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("says it once in every section that draws — the profile's version and the day it was written, in the app's day form", async () => {
+    today("2026-10-10T12:00:00.000Z");
+    client.getGeoValue.mockResolvedValue({ ...valueFilled, version: 3, updatedAt: "2026-10-08T12:00:00.000Z" });
+    const modes: ValueMode[] = ["summary", "profile", "safety", "decisions", "actions", "sources", "coverage"];
+    for (const mode of modes) {
+      const view = show(mode);
+      expect(await screen.findByText("依据版本 3 · 更新于 10月8日"), mode).toBeInTheDocument();
+      expect(screen.getAllByText(/依据版本/), `${mode}: one line, not one per row`).toHaveLength(1);
+      // A line to read, not a control: no picker for an older version.
+      expect(view.container.querySelector("select, input, [role=combobox], [role=listbox]"), mode).toBeNull();
+      expect(screen.queryByRole("button", { name: /版本/ }), mode).not.toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
+  it("dates a profile written in an earlier year in full, and names the version alone when no time came", async () => {
+    today("2026-10-10T12:00:00.000Z");
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, updatedAt: "2025-09-22T12:00:00.000Z", data: { findings: [{ id: "f", statement: "疗效优于安慰剂" }] } });
+    show();
+    expect(await screen.findByText("依据版本 2 · 更新于 2025-09-22")).toBeInTheDocument();
+    cleanup();
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 4, updatedAt: null, data: { findings: [{ id: "f", statement: "疗效优于安慰剂" }] } });
+    show();
+    expect(await screen.findByText("依据版本 4")).toBeInTheDocument();
+  });
+
+  it("names no version for a profile that was never written, though something is on the page", async () => {
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 0, data: { opportunities: [{ id: "o", statement: "补一篇科普稿" }] } });
+    show("actions");
+    expect(await screen.findByText("补一篇科普稿")).toBeInTheDocument();
+    expect(screen.queryByText(/依据版本/)).not.toBeInTheDocument();
   });
 });
 

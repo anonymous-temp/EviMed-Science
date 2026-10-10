@@ -19,7 +19,7 @@ import {
   zonedDay,
   zonedDayStart,
 } from "../src/geoMarket.mjs";
-import { ORDER_STATES, assertLedgerRow } from "../src/geoMarketStore.mjs";
+import { ORDER_STATES, assertLedgerRow, budgetOpen, budgetStopped } from "../src/geoMarketStore.mjs";
 import { defineGeoMarketMoneyPathScenarios, defineGeoMarketScenarios } from "./helpers/geoMarketScenarios.mjs";
 import { GeoMarketStoreDouble } from "./helpers/geoMarketStoreDouble.mjs";
 
@@ -28,6 +28,13 @@ const admitted = {
   flags: { medicalCategory: true, newsSourceCategory: true },
 };
 const article = { id: "a", status: "publishable", isControl: false, safety: "clear", gate: "passed", contentSha256: "a".repeat(64), layer: "popular" };
+
+test("a budget of nothing is a stop, no budget is no budget, and only an open budget is told to place 'within budget' (G10h)", () => {
+  assert.deepEqual([budgetStopped({ budget: { totalCny: 0, dailyCny: 0 } }), budgetStopped({ budget: { totalCny: "0" } }), budgetStopped({ budget: { totalCny: 5000, dailyCny: 500 } })], [true, true, false]);
+  assert.deepEqual([budgetStopped({ budget: null }), budgetStopped({}), budgetStopped(null)], [false, false, false], "no budget at all is not a stop: the project is not served");
+  assert.deepEqual([budgetOpen({ budget: { totalCny: 5000, dailyCny: 500 } }), budgetOpen({ budget: { totalCny: 0, dailyCny: 0 } }), budgetOpen({ budget: null }), budgetOpen(null)],
+    [true, false, false, false], "what the reader is told about placing: only an open budget places");
+});
 
 test("registrable domains follow the Chinese second-level suffixes", () => {
   assert.equal(registrableDomain("www.jksb.com.cn"), "jksb.com.cn");

@@ -33,8 +33,10 @@
  *   in code only, like the frontier's lanes.
  * - **Two tables the spec does not list**, both versioned products the runtime
  *   writes through `geo_write` and the spec gives no home: `journeys` (the
- *   旅程 summary) and `placement_plans` (the run's outlet preferences, which
- *   the control plane reads and still decides against). And columns it does
+ *   旅程 summary) and `placement_plans` (the run's outlet preferences; the
+ *   market does not read them yet, so the strategy skill does not ask a run
+ *   to write them — the tool and the table wait for a market that does).
+ *   And columns it does
  *   not list: `position` on question groups and questions (the order the run
  *   wrote them in), and the metrics package's `facts.red_flag_expected`,
  *   `red_flag_hits`, `safety_terms_hit` and `metrics.variant`, `rival`,

@@ -641,9 +641,10 @@ function memorySharingSettings(overrides, frontierEnabled) {
  * absent, so the default here applies), and a value outside its range stops
  * the process at start with the variable's name.
  *
- * - Off by default, and open to operators and the preview list only when on:
- *   the module spends model money (parse and judge), probe time and, once the
- *   marketplace is wired, real money.
+ * - Off by default, and open to every account once on (the owner's ruling of
+ *   2026-10-10; `operators` narrows it to operators and the preview list): the
+ *   module spends model money (parse and judge), probe time and, once the
+ *   marketplace is wired, real money, each held by its own budget.
  * - The engines are closed words (`GEO_ENGINES`); an unknown one is a startup
  *   error, not a silently unmeasured engine.
  * - The night window is `HH-HH` in the module's time zone (`22-07` wraps
@@ -691,7 +692,7 @@ function geoSettings(overrides) {
     }
     return value;
   };
-  const audience = String(read("geoAudience", "OPEN_SCIENCE_GEO_AUDIENCE", "operators")).trim().toLowerCase();
+  const audience = String(read("geoAudience", "OPEN_SCIENCE_GEO_AUDIENCE", "all")).trim().toLowerCase();
   if (!["all", "operators"].includes(audience)) {
     throw new Error(`OPEN_SCIENCE_GEO_AUDIENCE must be "all" or "operators", got ${JSON.stringify(audience)}.`);
   }
@@ -741,6 +742,17 @@ function geoSettings(overrides) {
     // request over the limit is answered with a notice and is not lost (the run keeps the question as a finding or an opportunity),
     // and a finished task frees its place. 0 queues none. Counted as `open_science_geo_service_total{kind="researchCapped"}`.
     geoResearchMaxOpen: integer("geoResearchMaxOpen", "OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN", 5, 0, 100),
+    // Versions of a project's value profile kept besides the milestones (a version another stored object points to, and the first of
+    // each calendar month): every version stores the whole merged profile, so a project worked on for months would hold hundreds of
+    // copies. The latest this many are never pruned; the rest are, by `geoValueUpkeep.mjs`, at most `geoValuePrunePerTick` versions in
+    // all per tick (every ten minutes), so a long backlog is worked off in turns. Counted as
+    // `open_science_geo_value_upkeep_total{event="versionsPruned"}`.
+    geoValueKeepVersions: integer("geoValueKeepVersions", "OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS", 20, 1, 1_000),
+    geoValuePrunePerTick: integer("geoValuePrunePerTick", "OPEN_SCIENCE_GEO_VALUE_PRUNE_PER_TICK", 200, 1, 10_000),
+    // Projects whose findings' sources the upkeep asks the platform's source-change record and the frontier feed about in a tick (every
+    // ten minutes), the one looked at longest ago first: a source a finding rests on that was retracted or corrected adds a `needs_review`
+    // entry to the project's profile. Each project costs a handful of reads. Counted as `open_science_geo_value_upkeep_total{event="watchProjects"}`.
+    geoSourceWatchProjectsPerTick: integer("geoSourceWatchProjectsPerTick", "OPEN_SCIENCE_GEO_SOURCE_WATCH_PROJECTS_PER_TICK", 20, 1, 500),
     // Calls one project's runtime may make to the probe host in a minute (`geo_visibility_probe`: providers, ask, screenshot, counted
     // together). The probe answers one request at a time for minutes through the platform's logged-in vendor accounts, and the skills
     // use the tool for the one question a person asks about; this is the ceiling of a loop, not of a run. A call over it is refused

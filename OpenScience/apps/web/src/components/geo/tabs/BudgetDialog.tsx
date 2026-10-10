@@ -15,12 +15,12 @@ export function suggestedDaily(total: number): number {
   return Math.min(total, Math.max(100, Math.ceil(total / 10 / 100) * 100));
 }
 
-/** A money field's text as yuan: a positive number with at most two decimals, else null. */
-export function readYuan(text: string): number | null {
+/** A money field's text as yuan: a positive number with at most two decimals, else null; 0 too where `zero` allows it (the total: 0 is the stop). */
+export function readYuan(text: string, { zero = false }: { zero?: boolean } = {}): number | null {
   const trimmed = text.trim().replace(/[,，¥￥]/g, "");
   if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null;
   const value = Number(trimmed);
-  return Number.isFinite(value) && value > 0 ? value : null;
+  return Number.isFinite(value) && (value > 0 || (zero && value === 0)) ? value : null;
 }
 
 /**
@@ -57,9 +57,10 @@ export function BudgetDialog({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (saving) return;
-    const totalCny = readYuan(total);
-    const dailyCny = readYuan(daily);
-    if (totalCny === null) return setError({ field: "total", message: "请填一个大于 0 的金额，单位灵豆。" });
+    const totalCny = readYuan(total, { zero: true });
+    if (totalCny === null) return setError({ field: "total", message: "请填总预算，单位灵豆；填 0 表示不再投放。" });
+    // A total of 0 stops the placing, and a day's cap under nothing is nothing: the field is not asked.
+    const dailyCny = totalCny === 0 ? 0 : readYuan(daily);
     if (dailyCny === null) return setError({ field: "daily", message: "请填一个大于 0 的金额，单位灵豆。" });
     if (dailyCny > totalCny) return setError({ field: "daily", message: "每天最多花的钱不能超过总预算。" });
     setError(null);

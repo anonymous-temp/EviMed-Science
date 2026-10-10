@@ -16,14 +16,18 @@
  *   a source's market cell to the market, an article's `released` safety to a
  *   person pressing 「放行」, and a target's data type is never `measured`.
  * - **Locking a question set is the one write with rules about the whole set**
- *   (spec §4): all four pools among the measured questions, 40–120 measured
- *   (30–120 for a single step's minimal set), and — in the full program —
- *   three to five control groups making up about a fifth to a third of the
- *   groups. A set that misses one of these is not locked, and the issues say
- *   which; a minimal set without control groups is locked with a notice,
- *   because a single step does not compute a net effect. Whether a set is
- *   minimal is the program's to say (`geoProgramMinimal`: some step was asked
- *   for, and the questions step was not), never the run's.
+ *   (spec §4), and they are notices, not refusals: all four pools among the
+ *   measured questions, 40–120 measured (30–120 for a single step's minimal
+ *   set), and — in the full program — three to five control groups making up
+ *   about a fifth to a third of the groups. Only a set with no measured
+ *   question is refused. A set under the full programme's size
+ *   (`GEO_MEASURED_RANGE.full`'s lower bound) or with no control group at all
+ *   is locked as a minimal set, a diagnosis: the orchestrator measures it and
+ *   starts nothing after it, and the strategy, the articles and the placing
+ *   begin when the researcher asks for them (「让 AI 做」), never by chaining
+ *   (G10i). Whether a set is minimal because of the program is the program's
+ *   to say (`geoProgramMinimal`: some step was asked for, and the questions
+ *   step was not), never the run's.
  * - **What decides an article's placement is the platform's, not the run's.**
  *   Its gate is the run ledger's verdict on the deliverable it was written in
  *   (`articleGate`, handed in by the composition); a run's own `gate` field is
@@ -1258,7 +1262,7 @@ async function writeToProject({ store, project, what, body, renameProject = null
       const missing = GEO_JOURNEY_EXPECTED.filter((part) => !journey[part]?.length);
       if (missing.length) {
         issues.push({ field: missing.join(","), code: "notice",
-          message: `A full journey also carries ${missing.join(", ")}: the patient subtypes with their size, 3–5 personas, and the full stage × column matrix saved as a file and listed in files.` });
+          message: `A full journey also carries ${missing.join(", ")}: the patient subtypes with their size, the personas the decisions need, and the full stage × column matrix saved as a file and listed in files.` });
       }
       return done([String(written.version)], { version: written.version });
     }

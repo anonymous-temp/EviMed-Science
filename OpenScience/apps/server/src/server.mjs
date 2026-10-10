@@ -317,6 +317,7 @@ import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
 import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
 import { createGeoQuestionBank, questionBankSummary } from "./geoQuestionBank.mjs";
+import { createGeoValueUpkeep } from "./geoValueUpkeep.mjs";
 import { geoArticleGateBound, geoArticleGateOf } from "./geoWrites.mjs";
 import { GeoService, geoAudienceAllows, isGeoPlaceholderName, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
@@ -2060,7 +2061,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
    *   gradedSha256: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string | null>,
    *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
-   *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
+   *   valueUpkeep?: ReturnType<typeof createGeoValueUpkeep>, importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
   if (config.geoEnabled && productDatabase) {
     const geoStore = new GeoStore({ database: productDatabase, entityVocabulary });
@@ -4772,6 +4773,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // The monthly figures page shows the bank's latest month under its three figures (evidencePublicMetrics.mjs).
       evidenceMetricSections.questionBank = (query) => geoParts.questionBank.summary(query);
     }
+    // The value profiles' upkeep (geoValueUpkeep.mjs): the module's own loop, always composed with it.
+    geoParts.valueUpkeep = createGeoValueUpkeep({ store: geoParts.store, sourceChanges, entityVocabulary, config, report: (code) => process.stderr.write(`geo value upkeep: ${code}\n`) });
     orchestrator = new GeoOrchestrator({
       store: geoParts.store, config, notifier, policies:evolutionModulePolicies,
       dispatchRun: overrides.geoDispatchRun ?? dispatchGeoRun,
@@ -4834,6 +4837,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         metrics: () => tickGeoMetrics(measureDeps),
         errors: () => tickGeoErrors(measureDeps),
         ...(geoParts.questionBank ? { questionBank: () => geoParts.questionBank.tick() } : {}),
+        valueUpkeep: () => geoParts.valueUpkeep.tick(),
         orchestrator: () => running.tick(),
         schedules: () => running.tickSchedules(),
         catalogue: () => tickGeoCatalogue(marketDeps),

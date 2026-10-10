@@ -107,7 +107,8 @@ async function fixture() {
         }
       },
       project: async (/** @type {string} */ id, /** @type {Record<string, any>} */ patch) => {
-        await db.query(`UPDATE evimed_geo.projects SET status = $2, updated_at = now() WHERE id = $1`, [id, patch.status]);
+        if (patch.status !== undefined) await db.query(`UPDATE evimed_geo.projects SET status = $2, updated_at = now() WHERE id = $1`, [id, patch.status]);
+        if (patch.budget !== undefined) await db.query(`UPDATE evimed_geo.projects SET budget = $2::jsonb, updated_at = now() WHERE id = $1`, [id, JSON.stringify(patch.budget)]);
       },
     },
     async close() {},

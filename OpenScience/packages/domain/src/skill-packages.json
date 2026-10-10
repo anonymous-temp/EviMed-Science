@@ -130,7 +130,7 @@
       "name": "geo-drug-value",
       "origin": "capability-skill",
       "source": {"kind":"release"},
-      "digest": "sha256:756ef07946fc17f82c72f549bc5deddd278ea6575935d5497be4ce2ce1e2c074",
+      "digest": "sha256:496468d26f8ed86bd4457b4bfd4e3c53480a494d57744c0422671ddee6aac3a3",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -584,11 +584,11 @@
       "id": "capability/geo-insight",
       "name": "geo-insight",
       "origin": "capability",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "source": {"kind":"release"},
-      "digest": "sha256:adaa6858ba9b0f2405cdfd2a1011cdb75177c6a80552adf2700e646ea0080841",
+      "digest": "sha256:0436df6138c7ddeb396afd1ac1e2db287ef18a9ad2c4bd8b15a5ce83142bb8eb",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"2efb5adecf315022b9e732b4e174c23bc386c372c42569dade934a7efa0408cb"}],
+      "references": [{"path":"capability.yaml","sha256":"d4b73d751d882dd0c94524e7082df20395c36a2c7f1cbf28dbc95f816f2d4aad"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"drug_label_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -651,11 +651,11 @@
       "id": "capability/geo-strategy",
       "name": "geo-strategy",
       "origin": "capability",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "source": {"kind":"release"},
-      "digest": "sha256:1d664af35f79fe4a2a4fecc58f9143548c5b154493a24a9000252b159865501e",
+      "digest": "sha256:1b6afdaa8a7fdd8e106cf61c53c7f14da41b41f053e6f14559e7223e1a76db67",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"2412700648a56f2495afbfb371ce864fd455f2e7fc5ebeb193ffe5dbb8010314"}],
+      "references": [{"path":"capability.yaml","sha256":"e099343c92ce0bb51b26a08ebe3c65adc7f62508b2411f6d3748d5a33a07a118"}],
       "dependencies": [
         {"kind":"platform-tool","name":"drug_label_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"geo_read","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},

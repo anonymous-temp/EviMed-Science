@@ -22,7 +22,7 @@
         "Run a patient line and a physician line, because it is a prescription medicine.",
         "Hang every red flag the label names on a care node, and say which node needs a 就医 prompt.",
         "Collect real phrasings through the social channel; where a platform returns nothing, write 无信号 for it.",
-        "Measure 40–120 questions across all four pools with 3–5 control groups of the same pool and difficulty, and put off-label and special-population questions in P4.",
+        "Choose a measurement set that fits the decisions and the evidence, across the pools the product's decisions fall in, with stable control groups of the same pool and difficulty where feasible, and put off-label and special-population questions in P4.",
         "Record every default taken (coverage, engines, focus SKU) in assumptions[] with its reason and how to change it."
       ],
       "mustNotDo": [
@@ -47,7 +47,7 @@
         "minimal": true
       },
       "mustDo": [
-        "Build only the minimal upstream the step needs: identity and label claims, then a set of 30 measured questions across the four pools.",
+        "Build only the minimal upstream the step needs: identity and label claims, then a measurement set sized to the actual decisions and the available evidence.",
         "Keep the label's 功能, 主治 and symptom layers as the label writes them, not as parallel indications.",
         "Check the prescription or OTC status from the label record, not from memory.",
         "Mark every file minimal: true and say in the report which parts are minimal and what the full version would add.",
@@ -55,7 +55,7 @@
       ],
       "mustNotDo": [
         "Write a claim about treating or preventing an infection the label does not name.",
-        "Present 30 minimal questions as the project's full question map.",
+        "Present a minimal question set as the project's full question map.",
         "Fill an empty social-channel result with invented phrasings."
       ],
       "gradedOn": "Whether the minimal set is honest about being minimal and faithful to the label's own TCM wording."
@@ -99,7 +99,7 @@
       "mustDo": [
         "Write aliases, misspellings, approvalNo, rx, identityStatus and singleSource for the product, with genericAliases for the molecule's other names.",
         "Decide singleSource from the label's holder and the regulator's approvals, and write it for each competitor too.",
-        "Write the journey's subtypes with their size, 3–5 personas, and the full stage × column matrix as a file listed in files.",
+        "Write the journey's subtypes with their size where the evidence gives one, the personas the decisions need, and the full stage × column matrix as a file listed in files.",
         "Keep each real phrasing's collectedAt and URL from the social search."
       ],
       "mustNotDo": [

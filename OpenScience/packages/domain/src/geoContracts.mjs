@@ -26,12 +26,17 @@
  *   - the pharmacist-owned clinical safety rules over an article a patient may
  *     read (the safety tier, as the old GEO pack already had it).
  *
- * Everything else — counts, pool coverage, control-group share, layer lengths,
- * the T/CAPT 026 evidence elements, gap classes, tier shape — is a notice
- * (principle 4: a new check ships as a notice and earns more from an observed
- * distribution). Measurement is the platform's now (build spec 2026-09-25
- * §0.3): no GEO contract requires a probe ledger, and the old measurement
- * notices speak only when a run did record an ad-hoc probe.
+ * Everything else — pool coverage, the T/CAPT 026 evidence elements, gap
+ * classes, tier shape — is a notice (principle 4: a new check ships as a notice
+ * and earns more from an observed distribution). A package is not asked for a
+ * size: the owner ruled on 2026-10-10 that the old quotas — thirty claims,
+ * forty to a hundred and twenty measured questions, three to five control
+ * groups, a 问答 of three to six hundred characters — go, because they pushed a
+ * run to pad a package against the drug-value guidance it is given
+ * ("no stage or sample quotas"); a size is the run's judgement, and the
+ * measurement says what a set can bear. Measurement is the platform's now
+ * (build spec 2026-09-25 §0.3): no GEO contract requires a probe ledger, and
+ * the old measurement notices speak only when a run did record an ad-hoc probe.
  *
  * The vocabularies below are the few this module needs to read a package.
  * `geoVocabulary.mjs` (package M of the same build) is the platform's closed
@@ -42,7 +47,6 @@
  */
 
 import { checkIdOf, citationIntegrityIssues, clinicalSafetyRuleHits, quoteIsPresent, runtimeLeakageLine } from './clinicalEvidence.mjs'
-import { GEO_METRICS, geoConstant } from './geoMetrics.mjs'
 
 /** @typedef {'required'|'advisory'} GeoSeverity */
 /**
@@ -99,21 +103,6 @@ const PROPOSAL_KINDS = Object.freeze({
   weekly: Object.freeze({ pdf: 1, docx: 1 }),
 })
 
-/**
- * Measured-question bounds of a locked question set (build spec §4). The minimal set, the control groups and their share of the groups
- * are the owner's table's (`SINGLE_STEP_MIN_QUESTIONS`, `net_effect.control_group_count_*`, `CONTROL_CLUSTER_SHARE_*`), read, not restated.
- */
-export const GEO_QUESTION_SET_BOUNDS = Object.freeze({
-  min: 40,
-  max: 120,
-  minimal: Number(geoConstant('SINGLE_STEP_MIN_QUESTIONS')),
-  controlGroups: Object.freeze({ min: GEO_METRICS.net_effect.control_group_count_min, max: GEO_METRICS.net_effect.control_group_count_max }),
-  controlShare: Object.freeze({ min: Number(geoConstant('CONTROL_CLUSTER_SHARE_MIN')), max: Number(geoConstant('CONTROL_CLUSTER_SHARE_MAX')) }),
-})
-/** A full claim library holds at least this many claims; a minimal one need not. */
-export const GEO_CLAIM_LIBRARY_MIN = 30
-/** A 问答 article is 300–600 characters (plan §3.6). */
-const QA_LENGTH = Object.freeze({ min: 300, max: 600 })
 /** How many companion files one index may name: a bound on what the gate reads. */
 const COMPANION_LIMIT = 80
 /** How many offenders one notice names. */
@@ -292,7 +281,6 @@ export function geoInsightFindings(input) {
 
   const library = readIndex(input, files.claims, (value) => (Array.isArray(value.claims) ? null : 'has no claims[] list: the claim library is that list.'), issues)
   const claims = library ? /** @type {any[]} */ (library.claims) : []
-  const minimal = library?.minimal === true
   let verified = 0
   /** @type {string[]} */ const unbound = []
   /** @type {string[]} */ const unchecked = []
@@ -321,13 +309,9 @@ export function geoInsightFindings(input) {
   if (incomplete.length) {
     issues.push(finding('geo_claim_library_notice', `${files.claims}: ${incomplete.length} claim(s) miss a source kind, the evidence elements, the verification date or whether it is in the label (${named(incomplete)}).`, { path: files.claims, check: 'geo-claim-schema' }))
   }
-  if (library && !minimal && claims.length < GEO_CLAIM_LIBRARY_MIN) {
-    issues.push(finding('geo_claim_library_notice', `${files.claims} holds ${claims.length} claim(s); a full claim library usually holds at least ${GEO_CLAIM_LIBRARY_MIN}. Mark the library minimal: true if it was built as the minimal upstream of a single step.`, { path: files.claims, check: 'geo-claim-schema' }))
-  }
 
   const map = readIndex(input, files.questions, (value) => (Array.isArray(value.groups) ? null : 'has no groups[] list: the question map is that list.'), issues)
   const groups = map ? /** @type {any[]} */ (map.groups).filter(isRecord) : []
-  const mapMinimal = map?.minimal === true
   const measuredGroups = groups.filter((group) => (Array.isArray(group.questions) ? group.questions : []).some((/** @type {any} */ question) => isRecord(question) && question.measured === true))
   const measured = groups.flatMap((group) => (Array.isArray(group.questions) ? group.questions : []).filter((/** @type {any} */ question) => isRecord(question) && question.measured === true))
   const controls = measuredGroups.filter((group) => group.isControl === true)
@@ -348,18 +332,6 @@ export function geoInsightFindings(input) {
     if (badPools.length) notes.push(`pool(s) ${named(badPools)} are not one of ${POOLS.join('/')}`)
     const missingPools = POOLS.filter((pool) => !pools.has(pool))
     if (missingPools.length) notes.push(`no group in ${missingPools.join(', ')}`)
-    const floor = mapMinimal ? GEO_QUESTION_SET_BOUNDS.minimal : GEO_QUESTION_SET_BOUNDS.min
-    if (measured.length < floor || measured.length > GEO_QUESTION_SET_BOUNDS.max) {
-      notes.push(`${measured.length} measured question(s), where a ${mapMinimal ? 'minimal' : 'full'} set holds ${floor}–${GEO_QUESTION_SET_BOUNDS.max}`)
-    }
-    if (!mapMinimal && measuredGroups.length) {
-      const share = controls.length / measuredGroups.length
-      if (controls.length < GEO_QUESTION_SET_BOUNDS.controlGroups.min || controls.length > GEO_QUESTION_SET_BOUNDS.controlGroups.max
-        || share < GEO_QUESTION_SET_BOUNDS.controlShare.min || share > GEO_QUESTION_SET_BOUNDS.controlShare.max) {
-        const { controlGroups, controlShare } = GEO_QUESTION_SET_BOUNDS
-        notes.push(`${controls.length} control group(s) of ${measuredGroups.length} measured (${Math.round(share * 100)}%), where the net effect needs ${controlGroups.min}–${controlGroups.max}, about ${Math.round(controlShare.min * 100)}–${Math.round(controlShare.max * 100)}%`)
-      }
-    }
     if (notes.length) {
       issues.push(finding('geo_question_map_notice', `${files.questions}: ${notes.join('; ')}.`, { path: files.questions, check: 'geo-question-map' }))
     }
@@ -638,10 +610,6 @@ export function geoContentFindings(input, prose) {
     if (!isRecord(article.safety) || !['clear', 'open'].includes(String(article.safety.status))) wrong.push('states no safety status (clear or open)')
     if (isGeoPackagePath(article.recordPath)) records.push(article.recordPath)
     else wrong.push('names no work record')
-    if (layer === 'qa') {
-      const length = [...(input.files.get(article.path) ?? '').replace(/\s+/g, '')].length
-      if (length && (length < QA_LENGTH.min || length > QA_LENGTH.max)) wrong.push(`is ${length} characters, where a 问答 is ${QA_LENGTH.min}–${QA_LENGTH.max}`)
-    }
     if (wrong.length) notes.push(`${label} ${wrong.join(', ')}`)
   })
   if (unreadable.length) {

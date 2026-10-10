@@ -252,6 +252,27 @@ test("with the private root holding only its README, the GEO capabilities still 
   }
 });
 
+test("no GEO skill asks a run to write a placement plan while no part of the market reads one; the tool and the table stay (G10g)", async () => {
+  // The strategy skill used to list `placement_plan` — preferred layers and outlets, "a proposal; the control plane decides" — and the
+  // market never read it (review M-5): a run spent an answer on a preference nobody weighed. The owner ruled on 2026-10-10 that the skill
+  // stops asking until the market reads it. The tool, its vocabulary and its table are untouched, so the day the market ranks by it the
+  // skill can ask again; this is the test to change then.
+  const ids = ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"];
+  for (const directory of ["capabilities", "capability-skills"]) {
+    for (const id of ids) {
+      const body = await readFile(path.join(repoRoot, directory, id, "SKILL.md"), "utf8");
+      assert.doesNotMatch(body, /placement[_ ]plan/i, `${directory}/${id}/SKILL.md asks for a placement plan`);
+    }
+  }
+  const { GEO_WRITE_WHATS } = await import("@evimed/domain");
+  assert.ok(GEO_WRITE_WHATS.includes("placement_plan"), "the tool still takes a placement plan");
+  const read = /placement_?plan|latestPlacementPlan/i;
+  for (const file of ["geoMarket.mjs", "geoMarketStore.mjs", "geoMarketOperations.mjs", "geoMarketText.mjs"]) {
+    assert.doesNotMatch(await readFile(path.join(repoRoot, "apps/server/src", file), "utf8"), read,
+      `${file} reads a placement plan: the strategy skill can ask a run for one again`);
+  }
+});
+
 test("the release script is not part of the repository; the vendored root is what it must carry", async () => {
   // A static guard on what the release depends on: the image COPYs the root,
   // and only the script knows the archive. Nothing in the repository may refer

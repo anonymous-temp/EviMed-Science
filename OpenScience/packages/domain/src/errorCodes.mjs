@@ -1617,6 +1617,7 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_member_forbidden',
   'geo_member_role_invalid',
   'geo_member_user_required',
+  'geo_member_user_unknown',
   'geo_member_owner_fixed',
   'geo_member_detail_invalid',
 ])
@@ -2005,6 +2006,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_member_forbidden: '你在这个项目里的角色不能做这件事；请联系项目负责人调整角色。',
   geo_member_role_invalid: '成员角色只能选：编辑、医学审核、只读。',
   geo_member_user_required: '请填写成员的账号。',
+  geo_member_user_unknown: '没有这个账号，请核对账号后再添加。',
   geo_member_owner_fixed: '项目负责人就是创建项目的账号，不能在成员里增减。',
   geo_member_detail_invalid: '成员的补充信息只能写医院、科室、专业、职称、所属机构和备注，每项不超过 120 个字。',
   // 「虚拟临床研究」's page refusals. Every one of these is permanent for the request
