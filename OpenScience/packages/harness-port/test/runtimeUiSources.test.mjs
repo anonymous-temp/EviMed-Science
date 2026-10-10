@@ -199,7 +199,8 @@ const CITING = `二甲双胍是首选用药。<!-- evimed-source: {"sourceId":"s
 async function citedAnswer({ reply, silent = false }) {
   const { JSDOM } = webRequire('jsdom');
   const dom = new JSDOM('<!doctype html><div id="root"></div>');
-  const saved = { window: globalThis.window, document: globalThis.document, act: globalThis.IS_REACT_ACT_ENVIRONMENT };
+  const host = /** @type {Record<string, any>} */ (/** @type {unknown} */ (globalThis));
+  const saved = { window: host.window, document: host.document, act: host.IS_REACT_ACT_ENVIRONMENT };
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
   try {
     const React = webRequire('react');
