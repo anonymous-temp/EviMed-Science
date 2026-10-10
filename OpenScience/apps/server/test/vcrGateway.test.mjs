@@ -14,6 +14,7 @@ import {
   vcrGatewayRoutePattern, vcrRuntimeWrite,
 } from "../src/vcrGateway.mjs";
 import { VCR_READ_WHATS, VCR_WRITE_WHATS, VcrService } from "../src/vcrService.mjs";
+import { PENDING_RECHECK, evaluateCriterion } from "../src/vcrMatching.mjs";
 import { vcrReportModel } from "../src/vcrRender.mjs";
 import { HttpError } from "../src/security.mjs";
 
@@ -1070,4 +1071,69 @@ test("a model written by a run keeps the notices its card earned: the run hears 
   const done = res.json().data;
   assert.deepEqual([done.ok, done.ids], [true, ["mdl_9"]], "the model is kept");
   assert.deepEqual(done.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]), [["applicability.horizon", "vcr_model_card_incomplete"]]);
+});
+
+// ---------------------------------------------------------------------------
+// The clinical fact write: what its optional links and metadata may and may not do
+// ---------------------------------------------------------------------------
+
+/**
+ * A fact write against doubles: one patient document, the facts the ledger already holds for the study, and whatever
+ * the store was asked to keep. The real ledger and plane are exercised by the integration suites.
+ * @param {{ text: string, known?: any[] }} input
+ */
+function factWriter({ text, known = [] }) {
+  /** @type {any[]} */
+  const saved = [];
+  const documents = { async runtimeRead(/** @type {any} */ _study, /** @type {{ subjectKey: string, documentId: string }} */ { subjectKey, documentId }) {
+    return subjectKey === "P-1" && documentId === "doc_1" ? { id: "doc_1", text, visibleAt: null, subjectKey } : null;
+  } };
+  const matchStore = {
+    async matchingFactsByIds(/** @type {string} */ _studyId, /** @type {string[]} */ ids) { return known.filter((fact) => ids.includes(fact.id)); },
+    async saveFact(/** @type {{ fact: any }} */ { fact }) { saved.push(fact); return { id: `fct_${saved.length}` }; },
+  };
+  return { saved, write: (/** @type {Record<string, any>} */ item) => vcrRuntimeWrite({ study, store: {}, service: {}, orchestrator: null, what: "fact", items: [item], documents, matchStore }) };
+}
+const PATIENT = { schema: 1, assertion: "affirmed", experiencer: "patient" };
+
+test("a copiedFrom link is honoured only for a copy of the same variable at the same instant; any other is its own event, with a warning (E-07)", async () => {
+  const text = "2026-08-01 多西他赛治疗。2026-09-25 多西他赛治疗。";
+  const original = { id: "fct_orig", subjectKey: "P-1", variable: "docetaxel", polarity: "affirmed", occurredAt: "2026-08-01T00:00:00.000Z", clinical: { ...PATIENT, medication: { state: "administered" } } };
+  const other = { ...original, id: "fct_other", variable: "paclitaxel" };
+  /** @param {string} quote @param {string} occurredAt @param {string} copiedFrom */
+  const copy = (quote, occurredAt, copiedFrom) => ({ subjectKey: "P-1", documentId: "doc_1", variable: "docetaxel", surface: "多西他赛", quote, occurredAt,
+    clinical: { ...PATIENT, medication: { state: "administered" }, copiedFrom } });
+  const washout = { id: "washout", kind: "exclusion", requirement: { op: "elapsed_since", variable: "docetaxel", days: 28 } };
+  const asOf = Date.parse("2026-10-01T00:00:00Z");
+
+  // The probe of the review: a genuine administration on 09-25 flagged as a copy of the 08-01 one.
+  const probe = factWriter({ text, known: [original, other] });
+  const flagged = await probe.write(copy("2026-09-25 多西他赛治疗", "2026-09-25", "fct_orig"));
+  assert.equal(flagged.ok, true, "the fact is kept, not rejected");
+  assert.deepEqual(flagged.issues, []);
+  assert.equal(probe.saved[0].clinical.copiedFrom, undefined, "it is stored as its own event");
+  assert.deepEqual(flagged.results[0].warnings.map((/** @type {any} */ warning) => [warning.field, warning.code]), [["clinical.copiedFrom", "clinical_copied_from_other_date"]]);
+  assert.equal(evaluateCriterion(washout, { facts: [original, probe.saved[0]], asOf }).state, PENDING_RECHECK,
+    "six days after the 09-25 administration the washout is still running; the link no longer hides it");
+
+  // Another variable is not a copy either.
+  const wrongVariable = factWriter({ text, known: [original, other] });
+  const crossed = await wrongVariable.write(copy("2026-09-25 多西他赛治疗", "2026-09-25", "fct_other"));
+  assert.equal(crossed.ok, true);
+  assert.equal(wrongVariable.saved[0].clinical.copiedFrom, undefined);
+  assert.equal(crossed.results[0].warnings[0].code, "clinical_copied_from_other_variable");
+
+  // A copy that keeps the original's variable and instant keeps the link, in whichever form the instant is written.
+  for (const occurredAt of ["2026-08-01", "2026-08-01T00:00:00Z", "2026-08-01T08:00:00+08:00"]) {
+    const honest = factWriter({ text, known: [original] });
+    const kept = await honest.write(copy("2026-08-01 多西他赛治疗", occurredAt, "fct_orig"));
+    assert.equal(kept.ok, true, occurredAt);
+    assert.equal(honest.saved[0].clinical.copiedFrom, "fct_orig", occurredAt);
+    assert.equal(kept.results[0].warnings, undefined, occurredAt);
+  }
+  // The fence is as before: a link to a fact that is not this patient's is refused whole.
+  const foreign = factWriter({ text, known: [{ ...original, subjectKey: "P-2" }] });
+  const refused = await foreign.write(copy("2026-08-01 多西他赛治疗", "2026-08-01", "fct_orig"));
+  assert.equal(refused.ok, false);
+  assert.equal(foreign.saved.length, 0);
 });

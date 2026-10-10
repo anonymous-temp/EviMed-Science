@@ -1282,20 +1282,36 @@ const WRITERS = {
       span: { start: start ?? null, end: end ?? null, quote: String(quote) },
       fact: { surface, dateSurface, value: typeof value === "number" ? value : undefined, clinical, unit } });
     if (!verified) return null;
-    const relationWarnings = [];
+    /** What the run should know about a fact that was kept: a link or a block the platform did not take. @type {any[]} */
+    const warnings = [];
     if (clinical) {
       const referenced = [...new Set([clinical.copiedFrom, clinical.correctionOf,
         ...(clinical.relations ?? []).filter(r => r.state === 'supported').map(r => r.targetFactId)].filter(Boolean))];
       const known = referenced.length ? await matchStore.matchingFactsByIds(study.id, referenced) : [];
       if (known.length !== referenced.length || known.some(row => row.subjectKey !== subjectKey)) return void item.bad('clinical', '事实引用必须属于本研究的同一受试者。');
       if (clinical.correctionOf && known.find(row => row.id === clinical.correctionOf)?.variable !== variable) return void item.bad('clinical.correctionOf', '更正必须针对同一临床变量。');
+      // `copiedFrom` takes a fact out of a washout, so it is honoured only where the record itself supports it: a copy
+      // states the same variable at the same instant as the fact it copies (copied text keeps its original event date).
+      // Any other link is the model's guess; the fact stands as its own event and the run is told, never refused.
+      if (clinical.copiedFrom) {
+        const original = known.find(row => row.id === clinical.copiedFrom);
+        const code = original?.variable !== variable ? 'clinical_copied_from_other_variable'
+          : sameInstant(original.occurredAt, occurredAt) ? null : 'clinical_copied_from_other_date';
+        if (code) {
+          delete clinical.copiedFrom;
+          warnings.push({ field: 'clinical.copiedFrom', targetFactId: original?.id, code,
+            message: code === 'clinical_copied_from_other_variable'
+              ? '被复制的事实是另一个变量，这条不是它的副本；已按独立事件保存，事实本身已保存。'
+              : '副本与被复制的事实发生在同一时间（复制的文字保留原来的事件日期）；这条的 occurredAt 不同，已按独立事件保存，事实本身已保存。' });
+        }
+      }
       for (const [relationIndex, relation] of (clinical.relations ?? []).entries()) {
         if (relation.state !== 'supported') continue;
         const target = known.find(row => row.id === relation.targetFactId);
         const reason = relationEvidenceReason(relation, target, verified);
         if (reason) {
           relation.state = 'unresolved';
-          relationWarnings.push({ relationIndex, targetFactId: relation.targetFactId, code: reason,
+          warnings.push({ relationIndex, targetFactId: relation.targetFactId, code: reason,
             message: '这条关系缺少可核对的双端点依据，已保留为待核对；事实本身已保存。' });
         }
       }
@@ -1320,7 +1336,7 @@ const WRITERS = {
       provenance: { ...(caller?.provenance ?? { schema: 1, status: 'unknown', runId: caller?.runtimeRunId ?? null }),
         inputProjectionHash: verified.document.projectionHash ?? null, terminologyVersion: vocabularyVersion, factSchema: 1 },
     } });
-    extra.results.push({ index: item.index, id: saved.id, subjectKey, ...(relationWarnings.length ? { warnings: relationWarnings } : {}) });
+    extra.results.push({ index: item.index, id: saved.id, subjectKey, ...(warnings.length ? { warnings } : {}) });
     return saved.id;
   },
 
@@ -1661,6 +1677,12 @@ async function studyHoldsSubject({ matchStore, documents, study, subjectKey, see
   }
   known.set(subjectKey, held);
   return held;
+}
+
+/** Two ISO instants are one moment however each is written; two absent ones are one too, and an unreadable one is nothing.
+ * @param {unknown} a @param {unknown} b */
+function sameInstant(a, b) {
+  return (a == null ? null : Date.parse(String(a))) === (b == null ? null : Date.parse(String(b)));
 }
 
 /** A supported link binds two preserved fact spans to one actual quote instance.
