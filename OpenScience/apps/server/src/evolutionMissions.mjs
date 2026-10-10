@@ -12,9 +12,12 @@ const TERMINAL = new Set(['complete', 'rejected', 'impossible', 'cancelled']);
 const digest = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const localDay = date => new Date(date.getTime() + 8 * 3600000).toISOString().slice(0, 10);
 export const evolutionReplayHeldOut = id => parseInt(digest(`heldout:${id}`).slice(0,8),16)%5===0;
+/** The dossier's measured score (`evolutionPriority` of its ranking features: papers, failures, waiting agendas, reference code,
+ * reachable data, examples, coverage, dependencies) is the base; until 2026-10-10 it was 0 here, so every opportunity of a
+ * module ranked alike and ties broke on the id string (review D-E1). */
 export const evolutionPriorityFeatures = (row) => {
   const p=row.payload ?? row,f=p.features ?? {};
-  return {id:row.id,baseScore:0,accountCount:Number(f.distinctAccounts??0),unlockedFamilies:Number(f.unlockedFamilies??Number(f.coverageGap===true)),otherModules:Number(f.otherModules??0),progressPoints:Number(f.progressPoints??f.developmentGain??0),totalResearch:Number(f.totalResearch??1),objectResearch:Number(f.objectResearch??0),estimatedCostCny:Number(f.estimatedCostCny??0)};
+  return {id:row.id,baseScore:Number.isFinite(Number(p.score))?Number(p.score):0,accountCount:Number(f.distinctAccounts??0),unlockedFamilies:Number(f.unlockedFamilies??Number(f.coverageGap===true)),otherModules:Number(f.otherModules??0),progressPoints:Number(f.progressPoints??f.developmentGain??0),totalResearch:Number(f.totalResearch??1),objectResearch:Number(f.objectResearch??0),estimatedCostCny:Number(f.estimatedCostCny??0)};
 };
 const sameFamily=(left,right)=>digest(left??null)===digest(right??null);
 const average = values => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;

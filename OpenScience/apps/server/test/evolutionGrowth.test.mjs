@@ -33,3 +33,14 @@ test('confirmed success becomes a growth opportunity after the matching candidat
  await service.save('archive','archive',{verdictId:'verdict',status:'promoted'});
  await growth.collect();assert.equal(offered.length,1);assert.deepEqual(offered[0].sources,['success']);
 });
+
+test('a module ranks its opportunities by their measured score, not by their id (review D-E1)',async()=>{
+ const {policyPriority}=await import('../src/evolutionPolicy.mjs');
+ // 200 failures + 50 papers + 5 waiting agendas against one failure: both used to rank 2.079 and the id decided.
+ const busy=evolutionPriorityFeatures({id:'a-opportunity',payload:{score:44.97,features:{distinctAccounts:0,coverageGap:true}}});
+ const quiet=evolutionPriorityFeatures({id:'0-opportunity',payload:{score:5.77,features:{distinctAccounts:0,coverageGap:true}}});
+ assert.equal(busy.baseScore,44.97);
+ assert.ok(policyPriority(busy)>policyPriority(quiet));
+ assert.deepEqual([quiet,busy].sort((a,b)=>policyPriority(b)-policyPriority(a)||String(a.id).localeCompare(String(b.id))).map(item=>item.id),['a-opportunity','0-opportunity']);
+ assert.equal(evolutionPriorityFeatures({id:'x',payload:{features:{}}}).baseScore,0,'a dossier without a score keeps a base of 0');
+});
