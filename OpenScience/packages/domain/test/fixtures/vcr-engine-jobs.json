@@ -1636,6 +1636,51 @@
       }
     },
     {
+      "name": "accrual forecast with an event target at the patients still to enrol",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "accrual_forecast",
+        "method": "accrual.poisson_gamma",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "sites": [
+            {
+              "id": "site_a",
+              "alpha": 2,
+              "beta": 4,
+              "startTime": 0
+            },
+            {
+              "id": "site_b",
+              "alpha": 3,
+              "beta": 5,
+              "startTime": 3,
+              "enrolled": 4,
+              "exposureTime": 5
+            }
+          ],
+          "target": 120,
+          "eventTarget": 116,
+          "eventHazard": 0.05,
+          "screenFailure": {
+            "alpha": 2,
+            "beta": 6
+          },
+          "byTimes": [
+            6,
+            12,
+            18
+          ]
+        },
+        "inputs": [],
+        "replicates": 20000
+      }
+    },
+    {
       "name": "map_prior #36",
       "job": {
         "jobId": "job_1",
@@ -10752,6 +10797,100 @@
       },
       "expected": [
         "scenario_field_unknown@scenario.replicates"
+      ]
+    },
+    {
+      "name": "an event target beyond the patients still to enrol",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "accrual_forecast",
+        "method": "accrual.poisson_gamma",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "sites": [
+            {
+              "id": "site_a",
+              "alpha": 2,
+              "beta": 4,
+              "startTime": 0
+            },
+            {
+              "id": "site_b",
+              "alpha": 3,
+              "beta": 5,
+              "startTime": 3,
+              "enrolled": 4,
+              "exposureTime": 5
+            }
+          ],
+          "target": 120,
+          "eventTarget": 117,
+          "eventHazard": 0.05,
+          "screenFailure": {
+            "alpha": 2,
+            "beta": 6
+          },
+          "byTimes": [
+            6,
+            12,
+            18
+          ]
+        },
+        "inputs": [],
+        "replicates": 20000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.eventTarget"
+      ]
+    },
+    {
+      "name": "an event target beyond the enrolment target with nothing enrolled",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "accrual_forecast",
+        "method": "accrual.poisson_gamma",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "sites": [
+            {
+              "id": "site_a",
+              "alpha": 2,
+              "beta": 4,
+              "startTime": 0
+            },
+            {
+              "id": "site_b",
+              "alpha": 3,
+              "beta": 5,
+              "startTime": 3
+            }
+          ],
+          "target": 120,
+          "eventTarget": 121,
+          "eventHazard": 0.05,
+          "screenFailure": {
+            "alpha": 2,
+            "beta": 6
+          },
+          "byTimes": [
+            6,
+            12,
+            18
+          ]
+        },
+        "inputs": [],
+        "replicates": 20000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.eventTarget"
       ]
     },
     {

@@ -814,6 +814,20 @@ vcr_pattern_match <- function(pattern, x) {
   invisible(NULL)
 }
 
+# A target number of events is counted among the patients still to enrol: the forecast draws the enrolment target less the patients the sites
+# already report (`sites[].enrolled`) and gives each an event time, so a target above that number is never reached. Nothing left to enrol:
+# the forecast is complete and the event target is not judged. Mirrors checkAccrualSemantics in the domain.
+.vcrp_check_accrual_semantics <- function(sc, path, ctx) {
+  event_target <- .vcrp_get(sc, "eventTarget"); target <- .vcrp_get(sc, "target"); sites <- .vcrp_items(.vcrp_get(sc, "sites"))
+  if (!.vcrp_num(event_target) || !.vcrp_num(target) || is.null(sites)) return(invisible(NULL))
+  enrolled <- sum(vapply(sites, function(s) { e <- .vcrp_get(s, "enrolled"); if (.vcrp_num(e) && e > 0) e else 0 }, numeric(1)))
+  remaining <- target - enrolled
+  if (remaining > 0 && event_target > remaining) {
+    ctx$raise("scenario_value_invalid", .vcrp_at(path, "eventTarget"), "Events are counted among the patients still to enrol (the target less those already enrolled); this event target is never reached.")
+  }
+  invisible(NULL)
+}
+
 #' Validate one method's scenario against its schema (`validateScenario`).
 vcr_validate_scenario <- function(method, scenario, input_ids = NULL, path = "scenario") {
   schema <- vcr_scenario_schemas()[[method]]
@@ -829,6 +843,7 @@ vcr_validate_scenario <- function(method, scenario, input_ids = NULL, path = "sc
   .vcrp_check_object(schema, scenario, path, ctx)
   if (method %in% c("design.simulate","design.grid","design.analytic")) .vcrp_check_design_semantics(scenario,path,ctx)
   if (identical(method, "comparator.maic")) .vcrp_check_maic_semantics(scenario, path, ctx)
+  if (identical(method, "accrual.poisson_gamma")) .vcrp_check_accrual_semantics(scenario, path, ctx)
   if (!is.null(schema$gridCells)) .vcrp_check_grid(schema, scenario, ctx)
   seen <- character(0)
   Filter(function(issue) {

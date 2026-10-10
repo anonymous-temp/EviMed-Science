@@ -390,6 +390,9 @@ function designNotes(method) {
  * @type {Readonly<Record<string, readonly string[]>>}
  */
 const METHOD_NOTES = Object.freeze({
+  'accrual.poisson_gamma': Object.freeze([
+    'eventTarget counts events among the patients still to enrol: the target less the patients already enrolled (the sum of sites[].enrolled, which the platform fills from the study\'s ledger). The events of patients already enrolled are not observed or simulated, so an eventTarget above that number is refused (scenario_value_invalid at eventTarget); write it within the patients still to enrol, and eventHazard with it.',
+  ]),
   'comparator.maic': Object.freeze([
     'Scales. Unanchored: aggregateOutcome and aggregateSe are the aggregate trial\'s outcome and its standard error on the outcome\'s OWN scale (a proportion for link logit, a positive mean or rate for link log, any number for identity), the scale of the outcomeColumn\'s mean; the engine applies the link to the level and the delta method to the standard error. A level outside the link\'s domain (a proportion not strictly between 0 and 1 on logit, a mean not above 0 on log) is refused (scenario_value_invalid). Anchored: aggregateEstimate and aggregateSe are already the aggregate trial\'s contrast and its standard error on the link scale (a log odds ratio, a log risk ratio, a mean difference).',
   ]),

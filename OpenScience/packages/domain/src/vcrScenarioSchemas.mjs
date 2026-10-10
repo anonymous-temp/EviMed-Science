@@ -1315,6 +1315,25 @@ function checkMaicSemantics(scenario, path, ctx) {
 }
 
 /**
+ * A target number of events is counted among the patients still to enrol. The forecast draws the enrolment target less the patients the
+ * sites already report (`sites[].enrolled`) and gives each an event time, so a target above that number is never reached, in any replicate:
+ * the run found no event time at all and ended as a handler error, after every replicate. It is refused by name instead. With nothing left
+ * to enrol the forecast is complete and the event target is not judged here. Mirrored by protocol.R.
+ * @param {any} scenario @param {string} path @param {WalkContext} ctx
+ */
+function checkAccrualSemantics(scenario, path, ctx) {
+  const { eventTarget, target, sites } = scenario
+  if (!isNumber(eventTarget) || !isNumber(target) || !Array.isArray(sites)) return
+  const enrolled = sites.reduce((/** @type {number} */ sum, /** @type {any} */ site) => sum + (isObject(site) && isNumber(site.enrolled) && site.enrolled > 0 ? site.enrolled : 0), 0)
+  const remaining = target - enrolled
+  if (remaining > 0 && eventTarget > remaining) {
+    raise(ctx, 'scenario_value_invalid', at(path, 'eventTarget'), enrolled > 0
+      ? `Events are counted among the patients still to enrol: ${remaining} (target ${target} less ${enrolled} already enrolled); an event target of ${eventTarget} is never reached.`
+      : `Events are counted among the ${target} patients to enrol; an event target of ${eventTarget} is never reached.`)
+  }
+}
+
+/**
  * Validate one method's scenario against its schema. Returns issues; empty is
  * valid. `inputIds` is the set of the job's input ids, for keys that name one.
  * @param {string} method @param {unknown} scenario
@@ -1337,6 +1356,7 @@ export function validateScenario(method, scenario, { inputIds = null, path = 'sc
   checkObject(schema, scenario, path, ctx)
   if (method === 'design.simulate' || method === 'design.grid' || method === 'design.analytic') checkDesignSemantics(scenario, path, ctx)
   if (method === 'comparator.maic') checkMaicSemantics(scenario, path, ctx)
+  if (method === 'accrual.poisson_gamma') checkAccrualSemantics(scenario, path, ctx)
   if (schema.gridCells) checkGrid(schema, scenario, ctx)
 
   // The same defect can be reported by two walkers; say it once.

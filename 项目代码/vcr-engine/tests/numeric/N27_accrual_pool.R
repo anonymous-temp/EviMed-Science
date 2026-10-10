@@ -116,6 +116,37 @@ vcr_case("N27c", c("AC-30", "AC-28"), function() {
                         paste(vcr_test_issue_codes(no_hazard), collapse = ",")))
 })
 
+vcr_case("N27e", c("AC-04", "AC-26", "AC-30"), function() {
+  # A target number of events is counted among the patients still to enrol. The forecast draws `target` minus the patients already
+  # enrolled (the sites' `enrolled`) and gives each an event time, so a target of events above that number is never reached, in any
+  # replicate: the run found no finite event time and ended as a handler error ("vcr_measure stopped on the NA MCSE") after all its
+  # replicates. It is refused up front, by name, before any replicate runs, in the validator and in the handler. The boundary -- the
+  # last of the patients still to enrol is the event -- is a legal forecast and has finite quantiles. With nothing enrolled the rule is
+  # the one the handler always had, an event target within the enrolment target.
+  reps <- 2000L; h <- 0.08
+  sites <- function(enrolled = NULL) .n27_sites(c(3, 3), c(4, 4), c(0, 0), enrolled = enrolled)
+  run <- function(target, kev, enrolled = NULL, tag) vcr_test_run(vcr_test_job("accrual.poisson_gamma",
+    list(sites = sites(enrolled), target = target, eventTarget = kev, eventHazard = h), seed = 7L, replicates = reps, job_id = paste0("job_n27e_", tag)))
+  # 2 sites x 20 enrolled = 40 of 80: 40 patients are still to enrol
+  beyond <- run(80L, 60L, 20L, "beyond"); edge <- run(80L, 41L, 20L, "edge"); boundary <- run(80L, 40L, 20L, "boundary")
+  # nothing enrolled: 41 events among 40 patients
+  none_beyond <- run(40L, 41L, NULL, "none"); none_ok <- run(40L, 40L, NULL, "none_ok")
+  codes <- function(r) paste(vapply(c(r$diagnostics$issues %||% list()), function(i) paste0(i$code, "@", i$field), character(1)), collapse = "+")
+  refused <- function(r) identical(r$status, "failed") && identical(codes(r), "scenario_value_invalid@scenario.eventTarget") && is.null(r$diagnostics$replicatesCompleted)
+  # the validator on its own, which is what the job runs first
+  verdict <- function(target, kev, enrolled) vapply(vcr_validate_scenario("accrual.poisson_gamma", vcr_test_json(list(sites = sites(enrolled), target = target, eventTarget = kev, eventHazard = h))),
+                                                     function(i) paste0(i$code, "@", i$field), character(1))
+  v_beyond <- verdict(80L, 60L, 20L); v_boundary <- verdict(80L, 40L, 20L)
+  me <- vcr_get_measure(boundary, "target_events_months"); ml <- vcr_get_measure(boundary, "last_patient_in_months")
+  ok <- refused(beyond) && refused(edge) && refused(none_beyond) && identical(v_beyond, "scenario_value_invalid@scenario.eventTarget") && length(v_boundary) == 0L &&
+    identical(boundary$status, "succeeded") && !is.null(me) && is.finite(me$value) && is.finite(me$mcse) && me$value > ml$value &&
+    identical(none_ok$status, "succeeded") && is.finite(vcr_measure_value(none_ok, "target_events_months"))
+  list(pass = ok,
+       detail = sprintf("40 of 80 enrolled, 40 still to enrol: 60 events -> %s (%s), 41 events -> %s, validator %s; 40 events (the boundary) -> %s, median %.3f +- %.3f (last patient in %.3f), validator clean: %s; nothing enrolled, 40 patients: 41 events -> %s, 40 events -> %s",
+                        beyond$status, codes(beyond), codes(edge), paste(v_beyond, collapse = "+"), boundary$status, me$value %||% NA_real_, me$mcse %||% NA_real_, ml$value %||% NA_real_,
+                        length(v_boundary) == 0L, codes(none_beyond), none_ok$status))
+})
+
 vcr_case("N27d", c("AC-30", "AC-04"), function() {
   # Evidence pooling through the job, in the shape the contract fixes: studies are
   # `{ studyId, estimate, se }` on the analysis scale, `method` and `level` are

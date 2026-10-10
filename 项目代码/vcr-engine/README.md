@@ -191,7 +191,7 @@ that snapshot and validates every job against them before a handler runs.
 | `design.grid` | designs × truths, one immutable run per cell, a long-format table | — |
 | `design.assurance` | power averaged over a design prior (normal on effect, on log HR, on the risk difference); for a group-sequential design the probability of crossing a boundary at any look, with the share at each look and a simulated check carrying its Monte-Carlo error (section 12) | numerical integration, a Monte-Carlo z-test; rpact's group-sequential power integrated over the prior (N47) |
 | `design.procova` | prognostic-adjustment sample size, three paths | the closed form, EMA 2022 |
-| `accrual.poisson_gamma` | per-site Poisson-Gamma accrual, staggered starts, screen failure, event target | closed form vs simulation, metafor-style REML for the pool (N27) |
+| `accrual.poisson_gamma` | per-site Poisson-Gamma accrual, staggered starts, screen failure, event target (counted among the patients still to enrol: the target less the sites' `enrolled`; a larger one is refused by name, N27e) | closed form vs simulation, metafor-style REML for the pool (N27) |
 | `matching.evaluate` | Kleene three-valued eligibility; a criterion that does not apply cannot exclude | the truth table (N29) |
 
 ### Robustness methods (2026-10-04)

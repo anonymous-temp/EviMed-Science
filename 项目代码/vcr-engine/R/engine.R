@@ -1797,7 +1797,14 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
   ev_target <- vcr_scalar(sc$eventTarget, NULL); ev_h <- vcr_scalar(sc$eventHazard, NULL)
   if (!is.null(ev_target)) {
     if (is.null(ev_h) || !(ev_h > 0)) vcr_abort("scenario_field_missing", "scenario.eventHazard", "A target event count needs the per-patient event hazard (per month).")
-    if (!(ev_target >= 1 && ev_target <= target)) vcr_abort("scenario_value_invalid", "scenario.eventTarget", "The event target is between 1 and the enrolment target.")
+    # The events are counted among the patients still to enrol -- the ones this forecast draws -- so a target above their number is never
+    # reached and the run used to end with no event time at all (N27e). The validator refuses it first; this is the second line. With
+    # nothing left to enrol the early return below answers, and the event target is held to the enrolment target as it always was.
+    if (!(ev_target >= 1 && ev_target <= (if (remaining > 0) remaining else target))) {
+      vcr_abort("scenario_value_invalid", "scenario.eventTarget",
+                if (remaining > 0 && remaining < target) "The event target is between 1 and the patients still to enrol (the target less those already enrolled)."
+                else "The event target is between 1 and the enrolment target.")
+    }
   }
   reps <- as.integer(job$replicates %||% 20000L)
   by <- vcr_num(sc$byTimes)
