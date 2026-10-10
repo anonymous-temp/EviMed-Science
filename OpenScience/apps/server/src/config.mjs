@@ -544,6 +544,8 @@ function shareSetting(overrides, key, name, fallback) {
  * - `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED` (off): a lesson an account's handbook learned that holds no project fact may go to the platform's skill supply as a
  *   text-only entry, after an independent re-check; needs the evolution module and the learning loop on. `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY` (3, at most 30)
  *   bounds the candidates re-checked and activated in a day, each a model call of the evolution module's own budget.
+ *   `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE` (0.1, from 0 to 1) is the share of eligible runs a handbook entry on probation is served to, by a hash of
+ *   the run id, so that the harm test can observe it; an entry that is never served can never leave probation (review L-6, owner decision 7).
  *
  * @param {Record<string, any>} overrides
  */
@@ -570,6 +572,7 @@ function evidenceFlywheelSettings(overrides) {
     evolutionModuleLeadsPerDay: moduleLeadsPerDay,
     learningPlatformHandbooksEnabled: overrides.learningPlatformHandbooksEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED", false),
     learningPlatformHandbooksPerDay: handbooksPerDay,
+    learningPlatformHandbooksProbationShare: shareSetting(overrides, "learningPlatformHandbooksProbationShare", "OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE", 0.1),
   };
 }
 

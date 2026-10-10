@@ -593,6 +593,8 @@ services:
       # A general lesson of an account's handbook may become a platform skill after an independent re-check (2026-10-06): the switch (off) and the candidates re-checked in a day.
       OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED:
       OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY:
+      # The share (0 to 1) of eligible runs a handbook entry on probation is served to; value-less: unset is the code's 0.1.
+      OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE:
       # What the platform reads for one account that asks it to verify a card's sources, per rolling day.
       OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY:
       # The most the judging of readers' challenges may spend in a day.

@@ -28,3 +28,13 @@ export function sampledByHash(id, share, purpose) {
   const digest = createHash("sha256").update(`${purpose}\0${String(id)}`).digest();
   return digest.readUInt32BE(0) / 0x1_0000_0000 < fraction;
 }
+
+/**
+ * One of `count` things, chosen by a hash of `id` for this purpose: the same id always gets the same one, and over many ids each is chosen about equally often.
+ * @param {unknown} id @param {number} count  how many to choose from (a positive whole number) @param {string} purpose
+ * @returns {number}  an index from 0 to count - 1; 0 when there is nothing to choose between
+ */
+export function pickByHash(id, count, purpose) {
+  if (!Number.isSafeInteger(count) || count <= 1) return 0;
+  return createHash("sha256").update(`${purpose}\0${String(id)}`).digest().readUInt32BE(0) % count;
+}

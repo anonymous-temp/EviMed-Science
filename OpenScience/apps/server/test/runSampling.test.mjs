@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sampledByHash } from "../src/runSampling.mjs";
+import { pickByHash, sampledByHash } from "../src/runSampling.mjs";
 
 const ids = Array.from({ length: 4000 }, (_, index) => `run_${index.toString(16).padStart(6, "0")}`);
 const taken = (share, purpose = "test-purpose") => ids.filter((id) => sampledByHash(id, share, purpose));
@@ -38,4 +38,17 @@ test("two purposes sample the same runs independently, so one run does not carry
   const both = [...first].filter((id) => second.has(id)).length;
   // Independent draws of a third each overlap in about a ninth of the runs; identical draws would overlap in a third.
   assert.ok(Math.abs(both / ids.length - 0.33 * 0.33) < 0.03, `${both} runs are in both`);
+});
+
+test("one of several is chosen by the id alone: the same one every time, each about equally often, and nothing to choose between is the first", () => {
+  for (const id of ids.slice(0, 200)) assert.equal(pickByHash(id, 3, "test-pick"), pickByHash(id, 3, "test-pick"), id);
+  for (const count of [2, 3, 5]) {
+    const tally = new Array(count).fill(0);
+    for (const id of ids) tally[pickByHash(id, count, "test-pick")] += 1;
+    for (const seen of tally) assert.ok(Math.abs(seen / ids.length - 1 / count) < 0.04, `${count} ways: ${tally}`);
+  }
+  for (const count of [1, 0, -2, 1.5, Number.NaN, undefined]) assert.equal(pickByHash("run_1", /** @type {any} */ (count), "test-pick"), 0, String(count));
+  const picks = ids.map((id) => pickByHash(id, 4, "test-pick"));
+  assert.ok(picks.every((index) => index >= 0 && index < 4 && Number.isInteger(index)));
+  assert.notDeepEqual(picks, ids.map((id) => pickByHash(id, 4, "another-purpose")), "a purpose of its own picks its own");
 });

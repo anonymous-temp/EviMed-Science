@@ -3876,6 +3876,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     learning: learningService, registry: agentRegistry, config, runtimeManager, agentRuns, sourceService, researchSessions,
     paused: (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId),
     audit: (event, status, detail) => securityAudit(config, event, status, detail),
+    // The platform's entry on probation for a sampled dispatch (learningPlatformHandbooks.mjs, `probationFor`). The module is composed further down, so it is asked for by name each time.
+    platformTrial: ({ project, run, capabilityId, fits }) => platformHandbooks?.probationFor({ userId: project.userId, projectId: project.id, runId: run.id, capabilityId, fits }) ?? null,
   };
   const prepareOwnedResearchContext = createOwnedResearchContext(ownedContextDependencies);
   const selectOwnedHandbooks = createOwnedHandbookSelector(ownedContextDependencies);
@@ -5158,6 +5160,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const evolutionService = evolution.service;
       platformHandbooks = createPlatformHandbooks({
         service: evolutionService, supply: evolution.supply, perDay: config.learningPlatformHandbooksPerDay, report: code => process.stderr.write(`${code}\n`),
+        // A run handed a probation entry is recorded as a use of the entry's tool, which is what the evolution module's feedback and its sequential harm test read.
+        probationShare: config.learningPlatformHandbooksProbationShare, served: event => evolution.onExecution(event),
         facts: projectFactsReader({ store, documents: productDocuments }),
         judge: async ({ text, capabilityId }) => evolution.budgeted("maintenance","memory",`handbook-judge:${capabilityId}:${createHash("sha256").update(text).digest("hex")}`,async () => {
           const response = await callModelForControlPlane({ config, usageLedger, fetchImpl: handbooksFetch }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID,

@@ -32,6 +32,16 @@
  * - **Researcher data and results never enter the supply**, because nothing here reads them into it: the entry is the handbook's own text, checked against
  *   the account's facts only to refuse it. The supply itself refuses anything that has not passed the re-check, and anything while the evolution module is off.
  * - **It is bounded.** At most `perDay` candidates are re-checked and activated in a day; model calls are the evolution module's own budget.
+ * - **A lesson on probation is served to a sample of runs, or nothing could ever see it.** The supply is copied to a runtime when it starts and holds only entries that
+ *   are effective, so an entry on probation ran in no run at all, the harm test had nothing to read, and none could leave probation (review L-6, owner ruling of
+ *   2026-10-10). `probationFor` gives a share of a researcher's dispatches (`OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE`, 0.1) one probation entry of the
+ *   run's capability as context in the prompt. Both the run and the entry are chosen by a hash of the run id (`runSampling.mjs`): a run is in or out for good, a
+ *   replayed dispatch gets the same entry, and one entry to a run means a run's outcome is that entry's alone. The exposure is recorded before the prompt carries the
+ *   text, as a use of the entry's tool (`served`) - the record the evolution module's feedback and its sequential harm test read - and an exposure that cannot be
+ *   recorded is not served. The entry is method text in front of the model like an account's supplement, so it takes only what is left of the shared prompt room
+ *   (`OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES`) after those. Every dispatch is counted by what came of it: served, no entry on probation for its capability that could be
+ *   served, outside the sample, or a failure.
+ *   It never reaches an account's own handbook, the run record a researcher reads, or any notice.
  *
  * Which model capability would make it deletable: a model that could be trusted to say, of its own lesson, that no project fact is in it.
  *
@@ -40,6 +50,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { handbookRetirementReason, rankHandbookEntries } from "./handbookUtility.mjs";
+import { pickByHash, sampledByHash } from "./runSampling.mjs";
 
 /** What a lesson is about, as the judge names it: the corroboration is of the same capability and the same class. */
 export const HANDBOOK_LESSON_CLASSES = Object.freeze([
@@ -51,6 +62,11 @@ export const HANDBOOK_FIELD_CHECKS = Object.freeze(["has_attachments", "identifi
 export const HANDBOOK_TEXT_LIMITS = Object.freeze({ min: 80, max: 6000 });
 export const HANDBOOK_JUDGE_ATTEMPTS = 3;
 export const HANDBOOK_DEFAULT_PER_DAY = 3;
+/** The share of a researcher's dispatches that carry one probation entry (`OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE`). */
+export const HANDBOOK_DEFAULT_PROBATION_SHARE = 0.1;
+/** What the two hashes are for, so that "is this run in the sample" and "which entry" are independent of each other and of the distillation sample. */
+const PROBATION_SAMPLE = "platform-handbook-probation";
+const PROBATION_PICK = "platform-handbook-probation-entry";
 const RECORD_TYPE = "evolution-handbook-candidate";
 const PAGE = 100;
 
@@ -141,12 +157,17 @@ export function handbookSkillFiles(text) {
  *   established: (userIds: string[]) => Promise<Set<string>>,
  *   recentGuestRun?: ((userId: string, runId: string | null) => Promise<boolean>) | null,
  *   perDay?: number, now?: () => Date, report?: ((code: string) => void) | null,
+ *   probationShare?: number,
+ *   served?: ((event: { userId: string, projectId: string, runId: string, toolId: string, revision?: number, digest?: string, result: { ok: boolean } }) => Promise<unknown>) | null,
  *   audit?: ((event: string, detail: { code: string, detail: string }) => Promise<unknown> | unknown) | null }} options
  *   `service` is the evolution service (records and tools); `supply` its platform skill supply. `harm` asks the independent-family judge
  *   (`judgeService.judge("J23", …)`) and answers with its result as it is (`{ outcome, value, code }`); absent, no lesson is checked and the skip is counted.
  *   `audit` is the security ledger's writer, told the entry's id and never the account.
+ *   `probationShare` is the share of dispatches that carry a probation entry (0 serves none); `served` records that a run was handed one - the composition passes the
+ *   evolution module's `onExecution`, which is what makes the run's outcome the entry's evidence. Without `served` nothing is served, since nothing could be observed.
  */
-export function createPlatformHandbooks({ service, supply, facts, judge, review = null, harm = null, established, recentGuestRun = null, perDay = HANDBOOK_DEFAULT_PER_DAY, now = () => new Date(), report = null, audit = null }) {
+export function createPlatformHandbooks({ service, supply, facts, judge, review = null, harm = null, established, recentGuestRun = null, perDay = HANDBOOK_DEFAULT_PER_DAY, now = () => new Date(), report = null, audit = null,
+  probationShare = HANDBOOK_DEFAULT_PROBATION_SHARE, served = null }) {
   const counters = {
     considered: 0,
     outcomes: /** @type {Record<string, number>} */ (Object.fromEntries(HANDBOOK_CANDIDATE_STATES.map((state) => [state, 0]))),
@@ -155,6 +176,8 @@ export function createPlatformHandbooks({ service, supply, facts, judge, review 
     /** Harm checks by what came of them: clear, flagged, uncertain (the judge was unsure), skipped (no answer; `harmSkippedBy` says why). */
     harmChecks: { clear: 0, flagged: 0, uncertain: 0, skipped: 0 },
     harmSkippedBy: /** @type {Record<string, number>} */ ({}),
+    /** Dispatches by what the probation sample made of them: served an entry, in the sample with no entry on probation for the capability, outside the sample, or failed. */
+    probation: { served: 0, noEntry: 0, sampledOut: 0, failed: 0 },
   };
   /** @param {string} state */
   const counted = (state) => { counters.outcomes[state] += 1; return state; };
@@ -374,6 +397,33 @@ export function createPlatformHandbooks({ service, supply, facts, judge, review 
     }
     return updated;
   }
+  /**
+   * The probation entry this dispatch carries, when it is one of the sampled ones. The hash of the run id decides first and cheaply, so the ledger is read for the sampled
+   * share only; a second hash picks the one entry among those on probation for the capability, in id order so that the pick does not move with the listing.
+   * `fits` is the caller's word on whether an entry's text still fits the prompt room it has left; an entry that does not is not among those picked from.
+   * The exposure is recorded before the entry is returned: a dispatch whose exposure could not be recorded is not served, because nothing about it could be observed.
+   * Never throws - the trial is how the platform learns about the entry, not something the run depends on.
+   * @param {{ userId: string, projectId: string, runId: string, capabilityId: string, fits?: ((text: { name: string, description: string, body: string }) => boolean) | null }} input
+   * @returns {Promise<{ entryId: string, version: number, capabilityId: string, text: { name: string, description: string, body: string } } | null>}
+   */
+  async function probationFor({ userId, projectId, runId, capabilityId, fits = null }) {
+    if (!served || !(Number(probationShare) > 0) || typeof runId !== "string" || !runId || typeof capabilityId !== "string" || !capabilityId) return null;
+    try {
+      if (!sampledByHash(runId, probationShare, PROBATION_SAMPLE)) { counters.probation.sampledOut += 1; return null; }
+      const rows = (await service.list("handbook-candidate", null, { status: "probation", capabilityId }))
+        .filter((row) => row.payload.toolId && row.payload.text?.body && (!fits || fits(row.payload.text)))
+        .sort((a, b) => (a.id < b.id ? -1 : 1));
+      if (!rows.length) { counters.probation.noEntry += 1; return null; }
+      const row = rows[pickByHash(runId, rows.length, PROBATION_PICK)];
+      await served({ userId, projectId, runId, toolId: row.payload.toolId, revision: row.payload.publication?.revision, digest: row.payload.publication?.digest, result: { ok: true } });
+      counters.probation.served += 1;
+      return { entryId: row.id, version: Number(row.payload.version ?? 1), capabilityId, text: row.payload.text };
+    } catch (error) {
+      counters.probation.failed += 1;
+      report?.(typeof /** @type {any} */ (error)?.code === "string" ? `learning_platform_handbook_${/** @type {any} */ (error).code}` : "learning_platform_handbook_probation_failed");
+      return null;
+    }
+  }
   /** Serving reads formal entries; evaluators may request probation. @param {string} capabilityId @param {{evaluation?:boolean}} [options] */
   async function entries(capabilityId,{evaluation=false}={}) {
     return rankHandbookEntries((await service.list("handbook-candidate")).filter(row=>(!capabilityId || row.payload.capabilityId===capabilityId)
@@ -417,11 +467,11 @@ export function createPlatformHandbooks({ service, supply, facts, judge, review 
     return result;
   }
 
-  return { consider, tick, observe, entries, observeTool: async input => {
+  return { consider, tick, observe, entries, probationFor, observeTool: async input => {
     const rows=(await service.list("handbook-candidate")).filter(row=>row.payload.toolId===input.toolId && ["probation","effective"].includes(row.payload.status));
     return Promise.all(rows.map(row=>observe({...input,entryId:row.id,version:row.payload.version??1})));
   }, stats: () => ({ ...counters, outcomes: { ...counters.outcomes }, rejectedBy: { ...counters.rejectedBy }, harmChecks: { ...counters.harmChecks },
-    harmSkippedBy: { ...counters.harmSkippedBy }, perDay, reviewConfigured: Boolean(review) }) };
+    harmSkippedBy: { ...counters.harmSkippedBy }, probation: { ...counters.probation }, probationShare, perDay, reviewConfigured: Boolean(review) }) };
 }
 
 /**
@@ -456,6 +506,11 @@ export function platformHandbookMetricFamilies(stats) {
     { name: "open_science_learning_platform_handbooks_harm_check_skipped_total", type: "counter",
       help: "Why a harm check gave no answer and the lesson went on unchecked: the judge not composed, unconfigured or not calibrated for its prompt, disabled, busy, over budget, timed out or failed.",
       series: Object.entries(stats.harmSkippedBy ?? {}).map(([reason, value]) => ({ value, labels: { reason } })) },
+    { name: "open_science_learning_platform_handbooks_probation_dispatches_total", type: "counter",
+      help: "Researcher dispatches by what the probation sample made of them: served (the prompt carried one probation entry and the exposure was recorded), no_entry (in the sample, but no entry on probation for the capability could be served: none, or none that fits the prompt room left), sampled_out (the rest) or failed (the exposure could not be recorded; the run went on without it).",
+      series: [["served", stats.probation?.served], ["no_entry", stats.probation?.noEntry], ["sampled_out", stats.probation?.sampledOut], ["failed", stats.probation?.failed]]
+        .map(([result, value]) => ({ value: Number(value ?? 0), labels: { result: String(result) } })) },
+    { name: "open_science_learning_platform_handbooks_probation_share", type: "gauge", help: "The share of dispatches that carry a probation entry (OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE); 0 serves none, and then no entry can leave probation.", series: [{ value: Number(stats.probationShare ?? 0) }] },
     { name: "open_science_learning_platform_handbooks_per_day", type: "gauge", help: "The most candidates re-checked and activated in a day (OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY).", series: [{ value: stats.perDay }] },
   ];
 }
