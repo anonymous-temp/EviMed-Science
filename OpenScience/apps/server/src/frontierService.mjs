@@ -1779,6 +1779,7 @@ export function frontierMetricFamilies(enabled, snapshot) {
       { labels: { outcome: "issued" }, value: Number(daily.counters?.issues ?? 0) },
       { labels: { outcome: "empty" }, value: Number(daily.counters?.empty ?? 0) },
       { labels: { outcome: "failed" }, value: Number(daily.counters?.failures ?? 0) },
+      { labels: { outcome: "rearmed" }, value: Number(daily.counters?.rearmed ?? 0) },
       { labels: { outcome: "ai_minute" }, value: Number(daily.counters?.aiMinutes ?? 0) },
       { labels: { outcome: "ai_minute_dropped" }, value: Number(daily.counters?.aiMinuteDropped ?? 0) },
     ]);

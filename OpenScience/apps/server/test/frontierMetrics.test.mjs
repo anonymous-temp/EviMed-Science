@@ -64,6 +64,21 @@ test("weekly and notification metrics distinguish unavailable delivery and scan 
   assert.ok(family(families, "open_science_frontier_notifications_total").series.some(row => row.labels.outcome === "scanGaps" && row.value === 2));
 });
 
+test("D-02: the jobs put back after giving up, and the attempts given back, are counted for the daily, the weekly and the notices", () => {
+  const view = snapshot(null);
+  view.composer = {
+    daily: { missing: false, counters: { issues: 1, empty: 0, failures: 3, rearmed: 2, aiMinutes: 1, aiMinuteDropped: 0, pushed: 0, pushFailures: 0 } },
+    weekly: { available: true, counters: { issues: 1, empty: 0, failures: 3, rearmed: 1 } },
+    notifications: { available: true, counters: { queued: 1, delivered: 0, skipped: 0, failed: 3, refunded: 2, rearmed: 4, scanGaps: 0 } },
+  };
+  const families = frontierMetricFamilies(true, view);
+  const outcome = (name, label) => family(families, name).series.find((row) => row.labels.outcome === label)?.value;
+  assert.equal(outcome("open_science_frontier_daily_total", "rearmed"), 2);
+  assert.equal(outcome("open_science_frontier_weekly_total", "rearmed"), 1);
+  assert.equal(outcome("open_science_frontier_notifications_total", "rearmed"), 4);
+  assert.equal(outcome("open_science_frontier_notifications_total", "refunded"), 2);
+});
+
 test("the edit failures are exported by kind as well as by field, and the trimmed summaries are counted", () => {
   const view = snapshot(null);
   view.editor = { counters: {

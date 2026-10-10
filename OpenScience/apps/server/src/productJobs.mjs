@@ -59,11 +59,15 @@ export class ProductJobs {
    * never applied to the codes the policy calls terminal, which will refuse the
    * same input again.
    *
-   * @param {string} kind @param {{limit?:number,terminalCodes?:readonly string[]}} options
+   * `createdWithinMs` leaves alone a job older than that: the work of a day that is over, or of a notice nobody can
+   * still be told, is not worth three more attempts, and a job that can never succeed must not be asked for ever.
+   *
+   * @param {string} kind @param {{limit?:number,terminalCodes?:readonly string[],createdWithinMs?:number|null}} options
    * @returns {Promise<number>} how many were re-armed
    */
-  async rearm(kind, { limit = 25, terminalCodes = [] } = {}) {
+  async rearm(kind, { limit = 25, terminalCodes = [], createdWithinMs = null } = {}) {
     productInteger(limit, 1, 1000);
+    if (createdWithinMs !== null) productInteger(createdWithinMs, 1000, 366 * 86_400_000);
     await migrateProductStore(this.database);
     const result = await this.database.query(`UPDATE evimed_product.jobs SET status='queued',attempts=0,error=NULL,
         finished_at=NULL,worker_id=NULL,lease_token=NULL,lease_expires_at=NULL,
@@ -71,8 +75,9 @@ export class ProductJobs {
       WHERE id IN (
         SELECT id FROM evimed_product.jobs
         WHERE kind=$1 AND status='failed' AND COALESCE(error->>'code','') <> ALL($2::text[])
+          AND ($4::double precision IS NULL OR created_at >= clock_timestamp() - ($4::double precision * interval '1 millisecond'))
         ORDER BY updated_at, id LIMIT $3)
-      RETURNING id`, [productKind(kind, PRODUCT_JOB_KINDS), [...terminalCodes], limit]);
+      RETURNING id`, [productKind(kind, PRODUCT_JOB_KINDS), [...terminalCodes], limit, createdWithinMs]);
     return result.rowCount ?? 0;
   }
 
