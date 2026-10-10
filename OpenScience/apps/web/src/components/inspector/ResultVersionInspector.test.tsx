@@ -138,6 +138,23 @@ describe("immutable result inspection", () => {
     expect(screen.getByText(/\.evimed-sources\/paper\/fulltext\.md/)).toBeInTheDocument();
     expect(screen.queryByText(/Recorded claim-to-source|remains separately assessed/)).toBeNull();
   });
+  // R24, 2026-10-10: a file's digest, a source's digest, and the platform's list of what was not recorded about a version are the back office's.
+  it("shows a version's sources by name, with no digest, no digest of the file and no list of what was not recorded", async () => {
+    const source = { kind: "source" as const, id: "10.9999/paper", path: ".evimed-sources/paper/fulltext.md", digest: "e".repeat(64), versionId: "rv_source", availability: "captured" as const };
+    const gaps: ResultVersion = { ...latest, inputs: [source], coverage: { ...latest.coverage, producer: "unknown", gaps: ["producer_bytes_not_bound", "unobserved_execution"] } };
+    api.list.mockResolvedValue({ items: [gaps], nextCursor: null }); api.get.mockResolvedValue(gaps);
+    const { container } = mount(gaps.versionId);
+    expect(await screen.findByText(/\.evimed-sources\/paper\/fulltext\.md · 原文可用/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看原文版本" })).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/文件摘要|摘要|eeeeeeeeeeee|bbbbbbbbbbbb|记录不完整|文件内容未经核对|执行过程未记录/);
+  });
+  it("lists the changed sources of a comparison by name only", () => {
+    const changed: ResultVersion = { ...latest, inputs: [{ kind: "source", id: "s1", path: "a.md", digest: "1".repeat(64), versionId: "rv_s1", availability: "captured" }] };
+    const before: ResultVersion = { ...old, inputs: [{ kind: "source", id: "s1", path: "a.md", digest: "2".repeat(64), versionId: "rv_s0", availability: "captured" }] };
+    const { container } = render(<ResultComparison current={changed} prior={before} before="a" after="a" />);
+    expect(screen.getByText("新增或改变来源 1；移除或替换来源 1")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/摘要|111111111111|222222222222/);
+  });
   // R22, 2026-10-10: the run's own notices are no longer copied into a version, so most versions carry no finding at all. Such a version
   // is not a version that was "not verified": there is nothing to say, and an empty section says nothing too.
   it("says nothing of verification, and draws no empty section, for a version with no findings, sources or numbers", async () => {

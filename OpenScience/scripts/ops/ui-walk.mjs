@@ -213,6 +213,8 @@ export const BACK_OFFICE = [
   /只分享文字，不含脚本/, /脚本不会随它分享/, /引用时只引用原始来源/,
   // The citation checker's own state under an answer: drawn only when it has a list to show.
   /引文核对中/, /引文暂时无法核对/,
+  // The result inspector: no digest, no image, no list of what the platform did not record or observe about a version.
+  /文件摘要/, /摘要未记录/, /记录不完整：/, /运行镜像/, /未被观察的部分/, /生成过程未被观察/, /没有可读取的核对意见/, /(?:已|未)保存此版本/,
 ];
 
 /**

@@ -48,6 +48,16 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["引用时只引用原始来源", "how a subscribed zone is cited is the model's context, not a sentence on the zone page"],
   ["引文核对中", "the citation checker's own state: under an answer nothing is drawn while it works or when it fails (as the reply check)"],
   ["引文暂时无法核对", "same"],
+  // The result inspector (R22-R24): a digest, the image a run was in, and the platform's list of what it did not record are the back office's.
+  ["文件摘要", "a file's digest is how versions are told apart internally; the reader sees 第 N 版 and the day"],
+  ["摘要未记录", "a source's digest is not shown, recorded or not"],
+  ["记录不完整：", "what the platform did not record about a version is not a line on the page (the colon: a gate's title for a measurement says 记录不完整 on its own)"],
+  ["运行镜像", "the image a run was in is the operator's"],
+  ["未被观察的部分", "what the platform did not observe about how a result was made is not said"],
+  ["生成过程未被观察", "same"],
+  ["没有记录生成过程", "same"],
+  ["没有可读取的核对意见", "a version with nothing to show is not a version that 「was not verified」"],
+  ["已保存此版本", "whether the platform kept a copy of an input is not a line in the lineage"],
   // The two modules' names (R10 plan §1, the owner's rulings of 2026-10-07): 「循证 GEO」 again —
   // 「循证传播」 was its name from 2026-10-06 — and 「虚拟临床研究」 for what was 「虚拟临研」. A search
   // still reads the old names as the new ones until 2027-01-07 — `@evimed/domain`'s

@@ -33,30 +33,32 @@ const mount = (version: ResultVersion, selectedText: string | null = null) => re
 beforeEach(() => { vi.clearAllMocks(); api.lineage.mockImplementation(async () => lineage()); });
 
 describe("the numerical chain of a version", () => {
-  it("says how an engine result was produced, with its inputs, environment and the transformation it was run on", async () => {
-    mount({ ...base, snapshot: engine, bindings: { ...bindings, status: "not_checked", items: [], unbound: [], unresolved: [], counts: { bound: 0, rendered: 0, unbound: 0, ambiguous: 0, unresolved: 0 } } });
+  it("says how an engine result was produced, with its inputs, environment and the transformation it was run on, and none of the platform's own record of it", async () => {
+    mount({ ...base, snapshot: { ...engine, process: { exitCode: 1, startedAt: null, endedAt: null, sourcesUnchanged: false, observation: null }, unknown: ["undeclared_dependencies"] },
+      bindings: { ...bindings, status: "not_checked", items: [], unbound: [], unresolved: [], counts: { bound: 0, rendered: 0, unbound: 0, ambiguous: 0, unresolved: 0 } } });
     const section = await screen.findByRole("region", { name: "生成方式" });
     expect(section).toHaveTextContent("确定性计算引擎 · meta.dl 第 1 版");
     expect(section).toHaveTextContent("实际执行：tau_estimator=DL");
-    expect(section).toHaveTextContent("摘要 ffffffffffff · 已核对");
-    expect(section).toHaveTextContent("输入：input.json · 摘要 dddddddddddd · 已保存此版本");
+    expect(section).toHaveTextContent("输入：input.json");
     expect(section).toHaveTextContent("数据变换：derive-outcome 第 2 版（数据集 trial-a）");
-    expect(section).toHaveTextContent("Python 3.12.3 · 2 个软件包的版本 · 运行镜像 777777777777");
-    expect(section).toHaveTextContent("运行已记录，所用代码已核对");
+    expect(section).toHaveTextContent("运行环境：Python 3.12.3 · 2 个软件包的版本");
+    // Digests, the image id, the exit status, and the verdicts the platform gives its own record are the back office's (owner ruling 2026-10-10).
+    expect(section.textContent).not.toMatch(/摘要|ffffffffffff|dddddddddddd|运行镜像|777777777777|已核对|未核对|已保存此版本|运行已记录|运行结果|退出码|未被观察|未被记录/);
     expect(within(section).queryByRole("list", { name: "未被观察的部分" })).toBeNull();
   });
 
-  it("names what was not observed for a version of unknown origin, and for code that was only generated", async () => {
-    mount({ ...base, snapshot: unobserved });
+  it("draws nothing about what was not observed, for a version of unknown origin", async () => {
+    const { container } = mount({ ...base, snapshot: unobserved });
+    await screen.findByRole("region", { name: "计算与依赖" });
+    expect(screen.queryByRole("region", { name: "生成方式" })).toBeNull();
+    expect(container.textContent).not.toMatch(/未被观察|未被记录|未记录|没有记录生成过程/);
+  });
+
+  it("says that code was written in the conversation and no more: not that it never ran, nor that its record is missing", async () => {
+    const { container } = mount({ ...base, snapshot: { ...unobserved, kind: "authored", unknown: [], reproduction: "generated_not_executed" } });
     const section = await screen.findByRole("region", { name: "生成方式" });
-    expect(section).toHaveTextContent("生成过程未被观察");
-    const unknown = within(section).getByRole("list", { name: "未被观察的部分" });
-    expect(unknown).toHaveTextContent("所用代码未记录");
-    expect(unknown).toHaveTextContent("运行中读取的其他文件和网络访问未被记录");
-    mount({ ...base, versionId: `rv_${"9".repeat(64)}`, snapshot: { ...unobserved, kind: "authored", unknown: [], reproduction: "generated_not_executed" } });
-    expect(await screen.findByText("这是对话中生成的代码，没有它运行过的记录")).toBeInTheDocument();
-    mount({ ...base, versionId: `rv_${"8".repeat(64)}`, snapshot: { ...unobserved, recorded: false } });
-    expect(await screen.findByText("此版本保存时没有记录生成过程。")).toBeInTheDocument();
+    expect(section).toHaveTextContent("生成方式：对话中直接写入");
+    expect(container.textContent).not.toMatch(/没有它运行过的记录|未被观察|没有记录生成过程/);
   });
 
   it("lists each printed number with the calculation, key, unit and formatting it came from, and each one that came from nothing", async () => {
@@ -70,7 +72,7 @@ describe("the numerical chain of a version", () => {
     const unbound = within(section).getByRole("list", { name: "没有对应计算值的数值" });
     expect(unbound).toHaveTextContent("“0.73”（第 4 行）：与计算值 values.pooled_effect（0.7134）接近但不相等，可能已过时或录入有误");
     expect(unbound).toHaveTextContent("“3.14”（第 2 行第 3 列）：没有对应的计算值");
-    expect(section).toHaveTextContent("渲染时有 1 处引用没有找到对应的计算值，报告里写的是“未计算”。");
+    expect(section).not.toHaveTextContent("渲染时有");
     await userEvent.click(within(rows[0]).getByRole("button", { name: "查看计算" }));
     expect(onOpen).toHaveBeenCalledWith({ versionId: CALC, path: "analysis/pooled.json", runId: "run_0" });
   });
