@@ -531,6 +531,37 @@ test("an account that keeps asking goes to the back of the line each time, so it
   } finally { hold.restore(); }
 });
 
+test("the gate's limits are the configuration's — derivations at once, the line and the wait — and the defaults are the ones it shipped with (review C4e)", async () => {
+  const container = await import("../src/capsuleContainer.mjs");
+  const { KDF_GATE_DEFAULTS } = await import("../src/capsuleKdfGate.mjs");
+  assert.equal(typeof container.configurePasswordKdfGate, "function", "the limits are set from the deployment's configuration at start");
+  assert.deepEqual(KDF_GATE_DEFAULTS, { concurrency: 1, maxWaiting: 6, maxWaitMs: 10_000 });
+  assert.deepEqual(container.passwordKdfGateLimits(), KDF_GATE_DEFAULTS, "until it is, the limits the gate was built with");
+  const hold = holdScrypt();
+  try {
+    // Two at once, and no line behind them: a third is told the line is full.
+    container.configurePasswordKdfGate({ concurrency: 2, maxWaiting: 0, maxWaitMs: 10_000 });
+    const a = packForBob({ password: "test-only-a", account: "acct-a" });
+    const b = packForBob({ password: "test-only-b", account: "acct-b" });
+    await hold.reached(2);
+    assert.deepEqual(hold.started, ["test-only-a", "test-only-b"], "both run at once");
+    await assert.rejects(packForBob({ password: "test-only-c", account: "acct-c" }), (error) => error.code === "capsule_password_busy" && error.reason === "queue_full");
+    hold.release(2);
+    await Promise.all([a, b]);
+    // One at a time, a line of one, and a wait of 60 ms: the second account waits it out.
+    container.configurePasswordKdfGate({ concurrency: 1, maxWaiting: 1, maxWaitMs: 60 });
+    const first = packForBob({ password: "test-only-first", account: "acct-a" });
+    await hold.reached(1);
+    await assert.rejects(packForBob({ password: "test-only-second", account: "acct-b" }), (error) => error.code === "capsule_password_busy" && error.reason === "waited_out");
+    hold.release();
+    await first;
+    // A value that is no limit leaves the limit as it was.
+    container.configurePasswordKdfGate({ concurrency: 0, maxWaiting: -1, maxWaitMs: Number.NaN });
+    assert.deepEqual(container.passwordKdfGateLimits(), { concurrency: 1, maxWaiting: 1, maxWaitMs: 60 });
+  } finally { hold.restore(); container.configurePasswordKdfGate(KDF_GATE_DEFAULTS); }
+  assert.deepEqual(container.passwordKdfGateLimits(), KDF_GATE_DEFAULTS);
+});
+
 test("workstyle scope cannot smuggle optional profile and knowledge entries", async () => {
   for (const [path, layer] of [["profile.md", "profile"], ["knowledge/chunks.jsonl", "knowledge"], ["documents/private.txt", "knowledge"]]) {
     const contentEntries = [{ path, layer, mime: "text/plain", content: "test-only-private-content" }];

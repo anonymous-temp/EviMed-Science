@@ -197,6 +197,7 @@ import { MaintenanceService } from "./maintenanceService.mjs";
 import { CapsuleService } from "./capsuleService.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
+import { configurePasswordKdfGate } from "./capsuleContainer.mjs";
 import { CapsuleShareLinks } from "./capsuleShareLinks.mjs";
 import { CapsuleSharing } from "./capsuleSharing.mjs";
 import { capsuleShareMetricFamilies, capsuleStewardshipMetricFamilies } from "./capsuleShareMetrics.mjs";
@@ -1515,9 +1516,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const capsuleService = productDocuments
     ? new CapsuleService(productDocuments, { indexing: memoryIndexing, strictIndex: config.memoryIndexStrict, scanner: capsuleScanner })
     : null;
+  // The password derivation's gate is the process's one, and its limits are the deployment's (review C4e).
+  configurePasswordKdfGate({ concurrency: config.capsuleKdfConcurrency, maxWaiting: config.capsuleKdfMaxWaiting, maxWaitMs: config.capsuleKdfMaxWaitMs });
   // The researcher's standing profile and the decision whether a dispatch hands it over (review M6, `residentProfile.mjs`).
   const residentProfiles = new ResidentProfiles({ config, store: researchMemory, capsules: capsuleService });
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
+    maxLiveSnapshots: config.capsuleMaxLiveSnapshots,
     privateAccountCleanup: userId => removePrivateExtensionFiles(config.dataDir, userId),
     // What became of an account's capsule cleanup: a deletion that rolled back and was released, or a cleanup that stopped on a code.
     report: (event, details) => { void securityAudit(config, "capsule.account-cleanup", event === "rolled_back" ? "released" : "failed", { userId: details.userId, code: details.code ?? event }).catch(() => {}); },
@@ -3927,7 +3931,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
       // every platform-level consumer (capsuleShareTrust.mjs, plan §7).
       guestInfluence: productDatabase ? createGuestInfluence({ database: productDatabase, documents: productDocuments,
-        minAccounts: config.capsuleShareCorroborationMinAccounts, keptDays: config.capsuleShareCorroborationKeptDays }) : null,
+        minAccounts: config.capsuleShareCorroborationMinAccounts, keptDays: config.capsuleShareCorroborationKeptDays,
+        minAccountAgeDays: config.capsuleShareCorroborationMinAccountAgeDays, minFinishedRuns: config.capsuleShareCorroborationMinFinishedRuns }) : null,
       // A conversation trying someone else's capsule teaches the loop nothing.
       sessionState: researchMemory.configured
         ? (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId) : null,

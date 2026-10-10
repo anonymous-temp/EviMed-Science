@@ -133,7 +133,7 @@ export interface CapsuleTransferPreview {
 export function listCapsuleExports(id: string, cursor?: string | null) {
   return productRequest<ProductPage<CapsuleExportSnapshot>>(`/capsules/${encodeURIComponent(id)}/exports${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
 }
-export function exportCapsule(id: string, input: { password: string; scopes: string[]; supersedes?: string }) {
+export function exportCapsule(id: string, input: { password: string; scopes: string[]; supersedes?: string; card?: CapsuleCard }) {
   return productRequest<{ archive: string; filename: string; snapshot: CapsuleExportSnapshot }>(`/capsules/${encodeURIComponent(id)}/exports`, "POST", input);
 }
 export function revokeCapsuleExport(id: string, snapshot: CapsuleExportSnapshot) {
