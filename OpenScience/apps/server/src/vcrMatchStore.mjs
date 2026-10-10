@@ -39,11 +39,17 @@ import { languageCriterionHash, languageInput, verifyMatchingSnapshot } from "./
 import { VCR_CRITERION_STATES, VCR_REFERRAL_STATES, clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
-import { VCR_SCHEMA } from "./vcrPersistence.mjs";
+import { VCR_SCHEMA, matchingManifestDigestSql } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
 
 /** A fact's id: `fac_` and the tail of a uuid, like every id of the module (the base's table has no row for it). */
 const factId = () => `fac_${randomUUID().replace(/-/g, "").slice(0, 22)}`;
+
+/**
+ * The outcomes recorded by every batch of one candidate denominator (the batches whose manifests differ only by offset), oldest
+ * first: one equality on the stored digest, through `vcr_matching_inputs_digest_idx`, and no manifest is read.
+ */
+export const MATCHING_BATCHES_SQL = `SELECT outcomes FROM ${VCR_SCHEMA}.matching_inputs WHERE study_id=$1 AND manifest_digest=$2 ORDER BY created_at,id`;
 
 /** The states a referral is created in. Anything else has to be reached by a transition a person made. */
 const VCR_REFERRAL_ENTRY_STATES = Object.freeze(["candidate", "needs_evidence"]);
@@ -750,7 +756,7 @@ export class VcrMatchStore extends VcrStoreBase {
   /** @param {{id:string,payload:any}} snapshot */
   async saveMatchingSnapshot(snapshot) {
     verifyMatchingSnapshot(snapshot.payload, snapshot.payload.studyId, snapshot.id);
-    await this.query(`INSERT INTO ${VCR_SCHEMA}.matching_inputs (study_id,id,manifest) VALUES ($1,$2,$3::jsonb)
+    await this.query(`INSERT INTO ${VCR_SCHEMA}.matching_inputs (study_id,id,manifest,manifest_digest) VALUES ($1,$2,$3::jsonb,${matchingManifestDigestSql("$3::jsonb")})
       ON CONFLICT (study_id,id) DO NOTHING`, [snapshot.payload.studyId, snapshot.id, JSON.stringify(snapshot.payload)]);
     return snapshot.id;
   }
@@ -770,12 +776,13 @@ export class VcrMatchStore extends VcrStoreBase {
   /** Protected, study-scoped roster; a subject outside a completed batch remains pending.
    * @param {string} studyId @param {string} id */
   async matchingProgress(studyId, id) {
-    const row = await this.one(`SELECT manifest FROM ${VCR_SCHEMA}.matching_inputs WHERE study_id=$1 AND id=$2`, [studyId,id]);
+    const row = await this.one(`SELECT manifest, COALESCE(manifest_digest, ${matchingManifestDigestSql("manifest")}) AS digest
+      FROM ${VCR_SCHEMA}.matching_inputs WHERE study_id=$1 AND id=$2`, [studyId,id]);
     if (!row) return [];
     // Continuations have their own immutable job hash, but one candidate
-    // denominator. Merge only batches whose entire input differs by offset.
-    const batches = await this.rows(`SELECT outcomes FROM ${VCR_SCHEMA}.matching_inputs
-      WHERE study_id=$1 AND (manifest - 'offset')=($2::jsonb - 'offset') ORDER BY created_at,id`, [studyId,JSON.stringify(row.manifest)]);
+    // denominator. Merge only batches whose entire input differs by offset:
+    // those are the ones that share the digest of the manifest without it.
+    const batches = await this.rows(MATCHING_BATCHES_SQL, [studyId,row.digest]);
     const outcomes = Object.assign({}, ...batches.map(batch => batch.outcomes ?? {}));
     return (row.manifest.subjects ?? []).map(subjectKey => ({ subjectKey, ...(outcomes[subjectKey] ?? { state:'pending' }) }));
   }

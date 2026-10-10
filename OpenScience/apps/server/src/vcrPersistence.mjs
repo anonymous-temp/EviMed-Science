@@ -94,6 +94,14 @@ export const VCR_TABLES = Object.freeze([
 const migrations = new WeakMap();
 
 /**
+ * The digest that names the batches of one candidate denominator: the sha256 of the frozen manifest without its `offset`, which
+ * is all that tells a continued batch from the one before it. SQL, so the insert and the migration's backfill agree byte for
+ * byte, and `jsonb`'s text form is canonical whatever order the keys were written in.
+ * @param {string} manifest a jsonb expression
+ */
+export const matchingManifestDigestSql = (manifest) => `encode(sha256(convert_to((${manifest} - 'offset')::text, 'UTF8')), 'hex')`;
+
+/**
  * `IN (...)` over a closed vocabulary, refusing any member that is not a plain
  * word: letters, digits, `_` and `-` (a knowledge pack's status is `ai-draft`).
  * @param {readonly string[]} words
@@ -1082,6 +1090,16 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.matching_inputs (
 );
 
 ALTER TABLE evimed_vcr.matching_inputs ADD COLUMN IF NOT EXISTS outcomes jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+-- A continued batch has its own immutable id but shares one candidate denominator with the batches it continues, and what tells them
+-- apart is the manifest's \`offset\`. The progress read used to compare every manifest of the study with this one, whole; it now
+-- asks for the digest of the manifest without its offset, which is stored and indexed. Rows that predate the column, and any an older
+-- process writes, are filled here on each migration (a pass that finds none changes nothing). The latest batch of a protocol is found
+-- through its own index for the same reason: the tab asks on every load.
+ALTER TABLE evimed_vcr.matching_inputs ADD COLUMN IF NOT EXISTS manifest_digest text;
+UPDATE evimed_vcr.matching_inputs SET manifest_digest = ${matchingManifestDigestSql("manifest")} WHERE manifest_digest IS NULL;
+CREATE INDEX IF NOT EXISTS vcr_matching_inputs_digest_idx ON evimed_vcr.matching_inputs (study_id, manifest_digest);
+CREATE INDEX IF NOT EXISTS vcr_matching_inputs_protocol_idx ON evimed_vcr.matching_inputs (study_id, (manifest->>'protocolVersionId'), created_at DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.sites (
   id             text PRIMARY KEY,

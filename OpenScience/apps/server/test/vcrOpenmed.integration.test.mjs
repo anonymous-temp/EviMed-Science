@@ -14,6 +14,8 @@ import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 import { streamOf } from './helpers/vcrIntakeData.mjs';
 import { freezeMatchingInputs } from '../src/vcrMatchingSnapshot.mjs';
 import { VcrStore } from '../src/vcrStore.mjs';
+import { vcrSchemaSql } from '../src/vcrPersistence.mjs';
+import { MATCHING_BATCHES_SQL } from '../src/vcrMatchStore.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'An isolated test PostgreSQL is required' };
 const origin = 'https://api.example.org';
@@ -302,6 +304,35 @@ test('continued batches share one denominator without mixing later facts or othe
   const changed=freezeMatchingInputs({...base,asOf:'2026-10-02'});
   await vcr.matchStore.saveMatchingSnapshot(changed);
   assert.ok((await vcr.matchStore.matchingProgress(target.id,changed.id)).every(row=>row.state==='pending'));
+});
+
+test('the batches of one candidate denominator are found by a stored, indexed digest of the manifest without its offset, which the migration fills for older rows (E-23)', options, async () => {
+  const target = await study();
+  const base = { studyId: target.id, protocolVersionId: 'p-digest', asOf: '2026-10-01', criteria: [], facts: [], languages: new Map(), subjects: ['a', 'b', 'c'], limit: 1 };
+  const first = freezeMatchingInputs(base), second = freezeMatchingInputs({ ...base, offset: 1 }), changed = freezeMatchingInputs({ ...base, asOf: '2026-10-02' });
+  for (const snapshot of [first, second, changed]) await vcr.matchStore.saveMatchingSnapshot(snapshot);
+  const digests = async () => Object.fromEntries((await database.query('SELECT id, manifest_digest FROM evimed_vcr.matching_inputs WHERE study_id=$1', [target.id])).rows
+    .map(row => [row.id, row.manifest_digest]));
+  const stored = await digests();
+  assert.match(stored[first.id], /^[a-f0-9]{64}$/);
+  assert.equal(stored[first.id], stored[second.id], 'two batches that differ only by offset are one denominator');
+  assert.notEqual(stored[first.id], stored[changed.id], 'any other difference is another');
+  // The progress read asks for the digest, and the index answers it: with sequential scans forbidden the plan still exists, and names the index.
+  const plan = await database.transaction(async client => {
+    await client.query('SET LOCAL enable_seqscan = off');
+    return JSON.stringify((await client.query(`EXPLAIN (FORMAT JSON) ${MATCHING_BATCHES_SQL}`, [target.id, stored[first.id]])).rows[0]['QUERY PLAN']);
+  });
+  assert.match(plan, /vcr_matching_inputs_digest_idx/);
+  // A row written before the digest existed is filled by the migration, and filling again changes nothing.
+  await database.query('UPDATE evimed_vcr.matching_inputs SET manifest_digest = NULL WHERE study_id=$1', [target.id]);
+  for (let pass = 0; pass < 2; pass += 1) {
+    await database.transaction(async client => { await client.query(vcrSchemaSql()); });
+    assert.deepEqual(await digests(), stored, `migration pass ${pass + 1}`);
+  }
+  await vcr.matchStore.recordMatchingOutcomes(target.id, first.id, { a: { state: 'evaluated' } });
+  await vcr.matchStore.recordMatchingOutcomes(target.id, second.id, { b: { state: 'unavailable', reason: 'source_unavailable' } });
+  assert.deepEqual((await vcr.matchStore.matchingProgress(target.id, second.id)).map(row => row.state), ['evaluated', 'unavailable', 'pending']);
+  assert.deepEqual((await vcr.matchStore.latestMatchingProgress(target.id, 'p-digest')).requested, 3, 'the latest batch of a protocol is still found');
 });
 
 test('study-scoped enrichment can be removed without deleting prior facts or changing another study', options, async () => {
