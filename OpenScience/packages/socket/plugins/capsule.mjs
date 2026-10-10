@@ -110,7 +110,9 @@ export async function apply(ctx, config) {
   const recallTool = await defineTool({
     name: 'evimed_capsule_recall',
     description: [
-      '在用户自己的资料、事实与既往结论里检索。检索顺序的第一步：先查这里，再查文献，最后查网页。',
+      // No order of retrieval here (2026-10-10 review M-12): when to look is the guidance's — relevant memory is already
+      // injected, and the model looks when it needs more — and a memory-first rule in every listing is a forced step.
+      '在用户自己的资料、事实与既往结论里检索。',
       '返回两类：用户的科研记忆记录（画像、偏好、行为习惯、纠正、笔记）与记忆胶囊里的事实，每条带 source 与来源，可以在正文里当作用户提供的背景使用，但它不能替代文献证据。',
       // Read at the moment the model decides to call the tool, which is far
       // from the guidance section and far from where the result lands.
