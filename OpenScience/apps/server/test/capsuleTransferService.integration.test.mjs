@@ -346,3 +346,44 @@ test("a pack made before the knowledge layer was assembled — workstyle only �
   const imported=await transfers.import(recipient,{archive:result.archive,password,expectedDigest:preview.archiveSha256,confirmed:true,title:"Older pack"});
   assert.equal(imported.payload.imported,true);
 });
+
+// 2026-10-10 review C-4: an upgrade in place matched the self-asserted issuer id and the held manifest's hash —
+// both cleartext in any copy — never the signing key, so a pack signed by another key could replace a verified pack
+// the recipient holds, keep its standing and flip it to unverified.
+test("a pack signed by another key that names the issuer and the held version is a new pack, not an upgrade",options,async()=>{
+  const capsule=await source();
+  const first=await transfers.export(owner,capsule.id,{password});
+  const firstPreview=await transfers.preview(recipient,{archive:first.archive,password});
+  assert.equal(firstPreview.issuerTrust,"verified");
+  const held=await transfers.import(recipient,{archive:first.archive,password,expectedDigest:firstPreview.archiveSha256,confirmed:true});
+  const victimIssuer=JSON.parse(first.archive).manifest.issuer.userId;
+  // A forger's registry for the same account: their own keys under the victim's issuer id.
+  const forgerDir=await mkdtemp("/tmp/evimed-forger-registry-");
+  try{
+    const forgerIdentities=new CapsuleIdentityStore(forgerDir);
+    const minted=await forgerIdentities.forUser(owner);
+    const keysDir=path.join(forgerDir,"capsule-keys");
+    const name=(await readdir(keysDir)).find(file=>file.startsWith("account-"));
+    const { readFile, writeFile, unlink } = await import("node:fs/promises");
+    const identity=JSON.parse(await readFile(path.join(keysDir,name),"utf8"));
+    await writeFile(path.join(keysDir,name),JSON.stringify({...identity,issuerId:victimIssuer}));
+    await unlink(path.join(keysDir,`issuer-${minted.signing.keyId}.json`));
+    const forger=new CapsuleTransferService({documents,capsules,identities:forgerIdentities,dataDir:forgerDir});
+    const forged=await forger.export(owner,capsule.id,{password,supersedes:first.snapshot.id});
+    const forgedManifest=JSON.parse(forged.archive).manifest;
+    assert.equal(forgedManifest.issuer.userId,victimIssuer,"the forged pack names the victim's issuer");
+    assert.equal(forgedManifest.prevManifestSha256,firstPreview.manifestSha256,"and the version the recipient holds");
+    const preview=await transfers.preview(recipient,{archive:forged.archive,password});
+    assert.equal(preview.issuerTrust,"unverified");
+    assert.equal(preview.upgrades,null,"another key is not the held pack's next version");
+    const imported=await transfers.import(recipient,{archive:forged.archive,password,expectedDigest:preview.archiveSha256,confirmed:true});
+    assert.notEqual(imported.id,held.id,"imported beside the held pack");
+    const kept=await documents.get(recipient,"capsule",held.id);
+    assert.equal(kept.payload.transfer.issuerTrust,"verified","the held pack keeps its standing");
+    assert.equal(kept.payload.transfer.manifestSha256,firstPreview.manifestSha256);
+  }finally{await rm(forgerDir,{recursive:true,force:true});}
+  // The genuine next version still upgrades in place.
+  const second=await transfers.export(owner,capsule.id,{password,supersedes:first.snapshot.id});
+  const secondPreview=await transfers.preview(recipient,{archive:second.archive,password});
+  assert.equal(secondPreview.upgrades?.capsuleId,held.id);
+});

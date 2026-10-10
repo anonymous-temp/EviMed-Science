@@ -687,7 +687,10 @@ export class CapsuleTransferService {
     let card = null;
     try { card = capsuleCard(manifest.card); } catch { throw invalid(); }
     const manifestSha256 = digest(JSON.stringify(manifest));
-    const upgrade = await this.#upgradeTarget(userId, manifest, metadata.entries);
+    // The key the pack was verified with: the registry's for a known issuer, else the archive's own. A pack continues
+    // one the account holds only when it is signed by the same key (2026-10-10 review C-4).
+    const signingKeyFingerprint = digest(String(known?.publicKey ?? envelope.issuerPublicKey));
+    const upgrade = await this.#upgradeTarget(userId, manifest, metadata.entries, { signingKeyFingerprint, trust: known ? "verified" : "unverified" });
     const preview = { archiveSha256, manifestSha256, snapshotId: metadata.snapshotId, scopes, entries: metadata.entries, newerSnapshotId: replacements.items[0]?.id ?? null, scan,
       card, sharedAt: typeof opened.manifest.createdAt === "string" ? opened.manifest.createdAt : null, upgrades: upgrade ? upgrade.view : null,
       issuerTrust: known ? "verified" : "unverified", issuerId: manifest.issuer.userId,
@@ -698,20 +701,29 @@ export class CapsuleTransferService {
     // Who made it, as this deployment knows: the account behind the verified issuer key. Internal — it is recorded beside what
     // the pack brought and never sent to a browser; a reader is shown the card's display name.
     const author = { id: known && !known.revoked && sourceAccountPresent ? known.ownerId : null, name: preview.card?.author ?? null };
-    return { preview, guards, accountCreatedAt, upgrade, author };
+    return { preview, guards, accountCreatedAt, upgrade, author, signingKeyFingerprint };
   }
 
   /**
    * The received pack this one continues, when the account holds it: the same
    * issuer, and a manifest whose version chain names the one it was imported
    * from. What changed is counted by content, since ids are minted per export.
+   *
+   * The same issuer means the same signing key, not the same self-asserted id: the issuer id and the held
+   * manifest's hash are cleartext in any copy, so a pack signed by another key that names both is a different
+   * pack, imported beside the one held — never in its place, keeping its standing (2026-10-10 review C-4). A
+   * pack held from before keys were recorded is continued only at the same trust, never verified → unverified.
    * @param {string} userId @param {any} manifest @param {readonly any[]} entries
+   * @param {{ signingKeyFingerprint: string, trust: "verified" | "unverified" }} signer
    */
-  async #upgradeTarget(userId, manifest, entries) {
+  async #upgradeTarget(userId, manifest, entries, { signingKeyFingerprint, trust }) {
     if (typeof manifest.prevManifestSha256 !== "string" || !/^[a-f0-9]{64}$/.test(manifest.prevManifestSha256)) return null;
     const received = await this.documents.list(userId, "capsule", { limit: 100,
       filter: { imported: true, transfer: { manifestSha256: manifest.prevManifestSha256, issuerId: manifest.issuer.userId } } });
-    const capsule = received.items[0];
+    const capsule = received.items.find((/** @type {any} */ item) => {
+      const held = item.payload.transfer ?? {};
+      return held.signingKeyFingerprint ? held.signingKeyFingerprint === signingKeyFingerprint : !(held.issuerTrust === "verified" && trust !== "verified");
+    });
     if (!capsule) return null;
     const facts = (await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: capsule.id } })).items
       .filter((/** @type {any} */ fact) => fact.payload.status !== "retired" && fact.payload.transfer?.sha256);
@@ -729,14 +741,14 @@ export class CapsuleTransferService {
     fields(input, ["archive", "password", "expectedDigest", "confirmed", "title"]);
     if (input.confirmed !== true) throw new HttpError(400, "capsule_import_confirmation_required", "Preview and explicitly confirm the capsule before importing.");
     if (input.expectedDigest !== digest(checkedText(input.archive, CAPSULE_TRANSFER_MAX_BYTES))) throw new HttpError(409, "capsule_preview_changed", "The archive changed after preview.");
-    const { preview, guards, accountCreatedAt, upgrade, author } = await this.inspect(userId,
+    const { preview, guards, accountCreatedAt, upgrade, author, signingKeyFingerprint } = await this.inspect(userId,
       { archive: input.archive, ...(input.password !== undefined ? { password: input.password } : {}) }, options);
     if (!preview.canImport) throw new HttpError(409, "capsule_snapshot_revoked", "This hosted snapshot has been revoked.");
     const channel = ["delivery", "link"].includes(String(options.channel)) ? String(options.channel) : "file";
     // Where the pack came from, kept beside everything it brings and never rewritten (plan §7): the author's account (internal)
     // and display name, the snapshot's hash, when it was made and by which channel it reached this account.
     const share = { authorId: author.id, authorName: author.name, snapshotHash: preview.manifestSha256, sharedAt: preview.sharedAt, channel };
-    if (upgrade) return this.#upgrade(userId, preview, upgrade, guards, share);
+    if (upgrade) return this.#upgrade(userId, preview, upgrade, guards, share, signingKeyFingerprint);
     const capsuleId = randomUUID();
     // The only transaction starts after KDF and parsing have finished. All rows
     // are new, owned by this account and context-only. The pack is trusted as
@@ -756,7 +768,7 @@ export class CapsuleTransferService {
     try { records = await this.documents.createBatch(userId, [
       { kind: "capsule", id: capsuleId, payload: { title: checkedText(input.title ?? preview.card?.title ?? "收到的研究胶囊", 150), description: "别人分享的胶囊：整包生效，随时停用。", imported: true, activationMode: "guest",
         transfer: { snapshotId: preview.snapshotId, archiveSha256: preview.archiveSha256, manifestSha256: preview.manifestSha256, issuerId: preview.issuerId,
-          issuerTrust: preview.issuerTrust, importedAt: new Date().toISOString(), authorId: share.authorId, channel },
+          issuerTrust: preview.issuerTrust, signingKeyFingerprint, importedAt: new Date().toISOString(), authorId: share.authorId, channel },
         share,
         ...(preview.card ? { card: preview.card } : {}),
         scan: preview.scan } },
@@ -788,8 +800,9 @@ export class CapsuleTransferService {
    * A newer snapshot is a different pack: whatever the account had kept of the old one does not count towards this one
    * (`keptSince` starts again), so an author cannot earn corroboration with a harmless snapshot and replace it with another.
    * @param {string} userId @param {any} preview @param {any} upgrade @param {readonly any[]} guards @param {Record<string, any>} share
+   * @param {string} signingKeyFingerprint
    */
-  async #upgrade(userId, preview, upgrade, guards, share) {
+  async #upgrade(userId, preview, upgrade, guards, share, signingKeyFingerprint) {
     const kept = new Set(preview.scan.kept);
     const unchecked = new Set(Array.isArray(preview.scan.unchecked) ? preview.scan.unchecked : preview.scan.model === "ok" ? [] : preview.scan.kept);
     const held = new Set(Array.isArray(preview.scan.held) ? preview.scan.held : []);
@@ -818,7 +831,7 @@ export class CapsuleTransferService {
         return this.documents.put(userId, "capsule", upgrade.capsule.id, {
           ...upgrade.capsule.payload,
           transfer: { ...upgrade.capsule.payload.transfer, snapshotId: preview.snapshotId, archiveSha256: preview.archiveSha256,
-            manifestSha256: preview.manifestSha256, issuerId: preview.issuerId, issuerTrust: preview.issuerTrust, upgradedAt: at,
+            manifestSha256: preview.manifestSha256, issuerId: preview.issuerId, issuerTrust: preview.issuerTrust, signingKeyFingerprint, upgradedAt: at,
             previousSnapshotId: upgrade.capsule.payload.transfer?.snapshotId ?? null, authorId: share.authorId, channel: share.channel },
           share,
           ...(upgrade.capsule.payload.keptSince ? { keptSince: at } : {}),
