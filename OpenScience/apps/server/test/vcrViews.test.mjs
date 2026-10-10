@@ -23,7 +23,7 @@ import {
 } from "../src/vcrViewsTabs.mjs";
 import {
   METHOD_LABELS, TIME_UNIT_WORDS, VCR_FAILED_SENTENCE, VCR_ROBUSTNESS_MEASURES, countsView, decimalsFor, defaultSourceOf, intervalView, measureLabel, measureValue, rangeString, reviewOfNode, staleNote,
-  presentVcrReview, unitWord, vcrFailureSentence, vcrPageSentence, withReviewState, zhDate, zhTime,
+  presentVcrReview, vcrFailureSentence, vcrPageSentence, withReviewState, zhDate, zhTime, zhUnit,
 } from "../src/vcrViewsKit.mjs";
 import { FIXTURE_DIR } from "./vcrViewsFixtures.mjs";
 
@@ -1246,8 +1246,8 @@ test("TU-1 the comparator page names the unit its RMST window is in — the engi
 
 test("TU-3 a page names every unit of the domain's one table, and a card's unit is said in Chinese whichever English word the platform or the engine wrote", () => {
   assert.deepEqual(Object.keys(TIME_UNIT_WORDS).sort(), [...VCR_TIME_UNITS].sort(), "a unit the table gains cannot be left without a word");
-  assert.deepEqual([unitWord("months"), unitWord("weeks"), unitWord("days"), unitWord("years"), unitWord("month")], ["个月", "周", "天", "年", "个月"]);
-  assert.deepEqual([unitWord("个月"), unitWord("例"), unitWord("%"), unitWord(null)], ["个月", "例", "%", null], "a spelling the table does not translate stands as it was written");
+  assert.deepEqual([zhUnit("months"), zhUnit("weeks"), zhUnit("days"), zhUnit("years"), zhUnit("month")], ["个月", "周", "天", "年", "个月"]);
+  assert.deepEqual([zhUnit("个月"), zhUnit("例"), zhUnit("%"), zhUnit(null)], ["个月", "例", "%", null], "a spelling the table does not translate stands as it was written");
   const card = (unit) => ({ id: "asm_t", key: "median_pfs_control", name: "对照组中位 PFS", version: 1, pointValue: 4.1, unit, sourceKind: "pooled", valueSource: "aggregate", reviewState: "ai_set",
     pooling: {}, distribution: {}, evidenceIds: [] });
   const bundle = (unit) => ({ ...emptyBundle(), study: { ...study, dataTier: "T2" }, assumptions: [card(unit)] });

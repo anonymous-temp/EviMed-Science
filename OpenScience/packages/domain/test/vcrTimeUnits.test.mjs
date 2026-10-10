@@ -52,11 +52,11 @@ test('evidence in several units agrees on one only when every one that names a u
 })
 
 test('a time-to-event scenario states its unit from the one table, and months when it says nothing (E4, OI-1)', () => {
-  const simulate = (extra) => ({ design: { kind: 'two_arm_fixed', nTreat: 100, nControl: 100 }, endpoint: { type: 'time_to_event' },
+  const simulate = (/** @type {Record<string, any>} */ extra = {}) => ({ design: { kind: 'two_arm_fixed', nTreat: 100, nControl: 100 }, endpoint: { type: 'time_to_event' },
     truth: { hazardRatio: 0.7, controlMedian: 1 }, analysis: { method: 'logrank', alpha: 0.025, sided: 1 }, accrual: { duration: 2, followup: 1, dropoutAnnual: 0.1 }, ...extra });
-  const analytic = (extra) => ({ design: { kind: 'two_arm_fixed' }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 1 },
+  const analytic = (/** @type {Record<string, any>} */ extra = {}) => ({ design: { kind: 'two_arm_fixed' }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 1 },
     analysis: { alpha: 0.025, power: 0.9, sided: 1 }, accrual: { duration: 2, followup: 1, dropoutAnnual: 0.1 }, ...extra });
-  const patients = (extra) => ({ design: { nTreat: 50, nControl: 50 }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 1 }, ...extra });
+  const patients = (/** @type {Record<string, any>} */ extra = {}) => ({ design: { nTreat: 50, nControl: 50 }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 1 }, ...extra });
   for (const [method, build] of /** @type {[string, (extra?: object) => object][]} */ ([['design.simulate', simulate], ['design.analytic', analytic], ['patients.time_to_event', patients]])) {
     assert.deepEqual(validateScenario(method, build()), [], `${method}: no unit is months, as it always was`);
     for (const unit of VCR_TIME_UNITS) assert.deepEqual(validateScenario(method, build({ timeUnit: unit })), [], `${method}: ${unit}`);

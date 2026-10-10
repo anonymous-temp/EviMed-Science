@@ -52,7 +52,7 @@ import {
 import {
   allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
   personName, plainText, PARAMETER_LABELS, METHOD_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime, VCR_ROBUSTNESS_MEASURES,
-  TIME_UNIT_WORDS, unitWord, vcrFailureSentence, vcrPageSentence,
+  TIME_UNIT_WORDS, zhUnit, vcrFailureSentence, vcrPageSentence,
 } from "./vcrViewsKit.mjs";
 
 /** A plain value (a number or `{ value, unit, … }` a row stored) as a page value. @param {unknown} raw @param {Record<string, any>} defaults */
@@ -1425,7 +1425,7 @@ export function presentDataTab(bundle, query = {}) {
       ...(newEvidence ? { newEvidence } : {}),
       // What an edit starts from. A person's value is an expert setting: it keeps the card's endpoint and applicability but not the pooled
       // evidence, which no longer supports the number (AC-25).
-      edit: { pointValue: numeric(card.pointValue), unit: unitWord(text(card.unit)), note: text(card.note), endpoint: text(card.endpoint), applicability: object(card.applicability) },
+      edit: { pointValue: numeric(card.pointValue), unit: zhUnit(text(card.unit)), note: text(card.note), endpoint: text(card.endpoint), applicability: object(card.applicability) },
       detail: {
         subtitle: [text(card.endpoint), text(pooling.calibre) ? `汇总口径：${CALIBRE_LABELS[String(pooling.calibre)] ?? pooling.calibre}` : null].filter(Boolean).join(" · ") || null,
         stats: [

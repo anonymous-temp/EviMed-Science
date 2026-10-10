@@ -446,7 +446,7 @@ const UNIT_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
   month: TIME_UNIT_WORDS.months.after, day: TIME_UNIT_WORDS.days.after, "%": "%",
 }));
 /** A unit as a page says it: an English unit word of the engine's or the platform's in Chinese, any other spelling as it was written. @param {string | null} unit */
-export const unitWord = (unit) => (unit === null ? null : UNIT_WORDS[unit] ?? unit);
+export const zhUnit = (unit) => (unit === null ? null : UNIT_WORDS[unit] ?? unit);
 
 /** @param {string} name */
 const isProportionName = (name) => MEASURE_META[name]?.percent === true || name.startsWith("probability_by_");
