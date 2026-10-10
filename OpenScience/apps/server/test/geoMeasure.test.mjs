@@ -160,7 +160,7 @@ test("a citation's stored domain is the host of its link and nothing that follow
     ["https://owned.com/?utm_source=chatgpt.com", "owned.com", true],
     ["https://www.owned.com:443/a", "www.owned.com", true],
     ["https://owned.com:8443", "owned.com", true],
-    ["https://user:secret@owned.com/x", "owned.com", true],
+    ["https://user:test-only@owned.com/x", "owned.com", true],
     ["HTTPS://Owned.COM./a?b#c", "owned.com", true],
     ["https://attacker.com?ref=x.owned.com", "attacker.com", false],
     ["https://attacker.com#.owned.com", "attacker.com", false],
