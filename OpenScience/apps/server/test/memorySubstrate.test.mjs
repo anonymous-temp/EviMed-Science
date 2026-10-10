@@ -461,6 +461,23 @@ test("the standing profile is offered when the index nominated none of it, and e
   }
 });
 
+test("when more of the profile is offered than fits, the most important of it is what reaches the prompt, as on the term matcher", async () => {
+  // Six standing preferences, listed most important first as the store lists them, and updated in the opposite order: recency
+  // would put the least important first. The durable reservation is half of eight slots, so four reach the prompt.
+  const records = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4].map((importance, index) => record({
+    id: `p${index + 1}`, kind: "preference", key: `pref.${index + 1}`, value: `Preference number ${index + 1}.`, importance,
+    updatedAt: `2026-09-0${index + 1}T00:00:00Z`,
+  }));
+  const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore(records), openViking: fakeIndex([]) });
+  const recalled = await substrate.recall(USER, "你好", { projectId: PROJECT });
+  assert.deepEqual(recalled.map((row) => row.id).sort(), ["record:p1", "record:p2", "record:p3", "record:p4"]);
+
+  // What the question is about still comes first, whatever the profile's own order.
+  const near = record({ id: "near", kind: "preference", key: "pref.near", value: "Prefers forest plots.", importance: 0.1 });
+  const withNear = new MemorySubstrate(openVikingConfig, { store: fakeStore([...records, near]), openViking: fakeIndex([hit(uriOf(near), 0.9)]) });
+  assert.equal((await withNear.recall(USER, "forest plots", { projectId: PROJECT }))[0].id, "record:near");
+});
+
 test("the profile that is offered is the one the decision allows: this project's scope, in force, not sensitive", async () => {
   const records = [
     record({ id: "mine", kind: "behavior", key: "habit", value: "Checks the protocol first.", scope: "project", scopeId: PROJECT }),

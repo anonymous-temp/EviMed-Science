@@ -77,6 +77,10 @@ export function memoryIndexSelection(config) {
  *  without the recall coming back short. */
 const CANDIDATE_OVERFETCH = 3;
 
+/** The distance between two records of the standing profile in the ranking: far below any score the index gives a nominated hit,
+ *  and only an order (the rank fusion keeps the order, not the number). */
+const STANDING_SCORE_STEP = 1e-6;
+
 /** How many accounts one sweep of the index visits (`sweepRecordLeaves`). The
  *  reconcile timer calls it every five minutes, so a deployment of a few
  *  accounts is swept whole each time and a large one in turns. */
@@ -361,12 +365,13 @@ export class MemorySubstrate {
     // does on the builtin arm: who they are, how they work and what they have
     // corrected stay relevant whatever the question is, and the index ranks by
     // closeness to a question, so a greeting nominates none of it. Records the
-    // index also nominated keep their score; the rest enter unscored and rank
-    // by recency behind them.
+    // index also nominated keep their score; the rest follow every nominated
+    // one in the order the store lists them — most important first, which is
+    // what ranks them on the term matcher when the question names none — and
+    // a profile larger than its half of the budget keeps its most important.
     const nominatedIds = new Set(hydrated.map(({ record }) => record.id));
-    for (const record of await this.#standingProfile(userId)) {
-      if (!nominatedIds.has(record.id)) hydrated.push({ record, score: 0 });
-    }
+    const standing = (await this.#standingProfile(userId)).filter((record) => !nominatedIds.has(record.id));
+    for (const [index, record] of standing.entries()) hydrated.push({ record, score: (standing.length - index) * STANDING_SCORE_STEP });
 
     // Which of them hold: in force and recallable, inside the validity
     // interval, in this project, one version of each fact. The index is asked
