@@ -388,13 +388,27 @@ export function verifyJudgement(answer, built, input) {
 
   /** @type {GeoVerifiedStatement[]} */
   const statements = [];
-  const seen = new Set();
+  // A sentence the judge lists twice is one statement, and keeps the worst verdict code could verify, in the place of the first: an
+  // unverifiable reading listed before a verified wrong one used to hide it, and the error was never recorded (Q-12). A listing that
+  // fails its checks is dropped as any other and replaces nothing.
+  const VERDICT_RANK = { correct: 0, unverifiable: 1, wrong: 2 };
+  /** @type {Map<string, number>} */
+  const placed = new Map();
+  /** @param {string} key @param {GeoVerifiedStatement} statement */
+  const keep = (key, statement) => {
+    const at = placed.get(key);
+    if (at === undefined) {
+      placed.set(key, statements.length);
+      statements.push(statement);
+    } else if (VERDICT_RANK[statement.verdict] > VERDICT_RANK[statements[at].verdict]) {
+      statements[at] = statement;
+    }
+  };
   for (const raw of (Array.isArray(answer.statements) ? answer.statements : []).slice(0, LIMITS.statements)) {
     const text = String(raw?.text ?? "").trim();
     const drop = (/** @type {string} */ reason) => dropped.push({ what: "statement", reason, text: text.slice(0, 300) });
     if (!text || !present(text)) { drop("statement_not_in_answer"); continue; }
     const key = compactText(text);
-    if (seen.has(key)) continue;
     const verdict = String(raw?.verdict ?? "");
     if (!GEO_STATEMENT_VERDICTS.includes(verdict)) { drop("verdict_invalid"); continue; }
     const alias = raw?.claim == null ? "" : String(raw.claim).trim();
@@ -404,8 +418,7 @@ export function verifyJudgement(answer, built, input) {
     // Which version of which card claim the verdict was judged against is the claim's, filled here and never typed by the model.
     const judgedAgainst = { topic, cardId: claim?.cardId ?? null, cardClaimId: claim?.cardClaimId ?? null, cardRevision: claim?.cardRevision ?? null };
     if (verdict === "unverifiable") {
-      seen.add(key);
-      statements.push({ text, verdict: "unverifiable", claimId: claim?.id ?? null, claimKey: claim?.key ?? null, errorType: null, severity: null, evidence: null, ...judgedAgainst });
+      keep(key, { text, verdict: "unverifiable", claimId: claim?.id ?? null, claimKey: claim?.key ?? null, errorType: null, severity: null, evidence: null, ...judgedAgainst });
       continue;
     }
     if (!claim) { drop("claim_unknown"); continue; }
@@ -421,12 +434,10 @@ export function verifyJudgement(answer, built, input) {
       // writes cannot have been confirmed by it either, and a statement nothing confirmed is not a correct one (Q-1).
       if ([...stated.unread].some((number) => !claimed.numbers.has(number))) {
         drop("number_not_confirmed");
-        seen.add(key);
-        statements.push({ text, verdict: "unverifiable", claimId: claim.id, claimKey: claim.key ?? null, errorType: null, severity: null, evidence: null, ...judgedAgainst });
+        keep(key, { text, verdict: "unverifiable", claimId: claim.id, claimKey: claim.key ?? null, errorType: null, severity: null, evidence: null, ...judgedAgainst });
         continue;
       }
-      seen.add(key);
-      statements.push({ text, verdict: "correct", claimId: claim.id, claimKey: claim.key ?? null, errorType: null, severity: null, evidence, ...judgedAgainst });
+      keep(key, { text, verdict: "correct", claimId: claim.id, claimKey: claim.key ?? null, errorType: null, severity: null, evidence, ...judgedAgainst });
       continue;
     }
     const errorType = String(raw?.errorType ?? "");
@@ -437,8 +448,7 @@ export function verifyJudgement(answer, built, input) {
       const differs = [...stated.tokens].some((token) => !claimed.tokens.has(token));
       if (!claimed.tokens.size || !differs) { drop("number_matches_claim"); continue; }
     }
-    seen.add(key);
-    statements.push({ text, verdict: "wrong", claimId: claim.id, claimKey: claim.key ?? null, errorType, severity, evidence, ...judgedAgainst });
+    keep(key, { text, verdict: "wrong", claimId: claim.id, claimKey: claim.key ?? null, errorType, severity, evidence, ...judgedAgainst });
   }
 
   // The three checks after the statements. Each is re-verified by what code can decide; one that fails is dropped, never softened.

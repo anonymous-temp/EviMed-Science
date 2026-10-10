@@ -320,6 +320,46 @@ test("the judge's verdicts are kept only when code can re-verify them, and dropp
   assert.deepEqual(verdict.entities, [], "an entity not in the answer is refused");
 });
 
+test("a sentence the judge lists twice keeps the worst verdict it can verify, in the place of the first (Q-12)", () => {
+  const answer = "玛仕度肽每天注射一次。出现剧烈腹痛要及时就医。玛仕度肽每周注射一次。";
+  const input = judgeInput(answer);
+  const built = buildJudgeInput(input);
+  const sentence = "玛仕度肽每天注射一次";
+  const wrong = { text: sentence, verdict: "wrong", claim: "C1", evidence: "每周一次皮下注射", errorType: "number", severity: "S3" };
+  const unverifiable = { text: sentence, verdict: "unverifiable", claim: null, evidence: "" };
+  const other = { text: "出现剧烈腹痛要及时就医", verdict: "unverifiable", claim: null, evidence: "" };
+  const kept = (/** @type {any[]} */ statements) => verifyJudgement({ statements }, built, input);
+  const verdicts = (/** @type {ReturnType<typeof kept>} */ result) => result.statements.map((statement) => [statement.text, statement.verdict]);
+
+  // Unverifiable first, then the verdict code can verify: the later, worse one stands, where the first used to hide it.
+  const late = kept([unverifiable, other, wrong]);
+  assert.deepEqual(verdicts(late), [[sentence, "wrong"], ["出现剧烈腹痛要及时就医", "unverifiable"]], "in the first one's place");
+  assert.deepEqual([late.statements[0].claimId, late.statements[0].errorType, late.statements[0].severity], ["claim-dose", "number", "S3"]);
+  assert.deepEqual(late.dropped, []);
+  // The same in the other order.
+  assert.deepEqual(verdicts(kept([wrong, unverifiable])), [[sentence, "wrong"]]);
+  // A sentence read as correct and as wrong against one claim (no number to hold it to) is wrong, in either order.
+  const unfounded = "玛仕度肽可用于儿童";
+  const reading = { text: unfounded, claim: "C2", evidence: "用于成人2型糖尿病患者" };
+  const asWrong = { ...reading, verdict: "wrong", errorType: "unfounded", severity: "S2" };
+  const asCorrect = { ...reading, verdict: "correct" };
+  const childAnswer = `${answer}${unfounded}。`;
+  const childInput = judgeInput(childAnswer);
+  const childBuilt = buildJudgeInput(childInput);
+  for (const order of [[asCorrect, asWrong], [asWrong, asCorrect]]) {
+    assert.deepEqual(verifyJudgement({ statements: order }, childBuilt, childInput).statements.map((statement) => [statement.text, statement.verdict]), [[unfounded, "wrong"]]);
+  }
+  // A later verdict code cannot verify never replaces an earlier one it can: the evidence is not in the claim, the claim is unknown.
+  const unproven = kept([unverifiable, { ...wrong, evidence: "每天注射一次" }]);
+  assert.deepEqual(verdicts(unproven), [[sentence, "unverifiable"]]);
+  assert.deepEqual(unproven.dropped.map((entry) => entry.reason), ["evidence_not_in_claim"]);
+  assert.deepEqual(kept([unverifiable, { ...wrong, claim: "C9" }]).dropped.map((entry) => entry.reason), ["claim_unknown"]);
+  // The same verdict twice, and a milder one after a worse one, are one statement and say nothing more.
+  const twice = kept([wrong, { ...wrong }, unverifiable]);
+  assert.deepEqual(verdicts(twice), [[sentence, "wrong"]]);
+  assert.deepEqual(twice.dropped, []);
+});
+
 test("a 'wrong on a number' verdict whose numbers are the claim's is dropped", () => {
   const answer = "玛仕度肽每周注射一次，起始剂量为2 mg。";
   const input = judgeInput(answer);
