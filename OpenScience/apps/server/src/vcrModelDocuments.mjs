@@ -62,16 +62,17 @@ import {
 
 import { vcrModelApplicabilityIssues, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
+import { longitudinalInputBlocks, longitudinalResultBlocks } from './vcrLongitudinalDocuments.mjs';
 import { evidenceLabel, list, measureValue, measureLabel, numeric, object, text, VALIDATION_LABELS } from "./vcrViewsKit.mjs";
 
 /** The shape of the frozen content, so a reader of an old row knows what it holds. */
 export const VCR_MODEL_PLAN_CONTENT_SCHEMA = 1;
 
 /** The kinds of result a model analysis report tabulates (a match or a profile is not a model result). */
-const REPORTED_RESULT_KINDS = Object.freeze(["population", "patient_set", "comparator", "trial_scenario", "accrual_forecast", "evidence_pool", "design_grid"]);
+const REPORTED_RESULT_KINDS = Object.freeze(["population", "patient_set", "comparator", "trial_scenario", "accrual_forecast", "evidence_pool", "design_grid", "longitudinal"]);
 const RESULT_KIND_LABELS_ZH = Object.freeze(/** @type {Record<string, string>} */ ({
   population: "人群", patient_set: "虚拟患者集", comparator: "对照", trial_scenario: "试验方案", accrual_forecast: "入组预测",
-  evidence_pool: "证据汇总", design_grid: "方案网格",
+  evidence_pool: "证据汇总", design_grid: "方案网格", longitudinal: "纵向研究",
 }));
 
 /** What a diff entry's section is called. */
@@ -98,11 +99,12 @@ const FIELD_LABELS_ZH = Object.freeze(/** @type {Record<string, string>} */ ({
  * @param {Record<string, any>} study
  */
 export async function readModelAnalysisInputs(store, study) {
-  const [definition, assumptions, populations, patientSets, comparators, scenarios, models, assessments] = await Promise.all([
+  const [definition, assumptions, populations, patientSets, comparators, scenarios, models, assessments, longitudinal] = await Promise.all([
     store.latestDefinition(study.id), store.assumptions(study.id), store.populations(study.id, 50), store.patientSets(study.id, 50),
     store.comparatorDesigns(study.id, 50), store.trialScenarios(study.id, 60), store.models(study.userId), store.modelAssessments(study.id),
+    store.longitudinalIndex?.(study.id,{all:true}) ?? {records:[]},
   ]);
-  return { study, definition, assumptions, populations, patientSets, comparators, scenarios, models, assessments };
+  return { study, definition, assumptions, populations, patientSets, comparators, scenarios, models, assessments, longitudinal };
 }
 
 /**
@@ -229,6 +231,11 @@ export function buildModelPlanContent(inputs) {
       endpointType, estimand: object(definition.estimand), pico: object(definition.pico),
     } : null,
     data: {
+      longitudinal: list(inputs.longitudinal?.records).filter(row => ['history','prediction','trial_benchmark'].includes(row.kind))
+        .map(row => ({id:row.id,hash:row.hash,kind:row.kind,historyId:row.summary.historyId ?? null,
+          model:row.summary.model ?? null,origin:row.summary.origin ?? null,endpoint:row.summary.endpoint ?? null,
+          horizonsDays:row.summary.horizonsDays ?? [],dataClass:row.summary.dataClass ?? 'published_aggregate'}))
+        .sort((a,b) => a.id.localeCompare(b.id)),
       populations: latestBy(list(inputs.populations), (row) => String(row.kind)).map((row) => ({
         kind: String(row.kind), name: String(row.name ?? ""), snapshotId: text(row.snapshotId),
       })).sort((a, b) => (a.kind < b.kind ? -1 : 1)),
@@ -304,6 +311,7 @@ const COLLECTIONS = Object.freeze([
   { path: "methods", section: "methods", identity: (item) => String(item.ref), name: (item) => String(item.label || item.ref) },
   { path: "scenarios", section: "scenarios", identity: (item) => String(item.label || item.design), name: (item) => String(item.label || item.design) },
   { path: "data.populations", section: "data", identity: (item) => String(item.kind), name: (item) => `人群（${item.kind}）` },
+  { path: "data.longitudinal", section: "data", identity: (item) => String(item.id), name: (item) => `纵向输入（${item.model?.name ?? item.kind}）` },
 ]);
 
 /** Fields the platform derives from others, never changes of their own. */
@@ -452,6 +460,7 @@ export function buildModelAnalysis({ inputs, results, versions }) {
     history: list(versions).map((version) => ({ ...summary(version), changes: list(version.changes).length })),
     deviations: newest ? diffModelPlanContent(object(newest.content), current) : [],
     results: modelResultsOf(inputs, results),
+    longitudinal: inputs.longitudinal ?? {records:[]},
   };
 }
 
@@ -699,7 +708,8 @@ function planSections(content, prose, { withProse }) {
   return [
     { id: "introduction", title: VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH.introduction, blocks: [...proseOf("introduction"), studyFacts(content)] },
     { id: "objectives", title: VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH.objectives, blocks: [...proseOf("objectives"), ...questionBlocks(content)] },
-    { id: "data", title: VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH.data, blocks: [...proseOf("data"), ...populationBlocks(content), assumptionsTable(list(content.assumptions))] },
+    { id: "data", title: VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH.data, blocks: [...proseOf("data"), ...populationBlocks(content),
+      ...longitudinalInputBlocks(list(content.data?.longitudinal)), assumptionsTable(list(content.assumptions))] },
     { id: "methods", title: VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH.methods, blocks: [
       ...proseOf("methods"), ...(models.length ? [modelsTable(models)] : [{ type: /** @type {const} */ ("text"), text: "这项研究没有登记任何需要评估的模型；所用的方法见下表。" }]),
       ...modelEvaluationBlocks(models), ...methodBlocks(list(content.methods), list(content.scenarios)),
@@ -749,6 +759,7 @@ export function modelPlanDocumentSections(model, reports) {
 
 /** One result's blocks: its conclusion, and the numbers the renderer prints. @param {Record<string, any>} result @param {number} index @param {Record<string, any>} model @returns {VcrDocumentBlock[]} */
 function resultBlocks(result, index, model) {
+  if (result.kind === 'longitudinal') return [];
   const base = `modelAnalysis.results[${index}]`;
   const notEstimable = result.conclusion === "not_estimable";
   /** @type {VcrDocumentBlock[]} */
@@ -824,14 +835,14 @@ export function modelReportDocumentSections(model, reports) {
   sections.push({ id: "introduction", title: VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH.introduction, blocks: [...proseOf("introduction"), studyFacts(current)] });
   sections.push({ id: "objectives", title: VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH.objectives, blocks: [...proseOf("objectives"), ...questionBlocks(current)] });
   sections.push({ id: "data_methods", title: VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH.data_methods, blocks: [
-    ...proseOf("data_methods"), ...populationBlocks(current), assumptionsTable(list(current.assumptions)),
+    ...proseOf("data_methods"), ...populationBlocks(current), ...longitudinalInputBlocks(list(current.data?.longitudinal)), assumptionsTable(list(current.assumptions)),
     ...(models.length ? [modelsTable(models)] : []), ...modelEvaluationBlocks(models), ...methodBlocks(list(current.methods), list(current.scenarios)),
     ...(list(current.assessments).some((record) => list(object(record).technicalCriteria).length)
       ? [/** @type {VcrDocumentBlock} */ ({ type: "list", title: "模型评价与结果的技术标准", items: list(current.assessments).flatMap((record) => list(object(record).technicalCriteria).map((entry) => `${object(record).modelName || object(record).key}：${object(entry).criterion}${object(entry).rationale ? `（${object(entry).rationale}）` : ""}`)) })]
       : [/** @type {VcrDocumentBlock} */ ({ type: "text", text: "技术标准还没有填写。" })]),
   ] });
   /** @type {VcrDocumentBlock[]} */
-  const resultBlocksAll = results.length ? results.flatMap((result, index) => resultBlocks(result, index, model))
+  const resultBlocksAll = results.length || list(analysis.longitudinal?.records).length ? [...results.flatMap((result, index) => resultBlocks(result, index, model)), ...longitudinalResultBlocks(model)]
     : [{ type: "text", text: "研究还没有可列入报告的结果。" }];
   sections.push({ id: "results", title: VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH.results, blocks: [
     ...proseOf("results"), ...resultBlocksAll,

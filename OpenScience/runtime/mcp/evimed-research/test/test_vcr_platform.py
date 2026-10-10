@@ -311,6 +311,20 @@ class VcrToolDefinitionTests(unittest.TestCase):
 
 
 class VcrReadWriteTests(_GatewayCase):
+    def test_longitudinal_summary_preserves_mixed_baseline_directions_and_suppressed_cells(self):
+        group = {"horizonDays": 30, "baselines": {
+            "persistence": {"comparisons": {"mae": {"model": .1, "baseline": .2, "preferred": "model"}}},
+            "trend": {"comparisons": {"mae": {"model": .1, "baseline": .01, "preferred": "baseline"}}},
+        }}
+        record = {"id": "vlf_evaluation", "kind": "evaluation", "summary": {"groups": [group]}}
+        hidden = {"id": "vlf_hidden", "kind": "evaluation", "summary": {"groups": [{**group, "displayReason": "small_cell_suppression"}]}}
+        _Gateway.answers["read"] = (200, {"data": {"records": [record, hidden], "related": [record]}})
+        result = self.server.call_tool("vcr_read", {"what": "longitudinal"})
+        self.assertIn("mae: model better than persistence; mae: trend better than model", result["summary"])
+        self.assertEqual(result["summary"].count("vlf_evaluation"), 1)
+        self.assertNotIn("vlf_hidden", result["summary"])
+        self.assertIn("not significance tests", result["summary"])
+
     def test_a_read_posts_the_what_and_filter_with_the_runtime_token_through_call_tool(self):
         _Gateway.answers["read"] = (200, {"data": {"what": "matching", "subjects": [{"subjectKey": "s_ab12", "summary": "eligible"}], "more": True}})
         result = self.server.call_tool("vcr_read", {"what": "matching", "filter": {"subjectKey": "s_ab12", "limit": 10}})
@@ -594,3 +608,27 @@ class RegistryRecordTests(_GatewayCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TrialBenchmarkFileTests(unittest.TestCase):
+    def test_preserved_trial_predictions_are_read_from_workspace_with_content_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = pathlib.Path(directory) / 'external.json'
+            file.write_text(json.dumps({'model': {'name': 'fixture'}, 'comparisons': [{'predicted': -.3}]}))
+            with mock.patch.dict(os.environ, {'OPEN_SCIENCE_WORKSPACE_DIR': directory}), mock.patch.object(vcr_platform, '_post', return_value={'ok': True, 'ids': ['vlf_fixture'], 'issues': []}) as post:
+                result = vcr_platform.write({'what': 'trial_benchmark', 'data': {'predictionsFile': 'external.json'}})
+                self.assertEqual(result['status'], 'success')
+                body = post.call_args.args[1]['data']
+                self.assertEqual(body['comparisons'][0]['predicted'], -.3)
+                self.assertEqual(body['sourceFile']['name'], 'external.json')
+                self.assertRegex(body['sourceFile']['sha256'], r'^[a-f0-9]{64}$')
+                self.assertNotIn('predictionsFile', body)
+
+    def test_a_trial_file_outside_the_workspace_is_a_local_input_error(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            file = pathlib.Path(outside) / 'external.json'
+            file.write_text('{"comparisons": []}')
+            with mock.patch.dict(os.environ, {'OPEN_SCIENCE_WORKSPACE_DIR': directory}), mock.patch.object(vcr_platform, '_post') as post:
+                with self.assertRaises(vcr_platform.VcrPlatformError) as raised:
+                    vcr_platform.write({'what': 'trial_benchmark', 'data': {'predictionsFile': str(file)}})
+                self.assertEqual(raised.exception.code, 'vcr_benchmark_invalid')
+                post.assert_not_called()

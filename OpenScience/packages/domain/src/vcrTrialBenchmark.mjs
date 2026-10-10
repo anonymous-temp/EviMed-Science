@@ -11,6 +11,9 @@ export function evaluateTrialBenchmark(benchmark,options = {}) {
   const seen = new Set()
   /** @type {any[]} */ const excluded = [], heldout = []
   for (const row of comparisons) {
+    if (row.issue || !['train','calibration','test'].includes(row.split)) {
+      excluded.push({code:row.issue ?? 'split_not_declared'});continue
+    }
     if (row.split !== 'test') continue
     const key = JSON.stringify([row.trialId,row.endpoint,row.scale,row.unit,row.horizonDays,row.arm])
     const issue = !Number.isFinite(row.actual) || !Number.isFinite(row.predicted) ? 'effect_missing'
@@ -32,7 +35,7 @@ export function evaluateTrialBenchmark(benchmark,options = {}) {
     trainingOverlap:benchmark.trainingOverlap ?? 'unknown',causalEffectIdentified:false,
     groups:[...groups.values()].map(rows => {
       const target = rows[0]
-      const calibration = comparisons.filter((/** @type {any} */ r) => ['train','calibration'].includes(r.split)
+      const calibration = comparisons.filter((/** @type {any} */ r) => !r.issue && ['train','calibration'].includes(r.split)
         && !testFamilies.has(r.familyId) && r.endpoint === target.endpoint && r.scale === target.scale
         && r.unit === target.unit && r.horizonDays === target.horizonDays && Number.isFinite(r.actual))
       // Equal-family means avoid overweighting repeated publications of a trial.

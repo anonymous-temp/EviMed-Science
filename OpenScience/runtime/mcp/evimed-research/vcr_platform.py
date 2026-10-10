@@ -49,12 +49,15 @@ from.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
+from pathlib import Path
 import urllib.error
 import urllib.request
 
 import public_sources
+from immutable_capture import managed_workspace, ImmutableCaptureError
 
 # The closed vocabularies, as `apps/server/src/vcrService.mjs` defines them.
 # `apps/server/test/vcrGateway.test.mjs` reads this file and holds these copies
@@ -67,7 +70,7 @@ READ_WHATS = (
 WRITE_WHATS = (
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
     "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
-    "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment", "history", "forecast_design",
+    "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
 )
 # The engine's job kinds, in the domain's order (`VCR_JOB_KINDS` in
 # `packages/domain/src/vcrVocabulary.mjs`): the 24 of the first release, then the
@@ -152,6 +155,8 @@ def tool_definitions():
                     "filter": {
                         "type": "object",
                         "properties": {
+                            "id": ID,
+                            "parentId": ID,
                             "kind": ID,
                             "registryId": ID,
                             "registry": ID,
@@ -183,6 +188,8 @@ def tool_definitions():
                 "measures and execution records come from the engine, and an object's configuration carries only the "
                 "keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in "
                 "issues and the rest are written."
+                " what: trial_benchmark imports an existing external trial-effect JSON via data {predictionsFile: workspace-relative path}; "
+                "actual effects are read from preserved evidence. Never generate the file's predictions yourself."
             ),
             "inputSchema": {
                 "type": "object",
@@ -494,6 +501,33 @@ def _absent_codes():
     return ("vcr_disabled", "vcr_no_study")
 
 
+def _longitudinal_comparison_summary(data: dict) -> str:
+    """Surface the engine's per-baseline directions without recomputing scores.
+    This reads only the already-projected answer, including any suppression."""
+    sentences = []
+    seen = set()
+    for record in data.get("records", []) + data.get("related", []):
+        if record.get("kind") != "evaluation" or record.get("id") in seen:
+            continue
+        seen.add(record.get("id"))
+        for group in record.get("summary", {}).get("groups", []):
+            if group.get("suppressed") or group.get("displayReason"):
+                continue
+            directions = []
+            for name, baseline in group.get("baselines", {}).items():
+                for metric, comparison in baseline.get("comparisons", {}).items():
+                    if comparison.get("model") is None or comparison.get("baseline") is None:
+                        continue
+                    preferred = comparison.get("preferred")
+                    wording = {"model": "model better than " + name,
+                               "baseline": name + " better than model", "equal": "model equal to " + name}.get(preferred)
+                    if wording:
+                        directions.append(metric + ": " + wording)
+            if directions:
+                sentences.append("%s at %s days: %s." % (record.get("id"), group.get("horizonDays"), "; ".join(directions)))
+    return " ".join(sentences) + (" These are same-subject point estimates, not significance tests." if sentences else "")
+
+
 def read(arguments: dict) -> dict:
     what = arguments.get("what")
     if what not in READ_WHATS:
@@ -509,6 +543,9 @@ def read(arguments: dict) -> dict:
         raise
     warnings = []
     next_actions = []
+    if what == 'longitudinal':
+        next_actions.append('Records and related are both readable results. filter.id selects that exact record; filter.parentId selects its evaluations. A prediction carries relatedIds for its latest evaluation. Empty filtered pages do not prove no validation exists.')
+        next_actions.append('A numeric metrics value marked availability=computed is a computed estimate, including zero and zero-width intervals. Only null/unavailable metrics have missing inputs; read unavailableReason. Predictive samples support CRPS without an sd. With adequate follow-up, zero events still permit Brier, while AUROC/AP need both classes.')
     if data.get("more") is True:
         warnings.append("More items exist than this answer holds.")
         next_actions.append("Call again with filter.offset to read the next page, or narrow the filter.")
@@ -519,7 +556,7 @@ def read(arguments: dict) -> dict:
         next_actions.append("Do the steps that do not need it, and say in the report what is missing and why.")
     return {
         "status": "warning" if warnings else "success",
-        "summary": "Read %s of this 虚拟临研 study." % what,
+        "summary": ("Read %s of this 虚拟临研 study. %s" % (what, _longitudinal_comparison_summary(data) if what == "longitudinal" else "")).strip(),
         "data": data,
         "warnings": warnings,
         "next_actions": next_actions,
@@ -536,6 +573,20 @@ def write(arguments: dict) -> dict:
     for key in ("items", "data"):
         if key in arguments:
             payload[key] = arguments[key]
+    if what == "trial_benchmark" and isinstance(payload.get("data"), dict) and "predictionsFile" in payload["data"]:
+        try:
+            workspace = managed_workspace()
+            file = (workspace / Path(payload["data"]["predictionsFile"])).resolve(strict=True)
+            if not file.is_relative_to(workspace) or not file.is_file() or file.stat().st_size > 400 * 1024:
+                raise ValueError("Select a trial-prediction JSON inside the workspace, at most 400 KB.")
+            raw = file.read_bytes()
+            document = json.loads(raw)
+            if not isinstance(document, dict) or not isinstance(document.get("comparisons"), list):
+                raise ValueError("The trial-prediction file requires comparisons.")
+            document["sourceFile"] = {"name": file.name, "sha256": hashlib.sha256(raw).hexdigest()}
+            payload["data"] = document
+        except (OSError, ValueError, TypeError, ImmutableCaptureError) as error:
+            raise VcrPlatformError("vcr_benchmark_invalid", "Read a valid external trial-prediction JSON from this workspace.") from error
     try:
         data = _post("write", payload)
     except VcrPlatformError as error:

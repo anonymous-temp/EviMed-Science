@@ -48,6 +48,7 @@ import { HttpError } from "./security.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
 import { withReviewState } from "./vcrViewsKit.mjs";
+import { longitudinalIndex } from './vcrLongitudinalStore.mjs';
 
 /** @param {unknown} value */
 const iso = (value) => (value == null ? null : new Date(/** @type {any} */ (value)).toISOString());
@@ -268,6 +269,8 @@ export { comparatorFromRow, criterionFromRow, jobSummaryFromRow, patientSetFromR
  * no package migrates a table another one reads.
  */
 export class VcrStore extends VcrStoreBase {
+  /** @param {string} studyId @param {any} [filter] */
+  longitudinalIndex(studyId,filter = {}) { return longitudinalIndex(this,studyId,filter); }
   /** Read every report input at one PostgreSQL snapshot. @param {(store:VcrStore) => Promise<any>} operation */
   async reportSnapshot(operation) {
     await this.ready();

@@ -170,7 +170,7 @@ export function longitudinalReadiness(events, coverage = {}) {
  * @param {Record<string, any>} input @param {{subjects?:Set<string>,origin?:string}} [context] */
 export function validateForecast(input, context = {}) {
   const endpoint = obj(input.endpoint), rows = arr(input.rows), origin = longitudinalInstant(input.origin)
-  /** @type {any[]} */ const issues = [], accepted = []
+  /** @type {any[]} */ const issues = [], accepted = [], rejected = []
   const horizons = arr(input.horizonsDays)
   const validHeader = VCR_PREDICTION_TYPES.includes(endpoint.type) && typeof endpoint.code === 'string' && endpoint.code.length > 0
     && typeof endpoint.unit === 'string' && endpoint.unit.length > 0 && origin && (!context.origin || origin === context.origin)
@@ -197,14 +197,34 @@ export function validateForecast(input, context = {}) {
     if (samples.length > VCR_LONGITUDINAL_LIMITS.samples || samples.some(v => !Number.isFinite(v) || probability && (v < 0 || v > 1))) errors.push('samples_invalid')
     if (row.absorbedAtDays != null && (!Number.isFinite(row.absorbedAtDays) || row.absorbedAtDays < 0
       || row.horizonDays > row.absorbedAtDays && endpoint.type === 'continuous')) errors.push('after_absorbing_event')
-    if (errors.length) { issues.push({ row: index + 1, codes: errors }); continue }
+    if (errors.length) {
+      issues.push({ row: index + 1, codes: errors })
+      if (typeof row.subjectKey === 'string' && horizons.includes(row.horizonDays)) rejected.push({subjectKey:row.subjectKey,horizonDays:row.horizonDays,codes:errors})
+      continue
+    }
     seen.add(key)
     accepted.push({ subjectKey: row.subjectKey, horizonDays: row.horizonDays, point: row.point,
       unit: endpoint.unit, ...(row.sd != null ? { sd: row.sd } : {}), quantiles: qs.map(q => ({ p: q.p, value: q.value })), samples,
       uncertainty: VCR_FORECAST_UNCERTAINTY.includes(row.uncertainty) ? row.uncertainty : 'unknown',
       absorbedAtDays: row.absorbedAtDays ?? null, valueSource: 'predicted' })
   }
-  return { rows: accepted, issues, received: rows.length }
+  // Survival cannot increase with time. Keep the last consistent value and
+  // quarantine only the offending horizon; unrelated subjects remain usable.
+  const invalid = new Set()
+  if (endpoint.type === 'survival_probability') {
+    const last = new Map()
+    for (const row of [...accepted].sort((a,b) => a.horizonDays-b.horizonDays)) {
+      const previous = last.get(row.subjectKey)
+      if (previous && row.point > previous.point + 1e-12) {
+        invalid.add(row)
+        const codes = ['survival_probability_increases']
+        issues.push({codes,horizonDays:row.horizonDays})
+        rejected.push({subjectKey:row.subjectKey,horizonDays:row.horizonDays,codes})
+      } else last.set(row.subjectKey,row)
+    }
+  }
+  // Rejected cell identities stay in the protected artifact, never its summary.
+  return { rows: accepted.filter(row => !invalid.has(row)), issues, rejected, received: rows.length }
 }
 
 /** @type {Record<string, string[]>} */ const required = {

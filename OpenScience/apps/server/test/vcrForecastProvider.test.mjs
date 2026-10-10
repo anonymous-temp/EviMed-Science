@@ -79,3 +79,16 @@ test('changing the provider configuration stops new batches and preserves comple
   const result=await held.api.predict({...input(),onBatch:async()=>{await fs.writeFile(held.file,JSON.stringify({providers:[{...held.provider,version:'rolled-back'}]}));}});
   assert.equal(calls,1);assert.equal(result.rows.length,1);assert.equal(result.failures[0].code,'provider_configuration_changed');
 });
+
+test('malformed peers keep valid rows, the original exchange, cost and a replayable sanitized receipt',async t=>{
+  let persisted,batch,calls=0;
+  const {api}=await fixture(t,async(_url,options)=>{
+    calls++;const body=JSON.parse(options.body),reply=await answer(body).json();
+    return Response.json({...reply,cost:.02,costCurrency:'CNY',rows:[...reply.rows,{subjectKey:'outside',horizonDays:30,point:7},null]});
+  },{batchSize:100});
+  const result=await api.predict({...input(),finishBatch:async value=>{persisted=value;},onBatch:async value=>{batch=value;}});
+  assert.equal(result.rows.length,2);assert.equal(result.receipts[0].invalidRows,2);assert.equal(result.receipts[0].cost,.02);
+  assert.equal(batch.rawResponse.rows.length,4);assert.equal(persisted.response.rows.length,2);
+  const replay=await api.predict({...input(),beginBatch:async()=>persisted});
+  assert.equal(replay.rows.length,2);assert.equal(replay.failures[0].code,'provider_rows_invalid');assert.equal(calls,1);
+});

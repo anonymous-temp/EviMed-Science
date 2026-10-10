@@ -72,6 +72,11 @@ export function metricIntervals(rows, type, { seed = 1, bootstrap = 200 } = {}) 
     for (const [key,value] of Object.entries(forecastMetrics(sample,type))) if (value != null) (replicates[key] ??= []).push(value)
   }
   return Object.fromEntries(Object.entries(point).map(([key,value]) => [key, { value,
+    availability: value == null ? 'unavailable' : 'computed',
+    unavailableReason: value != null ? null : key === 'crps' ? 'predictive_samples_missing'
+      : ['intervalCoverage','nominalCoverage'].includes(key) ? 'predictive_quantiles_missing'
+        : ['auroc','averagePrecision'].includes(key) ? 'both_outcome_classes_required'
+          : key === 'correlation' ? 'nonconstant_predictions_and_outcomes_required' : 'paired_observations_required',
     lower: quantile(replicates[key] ?? [], .025), upper: quantile(replicates[key] ?? [], .975),
     successfulReplicates: replicates[key]?.length ?? 0, interval: 'patient_cluster_percentile', bootstrap }]))
 }
@@ -167,6 +172,9 @@ export function ipcwBrier(rows, horizon, type) {
     if (!row.censored && row.time <= horizon) { const weight = before.get(row.time) ?? 0; if (weight <= 0) return null; sum += (1-risk)**2/weight }
     else if (row.time > horizon) { if (gh <= 0) return null; sum += risk**2/gh }
   }
+  // G(h)=0 leaves no censoring support at or beyond the last follow-up.
+  // Zero contributing weights must not masquerade as perfect error.
+  if (gh <= 0) return null
   return sum/survivalRows.length
 }
 
@@ -176,9 +184,14 @@ export function evaluateForecast(prediction, history, outcomes, options = {}) {
   const role = options.split ?? 'test'
   const eligible = (/** @type {any} */ row) => !history.split || history.split.assignments[row.subjectKey] === role
   const rows = paired.paired.filter(eligible), missing = paired.missing.filter(eligible)
+  const expectedSubjects = new Set(history.events.filter(eligible).map((/** @type {any} */ row) => row.subjectKey))
+  const dataClass = history.dataClass === 'synthetic' && outcomes.dataClass === 'synthetic' ? 'synthetic' : 'patient'
   const bootstrap = options.bootstrap ?? 200, seed = options.seed ?? 1
   const groups = prediction.horizonsDays.map((/** @type {number} */ horizonDays) => {
     const cells = rows.filter(r => r.horizonDays === horizonDays), absent = missing.filter(r => r.horizonDays === horizonDays)
+    const present = new Set([...cells,...absent].map(r => r.subjectKey))
+    const invalid = new Set((prediction.rejected ?? []).filter((/** @type {any} */ r) => r.horizonDays === horizonDays
+      && expectedSubjects.has(r.subjectKey) && !present.has(r.subjectKey)).map((/** @type {any} */ r) => r.subjectKey))
     /** @type {Record<string,any[]>} */
     const baselines = ['continuous','rate'].includes(prediction.endpoint.type) ? continuousBaselines(cells,history,prediction.endpoint) : {}
     const calibration = [...paired.paired,...paired.missing].filter(r => r.horizonDays === horizonDays && history.split?.assignments[r.subjectKey] === 'calibration')
@@ -199,7 +212,8 @@ export function evaluateForecast(prediction, history, outcomes, options = {}) {
     }
     const metrics = metricIntervals(cells,prediction.endpoint.type,{bootstrap,seed})
     const probability = ['risk','survival_probability'].includes(prediction.endpoint.type)
-    return { horizonDays, requested: cells.length+absent.length, evaluated: cells.length, missingOutcomes: absent.length,
+    return { horizonDays, requested: expectedSubjects.size, evaluated: cells.length, missingOutcomes: absent.length,
+      acceptedForecasts: present.size, invalidForecasts: invalid.size, missingForecasts: expectedSubjects.size-present.size-invalid.size,
       subjects: new Set(cells.map(r => r.subjectKey)).size, events: probability ? cells.filter(r => r.actual === 1).length : null,
       observedMean: mean(cells.map(r => r.actual)), forecastMean: mean(cells.map(r => r.point)),
       distributionAvailability: { evaluatedRows: cells.length,
@@ -231,8 +245,8 @@ export function evaluateForecast(prediction, history, outcomes, options = {}) {
   })
   return { schema: 1, endpoint: prediction.endpoint, origin: prediction.origin, groups, split: history.split ? role : 'not_declared',
     diagnostics: forecastShiftDiagnostics(prediction,history),
-    trainingOverlap: options.trainingOverlap ?? 'unknown', dataClass: history.dataClass ?? 'unknown',
-    validationClass: history.dataClass === 'synthetic' ? 'engineering_synthetic' : 'longitudinal_outcomes',
+    trainingOverlap: options.trainingOverlap ?? 'unknown', dataClass,
+    validationClass: dataClass === 'synthetic' ? 'engineering_synthetic' : 'longitudinal_outcomes',
     calibrationIndependent: role === 'test' && !!history.split,
     forecastFailures: prediction.issues?.length ?? 0, uncertainty: { intervals: 'patient_cluster_bootstrap', trajectoriesArePatients: false,
       predictiveIntervals: 'only_rows_declared_predictive', modelUncertainty: 'not_estimated', monteCarloError: 'separate_from_patient_uncertainty' },
@@ -257,6 +271,7 @@ export function compareForecasts(first, second, options = {}) {
       intervalMeaning: 'between_subject_sampling', modelUncertainty: 'not_estimated' }
   })
   return { available: true, groups, interpretation: 'paired_model_scenario_contrast', causalEffectIdentified: false,
+    dataClass: first.dataClass === 'synthetic' && second.dataClass === 'synthetic' ? 'synthetic' : 'patient',
     scenarios: [first.scenario ?? null,second.scenario ?? null] }
 }
 
@@ -268,11 +283,16 @@ export function forecastDesignInputs(prediction) {
     const rows = prediction.rows.filter((/** @type {any} */ r) => r.horizonDays === horizonDays)
     const values = rows.map((/** @type {any} */ r) => r.point)
     const between = variance(values)
-    const within = rows.length && rows.every((/** @type {any} */ r) => r.uncertainty === 'predictive' && Number.isFinite(r.sd))
-      ? mean(rows.map((/** @type {any} */ r) => r.sd**2)) : null
+    const dispersions = rows.map((/** @type {any} */ r) => r.uncertainty !== 'predictive' ? {value:null,source:'unavailable'}
+      : Number.isFinite(r.sd) ? {value:r.sd**2,source:'provided_sd'}
+        : {value:variance(r.samples ?? []),source:'predictive_samples'})
+    const within = rows.length && dispersions.every((/** @type {any} */ d) => d.value != null)
+      ? mean(dispersions.map((/** @type {any} */ d) => d.value)) : null
     return { horizonDays, subjects: new Set(rows.map((/** @type {any} */ r) => r.subjectKey)).size, mean: mean(values),
       outcomeVariance: prediction.endpoint.type === 'continuous' && between != null && within != null ? between + within : null,
       betweenSubjectVariance: between, withinSubjectPredictiveVariance: within, type: prediction.endpoint.type,
+      varianceSources: [...new Set(dispersions.map((/** @type {any} */ d) => d.value == null ? 'unavailable' : d.source))],
+      sampleVarianceDenominator: 'n_minus_one',
       unit: prediction.endpoint.unit, valueSource: 'predicted', interpretation: 'scenario_design_input',
       hazard: null, dropout: null, parameterUncertainty: 'not_estimated' }
   })

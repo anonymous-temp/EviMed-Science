@@ -35,6 +35,7 @@
  */
 
 import { VCR_PRIVATE_MATCHING_PROVENANCE_KEYS } from './vcrMatching.mjs';
+import { presentLongitudinalRead } from './vcrLongitudinalPresentation.mjs';
 import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
 import {
   clinicalFactView, VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_MODEL_INTERFACES, VCR_ROUTE_MIN_TIER,
@@ -122,7 +123,7 @@ export const VCR_PUBLISHED_FIGURE_READS = Object.freeze(["evidence", "precedents
 export const VCR_WRITE_WHATS = Object.freeze([
   "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
-  "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment", "history", "forecast_design",
+  "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
 ]);
 
 /** @param {unknown} value */
@@ -1137,12 +1138,13 @@ export class VcrService {
    * only: another trial's numbers pass the boundary's other half (no plane
    * address, a cycle refused whole) and are not judged as this study's head
    * counts: the exemption is a rule about numbers, not a hole.
-   * @param {unknown} payload @param {{ publishedFigures?: boolean }} [options]
+   * @param {unknown} payload @param {{ publishedFigures?: boolean, projection?: string }} [options]
    */
-  forModel(payload, { publishedFigures = false } = {}) {
+  forModel(payload, { publishedFigures = false, projection = '' } = {}) {
     try {
       const addressed = stripPlaneAddresses(payload);
-      return publishedFigures ? addressed : suppressForModel(addressed, { minCell: this.minCell });
+      const shown = publishedFigures ? addressed : suppressForModel(addressed, { minCell: this.minCell });
+      return presentLongitudinalRead(addressed,shown,projection,{minCell:this.minCell});
     } catch {
       throw failure(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
     }
@@ -1180,7 +1182,7 @@ export class VcrService {
       ? buildModelAnalysis({ inputs: await readModelAnalysisInputs(store, study), results, versions: await store.modelPlanVersions(study.id) }) : null;
     const report = vcrReportModel({ study, definition, assumptions, results, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current, exports }) })), staleMarks: stale, population, comparator,
       scenarios, models, seal: vcrSealState(study), modelAnalysis });
-    return this.packages.longitudinal ? {...report,longitudinal:await this.packages.longitudinal.view(study)} : report;
+    return this.packages.longitudinal ? {...report,longitudinal:await this.packages.longitudinal.view(study,{all:true},store)} : report;
   }
 
   /**
@@ -1200,7 +1202,7 @@ export class VcrService {
       throw failure(400, "vcr_read_what_invalid", `what must be one of: ${VCR_READ_WHATS.join(", ")}.`);
     }
     this.counters.reads += 1;
-    return this.forModel(await this.#runtimeRead(study, what, filter), { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what) });
+    return this.forModel(await this.#runtimeRead(study, what, filter), { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what), projection:what });
   }
 
   /** @param {any} study @param {string} what @param {Record<string, any>} filter */
@@ -1285,7 +1287,7 @@ export class VcrService {
         // name, never profiled.
         return dataPlane.runtimeProfile(study, filter);
       }
-      case 'longitudinal': return this.packages.longitudinal ? this.packages.longitudinal.view(study)
+      case 'longitudinal': return this.packages.longitudinal ? this.packages.longitudinal.view(study,filter)
         : {available:false,code:'vcr_data_plane_unavailable',alternatives:['literature_scenario','trial_design']};
       case "subject_document": {
         const documents = this.packages.documents;

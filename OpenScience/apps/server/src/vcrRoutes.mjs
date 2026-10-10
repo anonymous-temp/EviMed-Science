@@ -65,7 +65,8 @@ import {
 
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { fileView, importAttemptAuditDetail, importAuditDetail, snapshotView, sourceView, tableView, uploadAttemptAuditDetail, uploadAuditDetail } from "./vcrDataPlane.mjs";
-import { VCR_LONGITUDINAL_JOBS, suppressForModel } from '@evimed/domain';
+import { VCR_LONGITUDINAL_JOBS } from '@evimed/domain';
+import { presentLongitudinal } from './vcrLongitudinalPresentation.mjs';
 import { LONGITUDINAL_TEMPLATES } from './vcrLongitudinal.mjs';
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { isSiteScopedRole } from "./vcrRecruit.mjs";
@@ -595,14 +596,15 @@ export function createVcrRoutes(dependencies) {
       const longitudinal = service.packages.longitudinal;
       if (!longitudinal && method === 'GET') return reply({available:false,records:[],providers:[],templates:LONGITUDINAL_TEMPLATES});
       if (!longitudinal) throw UNAVAILABLE();
-      if (method === 'GET' && parts.length === 3) return reply(suppressForModel(await longitudinal.view(study)));
+      if (method === 'GET' && parts.length === 3) return reply(presentLongitudinal(await longitudinal.view(study,
+        Object.fromEntries(['id','parentId','kind','offset','limit'].map(key => [key,url.searchParams.get(key)]))),{minCell:service.minCell}));
       if (method === 'POST' && parts.length === 4 && ['histories','predictions','benchmarks'].includes(parts[3])) {
         const fields = parts[3] === 'histories' ? ['snapshotId','asOf','mappings','split','priorHistoryId','includeClinicalFacts','perturbation']
           : parts[3] === 'benchmarks' ? ['model','comparisons','split','trainingOverlap']
           : ['schema','historyId','origin','endpoint','horizonsDays','rows','model','scenario','priorPredictionId','subjectKeyMode'];
         const body = await bodyOf(req,Math.max(maxJsonBytes,8*1024*1024),fields);
         const save = parts[3] === 'histories' ? longitudinal.freezeHistory : parts[3] === 'predictions' ? longitudinal.importPrediction : longitudinal.importBenchmark;
-        return reply(suppressForModel(await save(study,body,String(user.id))),201);
+        return reply(presentLongitudinal(await save(study,body,String(user.id)),{minCell:service.minCell}),201);
       }
       throw new HttpError(404,'not_found','Longitudinal route not found.');
     }

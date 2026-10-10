@@ -358,5 +358,201 @@
         "Full hosted production deployment, real partner prediction service and prospective clinical validation are outside this isolated branch acceptance."
       ]
     }
-  ]
+  ],
+  "reviewRemediation": {
+    "reviewedCommit": "4a053f41a",
+    "reviewDate": "2026-10-10",
+    "scope": "All twelve source-review findings; isolated branch implementation and engineering acceptance.",
+    "findings": [
+      {
+        "id": "HF-R01",
+        "priority": "P1",
+        "title": "Forecast versions are absent from design job identity",
+        "status": "completed",
+        "resolution": "Computation identity includes immutable prediction and validation ids, horizon and randomization time alongside the queue-owned scenario hash. Inputs with equal numbers but different provenance cannot reuse an old design.",
+        "evidence": [
+          "apps/server/src/vcrLongitudinal.mjs"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinal.integration.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-R02",
+        "priority": "P1",
+        "title": "New imported forecasts do not invalidate a cached export",
+        "status": "completed",
+        "resolution": "Both document kinds bind to longitudinal metadata digests. Input cover and report projections read through repeatable-read snapshots; a concurrent import does not leak into an earlier report.",
+        "evidence": [
+          "apps/server/src/vcrLongitudinalStore.mjs",
+          "apps/server/src/vcrOrchestrator.mjs",
+          "apps/server/src/vcrService.mjs",
+          "apps/server/src/vcrGateway.mjs"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinal.integration.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-R03",
+        "priority": "P1",
+        "title": "Trial benchmark target alignment omits arm and horizon",
+        "status": "completed",
+        "resolution": "Preserved quotes anchor the endpoint timepoint and arm. Import aligns trial, endpoint, scale, unit, arm, arm role and horizon; mismatched or unknown targets are local exclusions.",
+        "evidence": [
+          "apps/server/src/vcrEvidence.mjs",
+          "apps/server/src/vcrLongitudinal.mjs",
+          "packages/domain/src/vcrTrialBenchmark.mjs"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinal.integration.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-R04",
+        "priority": "P1",
+        "title": "Per-horizon validation denominators omit missing predictions",
+        "status": "completed",
+        "resolution": "Each horizon starts from the eligible frozen history population. Evaluated, missing forecast, invalid forecast and missing outcome counts partition the requested population.",
+        "evidence": [
+          "packages/domain/src/vcrForecastEvaluation.mjs",
+          "packages/domain/src/vcrLongitudinal.mjs"
+        ],
+        "tests": [
+          "packages/domain/test/vcrLongitudinal.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-R05",
+        "priority": "P2",
+        "title": "One malformed provider row discards valid peers",
+        "status": "completed",
+        "resolution": "A valid batch envelope preserves valid peers, original exchanges, per-row rejection identities and receipts. Replay reuses preserved rows without another provider charge.",
+        "evidence": [
+          "apps/server/src/vcrForecastProvider.mjs",
+          "apps/server/src/vcrLongitudinal.mjs"
+        ],
+        "tests": [
+          "apps/server/test/vcrForecastProvider.test.mjs",
+          "evals/method-quality/run_native_longitudinal.mjs"
+        ]
+      },
+      {
+        "id": "HF-R06",
+        "priority": "P2",
+        "title": "Synthetic zero-event validation is hidden by generic suppression",
+        "status": "completed",
+        "resolution": "Only platform-owned synthetic summaries bypass generic small-cell display suppression. Real small cells retain a horizon and display reason; mixed-source histories stay patient data.",
+        "evidence": [
+          "apps/server/src/vcrLongitudinalPresentation.mjs",
+          "apps/server/src/vcrRoutes.mjs",
+          "apps/server/src/vcrService.mjs"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinalPresentation.test.mjs",
+          "apps/server/test/vcrLongitudinal.integration.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-R07",
+        "priority": "P2",
+        "title": "Recent-record limit can hide histories still referenced by predictions",
+        "status": "completed",
+        "resolution": "Metadata supports pagination and exact-id/parent-id reads. Related histories and latest evaluations remain reachable; cumulative batch checkpoints collapse in lists but remain individually addressable.",
+        "evidence": [
+          "apps/server/src/vcrLongitudinalStore.mjs",
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.tsx",
+          "runtime/mcp/evimed-research/vcr_platform.py"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinal.integration.test.mjs",
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.test.tsx"
+        ]
+      },
+      {
+        "id": "HF-R08",
+        "priority": "P2",
+        "title": "Trial benchmark has no researcher or DSH import entry",
+        "status": "completed",
+        "resolution": "Researcher upload and DSH workspace-file import both create a benchmark id. The engine reads actual effects only from preserved evidence, retaining the external prediction content identity.",
+        "evidence": [
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.tsx",
+          "apps/web/src/lib/vcrLongitudinalClient.ts",
+          "apps/server/src/vcrGateway.mjs",
+          "runtime/mcp/evimed-research/vcr_platform.py"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinal.integration.test.mjs",
+          "runtime/mcp/evimed-research/test/test_vcr_platform.py",
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.test.tsx"
+        ]
+      },
+      {
+        "id": "HF-R09",
+        "priority": "P2",
+        "title": "Predictive samples cannot supply available design variance",
+        "status": "completed",
+        "resolution": "Declared predictive samples supply within-subject sample variance with n-1 denominator. Parameter draws and single samples do not. Real R design and PROCOVA consume the derived design inputs.",
+        "evidence": [
+          "packages/domain/src/vcrForecastEvaluation.mjs",
+          "apps/server/src/vcrLongitudinal.mjs"
+        ],
+        "tests": [
+          "packages/domain/test/vcrLongitudinal.test.mjs",
+          "apps/server/test/vcrLongitudinal.integration.test.mjs",
+          "evals/method-quality/run_native_longitudinal.mjs"
+        ]
+      },
+      {
+        "id": "HF-R10",
+        "priority": "P2",
+        "title": "Increasing survival probabilities are accepted without a finding",
+        "status": "completed",
+        "resolution": "Survival probability increases are recorded as rejected cells; consistent horizons and other subjects remain usable.",
+        "evidence": [
+          "packages/domain/src/vcrLongitudinal.mjs"
+        ],
+        "tests": [
+          "packages/domain/test/vcrLongitudinal.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-R11",
+        "priority": "P2",
+        "title": "Validation UI hides baselines and incomplete-result explanations",
+        "status": "completed",
+        "resolution": "The page shows denominator partitions, same-subject baselines, unavailable distribution inputs, local exclusions and interruptions, with refresh and older versions. The AI receives explicit per-baseline directions without a new delivery gate.",
+        "evidence": [
+          "apps/web/src/components/vcr/VcrForecastEvaluation.tsx",
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.tsx",
+          "runtime/mcp/evimed-research/vcr_platform.py"
+        ],
+        "tests": [
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.test.tsx",
+          "runtime/mcp/evimed-research/test/test_vcr_platform.py"
+        ]
+      },
+      {
+        "id": "HF-R12",
+        "priority": "P2",
+        "title": "Automatic model-analysis document tables exclude longitudinal results",
+        "status": "completed",
+        "resolution": "Frozen model plans and generated reports include longitudinal identity, model version, validation, coverage, baseline and trial-benchmark tables whose numbers bind to the saved report model.",
+        "evidence": [
+          "apps/server/src/vcrModelDocuments.mjs",
+          "apps/server/src/vcrLongitudinalDocuments.mjs"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinal.integration.test.mjs",
+          "evals/method-quality/run_native_longitudinal.mjs"
+        ]
+      }
+    ],
+    "remainingExternalDependencies": [
+      "A callable dedicated forecasting provider and its actual protocol probe.",
+      "A partner incremental endpoint and cursor contract.",
+      "Independent rights-cleared longitudinal outcomes, RCT benchmark and Chinese extraction references."
+    ],
+    "acceptance": "packages/contracts/healthflux/validation.json#reviewClosure"
+  }
 }

@@ -115,7 +115,8 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       && (!perturbation?.historyFrom || Date.parse(e.occurredAt) >= Date.parse(perturbation.historyFrom)));
     const content = {schema:1,snapshotId:input.snapshotId,snapshotHash:profile.sha256,sourceId:profile.sourceId,
       asOf:replay.asOf,mappings,events:selectedEvents,coverage:replay.coverage,issues:[...issues,...replay.issues],perturbation,
-      dataClass:source?.valueSource === 'synthetic' ? 'synthetic' : 'patient',
+      dataClass:source?.valueSource === 'synthetic' && (!prior || prior.content.dataClass === 'synthetic') && !factSources.size
+        ? 'synthetic' : 'patient',
       split:frozenHistorySplit(study,prior?.content.split?.rule ?? input.split,replay.events),priorHistoryId:input.priorHistoryId ?? null};
     if (prior?.content.split && content.split) {
       content.split.assignments = {...content.split.assignments,...prior.content.split.assignments};
@@ -152,14 +153,18 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
     }
     const content = {schema:1,historyId:input.historyId,origin:history.content.asOf,endpoint:input.endpoint,horizonsDays:input.horizonsDays,
       model:input.model ?? {name:'unknown',version:'unknown'},scenario:input.scenario ?? null,rows:checked.rows,
-      issues:checked.issues,received:checked.received,valueSource:'predicted',originKind:provenance.originKind ?? 'external_file',
+      issues:checked.issues,rejected:[...(checked.rejected ?? []),...(provenance.rejected ?? [])],dataClass:history.content.dataClass,
+      received:checked.received,valueSource:'predicted',originKind:provenance.originKind ?? 'external_file',
       provenance:{...provenance,importDigest:longitudinalHash(input)},priorPredictionId:input.priorPredictionId ?? null};
     const original = await artifacts.save(study,'prediction_import',input,{historyId:input.historyId,received:rows.length},
       {snapshotIds:history.row.snapshot_ids,sourceIds:history.row.source_ids,bindings:history.row.bindings,parentId:input.historyId});
     content.provenance.importArtifactId = original.id;
     if (input.priorPredictionId) await artifacts.read(study,input.priorPredictionId,actor);
     const summary = {origin:content.origin,endpoint:content.endpoint,horizonsDays:content.horizonsDays,model:content.model,scenario:content.scenario,
-      historyId:content.historyId,received:checked.received,accepted:checked.rows.length,invalidRows:checked.issues.length,
+      historyId:content.historyId,jobId:provenance.jobId ?? null,
+      received:provenance.receipts?.reduce((/** @type {number} */ total,/** @type {any} */ r) => total+(r.receivedRows ?? 0),0) ?? checked.received,
+      accepted:checked.rows.length,invalidRows:checked.received-checked.rows.length
+        +(provenance.receipts?.reduce((/** @type {number} */ total,/** @type {any} */ r) => total+(r.invalidRows ?? 0),0) ?? 0),
       issues:checked.issues.slice(0,100),originKind:content.originKind,dataClass:history.content.dataClass,
       designInputs:content.horizonsDays?.length && checked.rows.length ? forecastDesignInputs(content) : [],
       trajectories:aggregateForecastCurve(content),actualProvider:provenance.receipts?.map((/** @type {any} */ r) => ({provider:r.provider,model:r.actualModel,version:r.actualVersion})),
@@ -217,7 +222,7 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
         saved = await importPrediction(study,{historyId:history.row.id,origin:history.content.asOf,endpoint:scenario.endpoint,
           horizonsDays:scenario.horizonsDays,rows:batch.rows,model:{name:batch.receipts?.[0]?.actualModel ?? scenario.providerId,
             version:batch.receipts?.[0]?.actualVersion ?? 'unknown'},
-          scenario:scenario.scenario},actor,{originKind:'cloud_api',jobId:job.jobId,receipts:batch.receipts,failures:batch.failures});
+          scenario:scenario.scenario},actor,{originKind:'cloud_api',jobId:job.jobId,receipts:batch.receipts,failures:batch.failures,rejected:batch.rejected});
         await onProgress({done:batch.rows.length,total:history.content.events.length});
       };
       try {
@@ -317,20 +322,23 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
         prognostic = {rho:Math.abs(correlation),lambda:input.lambda ?? 1,gamma:input.gamma ?? 1};
       }
       const queued = await jobs.enqueue({studyId:study.id,userId:study.userId,principal:actor,kind:prognostic ? 'procova' : 'design_analytic',
+        idempotencyKey:`forecast-design:${longitudinalHash({forecasts:[first.row.id,second.row.id],
+          horizonDays:input.horizonDays,validation:validation?.row.id ?? null,randomizationAt:input.randomizationAt ?? null})}`,
         scenario:{design:{...(prognostic ? {} : {kind:'two_arm_fixed'}),allocation:input.allocation ?? .5},endpoint:{type:binary ? 'binary' : 'continuous'},truth,
           analysis:{alpha:input.alpha ?? .05,power:input.power ?? .9,sided:2},...(prognostic ? {prognostic} : {})},
         // Analytic design reads the frozen truth in its scenario, not a patient
         // file. The source forecasts and hashes remain in the job's checkpoint.
         inputs:[],
         detail:{forecastInputs:[{id:first.row.id,hash:first.row.sha256},{id:second.row.id,hash:second.row.sha256}],
+          variance:{treatment:a,control:b},
           interpretation:'model_scenario_design',horizonDays:input.horizonDays,pairedSubjects:pairedSubjects.size,parameterUncertainty:'not_estimated',
           ...(validation ? {validation:{id:validation.row.id,hash:validation.row.sha256,dataClass:validation.content.dataClass,
             randomizationAt:input.randomizationAt,correlationMeaning:'heldout_predictive_correlation',clinicalQualification:false}} : {})}});
       return {available:true,jobId:queued.job.id,state:queued.job.state};
     },
-    /** @param {any} study */
-    async view(study) {
-      return {records:await artifacts.list(study.id),providers:await providers.list().catch(() => []),
+    /** @param {any} study @param {any} [filter] @param {any} [readStore] */
+    async view(study,filter = {},readStore = store) {
+      return {...await artifacts.list(study.id,filter,readStore),providers:await providers.list().catch(() => []),
         candidates:forecastCandidates.candidates,jobSchemas:VCR_LONGITUDINAL_SCHEMAS,
         available:true,templates:LONGITUDINAL_TEMPLATES,interfaces:['event_history_to_trajectories','external_prediction_file'],
         alternatives:['literature_scenario','sensitivity_analysis','trial_design']};
@@ -347,17 +355,25 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
         const evidence = await store.one('SELECT * FROM evimed_vcr.evidence_items WHERE study_id=$1 AND id=$2',[study.id,row.evidenceId]);
         if (!evidence) {comparisons.push({...row,actual:null,issue:'preserved_evidence_missing'});continue;}
         const verified = ['observed','extracted'].includes(evidence.value_source) && evidence.locator?.verification === 'verified';
-        const mismatch = row.scale && row.scale !== evidence.parameter || row.endpoint && row.endpoint !== evidence.endpoint_key
-          || row.unit && row.unit !== evidence.unit || row.trialId && row.trialId !== evidence.precedent_id;
+        const target = evidence.detail?.target ?? {};
+        const horizon = target.verification === 'verified' ? target.horizonDays : null;
+        const unknown = !evidence.arm || evidence.arm_role === 'unknown' || !Number.isFinite(horizon)
+          || !row.arm || !row.armRole || !Number.isFinite(row.horizonDays) || !row.endpoint || !row.scale || !row.unit || !row.trialId;
+        const mismatch = row.scale !== evidence.parameter || row.endpoint !== evidence.endpoint_key
+          || row.unit !== evidence.unit || row.trialId !== evidence.precedent_id || row.arm !== evidence.arm
+          || row.armRole !== evidence.arm_role || row.horizonDays !== horizon;
         comparisons.push({...row,trialId:evidence.precedent_id,endpoint:evidence.endpoint_key,scale:evidence.parameter,unit:evidence.unit,
           evidence:{id:evidence.id,sourceHash:longitudinalHash(evidence),record:evidence},
-          issue:!verified ? 'actual_evidence_unverified' : mismatch ? 'target_identity_mismatch' : null,
-          actual:verified && !mismatch && evidence.value != null && Number.isFinite(Number(evidence.value)) ? Number(evidence.value) : null});
+          issue:!verified ? 'actual_evidence_unverified' : unknown ? 'target_identity_unknown' : mismatch ? 'target_identity_mismatch' : null,
+          actual:verified && !unknown && !mismatch && evidence.value != null && Number.isFinite(Number(evidence.value)) ? Number(evidence.value) : null});
       }
       const content = {schema:1,model:input.model ?? {},contract:'trial_effect_prediction',comparisons,
-        split:input.split ?? {},trainingOverlap:input.trainingOverlap ?? 'unknown'};
+        split:input.split ?? {},trainingOverlap:input.trainingOverlap ?? 'unknown',sourceFile:input.sourceFile ?? null,
+        importDigest:longitudinalHash(input)};
       return longitudinalArtifactView(await artifacts.save(study,'trial_benchmark',content,
-        {comparisons:comparisons.length,model:content.model,contract:content.contract}));
+        {comparisons:comparisons.length,model:content.model,contract:content.contract,
+          matched:comparisons.filter(r => r.actual != null).length,issues:comparisons.filter(r => r.issue).map(r => ({code:r.issue})),
+          trainingOverlap:content.trainingOverlap}));
     },
   };
 }
@@ -375,6 +391,9 @@ export function aggregateForecastCurve(prediction) {
 }
 
 export const LONGITUDINAL_TEMPLATES = Object.freeze({
+  benchmark:{model:{name:'external-trial-model',version:'1'},trainingOverlap:'unknown',comparisons:[
+    {evidenceId:'<preserved evidence id>',trialId:'<precedent id>',familyId:'<trial family>',split:'test',
+      endpoint:'HbA1c',scale:'mean_difference',unit:'%',arm:'Treatment versus control',armRole:'contrast',horizonDays:84,predicted:-.4}]},
   events:{format:'csv',columns:['subject_id','event_id','revision','code','value','unit','occurred_at','recorded_at','available_at','kind','assertion','experiencer','medication_state','site'],
     example:['synthetic-001','lab-001','1','HbA1c','7.2','%','2026-01-01','2026-01-02','2026-01-02','measurement','affirmed','patient','unknown','synthetic-site']},
   prediction:{format:'json',schema:1,historyId:'<history id>',origin:'2026-01-02T00:00:00.000Z',subjectKeyMode:'source_identifier',

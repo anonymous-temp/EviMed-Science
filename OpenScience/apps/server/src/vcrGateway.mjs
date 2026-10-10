@@ -94,7 +94,7 @@ const answerBudgetMs = 10_000;
 const REGISTRY_MARGIN_MS = 3_000;
 /** The registry client's default deadline (its own default), when the deployment names none: `OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS`. */
 const REGISTRY_DEADLINE_MS = 20_000;
-const readFilterFields = Object.freeze(["kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "query"]);
+const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "query"]);
 const WRITE_MAX_ITEMS = 200;
 
 /**
@@ -194,7 +194,7 @@ function readRequest(body) {
   }
   /** @type {Record<string, any>} */
   const filter = {};
-  for (const key of ["kind", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId"]) {
+  for (const key of ["id", "parentId", "kind", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId"]) {
     if (raw[key] == null) continue;
     if (!ID.test(String(raw[key]))) throw gatewayError(400, "vcr_read_filter_invalid", `filter.${key} is not an id.`);
     filter[key] = String(raw[key]);
@@ -831,7 +831,7 @@ const WRITERS = {
 
   async evidence_item(item, { evidence, study }, extra) {
     if (!item.only(["registry", "registryId", "parameter", "arm", "armRole", "value", "valueText", "unit", "ciLow", "ciHigh", "sampleSize",
-      "events", "valueSource", "quote", "locator", "endpointKey", "enrollmentKind", "historicalBaseline", "line", "biomarker", "outcome", "note"])) return null;
+      "events", "valueSource", "quote", "locator", "endpointKey", "enrollmentKind", "historicalBaseline", "line", "biomarker", "outcome", "note", "timepoint"])) return null;
     const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
     const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "这条数所在的登记记录的登记号", { required: true });
     const parameter = item.str("parameter", { max: 120, required: true });
@@ -858,7 +858,7 @@ const WRITERS = {
     if (!evidence?.addEvidenceItem) return void item.bad("registryId", "证据参数化未接入本部署。", "vcr_write_refused");
     const written = await evidence.addEvidenceItem({ userId: study.userId, studyId: study.id, item: {
       registry, registryId, parameter, arm, armRole, value, valueText, unit, ciLow, ciHigh, sampleSize, events, valueSource, quote, locator,
-      endpointKey, enrollmentKind, historicalBaseline: item.row.historicalBaseline === true, line, biomarker, outcome: item.row.outcome, note: item.row.note,
+      endpointKey, enrollmentKind, historicalBaseline: item.row.historicalBaseline === true, line, biomarker, outcome: item.row.outcome, note: item.row.note, timepoint:item.row.timepoint,
     } });
     if (written.status !== "ok") return void item.bad(written.code === "vcr_precedent_not_in_study" ? "registryId" : "quote", written.message ?? "没有写入。",
       written.code === "vcr_precedent_not_in_study" ? "vcr_write_value_invalid" : "vcr_evidence_unverified");
@@ -1050,6 +1050,11 @@ const WRITERS = {
     if (!longitudinal) return void item.bad('snapshotId','数据平面尚未接入；可以继续文献情景分析。');
     const saved = await longitudinal.freezeHistory(study,item.row,study.userId);
     return saved.id;
+  },
+  async trial_benchmark(item,{service,study}) {
+    if (!item.only(['model','comparisons','split','trainingOverlap','sourceFile'])) return null;
+    if (!service.packages.longitudinal) return void item.bad('comparisons','纵向研究尚未接入。');
+    return (await service.packages.longitudinal.importBenchmark(study,item.row,study.userId)).id;
   },
   async forecast_design(item,{service,study}) {
     if (!item.only(['predictionId','controlPredictionId','horizonDays','allocation','alpha','power','prognosticEvaluationId','randomizationAt','lambda','gamma'])) return null;
@@ -1408,6 +1413,7 @@ const WRITERS = {
       const index = reports.findIndex(entry => entry.section === section);
       if (index < 0) reports.push(report); else reports[index] = report;
       return { ...cover, reports, report, results: model, intendedUse: model.intendedUse ?? study.intendedUse,
+        longitudinalDigest: model.longitudinal?.records?.length ? model.longitudinal.digest : null,
         reviews: model.review?.records ?? [], staleResults: model.stale?.length ?? 0, seal: model.seal ?? null,
         ...(cover.inputDigest ?? writtenFrom ? { inputDigest: cover.inputDigest ?? writtenFrom } : {}) };
     };
@@ -1759,7 +1765,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           // its small cells (contract §4): the answer passes the boundary once.
           const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress,
             cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}) };
-          return vcr.service.forModel(answer);
+          return vcr.service.forModel(answer,{projection:'job_result'});
         };
       }
 

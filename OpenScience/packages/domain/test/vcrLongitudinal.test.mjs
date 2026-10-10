@@ -55,12 +55,14 @@ test('rank metrics, ties, CRPS and IPCW agree with independent enumerations',() 
   assert.ok(Math.abs(Number(ipcwBrier([{point:.8,eventTime:10,censorTime:40},{point:.2,eventTime:null,censorTime:40}],30,'risk'))-.04)<1e-12)
   // One early censor: the remaining survivor receives inverse probability 2.
   assert.ok(Math.abs(Number(ipcwBrier([{point:.9,eventTime:null,censorTime:10},{point:.2,eventTime:null,censorTime:40}],30,'risk'))-.04)<1e-12)
+  assert.equal(ipcwBrier([{point:.2,eventTime:null,censorTime:30}],30,'risk'),null)
+  assert.equal(ipcwBrier([{point:.2,eventTime:null,censorTime:10}],30,'risk'),null)
 })
 
 test('evaluation separates heldout subjects, missing outcomes and synthetic engineering results',() => {
   const history = {asOf:origin,dataClass:'synthetic',events:[event('a',6),event('b',5),event('c',8)],split:{assignments:{a:'test',b:'calibration',c:'test'}}}
   const pred = prediction([{subjectKey:'a',horizonDays:30,point:7,sd:.5,uncertainty:'predictive'},{subjectKey:'b',horizonDays:30,point:900},{subjectKey:'c',horizonDays:30,point:8}])
-  const result = evaluateForecast(pred,history,{events:[event('a',8,'2026-01-31T00:00:00.000Z'),event('b',4,'2026-01-31T00:00:00.000Z')]},{bootstrap:10})
+  const result = evaluateForecast(pred,history,{dataClass:'synthetic',events:[event('a',8,'2026-01-31T00:00:00.000Z'),event('b',4,'2026-01-31T00:00:00.000Z')]},{bootstrap:10})
   assert.equal(result.groups[0].metrics.mae.value,1)
   assert.equal(result.groups[0].missingOutcomes,1)
   assert.equal(result.groups[0].subjects,1)
@@ -122,4 +124,37 @@ test('trial effects retain scales, family separation and an independent simple c
   assert.equal(result.groups[0].baseline.metrics?.mae.value,1.5)
   assert.equal(result.groups[0].metrics.mae.interval,'trial_family_percentile')
   assert.equal(result.causalEffectIdentified,false)
+})
+
+test('heldout denominators partition every requested subject and horizon including rejected and absent forecasts',()=>{
+  const history={asOf:origin,dataClass:'synthetic',events:['a','b','c','d','e'].map(k=>event(k,6)),split:{assignments:{a:'test',b:'test',c:'test',d:'test',e:'train'}}}
+  const raw=prediction([{subjectKey:'a',horizonDays:30,point:7},{subjectKey:'b',horizonDays:30,point:NaN},{subjectKey:'c',horizonDays:30,point:7},
+    {subjectKey:'a',horizonDays:60,point:7}],{horizonsDays:[30,60]})
+  const checked=validateForecast(raw)
+  const result=evaluateForecast({...raw,...checked},history,{dataClass:'synthetic',events:[event('a',8,'2026-01-31T00:00:00.000Z')]},{bootstrap:0})
+  assert.deepEqual(result.groups.map((/** @type {any} */ g)=>[g.requested,g.evaluated,g.missingForecasts,g.invalidForecasts,g.missingOutcomes]),[[4,1,1,1,1],[4,0,3,0,1]])
+  for(const group of result.groups)assert.equal(group.requested,group.evaluated+group.missingForecasts+group.invalidForecasts+group.missingOutcomes)
+  assert.equal(evaluateForecast({...raw,...checked},history,{dataClass:'patient',events:[]}).dataClass,'patient')
+})
+
+test('predictive samples supply design variance, but parameter draws and a single sample cannot',()=>{
+  const pred=prediction([{subjectKey:'a',horizonDays:30,point:6,samples:[5,7],uncertainty:'predictive'},
+    {subjectKey:'b',horizonDays:30,point:8,samples:[7,9],uncertainty:'predictive'}])
+  const design=forecastDesignInputs(pred)[0]
+  assert.equal(design.withinSubjectPredictiveVariance,2);assert.equal(design.outcomeVariance,4)
+  assert.deepEqual(design.varianceSources,['predictive_samples'])
+  const metric=metricIntervals([{subjectKey:'a',point:6,actual:6,samples:[5,7],uncertainty:'predictive'}],'continuous',{bootstrap:0})
+  assert.equal(metric.crps.availability,'computed');assert.equal(metric.crps.value,.5);assert.equal(metric.crps.unavailableReason,null)
+  assert.equal(metric.intervalCoverage.unavailableReason,'predictive_quantiles_missing')
+  assert.equal(forecastDesignInputs({...pred,rows:pred.rows.map(r=>({...r,uncertainty:'parameter'}))})[0].outcomeVariance,null)
+  assert.equal(forecastDesignInputs({...pred,rows:pred.rows.map(r=>({...r,samples:[r.point]}))})[0].outcomeVariance,null)
+})
+
+test('an increasing survival horizon is quarantined without discarding other subjects or consistent horizons',()=>{
+  const pred=prediction([{subjectKey:'a',horizonDays:60,point:.8},{subjectKey:'a',horizonDays:30,point:.2},
+    {subjectKey:'b',horizonDays:60,point:.6},{subjectKey:'b',horizonDays:30,point:.9}],{horizonsDays:[30,60],endpoint:{code:'survival',unit:'probability',type:'survival_probability'}})
+  const checked=validateForecast(pred)
+  assert.equal(checked.rows.length,3)
+  assert.deepEqual(checked.rejected,[{subjectKey:'a',horizonDays:60,codes:['survival_probability_increases']}])
+  assert.equal(checked.issues[0].codes[0],'survival_probability_increases')
 })

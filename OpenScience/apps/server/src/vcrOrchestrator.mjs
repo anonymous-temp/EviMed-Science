@@ -1563,7 +1563,8 @@ export class VcrOrchestrator {
     const modelKind = isModelDocumentKind(kind);
     const latestPlan = modelKind ? Number((await this.store.modelPlanVersions(study.id))[0]?.version ?? 0) : 0;
     const previous = (await this.store.exports(study.id)).find(row => row.kind === kind && vcrExportHoldsDocument(row.cover)
-      && (modelKind ? Number(row.cover?.results?.modelAnalysis?.plan?.version ?? 0) >= latestPlan : row.cover?.inputDigest === cover.inputDigest));
+      && (modelKind ? Number(row.cover?.results?.modelAnalysis?.plan?.version ?? 0) >= latestPlan
+        && (row.cover?.longitudinalDigest ?? null) === (cover.longitudinalDigest ?? null) : row.cover?.inputDigest === cover.inputDigest));
     if (previous && this.queueExport) {
       const conversion = await this.queueExport(user, study, previous);
       return { export: previous, conversion, sessionId: null, runId: previous.runId ?? null };
@@ -1617,23 +1618,32 @@ export class VcrOrchestrator {
    * @param {any} study
    */
   async #cover(study) {
+    return this.store.reportSnapshot ? this.store.reportSnapshot(async (snapshot) =>
+      this.#coverFromStore(await snapshot.studyById(study.id),snapshot)) : this.#coverFromStore(study,this.store);
+  }
+
+  /** @param {any} study @param {any} store */
+  async #coverFromStore(study,store) {
     const [reviews, stale, results, definition, assumptions, populations, patientSets, comparators, scenarios, grid, protocol, exports] = await Promise.all([
-      this.store.reviews(study.id), this.store.staleMarks(study.id), this.store.results(study.id), this.store.latestDefinition(study.id),
-      this.store.assumptions(study.id), this.store.populations(study.id, 20), this.store.patientSets(study.id, 20),
-      this.store.comparatorDesigns(study.id, 20), this.store.trialScenarios(study.id, 60), this.store.latestDesignGrid(study.id),
-      this.store.latestProtocolVersion(study.id),
-      this.store.exports(study.id),
+      store.reviews(study.id), store.staleMarks(study.id), store.results(study.id), store.latestDefinition(study.id),
+      store.assumptions(study.id), store.populations(study.id, 20), store.patientSets(study.id, 20),
+      store.comparatorDesigns(study.id, 20), store.trialScenarios(study.id, 60), store.latestDesignGrid(study.id),
+      store.latestProtocolVersion(study.id),
+      store.exports(study.id),
     ]);
     // A countersignature is printed on the cover for what it still covers: one whose versions have moved on is
     // said to have changed after review, never 已复核 (the same test the page's ceiling uses, `vcrReviewIsCurrent`).
     const current = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
+    const longitudinal = await store.longitudinalIndex?.(study.id,{all:true});
+    const longitudinalDigest = longitudinal?.records?.length ? longitudinal.digest : null;
     const stillHolds = (/** @type {any} */ review) => vcrReviewIsCurrent(review, { results, stale, current, exports });
     return {
       reviewed: reviews.some(stillHolds),
       reviews: reviews.map((review) => ({ kind: review.kind, reviewer: review.reviewer, nodes: review.nodes, at: review.createdAt, current: stillHolds(review) })),
       staleResults: stale.length,
       // What this document is written from: a request for the same kind later asks whether the study still holds these versions.
-      inputDigest: vcrInputDigest(current),
+      inputDigest: vcrInputDigest(longitudinalDigest ? {nodes:new Set([...current.nodes,`longitudinal:${longitudinalDigest}`])} : current),
+      longitudinalDigest,
       intendedUse: study.intendedUse,
       conclusions: [...new Set(results.map((result) => result.conclusion).filter(Boolean))],
       seal: this.seal ? await this.seal.sealState(study).catch(() => null) : null,

@@ -1383,6 +1383,14 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       }
       const derived = ["calculated", "imputed", "predicted"].includes(String(item.valueSource ?? ""));
       const checkedAt = now().toISOString();
+      const timepoint = item.timepoint;
+      const checkedTarget = timepoint && typeof timepoint === 'object' ? verifyExtraction({
+        extraction:{value:timepoint.value,quote:String(timepoint.quote ?? ''),valueSource:'extracted'},
+        sourceText:String(precedent.record_text ?? ''),checkedAt}) : null;
+      const timeUnit = {days:1,weeks:7}[String(timepoint?.unit)];
+      const targetVerified = checkedTarget?.verified === true && Number.isFinite(timepoint?.value) && timepoint.value > 0
+        && timeUnit != null && quoteIsPresent(String(timepoint.quote),String(timepoint.unit))
+        && !!item.arm && quoteIsPresent(String(timepoint.quote),String(item.arm));
       const checked = verifyExtraction({
         extraction: {
           parameter: String(item.parameter), arm: item.arm ?? null,
@@ -1399,7 +1407,10 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           enrollmentKind: item.enrollmentKind ?? null,
           historicalBaseline: item.historicalBaseline === true,
           applicability: { line: item.line, biomarker: item.biomarker, endpointKey: String(item.endpointKey ?? "") },
-          detail: { outcome: item.outcome ?? null, note: item.note ?? null },
+          detail: { outcome: item.outcome ?? null, note: item.note ?? null,
+            target:timepoint ? {horizonDays:targetVerified ? timepoint.value*timeUnit : null,arm:item.arm,armRole:item.armRole,
+              verification:targetVerified ? 'verified' : 'unverified',quote:timepoint.quote,unit:timepoint.unit,value:timepoint.value,
+              sourceHash:precedent.record_hash ?? null} : null },
         },
         sourceText: String(precedent.record_text ?? ""),
         checkedAt,

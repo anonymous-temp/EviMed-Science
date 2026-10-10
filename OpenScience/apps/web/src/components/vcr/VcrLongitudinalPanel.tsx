@@ -5,7 +5,8 @@ import { Disclosure } from '@/components/ui/Disclosure';
 import { Tag } from '@/components/ui/Tag';
 import { ChartCard } from '@/components/ui/ChartCard';
 import { webErrorMessage } from '@/lib/apiClient';
-import { getVcrLongitudinal, importVcrPrediction, type LongitudinalRecord } from '@/lib/vcrLongitudinalClient';
+import { getVcrLongitudinal, importVcrPrediction, importVcrBenchmark, type LongitudinalRecord } from '@/lib/vcrLongitudinalClient';
+import { VcrForecastEvaluation, forecastIssue } from './VcrForecastEvaluation';
 import type { VcrSeries } from '@/lib/vcrClient';
 import { VcrTrajectoryChart, VcrSeriesLegend } from './VcrCharts';
 import { useVcrLoad, VcrTabError } from './vcrTabKit';
@@ -27,11 +28,19 @@ export function VcrLongitudinalPanel({ studyId, canRun }: { studyId: string; can
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState(false);
+  const [pages, setPages] = useState<{ studyId: string; records: LongitudinalRecord[]; nextOffset?: number | null }>({ studyId, records: [] });
+  const [benchmarkId, setBenchmarkId] = useState('');
   const input = useRef<HTMLInputElement>(null);
+  const benchmarkInput = useRef<HTMLInputElement>(null);
   if (state.kind === 'loading') return <VcrTabSkeleton />;
   if (state.kind === 'error') return <VcrTabError message={state.message} onRetry={reload} />;
   const data = state.data;
-  const records = data.records ?? [];
+  const held = pages.studyId === studyId ? pages : { records: [], nextOffset: undefined };
+  const records = [...new Map([...held.records, ...data.records, ...(data.related ?? [])].map(record => [record.id, record])).values()]
+    .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')) || b.id.localeCompare(a.id));
+  const nextOffset = held.nextOffset === undefined ? data.nextOffset : held.nextOffset;
+  const benchmarks = records.filter(r => r.kind === 'trial_benchmark');
+  const benchmark = benchmarks.find(r => r.id === benchmarkId) ?? benchmarks[0];
   const histories = records.filter(r => r.kind === 'history');
   const predictions = records.filter(r => r.kind === 'prediction');
   const history = histories.find(r => r.id === historyId) ?? histories.find(r => r.id === predictions[0]?.summary.historyId) ?? histories[0];
@@ -40,26 +49,39 @@ export function VcrLongitudinalPanel({ studyId, canRun }: { studyId: string; can
   const evaluations = records.filter(r => r.kind === 'evaluation' && r.parentId === selected?.id);
   const evaluated = evaluations[0]?.summary.groups;
   const chartSeries: VcrSeries[] = selected ? [{ key: selected.id, label: '模型预测', source: 'predicted', ours: true,
-    points: evaluated ? evaluated.map(g => ({x:g.horizonDays,y:g.forecastMean}))
+    points: evaluated ? evaluated.map(g => ({x:g.horizonDays,y:g.forecastMean ?? null}))
       : (selected.summary.trajectories ?? []).map(p => ({x:p.day,y:p.mean})) },
     ...(evaluated ? [{ key: 'observed', label: '后续观测', source: 'observed' as const,
       points: evaluated.map(g => ({x:g.horizonDays,y:g.observedMean == null ? null : selected.summary.endpoint?.type === 'survival_probability' ? 1-g.observedMean : g.observedMean})) }] : [])] : [];
-  async function upload(file?: File) {
-    if (!file || !history) return;
+  function refresh() { setPages({ studyId, records }); reload(); }
+  async function more() {
+    if (nextOffset == null) return;
+    setBusy(true); setMessage(''); setError(false);
+    try {
+      const page = await getVcrLongitudinal(studyId, { offset: nextOffset });
+      setPages({ studyId, records: [...records, ...page.records, ...(page.related ?? [])], nextOffset: page.nextOffset ?? null });
+    } catch (cause) { setError(true); setMessage(webErrorMessage(cause, { fallback: '较早版本未能读取，请重试。' })); }
+    finally { setBusy(false); }
+  }
+  async function upload(file?: File, trial = false) {
+    if (!file || !trial && !history) return;
     setBusy(true); setMessage(''); setError(false);
     try {
       if (file.size > 8 * 1024 * 1024) throw new Error('预测文件超过 8 MB，请拆分后导入。');
       const body = JSON.parse(await file.text());
-      const result = await importVcrPrediction(studyId, { ...body, historyId: history.id });
-      setSelectedId(result.id); setMessage(`已导入 ${number(result.summary.accepted)} 条预测，${number(result.summary.invalidRows)} 条需补充或更正。`); reload();
+      const result = trial ? await importVcrBenchmark(studyId, body) : await importVcrPrediction(studyId, { ...body, historyId: history.id });
+      if (trial) { setBenchmarkId(result.id); setMessage(`已导入 ${number(result.summary.comparisons)} 条试验预测，其中 ${number(result.summary.matched)} 条已对应到证据。可在研究对话中要求运行基准验证。`); }
+      else { setSelectedId(result.id); setMessage(`已导入 ${number(result.summary.accepted)} 条预测，${number(result.summary.invalidRows)} 条需补充或更正。`); }
+      setPages({ studyId, records: [...records, result] }); reload();
     } catch (cause) {
       setError(true); setMessage(webErrorMessage(cause, { fallback: '文件未能导入，请检查预测模板后重试。' }));
-    } finally { setBusy(false); if (input.current) input.current.value = ''; }
+    } finally { setBusy(false); if (input.current) input.current.value = ''; if (benchmarkInput.current) benchmarkInput.current.value = ''; }
   }
   return <section className="flex flex-col gap-4" aria-label="纵向预测与验证">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-section font-semibold text-text">纵向预测与验证</h2>
       <div className="flex flex-wrap items-center gap-2">
+        <Button variant="ghost" size="sm" disabled={busy} onClick={refresh}>刷新结果</Button>
         <Button variant="ghost" size="sm" onClick={() => download('longitudinal-events.csv', [data.templates.events.columns.join(','), data.templates.events.example.join(',')].join('\n'), 'text/csv')}>下载事件模板</Button>
         <Button variant="ghost" size="sm" onClick={() => download('prediction-template.json', JSON.stringify({ ...data.templates.prediction, ...(history ? { historyId: history.id, origin: history.summary.origin } : {}) }, null, 2), 'application/json')}>下载预测模板</Button>
         {canRun && <Button size="sm" disabled={!history || busy} loading={busy} onClick={() => input.current?.click()}>导入预测文件</Button>}
@@ -91,9 +113,29 @@ export function VcrLongitudinalPanel({ studyId, canRun }: { studyId: string; can
           <dd className="text-section font-medium tabular-nums text-text">{number(series.points[0]?.y)} <span className="text-caption text-text-3">{selected.summary.endpoint?.unit}</span></dd></div>)}
       </dl>}
 
-      {evaluations.map(record => <Evaluation key={record.id} record={record} />)}
+      {!!selected.summary.invalidRows && <p className="text-caption text-text-2">{number(selected.summary.invalidRows)} 条预测未纳入计算；可用记录已保留。</p>}
+      {(selected.summary.failures ?? []).map((failure, index) => <p key={index} className="text-caption text-text-2">{forecastIssue(failure.code)}；已完成部分保留。</p>)}
+      {records.filter(r => r.kind === 'prediction_interruption' && r.summary.predictionId === selected.id).map(r => <p key={r.id} className="text-caption text-text-2">{forecastIssue(r.summary.code ?? '')}；已完成部分保留。</p>)}
+      {evaluations.map(record => <VcrForecastEvaluation key={record.id} record={record} />)}
       {!evaluations.length && <p className="text-caption text-text-3">接入后续观测后，可在对话中要求比较预测与实际结果。</p>}
     </>}
+    <Disclosure summary="试验效果基准验证">
+      <div className="flex flex-col gap-3">
+        <p className="text-caption text-text-2">用外部模型的试验效果预测，对照已保留的试验证据。无需先建立患者历史；治疗组、终点、单位和时间点须能对应。</p>
+        <div className="flex flex-wrap gap-2">
+          {data.templates.benchmark && <Button variant="ghost" size="sm" onClick={() => download('trial-benchmark-template.json', JSON.stringify(data.templates.benchmark, null, 2), 'application/json')}>下载试验基准模板</Button>}
+          {canRun && <Button variant="secondary" size="sm" disabled={busy} onClick={() => benchmarkInput.current?.click()}>导入试验预测</Button>}
+          <input ref={benchmarkInput} type="file" accept=".json,application/json" className="sr-only" aria-label="选择试验预测文件" onChange={event => { void upload(event.target.files?.[0], true); }} />
+        </div>
+        {benchmark && <>
+          <Select label="试验预测版本" value={benchmark.id} onChange={event => setBenchmarkId(event.target.value)}>{benchmarks.map(r => <option key={r.id} value={r.id}>{r.summary.model?.name ?? '外部模型'} · {r.summary.model?.version ?? '版本未知'} · {date(r.createdAt)}</option>)}</Select>
+          <p className="text-caption text-text-2">{number(benchmark.summary.matched)} / {number(benchmark.summary.comparisons)} 条预测已对应到试验证据。</p>
+          {[...new Set(benchmark.summary.issues?.map(issue => issue.code))].map(code => <p key={code} className="text-caption text-text-2">{forecastIssue(code ?? '')}</p>)}
+          {records.filter(r => r.kind === 'trial_evaluation' && r.parentId === benchmark.id).map(r => <VcrForecastEvaluation key={r.id} record={r} />)}
+        </>}
+      </div>
+    </Disclosure>
+    {nextOffset != null && <Button variant="ghost" size="sm" loading={busy} onClick={() => { void more(); }}>加载较早版本</Button>}
     <Disclosure summary="可用模型与版本记录">
       <ul className="flex flex-col gap-2 text-caption text-text-2">
         {(data.providers ?? []).map(provider => <li key={provider.id}>{provider.name} · {provider.version}</li>)}
@@ -102,18 +144,4 @@ export function VcrLongitudinalPanel({ studyId, canRun }: { studyId: string; can
       </ul>
     </Disclosure>
   </section>;
-}
-
-function Evaluation({ record }: { record: LongitudinalRecord }) {
-  const labels: Record<string, string> = { mae: '平均绝对误差', rmse: '均方根误差', crps: '分布误差（CRPS）', auroc: 'AUROC', averagePrecision: '平均精确率', brier: 'Brier 分数', intervalCoverage: '预测区间覆盖率' };
-  return <div className="flex flex-col gap-3">
-    <h3 className="text-ui font-medium text-text">与后续观测比较</h3>
-    <p className="text-caption text-text-3">{record.summary.validationClass === 'engineering_synthetic' ? '模拟数据流程验证' : '纵向数据验证'} · {record.summary.trainingOverlap === 'unknown' ? '模型训练数据重叠情况未知' : '训练数据重叠情况已记录'}</p>
-    <div className="overflow-x-auto"><table className="w-full text-left text-caption tabular-nums">
-      <caption className="sr-only">各预测跨度的误差与患者抽样置信区间</caption>
-      <thead><tr className="border-b border-border text-text-3"><th className="p-2 font-medium">跨度</th><th className="p-2 font-medium">参与者</th><th className="p-2 font-medium">指标</th><th className="p-2 font-medium">结果</th><th className="p-2 font-medium">95% 置信区间</th></tr></thead>
-      <tbody>{record.summary.groups?.flatMap(group => Object.entries(group.metrics ?? {}).filter(([key, metric]) => labels[key] && metric.value != null).map(([key, metric]) =>
-        <tr key={`${group.horizonDays}:${key}`} className="border-b border-faint text-text-2"><td className="p-2">{group.horizonDays} 天</td><td className="p-2">{number(group.subjects)}</td><td className="p-2">{labels[key]}</td><td className="p-2">{number(metric.value)}</td><td className="p-2">{metric.lower != null && metric.upper != null ? `${number(metric.lower)}–${number(metric.upper)}` : '未估计'}</td></tr>))}</tbody>
-    </table></div>
-  </div>;
 }
