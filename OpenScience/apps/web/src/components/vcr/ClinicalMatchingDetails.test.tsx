@@ -54,6 +54,83 @@ describe('evaluating from the controls',()=>{
   });
 });
 
+describe('the redaction a reviewer attests to',()=>{
+  const TEXT='王小明住院。王小明否认胸痛。李四来探视。';
+  const source=()=>({id:'src',files:[{id:'doc1',name:'病历.txt',role:'document'}],upload:{cloudDestinations:['https://api.example.org']},
+    cloudPermission:{status:'approved',reference:'合作协议 2026-09',expiresAt:'2999-01-01'}}) as unknown as VcrIntakeSource;
+  async function open(){
+    api.document.mockResolvedValue({document:{id:'doc1',text:TEXT,sourceHash:'h1'}});
+    api.projection.mockResolvedValue({});
+    const changed=vi.fn();
+    const view=render(<CloudDocuments studyId="s1" source={source()} onChanged={changed}/>);
+    fireEvent.click(screen.getByText('病历云端处理 · 已授权'));
+    fireEvent.change(screen.getByLabelText('准备脱敏文本'),{target:{value:'doc1'}});
+    fireEvent.click(screen.getByRole('button',{name:'打开原文'}));
+    await screen.findByLabelText('受保护的原文');
+    return {view,changed};
+  }
+  const identify=(lines:string)=>fireEvent.change(screen.getByLabelText('需替换的姓名、编号或地址（每行一项）'),{target:{value:lines}});
+  const preview=()=>screen.getByRole('region',{name:'脱敏后的文本'});
+
+  // Review V-C1: the reviewer attested 「已检查全文」 without seeing the text that would be saved, with one total over all
+  // identifiers (a misspelt one matched nothing and nobody saw it), and the whole record stayed in the page after the save.
+  it('shows the text as it will be saved — the located names masked, everything else as written — before the save can be pressed',async()=>{
+    await open();
+    identify('王小明');
+    expect(preview()).not.toHaveTextContent('王小明');
+    expect(within(preview()).getAllByText('已遮蔽')).toHaveLength(2);
+    expect(preview()).toHaveTextContent('住院。');
+    // A name the reviewer did not list is plainly still there: this is what the attestation is about.
+    expect(preview()).toHaveTextContent('李四来探视');
+    expect(screen.getByRole('button',{name:'保存脱敏文本'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox',{name:/已检查脱敏后的全文/}));
+    expect(screen.getByRole('button',{name:'保存脱敏文本'})).toBeEnabled();
+  });
+  it('counts each identifier on its own and warns on one that was found nowhere',async()=>{
+    await open();
+    identify('王小明\n王晓明\n李四');
+    const list=screen.getByRole('list',{name:'需替换的内容'});
+    const [first,second,third]=within(list).getAllByRole('listitem');
+    expect(first).toHaveTextContent('王小明');expect(first).toHaveTextContent('2 处');
+    expect(second).toHaveTextContent('王晓明');expect(second).toHaveTextContent('0 处');expect(second).toHaveTextContent('原文里没有找到');
+    expect(third).toHaveTextContent('1 处');expect(third).not.toHaveTextContent('没有找到');
+    expect(screen.getByText(/共 3 处将被替换/)).toBeVisible();
+  });
+  it('sends what it always sent — the reviewed spans of the original and the permission it rests on — and then lets the record go',async()=>{
+    const {changed}=await open();
+    identify('王小明');
+    fireEvent.click(screen.getByRole('checkbox',{name:/已检查脱敏后的全文/}));
+    fireEvent.click(screen.getByRole('button',{name:'保存脱敏文本'}));
+    await waitFor(()=>expect(api.projection).toHaveBeenCalledWith('s1','doc1',{sourceHash:'h1',spans:[{start:0,end:3,kind:'identifier'},{start:6,end:9,kind:'identifier'}],attestation:'合作协议 2026-09'}));
+    await waitFor(()=>expect(changed).toHaveBeenCalled());
+    expect(await screen.findByText('已准备脱敏文本，匹配可读取这份副本。')).toBeVisible();
+    // Neither the record nor the names typed beside it stay in the page.
+    expect(screen.queryByLabelText('受保护的原文')).toBeNull();
+    expect(screen.queryByLabelText('需替换的姓名、编号或地址（每行一项）')).toBeNull();
+    expect(screen.queryByRole('region',{name:'脱敏后的文本'})).toBeNull();
+    expect(document.body.textContent).not.toContain('王小明');
+    expect(document.body.textContent).not.toContain('李四');
+  });
+  it('keeps the record when the save fails, so the reviewer can try again',async()=>{
+    api.document.mockResolvedValue({document:{id:'doc1',text:TEXT,sourceHash:'h1'}});
+    await open();
+    api.projection.mockRejectedValue(new WebApiError('no',{status:409,code:'vcr_projection_span_invalid'}));
+    identify('王小明');
+    fireEvent.click(screen.getByRole('checkbox',{name:/已检查脱敏后的全文/}));
+    fireEvent.click(screen.getByRole('button',{name:'保存脱敏文本'}));
+    expect(await screen.findByRole('alert')).toBeVisible();
+    expect(screen.getByLabelText('受保护的原文')).toBeInTheDocument();
+    expect(screen.getByLabelText('需替换的姓名、编号或地址（每行一项）')).toHaveValue('王小明');
+  });
+  it('lets the record go when the fold is closed',async()=>{
+    await open();
+    identify('王小明');
+    fireEvent.click(screen.getByText('病历云端处理 · 已授权'));
+    await waitFor(()=>expect(screen.queryByLabelText('受保护的原文')).toBeNull());
+    expect(document.body.textContent).not.toContain('王小明');
+  });
+});
+
 describe('the clinical timeline',()=>{
   const fact=(id:string,extra:Record<string,unknown>={})=>({id,variable:'creatinine',value:2.4,unit:'mg/dL',at:null,assertion:'affirmed',experiencer:'patient',medicationState:null,correctionOf:null,quote:null,superseded:false,conflictFactIds:[],correctionReason:null,locator:null,...extra});
   const timeline=(entries:unknown[],mayReadOriginal=true)=>{
