@@ -26,7 +26,7 @@ test("a version shows its claim marks and the run's clinical-safety findings, ne
     { id: "claim-CLM-001", kind: "claim_source_binding", status: "verified", message: "", elementId: "CLM-001", sourceRefs: [] },
     { id: "finding", status: "failed", message: "a finding of another producer" },
   ] };
-  assert.deepEqual(projectResultVersion(stored).findings.map((finding) => finding.id),
+  assert.deepEqual(projectResultVersion(stored).findings.map((/** @type {{ id: string }} */ finding) => finding.id),
     [`${RUN_FINDING_ID_PREFIX}2`, "claim-CLM-001", "finding"]);
   assert.equal(RUN_FINDING_ID_PREFIX, "run-finding-");
   assert.deepEqual(projectResultVersion({ ...version, findings: undefined }).findings, []);

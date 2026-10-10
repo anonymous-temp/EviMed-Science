@@ -224,6 +224,9 @@ export const BACK_OFFICE = [
   /审查意见供参考/, /不代表实证验证/, /旧意见保留供参考/, /表中每个数都是这个研究的结果/, /平台不自动选定方案/,
   /模型推断\s*\d+/, /你已确认\s*\d+/, /数据字典所述/, /确认以上推断/,
   /导读由模型根据原文写成/, /引用前请阅读原文/,
+  // The model-only notes and the English binding sentence must never be a line of a page; the old partial-text finding of an upkeep round and a
+  // generic 「review not done」 announcement are the card pipeline's.
+  /不是操作指令/, /source support remains separately assessed/, /仅使用该来源的部分已保存正文/, /尚未完成复核/,
   /证据卡是 EviMed 对来源的整理/, /请引用它列出的原始来源/, /不要引用这张卡/, /撤回的卡片保留这一页/, /不为它们背书/, /是平台还没核对这一项/, /三项都未核实/, /(?:未做|未安排)独立复核/,
   /AI 已评议/, /AI 待评议/, /当前内容(?:已完成 AI 评议|待重新评议)/, /沿用上次保留内容/, /上次成功读取于/, /本轮(?:未能重新读取|尚未核查)/, /部分来源(?:本轮尚未完成复核|待复核)/,
   // 虚拟临床研究: who set a value, who drafted a pack or wrote a record, and whether a card was countersigned are not marks on the

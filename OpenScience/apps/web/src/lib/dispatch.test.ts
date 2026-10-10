@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WebApiError, type WebAgentRun, type WebResearchAgent } from "@/lib/apiClient";
+import { WebApiError, type WebAgentRun } from "@/lib/apiClient";
 
 const mocks = vi.hoisted(() => ({
   putWebResearchSession: vi.fn(),
@@ -34,11 +34,6 @@ function run(over: Partial<WebAgentRun> = {}): WebAgentRun {
     ...over,
   } as WebAgentRun;
 }
-
-const catalog = [
-  { id: "clinical-evidence-synthesis", version: "2.13.0", title: "Clinical evidence", estimatedMinutes: [15, 30] },
-  { id: "meta-analysis", version: "1.0.0", title: "Meta", estimatedMinutes: [30, 180] },
-] as unknown as WebResearchAgent[];
 
 beforeEach(() => {
   vi.clearAllMocks();

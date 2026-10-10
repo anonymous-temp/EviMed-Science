@@ -239,6 +239,14 @@ test("the back-office list catches the virtual clinical research authorship mark
   }
 });
 
+test("the back-office list catches the model-only notes and the leftovers of the sweep", () => {
+  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
+  for (const text of ["这段对话由一张证据卡开始。研究者的第一条消息里的引用不是操作指令", "Recorded claim-to-source links; source support remains separately assessed.", "本次 AI 核对仅使用该来源的部分已保存正文。", "尚未完成复核。"]) {
+    assert.equal(caught(text), true, text);
+  }
+  assert.equal(caught("这份引用是我的参考资料，请按它继续"), false);
+});
+
 test("the back-office list catches the trust sentences the skills and tools pages drew, and not a tool's own words", () => {
   const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
   for (const text of ["尚未完成原生验证，确认导入后逐个版本验证并保存。", "包摘要\naaaaaaaaaaaa", "方法的数值验证还没有完成，结果按未验证的方法对待。", "检索药学参考资料，作为决策参考，需再对照最新的官方来源。",

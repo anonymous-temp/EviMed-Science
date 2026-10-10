@@ -57,6 +57,9 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["生成过程未被观察", "same"],
   ["没有记录生成过程", "same"],
   ["没有可读取的核对意见", "a version with nothing to show is not a version that 「was not verified」"],
+  ["source support remains separately assessed", "a claim's finding is its ✓/⚠ mark; there is no English sentence under it (R23)"],
+  ["引用均为来源原文片段", "the coding viewer does not vouch for its own quotations (R25)"],
+  ["不由模型生成", "same"],
   ["已保存此版本", "whether the platform kept a copy of an input is not a line in the lineage"],
   // The error registry (R27): sentences from when the gate withheld a delivery, and a chore handed to the reader.
   ["退回修复", "a gate verdict never withholds a delivery (ruling of 2026-09-17), so no run is sent back for repair"],
@@ -83,6 +86,7 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["回执没有对上这些数字", "same"],
   ["平台保存的回执", "same"],
   ["本卡由平台议程完成", "a card does not say that the platform's agenda made it"],
+  ["尚未完成复核", "neither a package, a public page nor a card announces a review that has not happened"],
   ["证明哈希", "a card does not carry the evaluator's proof hash"],
   ["内部研究记录", "a card does not tell its reader what the platform keeps in its internal project"],
   // 虚拟临床研究's package and pages (R35): the platform's hedges about its own reviews, tables and hash.
