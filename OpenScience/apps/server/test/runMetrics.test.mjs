@@ -54,6 +54,22 @@ test("duration and cost are histograms a percentile can be read from, up to two 
   assert.match(text, /^# TYPE evimed_run_cost_cny_total counter$/m);
 });
 
+test("a step of the run-finished hook that threw is counted under its own name, from a closed spelling", () => {
+  // 2026-10-10 review D7: a step that failed left an audit line and no number, so nothing could say how often finished runs
+  // skipped their transcript, memory or lessons for want of one of them.
+  const metrics = new RunMetrics();
+  metrics.stepFailed("clinical.context");
+  metrics.stepFailed("clinical.context");
+  metrics.stepFailed("run.events");
+  metrics.stepFailed("Not A Step Name, with a \"quote\"");
+  const text = metrics.lines().join("\n");
+  assert.match(text, /^# TYPE evimed_run_completion_step_failures_total counter$/m);
+  assert.ok(has(text, 'evimed_run_completion_step_failures_total{step="clinical.context"} 2'));
+  assert.ok(has(text, 'evimed_run_completion_step_failures_total{step="run.events"} 1'));
+  assert.ok(has(text, 'evimed_run_completion_step_failures_total{step="other"} 1'), "a name outside the spelling is one series, not a new one each time");
+  assert.match(new RunMetrics().lines().join("\n"), /^# TYPE evimed_run_completion_step_failures_total counter$/m, "declared before any failure");
+});
+
 test("claims and preserved sources are counted, and one run cannot flood a counter", () => {
   const metrics = new RunMetrics();
   metrics.observe({ capability: "clinical-evidence-synthesis", status: "succeeded",

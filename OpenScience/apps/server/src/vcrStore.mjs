@@ -453,6 +453,29 @@ export class VcrStore extends VcrStoreBase {
     return found.length > 0;
   }
 
+  /**
+   * `hasClinicalContext` for a list: which of `contexts` hold a clinical source dependency, in the order given, in one
+   * statement. Asked once per project where it used to be asked once per run (2026-10-10 review D7). A context that names
+   * neither a session nor a run cannot be attributed to one conversation, and is answered as the project as a whole is.
+   * @param {string} userId @param {string} projectId @param {{sessionId?:string,runId?:string}[]} [contexts]
+   * @returns {Promise<boolean[]>}
+   */
+  async clinicalContextsHeld(userId, projectId, contexts = []) {
+    const sessions = [...new Set(contexts.map(row => row.sessionId).filter(Boolean))];
+    const runs = [...new Set(contexts.map(row => row.runId).filter(Boolean))];
+    const rows = sessions.length + runs.length === 0 ? [] : await this.clinicalHistoryRows(`SELECT DISTINCT r.session_id,r.run_id
+      FROM ${VCR_SCHEMA}.cloud_reads r JOIN ${VCR_SCHEMA}.studies s ON s.id=r.study_id
+      WHERE s.project_id=$1 AND (s.user_id=$2 OR EXISTS
+        (SELECT 1 FROM ${VCR_SCHEMA}.members m WHERE m.study_id=s.id AND m.user_id=$2))
+        AND (r.session_id=ANY($3::text[]) OR r.run_id=ANY($4::text[]))`,
+    [projectId,userId,sessions,runs]);
+    const heldSessions = new Set(rows.map(row => row.session_id)), heldRuns = new Set(rows.map(row => row.run_id));
+    const unattributed = contexts.some(row => !row.sessionId && !row.runId) ? await this.hasClinicalContext(userId, projectId) : false;
+    return contexts.map(row => (!row.sessionId && !row.runId)
+      ? unattributed
+      : Boolean((row.sessionId && heldSessions.has(row.sessionId)) || (row.runId && heldRuns.has(row.runId))));
+  }
+
   /** History permissions survive disabling the optional VCR module. A deployment
    * that never created this table gains no VCR schema from a normal model call.
    * @param {string} sql @param {unknown[]} values */

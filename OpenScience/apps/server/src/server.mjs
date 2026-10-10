@@ -106,6 +106,7 @@ import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
 import { MethodFeedbackService } from "./methodFeedback.mjs";
 import { LearningTriggers } from "./learningTriggers.mjs";
+import { createClinicalReuse } from "./clinicalContextReuse.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
 import { EVALUATION_JUDGE_LIMITS, evaluateLearnedMethod } from "./learningEvaluation.mjs";
 import { freezeLearningBaseline } from "./learningBaseline.mjs";
@@ -2197,9 +2198,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   if (vcr) entityVocabulary.registerBackfill("vcr", ({ limit }) => vcr.store.backfillEntityKeys({ limit }));
   // Processing a projection does not authorize copying it into account-wide
   // methods, memory capsules or the shared evaluation corpus.
-  const vcrPrivacyStore = vcr?.store ?? (productDatabase ? new VcrStore({database:productDatabase}) : null);
-  const canReuseRun = async (project, run) => !vcrPrivacyStore || !await vcrPrivacyStore.hasClinicalContext(
-    project.userId, project.id, [{ sessionId: run.sessionId, runId: run.id }]);
+  const vcrPrivacyStore = overrides.vcrPrivacyStore ?? vcr?.store ?? (productDatabase ? new VcrStore({database:productDatabase}) : null);
+  const { canReuseRun, canReuseRuns } = createClinicalReuse({ store: vcrPrivacyStore });
 
   /**
    * The newest run of a GEO project's control-plane project that holds the
@@ -3304,6 +3304,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         try {
           return await work();
         } catch (error) {
+          runMetrics.stepFailed(name);
           await securityAudit(config, "run.completion.step", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
             code: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "run_completion_step_failed",
@@ -3519,7 +3520,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // Best effort, and it audits its own failure: a throw in this callback is
       // caught by `finishInternal` and then caught again, so a step that does
       // not report for itself fails invisibly.
-      const reusableClinicalContext = await canReuseRun(project, run).catch(() => false);
+      //
+      // The privacy question comes first because everything that copies out of the conversation depends on its answer, and a
+      // store that cannot answer is read as "no" - fail closed, as a privacy boundary must. That used to be a bare
+      // `.catch(() => false)`: the run's evolution outcome, handbook observations, graph evidence and memory extraction were
+      // skipped with no audit line and no number (2026-10-10 review D7). It is a step now, so the failure is audited under its
+      // name and counted, and the run's own completion goes on.
+      const reusableClinicalContext = (await step("clinical.context", () => canReuseRun(project, run))) === true;
       // What the transcript branch below collected, kept for the memory branch after it: the conversation is read once, while the
       // container answers, and both consume that read (2026-10-10 review M-15).
       /** @type {import("./runTranscripts.mjs").CollectedSession[] | null} */
@@ -3991,7 +3998,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }),
     });
     learningTriggers = new LearningTriggers({
-      jobs: productJobs, agentRuns, memory: researchMemory, canReuseRun,
+      jobs: productJobs, agentRuns, memory: researchMemory, canReuseRun, canReuseRuns,
       // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
       // every platform-level consumer (capsuleShareTrust.mjs, plan §7).
       guestInfluence: productDatabase ? createGuestInfluence({ database: productDatabase, documents: productDocuments,
