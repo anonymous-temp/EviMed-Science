@@ -180,10 +180,11 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // is what notices a method being added to one half without a decision about
   // the other. Disjointness is asserted beside it, because a method that is
   // both allowed and denied would keep the total right.
-  // Nine kernel calls, four EviMed probe calls and three scoped skill calls, 122 refused methods and
-  // the gateway acknowledgement. Browser model-selection methods have their
-  // own validated policy, so they no longer belong to this denied inventory.
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 139);
+  // Nine kernel calls, four EviMed probe calls and three scoped skill calls,
+  // 124 refused methods and the gateway acknowledgement. Browser model
+  // selection has its own validated proxy policy; the run's wire still
+  // classifies these methods as denied.
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 141);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }
@@ -204,6 +205,7 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   assert.ok(!isAllowedWireMethod("settings/update"));
   assert.ok(!isAllowedWireMethod("credentials/set"));
   assert.ok(!isAllowedWireMethod("session/selectModel"), "the model is the deployment's decision, not the run's");
+  assert.ok(!isAllowedWireMethod("session/modelCatalog"), "the run cannot enumerate the kernel's provider configuration");
   assert.ok(!isAllowedWireMethod("workspace/delete"));
   assert.ok(!isAllowedWireMethod("session/status"), "the kernel publishes no such method");
 });
