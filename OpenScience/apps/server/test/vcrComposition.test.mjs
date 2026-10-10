@@ -841,6 +841,44 @@ test("a row of the table is a person the study holds data on, not a patient to c
   assert.deepEqual(referrals.map((referral) => referral.subjectKey), ["P-chart"], "only the person who came with a chart is offered to a site");
 });
 
+test("a panel evaluation of another protocol records its assessments and never touches the referral ledger (E-05)", async () => {
+  /** @type {any[]} */ const saved = [];
+  /** @type {any[]} */ const referrals = [];
+  /** @type {string[]} */ const reported = [];
+  const matchStore = matchStoreDouble({
+    async latestProtocol() { return { id: "prt_2", version: 2, title: "EV-201 v2" }; },
+    async saveAssessment({ assessment }) { const row = { id: `mas_${saved.length + 1}`, ...assessment, judgments: assessment.judgments }; saved.push(row); return row; },
+    async createReferral({ referral }) { referrals.push(referral); return { state: referral.state }; },
+    async listReferrals() { return []; },
+  });
+  const seam = vcrMatchingSeam({ matchStore, store: owner, report: (code) => reported.push(code) });
+  /** @param {string} subjectKey @param {string} protocolVersionId @param {string} summary */
+  const assessment = (subjectKey, protocolVersionId, summary) => ({ subjectKey, protocolVersionId, direction: "patient_to_trial", asOf: AS_OF, summary, counts: {}, evidenceGaps: [], judgments: [] });
+  /** @param {string} protocol @param {any[]} rows */
+  const finish = (protocol, rows) => seam.onJobFinished({ state: "succeeded", job: { kind: "match_criteria", studyId: "std_1", id: `job_${protocol}` },
+    engineResult: { diagnostics: { protocolVersionId: protocol }, assessments: rows } });
+
+  // A panel also evaluates the study's earlier protocol: a candidate and a needs-evidence person there are not referrals of this study.
+  const beside = await finish("prt_1", [assessment("P-1", "prt_1", "eligible"), assessment("P-2", "prt_1", "insufficient_evidence")]);
+  assert.equal(beside.persisted, 2, "both verdicts are recorded and shown");
+  assert.deepEqual(referrals, [], "prt_1 is not the study's current protocol, so nothing reaches the ledger");
+  // The current protocol's own evaluation makes the referrals, from its own assessments.
+  const current = await finish("prt_2", [assessment("P-1", "prt_2", "ineligible"), assessment("P-2", "prt_2", "eligible"), assessment("P-3", "prt_2", "insufficient_evidence")]);
+  assert.equal(current.persisted, 3);
+  assert.deepEqual(referrals.map((referral) => [referral.subjectKey, referral.assessmentId, referral.state]), [["P-2", "mas_4", "candidate"], ["P-3", "mas_5", "needs_evidence"]]);
+  // A later panel run of the earlier protocol cannot re-point a live referral at its own verdict.
+  referrals.length = 0;
+  await finish("prt_1", [assessment("P-2", "prt_1", "eligible")]);
+  assert.deepEqual(referrals, []);
+  // Without a protocol to compare to, nothing is guessed: the verdicts are kept, no referral is made, and the operator is told.
+  const lost = vcrMatchingSeam({ matchStore: matchStoreDouble({ ...matchStore, async latestProtocol() { throw Object.assign(new Error("db"), { code: "vcr_db_down" }); } }), store: owner, report: (code) => reported.push(code) });
+  const kept = await lost.onJobFinished({ state: "succeeded", job: { kind: "match_criteria", studyId: "std_1", id: "job_x" },
+    engineResult: { diagnostics: { protocolVersionId: "prt_2" }, assessments: [assessment("P-9", "prt_2", "eligible")] } });
+  assert.equal(kept.persisted, 1);
+  assert.deepEqual(referrals, []);
+  assert.deepEqual(reported, ["vcr_db_down"]);
+});
+
 test("a job's frozen inputs name the subject table it will read, and a study with no table keeps the token it had", async () => {
   const study = { id: "std_1", userId: "u1" };
   const withoutTable = await vcrMatchingSeam({ matchStore: matchStoreDouble(), store: storeDouble }).matchScenario(study);

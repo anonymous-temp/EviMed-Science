@@ -797,7 +797,16 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       // contact: its verdicts are saved and counted, and no referral is made for it. A person who also has documents is
       // the recruitment flow's as before.
       const tableOnly = new Set(list(result.assessments).filter((assessment) => assessment?.source === "subject_table").map((assessment) => String(assessment.subjectKey)));
-      for (const candidate of candidateReferrals({ studyId: study.id, assessments: saved.filter((assessment) => !tableOnly.has(String(assessment.subjectKey))) })) {
+      // The referral ledger is the study's: one live row per person, following the study's CURRENT protocol. A panel
+      // evaluates other versions beside it (D03); those verdicts are recorded and shown like any other and never reach
+      // the ledger, because making a referral again re-points an existing one at the newest assessment while keeping its
+      // state, which would leave a candidate of the current protocol pointing at another protocol's verdict (E-05).
+      const current = await matchStore.latestProtocol(study.id).catch((/** @type {any} */ error) => {
+        report(String(error?.code ?? "vcr_referral_create_failed"));
+        return null;
+      });
+      const ledgerBound = saved.filter((assessment) => current && assessment.protocolVersionId === current.id && !tableOnly.has(String(assessment.subjectKey)));
+      for (const candidate of candidateReferrals({ studyId: study.id, assessments: ledgerBound })) {
         try {
           const referral = await matchStore.createReferral({
             userId: study.userId,

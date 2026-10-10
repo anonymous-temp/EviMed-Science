@@ -219,6 +219,9 @@ test('a patient panel queues both protocols, persists distinct outcomes and acco
   const view = await vcr.service.tab({ id: 'owner' }, target.id, 'matching', { candidate: subjectKey });
   assert.deepEqual(Object.fromEntries(view.comparisons.map(item => [item.protocol.id, item.summary])),
     { [protocols[0]]: 'eligible', [protocols[1]]: 'ineligible' });
+  // The referral ledger follows the study's current protocol (the later one, age >= 65), for which this person is ineligible:
+  // the earlier protocol's panel verdict of eligible is recorded above and makes no referral (E-05).
+  assert.deepEqual(await vcr.matchStore.listReferrals({ studyId: target.id }), []);
   assert.deepEqual(await vcr.matchStore.listAssessments({ studyId: other.id }), []);
 });
 
