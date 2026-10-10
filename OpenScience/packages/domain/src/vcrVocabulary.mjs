@@ -925,13 +925,18 @@ export const VCR_PEOPLE_COUNT_MAP_KEYS = frozen(['levels'])
  * Keys that count people but are never one of a list's sibling cells: a table's
  * row total, the rows a cohort started from and kept, the rows a synthetic
  * model was trained on, the effective sample size a weighted estimate rests on
- * (an unweighted one is exactly the head count). Small-cell suppression reads
- * them alone — one of them under ten becomes null — and never as a cell whose
- * neighbours are topped up around it, because two tables' row totals or two
- * diagnostics blocks are not the parts of one whole.
+ * (an unweighted one is exactly the head count), and the roster and batch
+ * counts a matching evaluation reports (`requestedSubjects`, `batchSubjects`,
+ * `batchEvaluated`, `batchUnavailable`, `outsideBatch`, `subjectsNotEvaluated`:
+ * each is a number of this study's candidates under a name of its own).
+ * Small-cell suppression reads them alone — one of them under ten becomes
+ * null — and never as a cell whose neighbours are topped up around it, because
+ * two tables' row totals or two diagnostics blocks are not the parts of one
+ * whole.
  */
 export const VCR_PEOPLE_COUNT_SCALAR_FIELDS = frozen([
   'rows', 'startingRows', 'keptRows', 'trainingObservations', 'effectiveSampleSize',
+  'requestedSubjects', 'batchSubjects', 'batchEvaluated', 'batchUnavailable', 'outsideBatch', 'subjectsNotEvaluated',
 ])
 /**
  * Names of measures — `{ name, value }` — whose value is a head count of the
@@ -939,10 +944,14 @@ export const VCR_PEOPLE_COUNT_SCALAR_FIELDS = frozen([
  * `counts` key, so a boundary that reads only keys lets a small cohort out as
  * `cohort_size`. Closed: a measure of a published trial's figure (a
  * reconstructed curve's events) or of a design (`expected_sample_size`,
- * `required_total_*`) is not this study's people and is not listed.
+ * `required_total_*`) is not this study's people and is not listed. A matching
+ * evaluation reports how many of its candidates fall under each eligibility
+ * summary the same way, named by the summary (`eligible` … `pending`), so those
+ * names are listed from the summaries themselves.
  */
 export const VCR_PEOPLE_COUNT_MEASURES = frozen([
   'rows', 'cohort_size', 'cohort_size_strict', 'cohort_size_lenient', 'training_observations', 'effective_sample_size',
+  ...VCR_ELIGIBILITY_SUMMARIES,
 ])
 
 /**

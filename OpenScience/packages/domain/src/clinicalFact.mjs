@@ -120,6 +120,9 @@ export function clinicalFactPolarity(fact) {
   return ['affirmed', 'negated'].includes(fact.clinical.assertion) ? fact.clinical.assertion : 'hypothetical';
 }
 
+/** The polarities a verdict may be reasoned from: a family history, a plan or a hypothesis is not a finding. */
+export const CLINICAL_ASSERTIVE_POLARITIES = Object.freeze(['affirmed', 'negated']);
+
 /** Metadata shared with dataset semantics: no subject, values or quotations.
  * @param {any[]} facts */
 export function clinicalSemanticFields(facts) {
@@ -160,21 +163,35 @@ export function clinicalTerminologyContext(pack, criteria) {
 
 /** A correction supersedes a fact only in a view that could already see that correction.
  * Distinct episodes are not merged; explicit contradictions and same-episode disagreements stay visible.
- * @param {any[]} facts @param {string|number|Date} asOf */
-export function clinicalFactView(facts, asOf) {
+ *
+ * Two clocks, kept apart. What the platform could read by `asOf` (`visibleAt`, valid time) is the caller's cut and
+ * is already made; `createdAt` is when a row was written (system time), and a replay of a past instant writes
+ * every row after that instant. So a fact is never left out of the view for being written late. Only a correction
+ * is held to the clock: one written after `asOf` is a later rewrite of that moment, not a record of it, so it is not
+ * part of the view at all — it neither supersedes nor stands as a second reading.
+ *
+ * `assertiveOnly` is the view a verdict is reasoned from. Supersession is settled among every fact whatever its
+ * polarity — a correction that re-labels a fact as a family history or a hypothesis replaces the original exactly as
+ * one that negates it — and only then are the survivors that are not assertive left out of `facts` and out of every
+ * conflict. They are returned in `setAside`, the facts as given (not copies), so a caller can match them by identity.
+ * @param {any[]} facts @param {string|number|Date} asOf @param {{ assertiveOnly?: boolean }} [options] */
+export function clinicalFactView(facts, asOf, { assertiveOnly = false } = {}) {
   const at = new Date(asOf).getTime();
-  const visible = facts.filter(f => !f.createdAt || new Date(f.createdAt).getTime() <= at);
+  const visible = facts.filter(f => !f.clinical?.correctionOf || !f.createdAt || new Date(f.createdAt).getTime() <= at);
   const byId = new Map(visible.map(f => [f.id, f]));
   const replaced = new Set();
   for (const fact of visible) {
-    const original = byId.get(fact.clinical?.correctionOf);
+    const original = fact.clinical?.correctionOf ? byId.get(fact.clinical.correctionOf) : undefined;
     if (original && original.subjectKey === fact.subjectKey && original.variable === fact.variable) replaced.add(original.id);
   }
-  const active = visible.filter(f => !replaced.has(f.id));
+  const survivors = visible.filter(f => !replaced.has(f.id));
+  const setAside = assertiveOnly ? survivors.filter(f => !CLINICAL_ASSERTIVE_POLARITIES.includes(clinicalFactPolarity(f))) : [];
+  const active = setAside.length ? survivors.filter(f => !setAside.includes(f)) : survivors;
+  const activeById = new Map(active.map(f => [f.id, f]));
   const conflicts = new Map();
   for (const fact of active) {
     const related = (fact.clinical?.relations ?? []).filter((/** @type {any} */ r) => r.type === 'contradicts' && r.state === 'supported')
-      .map((/** @type {any} */ r) => r.targetFactId).filter((/** @type {any} */ target) => byId.has(target) && byId.get(target).subjectKey === fact.subjectKey && !replaced.has(target));
+      .map((/** @type {any} */ r) => r.targetFactId).filter((/** @type {any} */ target) => activeById.has(target) && activeById.get(target).subjectKey === fact.subjectKey);
     if (related.length) {
       conflicts.set(fact.id, related);
       for (const target of related) conflicts.set(target, [...(conflicts.get(target) ?? []), fact.id]);
@@ -203,5 +220,5 @@ export function clinicalFactView(facts, asOf) {
     }
   }
   return { facts: active.map(f => ({ ...f, polarity: clinicalFactPolarity(f), ...(conflicts.has(f.id) ? { conflicts: conflicts.get(f.id) } : {}) })),
-    superseded: [...replaced], conflicts: [...conflicts].map(([factId, withFacts]) => ({ factId, withFacts })) };
+    superseded: [...replaced], conflicts: [...conflicts].map(([factId, withFacts]) => ({ factId, withFacts })), setAside };
 }

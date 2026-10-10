@@ -239,14 +239,17 @@ cohortSize, screened, eligible, enrolled, referred, contacted, candidates` (exte
 - a cell with several count keys is judged by its smallest;
 - `suppressedCount`-style complements are never emitted;
 - **scalar fields** (`VCR_PEOPLE_COUNT_SCALAR_FIELDS`: `rows, startingRows, keptRows,
-  trainingObservations, effectiveSampleSize`) count people but are never one of a list's sibling
-  cells — two tables' row totals are not the parts of one whole — so they answer to the standalone
-  rule above and are never topped up with neighbours;
+  trainingObservations, effectiveSampleSize`, and a matching evaluation's `requestedSubjects,
+  batchSubjects, batchEvaluated, batchUnavailable, outsideBatch, subjectsNotEvaluated`) count people but
+  are never one of a list's sibling cells — two tables' row totals are not the parts of one whole — so
+  they answer to the standalone rule above and are never topped up with neighbours;
 - **a measure is a count by its name**: `{ name, value }` where `name` is in
   `VCR_PEOPLE_COUNT_MEASURES` (`rows, cohort_size, cohort_size_strict, cohort_size_lenient,
-  training_observations, effective_sample_size`) answers to the standalone rule; a hidden measure keeps
-  its name and loses its value, interval and note. The list is closed: a published trial's figure or a
-  design's own size (`expected_sample_size`, `required_total_*`) is not this study's people;
+  training_observations, effective_sample_size`, and the four eligibility summaries `eligible,
+  ineligible, insufficient_evidence, pending` a matching evaluation tallies) answers to the standalone
+  rule; a hidden measure keeps its name and loses its value, interval and note. The list is closed: a
+  published trial's figure or a design's own size (`expected_sample_size`, `required_total_*`) is not
+  this study's people;
 - a `null` count is a value never known, not a person; it counts only where the object's own
   `suppressed` list names it.
 

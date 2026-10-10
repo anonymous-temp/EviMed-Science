@@ -15,7 +15,7 @@ import { validateEngineResult, validateEngineJob } from "@evimed/domain";
 
 import { freezeMatchingInputs, MATCHING_SNAPSHOT_PREFIX } from "../src/vcrMatchingSnapshot.mjs";
 import { loadConfig } from "../src/config.mjs";
-import { vcrReadiness } from "../src/vcrService.mjs";
+import { VcrService, vcrReadiness } from "../src/vcrService.mjs";
 import { removeVcrArtifacts } from "../src/vcrStoreBase.mjs";
 import { createIntakeCounters } from "../src/vcrRecordExtract.mjs";
 import {
@@ -166,6 +166,32 @@ test("CW-22 a run reads criterion-level aggregates and pseudonymous subject keys
   assert.equal(empty.protocol, null);
 });
 
+test("a run reading a frozen matching batch gets the roster size through the small-cell boundary and the progress counts as sibling cells (E-19)", async () => {
+  const boundary = new VcrService({ store: /** @type {any} */ ({}), config: {} });
+  /** @param {number} count @param {string} state */
+  const rows = (count, state) => Array.from({ length: count }, (_, at) => ({ subjectKey: `${state}-${at}`, state, jobId: "job_1" }));
+  const read = async (/** @type {any[]} */ progress) => boundary.forModel(await vcrMatchingSeam({
+    matchStore: matchStoreDouble({ async matchingSnapshot() { return { protocolVersionId: "prt_1", asOf: AS_OF }; }, async matchingProgress() { return progress; } }),
+    store: storeDouble }).runtimeRead({ id: "std_1" }, { snapshotId: "snap_1" }));
+  const cells = (/** @type {any} */ view) => view.coverageCells.map((/** @type {any} */ cell) => [cell.key, cell.n]);
+
+  // Three people: neither the roster size nor any state's count leaves.
+  const small = await read([...rows(2, "evaluated"), ...rows(1, "pending")]);
+  assert.equal(small.requestedSubjects, null);
+  assert.deepEqual(cells(small), [["evaluated", null], ["pending", null], ["unavailable", null]]);
+  assert.deepEqual(small.suppressed, ["requestedSubjects"]);
+  // A nearly finished roster of 240: the one pending person is hidden together with the neighbours that would reproduce it.
+  const nearly = await read([...rows(239, "evaluated"), ...rows(1, "pending")]);
+  assert.equal(nearly.requestedSubjects, 240);
+  assert.deepEqual(cells(nearly), [["evaluated", null], ["pending", null], ["unavailable", null]]);
+  // A roster whose every state is over the floor shows all of them.
+  const wide = await read([...rows(120, "evaluated"), ...rows(100, "pending"), ...rows(20, "unavailable")]);
+  assert.deepEqual([wide.requestedSubjects, ...cells(wide).map((/** @type {any} */ cell) => cell[1])], [240, 120, 100, 20]);
+  assert.equal(wide.subjects.length, 20, "the page of rows is as it was, and more says so");
+  assert.equal(wide.more, true);
+  assert.equal(JSON.stringify(wide).includes('"requested"'), false, "the old key is gone, not shown twice");
+});
+
 /** The frozen inputs a matching job carries. */
 const matchingInputs = (asOf = AS_OF, protocol = "prt_1") => [
   { kind: "evidence", id: `matching:asof:${asOf}` }, { kind: "evidence", id: `matching:protocol:${protocol}` }, { kind: "evidence", id: "matching:facts:0123456789abcdef" },
@@ -217,6 +243,12 @@ test("AC-14 CS-31 the local executor loads what it evaluates by study, decides i
   assert.ok(progress.length >= 1, "progress is reported even for a short job");
   assert.equal(result.manifest.engineVersion, "control-plane");
   assert.deepEqual(asked, [{ studyId: "std_1", visibleBy: AS_OF }, { studyId: "std_1", ids: ["f1"] }], "execution loads only the references frozen when queued");
+  // Whatever it counts of one person leaves through the one boundary, under whatever name it wrote it (E-19, D16).
+  const shown = new VcrService({ store: /** @type {any} */ ({}), config: {} }).forModel({ result: { counts: result.counts, measures: result.measures, diagnostics: result.diagnostics } });
+  assert.equal(shown.result.counts.realPatients, null);
+  assert.deepEqual(shown.result.measures.filter((/** @type {any} */ measure) => measure.value !== null && measure.value !== 0), [], "one person under an eligibility summary is one person");
+  for (const key of ["subjects", "requestedSubjects", "batchSubjects", "batchEvaluated"]) assert.equal(shown.result.diagnostics[key], null, key);
+  assert.equal(shown.result.diagnostics.nextOffset, null, "an offset is not a count, and there was no next batch");
 });
 
 test("CS-34 one subject that cannot be evaluated is counted and never stops the others; a fact with no document is void", async () => {
@@ -807,6 +839,44 @@ test("a row of the table is a person the study holds data on, not a patient to c
     engineResult: { diagnostics: { protocolVersionId: "prt_1" }, assessments: [assessment("P-table", "subject_table"), assessment("P-chart")] } });
   assert.equal(done.persisted, 2, "both are saved and counted");
   assert.deepEqual(referrals.map((referral) => referral.subjectKey), ["P-chart"], "only the person who came with a chart is offered to a site");
+});
+
+test("a panel evaluation of another protocol records its assessments and never touches the referral ledger (E-05)", async () => {
+  /** @type {any[]} */ const saved = [];
+  /** @type {any[]} */ const referrals = [];
+  /** @type {string[]} */ const reported = [];
+  const matchStore = matchStoreDouble({
+    async latestProtocol() { return { id: "prt_2", version: 2, title: "EV-201 v2" }; },
+    async saveAssessment({ assessment }) { const row = { id: `mas_${saved.length + 1}`, ...assessment, judgments: assessment.judgments }; saved.push(row); return row; },
+    async createReferral({ referral }) { referrals.push(referral); return { state: referral.state }; },
+    async listReferrals() { return []; },
+  });
+  const seam = vcrMatchingSeam({ matchStore, store: owner, report: (code) => reported.push(code) });
+  /** @param {string} subjectKey @param {string} protocolVersionId @param {string} summary */
+  const assessment = (subjectKey, protocolVersionId, summary) => ({ subjectKey, protocolVersionId, direction: "patient_to_trial", asOf: AS_OF, summary, counts: {}, evidenceGaps: [], judgments: [] });
+  /** @param {string} protocol @param {any[]} rows */
+  const finish = (protocol, rows) => seam.onJobFinished({ state: "succeeded", job: { kind: "match_criteria", studyId: "std_1", id: `job_${protocol}` },
+    engineResult: { diagnostics: { protocolVersionId: protocol }, assessments: rows } });
+
+  // A panel also evaluates the study's earlier protocol: a candidate and a needs-evidence person there are not referrals of this study.
+  const beside = await finish("prt_1", [assessment("P-1", "prt_1", "eligible"), assessment("P-2", "prt_1", "insufficient_evidence")]);
+  assert.equal(beside.persisted, 2, "both verdicts are recorded and shown");
+  assert.deepEqual(referrals, [], "prt_1 is not the study's current protocol, so nothing reaches the ledger");
+  // The current protocol's own evaluation makes the referrals, from its own assessments.
+  const current = await finish("prt_2", [assessment("P-1", "prt_2", "ineligible"), assessment("P-2", "prt_2", "eligible"), assessment("P-3", "prt_2", "insufficient_evidence")]);
+  assert.equal(current.persisted, 3);
+  assert.deepEqual(referrals.map((referral) => [referral.subjectKey, referral.assessmentId, referral.state]), [["P-2", "mas_4", "candidate"], ["P-3", "mas_5", "needs_evidence"]]);
+  // A later panel run of the earlier protocol cannot re-point a live referral at its own verdict.
+  referrals.length = 0;
+  await finish("prt_1", [assessment("P-2", "prt_1", "eligible")]);
+  assert.deepEqual(referrals, []);
+  // Without a protocol to compare to, nothing is guessed: the verdicts are kept, no referral is made, and the operator is told.
+  const lost = vcrMatchingSeam({ matchStore: matchStoreDouble({ ...matchStore, async latestProtocol() { throw Object.assign(new Error("db"), { code: "vcr_db_down" }); } }), store: owner, report: (code) => reported.push(code) });
+  const kept = await lost.onJobFinished({ state: "succeeded", job: { kind: "match_criteria", studyId: "std_1", id: "job_x" },
+    engineResult: { diagnostics: { protocolVersionId: "prt_2" }, assessments: [assessment("P-9", "prt_2", "eligible")] } });
+  assert.equal(kept.persisted, 1);
+  assert.deepEqual(referrals, []);
+  assert.deepEqual(reported, ["vcr_db_down"]);
 });
 
 test("a job's frozen inputs name the subject table it will read, and a study with no table keeps the token it had", async () => {

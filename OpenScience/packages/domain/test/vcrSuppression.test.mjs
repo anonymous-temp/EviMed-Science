@@ -30,8 +30,10 @@ test("the people-count keys are the contract's, and the floor is ten", () => {
   assert.deepEqual([...VCR_PEOPLE_COUNT_FIELDS], ["n", "count", "patients", "realPatients", "subjects", "events", "kept", "excluded",
     "indeterminate", "cohortSize", "screened", "eligible", "enrolled", "referred", "contacted", "candidates"]);
   assert.deepEqual([...VCR_PEOPLE_COUNT_MAP_KEYS], ["levels"]);
-  assert.deepEqual([...VCR_PEOPLE_COUNT_SCALAR_FIELDS], ["rows", "startingRows", "keptRows", "trainingObservations", "effectiveSampleSize"]);
-  assert.deepEqual([...VCR_PEOPLE_COUNT_MEASURES], ["rows", "cohort_size", "cohort_size_strict", "cohort_size_lenient", "training_observations", "effective_sample_size"]);
+  assert.deepEqual([...VCR_PEOPLE_COUNT_SCALAR_FIELDS], ["rows", "startingRows", "keptRows", "trainingObservations", "effectiveSampleSize",
+    "requestedSubjects", "batchSubjects", "batchEvaluated", "batchUnavailable", "outsideBatch", "subjectsNotEvaluated"]);
+  assert.deepEqual([...VCR_PEOPLE_COUNT_MEASURES], ["rows", "cohort_size", "cohort_size_strict", "cohort_size_lenient", "training_observations", "effective_sample_size",
+    "eligible", "ineligible", "insufficient_evidence", "pending"]);
 });
 
 test("a count of 1 to 9 that stands alone becomes null, and its object says which keys it hid", () => {
@@ -265,4 +267,35 @@ test("the row counts a diagnostics block carries are head counts, judged alone a
   assert.deepEqual(shown.tables[1].columns, [{ column: "x", missing: 4 }], "and its profile is not hollowed");
   assert.equal(shown.counts.effectiveSampleSize, null, "an effective sample size of an unweighted analysis is the head count");
   assert.equal(shown.counts.realPatients, 412);
+});
+
+test("a matching result's tallies and batch counts are head counts under the names the local executor writes (E-19, D16)", () => {
+  // The shape `vcr_simulate status` hands back for an evaluation of 60 people, the first batch of 8 (vcrMatchingExecutor).
+  const status = { state: "succeeded", result: {
+    counts: { realPatients: 8, events: null, effectiveSampleSize: null, generatedRecords: 0 },
+    measures: [
+      { name: "eligible", value: 3, simulated: false, source: "calculated" }, { name: "ineligible", value: 50, simulated: false, source: "calculated" },
+      { name: "insufficient_evidence", value: 5, simulated: false, source: "calculated" }, { name: "pending", value: 0, simulated: false, source: "calculated" },
+    ],
+    diagnostics: { criteria: 6, subjects: 8, voidedFacts: 2, errors: 0, requestedSubjects: 60, batchOffset: 0, batchSubjects: 8, batchEvaluated: 8,
+      batchUnavailable: 0, outsideBatch: 52, subjectsNotEvaluated: 52, inputSnapshotId: "a".repeat(64), nextOffset: 8 },
+  } };
+  const shown = suppressForModel(clone(status));
+  const [eligible, ineligible, insufficient, pending] = shown.result.measures;
+  assert.deepEqual(eligible, { name: "eligible", simulated: false, source: "calculated", value: null, suppressed: ["value"] }, "three eligible people are three people");
+  assert.equal(ineligible.value, 50);
+  assert.equal(insufficient.value, null);
+  assert.equal(pending.value, 0, "nobody pending says nothing about a person");
+  const diagnostics = shown.result.diagnostics;
+  assert.equal(diagnostics.subjects, null);
+  assert.equal(diagnostics.batchSubjects, null, "the batch holds 8 people under any key");
+  assert.equal(diagnostics.batchEvaluated, null);
+  assert.deepEqual(diagnostics.suppressed.sort(), ["batchEvaluated", "batchSubjects", "subjects"]);
+  // What is not a head count of this study's people stays: the roster size and the remainder are over the floor; the offset, the criteria and the hash are not people.
+  assert.deepEqual([diagnostics.requestedSubjects, diagnostics.outsideBatch, diagnostics.subjectsNotEvaluated, diagnostics.batchUnavailable], [60, 52, 52, 0]);
+  assert.deepEqual([diagnostics.criteria, diagnostics.nextOffset, diagnostics.batchOffset, diagnostics.inputSnapshotId], [6, 8, 0, "a".repeat(64)]);
+  // A roster of three: every count of it is hidden, whatever it is called.
+  const tiny = suppressForModel({ diagnostics: { requestedSubjects: 3, batchSubjects: 3, batchEvaluated: 2, batchUnavailable: 1, outsideBatch: 0, subjectsNotEvaluated: 1 },
+    measures: [{ name: "insufficient_evidence", value: 3 }] });
+  assert.deepEqual(numbers(tiny).filter((value) => value > 0), []);
 });

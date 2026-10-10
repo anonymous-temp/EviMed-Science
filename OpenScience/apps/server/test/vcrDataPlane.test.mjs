@@ -13,11 +13,11 @@ import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
-import { VCR_MIN_CELL_SIZE, VCR_QUALITY_CATEGORIES, VCR_REAL_PATIENT_SOURCES, VCR_SOURCE_FORMATS, suppressForModel } from "@evimed/domain";
+import { VCR_COLUMN_SOURCE_LIMITS, VCR_ENGINE_PROTOCOL_VERSION, VCR_MIN_CELL_SIZE, VCR_QUALITY_CATEGORIES, VCR_REAL_PATIENT_SOURCES, VCR_SOURCE_FORMATS, suppressForModel, validateEngineJob } from "@evimed/domain";
 import {
   VCR_ANALYSIS_TABLE_BLOCKING_ISSUES, VCR_COLUMN_SOURCE_ORDER, VCR_DATA_PLANE_CODES, VCR_PROFILER_SCRIPT, VCR_UNSUPPORTED_FORMAT_HINTS, VCR_UPLOAD_FORMATS,
   analysisTableIssues, asOfIssues, assertDataPlaneLocation, assertDataPlaneRoot, checkedTable, columnSourceIssues, decodeUploadText, deriveAnalysisShapes,
-  dictionaryEntries, fieldMapHash, isOutcomeEntry, jsonTable, latestDataFiles, normalizeFieldMap, parseDelimited, parseTable, profilerFieldMap, projectTable, pseudonymOf,
+  dictionaryEntries, engineColumnSources, fieldMapHash, isOutcomeEntry, jsonTable, latestDataFiles, normalizeFieldMap, parseDelimited, parseTable, profilerFieldMap, projectTable, pseudonymOf,
   qualitySummary, rowsVisibleAsOf, safeUploadName, sha256OfFile, snapshotClocks, suppressSmallCells, tablesNeededBy, tableVisibleAsOf, toCsv, treatmentEvidence,
   validateFieldMap, VcrDataPlane, weakestSource, writeContentAddressed,
 } from "../src/vcrDataPlane.mjs";
@@ -749,6 +749,45 @@ test("AC-03 a column names its own value source, and a table of mixed columns is
   assert.deepEqual(columnSourceIssues(mixed, "observed"), []);
   assert.deepEqual(columnSourceIssues(mixed, "synthetic").map((issue) => issue.code), ["column_source_on_non_individual_source", "column_source_on_non_individual_source"]);
   assert.deepEqual(columnSourceIssues(validateFieldMap(normalizeFieldMap(GOOD_MAP).columns, TABLES).columns, "synthetic"), []);
+});
+
+test("AC-03 the per-column sources of a table reach the engine in the form its protocol accepts, and a held-back column labels nothing (D1)", () => {
+  const cohort = { name: "cohort.csv", header: TABLES[0].header, rows: [["E1", "TRT", "50", "12.5", "1"], ["E2", "CTL", "61", "8", "0"]] };
+  const visits = { name: "visits.csv", header: TABLES[1].header, rows: [["E1", "120"], ["E2", "111"]] };
+  const mixed = validateFieldMap(normalizeFieldMap(GOOD_MAP.map((entry) => (
+    entry.column === "AGE" ? { ...entry, valueSource: "imputed" } : entry.column === "SBP" ? { ...entry, valueSource: "calculated" } : entry))).columns, TABLES).columns;
+  const { subject, events, longitudinal } = deriveAnalysisShapes({ tables: [cohort, visits], entries: mixed, key: Buffer.alloc(32, 4), fileSource: "observed" }).shapes;
+  assert.ok(subject && events && longitudinal);
+
+  // The whole table: every value column with its own word, the identifier columns with none; the table keeps the weakest.
+  assert.deepEqual(engineColumnSources(subject.columnSources, subject.header, subject.valueSource), { age: "imputed", arm: "observed" });
+  assert.equal(subject.valueSource, "imputed");
+  assert.deepEqual(engineColumnSources(events.columnSources, events.header, events.valueSource), { AVAL: "observed", CNSR: "observed" });
+  // A view that holds only some of the columns names only those: the imputed `age` held back does not label `arm`, and is not named.
+  assert.deepEqual(engineColumnSources(subject.columnSources, ["USUBJID", "arm"], "observed"), { arm: "observed" });
+  assert.equal(engineColumnSources(subject.columnSources, ["USUBJID"], "observed"), null, "nothing to say is not an empty map");
+  // The protocol allows a map on a table of real people's rows only, with its four words, its name length and its cap.
+  assert.equal(engineColumnSources({ age: "observed" }, ["age"], "synthetic"), null);
+  assert.equal(engineColumnSources({ age: "observed" }, ["age"], "aggregate"), null);
+  assert.equal(engineColumnSources({ age: "synthetic", sex: "observed" }, ["age", "sex"], "observed") ?.age, undefined, "a word outside the four is not sent");
+  assert.deepEqual(engineColumnSources({ age: "synthetic", sex: "observed" }, ["age", "sex"], "observed"), { sex: "observed" });
+  assert.equal(engineColumnSources(null, ["age"], "observed"), null);
+  assert.equal(engineColumnSources(["age"], ["age"], "observed"), null);
+  assert.deepEqual(engineColumnSources({ constructor: "observed", toString: "imputed" }, ["constructor", "valueOf"], "observed"), { constructor: "observed" }, "only an own key is read");
+  const long = "c".repeat(VCR_COLUMN_SOURCE_LIMITS.maxNameLength + 1);
+  assert.deepEqual(engineColumnSources({ [long]: "observed", ok: "observed" }, [long, "ok"], "observed"), { ok: "observed" });
+  const many = Array.from({ length: VCR_COLUMN_SOURCE_LIMITS.maxColumns + 1 }, (_, at) => `c${at}`);
+  assert.equal(engineColumnSources(Object.fromEntries(many.map((name) => [name, "observed"])), many, "observed"), null, "over the cap the table's own label stands");
+
+  // What is sent passes the protocol's own validator, whole table or view.
+  /** @param {Record<string, any>} input */
+  const job = (input) => ({ jobId: "job_1", studyId: "std_1", kind: "profile_snapshot", method: "profile.snapshot", methodVersion: "1.0.0", protocolVersion: VCR_ENGINE_PROTOCOL_VERSION,
+    seed: 1, cpuSecondsLimit: 600, scenario: {}, inputs: [input] });
+  const table = { kind: "analysis_table", id: "snp_1:subject", shape: "subject", location: "std_1/tables/snp_1/subject/a.csv", hash: "a".repeat(64) };
+  assert.deepEqual(validateEngineJob(job({ ...table, valueSource: subject.valueSource, columnSources: engineColumnSources(subject.columnSources, subject.header, subject.valueSource) })), []);
+  assert.deepEqual(validateEngineJob(job({ ...table, valueSource: "observed", columnSources: engineColumnSources(subject.columnSources, ["arm"], "observed") })), []);
+  assert.deepEqual(validateEngineJob(job({ ...table, shape: "longitudinal", valueSource: longitudinal.valueSource,
+    columnSources: engineColumnSources(longitudinal.columnSources, longitudinal.header, longitudinal.valueSource) })), []);
 });
 
 // ---------------------------------------------------------------------------

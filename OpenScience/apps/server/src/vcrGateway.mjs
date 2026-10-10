@@ -1268,8 +1268,14 @@ const WRITERS = {
     const recordedAt = item.iso("recordedAt");
     const visibleAt = item.iso("visibleAt");
     const clinical = item.row.clinical == null ? null : structuredClone(item.row.clinical);
+    /** What the run should know about a fact that was kept: a link or a block the platform did not take. @type {any[]} */
+    const warnings = [];
+    if (clinical !== null && typeof clinical === 'object' && !Array.isArray(clinical)) {
+      // The platform assigns the locator from the verified quote below and never reads a typed one, so a defect in it is no reason to refuse.
+      delete clinical.locator;
+      setAsideDefectiveClinicalBlocks(clinical, warnings);
+    }
     for (const code of clinicalFactIssues(clinical)) item.bad('clinical', code);
-    if (clinical?.coding?.some(code => code.basis !== 'model_inferred')) item.bad('clinical.coding', '模型写入的术语解释只能标为 model_inferred。');
     const surface = item.str("surface", { max: 400, required: true });
     const dateSurface = item.str("dateSurface", { max: 80 });
     const documentId = item.token("documentId", ID, "vcr_read what:subject_document 给出的文档 id", { required: true });
@@ -1282,24 +1288,41 @@ const WRITERS = {
       span: { start: start ?? null, end: end ?? null, quote: String(quote) },
       fact: { surface, dateSurface, value: typeof value === "number" ? value : undefined, clinical, unit } });
     if (!verified) return null;
-    const relationWarnings = [];
     if (clinical) {
       const referenced = [...new Set([clinical.copiedFrom, clinical.correctionOf,
         ...(clinical.relations ?? []).filter(r => r.state === 'supported').map(r => r.targetFactId)].filter(Boolean))];
       const known = referenced.length ? await matchStore.matchingFactsByIds(study.id, referenced) : [];
       if (known.length !== referenced.length || known.some(row => row.subjectKey !== subjectKey)) return void item.bad('clinical', '事实引用必须属于本研究的同一受试者。');
       if (clinical.correctionOf && known.find(row => row.id === clinical.correctionOf)?.variable !== variable) return void item.bad('clinical.correctionOf', '更正必须针对同一临床变量。');
+      // `copiedFrom` takes a fact out of a washout, so it is honoured only where the record itself supports it: a copy
+      // states the same variable at the same instant as the fact it copies (copied text keeps its original event date).
+      // Any other link is the model's guess; the fact stands as its own event and the run is told, never refused.
+      if (clinical.copiedFrom) {
+        const original = known.find(row => row.id === clinical.copiedFrom);
+        const code = original?.variable !== variable ? 'clinical_copied_from_other_variable'
+          : sameInstant(original.occurredAt, occurredAt) ? null : 'clinical_copied_from_other_date';
+        if (code) {
+          delete clinical.copiedFrom;
+          warnings.push({ field: 'clinical.copiedFrom', targetFactId: original?.id, code,
+            message: code === 'clinical_copied_from_other_variable'
+              ? '被复制的事实是另一个变量，这条不是它的副本；已按独立事件保存，事实本身已保存。'
+              : '副本与被复制的事实发生在同一时间（复制的文字保留原来的事件日期）；这条的 occurredAt 不同，已按独立事件保存，事实本身已保存。' });
+        }
+      }
       for (const [relationIndex, relation] of (clinical.relations ?? []).entries()) {
         if (relation.state !== 'supported') continue;
         const target = known.find(row => row.id === relation.targetFactId);
         const reason = relationEvidenceReason(relation, target, verified);
         if (reason) {
           relation.state = 'unresolved';
-          relationWarnings.push({ relationIndex, targetFactId: relation.targetFactId, code: reason,
+          warnings.push({ relationIndex, targetFactId: relation.targetFactId, code: reason,
             message: '这条关系缺少可核对的双端点依据，已保留为待核对；事实本身已保存。' });
         }
       }
-      if (clinical.section && (clinical.section.start > verified.span.start || clinical.section.end < verified.span.end || clinical.section.end > verified.document.text.length)) return void item.bad('clinical.section', '章节范围必须包含这条事实证据。');
+      if (clinical.section && (clinical.section.start > verified.span.start || clinical.section.end < verified.span.end || clinical.section.end > verified.document.text.length)) {
+        delete clinical.section;
+        warnings.push(notKept('section', '章节范围必须包含这条事实证据。'));
+      }
       clinical.locator = { kind: 'text', offsetUnit: 'utf16', start: verified.span.start, end: verified.span.end,
         ...(verified.document.sourceHash ? { sourceHash: verified.document.sourceHash } : {}),
         ...(verified.document.projectionHash ? { projectionHash: verified.document.projectionHash } : {}) };
@@ -1320,7 +1343,7 @@ const WRITERS = {
       provenance: { ...(caller?.provenance ?? { schema: 1, status: 'unknown', runId: caller?.runtimeRunId ?? null }),
         inputProjectionHash: verified.document.projectionHash ?? null, terminologyVersion: vocabularyVersion, factSchema: 1 },
     } });
-    extra.results.push({ index: item.index, id: saved.id, subjectKey, ...(relationWarnings.length ? { warnings: relationWarnings } : {}) });
+    extra.results.push({ index: item.index, id: saved.id, subjectKey, ...(warnings.length ? { warnings } : {}) });
     return saved.id;
   },
 
@@ -1661,6 +1684,57 @@ async function studyHoldsSubject({ matchStore, documents, study, subjectKey, see
   }
   known.set(subjectKey, held);
   return held;
+}
+
+/** Two ISO instants are one moment however each is written; two absent ones are one too, and an unreadable one is nothing.
+ * @param {unknown} a @param {unknown} b */
+function sameInstant(a, b) {
+  return (a == null ? null : Date.parse(String(a))) === (b == null ? null : Date.parse(String(b)));
+}
+
+/** A part of a fact's clinical metadata the platform did not keep, as the run reads it.
+ * @param {string} block the part, as named in the metadata, `section` or `relations[0]` @param {string} why */
+const notKept = (block, why) => ({ field: `clinical.${block}`, code: `clinical_${block.replace(/\[\d+\]$/, '')}_not_kept`,
+  message: `${why}这一部分没有保存；事实本身已保存，不需要重写。` });
+
+/** The three fields every clinical block must carry, so one part of a block can be checked on its own. */
+const CLINICAL_SHELL = Object.freeze({ schema: 1, assertion: 'affirmed', experiencer: 'patient' });
+
+/**
+ * Take out of a clinical block the parts no verdict reads when they are defective: the terminology binding, the
+ * section range, the specialty annotations and the relation entries (which can only demote a verdict to unknown, never
+ * decide one). The fact's quote is verified on its own, and a defect in a label costs the label, not the fact
+ * (principle 19; the owner's rule to keep usable work). The parts a verdict does read — assertion, experiencer,
+ * temporality, medication, laboratory, event identity, corrections, copies — are not touched here and stay refused when
+ * malformed: a fact stored without them would mean something else, and a corrected rewrite is a different fact that
+ * would not replace it. Each part is checked alone, with the domain's own validator, so the two cannot disagree.
+ * @param {Record<string, any>} clinical edited in place @param {any[]} warnings
+ */
+function setAsideDefectiveClinicalBlocks(clinical, warnings) {
+  for (const block of ['coding', 'section', 'specialty']) {
+    if (clinical[block] == null) continue;
+    const defects = clinicalFactIssues({ ...CLINICAL_SHELL, [block]: clinical[block] });
+    if (!defects.length && block === 'coding' && clinical.coding.some((/** @type {any} */ code) => code.basis !== 'model_inferred')) {
+      delete clinical.coding;
+      warnings.push(notKept('coding', '模型写入的术语解释只能标为 model_inferred。'));
+    } else if (defects.length) {
+      delete clinical[block];
+      warnings.push(notKept(block, `这一部分的格式不合规定（${defects.join('、')}）。`));
+    }
+  }
+  if (clinical.relations == null) return;
+  if (!Array.isArray(clinical.relations) || clinical.relations.length > 20) {
+    const defects = clinicalFactIssues({ ...CLINICAL_SHELL, relations: clinical.relations });
+    delete clinical.relations;
+    warnings.push(notKept('relations', `关系列表的格式不合规定（${defects.join('、')}）。`));
+    return;
+  }
+  clinical.relations = clinical.relations.filter((/** @type {any} */ relation, /** @type {number} */ index) => {
+    const defects = clinicalFactIssues({ ...CLINICAL_SHELL, relations: [relation] });
+    if (!defects.length) return true;
+    warnings.push(notKept(`relations[${index}]`, `这条关系的格式不合规定（${defects.join('、')}）。`));
+    return false;
+  });
 }
 
 /** A supported link binds two preserved fact spans to one actual quote instance.

@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
-import { VCR_QUALITY_CATEGORIES } from "@evimed/domain";
+import { VCR_ENGINE_PROTOCOL_VERSION, VCR_QUALITY_CATEGORIES, validateEngineJob } from "@evimed/domain";
 
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { VCR_ACCESS_CODES, VcrAccess } from "../src/vcrAccess.mjs";
@@ -475,6 +475,30 @@ test("AC-03 a column that says it was imputed keeps the table it is in from read
   assert.ok(!(await fs.readFile(path.join(dataPlaneDir, subject.location), "utf8")).split("\n")[0].includes("age"));
   const longitudinal = await plane.resolveEngineInputs({ studyId, snapshotId: snapshot.id, principal: OWNER, purpose: "vcr", include: ["longitudinal"] });
   assert.equal(longitudinal[0].valueSource, "calculated");
+
+  // ...and so do the labels of the columns themselves (D1): the engine labels a result with the weakest source of the
+  // columns its method used, which it can only do when it is told which column is which. The view names the columns it
+  // holds; the imputed AGE that the seal held back labels none of them. The whole longitudinal table keeps its own.
+  assert.deepEqual(subject.columnSources, { arm: "observed", ecog: "observed", sex: "observed" });
+  assert.deepEqual(longitudinal[0].columnSources, { ADT: "observed", AVAL: "calculated" }, "the date is observed though the table, with its calculated value, is labelled calculated");
+  // What is sent is what the engine protocol accepts.
+  for (const input of [subject, longitudinal[0]]) {
+    assert.deepEqual(validateEngineJob({ jobId: "job_1", studyId, kind: "profile_snapshot", method: "profile.snapshot", methodVersion: "1.0.0",
+      protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, seed: 1, cpuSecondsLimit: 600, scenario: {}, inputs: [input] }), [], input.shape);
+  }
+  // A raw file is handed over as a view too, and its columns are named as the view names them.
+  const raw = await plane.resolveSnapshotInputs({ studyId, snapshotId: snapshot.id, principal: OWNER, purpose: "vcr", include: ["files"] });
+  const rawFiles = raw.inputs.filter((input) => input.kind === "snapshot_file");
+  assert.ok(rawFiles.length, "the walk found a raw file");
+  for (const input of rawFiles) {
+    const header = parseTable(await fs.readFile(path.join(dataPlaneDir, input.location), "utf8")).header;
+    assert.ok(input.columnSources, `${input.id} names its columns' sources`);
+    assert.ok(Object.keys(input.columnSources).every((name) => header.includes(name)), `${input.id}: every named column is one of the view's own (${header.join(",")})`);
+    assert.ok(!header.includes("age") && !header.includes("AGE"), "the sealed column is not in the view");
+    assert.ok(!Object.keys(input.columnSources).some((name) => name.toLowerCase() === "age"), "the held-back column is not named");
+    assert.deepEqual(validateEngineJob({ jobId: "job_1", studyId, kind: "profile_snapshot", method: "profile.snapshot", methodVersion: "1.0.0",
+      protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, seed: 1, cpuSecondsLimit: 600, scenario: {}, inputs: [input] }), [], input.id);
+  }
 });
 
 test("AC-03 a column cannot claim a source its file is not: a synthetic file has no observed columns", options, async () => {

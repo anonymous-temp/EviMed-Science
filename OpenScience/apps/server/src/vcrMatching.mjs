@@ -48,7 +48,7 @@
  * @module vcrMatching
  */
 
-import { clinicalFactPolarity, clinicalFactView, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit } from "@evimed/domain";
+import { CLINICAL_ASSERTIVE_POLARITIES, clinicalFactPolarity, clinicalFactView, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit } from "@evimed/domain";
 import { createHash } from 'node:crypto';
 import {
   canonicalScenarioJson, VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ELIGIBILITY_SUMMARIES, VCR_MISSING_REASONS, validateRequirement,
@@ -96,7 +96,7 @@ export const VCR_FACT_VOID_REASONS = Object.freeze([
 ]);
 
 /** Polarities that may be reasoned from. A family history or a plan is not a finding. */
-export const VCR_ASSERTIVE_POLARITIES = Object.freeze(["affirmed", "negated"]);
+export const VCR_ASSERTIVE_POLARITIES = CLINICAL_ASSERTIVE_POLARITIES;
 
 /** The layers a criterion-level error is stratified by (plan §7.1, attachment C2 failure modes). */
 export const VCR_ERROR_LAYERS = Object.freeze(["time", "number", "negation", "logic", "applicability", "other"]);
@@ -246,13 +246,16 @@ function numeralsIn(text) {
  * chart says 2.4 fails the last of those three and nothing else would have
  * caught it.
  *
+ * `anyPolarity` skips the polarity check and nothing else: the caller is asking whether the evidence stands, not
+ * whether the fact may be reasoned from (`assessSubject` settles corrections among such facts first).
+ *
  * @param {any} fact
- * @param {{ documents?: Map<string, any> | Record<string, any>, asOf?: number|string|Date }} context
+ * @param {{ documents?: Map<string, any> | Record<string, any>, asOf?: number|string|Date, anyPolarity?: boolean }} context
  * @returns {{ ok: boolean, reason: string|null }}
  */
 export function verifyFactEvidence(fact, context = {}) {
   const asOf = instant(context.asOf) ?? Number.POSITIVE_INFINITY;
-  if (!VCR_ASSERTIVE_POLARITIES.includes(String(fact?.polarity ?? "affirmed"))) {
+  if (context.anyPolarity !== true && !VCR_ASSERTIVE_POLARITIES.includes(String(fact?.polarity ?? "affirmed"))) {
     return { ok: false, reason: "polarity_not_assertive" };
   }
   const visibleAt = instant(fact?.visibleAt);
@@ -418,10 +421,6 @@ export function evaluateRequirement(node, context) {
 
 /** @param {any} node @param {any} context @returns {RequirementVerdict} */
 function evaluateNode(node, context) {
-  if (['present', 'absent', 'compare', 'elapsed_since'].includes(node.op)) {
-    const competing = factsFor(context, String(node.variable)).filter(fact => fact.conflicts?.length);
-    if (competing.length) return unknownBecause(String(node.variable), 'conflicting_evidence', competing.map(citation));
-  }
   switch (node.op) {
     case "all": case "any": {
       const parts = (Array.isArray(node.operands) ? node.operands : []).map((child) => evaluateNode(child, context));
@@ -448,6 +447,18 @@ function evaluateNode(node, context) {
 /** @param {any} context @param {string} variable */
 function factsFor(context, variable) {
   return (context.facts ?? []).filter((fact) => String(fact?.variable ?? "") === String(variable ?? "")).map(fact => ({ ...fact, polarity: clinicalFactPolarity(fact) }));
+}
+
+/**
+ * A conflict between facts bears on a verdict only through a fact the verdict rests on. A disagreement about a reading
+ * or an event the criterion no longer looks at — a 2020 pair, an event outside the window, a value an aggregate does
+ * not select — must not block a clean recent fact that decides it (E-21); it stays on the record in `clinicalHistory`.
+ * @param {string} variable @param {readonly any[]} decisive the facts the verdict is about to rest on
+ * @returns {RequirementVerdict | null} `unknown / conflicting_evidence`, or null when none of them is in conflict
+ */
+function conflictingEvidence(variable, decisive) {
+  const competing = decisive.filter((fact) => fact.conflicts?.length);
+  return competing.length ? unknownBecause(variable, "conflicting_evidence", competing.map(citation)) : null;
 }
 
 /**
@@ -487,11 +498,13 @@ function evaluatePresence(node, context) {
 
   const wantPresent = node.op === "present";
   if (inside.length) {
-    return verdict(wantPresent ? SATISFIED : NOT_SATISFIED, { evidence: inside.map(citation) });
+    return conflictingEvidence(variable, inside)
+      ?? verdict(wantPresent ? SATISFIED : NOT_SATISFIED, { evidence: inside.map(citation) });
   }
-  if (undated.length) return unknownBecause(variable, "undated", undated.map(citation));
+  if (undated.length) return conflictingEvidence(variable, undated) ?? unknownBecause(variable, "undated", undated.map(citation));
   if (negated.length || outside.length) {
-    return verdict(wantPresent ? NOT_SATISFIED : SATISFIED, { evidence: [...negated, ...outside].map(citation) });
+    return conflictingEvidence(variable, [...negated, ...outside])
+      ?? verdict(wantPresent ? NOT_SATISFIED : SATISFIED, { evidence: [...negated, ...outside].map(citation) });
   }
   return unknownBecause(variable, "not_recorded");
 }
@@ -559,15 +572,21 @@ function evaluateCompare(node, context) {
   const candidates = placed.filter((item) => item.inside === true).map((item) => item.fact);
   if (!candidates.length) {
     const undated = placed.filter((item) => item.inside === null).map((item) => item.fact);
-    return undated.length ? unknownBecause(variable, "undated", undated.map(citation)) : unknownBecause(variable, "not_measured");
+    return undated.length ? conflictingEvidence(variable, undated) ?? unknownBecause(variable, "undated", undated.map(citation)) : unknownBecause(variable, "not_measured");
   }
   const aggregate = String(node.aggregate ?? "latest");
   const dated = candidates.filter((fact) => instant(fact?.occurredAt) !== null);
   const ordered = [...dated].sort((a, b) => (instant(b?.occurredAt) ?? 0) - (instant(a?.occurredAt) ?? 0));
   if (aggregate === "latest" && !ordered.length && candidates.length > 1) {
     // Several values and none of them dated: which is the latest cannot be said.
-    return unknownBecause(variable, "undated", candidates.map(citation));
+    return conflictingEvidence(variable, candidates) ?? unknownBecause(variable, "undated", candidates.map(citation));
   }
+  // The verdict rests on the latest reading (and any other at the same instant), or on every reading in the window when
+  // the aggregate is all or any; a disagreement among older readings is not asked about.
+  const decisive = aggregate !== "latest" ? candidates
+    : ordered.length ? ordered.filter((fact) => instant(fact.occurredAt) === instant(ordered[0].occurredAt)) : candidates.slice(0, 1);
+  const blocked = conflictingEvidence(variable, decisive);
+  if (blocked) return blocked;
   if (aggregate === 'latest' && ordered.length > 1) {
     const tied = ordered.filter(fact => instant(fact.occurredAt) === instant(ordered[0].occurredAt));
     const compared = tied.map(fact => compareFact(node,fact,context));
@@ -687,13 +706,16 @@ function evaluateElapsed(node, context) {
   });
   if (!dated.length) {
     // 「从未接受过」 is a complete answer to 「距上次治疗已满 N 天」.
-    if (denied.length && node.deniedSatisfies !== false) return verdict(SATISFIED, { evidence: denied.map(citation) });
+    if (denied.length && node.deniedSatisfies !== false) return conflictingEvidence(variable, denied) ?? verdict(SATISFIED, { evidence: denied.map(citation) });
     const undated = affirmed.filter((fact) => instant(fact?.occurredAt) === null);
-    if (undated.length) return unknownBecause(variable, "undated", undated.map(citation));
+    if (undated.length) return conflictingEvidence(variable, undated) ?? unknownBecause(variable, "undated", undated.map(citation));
     return unknownBecause(variable, "not_recorded");
   }
   const latest = [...dated].sort((a, b) => (instant(b.occurredAt) ?? 0) - (instant(a.occurredAt) ?? 0))[0];
   const at = /** @type {number} */ (instant(latest.occurredAt));
+  // The verdict rests on the last exposure (and any other at that instant); an older disagreement is not asked about.
+  const blocked = conflictingEvidence(variable, dated.filter((fact) => instant(fact.occurredAt) === at));
+  if (blocked) return blocked;
   const needed = Number(node.days ?? 0);
   const elapsed = daysBetween(at, context.asOf);
   const strict = String(node.comparator ?? "gte") === "gt";
@@ -977,11 +999,30 @@ export function assessSubject(input) {
   const asOf = instant(input?.asOf);
   if (asOf === null) throw new TypeError("An assessment is made as of an instant; pass asOf.");
   const visible = factsVisibleAt(input.facts ?? [], asOf);
-  const { facts, voided } = admissibleFacts(visible, { documents: input.documents, asOf });
+  // Every visible fact has its evidence checked whatever its polarity, and corrections are settled among all of the
+  // ones that stand: a correction that re-labels a fact as a family history or a hypothesis replaces the original
+  // exactly as one that negates it does, and the page already says so. Only then are the survivors that may not be
+  // reasoned from set aside. Voiding them first kept the original, and the false exclusion with it (E-02).
+  /** @type {any[]} */
+  const verified = [];
+  /** @type {Map<any, string>} */
+  const unverified = new Map();
+  for (const fact of visible) {
+    const checked = verifyFactEvidence(fact, { documents: input.documents, asOf, anyPolarity: true });
+    if (checked.ok) verified.push(fact); else unverified.set(fact, String(checked.reason));
+  }
+  const longitudinal = clinicalFactView(verified, asOf, { assertiveOnly: true });
+  const setAside = new Set(longitudinal.setAside);
   // A fact that was thrown away here is the reason a criterion downstream reads
   // `unknown`; carrying the list on the assessment is what makes that traceable
-  // instead of mysterious.
-  const longitudinal = clinicalFactView(facts, asOf);
+  // instead of mysterious. A fact that may not be reasoned from says so first, whatever else is wrong with it.
+  /** @type {{ factId: string, variable: string, reason: string }[]} */
+  const voided = [];
+  for (const fact of visible) {
+    const reason = !unverified.has(fact) && !setAside.has(fact) ? null
+      : !VCR_ASSERTIVE_POLARITIES.includes(clinicalFactPolarity(fact)) ? "polarity_not_assertive" : unverified.get(fact) ?? null;
+    if (reason) voided.push({ factId: String(fact?.id ?? ""), variable: String(fact?.variable ?? ""), reason });
+  }
   const context = {
     facts: longitudinal.facts, asOf, documents: input.documents,
     modelJudgments: input.modelJudgments ?? {},

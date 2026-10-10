@@ -2114,6 +2114,7 @@ export {
   CLINICAL_ASSERTIONS,
   CLINICAL_EXPERIENCERS,
   CLINICAL_RELATIONS,
+  CLINICAL_ASSERTIVE_POLARITIES,
   clinicalLocatorIssues,
   clinicalFactIssues,
   clinicalFactPolarity,

@@ -578,11 +578,13 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       if (filter.snapshotId) {
         const snapshot = await matchStore.matchingSnapshot(study.id, String(filter.snapshotId));
         const progress = await matchStore.matchingProgress(study.id, String(filter.snapshotId));
+        // Counts of people leave through the one boundary like every other: the roster size under a name it knows, the
+        // states as sibling cells so a small one is hidden together with the neighbour that would reproduce it.
         return { inputSnapshotId: String(filter.snapshotId), protocolVersionId: snapshot.protocolVersionId,
-          asOf: snapshot.asOf, requested: progress.length,
+          asOf: snapshot.asOf, requestedSubjects: progress.length,
           subjects: progress.slice(Number(filter.offset ?? 0), Number(filter.offset ?? 0) + Number(filter.limit ?? 20)),
           more: Number(filter.offset ?? 0) + Number(filter.limit ?? 20) < progress.length,
-          coverage: Object.fromEntries(['evaluated','pending','unavailable'].map(state => [state, progress.filter(row => row.state === state).length])) };
+          coverageCells: ['evaluated', 'pending', 'unavailable'].map(state => ({ key: state, n: progress.filter(row => row.state === state).length })) };
       }
       const protocol = filter.protocolVersionId ? (await matchStore.protocols(study.id, String(filter.protocolVersionId)))[0] ?? null
         : await matchStore.latestProtocol(study.id).catch(() => null);
@@ -795,7 +797,16 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       // contact: its verdicts are saved and counted, and no referral is made for it. A person who also has documents is
       // the recruitment flow's as before.
       const tableOnly = new Set(list(result.assessments).filter((assessment) => assessment?.source === "subject_table").map((assessment) => String(assessment.subjectKey)));
-      for (const candidate of candidateReferrals({ studyId: study.id, assessments: saved.filter((assessment) => !tableOnly.has(String(assessment.subjectKey))) })) {
+      // The referral ledger is the study's: one live row per person, following the study's CURRENT protocol. A panel
+      // evaluates other versions beside it (D03); those verdicts are recorded and shown like any other and never reach
+      // the ledger, because making a referral again re-points an existing one at the newest assessment while keeping its
+      // state, which would leave a candidate of the current protocol pointing at another protocol's verdict (E-05).
+      const current = await matchStore.latestProtocol(study.id).catch((/** @type {any} */ error) => {
+        report(String(error?.code ?? "vcr_referral_create_failed"));
+        return null;
+      });
+      const ledgerBound = saved.filter((assessment) => current && assessment.protocolVersionId === current.id && !tableOnly.has(String(assessment.subjectKey)));
+      for (const candidate of candidateReferrals({ studyId: study.id, assessments: ledgerBound })) {
         try {
           const referral = await matchStore.createReferral({
             userId: study.userId,

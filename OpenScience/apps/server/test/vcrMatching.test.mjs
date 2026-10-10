@@ -21,7 +21,7 @@ import {
   pendingReviewExclusions, requiresLanguageJudgment, runMatchingEvaluation, separateLedgers,
   summarizeEligibility, verifyFactEvidence, windowStart, withinWindow,
 } from "../src/vcrMatching.mjs";
-import { validateCapabilityManifest, vcrMatchingFindings } from "@evimed/domain";
+import { clinicalFactView, validateCapabilityManifest, vcrMatchingFindings } from "@evimed/domain";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const AS_OF = "2026-09-28T00:00:00Z";
@@ -854,6 +854,115 @@ test('same-event conflicting lab results stay unknown; a visible sourced correct
   const correction={...second,createdAt:'2026-10-02',clinical:{...clinical,correctionOf:'first',correctionReason:'Confirmed corrected report'}};
   assert.equal(assess([first,correction],'2026-10-01').summary,'eligible');
   assert.equal(assess([first,correction]).summary,'ineligible');
+});
+
+test('a correction that re-labels a fact as a family history or a hypothesis replaces it, and the verdict follows the page (E-02)', () => {
+  const source = chart('2026-08-01 患者诊断心肌梗死。2026-09-01 更正：心肌梗死为其父亲病史。2026-09-02 更正：心肌梗死仅为可疑诊断。');
+  const patient = { schema: 1, assertion: 'affirmed', experiencer: 'patient' };
+  const original = source.fact('患者诊断心肌梗死', { id: 'original', subjectKey: 'p1', variable: 'myocardial_infarction', occurredAt: '2026-08-01T00:00:00Z',
+    createdAt: '2026-09-10T00:00:00Z', clinical: patient });
+  /** @param {string} id @param {string} surface @param {string} polarity @param {any} clinical */
+  const correction = (id, surface, polarity, clinical) => source.fact(surface, { id, subjectKey: 'p1', variable: 'myocardial_infarction', polarity,
+    occurredAt: '2026-08-01T00:00:00Z', createdAt: '2026-09-11T00:00:00Z', clinical: { schema: 1, ...clinical, correctionOf: 'original', correctionReason: 'The note itself corrects the entry' } });
+  const assess = (/** @type {any[]} */ facts) => assessSubject({ criteria: [CRITERION_MI], facts, asOf: AS_OF, documents: source.documents });
+
+  assert.equal(assess([original]).summary, 'ineligible', 'the control: an affirmed infarction inside the window excludes');
+  for (const [label, fact] of /** @type {[string, any][]} */ ([
+    ['family', correction('relabelled', '更正：心肌梗死为其父亲病史', 'family', { assertion: 'affirmed', experiencer: 'family' })],
+    ['hypothetical', correction('relabelled', '更正：心肌梗死仅为可疑诊断', 'hypothetical', { assertion: 'possible', experiencer: 'patient' })],
+  ])) {
+    const assessed = assess([original, fact]);
+    assert.deepEqual(assessed.clinicalHistory.superseded, ['original'], `${label}: the original is replaced, as the page says`);
+    assert.equal(assessed.summary, 'insufficient_evidence', `${label}: the false exclusion the correction exists to remove is gone, and silence is unknown`);
+    assert.deepEqual(assessed.voidedFacts, [{ factId: 'relabelled', variable: 'myocardial_infarction', reason: 'polarity_not_assertive' }], `${label}: the re-labelled fact is set aside, not reasoned from`);
+    assert.deepEqual(clinicalFactView([original, fact], AS_OF).superseded, ['original'], `${label}: page and verdict agree`);
+  }
+  // A re-label whose own quote is not in the chart replaces nothing.
+  const forged = { ...correction('forged', '更正：心肌梗死为其父亲病史', 'family', { assertion: 'affirmed', experiencer: 'family' }), source: { documentId: 'doc-1', start: 0, end: 4, quote: '2026' } };
+  assert.equal(assess([original, forged]).summary, 'ineligible');
+  // A re-label that is not yet visible at the instant replaces nothing either.
+  const later = { ...correction('later', '更正：心肌梗死为其父亲病史', 'family', { assertion: 'affirmed', experiencer: 'family' }), visibleAt: '2026-10-01T00:00:00Z' };
+  assert.equal(assess([original, later]).summary, 'ineligible');
+});
+
+test('an explicit as-of replay uses a clinical fact the platform wrote later but could read by then (E-03)', () => {
+  // Production shape: every clinical-format fact carries createdAt (when the row was written), and a replay of a past
+  // instant extracts after that instant. visibleAt is the clock that decides whether a fact belongs to the replay.
+  const source = chart('2026-08-20 血肌酐 1.1 mg/dL。');
+  const clinical = { schema: 1, assertion: 'affirmed', experiencer: 'patient' };
+  const base = { id: 'written-late', subjectKey: 'p1', variable: 'creatinine', value: 1.1, unit: 'mg/dL', occurredAt: '2026-08-20T00:00:00Z', visibleAt: '2026-09-01T00:00:00Z' };
+  const criteria = [{ id: 'lab', kind: 'inclusion', requirement: { op: 'compare', variable: 'creatinine', comparator: 'lte', value: 1.5, unit: 'mg/dL' } }];
+  const assess = (/** @type {any} */ fact, asOf = '2026-09-15') => assessSubject({ criteria, facts: [fact], asOf, documents: source.documents });
+  const legacy = assess(source.fact('血肌酐 1.1 mg/dL', base));
+  assert.equal(legacy.summary, 'eligible', 'the control: the same reading in the legacy shape decides the criterion');
+  const written = assess(source.fact('血肌酐 1.1 mg/dL', { ...base, clinical, createdAt: '2026-10-05T00:00:00Z' }));
+  assert.equal(written.summary, 'eligible', 'written on 10-05, readable on 09-01: it belongs to a replay as of 09-15');
+  assert.deepEqual(written.voidedFacts, []);
+  // Valid time still decides: a reading that only became visible after the instant stays out.
+  assert.equal(assess(source.fact('血肌酐 1.1 mg/dL', { ...base, clinical, createdAt: '2026-10-05T00:00:00Z', visibleAt: '2026-09-20T00:00:00Z' })).factsWithheldAsFuture, 1);
+});
+
+test('an old same-event conflict does not block a criterion that a clean recent value decides; a conflict in the facts it rests on still does (E-21)', () => {
+  const clinical = { schema: 1, assertion: 'affirmed', experiencer: 'patient' };
+  /** @param {string} id @param {any} extra */
+  const fact = (id, extra) => ({ id, subjectKey: 'p1', extractedBy: 'snapshot', unit: 'mg/dL', variable: 'creatinine', polarity: 'affirmed', visibleAt: '2026-09-01T00:00:00Z',
+    createdAt: '2026-09-02T00:00:00Z', ...extra, clinical: { ...clinical, ...(extra.clinical ?? {}) } });
+  const oldPair = [
+    fact('old-a', { value: 1.0, occurredAt: '2020-03-01T00:00:00Z', clinical: { eventId: 'sample_2020' } }),
+    fact('old-b', { value: 2.4, occurredAt: '2020-03-01T00:00:00Z', clinical: { eventId: 'sample_2020' } }),
+  ];
+  const recent = fact('recent', { value: 1.1, occurredAt: '2026-09-01T00:00:00Z' });
+  const recentPair = [
+    fact('new-a', { value: 1.0, occurredAt: '2026-09-01T00:00:00Z', clinical: { eventId: 'sample_2026' } }),
+    fact('new-b', { value: 2.4, occurredAt: '2026-09-01T00:00:00Z', clinical: { eventId: 'sample_2026' } }),
+  ];
+  const lab = (/** @type {any} */ extra = {}) => ({ id: 'lab', kind: 'inclusion', requirement: { op: 'compare', variable: 'creatinine', comparator: 'lte', value: 1.5, unit: 'mg/dL', ...extra } });
+  const assess = (/** @type {any} */ criterion, /** @type {any[]} */ facts) => assessSubject({ criteria: [criterion], facts, asOf: AS_OF });
+
+  assert.equal(assess(lab(), [recent]).summary, 'eligible', 'the control: the recent value alone decides it');
+  const withOld = assess(lab(), [...oldPair, recent]);
+  assert.equal(withOld.summary, 'eligible', 'the 2020 disagreement is about a reading the criterion does not look at');
+  assert.deepEqual(withOld.clinicalHistory.conflicts.map(entry => entry.factId).sort(), ['old-a', 'old-b'], 'and it is still on the record');
+  assert.equal(assess(lab({ window: { months: 6 } }), [...oldPair, recent]).summary, 'eligible', 'outside the window it is not a party to the verdict either');
+  assert.equal(assess(lab({ aggregate: 'all' }), [...oldPair, recent]).judgments[0].missing[0]?.reason, 'conflicting_evidence', 'aggregate all rests on every reading in the window, the 2020 pair included');
+  // A conflict among the readings the verdict does rest on blocks as before.
+  for (const [label, facts] of /** @type {[string, any[]][]} */ ([['the latest readings disagree', [...recentPair, fact('older', { value: 0.9, occurredAt: '2025-01-01T00:00:00Z' })]], ['only conflicting readings', oldPair]])) {
+    const blocked = assess(lab(), facts);
+    assert.equal(blocked.summary, 'insufficient_evidence', label);
+    assert.deepEqual(blocked.evidenceGaps.map(gap => gap.reason), ['conflicting_evidence'], label);
+  }
+  // The same for a window of presence and for a washout: the recent clean fact decides, the old disagreement is not asked about.
+  /** @param {string} id @param {any} extra */
+  const exposure = (id, extra) => fact(id, { variable: 'docetaxel', unit: null, value: 'docetaxel', ...extra, clinical: { medication: { state: 'administered' }, ...(extra.clinical ?? {}) } });
+  const washout = { id: 'washout', kind: 'exclusion', requirement: { op: 'elapsed_since', variable: 'docetaxel', days: 28 } };
+  const oldExposures = [exposure('x-a', { occurredAt: '2020-03-01T00:00:00Z', clinical: { eventId: 'cycle1' } }), exposure('x-b', { occurredAt: '2020-03-01T00:00:00Z', polarity: 'negated', clinical: { eventId: 'cycle1', assertion: 'negated' } })];
+  assert.equal(assess(washout, [...oldExposures, exposure('x-recent', { occurredAt: '2026-06-01T00:00:00Z' })]).summary, 'eligible', 'decided by the last exposure, 119 days ago');
+  assert.equal(assess(washout, oldExposures).summary, 'insufficient_evidence', 'with nothing else the disagreement is all there is');
+  const noInfarction = { id: 'mi', kind: 'exclusion', requirement: { op: 'absent', variable: 'myocardial_infarction', window: { months: 6 } } };
+  const event = (/** @type {string} */ id, /** @type {any} */ extra) => fact(id, { variable: 'myocardial_infarction', unit: null, value: 'yes', ...extra });
+  const infarctions = [event('mi-a', { occurredAt: '2020-03-01T00:00:00Z', clinical: { eventId: 'mi2020' } }),
+    event('mi-b', { occurredAt: '2020-03-01T00:00:00Z', polarity: 'negated', clinical: { eventId: 'mi2020', assertion: 'negated' } })];
+  assert.equal(assess(noInfarction, [...infarctions, event('mi-new', { occurredAt: '2026-08-01T00:00:00Z' })]).summary, 'ineligible', 'the infarction inside the window decides it');
+});
+
+test('units that differ only in case compare as one unit, and units whose case changes the magnitude do not (E-09)', () => {
+  const asOf = Date.parse(AS_OF);
+  /** @param {string} wanted @param {string} observed */
+  const state = (wanted, observed) => evaluateCriterion(
+    { id: 'lab', kind: 'inclusion', requirement: { op: 'compare', variable: 'analyte', comparator: 'lte', value: 10, unit: wanted } },
+    { facts: [{ id: 'f', variable: 'analyte', value: 5, unit: observed, polarity: 'affirmed' }], asOf }).state;
+  for (const [a, b] of [['ng/mL', 'ng/ml'], ['U/L', 'u/l'], ['10^9/L', '10^9/l'], ['mg/dL', 'MG/DL']]) {
+    assert.equal(state(a, b), SATISFIED, `criterion ${a}, fact ${b}`);
+    assert.equal(state(b, a), SATISFIED, `criterion ${b}, fact ${a}`);
+  }
+  for (const [a, b] of [['mmol/L', 'Mmol/L'], ['mU/L', 'MU/L'], ['g/L', 'G/L']]) {
+    assert.equal(state(a, b), UNKNOWN, `${a} and ${b} are not the same unit`);
+    assert.equal(state(b, a), UNKNOWN);
+  }
+  // The same through the evidence check: a laboratory fact whose quote prints the unit in capitals states its unit.
+  const source = chart('肌钙蛋白 0.02 NG/ML。');
+  const clinical = { schema: 1, assertion: 'affirmed', experiencer: 'patient', laboratory: { analyte: 'troponin', originalValue: 0.02, originalUnit: 'ng/mL' } };
+  assert.deepEqual(verifyFactEvidence(source.fact('肌钙蛋白 0.02 NG/ML', { variable: 'troponin', value: 0.02, unit: 'ng/mL', clinical }), { documents: source.documents }), { ok: true, reason: null });
 });
 
 test('a model cannot attach a guessed unit to a quote that omits it, or bypass units with equality',()=>{
