@@ -104,13 +104,15 @@ test('the strings written for a coding agent on a laptop are rephrased for a hos
   assert.equal(EVIMED_DICTIONARIES.chat['message.retry.active'], '正在重试');
   assert.equal(EVIMED_DICTIONARIES.chat['message.retry.scheduled'], '正在重试');
   // The kernel's record format is not the reader's business.
-  assert.doesNotMatch(EVIMED_DICTIONARIES.subagent['diagnostic.unsupported'], /版本/);
+  // `diagnostic.unsupported` was a key of the kernel before 0.1.7 and is gone from the pinned client.
+  assert.equal(EVIMED_DICTIONARIES.subagent['diagnostic.unsupported'], undefined);
 });
 
 test('status copy is 正在 + a verb with no ellipsis and never 思考中 (design reference §7.3, E-13)', () => {
   // The five strings that carried one, now said as the shell says its own.
   assert.equal(EVIMED_DICTIONARIES.subagent['loading.label'], '正在加载子任务');
-  assert.equal(EVIMED_DICTIONARIES.subagent['loading.aria'], '正在加载子任务');
+  // `loading.aria` was a key of the kernel before 0.1.7; the pinned kernel draws the loading row from `loading.label` alone.
+  assert.equal(EVIMED_DICTIONARIES.subagent['loading.aria'], undefined);
   for (const dict of Object.values(EVIMED_DICTIONARIES)) {
     for (const [key, value] of Object.entries(dict)) {
       assert.doesNotMatch(value, /加载中|处理中|思考中/, `${key} says a state with 中`);

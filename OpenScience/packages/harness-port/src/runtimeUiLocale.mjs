@@ -82,12 +82,23 @@ export function evimedDictionaries() {
       'input.upload': '上传附件',
       'input.commands': '技能与工具',
       'input.send.queue': '排队发送 · Ctrl/⌘+Enter 插话',
+      // The wait-for-agents tool and its detail panel (0.1.7).
+      'tool.title.waitAgent': '等待子任务',
+      'detail.wait.title': '子任务状态',
+      'detail.wait.noProgress': '没有正在运行的子任务',
     },
     chat: {
       // The working indicator under the last message. The kernel's copy is its
       // vendor's Chinese name plus 中; the product's own name goes there, as
       // 正在 + a verb with no ellipsis (design reference §7.3, E-13).
       'chat.deepDiving': 'EviMed 正在思考',
+      // 0.1.7 draws the running turn's header from this key, with the time so far; the old key above stopped
+      // covering it and 「深度求索中，用时 N 秒」 came back on every live conversation (live walk 2026-10-10).
+      'message.turnProcess.deepDivingFor': 'EviMed 正在思考，用时 {duration}',
+      // A step that delegates: the same sub-task, said as status copy.
+      'message.stepProcess.prepare.subagents': '正在准备子任务',
+      'message.stepProcess.subagents': '正在协调子任务',
+      'message.stepProcess.done.subagents': '已协调子任务',
       // The folded process of a finished turn counts its delegations by this
       // name (「171 次工具调用 · 3 个子任务」).
       'message.turnProcess.subagents.one': '{count} 个子任务',
@@ -114,19 +125,17 @@ export function evimedDictionaries() {
       'switcher.aria': '切换子任务：{title}',
       'tree.aria': '子任务会话',
       'loading.label': '正在加载子任务',
-      'loading.aria': '正在加载子任务',
       'load.error': '无法加载子任务',
       'branch.collapse': '收起 {label} 的下级子任务',
       'branch.expand': '展开 {label} 的下级子任务',
-      // The kernel names the record format it could not read; the reader
-      // needs to know only that this one cannot be shown.
-      'diagnostic.unsupported': '这条子任务记录暂时无法显示',
       'readonly.oneShot.title': '一次性子任务记录',
       'readonly.title': '此子任务暂时只读',
     },
     workspace: {
       'status.subagentsRunning.one': '{n} 个子任务运行中',
       'status.subagentsRunning.other': '{n} 个子任务运行中',
+      'archive.confirm.subagents.one': '{n} 个运行中的子任务：{names}',
+      'archive.confirm.subagents.other': '{n} 个运行中的子任务：{names}',
     },
     'slash.menu': {
       subagent: '子任务',
@@ -142,6 +151,13 @@ export function evimedDictionaries() {
 }
 
 /** The same table, for readers outside the frame (the pack test reads it). */
+/**
+ * Keys of the pack that are the product's own, not the kernel's: strings our own slot occupants ask for through
+ * the kernel's `t` (the composer's upload button, `runtimeUiComposer.mjs`). Every other key rephrases one the
+ * pinned kernel has, and `runtimeUiLocaleKernelKeys.test.mjs` holds it to the recorded dictionaries.
+ */
+export const EVIMED_OWN_KEYS = Object.freeze({ conversation: Object.freeze(['input.upload']) });
+
 export const EVIMED_DICTIONARIES = Object.freeze(Object.fromEntries(
   Object.entries(evimedDictionaries()).map(([ns, dict]) => [ns, Object.freeze(dict)]),
 ));
