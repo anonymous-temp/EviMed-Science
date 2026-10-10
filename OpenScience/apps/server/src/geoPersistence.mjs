@@ -631,6 +631,12 @@ ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS market_served_at timest
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS errors_owed boolean NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS geo_facts_errors_owed_idx ON evimed_geo.facts (created_at) WHERE errors_owed;
 
+-- An answer the judge gave up on is judged again, a bounded number of times (Q-13): how many tries an answer's own failures have used,
+-- and the earliest time of the next one. The index is the sweep's: unjudged answers only (an inclusion check has no judgement to owe).
+ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS rejudge_attempts integer NOT NULL DEFAULT 0;
+ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS rejudge_after timestamptz;
+CREATE INDEX IF NOT EXISTS geo_facts_unjudged_idx ON evimed_geo.facts (created_at) WHERE judged_at IS NULL AND parser_version LIKE '%+unjudged';
+
 -- A claim's source as a reader names it (「玛仕度肽注射液说明书（国家药监局 2025）」);
 -- source_ref stays the machine reference the quote is checked against.
 ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS source_label text;

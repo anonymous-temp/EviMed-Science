@@ -45,6 +45,18 @@ import { GEO_VALUE_COVERAGE_STATUSES, geoValueJudged, geoValueList } from "@evim
  *   judge nothing is written (a spent budget or no model waits); an answer
  *   the judge failed on three times gets a facts row with `judged_at` null,
  *   which the metrics treat as unparsed — left out, never counted as zero.
+ *   It is not final: the parse tick judges such an answer again after a wait,
+ *   a bounded number of times (`rejudgeUnjudged`, Q-13).
+ * - **The judge reads the first `GEO_JUDGE_ANSWER_CHARS` characters of an
+ *   answer; code counts all of it.** The brands, their positions and the
+ *   citations are counted over the whole answer, because that is a matter of
+ *   fact; the statements, the off-label sentences, the entities, the
+ *   recommendations, the safety terms and the value coverage are the judge's
+ *   reading of what it was shown. They are not aligned for an answer longer
+ *   than that, and the row says where the judge stopped (`checks.answerCut`,
+ *   the warning `judge_answer_truncated`). A sentence the judge returns that
+ *   is only past the cut is dropped as `*_beyond_limit`, not as `not_in_answer`:
+ *   it was not shown, which is not the same as made up.
  *
  * - **The cards are the ground truth** (flywheel F21, 2026-10-06). A project that has verified claims in its product-zone cards
  *   (`claims.card_id`) is judged against those and nothing else: a claim the card ruler marked ⚠ was never written there, and the
@@ -332,6 +344,9 @@ export function buildJudgeInput(input) {
     valueFindings: project.value.findings,
     shown,
     truncated: shown.length < body.length,
+    // The whole answer, folded, for telling a sentence the judge cannot have seen (past the cut) from one that is not in the answer at all.
+    wholeAnswer: shown.length < body.length ? compactText(body) : null,
+    answerChars: body.length,
     prefix: `【项目】\n${JSON.stringify(project)}`,
     item: `【问题与回答】\n${JSON.stringify(item)}`,
   };
@@ -349,6 +364,7 @@ export function buildJudgeInput(input) {
  * @typedef {object} GeoJudgement
  * @property {Array<Record<string, any>>} [valueCoverage]
  * @property {number} [valueBasisVersion]
+ * @property {{ chars: number, shown: number } | null} [cut]   the answer's length and the part of it the judge was shown, when it was cut
  * @property {boolean} refusal
  * @property {GeoVerifiedStatement[]} statements
  * @property {string[]} entities
@@ -382,6 +398,13 @@ export function verifyJudgement(answer, built, input) {
     const compact = compactText(text);
     return compact.length > 0 && inAnswer.includes(compact);
   };
+  // A sentence that is not in what the judge was shown is either not in the answer at all, or in the part past the cut (Q-13): the
+  // second was not judged, which is not the same as the judge having made it up.
+  /** @param {string} text */
+  const absent = (text) => {
+    const compact = compactText(text);
+    return built.wholeAnswer !== null && compact.length > 0 && built.wholeAnswer.includes(compact) ? "beyond_limit" : "not_in_answer";
+  };
   /** @type {GeoJudgement["dropped"]} */
   const dropped = [];
   const claimsByAlias = new Map(built.claims.map((claim) => [claim.alias, claim]));
@@ -407,7 +430,7 @@ export function verifyJudgement(answer, built, input) {
   for (const raw of (Array.isArray(answer.statements) ? answer.statements : []).slice(0, LIMITS.statements)) {
     const text = String(raw?.text ?? "").trim();
     const drop = (/** @type {string} */ reason) => dropped.push({ what: "statement", reason, text: text.slice(0, 300) });
-    if (!text || !present(text)) { drop("statement_not_in_answer"); continue; }
+    if (!text || !present(text)) { drop(`statement_${absent(text)}`); continue; }
     const key = compactText(text);
     const verdict = String(raw?.verdict ?? "");
     if (!GEO_STATEMENT_VERDICTS.includes(verdict)) { drop("verdict_invalid"); continue; }
@@ -456,7 +479,7 @@ export function verifyJudgement(answer, built, input) {
   const offLabel = [];
   for (const sentence of textList(answer.offLabel, LIMITS.offLabel)) {
     if (present(sentence)) offLabel.push(sentence);
-    else dropped.push({ what: "off_label", reason: "not_in_answer", text: sentence.slice(0, 300) });
+    else dropped.push({ what: "off_label", reason: absent(sentence), text: sentence.slice(0, 300) });
   }
   /** @type {GeoJudgeChecks["omittedSafety"]} */
   const omittedSafety = [];
@@ -475,24 +498,24 @@ export function verifyJudgement(answer, built, input) {
     const drop = (/** @type {string} */ reason) => dropped.push({ what: "citation_claim", reason, text: statement.slice(0, 300) });
     const link = linksById.get(String(raw?.link ?? "").trim());
     if (!link) { drop("link_unknown"); continue; }
-    if (!statement || !present(statement)) { drop("statement_not_in_answer"); continue; }
+    if (!statement || !present(statement)) { drop(`statement_${absent(statement)}`); continue; }
     citations.push({ link: link.id, url: link.url, statement, exists: null, supports: null, evidence: null });
   }
 
   const entities = [];
   for (const name of textList(answer.entities, LIMITS.entities)) {
     if (present(name)) entities.push(name);
-    else dropped.push({ what: "entity", reason: "not_in_answer", text: name.slice(0, 100) });
+    else dropped.push({ what: "entity", reason: absent(name), text: name.slice(0, 100) });
   }
   const recommendations = [];
   for (const sentence of textList(answer.recommendations, LIMITS.recommendations)) {
     if (present(sentence)) recommendations.push(sentence);
-    else dropped.push({ what: "recommendation", reason: "not_in_answer", text: sentence.slice(0, 300) });
+    else dropped.push({ what: "recommendation", reason: absent(sentence), text: sentence.slice(0, 300) });
   }
   const safetyTermsHit = [];
   for (const term of textList(answer.safetyTerms, LIMITS.safetyTerms)) {
     if (present(term)) safetyTermsHit.push(term);
-    else dropped.push({ what: "safety_term", reason: "not_in_answer", text: term.slice(0, 100) });
+    else dropped.push({ what: "safety_term", reason: absent(term), text: term.slice(0, 100) });
   }
   const flags = new Map(input.careFlags.map((flag) => [flag.id, flag.text]));
   const expectedIds = [...new Set(textList(answer.redFlagsExpected, flags.size))].filter((id) => flags.has(id));
@@ -512,6 +535,7 @@ export function verifyJudgement(answer, built, input) {
   }
   return {
     valueCoverage, valueBasisVersion: input.value?.version ?? 0,
+    cut: built.truncated ? { chars: built.answerChars, shown: built.shown.length } : null,
     refusal: answer.refusal === true,
     statements,
     entities,
@@ -703,6 +727,15 @@ export async function geoJudgeBudget(store, config, now) {
 
 // ───────────────────────── the parse loop ─────────────────────────
 
+/** Tries an answer the judge gave up on is given again, by its own failures (an outage of the provider spends none). */
+export const GEO_REJUDGE_MAX_ATTEMPTS = 3;
+/** Unjudged answers one tick judges again at most: the new answers come first, and a re-judging costs what a judging does. */
+export const GEO_REJUDGE_PER_TICK = 3;
+/** How long an answer waits before its next try: after it was given up on, and after a try that did not give a judgement. */
+export const GEO_REJUDGE_BACKOFF_MS = 30 * 60_000;
+/** An unjudged answer older than this is not tried again: the limit that keeps a failure the provider repeats from being tried for ever. */
+export const GEO_REJUDGE_MAX_AGE_MS = 14 * 86_400_000;
+
 /**
  * @typedef {object} GeoParseDeps
  * @property {import("./geoMeasureStore.mjs").GeoMeasureStore} store
@@ -721,9 +754,73 @@ export async function geoJudgeBudget(store, config, now) {
  */
 
 /**
+ * What the judge is given for one answer.
+ * @param {NonNullable<Awaited<ReturnType<import("./geoMeasureStore.mjs").GeoMeasureStore["projectContext"]>>>} context
+ * @param {{ text?: string, pool?: string | null, journeyStage?: string | null } | null} question
+ * @param {{ answerText: string | null, citations: any[] }} snapshot
+ * @returns {GeoJudgeInput}
+ */
+function judgeInputOf(context, question, snapshot) {
+  return {
+    owner: { userId: context.project.userId, projectId: context.project.projectId },
+    product: context.judgeProduct ?? context.project.product,
+    competitors: context.judgeCompetitors ?? context.project.competitors,
+    claims: context.claims,
+    value: context.value,
+    careFlags: context.careFlags,
+    question: { text: question?.text ?? "", pool: question?.pool ?? null, journeyStage: question?.journeyStage ?? null },
+    answer: snapshot.answerText ?? "",
+    links: (Array.isArray(snapshot.citations) ? snapshot.citations : []).map((/** @type {any} */ citation) => ({ url: String(citation?.url ?? ""), title: String(citation?.title ?? "") })),
+  };
+}
+
+/**
+ * The facts row of one answer: what code counts of it under the basis its round froze, and what the judge made of it (nothing, when it
+ * gave none: the row is then written unjudged, counted for what code can count, and left out of every rate that rests on a judgement).
+ * @param {{ snapshot: { status: string, answerText: string | null, citations: any[] }, judged: (GeoJudgement & { truncated?: boolean }) | null,
+ *   registry: ReturnType<typeof brandRegistry>, countedOwned: { domains?: string[], urls?: string[] }, at: Date }} input
+ */
+function factsOf({ snapshot, judged, registry, countedOwned, at }) {
+  const extract = { recommendations: judged?.recommendations ?? [], entities: judged?.entities ?? [],
+    valueCoverage: judged?.valueCoverage ?? [], valueBasisVersion: judged?.valueBasisVersion ?? 0, rubricVersion: GEO_JUDGE_VERSION };
+  const code = parseAnswer({
+    answer: snapshot.answerText,
+    citations: snapshot.citations,
+    registry,
+    owned: countedOwned,
+    ...extract,
+  });
+  const status = snapshot.status === "valid" && judged?.refusal ? "refusal" : snapshot.status;
+  const statements = judged?.statements ?? [];
+  const facts = {
+    ...code,
+    careHint: judged ? judged.careHint : null,
+    statements,
+    failureMode: failureMode({ status, mentionsOurs: code.mentionsOurs, statements }),
+    parserVersion: `${GEO_PARSER_VERSION}+${judged ? GEO_JUDGE_VERSION : "unjudged"}`,
+    judgedAt: judged ? at.toISOString() : null,
+    redFlagExpected: judged?.redFlagExpected ?? [],
+    redFlagHits: judged?.redFlagHits ?? [],
+    safetyTermsHit: judged?.safetyTermsHit ?? [],
+    // The three checks beside the statements: a claim beyond the label, safety information left out, what the cited links say; and,
+    // when the answer was longer than the judge reads, where it was cut: the brands and the citations above are counted over all of
+    // it, the judgement is of the part it was shown (Q-13).
+    checks: judged ? { ...judged.checks, ...(judged.cut ? { answerCut: judged.cut } : {}) } : {},
+    // What it was counted under, and the judge's two lists it was counted
+    // with: a later registry change counts it again from these, asking no model.
+    registryKey: registryKey(registry, countedOwned),
+    judgeExtract: judged ? extract : null,
+    // An unjudged row waits before it is judged again.
+    rejudgeAfter: judged ? null : new Date(at.getTime() + GEO_REJUDGE_BACKOFF_MS).toISOString(),
+  };
+  return { facts, status, statements };
+}
+
+/**
  * Parse and judge the answers that have not been: code counts, the model
  * judges, code re-verifies, one facts row per answer, then the 讲错我方 of it
- * are recorded (`geoErrors.recordErrorsFromFacts`).
+ * are recorded (`geoErrors.recordErrorsFromFacts`). Then, with what the tick
+ * has left, the answers the judge once gave up on are judged again.
  * @param {GeoParseDeps} deps
  */
 export async function tickParse(deps) {
@@ -731,7 +828,7 @@ export async function tickParse(deps) {
   const now = deps.now ?? (() => new Date());
   const state = deps.state ?? geoMeasureState(store);
   const counts = { parsed: 0, refusals: 0, unjudged: 0, dropped: 0, failures: 0, errorsCreated: 0, notified: 0, recounted: 0,
-    offLabel: 0, omittedSafety: 0, linkExists: 0, linkMissing: 0, linkUnreadable: 0, linkSupports: 0, linkContradicts: 0, linkUnclear: 0, linkJudgeFailed: 0,
+    rejudged: 0, rejudgeFailed: 0, rejudgeGivenUp: 0, offLabel: 0, omittedSafety: 0, linkExists: 0, linkMissing: 0, linkUnreadable: 0, linkSupports: 0, linkContradicts: 0, linkUnclear: 0, linkJudgeFailed: 0,
     skipped: /** @type {string | null} */ (null) };
   await store.ready();
   const judge = deps.judge ?? (state.judge ??= new GeoJudge(config, { usageLedger: deps.usageLedger, callModel: deps.callModel, fetchImpl: deps.fetchImpl }));
@@ -784,17 +881,7 @@ export async function tickParse(deps) {
     // stopped the tick right after the last success can be taken for stuck.)
     const stuck = Boolean(stops && stops.count >= GEO_JUDGE_MAX_ATTEMPTS && state.lastJudgedTick >= stops.firstTick);
     if (!stuck) try {
-      judged = await judge.judge({
-        owner: { userId: context.project.userId, projectId: context.project.projectId },
-        product: context.judgeProduct ?? context.project.product,
-        competitors: context.judgeCompetitors ?? context.project.competitors,
-        claims: context.claims,
-        value: context.value,
-        careFlags: context.careFlags,
-        question: { text: question?.text ?? "", pool: question?.pool ?? null, journeyStage: question?.journeyStage ?? null },
-        answer: snapshot.answerText ?? "",
-        links: (Array.isArray(snapshot.citations) ? snapshot.citations : []).map((/** @type {any} */ citation) => ({ url: String(citation?.url ?? ""), title: String(citation?.title ?? "") })),
-      });
+      judged = await judge.judge(judgeInputOf(context, question, snapshot));
     } catch (error) {
       const code = String(/** @type {any} */ (error)?.code ?? "geo_judge_failed");
       counts.failures += 1;
@@ -824,34 +911,7 @@ export async function tickParse(deps) {
         owner: { userId: context.project.userId, projectId: context.project.projectId }, counts });
     }
 
-    const extract = { recommendations: judged?.recommendations ?? [], entities: judged?.entities ?? [],
-      valueCoverage: judged?.valueCoverage ?? [], valueBasisVersion: judged?.valueBasisVersion ?? 0, rubricVersion: GEO_JUDGE_VERSION };
-    const code = parseAnswer({
-      answer: snapshot.answerText,
-      citations: snapshot.citations,
-      registry,
-      owned: countedOwned,
-      ...extract,
-    });
-    const status = snapshot.status === "valid" && judged?.refusal ? "refusal" : snapshot.status;
-    const statements = judged?.statements ?? [];
-    const facts = {
-      ...code,
-      careHint: judged ? judged.careHint : null,
-      statements,
-      failureMode: failureMode({ status, mentionsOurs: code.mentionsOurs, statements }),
-      parserVersion: `${GEO_PARSER_VERSION}+${judged ? GEO_JUDGE_VERSION : "unjudged"}`,
-      judgedAt: judged ? now().toISOString() : null,
-      redFlagExpected: judged?.redFlagExpected ?? [],
-      redFlagHits: judged?.redFlagHits ?? [],
-      safetyTermsHit: judged?.safetyTermsHit ?? [],
-      // The three checks beside the statements: a claim beyond the label, safety information left out, what the cited links say.
-      checks: judged?.checks ?? {},
-      // What it was counted under, and the judge's two lists it was counted
-      // with: a later registry change counts it again from these, asking no model.
-      registryKey: registryKey(registry, countedOwned),
-      judgeExtract: judged ? extract : null,
-    };
+    const { facts, status, statements } = factsOf({ snapshot, judged, registry, countedOwned, at: now() });
     const written = await store.writeFacts(snapshot, facts, { status: status !== snapshot.status ? status : null, at: now() });
     if (!written) continue;
     counts.parsed += 1;
@@ -867,13 +927,86 @@ export async function tickParse(deps) {
     counts.errorsCreated += recorded.created;
     counts.notified += recorded.notified;
   }
+  // What is left of the tick goes to the answers the judge gave up on: they were new once, and the new ones come first.
+  if (!counts.skipped) await rejudgeUnjudged(deps, state, judge, counts);
   // The three checks and the link checks, counted since this process started: `open_science_geo_checks_total{check}`.
-  for (const key of ["offLabel", "omittedSafety", "linkExists", "linkMissing", "linkUnreadable", "linkSupports", "linkContradicts", "linkUnclear", "linkJudgeFailed"]) {
+  for (const key of ["offLabel", "omittedSafety", "linkExists", "linkMissing", "linkUnreadable", "linkSupports", "linkContradicts", "linkUnclear", "linkJudgeFailed",
+    "rejudged", "rejudgeFailed", "rejudgeGivenUp"]) {
     if (counts[/** @type {keyof typeof counts} */ (key)]) state.checkTotals[key] = (state.checkTotals[key] ?? 0) + Number(counts[/** @type {keyof typeof counts} */ (key)]);
   }
   const recounted = await recountRegistryFacts(deps);
   counts.recounted = recounted.facts;
   return counts;
+}
+
+/**
+ * The answers the judge gave up on, judged again (Q-13). An answer the judge failed on three times is written unjudged and was final:
+ * nothing looked at it again, so a failure that was the prompt's (the prompt size D-02 removed) or a bad moment of the provider's cost
+ * that answer its judgement for good, and every rate that rests on one (accuracy, the 讲错我方 list) went on without it. Now an unjudged
+ * answer is tried again after a wait, by the same judge on the round's frozen basis; a judgement counts the brands again (the judge's
+ * entities and recommendations are part of the count), records the errors it finds and has the round measured again.
+ *
+ * Bounded: at most {@link GEO_REJUDGE_PER_TICK} a tick, after the new answers; {@link GEO_REJUDGE_MAX_ATTEMPTS} tries spent by the
+ * answer's own failures, each after a {@link GEO_REJUDGE_BACKOFF_MS} wait; none once the answer is {@link GEO_REJUDGE_MAX_AGE_MS} old.
+ * A provider that fails spends no try (it is not the answer's) and stops the pass. Counted: `rejudged`, `rejudgeFailed` (a try spent) and
+ * `rejudgeGivenUp` (the last one), in the tick's counts and `open_science_geo_checks_total{check}`.
+ * @param {GeoParseDeps} deps @param {ReturnType<typeof geoMeasureState>} state @param {{ judge: Function, judgeCitation?: Function }} judge
+ * @param {Record<string, any>} counts
+ */
+async function rejudgeUnjudged(deps, state, judge, counts) {
+  const { store, config } = deps;
+  const now = deps.now ?? (() => new Date());
+  const answers = await store.unjudgedAnswers(GEO_REJUDGE_PER_TICK, { maxAttempts: GEO_REJUDGE_MAX_ATTEMPTS, maxAgeMs: GEO_REJUDGE_MAX_AGE_MS, now: now() });
+  /** @type {Map<string, Awaited<ReturnType<typeof store.projectContext>>>} */
+  const contexts = new Map();
+  /** @type {Map<string, Map<string, any>>} */
+  const questionsByProject = new Map();
+  for (const snapshot of answers) {
+    const budget = await geoJudgeBudget(store, config, now());
+    if (budget.exhausted) {
+      counts.skipped = "budget_exhausted";
+      return;
+    }
+    const contextKey = `${snapshot.geoProjectId}:${snapshot.roundId ?? "live"}`;
+    if (!contexts.has(contextKey)) contexts.set(contextKey, await store.projectContext(snapshot.geoProjectId, snapshot.roundId));
+    const context = contexts.get(contextKey);
+    if (!context) continue;
+    if (!questionsByProject.has(snapshot.geoProjectId)) {
+      questionsByProject.set(snapshot.geoProjectId, new Map((await store.questions(snapshot.geoProjectId)).map((question) => [question.id, question])));
+    }
+    const question = questionsByProject.get(snapshot.geoProjectId)?.get(String(snapshot.questionId)) ?? null;
+    /** @type {(GeoJudgement & { truncated?: boolean }) | null} */
+    let judged = null;
+    try {
+      judged = await judge.judge(judgeInputOf(context, question, snapshot));
+    } catch (error) {
+      counts.failures += 1;
+      const own = judgeFailureIsTheAnswers(error);
+      const spent = await store.rejudgeDeferred(snapshot.id, { after: new Date(now().getTime() + GEO_REJUDGE_BACKOFF_MS), spent: own });
+      if (!own) {
+        counts.skipped = String(/** @type {any} */ (error)?.code ?? "geo_judge_failed");
+        return;
+      }
+      counts.rejudgeFailed += 1;
+      if (spent >= GEO_REJUDGE_MAX_ATTEMPTS) counts.rejudgeGivenUp += 1;
+      continue;
+    }
+    counts.offLabel += judged.checks.offLabel.length;
+    counts.omittedSafety += judged.checks.omittedSafety.length;
+    await checkCitationLinks({ checks: judged.checks, judge: /** @type {any} */ (judge), linkChecker: deps.linkChecker ?? null,
+      owner: { userId: context.project.userId, projectId: context.project.projectId }, counts });
+    const registry = brandRegistry(context.judgeProduct ?? context.project.product, context.judgeCompetitors ?? context.project.competitors);
+    const { facts, status, statements } = factsOf({ snapshot, judged, registry, countedOwned: context.judgeOwned ?? context.owned, at: now() });
+    if (!await store.rejudgeFacts(snapshot, facts, { status: status !== snapshot.status ? status : null, at: now() })) continue;
+    counts.rejudged += 1;
+    if (status === "refusal") counts.refusals += 1;
+    const warnings = ["judge_rejudged", ...judged.dropped.map((entry) => `judge_dropped:${entry.what}:${entry.reason}`), ...(judged.truncated ? ["judge_answer_truncated"] : [])];
+    counts.dropped += judged.dropped.length;
+    await store.appendSnapshotWarnings(snapshot.id, warnings);
+    const recorded = await recordErrorsFromFacts(deps, { snapshot: { ...snapshot, status }, statements, context, question });
+    counts.errorsCreated += recorded.created;
+    counts.notified += recorded.notified;
+  }
 }
 
 /** How often the parse loop looks for facts counted under an older registry. */

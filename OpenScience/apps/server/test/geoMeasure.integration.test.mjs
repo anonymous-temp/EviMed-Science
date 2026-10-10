@@ -12,7 +12,7 @@ import pg from "pg";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.mjs";
-import { GeoJudge, tickParse } from "../src/geoJudge.mjs";
+import { GEO_JUDGE_VERSION, GeoJudge, tickParse } from "../src/geoJudge.mjs";
 import { measureRound, netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
 import { noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
@@ -1019,6 +1019,137 @@ test("a provider outage stops the judge without spending attempts; an answer the
     // Every answer unparsed leaves the domain's metrics nothing to count: 未测, never 0 %.
     assert.deepEqual({ status: mention.status, reason: mention.reason }, { status: "absent", reason: "engine_absent" },
       "unjudged answers are left out, never read as mentioning nothing");
+  } finally {
+    await h.probe.close();
+  }
+});
+
+// ---------------------------------------------------------------- judging again (Q-13)
+
+/**
+ * A project whose three answers the judge cannot read, until `mode.ok` says it can: the harness with a judge that returns no JSON.
+ * @param {string} id
+ */
+async function unjudgedRound(id) {
+  await seed(id, { engines: ["deepseek"] });
+  const h = await harness({ answers: ({ question }) => ({ answer: question === Q1 ? A_WRONG : A_RIGHT, searchResults: question === Q1 ? OWNED_LABEL : [] }) });
+  const mode = { ok: false, outage: false, calls: 0 };
+  const judge = new GeoJudge(h.config, {
+    callModel: /** @type {any} */ (async (/** @type {any} */ deps, /** @type {any} */ call) => {
+      mode.calls += 1;
+      if (mode.outage) throw Object.assign(new Error("upstream"), { code: "model_gateway_upstream_error" });
+      return mode.ok ? h.model.callModel(deps, call) : { choices: [{ message: { content: "I cannot produce JSON today." } }] };
+    }),
+  });
+  const deps = { ...h.deps, judge };
+  const round = await enqueueRound(deps, { geoProjectId: id, kind: "baseline" });
+  await tickProbe({ ...deps, maxAsks: 10 });
+  for (let tick = 0; tick < 3; tick += 1) await tickParse({ ...deps, maxParse: 20 });
+  return { h, mode, deps, round };
+}
+
+test("an answer the judge gave up on is judged again after a wait; a judgement counts it again, records its errors and has the round measured again (Q-13)", options, async () => {
+  await reset();
+  const { h, mode, deps, round } = await unjudgedRound("geo_rj");
+  try {
+    const facts = async () => rows(`SELECT f.judged_at, f.parser_version, f.rejudge_attempts, f.reparsed_at, f.failure_mode, f.statements, f.brands, f.cites_ours FROM evimed_geo.facts f
+      JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id JOIN evimed_geo.questions q ON q.id = s.question_id ORDER BY q.text`);
+    assert.ok((await facts()).every((row) => row.judged_at === null && row.parser_version.endsWith("+unjudged")), "given up on after three tries");
+    await tickMetrics(deps);
+    mode.ok = true;
+
+    // Not yet: an answer waits half an hour after it was given up on.
+    const calls = mode.calls;
+    const early = await tickParse({ ...deps, maxParse: 20 });
+    assert.deepEqual([early.rejudged, early.rejudgeFailed, mode.calls], [0, 0, calls]);
+
+    // Judged again: the wrong statement is found, recorded and told, and the round is measured again with the answers it now counts.
+    h.clock.advance(31 * 60_000);
+    const again = await tickParse({ ...deps, maxParse: 20 });
+    assert.deepEqual([again.rejudged, again.rejudgeFailed, again.errorsCreated, again.notified], [3, 0, 1, 1]);
+    const judged = await facts();
+    assert.ok(judged.every((row) => row.judged_at !== null && row.parser_version.endsWith(GEO_JUDGE_VERSION) && row.reparsed_at !== null && row.rejudge_attempts === 0));
+    const wrong = judged.find((row) => row.failure_mode === "wrong_ours");
+    assert.deepEqual(wrong.statements.map((/** @type {any} */ statement) => [statement.text, statement.verdict]), [[WRONG, "wrong"]]);
+    assert.equal(wrong.cites_ours, true, "what code counts is counted again from the answer");
+    assert.equal((await rows(`SELECT count(*)::integer AS n FROM evimed_geo.errors`))[0].n, 1);
+    assert.equal(h.notices.filter((notice) => notice.kind === "wrong_ours").length, 1);
+    assert.ok((await rows(`SELECT warnings FROM evimed_geo.snapshots WHERE answer_text = $1`, [A_WRONG]))[0].warnings.includes("judge_rejudged"));
+    assert.deepEqual(Object.fromEntries(Object.entries(h.state.checkTotals).filter(([key]) => key.startsWith("rejudge"))), { rejudged: 3 });
+    const measured = await tickMetrics(deps);
+    assert.equal(measured.rounds, 1, "the round's facts are newer than its numbers");
+    const [accuracy] = await rows(`SELECT status, numerator::float8 AS numerator, denominator::float8 AS denominator FROM evimed_geo.metrics WHERE round_id = $1 AND scope = 'engine' AND engine = 'deepseek' AND metric_id = 'M-06'`, [round.roundId]);
+    assert.ok(accuracy && accuracy.denominator >= 1, "accuracy now rests on judged statements");
+    // Judged answers are not judged again.
+    h.clock.advance(31 * 60_000);
+    const calls2 = mode.calls;
+    assert.equal((await tickParse({ ...deps, maxParse: 20 })).rejudged, 0);
+    assert.equal(mode.calls, calls2);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("the judging again is bounded: three tries spent by an answer's own failures, each after a wait; a provider's failure spends none; an old answer is let go (Q-13)", options, async () => {
+  await reset();
+  const { h, mode, deps } = await unjudgedRound("geo_rb");
+  try {
+    const attempts = async () => (await rows(`SELECT rejudge_attempts AS n FROM evimed_geo.facts ORDER BY snapshot_id`)).map((row) => row.n);
+    const totals = () => ({ failed: h.state.checkTotals.rejudgeFailed ?? 0, givenUp: h.state.checkTotals.rejudgeGivenUp ?? 0 });
+
+    // The provider is down: a tick stops at the first answer it asks, spends nothing, and that answer waits before it is tried again,
+    // so the next tick asks the next one; once each has been tried, nothing is asked until the wait is over.
+    mode.outage = true;
+    h.clock.advance(31 * 60_000);
+    for (let tick = 0; tick < 3; tick += 1) {
+      const outage = await tickParse({ ...deps, maxParse: 20 });
+      assert.deepEqual([outage.skipped, outage.rejudgeFailed], ["model_gateway_upstream_error", 0]);
+    }
+    assert.deepEqual(await attempts(), [0, 0, 0]);
+    const duringOutage = mode.calls;
+    assert.deepEqual([(await tickParse({ ...deps, maxParse: 20 })).rejudged, mode.calls], [0, duringOutage], "every answer is waiting");
+
+    // The provider is back and the answers still cannot be read: a try each, three times, each after the wait; then no more.
+    mode.outage = false;
+    for (const spent of [1, 2, 3]) {
+      h.clock.advance(31 * 60_000);
+      const tick = await tickParse({ ...deps, maxParse: 20 });
+      assert.deepEqual([tick.rejudgeFailed, tick.rejudged], [3, 0], `try ${spent}`);
+      assert.deepEqual(await attempts(), [spent, spent, spent]);
+    }
+    assert.deepEqual(totals(), { failed: 9, givenUp: 3 }, "counted since the process started: nine tries spent, three answers given up on");
+    h.clock.advance(31 * 60_000);
+    const calls = mode.calls;
+    mode.ok = true;
+    const spent = await tickParse({ ...deps, maxParse: 20 });
+    assert.deepEqual([spent.rejudged, spent.rejudgeFailed, mode.calls], [0, 0, calls], "an answer whose tries are spent is final, even with a judge that would answer");
+
+    // An answer older than the limit is let go whatever it has spent.
+    await database.query(`UPDATE evimed_geo.facts SET rejudge_attempts = 0, rejudge_after = NULL`);
+    h.clock.advance(15 * 86_400_000);
+    assert.equal((await tickParse({ ...deps, maxParse: 20 })).rejudged, 0);
+    assert.equal(mode.calls, calls);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an answer longer than the judge reads is counted whole and judged in part, and the row says where the judge stopped (Q-13)", options, async () => {
+  await reset();
+  await seed("geo_cut", { engines: ["deepseek"] });
+  // The product is named once near the start and once past the 8,000 characters the judge is shown.
+  const long = `玛仕度肽每周注射一次。${"这是一段与本品无关的背景介绍。".repeat(700)}玛仕度肽的补充说明。`;
+  const h = await harness({ answers: () => ({ answer: long }) });
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_cut", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    await tickParse({ ...h.deps, maxParse: 20 });
+    const [fact] = await rows(`SELECT f.checks, f.brands, s.warnings FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id LIMIT 1`);
+    assert.deepEqual({ ...fact.checks.answerCut }, { chars: long.length, shown: 8_000 });
+    assert.ok(fact.warnings.includes("judge_answer_truncated"));
+    assert.equal(fact.brands.find((/** @type {any} */ brand) => brand.ours)?.count, 2, "the brand is counted over all of the answer");
+    const seen = judgeCallParts(h.model.calls[0]).item.answer;
+    assert.equal(seen.length, 8_000, "and the judge was shown the first 8,000 characters");
   } finally {
     await h.probe.close();
   }

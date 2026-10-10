@@ -690,9 +690,9 @@ export class GeoMeasureStore {
       const result = await client.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, brands, mentions_ours, first_ours,
           recommended_ours, position_ours, brands_mentioned, retrieval_triggered, cites_ours, cites_ours_in_body, care_hint, statements,
           failure_mode, parser_version, judged_at, red_flag_expected, red_flag_hits, safety_terms_hit, created_at, registry_key, judge_extract, checks,
-          errors_owed)
+          errors_owed, rejudge_after)
         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18::jsonb, $19::jsonb, $20::jsonb,
-          coalesce($21::timestamptz, now()), $22, $23::jsonb, $24::jsonb, $25)
+          coalesce($21::timestamptz, now()), $22, $23::jsonb, $24::jsonb, $25, $26::timestamptz)
         ON CONFLICT (snapshot_id) DO NOTHING RETURNING snapshot_id`,
       [snapshot.id, snapshot.userId, snapshot.geoProjectId, JSON.stringify(facts.brands ?? []), facts.mentionsOurs ?? null, facts.firstOurs ?? null,
         facts.recommendedOurs ?? null, facts.positionOurs ?? null, facts.brandsMentioned ?? null, facts.retrievalTriggered ?? null,
@@ -700,11 +700,65 @@ export class GeoMeasureStore {
         facts.failureMode ?? null, facts.parserVersion ?? null, facts.judgedAt ?? null, JSON.stringify(facts.redFlagExpected ?? []),
         JSON.stringify(facts.redFlagHits ?? []), JSON.stringify(facts.safetyTermsHit ?? []), at ? at.toISOString() : null,
         facts.registryKey ?? null, facts.judgeExtract ? JSON.stringify(facts.judgeExtract) : null, JSON.stringify(facts.checks ?? {}),
-        (facts.statements ?? []).some((/** @type {any} */ statement) => statement?.verdict === "wrong")]);
+        (facts.statements ?? []).some((/** @type {any} */ statement) => statement?.verdict === "wrong"), facts.rejudgeAfter ?? null]);
       if (!result.rows.length) return false;
       if (status) await client.query(`UPDATE evimed_geo.snapshots SET status = $2 WHERE id = $1`, [snapshot.id, status]);
       return true;
     });
+  }
+
+  /**
+   * Answers the judge gave up on that are due another try (Q-13), the least tried first: unjudged, written by the judge's failing (an
+   * inclusion check has no judgement to owe), fewer than `maxAttempts` own failures, newer than `maxAgeMs`, and past the time their last
+   * try asked to wait until.
+   * @param {number} limit @param {{ maxAttempts: number, maxAgeMs: number, now: Date }} options
+   */
+  async unjudgedAnswers(limit, { maxAttempts, maxAgeMs, now }) {
+    const result = await this.query(`SELECT s.* FROM evimed_geo.facts f
+        JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
+        JOIN evimed_geo.projects p ON p.id = f.geo_project_id AND p.deleted_at IS NULL
+      WHERE f.judged_at IS NULL AND f.parser_version LIKE '%+unjudged' AND f.rejudge_attempts < $2 AND f.created_at > $3
+        AND (f.rejudge_after IS NULL OR f.rejudge_after <= $4) AND s.status IN ('valid', 'refusal') AND s.answer_text IS NOT NULL
+      ORDER BY f.rejudge_attempts, f.created_at, f.snapshot_id LIMIT $1`,
+    [limit, maxAttempts, new Date(now.getTime() - maxAgeMs).toISOString(), now.toISOString()]);
+    return result.rows.map(snapshotRow);
+  }
+
+  /**
+   * An unjudged answer's facts row, written again with a judgement: everything the judge's reading changes, counted again from the
+   * answer by the caller. Only a row still unjudged is touched, so two workers cannot both write it. `reparsed_at` is what makes the
+   * metrics loop measure the round again. Returns false when the row was not (or no longer) unjudged.
+   * @param {{ id: string }} snapshot @param {Record<string, any>} facts @param {{ status?: string | null, at: Date }} options
+   */
+  async rejudgeFacts(snapshot, facts, { status = null, at }) {
+    return this.transaction(async (client) => {
+      const result = await client.query(`UPDATE evimed_geo.facts SET brands = $2::jsonb, mentions_ours = $3, first_ours = $4, recommended_ours = $5,
+          position_ours = $6, brands_mentioned = $7, retrieval_triggered = $8, cites_ours = $9, cites_ours_in_body = $10, care_hint = $11,
+          statements = $12::jsonb, failure_mode = $13, parser_version = $14, judged_at = $15, red_flag_expected = $16::jsonb, red_flag_hits = $17::jsonb,
+          safety_terms_hit = $18::jsonb, registry_key = $19, judge_extract = $20::jsonb, checks = $21::jsonb, errors_owed = $22, reparsed_at = $23,
+          rejudge_after = NULL
+        WHERE snapshot_id = $1 AND judged_at IS NULL AND parser_version LIKE '%+unjudged' RETURNING snapshot_id`,
+      [snapshot.id, JSON.stringify(facts.brands ?? []), facts.mentionsOurs ?? null, facts.firstOurs ?? null, facts.recommendedOurs ?? null,
+        facts.positionOurs ?? null, facts.brandsMentioned ?? null, facts.retrievalTriggered ?? null, facts.citesOurs ?? null, facts.citesOursInBody ?? null,
+        facts.careHint ?? null, JSON.stringify(facts.statements ?? []), facts.failureMode ?? null, facts.parserVersion ?? null, facts.judgedAt ?? null,
+        JSON.stringify(facts.redFlagExpected ?? []), JSON.stringify(facts.redFlagHits ?? []), JSON.stringify(facts.safetyTermsHit ?? []), facts.registryKey ?? null,
+        facts.judgeExtract ? JSON.stringify(facts.judgeExtract) : null, JSON.stringify(facts.checks ?? {}),
+        (facts.statements ?? []).some((/** @type {any} */ statement) => statement?.verdict === "wrong"), at.toISOString()]);
+      if (!result.rows.length) return false;
+      if (status) await client.query(`UPDATE evimed_geo.snapshots SET status = $2 WHERE id = $1`, [snapshot.id, status]);
+      return true;
+    });
+  }
+
+  /**
+   * A try at judging an unjudged answer again did not give a judgement: wait until `after`, and count the try when the failure was the
+   * answer's own (`spent`); a provider's failure is not the answer's and spends nothing. Returns the tries spent so far.
+   * @param {string} snapshotId @param {{ after: Date, spent: boolean }} options
+   */
+  async rejudgeDeferred(snapshotId, { after, spent }) {
+    const result = await this.query(`UPDATE evimed_geo.facts SET rejudge_attempts = rejudge_attempts + $3::integer, rejudge_after = $2
+      WHERE snapshot_id = $1 AND judged_at IS NULL RETURNING rejudge_attempts`, [snapshotId, after.toISOString(), spent ? 1 : 0]);
+    return Number(result.rows[0]?.rejudge_attempts ?? 0);
   }
 
   /**
