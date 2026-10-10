@@ -44,6 +44,11 @@ The optional data below is a vocabulary for useful context, not a required form:
   import route; it is never a required delivery artifact.
 
 Keep provenance and scope in these backend records and source-linked reports.
+An observation with no source link remains source-unknown: do not borrow a
+neighboring finding's sourceRefs or invent a source label. A value summary is
+not a verbatim source quotation. Copy quotes only from preserved source text;
+keep useful qualitative observations with their stated origin when that text
+is unavailable.
 Do not ask the user to fill every field. When identity is ambiguous, continue
 safe disease/molecule analysis, label the identity limit, and ask only the
 question that matters for product-specific work. Do not withhold the entire task.
