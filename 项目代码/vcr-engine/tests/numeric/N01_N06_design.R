@@ -495,6 +495,66 @@ vcr_case("N06f", c("AC-30", "AC-29"), function() {
                         old_pev, rows[[1]]$pev, d_special, route_of(expo), route_of(weib1)))
 })
 
+vcr_case("N06g", c("AC-04", "AC-28"), function() {
+  # The cost of a design needs a duration only for the part of it that is per month. A continuous or binary two-arm design has no
+  # accrual (the schema refuses one there), so its duration is unknown, and `cost` was withheld even when the costs stated were per patient
+  # and per site and the total is known exactly: the result said only that cost "needs ... an accrual duration; it was not computed".
+  # Now the per-patient and per-site parts are computed (cost is deterministic given the sizes, so the Monte-Carlo error is 0), and a
+  # cost per month on a design with no duration is still declined, with that reason. A time-to-event design with accrual keeps all three.
+  run <- function(sc, tag) vcr_test_run(vcr_test_job("design.simulate", sc, seed = 606L, replicates = 400L, job_id = paste0("job_n06g_", tag)))
+  cont <- function(costs) list(design = list(kind = "two_arm_fixed", nTreat = 40, nControl = 30), endpoint = list(type = "continuous"), truth = list(effect = 0.5, sd = 1),
+                               analysis = list(method = "ttest", alpha = 0.025, sided = 1), performance = list("power", "cost"), costs = costs)
+  notes_of <- function(r) vapply(r$diagnostics$performanceNotComputed %||% list(), function(i) as.character(i$detail), character(1))
+  # per patient and per site: 1000 x 70 + 5000 x 4 = 90000, exactly
+  fixed <- run(cont(list(perPatient = 1000, perSite = 5000, sites = 4)), "fixed")
+  cost <- vcr_get_measure(fixed, "cost")
+  # a cost per month on a design with no accrual: declined, with the reason
+  monthly <- run(cont(list(perPatient = 1000, perMonth = 200)), "monthly")
+  # a time-to-event design with accrual: all three parts, the duration being accrual + follow-up
+  tte <- function(costs) list(design = list(kind = "two_arm_fixed", nTreat = 60, nControl = 60), endpoint = list(type = "time_to_event"), truth = list(hazardRatio = 0.7, controlMedian = 12),
+                              analysis = list(method = "logrank", alpha = 0.025, sided = 1), accrual = list(kind = "uniform", duration = 12, followup = 12),
+                              performance = list("power", "cost"), costs = costs)
+  full <- run(tte(list(perPatient = 1000, perSite = 5000, sites = 4, perMonth = 200)), "full")
+  no_month <- run(tte(list(perPatient = 1000, perSite = 5000, sites = 4)), "nomonth")
+  none <- run(cont(list(sites = 3)), "none")
+  ok <- identical(fixed$status, "succeeded") && !is.null(cost) && cost$value == 90000 && identical(cost$mcse, 0) && !grepl("perMonth", cost$note, fixed = TRUE) &&
+    identical(monthly$status, "succeeded") && is.null(vcr_get_measure(monthly, "cost")) && any(grepl("per month", notes_of(monthly), fixed = TRUE)) &&
+    abs(vcr_measure_value(full, "cost") - (1000 * 120 + 5000 * 4 + 200 * 24)) < 1e-6 && abs(vcr_measure_value(no_month, "cost") - (1000 * 120 + 5000 * 4)) < 1e-6 &&
+    is.finite(vcr_measure_value(none, "cost")) && vcr_measure_value(none, "cost") == 0
+  list(pass = ok,
+       detail = sprintf("continuous 40 + 30 patients at 1000 each and 4 sites at 5000: cost %s (want 90000, MCSE %s); with a cost per month and no accrual: %s (%s); time to event, 120 patients, accrual 12 + follow-up 12: all three parts %s (want %d), without a monthly part %s (want %d)",
+                        format(cost$value %||% NA_real_), format(cost$mcse %||% NA_real_), if (is.null(vcr_get_measure(monthly, "cost"))) "not computed" else "computed", paste(notes_of(monthly), collapse = " | "),
+                        format(vcr_measure_value(full, "cost")), 1000L * 120L + 5000L * 4L + 200L * 24L, format(vcr_measure_value(no_month, "cost")), 1000L * 120L + 5000L * 4L))
+})
+
+vcr_case("N06h", c("AC-04", "AC-28"), function() {
+  # A grid stopped by its CPU budget before its last cell said `succeeded` with nothing but an issue entry for a trace: the later cells
+  # simply did not exist, and the cells that did run dropped their own conclusion (limited, capped) on the way into diagnostics.cells.
+  # Now the grid is `limited` when it did not run every cell it planned, or any cell ended failed, capped or limited; the result counts
+  # the cells planned against the cells run, and each cell carries its conclusion. The cells that finished are still the deliverable.
+  # Three designs on a continuous endpoint: a small one, one so large that its replicates alone outlast the budget (600,000 patients a
+  # replicate), and a small one that never gets its turn. The budget is 10 CPU seconds (the engine stops at 0.9 of it), the heavy cell
+  # needs minutes whatever the machine, and the small ones need a second or two.
+  mk <- function(designs) list(design = list(kind = "two_arm_fixed", nTreat = 20, nControl = 20), endpoint = list(type = "continuous"), truth = list(effect = 0.5, sd = 1),
+                               analysis = list(method = "ttest", alpha = 0.025, sided = 1), performance = list("power"),
+                               designs = designs, truths = list(list(effect = 0.5)))
+  stopped <- vcr_test_run(vcr_test_job("design.grid", mk(list(list(nTreat = 20, nControl = 20), list(nTreat = 300000, nControl = 300000), list(nTreat = 25, nControl = 25))),
+                                       seed = 7L, replicates = 5000L, cores = 1L, job_id = "job_n06h_stop", extra = list(cpuSecondsLimit = 10, batchSize = 25L)))
+  whole <- vcr_test_run(vcr_test_job("design.grid", mk(list(list(nTreat = 20, nControl = 20), list(nTreat = 25, nControl = 25))), seed = 7L, replicates = 5000L, cores = 1L, job_id = "job_n06h_whole"))
+  d <- stopped$diagnostics
+  codes <- vcr_test_issue_codes(stopped)
+  ok <- identical(stopped$status, "succeeded") && identical(stopped$conclusion, "limited") && d$cellsPlanned == 3L && d$cellsRun == 2L && length(d$cells) == 2L &&
+    "cpu_budget_exhausted" %in% codes && identical(d$cells[[1]]$status, "succeeded") && identical(d$cells[[1]]$conclusion, "estimable") && identical(d$cells[[2]]$status, "failed") &&
+    identical(d$cells[[2]]$conclusion, "limited") &&
+    identical(whole$status, "succeeded") && identical(whole$conclusion, "estimable") && whole$diagnostics$cellsPlanned == 2L && whole$diagnostics$cellsRun == 2L &&
+    identical(whole$diagnostics$cells[[1]]$conclusion, "estimable") && isFALSE(whole$diagnostics$cells[[1]]$replicatesCapped)
+  list(pass = ok,
+       detail = sprintf("three designs, the second too large for a 10-second budget: status %s, conclusion %s, %s of %s cells run (cell statuses %s, conclusions %s), issues %s; a grid that runs every cell: conclusion %s, %s of %s cells",
+                        stopped$status, stopped$conclusion %||% "NULL", d$cellsRun %||% "NULL", d$cellsPlanned %||% "NULL",
+                        paste(vapply(d$cells, function(c_) c_$status, character(1)), collapse = "/"), paste(vapply(d$cells, function(c_) c_$conclusion %||% "NULL", character(1)), collapse = "/"),
+                        paste(codes, collapse = ","), whole$conclusion %||% "NULL", whole$diagnostics$cellsRun %||% "NULL", whole$diagnostics$cellsPlanned %||% "NULL"))
+})
+
 vcr_case("N04d", c("AC-29", "AC-30"), function() {
   # The analytic cross-check at a high replicate count. The log-rank power is a
   # first-order approximation, documented to sit within about a percentage point

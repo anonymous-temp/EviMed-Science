@@ -1247,6 +1247,7 @@
         "analysis.method for a two-arm design follows the endpoint: continuous ttest|ancova; binary risk_difference|logistic; time_to_event logrank|rmst.",
         "A single-arm design runs the analysis of its endpoint: single_arm binary exact_binomial, continuous one_sample_t|one_sample_z, time_to_event one_sample_logrank; single_arm_external binary stratified_risk_difference; simon_two_stage binary simon_boundary.",
         "A single-arm trial of a mean or a survival time is compared with a fixed benchmark: truth.benchmark is the historical mean (continuous), truth.controlMedian or truth.controlDistribution the benchmark survival, and truth.effect (the true mean minus the benchmark) or truth.hazardRatio (the trial's hazard over the benchmark's) is the effect, 0 or 1 for the null. analysis.alternative describes that parameter: for a time-to-event endpoint less is a benefit (a hazard below the benchmark's) and greater is harm.",
+        "costs: the cost measure is perPatient x N + perSite x sites + perMonth x duration. A duration exists only for a time-to-event design with an accrual block, so a continuous or binary design gets its cost from perPatient and perSite, and a perMonth cost there is declined with its reason (diagnostics.performanceNotComputed).",
         "A frozen Simon two-stage design (simon_two_stage) is simulated at truth.responseRate with its given boundaries n1, r1, n, r. truth.alternativeRate and analysis.alpha do not change that; they are what the result reports the frozen design against: diagnostics.frozenDesign holds its exact rejection probability, early-stop probability and expected sample size at truth.nullRate and at truth.alternativeRate, and, when analysis.alpha is written, whether its type I error is within it."
       ],
       "rows": [
@@ -1649,6 +1650,7 @@
         "analysis.method for a two-arm design follows the endpoint: continuous ttest|ancova; binary risk_difference|logistic; time_to_event logrank|rmst.",
         "A single-arm design runs the analysis of its endpoint: single_arm binary exact_binomial, continuous one_sample_t|one_sample_z, time_to_event one_sample_logrank; single_arm_external binary stratified_risk_difference; simon_two_stage binary simon_boundary.",
         "A single-arm trial of a mean or a survival time is compared with a fixed benchmark: truth.benchmark is the historical mean (continuous), truth.controlMedian or truth.controlDistribution the benchmark survival, and truth.effect (the true mean minus the benchmark) or truth.hazardRatio (the trial's hazard over the benchmark's) is the effect, 0 or 1 for the null. analysis.alternative describes that parameter: for a time-to-event endpoint less is a benefit (a hazard below the benchmark's) and greater is harm.",
+        "costs: the cost measure is perPatient x N + perSite x sites + perMonth x duration. A duration exists only for a time-to-event design with an accrual block, so a continuous or binary design gets its cost from perPatient and perSite, and a perMonth cost there is declined with its reason (diagnostics.performanceNotComputed).",
         "A frozen Simon two-stage design (simon_two_stage) is simulated at truth.responseRate with its given boundaries n1, r1, n, r. truth.alternativeRate and analysis.alpha do not change that; they are what the result reports the frozen design against: diagnostics.frozenDesign holds its exact rejection probability, early-stop probability and expected sample size at truth.nullRate and at truth.alternativeRate, and, when analysis.alpha is written, whether its type I error is within it."
       ],
       "rows": [
@@ -2096,7 +2098,8 @@
       "endpoints": ["continuous","binary","time_to_event"],
       "designs": {"two_arm_fixed":["continuous","binary","time_to_event"],"group_sequential":["time_to_event"]},
       "notes": [
-        "design.kind × endpoint.type this method implements: two_arm_fixed (continuous|binary|time_to_event); group_sequential (time_to_event). Any other pairing is refused (design_not_supported)."
+        "design.kind × endpoint.type this method implements: two_arm_fixed (continuous|binary|time_to_event); group_sequential (time_to_event). Any other pairing is refused (design_not_supported).",
+        "design.allocation is the share allocated to treatment. On a time-to-event endpoint it enters the power calculation. On a continuous or binary endpoint the arms are sized by nTreat and nControl: a stated allocation sizes the control arm when nControl is absent (nControl = nTreat x (1 - allocation) / allocation), and a stated nControl is used as it is, with an allocation it contradicts named in diagnostics.notApplied."
       ],
       "rows": [
         {"path":"design","type":"object","required":true},

@@ -587,15 +587,19 @@ vcr_summarize_replicates <- function(values, estimand, scenario, done) {
   if ("cost" %in% wanted) {
     cs <- scenario$costs
     ss <- if ("sampleSize" %in% colnames(values)) values[, "sampleSize"] else numeric(0)
-    if (is.list(cs) && length(dur) > 1L && length(ss[is.finite(ss)]) > 1L) {
-      per <- (vcr_scalar(cs$perPatient, 0) * values[, "sampleSize"] + vcr_scalar(cs$perSite, 0) * vcr_scalar(cs$sites, 0) +
-                vcr_scalar(cs$perMonth, 0) * values[, "duration"])
+    # a duration is needed only by a cost per month: the per-patient and per-site parts of a design with no accrual (continuous, binary)
+    # are known without one
+    monthly <- if (is.list(cs)) vcr_scalar(cs$perMonth, 0) else 0
+    if (is.list(cs) && length(ss[is.finite(ss)]) > 1L && (!(monthly > 0) || length(dur) > 1L)) {
+      per <- vcr_scalar(cs$perPatient, 0) * values[, "sampleSize"] + vcr_scalar(cs$perSite, 0) * vcr_scalar(cs$sites, 0) +
+        (if (monthly > 0) monthly * values[, "duration"] else 0)
       per <- per[is.finite(per)]
       add(vcr_measure("cost", mean(per), simulated = TRUE, mcse = if (stats::sd(per) > 0) vcr_mcse_mean(per) else 0, source = src,
-                      note = "perPatient x N + perSite x sites + perMonth x duration"))
+                      note = if (monthly > 0) "perPatient x N + perSite x sites + perMonth x duration" else "perPatient x N + perSite x sites (no cost per month is stated)"))
     } else {
       notes[[length(notes) + 1L]] <- vcr_issue("performance_measure_unsupported", "performance",
-        "cost needs costs (perPatient, perSite, perMonth, sites) and an accrual duration; it was not computed.")
+        if (is.list(cs) && monthly > 0) "a cost per month needs the scenario's accrual duration (and follow-up); cost was not computed."
+        else "cost needs costs (perPatient, perSite, perMonth, sites); it was not computed.")
     }
   }
   fail_share <- (total - n) / total
@@ -722,11 +726,14 @@ vcr_grid_cell_scenario <- function(base_scenario, design_override, truth_overrid
 vcr_design_grid <- function(base_scenario, designs, truths, seed, replicates = NULL,
                             cores = 1L, cancel_file = NULL, checkpoint_dir = NULL,
                             progress = NULL, batch_size = 500L, cpu_seconds_limit = Inf) {
-  cells <- list(); k <- 0L
+  cells <- list()
   total <- length(designs) * length(truths)
   cpu0 <- vcr_cpu_seconds()
-  for (di in seq_along(designs)) for (ti in seq_along(truths)) {
-    k <- k + 1L
+  # One loop over the cells, designs outermost: a cancel or a spent CPU budget ends the grid, not just the row of it (the `break` of the
+  # nested loops this was ended only the inner one, and the next design's cells were each started with no budget and returned failed).
+  for (k in seq_len(total)) {
+    di <- (k - 1L) %/% length(truths) + 1L
+    ti <- (k - 1L) %% length(truths) + 1L
     sc <- vcr_grid_cell_scenario(base_scenario, designs[[di]], truths[[ti]])
     # Each cell gets its own seed derived from the job seed and the cell index,
     # so adding a cell never changes another cell's numbers.

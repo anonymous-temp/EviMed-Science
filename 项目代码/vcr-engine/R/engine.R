@@ -1703,14 +1703,22 @@ vcr_job_design_grid <- function(job, output_dir = NULL, cancel_file = NULL, prog
     issues <- c(issues, list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit",
       "The CPU budget ran out during the grid; the cells that finished are reported and the rest were not run.")))
   }
+  # A grid that did not run every cell, or whose cells ended failed, capped or limited, is `limited`: the cells that finished are the
+  # deliverable and say so, and the cells that did not run are counted against the ones planned.
+  planned <- length(designs) * length(truths)
+  cell_limited <- vapply(cells, function(c_) !identical(c_$status, "succeeded") || identical(c_$diagnostics$conclusion, "limited") || isTRUE(c_$diagnostics$replicatesCapped), logical(1))
   list(status = status,
+       conclusion = if (length(cells) < planned || any(cell_limited)) "limited" else "estimable",
        measures = list(vcr_measure("cells", length(cells), source = "calculated")),
        counts = vcr_counts(),
        issues = issues,
-       diagnostics = list(replicatesCompleted = done,
+       diagnostics = list(replicatesCompleted = done, cellsPlanned = planned, cellsRun = length(cells),
                           # the cells with their numbers: the page draws the heat grid from these (the full table stays a CSV)
                           cells = lapply(cells, function(c_) list(designIndex = c_$designIndex, truthIndex = c_$truthIndex, seed = c_$seed,
                                                                   scenarioHash = c_$scenarioHash, status = c_$status,
+                                                                  # a cell that stopped before it finished and holds measures says `limited`, as a stopped job does
+                                                                  conclusion = if (identical(c_$status, "succeeded")) c_$diagnostics$conclusion else if (length(c_$measures)) "limited" else NULL,
+                                                                  replicatesCapped = isTRUE(c_$diagnostics$replicatesCapped),
                                                                   refusal = if (!is.null(c_$refusal)) c_$refusal$code else NULL,
                                                                   measures = lapply(c_$measures, function(m) list(name = m$name, value = m$value, mcse = m$mcse))))),
        tables = .vcr_tables_of(list(vcr_write_table(long, "operating-characteristics", output_dir))))
@@ -1734,6 +1742,17 @@ vcr_job_assurance <- function(job, ...) {
   if (identical(as.character(sc[["design"]][["kind"]] %||% "two_arm_fixed"), "group_sequential")) {
     return(.vcr_job_assurance_group_sequential(job, prior, basis, kind, e, alpha, sided, pmean, psd))
   }
+  # On a continuous or binary endpoint the arms are sized by nTreat and nControl. A stated allocation (the share allocated to treatment)
+  # sizes the control arm when nControl is not given, and gives way to the sizes when it is: a size is the more specific statement.
+  # (On a time-to-event endpoint the design has events, not sizes, and the allocation enters the calculation itself.)
+  not_applied <- list()
+  if (!identical(e, "time_to_event") && !is.null(sc[["design"]][["allocation"]])) {
+    a <- vcr_scalar(sc[["design"]][["allocation"]], 0.5)
+    if (is.null(sc[["design"]][["nControl"]])) n0 <- ceiling(n1 * (1 - a) / a)
+    else if (abs(n1 / (n1 + n0) - a) > 0.5 / (n1 + n0) + 1e-9) {
+      not_applied <- list(vcr_not_applied("design.allocation", sprintf("nTreat and nControl state the allocation of this design (%.4g to treatment); the sizes are used", n1 / (n1 + n0))))
+    }
+  }
   # A lognormal prior on a hazard ratio is a normal prior on log(HR) with the
   # same two numbers, so for a time-to-event endpoint the two kinds agree; on
   # the other endpoints the effect is not a ratio and only `normal` applies.
@@ -1753,9 +1772,11 @@ vcr_job_assurance <- function(job, ...) {
        measures = list(vcr_measure("assurance", out$assurance, source = "calculated"),
                        vcr_measure("power_at_prior_mean", out$power, source = "calculated")),
        counts = vcr_counts(),
-       diagnostics = list(designPrior = prior, priorBasis = basis, priorKind = kind,
-                          priorMassOutsideUnitInterval = out$priorMassOutsideUnitInterval,
-                          note = "Assurance integrates power over the design prior; it is not a trial-success prediction score."))
+       diagnostics = c(list(designPrior = prior, priorBasis = basis, priorKind = kind,
+                            priorMassOutsideUnitInterval = out$priorMassOutsideUnitInterval,
+                            note = "Assurance integrates power over the design prior; it is not a trial-success prediction score."),
+                       if (!identical(e, "time_to_event")) list(arms = list(nTreat = n1, nControl = n0)),
+                       if (length(not_applied)) list(notApplied = not_applied)))
 }
 
 #' The assurance of a group-sequential design: the power of the whole sequential procedure under the design prior (the headline,

@@ -145,6 +145,40 @@ vcr_case("N19c", c("AC-07", "AC-04"), function() {
                         deliberate$diagnostics$priorBasis, refused$status, paste(vcr_test_issue_codes(refused), collapse = ",")))
 })
 
+vcr_case("N19d", c("AC-07", "AC-04"), function() {
+  # `design.allocation` of a continuous or binary assurance. The arms of those designs are sized by nTreat and nControl; the key was
+  # accepted and never read, so a design stated as "200 treated, 80% allocated to treatment" was assessed with 200 controls. Now a
+  # stated allocation sizes the control arm when nControl is absent (n0 = n1 (1 - a) / a), and when nControl is stated the sizes are the
+  # more specific statement: the allocation is named in diagnostics.notApplied if it contradicts them. The reference is the integral of
+  # the z-test's power over the design prior written here, with the standard error of the arms actually sized.
+  run <- function(design, tag, endpoint = "continuous") {
+    sc <- list(design = design, endpoint = list(type = endpoint), designPrior = list(kind = "normal", mean = 0.3, sd = 0.15), analysis = list(alpha = 0.025, sided = 1))
+    sc$truth <- if (identical(endpoint, "binary")) list(controlRate = 0.3) else list(sd = 1)
+    if (identical(endpoint, "binary")) sc$designPrior <- list(kind = "normal", mean = 0.08, sd = 0.05)
+    vcr_test_run(vcr_test_job("design.assurance", sc, job_id = paste0("job_n19d_", tag)))
+  }
+  z <- stats::qnorm(0.975)
+  integral <- function(n1, n0) { se <- sqrt(1 / n1 + 1 / n0); stats::integrate(function(d) stats::pnorm(d / se - z) * stats::dnorm(d, 0.3, 0.15), -Inf, Inf, rel.tol = 1e-10)$value }
+  from_allocation <- run(list(nTreat = 200, allocation = 0.8), "alloc")          # nControl = 200 x 0.2 / 0.8 = 50
+  explicit <- run(list(nTreat = 200, nControl = 50), "explicit")
+  consistent <- run(list(nTreat = 200, nControl = 50, allocation = 0.8), "consistent")
+  contradicted <- run(list(nTreat = 200, nControl = 200, allocation = 0.8), "contradicted")
+  equal <- run(list(nTreat = 200), "equal")
+  na_keys <- function(r) vapply(r$diagnostics$notApplied %||% list(), function(x) x$key, character(1))
+  ok_cont <- abs(vcr_measure_value(from_allocation, "assurance") - integral(200, 50)) < 1e-8 && identical(vcr_measure_value(from_allocation, "assurance"), vcr_measure_value(explicit, "assurance")) &&
+    identical(from_allocation$diagnostics$arms, list(nTreat = 200, nControl = 50)) && length(na_keys(from_allocation)) == 0L &&
+    identical(vcr_measure_value(consistent, "assurance"), vcr_measure_value(explicit, "assurance")) && length(na_keys(consistent)) == 0L &&
+    abs(vcr_measure_value(contradicted, "assurance") - integral(200, 200)) < 1e-8 && identical(na_keys(contradicted), "design.allocation") &&
+    abs(vcr_measure_value(equal, "assurance") - integral(200, 200)) < 1e-8 && abs(integral(200, 50) - integral(200, 200)) > 0.05
+  # a binary endpoint takes the same rule: the allocation is the same job as the sizes it implies
+  bin_alloc <- run(list(nTreat = 300, allocation = 0.75), "bin_alloc", "binary"); bin_sized <- run(list(nTreat = 300, nControl = 100), "bin_sized", "binary")
+  ok_bin <- identical(bin_alloc$status, "succeeded") && identical(vcr_measure_value(bin_alloc, "assurance"), vcr_measure_value(bin_sized, "assurance")) && is.finite(vcr_measure_value(bin_alloc, "assurance"))
+  list(pass = ok_cont && ok_bin,
+       detail = sprintf("200 treated, allocation 0.8, no control size: assurance %.8f (integral at 200 + 50: %.8f; with 200 controls it would be %.8f); a consistent allocation beside nControl 50: notApplied %s; a contradicted one (200 + 200): assurance %.8f, notApplied %s; binary, 300 treated at 0.75 = nControl 100: %.8f vs %.8f",
+                        vcr_measure_value(from_allocation, "assurance"), integral(200, 50), integral(200, 200), if (length(na_keys(consistent))) "named" else "none",
+                        vcr_measure_value(contradicted, "assurance"), paste(na_keys(contradicted), collapse = ","), vcr_measure_value(bin_alloc, "assurance"), vcr_measure_value(bin_sized, "assurance")))
+})
+
 vcr_case("N20", c("AC-10", "AC-28"), function() {
   # The operating characteristics of a borrowing design over a grid of
   # control-rate drift (plan 5.3: type-I error and power in scenarios where the
