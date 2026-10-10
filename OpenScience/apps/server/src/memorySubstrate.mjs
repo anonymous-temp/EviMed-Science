@@ -180,7 +180,20 @@ export class MemorySubstrate {
     // component that holds no original data. An operator who would rather see
     // the failure sets this.
     this.strict = Boolean(config.memoryIndexStrict);
+    /**
+     * The code of the last time the index could not answer a recall, or null
+     * once it did again. It is what readiness, the degraded gauge and its
+     * alert ("every recall for fifteen minutes fell back") read, so it states
+     * the index's condition now and nothing else: it was assigned on a
+     * failure and never cleared, so one transient failure alarmed until a
+     * restart, and a failure of the store (the labels of a memory) set it too
+     * (2026-10-10 review M-6).
+     * @type {string | null}
+     */
     this.lastError = null;
+    /** The same for the labels a recall carries (conflicts, source states): the
+     *  memories were served unlabelled, which is no index outage. @type {string | null} */
+    this.lastLinksError = null;
     /** Where the index sweep resumes: the last account it visited. */
     this.sweepCursor = "";
     /** What the last sweep did, for status and tests. @type {{ accounts: number, removed: number, enqueued: number, code?: string } | null} */
@@ -281,7 +294,8 @@ export class MemorySubstrate {
     try {
       return await this.#rankedRecall(userId, query, { projectId, sessionId, now });
     } catch (error) {
-      this.lastError = error?.code ?? "memory_index_unavailable";
+      // Whether the index failed is `#rankedRecall`'s to say (`lastError`); an
+      // error of the store behind it falls back all the same.
       if (this.strict) throw error;
       // Fall back rather than fail: the term matcher needs no index and reads
       // the same authoritative records.
@@ -291,18 +305,27 @@ export class MemorySubstrate {
 
   async #rankedRecall(userId, query, { projectId, sessionId, now }) {
     if (this.contextLimit === 0 || this.contextMaxChars === 0) return [];
-    const hits = await this.openViking.find(userId, query, {
-      targets: recallTargets(userId, { projectId, sessionId }),
-      limit: this.contextLimit * CANDIDATE_OVERFETCH,
-      peerId: projectId,
-      // The memory page's floor (2026-10-10 review M-3). Without one the index
-      // answers with its nearest neighbours however far they are, and a
-      // greeting was handed eight memories under 「与当前问题相关」. The
-      // builtin arm needs a term match for everything but the durable kinds;
-      // this is the same gate for the index arm, and the durable kinds join
-      // below.
-      scoreThreshold: this.searchMinScore,
-    });
+    /** @type {any[]} */
+    let hits;
+    try {
+      hits = await this.openViking.find(userId, query, {
+        targets: recallTargets(userId, { projectId, sessionId }),
+        limit: this.contextLimit * CANDIDATE_OVERFETCH,
+        peerId: projectId,
+        // The memory page's floor (2026-10-10 review M-3). Without one the index
+        // answers with its nearest neighbours however far they are, and a
+        // greeting was handed eight memories under 「与当前问题相关」. The
+        // builtin arm needs a term match for everything but the durable kinds;
+        // this is the same gate for the index arm, and the durable kinds join
+        // below.
+        scoreThreshold: this.searchMinScore,
+      });
+    } catch (error) {
+      this.lastError = error?.code ?? "memory_index_unavailable";
+      throw error;
+    }
+    // The index answered, whatever the store does with the answer.
+    this.lastError = null;
 
     const nominated = [];
     const seen = new Set();
@@ -408,15 +431,17 @@ export class MemorySubstrate {
    * and the sources they rest on that are no longer as they were. Read from the
    * store that holds them. A store that cannot say (a double that predates the
    * relations, a read that failed) leaves the memories unlabelled and says so in
-   * `lastError` — the recall is not failed by it, and it is not claimed clean.
+   * `lastLinksError` — the recall is not failed by it, and it is not claimed clean.
    * @param {string} userId @param {string[]} recordIds
    */
   async #linksOf(userId, recordIds) {
     if (recordIds.length === 0 || typeof this.store?.recallLinks !== "function") return undefined;
     try {
-      return await this.store.recallLinks(userId, recordIds);
+      const links = await this.store.recallLinks(userId, recordIds);
+      this.lastLinksError = null;
+      return links;
     } catch (error) {
-      this.lastError = error?.code ?? "memory_links_unavailable";
+      this.lastLinksError = error?.code ?? "memory_links_unavailable";
       return undefined;
     }
   }

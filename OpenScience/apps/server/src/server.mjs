@@ -9611,8 +9611,13 @@ async function readinessMemoryIndex(config, substrate, worker) {
     ...(rerank ? { rerank } : {}),
     // Whether recall has had to answer without the index. It is the one symptom
     // of "up but refusing" that the reader of a recall can observe, and it was
-    // computed and then kept to itself.
-    ...(substrate?.lastError ? { recall: { lastError: substrate.lastError } } : {}),
+    // computed and then kept to itself. `lastError` is the index's condition
+    // now (it clears when the index answers again; the degraded gauge reads it);
+    // `linksError` is memories served without their labels, which is not.
+    ...(substrate?.lastError || substrate?.lastLinksError ? { recall: {
+      ...(substrate.lastError ? { lastError: substrate.lastError } : {}),
+      ...(substrate.lastLinksError ? { linksError: substrate.lastLinksError } : {}),
+    } } : {}),
   };
   if (required && !(status.configured && status.connected)) {
     throw readinessFailure(status.code ?? "memory_index_unavailable", details);

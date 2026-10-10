@@ -396,3 +396,29 @@ test("readiness names a builtin pin on a deployment whose index is configured", 
     await rm(keyDir, { recursive: true, force: true });
   }
 });
+
+// 2026-10-10 review M-6: readiness (and the degraded gauge that reads it) kept saying the recall had fallen back to the
+// term matcher after one failed index call, until the process restarted.
+test("readiness says the recall fell back while the index failed, and stops saying so once it answers", async () => {
+  let down = true;
+  const openViking = {
+    configured: true,
+    async status() { return { configured: true, connected: true, code: null }; },
+    async find() {
+      if (down) throw Object.assign(new Error("index down"), { code: "memory_index_timeout" });
+      return [];
+    },
+    async write() { return { ok: true }; },
+    async remove() { return true; },
+  };
+  const memory = recordingMemory();
+  await withApp(async ({ base }) => {
+    const recall = async () => (await (await fetch(`${base}/api/ready`)).json()).data.checks.memoryIndex.recall;
+    assert.equal(await recall(), undefined, "nothing has failed yet");
+    await dispatchOnce(base, "ses_index_down");
+    assert.deepEqual(await recall(), { lastError: "memory_index_timeout" });
+    down = false;
+    await dispatchOnce(base, "ses_index_back");
+    assert.equal(await recall(), undefined, "the index answered: the recall is no longer degraded");
+  }, { researchMemory: memory, memoryIndexProvider: "openviking", openVikingClient: openViking });
+});

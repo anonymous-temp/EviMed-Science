@@ -319,6 +319,58 @@ test("an index that is down degrades the recall instead of failing the run", asy
   assert.equal(substrate.lastError, "memory_index_unavailable", "a silent fallback is an outage nobody can see");
 });
 
+// 2026-10-10 review M-6: `lastError` was assigned on a failure and never cleared, so the readiness field, the
+// open_science_memory_recall_degraded gauge and the alert behind it (which says every recall for fifteen minutes fell
+// back) stayed on after one transient failure, until a restart. It was also set by a failure to read the labels of a
+// memory (conflicts, source states) from the store, which is not an index outage.
+test("the degraded signal clears when the index answers again, and only an index failure sets it", async () => {
+  const records = [record({ id: "rec1" })];
+  const store = fakeStore(records);
+  const flaky = fakeIndex([hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.9)]);
+  const find = flaky.find;
+  let down = true;
+  flaky.find = async (...args) => {
+    if (down) throw Object.assign(new Error("gone"), { code: "memory_index_timeout" });
+    return find(...args);
+  };
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: flaky });
+  assert.equal(substrate.lastError, null);
+
+  assert.deepEqual((await substrate.recall(USER, "tables", {})).map((row) => row.id), ["fallback"]);
+  assert.equal(substrate.lastError, "memory_index_timeout");
+
+  down = false;
+  assert.deepEqual((await substrate.recall(USER, "tables", {})).map((row) => row.id), ["record:rec1"]);
+  assert.equal(substrate.lastError, null, "one transient failure must not alarm until a restart");
+});
+
+test("a failure to read a memory's labels is not an index outage, and clears with the next read that works", async () => {
+  const rec = record({ id: "rec1" });
+  const index = fakeIndex([hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.9)]);
+  let broken = true;
+  const store = { ...fakeStore([rec]), async recallLinks() {
+    if (broken) throw Object.assign(new Error("relations table locked"), { code: "memory_links_unavailable" });
+    return { conflicts: new Map(), sources: new Map() };
+  } };
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: index });
+
+  assert.deepEqual((await substrate.recall(USER, "tables", {})).map((row) => row.id), ["record:rec1"], "served, unlabelled");
+  assert.equal(substrate.lastError, null, "the index answered; this is not what the degraded gauge and its alert are about");
+  assert.equal(substrate.lastLinksError, "memory_links_unavailable", "but it is not claimed clean either");
+
+  broken = false;
+  await substrate.recall(USER, "tables", {});
+  assert.equal(substrate.lastLinksError, null);
+  assert.equal(substrate.lastError, null);
+});
+
+test("a failure of the store behind a ranked recall is not the index's either", async () => {
+  const store = { ...fakeStore([record({ id: "rec1" })]), async listRecords() { throw Object.assign(new Error("db blip"), { code: "memory_store_unavailable" }); } };
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: fakeIndex([]) });
+  assert.deepEqual((await substrate.recall(USER, "tables", {})).map((row) => row.id), ["fallback"], "the term matcher still answers");
+  assert.equal(substrate.lastError, null, "the index answered");
+});
+
 test("an operator who would rather see the failure gets it", async () => {
   const failure = Object.assign(new Error("gone"), { code: "memory_index_unavailable" });
   const substrate = new MemorySubstrate(
