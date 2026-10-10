@@ -544,7 +544,8 @@
       }
     ],
     "trainingRecords": 3412,
-    "copies": 1
+    "copies": 1,
+    "scope": null
   },
   "counts": {
     "realPatients": 3412,
