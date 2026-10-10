@@ -110,7 +110,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import {
-  RUNTIME_WORKSPACE_ROOT, VCR_ANALYSIS_TABLES, VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_MIN_CELL_SIZE, VCR_MISSING_REASONS,
+  RUNTIME_WORKSPACE_ROOT, VCR_ANALYSIS_TABLES, VCR_COLUMN_SOURCE_LIMITS, VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_MIN_CELL_SIZE, VCR_MISSING_REASONS,
   VCR_QUALITY_CATEGORIES, VCR_REAL_PATIENT_SOURCES, VCR_SOURCE_FORMATS, VCR_TIME_KINDS, VCR_VALUE_SOURCES, canonicalScenarioJson,
   suppressForModel, vcrTierSupportedBy, workspaceLayout,
 } from "@evimed/domain";
@@ -552,6 +552,31 @@ export function weakestSource(sources, fallback) {
  * @param {{ valueSource?: string | null } | null | undefined} entry @param {string} fileSource
  */
 export const columnSourceOf = (entry, fileSource) => entry?.valueSource ?? fileSource;
+
+/**
+ * The per-column sources a table input carries to the engine (`columnSources`, contract §3.2), which labels a result
+ * with the weakest source of the columns its method used. Without them one imputed column labels every result of the
+ * table with the table's own, weakest, source, whether or not the method read that column.
+ *
+ * Only what the engine protocol accepts is sent, so a job is never refused for its labels: a table of real people's
+ * rows only (any other has no sources per column), the columns the input holds, each with one of the real-patient
+ * words, a name of at most the protocol's length, and no more than its cap. A column left out has the table's own
+ * source, which is the weakest of its columns, so the label can fall short of the truth and never exceed it.
+ * @param {unknown} columnSources the table's, by column name @param {Iterable<string>} columns the names the input holds
+ * @param {string} valueSource the input's own @returns {Record<string, string> | null} null when there is nothing to send
+ */
+export function engineColumnSources(columnSources, columns, valueSource) {
+  if (!VCR_REAL_PATIENT_SOURCES.includes(valueSource) || !isObject(columnSources)) return null;
+  const held = /** @type {Record<string, unknown>} */ (columnSources);
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const name of columns) {
+    const source = Object.hasOwn(held, name) ? held[name] : undefined;
+    if (typeof source === "string" && VCR_REAL_PATIENT_SOURCES.includes(source) && name && [...name].length <= VCR_COLUMN_SOURCE_LIMITS.maxNameLength) out[name] = source;
+  }
+  const named = Object.keys(out).length;
+  return named > 0 && named <= VCR_COLUMN_SOURCE_LIMITS.maxColumns ? out : null;
+}
 
 // ---------------------------------------------------------------------------
 // Hashing and reading bytes (the control plane may; the model may not)
@@ -2705,7 +2730,7 @@ export class VcrDataPlane {
    *   kind?: string | null, jobKind?: string | null, method?: string | null, endpointType?: string | null,
    *   include?: ("subject" | "longitudinal" | "events" | "files")[] | null }} input
    * @returns {Promise<{ snapshotId: string,
-   *   inputs: { kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string }[],
+   *   inputs: { kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string> }[],
    *   withheld: { id: string, kind: string, shape?: string, reason: string, fields: string[] }[],
    *   outcomeFieldsRead: string[], grantId: string | null }>}
    */
@@ -2762,7 +2787,7 @@ export class VcrDataPlane {
     /** @type {Map<string, string>} */
     const why = new Map(decision.fields.denied.map((denial) => [denial.field, denial.code === "vcr_field_sealed" ? "sealed" : denial.code === "vcr_field_identifying" ? "identifying" : "not_granted"]));
 
-    /** @type {{ kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string }[]} */
+    /** @type {{ kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string> }[]} */
     const inputs = [];
     /** @type {{ id: string, kind: string, shape?: string, reason: string, fields: string[] }[]} */
     const withheld = [];
@@ -2776,7 +2801,9 @@ export class VcrDataPlane {
       const mapped = table.derivedFrom?.columns ?? [];
       const missing = [...new Set(mapped.map((column) => column.source).filter((name) => judgeable(name) && !allowed.has(name)))];
       if (!missing.length) {
-        inputs.push({ kind: "analysis_table", id, shape: table.shape, location: table.location, hash: table.sha256, valueSource: table.valueSource });
+        const labels = engineColumnSources(table.derivedFrom?.columnSources, table.columns, table.valueSource);
+        inputs.push({ kind: "analysis_table", id, shape: table.shape, location: table.location, hash: table.sha256, valueSource: table.valueSource,
+          ...(labels ? { columnSources: labels } : {}) });
         if (table.outcomeBearing) for (const column of mapped.map((item) => item.source)) if (outcomeColumns.has(column)) outcomeRead.add(column);
         continue;
       }
@@ -2787,7 +2814,10 @@ export class VcrDataPlane {
         const written = await writeContentAddressed(root, path.posix.join(studyRelative(studyId), "views", snapshot.id), "csv", toCsv(projection.header, projection.rows));
         // The view holds fewer columns than the table, so it is labelled by the columns it holds.
         const viewSource = weakestSource(carried.map((column) => column.valueSource ?? table.valueSource), table.valueSource);
-        inputs.push({ kind: "analysis_table", id, shape: table.shape, location: written.location, hash: written.sha256, valueSource: viewSource });
+        // and by the columns it holds: a held-back imputed column does not label the columns that are handed over
+        const labels = engineColumnSources(table.derivedFrom?.columnSources, carried.map((column) => column.name), viewSource);
+        inputs.push({ kind: "analysis_table", id, shape: table.shape, location: written.location, hash: written.sha256, valueSource: viewSource,
+          ...(labels ? { columnSources: labels } : {}) });
         continue;
       }
       withheld.push({ id, kind: "analysis_table", shape: table.shape, reason: why.get(missing[0]) ?? "not_granted", fields: missing });
@@ -2826,7 +2856,11 @@ export class VcrDataPlane {
         const projection = projectTable(parsed, { keep, rename, keyColumn: keyEntry?.column ?? null, key });
         const written = await writeContentAddressed(root, path.posix.join(studyRelative(studyId), "views", snapshot.id), "csv", toCsv(projection.header, projection.rows));
         const viewSource = weakestSource(keep.map((name) => columnSourceOf(own.find((entry) => entry.column === name), snapshot.valueSource)), snapshot.valueSource);
-        inputs.push({ kind: "snapshot_file", id, location: written.location, hash: written.sha256, valueSource: viewSource });
+        // each kept column is named in the view as the view renamed it
+        const heldSources = Object.fromEntries(keep.map((name) => [rename[name] ?? name, columnSourceOf(own.find((entry) => entry.column === name), snapshot.valueSource)]));
+        const labels = engineColumnSources(heldSources, Object.keys(heldSources), viewSource);
+        inputs.push({ kind: "snapshot_file", id, location: written.location, hash: written.sha256, valueSource: viewSource,
+          ...(labels ? { columnSources: labels } : {}) });
         for (const name of keep) if (outcomeColumns.has(name)) outcomeRead.add(name);
       }
     }
@@ -2847,7 +2881,7 @@ export class VcrDataPlane {
   /**
    * The inputs the engine may read for one snapshot, as the job queue attaches
    * them: `[{ kind: "analysis_table" | "snapshot_file", id, shape?, location,
-   * hash, valueSource }]` (contract §3.2). A refusal is thrown — 404 for a
+   * hash, valueSource, columnSources? }]` (contract §3.2). A refusal is thrown — 404 for a
    * snapshot that is not the study's, 403 for a principal who may not read it or
    * a snapshot every table of which is withheld — never an empty answer a caller
    * could read as 「没有数据」. {@link resolveSnapshotInputs} has the same call
