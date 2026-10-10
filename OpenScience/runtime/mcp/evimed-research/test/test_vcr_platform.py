@@ -75,6 +75,25 @@ import('@evimed/domain').then((m) => {
     return json.loads(out.stdout.strip().splitlines()[-1])
 
 
+def domain_longitudinal_keys():
+    """The keys each control-plane (forecast) kind's scenario may carry, from `VCR_LONGITUDINAL_SCHEMAS` read by Node."""
+    node = shutil.which("node")
+    assert node, "node must be installed"
+    script = """
+import('@evimed/domain').then((m) => {
+  const out = {};
+  for (const [kind, method] of Object.entries(m.VCR_JOB_METHODS)) {
+    const schema = m.VCR_LONGITUDINAL_SCHEMAS[method];
+    if (schema) out[kind] = [...schema.required, ...schema.optional];
+  }
+  process.stdout.write(JSON.stringify(out));
+});
+"""
+    done = subprocess.run([node, "--input-type=module", "-e", script], cwd=OPEN_SCIENCE / "apps" / "server",
+                          capture_output=True, text=True, timeout=60, check=True)
+    return {kind: set(keys) for kind, keys in json.loads(done.stdout).items()}
+
+
 def domain_paths():
     """Every dotted key path each job kind's scenario may carry, from the validator's own schemas: an oracle that does not read the
     generated help. A list's items and a variant's members are paths like any other (``[]`` is not part of a name here)."""
@@ -200,8 +219,12 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertEqual(set(help_["kinds"]), set(vcr_platform.JOB_KINDS))
         self.assertGreaterEqual(len(oracle), 24)
         walked = 0
+        longitudinal = domain_longitudinal_keys()
         for kind in vcr_platform.JOB_KINDS:
             answer = vcr_platform.shape({"kind": kind})["data"]
+            if answer.get("controlPlane"):
+                self.assertEqual({line.split(":", 1)[0] for line in answer["keys"]}, longitudinal[kind], kind)
+                continue
             if answer.get("builtByPlatform"):
                 continue
             lines = answer["keys"]
