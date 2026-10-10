@@ -214,3 +214,32 @@ test("every action on a pack writes an audit row with ids and counts, and a prev
   assert.equal(audited[2].details.dropped, 1);
   assert.ok(!JSON.stringify(audited).includes("test-only-transfer"), "no password, no content");
 });
+
+// 2026-10-10 review C-5: deleting a capsule was a soft delete and its share links and hosted snapshots kept serving.
+test("deleting a capsule ends its links and revokes its hosted snapshots, and only once the removal succeeded", async (t) => {
+  const calls = [];
+  const store = { ensureSessionUser: async () => ({ user: { id: "owner" } }), assertCsrf: async () => {} };
+  const service = {
+    remove: async (user, id, revision) => {
+      calls.push(["remove", user, id, revision]);
+      if (revision !== 3) throw new HttpError(409, "product_revision_conflict", "Revision conflict.");
+      return { id, deleted: true };
+    },
+  };
+  const links = { revokeForCapsule: async (user, id) => { calls.push(["links", user, id]); return 2; } };
+  const transferService = { revokeAllForCapsule: async (user, id) => { calls.push(["snapshots", user, id]); return ["snap-1"]; } };
+  const audits = [];
+  const handle = createCapsuleRoutes({ store, service, links, transferService, maxJsonBytes: 100000, audit: async (_user, event, detail) => { audits.push([event, detail]); } });
+  const server = createServer((req, res) => { handle(req, res).then((handled) => { if (!handled) { res.writeHead(404); res.end(); } }).catch((error) => sendError(res, error)); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const remove = (revision) => fetch(`${base}/api/capsules/capsule-one`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ expectedRevision: revision }) });
+
+  assert.equal((await remove(2)).status, 409);
+  assert.deepEqual(calls, [["remove", "owner", "capsule-one", 2]], "a removal that failed withdraws nothing");
+  calls.length = 0;
+  assert.equal((await remove(3)).status, 200);
+  assert.deepEqual(calls, [["remove", "owner", "capsule-one", 3], ["links", "owner", "capsule-one"], ["snapshots", "owner", "capsule-one"]]);
+  assert.deepEqual(audits, [["capsule.share.withdrawn-on-delete", { capsuleId: "capsule-one", links: 2, snapshots: 1 }]]);
+});

@@ -509,6 +509,29 @@ export class CapsuleTransferService {
     return { items: page.items.map(snapshotView), nextCursor: page.nextCursor };
   }
 
+  /**
+   * Revoke every hosted snapshot of a capsule that has been deleted, so nothing more is imported from it; what
+   * recipients already imported is theirs, as with `revoke`. Reads the snapshot records directly: the capsule
+   * itself is already gone. Idempotent. @param {string} userId @param {string} capsuleId @returns {Promise<string[]>}
+   */
+  async revokeAllForCapsule(userId, capsuleId) {
+    const revoked = [];
+    /** @type {string | null} */
+    let cursor = null;
+    for (let pages = 0; pages < 50; pages += 1) {
+      const page = await this.documents.list(userId, "preferences", { limit: 100, cursor, filter: { recordType: "capsule-snapshot", capsuleId } });
+      for (const record of page.items) {
+        if (record.payload.status === "revoked") continue;
+        await this.documents.put(userId, "preferences", record.id, { ...record.payload, status: "revoked", revokedAt: new Date().toISOString() },
+          { expectedRevision: record.revision });
+        revoked.push(record.id);
+      }
+      if (!page.nextCursor) break;
+      cursor = page.nextCursor;
+    }
+    return revoked;
+  }
+
   async snapshot(userId, capsuleId, snapshotId) {
     await this.capsules.get(userId, capsuleId);
     const record = await this.documents.get(userId, "preferences", snapshotId);

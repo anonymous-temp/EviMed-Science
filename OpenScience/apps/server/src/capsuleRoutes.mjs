@@ -264,7 +264,13 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
         await bodyOf(req, maxJsonBytes, ["title", "description", "expectedRevision"])));
       if (method === "DELETE") {
         const body = await bodyOf(req, maxJsonBytes, ["expectedRevision"]);
-        return reply(await service.remove(user.id, capsuleId, body.expectedRevision));
+        const removed = await service.remove(user.id, capsuleId, body.expectedRevision);
+        // A deleted capsule is no longer handed out (2026-10-10 review C-5): its links end and its hosted snapshots
+        // are revoked, after the removal itself succeeded. What recipients already imported is theirs, as with a revoke.
+        const endedLinks = links ? await links.revokeForCapsule(user.id, capsuleId) : 0;
+        const snapshots = transferService?.revokeAllForCapsule ? await transferService.revokeAllForCapsule(user.id, capsuleId) : [];
+        if (endedLinks || snapshots.length) await audit(user, "capsule.share.withdrawn-on-delete", { capsuleId, links: endedLinks, snapshots: snapshots.length });
+        return reply(removed);
       }
     }
     if (parts.length === 2 && action === "activate" && method === "POST") {

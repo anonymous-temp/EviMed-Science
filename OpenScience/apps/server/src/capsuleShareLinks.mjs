@@ -161,6 +161,18 @@ export class CapsuleShareLinks {
     return linkView(row, this.now());
   }
 
+  /**
+   * Every link of a capsule ends when the capsule is deleted (2026-10-10 review C-5: a deleted capsule's links kept
+   * serving until revoked by hand or expired). @param {string} ownerId @param {string} capsuleId
+   */
+  async revokeForCapsule(ownerId, capsuleId) {
+    await migrateCapsuleShare(this.database);
+    const result = await this.database.query(
+      "UPDATE evimed_share.links SET revoked_at=clock_timestamp() WHERE owner_id=$1 AND capsule_id=$2 AND revoked_at IS NULL",
+      [productId(ownerId, "user"), String(capsuleId)]);
+    return result.rowCount ?? 0;
+  }
+
   /** Every link of a snapshot ends with it. @param {string} ownerId @param {readonly string[]} snapshotIds */
   async revokeForSnapshots(ownerId, snapshotIds) {
     if (!snapshotIds.length) return 0;
