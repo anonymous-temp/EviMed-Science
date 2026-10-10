@@ -61,10 +61,11 @@ import { isDeepStrictEqual } from "node:util";
 
 import {
   VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
-  VCR_HOSTED_MODEL_INTERFACES, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH,
+  VCR_FORECAST_MODEL_INTERFACES, VCR_HOSTED_MODEL_INTERFACES, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH,
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS,
-  VCR_DEFAULT_TIME_UNIT, allowanceWaitingNote, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, vcrCommonTimeUnit, vcrConvertTime,
-  vcrModelInterfaceOf, vcrScenarioChildKeys, vcrScenarioParentOf, vcrTimeUnitOf, whenHolds,
+  VCR_DEFAULT_TIME_UNIT, allowanceWaitingNote, knownErrorCodeMessage, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, validateLongitudinalScenario,
+  vcrCommonTimeUnit, vcrConvertTime, vcrEventHistoryScopeIssues, vcrModelCardIssues, vcrModelInterfaceOf, vcrScenarioChildKeys, vcrScenarioParentOf, vcrTimeUnitOf,
+  whenHolds,
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
@@ -436,8 +437,16 @@ export function vcrStepUpdates({ steps, seen, flying, plan }) {
   return updates;
 }
 
+/**
+ * Why a forecast step was declined (G12): the deployment has no forecast service for the model, the study has no frozen history, or the
+ * service does not offer the endpoint or the horizon asked. Each depends on something outside the object (a provider configured later, a
+ * history frozen later), so a step skipped for one of them is asked again when the plan has what it lacked (`#enqueueFor`).
+ */
+const FORECAST_UNAVAILABLE_REASONS = Object.freeze(["forecast_provider_unavailable", "forecast_history_missing", "forecast_endpoint_unsupported", "forecast_horizon_unsupported"]);
+
 /** Why a job was not run that is not a failure: the engine does not implement it, or an earlier stage already ended the question. */
-const UNAVAILABLE_REASONS = Object.freeze(["design_not_supported", "route_unavailable", "model_comparator_unavailable", "data_tier_insufficient", "previous_not_estimable"]);
+const UNAVAILABLE_REASONS = Object.freeze(["design_not_supported", "route_unavailable", "model_comparator_unavailable", "data_tier_insufficient", "previous_not_estimable",
+  ...FORECAST_UNAVAILABLE_REASONS]);
 
 /** What a job mark says about why its object is not being computed, as a sentence. @param {any} mark */
 function noteOfMark(mark) {
@@ -945,13 +954,73 @@ function maicTimeToEventPlan(configuration) {
 }
 
 /**
+ * A patient set that names a model of the event-history call shape, planned onto the longitudinal forecast path: one
+ * `forecast_trajectories` job on the newest frozen history, with the cloud forecast provider the deployment configured for that
+ * model — never a generator of ours standing in for it. What this step cannot do it says in the words the platform already has for
+ * it, and only this step is declined (`unavailable` is a finding about one object, `refused` a defect in what it states); the
+ * study's other work goes on, and a prediction a researcher imports (the Patients tab) remains the way to a forecast without a provider.
+ *
+ * Which provider: the one the patient set names (`scenario.providerId`), else the one whose declared model is this model's name (and
+ * version, when both say one) — a card never becomes a callable API by what it says about itself, so a model no provider declares is
+ * not connected. Which history: the one named, else the newest. What is forecast (`endpoint`, `horizonsDays`) is the patient set's.
+ * @param {Record<string, any>} model the library row @param {Record<string, any>} row the patient set
+ * @param {{ providers?: readonly Record<string, any>[], histories?: readonly Record<string, any>[] } | null | undefined} forecast
+ * @returns {VcrPlan}
+ */
+function forecastPlan(model, row, forecast) {
+  const asked = object(row.scenario);
+  /** @param {string} code @param {string} reason @param {string} title */
+  const unavailable = (code, reason, title) => ({ ok: false, unavailable: { rule: "forecast_path", reason,
+    gaps: [{ title, detail: knownErrorCodeMessage(code), answers: "导入一份预测文件，或继续用文献情景分析；其他步骤照常。" }] } });
+  const providers = list(forecast?.providers).map(object);
+  const same = (/** @type {unknown} */ a, /** @type {unknown} */ b) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
+  const provider = asked.providerId !== undefined ? providers.find((entry) => entry.id === asked.providerId)
+    : providers.find((entry) => same(entry.model, model.name) && (!entry.version || entry.version === "unknown" || same(entry.version, model.version)));
+  if (!provider) return unavailable("vcr_forecast_provider_unavailable", "forecast_provider_unavailable", "事件历史模型还没有接入预测服务");
+  const historyId = asked.historyId ?? list(forecast?.histories).map(object)[0]?.id;
+  if (!historyId) return unavailable("vcr_history_required", "forecast_history_missing", "还没有冻结的事件历史");
+  const { providerId: _providerId, historyId: _historyId, ...rest } = asked;
+  const scenario = {
+    historyId, providerId: provider.id, ...rest,
+    // The model's version is asked of the provider only when the provider states the same one: an unknown version stays unknown.
+    ...(provider.version && same(provider.version, model.version) ? { modelVersion: model.version } : {}),
+  };
+  const problems = validateLongitudinalScenario("forecast.trajectories", scenario);
+  if (problems.length) {
+    return { ok: false, refused: { code: "vcr_job_scenario_invalid", paths: problems.map((problem) => problem.field),
+      message: `事件历史模型「${model.name}」的患者集要写清预测什么和预测多远：endpoint（{code, type, unit}）与 horizonsDays（天数列表）；有问题的字段：${problems.map((problem) => problem.field).join("、")}。` } };
+  }
+  const days = list(scenario.horizonsDays).map(Number).filter(Number.isFinite);
+  const longest = days.length ? Math.max(...days) : 0;
+  if (list(provider.endpoints).length && !list(provider.endpoints).includes(object(scenario.endpoint).code)) {
+    return unavailable("vcr_forecast_endpoint_unsupported", "forecast_endpoint_unsupported", "所选预测模型没有提供这个终点");
+  }
+  if (Number(provider.maxHorizonDays) > 0 && longest > Number(provider.maxHorizonDays)) {
+    return unavailable("vcr_forecast_horizon_unsupported", "forecast_horizon_unsupported", "所选预测模型不支持这个预测跨度");
+  }
+  const issues = [...vcrModelCardIssues(model), ...vcrEventHistoryScopeIssues(model, {
+    horizon: longest > 0 ? { value: longest, unit: "days" } : null, trajectories: Number.isFinite(Number(scenario.samples)) ? Number(scenario.samples) : null })];
+  if (issues.length) {
+    return { ok: false, refused: { code: "vcr_model_not_applicable", paths: issues.map((issue) => issue.field),
+      message: `模型「${model.name}」的适用范围没有覆盖这个研究：${issues.map((issue) => issue.text).join("；")}。换一个适用的模型，或先补齐这些条件。` } };
+  }
+  return { ok: true, stages: [/** @type {VcrStage} */ ({
+    stage: null, jobKind: "forecast_trajectories", scenario, keepTables: [], derived: [], snapshot: false, after: null, bound: [],
+    // No result kind and no subject: the forecast is filed as a longitudinal record, as one a run queues is, and never as the
+    // patient set's own table.
+    detail: { modelId: model.id ?? null, modelVersion: model.version ?? null, forecast: true },
+  })] };
+}
+
+/**
  * Turn an object into the jobs that compute it — or say why it cannot be
  * computed. Pure: everything it reads is in `context`.
  *
  * @param {{ kind: string, row: Record<string, any> }} item
  * @param {{ study: Record<string, any>, definition: Record<string, any> | null, assumptions: readonly Record<string, any>[],
  *   populations?: readonly Record<string, any>[], scenarios?: readonly Record<string, any>[], grid?: Record<string, any> | null,
- *   analytic?: Record<string, any> | null, analyticJob?: Record<string, any> | null, models?: readonly Record<string, any>[] }} context
+ *   analytic?: Record<string, any> | null, analyticJob?: Record<string, any> | null, models?: readonly Record<string, any>[],
+ *   forecast?: { providers?: readonly Record<string, any>[], histories?: readonly Record<string, any>[] } | null }} context
  * @returns {VcrPlan}
  */
 export function vcrBuildStages(item, context) {
@@ -1078,8 +1147,10 @@ export function vcrBuildStages(item, context) {
       const matches = exact.length ? exact : models.filter((model) => model.name === row.modelId && (!row.modelVersion || model.version === row.modelVersion));
       const named = matches.length === 1 ? matches[0] : null;
       if (!named) return { ok: false, refused: { code: "vcr_model_not_found", message: "选定模型的确切版本已不可用；这一步不使用替代模型，其他研究结果继续保留。" } };
-      // A model of a call shape this deployment has no executor for is not run through a generator that is not that model.
+      // A model of the event-history call shape is not a generator's: the longitudinal forecast path runs it (G12).
       const shape = vcrModelInterfaceOf(named);
+      if (shape !== null && VCR_FORECAST_MODEL_INTERFACES.includes(shape)) return forecastPlan(named, row, context.forecast);
+      // A model of a call shape this deployment has no executor for is not run through a generator that is not that model.
       if (shape !== null && !VCR_HOSTED_MODEL_INTERFACES.includes(shape)) {
         const word = /** @type {Record<string, string>} */ (VCR_MODEL_INTERFACE_LABELS_ZH)[shape] ?? shape;
         return { ok: false, refused: { code: "vcr_model_interface_not_hosted",
@@ -1436,10 +1507,11 @@ export class VcrOrchestrator {
    *   latestSessionId?: ((input: { userId: string, projectId: string }) => Promise<string | null>) | null,
    *   briefFor?: ((input: { study: any, key: string, scope: string[], detail: Record<string, any>,
    *     fidelity: (step: string) => string }) => string | Promise<string>) | null,
+   *   longitudinal?: { providers: { list: () => Promise<any[]> }, prepare: (study: any, request: any, actor: string, extra?: Record<string, any>) => Promise<{ job: any }> } | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    */
   constructor({ store, jobs, config = {}, notifier = null, seal = null, queueExport = null, queueReviews = null, dispatchRun = null, latestSessionId = null,
-    briefFor = null, now = () => new Date(), report = () => {} }) {
+    briefFor = null, longitudinal = null, now = () => new Date(), report = () => {} }) {
     if (!store) throw new TypeError("The VCR orchestrator needs the VCR store.");
     if (!jobs) throw new TypeError("The VCR orchestrator needs the VCR job queue.");
     this.store = store;
@@ -1452,6 +1524,9 @@ export class VcrOrchestrator {
     this.dispatchRun = dispatchRun;
     this.latestSessionId = latestSessionId;
     this.briefFor = briefFor;
+    // The longitudinal forecast path: a patient set that names an event-history model is run there (G12). Absent, that step says
+    // the forecast service is not connected, in the platform's own sentence, and nothing else waits for it.
+    this.longitudinal = longitudinal;
     this.now = now;
     this.report = report;
     this.owner = `vcr-${process.pid}-${randomId().slice(0, 12)}`;
@@ -2003,8 +2078,15 @@ export class VcrOrchestrator {
     // The model library, read only when a patient set names a model (whether the model
     // covers the study is decided before a job is queued).
     const models = patientSets[0]?.modelId ? await this.store.models(String(study.userId)) : [];
+    // The providers the deployment configured and the newest frozen history, read only when a model of the event-history shape is
+    // named: no provider, no history and no longitudinal module are each an answer the plan gives for that step alone.
+    const forecast = models.some((model) => VCR_FORECAST_MODEL_INTERFACES.includes(String(vcrModelInterfaceOf(model))))
+      ? {
+        providers: this.longitudinal ? await this.longitudinal.providers.list().catch(() => []) : [],
+        histories: this.longitudinal ? list((await this.store.longitudinalIndex?.(study.id, { kind: "history", limit: 1 }).catch(() => null))?.records) : [],
+      } : null;
     return { definition, assumptions, populations, population: populations[0] ?? null, patientSets, patientSet: patientSets[0] ?? null,
-      comparators, comparator: comparators[0] ?? null, scenarios, grid, protocol, stale, staleByNode, openByNode, openKinds, marksByNode, models };
+      comparators, comparator: comparators[0] ?? null, scenarios, grid, protocol, stale, staleByNode, openByNode, openKinds, marksByNode, models, forecast };
   }
 
   /**
@@ -2201,7 +2283,13 @@ export class VcrOrchestrator {
       ? analyticJob ? await this.jobs.resultOf(study.id, analyticJob.id) : null
       : await this.store.currentResultOf(study.id, "trial_scenario", item.row.id)) : null;
     const plan = vcrBuildStages(item, { study, definition: read.definition, assumptions: read.assumptions, populations: read.populations,
-      scenarios: read.scenarios, grid: read.grid, analytic, analyticJob, models: read.models });
+      scenarios: read.scenarios, grid: read.grid, analytic, analyticJob, models: read.models, forecast: read.forecast });
+    // A forecast step declined for want of the service or the history is asked again once the plan has it: nothing else about the
+    // patient set moved, so nothing else would wake it (a provider configured, or a history frozen, after the patient set was written).
+    if (plan.ok === true && marks.some((mark) => mark.key === `job:${node}` && mark.state === "skipped"
+      && FORECAST_UNAVAILABLE_REASONS.includes(String(object(mark.detail).reason)))) {
+      await this.#dropMarks(study.id, `job:${node}`);
+    }
     /** @type {string[]} */
     const queued = [];
     if (plan.ok === false) {
@@ -2317,23 +2405,28 @@ export class VcrOrchestrator {
     try {
       await this.#freezePlanIfSealed(study, item, stage, stages);
       const line = await this.#lineOf(study.id, item.kind, item.row);
-      const { job } = await this.jobs.enqueue({
-        studyId: study.id, userId: study.userId, kind: stage.jobKind, scenario: stage.scenario, inputs, derived, internal: true,
-        idempotencyKey: `vcr:${study.id}:${node}${stage.stage ? `#${stage.stage}` : ""}:g${generation}`,
-        // The result this job files under is the object it was queued for, not a
-        // guess from the method: a literature control computed by `reconstruct_km`
-        // and then `rmst` is still the comparator's result, and each of N designs
-        // is its own subject, so N designs are N current results.
-        detail: { node, step: item.step, stage: stage.stage, plannedStages: planned, resultKind: VCR_OBJECT_RESULT_KINDS[item.kind] ?? null,
-          subjectId: item.row.id, supersedes: line, keepTables: stage.keepTables, bound: stage.bound,
-          // Whose computation this is, for the notice that tells the researcher it is done: the programme's recomputation after a
-          // change tells nobody, and a computation of a step somebody asked for with 「让 AI 做」 does.
-          ...(read.staleByNode.has(node) ? { recompute: true } : {}),
-          ...(study.steps?.[item.step]?.askedAt && !read.staleByNode.has(node) ? { asked: true } : {}),
-          // A hybrid control's historical counts are evidence only when verified extractions say so.
-          ...(stage.jobKind === "map_prior" && !(await this.#historicalIsVerified(study, stage.scenario)) ? { inputsAssumed: true } : {}),
-          ...stage.detail },
-      });
+      const idempotencyKey = `vcr:${study.id}:${node}${stage.stage ? `#${stage.stage}` : ""}:g${generation}`;
+      // The result this job files under is the object it was queued for, not a
+      // guess from the method: a literature control computed by `reconstruct_km`
+      // and then `rmst` is still the comparator's result, and each of N designs
+      // is its own subject, so N designs are N current results.
+      const detail = { node, step: item.step, stage: stage.stage, plannedStages: planned, resultKind: VCR_OBJECT_RESULT_KINDS[item.kind] ?? null,
+        subjectId: item.row.id, supersedes: line, keepTables: stage.keepTables, bound: stage.bound,
+        // Whose computation this is, for the notice that tells the researcher it is done: the programme's recomputation after a
+        // change tells nobody, and a computation of a step somebody asked for with 「让 AI 做」 does.
+        ...(read.staleByNode.has(node) ? { recompute: true } : {}),
+        ...(study.steps?.[item.step]?.askedAt && !read.staleByNode.has(node) ? { asked: true } : {}),
+        // A hybrid control's historical counts are evidence only when verified extractions say so.
+        ...(stage.jobKind === "map_prior" && !(await this.#historicalIsVerified(study, stage.scenario)) ? { inputsAssumed: true } : {}),
+        ...stage.detail };
+      // A forecast is not an engine job: the longitudinal module freezes the history and the provider it reads (their hashes are the
+      // job's inputs) and is the one that queues it. Filed as a longitudinal record, not as the patient set's table, so it carries
+      // neither the object's result kind nor its subject, and supersedes nothing.
+      const { job } = stage.jobKind === "forecast_trajectories" && this.longitudinal
+        ? await this.longitudinal.prepare(study, { kind: stage.jobKind, scenario: stage.scenario }, String(study.userId), {
+          idempotencyKey, detail: { ...detail, resultKind: undefined, subjectId: undefined, supersedes: [] } })
+        : await this.jobs.enqueue({ studyId: study.id, userId: study.userId, kind: stage.jobKind, scenario: stage.scenario, inputs, derived, internal: true,
+          idempotencyKey, detail });
       await this.#update(study.id, key, { state: "running", jobId: job.id, detail: { jobId: job.id, state: job.state } });
       if (read.staleByNode.has(node)) await this.store.noteRecomputeJob(study.id, node, job.id);
       const cost = ["design_simulation", "design_grid", "assurance"].includes(stage.jobKind) ? "heavy" : "light";

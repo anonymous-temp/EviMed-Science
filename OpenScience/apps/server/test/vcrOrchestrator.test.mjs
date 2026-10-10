@@ -17,7 +17,7 @@ import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from
 import {
   VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
   VCR_MODEL_DOCUMENT_SECTIONS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob,
-  validateScenario,
+  knownErrorCodeMessage, validateLongitudinalScenario, validateScenario,
 } from "@evimed/domain";
 
 /** @param {string[]} requested */
@@ -1021,20 +1021,69 @@ test("the applicability check covers the second call shape: its card against its
   assert.deepEqual(vcrModelApplicabilityIssues({ ...first, card: { interfaceShape: "quantum" } }, { endpointType: "binary", variables }).map((issue) => issue.code), ["interface_unknown"]);
 });
 
-test("a patient set that names a model of a shape this deployment does not host is refused by name, with no job queued and no generator run in its place", () => {
-  const patientRow = { id: "pts_1", version: 1, populationId: "pop_1", modelId: "event-model", modelVersion: "2.1.0",
-    scenario: { design: { nTreat: 60, nControl: 40 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 6 } } };
-  const population = { id: "pop_1", resultId: "res_1", definition: { population: { variables: [{ name: "age", family: "normal", mean: 63, sd: 9 }] } } };
-  const refused = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: patientRow }, { ...context, populations: [population], models: [eventHistoryModel()] }));
-  assert.equal(refused.ok, false);
-  assert.equal(refused.refused.code, "vcr_model_interface_not_hosted");
-  assert.match(refused.refused.message, /event-model/);
-  assert.match(refused.refused.message, /事件历史 → 未来轨迹/);
-  assert.match(refused.refused.message, /其他研究结果继续保留/, "the rest of the study goes on");
-  // A model that says it is the first shape is run as before.
+/** A patient set that names the event-history model, stating what is forecast and how far (G12). */
+const forecastPatientRow = (/** @type {Record<string, any>} */ scenario = {}) => ({ id: "pts_1", version: 1, populationId: "pop_1", modelId: "event-model", modelVersion: "2.1.0",
+  scenario: { endpoint: { code: "HbA1c", type: "continuous", unit: "%" }, horizonsDays: [90, 180], ...scenario } });
+const forecastPopulation = { id: "pop_1", resultId: "res_1", definition: { population: { variables: [{ name: "age", family: "normal", mean: 63, sd: 9 }] } } };
+const provider = (/** @type {Record<string, any>} */ extra = {}) => ({ id: "prov-1", name: "Event model", model: "event-model", version: "2.1.0", endpoints: ["HbA1c"], maxHorizonDays: 365, ...extra });
+
+test("a patient set that names an event-history model is run by the longitudinal forecast path: the provider that model names, the newest frozen history, and what the patient set asks to forecast (G12)", () => {
+  const plan = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: forecastPatientRow() },
+    { ...context, populations: [forecastPopulation], models: [eventHistoryModel()], forecast: { providers: [provider()], histories: [{ id: "vlf_new" }, { id: "vlf_old" }] } }));
+  assert.equal(plan.ok, true, JSON.stringify(plan));
+  assert.equal(plan.stages.length, 1);
+  const [stage] = plan.stages;
+  assert.equal(stage.jobKind, "forecast_trajectories", "not a generator of ours standing in for the model");
+  assert.deepEqual(stage.scenario, { historyId: "vlf_new", providerId: "prov-1", endpoint: { code: "HbA1c", type: "continuous", unit: "%" }, horizonsDays: [90, 180], modelVersion: "2.1.0" });
+  assert.deepEqual(validateLongitudinalScenario("forecast.trajectories", stage.scenario), [], "the scenario the forecast job is validated against");
+  assert.equal(stage.snapshot, false, "it reads the frozen history, not a snapshot grant");
+  assert.deepEqual([stage.detail.modelId, stage.detail.modelVersion, stage.detail.forecast], ["mdl_eh", "2.1.0", true]);
+  // The patient set may name the provider and the history; the version is asked of the provider only when the provider states the same one.
+  const named = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: forecastPatientRow({ providerId: "prov-2", historyId: "vlf_old", samples: 200 }) },
+    { ...context, populations: [forecastPopulation], models: [eventHistoryModel()],
+      forecast: { providers: [provider(), provider({ id: "prov-2", model: "another-model", version: "unknown" })], histories: [{ id: "vlf_new" }] } }));
+  assert.equal(named.ok, true, JSON.stringify(named));
+  assert.deepEqual([named.stages[0].scenario.providerId, named.stages[0].scenario.historyId, named.stages[0].scenario.samples, named.stages[0].scenario.modelVersion], ["prov-2", "vlf_old", 200, undefined]);
+  // A model of the first shape is run as before.
   const fitted = { id: "mdl_f", name: "fitted-os", version: "1.0.0", endpointType: "time_to_event", applicability: { endpoints: ["time_to_event"] }, card: { interfaceShape: "baseline_to_outcome" } };
-  const covered = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...patientRow, modelId: "fitted-os", modelVersion: "1.0.0" } }, { ...context, populations: [population], models: [fitted] }));
+  const covered = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...forecastPatientRow(), modelId: "fitted-os", modelVersion: "1.0.0", scenario: { design: { nTreat: 60, nControl: 40 },
+    endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 6 } } } }, { ...context, populations: [forecastPopulation], models: [fitted] }));
   assert.equal(covered.ok, true);
+  assert.notEqual(covered.stages[0].jobKind, "forecast_trajectories");
+});
+
+test("an event-history model nothing can forecast with declines that one step in the platform's own sentence, and refuses no other (G12)", () => {
+  const plan = (/** @type {any} */ forecast, /** @type {Record<string, any>} */ scenario = {}, /** @type {any} */ model = eventHistoryModel()) =>
+    /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: forecastPatientRow(scenario) }, { ...context, populations: [forecastPopulation], models: [model], forecast }));
+  for (const forecast of [{ providers: [], histories: [{ id: "vlf_1" }] }, null, undefined]) {
+    const none = plan(forecast);
+    assert.equal(none.ok, false);
+    assert.equal(none.unavailable.reason, "forecast_provider_unavailable", "an absent service is an unavailable step, never a failed study");
+    assert.equal(none.unavailable.gaps[0].detail, knownErrorCodeMessage("vcr_forecast_provider_unavailable"), "the sentence the platform already has for it");
+    assert.equal(none.refused, undefined);
+  }
+  // A model no provider declares is not connected, whatever else is: a card never becomes a callable API by what it says of itself.
+  assert.equal(plan({ providers: [provider({ model: "another-model" })], histories: [{ id: "vlf_1" }] }).unavailable.reason, "forecast_provider_unavailable");
+  assert.equal(plan({ providers: [provider()], histories: [{ id: "vlf_1" }] }, { providerId: "nobody" }).unavailable.reason, "forecast_provider_unavailable");
+  // No frozen history to forecast from, an endpoint or a horizon the provider does not offer: each declines this step by name.
+  const noHistory = plan({ providers: [provider()], histories: [] });
+  assert.equal(noHistory.unavailable.reason, "forecast_history_missing");
+  assert.equal(noHistory.unavailable.gaps[0].detail, knownErrorCodeMessage("vcr_history_required"));
+  assert.equal(plan({ providers: [provider({ endpoints: ["LDL"] })], histories: [{ id: "vlf_1" }] }).unavailable.reason, "forecast_endpoint_unsupported");
+  assert.equal(plan({ providers: [provider({ maxHorizonDays: 100 })], histories: [{ id: "vlf_1" }] }).unavailable.reason, "forecast_horizon_unsupported");
+  // What is forecast is the patient set's to state; a defect in it is that patient set's refusal, by field.
+  const unstated = plan({ providers: [provider()], histories: [{ id: "vlf_1" }] }, { endpoint: undefined, horizonsDays: undefined });
+  assert.equal(unstated.ok, false);
+  assert.equal(unstated.refused.code, "vcr_job_scenario_invalid");
+  assert.ok(unstated.refused.paths.includes("scenario.endpoint") && unstated.refused.paths.includes("scenario.horizonsDays"), JSON.stringify(unstated.refused.paths));
+  // The model's own declared reach is held against the ask: 24 months is 730 days.
+  const tooFar = plan({ providers: [provider({ maxHorizonDays: 5000 })], histories: [{ id: "vlf_1" }] }, { horizonsDays: [90, 1000] });
+  assert.equal(tooFar.refused.code, "vcr_model_not_applicable");
+  assert.match(tooFar.refused.message, /最长 24 months/);
+  // A card short of its contract is reported field by field, before anything is queued.
+  const bare = plan({ providers: [provider()], histories: [{ id: "vlf_1" }] }, {}, { ...eventHistoryModel(), card: { interfaceShape: "event_history_to_trajectories" }, applicability: {}, validation: {} });
+  assert.equal(bare.refused.code, "vcr_model_not_applicable");
+  assert.ok(bare.refused.paths.length >= 8);
 });
 
 test("the two model documents are briefed by section: the run is told the sections that are its own and that the tables are the platform's", () => {
