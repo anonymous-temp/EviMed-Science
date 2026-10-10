@@ -31,6 +31,9 @@ const everything = /** @type {any} */ ({
   service: { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 },
   jobs: { counters: { enqueued: 0, succeeded: 0, failed: 0 } },
   engine: { configured: true },
+  // The plane's counters: which basis a cloud read stood on, and what a withdrawal and a changed basis did.
+  cloud: { cloudReadsDeploymentAgreements: 0, cloudReadsSourcePermission: 0, cloudReadsRefused: 0, withdrawals: 0, documentsErased: 0,
+    projectionsRetired: 0, filesOverwritten: 0, overwriteFailures: 0, marksWritten: 0, marksFailed: 0 },
 });
 const families = new Map(vcrMetricFamilies(true, everything).map((family) => [family.name, family]));
 
