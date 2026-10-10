@@ -650,6 +650,9 @@ services:
       OPEN_SCIENCE_VCR_DRAFT_TTL_MINUTES: ${OPEN_SCIENCE_VCR_DRAFT_TTL_MINUTES:-60}
       OPEN_SCIENCE_VCR_ENGINE_URL: ${OPEN_SCIENCE_VCR_ENGINE_URL-}
       OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS:
+      OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS:
+      OPEN_SCIENCE_VCR_MIN_CELL_SIZE:
+      OPEN_SCIENCE_VCR_DERIVED_TABLE_MAX_BYTES:
       # Numerical validation is operator-installed evidence, never a model
       # write. Set the container path only when its read-only host file exists.
       OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE: ${OPEN_SCIENCE_VCR_METHOD_VALIDATION_HOST_FILE:+/run/evimed/vcr-method-validation.json}

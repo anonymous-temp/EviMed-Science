@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
-import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, SIMULATED_START_CREDITS } from "@evimed/domain";
+import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, SIMULATED_START_CREDITS, VCR_MIN_CELL_SIZE } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
@@ -870,6 +870,14 @@ function vcrSettings(overrides) {
     vcrBackupStateFile: String(overrides.vcrBackupStateFile ?? process.env.OPEN_SCIENCE_VCR_BACKUP_STATE_FILE ?? '').trim(),
     vcrBackupMaxAgeSeconds: integer('vcrBackupMaxAgeSeconds', 'OPEN_SCIENCE_VCR_BACKUP_MAX_AGE_SECONDS', 90_000, 60, 604_800),
     vcrEngineTimeoutMs: integer("vcrEngineTimeoutMs", "OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS", 120_000, 5_000, 900_000),
+    // A trial-registry read's deadline: the registry client's and the gateway's budget for it are this one key
+    // (vcrComposition, vcrGateway); the client clamps it to 5–60 s. Read since the registry client existed, defined
+    // here only on 2026-10-10 — until then the variable reached nothing and the deadline was always 20 s.
+    vcrRegistryTimeoutMs: integer("vcrRegistryTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS", 20_000, 5_000, 60_000),
+    // The smallest cell a model is shown (vcrService.minCell): a deployment may raise the domain's floor, never lower it.
+    vcrMinCellSize: integer("vcrMinCellSize", "OPEN_SCIENCE_VCR_MIN_CELL_SIZE", VCR_MIN_CELL_SIZE, VCR_MIN_CELL_SIZE, 1_000),
+    // The largest derived table — reconstructed pseudo-patients, a forecast's probabilities — the control plane stores from an engine job (vcrJobs).
+    vcrDerivedTableMaxBytes: integer("vcrDerivedTableMaxBytes", "OPEN_SCIENCE_VCR_DERIVED_TABLE_MAX_BYTES", 256 * 1024 * 1024, 1024 * 1024, 2 * 1024 * 1024 * 1024),
     // Request authentication is required; receipt signing is optional, and a
     // receipt is our own evidence of what the engine ran — it labels a result,
     // it never decides whether a person may have one (owner ruling 2026-10-04).

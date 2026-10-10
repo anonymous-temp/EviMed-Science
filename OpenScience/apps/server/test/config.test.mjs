@@ -56,6 +56,19 @@ test("the mounted-method prompt budget has a key, a default and a bound", () => 
   }
 });
 
+test("the three VCR limits the code reads have keys, defaults and bounds", () => {
+  // They were read (vcrComposition/vcrGateway, vcrService.minCell, vcrJobs) but never defined, so the
+  // variables reached nothing: the registry deadline was always 20 s and the floor could not be raised.
+  const base = loadConfig({ rootDir: repoRoot });
+  assert.equal(base.vcrRegistryTimeoutMs, 20_000);
+  assert.equal(base.vcrMinCellSize, 10);
+  assert.equal(base.vcrDerivedTableMaxBytes, 256 * 1024 * 1024);
+  const set = loadConfig({ rootDir: repoRoot, vcrRegistryTimeoutMs: "45000", vcrMinCellSize: "20", vcrDerivedTableMaxBytes: String(64 * 1024 * 1024) });
+  assert.deepEqual([set.vcrRegistryTimeoutMs, set.vcrMinCellSize, set.vcrDerivedTableMaxBytes], [45_000, 20, 64 * 1024 * 1024]);
+  assert.throws(() => loadConfig({ rootDir: repoRoot, vcrMinCellSize: "5" }), /OPEN_SCIENCE_VCR_MIN_CELL_SIZE/, "a deployment may raise the floor, never lower it");
+  assert.throws(() => loadConfig({ rootDir: repoRoot, vcrRegistryTimeoutMs: "1000" }), /OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS/);
+});
+
 test("memory extraction is given longer than one extraction actually takes", () => {
   // Measured against deepseek-v4-pro, one extraction request takes 40-46s. At
   // the previous 30s budget every request aborted, so the store only ever held
