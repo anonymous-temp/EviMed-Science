@@ -535,6 +535,13 @@ test("DL-13 the metric families are the platform's open_science_vcr_*, with the 
     ["extracted", "needsText", "unreadable", "tooLong", "tooLarge", "timedOut", "failed", "unavailable", "digitized", "digitizeRefused", "digitizeFailed"]);
   assert.ok(withIntake.get("open_science_vcr_intake_total")?.series.every((series) => series.value === 0));
   assert.equal(withIntake.get("open_science_vcr_intake_total")?.type, "counter");
+  // What the plane did for the cloud, and what it erased and marked: a counter per outcome, refusals and failures included.
+  assert.equal(byName.has("open_science_vcr_cloud_reads_total"), false, "a snapshot without the plane reads as no family");
+  const withPlane = new Map(vcrMetricFamilies(true, { ...snapshot, cloud: { cloudReadsDeploymentAgreements: 5, cloudReadsSourcePermission: 2, cloudReadsRefused: 1, withdrawals: 3, marksWritten: 9, overwriteFailures: 1 } }).map((family) => [family.name, family]));
+  assert.deepEqual(withPlane.get("open_science_vcr_cloud_reads_total")?.series.map((series) => [series.labels?.basis, series.value]),
+    [["deployment_agreements", 5], ["source_permission", 2], ["refused", 1]]);
+  assert.deepEqual(withPlane.get("open_science_vcr_erasure_total")?.series.map((series) => [series.labels?.kind, series.value]),
+    [["withdrawals", 3], ["documentsErased", 0], ["projectionsRetired", 0], ["filesOverwritten", 0], ["overwriteFailures", 1], ["marksWritten", 9], ["marksFailed", 0]]);
   // A schema that did not answer is reported, not read as an empty queue.
   const unreadable = new Map(vcrMetricFamilies(true, { ...snapshot, tables: null }).map((family) => [family.name, family]));
   assert.equal(unreadable.get("open_science_vcr_tables_readable")?.series[0].value, 0);

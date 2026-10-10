@@ -341,6 +341,19 @@ describe("匹配与招募 — what a rule says about a person", () => {
     for (const other of others) expect(within(other).queryByText("已撤回")).toBeNull();
   });
 
+  it("says 依据已更新 beside a person whose evaluation rested on a basis that has since changed", async () => {
+    const payload = fixture("ev201/matching.json");
+    payload.candidates[0].basis = "updated";
+    payload.basisUpdated = { count: 1, subjects: [payload.candidates[0].id] };
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: payload.candidates[0].id });
+    const changed = document.querySelector(`[data-vcr-candidate='${payload.candidates[0].id}']`) as HTMLElement;
+    expect(within(changed).getByText("依据已更新")).toBeInTheDocument();
+    expect(screen.getByText("1 人的评估依据已更新")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新评估" })).toBeEnabled();
+  });
+
   it("says the recruiting side is not here, and nothing else waits", async () => {
     server = installVcrServer(network.productRequest, {
       [`GET ${MATCHING}`]: { view: "matching", available: false, unavailable: { code: "vcr_matching_unavailable", message: "匹配与招募在本部署尚未接入；其余步骤照常。" }, funnel: [], candidates: [], selected: null, gaps: [], counts: null },

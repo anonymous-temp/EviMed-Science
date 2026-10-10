@@ -124,6 +124,11 @@ export function MatchingPanelControls({ studyId, data, direction, protocolId, se
         onClick={() => void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, ...scope })}>开始评估</Button>}
       <Button variant="text" onClick={onReload}>刷新结果</Button>
     </div>
+    {data.basisUpdated && <div className="flex flex-wrap items-center gap-3">
+      <p className="text-caption text-text-2" role="status">{`${data.basisUpdated.count} 人的评估依据已更新`}</p>
+      {canRun && <Button variant="secondary" size="sm" loading={evaluation.busy} disabled={evaluation.busy || settling}
+        onClick={() => void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, subjectKeys: data.basisUpdated?.subjects })}>重新评估</Button>}
+    </div>}
     <EvaluationNote message={evaluation.message} failed={evaluation.failed} />
     <Disclosure summary="比较多个方案">
       <div className="grid gap-3 md:grid-cols-2">
@@ -172,7 +177,8 @@ export function ClinicalTimeline({ studyId, data, mayReadOriginal, subject }: {
       {shown.visible.map(entry => <li key={entry.id} className="flex flex-col gap-2 py-3">
         <p className="text-caption text-text-3">{[formatDay(entry.at) || '日期未记载', assertions[entry.assertion] ?? '未知',
           entry.experiencer ? experiencers[entry.experiencer] : null, entry.medicationState ? medicationStates[entry.medicationState] : null,
-          entry.correctionOf ? '更正记录' : null, entry.superseded ? '已有更正' : null, entry.conflictFactIds?.length ? '记录有冲突' : null].filter(Boolean).join(' · ')}</p>
+          entry.correctionOf ? '更正记录' : null, entry.superseded ? '已有更正' : null, entry.conflictFactIds?.length ? '记录有冲突' : null,
+          entry.basis === 'updated' ? '依据已更新' : null].filter(Boolean).join(' · ')}</p>
         <p className="text-ui text-text">{entry.quote ?? `${entry.variable}：${factValueText(entry.value)}${entry.unit ? ` ${entry.unit}` : ''}`}</p>
         {entry.correctionReason && <p className="text-caption text-text-2">{entry.correctionReason}</p>}
         {/* The original can be read wherever the fact cites a span of it; whether the server can open that span is the server's answer, said right here. */}

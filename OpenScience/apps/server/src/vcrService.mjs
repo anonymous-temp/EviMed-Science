@@ -1130,8 +1130,10 @@ export class VcrService {
       assessment: await matchStore.latestAssessment({ studyId: study.id, subjectKey: focusKey, protocolVersionId: entry.id }) }))) : [];
     const timeline = focusKey ? await matchStore.listFacts({ studyId: study.id, subjectKey: focusKey }) : [];
     const longitudinal = clinicalFactView(timeline, new Date().toISOString());
+    // A fact read from a basis that has since changed says so, beside the fact.
+    const factMarks = await this.packages.erasure?.factMarks?.(study.id, timeline.map(fact => fact.id)).catch(() => new Map()) ?? new Map();
     const clinicalTimeline = timeline.map(fact => ({ ...fact, superseded: longitudinal.superseded.includes(fact.id),
-      conflicts: longitudinal.conflicts.find(entry => entry.factId === fact.id)?.withFacts ?? [] }));
+      conflicts: longitudinal.conflicts.find(entry => entry.factId === fact.id)?.withFacts ?? [], ...(factMarks.has(fact.id) ? { basis: "updated" } : {}) }));
     const candidateCoverage = protocol && matchStore.latestMatchingProgress ? await matchStore.latestMatchingProgress(study.id,protocol.id) : null;
     return {
       ...(candidateCoverage ? {candidateCoverage} : {}),

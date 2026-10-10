@@ -1235,6 +1235,7 @@ export function presentMatchingTab(bundle, query = {}) {
       at: fact.occurredAt ?? null, assertion: fact.clinical?.assertion ?? fact.polarity, experiencer: fact.clinical?.experiencer ?? null,
       medicationState: fact.clinical?.medication?.state ?? null, correctionOf: fact.clinical?.correctionOf ?? null,
       superseded: fact.superseded === true, conflictFactIds: fact.conflicts ?? [], correctionReason: fact.clinical?.correctionReason ?? null,
+      ...(fact.basis ? { basis: fact.basis } : {}),
       quote: fact.source?.quote ?? null, locator: fact.source ? { documentId: fact.source.documentId, start: fact.source.start, end: fact.source.end } : null })),
     headline: total ? `${total.toLocaleString("en-US")} 人已评估，${(eligible ?? 0).toLocaleString("en-US")} 人全部满足，${insufficient.toLocaleString("en-US")} 人至少有 1 条未知或待复评。` : null,
     partner: total ? { name: null, candidates: total, tier: study.dataTier, snapshotAt: match.snapshotAt ? zhDate(match.snapshotAt, now) : null } : null,

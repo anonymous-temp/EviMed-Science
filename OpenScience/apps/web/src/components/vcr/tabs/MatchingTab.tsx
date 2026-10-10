@@ -408,6 +408,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                 <span className="min-w-0 flex-1 text-ui text-text-2">{selected.candidate.summary}</span>
                 {selected.referralState && <Tag>{referralStateLabel(selected.referralState)}</Tag>}
                 {selected.candidate.basis === "withdrawn" && <Tag>已撤回</Tag>}
+                {selected.candidate.basis === "updated" && <Tag>依据已更新</Tag>}
               </div>
             )}
           >
@@ -558,6 +559,7 @@ function CandidateButton({ candidate, current, onPick }: { candidate: VcrCandida
       <span className="flex items-baseline justify-between gap-2">
         <span className="min-w-0 truncate text-ui font-medium text-text">{candidate.id}</span>
         {candidate.basis === "withdrawn" && <Tag>已撤回</Tag>}
+        {candidate.basis === "updated" && <Tag>依据已更新</Tag>}
         {candidate.site && <span className="shrink-0 text-caption text-text-3">{candidate.site}</span>}
       </span>
       <span className="block truncate text-caption text-text-2">{candidate.summary}</span>

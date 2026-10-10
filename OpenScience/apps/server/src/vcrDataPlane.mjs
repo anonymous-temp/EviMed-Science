@@ -1911,7 +1911,7 @@ export class VcrDataPlane {
     /** What the plane did for the cloud since this process started: reads by the basis they stood on, and reads it refused; and what it erased. */
     this.counters = {
       cloudReadsDeploymentAgreements: 0, cloudReadsSourcePermission: 0, cloudReadsRefused: 0,
-      withdrawals: 0, documentsErased: 0, projectionsRetired: 0, filesOverwritten: 0, overwriteFailures: 0,
+      withdrawals: 0, documentsErased: 0, projectionsRetired: 0, filesOverwritten: 0, overwriteFailures: 0, marksWritten: 0, marksFailed: 0,
     };
   }
 
@@ -2246,6 +2246,8 @@ export class VcrDataPlane {
       if (source.status === "registered" && role === "data") {
         await this.store.setSourceStatus({ sourceId: entry.sourceId, status: "profiled", actor: String(entry.actor), userId: source.userId });
       }
+      // A record added for a subject who has been evaluated: what was concluded rested on less, and says so (nothing re-runs).
+      if (role === "document" && stored.created && detail.subjectKey) await this.#markSubjectChanged(entry.studyId, String(detail.subjectKey), stored.file.id);
       // The same text from a different file (a re-saved PDF) is the file already
       // held: the original written for this attempt is then not named by any row.
       if (originalLocation && stored.file.detail?.original?.location !== originalLocation) {
@@ -2355,6 +2357,28 @@ export class VcrDataPlane {
     this.counters.filesOverwritten += overwritten;
     this.counters.overwriteFailures += failed;
     return { counts: done.counts, report: { ...done.counts, filesOverwritten: overwritten, ...(failed ? { filesFailed: failed } : {}) } };
+  }
+
+  /** @param {string} studyId @param {string} subjectKey @param {string} causeId */
+  async #markSubjectChanged(studyId, subjectKey, causeId) {
+    if (!this.erasure) return;
+    try { this.counters.marksWritten += await this.erasure.markSubjectChanged({ studyId, subjectKey, cause: "document", causeId }); }
+    catch { this.counters.marksFailed += 1; }
+  }
+
+  /**
+   * What was derived from a document, a projection or a permission that has just changed is marked, for the page to say so and
+   * offer the evaluation that already exists. It blocks nothing, runs nothing, and a failure to mark never undoes the change.
+   * @param {{ studyId: string, cause: "document" | "projection" | "permission" | "withdrawn", causeId: string, documentIds: string[] }} change
+   */
+  async #markChanged(change) {
+    if (!this.erasure || !change.documentIds.length) return;
+    try {
+      const marked = await this.erasure.markBasisChanged(change);
+      this.counters.marksWritten += marked.facts + marked.languageJudgments + marked.assessments;
+    } catch {
+      this.counters.marksFailed += 1;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -3214,7 +3238,23 @@ export class VcrDataPlane {
     const source = await this.store.sourceInStudy(entry.studyId, entry.sourceId);
     if (!source || source.studyId !== entry.studyId) throw refuse(404, VCR_DATA_PLANE_CODES.sourceNotFound, 'Source not found.');
     const permission = cloudPermission(entry.permission, entry.actor, this.now().toISOString());
-    return this.store.setCloudPermission({ ...entry, permission });
+    const saved = await this.store.setCloudPermission({ ...entry, permission });
+    // What was read from this source's documents under the earlier permission is marked; the new one applies from here. Saving the
+    // same terms again changes nothing and marks nothing.
+    const terms = (/** @type {any} */ record) => JSON.stringify(record ? [record.status, record.dataClass, record.destinations, record.reference, record.retention, record.training, record.humanReview, record.expiresAt] : null);
+    if (terms(source.cloudPermission) !== terms(permission)) {
+      const files = (await this.store.listSourceFilesForStudy(entry.studyId)).filter((file) => file.sourceId === entry.sourceId && file.role === "document");
+      await this.#markChanged({ studyId: entry.studyId, cause: "permission", causeId: entry.sourceId, documentIds: await this.#documentIdsOf(entry.studyId, files.map((file) => file.id)) });
+    }
+    return saved;
+  }
+
+  /** The documents and every projection of them: the ids a fact or a quote may name as where it was read.
+   * @param {string} studyId @param {string[]} fileIds */
+  async #documentIdsOf(studyId, fileIds) {
+    if (!fileIds.length) return [];
+    const projections = await this.store.projectionsOfDocuments(studyId, fileIds);
+    return [...fileIds, ...projections.map((row) => String(row.id))];
   }
 
   /** Whether a source's documents may go to the configured model providers, and on which basis: the operator's record of that
@@ -3262,6 +3302,9 @@ export class VcrDataPlane {
     await this.store.putDocumentProjection({ id, studyId: entry.studyId, sourceId: file.sourceId, documentId: entry.documentId,
       sourceHash: projection.sourceHash, projectionHash: projection.projectionHash, permissionHash,
       location: written.location, manifestHash: written.sha256, actor: entry.actor });
+    // A reviewed text now takes the place of the document (and of earlier reviews) for a run: what was read from those is marked.
+    await this.#markChanged({ studyId: entry.studyId, cause: "projection", causeId: id,
+      documentIds: (await this.#documentIdsOf(entry.studyId, [entry.documentId])).filter((named) => named !== id) });
     return { id, sourceHash: projection.sourceHash, projectionHash: projection.projectionHash, chars: projection.text.length, offsetUnit: projection.offsetUnit };
   }
 

@@ -348,6 +348,19 @@ export class VcrErasureStore extends VcrStoreBase {
   }
 
   /**
+   * A subject has new evidence (a record was added): the assessments already made of them rested on less. They are marked, and
+   * a new evaluation writes a new assessment that is not.
+   * @param {{ studyId: string, subjectKey: string, cause: "document" | "projection" | "permission" | "withdrawn", causeId: string }} input
+   */
+  async markSubjectChanged({ studyId, subjectKey, cause, causeId }) {
+    return this.transaction(async (client) => {
+      const assessments = (await client.query(`SELECT id, subject_key FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id=$1 AND subject_key=$2`, [studyId, subjectKey])).rows
+        .map((/** @type {any} */ row) => ({ id: String(row.id), subjectKey: String(row.subject_key) }));
+      return this.#mark(client, studyId, "assessment", assessments, cause, causeId);
+    });
+  }
+
+  /**
    * The marks on some assessments, by id.
    * @param {string} studyId @param {readonly string[]} assessmentIds
    * @returns {Promise<Map<string, { cause: string, markedAt: string | null }>>}

@@ -1380,6 +1380,12 @@ export function vcrMetricFamilies(enabled, snapshot) {
         { labels: { basis: "source_permission" }, value: Number(snapshot.cloud.cloudReadsSourcePermission ?? 0) },
         { labels: { basis: "refused" }, value: Number(snapshot.cloud.cloudReadsRefused ?? 0) }]);
   }
+  if (snapshot.cloud) {
+    add("erasure_total", "What withdrawal and the marks on changed bases did since this process started: subjects withdrawn, records and reviewed texts erased or retired, files overwritten (and the ones that could not be), and marks written on what was derived from a changed basis (and the ones that could not be).", "counter",
+      [["withdrawals", "withdrawals"], ["documentsErased", "documentsErased"], ["projectionsRetired", "projectionsRetired"], ["filesOverwritten", "filesOverwritten"],
+        ["overwriteFailures", "overwriteFailures"], ["marksWritten", "marksWritten"], ["marksFailed", "marksFailed"]]
+        .map(([kind, key]) => ({ labels: { kind }, value: Number(/** @type {any} */ (snapshot.cloud)[key] ?? 0) })));
+  }
   if (snapshot.evidence) {
     add("card_candidates_total", "Evidence items a run wrote as candidates it found through an evidence card (flywheel F23): written, and the ones that passed the quote and number check.", "counter",
       [{ labels: { outcome: "written" }, value: Number(snapshot.evidence.cardCandidates ?? 0) },

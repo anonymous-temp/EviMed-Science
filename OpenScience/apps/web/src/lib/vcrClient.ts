@@ -930,12 +930,16 @@ export interface VcrClinicalTimelineEntry {
   id: string; variable: string; value: unknown; unit: string | null; at: string | null; assertion: string; experiencer: string | null;
   medicationState: string | null; correctionOf: string | null; quote: string | null;
   superseded?: boolean; conflictFactIds?: string[]; correctionReason?: string | null;
+  /** The fact was read from a basis (a record, a reviewed text, a permission) that has since changed. */
+  basis?: "updated";
   locator: { documentId: string; start: number; end: number } | null;
 }
 export interface VcrMatchingTab {
   protocols?: VcrProtocolChoice[];
   protocolVersionId?: string | null;
   candidateRoster?: string[];
+  /** The people whose evaluation rested on a basis that has since changed: the evaluation that already exists is offered for them. */
+  basisUpdated?: { count: number; subjects: string[] };
   candidateCoverage?: { inputSnapshotId: string; requested: number; evaluated: number; pending: number; unavailable: number };
   comparisons?: Array<{ protocol: VcrProtocolChoice; summary: string | null; asOf: string | null; evidenceGaps: Array<{ variable: string; reason: string }> }>;
   timeline?: VcrClinicalTimelineEntry[];

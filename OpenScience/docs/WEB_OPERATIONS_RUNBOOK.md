@@ -1609,6 +1609,17 @@ retention follow existing policy; this feature makes no claim of instant erasure
 backup media or a provider. Do not treat these controls as HIPAA, GDPR or 21 CFR
 Part 11 certification.
 
+What an evaluation rested on can change afterwards: a permission of its source, a
+reviewed text that now takes the place of a record, a record added for the person, a
+withdrawal. The facts, language judgments and assessments derived from it are marked
+(`evimed_vcr.derived_marks`, found from a fact's source, a judgment's evidence and the
+facts a frozen input names), the matching page says 「依据已更新」 (or 「已撤回」) beside the
+person and offers 「重新评估」, which is the ordinary evaluation request for those
+people. A mark is a label: nothing is blocked, nothing runs because of one, a new
+evaluation writes a new assessment that carries no mark, and a withdrawal is not
+weakened by a later change. `open_science_vcr_erasure_total{kind}` counts withdrawals,
+erasures, retirements, files overwritten and marks written (and the ones that failed).
+
 Matching jobs freeze the candidate roster, facts, language judgments, criteria and
 as-of time before queueing. Continue a batch using its `inputSnapshotId` and
 `nextOffset`, not current mutable inputs. Requested candidates remain partitioned

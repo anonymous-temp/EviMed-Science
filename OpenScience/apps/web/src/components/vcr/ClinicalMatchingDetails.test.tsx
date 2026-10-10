@@ -47,6 +47,24 @@ describe('evaluating from the controls',()=>{
     fireEvent.click(start);
     await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1'],subjectKeys:['P-001'],direction:'patient_to_trial'}));
   });
+  // Per-source reprocessing (E-13): what an evaluation rested on has changed, so the page says so and offers the evaluation that exists.
+  it('says how many evaluations rest on a basis that has changed, and evaluates those people again with the existing trigger',async()=>{
+    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
+    controls(page({basisUpdated:{count:2,subjects:['P-001','P-002']}}));
+    expect(screen.getByText('2 人的评估依据已更新')).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'重新评估'}));
+    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p2'],subjectKeys:['P-001','P-002'],direction:'trial_to_patient'}));
+    expect(await screen.findByText('已提交 1 项评估。')).toBeVisible();
+  });
+  it('says nothing about a basis when nothing changed, and offers the evaluation only to a reader who may run it',()=>{
+    controls();
+    expect(screen.queryByText(/评估依据已更新/)).toBeNull();
+    expect(screen.queryByRole('button',{name:'重新评估'})).toBeNull();
+    document.body.innerHTML='';
+    controls(page({basisUpdated:{count:1,subjects:['P-001']}}),{canRun:false});
+    expect(screen.getByText('1 人的评估依据已更新')).toBeVisible();
+    expect(screen.queryByRole('button',{name:'重新评估'})).toBeNull();
+  });
   it('offers no run to a reader who may not run it, and keeps the refresh',()=>{
     controls(page(),{canRun:false});
     expect(screen.queryByRole('button',{name:'开始评估'})).toBeNull();
@@ -292,6 +310,11 @@ describe('the clinical timeline',()=>{
     fireEvent.click(screen.getByRole('button',{name:'显示更多 · 还有 5 条'}));
     expect(rows()).toHaveLength(45);
     expect(screen.queryByRole('button',{name:/显示更多/})).toBeNull();
+  });
+  it('says 依据已更新 beside a fact that was read from a basis that has changed',()=>{
+    timeline([fact('f1',{basis:'updated'}),fact('f2')]);
+    expect(rows()[0]).toHaveTextContent('依据已更新');
+    expect(rows()[1]).not.toHaveTextContent('依据已更新');
   });
   // ...a structured value printed as [object Object]...
   it('writes a recorded value a reader can read — a record, a list, a yes or no — never [object Object]',()=>{
