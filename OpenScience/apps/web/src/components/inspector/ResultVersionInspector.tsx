@@ -263,13 +263,13 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
       {actionError && <p role="alert" className="text-error">{actionError}</p>}
       {replay && <div role="status" className="flex flex-wrap items-center gap-2"><span>{replayLabel(replay.state)}</span>{replay.error && <span className="text-error">{replayErrorText(replay.error)}</span>}{replay.resultVersionId && <Button variant="text" onClick={() => void openSuccessor(replay.resultVersionId!)}>打开新结果</Button>}{["queued", "running", "pending"].includes(replay.state) && <Button variant="text" loading={action === "cancel"} onClick={() => void refreshReplay(true)}>取消重算</Button>}{actionError && <Button variant="text" onClick={() => void refreshReplay()}>刷新进度</Button>}</div>}
       {replay?.comparison && <ReplayOutcome comparison={replay.comparison} />}
-      <Disclosure summary="依据与核对意见" defaultOpen>
-        {!version.findings.length && <p className="py-2 text-muted">此版本没有可读取的核对意见，尚未核实。</p>}
+      {/* Nothing to show is no section: a version with no finding, source or number is not one that "was not verified" (owner ruling 2026-10-10). */}
+      {(version.findings.length > 0 || version.inputs.length > 0 || version.coverage.gaps.length > 0 || version.machineValues.length > 0) && <Disclosure summary="依据与核对意见" defaultOpen>
         <ul className="space-y-3 py-2">{version.findings.map((finding) => <li key={finding.id}><p className={finding.status === "verified" ? "text-verify-ok" : "text-verify-pending"}>{finding.status === "verified" ? "✓ " : "⚠ "}{finding.message}</p>{finding.sourceRefs?.map((source) => <SourceReference key={source.id} source={source} onOpen={(id) => navigate(`/app/runs/${version.producer.runId ?? version.producer.sessionId ?? "result"}/files/${(source.path ?? path).split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(id)}`)} />)}</li>)}</ul>
         {version.inputs.length > 0 && <ul className="space-y-2">{version.inputs.map((source) => <li key={`${source.id}:${source.versionId ?? source.digest}`}><SourceReference source={source} onOpen={(id) => navigate(`/app/runs/${version.producer.runId ?? version.producer.sessionId ?? "result"}/files/${(source.path ?? path).split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(id)}`)} /></li>)}</ul>}
         {version.coverage.gaps.length > 0 && <p className="py-2 text-verify-pending">记录不完整：{version.coverage.gaps.map(resultGapLabel).join("；")}</p>}
         {version.machineValues.length > 0 && <MachineValues version={version} />}
-      </Disclosure>
+      </Disclosure>}
       {text !== null && /\.(md|markdown|txt)$/i.test(version.path) && <DocumentExportActions source={{ versionId: version.versionId }} groupLabel="导出此版本" />}
       <ResultCorrectionPanel key={`correction:${version.versionId}`} versionId={version.versionId} onOpen={(id) => void openSuccessor(id)} />
       <ResultLineagePanel key={`lineage:${version.versionId}`} version={version} selectedText={anchor && anchor.versionId === version.versionId ? anchor.selection.selectedText : null}

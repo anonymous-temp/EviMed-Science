@@ -114,23 +114,30 @@ describe("immutable result inspection", () => {
     expect(shown("export")).toHaveAttribute("data-source", JSON.stringify({ versionId: latest.versionId }));
     expect(shown("corrections")).toHaveAttribute("data-version", latest.versionId);
   });
-  it("shows what the producing run found about a version, as warnings in the reader's words", async () => {
+  it("shows the clinical-safety finding the producing run left about a version, as a warning in the reader's words", async () => {
     const found: ResultVersion = { ...latest, findings: [
-      { id: "run-finding-0", kind: "legacy_notice", status: "safety", message: "涉及临床安全，请核对：阿司匹林一级预防：出血风险" },
-      { id: "run-finding-1", kind: "legacy_notice", status: "must-fix", message: "有一处依据需要核对：证据矩阵第 1 条结论" },
+      { id: "run-finding-0", kind: "clinical_safety_caution", status: "safety", message: "阿司匹林一级预防：出血风险：老年人应由医生评估。" },
     ] };
     api.list.mockResolvedValue({ items: [found], nextCursor: null }); api.get.mockResolvedValue(found);
     mount(found.versionId);
-    expect(await screen.findByText(/⚠ 涉及临床安全，请核对：阿司匹林一级预防：出血风险/)).toBeInTheDocument();
-    expect(screen.getByText(/⚠ 有一处依据需要核对：证据矩阵第 1 条结论/)).toBeInTheDocument();
+    expect(await screen.findByText(/⚠ 阿司匹林一级预防：出血风险：老年人应由医生评估。/)).toBeInTheDocument();
     expect(screen.queryByText(/尚未核实/)).toBeNull();
+  });
+  // R22, 2026-10-10: the run's own notices are no longer copied into a version, so most versions carry no finding at all. Such a version
+  // is not a version that was "not verified": there is nothing to say, and an empty section says nothing too.
+  it("says nothing of verification, and draws no empty section, for a version with no findings, sources or numbers", async () => {
+    mount(latest.versionId);
+    await screen.findByText("新结论");
+    expect(screen.queryByText("依据与核对意见")).toBeNull();
+    expect(screen.queryByText(/没有可读取的核对意见|尚未核实/)).toBeNull();
   });
   it("resets content and findings when a different immutable version is selected", async () => {
     mount(old.versionId); await screen.findByText("旧结论");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "结果版本" }), latest.versionId);
     expect(await screen.findByText("新结论")).toBeInTheDocument();
     expect(screen.queryByText(/旧版本原文不可用/)).toBeNull();
-    expect(screen.getByText(/尚未核实/)).toBeInTheDocument();
+    // The newer version has nothing of its own to say: the older version's finding is gone, and nothing is said in its place.
+    expect(screen.queryByText("依据与核对意见")).toBeNull();
   });
   it("shows read failures with retry and never presents them as a clean review", async () => {
     api.raw.mockRejectedValueOnce(new Error("保存的内容已删除")); mount();

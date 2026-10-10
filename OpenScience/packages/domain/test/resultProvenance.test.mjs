@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeResultPath, projectResultMethod, projectResultVersion, projectResultInput, resultMethodDifference, validateResultAnchor, resultVersionDifference } from "../src/resultProvenance.mjs";
+import { normalizeResultPath, projectResultMethod, projectResultVersion, projectResultInput, resultMethodDifference, validateResultAnchor, resultVersionDifference, RUN_FINDING_ID_PREFIX } from "../src/resultProvenance.mjs";
 
 const version = { artifactId: `ra_${"a".repeat(64)}`, versionId: `rv_${"b".repeat(64)}`,
   projectId: "one", path: "report.md", digest: "c".repeat(64), size: 12, coverage: { gaps: [] },
@@ -14,6 +14,22 @@ test("projection preserves honest capture gaps and binds findings without leakin
   assert.equal(projectResultInput({ kind: "source", id: "source", availability: "captured" }).availability, "reference");
   assert.throws(() => normalizeResultPath("../outside")); assert.throws(() => normalizeResultPath("/private"));
   assert.throws(() => normalizeResultPath("folder\\outside")); assert.equal(normalizeResultPath("./a//b.md"), "a/b.md");
+});
+
+test("a version shows its claim marks and the run's clinical-safety findings, never the run's own machinery notices", () => {
+  // A version captured before 2026-10-10 carries every notice its run left, copied in as `run-finding-N` with the notice's severity as
+  // its status. What a reader is shown of one is the claim-level marks and the clinical-safety findings; the run ledger keeps the rest.
+  const stored = { ...version, findings: [
+    { id: `${RUN_FINDING_ID_PREFIX}0`, kind: "run_compaction_forced", status: "advice", message: "请求过大，已先压缩上下文" },
+    { id: `${RUN_FINDING_ID_PREFIX}1`, kind: "legacy_notice", status: "must-fix", message: "有一处依据需要核对：证据矩阵第 1 条结论" },
+    { id: `${RUN_FINDING_ID_PREFIX}2`, kind: "clinical_safety_caution", status: "safety", message: "阿司匹林一级预防：出血风险" },
+    { id: "claim-CLM-001", kind: "claim_source_binding", status: "verified", message: "", elementId: "CLM-001", sourceRefs: [] },
+    { id: "finding", status: "failed", message: "a finding of another producer" },
+  ] };
+  assert.deepEqual(projectResultVersion(stored).findings.map((finding) => finding.id),
+    [`${RUN_FINDING_ID_PREFIX}2`, "claim-CLM-001", "finding"]);
+  assert.equal(RUN_FINDING_ID_PREFIX, "run-finding-");
+  assert.deepEqual(projectResultVersion({ ...version, findings: undefined }).findings, []);
 });
 
 test("anchored references cannot silently retarget selection to a successor or stale source", () => {

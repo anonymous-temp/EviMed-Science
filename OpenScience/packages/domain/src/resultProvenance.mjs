@@ -22,7 +22,24 @@ export function projectResultMethod(value) {
     seed: Number.isSafeInteger(value.seed) ? value.seed : null };
 }
 
-/** Public projection excludes storage paths, credentials and unbounded tool arguments.
+/**
+ * The id a finding copied from the run that produced a result is stored under: `run-finding-0`, `run-finding-1`… The capture
+ * (`resultDeliveryCapture.runFindingsOf`) writes it and the projection below reads it.
+ */
+export const RUN_FINDING_ID_PREFIX = 'run-finding-'
+
+/**
+ * A finding that is one of the run's own notices and not a clinical-safety one: the platform's machinery (a context compaction, a
+ * receipt, a repair round, a missing tool) copied in beside the result. A researcher is shown a result's claim marks and the
+ * clinical-safety findings; the notices stay in the run ledger for an operator (owner ruling 2026-10-10). Versions captured before
+ * the capture stopped copying them still hold them, so the projection leaves them out as well.
+ * @param {any} finding @returns {boolean}
+ */
+function isRunMachineryFinding(finding) {
+  return typeof finding?.id === 'string' && finding.id.startsWith(RUN_FINDING_ID_PREFIX) && finding.status !== 'safety'
+}
+
+/** Public projection excludes storage paths, credentials, unbounded tool arguments and the run's own machinery notices.
  * @param {any} value @returns {any} */
 export function projectResultVersion(value) {
   if (!value || !/^rv_[a-f0-9]{64}$/.test(value.versionId) || !/^ra_[a-f0-9]{64}$/.test(value.artifactId)
@@ -41,7 +58,7 @@ export function projectResultVersion(value) {
     producer: publicProducer, inputs, code: value.code ? projectResultInput(value.code) : null,
     environment: value.environment ? projectResultInput(value.environment) : null,
     method: projectResultMethod(value.method),
-    findings: Array.isArray(value.findings) ? value.findings.map((/** @type {any} */ finding) => ({
+    findings: Array.isArray(value.findings) ? value.findings.filter((/** @type {any} */ finding) => !isRunMachineryFinding(finding)).map((/** @type {any} */ finding) => ({
       id: finding.id, kind: finding.kind, status: finding.status, message: finding.message,
       elementId: finding.elementId ?? null, sourceRefs: finding.sourceRefs ?? [],
       machineValues: finding.machineValues ?? [], versionId: value.versionId })) : [],

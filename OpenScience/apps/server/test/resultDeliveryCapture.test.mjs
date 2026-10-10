@@ -7,6 +7,7 @@ import { readDeliveryReceipt } from "../src/agentRuns.mjs";
 import { ResultProvenanceService } from "../src/resultProvenanceService.mjs";
 import { ResultImpactService } from "../src/resultImpact.mjs";
 import { captureFinishedRun, captureResultDelivery, runFindingsOf } from "../src/resultDeliveryCapture.mjs";
+import { clinicalSafetyCautionNotice } from "../src/runNotices.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
 const sha = value => createHash("sha256").update(value).digest("hex");
@@ -21,7 +22,8 @@ async function fixture(t) {
   // As the ledger stores a finished run's findings: `qualityNotices`, each with the identity it was raised under.
   const run = { id: "run", sessionId: "session", qualityNotices: [
     { code: "run_partial_read", severity: "advice", text: "One search was unavailable.", detail: "有一项检索没有完成，这一项结论只基于能读到的部分。" },
-    "MUST FIX — claims[0].claim numeric fact 6 is not present"] };
+    "MUST FIX — claims[0].claim numeric fact 6 is not present",
+    clinicalSafetyCautionNotice({ ruleId: "aspirin-primary-prevention", titleZh: "阿司匹林一级预防：出血风险", messageZh: "老年人一级预防使用阿司匹林出血风险超过获益，应由医生评估。" })] };
   const sourceText = `# Study\n\n- DOI: 10.9999/paper\n\n${QUOTE}\n`;
   const sourceManifest = { "fulltext.md": sha(sourceText) };
   const sourceVersion = sha(JSON.stringify(sourceManifest));
@@ -267,19 +269,21 @@ test("a run that finishes with no receipt hands its listed files to capture, and
   assert.deepEqual(verified.unbound, []);
 });
 
-test("every version of a run shows the findings that run left, in the reader's words, whatever its receipt says", async t => {
+test("every version of a run carries the run's clinical-safety findings and its own claim marks, and not the run's machinery notices, whatever its receipt says", async t => {
   const f = await fixture(t);
   const runFindings = item => item.findings.filter(finding => finding.id.startsWith("run-finding-"));
+  // The ledger keeps all three notices of the run (an operator reads them there); a version is handed the clinical-safety one only
+  // (owner ruling 2026-10-10: the run's own notices are the back office's, a pharmacist's caution is content).
   assert.deepEqual(runFindingsOf(f.run), [
-    { id: "run-finding-0", kind: "run_partial_read", status: "advice", message: "部分子任务的记录无法读取：有一项检索没有完成，这一项结论只基于能读到的部分。" },
-    { id: "run-finding-1", kind: "legacy_notice", status: "must-fix", message: "有一处依据需要核对：证据矩阵第 1 条结论" },
-  ], "a legacy sentence is described in Chinese, not shown as the validator wrote it");
+    { id: "run-finding-0", kind: "clinical_safety_caution", status: "safety", message: "阿司匹林一级预防：出血风险：老年人一级预防使用阿司匹林出血风险超过获益，应由医生评估。" },
+  ]);
+  assert.deepEqual(runFindingsOf({ qualityNotices: f.run.qualityNotices.slice(0, 2) }), [], "a run that left only machinery notices hands its versions none");
 
   const verified = await readDeliveryReceipt(f.project, f.run);
   const graded = await captureResultDelivery({ ...f, receipt: verified });
   assert.equal(graded.items.length, 2);
   for (const item of graded.items) {
-    assert.deepEqual(runFindings(item).map(finding => [finding.id, finding.status]), [["run-finding-0", "advice"], ["run-finding-1", "must-fix"]], item.path);
+    assert.deepEqual(runFindings(item).map(finding => [finding.id, finding.status]), [["run-finding-0", "safety"]], item.path);
     assert.ok(item.findings.every(finding => typeof finding.message === "string" && finding.message), item.path);
   }
   // The matrix's own claim findings keep to the report, beside the run's.
@@ -287,13 +291,13 @@ test("every version of a run shows the findings that run left, in the reader's w
   assert.deepEqual(report.findings.filter(finding => finding.elementId).map(finding => finding.elementId), ["CLM-001", "CLM-002", "CLM-003"]);
   // What the reader opens later is the stored version, not the capture's return value.
   const stored = await f.results.get("owner", "p", graded.items.find(item => item.path === f.matrixPath).versionId);
-  assert.equal(runFindings(stored).length, 2);
+  assert.equal(runFindings(stored).length, 1);
 
   // Without a receipt, and for a run of another id: observed files carry them too.
   await rm(path.join(f.project.workspaceDir, "delivery-receipt.json"));
   const observed = await captureResultDelivery({ ...f, run: { ...f.run, id: "run-observed" }, receipt: null, files: [f.reportPath, f.matrixPath] });
   assert.equal(observed.items.length, 2);
-  for (const item of observed.items) assert.equal(runFindings(item).length, 2, item.path);
+  for (const item of observed.items) assert.equal(runFindings(item).length, 1, item.path);
 
   // A run that found nothing says nothing, and the old field name carries nothing.
   const quiet = await captureResultDelivery({ ...f, run: { id: "run-quiet", sessionId: "session", qualityFindings: [{ code: "x", message: "never read" }] }, receipt: null, files: [f.reportPath] });
