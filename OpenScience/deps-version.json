@@ -122,7 +122,16 @@
         },
         "J3": {
           "threshold": 0.8,
-          "calibration": "uncalibrated"
+          "calibration": "calibrated",
+          "promptFingerprint": "100472095ab4239afb73e0b20ebf86cbc754f040f550700b8c3fb2d4c52c9e02",
+          "calibratedAt": "2026-10-10T17:54:37.864Z",
+          "evidence": "evals/judge-sites/J3/benefit-2026-10-10.json",
+          "measured": 135,
+          "settled": 85,
+          "correct": 81,
+          "lower95": 0.8955440972244286,
+          "resultSha256": "874eb5549f0735c6c906cfaa9650be245a8ccacbcaf85ab56c59e2bc467c6a40",
+          "baselineAgreement": 0.9879518072289156
         },
         "J4": {
           "threshold": 0.7,

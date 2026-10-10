@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "site": "J9",
+  "recordedAt": "2026-10-10",
+  "rule": {
+    "id": "jev-benefit-2026-10-10",
+    "qualificationBar": 0.95,
+    "marginPoints": 0.02,
+    "statement": "On when, in every pass: (1) Jev's settled-correct lower95 is at least 0.95, or, where the plan names launch conditions that stand in for it (J3), those hold, and J4's added condition of no false notice on real non-clinical sentences holds as well; (2) the accuracy of the site with Jev on is not below the incumbent's on the same cases by more than 0.02; (3) the site with Jev on is faster (median per decision), or cheaper, or more accurate; (4) no constraint the site's record adds is broken (J3: not slower than Flash). Otherwise the original path stays.",
+    "siteConditions": "none named by the plan: the generic bar applies"
+  },
+  "model": "jev-1.13.0",
+  "corpus": {
+    "files": [
+      {
+        "file": "evals/judge-sites/J9/cases.json",
+        "sha256": "3c321d2b020878eb800e93dcd25d22dd40b49400112b064d6de0281e2e31c624"
+      }
+    ],
+    "cases": 14
+  },
+  "measuredOn": "A development host in Taipei, where both providers answer a bare request in about 0.16 s. The production host is in Beijing: TypeSafe is reached there in 0.5 to 0.6 s (plan 2026-10-06 section 0), and a 325-token Jev request took 0.33 to 1.24 s on 2026-10-07 (4 requests, privateEvidence latency-production-host.json). Latency here compares the two paths on one network; it is not the production figure.",
+  "incumbentCostBasis": "List prices (peak) from the reference price list on the tokens the provider reported. A repeated run of identical prompts is partly served from DeepSeek's prompt cache and costs less than a first call; production questions are new, so the first pass of a site is the representative one.",
+  "passes": [
+    {
+      "id": "pass-1",
+      "at": "2026-10-10T18:05:09.116Z",
+      "mode": "live-calibration",
+      "model": "jev-1.13.0",
+      "catalogCount": 25,
+      "catalogDigest": "3d46621a6a94733d812bcfe05862f3123a8914caa1652dfd92dff7b67ab16636",
+      "summary": {
+        "cases": 14,
+        "jev": {
+          "measured": 9,
+          "settled": 9,
+          "settledShare": 1,
+          "correctSettled": 9,
+          "settledAccuracy": 1,
+          "lower95": 0.7168711644368865,
+          "bar": 0.95,
+          "rawAccuracy": 1,
+          "failures": 5,
+          "ms": {
+            "n": 14,
+            "p50": 219,
+            "p95": 243
+          },
+          "costCnyPerCall": 0.0014750521428571427
+        },
+        "incumbent": {
+          "measured": 0,
+          "correct": 0,
+          "accuracy": null,
+          "failures": 0,
+          "ms": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "costCnyPerCall": null
+        },
+        "hybrid": {
+          "measured": 0,
+          "correct": 0,
+          "accuracy": null,
+          "ms": {
+            "n": 14,
+            "p50": 219,
+            "p95": 243
+          },
+          "costCnyPerCall": 0.0014750521428571427,
+          "originalPathAsked": 5
+        },
+        "paired": {
+          "n": 0,
+          "hybridOnly": 0,
+          "incumbentOnly": 0,
+          "bothRight": 0,
+          "bothWrong": 0
+        }
+      },
+      "checks": [
+        {
+          "id": "qualification",
+          "ok": false,
+          "detail": "settled-correct 9/9, lower95 0.7169 against the bar 0.95"
+        },
+        {
+          "id": "non-inferiority",
+          "ok": false,
+          "detail": "the incumbent or the site with Jev on was not measured on these cases"
+        },
+        {
+          "id": "benefit",
+          "ok": false,
+          "detail": "with the site on: faster false (p50 219 against null ms), cheaper false (0.001475 against n/a CNY per decision), more accurate false"
+        }
+      ],
+      "decision": "original-path",
+      "reasons": [
+        "qualification: settled-correct 9/9, lower95 0.7169 against the bar 0.95",
+        "non-inferiority: the incumbent or the site with Jev on was not measured on these cases",
+        "benefit: with the site on: faster false (p50 219 against null ms), cheaper false (0.001475 against n/a CNY per decision), more accurate false"
+      ],
+      "spend": {
+        "jevUsd": 0.0031,
+        "deepseekBilledCny": 0
+      },
+      "rowsSha256": "929d72b08b30adc7c62e092e58ee3083ad12a6b4a6258665423edac6780f804e",
+      "rows": [
+        {"id":"gwas-0","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ieu-b-40","ukb-b-19953","ieu-a-2"]},"outcome":"settled","confidence":1,"jev":{"sha256":"d5cee1f5c5ea0786464023f25d3225a8ad31bbcecefb5f049682e08802b1d777","bytes":1916},"correct":true,"ms":243,"costCny":0.0014731},
+        {"id":"gwas-1","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ebi-a-GCST005195","ieu-a-7","ukb-d-I9_CHD","finn-b-I9_CHD"]},"outcome":"fallback","code":"judge_provider_failure","confidence":0,"ms":213,"costCny":0.0014737},
+        {"id":"gwas-2","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ebi-a-GCST006867","finn-b-E4_DM2","ieu-a-26"]},"outcome":"settled","confidence":1,"jev":{"sha256":"7c3697802288566b3d7dffe2b5a55f93bcebb74210b9e39b659b8cfbce4527de","bytes":1918},"correct":true,"ms":219,"costCny":0.0014734},
+        {"id":"gwas-3","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ieu-b-110","ebi-a-GCST90239658","ukb-d-30780_irnt","ieu-a-300"]},"outcome":"settled","confidence":1,"jev":{"sha256":"78a2ea9498e92023c484918aaa24abc730699ca434b3cd7e2b6ea4e37c89651f","bytes":1922},"correct":true,"ms":223,"costCny":0.0014731},
+        {"id":"gwas-4","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ieu-b-38","ukb-b-20175"]},"outcome":"settled","confidence":1,"jev":{"sha256":"f671f8a4201dca136e163150f3852222bbef34270d8963d33e7b819f686e04f4","bytes":1920},"correct":true,"ms":225,"costCny":0.0014737},
+        {"id":"gwas-5","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ieu-b-4877","ukb-b-2134"]},"outcome":"settled","confidence":1,"jev":{"sha256":"1635a0db332ae4510b9cde5e109787d60574abb7de6cdab94accf9725dac3391","bytes":1922},"correct":true,"ms":226,"costCny":0.0014731},
+        {"id":"gwas-6","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ebi-a-GCST90018977","ukb-d-30880_irnt","ieu-a-1055"]},"outcome":"fallback","code":"judge_provider_failure","confidence":0,"ms":216,"costCny":0.0014768},
+        {"id":"gwas-7","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ieu-b-102","finn-b-F5_DEPRESSIO","ieu-a-1188"]},"outcome":"settled","confidence":1,"jev":{"sha256":"edcabdeaad3dc55440e6cf49a2049481767fc6c75003141ef699d2167002b1c4","bytes":1911},"correct":true,"ms":241,"costCny":0.0014723},
+        {"id":"gwas-8","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ebi-a-GCST90000615","ukb-d-30890_irnt","ieu-a-? "]},"outcome":"fallback","code":"judge_provider_failure","confidence":0,"ms":215,"costCny":0.0014759},
+        {"id":"gwas-9","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ebi-a-GCST90027158","ieu-b-2","finn-b-G6_ALZHEIMER","ieu-a-297"]},"outcome":"settled","confidence":1,"jev":{"sha256":"ca40c223467da1b5300883165b279072883af2615b18a16475009bfda86bab98","bytes":1906},"correct":true,"ms":215,"costCny":0.0014768},
+        {"id":"gwas-10","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ebi-a-GCST004131","finn-b-K11_IBD","ieu-a-31"]},"outcome":"settled","confidence":1,"jev":{"sha256":"c16bc843b467f25fa3d11454520a084b1e144dd19c3b8bbdb5fec8fbb9513fb6","bytes":1907},"correct":true,"ms":223,"costCny":0.0014757},
+        {"id":"gwas-11","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ebi-a-GCST90029070","ukb-d-30710_irnt","ieu-b-35"]},"outcome":"fallback","code":"judge_provider_failure","confidence":0,"ms":209,"costCny":0.0014776},
+        {"id":"gwas-12","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ebi-a-GCST007561","ukb-b-4424"]},"outcome":"settled","confidence":1,"jev":{"sha256":"4c69a1fc1e8e811c7047e17b755010bf7d15a34f255b54345dfe70f06a3c7ef6","bytes":1917},"correct":true,"ms":208,"costCny":0.001474},
+        {"id":"gwas-13","source":"2026-09-21-curated-gwas-catalogue","label":{"acceptableIds":["ukb-d-30750_irnt","ebi-a-GCST90002244","ieu-b-104"]},"outcome":"fallback","code":"judge_provider_failure","confidence":0,"ms":221,"costCny":0.0014816}
+      ]
+    }
+  ],
+  "decision": {
+    "value": "original-path",
+    "heldBy": [
+      "qualification: settled-correct 9/9, lower95 0.7169 against the bar 0.95",
+      "non-inferiority: the incumbent or the site with Jev on was not measured on these cases",
+      "benefit: with the site on: faster false (p50 219 against null ms), cheaper false (0.001475 against n/a CNY per decision), more accurate false"
+    ],
+    "resultsSha256": "3b65d2503a0d1d2e3f376f6c4d8606ad2726d128ee7e3c692eebe35b8f3d124b",
+    "summary": "Original path. The incumbent comparison the plan requires was not run, and 5 of 14 requests cannot settle because one tied candidate voids the request."
+  },
+  "notes": {
+    "jev": "Jev settled 9 of the 14 traits (50 candidates each) and was right on all 9 (lower95 0.717). The other 5 requests failed outright, in both runs: one question of the 50 comes back as an exact tie (0.5 and 0.5, confidence 0), and for every site except J1 and J8 a single invalid answer discards the whole request (judge_invalid_answer). Replaying three of the failed traits found two tied candidates in two of them (the third did not tie that time).",
+    "incumbent": "Not run. The original path is the MR engine's own structured call (chat_structured with its pro tier, then a hand-over of up to three ids), which this harness cannot reproduce without the engine's runtime, and the plan's condition is a comparison with thinking-on Flash on this 50-candidate shape.",
+    "also": "Beyond the failures: J9 asks 'is this candidate relevant to the trait', which does not encode the engine's own criteria (larger sample, more recent, European), and equally relevant candidates stay in list order, so the one id it would take is not the one the engine's prompt would pick; it also takes one id where the original selects up to three (review J-11), which changes the analysis it feeds."
+  }
+}

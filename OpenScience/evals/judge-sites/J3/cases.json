@@ -934,9 +934,16 @@
         "question": "请帮我生成一份关于SGLT2抑制剂治疗心力衰竭的系统综述与Meta分析报告，要求包含文献检索策略、纳入研究和森林图结果解读。"
       },
       "expected": {
-        "agentId": "clinical-evidence-synthesis"
+        "agentId": "meta-analysis"
       },
-      "tag": "open-domain:report"
+      "tag": "open-domain:report",
+      "labelCorrection": {
+        "from": "clinical-evidence-synthesis",
+        "to": "meta-analysis",
+        "reason": "The request commissions a systematic review with Meta analysis, a search strategy and forest-plot reading, which is the meta-analysis capability's own deliverable and starter prompt; routing-6 and routing-34 are labelled the same way.",
+        "correctedOn": "2026-10-10",
+        "basis": "release-readiness.json records these labels as legacy ones, written against an 11-capability catalogue, that conflict with current named meta, bibliometric and off-label deliverables. Corrected from the question and the capability manifest alone, by this corpus's own convention (routing-2, -6, -7, -34), before the run that scored it."
+      }
     },
     {
       "id": "routing-79",
@@ -970,9 +977,16 @@
         "question": "请生成一份肿瘤免疫检查点抑制剂近五年研究进展与文献计量分析报告。"
       },
       "expected": {
-        "agentId": "clinical-evidence-synthesis"
+        "agentId": "bibliometric-analysis"
       },
-      "tag": "open-domain:report"
+      "tag": "open-domain:report",
+      "labelCorrection": {
+        "from": "clinical-evidence-synthesis",
+        "to": "bibliometric-analysis",
+        "reason": "The request commissions a 文献计量分析报告 of research progress, which is the bibliometric-analysis capability's own deliverable (research landscape, trends); routing-2 is labelled the same way.",
+        "correctedOn": "2026-10-10",
+        "basis": "release-readiness.json records these labels as legacy ones, written against an 11-capability catalogue, that conflict with current named meta, bibliometric and off-label deliverables. Corrected from the question and the capability manifest alone, by this corpus's own convention (routing-2, -6, -7, -34), before the run that scored it."
+      }
     },
     {
       "id": "routing-82",
@@ -994,9 +1008,16 @@
         "question": "请生成一份他汀类药物用于心血管疾病一级预防的Meta分析报告，重点讨论获益与风险的权衡。"
       },
       "expected": {
-        "agentId": "clinical-evidence-synthesis"
+        "agentId": "meta-analysis"
       },
-      "tag": "open-domain:report"
+      "tag": "open-domain:report",
+      "labelCorrection": {
+        "from": "clinical-evidence-synthesis",
+        "to": "meta-analysis",
+        "reason": "The request commissions a Meta analysis report, which is the meta-analysis capability's own deliverable; routing-6 and routing-34 are labelled the same way.",
+        "correctedOn": "2026-10-10",
+        "basis": "release-readiness.json records these labels as legacy ones, written against an 11-capability catalogue, that conflict with current named meta, bibliometric and off-label deliverables. Corrected from the question and the capability manifest alone, by this corpus's own convention (routing-2, -6, -7, -34), before the run that scored it."
+      }
     },
     {
       "id": "routing-84",
@@ -1018,9 +1039,16 @@
         "question": "请出具一份利妥昔单抗超说明书用药（如免疫性血小板减少症、肾病综合征）的循证评价报告。"
       },
       "expected": {
-        "agentId": "clinical-evidence-synthesis"
+        "agentId": "off-label-analysis"
       },
-      "tag": "open-domain:report"
+      "tag": "open-domain:report",
+      "labelCorrection": {
+        "from": "clinical-evidence-synthesis",
+        "to": "off-label-analysis",
+        "reason": "The request asks for the evidence on named off-label indications of one medicine, which is the off-label-analysis capability's starter prompt and required inputs (drug, proposed use); routing-7 is labelled the same way.",
+        "correctedOn": "2026-10-10",
+        "basis": "release-readiness.json records these labels as legacy ones, written against an 11-capability catalogue, that conflict with current named meta, bibliometric and off-label deliverables. Corrected from the question and the capability manifest alone, by this corpus's own convention (routing-2, -6, -7, -34), before the run that scored it."
+      }
     },
     {
       "id": "paper-001",
@@ -1622,5 +1650,15 @@
       },
       "tag": "title-to-paper"
     }
-  ]
+  ],
+  "labelCorrections": {
+    "correctedOn": "2026-10-10",
+    "ids": [
+      "routing-78",
+      "routing-81",
+      "routing-83",
+      "routing-85"
+    ],
+    "rule": "A label is corrected only where the request names a current specialty capability's own deliverable and the label names the generic synthesis capability. Requests that fit two current capabilities (routing-79, -80, -84: an evidence evaluation of one medicine) or that no arm routed (routing-21, -22, -24) are judgement calls and keep their labels."
+  }
 }

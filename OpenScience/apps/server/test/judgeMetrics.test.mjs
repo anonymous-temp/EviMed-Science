@@ -81,24 +81,32 @@ test("a site whose pin carries no baseline agreement says so: its drift alert ca
 
 const measuredCatalogue = { question: "请做一个 Meta 分析", capabilities: [{ id: "meta-analysis", title: "Meta" }, { id: "adr-analysis", title: "ADR" }] };
 const changedCatalogue = { ...measuredCatalogue, capabilities: [...measuredCatalogue.capabilities, { id: "a-new-capability", title: "New" }] };
-/** A config that pins J3 as calibrated for the catalogue above. */
-function pinnedJ3() {
-  const fingerprint = judgePromptFingerprint("J3", buildJudgeRequest("J3", measuredCatalogue).questions, 0.8, config.reviewJevModel);
+/** A config that pins J3 as calibrated for the prompt below; `reworded` pins it for a prompt that has since been edited. */
+function pinnedJ3({ reworded = false } = {}) {
+  const measured = buildJudgeRequest("J3", measuredCatalogue);
+  if (reworded) measured.questions.agentId.instructions += " Prefer a specialist.";
+  const fingerprint = judgePromptFingerprint("J3", measured.questions, 0.8, config.reviewJevModel);
   return { fingerprint, config: { ...config, jevSites: { J3: { calibration: "calibrated", threshold: 0.8, promptFingerprint: fingerprint } } } };
 }
 
 test("a calibrated site that stops judging because its prompt changed says which site and why", async () => {
-  const { fingerprint, config: pinned } = pinnedJ3();
-  const service = createJudgeService({ config: pinned, callImpl: yesLast });
-  assert.equal((await service.judge("J3", measuredCatalogue)).outcome, "settled", "the catalogue that was measured runs");
-  assert.equal(service.status().sites.J3.blockedBy, undefined);
+  // J3's options are the capability catalogue, and its calibration is bound to the wording of the prompt, not to which capabilities
+  // exist: a capability added does not stand a calibrated site down (JEV-4).
+  const { config: pinnedForThisPrompt } = pinnedJ3();
+  const steady = createJudgeService({ config: pinnedForThisPrompt, callImpl: yesLast });
+  assert.equal((await steady.judge("J3", measuredCatalogue)).outcome, "settled");
+  assert.equal((await steady.judge("J3", changedCatalogue)).outcome, "settled", "a catalogue with one more capability runs under the same pin");
+  assert.equal(steady.status().sites.J3.blockedBy, undefined);
+  await steady.close();
 
-  // A capability is added to the catalogue: the calibration was bound to the old prompt, so the site stands down, as it must.
-  const refused = await service.judge("J3", changedCatalogue);
+  // The prompt is edited after the calibration (the pin names the wording that was measured): the site stands down, as it must.
+  const { fingerprint, config: pinned } = pinnedJ3({ reworded: true });
+  const service = createJudgeService({ config: pinned, callImpl: yesLast });
+  const refused = await service.judge("J3", measuredCatalogue);
   assert.equal(refused.code, "judge_calibration_mismatch");
-  assert.notEqual(judgePromptFingerprint("J3", buildJudgeRequest("J3", changedCatalogue).questions, 0.8, config.reviewJevModel), fingerprint,
-    "the fingerprint still binds the calibration to the prompt, capability ids included");
-  await service.judge("J3", changedCatalogue);
+  assert.notEqual(judgePromptFingerprint("J3", buildJudgeRequest("J3", measuredCatalogue).questions, 0.8, config.reviewJevModel), fingerprint,
+    "the fingerprint still binds the calibration to the wording of the prompt");
+  await service.judge("J3", measuredCatalogue);
   const blocked = service.status().sites.J3;
   assert.equal(blocked.blockedBy, "judge_calibration_mismatch");
   assert.match(blocked.blockedSince, /^\d{4}-\d\d-\d\dT/);
@@ -106,10 +114,13 @@ test("a calibrated site that stops judging because its prompt changed says which
   const reasons = (await service.metricFamilies()).find((family) => family.name === "open_science_jev_fallback_reasons_total");
   assert.deepEqual(reasons?.series.filter((row) => row.labels.site === "J3"), [{ value: 2, labels: { site: "J3", code: "judge_calibration_mismatch" } }]);
 
-  // Measured again (the catalogue went back, or the site was re-calibrated): the mark clears.
-  assert.equal((await service.judge("J3", measuredCatalogue)).outcome, "settled");
-  assert.equal(service.status().sites.J3.blockedBy, undefined);
+  // Measured again (the wording went back, or the site was re-calibrated): the mark clears.
+  const { config: remeasured } = pinnedJ3();
+  const again = createJudgeService({ config: remeasured, callImpl: yesLast });
+  assert.equal((await again.judge("J3", measuredCatalogue)).outcome, "settled");
+  assert.equal(again.status().sites.J3.blockedBy, undefined);
   await service.close();
+  await again.close();
 });
 
 test("the fallback reasons of every site are exported, so a site that stopped judging is a number, not a silence", async () => {
@@ -124,9 +135,9 @@ test("the fallback reasons of every site are exported, so a site that stopped ju
 });
 
 test("/api/ready names a site that is blocked and why", async () => {
-  const { config: pinned } = pinnedJ3();
+  const { config: pinned } = pinnedJ3({ reworded: true });
   const service = createJudgeService({ config: pinned, callImpl: yesLast });
-  await service.judge("J3", changedCatalogue);
+  await service.judge("J3", measuredCatalogue);
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-judge-ready-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, bootstrapUser: "alice", bootstrapPassword: "correct horse battery staple", judgeService: service });
   const address = await app.listen(0, "127.0.0.1");

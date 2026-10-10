@@ -470,8 +470,9 @@ export function createJudgeService({
     if (site !== "reply-check" && !calibrationMode) {
       if (config.jevSites?.[site]?.calibration !== "calibrated")
         return finish("fallback", "judge_uncalibrated");
-      // The calibration is bound to the prompt, capability ids and all (J3's options are the catalogue's), so
-      // a changed prompt stands the site down. That has to be seen: it is marked here and shows in status().
+      // The calibration is bound to the prompt (the wording of each question and option, the threshold, the model;
+      // not the candidates a request offers), so a changed prompt stands the site down. That has to be seen: it is
+      // marked here and shows in status().
       if (config.jevSites?.[site]?.promptFingerprint !== fingerprint) {
         if (!blocked.has(site)) blocked.set(site, now());
         return finish("fallback", "judge_calibration_mismatch", {

@@ -1,3 +1,15 @@
+// Measures Jev judge sites against the corpora in evals/judge-sites/<site>/.
+//
+//   node evals/judge-sites/run.mjs [--site J2,J3] [--limit N]                          validate the corpora, no model call
+//   node evals/judge-sites/run.mjs --live --output <private.json> [--site ...]          Jev alone, at each site's pinned threshold
+//   ... --incumbent                 also run the path each site replaces, as production runs it (incumbents.mjs; J3 through the
+//                                   production classifier and routing, J2 through ChannelIntentClassifier, J5 and J6 through the
+//                                   frontier editor, J4 the frozen register pattern, J15 and J18 their fixed originals)
+//   ... --resume                    skip the cases the output file already holds
+//
+// Keys come from the files the server itself reads (OPEN_SCIENCE_TYPESAFE_API_KEY_FILE, OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE); nothing here
+// prints or stores one, and the output is kept private. `write-benefit.mjs` turns passes of such a report into a site's committed
+// benefit record, and `benefit.mjs` holds the one rule that decides from it.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,9 +20,11 @@ import { callJev } from '../../apps/server/src/jevModel.mjs';
 import { createJudgeService, decodeJudgeAnswers } from '../../apps/server/src/judgeService.mjs';
 import { buildJudgeRequest, JUDGE_SITE_IDS } from '../../apps/server/src/judgeSites.mjs';
 import { SpecialistClassifier } from '../../apps/server/src/specialistClassifier.mjs';
-import { ChannelIntentClassifier, verifiedIntent } from '../../apps/server/src/channels/intent.mjs';
+import { verifiedIntent } from '../../apps/server/src/channels/intent.mjs';
 import { lowerConfidenceBound, recommendThreshold } from './statistics.mjs';
 import { routeRecordedDecision } from './routing-evaluation.mjs';
+import { createIncumbents, createMeter } from './incumbents.mjs';
+import { summarizeSite } from './benefit.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
@@ -54,11 +68,18 @@ const meteredCall = async (deps, call) => {
   return combined;
 };
 const judge = createJudgeService({ config, callImpl: meteredCall, calibrationMode: true });
-const baseline = option('--baseline') === 'flash' ? new SpecialistClassifier({ ...config, llmRoutingEnabled: true }) : null;
-const intentBaseline = baseline ? new ChannelIntentClassifier(config) : null;
+// `--incumbent` (or the older `--baseline flash`) also runs, for each case, the path the site replaces: the production class or pattern
+// itself, measured for latency and cost (incumbents.mjs). Without it Jev is measured alone.
+const incumbentOn = argv.includes('--incumbent') || option('--baseline') === 'flash';
+const meter = createMeter();
+const incumbents = incumbentOn ? createIncumbents({ config, meter }) : {};
+const baseline = incumbentOn ? new SpecialistClassifier({ ...config, llmRoutingEnabled: true }, { fetchImpl: meter.fetchImpl }) : null;
+const resume = argv.includes('--resume');
 const baselineReplayFile = option('--baseline-replay');
 const baselineReplay = baselineReplayFile ? JSON.parse(await fs.readFile(baselineReplayFile, 'utf8')) : null;
 if (baselineReplay && baselineReplay.catalogDigest !== catalogDigest) throw new Error('Baseline catalog differs from the live catalog');
+let previous = [];
+if (resume && output) try { previous = JSON.parse(await fs.readFile(output, 'utf8')).rows ?? []; } catch { /* Nothing to resume from. */ }
 const report = { schemaVersion: 1, provider, model: config.reviewJevModel, at: new Date().toISOString(),
   mode: live ? 'live-calibration' : 'corpus-validation-only', catalogCount: catalog.length, catalogDigest,
   independentHoldout: false, sites: {}, rows: [] };
@@ -78,6 +99,19 @@ function satisfiesConstraint(actual, expected, mode) {
   if (Array.isArray(expected)) return Array.isArray(actual) && expected.every((value, index) => satisfiesConstraint(actual[index], value, mode));
   return Object.entries(expected).every(([key, value]) => key === 'id' ? actual[key] === value : satisfiesConstraint(actual[key], value, mode));
 }
+/** Whether `value` is what the case's label says, by the first kind of label the case carries; undefined when it carries none the runner can score. */
+function labelCorrect(example, value) {
+  if (example.expected?.methodsReportingAnnotations) return undefined;
+  if (example.expected !== undefined) return includesExpected(value, example.expected);
+  if (example.expectedPartial !== undefined) return includesExpected(value, example.expectedPartial);
+  if (example.expectedNot !== undefined) return satisfiesConstraint(value, example.expectedNot, 'not');
+  if (example.expectedAny !== undefined) return satisfiesConstraint(value, example.expectedAny, 'any');
+  return undefined;
+}
+/** What a caller does with an answer Jev did not settle, for the sites whose caller does something other than ask the original path
+ *  (J4: no notice). J2 asked for the safe default intent until 2026-10-10 (`JEV_J2_BEFORE`) and asks the original classifier now. */
+const DEFAULTS = { J4: { leakage: false } };
+const JEV_J2_BEFORE = { switch_to: null, has_request: true, continues_running_task: false };
 function comparableValue(site, value, input) {
   if (site !== 'J2' || !value) return value;
   const verified = verifiedIntent(value, { projectIds: input.projects.map(p => p.id), currentProjectId: input.currentProjectId, running: Boolean(input.currentTask) });
@@ -94,6 +128,8 @@ try {
     try { supplemental = JSON.parse(await fs.readFile(path.join(root, 'evals/judge-sites', site, 'supplemental.json'), 'utf8')); } catch { /* Optional independent controls. */ }
     const cases = [...corpus.cases, ...supplemental].slice(0, Number(option('--limit', '100000')));
     const evaluate = async example => {
+      const done = resume ? previous.find(item => item.site === site && item.id === example.id && item.outcome !== 'invalid') : null;
+      if (done) { rows.push(done); report.rows.push(done); return; }
       const input = { ...example.input, ...(site === 'J3' ? { capabilities: catalog } : {}) };
       const row = { site, id: example.id, tag: example.tag, source: example.source, labelBasis: example.labelBasis,
         releaseEligible: example.releaseEligible !== false, group: example.group ?? example.id,
@@ -104,7 +140,7 @@ try {
           const started = Date.now();
           const decision = await judge.judge(site, input, { userId: 'judge-calibration', projectId: 'judge-calibration' });
           Object.assign(row, { outcome: decision.outcome, code: decision.code, ms: Date.now() - started,
-            cost: decision.cost, confidence: decision.confidence, promptFingerprint: decision.promptFingerprint });
+            cost: decision.cost, confidence: decision.confidence, promptFingerprint: decision.promptFingerprint, ...(decision.cause ? { cause: decision.cause } : {}) });
           if (decision.answers) {
             const decoded = decodeJudgeAnswers(site, input, decision.answers, { threshold: 0, model: config.reviewJevModel });
             row.rawValue = comparableValue(site, decoded.value, input);
@@ -112,10 +148,7 @@ try {
             row.confidence = decoded.confidence;
             row.decisions = decoded.decisions;
             if (example.expected?.methodsReportingAnnotations) row.unscoredReason = 'Methods reporting annotations do not establish a complete CONSORT criterion pass.';
-            else if (example.expected !== undefined) row.correct = includesExpected(row.rawValue, example.expected);
-            else if (example.expectedPartial !== undefined) row.correct = includesExpected(row.rawValue, example.expectedPartial);
-            else if (example.expectedNot !== undefined) row.correct = satisfiesConstraint(row.rawValue, example.expectedNot, 'not');
-            else if (example.expectedAny !== undefined) row.correct = satisfiesConstraint(row.rawValue, example.expectedAny, 'any');
+            else if (labelCorrect(example, row.rawValue) !== undefined) row.correct = labelCorrect(example, row.rawValue);
             else if (example.acceptableIds) {
               const best = [...(decoded.value.candidates ?? [])].sort((a, b) => b.relevance - a.relevance)[0];
               row.correct = example.acceptableIds.includes(best?.id);
@@ -130,23 +163,32 @@ try {
             }
             else if (baseline) {
               const trace = {};
-              const old = await baseline.classify(input.question, catalog, trace, { userId: 'judge-calibration', projectId: 'judge-calibration' });
-              row.baseline = { agentId: old?.agentId ?? (trace.verdict === 'none' ? 'none' : null), failure: trace.failure ?? null };
+              const arm = await meter.measure(() => baseline.classify(input.question, catalog, trace, { userId: 'judge-calibration', projectId: 'judge-calibration' }));
+              row.baseline = { agentId: arm.result?.agentId ?? (trace.verdict === 'none' ? 'none' : null), failure: trace.failure ?? null };
+              row.incumbent = { value: { agentId: row.baseline.agentId }, ms: arm.ms, cost: arm.cost, billedCny: arm.billedCny, failure: row.baseline.failure };
             }
             row.finalRoute = await routeRecordedDecision(input.question, catalog, decision, row.baseline);
             row.baselineFinalRoute = row.baseline ? await routeRecordedDecision(input.question, catalog, null, row.baseline) : null;
             row.falseSpecialist = example.expected?.agentId === 'none' && row.finalRoute.agentId !== 'none';
             row.baselineFalseSpecialist = example.expected?.agentId === 'none' && row.baselineFinalRoute?.agentId !== 'none';
             row.finalCorrect = row.finalRoute.agentId === example.expected?.agentId;
+            // What the researcher gets is the final route, regex net included: that is what both arms are scored on.
+            row.hybridCorrect = row.finalCorrect;
+            if (row.incumbent && row.baselineFinalRoute) row.incumbent.correct = row.baselineFinalRoute.agentId === example.expected?.agentId;
+          } else if (incumbents[site]) {
+            try {
+              const arm = await incumbents[site](example);
+              row.incumbent = { value: arm.value, ms: arm.ms, cost: arm.cost, billedCny: arm.billedCny, failure: arm.failure,
+                correct: labelCorrect(example, comparableValue(site, arm.value, input)) };
+              if (site === 'J2' && !arm.failure && row.rawValue) row.baselineAgreement = includesExpected(row.rawValue, arm.value);
+            } catch (error) { row.incumbent = { failure: /^[a-z_]+$/.test(error.message) ? error.message : 'incumbent_failed' }; }
           }
-          if (site === 'J2' && intentBaseline) {
-            const old = await intentBaseline.classifyWithModel({ userId: 'judge-calibration', projectId: input.currentProjectId,
-              text: input.message, projects: input.projects, runningTask: input.currentTask ? { question: input.currentTask } : null });
-            row.baseline = { switch_to: old.switchTo, has_request: old.hasRequest, continues_running_task: old.continuesRunningTask,
-              failure: old.source === 'model' ? null : old.reason ?? 'baseline_unavailable' };
-            row.baselineCorrect = !row.baseline.failure && includesExpected(row.baseline, example.expected);
-            row.baselineAgreement = !row.baseline.failure && includesExpected(row.rawValue, {
-              switch_to: old.switchTo, has_request: old.hasRequest, continues_running_task: old.continuesRunningTask });
+          // The site with Jev on: Jev where it settled; elsewhere what its caller does (a fixed default for J2 and J4), else the original path.
+          if (site !== 'J3') {
+            if (Object.hasOwn(DEFAULTS, site)) row.hybridCorrect = row.outcome === 'settled' ? row.correct : labelCorrect(example, DEFAULTS[site]);
+            else if (row.incumbent) row.hybridCorrect = row.outcome === 'settled' ? row.correct : row.incumbent.correct;
+            // What J2 did before it handed unsettled messages on, scored beside what it does now.
+            if (site === 'J2') row.hybridBeforeCorrect = row.outcome === 'settled' ? row.correct : labelCorrect(example, JEV_J2_BEFORE);
           }
         } else row.outcome = 'validated-input';
       } catch (error) { row.outcome = 'invalid'; row.code = /^[a-z_]+$/.test(error.message) ? error.message : 'eval_case_failed'; }
@@ -176,8 +218,10 @@ try {
       baselineAgreement: settled.filter(row => typeof row.baselineAgreement === 'boolean').length
         ? settled.filter(row => row.baselineAgreement).length / settled.filter(row => typeof row.baselineAgreement === 'boolean').length : null,
       missingReleaseEvidence: [...(calibration.length < 100 ? ['approximately-100-labelled-examples'] : [])],
+      ...(incumbentOn && live ? { benefit: summarizeSite(rows) } : {}),
       status: live ? 'measured-not-release-certified' : 'validated-not-measured' };
   }
 } finally { await judge.close(); }
+if (incumbentOn) report.incumbentMeter = { ...meter.totals };
 if (output) await fs.writeFile(output, JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
 process.stdout.write(JSON.stringify({ ...report, rows: undefined }, null, 2) + '\n');

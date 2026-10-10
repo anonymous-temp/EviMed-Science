@@ -126,7 +126,10 @@ export function judgePromptFingerprint(site,questions,threshold,model) {
   // Project and candidate identities vary per request. Preserve the question's
   // conservative first option and every criterion template, not private IDs.
   // A criterion-only policy edit must invalidate the calibrated fingerprint.
-  const dynamic=['J2','J11','J20'].includes(site)&&Object.hasOwn(q.criteria,'none');
+  // J3's options are the capability catalogue, which grows: its pin is bound to
+  // the wording of the question and of each option, not to which capabilities
+  // exist, or the next capability added would stand a calibrated site down.
+  const dynamic=['J2','J3','J11','J20'].includes(site)&&Object.hasOwn(q.criteria,'none');
   const criteria=dynamic?{
    first:Object.entries(q.criteria)[0],
    candidates:[...new Set(Object.entries(q.criteria).slice(1).map(([key,value])=>normalize(key===value?'registered_candidate':value)))],

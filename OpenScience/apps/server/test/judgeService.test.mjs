@@ -77,3 +77,19 @@ test('the master switch (OPEN_SCIENCE_JEV_ENABLED) stands every registered site 
   }
   await off.close();
 });
+
+test("J3's calibration is bound to its prompt, not to the capability catalogue: a capability added, removed or reordered keeps the pin, a changed question or option text stands it down (JEV-4)",()=>{
+  const ask=ids=>buildJudgeRequest('J3',{question:'q',capabilities:ids.map(id=>({id,title:id,description:`about ${id}`}))});
+  const fingerprint=request=>judgePromptFingerprint('J3',request.questions,.8,config.reviewJevModel);
+  // The catalogue is data in the state; the questions only name its options. Twenty-five capabilities in one order or thirty in another are one prompt.
+  assert.equal(fingerprint(ask(['a','b'])),fingerprint(ask(['x','y','z','w'])));
+  assert.equal(fingerprint(ask(['a','b','c'])),fingerprint(ask(['c','a','b'])));
+  // What was measured is the wording of the question and of each option, and the threshold and model it was measured at.
+  const reworded=ask(['a','b']);reworded.questions.agentId.instructions+=' Prefer a specialist.';
+  assert.notEqual(fingerprint(reworded),fingerprint(ask(['a','b'])));
+  const none=ask(['a','b']);none.questions.agentId.criteria.none='A specialist always fits.';
+  assert.notEqual(fingerprint(none),fingerprint(ask(['a','b'])));
+  const option=ask(['a','b']);option.questions.agentId.criteria.a='The question mentions the topic of capabilities[0].';
+  assert.notEqual(fingerprint(option),fingerprint(ask(['a','b'])));
+  assert.notEqual(judgePromptFingerprint('J3',ask(['a','b']).questions,.9,config.reviewJevModel),fingerprint(ask(['a','b'])));
+});
