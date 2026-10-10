@@ -38,9 +38,10 @@ export const DURABLE_RECALL_KINDS = new Set(["profile", "preference", "behavior"
 // unreachable, silently, and the memory ablation's two arms consequently
 // delivered byte-identical context.
 //
-// `researchMemory.relevant()` already documents this exact failure and fixes it
-// for the *fetch* (durable records get their own query). This is the same fix
-// one layer down, for the *selection*.
+// `researchMemory.relevant()` fixes this exact failure for the *fetch* (it reads
+// the durable kinds whatever the question says and never reads a run summary,
+// so episodes cannot fill what is read). This is the same fix one layer down,
+// for the *selection*.
 export const DURABLE_RECALL_BUDGET_SHARE = 0.5;
 
 /**
