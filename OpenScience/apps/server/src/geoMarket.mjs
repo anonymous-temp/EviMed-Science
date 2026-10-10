@@ -834,13 +834,17 @@ async function reservedToday(ctx, geoProjectId) {
  * @param {Set<string>} blocked @param {Record<string, any>} counts
  */
 async function planProject(ctx, project, candidates, blocked, counts) {
-  const articles = await ctx.store.listPlaceableArticles(project.id, 200);
+  // The articles that can take a placement: not the ones that already hold an order (placed, being placed or planned), which are
+  // the oldest and, in a project that has placed a good many, all of the first two hundred (M-4).
+  const articles = await ctx.store.listPlaceableArticles(project.id, 200, { withoutOrderIn: LIVE_STATES });
   if (!articles.length) return;
   const mediaByKey = new Map(candidates.map((media) => [mediaKey(media.mediaType, media.resourceId), media]));
   const { usage, orders: recent } = await domainUsage(ctx, project.id, mediaByKey);
   const articleOrders = await listAllOrders(ctx.store, { geoProjectId: project.id, articleIds: articles.map((article) => article.id) }, 2_000);
   const money = projectMoney(project, await ctx.store.ledgerSums({ geoProjectId: project.id }));
-  const plannedReserve = articleOrders.filter((order) => order.state === "planned").reduce((total, order) => total + (order.reserveCny ?? 0), 0);
+  // What the plans already made hold back from the budget is every planned order of the project, not those of the articles listed above.
+  const plannedReserve = (await listAllOrders(ctx.store, { geoProjectId: project.id, states: ["planned"] }, 2_000))
+    .reduce((total, order) => total + (order.reserveCny ?? 0), 0);
   let room = round2((money.availableCny ?? 0) - plannedReserve);
   const hard = candidates.filter((media) => media.available && !media.blacklisted && !media.flags?.medicalRefused
     && media.domainVerified === true && media.priceCny != null && media.priceCny <= MARKET_RULES.autoSelectMaxPriceCny);

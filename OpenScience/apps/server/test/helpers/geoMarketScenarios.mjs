@@ -1280,4 +1280,100 @@ export function defineGeoMarketMoneyPathScenarios(test, makeFixture, options = {
       assert.equal(await store.markProjectsServed([], at(40)), 0);
     } finally { await w.close(); }
   });
+
+  /**
+   * `count` articles of the project written before its others, each seeded as `status` in `group`, and — with `holding` — each holding
+   * one planned order (a live order, whatever came after it: the market's rule is the same for planned, placed and settled).
+   * @param {any} w @param {{ id: string, userId: string }} p @param {number} count
+   * @param {{ status?: string, group?: string, holding?: boolean }} [options]
+   */
+  const writtenBefore = async (w, p, count, { status = "placed", group = "g1", holding = true } = {}) => {
+    const at = w.clock.now().toISOString();
+    const ids = [];
+    for (let index = 0; index < count; index += 1) {
+      const id = `${p.id}_old${String(index).padStart(3, "0")}`;
+      ids.push(id);
+      w.bodies.set(id, ARTICLE_MARKDOWN);
+      await w.fixture.seed.article({ id, userId: p.userId, geoProjectId: p.id, layer: "popular", title: `旧稿 ${index}`, groupId: `${p.id}_${group}`, gate: "passed", safety: "clear",
+        contentSha256: sha256Hex(ARTICLE_MARKDOWN), status, createdAt: new Date(Date.parse(at) - DAY - (count - index) * 1_000).toISOString() });
+      if (holding) {
+        await w.fixture.store.insertOrders([{ userId: p.userId, geoProjectId: p.id, articleId: id, mediaType: "website", resourceId: "101", priceCny: 100, reserveCny: 110 }], at);
+      }
+    }
+    return ids;
+  };
+
+  test("window (M-4): articles that already hold an order do not keep a new one out of the plan", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      // Two hundred articles placed long ago, each holding its order, and two new ones. The list was the oldest two hundred articles
+      // that may be placed, placed ones included, so after the two hundredth placement a new article was never planned.
+      const p = await w.project({ totalCny: 100_000, dailyCny: 100_000, articles: [{}, {}] });
+      await writtenBefore(w, p, 200);
+      const tick = await tickOrders(w.deps);
+      const fresh = (await orders(store, p.id)).filter((order) => p.articleIds.includes(order.articleId));
+      assert.equal(tick.planned, 2, "both new articles are planned");
+      assert.deepEqual(fresh.map((order) => order.state), ["planned", "planned"]);
+      assert.equal((await orders(store, p.id)).length, 202);
+    } finally { await w.close(); }
+  });
+
+  test("window (M-4): what the plans already made hold back from the budget is all of them, not those of the articles listed", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      // Two hundred planned reserves of 110 hold back 22,000 of 22,200: room for one more placement (132 or 165), not two.
+      const p = await w.project({ totalCny: 22_200, dailyCny: 22_200, articles: [{}, {}] });
+      await writtenBefore(w, p, 200);
+      const tick = await tickOrders(w.deps);
+      assert.equal(tick.planned, 1, "one placement fits in what is left");
+      assert.equal(tick.skipped.budget_exhausted, 1);
+      assert.equal((await orders(store, p.id)).length, 201);
+    } finally { await w.close(); }
+  });
+
+  test("window (M-4): an article whose placement failed is a candidate again, however old", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const p = await w.project({ totalCny: 100_000, dailyCny: 100_000, articles: [] });
+      const [oldId] = await writtenBefore(w, p, 1, { holding: false });
+      const at = w.clock.now().toISOString();
+      const [first] = await store.insertOrders([{ userId: p.userId, geoProjectId: p.id, articleId: oldId, mediaType: "website", resourceId: "101", priceCny: 100, reserveCny: 110 }], at);
+      await store.transitionOrder(first.id, { from: ["planned"], to: "cancelled", at, detail: { reason: "cancelled_by_user" } });
+      const tick = await tickOrders(w.deps);
+      assert.equal(tick.planned, 1, "it holds no order now");
+      const mine = await orders(store, p.id);
+      assert.deepEqual(mine.map((order) => [order.state, order.resourceId === "101"]).sort(), [["cancelled", true], ["planned", false]], "on another outlet than the one that failed");
+    } finally { await w.close(); }
+  });
+
+  test("window (M-4): two hundred control-group articles, which are never placed, do not keep a new one out either", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const p = await w.project({ totalCny: 5_000, dailyCny: 5_000, articles: [{}] });
+      await writtenBefore(w, p, 200, { status: "published", group: "gc", holding: false });
+      const tick = await tickOrders(w.deps);
+      assert.equal(tick.planned, 1);
+      assert.deepEqual((await orders(store, p.id)).map((order) => order.articleId), p.articleIds);
+      assert.equal(tick.skipped.control_group_article, 199, "the new article took the first place of the two hundred; the control-group ones fill the rest and are skipped by name");
+    } finally { await w.close(); }
+  });
+
+  test("window (M-4): the store lists the articles that hold no order in the given states, control-group ones last", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const p = await w.project({ totalCny: 100_000, dailyCny: 100_000, articles: [{ control: true }, {}] });
+      const [held] = await writtenBefore(w, p, 1);
+      const ids = async (/** @type {readonly string[]} */ states, limit = 200) => (await store.listPlaceableArticles(p.id, limit, { withoutOrderIn: states })).map((article) => article.id);
+      assert.deepEqual(await ids([]), [held, p.articleIds[1], p.articleIds[0]], "with no state named every article is listed: the oldest first, the control-group one last");
+      assert.deepEqual(await ids(["planned"]), [p.articleIds[1], p.articleIds[0]], "the one holding a planned order is not");
+      assert.deepEqual(await ids(["settled"]), [held, p.articleIds[1], p.articleIds[0]], "an order in another state does not hold it");
+      assert.deepEqual(await ids(["planned"], 1), [p.articleIds[1]]);
+      await assert.rejects(store.listPlaceableArticles(p.id, 10, { withoutOrderIn: ["no_such_state"] }), { code: "geo_market_store_invalid" });
+    } finally { await w.close(); }
+  });
 }

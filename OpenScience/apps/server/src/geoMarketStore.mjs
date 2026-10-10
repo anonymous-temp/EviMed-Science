@@ -610,12 +610,21 @@ export class GeoMarketStore {
     });
   }
 
-  /** Articles that may be placed: publishable, placed or published. @param {string} geoProjectId @param {number} limit */
-  async listPlaceableArticles(geoProjectId, limit) {
+  /**
+   * Articles that may be placed: publishable, placed or published — and, of those, the ones that hold no order in `withoutOrderIn`
+   * (the states in which an article is placed or being placed; an article that holds one cannot take another). Oldest first,
+   * except that a control-group article, which is never placed, comes after every other: neither an article already placed nor
+   * one that is never placed takes a place in the list from one that may be (M-4).
+   * @param {string} geoProjectId @param {number} limit @param {{ withoutOrderIn?: readonly string[] }} [options]
+   */
+  async listPlaceableArticles(geoProjectId, limit, { withoutOrderIn = [] } = {}) {
     assertLimit(limit, GEO_MARKET_STORE_LIMITS.listMax);
+    for (const state of withoutOrderIn) assertOneOf(state, ORDER_STATES, "order state");
     const result = await this.#query(`${ARTICLE_SELECT}
-      WHERE a.geo_project_id = $1 AND a.status IN ('publishable', 'placed', 'published') ORDER BY a.created_at, a.id LIMIT $2`,
-    [String(geoProjectId), limit]);
+      WHERE a.geo_project_id = $1 AND a.status IN ('publishable', 'placed', 'published')
+        AND NOT EXISTS (SELECT 1 FROM evimed_geo.orders o WHERE o.geo_project_id = a.geo_project_id AND o.article_id = a.id AND o.state = ANY($3::text[]))
+      ORDER BY coalesce(g.is_control, false), a.created_at, a.id LIMIT $2`,
+    [String(geoProjectId), limit, [...withoutOrderIn]]);
     return result.rows.map(mapArticle);
   }
 

@@ -254,13 +254,17 @@ export class GeoMarketStoreDouble {
     return { ...clone(article), isControl: Boolean(group && group.geoProjectId === article.geoProjectId && group.isControl) };
   }
 
-  /** @param {string} geoProjectId @param {number} limit */
-  async listPlaceableArticles(geoProjectId, limit) {
+  /** @param {string} geoProjectId @param {number} limit @param {{ withoutOrderIn?: readonly string[] }} [options] */
+  async listPlaceableArticles(geoProjectId, limit, { withoutOrderIn = [] } = {}) {
     assertLimit(limit, GEO_MARKET_STORE_LIMITS.listMax);
+    for (const state of withoutOrderIn) assertOneOf(state, ORDER_STATES, "order state");
+    const held = new Set([...this.orders.values()].filter((order) => order.geoProjectId === geoProjectId && withoutOrderIn.includes(order.state)).map((order) => order.articleId));
     return [...this.articles.values()]
-      .filter((article) => article.geoProjectId === geoProjectId && ["publishable", "placed", "published"].includes(article.status))
-      .sort((a, b) => byTime(a.createdAt, b.createdAt) || (a.id < b.id ? -1 : 1))
-      .slice(0, limit).map((article) => this.#articleView(article));
+      .filter((article) => article.geoProjectId === geoProjectId && ["publishable", "placed", "published"].includes(article.status) && !held.has(article.id))
+      .map((article) => this.#articleView(article))
+      // Oldest first, a control-group article after every other (it is never placed).
+      .sort((a, b) => Number(a.isControl) - Number(b.isControl) || byTime(a.createdAt, b.createdAt) || (a.id < b.id ? -1 : 1))
+      .slice(0, limit);
   }
 
   /** @param {string[]} ids */
