@@ -1,15 +1,18 @@
 import { useState } from 'react';
+import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock } from 'lucide-react';
 import { knownErrorCodeMessage } from '@evimed/domain';
 import { Button } from '@/components/ui/Button';
+import { DataTable, type DataColumn } from '@/components/ui/DataTable';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { Select } from '@/components/ui/Input';
-import { enqueueVcrMatching, resolveVcrQuote, type VcrMatchingTab, type VcrProtocolChoice } from '@/lib/vcrClient';
+import { Tag } from '@/components/ui/Tag';
+import { enqueueVcrMatching, resolveVcrQuote, type VcrClinicalTimelineEntry, type VcrCriterionJudgement, type VcrCriterionState, type VcrMatchingTab, type VcrProtocolChoice } from '@/lib/vcrClient';
 import { webErrorMessage } from '@/lib/apiClient';
 import { cn } from '@/lib/cn';
 import { formatDay } from '@/lib/format';
 import { ShowMore, useShowMore } from '@/components/ui/ShowMore';
-import { ASSERTION_WORDS as assertions } from './evidenceCaveats';
-import { factValueText } from './vcrText';
+import { ASSERTION_WORDS as assertions, evidenceCaveats, type EvidenceCaveat } from './evidenceCaveats';
+import { criterionStateLabel, factValueText } from './vcrText';
 
 const summaries: Record<string, string> = { eligible: '全部满足', ineligible: '有不满足条件', insufficient_evidence: '证据不足', pending: '待复评' };
 const experiencers: Record<string, string> = { patient: '本人', family: '家属', other: '他人', unknown: '主体不明' };
@@ -53,6 +56,109 @@ export function EvaluationNote({ message, failed }: { message: string; failed: b
   return <p className={failed ? 'text-caption text-error' : 'text-caption text-text-2'} role={failed ? 'alert' : 'status'}>{message}</p>;
 }
 
+const STATE_ICON: Record<VcrCriterionState, typeof CircleCheck> = {
+  satisfied: CircleCheck,
+  not_satisfied: CircleX,
+  unknown: CircleHelp,
+  pending_recheck: Clock,
+};
+
+/**
+ * A rule's state for one person — or 「不适用」, which is its own mark and never 未知. Under the mark, what the rule's evidence has been
+ * through (denied, since corrected, contradicted): the platform's judgment stays as it is and the row says how far to trust the sentence
+ * under it.
+ */
+export function CriterionState({ row, caveats = [] }: { row: VcrCriterionJudgement; caveats?: readonly EvidenceCaveat[] }) {
+  if (row.applicable === false) {
+    return (
+      <span data-vcr-not-applicable="" className="inline-flex items-center gap-1.5 whitespace-nowrap text-text-3">
+        <CircleMinus size={16} aria-hidden="true" />
+        不适用
+      </span>
+    );
+  }
+  const Icon = STATE_ICON[row.state] ?? CircleHelp;
+  const mark = (
+    <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap',
+      row.state === 'satisfied' ? 'text-ok' : row.state === 'not_satisfied' ? 'text-danger-strong' : 'text-warn-strong')}
+    >
+      <Icon size={16} aria-hidden="true" />
+      {criterionStateLabel(row.state)}
+      {/* The state shown is a person's: the platform's own answer is kept beside it. */}
+      {row.overridden && <span data-vcr-overridden=""><Tag>人工改判</Tag></span>}
+    </span>
+  );
+  if (caveats.length === 0) return mark;
+  return (
+    <span className="flex flex-col items-start gap-1">
+      {mark}
+      <span data-vcr-caveats="" className="flex flex-wrap gap-1">
+        {caveats.map((caveat) => <Tag key={caveat.key} tone={caveat.needsChecking ? 'warn' : 'neutral'}>{caveat.label}</Tag>)}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The rule-by-rule table of one trial for one person: the trial's own words, the state, the person's own sentence and what to ask for.
+ * The study's own protocol and a registry trial a run found read through this one table; `extraColumns` is where a person's hand (改判)
+ * is added for the protocol, which is the only trial a person re-judges.
+ */
+export function CriterionTable({ label, rows, facts, extraColumns = [] }: {
+  label: string;
+  rows: readonly VcrCriterionJudgement[];
+  /** The person's own facts, when the page holds them: the rows are tagged by what has been through them. */
+  facts?: readonly VcrClinicalTimelineEntry[];
+  extraColumns?: ReadonlyArray<DataColumn<VcrCriterionJudgement>>;
+}) {
+  const columns: Array<DataColumn<VcrCriterionJudgement>> = [
+    { key: 'code', header: '编号', rowHeader: true, width: 'w-16', cell: (row) => <span className="tabular-nums text-text-3">{row.code}</span> },
+    { key: 'text', header: '方案原文', cell: (row) => <span className="text-text">{row.text}</span> },
+    { key: 'state', header: '状态', width: 'w-24', cell: (row) => <CriterionState row={row} caveats={evidenceCaveats(row.evidence, facts)} /> },
+    {
+      key: 'evidence',
+      header: '患者证据',
+      isEmpty: (row) => !row.evidence,
+      // Up to three citations, the first still `evidence`: each with its quote, the document it is in and the date of what it records.
+      cell: (row) => row.evidence ? (
+        <span className="flex flex-col gap-1.5">
+          {(row.evidenceItems?.length ? row.evidenceItems : [row.evidence]).map((item, index) => (
+            <span key={`${item.quote}-${index}`} className="block">
+              <span className="block text-text">{`“${item.quote}”`}</span>
+              <span className="block text-caption text-text-3">{[item.source, item.at].filter(Boolean).join(' · ')}</span>
+            </span>
+          ))}
+        </span>
+      ) : null,
+    },
+    {
+      key: 'request',
+      header: '补证建议',
+      isEmpty: (row) => !row.request,
+      cell: (row) => row.request ? (
+        <span className="block">
+          <span className="block text-text">{row.request}</span>
+          {row.requestNote && <span className="block text-caption text-text-3">{row.requestNote}</span>}
+        </span>
+      ) : <span className="text-text-3">—</span>,
+    },
+    ...extraColumns,
+  ];
+  return (
+    <DataTable
+      label={label}
+      minWidth="min-w-[44rem]"
+      columns={columns}
+      rows={rows}
+      rowKey={(row) => row.code}
+      rowAttrs={(row) => ({
+        'data-vcr-criterion': row.code,
+        'data-vcr-criterion-state': row.applicable === false ? 'not_applicable' : row.state,
+      })}
+    />
+  );
+}
+
 /** The most protocol versions one comparison takes: the server refuses more (`vcr_matching_selection_invalid`). */
 const MOST_PROTOCOLS = 10;
 
@@ -82,22 +188,30 @@ function ProtocolChecklist({ protocols, chosen, onChange }: { protocols: readonl
   </fieldset>;
 }
 
-export function MatchingPanelControls({ studyId, data, direction, protocolId, settling = false, canRun, onProtocol, onCandidate, onReload }: {
+export function MatchingPanelControls({ studyId, data, direction, protocolId, subjectKey, settling = false, canRun, onProtocol, onCandidate, onReload }: {
   studyId: string; data: VcrMatchingTab;
   /** The direction the reader chose: `data` may still be the page of the one before. */
   direction?: NonNullable<VcrMatchingTab['direction']>;
   /** The protocol the reader chose, once they have: the select shows it at once, before its page has arrived. */
   protocolId?: string | null;
+  /**
+   * The patient the page is about, when the page — not these controls — keeps it (给患者找试验): the select shows it, and choosing
+   * 请选择患者 again says so through `onCandidate('')`. Left out, the select keeps the choice itself.
+   */
+  subjectKey?: string | null;
   /** The page for what the reader chose is still being read (or could not be): the controls stay, and a run waits for it. */
   settling?: boolean;
   canRun: boolean; onProtocol: (id: string) => void; onCandidate: (id: string) => void; onReload: () => void;
 }) {
   const [panel, setPanel] = useState<string[]>([]);
-  const [subject, setSubject] = useState('');
+  const [ownSubject, setSubject] = useState('');
   const evaluation = useMatchingEvaluation(studyId, onReload);
   const protocols = data.protocols ?? [];
-  if (!protocols.length) return null;
   const way = direction ?? data.direction ?? 'trial_to_patient';
+  const roster = data.candidateRoster ?? [];
+  // A patient's trials do not wait on a protocol: the patient to start from is chosen here whether or not the study has one.
+  if (!protocols.length && !(way === 'patient_to_trial' && roster.length)) return null;
+  const subject = subjectKey !== undefined ? subjectKey ?? '' : ownSubject;
   const viewing = protocolId ?? data.protocolVersionId ?? protocols[0]?.id ?? '';
   const scope = subject ? { subjectKeys: [subject] } : {};
   // 给患者找试验 starts from a person: nothing is asked of the engine until one is chosen.
@@ -108,24 +222,29 @@ export function MatchingPanelControls({ studyId, data, direction, protocolId, se
       {`本次选择 ${data.candidateCoverage.requested} 人 · 已评估 ${data.candidateCoverage.evaluated} 人 · 待评估 ${data.candidateCoverage.pending} 人 · 暂不可用 ${data.candidateCoverage.unavailable} 人`}
     </p>}
     <div className="flex flex-wrap items-end gap-3">
-      <div className="w-full min-w-0 sm:w-64">
+      {protocols.length > 0 && <div className="w-full min-w-0 sm:w-64">
         <Select label="查看方案" value={viewing} onChange={event => onProtocol(event.target.value)}>
           {protocols.map(protocol => <option key={protocol.id} value={protocol.id}>{name(protocol)}</option>)}
         </Select>
-      </div>
+      </div>}
       <div className="w-full min-w-0 sm:w-64">
-        <Select label="患者" value={subject} onChange={event => { setSubject(event.target.value); if (event.target.value) onCandidate(event.target.value); }}>
+        <Select label="患者" value={subject} onChange={event => {
+          const chosen = event.target.value;
+          setSubject(chosen);
+          // Where the page keeps the patient, choosing the placeholder again is a choice too: nobody.
+          if (chosen || subjectKey !== undefined) onCandidate(chosen);
+        }}>
           <option value="">{way === 'patient_to_trial' ? '请选择患者' : '全部已登记患者'}</option>
-          {(data.candidateRoster ?? []).map(key => <option key={key} value={key}>{key}</option>)}
+          {roster.map(key => <option key={key} value={key}>{key}</option>)}
         </Select>
       </div>
       {/* The view's main action is the contact confirmation below; starting an evaluation is the quieter one next to the protocol it is for. */}
-      {canRun && <Button variant="secondary" loading={evaluation.busy} disabled={evaluation.busy || settling || needsPatient}
+      {canRun && protocols.length > 0 && <Button variant="secondary" loading={evaluation.busy} disabled={evaluation.busy || settling || needsPatient}
         onClick={() => void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, ...scope })}>开始评估</Button>}
       <Button variant="text" onClick={onReload}>刷新结果</Button>
     </div>
     <EvaluationNote message={evaluation.message} failed={evaluation.failed} />
-    <Disclosure summary="比较多个方案">
+    {protocols.length > 0 && <Disclosure summary="比较多个方案">
       <div className="grid gap-3 md:grid-cols-2">
         <ProtocolChecklist protocols={protocols} chosen={panel} onChange={setPanel} />
         <div className="flex flex-wrap items-start gap-2">
@@ -139,7 +258,7 @@ export function MatchingPanelControls({ studyId, data, direction, protocolId, se
           </li>)}
         </ul>}
       </div>
-    </Disclosure>
+    </Disclosure>}
   </div>;
 }
 

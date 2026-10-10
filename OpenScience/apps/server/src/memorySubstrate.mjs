@@ -220,14 +220,17 @@ export class MemorySubstrate {
    *
    * @param {string} userId
    * @param {string} query
-   * @param {{ projectId?: string|null, sessionId?: string|null, countUsage?: boolean, asOf?: number|null, now?: number }} scope
+   * @param {{ projectId?: string|null, sessionId?: string|null, countUsage?: boolean, asOf?: number|null, now?: number, standing?: boolean }} scope
    *   `countUsage: false` for a read that is not a run being handed memories —
    *   the memory page's own search goes through this port for its ranking, and
    *   a researcher looking for a memory is not the platform using one.
    *   `asOf`: the moment the question is about, in epoch milliseconds, when it
    *   is not now (`parseAsOf`); `now` is injectable.
+   *   `standing: false`: only what the question's own words reach, with the researcher's standing profile left out — the
+   *   recall tool's reading (review M6, 2026-10-10). The profile is handed to a conversation up front
+   *   (`ResidentProfiles`), and a lookup that padded its answer with it could never come back empty.
    */
-  async recall(userId, query, { projectId = null, sessionId = null, countUsage = true, asOf = null, now = Date.now() } = {}) {
+  async recall(userId, query, { projectId = null, sessionId = null, countUsage = true, asOf = null, now = Date.now(), standing = true } = {}) {
     // The deployment's switch, before the researcher's: off means no memory
     // reaches a run from this port, which is what makes "memory off" a control
     // arm rather than an account whose records happen not to match.
@@ -237,7 +240,7 @@ export class MemorySubstrate {
     // whichever index is serving.
     const pause = await memoryPausedFor(this.store, userId, projectId, sessionId);
     if (pause.recall) return [];
-    const served = await this.#served(userId, query, { projectId, sessionId, asOf, now });
+    const served = await this.#served(userId, query, { projectId, sessionId, asOf, now, standing });
     // What the page means by 「用过 7 次，上次 9月18日」, counted at the one port
     // every recall passes through. Never awaited and never able to throw: a
     // bookkeeping row must not be able to decide whether a run gets its
@@ -289,25 +292,25 @@ export class MemorySubstrate {
   }
 
   /** @param {string} userId @param {string} query
-   *  @param {{ projectId: string|null, sessionId: string|null, asOf: number|null, now: number }} scope */
-  async #served(userId, query, { projectId, sessionId, asOf, now }) {
+   *  @param {{ projectId: string|null, sessionId: string|null, asOf: number|null, now: number, standing: boolean }} scope */
+  async #served(userId, query, { projectId, sessionId, asOf, now, standing }) {
     // The index holds what is in force now, as text, and nothing about when or
     // what replaced it. A question about another time is answered from the
     // authority, where the versions that held then still are.
-    if (!this.active || (asOf != null && asOf < now)) return this.store.relevant(userId, query, { projectId, sessionId, asOf, now });
+    if (!this.active || (asOf != null && asOf < now)) return this.store.relevant(userId, query, { projectId, sessionId, asOf, now, standing });
     try {
-      return await this.#rankedRecall(userId, query, { projectId, sessionId, now });
+      return await this.#rankedRecall(userId, query, { projectId, sessionId, now, standing });
     } catch (error) {
       // Whether the index failed is `#rankedRecall`'s to say (`lastError`); an
       // error of the store behind it falls back all the same.
       if (this.strict) throw error;
       // Fall back rather than fail: the term matcher needs no index and reads
       // the same authoritative records.
-      return this.store.relevant(userId, query, { projectId, sessionId, now });
+      return this.store.relevant(userId, query, { projectId, sessionId, now, standing });
     }
   }
 
-  async #rankedRecall(userId, query, { projectId, sessionId, now }) {
+  async #rankedRecall(userId, query, { projectId, sessionId, now, standing }) {
     if (this.contextLimit === 0 || this.contextMaxChars === 0) return [];
     /** @type {any[]} */
     let hits;
@@ -370,8 +373,9 @@ export class MemorySubstrate {
     // what ranks them on the term matcher when the question names none — and
     // a profile larger than its half of the budget keeps its most important.
     const nominatedIds = new Set(hydrated.map(({ record }) => record.id));
-    const standing = (await this.#standingProfile(userId)).filter((record) => !nominatedIds.has(record.id));
-    for (const [index, record] of standing.entries()) hydrated.push({ record, score: (standing.length - index) * STANDING_SCORE_STEP });
+    // Not for the recall tool (`standing: false`): a lookup returns what the question reached, or nothing.
+    const profile = standing ? (await this.#standingProfile(userId)).filter((record) => !nominatedIds.has(record.id)) : [];
+    for (const [index, record] of profile.entries()) hydrated.push({ record, score: (profile.length - index) * STANDING_SCORE_STEP });
 
     // Which of them hold: in force and recallable, inside the validity
     // interval, in this project, one version of each fact. The index is asked

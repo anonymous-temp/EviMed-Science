@@ -1,4 +1,5 @@
 import { CAPSULE_FACT_KINDS, SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
+import { recordRecallTool } from "./memoryMetrics.mjs";
 import { recallAcrossMemory } from "./memoryRecall.mjs";
 import { HttpError, readJson, sendError, sendJson } from "./security.mjs";
 
@@ -9,6 +10,9 @@ const recallPaused = () => ({
   items: [], mode: "paused", contextOnly: true, sources: { memory: 0, capsule: 0 },
   notice: "用户已暂停记忆（整个账号或本项目）：这里不读取，也不代表没有相关记忆。",
 });
+
+/** What a recall answers when nothing reached the relevance floor: an answer the model can act on — look again in other words, or go on without. */
+const NOTHING_ABOVE_THE_FLOOR = "没有达到相关度下限的记忆。可以换个说法再查一次，或不依赖记忆直接回答。";
 
 /** The workload credential, never a caller-supplied field, fixes account and project.
  *
@@ -38,10 +42,14 @@ const recallPaused = () => ({
  *
  * 无痕 and 「本次不用」 were read here until 2026-09-20 and are gone with the bar
  * that was their only control.
+ * `recallLimit` is how many items the recall tool answers with when the model does not say, and `recallMaxLimit` the most it may ask
+ * for (`OPEN_SCIENCE_MEMORY_RECALL_TOOL_LIMIT`, `..._MAX_LIMIT`): a recall that returns what it found above the relevance floor, five
+ * at most unless the model asks for more, and says so when it found nothing (review M6, 2026-10-10).
  * `subscriptions` is the project's evidence-zone subscriptions (`evidenceZoneSubscription.mjs`, flywheel F18): one more provider of a
  * recall, read for this project alone, appended after what the capsules and memory returned, never counted in the run's recalled
  * memories (a zone's card is reference context, not a memory) and never read in a conversation that is trying someone's pack.
  * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any, evaluationIsolation?: any, handbooks?: any,
+ *   recallLimit?: number, recallMaxLimit?: number,
  *   subscriptions?: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> } | null,
  *   clinicalContext?: ((identity:any,runs:any[])=>Promise<boolean>) | null,
  *   sessions?: { running: (user: any, project: any) => Promise<{ id: string, sessionId: string }[]>,
@@ -49,7 +57,10 @@ const recallPaused = () => ({
  *     paused?: (userId: string, projectId: string, sessionId: string | null) => Promise<{ learning: boolean, recall: boolean, trial: boolean }>,
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null }} dependencies */
-export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null, handbooks = null, evaluationIsolation = null, subscriptions = null, clinicalContext = null }) {
+export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null, handbooks = null, evaluationIsolation = null, subscriptions = null, clinicalContext = null,
+  recallLimit = 5, recallMaxLimit = 8 }) {
+  const maxLimit = Math.max(1, Math.min(30, Math.trunc(Number(recallMaxLimit)) || 8));
+  const defaultLimit = Math.max(1, Math.min(maxLimit, Math.trunc(Number(recallLimit)) || 5));
   const windows = new Map();
   /** @param {any} req @param {any} res @param {(failure:any)=>void} [onFailure] */
   return async (req, res, onFailure) => {
@@ -73,7 +84,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       windows.set(key, window);
       if (++window.count > 120) throw new HttpError(429, "capsule_rate_limited", "Too many memory operations.");
       const body = await readJson(req, 64 * 1024);
-      const allowed = action === "recall" ? ["query", "factKinds", "since", "scope", "asOf"]
+      const allowed = action === "recall" ? ["query", "factKinds", "since", "scope", "asOf", "limit"]
         : action === "handbook-context" ? ["sessionId", "inputs"]
           : action === "handbook-attached" ? ["sessionId", "receipts"]
         : action === "session" ? ["sessionId"] : ["factKind", "content", "origin"];
@@ -133,13 +144,22 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         if (body.scope !== undefined && !["all", "capsule", "conversation", "agenda"].includes(body.scope)) {
           throw new HttpError(400, "capsule_payload_invalid", "Invalid memory scope.");
         }
+        // How many the model wants, within what the platform answers with: absent means the default, and more than the most is
+        // the most (a tool call is not refused for asking for a few too many).
+        if (body.limit !== undefined && (!Number.isFinite(Number(body.limit)) || Number(body.limit) < 1)) {
+          throw new HttpError(400, "capsule_payload_invalid", "Invalid memory limit.");
+        }
+        const limit = body.limit === undefined ? defaultLimit : Math.min(maxLimit, Math.trunc(Number(body.limit)));
         if (trialConversation) {
+          recordRecallTool("trial");
           sendJson(res, 200, { items: [], mode: "trial", contextOnly: true, sources: { memory: 0, capsule: 0 },
             notice: "这是一段试用别人胶囊的对话：只读这个胶囊，不读用户自己的记忆。" });
           return;
         }
+        // `standing: false`: this is the lookup; the researcher's standing profile was handed over up front, and an answer
+        // padded with it could never be empty (`ResidentProfiles`).
         const recalled = pause?.recall ? recallPaused() : await recallAcrossMemory({ capsules: service, memorySubstrate }, currentUser, {
-          ...body, projectId: identity.projectId,
+          ...body, limit, standing: false, projectId: identity.projectId,
           sessionId: running.length === 1 ? running[0].sessionId : null,
         });
         if (!pause?.recall && sessions && running.length === 1) {
@@ -149,8 +169,13 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         // An evaluation run is frozen at a date and kept from what the platform has written since: no zone card reaches it.
         const reference = subscriptions && body.scope !== "conversation" && typeof body.query === "string" && !(await evaluationIsolation?.isEvaluation(identity))
           ? await subscriptions.recall(currentUser.id, identity.projectId, body.query).catch(() => []) : [];
-        const answer = reference.length
+        /** @type {any} */
+        const found = reference.length
           ? { ...recalled, items: [...recalled.items, ...reference], sources: { ...recalled.sources, zone: reference.length } } : recalled;
+        // Nothing above the relevance floor is an answer, said as one: the model reformulates or goes on, and an empty list
+        // is not mistaken for a tool that failed. A recall the researcher paused already carries its own notice, and says so.
+        const answer = !pause?.recall && found.mode !== "disabled" && found.items.length === 0 && !found.notice ? { ...found, notice: NOTHING_ABOVE_THE_FLOOR } : found;
+        recordRecallTool(pause?.recall ? "paused" : recalled.mode === "disabled" ? "disabled" : answer.items.length ? "hit" : "empty", answer.items.length);
         sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "capsule-memory", answer) : answer);
       } else if (writesNothing) {
         // A conversation trying someone else's capsule leaves nothing behind.

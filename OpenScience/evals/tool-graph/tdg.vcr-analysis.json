@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-analysis",
-  "version": "sha256:8de3d2c39169fa34222c41a3a83521921651677d3aad842c5a5c4735106388b5",
+  "version": "sha256:239e081f9112b1c3cb6c8d7bd35c47d215df0be14ef41f362015be7d20806d1b",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 29,
@@ -1229,7 +1229,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this 虚拟临床研究 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people (a published trial's own figures -- registry records, extracted values, precedents -- are not this study's people and come back whole). what: study also returns intendedUseCeiling, the highest use the study's results can be labelled with and why. what: pack reads the study's disease knowledge pack (an index of its sections; filter.kind reads one section whole) or, with none bound, the catalogue (filter.query searches it); what: library lists the account's reusable population definitions. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema, and the language criteria still waiting for the run's answer.",
+      "description": "Read this 虚拟临床研究 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people (a published trial's own figures -- registry records, extracted values, precedents -- are not this study's people and come back whole). what: study also returns intendedUseCeiling, the highest use the study's results can be labelled with and why. what: pack reads the study's disease knowledge pack (an index of its sections; filter.kind reads one section whole) or, with none bound, the catalogue (filter.query searches it); what: library lists the account's reusable population definitions. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema, and the language criteria still waiting for the run's answer. what: candidate_trials lists the registry trials found for patients (filter.id or filter.registryId reads one with its criteria; filter.subjectKey returns that patient's trials in order with the verdict about each and the language answers still owed).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1257,7 +1257,8 @@
               "pack",
               "library",
               "model_assessments",
-              "longitudinal"
+              "longitudinal",
+              "candidate_trials"
             ]
           },
           "filter": {
@@ -1533,7 +1534,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Write this 虚拟临床研究 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population item may carry fromLibrary {definitionId, version?} instead of a definition, or, for a real cohort, fromProtocol: true with a snapshotId (the protocol's own criteria become its rules); a definition may carry title (the study's name, 24 characters) and question. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration, scenario or definition carries only the keys the engine reads for the job that computes it: before you write a trial scenario, patient set, population or comparator, call vcr_simulate with action shape and that job's kind (design_analytic and design_simulation for a trial scenario; generate_patients, generate_patients_continuous, generate_patients_binary or generate_patients_longitudinal (a trajectory over a visit schedule) for a patient set; generate_population for a population; the comparator kind for a comparator) and write those keys and no others. Items are checked one by one; refused items come back in issues and the rest are written. what: trial_benchmark imports an existing external trial-effect JSON via data {predictionsFile: workspace-relative path}; actual effects are read from preserved evidence. Never generate the file's predictions yourself.",
+      "description": "Write this 虚拟临床研究 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population item may carry fromLibrary {definitionId, version?} instead of a definition, or, for a real cohort, fromProtocol: true with a snapshotId (the protocol's own criteria become its rules); a definition may carry title (the study's name, 24 characters) and question. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration, scenario or definition carries only the keys the engine reads for the job that computes it: before you write a trial scenario, patient set, population or comparator, call vcr_simulate with action shape and that job's kind (design_analytic and design_simulation for a trial scenario; generate_patients, generate_patients_continuous, generate_patients_binary or generate_patients_longitudinal (a trajectory over a visit schedule) for a patient set; generate_population for a population; the comparator kind for a comparator) and write those keys and no others. Items are checked one by one; refused items come back in issues and the rest are written. what: candidate_trial writes a registry trial found for a patient: items [{registryId, criteria, subjectKeys}] -- the platform reads the trial's title, phase, status and sites from the registry, judges the named patients against the criteria (its eligibility lines, in the same shape as a protocol's) and ranks the trials; a language criterion of a trial is answered with what: language_judgment and candidateTrialId. what: trial_benchmark imports an existing external trial-effect JSON via data {predictionsFile: workspace-relative path}; actual effects are read from preserved evidence. Never generate the file's predictions yourself.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1566,7 +1567,8 @@
               "model_assessment",
               "history",
               "forecast_design",
-              "trial_benchmark"
+              "trial_benchmark",
+              "candidate_trial"
             ]
           },
           "items": {

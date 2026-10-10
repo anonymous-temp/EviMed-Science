@@ -216,6 +216,23 @@ CREATE TABLE IF NOT EXISTS evimed_memory.settings (
   paused_projects text[] NOT NULL DEFAULT '{}' CHECK (cardinality(paused_projects) <= ${MEMORY_PAUSED_PROJECT_LIMIT}),
   updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
 );
+-- The accounts erased since the retired usememos store was left behind (2026-10-10, review M-11), by the two digests that
+-- store knew them by. No foreign key to the account, on purpose: this outlives it. It is what the retirement's archive (an
+-- encrypted dump, which cannot have a row cut out of it in place) is re-sealed against by \`scripts/ops/retire-usememos-tables.py
+-- --forget-erased\`. A digest of an account id names no one to a reader who does not already hold the id.
+CREATE TABLE IF NOT EXISTS evimed_memory.retired_erasures (
+  namespace text PRIMARY KEY CHECK (namespace ~ '^evimed-science-[a-f0-9]{24}$'),
+  tag text NOT NULL CHECK (tag ~ '^[a-f0-9]{24}$'),
+  erased_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
+);
+-- The instant of the account's last 「重置记忆」 (2026-10-10, review M-11). A reset
+-- deletes what the account holds; this is what keeps the platform from learning
+-- it again out of the conversations that were already over when the researcher
+-- asked to start from nothing (extraction and the learning loop skip a run that
+-- ended before it). Millisecond precision, unlike the other times of this
+-- schema: a run that ends in the same second as the reset must still be placed
+-- on one side of it. Null: never reset.
+ALTER TABLE evimed_memory.settings ADD COLUMN IF NOT EXISTS reset_at timestamptz(3);
 -- One conversation's own memory state. Keyed by the kernel's session id inside
 -- a project; deleted with the account, and with the project by
 -- deleteProjectMemory. All that is left of it is the capsule a conversation is
@@ -233,6 +250,13 @@ CREATE TABLE IF NOT EXISTS evimed_memory.sessions (
 );
 ALTER TABLE evimed_memory.sessions DROP COLUMN IF EXISTS incognito;
 ALTER TABLE evimed_memory.sessions DROP COLUMN IF EXISTS excluded;
+-- What a conversation was last handed of the resident profile (2026-10-10, review M6): the digest of the block and when it
+-- was handed over, and when the kernel last compacted the conversation. The profile is given to a conversation at its first
+-- dispatch and again only when it changed or the conversation was compacted since; this is how a dispatch knows which.
+ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS resident_digest text
+  CHECK (resident_digest IS NULL OR resident_digest ~ '^[a-f0-9]{64}$');
+ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS resident_delivered_at timestamptz(3);
+ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS compacted_at timestamptz(3);
 -- A conversation that tries a capsule someone shared (「试用一次」): the pack
 -- it is handed as context. It writes nothing into the researcher's own
 -- memory (memoryPausedFor) while the trial lasts.

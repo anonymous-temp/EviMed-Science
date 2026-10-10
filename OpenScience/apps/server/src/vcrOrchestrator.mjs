@@ -239,6 +239,22 @@ export function vcrExportBriefLines(kind) {
 }
 
 /**
+ * The brief of a run sent to find trials for one patient (「给患者找试验」, `requestTrialSearch`): the study it is in, the patient by the
+ * study's own pseudonym, and where the way of doing it is written. How — the registries to search, what to write, how the trials are
+ * judged and listed — is the matching skill's section, not a second copy here.
+ * @param {{ study: any, subjectKey: string }} input
+ */
+export function vcrTrialSearchBrief({ study, subjectKey }) {
+  return [
+    `研究：${study.name}。`,
+    study.question ? `研究问题：${study.question}` : "",
+    `数据档位：${study.dataTier}；预期用途：${study.intendedUse}。`,
+    `这次的任务是「给患者找试验」：为受试者 ${subjectKey} 找适合参加的试验，按 vcr-matching 技能里「给患者找试验」一节做。`,
+    "用 vcr_read 读这位受试者已有的事实和本研究已有的候选试验；候选试验由 vcr_write 写入，平台判定并排序，结果用 vcr_read 读回，不要自己下判定。",
+  ].filter(Boolean).join("\n");
+}
+
+/**
  * The brief a dispatched run gets when whoever composed the module injected
  * none: the study's own question, then what this run is for — the document of
  * an export run, the steps of a step run.
@@ -1818,6 +1834,29 @@ export class VcrOrchestrator {
   }
 
   /**
+   * 「为该患者找试验」 (the patient → trials direction of matching): ask for a run of the matching capability that searches the registries
+   * for trials one patient could join and writes them as candidate trials, which the platform judges and ranks. Recorded as a pending run
+   * mark and dispatched by the rules of any programme run (`#pendingTrialSearch`) — the study active, the one run slot free, the allowance
+   * and the bounded budget `dispatchRun` asks — so a busy slot makes the request wait, and the answer says so (no run, no session). A
+   * second press for the same patient while a request is pending or out is the same request. It moves none of the seven steps.
+   * @param {{ id: string }} user @param {{ id: string }} input @param {{ subjectKey: string }} request
+   */
+  async requestTrialSearch(user, input, { subjectKey }) {
+    const study = await this.store.getStudy(String(user.id), String(input.id));
+    if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
+    if (study.status !== "active") throw new HttpError(409, "vcr_study_paused", "This study is paused.");
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/.test(String(subjectKey))) throw new HttpError(400, "vcr_payload_invalid", "subjectKey is the study's own key for the patient.");
+    const prefix = `run:trial-search:${createHash("sha256").update(String(subjectKey)).digest("hex").slice(0, 12)}:`;
+    const open = await this.store.one(`SELECT key FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1 AND kind = 'run' AND starts_with(key, $2)
+      AND state IN ('pending', 'claimed', 'running') LIMIT 1`, [study.id, prefix]);
+    if (!open) {
+      const key = `${prefix}${this.now().getTime().toString(36)}`;
+      await this.#claim(study, key, "run", "pending", { detail: { purpose: "trial_search", subjectKey: String(subjectKey), brief: vcrTrialSearchBrief({ study, subjectKey: String(subjectKey) }) } });
+    }
+    return this.#answer(study, await this.advance(study.id));
+  }
+
+  /**
    * Ask for a run that takes new evidence into a study's assumption cards (flywheel F24, 2026-10-06). The consumer of the frontier
    * feed calls this once it has labelled the cards; this only records the request, as a pending run mark named by `token` (the same
    * news asked twice is one request), and the next pass dispatches it by the rules of any programme run (`#pendingEvidenceRefresh`).
@@ -2847,6 +2886,7 @@ export class VcrOrchestrator {
     const candidates = [
       () => this.#pendingReviewRepair(study),
       () => this.#pendingExport(study),
+      () => this.#pendingTrialSearch(study),
       () => this.#pendingEvidenceRefresh(study),
       () => this.#stepRun(study, plan, "definition"),
       ...(defined ? [
@@ -2910,6 +2950,22 @@ export class VcrOrchestrator {
       key: String(mark.key), purpose: "export", capabilityId: "vcr-package", reason: `vcr:export-${detail.kind ?? "study_package"}`,
       brief: await this.#brief(study, String(mark.key), [], { kind: detail.kind, exportId: detail.exportId }),
       steps: [], detail: { kind: detail.kind, exportId: detail.exportId },
+    };
+  }
+
+  /**
+   * The run a person asked for to find trials for a patient (`requestTrialSearch`): a run of the matching capability with the brief the
+   * request recorded. It is dispatched exactly as every other run of the study is, and when any rule says no the key stays pending.
+   * @param {any} study @returns {Promise<VcrRunSpec | null>}
+   */
+  async #pendingTrialSearch(study) {
+    const mark = await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1 AND kind = 'run'
+      AND starts_with(key, 'run:trial-search:') AND state = 'pending' ORDER BY created_at LIMIT 1`, [study.id]);
+    if (!mark || !this.#allowed(mark)) return null;
+    const detail = object(mark.detail);
+    return {
+      key: String(mark.key), purpose: "trial_search", capabilityId: /** @type {Record<string, string>} */ (VCR_STEP_CAPABILITIES).matching,
+      reason: "vcr:trial-search", brief: String(detail.brief ?? ""), steps: [], detail: { subjectKey: String(detail.subjectKey ?? "") },
     };
   }
 
@@ -3114,6 +3170,8 @@ export class VcrOrchestrator {
     // A run for new evidence has no step to read and nothing to review: what it wrote is on the cards (`ai_set`), and the frontier
     // consumer sees the versions arrive and closes the labels.
     if (detail.purpose === "evidence_refresh") return;
+    // A search for a patient's trials has no step to read: what it wrote is candidate trials and their verdicts, which are read as they are.
+    if (detail.purpose === "trial_search") return;
     if (detail.purpose === "export" && detail.exportId) {
       const existing = await this.store.exportRow(study.id, String(detail.exportId));
       // The report's snapshot owns its cover; completion cannot relabel old

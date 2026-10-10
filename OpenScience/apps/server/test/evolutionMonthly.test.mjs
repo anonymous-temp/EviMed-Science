@@ -18,7 +18,7 @@ test('a malformed policy proposal does not stop the monthly job: the metrics are
  const notice=f.notices.find(item=>item.title==='进化月报');assert.ok(notice);assert.match(notice.body,/策略提案不合规/);
 });
 test('a valid proposal is still tried and the report does not mention an invalid one',async()=>{
- const {f,loops}=await monthly(async()=>({field:'stagnationRounds',value:2,hypothesis:'stop earlier'}));
+ const {f,loops}=await monthly(async()=>({field:'resourceStop',value:{attempts:2,days:7},hypothesis:'stop earlier'}));
  const result=await loops.monthly();
  assert.equal(result.proposal.payload.status,'replay_pending');
  assert.doesNotMatch(f.notices.find(item=>item.title==='进化月报').body,/不合规/);

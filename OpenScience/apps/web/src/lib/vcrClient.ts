@@ -39,7 +39,7 @@ import { productRequest } from "./productClient";
 import {
   assessmentBody, assessmentReviewBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody,
   definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, reviewBody, runBody, studyCreateBody,
-  studyPatchBody, transitionBody,
+  studyPatchBody, transitionBody, trialSearchBody,
   type VcrAssessmentBody, type VcrAssumptionBody, type VcrBudgetBody, type VcrContactBody, type VcrCreateBody, type VcrDecisionBody, type VcrDefinitionCompareBody,
   type VcrDefinitionSaveBody, type VcrDefinitionUseBody, type VcrJobBody,
   type VcrJudgmentBody, type VcrMemberBody, type VcrModelBody, type VcrPatchBody, type VcrReviewBody, type VcrTransitionBody,
@@ -934,6 +934,41 @@ export interface VcrCriterionJudgement {
 }
 
 export interface VcrProtocolChoice { id: string; title: string; version: number; sourceRef?: unknown }
+
+/**
+ * One trial in a patient's list (「给患者找试验」): a registry trial a run found for them, or a version of the study's own protocol that has
+ * judged them. The order is the platform's (every criterion met first, then the fewest still to settle, the excluded last); `rank` says it.
+ */
+export interface VcrPatientTrial {
+  id: string;
+  kind: "registry" | "protocol";
+  rank: number;
+  /** The registry the trial is in and its number there; null for the study's own protocol. */
+  registry: string | null;
+  registryId: string | null;
+  /** The trial's page on its registry — an https address, or null. */
+  url: string | null;
+  title: string;
+  /** In the reader's words (「II 期」, 「招募中」); empty when the registry did not say. */
+  phase: string;
+  status: string;
+  conditions: string[];
+  sites: { total: number | null; countries: string[] } | null;
+  eligibility: VcrEligibility | null;
+  /** How many of the trial's criteria stand where, for this patient. */
+  counts: { satisfied: number; unknown: number; notSatisfied: number; pending: number };
+  summary: string;
+  assessedAt: string | null;
+}
+
+/** 「给患者找试验」: the patient the page is about, the trials that have judged them, and the chosen trial's criteria. */
+export interface VcrPatientTrials {
+  /** False where this deployment has not composed the direction. */
+  available: boolean;
+  subject: string | null;
+  trials: VcrPatientTrial[];
+  selected: { id: string; criteria: VcrCriterionJudgement[]; verdict?: { text: string; note?: string | null } | null; assessedAt: string | null } | null;
+}
 export interface VcrClinicalTimelineEntry {
   id: string; variable: string; value: unknown; unit: string | null; at: string | null; assertion: string; experiencer: string | null;
   medicationState: string | null; correctionOf: string | null; quote: string | null;
@@ -958,6 +993,10 @@ export interface VcrMatchingTab {
   partner?: { name?: string | null; candidates?: number | null; tier?: VcrDataTier | null; snapshotAt?: string | null } | null;
   /** 「给试验找患者 | 给患者找试验」. */
   direction?: "trial_to_patient" | "patient_to_trial";
+  /** The directions this server answers. */
+  directions?: Array<"trial_to_patient" | "patient_to_trial">;
+  /** Present when the direction asked for is 给患者找试验. */
+  patientTrials?: VcrPatientTrials | null;
   funnel: Array<{ key: string; label: string; count: number | null; note?: string | null; tone?: "attention" | "accent" | "neutral" }>;
   candidates: VcrCandidate[];
   /** The candidate the detail panel is about. */
@@ -1683,6 +1722,23 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
   };
 }
 
+function readPatientTrials(raw: unknown): VcrPatientTrials {
+  const value = obj(raw);
+  const selected = obj(value.selected);
+  return {
+    available: value.available !== false,
+    subject: typeof value.subject === "string" ? value.subject : null,
+    trials: arr(value.trials).map((trial) => ({
+      ...(trial as unknown as VcrPatientTrial),
+      conditions: strings(trial.conditions),
+      sites: trial.sites && typeof trial.sites === "object" ? { ...(trial.sites as Loose), countries: strings(obj(trial.sites).countries) } as VcrPatientTrial["sites"] : null,
+      counts: { satisfied: 0, unknown: 0, notSatisfied: 0, pending: 0, ...obj(trial.counts) } as VcrPatientTrial["counts"],
+    })),
+    selected: Object.keys(selected).length && typeof selected.id === "string"
+      ? { ...(selected as unknown as NonNullable<VcrPatientTrials["selected"]>), criteria: arr(selected.criteria) as unknown as VcrCriterionJudgement[] } : null,
+  };
+}
+
 export function readVcrMatching(raw: unknown): VcrMatchingTab {
   const value = obj(raw);
   const selected = obj(value.selected);
@@ -1700,6 +1756,8 @@ export function readVcrMatching(raw: unknown): VcrMatchingTab {
       criteria: arr(selected.criteria) as unknown as VcrCriterionJudgement[],
       trace: arr(selected.trace) as unknown as NonNullable<NonNullable<VcrMatchingTab["selected"]>["trace"]>,
     } : null,
+    // What is not an object is no page of trials (the raw key is dropped, not passed through): the tab reads as the other direction's.
+    patientTrials: value.patientTrials && typeof value.patientTrials === "object" ? readPatientTrials(value.patientTrials) : undefined,
     gaps: arr(value.gaps) as unknown as VcrMatchingTab["gaps"],
     pendingReview: value.pendingReview && typeof value.pendingReview === "object" ? value.pendingReview as VcrMatchingTab["pendingReview"] : null,
     ledger: arr(value.ledger) as unknown as VcrMatchingTab["ledger"],
@@ -2018,6 +2076,14 @@ export const getVcrComparator = tabReader("comparator", readVcrComparator);
 export const getVcrTrial = tabReader("trial", readVcrTrial);
 export const getVcrMatching = tabReader("matching", readVcrMatching);
 export const getVcrData = tabReader("data", readVcrData);
+
+/**
+ * 「为该患者找试验」: asks for a run of the matching capability that searches the registries for this patient. The answer is a run's, like
+ * 「让 AI 做」 (a deferred one has no run); `evaluated` is how many verdicts the trials the study already holds now have about the patient.
+ */
+export function runVcrTrialSearch(studyId: string, subjectKey: string) {
+  return productRequest<VcrRunAnswer & { evaluated?: number | null }>(`${study(studyId)}/trial-search`, "POST", trialSearchBody(subjectKey));
+}
 
 /** 「让 AI 做」: dispatches one step now, in the study's own conversation. */
 export function runVcrStep(studyId: string, step: VcrStepKey) {

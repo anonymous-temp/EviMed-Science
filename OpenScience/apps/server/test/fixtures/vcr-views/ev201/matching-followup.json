@@ -34,7 +34,8 @@
   },
   "direction": "trial_to_patient",
   "directions": [
-    "trial_to_patient"
+    "trial_to_patient",
+    "patient_to_trial"
   ],
   "funnel": [
     {

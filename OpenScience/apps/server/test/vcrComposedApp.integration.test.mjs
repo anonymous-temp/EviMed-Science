@@ -191,6 +191,8 @@ function requests(target, ids) {
     "PATCH /studies/:id dataTier,intendedUse,status": async () => ["PATCH", S, { status: "active" }],
     "DELETE /studies/:id": async () => ["DELETE", `/api/vcr/studies/${await ids.disposable()}`, undefined],
     "POST /studies/:id/run": async () => ["POST", `${S}/run`, { step: "definition" }],
+    // 「为该患者找试验」: a role that may run reaches the roster check, which answers 404 for a patient this study does not hold.
+    "POST /studies/:id/trial-search": async () => ["POST", `${S}/trial-search`, { subjectKey: "P-0192" }],
     "GET /studies/:id/jobs": async () => ["GET", `${S}/jobs`, undefined],
     "GET /studies/:id/jobs/:job": async () => ["GET", `${S}/jobs/job_none`, undefined],
     "POST /studies/:id/jobs": async () => ["POST", `${S}/jobs`, { kind: "design_simulation", scenario: {} }],

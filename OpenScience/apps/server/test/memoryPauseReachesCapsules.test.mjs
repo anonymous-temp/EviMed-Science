@@ -2,13 +2,14 @@
 // the researcher's pause (`memoryPausedFor`) reached only the research-memory records. The resident capsule profile,
 // the learned and capsule method cards a launch mounts, the capsule half of a recall and capsule notes ignored it.
 // This file holds the runtime-manager half: what a launch mounts and what a dispatch writes into the workspace. The
-// gateway half (recall and note) is in capsuleGateway.test.mjs.
+// gateway half (recall and note) is in capsuleGateway.test.mjs, and the profile's own pauses (it is one block in the
+// conversation's context now) are in residentProfile.test.mjs.
 //
 // Semantics held here (see `memoryPausedFor`): `recall` paused = nothing is read into a run (profile, method cards,
 // recall); `learning` paused = nothing is written (notes). A 「试用一次」 conversation is paused for both, for itself.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -72,77 +73,27 @@ function learnedLibrary() {
   };
 }
 
-test("the resident profile is written empty while recall is paused for the account, the project or the conversation, and only then", async () => {
-  const capsules = await ownCapsule();
+test("the workspace-level capsule profile is emptied where a project holds one, and nothing is written where it never had one", async () => {
+  // The capsule's profile is part of the conversation's own context now (`ResidentProfiles`, residentProfile.test.mjs, where the
+  // pauses are held); the file the socket still reads at every run's start must not hand a project's last profile over a second time.
   const f = await projectFixture();
   try {
     const manager = new RuntimeManager({ runtimeMode: "mock", dataDir: f.root });
-    manager.capsuleService = capsules;
-    const profileOn = async (/** @type {any} */ state, /** @type {any} */ options) => {
-      manager.memoryPause = pauseOf(state).read;
-      const result = await manager.syncCapsuleProfile(f.project, options);
-      return { result, text: await readFile(f.profileFile, "utf8") };
-    };
+    assert.deepEqual(await manager.withdrawCapsuleProfileFile(f.project), { withdrawn: false });
+    await assert.rejects(readFile(f.profileFile, "utf8"), { code: "ENOENT" }, "a project that never had a profile gains no file");
 
-    const open = await profileOn({});
-    assert.match(open.text, /- 身份：心内科临床药师/, "nothing paused: the profile is handed over, as it always was");
-
-    // The account's recall pause. The stale block from the line above must go, not merely stop being refreshed.
-    const account = await profileOn({ recall: true });
-    assert.deepEqual(account.result, { written: true, chars: 0 });
-    assert.equal(account.text, "", "a paused account's runs read no profile");
-
-    assert.match((await profileOn({})).text, /心内科临床药师/, "and resuming brings it back");
-
-    // 「本项目不使用记忆」: this project only.
-    assert.equal((await profileOn({ projects: ["p1"] })).text, "");
-    assert.match((await profileOn({ projects: ["another-project"] })).text, /心内科临床药师/, "pausing one project leaves the others alone");
-
-    // A conversation trying someone else's capsule reads that pack alone: the dispatch names the conversation.
-    assert.equal((await profileOn({ trialSessions: ["ses_trial"] }, { sessionId: "ses_trial" })).text, "");
-    assert.match((await profileOn({ trialSessions: ["ses_trial"] }, { sessionId: "ses_plain" })).text, /心内科临床药师/,
-      "an ordinary conversation of the same project is not a trial");
-
-    // Pausing learning is not pausing recall: reading a profile writes nothing.
-    assert.match((await profileOn({ learning: true })).text, /心内科临床药师/);
+    await mkdir(path.dirname(f.profileFile), { recursive: true });
+    await writeFile(f.profileFile, "以下条目来自用户本人的记忆胶囊，由用户写下：\n- 身份：心内科临床药师\n");
+    assert.deepEqual(await manager.withdrawCapsuleProfileFile(f.project), { withdrawn: true });
+    assert.equal(await readFile(f.profileFile, "utf8"), "", "emptied, which the socket reads as no profile");
+    assert.equal((await lstat(f.profileFile)).mode & 0o777, 0o444);
+    assert.deepEqual(await manager.withdrawCapsuleProfileFile(f.project), { withdrawn: false }, "and an empty one is left alone");
   } finally {
     await rm(f.root, { recursive: true, force: true });
   }
 });
 
-test("a pause that cannot be read withholds the profile instead of leaving the last one in place", async () => {
-  const capsules = await ownCapsule();
-  const f = await projectFixture();
-  try {
-    const manager = new RuntimeManager({ runtimeMode: "mock", dataDir: f.root });
-    manager.capsuleService = capsules;
-    manager.memoryPause = pauseOf({}).read;
-    await manager.syncCapsuleProfile(f.project);
-    assert.match(await readFile(f.profileFile, "utf8"), /心内科临床药师/);
-    manager.memoryPause = pauseOf({ unreadable: true }).read;
-    // A researcher who asked for no memory is not given it because the switch could not be read; the failure is named.
-    assert.deepEqual(await manager.syncCapsuleProfile(f.project), { written: true, chars: 0, error: "product_state_unavailable" });
-    assert.equal(await readFile(f.profileFile, "utf8"), "");
-  } finally {
-    await rm(f.root, { recursive: true, force: true });
-  }
-});
-
-test("a deployment with no memory store has nothing to pause, and its profile is written as before", async () => {
-  const capsules = await ownCapsule();
-  const f = await projectFixture();
-  try {
-    const manager = new RuntimeManager({ runtimeMode: "mock", dataDir: f.root });
-    manager.capsuleService = capsules;
-    assert.equal(manager.memoryPause, null);
-    assert.equal((await manager.syncCapsuleProfile(f.project)).written, true);
-    assert.match(await readFile(f.profileFile, "utf8"), /心内科临床药师/);
-  } finally {
-    await rm(f.root, { recursive: true, force: true });
-  }
-});
-
-test("a dispatch names its conversation when it brings the profile up to date", async () => {
+test("a dispatch that passes its memory withdraws the old profile file, and one that passes none touches nothing", async () => {
   const manager = new RuntimeManager({ runtimeIdleTimeoutMs: 0 });
   const project = { userId: "owner", id: "project", workspaceDir: "/workspace" };
   manager.runtimes.set(manager.key(project), {});
@@ -150,11 +101,13 @@ test("a dispatch names its conversation when it brings the profile up to date", 
   manager.assertPersonalSkillPromptGeneration = async () => {};
   manager.enforceProjectQuota = async () => {};
   manager.callKernel = async () => ({});
-  const synced = [];
-  manager.syncCapsuleProfile = async (_project, options) => { synced.push(options); return { written: false, chars: 0 }; };
-  await manager.dispatchAdmittedPrompt(project, "ses_trial", { text: "hello", residentProfile: true });
-  await manager.dispatchAdmittedPrompt(project, "ses_other", { text: "hello" });
-  assert.deepEqual(synced, [{ sessionId: "ses_trial" }], "the profile is per dispatch and only where the dispatch asks for it");
+  manager.writeRunMemoryFile = async () => {};
+  let withdrawn = 0;
+  manager.withdrawCapsuleProfileFile = async () => { withdrawn += 1; return { withdrawn: false }; };
+  await manager.dispatchAdmittedPrompt(project, "ses_a", { text: "hello", memoryContext: "" });
+  await manager.dispatchAdmittedPrompt(project, "ses_b", { text: "hello", memoryContext: "用户的长期记忆" });
+  await manager.dispatchAdmittedPrompt(project, "ses_c", { text: "hello" });
+  assert.equal(withdrawn, 2, "a verification, a source reading or a learning run works in a directory of its own and passes no memory");
 });
 
 test("a launch under a recall pause mounts no learned and no capsule method, and clears what an earlier launch left", async () => {

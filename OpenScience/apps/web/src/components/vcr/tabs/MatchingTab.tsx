@@ -1,7 +1,7 @@
-import { ClinicalTimeline, EvaluationNote, MatchingPanelControls, useMatchingEvaluation } from "../ClinicalMatchingDetails";
+import { ClinicalTimeline, CriterionTable, EvaluationNote, MatchingPanelControls, useMatchingEvaluation } from "../ClinicalMatchingDetails";
 import { VcrCorrectionCasesActions } from "../VcrCorrectionCasesActions";
 import { useState } from "react";
-import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import {
   contactVcrReferral,
   getVcrMatching,
@@ -11,7 +11,6 @@ import {
   transitionVcrReferral,
   type VcrCandidate,
   type VcrCriterionJudgement,
-  type VcrCriterionState,
   type VcrMatchingTab as MatchingData,
   type VcrReferral,
   type VcrStudy,
@@ -26,13 +25,13 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { DataTable } from "@/components/ui/DataTable";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Tag } from "@/components/ui/Tag";
-import { evidenceCaveats, type EvidenceCaveat } from "../evidenceCaveats";
 import { VcrJudgmentDrawer } from "../VcrJudgmentDrawer";
 import { VcrForecastChart } from "../VcrCharts";
 import { VcrFunnelBar } from "../VcrDiagrams";
 import { SourceTag } from "../VcrMarks";
 import { VcrStat, VcrStatNote } from "../VcrNumber";
 import { VcrStepPending, VcrTabSkeleton } from "../VcrStates";
+import { PatientTrials } from "./PatientTrials";
 import { useVcrLoad, VcrHeadline, VcrSection, VcrTabError, VcrToolbar } from "../vcrTabKit";
 import { criterionStateLabel, intervalLabel, NO_VALUE, numberText, referralStateLabel, VCR_MATCHING_EMPTY_T0 } from "../vcrText";
 
@@ -70,13 +69,6 @@ const DIRECTIONS: ReadonlyArray<{ value: Direction; label: string }> = Object.fr
  */
 const PRIORITY_LABEL = "临床优先级（不是获益概率）";
 
-const STATE_ICON: Record<VcrCriterionState, typeof CircleCheck> = {
-  satisfied: CircleCheck,
-  not_satisfied: CircleX,
-  unknown: CircleHelp,
-  pending_recheck: Clock,
-};
-
 /**
  * 匹配与招募: who might be eligible, what is still missing on each of them,
  * and what the sites have actually done.
@@ -113,21 +105,31 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const [view, setView] = useState<View>("matching");
   const [direction, setDirection] = useState<Direction>("trial_to_patient");
   const [candidate, setCandidate] = useState<string | null>(null);
+  // 给患者找试验: the trial of the patient's list the reader opened. It is the patient's, so it goes with them.
+  const [trial, setTrial] = useState<string | null>(null);
   const [protocolVersionId, setProtocolVersionId] = useState<string | null>(null);
   const { state, reload, last } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}`, () => {
     const askedFor = view === "matching" && candidate ? candidate : null;
+    const askedTrial = view === "matching" && direction === "patient_to_trial" && askedFor && trial ? trial : null;
     return getVcrMatching(studyId, {
       view, direction, ...(protocolVersionId ? { protocolVersionId } : {}), ...(askedFor ? { candidate: askedFor } : {}),
+      ...(askedTrial ? { trial: askedTrial } : {}),
     }).then((page): MatchingPage => ({ ...page, askedFor }));
   });
   const pick = (id: string) => {
-    setCandidate(id);
+    // An empty id is the select's own 请选择患者: nobody asked for.
+    setCandidate(id || null);
+    setTrial(null);
     // Same key, a new round: the tab stays on screen while the person loads.
     reload();
   };
-  const switchView = (next: View) => { setView(next); setCandidate(null); };
+  const pickTrial = (id: string) => {
+    setTrial(id);
+    reload();
+  };
+  const switchView = (next: View) => { setView(next); setCandidate(null); setTrial(null); };
 
-  const switchDirection = (next: Direction) => { setDirection(next); setCandidate(null); };
+  const switchDirection = (next: Direction) => { setDirection(next); setCandidate(null); setTrial(null); };
 
   const toolbar = (summary?: string) => (
     <VcrToolbar summary={summary}>
@@ -143,6 +145,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const canRun = study.abilities.includes("run") && study.abilities.includes("read_patient_level");
   const controls = view === "matching" && shown && shown.available !== false ? (
     <MatchingPanelControls key="controls" studyId={studyId} data={shown} direction={direction} protocolId={protocolVersionId}
+      subjectKey={direction === "patient_to_trial" ? candidate : undefined}
       settling={state.kind !== "ready"} canRun={canRun} onProtocol={setProtocolVersionId} onCandidate={pick} onReload={reload} />
   ) : null;
   if (state.kind === "loading") return <div className="flex flex-col gap-6">{toolbar()}{controls}<VcrTabSkeleton /></div>;
@@ -153,6 +156,31 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       <p data-vcr-matching-unavailable="" className="py-12 text-center text-ui text-text-3">
         {data.unavailable?.message ?? "匹配与招募在本部署尚未接入。"}
       </p>
+    );
+  }
+  // 给患者找试验 is a page of its own: one patient's trials, ranked, with the chosen trial's criteria. It is taken only where the server
+  // sent that page; a server that did not answers the direction with the protocol's page, and that is drawn as it always was.
+  if (view === "matching" && direction === "patient_to_trial" && data.patientTrials) {
+    const owner = data.patientTrials.subject;
+    return (
+      <div className="flex flex-col gap-6">
+        {toolbar()}
+        {controls}
+        <PatientTrials
+          studyId={studyId}
+          study={study}
+          page={data.patientTrials}
+          roster={data.candidateRoster ?? []}
+          asked={candidate}
+          picked={trial}
+          facts={owner && timelineOwner(data) === owner ? data.timeline : undefined}
+          onPick={pickTrial}
+          onSearched={reload}
+        />
+        {owner && timelineOwner(data) === owner && (
+          <ClinicalTimeline studyId={studyId} data={data} subject={owner} mayReadOriginal={study.abilities.includes("read_patient_level")} />
+        )}
+      </div>
     );
   }
   // Every sub-view counts: a referral ledger with no candidate list is a
@@ -421,55 +449,19 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
               </dl>
             )}
 
-            <DataTable
+            <CriterionTable
               label={`${selected.candidate.id} 的逐条判定`}
-              minWidth="min-w-[44rem]"
-              columns={[
-                { key: "code", header: "编号", rowHeader: true, width: "w-16", cell: (row) => <span className="tabular-nums text-text-3">{row.code}</span> },
-                { key: "text", header: "方案原文", cell: (row) => <span className="text-text">{row.text}</span> },
-                { key: "state", header: "状态", width: "w-24", cell: (row) => <CriterionState row={row} caveats={evidenceCaveats(row.evidence, caveatFacts)} /> },
-                {
-                  key: "evidence",
-                  header: "患者证据",
-                  isEmpty: (row) => !row.evidence,
-                  cell: (row) => row.evidence ? (
-                    <span className="flex flex-col gap-1.5">
-                      {(row.evidenceItems?.length ? row.evidenceItems : [row.evidence]).map((item, index) => (
-                        <span key={`${item.quote}-${index}`} className="block">
-                          <span className="block text-text">{`“${item.quote}”`}</span>
-                          <span className="block text-caption text-text-3">{[item.source, item.at].filter(Boolean).join(" · ")}</span>
-                        </span>
-                      ))}
-                    </span>
-                  ) : null,
-                },
-                {
-                  key: "request",
-                  header: "补证建议",
-                  isEmpty: (row) => !row.request,
-                  cell: (row) => row.request ? (
-                    <span className="block">
-                      <span className="block text-text">{row.request}</span>
-                      {row.requestNote && <span className="block text-caption text-text-3">{row.requestNote}</span>}
-                    </span>
-                  ) : <span className="text-text-3">—</span>,
-                },
-                ...(mayJudge ? [{
-                  key: "judge",
-                  header: "改判",
-                  width: "w-20",
-                  isEmpty: (row: VcrCriterionJudgement) => !row.criterionId,
-                  cell: (row: VcrCriterionJudgement) => row.criterionId ? (
-                    <Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => setJudging(row)}>改判</Button>
-                  ) : null,
-                }] : []),
-              ]}
               rows={selected.criteria}
-              rowKey={(row) => row.code}
-              rowAttrs={(row) => ({
-                "data-vcr-criterion": row.code,
-                "data-vcr-criterion-state": row.applicable === false ? "not_applicable" : row.state,
-              })}
+              facts={caveatFacts}
+              extraColumns={mayJudge ? [{
+                key: "judge",
+                header: "改判",
+                width: "w-20",
+                isEmpty: (row: VcrCriterionJudgement) => !row.criterionId,
+                cell: (row: VcrCriterionJudgement) => row.criterionId ? (
+                  <Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => setJudging(row)}>改判</Button>
+                ) : null,
+              }] : []}
             />
 
             {selected.trace && selected.trace.length > 0 && (
@@ -578,42 +570,6 @@ function CandidateButton({ candidate, current, onPick }: { candidate: VcrCandida
         </span>
       )}
     </button>
-  );
-}
-
-/**
- * A rule's state for one person — or 「不适用」, which is its own mark and never 未知. Under the mark, what the rule's evidence has been
- * through (denied, since corrected, contradicted): the platform's judgment stays as it is and the row says how far to trust the sentence
- * under it.
- */
-function CriterionState({ row, caveats = [] }: { row: VcrCriterionJudgement; caveats?: readonly EvidenceCaveat[] }) {
-  if (row.applicable === false) {
-    return (
-      <span data-vcr-not-applicable="" className="inline-flex items-center gap-1.5 whitespace-nowrap text-text-3">
-        <CircleMinus size={16} aria-hidden="true" />
-        不适用
-      </span>
-    );
-  }
-  const Icon = STATE_ICON[row.state] ?? CircleHelp;
-  const mark = (
-    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap",
-      row.state === "satisfied" ? "text-ok" : row.state === "not_satisfied" ? "text-danger-strong" : "text-warn-strong")}
-    >
-      <Icon size={16} aria-hidden="true" />
-      {criterionStateLabel(row.state)}
-      {/* The state shown is a person's: the platform's own answer is kept beside it. */}
-      {row.overridden && <span data-vcr-overridden=""><Tag>人工改判</Tag></span>}
-    </span>
-  );
-  if (caveats.length === 0) return mark;
-  return (
-    <span className="flex flex-col items-start gap-1">
-      {mark}
-      <span data-vcr-caveats="" className="flex flex-wrap gap-1">
-        {caveats.map((caveat) => <Tag key={caveat.key} tone={caveat.needsChecking ? "warn" : "neutral"}>{caveat.label}</Tag>)}
-      </span>
-    </span>
   );
 }
 

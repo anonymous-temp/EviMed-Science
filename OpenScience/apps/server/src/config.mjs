@@ -924,6 +924,10 @@ function vcrSettings(overrides) {
     // (vcrComposition, vcrGateway); the client clamps it to 5–60 s. Read since the registry client existed, defined
     // here only on 2026-10-10 — until then the variable reached nothing and the deadline was always 20 s.
     vcrRegistryTimeoutMs: integer("vcrRegistryTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS", 20_000, 5_000, 60_000),
+    // The most candidate trials one study holds (「给患者找试验」, vcrPatientTrials): each one costs an evaluation for every patient the
+    // study judges against it, so the count is bounded; a trial the study already holds can always be updated. Counter:
+    // `open_science_vcr_patient_trials_total{kind="capReached"}`.
+    vcrCandidateTrialsMax: integer("vcrCandidateTrialsMax", "OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX", 60, 1, 500),
     // The smallest cell a model is shown (vcrService.minCell): a deployment may raise the domain's floor, never lower it.
     vcrMinCellSize: integer("vcrMinCellSize", "OPEN_SCIENCE_VCR_MIN_CELL_SIZE", VCR_MIN_CELL_SIZE, VCR_MIN_CELL_SIZE, 1_000),
     // The largest derived table — reconstructed pseudo-patients, a forecast's probabilities — the control plane stores from an engine job (vcrJobs).
@@ -1270,6 +1274,11 @@ function reviewConfigured(overrides) {
  *   with a key in place, and the reply check then asks the reviewer model
  *   about every sentence, as it did before Jev (principle 15: the reason is
  *   cost and latency, the counter is `open_science_review_jev_requests_total`).
+ * - `OPEN_SCIENCE_JEV_ENABLED` (owner, 2026-10-10; default on) is the one switch
+ *   for every Jev site at once, the reply check's included: off, the key stays
+ *   mounted and each site takes the path it had before Jev. The per-site list
+ *   (`OPEN_SCIENCE_JEV_DISABLED_SITES`) and the reply check's own lever stay as
+ *   narrower switches under it.
  * - The timeout is how long a reply check waits for Jev before the reviewer
  *   takes every sentence. Jev answered in 0.2–1.3 s in the 2026-09-21 probes,
  *   so fifteen seconds is an outage, not a slow answer.
@@ -1311,15 +1320,17 @@ function reviewJevSettings(overrides, keyPresent) {
   const registerValue = overrides.jevRegisterMaxLines ?? (process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES || REGISTER_JUDGE_MAX_LINES);
   const registerMaxLines = Number(registerValue);
   if(!Number.isSafeInteger(registerMaxLines)||registerMaxLines<1||registerMaxLines>5000)throw new Error(`OPEN_SCIENCE_JEV_REGISTER_MAX_LINES must be a whole number from 1 to 5000, got ${JSON.stringify(registerValue)}.`);
+  // Read once and folded into both flags below, so a consumer that reads only the reply check's flag cannot miss the master switch.
+  const master = Boolean(overrides.jevEnabled ?? boolEnv("OPEN_SCIENCE_JEV_ENABLED", true));
   return {
-    reviewJevEnabled: overrides.reviewJevEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_JEV_ENABLED", keyPresent),
+    reviewJevEnabled: master && Boolean(overrides.reviewJevEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_JEV_ENABLED", keyPresent)),
     reviewJevModel: model,
     reviewJevApiBase: String(pin.apiBase ?? "").replace(/\/+$/, ""),
     reviewJevSupportConfidence: threshold,
     reviewJevMaxRequestTokens: maxRequestTokens,
     reviewJevMaxStateTokens: maxStateTokens,
     reviewJevTimeoutMs: timeoutMs,
-    jevEnabled: overrides.jevEnabled ?? keyPresent,
+    jevEnabled: master && keyPresent,
     jevDisabledSites: disabled,
     jevOnlineTimeoutMs: onlineTimeout,
     jevBackgroundConcurrency: concurrency,
@@ -1567,6 +1578,8 @@ export function loadConfig(overrides = {}) {
   const publicSourceCredentialSpecs = {
     evimedEvidence: ["evimedApiKey", "OPEN_SCIENCE_EVIMED_API_KEY", "evimed.api-key"],
     semanticScholar: ["semanticScholarApiKey", "OPEN_SCIENCE_SEMANTIC_SCHOLAR_API_KEY", "semantic-scholar.api-key"],
+    // Optional, and read by the control plane only (evolutionScholarEnrichment.mjs): without it OpenAlex is not asked about a shortlisted paper.
+    openAlex: ["openAlexApiKey", "OPEN_SCIENCE_OPENALEX_API_KEY", "openalex.api-key"],
     core: ["coreApiKey", "OPEN_SCIENCE_CORE_API_KEY", "core.api-key"],
     unpaywall: ["unpaywallEmail", "OPEN_SCIENCE_UNPAYWALL_EMAIL", "unpaywall.email"],
     umls: ["umlsApiKey", "OPEN_SCIENCE_UMLS_API_KEY", "umls.api-key"],
@@ -2521,6 +2534,22 @@ export function loadConfig(overrides = {}) {
     memoryContextMaxChars: Number(
       overrides.memoryContextMaxChars ?? process.env.OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS ?? 20_000,
     ),
+    // The standing profile a conversation is handed up front (review M6, 2026-10-10): the most entries it carries, research
+    // records and capsule entries together, inside the 1,500 tokens the block is held to. What is always present is paid for on
+    // every request and takes attention from the question, so it is capped; the rest is the recall tool's, and the line beside
+    // the profile says how many there are.
+    memoryProfileMaxRecords: Number(
+      overrides.memoryProfileMaxRecords ?? process.env.OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS ?? 24,
+    ),
+    // How many items the recall tool answers with when the model does not say, and the most it may ask for. The tool is the
+    // one path to episodic and project memory, and an answer is read by the model whole: five, eight at most, each above the
+    // relevance floor below.
+    memoryRecallToolLimit: Number(
+      overrides.memoryRecallToolLimit ?? process.env.OPEN_SCIENCE_MEMORY_RECALL_TOOL_LIMIT ?? 5,
+    ),
+    memoryRecallToolMaxLimit: Number(
+      overrides.memoryRecallToolMaxLimit ?? process.env.OPEN_SCIENCE_MEMORY_RECALL_TOOL_MAX_LIMIT ?? 8,
+    ),
     // The similarity below which an index hit is not offered: by the memory
     // page's search (2026-09-26 audit, M-4: 「信尔美」 also listed five unrelated
     // memories of another project) and, since 2026-10-10 (review M-3), by the
@@ -2528,7 +2557,8 @@ export function loadConfig(overrides = {}) {
     // neighbours. Measured on the pinned embedder (qwen3.7-text-embedding,
     // 2026-09-14): relevant hits score 0.71–0.87, unrelated ones fall to about
     // 0.21. The durable kinds (profile, preference, behavior, correction) are
-    // recalled whatever they score; recall keeps its own budget.
+    // not looked up under it: they are the standing profile, handed to a
+    // conversation up front whatever they would score (`memoryProfileMaxRecords`).
     memorySearchMinScore: Number(
       overrides.memorySearchMinScore ?? process.env.OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE ?? 0.5,
     ),
@@ -2759,6 +2789,26 @@ export function loadConfig(overrides = {}) {
     evolutionLightConcurrency: Number(overrides.evolutionLightConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY ?? 2),
     evolutionSearchPaused: overrides.evolutionSearchPaused ?? boolEnv("OPEN_SCIENCE_EVOLUTION_SEARCH_PAUSED", false),
     evolutionMaxDecisionCards: Number(overrides.evolutionMaxDecisionCards ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS ?? 3),
+    // How many different accounts of a class a user-originated signal or lead needs before the platform loop reads it (review D-E12). Researchers
+    // need five, always: one person's private work must not steer the platform. An operator's own account is the platform's, and on a deployment
+    // with a handful of accounts five could never be reached, so the operator class is counted on its own against this floor (1 to 5).
+    // The hours the heavy, model-intensive evolution work (scouting, building, evaluation, missions with their confirmation runs and fresh-paper sets,
+    // the monthly policy loop, the audits, the weekly self-research that writes mechanism cards) is claimed in, `HH:MM-HH:MM` in China time, or `always`.
+    // 22:00-07:00 is 14:00-23:00 UTC, wholly inside DeepSeek's half-price hours (peak: weekdays 01:00-04:00 and 06:00-10:00 UTC), so it halves the cost of
+    // this work and leaves the daytime to researchers. Collection and the light jobs run at any hour. A value that cannot be read is no window.
+    evolutionHeavyWindow: String(overrides.evolutionHeavyWindow ?? process.env.OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW ?? "22:00-07:00").trim(),
+    evolutionOperatorSignalFloor: Number(overrides.evolutionOperatorSignalFloor ?? process.env.OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR ?? 1),
+    // The weekly self-research funnel (evolutionSelfResearch.mjs): what a week may screen, shortlist, read whole and write.
+    // The caps are the platform's attention, not its money (a full week is about half a million input tokens); the text bound keeps one paper's
+    // full text to what a card can quote from in one call.
+    evolutionSelfResearchScreenLimit: Number(overrides.evolutionSelfResearchScreenLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_SCREEN_LIMIT ?? 300),
+    evolutionSelfResearchShortlistLimit: Number(overrides.evolutionSelfResearchShortlistLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_SHORTLIST_LIMIT ?? 30),
+    evolutionSelfResearchFullTextLimit: Number(overrides.evolutionSelfResearchFullTextLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_FULL_TEXT_LIMIT ?? 12),
+    evolutionSelfResearchCardLimit: Number(overrides.evolutionSelfResearchCardLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_CARD_LIMIT ?? 8),
+    // A request the knowledge-source plugin has not taken in this many days is closed as lapsed. The plugin pulls the list daily, so a request it still
+    // has not taken after a month is one it declines, and it must not hold one of the twenty-five places for ever.
+    evolutionSourceRequestLapseDays: Number(overrides.evolutionSourceRequestLapseDays ?? process.env.OPEN_SCIENCE_EVOLUTION_SOURCE_REQUEST_LAPSE_DAYS ?? 30),
+    evolutionSelfResearchTextChars: Number(overrides.evolutionSelfResearchTextChars ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_TEXT_CHARS ?? 60_000),
     evolutionMaxPaperScoutsPerDay: Number(overrides.evolutionMaxPaperScoutsPerDay ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY ?? 8),
     evolutionDecisionTimeoutMs: Number(overrides.evolutionDecisionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS ?? 86_400_000),
     evolutionPollMs: Number(overrides.evolutionPollMs ?? process.env.OPEN_SCIENCE_EVOLUTION_POLL_MS ?? 15_000),

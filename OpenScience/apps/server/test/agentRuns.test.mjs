@@ -399,6 +399,9 @@ function memoryStoreDouble({ configured = true, fail = null } = {}) {
         : { configured, connected: configured, code: null, structured: configured };
     },
     async relevant() { refuse(); return []; },
+    // What a dispatch reads of the memory since review M6 (the standing profile and the counts beside it).
+    async residentRecords() { refuse(); return []; },
+    async lookupCounts() { refuse(); return { user: 0, project: 0, session: 0 }; },
     async list() { refuse(); return []; },
     async listRecords() { refuse(); return []; },
     async listAllRecords() { refuse(); return []; },

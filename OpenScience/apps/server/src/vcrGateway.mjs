@@ -56,6 +56,7 @@
 //   `vcr_gateway_unavailable`.
 
 import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
+import { locateSourceText } from "./vcrPatientTrials.mjs";
 import { clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
@@ -606,7 +607,7 @@ function distributionOf(item, field, value) {
  * gateway knows of who is calling beyond the study: the dispatch the calling
  * runtime is reserved for, when it is a bounded one (`runtimeRunId`).
  * @typedef {{ store: any, service: any, orchestrator: any, study: any, evidence?: any, evidenceStore?: any, matchStore?: any,
- *   matching?: any, seal?: any, dataPlane?: any, documents?: any, report?: (code: string) => void,
+ *   matching?: any, patientTrials?: any, seal?: any, dataPlane?: any, documents?: any, report?: (code: string) => void,
  *   caller?: { runtimeRunId?: string | null, provenance?: any } | null, knowledge?: any, afterFreeze?: boolean }} WriteDeps
  */
 
@@ -636,47 +637,57 @@ async function checkedCriteria(deps, rows, issues, what) {
       versionRow = { ...versionRow, ...rest };
     }
     for (const [at, candidate] of candidates.entries()) {
-      const where = candidates === rows ? "" : `criteria[${at}].`;
-      const own = (/** @type {string} */ field) => `${where}${field}`;
-      const item = new Item({ row: object(candidate), index, issues, study: deps.study, store: deps.store });
-      item.prefix = where;
-      if (!item.only(CRITERION_FIELDS)) continue;
-      const kind = item.choice("kind", ["inclusion", "exclusion"], { required: true });
-      const criterionType = item.choice("criterionType", VCR_CRITERION_TYPES, { fallback: "other" });
-      const sourceText = item.str("sourceText", { max: 4000 }) ?? "";
-      const sourceLocator = item.obj("sourceLocator", { bytes: 4096 }) ?? {};
-      const evidenceNeeded = item.arr("evidenceNeeded", { max: 30 }) ?? [];
-      const requirement = item.obj("requirement", { required: true, bytes: 32 * 1024 });
-      const applicability = item.obj("applicability", { bytes: 8 * 1024 });
-      /** @type {Array<[string, Record<string, any> | undefined]>} */
-      const nodes = [["requirement", requirement], ["applicability", applicability]];
-      for (const [field, node] of nodes) {
-        if (!node) continue;
-        const problems = validateRequirement(node, { path: field });
-        if (problems.length) {
-          issues.push(issue(index, own(field), "vcr_criterion_malformed",
-            `${own(field)} 不符合入排条件的规定结构：${problems.slice(0, 3).map((problem) => `${problem.field || field}（${problem.detail}）`).join("；")}。`));
-          item.ok = false;
-        }
-      }
-      if (!item.ok) continue;
-      criteria.push({
-        kind, criterionType, sourceText, sourceLocator, evidenceNeeded, reviewState: "ai_set",
-        // Applicability is its own column, beside the requirement: the evaluator
-        // reads it from there, and the grammar would refuse it inside the
-        // requirement. A criterion that does not apply is not an unknown.
-        requirement, applicability: applicability ?? null,
-      });
+      const criterion = checkedCriterion(deps, candidate, index, candidates === rows ? "" : `criteria[${at}].`, issues);
+      if (criterion) criteria.push(criterion);
     }
   }
   return { criteria, versionRow };
 }
 
 /**
+ * One criterion, checked: the closed words by name, the requirement and the applicability each against the domain's grammar.
+ * `where` is the path the issues name (`criteria[2].`). A criterion that fails is `null`, with its issues recorded.
+ * @param {WriteDeps} deps @param {unknown} candidate @param {number} index the item it belongs to @param {string} where @param {any[]} issues
+ * @returns {Record<string, any> | null}
+ */
+function checkedCriterion(deps, candidate, index, where, issues) {
+  const own = (/** @type {string} */ field) => `${where}${field}`;
+  const item = new Item({ row: object(candidate), index, issues, study: deps.study, store: deps.store });
+  item.prefix = where;
+  if (!item.only(CRITERION_FIELDS)) return null;
+  const kind = item.choice("kind", ["inclusion", "exclusion"], { required: true });
+  const criterionType = item.choice("criterionType", VCR_CRITERION_TYPES, { fallback: "other" });
+  const sourceText = item.str("sourceText", { max: 4000 }) ?? "";
+  const sourceLocator = item.obj("sourceLocator", { bytes: 4096 }) ?? {};
+  const evidenceNeeded = item.arr("evidenceNeeded", { max: 30 }) ?? [];
+  const requirement = item.obj("requirement", { required: true, bytes: 32 * 1024 });
+  const applicability = item.obj("applicability", { bytes: 8 * 1024 });
+  /** @type {Array<[string, Record<string, any> | undefined]>} */
+  const nodes = [["requirement", requirement], ["applicability", applicability]];
+  for (const [field, node] of nodes) {
+    if (!node) continue;
+    const problems = validateRequirement(node, { path: field });
+    if (problems.length) {
+      issues.push(issue(index, own(field), "vcr_criterion_malformed",
+        `${own(field)} 不符合入排条件的规定结构：${problems.slice(0, 3).map((problem) => `${problem.field || field}（${problem.detail}）`).join("；")}。`));
+      item.ok = false;
+    }
+  }
+  if (!item.ok) return null;
+  return {
+    kind, criterionType, sourceText, sourceLocator, evidenceNeeded, reviewState: "ai_set",
+    // Applicability is its own column, beside the requirement: the evaluator
+    // reads it from there, and the grammar would refuse it inside the
+    // requirement. A criterion that does not apply is not an unknown.
+    requirement, applicability: applicability ?? null,
+  };
+}
+
+/**
  * The writers, one per kind. Each takes the item's kit and the deps, validates
  * every field it uses first, and returns the id it wrote — or nothing, having
  * recorded why.
- * @type {Record<string, (item: Item, deps: WriteDeps, extra: { changed: string[], results: any[] }) => Promise<string | null | undefined>>}
+ * @type {Record<string, (item: Item, deps: WriteDeps, extra: { changed: string[], results: any[], reevaluate?: Set<string> }) => Promise<string | null | undefined>>}
  */
 const WRITERS = {
   async definition(item, { store, study }) {
@@ -878,6 +889,83 @@ const WRITERS = {
     }
     extra.results.push({ index: item.index, registryId, extracted: extracted.counts.extracted, verified: extracted.counts.verified, refused: extracted.counts.refused });
     return extracted.precedent?.id ?? null;
+  },
+
+  /**
+   * A trial a registry lists, found for a patient (「给患者找试验」). The run names the registry and the id and hands over its structuring of the
+   * trial's eligibility text; the platform reads everything that identifies the trial out of the registry's record, finds where each
+   * criterion's original wording stands in it, and — when the item names patients — evaluates each against the trial. A criterion
+   * outside the grammar refuses the trial whole: a trial missing a line would rank a patient it excludes as eligible. A patient the study
+   * does not hold is a warning, not a reason to lose the trial.
+   */
+  async candidate_trial(item, deps, extra) {
+    const { evidence, matchStore, patientTrials, study } = deps;
+    if (!item.only(["registry", "registryId", "criteria", "subjectKeys"])) return null;
+    const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
+    const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "登记号，例如 NCT02296125 或 EU CT 号 2024-513060-26-00", { required: true });
+    const rows = item.arr("criteria", { max: 200 });
+    const asked = item.arr("subjectKeys", { max: 20 }) ?? [];
+    for (const [at, key] of asked.entries()) {
+      if (typeof key !== "string" || !TOKEN.test(key)) item.bad(`subjectKeys[${at}]`, "subjectKeys 里是受试者的假名编号（vcr_read what:matching 给出）。");
+    }
+    /** @type {Array<Record<string, any>> | null} */
+    let checked = null;
+    if (rows !== undefined) {
+      if (!rows.length) item.bad("criteria", "criteria 至少写一条入排条件；只想评估新的受试者时不要写 criteria。");
+      else {
+        checked = [];
+        for (const [at, raw] of rows.entries()) {
+          const criterion = checkedCriterion(deps, raw, item.index, `criteria[${at}].`, item.issues);
+          if (criterion) checked.push(criterion); else item.ok = false;
+        }
+      }
+    }
+    if (!item.ok) return null;
+    if (!evidence?.candidateRecord || !patientTrials?.writeTrial) return void item.bad("registryId", "给患者找试验在本部署尚未接入。", "vcr_write_refused");
+    if (checked === null && typeof patientTrials.holds === "function" && !(await patientTrials.holds(study, { registry, registryId }))) {
+      return void item.bad("criteria", "这个试验本研究里还没有：第一次写它要同时写入它的入排条件（criteria）。");
+    }
+    const fetched = await evidence.candidateRecord({ userId: study.userId, registry, registryId });
+    if (fetched?.status !== "ok") {
+      const missing = fetched?.status === "registry_not_found";
+      return void item.bad("registryId", missing ? "登记平台没有这个登记号的记录。" : `没能取回这条登记记录（${fetched?.reason ?? fetched?.status ?? "unknown"}）。`,
+        missing ? "registry_not_found" : "registry_unavailable");
+    }
+    const trial = fetched.trial;
+    /** @type {any[]} */
+    const warnings = [];
+    let located = 0;
+    const criteria = checked?.map((criterion, at) => {
+      const found = locateSourceText(criterion.sourceText, trial.eligibilityText);
+      if (found) located += 1;
+      else if (trial.eligibilityText) {
+        warnings.push({ field: `criteria[${at}].sourceText`, code: "source_text_not_in_record",
+          message: "这句原文在登记记录的入排条件里找不到：照写保存，没有定位。要让读的人能对上，sourceText 请逐字照抄登记记录里的那一句。" });
+      }
+      // Where the wording stands is the platform's to say: the platform's locator replaces whatever the run typed.
+      return { ...criterion, sourceLocator: found ? { recordHash: trial.recordHash, ...found } : { recordHash: trial.recordHash, located: false } };
+    }) ?? null;
+    /** The patients to evaluate: the ones the study holds. */
+    const roster = new Set(typeof matchStore?.candidateSubjects === "function" ? await matchStore.candidateSubjects({ studyId: study.id }).catch(() => []) : []);
+    /** @type {string[]} */
+    const subjectKeys = [];
+    for (const [at, key] of asked.entries()) {
+      const subjectKey = String(key);
+      if (roster.has(subjectKey) || await studyHoldsSubject({ matchStore, documents: deps.documents, study, subjectKey, seen: extra })) {
+        if (!subjectKeys.includes(subjectKey)) subjectKeys.push(subjectKey);
+      } else {
+        warnings.push({ field: `subjectKeys[${at}]`, code: "vcr_subject_not_found",
+          message: `本研究里没有编号为「${subjectKey.slice(0, 60)}」的受试者：编号取自 vcr_read what:matching 的受试者清单，不要自拟；试验已保存，其余受试者照常评估。` });
+      }
+    }
+    const saved = await patientTrials.writeTrial(study, { trial, criteria, subjectKeys });
+    const unavailable = saved.evaluation?.unavailable ?? [];
+    extra.results.push({
+      index: item.index, id: saved.trial.id, registryId, created: saved.created, criteria: saved.criteria.length,
+      ...(criteria ? { located } : {}), evaluated: saved.evaluation?.evaluated ?? [],
+      ...(unavailable.length ? { unavailable } : {}), ...(warnings.length ? { warnings } : {}),
+    });
+    return saved.trial.id;
   },
 
   async evidence_item(item, { evidence, study, service }, extra) {
@@ -1370,18 +1458,24 @@ const WRITERS = {
     return saved.id;
   },
 
-  async language_judgment(item, { matchStore, matching, documents, study, caller }, extra) {
-    if (!item.only(["subjectKey", "criterionKey", "protocolVersionId", "state", "evidence"])) return null;
+  async language_judgment(item, { matchStore, matching, patientTrials, documents, study, caller }, extra) {
+    if (!item.only(["subjectKey", "criterionKey", "protocolVersionId", "candidateTrialId", "state", "evidence"])) return null;
     const subjectKey = item.token("subjectKey", TOKEN, "受试者的假名编号", { required: true });
     const protocolVersionId = item.token("protocolVersionId", ID, "本研究方案版本的 id");
+    // The answer is about one trial's criterion: the study's own protocol version, or a candidate trial found for a patient.
+    const candidateTrialId = item.token("candidateTrialId", ID, "候选试验的 id（vcr_read what:candidate_trials 给出）");
+    if (protocolVersionId && candidateTrialId) item.bad("candidateTrialId", "protocolVersionId 和 candidateTrialId 二选一：答案属于本研究的方案，或属于一个候选试验。");
     const criterionKey = item.token("criterionKey", TOKEN, "入排条件里 language 节点的 key（没写 key 时用条件的 id）", { required: true });
     const state = item.choice("state", ["satisfied", "not_satisfied", "unknown"], { required: true });
     const evidence = item.arr("evidence", { max: 10 }) ?? [];
     if (!item.ok) return null;
-    if (!matching?.languageKeys) return void item.bad("criterionKey", "匹配未接入本部署。", "vcr_write_refused");
-    const known = await matching.languageKeys(study, protocolVersionId ?? null);
+    if (candidateTrialId ? !patientTrials?.languageKeys : !matching?.languageKeys) return void item.bad("criterionKey", "匹配未接入本部署。", "vcr_write_refused");
+    const known = candidateTrialId ? await patientTrials.languageKeys(study, candidateTrialId) : await matching.languageKeys(study, protocolVersionId ?? null);
+    if (candidateTrialId && !known.length && !(await patientTrials.holds?.(study, { id: candidateTrialId }))) {
+      return void item.bad("candidateTrialId", "本研究里没有这个候选试验：id 取自 vcr_read what:candidate_trials。");
+    }
     if (!known.includes(String(criterionKey))) {
-      return void item.bad("criterionKey", `最新方案版本里没有 key 为「${String(criterionKey).slice(0, 60)}」的 language 条件${known.length ? `（有：${known.slice(0, 8).join("、")}）` : ""}。`);
+      return void item.bad("criterionKey", `${candidateTrialId ? "这个候选试验" : "最新方案版本"}里没有 key 为「${String(criterionKey).slice(0, 60)}」的 language 条件${known.length ? `（有：${known.slice(0, 8).join("、")}）` : ""}。`);
     }
     if (state !== "unknown" && !evidence.length) {
       return void item.bad("evidence", "判为满足或不满足必须带原句证据；判断不了就写 unknown。");
@@ -1406,7 +1500,15 @@ const WRITERS = {
       if (!verified) return null;
       anchored.push({ documentId: span.documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, visibleAt: verified.document.visibleAt ?? null });
     }
-    const saved = await matchStore.saveLanguageJudgment({ studyId: study.id, userId: study.userId, subjectKey, criterionKey, protocolVersionId, state, evidence: anchored, provenance: caller?.provenance ?? { schema: 1, status: "unknown", runId: caller?.runtimeRunId ?? null } });
+    const provenance = caller?.provenance ?? { schema: 1, status: "unknown", runId: caller?.runtimeRunId ?? null };
+    if (candidateTrialId) {
+      const saved = await patientTrials.saveLanguageJudgment(study, { subjectKey, candidateTrialId, criterionKey, state, evidence: anchored, provenance });
+      // The verdict about this patient and this trial rests on the answer just written: it is judged again once the batch is in.
+      (extra.reevaluate ??= new Set()).add(`${subjectKey}\u0000${candidateTrialId}`);
+      extra.results.push({ index: item.index, id: saved.id });
+      return saved.id;
+    }
+    const saved = await matchStore.saveLanguageJudgment({ studyId: study.id, userId: study.userId, subjectKey, criterionKey, protocolVersionId, state, evidence: anchored, provenance });
     extra.results.push({ index: item.index, id: saved.id });
     return saved.id;
   },
@@ -1573,7 +1675,7 @@ const WRITERS = {
  * @param {WriteDeps & { what: string, items: any[] | null, data: any | null }} input
  */
 export async function vcrRuntimeWrite({ store, service, orchestrator, study, what, items, data, evidence = null, evidenceStore = null,
-  matchStore = null, matching = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null, knowledge = null }) {
+  matchStore = null, matching = null, patientTrials = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null, knowledge = null }) {
   /** @type {string[]} */
   const ids = [];
   /** @type {Array<Record<string, any>>} */
@@ -1586,8 +1688,10 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
   if (!rows.length) {
     return { ok: false, ids, issues: [issue(null, "", "vcr_write_empty", "这次写入没有任何内容。")] };
   }
+  /** What the writers of one request share: the changed nodes, the answers beside the ids, and the pairs to judge again. @type {{ changed: string[], results: any[], reevaluate?: Set<string> }} */
+  const scratch = { changed, results };
   /** @type {WriteDeps} */
-  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, seal, dataPlane, documents, report, caller, knowledge };
+  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, patientTrials, seal, dataPlane, documents, report, caller, knowledge };
   // The run the platform sent to take new evidence into a study's cards (flywheel F24) writes its versions beside the frozen one when
   // the study's analysis plan has frozen: the dispatch names the run, and a card a run types never decides it. Any other writer — the
   // researcher's own conversation, an ordinary programme step — writes exactly as before, which for a frozen study is a new freeze.
@@ -1635,7 +1739,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
       }
       const item = new Item({ row: /** @type {Record<string, any>} */ (raw), index, issues, study, store });
       try {
-        const written = await writer(item, deps, { changed, results });
+        const written = await writer(item, deps, scratch);
         if (written && item.ok) ids.push(written);
       } catch (error) {
         if (error instanceof HttpError) issues.push(issue(index, "", "vcr_write_refused", error.message));
@@ -1649,6 +1753,15 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
     }
   }
 
+  // An answer to a candidate trial's language criterion changes what is known about that patient and that trial: the verdict is made
+  // again, once for each pair the batch touched, and what it now says comes back beside the write.
+  if (scratch?.reevaluate?.size && patientTrials?.evaluate) {
+    for (const pair of scratch.reevaluate) {
+      const [subjectKey, candidateTrialId] = pair.split("\u0000");
+      const done = await patientTrials.evaluate(study, { subjectKeys: [subjectKey], trialIds: [candidateTrialId] }).catch(() => null);
+      if (done) results.push({ candidateTrialId, subjectKey, evaluated: done.evaluated.map((/** @type {any} */ row) => ({ subjectKey: row.subjectKey, summary: row.summary, counts: row.counts })) });
+    }
+  }
   if (changed.length && orchestrator?.recomputeAfterChange) {
     await orchestrator.recomputeAfterChange({
       studyId: study.id, changed, reason: what === "criteria" || what === "protocol" ? "criterion_changed" : "assumption_changed",
@@ -1878,7 +1991,7 @@ function poolingSummary(result, about) {
 /**
  * @param {any} config @param {any} runtimeManager
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
- *   matching?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any } | null,
+ *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any } | null,
  *   report?: (code: string) => void, budgetMs?: number, attributeRun?: ((caller:any)=>Promise<string|null>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null }} dependencies
  */
 export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, attributeRun = null }) {
@@ -1948,7 +2061,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             store: vcr.store, service: vcr.service, orchestrator: vcr.orchestrator ?? null, study,
             what: request.what, items: request.items, data: request.data,
             evidence: vcr.evidence ?? null, evidenceStore: vcr.evidenceStore ?? null, matchStore: vcr.matchStore ?? null,
-            matching: vcr.matching ?? null, seal: vcr.seal ?? null, dataPlane: vcr.dataPlaneSeam ?? null, documents: vcr.documents ?? null, report,
+            matching: vcr.matching ?? null, patientTrials: vcr.patientTrials ?? null, seal: vcr.seal ?? null, dataPlane: vcr.dataPlaneSeam ?? null, documents: vcr.documents ?? null, report,
             knowledge: vcr.knowledge ?? vcr.service?.packages?.knowledge ?? null,
             caller: { runtimeRunId: runtimeRunId == null ? null : String(runtimeRunId),
               ...(["fact", "language_judgment"].includes(request.what) && typeof vcr.matchStore?.producerContext === "function"

@@ -1,0 +1,62 @@
+{
+ "case": "atom/ai-discovery-arxiv-venue-accepted",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-10T18:11:22+00:00",
+ "note": null,
+ "source": {
+  "id": "ai-discovery-arxiv-venue-accepted",
+  "name": "arXiv · papers whose comment says accepted at an AI venue",
+  "homepage": "https://arxiv.org/",
+  "lane": "ai",
+  "source_type": "preprint",
+  "access": "atom",
+  "egress": "direct",
+  "authority": 2,
+  "safety_feed": false,
+  "owner_entity": "arXiv",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 86400,
+  "poll_ceiling_s": 259200,
+  "config": {
+   "url": "https://export.arxiv.org/api/query?search_query=co:accepted+AND+%28co:NeurIPS+OR+co:EMNLP+OR+co:ICLR+OR+co:COLM+OR+co:ICML+OR+co:ACL+OR+co:TMLR%29+AND+%28cat:cs.AI+OR+cat:cs.CL+OR+cat:cs.LG+OR+cat:cs.IR+OR+cat:cs.MA+OR+cat:cs.SE+OR+cat:stat.ML%29&sortBy=lastUpdatedDate&sortOrder=descending&max_results=100",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "arxiv.org",
+    "export.arxiv.org"
+   ],
+   "arxiv_comment": true,
+   "discovery_only": true
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-10-10T18:11:18+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=co:accepted+AND+%28co:NeurIPS+OR+co:EMNLP+OR+co:ICLR+OR+co:COLM+OR+co:ICML+OR+co:ACL+OR+co:TMLR%29+AND+%28cat:cs.AI+OR+cat:cs.CL+OR+cat:cs.LG+OR+cat:cs.IR+OR+cat:cs.MA+OR+cat:cs.SE+OR+cat:stat.ML%29&sortBy=lastUpdatedDate&sortOrder=descending&max_results=100",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://export.arxiv.org/api/query?search_query=co:accepted+AND+%28co:NeurIPS+OR+co:EMNLP+OR+co:ICLR+OR+co:COLM+OR+co:ICML+OR+co:ACL+OR+co:TMLR%29+AND+%28cat:cs.AI+OR+cat:cs.CL+OR+cat:cs.LG+OR+cat:cs.IR+OR+cat:cs.MA+OR+cat:cs.SE+OR+cat:stat.ML%29&sortBy=lastUpdatedDate&sortOrder=descending&max_results=100",
+   "headers": {
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "fetched_at": "2026-10-10T18:11:21+00:00",
+   "file": "01.xml.gz",
+   "gzip": true,
+   "bytes": 243374,
+   "sha256": "f952d21454e6089f99734fb924c2b73306a9cbc2358c055efe776b842d15c194"
+  }
+ ]
+}
