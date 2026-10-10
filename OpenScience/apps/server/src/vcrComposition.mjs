@@ -87,6 +87,8 @@ import { VcrKnowledge } from "./vcrKnowledge.mjs";
 import { VcrKnowledgeStore } from "./vcrKnowledgeStore.mjs";
 import { createVcrContact } from "./vcrContact.mjs";
 import { VcrMatchStore } from "./vcrMatchStore.mjs";
+import { VcrCandidateTrialStore } from "./vcrCandidateTrialStore.mjs";
+import { createPatientTrials } from "./vcrPatientTrials.mjs";
 import { VcrMembers } from "./vcrMembers.mjs";
 import { createVcrModelPlans } from "./vcrModelDocuments.mjs";
 import { createVcrSeal } from "./vcrSeal.mjs";
@@ -1057,6 +1059,8 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const store = new VcrStore({ database: productDatabase, entityVocabulary });
   const dataStore = new VcrDataStore({ database: productDatabase });
   const matchStore = new VcrMatchStore({ database: productDatabase });
+  // The trials a run found for a patient (「给患者找试验」): their own tables, never the study's protocol versions.
+  const candidateStore = new VcrCandidateTrialStore({ database: productDatabase });
   const evidenceStore = new VcrEvidenceStore({ database: productDatabase });
 
   const access = new VcrAccess({ store: dataStore });
@@ -1142,8 +1146,9 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   jobs.addFinishHook((done) => matching.onJobFinished(done));
   const dataPlaneSeam = dataPlane ? vcrDataPlaneSeam({ dataPlane, dataStore, access }) : null;
 
+  const patientTrials = createPatientTrials({ candidateStore, matchStore, documents, subjectTable, config, report });
   const service = new VcrService({
-    store, config, engine, access, dataPlane: dataPlaneSeam, evidence, matching, jobs, seal, matchStore, evidenceStore, documents,
+    store, config, engine, access, dataPlane: dataPlaneSeam, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, patientTrials,
   });
 
   const longitudinal = createVcrLongitudinal({store,dataStore,dataPlane,matchStore,access,jobs,config,fetchImpl});
@@ -1192,7 +1197,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const records = createVcrRecords({ store, config });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal,
+    store, dataStore, matchStore, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
@@ -1305,6 +1310,7 @@ export async function vcrMetricsSnapshot(vcr) {
     evidence: vcr.evidence?.counters ? { ...vcr.evidence.counters } : null,
     publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
     predictions: vcr.predictions ? { ...vcr.predictions.counters } : null,
+    patientTrials: vcr.patientTrials?.counters ? { ...vcr.patientTrials.counters } : null,
     frontierEvents: vcr.frontierEvents ? { ...vcr.frontierEvents.counters } : null,
     platformPacks: vcr.knowledge?.platform?.enabled
       ? Object.fromEntries(Object.entries(vcr.knowledge.counters).filter(([kind]) => kind.startsWith("platform"))) : null,
@@ -1357,6 +1363,10 @@ export function vcrMetricFamilies(enabled, snapshot) {
   if (snapshot.predictions) {
     add("predictions_total", "Predictions of a registered trial's primary endpoint filed with the registry from a study's trial scenario (flywheel F25): filed, asked again, refused, and filings the registry did not take.", "counter",
       Object.entries(snapshot.predictions).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
+  }
+  if (snapshot.patientTrials) {
+    add("patient_trials_total", "What 「给患者找试验」 did since this process started: candidate trials written and updated, writes refused, and writes refused because the study already holds the most it may (OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX); patients evaluated against a trial, evaluations that could not be made, and the searches the page asked for.", "counter",
+      Object.entries(snapshot.patientTrials).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.platformPacks) {
     add("platform_packs_total", "What the platform knowledge packs did since this process started (flywheel F26): packs that passed the re-check and were copied, requests that failed it, authors who took their name off, and platform packs labelled 来源有变更.", "counter",

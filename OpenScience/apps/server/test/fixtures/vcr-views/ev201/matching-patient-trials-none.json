@@ -1,0 +1,224 @@
+{
+  "view": "matching",
+  "available": true,
+  "protocols": [
+    {
+      "id": "prt_2",
+      "version": 1,
+      "title": "EV-201 方案 v1",
+      "sourceRef": null
+    }
+  ],
+  "protocolVersionId": "prt_2",
+  "candidateRoster": [
+    "P-0192",
+    "P-0201"
+  ],
+  "comparisons": [
+    {
+      "protocol": {
+        "id": "prt_2",
+        "version": 1,
+        "title": "EV-201 方案 v1",
+        "sourceRef": null
+      },
+      "summary": null,
+      "asOf": null,
+      "evidenceGaps": []
+    }
+  ],
+  "timeline": [
+    {
+      "id": "fac_4",
+      "variable": "age",
+      "value": 58,
+      "unit": "year",
+      "at": "2026-09-10T00:00:00.000Z",
+      "assertion": "affirmed",
+      "experiencer": null,
+      "medicationState": null,
+      "correctionOf": null,
+      "superseded": false,
+      "conflictFactIds": [],
+      "correctionReason": null,
+      "quote": null,
+      "locator": null
+    }
+  ],
+  "headline": "1 人已评估，1 人全部满足，0 人至少有 1 条未知或待复评。",
+  "partner": {
+    "name": null,
+    "candidates": 1,
+    "tier": "T1",
+    "snapshotAt": null
+  },
+  "direction": "patient_to_trial",
+  "directions": [
+    "trial_to_patient",
+    "patient_to_trial"
+  ],
+  "patientTrials": {
+    "available": true,
+    "subject": "P-0201",
+    "trials": [],
+    "selected": null
+  },
+  "funnel": [
+    {
+      "key": "candidates",
+      "label": "已评估",
+      "count": 1,
+      "note": null,
+      "tone": "neutral"
+    },
+    {
+      "key": "insufficient",
+      "label": "可能符合 · 待补证",
+      "count": 0,
+      "note": null,
+      "tone": "attention"
+    },
+    {
+      "key": "eligible",
+      "label": "符合",
+      "count": 1,
+      "note": null,
+      "tone": "accent"
+    },
+    {
+      "key": "ineligible",
+      "label": "不符合",
+      "count": 0,
+      "note": null,
+      "tone": "neutral"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "P-0192",
+      "referralId": null,
+      "summary": "2 条满足 · 0 条未知 · 0 条待复评",
+      "site": null,
+      "eligibility": "eligible",
+      "open": [],
+      "priority": null
+    }
+  ],
+  "selected": {
+    "candidate": {
+      "id": "P-0192",
+      "referralId": null,
+      "summary": "2 条满足 · 0 条未知 · 0 条待复评",
+      "site": null,
+      "eligibility": "eligible",
+      "open": [],
+      "priority": null
+    },
+    "assessmentId": "mas_3",
+    "facts": [
+      {
+        "label": "临床资格",
+        "value": "符合",
+        "tone": "neutral"
+      },
+      {
+        "label": "满足",
+        "value": "2",
+        "tone": "neutral"
+      },
+      {
+        "label": "未知",
+        "value": "0",
+        "tone": "neutral"
+      },
+      {
+        "label": "待复评",
+        "value": "0",
+        "tone": "neutral"
+      },
+      {
+        "label": "评估时点",
+        "value": "今天",
+        "tone": "neutral"
+      }
+    ],
+    "criteria": [
+      {
+        "criterionId": "crt_7",
+        "code": "I1",
+        "kind": "inclusion",
+        "text": "年龄 ≥ 18 岁",
+        "state": "satisfied",
+        "applicable": true,
+        "evidence": {
+          "quote": "age = 63 year",
+          "locator": {
+            "field": "age",
+            "snapshotId": ""
+          },
+          "source": "数据快照字段「age」",
+          "at": "9 月 10 日"
+        },
+        "request": null,
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      },
+      {
+        "criterionId": "crt_8",
+        "code": "I2",
+        "kind": "inclusion",
+        "text": "ECOG 体能评分 0–1",
+        "state": "satisfied",
+        "applicable": true,
+        "evidence": {
+          "quote": "ecog = 1",
+          "locator": {
+            "field": "ecog",
+            "snapshotId": ""
+          },
+          "source": "数据快照字段「ecog」",
+          "at": "9 月 10 日"
+        },
+        "request": null,
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      }
+    ],
+    "verdict": {
+      "text": "符合：全部适用的入排条件都满足",
+      "note": null
+    },
+    "canContact": false,
+    "referralId": null,
+    "referralState": null,
+    "priority": null,
+    "reviewedBy": null,
+    "reviewedByName": null,
+    "trace": []
+  },
+  "gaps": [],
+  "pendingReview": null,
+  "ledger": [],
+  "forecast": null,
+  "sites": [],
+  "followup": [],
+  "protocol": {
+    "version": 1,
+    "title": "EV-201 方案 v1"
+  },
+  "abilities": {
+    "contact": true
+  },
+  "counts": {
+    "realPatients": 1,
+    "events": null,
+    "effectiveSampleSize": null,
+    "generatedRecords": null,
+    "notes": {
+      "events": "T1 无结局记录"
+    },
+    "scope": null
+  }
+}

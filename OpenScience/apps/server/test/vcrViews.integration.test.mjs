@@ -25,11 +25,13 @@ import { VCR_TABS } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { VcrEvidenceStore } from "../src/vcrEvidenceStore.mjs";
 import { VcrJobs } from "../src/vcrJobs.mjs";
+import { VcrCandidateTrialStore } from "../src/vcrCandidateTrialStore.mjs";
 import { VcrMatchStore } from "../src/vcrMatchStore.mjs";
+import { createPatientTrials } from "../src/vcrPatientTrials.mjs";
 import { VcrService } from "../src/vcrService.mjs";
 import { VcrStore } from "../src/vcrStore.mjs";
 import { FIXTURE_DIR } from "./vcrViewsFixtures.mjs";
-import { SEED_NOW, seedEv201 } from "./vcrViewsSeed.mjs";
+import { SEED_NOW, seedEv201, seedPatientTrials } from "./vcrViewsSeed.mjs";
 
 const WRITE = process.env.VCR_VIEWS_WRITE_FIXTURES === "1";
 
@@ -50,6 +52,8 @@ let database;
 let service;
 /** @type {any} */
 let seeded;
+/** The third study: another account's, with the trials found for a patient. @type {any} */
+let trialsStudy;
 /** @type {pg.Client | null} */
 let admin = null;
 let isolatedName = "";
@@ -70,9 +74,11 @@ before(async () => {
   const evidenceStore = new VcrEvidenceStore({ database });
   const jobs = new VcrJobs({ store, config });
   seeded = await seedEv201({ store, matchStore, evidenceStore });
-  service = new VcrService({ store, config, jobs, matchStore, evidenceStore, now: () => SEED_NOW });
+  const patientTrials = createPatientTrials({ candidateStore: new VcrCandidateTrialStore({ database }), matchStore, config: { vcrCandidateTrialsMax: 20 }, now: () => SEED_NOW });
+  service = new VcrService({ store, config, jobs, matchStore, evidenceStore, patientTrials, now: () => SEED_NOW });
   number(seeded.study.id);
   number(seeded.empty.id);
+  trialsStudy = await seedPatientTrials({ store, matchStore, patientTrials });
 });
 
 after(async () => {
@@ -110,7 +116,7 @@ function number(id) {
  */
 function normalize(value) {
   const text = JSON.stringify(value, null, 2)
-    .replace(/\b(std|def|prt|crt|pre|evd|asm|pop|pts|cmp|scn|grd|mdl|mth|exe|res|fct|mas|jdg|rev|fup|rvw|dec|exp)_[0-9a-f]{22}\b/g, (match) => number(match))
+    .replace(/\b(std|def|prt|crt|pre|evd|asm|pop|pts|cmp|scn|grd|mdl|mth|exe|res|fct|mas|jdg|rev|fup|rvw|dec|exp|ctr|ctc|cta|fac)_[0-9a-f]{22}\b/g, (match) => number(match))
     .replace(/"hash": "[0-9a-f]{12}"/g, '"hash": "HASH"');
   return `${text}\n`;
 }
@@ -176,6 +182,50 @@ test("the matching tab answers each view and the candidate it is asked for", opt
     assert.equal(answer.view, view);
     check(`ev201/matching-${view}.json`, answer);
   }
+});
+
+test("the matching tab answers 给患者找试验: a patient's trials in order, the chosen trial's criteria, and an empty answer for a patient nobody has searched for", options, async () => {
+  const mine = { id: trialsStudy.userId };
+  const asked = (/** @type {string} */ query) => service.tab(mine, trialsStudy.study.id, "matching", new URLSearchParams(`view=matching&direction=patient_to_trial&${query}`));
+  // The patient, and the first of her trials chosen.
+  const first = await asked("candidate=P-0192");
+  assert.equal(first.direction, "patient_to_trial");
+  assert.deepEqual(first.directions, ["trial_to_patient", "patient_to_trial"]);
+  assert.equal(first.patientTrials.subject, "P-0192");
+  assert.deepEqual(first.patientTrials.trials.map((/** @type {any} */ row) => [row.rank, row.kind, row.registryId, row.eligibility]), [
+    [1, "registry", "NCT05000001", "eligible"],
+    [2, "protocol", null, "eligible"],
+    [3, "registry", "NCT05000002", "insufficient_evidence"],
+    [4, "registry", "NCT05000003", "ineligible"],
+  ], "every criterion met first (the registry's recruiting trial before the study's own), the one that waits on a report next, the excluded last");
+  assert.equal(first.patientTrials.selected.id, first.patientTrials.trials[0].id, "the first is chosen when none is asked for");
+  assert.deepEqual(first.patientTrials.selected.criteria.map((/** @type {any} */ row) => [row.code, row.state]), [["I1", "satisfied"], ["I2", "satisfied"], ["E1", "satisfied"]]);
+  assert.equal(first.patientTrials.selected.verdict.text, "符合：全部适用的入排条件都满足");
+  check("ev201/matching-patient-trials.json", first);
+  // Her trial that waits on a biomarker report: the rule that is open, and what to ask for.
+  const waitingId = first.patientTrials.trials[2].id;
+  const waiting = await asked(`candidate=P-0192&trial=${waitingId}`);
+  assert.equal(waiting.patientTrials.selected.id, waitingId);
+  const open = waiting.patientTrials.selected.criteria.find((/** @type {any} */ row) => row.state === "unknown");
+  assert.deepEqual([open.code, open.request], ["I2", "EGFR 突变检测报告"]);
+  assert.deepEqual(waiting.patientTrials.trials[2].counts, { satisfied: 2, unknown: 1, notSatisfied: 0, pending: 0 });
+  assert.equal(waiting.patientTrials.trials[2].summary, "2 条满足 · 1 条未知 · 0 条不满足");
+  check("ev201/matching-patient-trials-open.json", waiting);
+  // A patient nobody has searched for: nothing judged, nothing listed, and the page's one sentence and one button.
+  const none = await asked("candidate=P-0201");
+  assert.deepEqual([none.patientTrials.subject, none.patientTrials.trials, none.patientTrials.selected], ["P-0201", [], null]);
+  check("ev201/matching-patient-trials-none.json", none);
+  // No patient chosen yet, a key the study does not hold, and a trial that is not this patient's all read as the first of these.
+  const nobody = await asked("");
+  assert.deepEqual([nobody.patientTrials.subject, nobody.patientTrials.trials.length], [null, 0]);
+  check("ev201/matching-patient-trials-nobody.json", nobody);
+  assert.equal((await asked("candidate=P-9999")).patientTrials.subject, null);
+  assert.equal((await asked("candidate=P-0192&trial=ctr_not_hers")).patientTrials.selected.id, first.patientTrials.trials[0].id);
+  // The other direction is what it was: the same view, no patient-trials block.
+  const other = await service.tab(mine, trialsStudy.study.id, "matching", new URLSearchParams("view=matching&candidate=P-0192"));
+  assert.equal(other.direction, "trial_to_patient");
+  assert.equal(other.patientTrials, undefined);
+  assert.deepEqual(other.directions, ["trial_to_patient", "patient_to_trial"]);
 });
 
 test("the model library, the precedents and a package read", options, async () => {

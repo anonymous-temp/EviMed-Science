@@ -264,6 +264,17 @@ export const VCR_STEP_EMPTY: Readonly<Record<VcrStepKey, string>> = Object.freez
  */
 export const VCR_MATCHING_EMPTY_T0 = "这项研究现在只有公开资料（T0），没有可以匹配的真实患者。让 AI 做会把入排条件整理成逐条可判定的标准；接入你的数据（T1 及以上）后才能逐个匹配、转诊和随访。";
 
+/**
+ * 给患者找试验: what the direction says before it has anything to list. One sentence each, and the one button the page has (为该患者找试验)
+ * beside the ones that leave it something to do.
+ */
+export const VCR_PATIENT_TRIALS_CHOOSE = "选一位患者，看有哪些试验可以参加。";
+export const VCR_PATIENT_TRIALS_NOBODY = "还没有登记患者，有了患者资料才能为患者找试验。";
+export const VCR_PATIENT_TRIALS_OFF = "给患者找试验在本部署尚未接入。";
+export const VCR_TRIAL_SEARCH_FAILED = "暂时无法开始查找，请稍后重试。";
+/** The patient has no trial the study has judged them against yet. */
+export const patientTrialsNoneSentence = (subject: string): string => `还没有为 ${subject} 找过试验。`;
+
 /** What a tab says when the study has no definition yet: the programme is not waiting for anything, the study is waiting to be described. */
 export const VCR_NO_DEFINITION = "先在对话里说一句要研究什么";
 

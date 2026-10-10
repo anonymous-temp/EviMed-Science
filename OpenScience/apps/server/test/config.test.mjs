@@ -69,6 +69,15 @@ test("the three VCR limits the code reads have keys, defaults and bounds", () =>
   assert.throws(() => loadConfig({ rootDir: repoRoot, vcrRegistryTimeoutMs: "1000" }), /OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS/);
 });
 
+test("the number of candidate trials a study holds has a key, a default and bounds", () => {
+  // 「给患者找试验」: each candidate costs an evaluation for every patient the study judges against it.
+  assert.equal(loadConfig({ rootDir: repoRoot }).vcrCandidateTrialsMax, 60);
+  assert.equal(loadConfig({ rootDir: repoRoot, vcrCandidateTrialsMax: "120" }).vcrCandidateTrialsMax, 120);
+  for (const value of ["0", "501", "many"]) {
+    assert.throws(() => loadConfig({ rootDir: repoRoot, vcrCandidateTrialsMax: value }), /OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX/);
+  }
+});
+
 test("memory extraction is given longer than one extraction actually takes", () => {
   // Measured against deepseek-v4-pro, one extraction request takes 40-46s. At
   // the previous 30s budget every request aborted, so the store only ever held
