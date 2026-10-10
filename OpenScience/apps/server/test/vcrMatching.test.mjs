@@ -1004,3 +1004,49 @@ test('laboratory units outside the conversion vocabulary must still be stated in
   const stated=chart('肌钙蛋白 0.02 ng/mL。');
   assert.deepEqual(verifyFactEvidence(stated.fact('肌钙蛋白 0.02 ng/mL',{variable:'troponin',value:0.02,unit:'ng/mL',clinical}),{documents:stated.documents}),{ok:true,reason:null});
 });
+
+test('a newer prescribed, planned or unknown-state exposure that could reset the washout leaves it unknown with a named reason, not satisfied from the older administration (E-04)', () => {
+  const asOf = Date.parse('2026-10-01T00:00:00Z');
+  const washout = { id: 'washout', kind: 'exclusion', criterionType: 'prior_treatment', requirement: { op: 'elapsed_since', variable: 'docetaxel', days: 28, comparator: 'gte' } };
+  const patient = { schema: 1, assertion: 'affirmed', experiencer: 'patient' };
+  /** @param {string} id @param {string} state @param {string|null} occurredAt */
+  const exposure = (id, state, occurredAt) => ({ id, variable: 'docetaxel', polarity: 'affirmed', occurredAt, visibleAt: '2026-09-01T00:00:00Z',
+    source: { documentId: 'd', start: 0, end: 4, quote: id }, clinical: { ...patient, medication: { state } } });
+  const given = exposure('given', 'administered', '2026-06-01T00:00:00Z');
+  const verdict = (/** @type {any[]} */ facts) => evaluateCriterion(washout, { facts, asOf });
+
+  assert.equal(verdict([given]).state, SATISFIED, 'the control: 122 days since the last administration clears a 28-day washout');
+  // The administration is old; a prescription five days ago may have been given since. Dropping it read the washout as clear.
+  for (const state of ['prescribed', 'planned', 'historical_list', 'unknown']) {
+    const judged = verdict([given, exposure('later', state, '2026-09-26T00:00:00Z')]);
+    assert.equal(judged.state, UNKNOWN, state);
+    assert.deepEqual(judged.missing, [{ variable: 'docetaxel', reason: 'unresolved_exposure' }], `${state}: the gap names why`);
+    assert.deepEqual(judged.evidence.map(item => item.factId), ['later', 'given'], `${state}: the reader sees the prescription and the administration it is set against`);
+  }
+  // Nothing is blocked that could not change the answer: an older exposure, one dated after the assessment, and one too old to matter.
+  assert.equal(verdict([given, exposure('older', 'prescribed', '2026-05-01T00:00:00Z')]).state, SATISFIED, 'older than the last administration');
+  assert.equal(verdict([given, exposure('same-day', 'prescribed', '2026-06-01T00:00:00Z')]).state, SATISFIED, 'the administration of the same day settles it');
+  assert.equal(verdict([given, exposure('future', 'prescribed', '2026-10-05T00:00:00Z')]).state, SATISFIED, 'not yet a fact of this assessment');
+  assert.equal(verdict([given, exposure('old-enough', 'prescribed', '2026-08-01T00:00:00Z')]).state, SATISFIED, '61 days: given or not, the washout is clear');
+  assert.equal(verdict([given, exposure('undated', 'prescribed', null)]).state, SATISFIED, 'an exposure that cannot be placed decides nothing, as an undated administration does beside a dated one');
+  // A newer administration is the latest exposure and is read as before; the prescription beside it adds nothing.
+  assert.equal(verdict([given, exposure('again', 'administered', '2026-09-20T00:00:00Z'), exposure('rx', 'prescribed', '2026-09-26T00:00:00Z')]).state, UNKNOWN, 'the prescription after the last administration is still unresolved');
+  assert.equal(verdict([given, exposure('again', 'administered', '2026-09-28T00:00:00Z'), exposure('rx', 'prescribed', '2026-09-26T00:00:00Z')]).state, PENDING_RECHECK, 'an administration after the prescription settles it');
+
+  // With no administration at all the washout was unknown for want of a record; now it says what the chart does hold.
+  const only = verdict([exposure('rx', 'prescribed', '2026-09-26T00:00:00Z')]);
+  assert.equal(only.state, UNKNOWN);
+  assert.deepEqual(only.missing, [{ variable: 'docetaxel', reason: 'unresolved_exposure' }]);
+  assert.deepEqual(verdict([exposure('rx-old', 'prescribed', '2026-06-01T00:00:00Z')]).missing, [{ variable: 'docetaxel', reason: 'not_recorded' }], 'a prescription too old to matter is still no record of an administration');
+  assert.deepEqual(verdict([]).missing, [{ variable: 'docetaxel', reason: 'not_recorded' }]);
+
+  // Through the assessment: the gap is the subject's, named, and the subject is not read as eligible.
+  const source = chart('2026-06-01 给予多西他赛。2026-09-26 处方多西他赛。');
+  const written = (/** @type {string} */ surface, /** @type {string} */ id, /** @type {string} */ state, /** @type {string} */ occurredAt) =>
+    source.fact(surface, { id, variable: 'docetaxel', occurredAt, clinical: { ...patient, medication: { state } } });
+  const assessed = assessSubject({ criteria: [washout], asOf: '2026-10-01', documents: source.documents,
+    facts: [written('给予多西他赛', 'given', 'administered', '2026-06-01T00:00:00Z'), written('处方多西他赛', 'rx', 'prescribed', '2026-09-26T00:00:00Z')] });
+  assert.equal(assessed.summary, 'insufficient_evidence');
+  assert.deepEqual(assessed.evidenceGaps, [{ variable: 'docetaxel', reason: 'unresolved_exposure', criterionIds: ['washout'] }]);
+  assert.deepEqual(assessed.blockingExclusionUnknowns, ['washout']);
+});
