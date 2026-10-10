@@ -1687,7 +1687,7 @@
       "implementationSummary": "No dose-check route exists yet: it takes suitable versioned indication, renal and weight rules, and none were supplied. Native drug evidence and safety framing remain in use, and a missing rule is a named evidence gap.",
       "waitingFor": "Suitable licensed dose-rule tables with indication, renal and weight applicability cases.",
       "readyBecause": [
-        "Dose rules reach a run by the same two ways in as F01: a project source, or a dataset of the private reference index (which already holds `high-risk-dose`, `special-populations`, `monitoring` and `laboratory-thresholds` tables for institution-specific screening).",
+        "Dose rules reach a run by the same two ways in as F01: a project source, or a dataset of the private reference index (whose builder already reads `high-risk-dose`, `special-populations`, `monitoring` and `laboratory-thresholds` tables for institution-specific screening).",
         "A figure derived from a rule is a `derived` claim: it must name its quote-anchored inputs, method, assumptions and sensitivities, is marked as derived in the report, and never carries practical safety advice (`clinicalEvidence.mjs`)."
       ],
       "onArrival": [
@@ -1731,7 +1731,7 @@
       "implementationSummary": "Reuse of the existing ADR capability and drug-safety engine: its live openFDA tier answers today and says so in every output (`data_source`), and its frozen report-level path is built for the day a dataset is converted into the snapshot format. No unsupported signal dataset or causal trial parameter was added.",
       "waitingFor": "A commissioned, authorized report-level adverse-event dataset, with its case ids, case versions and drug-role fields.",
       "readyBecause": [
-        "The drug-safety engine (`项目代码/药物安全分析agent`) has a frozen report-level tier: JSON fixtures or an indexed SQLite snapshot (`write_sqlite_snapshot`, `FAERS_SNAPSHOT_PATH`), deduplicated by case version, drug name and ROLE_COD bound on the same drug row, one ROR/PRR implementation, and every signal row carrying `data_source`, `snapshot_id` and `snapshot_sha256`; duplicate reports and changed follow-up versions are exercised in its tests (`tests/test_faers_frozen.py`).",
+        "The drug-safety engine (`项目代码/药物安全分析agent`) has a frozen report-level tier: JSON fixtures or an indexed SQLite snapshot (`write_sqlite_snapshot`, `FAERS_SNAPSHOT_PATH`), deduplicated by case version, drug name and ROLE_COD bound on the same drug row, one ROR/PRR implementation, and `signals.csv`, `signal-provenance.json` and `result.json` carrying `data_source`, `snapshot_id` and `snapshot_sha256`; duplicate reports and changed follow-up versions are exercised in its tests (`tests/test_faers_frozen.py`).",
         "The `adr-analysis` guidance already reads those provenance fields and states that a ratio is a signal, never an incidence, causal effect, patient risk or trial outcome rate; its tools run by default with no switch of their own."
       ],
       "onArrival": [
@@ -1822,7 +1822,7 @@
       "waitingFor": "An explicitly approved clinical OCR service with its processing terms, and a reference set of scans.",
       "readyBecause": [
         "Text PDFs and DOCX are extracted inside the disposable no-network intake container (`vcrRecordExtract.mjs`, `vcrIntakeController.mjs`); a document without text is refused by name with `vcr_document_needs_text`, affecting only that document, and never reaches the ordinary document parser.",
-        "The cloud-read permission a scan route needs already exists per source: processing purpose, approved HTTPS origins, terms, authorization reference and expiry, with every served window recorded (A03/A04, `data-rights.json`)."
+        "The cloud-read permission a scan route needs already exists per source: processing purpose, approved HTTPS origins, terms, authorization reference and expiry, with every served window recorded (A03/A04, `setCloudPermission` in `vcrDataPlane.mjs`)."
       ],
       "onArrival": [
         "The service's origin is recorded on the source's permission and a client for its API is added at the `needs_text` refusal, so only scans take that route and text documents still never leave the container.",
@@ -1873,7 +1873,7 @@
       "waitingFor": "A named partner format or language, with acceptance fixtures for each.",
       "readyBecause": [
         "The three formats are one path: `FORMATS` / `CONVERTERS` in `vcr_import_convert.py`, each producing the module's own tables, a field map, a dictionary and a coverage of what was read, skipped and why; `vcrImport.mjs` re-checks every converter output against the data plane's limits.",
-        "Chinese-first terminology is versioned data (coding edition, source, basis and ambiguity on every fact, C01/C08) and source text in either language goes through the same extraction and matching, so a language is not a code path."
+        "Chinese-first terminology is versioned data (coding edition, source, basis and ambiguity on every fact, C01/C08) and source text in Chinese or English goes through the same extraction and matching."
       ],
       "onArrival": [
         "A format is one more converter in the same table with its own supported-version statement and acceptance fixtures; the product claims only what those fixtures show.",
@@ -2051,7 +2051,7 @@
   "statusMeaning": {
     "implemented": "Engineering change is present; consult remaining and validationStatus for unmet acceptance.",
     "native_reused": "Existing implementation was retained and its applicable regressions exercised.",
-    "ready_waiting_for_data": "Neither open work nor closed. Everything that can be done before the input exists is built and on by default, with no switch of its own; the task waits only for the licensed, partner or independently labelled input named in waitingFor. readyBecause says what already runs and onArrival what that input turns on. Nothing is called verified or validated until the input has been used, and no input is made up in its place."
+    "ready_waiting_for_data": "Neither open work nor closed. Whatever can be done before the input exists is built, and nothing is switched off while the task waits: it has no flag of its own to turn on. It waits only for the licensed, partner or independently labelled input named in waitingFor; readyBecause says what already runs and onArrival what that input turns on. Nothing is called verified or validated until the input has been used, and no input is made up in its place."
   },
   "statusCounts": {
     "implemented": 38,
