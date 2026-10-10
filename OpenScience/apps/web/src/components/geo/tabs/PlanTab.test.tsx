@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { evidenceFilled, geoProject, journeyFilled, sourcesFilled } from "../__fixtures__/geoTabs";
+import { evidenceFilled, geoProject, journeyFilled, sourcesFilled, valueFilled } from "../__fixtures__/geoTabs";
 import { PlanTab } from "./PlanTab";
 import { tierSentence } from "./PlanStrategy";
 
@@ -111,6 +111,33 @@ describe("方案", () => {
     expect(await screen.findByRole("heading", { name: "产品与依据" })).toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: /重试/ }));
     expect(await screen.findByText("档二：综合可见度指数 55")).toBeInTheDocument();
+  });
+});
+
+describe("方案: the drug-value analysis", () => {
+  const FOLLOWS = Node.DOCUMENT_POSITION_FOLLOWING;
+
+  it("offers the one way to start it where the project has none, after the measurement settings and before the target", async () => {
+    renderPlan();
+    const start = await screen.findByRole("button", { name: "开始药品价值分析" });
+    expect(screen.getAllByRole("button", { name: "开始药品价值分析" })).toHaveLength(1);
+    expect(document.querySelectorAll("[data-geo-ask-ai]")).toHaveLength(1);
+    await screen.findByText("档二：综合可见度指数 55");
+    const settings = screen.getByRole("heading", { name: "测量方案" });
+    const heading = screen.getByRole("heading", { name: "药品价值分析" });
+    const target = screen.getByRole("heading", { name: "目标" });
+    expect(settings.compareDocumentPosition(heading) & FOLLOWS).toBeTruthy();
+    expect(heading.compareDocumentPosition(start) & FOLLOWS).toBeTruthy();
+    expect(start.compareDocumentPosition(target) & FOLLOWS).toBeTruthy();
+  });
+
+  it("shows the analysis itself where there is one, and then offers no start and no 问 AI", async () => {
+    client.getGeoValue.mockResolvedValue(valueFilled);
+    renderPlan();
+    expect(await screen.findByText("减重获益证据较充分，长期安全性数据仍有限。")).toBeInTheDocument();
+    expect(screen.getByText("12 周体重下降幅度明显大于安慰剂")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "开始药品价值分析" })).not.toBeInTheDocument();
+    expect(document.querySelector("[data-geo-ask-ai]")).toBeNull();
   });
 });
 

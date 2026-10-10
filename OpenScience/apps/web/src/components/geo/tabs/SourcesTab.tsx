@@ -50,7 +50,7 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
   const linkless = (Array.isArray(data?.linklessEngines) ? data.linklessEngines : []).filter(Boolean);
   return (
     <div data-geo-tab="sources">
-      <ValueSection geoId={geoId} project={project} mode="sources" />
+      <ValueSection geoId={geoId} project={project} mode="sources" className="mb-6" />
       <SourceList geoId={geoId} project={project} sources={sources} engines={project.engines} />
       {/* An engine whose citations had no link is not missing from the list
           by accident: it is said, not dropped (G8). */}

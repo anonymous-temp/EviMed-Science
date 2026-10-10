@@ -141,7 +141,6 @@ function Accuracy({
 
   return (
     <div data-geo-tab="accuracy" className="flex flex-col gap-6">
-      <ValueSection geoId={geoId} project={project} mode="safety" />
       <StatBand label="准确与安全" footnote={[denominator, coverageNotice(accuracyChange)].filter(Boolean).join(" · ") || null} columns={tiles.length >= 5 ? 5 : 4}>
         {tiles.map((tile) => (
           <StatTile
@@ -182,6 +181,8 @@ function Accuracy({
           <ByType errors={errors} />
         </div>
       </Disclosure>
+
+      <ValueSection geoId={geoId} project={project} mode="safety" />
     </div>
   );
 }

@@ -63,7 +63,6 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
 
   return (
     <div data-geo-tab="visibility" className="flex flex-col gap-6">
-      <ValueSection geoId={geoId} project={project} mode="coverage" />
       {options.length > 1 && (
         <FilterChips label="指标" options={options} value={line ? line.key : options[0].value} onChange={setKey} />
       )}
@@ -80,6 +79,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
       <ByPool geoId={geoId} diagnosis={diag} loading={diagnosis.state.kind === "loading"} />
       <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} />
       <MoreMetrics geoId={geoId} diagnosis={diag} />
+      <ValueSection geoId={geoId} project={project} mode="coverage" />
     </div>
   );
 }

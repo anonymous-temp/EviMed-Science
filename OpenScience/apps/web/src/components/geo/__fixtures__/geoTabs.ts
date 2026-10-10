@@ -22,6 +22,7 @@ import type {
   GeoSources,
   GeoStepKey,
   GeoStepStatus,
+  GeoValue,
 } from "@/lib/geoClient";
 
 export function cell(value: number | null, numerator: number | null, denominator: number | null, extra: Partial<GeoCell> = {}): GeoCell {
@@ -403,3 +404,33 @@ export function sourcePagesOf(domain: string, count: number): GeoSourcePage[] {
 export function sourceHistoryOf(rows: ReadonlyArray<readonly [string, number, number, string | null]>): GeoSourceHistoryPoint[] {
   return rows.map(([day, cited, wrongOurs, coverage]) => ({ roundId: `round_${day}`, kind: "weekly", sampleDate: `2026-09-${day}`, coverage, cited, wrongOurs, mentionsOurs: 0 }));
 }
+
+/** A project with a drug-value analysis: a summary, findings of three dimensions, a decision, opportunities, a changed source, a research task that failed and one judged round. */
+export const valueFilled: GeoValue = {
+  version: 3,
+  updatedAt: "2026-10-08T08:00:00.000Z",
+  data: {
+    scope: { genericName: "玛仕度肽注射液", indication: "成人肥胖或超重伴体重相关合并症" },
+    summary: "减重获益证据较充分，长期安全性数据仍有限。",
+    findings: [
+      { id: "f_eff", statement: "12 周体重下降幅度明显大于安慰剂", dimension: "effectiveness" },
+      { id: "f_saf", statement: "胃肠道反应多为轻中度，随用药时间减轻", dimension: "safety" },
+      { id: "f_eco", statement: "年治疗费用高于同类药", dimension: "economics" },
+    ],
+    decisions: [{ id: "d_1", statement: "患者是否愿意长期每周注射" }],
+    opportunities: [
+      { id: "o_1", statement: "补写停药后体重反弹的科普稿" },
+      { id: "o_2", statement: "核对说明书里的胃肠道反应表述" },
+    ],
+    sourceChanges: [{ id: "c_1", summary: "知识库资料已更新，可检查引用它的结论与内容。", status: "needs_review" }],
+  },
+  research: [{ id: "r_1", question: "这个安全信号说明什么？", status: "failed", runId: "run_1" }],
+  impacts: [{ change: { id: "c_1" }, findingIds: ["f_saf"], groupIds: [], articleIds: [] }],
+  coverage: { assessed: 4, represented: 3, partial: 1, contradicted: 0, uncertain: 0, notApplicable: 0, value: 75, basisVersion: 3 },
+  observations: [
+    { findingId: "f_eff", status: "represented", quote: "疗效明显优于安慰剂", reason: "", engine: "deepseek", basisVersion: 3, rubricVersion: "1", askedAt: "2026-10-07T08:00:00.000Z" },
+  ],
+};
+
+/** The headings the drug-value analysis can draw, one for each tab it appears on. */
+export const VALUE_TITLES = ["药品价值分析", "药品价值与机会", "AI 如何表达药品价值", "获益与风险", "问题背后的决策", "依据与传播", "下一步研究与内容"] as const;

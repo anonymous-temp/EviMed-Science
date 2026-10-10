@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,8 @@ import {
   sourceHistoryOf,
   sourcePagesOf,
   sourcesFilled,
+  valueFilled,
+  VALUE_TITLES,
 } from "../__fixtures__/geoTabs";
 import { AccuracyTab } from "./AccuracyTab";
 import { ContentTab } from "./ContentTab";
@@ -30,7 +32,7 @@ import { SourcesTab } from "./SourcesTab";
 import { VisibilityTab } from "./VisibilityTab";
 
 const client = vi.hoisted(() => ({
-  getGeoValue: vi.fn(async () => ({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } })),
+  getGeoValue: vi.fn<(geoId: string) => Promise<unknown>>(async () => ({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } })),
   getGeoEvidence: vi.fn(),
   getGeoJourney: vi.fn(),
   getGeoQuestions: vi.fn(),
@@ -1174,3 +1176,87 @@ describe("效果", () => {
     expect(screen.getByText(/还在波动范围内/)).toBeInTheDocument();
   });
 });
+
+describe("药品价值分析在页签里", () => {
+  const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  const FOLLOWS = Node.DOCUMENT_POSITION_FOLLOWING;
+
+  /** Each tab that carries a section of it, with the data its own tests give it and a sign that its own content is drawn. */
+  const TABS: ReadonlyArray<{ tab: string; title: string; render: () => ReactElement; ready: () => Promise<unknown> }> = [
+    {
+      tab: "overview", title: "药品价值与机会",
+      render: () => { client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled); client.getGeoMonitoring.mockResolvedValue(fallingMonitoring); return <OverviewTab {...props(fallingProject())} />; },
+      ready: () => screen.findByRole("heading", { name: /综合可见度指数 44，/ }),
+    },
+    {
+      tab: "visibility", title: "AI 如何表达药品价值",
+      render: () => { client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled); client.getGeoMonitoring.mockResolvedValue(monitoringFilled); return <VisibilityTab {...props()} />; },
+      ready: () => screen.findByRole("heading", { name: /综合可见度指数 38，比上次高 9/ }),
+    },
+    {
+      tab: "accuracy", title: "获益与风险",
+      render: () => { client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled); client.getGeoMonitoring.mockResolvedValue(monitoringFilled); return <AccuracyTab {...props()} />; },
+      ready: () => screen.findByRole("heading", { name: "讲错清单，按严重度排序" }),
+    },
+    {
+      tab: "questions", title: "问题背后的决策",
+      render: () => { client.getGeoQuestions.mockResolvedValue(questionsFilled); return <QuestionsTab {...props()} />; },
+      ready: () => screen.findByText("3 个语义群 · 2 问 · 2 条真实问法"),
+    },
+    {
+      tab: "sources", title: "依据与传播",
+      render: () => { client.getGeoSources.mockResolvedValue(sourcesFilled); return <SourcesTab {...props()} />; },
+      ready: () => screen.findByText("3 个信源"),
+    },
+  ];
+
+  it.each(TABS)("$tab: a project with no value analysis gets no box, no heading, no sentence and no button from it", async ({ render: arrange, ready }) => {
+    renderTab(arrange());
+    await ready();
+    await settle();
+    expect(client.getGeoValue).toHaveBeenCalledWith("geo_1");
+    for (const title of VALUE_TITLES) expect(screen.queryByRole("heading", { name: title })).not.toBeInTheDocument();
+    expect(document.querySelector("[data-geo-ask-ai]")).toBeNull();
+    expect(screen.queryByText(/可以先从已有资料/)).not.toBeInTheDocument();
+  });
+
+  it.each(TABS)("$tab: with an analysis, its section is drawn and has no 问 AI button on it", async ({ title, render: arrange, ready }) => {
+    client.getGeoValue.mockResolvedValue(valueFilled);
+    renderTab(arrange());
+    await ready();
+    expect(await screen.findByRole("heading", { name: title })).toBeInTheDocument();
+    expect(document.querySelector("[data-geo-ask-ai]")).toBeNull();
+  });
+
+  it("总览: the headline and the metric band come first, and the analysis is the last thing on the tab", async () => {
+    client.getGeoValue.mockResolvedValue(valueFilled);
+    renderTab(TABS[0].render());
+    const heading = await screen.findByRole("heading", { name: "药品价值与机会" });
+    const sentence = await screen.findByText(/综合可见度 44，比上次低 2/);
+    const band = screen.getByRole("region", { name: "本轮指标" });
+    expect(sentence.compareDocumentPosition(band) & FOLLOWS).toBeTruthy();
+    expect(band.compareDocumentPosition(heading) & FOLLOWS).toBeTruthy();
+    expect(document.querySelector("[data-geo-tab='overview']")?.lastElementChild).toBe(heading.closest("section"));
+  });
+
+  it("可见度: the trend comes first, and the analysis is the last thing on the tab", async () => {
+    client.getGeoValue.mockResolvedValue(valueFilled);
+    renderTab(TABS[1].render());
+    const heading = await screen.findByRole("heading", { name: "AI 如何表达药品价值" });
+    const trend = await screen.findByRole("heading", { name: /综合可见度指数 38，比上次高 9/ });
+    expect(trend.compareDocumentPosition(heading) & FOLLOWS).toBeTruthy();
+    expect(document.querySelector("[data-geo-tab='visibility']")?.lastElementChild).toBe(heading.closest("section"));
+  });
+
+  it("准确与安全: the tiles and the list straight after them come first, and the analysis is the last thing on the tab", async () => {
+    client.getGeoValue.mockResolvedValue(valueFilled);
+    renderTab(TABS[2].render());
+    const heading = await screen.findByRole("heading", { name: "获益与风险" });
+    const tiles = await screen.findByRole("region", { name: "准确与安全" });
+    const list = screen.getByRole("heading", { name: "讲错清单，按严重度排序" });
+    expect(tiles.compareDocumentPosition(list) & FOLLOWS).toBeTruthy();
+    expect(list.compareDocumentPosition(heading) & FOLLOWS).toBeTruthy();
+    expect(document.querySelector("[data-geo-tab='accuracy']")?.lastElementChild).toBe(heading.closest("section"));
+  });
+});
+

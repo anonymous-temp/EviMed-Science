@@ -15,13 +15,13 @@ import { yuan } from "./geoTabText";
  * (the main battlefield and what each engine can be expected to do), who the patients and doctors are, and last the product and
  * the claims every sentence we publish rests on.
  *
- * It is the page a reader opens to answer “按什么口径算的”, which is why the settings sit here and not under a chart.
+ * It is the page a reader opens to answer “按什么口径算的”, which is why the settings sit here and not under a chart. The drug-value
+ * analysis follows them: its findings where a project has them, else the one way to start it — the only place that is offered.
  */
 export function PlanTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const engines = (project.engines ?? []).map(engineName).join("、");
   return (
     <div data-geo-tab="plan" className="flex flex-col gap-10">
-      <ValueSection geoId={geoId} project={project} mode="profile" />
       <Panel title="测量方案">
         <PanelRow label="测量的 AI 引擎" control={engines || "—"} />
         <PanelRow label="覆盖周期" control={coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)} />
@@ -32,6 +32,7 @@ export function PlanTab({ geoId, project }: { geoId: string; project: GeoProject
             : marketConnected(project) ? "还没有设" : "等媒介集市接通"}
         />
       </Panel>
+      <ValueSection geoId={geoId} project={project} mode="profile" />
       <Strategy geoId={geoId} project={project} />
       <TabSection title="患者与医生的旅程" level="ui">
         <JourneyTab geoId={geoId} project={project} />

@@ -18,7 +18,9 @@ const MARKET_OFF_SENTENCE = "投放要等媒介集市接通：接通之前不会
  * was placed; and last the measurement of the work itself — the question groups
  * we placed articles for against the ones we only watched. That used to live in
  * “监测”, one tab away from the placements it is about. A section with nothing
- * in it is not drawn.
+ * in it is not drawn. After all of it, when the drug-value analysis has next
+ * work to name, comes that: it is a follow-up to the page, never a block that
+ * stands between a reader and the sentence under the counts.
  */
 export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const distribution = useGeoLoad(`distribution:${geoId}`, () => getGeoDistribution(geoId));
@@ -26,7 +28,6 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
   const marketOff = loaded?.market?.configured === false;
   return (
     <div data-geo-tab="actions" className="flex flex-col gap-10">
-      <ValueSection geoId={geoId} project={project} mode="actions" />
       <ContentTab
         geoId={geoId}
         project={project}
@@ -45,6 +46,7 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
       <TabSection title="效果">
         <EffectSection project={project} />
       </TabSection>
+      <ValueSection geoId={geoId} project={project} mode="actions" />
     </div>
   );
 }

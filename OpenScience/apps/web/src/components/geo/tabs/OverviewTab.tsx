@@ -52,7 +52,9 @@ import { useGeoLoad, type GeoLoadResult } from "./geoTabKit";
  *
  * Every number is still drillable to the answer it came from, every rate still
  * carries its denominator — declared once under the band, not in each cell —
- * and 未测 is still a hatched row with a reason rather than a zero.
+ * and 未测 is still a hatched row with a reason rather than a zero. The drug-value
+ * analysis, where a project has one, is the last block: an excerpt after the page,
+ * not a section above the result.
  */
 export function OverviewTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const diagnosis = useGeoLoad<GeoDiagnosis>(`overview:diagnosis:${geoId}`, () => getGeoDiagnosis(geoId));
@@ -80,7 +82,6 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
 
   return (
     <div data-geo-tab="overview" className="flex flex-col gap-4">
-      <ValueSection geoId={geoId} project={project} mode="summary" />
       {/* The sentence names the open errors, so it is written once they are counted: a 「没有待办」 that turns into
           「还有 11 条严重讲错」 a moment later is worse than a held line. */}
       {diagnosis.state.kind === "loading" ? (
@@ -190,6 +191,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
       </ChartCard>
 
       <Week geoId={geoId} project={project} />
+      <ValueSection geoId={geoId} project={project} mode="summary" />
     </div>
   );
 }

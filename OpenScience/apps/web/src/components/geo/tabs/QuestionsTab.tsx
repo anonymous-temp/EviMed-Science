@@ -127,7 +127,7 @@ function QuestionMap({
 
   return (
     <div data-geo-tab="questions">
-      <ValueSection geoId={geoId} project={project} mode="decisions" />
+      <ValueSection geoId={geoId} project={project} mode="decisions" className="mb-6" />
       <FilterRow summary={needle ? `匹配 ${matchedQuestions} 个问题` : `${counts.groups} 个语义群 · ${counts.measured} 问 · ${counts.real.toLocaleString("zh-CN")} 条真实问法`}>
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 max-sm:w-full">
           <FilterChips
