@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { mergeGeoValue, geoValueImpacts, summarizeGeoValueCoverage } from "@evimed/domain";
 import { buildJudgeInput, verifyJudgement } from "../src/geoJudge.mjs";
 import { importGeoValue } from "../src/geoValueImport.mjs";
+import { GeoService } from "../src/geoService.mjs";
 
 test("partial, conflicting and negative findings survive an incremental update without manufactured fields", () => {
   const first = { scope: { population: "Adults", region: "CN" }, findings: [
@@ -70,4 +71,35 @@ test("failed specialist runs keep usable reports, optional value JSON is not req
   assert.equal(result.verification, "unverified");
   assert.equal(result.materials.length, 1);
   assert.match(result.materials[0].excerpt, /not incidence/);
+});
+
+test("declared specialist artifacts are reusable while unsafe paths remain outside the import", async () => {
+  const writes = [], reads = [];
+  await importGeoValue({ store: { writeValue: async (...args) => writes.push(args) },
+    project: { userId: "u", workspaceDir: "/work" }, geoProject: { id: "g" },
+    run: { id: "r2", status: "failed", deliverables: [{ id: "meta", capability: "meta-analysis" }] },
+    capabilityOutputs: async () => ["meta-analysis-report.md", "meta-analysis-run.json", "../secret.txt", "/outside.md", "plot.png"],
+    readFile: async (_root, path) => {
+      reads.push(path);
+      if (path.endsWith("meta-analysis-report.md")) return Buffer.from("Usable synthesis; subgroup unavailable.");
+      if (path.endsWith("meta-analysis-run.json")) return Buffer.from('{"status":"partial"}');
+      throw new Error("Not produced");
+    }, report: () => {} });
+  assert.equal(writes[0][2].researchResults[0].materials.length, 2);
+  assert.ok(reads.every(path => !path.includes("secret") && !path.includes("outside") && !path.includes("plot")));
+});
+
+test("coverage never combines different value bases and passes audience/group/engine scope to the measurement read", async () => {
+  let parameters;
+  const store = { latestValue: async () => ({ version: 2, data: { findings: [] } }), researchRequests: async () => [], listArticles: async () => [],
+    query: async (_sql, args) => {
+      parameters = args;
+      return { rows: [1, 2].map(version => ({ engine: "deepseek", judge_extract: { valueBasisVersion: version,
+        valueCoverage: [{ findingId: "f1", status: "represented" }] } })) };
+    } };
+  const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
+  const value = await service.valueOf({ id: "g" }, { groupId: "group", audience: "caregiver", engine: "deepseek" });
+  assert.equal(value.coverage.assessed, 1);
+  assert.ok(value.observations.every(observation => observation.basisVersion === 2));
+  assert.deepEqual(parameters, ["g", "deepseek", "group", "caregiver"]);
 });

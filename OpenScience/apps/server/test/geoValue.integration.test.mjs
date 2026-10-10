@@ -125,6 +125,11 @@ test("article, source and question context round-trips through the views read by
   assert.deepEqual(articles.articles[0].valueContext.findingIds, ["f1"]);
   assert.equal((await service.sources({ id: "alice" }, project.id)).sources[0].valueContext.retrievalBasis, "not yet observed");
   assert.deepEqual((await service.questions({ id: "alice" }, project.id)).groups[0].valueContext.findingIds, ["f1"]);
+  await write(project, "value", { findings: [{ id: "f1", limitations: "A newer source needs review" }] });
+  await store.registerArticles("alice", project.id, [{ path: "deliverables/safety/articles/frozen.md", layer: "popular", groupId: groups.ids[0],
+    claimIds: [], gate: "unverified", safety: "clear", valueContext: { findingIds: ["f1"], basisVersion: 1 } }]);
+  assert.equal((await store.listArticles(project.id)).find(article => article.path.endsWith("frozen.md")).valueContext.basisVersion, 1,
+    "publishing an article written against an earlier profile must preserve the declared basis");
 });
 
 test("research deduplication respects supplied clinical context; an unavailable method leaves the project usable", options, async () => {

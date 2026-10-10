@@ -1069,6 +1069,10 @@ export class GeoStore {
       const ids = [];
       const valueVersion = Number((await client.query(`SELECT version FROM evimed_geo.value_profiles WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [geoId])).rows[0]?.version ?? 0);
       for (const item of items) {
+        const suppliedVersion = item.valueContext?.basisVersion;
+        const basisVersion = Number.isSafeInteger(suppliedVersion) && suppliedVersion > 0
+          && (await client.query("SELECT 1 FROM evimed_geo.value_profiles WHERE geo_project_id = $1 AND version = $2", [geoId, suppliedVersion])).rowCount
+          ? suppliedVersion : valueVersion;
         const status = geoArticlePublishable(item) ? "publishable" : "draft";
         const result = await client.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, run_id, deliverable_id, path, layer, title,
             group_id, claim_ids, gate, safety, content_sha256, protected_sha256, status, value_context, created_at, updated_at)
@@ -1085,7 +1089,7 @@ export class GeoStore {
             updated_at = now()
           RETURNING id`,
         [randomId("gart_"), userId, geoId, item.runId ?? null, item.deliverableId ?? null, item.path, item.layer, item.title ?? null,
-          item.groupId ?? null, item.claimIds, item.gate, item.safety, item.contentSha256 ?? null, item.protectedSha256 ?? null, status, JSON.stringify({ ...item.valueContext, basisVersion: valueVersion })]);
+          item.groupId ?? null, item.claimIds, item.gate, item.safety, item.contentSha256 ?? null, item.protectedSha256 ?? null, status, JSON.stringify({ ...item.valueContext, basisVersion })]);
         ids.push(String(result.rows[0].id));
       }
       return ids;

@@ -5,9 +5,9 @@ import { deliverableDir, GEO_RESEARCH_CAPABILITIES, geoValueObject } from "@evim
  * Import optional analysis plus the original specialist output, even after a
  * partial run. A report is research material, not an automatically verified
  * clinical conclusion. The next GEO turn interprets it in its decision context.
- * @param {{ store: any, project: any, geoProject: any, run: any, readFile: Function, report: Function }} input
+ * @param {{ store: any, project: any, geoProject: any, run: any, readFile: Function, report: Function, capabilityOutputs?: (id: string) => Promise<string[]> }} input
  */
-export async function importGeoValue({ store, project, geoProject, run, readFile, report }) {
+export async function importGeoValue({ store, project, geoProject, run, readFile, report, capabilityOutputs = async () => [] }) {
   if (typeof store.writeValue !== "function") return;
   const request = typeof store.researchRequests === "function"
     ? (await store.researchRequests(geoProject.id)).find((entry) => entry.runId === run.id) : null;
@@ -28,7 +28,11 @@ export async function importGeoValue({ store, project, geoProject, run, readFile
     } catch { report("geo_value_import_failed"); }
     const materials = [];
     // Exact, bounded artifact names rather than a recursive scan or another model call.
-    for (const name of ["evaluation-summary.json", "evidence-snapshot.json", "comprehensive-evaluation-report.md", "safety-report.md", "report.md"]) {
+    const declared = await capabilityOutputs(String(capability ?? "")).catch(() => []);
+    const names = [...new Set(["evaluation-summary.json", "evidence-snapshot.json", "comprehensive-evaluation-report.md", "safety-report.md", "report.md", ...declared])]
+      .filter((name) => typeof name === "string" && /\.(?:md|json|csv|txt)$/i.test(name)
+        && !name.startsWith("/") && !name.split(/[\\/]/).some((part) => part === ".." || !part)).slice(0, 40);
+    for (const name of names) {
       try {
         const bytes = await readFile(project.workspaceDir, `${base}/${name}`);
         const text = String(bytes);

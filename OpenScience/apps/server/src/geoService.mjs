@@ -1673,19 +1673,25 @@ export class GeoService {
   /** @param {any} user @param {string} id */
   async value(user, id) { return this.valueOf(await this.requireProject(user, id)); }
 
-  /** Research metadata stays behind the page's findings and actions. @param {any} project @param {{groupId?: string, audience?: string, version?: number}} [filter] */
+  /** Research metadata stays behind the page's findings and actions. @param {any} project @param {{groupId?: string, audience?: string, engine?: string, version?: number}} [filter] */
   async valueOf(project, filter = {}) {
     const [profile, research, articles] = await Promise.all([
       this.store.latestValue(project.id, filter.version ?? null), this.store.researchRequests(project.id), this.store.listArticles(project.id),
     ]);
     const rows = profile.version ? (await this.store.query(`SELECT f.judge_extract, s.engine, s.asked_at, s.round_id
       FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
-      WHERE f.geo_project_id = $1 AND f.judged_at IS NOT NULL AND s.round_id =
+      WHERE f.geo_project_id = $1 AND f.judged_at IS NOT NULL
+        AND ($2::text IS NULL OR s.engine = $2)
+        AND ($3::text IS NULL OR s.question_id IN (SELECT id FROM evimed_geo.questions WHERE geo_project_id = $1 AND group_id = $3))
+        AND ($4::text IS NULL OR s.question_id IN (SELECT q.id FROM evimed_geo.questions q JOIN evimed_geo.question_groups g ON g.id = q.group_id WHERE q.geo_project_id = $1 AND g.audience = $4))
+        AND s.round_id =
         (SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'weekly', 'single_step')
-          AND status IN ('done', 'partial') ORDER BY created_at DESC LIMIT 1)`, [project.id])).rows : [];
+          AND status IN ('done', 'partial') ORDER BY created_at DESC LIMIT 1)`,
+    [project.id, filter.engine ?? null, filter.groupId ?? null, filter.audience ?? null])).rows : [];
     const observations = rows.flatMap((row) => (Array.isArray(row.judge_extract?.valueCoverage) ? row.judge_extract.valueCoverage : [])
       .map((/** @type {any} */ observation) => ({ ...observation, engine: row.engine, roundId: row.round_id,
-        basisVersion: row.judge_extract?.valueBasisVersion ?? null, rubricVersion: row.judge_extract?.rubricVersion ?? null, askedAt: iso(row.asked_at) })));
+        basisVersion: row.judge_extract?.valueBasisVersion ?? null, rubricVersion: row.judge_extract?.rubricVersion ?? null, askedAt: iso(row.asked_at) })))
+      .filter((observation) => observation.basisVersion === profile.version);
     return { ...profile, data: { ...profile.data, ...geoValueContext(profile.data, filter) }, research,
       impacts: geoValueImpacts(profile.data, articles), coverage: summarizeGeoValueCoverage(observations), observations };
   }

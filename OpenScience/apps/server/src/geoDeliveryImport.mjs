@@ -126,6 +126,7 @@ export const readWorkspaceFile = async (workspaceDir, relative) => readFileNoFol
  *   readFile?: (rootDir: string, file: string) => Promise<Buffer | string>,
  *   listInsightFolders?: (workspaceDir: string) => Promise<string[]>,
  *   listDeliverableFolders?: (workspaceDir: string) => Promise<string[]>,
+ *   capabilityOutputs?: (id: string) => Promise<string[]>,
  *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>) | null,
  *   articleRunId?: ((project: any, deliverableId: string) => Promise<string | null>) | null,
  *   refreshCards?: ((geoProject: any, controlProject: any) => Promise<{ cards: unknown[], held: unknown[], failed: unknown[] } | null>) | null,
@@ -136,7 +137,7 @@ export const readWorkspaceFile = async (workspaceDir, relative) => readFileNoFol
  *   article whose text is the one it last read is not read again.
  */
 export function createGeoDeliveryImport({ store, report = () => {}, readFile = readWorkspaceFile, listInsightFolders = insightFolders,
-  listDeliverableFolders = deliverableFolders, articleGate = null, articleRunId = null, refreshCards = null, checkReferences = null }) {
+  listDeliverableFolders = deliverableFolders, articleGate = null, articleRunId = null, refreshCards = null, checkReferences = null, capabilityOutputs = async () => [] }) {
   /** Runs already imported by this process; the writes are idempotent either way. */
   const seen = new Set();
   /**
@@ -149,7 +150,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
     const geoProject = await store.projectByControlProject(project.userId, project.id);
     if (!geoProject) return null;
     seen.add(run.id);
-    await importGeoValue({ store, project, geoProject, run, readFile, report });
+    await importGeoValue({ store, project, geoProject, run, readFile, report, capabilityOutputs });
     const deliverables = /** @type {any[]} */ (run.deliverables ?? run.progress?.deliverables ?? []);
     const ids = new Set(deliverables
       .filter((deliverable) => typeof deliverable?.id === "string" && (!deliverable.capability || deliverable.capability === "geo-insight"))
