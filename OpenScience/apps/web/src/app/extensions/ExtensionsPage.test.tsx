@@ -97,6 +97,15 @@ it("is one page titled for both tabs, with the counts, and has no runtime sectio
   expect(skills.listPlatformSkills).toHaveBeenCalledTimes(1);
 });
 
+// The header says what the page holds in its search box, the way 科研工具 does, and carries no sentence under the title:
+// PageHeader has no place for one (DESIGN.md, 页头).
+it("names its search box for what the page holds, and the header has no sentence under the title", async () => {
+  open("/app/extensions/skills");
+  await screen.findByRole("region", { name: "科研分析" });
+  expect(screen.getByRole("searchbox", { name: "搜索插件与技能" })).toHaveAttribute("placeholder", "搜索插件与技能");
+  expect(screen.getByRole("heading", { level: 1, name: "插件与技能" }).closest("header")?.querySelectorAll("p")).toHaveLength(0);
+});
+
 it("one primary action creates or imports, and an empty library says what it can be given", async () => {
   open("/app/extensions/skills");
   const own = await screen.findByRole("region", { name: "我的技能" });
@@ -111,12 +120,12 @@ it("one primary action creates or imports, and an empty library says what it can
 it("a search shows every match across the groups, unfolded", async () => {
   open("/app/extensions/skills");
   await screen.findByRole("region", { name: "科研分析" });
-  await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "技能 f");
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "技能 f");
   const analysis = screen.getByRole("region", { name: "科研分析" });
   expect(within(analysis).getAllByRole("listitem")).toHaveLength(1);
   expect(screen.queryByRole("region", { name: "办公文档" })).not.toBeInTheDocument();
-  await userEvent.clear(screen.getByRole("searchbox", { name: "搜索" }));
-  await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "没有这个");
+  await userEvent.clear(screen.getByRole("searchbox", { name: "搜索插件与技能" }));
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "没有这个");
   expect(await screen.findByText("没有找到技能")).toBeInTheDocument();
 });
 
@@ -124,7 +133,7 @@ it("a module's retired name still finds the module's skills, as its current name
   skills.listPlatformSkills.mockResolvedValue({ ...platformList, items: [...platformList.items, row("geo-x", "循证 GEO", { id: "geo-private:geo-x", canCopy: false })] });
   open("/app/extensions/skills");
   await screen.findByRole("region", { name: "科研分析" });
-  await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "循证传播");
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "循证传播");
   const pack = await screen.findByRole("region", { name: "循证 GEO" });
   expect(within(pack).getAllByRole("listitem")).toHaveLength(1);
   expect(screen.queryByRole("region", { name: "科研分析" })).not.toBeInTheDocument();
@@ -269,10 +278,10 @@ it("an inventory that cannot be read says so with a way to try again", async () 
 it("switching tabs keeps one page and clears the search", async () => {
   open("/app/extensions/skills");
   await screen.findByRole("region", { name: "科研分析" });
-  await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "没有这个");
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "没有这个");
   await userEvent.click(screen.getByRole("tab", { name: /^插件/ }));
   expect(screen.getByTestId("where")).toHaveTextContent("/app/extensions/plugins");
-  expect(screen.getByRole("searchbox", { name: "搜索" })).toHaveValue("");
+  expect(screen.getByRole("searchbox", { name: "搜索插件与技能" })).toHaveValue("");
   await screen.findByRole("region", { name: "对话里的工具" });
   expect(screen.queryByRole("button", { name: "新建技能" })).not.toBeInTheDocument();
   // Both lists were read once, on arrival: going back and forth reads nothing again.
