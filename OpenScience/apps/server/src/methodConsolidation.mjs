@@ -368,8 +368,8 @@ export class MethodConsolidation {
    * @param {{job: any}} request
    */
   async sleep({ job }) {
-    const page = await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods });
-    const methods = (page.items ?? []).filter((item) => item.payload?.status !== "retired");
+    const notRetired = (/** @type {any} */ page) => (page.items ?? []).filter((/** @type {any} */ item) => item.payload?.status !== "retired");
+    let methods = notRetired(await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods }));
     if (methods.length === 0) {
       return { action: "sleep", methods: 0, groups: 0, relations: 0, builds: 0, screened: false, screenDropped: 0, promoted: [], retirements: [], graphIssues: [] };
     }
@@ -379,6 +379,14 @@ export class MethodConsolidation {
     // with learning on by default the nightly job returned at this line every
     // night for every user who had one. The comparison is what is conditional.
     const comparable = methods.length >= CONSOLIDATION_LIMITS.minGroupSize;
+
+    // First, and again at the end: approval asks no model, and it used to come only after every model step, so a pass that was deferred (a busy
+    // runtime, the learning budget), timed out or threw ended before it, and each amended method, which goes back to `candidate`, stayed out of
+    // the library until some later pass got that far (review L-14). The steps below can change what is approvable (a conflict recorded, a
+    // counterpart retired), which is what the second look is for; this one is best effort, and the second is where a real failure surfaces.
+    const early = await this.approveCandidates(job, methods, { strict: false });
+    // An approval is a write, so the steps below, which amend and retire against the revisions they hold, read the library again.
+    if (early.length) methods = notRetired(await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods }));
 
     const screen = comparable
       ? await this.screenPairs(job, candidatePairs(methods), methods)
@@ -408,31 +416,16 @@ export class MethodConsolidation {
     const records = refreshed.map(methodRecordFrom);
     const graph = validateMethodGraph(records);
 
-    /** @type {string[]} */
-    const promoted = [];
-    for (const document of refreshed) {
-      if (document.payload?.status === "retired") continue;
-      if (document.payload?.status === "candidate") {
-        try {
-          const approvedDocument = await this.learning.approve(job.userId, document.id, { expectedRevision: document.revision });
-          promoted.push(approvedDocument.id);
-        } catch (error) {
-          // Not promotable now means one thing only: an unresolved conflict
-          // with another method, which no measurement repairs. The reason is
-          // what the researcher is shown.
-          if (error?.code !== "method_not_promotable") throw error;
-        }
-      }
-      // No paired evaluation is queued here any more (ruling of 2026-09-21).
-      // One ran for every method and every revision: a six-cell tier whose
-      // verdict the runner forces to `inconclusive`, about ¥10 and two and a
-      // half hours each time a method's text changed, and a 24-cell one that
-      // outlived its own six-hour limit and, simulated on the variance of our
-      // own cells, would have retired about one harmless method in six. The
-      // detector is now the method's own runs (`methodHarmTest`, read by
-      // `retirementProposal` below); the `evaluate` action stays for an
-      // evaluation someone asks for.
-    }
+    const promoted = [...early, ...await this.approveCandidates(job, refreshed, { strict: true })];
+    // No paired evaluation is queued here any more (ruling of 2026-09-21).
+    // One ran for every method and every revision: a six-cell tier whose
+    // verdict the runner forces to `inconclusive`, about ¥10 and two and a
+    // half hours each time a method's text changed, and a 24-cell one that
+    // outlived its own six-hour limit and, simulated on the variance of our
+    // own cells, would have retired about one harmless method in six. The
+    // detector is now the method's own runs (`methodHarmTest`, read by
+    // `retirementProposal` below); the `evaluate` action stays for an
+    // evaluation someone asks for.
 
     // A proposal that is not immediate stays a proposal: it rides on this
     // pass's result (`retirements`), and nothing is posted to the inbox — the
@@ -488,6 +481,31 @@ export class MethodConsolidation {
       graphIssues: graph.issues.map((issue) => issue.code),
       described,
     };
+  }
+
+  /**
+   * Approve the candidates the record allows approving (`LearningService.approve` recomputes the verdict from the stored record, so nothing
+   * here asserts one). No model is asked.
+   * @param {any} job @param {readonly any[]} documents
+   * @param {{strict: boolean}} options  `strict`: an error other than "not promotable" ends the pass; otherwise that candidate is left for the next look
+   * @returns {Promise<string[]>} the ids approved
+   */
+  async approveCandidates(job, documents, { strict }) {
+    /** @type {string[]} */
+    const promoted = [];
+    for (const document of documents) {
+      if (document.payload?.status !== "candidate") continue;
+      try {
+        const approvedDocument = await this.learning.approve(job.userId, document.id, { expectedRevision: document.revision });
+        promoted.push(approvedDocument.id);
+      } catch (error) {
+        // Not promotable now means one thing only: an unresolved conflict
+        // with another method, which no measurement repairs. The reason is
+        // what the researcher is shown.
+        if (/** @type {any} */ (error)?.code !== "method_not_promotable" && strict) throw error;
+      }
+    }
+    return promoted;
   }
 
   /**

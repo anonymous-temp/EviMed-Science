@@ -678,7 +678,7 @@ export class LearningService {
     // No baseline read: since 2026-09-20 the verdict reads the method's own
     // conflicts and nothing else, so fetching a digest it will not look at
     // would be one more thing to be down at the moment of a write.
-    const verdict = promotionVerdict(methodRecordFrom(document));
+    const verdict = promotionVerdict(methodRecordFrom(document), { isApproved: await this.#inForce(userId, document.payload) });
     if (verdict.status !== "approved") {
       throw new HttpError(409, "method_not_promotable", `The method is not eligible: ${verdict.missing.join("; ")}`);
     }
@@ -686,6 +686,29 @@ export class LearningService {
     // whatever reason an earlier path had written, English included.
     return this.#setStatus(userId, methodId, "approved", input.expectedRevision, document,
       effectiveStatusReason({ ...document.payload, status: "approved" }));
+  }
+
+  /**
+   * Which of the methods a method is in conflict with are in force, read now.
+   *
+   * A recorded conflict is never resolved by anything (`unresolvedConflicts`), so judged by the record alone it held a method back for good
+   * even after the method it conflicted with was retired (review L-3). It holds one back while the other is approved, and the read is
+   * made at the moment of the decision, so of two contradicting methods that wait the first one a pass reaches takes effect and the
+   * other then waits.
+   * @param {string} userId @param {any} payload @returns {Promise<(id: string) => boolean>}
+   */
+  async #inForce(userId, payload) {
+    const approved = new Set();
+    for (const relation of unresolvedConflicts(payload?.learning?.relations)) {
+      const id = String(relation.target);
+      if (approved.has(id)) continue;
+      /** @type {string} */ let key;
+      // An id that cannot name a method names none; a read that fails is not taken for "not in force", it fails the decision.
+      try { key = productId(id, "method"); } catch { continue; }
+      const other = await this.documents.get(userId, "method", key);
+      if (isLearnedMethod(other) && other.payload.status === "approved") approved.add(id);
+    }
+    return (id) => approved.has(id);
   }
 
   /**
@@ -830,7 +853,7 @@ export class LearningService {
     };
     if (payload.files === undefined) delete payload.files;
     if (payload.scope === undefined) delete payload.scope;
-    const verdict = promotionVerdict(methodRecordFrom({ id: methodId, payload: { ...payload, status: "candidate" } }));
+    const verdict = promotionVerdict(methodRecordFrom({ id: methodId, payload: { ...payload, status: "candidate" } }), { isApproved: await this.#inForce(userId, payload) });
     payload.status = verdict.status;
     payload.statusReason = effectiveStatusReason(payload);
     payload.statusChangedAt = at;

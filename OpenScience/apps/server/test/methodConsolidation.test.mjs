@@ -442,6 +442,90 @@ test("a step that cannot start defers the pass instead of finishing it without t
   }
 });
 
+test("approvals do not wait for the model steps: a pass that cannot finish has already approved what the record allows (review L-14)", async () => {
+  // The only caller of `approve` was the loop at the end of the pass, after every model step. A deferral (a busy runtime, a spent budget), a step that
+  // timed out or any step that threw ended the pass before it, and each amended method, which goes back to `candidate`, stayed out of the library.
+  // A deferral ends the pass (the worker asks again later); any other step failure is that group's own and the pass goes on to its end.
+  const stops = [["runtime_busy", 503, true], ["usage_budget_exceeded", 402, true], ["learning_step_timeout", 504, false]];
+  for (const [code, status, ends] of stops) {
+    const learning = fakeLearning([doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor"), doc("m3", "resolve-claim-quote")]);
+    /** @type {string[]} */
+    const events = [];
+    /** @type {any} */ (learning).approve = async (_userId, id) => {
+      events.push(`approve:${id}`);
+      if (id === "m2") throw Object.assign(new Error("not promotable"), { code: "method_not_promotable" });
+      return { id };
+    };
+    const consolidation = new MethodConsolidation({
+      learning,
+      dispatch: async (request) => {
+        events.push(`dispatch:${request.input.action}`);
+        throw Object.assign(new Error("stopped"), { code, status });
+      },
+      readResult: async () => ({ status: "succeeded", output: {} }),
+      wait: async () => {},
+    });
+    const sleeping = consolidation.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
+    if (ends) await assert.rejects(sleeping, { code }); else await sleeping;
+    assert.deepEqual(events.filter((event) => event.startsWith("approve:")).sort().filter((event, index, all) => event !== all[index - 1]), ["approve:m1", "approve:m2", "approve:m3"], `${code}: every candidate was offered for approval`);
+    assert.ok(events.findIndex((event) => event.startsWith("approve:")) < events.findIndex((event) => event.startsWith("dispatch:")), `${code}: before the first model step`);
+  }
+});
+
+test("a candidate approved before the model steps is reported once, and the pass still approves what its steps made approvable", async () => {
+  const learning = fakeLearning([doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor")]);
+  /** @type {string[]} */
+  const approvals = [];
+  /** @type {any} */ (learning).approve = async (_userId, id) => {
+    approvals.push(id);
+    const item = learning.items.find((entry) => entry.id === id);
+    // m2 is held by a conflict until the pass has run (as one recorded by its DECIDE step would be lifted by a retirement in it).
+    if (id === "m2" && !item.payload.released) throw Object.assign(new Error("not promotable"), { code: "method_not_promotable" });
+    item.payload.status = "approved";
+    return { id };
+  };
+  const { instance } = consolidation({
+    learning,
+    readResult: async () => ({ status: "succeeded", output: { relations: [], assignments: [] } }),
+    judgeService: { judge: async () => { learning.items[1].payload.released = true; return { outcome: "settled", value: { pairs: [] } }; } },
+  });
+  const result = await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
+  assert.deepEqual(approvals, ["m1", "m2", "m2"], "m1 once, at the start; m2 refused at the start and approved at the end");
+  assert.deepEqual(result.promoted, ["m1", "m2"]);
+});
+
+test("what the steps rewrite is written against the revision the approvals left, not the one the pass began with", async () => {
+  // Approving a candidate is a write, so a method approved before the model steps holds a newer revision when the build step amends it; a build
+  // that used the list read at the start would conflict with it, and the conflict is swallowed per method, so the rewrite would be lost unseen.
+  const items = [doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor")];
+  const learning = fakeLearning(items);
+  /** @type {any} */ (learning).approve = async (_userId, id) => {
+    const index = learning.items.findIndex((entry) => entry.id === id);
+    learning.items[index] = { ...learning.items[index], revision: learning.items[index].revision + 1, payload: { ...learning.items[index].payload, status: "approved" } };
+    return learning.items[index];
+  };
+  /** @type {any} */ (learning).amendMethod = async (_userId, id, input) => {
+    const current = learning.items.find((entry) => entry.id === id);
+    if (input.expectedRevision !== current.revision) throw Object.assign(new Error("conflict"), { code: "product_revision_conflict" });
+    learning.amendments.push({ id, input });
+    return { ...current, revision: current.revision + 1 };
+  };
+  const grown = SECTIONS("- Never invent a span.");
+  const { instance } = consolidation({
+    learning,
+    readResult: async (identity) => ({
+      status: "succeeded",
+      output: identity.dispatchId.includes("build")
+        ? { revisions: [{ methodId: "m1", operation: "amend", assignment: "g1", baseDigest: items[0].payload.contentDigest, skill: renderMethodSkill(frontmatter("resolve-claim-span"), grown) }] }
+        : { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "subset", SKILLS: ["m1", "m2"] }] },
+    }),
+  });
+  const result = await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
+  assert.deepEqual(result.promoted, ["m1", "m2"]);
+  assert.equal(learning.amendments.length, 1, "the rewrite of an approved method was written");
+  assert.equal(learning.amendments[0].input.expectedRevision, 2);
+});
+
 test("a step is keyed on what it reads: an unchanged group reads its answer again, a changed method is a new question", async () => {
   const ids = async (items) => {
     const { instance, dispatched } = consolidation({ learning: fakeLearning(items) });

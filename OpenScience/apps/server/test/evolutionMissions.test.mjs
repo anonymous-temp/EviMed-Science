@@ -4,6 +4,7 @@ import {evolutionServiceFixture} from './helpers/evolutionServiceFixture.mjs';
 import {createEvolutionMissions} from '../src/evolutionMissions.mjs';
 import {createEvolutionTaskPool} from '../src/evolutionTaskPool.mjs';
 import {evolutionToolArchiveId} from '../src/evolutionService.mjs';
+import {DEFAULT_EVOLUTION_POLICY} from '../src/evolutionPolicy.mjs';
 const make=async({auditOnly=false,interrupt=false}={})=>{
  const f=evolutionServiceFixture(),pool=createEvolutionTaskPool({service:f.service}),calls=new Map(),published=[];
  for(const id of ['a','b'])await pool.add({id,moduleId:'tools',sourceRoot:id,sourceHash:id.repeat(64),pool:'confirmation',scope:'public',reservedHidden:true,curatorIndependent:true,equivalentVariant:{input:{value:1}},abstentionExpected:id==='a'});
@@ -112,10 +113,13 @@ test('module activation is idempotent and never replaces a newer incompatible ba
  assert.equal((await f.service.get(active.id)).payload.candidateId,'newer');
 });
 test('code-only module missions produce review inputs without claiming a promotion',async()=>{
- const f=evolutionServiceFixture();f.service.callbacks.runModuleEngineMission=async()=>({status:'review',review:{bundlePath:'actual-bundle'}});
+ const f=evolutionServiceFixture();f.service.callbacks.runModuleEngineMission=async()=>({status:'review',review:{identity:'review-1',bundlePath:'actual-bundle'}});
  await f.service.save('mission','engine-module',{moduleId:'memory',status:'ready',dependencies:[],kind:'research'});
  const missions=createEvolutionMissions({service:f.service,policy:{},map:{},taskPool:{},signals:{},config:{},adapters:{memory:{enabled:true}}});
- const result=await missions.run({missionId:'engine-module'});assert.equal(result.payload.status,'waiting_resource');assert.equal(result.payload.lastResult,'review');assert.equal(result.payload.engineReview.bundlePath,'actual-bundle');assert.equal(result.payload.confirmedPromotions,0);
+ const result=await missions.run({missionId:'engine-module'});
+ // The mission's work is the review input; what a human does with it is not this mission's to wait for (review D-E3).
+ assert.equal(result.payload.status,'complete');assert.equal(result.payload.completed,true);assert.deepEqual(result.payload.result,{outcome:'review-prepared',reviewId:'review-1'});
+ assert.equal(result.payload.lastResult,'review');assert.equal(result.payload.engineReview.bundlePath,'actual-bundle');assert.equal(result.payload.confirmedPromotions,0);
 });
 test('a repair requires an independent executed public failure receipt rather than a proposer boolean',async()=>{
  const {validEvolutionFailureReproduction,evolutionFailureReproductionHash}=await import('../src/evolutionMissions.mjs');
@@ -154,4 +158,101 @@ test('resource acquisition resumes only a new matched resource, with a new bound
  assert.deepEqual(await missions.wake({type:'dataset-ready',semanticsMatched:false}),[]);
  assert.deepEqual(await missions.wake({type:'dataset-ready',semanticsMatched:true}),['stopped']);
  const row=await f.service.get('stopped');assert.equal(row.payload.resourceAttempts,0);assert.equal(row.payload.resourceStopped,false);assert.equal(row.payload.resourceWindowStartedAt,f.service.now().toISOString());
+});
+
+// The weekly planner, with the policy, map and signals it reads reduced to doubles.
+const planner=(adapters,{callbacks={},config={}}={})=>{
+ const f=evolutionServiceFixture(),P=DEFAULT_EVOLUTION_POLICY;Object.assign(f.service.callbacks,callbacks);
+ const missions=createEvolutionMissions({service:f.service,policy:{assignedPolicy:async()=>({id:'P',policy:P}),current:async()=>({policy:P})},map:{rebuild:async()=>({counts:{}})},taskPool:{},signals:{aggregate:async()=>[]},
+  config:{evolutionDailyBudgetCny:50,evolutionRunBudgetCny:10,...config},adapters});
+ return{f,missions};
+};
+const WEEK=7*86400000;
+const opportunity=(missions,id,moduleId,{failures=1,prerequisites}={})=>missions.opportunity({id,moduleId,sources:['repair'],taskFamily:id,mechanismFamily:id,evidenceRoots:[id],features:{runtimeFailures:failures},...(prerequisites?{prerequisites}:{})});
+test('an engine module answers an opportunity with a review input and plans its next opportunity the week after',async()=>{
+ const {f,missions}=planner({runtime:{enabled:true}},{callbacks:{runModuleEngineMission:async()=>({status:'review',review:{identity:'review-1'}})}});
+ await opportunity(missions,'opp-a','runtime',{failures:30});await opportunity(missions,'opp-b','runtime',{failures:3});
+ const first=await missions.plan({week:'2026-10-05'});assert.equal(first.missions.length,1);
+ const done=await missions.run({missionId:first.missions[0]});
+ assert.equal(done.payload.opportunityId,'opp-a');assert.equal(done.payload.status,'complete');assert.deepEqual(done.payload.result,{outcome:'review-prepared',reviewId:'review-1'});
+ const answered=await f.service.get('opp-a');assert.equal(answered.payload.status,'review');assert.equal(answered.payload.review.reviewId,'review-1');
+ f.advance(WEEK);
+ const second=await missions.plan({week:'2026-10-12'});assert.equal(second.missions.length,1);
+ assert.equal((await f.service.get(second.missions[0])).payload.opportunityId,'opp-b');
+ await missions.run({missionId:second.missions[0]});f.advance(WEEK);
+ const third=await missions.plan({week:'2026-10-19'});
+ assert.deepEqual((await Promise.all(third.missions.map(id=>f.service.get(id)))).map(row=>row.payload.kind),['baseline-audit'],'an answered opportunity is not worked a second time');
+});
+test('a mission parked past its resource window ends deferred; its opportunity keeps the wake conditions and comes back on a matching event',async()=>{
+ const {f,missions}=planner({tools:{enabled:true}},{callbacks:{acquireResource:async()=>({ready:false,reason:'pending',wakeConditions:['new-data']})}});
+ await opportunity(missions,'availability','tools',{failures:60,prerequisites:['measured-execution-reference']});await opportunity(missions,'paper','tools',{failures:30});
+ const first=await missions.plan({week:'2026-10-05'});
+ const parked=await missions.run({missionId:first.missions[0]});assert.equal(parked.payload.opportunityId,'availability');assert.equal(parked.payload.status,'waiting_resource');
+ f.advance(15*86400000);
+ const later=await missions.plan({week:'2026-10-19'});
+ const deferred=await f.service.get(first.missions[0]);assert.equal(deferred.payload.status,'deferred');assert.ok(deferred.payload.deferredAt);
+ const dossier=await f.service.get('availability');assert.equal(dossier.payload.deferred,true);assert.equal(dossier.payload.deferredAt,deferred.payload.deferredAt);assert.deepEqual(dossier.payload.wakeConditions,['new-data']);
+ assert.deepEqual((await Promise.all(later.missions.map(id=>f.service.get(id)))).map(row=>row.payload.opportunityId),['paper'],'the module is not held by the deferred opportunity');
+ await missions.wake({type:'tool-ready'});assert.equal((await f.service.get('availability')).payload.deferred,true,'an event the opportunity does not wait for leaves it deferred');
+ await missions.wake({type:'dataset-ready',semanticsMatched:false});assert.equal((await f.service.get('availability')).payload.deferred,true,'a dataset that does not match its semantics is not a new resource');
+ await missions.wake({type:'dataset-ready',semanticsMatched:true});
+ const reopened=await f.service.get('availability');assert.equal(reopened.payload.deferred,false);assert.equal(reopened.payload.deferredAt,null);assert.deepEqual(reopened.payload.wakeConditions,[]);
+ // A deferral also ends when what the opportunity rests on changes.
+ await f.service.save('dossier','availability',{...reopened.payload,deferred:true,deferredAt:'2026-10-19T00:00:00.000Z',wakeConditions:['new-tool']},reopened);
+ await opportunity(missions,'availability','tools',{failures:61,prerequisites:['measured-execution-reference']});
+ assert.equal((await f.service.get('availability')).payload.deferred,false);
+});
+test('a repair that cannot reproduce its failure is deferred when its window has passed, whatever woke nothing in the meantime',async()=>{
+ const {f,missions}=planner({autopilot:{enabled:true}});
+ await opportunity(missions,'repair-opportunity','autopilot',{failures:5});
+ await f.service.save('mission','repair-parked',{moduleId:'autopilot',kind:'research',status:'waiting_resource',reason:'repair-failure-reproduction-required',opportunityId:'repair-opportunity',week:'2026-09-14',
+  createdAt:f.service.now().toISOString(),wakeConditions:[],dependencies:[],budget:{category:'research',reservedCny:10}});
+ f.advance(13*86400000);await missions.plan({week:'2026-10-12'});
+ assert.equal((await f.service.get('repair-parked')).payload.status,'waiting_resource','inside its window it is left alone');
+ f.advance(2*86400000);await missions.plan({week:'2026-10-19'});
+ const row=await f.service.get('repair-parked');assert.equal(row.payload.status,'deferred');assert.equal(row.payload.reason,'repair-failure-reproduction-required');
+ assert.deepEqual((await f.service.get('repair-opportunity')).payload.wakeConditions,['new-data','new-method','new-tool','new-model'],'a mission parked with no wake condition leaves the closed default');
+});
+test('a module whose best opportunity is parked inside its resource window takes the next-ranked one the week after',async()=>{
+ const {f,missions}=planner({tools:{enabled:true}},{callbacks:{acquireResource:async()=>({ready:false,reason:'pending',wakeConditions:['new-data']})}});
+ const opportunities=async plan=>(await Promise.all(plan.missions.map(id=>f.service.get(id)))).map(row=>row.payload.opportunityId);
+ await opportunity(missions,'availability','tools',{failures:60,prerequisites:['measured-execution-reference']});await opportunity(missions,'paper','tools',{failures:30});
+ const first=await missions.plan({week:'2026-10-05'});assert.deepEqual(await opportunities(first),['availability']);
+ const parked=await missions.run({missionId:first.missions[0]});assert.equal(parked.payload.status,'waiting_resource');
+ f.advance(WEEK);
+ const second=await missions.plan({week:'2026-10-12'});
+ assert.deepEqual(await opportunities(second),['paper'],'the parked opportunity holds the module');
+ const decision=(await f.service.get(second.missions[0])).payload.decisions.find(item=>item.policyField==='weights');
+ assert.deepEqual([decision.choice,decision.opportunities.map(item=>item.id)],['paper',['paper']],'the recorded choice names what could be chosen, so a replay under other weights sees the same options');
+ assert.equal((await f.service.get(first.missions[0])).payload.resourceAttempts,1,'planning does not run a parked mission again');
+ assert.deepEqual((await missions.plan({week:'2026-10-12'})).missions,[],'one mission per module and week');
+ f.advance(6*86400000);
+ assert.deepEqual((await missions.plan({week:'2026-10-19'})).missions,[],'every opportunity of the module has an open mission');
+});
+test('a mission opened for a job ends with the job whatever kind the job has, and fails with it; a research mission concludes itself',async()=>{
+ const {f,missions}=planner({});
+ // The self-research job's mission is named for its job and has kind `research`, which is also the kind of an opportunity's weekly mission.
+ const row=await missions.ensureJob({id:'job-research',kind:'evolution-research',payload:{}});
+ assert.equal(row.payload.kind,'research');assert.equal(row.payload.jobId,'job-research');
+ const done=await missions.recordJob(row,{status:'complete',added:1});
+ assert.deepEqual([done.payload.status,done.payload.completed],['complete',true]);assert.ok(done.payload.completedAt);
+ const scout=await missions.ensureJob({id:'job-scout',kind:'evolution-scout',payload:{}});
+ assert.equal((await missions.recordJob(scout,{status:'complete'})).payload.status,'complete','the kinds that always ended with their job still do');
+ const budgeted=await missions.ensureJob({id:'job-audit',kind:'evolution-audit',payload:{moduleId:'tools'}});
+ assert.equal((await missions.recordJob(budgeted,{status:'waiting_resource'})).payload.status,'ready','a job that reports it is waiting leaves its mission open');
+ // A measurement that came out `failed` is a result of a job that succeeded (a self-check's verdict), not a failed job.
+ const check=await missions.ensureJob({id:'job-check',kind:'evolution-self-check',payload:{moduleId:'tools'}});
+ assert.equal((await missions.recordJob(check,{payload:{status:'failed'}})).payload.status,'complete');
+ const broken=await missions.ensureJob({id:'job-meta',kind:'evolution-meta',payload:{}});
+ const failed=await missions.recordJob(broken,{jobFailed:true,code:'evolution_job_failed'});
+ assert.deepEqual([failed.payload.status,failed.payload.reason,failed.payload.completed],['failed','evolution_job_failed',undefined]);
+ assert.equal((await missions.fund(failed)).payload.status,'failed','a failed mission is not funded again');
+ // The missions that carry research are concluded by their own run, never by the fate of a job.
+ for(const kind of ['research','baseline-audit','acquire-resource','curriculum']){
+  f.advance(86400000);// a day's research allowance holds two missions
+  const weekly=await missions.create({id:`weekly-${kind}`,moduleId:'tools',kind,category:'research'});
+  assert.equal((await missions.recordJob(weekly,{status:'complete'})).payload.status,kind==='research'?'ready':'complete',`${kind} after a job that finished`);
+  const other=await missions.create({id:`failed-${kind}`,moduleId:'tools',kind,category:'research'});
+  assert.equal((await missions.recordJob(other,{jobFailed:true,code:'evolution_job_failed'})).payload.status,'ready',`${kind} after a job that failed`);
+ }
 });

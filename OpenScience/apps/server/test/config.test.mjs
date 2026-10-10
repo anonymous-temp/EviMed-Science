@@ -582,6 +582,11 @@ test("opt-in local auto configuration loads mode-600 EviMed service secrets", as
   }
 });
 
+test("the learning loop's caps default to ten yuan a day and none a week or a run, which is what the config comment says", () => {
+  const config = loadConfig({ dataDir: "/tmp/os-config-learning-caps" });
+  assert.deepEqual([config.learningDailyLimitCny, config.learningWeeklyLimitCny, config.learningRunLimitCny], [10, 0, 0]);
+});
+
 test("the agent run monitor outlasts a systematic review by default", () => {
   // A day since 2026-09-21: no time ceiling may end a run that is working
   // while the product is being tested (owner ruling).

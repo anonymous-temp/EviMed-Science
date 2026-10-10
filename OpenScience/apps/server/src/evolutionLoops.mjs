@@ -237,7 +237,7 @@ export function createEvolutionLoops({ service, config, database, registry, mode
     const metrics=previousMetrics?.payload.metrics ?? await service.callbacks.monthlyMetrics?.(month,{previous:null});
     if(metrics)await service.save('monthly-metrics',id,{...previousMetrics?.payload,month,metrics,loopsProgress:report,decisions,proposalId:proposal?.id??null,observedAt:service.now().toISOString()},previousMetrics);
     await service.notifications?.create(await service.owner(),{noticeType:'notify',title:'进化月报',
-      body:`本月经新题确认 ${report.confirmedVersions.length} 个版本，新增支持 ${report.newSupportedFamilies} 类任务；${report.costCny===null?'花费待结算':`花费 ${report.costCny.toFixed(2)} 元`}。\n过拟合落差：${report.overfitGap===null?'尚无完整审计结果':report.overfitGap}。\n研发策略：${decisions.length?'已记录本月裁定':'试行结果仍在等待真实观察'}。`,source:{type:'system',id},idempotencyKey:id});
+      body:`本月经新题确认 ${report.confirmedVersions.length} 个版本，新增支持 ${report.newSupportedFamilies} 类任务；${report.costCny===null?'花费待结算':`花费 ${report.costCny.toFixed(2)} 元`}。\n过拟合落差：${report.overfitGap===null?'尚无完整审计结果':report.overfitGap}。\n研发策略：${decisions.length?'已记录本月裁定':'试行结果仍在等待真实观察'}${proposal?.payload?.status==='proposal_invalid'?'；本月的策略提案不合规，已记录原因，未进入试行':''}。`,source:{type:'system',id},idempotencyKey:id});
     return {decisions,proposal,report};
   }
   async function audit({month,quarter}) {

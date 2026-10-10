@@ -291,6 +291,21 @@ test("an unresolved conflict blocks promotion from either origin", () => {
   assert.deepEqual(unresolvedConflicts(resolved.relations), []);
 });
 
+test("a conflict withholds a method only while the method it is with is in force", () => {
+  const conflicted = foldRelation(threeSuccesses(), { type: "conflicts_with", target: "m9", evidence: "opposite advice", proposedBy: "job_1" });
+  const record = method({ learning: conflicted });
+  const inForce = (/** @type {Record<string, string | undefined>} */ statuses) => ({ isApproved: (/** @type {string} */ id) => statuses[id] === "approved" });
+  assert.equal(promotionVerdict(record, inForce({ m9: "approved" })).status, "candidate", "the library would tell a run two opposite things");
+  for (const status of ["retired", "candidate", undefined]) {
+    const verdict = promotionVerdict(record, inForce({ m9: status }));
+    assert.equal(verdict.status, "approved", `a ${status ?? "missing"} counterpart is not told to any run, so it holds nothing back`);
+    assert.deepEqual(verdict.missingDetails, []);
+  }
+  assert.equal(promotionVerdict(record).status, "candidate", "a caller that cannot look still has every unresolved conflict count");
+  assert.deepEqual(unresolvedConflicts(conflicted.relations, () => false), []);
+  assert.equal(unresolvedConflicts(conflicted.relations, () => true).length, 1);
+});
+
 /* --------------------------------------------------------------- retirement */
 
 test("strength decays, and retirement is proposed only when something validated replaces it", () => {

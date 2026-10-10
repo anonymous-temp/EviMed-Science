@@ -333,9 +333,20 @@ export function successfulRuns(learning) {
   return [...runs]
 }
 
-/** @param {MethodRelation[]} relations @returns {MethodRelation[]} */
-export function unresolvedConflicts(relations) {
-  return (relations ?? []).filter((relation) => relation.type === 'conflicts_with' && !relation.resolved)
+/**
+ * The conflicts that still hold a method back.
+ *
+ * A conflict is recorded on both methods and nothing resolves it (`resolved` has no writer for a method relation), so it would hold a method
+ * back for good even after the other one was retired. It holds one back only while the library would be telling a run two opposite things,
+ * which is while the method it is with is in force. A caller that can look says which methods are (`isApproved`); a retired, still-candidate
+ * or missing counterpart then holds nothing back. A caller that cannot look has every unresolved conflict count, as before.
+ * @param {MethodRelation[]} relations
+ * @param {(id: string) => boolean} [isApproved]  whether the method with this id is in force
+ * @returns {MethodRelation[]}
+ */
+export function unresolvedConflicts(relations, isApproved) {
+  return (relations ?? []).filter((relation) => relation.type === 'conflicts_with' && !relation.resolved
+    && (!isApproved || isApproved(String(relation.target))))
 }
 
 /* ------------------------------------------------------------ strength and decay */
@@ -549,6 +560,7 @@ export function reflectionDue(accumulatedImportance, threshold = MEMORY_REFLECTI
  * @property {number} [minTrajectories]
  * @property {number} [minRuns]
  * @property {string} [currentBaselineDigest]  the digest the evaluation had to beat
+ * @property {(id: string) => boolean} [isApproved]  whether a method is in force; a conflict with one that is not does not count (`unresolvedConflicts`)
  */
 
 /**
@@ -616,8 +628,9 @@ export function evaluationEligible(method, options = {}) {
  * paired evaluation keeps running in the background as the thing that can take
  * it away — see `retirementProposal`'s evaluation clause. What still blocks
  * effect is the one thing no measurement can repair: an unresolved conflict
- * with another method, where the library would be telling the run two
- * incompatible things.
+ * with another method that is itself in force, where the library would be
+ * telling the run two incompatible things (`options.isApproved`; see
+ * `unresolvedConflicts` for a conflict with a method that is not).
  *
  * `evaluationEligible` is untouched and still decides who is *worth* measuring;
  * it is a budget, not a gate.
@@ -636,7 +649,7 @@ export function promotionVerdict(method, options = {}) {
   const lack = (sentence, detail) => { missing.push(sentence); missingDetails.push(detail) }
   const learning = method?.learning ?? emptyLearning(method?.digest ?? '')
 
-  const conflicts = unresolvedConflicts(learning.relations)
+  const conflicts = unresolvedConflicts(learning.relations, options.isApproved)
   if (conflicts.length) {
     lack(`${conflicts.length} unresolved conflict(s) with ${conflicts.map((entry) => entry.target).join(', ')}`,
       { code: 'conflicts', count: conflicts.length, targets: conflicts.map((entry) => String(entry.target)) })
@@ -651,7 +664,6 @@ export function promotionVerdict(method, options = {}) {
   const evaluations = learning.evaluations ?? []
   const latest = evaluations.length ? evaluations[evaluations.length - 1] : null
   if (latest && latest.candidateDigest === learning.digest) reasons.push(`evaluation ${latest.verdict} against ${latest.baselineDigest}`)
-  void options
 
   return { status: missing.length ? 'candidate' : 'approved', reasons, missing, missingDetails }
 }
