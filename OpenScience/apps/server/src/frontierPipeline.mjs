@@ -48,8 +48,9 @@ import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
  *   transaction** (review #14), and leaves an `item_changes` row for
  *   downstream copies.
  * - **Selection is serialized** by one advisory lock, so two concurrent
- *   batches cannot both take a source's third slot or both fill a lane's floor.
- *   Selection is sticky: a later re-score never unselects.
+ *   batches cannot both take a source's third slot, both fill a lane's floor or
+ *   both take the preprint lane's last place. Selection is sticky: a later
+ *   re-score never unselects.
  * - **The number check reads what the model was shown.** The edit stores the
  *   exact item text it sent (`item_texts.model_input` + SHA-256); until the
  *   first edit that column holds the text the edit will use.
@@ -62,6 +63,7 @@ import {
   FRONTIER_ITEM_FLAGS,
   FRONTIER_LANES,
   FRONTIER_NOTICE_KINDS,
+  FRONTIER_PREPRINT_LANE_SOURCE_TYPES,
   FRONTIER_SOURCE_TYPE_LABELS_ZH,
   doiOf,
   frontierAuthorityScore,
@@ -147,6 +149,24 @@ export const FRONTIER_LANE_FLOOR_SCORE = 60;
  * never pads (§14.8 #6). Re-read a week's distribution before moving it.
  */
 export const FRONTIER_SELECT_THRESHOLD_DEFAULT = 82;
+/**
+ * The preprint lane (`OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY` / `_MIN_SCORE`; config.mjs holds the same numbers and
+ * frontierConfig.test.mjs holds them equal). Review B, D-08: a preprint server tops out at a total of 77 and a company newsroom at 76
+ * against the line of 82, whatever they publish - 52 of the 494 enabled sources could never reach 精选 or the daily, by arithmetic and not
+ * by quality. The owner ruled on 2026-10-10 that a few of them should: each day, up to 2 of their items, the highest total first.
+ *
+ * The total, because that is the editorial score a card shows and its band is read from (high from the line, medium from 60, low
+ * below). The floor is 60, the lower edge of the "medium" band and the line the lane floor has drawn since launch (production's
+ * seven days to 2026-10-10, read only: it selected 45 items, so a total of 60 is a level the editor reaches every day): a selected
+ * card never reads as low. For these classes 60 asks the editor for 53 or 54 of its 70 points (76-77%), against the 64 (91%) that
+ * the line of 82 asks for a journal of authority 3 - what a place kept for "worth reading" should ask for. The only preprint on
+ * record with the real editor (the live-chain receipt of 2026-10-10) scored 40, a middling secondary analysis, and stays out.
+ * That is one sample and the arithmetic, not a distribution: the first week of
+ * `open_science_frontier_pipeline_total{outcome="preprintLane"}` and the totals per day of the two classes
+ * (`SELECT max(score_total) ... WHERE source_type IN ('preprint','company') GROUP BY day`) are what to move the floor from.
+ */
+export const FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT = 2;
+export const FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT = 60;
 /** Owed edits cover recent source dates, actual publication, or generated dailies. */
 export const FRONTIER_DEFERRED_EDIT_WINDOW_MS = 7 * DAY;
 /** Items embedded by the pipeline (older ones are the rebuild script's). */
@@ -233,6 +253,26 @@ export function frontierSelectThreshold(config) {
   const value = Number(config?.frontierSelectThreshold);
   return config?.frontierSelectThreshold != null && config.frontierSelectThreshold !== "" && Number.isFinite(value)
     ? value : FRONTIER_SELECT_THRESHOLD_DEFAULT;
+}
+
+/**
+ * How many items of a day the preprint lane may select (`OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY`; 0 is no lane).
+ * @param {Record<string, any> | null | undefined} config @returns {number}
+ */
+export function frontierPreprintLanePerDay(config) {
+  const value = Number(config?.frontierPreprintLanePerDay);
+  return config?.frontierPreprintLanePerDay != null && config.frontierPreprintLanePerDay !== "" && Number.isInteger(value) && value >= 0
+    ? value : FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT;
+}
+
+/**
+ * The total an item must reach to be taken by the preprint lane (`OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE`).
+ * @param {Record<string, any> | null | undefined} config @returns {number}
+ */
+export function frontierPreprintLaneMinScore(config) {
+  const value = Number(config?.frontierPreprintLaneMinScore);
+  return config?.frontierPreprintLaneMinScore != null && config.frontierPreprintLaneMinScore !== "" && Number.isFinite(value)
+    ? value : FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT;
 }
 
 /** Safety feeds, regulators and authority-5 journals: edited at peak and past 80%, never waiting for an abstract.
@@ -516,7 +556,8 @@ function orderedFlags(flags) {
 
 /**
  * @typedef {{ claimed: number, promoted: number, published: number, merged: number, screenedOut: number, held: number,
- *             failed: number, dropped: number, waiting: number, deferred: number, edited: number, rescored: number, embedded: number }} FrontierBatchSummary
+ *             failed: number, dropped: number, waiting: number, deferred: number, edited: number, rescored: number, embedded: number,
+ *             preprintLane: number }} FrontierBatchSummary
  */
 
 export class FrontierPipeline {
@@ -549,6 +590,8 @@ export class FrontierPipeline {
     this.evolution = evolution;
     this.policies = policies;
     this.threshold = frontierSelectThreshold(this.config);
+    this.preprintLanePerDay = frontierPreprintLanePerDay(this.config);
+    this.preprintLaneMinScore = frontierPreprintLaneMinScore(this.config);
     this.budgetCny = Number.isFinite(Number(this.config.frontierDailyBudgetCny)) ? Number(this.config.frontierDailyBudgetCny) : 10;
     this.offpeak = this.config.frontierOffpeak !== false;
     this.timeZone = String(this.config.frontierTimeZone || this.config.frontierTimezone || "Asia/Shanghai");
@@ -559,7 +602,7 @@ export class FrontierPipeline {
     this.counters = {
       batches: 0, claimedEntries: 0, claimedItems: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0,
       failed: 0, dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, embedFailures: 0,
-      titleDuplicates: 0, notices: 0, laneFloor: 0, selected: 0, capped: 0, releaseFailures: 0,
+      titleDuplicates: 0, notices: 0, laneFloor: 0, preprintLane: 0, selected: 0, capped: 0, releaseFailures: 0,
       editSkipped: { unavailable: 0, exhausted: 0, throttled: 0, peak: 0 },
       // Rows released to wait out a provider balance refusal, never charged an attempt.
       providerRefusedWaits: 0,
@@ -627,7 +670,7 @@ export class FrontierPipeline {
 
   /**
    * One bounded round: claimed entries, then promoted items, then owed edits,
-   * the lane floor, and embeddings.
+   * the lane floor and the preprint lane, and embeddings.
    * @returns {Promise<FrontierBatchSummary>}
    */
   async processBatch() {
@@ -636,7 +679,7 @@ export class FrontierPipeline {
     this.policyRevisionId = policy.revisionId;
     /** @type {FrontierBatchSummary} */
     const summary = { claimed: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0, failed: 0, dropped: 0,
-      waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0 };
+      waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0 };
     try {
       const capabilities = await migrateFrontier(this.database, { dimension: this.dimension });
       const now = this.now();
@@ -646,7 +689,10 @@ export class FrontierPipeline {
       await this.#processEntries(context);
       await this.#processItems(context);
       await this.#processOwedEdits(context);
-      if (summary.published || summary.rescored) await this.#laneFloor(context);
+      if (summary.published || summary.rescored) {
+        await this.#laneFloor(context);
+        summary.preprintLane += await this.#preprintLane(context);
+      }
       summary.embedded += await this.#embed(context);
       this.counters.batches += 1;
       for (const key of /** @type {Array<keyof FrontierBatchSummary>} */ (Object.keys(summary))) {
@@ -1642,7 +1688,7 @@ export class FrontierPipeline {
   async #selectedToday(client, sourceId, timelineAt) {
     const { start, end } = frontierDayWindow(timelineAt, this.timeZone);
     const result = await client.query(`SELECT count(*)::integer AS selected FROM evimed_frontier.items
-      WHERE primary_source_id = $1 AND state = 'published' AND selected AND selected_rule IN ('threshold', 'lane-floor')
+      WHERE primary_source_id = $1 AND state = 'published' AND selected AND selected_rule IN ('threshold', 'lane-floor', 'preprint-lane')
         AND timeline_at >= $2 AND timeline_at < $3`, [sourceId, start, end]);
     return Number(result.rows[0]?.selected ?? 0);
   }
@@ -1741,6 +1787,52 @@ export class FrontierPipeline {
         this.counters.laneFloor += chosen.size;
         await bumpFrontierVersion(client);
       }
+    });
+  }
+
+  /**
+   * The preprint lane (owner ruling 2026-10-10, review B D-08; the numbers and the reasoning are
+   * `FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT`'s). At the end of a round, a day (the lane floor's) that has selected fewer than
+   * `preprintLanePerDay` items of the classes that cannot reach the line by arithmetic - preprint servers and company newsrooms
+   * (`FRONTIER_PREPRINT_LANE_SOURCE_TYPES`) - takes the best of the rest: verified, not retracted, not a letter or a comment, with a
+   * Chinese summary (the daily and the weekly carry no item without one), the highest total first, at or above the floor.
+   * Everything the day already selected of those classes counts against the places, by whatever rule, so the lane tops a day up to
+   * the number and never past it; an operator's pin does not count. Sticky like every selection: a better item that comes later
+   * finds the places taken. The item keeps its source class (`preprint` / `company`, and the flag that says it is unreviewed or a
+   * press release); only `selected_rule` says why it is here.
+   * @param {any} context @returns {Promise<number>} how many items it selected
+   */
+  async #preprintLane(context) {
+    if (this.preprintLanePerDay < 1) return 0;
+    const { now } = context;
+    const { start, end } = frontierDayWindow(now, this.timeZone);
+    return this.database.transaction(async (/** @type {any} */ client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [SELECT_LOCK]);
+      const taken = Number((await client.query(`SELECT count(*)::integer AS taken FROM evimed_frontier.items
+        WHERE state = 'published' AND selected AND selected_rule IN ('threshold', 'lane-floor', 'preprint-lane')
+          AND source_type = ANY($1) AND timeline_at >= $2 AND timeline_at < $3`,
+      [FRONTIER_PREPRINT_LANE_SOURCE_TYPES, start, end])).rows[0]?.taken ?? 0);
+      const room = this.preprintLanePerDay - taken;
+      if (room < 1) return 0;
+      // A few more than the room: a letter or a comment is dropped below, as the lane floor drops them.
+      const candidates = await client.query(`SELECT i.id, i.evidence_type, t.publication_types FROM evimed_frontier.items i
+        JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+        LEFT JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+        WHERE i.state = 'published' AND i.source_type = ANY($1) AND i.timeline_at >= $2 AND i.timeline_at < $3
+          AND i.score_total >= $4 AND NOT i.selected AND NOT ('retracted' = ANY(i.flags))
+          AND i.verification IN ('passed', 'repaired') AND length(btrim(coalesce(i.summary_zh, ''))) > 0
+        ORDER BY i.score_total DESC, i.id LIMIT $5`,
+      [FRONTIER_PREPRINT_LANE_SOURCE_TYPES, start, end, this.preprintLaneMinScore, room + 5]);
+      const chosen = candidates.rows
+        .filter((/** @type {any} */ row) => !frontierEvidenceFromPublicationTypes(row.publication_types, { modelType: row.evidence_type }).demote)
+        .slice(0, room);
+      for (const row of chosen) {
+        await client.query(`UPDATE evimed_frontier.items SET selected = true, selected_rule = 'preprint-lane', selected_at = $2,
+          updated_at = clock_timestamp() WHERE id = $1`, [row.id, now]);
+        await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'selected')", [row.id]);
+      }
+      if (chosen.length) await bumpFrontierVersion(client);
+      return chosen.length;
     });
   }
 

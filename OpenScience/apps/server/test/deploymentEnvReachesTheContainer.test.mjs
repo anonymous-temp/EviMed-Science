@@ -224,6 +224,10 @@ const operatorLevers = {
   OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY: ["open-science-web"],
   OPEN_SCIENCE_FRONTIER_OFFPEAK: ["open-science-web"],
   OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD: ["open-science-web"],
+  // The preprint lane (2026-10-10, F12b): how many preprints and company news a day are selected without reaching the line, and the
+  // total they must reach. A limit that never arrived would leave the default in force while the operator believes theirs applies.
+  OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE: ["open-science-web"],
   // The platform's evidence programme and its public pages (evidence-flywheel B7, 2026-10-05): the programme's switch, its
   // day's model money and its slot, and the two public-page switches. A lever that does not arrive leaves the programme off, or
   // on and spending, or the public pages indexable, with the operator believing otherwise.

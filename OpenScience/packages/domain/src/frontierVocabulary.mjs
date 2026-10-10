@@ -344,7 +344,16 @@ export const FRONTIER_ITEM_FLAG_LABELS_ZH = /** @type {Readonly<Record<FrontierI
 export const FRONTIER_MODEL_FLAGS = /** @type {readonly FrontierItemFlag[]} */ (Object.freeze(['press-release']))
 
 /** Why an item is selected (`items.selected_rule`). */
-export const FRONTIER_SELECTED_RULES = Object.freeze(['threshold', 'lane-floor', 'safety-bypass', 'operator-pin'])
+export const FRONTIER_SELECTED_RULES = Object.freeze(['threshold', 'lane-floor', 'preprint-lane', 'safety-bypass', 'operator-pin'])
+
+/**
+ * The source classes whose best possible total sits under the selection line whatever they publish (review B, D-08): a company
+ * newsroom's evidence type is fixed to a press release (coefficient 0.5) and a preprint server's authority term takes a preprint's
+ * 0.6 off, so at the registry's authority of 2 they top out at 76 and 77 against a line of 82. They reach 精选 only through the
+ * preprint lane (`items.selected_rule = 'preprint-lane'`, a few a day, the owner's ruling of 2026-10-10). The server's
+ * `frontierPipeline.test.mjs` computes both ceilings: the day the arithmetic stops capping a class, the test says it needs no lane.
+ */
+export const FRONTIER_PREPRINT_LANE_SOURCE_TYPES = Object.freeze(['preprint', 'company'])
 
 /** What the number and format check concluded (`items.verification`):
  *  `pending` — not edited yet (published title-only, edit deferred);

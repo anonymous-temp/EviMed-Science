@@ -22,13 +22,15 @@ test("the defaults are the build spec's: off, open to all once on, and no plugin
     frontierPollMs: config.frontierPollMs, frontierLeaseMs: config.frontierLeaseMs, frontierModel: config.frontierModel,
     frontierDailyTime: config.frontierDailyTime, frontierTimeZone: config.frontierTimeZone, frontierDailyBudgetCny: config.frontierDailyBudgetCny,
     frontierProcessConcurrency: config.frontierProcessConcurrency, frontierOffpeak: config.frontierOffpeak,
-    frontierSelectThreshold: config.frontierSelectThreshold, knowledgePluginUrl: config.knowledgePluginUrl,
+    frontierSelectThreshold: config.frontierSelectThreshold, frontierPreprintLanePerDay: config.frontierPreprintLanePerDay,
+    frontierPreprintLaneMinScore: config.frontierPreprintLaneMinScore, knowledgePluginUrl: config.knowledgePluginUrl,
     knowledgePluginTokenFile: config.knowledgePluginTokenFile, knowledgePluginPollMs: config.knowledgePluginPollMs,
     knowledgePluginTimeoutMs: config.knowledgePluginTimeoutMs, knowledgePluginMinContract: config.knowledgePluginMinContract,
   }, {
     frontierEnabled: false, frontierAudience: "all", frontierPreviewUsers: [], frontierPollMs: 5_000, frontierLeaseMs: 600_000,
     frontierModel: "deepseek-flash", frontierDailyTime: "07:30", frontierTimeZone: "Asia/Shanghai", frontierDailyBudgetCny: 10,
-    frontierProcessConcurrency: 2, frontierOffpeak: true, frontierSelectThreshold: 82, knowledgePluginUrl: "",
+    frontierProcessConcurrency: 2, frontierOffpeak: true, frontierSelectThreshold: 82, frontierPreprintLanePerDay: 2, frontierPreprintLaneMinScore: 60,
+    knowledgePluginUrl: "",
     knowledgePluginTokenFile: "/run/secrets/knowledge-plugin-token", knowledgePluginPollMs: 60_000, knowledgePluginTimeoutMs: 8_000,
     knowledgePluginMinContract: "1.0",
   });
@@ -45,12 +47,31 @@ test("the selection line has one default: the config's, the pipeline's fallback 
   assert.equal(Number(lines[0][1]), FRONTIER_SELECT_THRESHOLD_DEFAULT);
 });
 
+test("the preprint lane has one default for each number: the config's, the pipeline's fallback and the example .env agree", async () => {
+  const { FRONTIER_LANE_FLOOR_SCORE, FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT, FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT, frontierPreprintLaneMinScore,
+    frontierPreprintLanePerDay } = await import("../src/frontierPipeline.mjs");
+  const { readFile } = await import("node:fs/promises");
+  assert.equal(configUnder({}).frontierPreprintLanePerDay, FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT);
+  assert.equal(configUnder({}).frontierPreprintLaneMinScore, FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT);
+  assert.equal(frontierPreprintLanePerDay({}), FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT);
+  assert.equal(frontierPreprintLaneMinScore({}), FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT);
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  for (const [name, value] of [["OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY", FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT], ["OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE", FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT]]) {
+    assert.equal([...example.matchAll(new RegExp(`^${name}=(\\d+)$`, "gm"))].map((match) => Number(match[1])).join(), String(value), `${name}: the example names the default once`);
+    assert.match(compose, new RegExp(`^\\s+${name}:\\s*$`, "m"), `${name} reaches the web container value-less`);
+  }
+  // A selected card never reads as low: the floor is the lower edge of the medium band, the lane floor's own line.
+  assert.equal(FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT, FRONTIER_LANE_FLOOR_SCORE);
+});
+
 test("every lever is read from the environment, and an empty value reads as unset", () => {
   const config = configUnder({
     OPEN_SCIENCE_FRONTIER_ENABLED: "true", OPEN_SCIENCE_FRONTIER_AUDIENCE: "operators", OPEN_SCIENCE_FRONTIER_PREVIEW_USERS: "acceptance, qa",
     OPEN_SCIENCE_FRONTIER_POLL_MS: "2000", OPEN_SCIENCE_FRONTIER_LEASE_MS: "", OPEN_SCIENCE_FRONTIER_MODEL: "deepseek-v4-flash",
     OPEN_SCIENCE_FRONTIER_DAILY_TIME: "08:05", OPEN_SCIENCE_FRONTIER_TIMEZONE: "UTC", OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY: "0",
     OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY: "4", OPEN_SCIENCE_FRONTIER_OFFPEAK: "false", OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD: "65",
+    OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY: "3", OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE: "",
     OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL: "http://evimed-knowledge-plugin:8080/", OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE: "/tmp/token",
     OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS: "30000", OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TIMEOUT_MS: "5000", OPEN_SCIENCE_KNOWLEDGE_PLUGIN_MIN_CONTRACT: "1.1",
   });
@@ -62,6 +83,9 @@ test("every lever is read from the environment, and an empty value reads as unse
   assert.equal(config.frontierModel, "deepseek-v4-flash");
   assert.equal(config.frontierDailyBudgetCny, 0);
   assert.equal(config.frontierOffpeak, false);
+  assert.equal(config.frontierPreprintLanePerDay, 3);
+  assert.equal(config.frontierPreprintLaneMinScore, 60, "an empty value is the default, not 0");
+  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY: "0" }).frontierPreprintLanePerDay, 0, "0 is no lane");
   assert.equal(config.knowledgePluginUrl, "http://evimed-knowledge-plugin:8080", "the trailing slash is not part of the origin");
   assert.equal(config.knowledgePluginMinContract, "1.1");
 });
@@ -79,6 +103,11 @@ test("a value outside its range stops the start by the variable's name", () => {
     ["OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY", "lots"],
     ["OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY", "9"],
     ["OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD", "101"],
+    ["OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY", "11"],
+    ["OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY", "-1"],
+    ["OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY", "1.5"],
+    ["OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE", "101"],
+    ["OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE", "high"],
     ["OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL", "ftp://plugin"],
     ["OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL", "http://someone:test-only@plugin:8080"],
     ["OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE", "relative/token"],

@@ -72,6 +72,23 @@ test("an issue: the lead by the hot list, safety alerts apart, a section only fo
   assert.equal(many.sections[0].rows.length, FRONTIER_DAILY_SECTION_MAX);
 });
 
+test("F12b: a section's cap of eight never cuts an item the preprint lane selected, so the lane's places reach the daily on a full day", () => {
+  // Twenty selected items at 80 and above fill the evidence section; two preprint-lane items at 61 and 62 would sort below all of them.
+  const full = Array.from({ length: 20 }, (_, index) => row(index + 10, { score_total: 80 + index }));
+  const lane = [row(40, { score_total: 62, selected_rule: "preprint-lane" }), row(41, { score_total: 61, selected_rule: "preprint-lane" })];
+  const issue = frontierDailyIssue({ rows: [...full, ...lane] });
+  const ids = issue.sections[0].rows.map((entry) => entry.id);
+  assert.equal(issue.lead.id, 29, "the highest score leads");
+  assert.deepEqual(ids.slice(0, FRONTIER_DAILY_SECTION_MAX), [28, 27, 26, 25, 24, 23, 22, 21], "the eight best, as ever");
+  assert.deepEqual(ids.slice(FRONTIER_DAILY_SECTION_MAX), [40, 41], "then the lane's two, best first");
+  // The cap is the lane's own to exceed and nothing else's: a threshold item below the eight is still cut.
+  const cut = frontierDailyIssue({ rows: [...full, row(42, { score_total: 61, selected_rule: "threshold" })] });
+  assert.equal(cut.sections[0].rows.length, FRONTIER_DAILY_SECTION_MAX);
+  // A lane pick that fits is not listed twice.
+  const fits = frontierDailyIssue({ rows: [row(1, { score_total: 90 }), row(2, { score_total: 70, selected_rule: "preprint-lane" }), row(3, { score_total: 69 })] });
+  assert.deepEqual(fits.sections[0].rows.map((entry) => entry.id), [2, 3]);
+});
+
 test("the Markdown: the window in Beijing time, each item with its source and a link, text that cannot break the format", () => {
   const window = frontierDailyWindow("2026-09-22", { timeZone: ZONE, dailyTime: "07:30" });
   const lead = row(1, { title_zh: "司美格鲁肽 [SELECT] 试验", source_name: "NEJM" });
