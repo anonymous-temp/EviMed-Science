@@ -134,7 +134,8 @@
           "settled": 127,
           "correct": 127,
           "lower95": 0.9766875895717869,
-          "resultSha256": "9a9c44523254c93d7952d1dcaedb93c7fecb65f97cd9f9a68b21afe20abae6bd"
+          "resultSha256": "9a9c44523254c93d7952d1dcaedb93c7fecb65f97cd9f9a68b21afe20abae6bd",
+          "baselineAgreement": 0.8
         },
         "J5": {
           "threshold": 0.8,

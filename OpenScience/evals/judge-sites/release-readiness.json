@@ -96,7 +96,9 @@
       "correct": 127,
       "lower95": 0.9766875895717869,
       "resultSha256": "9a9c44523254c93d7952d1dcaedb93c7fecb65f97cd9f9a68b21afe20abae6bd",
-      "observations": "140 labelled lines, including 35 preserved lines from real statistical and bibliometric reports; 127 settled / 127 correct. Sentences share report groups, so line-level confidence bounds are not independent-report generalization."
+      "observations": "140 labelled lines, including 35 preserved lines from real statistical and bibliometric reports; 127 settled / 127 correct. Sentences share report groups, so line-level confidence bounds are not independent-report generalization.",
+      "baselineAgreement": 0.8,
+      "baselineObservations": "Drift baseline recorded 2026-10-10 from production: 2,855 comparisons against the frozen regex, 2026-10-07 09:54Z to 2026-10-09 01:18Z. Daily agreement 0.501 on 10-07 (a partial day that ran before the site settled), then 0.811 and 0.804; the settled level is about 0.80. J4 was enabled and its prompt fingerprint matched this pin."
     },
     "J5": {
       "implementation": "wired",
