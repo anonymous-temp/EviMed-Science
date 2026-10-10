@@ -442,6 +442,58 @@ test("a step that cannot start defers the pass instead of finishing it without t
   }
 });
 
+test("approvals do not wait for the model steps: a pass that cannot finish has already approved what the record allows (review L-14)", async () => {
+  // The only caller of `approve` was the loop at the end of the pass, after every model step. A deferral (a busy runtime, a spent budget), a step that
+  // timed out or any step that threw ended the pass before it, and each amended method, which goes back to `candidate`, stayed out of the library.
+  // A deferral ends the pass (the worker asks again later); any other step failure is that group's own and the pass goes on to its end.
+  const stops = [["runtime_busy", 503, true], ["usage_budget_exceeded", 402, true], ["learning_step_timeout", 504, false]];
+  for (const [code, status, ends] of stops) {
+    const learning = fakeLearning([doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor"), doc("m3", "resolve-claim-quote")]);
+    /** @type {string[]} */
+    const events = [];
+    /** @type {any} */ (learning).approve = async (_userId, id) => {
+      events.push(`approve:${id}`);
+      if (id === "m2") throw Object.assign(new Error("not promotable"), { code: "method_not_promotable" });
+      return { id };
+    };
+    const consolidation = new MethodConsolidation({
+      learning,
+      dispatch: async (request) => {
+        events.push(`dispatch:${request.input.action}`);
+        throw Object.assign(new Error("stopped"), { code, status });
+      },
+      readResult: async () => ({ status: "succeeded", output: {} }),
+      wait: async () => {},
+    });
+    const sleeping = consolidation.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
+    if (ends) await assert.rejects(sleeping, { code }); else await sleeping;
+    assert.deepEqual(events.filter((event) => event.startsWith("approve:")).sort().filter((event, index, all) => event !== all[index - 1]), ["approve:m1", "approve:m2", "approve:m3"], `${code}: every candidate was offered for approval`);
+    assert.ok(events.findIndex((event) => event.startsWith("approve:")) < events.findIndex((event) => event.startsWith("dispatch:")), `${code}: before the first model step`);
+  }
+});
+
+test("a candidate approved before the model steps is reported once, and the pass still approves what its steps made approvable", async () => {
+  const learning = fakeLearning([doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor")]);
+  /** @type {string[]} */
+  const approvals = [];
+  /** @type {any} */ (learning).approve = async (_userId, id) => {
+    approvals.push(id);
+    const item = learning.items.find((entry) => entry.id === id);
+    // m2 is held by a conflict until the pass has run (as one recorded by its DECIDE step would be lifted by a retirement in it).
+    if (id === "m2" && !item.payload.released) throw Object.assign(new Error("not promotable"), { code: "method_not_promotable" });
+    item.payload.status = "approved";
+    return { id };
+  };
+  const { instance } = consolidation({
+    learning,
+    readResult: async () => ({ status: "succeeded", output: { relations: [], assignments: [] } }),
+    judgeService: { judge: async () => { learning.items[1].payload.released = true; return { outcome: "settled", value: { pairs: [] } }; } },
+  });
+  const result = await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
+  assert.deepEqual(approvals, ["m1", "m2", "m2"], "m1 once, at the start; m2 refused at the start and approved at the end");
+  assert.deepEqual(result.promoted, ["m1", "m2"]);
+});
+
 test("a step is keyed on what it reads: an unchanged group reads its answer again, a changed method is a new question", async () => {
   const ids = async (items) => {
     const { instance, dispatched } = consolidation({ learning: fakeLearning(items) });
