@@ -189,11 +189,16 @@ describe("no title over an empty box", () => {
 
   it("holds on the matching tab before anything was judged: one sentence and one button, and no toolbar over it", async () => {
     const raw = fixture("ev201/matching.json");
-    Object.assign(raw, { candidates: [], protocols: [], protocolVersionId: null, comparisons: [], timeline: [], forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null });
+    // The study keeps its protocol version (the fixture's own): a protocol with nothing evaluated yet is the case this guards, and
+    // clearing `protocols` in the fixture, as 2026-10-10 did to keep the test green, removed the case instead of the toolbar.
+    Object.assign(raw, { candidates: [], comparisons: [], forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null });
+    expect(raw.protocols).toHaveLength(1);
     installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/matching`]: raw });
     const view = await drawTab(<MatchingTab studyId={STUDY_ID} study={study((rawStudy) => { rawStudy.steps.matching = { status: "none", requested: false }; })} />);
     expect(view.container.querySelector("[data-vcr-step-empty='matching']")).not.toBeNull();
     expect(view.queryByRole("radiogroup", { name: "匹配与招募的视图" })).toBeNull();
+    expect(view.queryByLabelText("查看方案")).toBeNull();
+    expect(view.getAllByRole("button")).toHaveLength(1);
     expect(emptyTitles(view.container)).toEqual([]);
   });
 

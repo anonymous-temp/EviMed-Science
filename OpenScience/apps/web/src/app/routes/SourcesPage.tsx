@@ -397,6 +397,9 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const kindsPresent = kindOptions.length - 1;
   const duplicateOpen = duplicatesFor ? groups.filter((group) => !group.decision && group.sourceIds.includes(duplicatesFor)) : [];
   const filtered = kind !== null || search !== "";
+  // With nothing in the project's library the empty state offers 「添加」, so the header does not: one solid button on the page. It stays
+  // wherever the empty state offers none — a search without a hit, the shared library — and while the list is read or failed.
+  const firstRun = items !== null && items.length === 0 && !error && !filtered && !shared;
 
   const rowActions = (source: SourceRecord) => ({
     busy,
@@ -434,7 +437,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
         meta={<KnowledgeScopeMenu scope={scope} onChange={setScope} />}
         actions={<>
           <SearchInput label="搜索资料和内容" value={query} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-60" />
-          {addMenu}
+          {!firstRun && addMenu}
         </>}
       >
         {(kindsPresent >= 2 || kind !== null) && (

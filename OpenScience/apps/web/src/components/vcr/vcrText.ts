@@ -192,6 +192,22 @@ export function mcseText(mcse: number | null | undefined): string {
   return `±${mcse.toLocaleString("zh-CN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
 
+/**
+ * A value recorded on a patient's chart, said the way a reader would: 是 / 否 for a yes or no, a list joined with 、, a record as
+ * 「名称：值」 pairs joined with 「；」 — never `[object Object]` — and 「未知」 for a fact recorded without a value. A value nested
+ * more than two levels deep is handed over as compact JSON: a reader can still read it and nothing loops.
+ */
+export function factValueText(value: unknown, depth = 0): string {
+  if (value === null || value === undefined || value === "") return "未知";
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "未知";
+  if (typeof value === "string") return value;
+  if (typeof value !== "object") return String(value);
+  if (depth >= 2) return JSON.stringify(value);
+  if (Array.isArray(value)) return value.map((item) => factValueText(item, depth + 1)).join("、");
+  return Object.entries(value as Record<string, unknown>).map(([name, item]) => `${name}：${factValueText(item, depth + 1)}`).join("；");
+}
+
 /** The number itself, or the word that stands in its place. */
 export function valueText(value: VcrValue | null | undefined): string {
   if (!value) return NO_VALUE;

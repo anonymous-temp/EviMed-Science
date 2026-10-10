@@ -911,8 +911,11 @@ export interface VcrCriterionJudgement {
   state: VcrCriterionState;
   /** 不适用 is its own field, never folded into 未知. */
   applicable?: boolean;
-  /** The patient's own sentence, and where it is from. */
-  evidence?: { quote: string; source?: string | null; at?: string | null } | null;
+  /**
+   * The patient's own sentence, and where it is from. `locator` is where the sentence stands: a span of a document
+   * (`documentId`, `start`, `end` — the same span a fact of the clinical timeline cites) or a cell of the data table (`snapshotId`, `field`).
+   */
+  evidence?: { quote: string; source?: string | null; at?: string | null; locator?: { documentId?: string; start?: number | null; end?: number | null; snapshotId?: string; field?: string } | null } | null;
   /** What to ask for: 「申请近 4 周头颅 MRI」. */
   request?: string | null;
   requestNote?: string | null;

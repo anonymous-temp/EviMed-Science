@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -377,6 +377,107 @@ describe("匹配与招募 — before anything has been judged", () => {
   });
 });
 
+describe("匹配与招募 — a study with protocol versions and nothing evaluated yet", () => {
+  // Review V-M4/V-M5: with a protocol present the empty tab drew export, four views, two directions, a protocol select and a folded
+  // panel above the empty state, and the action that starts an evaluation was inside the fold.
+  const idle = (raw: any) => { raw.steps.matching = { status: "none", requested: false }; };
+  const unevaluated = (change?: (page: any) => void) => {
+    const page = fixture("ev201/matching.json");
+    Object.assign(page, { candidates: [], selected: null, funnel: [], gaps: [], comparisons: [], timeline: [], forecast: null, pendingReview: null, ledger: [],
+      sites: [], followup: [], headline: null, partner: null, counts: null, candidateRoster: ["P-0300", "P-0301"] });
+    change?.(page);
+    return page;
+  };
+  const JOBS = `POST /vcr/studies/${STUDY_ID}/jobs`;
+
+  it("is the step's sentence and one 开始评估 — no toolbar, no controls over it — and the button queues the protocol in view for the registered people", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: unevaluated(),
+      [JOBS]: { jobs: [{ jobId: "job_1", state: "queued" }], unavailable: [] },
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study(idle)} />);
+    const start = await screen.findByRole("button", { name: "开始评估" });
+    expect(screen.getByText("还没有匹配评估：逐条判定每个人是否符合入排条件，并给出补证建议。")).toBeInTheDocument();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+    expect(screen.queryByLabelText("查看方案")).toBeNull();
+    expect(screen.queryByRole("button", { name: "让 AI 做" })).toBeNull();
+    await userEvent.click(start);
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/jobs`, "POST",
+      { kind: "match_criteria", selection: { protocolVersionIds: ["prt_1"], direction: "trial_to_patient" } }));
+    expect(await screen.findByText("已提交 1 项评估。")).toBeInTheDocument();
+    // The job runs on its own time: the way to read the answer is next to the sentence that says it was asked.
+    const reads = matchingReads(server).length;
+    await userEvent.click(screen.getByRole("button", { name: "刷新结果" }));
+    await waitFor(() => expect(matchingReads(server).length).toBeGreaterThan(reads));
+  });
+
+  it("says nothing was submitted, and why, when the evaluation could not be queued", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: unevaluated(),
+      [JOBS]: { jobs: [], unavailable: [{ code: "vcr_criteria_missing" }] },
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study(idle)} />);
+    await userEvent.click(await screen.findByRole("button", { name: "开始评估" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("没有提交评估。方案还没有结构化的入排条件，无法匹配。");
+  });
+
+  it("keeps the step's own ask when nobody is registered to evaluate — there is nothing for 开始评估 to work on", async () => {
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: unevaluated((page) => { page.candidateRoster = []; }) });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study(idle)} />);
+    expect(await screen.findByRole("button", { name: "让 AI 做" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "开始评估" })).toBeNull();
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+  });
+
+  it("offers no 开始评估 to a reader who may not run it", async () => {
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: unevaluated() });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study((raw) => { idle(raw); raw.tier = "T1"; raw.abilities = ["read", "write"]; })} />);
+    expect(await screen.findByText("还没有匹配评估：逐条判定每个人是否符合入排条件，并给出补证建议。")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("shows the controls, with 开始评估 in plain sight, once the reader has chosen a direction and the answer is empty", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => (query.get("direction") === "patient_to_trial"
+        ? unevaluated()
+        : withProtocols()),
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("radio", { name: "给患者找试验" }));
+    expect(await screen.findByLabelText("查看方案")).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "匹配方向" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始评估" }).closest("details")).toBeNull();
+  });
+});
+
+describe("匹配与招募 — the switch of direction is always the way back", () => {
+  // Review V-M3: a study with candidates and no protocol version drew the tab with its toolbar; choosing 给患者找试验 (which comes back
+  // empty) replaced the whole tab with the one-line step ask, toolbar and all, and the only way back was to reload the page.
+  it("keeps the direction and view switches where the reader chose a direction that came back empty, and goes back from there", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => {
+        if (query.get("direction") === "patient_to_trial") {
+          return { view: "matching", available: true, direction: "patient_to_trial", funnel: [], candidates: [], selected: null, gaps: [], counts: null,
+            forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null };
+        }
+        const page = fixture("ev201/matching.json");
+        Object.assign(page, { protocols: [], protocolVersionId: null, comparisons: [], timeline: [], candidateRoster: [] });
+        return page;
+      },
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("radio", { name: "给患者找试验" }));
+    await screen.findByRole("button", { name: "让 AI 做" });
+    expect(screen.getByRole("radiogroup", { name: "匹配方向" })).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "匹配与招募的视图" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "给试验找患者" }));
+    expect(await screen.findByRole("heading", { name: "P-0201" })).toBeInTheDocument();
+  });
+});
+
 /** The page contract's two ids: the assessment the panel is about, and each rule's own id. */
 function addressed(payload: any) {
   payload.selected.assessmentId = "asm_192";
@@ -528,6 +629,161 @@ describe("匹配与招募 — 复核这份评估, a reviewer's countersignature"
   });
 });
 
+describe("匹配与招募 — what the evidence of a rule has been through", () => {
+  // Review V-M8: negation, a correction and a conflict were told only in the folded timeline at the foot of the tab, so a 满足 or 不满足
+  // on a rule's own row said nothing of its evidence having been denied, corrected or contradicted, nor whose records the fold held.
+  const AT = (start: number) => ({ documentId: "doc_192", start, end: start + 8 });
+  const entry = (extra: Record<string, unknown>) => ({ id: "f_x", variable: "v", value: null, unit: null, at: null, assertion: "affirmed", experiencer: "patient",
+    medicationState: null, correctionOf: null, quote: null, superseded: false, conflictFactIds: [], correctionReason: null, locator: null, ...extra });
+  const cite = (code: string, quote: string, locator: unknown) => (payload: any) => {
+    payload.selected.criteria.find((row: any) => row.code === code).evidence = { quote, locator, source: "病历原文", at: "9 月 1 日" };
+  };
+  async function open(change: (payload: any) => void, reader: VcrStudy = study()) {
+    const payload = addressed(fixture("ev201/matching-p0192.json"));
+    change(payload);
+    server = installVcrServer(network.productRequest, { [P0192]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={reader} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+  }
+  const timeline = (payload: any) => {
+    cite("I1", "否认脑转移", AT(10))(payload);
+    cite("I2", "ECOG 1 分", AT(40))(payload);
+    cite("I3", "一线含铂双药", AT(70))(payload);
+    payload.timeline = [
+      entry({ id: "f_1", variable: "brain_mets", quote: "否认脑转移", assertion: "negated", locator: AT(10) }),
+      entry({ id: "f_2", variable: "ecog", quote: "ECOG 1 分", superseded: true, conflictFactIds: ["f_4"], locator: AT(40) }),
+      entry({ id: "f_3", variable: "platinum", quote: "一线含铂双药", correctionOf: "f_0", correctionReason: "检验科更正", locator: AT(70) }),
+      entry({ id: "f_4", variable: "ecog", quote: "ECOG 2 分", conflictFactIds: ["f_2"], locator: AT(120) }),
+    ];
+  };
+
+  it("tags a rule whose evidence was denied, one that has since been corrected or contradicted, and one that is itself a correction — on the rule's own row", async () => {
+    await open(timeline);
+    expect(within(criterionRow("I1")).getByText("已否认")).toBeInTheDocument();
+    expect(within(criterionRow("I2")).getByText("已有更正")).toBeInTheDocument();
+    expect(within(criterionRow("I2")).getByText("记录有冲突")).toBeInTheDocument();
+    expect(within(criterionRow("I3")).getByText("更正记录")).toBeInTheDocument();
+    // The mark itself is unchanged: the tag says what the evidence went through, the state says what the platform judged.
+    expect(criterionRow("I1")).toHaveAttribute("data-vcr-criterion-state", "satisfied");
+  });
+
+  it("tags nothing on a rule that has no evidence, or whose evidence is a cell of the data table", async () => {
+    await open(timeline);
+    // I1..I3 carry caveats; the rule with no evidence and the snapshot cells do not.
+    for (const code of ["E1", "E2", "E3"]) expect(criterionRow(code).querySelector("[data-vcr-caveats]")).toBeNull();
+  });
+
+  it("tags nothing on a rule whose evidence no recorded fact stands behind", async () => {
+    await open((payload) => { timeline(payload); payload.timeline = payload.timeline.filter((fact: any) => fact.id === "f_4"); });
+    expect(document.querySelectorAll("[data-vcr-caveats]")).toHaveLength(0);
+  });
+
+  it("tags nothing when the page carries no timeline — a reader who may not read patient-level records sees no facts to tag", async () => {
+    await open((payload) => { timeline(payload); payload.timeline = []; });
+    expect(document.querySelectorAll("[data-vcr-caveats]")).toHaveLength(0);
+  });
+
+  it("names whose records the fold holds", async () => {
+    await open(timeline);
+    expect(screen.getByText("P-0192 的临床记录与更正")).toBeInTheDocument();
+  });
+});
+
+describe("匹配与招募 — whose records the timeline holds", () => {
+  // The timeline under the panel is the facts of the person the page was asked for (`?candidate=`). An unevaluated person has no
+  // assessment, so the server answers with their facts under the first candidate's panel: the two are different people, and the
+  // fold must say whose facts it holds, and the rows of the panel must not be tagged from another person's facts.
+  const AT = { documentId: "doc_shared", start: 10, end: 18 };
+  const fact = (id: string, extra: Record<string, unknown> = {}) => ({ id, variable: "brain_mets", value: null, unit: null, at: null, assertion: "affirmed",
+    experiencer: "patient", medicationState: null, correctionOf: null, quote: "否认脑转移", superseded: false, conflictFactIds: [], correctionReason: null,
+    locator: AT, ...extra });
+  /** The first candidate's page; the panel's first rule cites a span of a document, and `facts` are the page's timeline. */
+  const page = (facts: unknown[]) => {
+    const raw = fixture("ev201/matching.json");
+    raw.candidateRoster = ["P-0300"];
+    raw.selected.criteria[0].evidence = { quote: "否认脑转移", locator: AT, source: "病历原文", at: "9 月 1 日" };
+    raw.timeline = facts;
+    return raw;
+  };
+  const NEGATED = fact("f_neg", { assertion: "negated" });
+
+  it("names the person the page was asked for, not the person of the panel above it, when they are two", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => page(query.get("candidate") === "P-0300"
+        ? [fact("f_300", { quote: "P-0300 的既往史", locator: { documentId: "doc_300", start: 0, end: 8 } })]
+        : [fact("f_201", { quote: "P-0201 的既往史", locator: { documentId: "doc_201", start: 0, end: 8 } })]),
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    // Nobody was asked for: the page's own person.
+    expect(screen.getByText("P-0201 的临床记录与更正")).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("患者"), "P-0300");
+    expect(await screen.findByText("P-0300 的临床记录与更正")).toBeInTheDocument();
+    expect(screen.queryByText("P-0201 的临床记录与更正")).toBeNull();
+    // The server has no assessment of P-0300, so the panel is still the first candidate's.
+    expect(screen.getByRole("heading", { name: "P-0201" })).toBeInTheDocument();
+  });
+
+  it("keeps naming the person whose facts are on screen while the next person's page is read", async () => {
+    let arrive: (value: unknown) => void = () => undefined;
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => (query.get("candidate") === "P-0192"
+        ? new Promise((resolve) => { arrive = resolve; })
+        : page([fact("f_201", { quote: "P-0201 的既往史", locator: { documentId: "doc_201", start: 0, end: 8 } })])),
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await waitFor(() => expect(matchingReads(server).some((query) => query.get("candidate") === "P-0192")).toBe(true));
+    // P-0192's page has not come: the facts are still P-0201's, and so is the name over them.
+    expect(screen.getByText("P-0201 的临床记录与更正")).toBeInTheDocument();
+    expect(screen.queryByText("P-0192 的临床记录与更正")).toBeNull();
+    // It comes — the server's own page for P-0192, with that person's facts — and the name follows the facts.
+    const arrived = fixture("ev201/matching-p0192.json");
+    arrived.timeline = [fact("f_192", { quote: "P-0192 的既往史", locator: { documentId: "doc_192", start: 0, end: 8 } })];
+    await act(async () => { arrive(arrived); });
+    expect(await screen.findByText("P-0192 的临床记录与更正")).toBeInTheDocument();
+    expect(screen.queryByText("P-0201 的临床记录与更正")).toBeNull();
+  });
+
+  it("tags the rules of the panel from the panel's person's facts, and from nobody else's", async () => {
+    server = installVcrServer(network.productRequest, {
+      // Whoever the facts are, one of them is a denial of the span the first rule of the panel cites: a shared document.
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => {
+        const raw = page([NEGATED]);
+        // The page asked for P-0300 is told apart by its list: the second candidate is not in it.
+        if (query.get("candidate") === "P-0300") raw.candidates = raw.candidates.slice(0, 1);
+        return raw;
+      },
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    expect(within(criterionRow("I1")).getByText("已否认")).toBeInTheDocument();
+    // Asked for another person, the panel is still P-0201's but the facts are not: the rule is not tagged by them.
+    await userEvent.selectOptions(screen.getByLabelText("患者"), "P-0300");
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^P-0207/ })).toBeNull());
+    expect(screen.getByRole("heading", { name: "P-0201" })).toBeInTheDocument();
+    expect(document.querySelectorAll("[data-vcr-caveats]")).toHaveLength(0);
+  });
+});
+
+describe("匹配与招募 — one word for the person", () => {
+  // Review V-M9: the direction switch said 患者 and the select beside it 受试者. The product's own word in the recruiting tab
+  // is 患者 (给试验找患者, 患者证据, 匹配患者, 联系真实患者).
+  it("says 患者 in the controls and in the referral ledger, and never 受试者", async () => {
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    expect(screen.getByLabelText("患者")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "全部已登记患者" })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/受试者/);
+    await userEvent.click(screen.getByRole("radio", { name: "转诊" }));
+    expect(await screen.findByRole("columnheader", { name: "患者" })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/受试者/);
+  });
+});
+
 describe("匹配与招募 — the other three views", () => {
   it("reads the referral ledger and the forecast from the server's referral view", async () => {
     drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
@@ -641,6 +897,78 @@ describe("匹配与招募 — the other three views", () => {
 
 const dataPath = (card?: string) => `/app/virtual-research/${STUDY_ID}/data${card ? `?card=${card}` : ""}`;
 const detail = () => document.querySelector("[data-vcr-assumption-detail]") as HTMLElement;
+
+/** The server's matching page with two protocol versions to look at. */
+function withProtocols(change?: (payload: any) => void) {
+  const payload = fixture("ev201/matching.json");
+  payload.protocols = [
+    { id: "prt_1", version: 1, title: "EV-201 方案 v1", sourceRef: null },
+    { id: "prt_2", version: 2, title: "EV-201 方案 v2", sourceRef: null },
+  ];
+  payload.protocolVersionId = "prt_1";
+  change?.(payload);
+  return payload;
+}
+
+describe("匹配与招募 — the controls stay while another page is read", () => {
+  // Review V-M2: the load key holds the protocol and the direction, and while a new key loaded the tab drew its toolbar and a
+  // skeleton alone — the select just used, the comparison panel and a half-made choice were unmounted, and a keyboard reader's
+  // focus fell to <body>.
+  it("keeps the select the reader changed — the same element, still focused — with the open comparison panel and its choice, while the other protocol's page loads", async () => {
+    let arrive: (page: unknown) => void = () => undefined;
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => (query.get("protocolVersionId") === "prt_2"
+        ? new Promise((resolve) => { arrive = resolve; })
+        : withProtocols()),
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByText("比较多个方案"));
+    const panel = screen.getByText("比较多个方案").closest("details")!;
+    expect(panel).toHaveAttribute("open");
+    const group = () => screen.getByRole("group", { name: "选择方案（最多 10 项）" });
+    await userEvent.click(within(group()).getByRole("checkbox", { name: "EV-201 方案 v2" }));
+    const select = screen.getByLabelText("查看方案") as HTMLSelectElement;
+    select.focus();
+    fireEvent.change(select, { target: { value: "prt_2" } });
+    await waitFor(() => expect(matchingReads(server).some((query) => query.get("protocolVersionId") === "prt_2")).toBe(true));
+    // The page for prt_2 has not arrived: the tab is loading, and the controls are the ones the reader was using.
+    expect(document.querySelector("[data-vcr-loading='tab']")).not.toBeNull();
+    expect(screen.getByLabelText("查看方案")).toBe(select);
+    expect(select).toHaveFocus();
+    expect(select.value).toBe("prt_2");
+    expect(panel).toHaveAttribute("open");
+    expect(within(group()).getByRole("checkbox", { name: "EV-201 方案 v2" })).toBeChecked();
+    expect(within(group()).getByRole("checkbox", { name: "EV-201 方案 v1" })).not.toBeChecked();
+    await act(async () => { arrive(withProtocols((payload) => { payload.protocolVersionId = "prt_2"; })); });
+    await waitFor(() => expect(document.querySelector("[data-vcr-loading='tab']")).toBeNull());
+    expect(screen.getByLabelText("查看方案")).toBe(select);
+    expect(select).toHaveFocus();
+    expect(select.value).toBe("prt_2");
+    expect(panel).toHaveAttribute("open");
+    expect(within(group()).getByRole("checkbox", { name: "EV-201 方案 v2" })).toBeChecked();
+    expect(within(group()).getByRole("checkbox", { name: "EV-201 方案 v1" })).not.toBeChecked();
+  });
+
+  it("keeps the controls when the page for the protocol chosen cannot be read, so another protocol can be chosen", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => {
+        if (query.get("protocolVersionId") === "prt_2") throw new WebApiError("no", { status: 500, code: "vcr_unavailable" });
+        return withProtocols();
+      },
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    const select = screen.getByLabelText("查看方案") as HTMLSelectElement;
+    select.focus();
+    fireEvent.change(select, { target: { value: "prt_2" } });
+    expect(await screen.findByRole("button", { name: "重试" })).toBeInTheDocument();
+    expect(screen.getByLabelText("查看方案")).toBe(select);
+    expect(select.value).toBe("prt_2");
+    fireEvent.change(select, { target: { value: "prt_1" } });
+    expect(await screen.findByRole("heading", { name: "P-0201" })).toBeInTheDocument();
+  });
+});
 
 describe("数据与证据 — which card is open", () => {
   it("opens the card the address names, by key or by id", async () => {

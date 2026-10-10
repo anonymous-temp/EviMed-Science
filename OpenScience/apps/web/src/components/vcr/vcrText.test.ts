@@ -12,6 +12,7 @@ import {
   conclusionLabel,
   countLabel,
   countText,
+  factValueText,
   intervalText,
   isPlaceholder,
   mcseText,
@@ -173,5 +174,30 @@ describe("the Monte-Carlo standard error", () => {
   it("is written with its sign and nothing at all when it was not computed", () => {
     expect(mcseText(0.4)).toBe("±0.40");
     expect(mcseText(null)).toBe("");
+  });
+});
+
+describe("a recorded value, read by a person", () => {
+  it("says a yes or no as 是 or 否, and a value that was recorded without one as 未知", () => {
+    expect(factValueText(true)).toBe("是");
+    expect(factValueText(false)).toBe("否");
+    for (const missing of [null, undefined, "", Number.NaN]) expect(factValueText(missing)).toBe("未知");
+  });
+  it("keeps a real zero and a string as they are", () => {
+    expect(factValueText(0)).toBe("0");
+    expect(factValueText(2.4)).toBe("2.4");
+    expect(factValueText("1+")).toBe("1+");
+  });
+  it("lists a list with 、 and a record as name：value pairs, never [object Object]", () => {
+    expect(factValueText(["青霉素", "磺胺"])).toBe("青霉素、磺胺");
+    expect(factValueText({ systolic: 120, diastolic: 80 })).toBe("systolic：120；diastolic：80");
+    expect(factValueText({ drug: { name: "二甲双胍", dose: 500 }, stopped: false })).toBe("drug：name：二甲双胍；dose：500；stopped：否");
+    expect(factValueText([{ a: 1 }, { a: 2 }])).toBe("a：1、a：2");
+  });
+  it("hands a very deep value over as compact JSON rather than loop or print an object", () => {
+    const deep = { a: { b: { c: { d: 1 } } } };
+    const text = factValueText(deep);
+    expect(text).not.toContain("[object Object]");
+    expect(text).toContain('{"d":1}');
   });
 });

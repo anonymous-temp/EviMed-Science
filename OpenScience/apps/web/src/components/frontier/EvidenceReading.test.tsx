@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EvidenceReading, evidenceUpdatedAt } from "./EvidenceReading";
 import type { EvidenceCard } from "@/lib/evidenceZoneClient";
 import { card as richCard } from "./__fixtures__/evidenceCards";
@@ -10,6 +10,7 @@ const card: EvidenceCard = { id: "one", revision: 1, state: "published", canEdit
 const fold = (container: HTMLElement) => container.querySelector("details") as HTMLDetailsElement;
 
 describe("evidence reading", () => {
+  afterEach(() => vi.useRealTimers());
   it("preserves evidence/source/limitations without inventing author or grade", () => {
     const { container } = render(<EvidenceReading evidence={card} />);
     expect(screen.getByText("样本较少")).toBeInTheDocument();
@@ -107,7 +108,10 @@ describe("evidence reading", () => {
     expect(evidenceUpdatedAt({ createdAt: "2026-10-01T00:00:00Z", revisions: [{ revision: 2, recordedAt: "2026-10-05T00:00:00Z", title: "新", sourceFingerprint: null, reviewStatus: null }] })).toBe("2026-10-05T00:00:00Z");
     expect(evidenceUpdatedAt({ createdAt: "2026-10-01T00:00:00Z" })).toBe("2026-10-01T00:00:00Z");
     expect(evidenceUpdatedAt({})).toBeNull();
+    // Written the way the rest of the app writes a day (review L-7): 「10月1日」 this year, not Intl's 「2026/10/1」.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-10T08:00:00Z"));
     render(<EvidenceReading evidence={{ ...richCard, createdAt: "2026-10-01T12:00:00Z" }} />);
-    expect(screen.getByText(/^更新于 2026\/10\/1/)).toBeInTheDocument();
+    expect(screen.getByText(/^更新于 10月1日/)).toBeInTheDocument();
   });
 });

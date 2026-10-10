@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,6 +52,8 @@ function draw(path = "/app/virtual-research") {
 const EV201 = "EV-201 二线 NSCLC：单臂 II 期还是随机";
 const GLP1 = "GLP-1 周制剂 III 期：样本量与脱落情景";
 const row = (name: string) => screen.getByRole("link", { name }).closest("li") as HTMLElement;
+/** The page's own header (the views under it draw headers of their own). */
+const pageHeader = () => within(screen.getByRole("heading", { level: 1, name: "虚拟临床研究" }).closest("header")!);
 
 let server: ReturnType<typeof installVcrServer>;
 
@@ -186,14 +188,50 @@ describe("the study list", () => {
     expect(screen.getByText("没有匹配的研究")).toBeInTheDocument();
   });
 
-  it("is an empty state with 新建研究 in it when there is no study yet — and no search box", async () => {
+  // Review L-4/L-5: 「还没有研究」 and a button, with no word on what the module is for, and 新建研究 twice as a solid button.
+  it("says what it is for and offers 新建研究 once — in the empty state, with none in the header — when there is no study yet", async () => {
     server = installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], draftProjectIds: [] } });
     draw();
     expect(await screen.findByText("还没有研究")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "新建研究" })).toHaveLength(2);
+    const sentence = screen.getByText("在真实入组前，用已有证据和你的数据模拟人群与试验方案，估算样本量，再匹配合适的患者。");
+    const buttons = screen.getAllByRole("button", { name: "新建研究" });
+    expect(buttons).toHaveLength(1);
+    expect(sentence.parentElement).toContainElement(buttons[0]);
+    expect(pageHeader().queryByRole("button")).toBeNull();
     expect(screen.queryByRole("searchbox")).toBeNull();
     // UI-27: no sentence under the title explaining what to do.
     expect(screen.queryByText(/从上面四个动作/)).toBeNull();
+  });
+
+  it("keeps the header's 新建研究 while the list is read, when it cannot be read, and on the other views", async () => {
+    server = installVcrServer(network.productRequest, { "GET /vcr/studies": () => new Promise(() => undefined) });
+    draw();
+    expect(pageHeader().getByRole("button", { name: "新建研究" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "新建研究" })).toHaveLength(1);
+    cleanup();
+    server = installVcrServer(network.productRequest, { "GET /vcr/studies": () => { throw new WebApiError("down", { status: 503, code: "vcr_unavailable" }); } });
+    draw();
+    await screen.findByRole("button", { name: "重试" });
+    expect(pageHeader().getByRole("button", { name: "新建研究" })).toBeInTheDocument();
+    cleanup();
+    server = installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], draftProjectIds: [] } });
+    draw("/app/virtual-research?tab=models");
+    await screen.findByRole("tab", { name: /方法库/ });
+    await waitFor(() => expect(pageHeader().getByRole("button", { name: "新建研究" })).toBeInTheDocument());
+    expect(screen.getAllByRole("button", { name: "新建研究" })).toHaveLength(1);
+  });
+
+  it("creates the first study from the empty state and lands in its conversation", async () => {
+    server = installVcrServer(network.productRequest, {
+      "GET /vcr/studies": { studies: [], draftProjectIds: [] },
+      "POST /vcr/studies": { id: "std_9", projectId: "prj_new", sessionId: "ses_9", status: "draft" },
+    });
+    draw();
+    // The header's button stands until the empty state has taken its place: wait for the state before pressing.
+    await screen.findByText("还没有研究");
+    await userEvent.click(screen.getByRole("button", { name: "新建研究" }));
+    await waitFor(() => expect(server.calls.some((call) => call.method === "POST" && call.path === "/vcr/studies")).toBe(true));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
   });
 
   it("offers 重试 when the list cannot be read", async () => {

@@ -56,6 +56,7 @@ const bar = () => document.querySelector<HTMLElement>("[data-task-bar]")!;
 /** The task bar once the page has drawn it: a task page reads its task before it has one. */
 const barElement = async () => { await waitFor(() => { if (!document.querySelector("[data-task-bar]")) throw new Error("the task bar is not drawn yet"); }); return bar(); };
 const list = () => document.querySelector<HTMLElement>("[data-task-list]")!;
+const layoutOf = () => document.querySelector("[data-autopilot-layout]")!.getAttribute("data-autopilot-layout");
 const choose = async (trigger: HTMLElement, name: string) => {
   await userEvent.click(trigger);
   await userEvent.click(await screen.findByRole("menuitem", { name }));
@@ -266,6 +267,46 @@ describe("scheduled tasks", () => {
       mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
       expect(await screen.findByText("还没有定时任务")).toBeInTheDocument();
       expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    });
+    // Review L-4: with no task the right-hand pane said 「选择一项任务」, there being none to choose, and creating one was a small 「+」.
+    it("says in the pane what a scheduled task is and offers 新建任务 there, instead of asking for a task to be chosen", async () => {
+      mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
+      const sentence = await screen.findByText("按你定的时间，让 EviMed 自己去跟进一个研究问题，比如每天一份文献简报，结果留在这里。");
+      expect(screen.queryByText("选择一项任务")).not.toBeInTheDocument();
+      expect(layoutOf()).toBe("split");
+      const create = within(task()).getByRole("button", { name: "新建任务" });
+      expect(sentence.parentElement).toContainElement(create);
+      // The same sentence is not also in the list column, and the page has one solid button.
+      expect(within(list()).queryByText("还没有定时任务")).not.toBeInTheDocument();
+      expect(within(list()).queryByRole("button", { name: "新建任务" })).not.toBeInTheDocument();
+      await userEvent.click(create);
+      expect(await screen.findByRole("dialog", { name: "新建任务" })).toBeInTheDocument();
+    });
+    it("puts the same sentence and button in the list itself where the list is the page", async () => {
+      identity.width = 800; mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
+      expect(await screen.findByText("按你定的时间，让 EviMed 自己去跟进一个研究问题，比如每天一份文献简报，结果留在这里。")).toBeInTheDocument();
+      expect(layoutOf()).toBe("single");
+      expect(within(list()).getAllByRole("button", { name: "新建任务" })).toHaveLength(1);
+      expect(document.querySelector("[data-task-main]")).toBeNull();
+    });
+    it("keeps asking for a task to be chosen when a later read fails with tasks on screen — the pane does not go blank", async () => {
+      render("/app/autopilot");
+      await screen.findByText("选择一项任务");
+      mocks.listAgendas.mockRejectedValue(new Error("offline"));
+      await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+      expect(await screen.findByRole("alert")).toHaveTextContent("定时任务暂不可用");
+      expect(screen.getByRole("link", { name: "心衰证据追踪" })).toBeInTheDocument();
+      expect(screen.getByText("选择一项任务")).toBeInTheDocument();
+    });
+    it("does not say the page is empty while the tasks are still being read, or when they could not be", async () => {
+      mocks.listAgendas.mockReturnValue(new Promise(() => undefined)); render("/app/autopilot");
+      await screen.findByRole("heading", { name: "定时任务", level: 1 });
+      expect(screen.queryByText("选择一项任务")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "新建任务" })).not.toBeInTheDocument();
+      cleanup();
+      mocks.listAgendas.mockReset(); mocks.listAgendas.mockRejectedValue(new Error("offline")); render("/app/autopilot");
+      expect(await screen.findByRole("alert")).toHaveTextContent("定时任务暂不可用");
+      expect(screen.queryByRole("button", { name: "新建任务" })).not.toBeInTheDocument();
     });
   });
 
