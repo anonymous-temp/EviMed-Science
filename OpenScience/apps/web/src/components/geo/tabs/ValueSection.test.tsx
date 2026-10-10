@@ -60,16 +60,28 @@ it("keeps the last round's coverage after the profile moves on, and says which v
   value.coverage = { ...value.coverage, assessed: 3, represented: 2, partial: 1, basisVersion: 3 };
   client.getGeoValue.mockResolvedValue(value);
   show("coverage");
-  expect(await screen.findByText("2 / 3 次相关结论被完整表达，1 次不完整，0 次存在冲突，0 次未涉及。")).toBeInTheDocument();
+  expect(await screen.findByText("2 / 3 次相关结论被完整表达，1 次不完整，0 次存在冲突。")).toBeInTheDocument();
   expect(screen.getByText("以上按第 3 版药品价值分析测得；分析已更新到第 4 版，下一轮测量后按新版本判断。")).toBeInTheDocument();
 });
 
-it("says how many answers did not address the claim, so the four parts add up to what was assessed", async () => {
+it("keeps 未涉及 beside the headline and outside it: the parts of the headline add up to what was assessed, the unspoken ones are a count of their own (G10d)", async () => {
   const value = { ...empty(), version: 3 };
-  value.coverage = { ...value.coverage, assessed: 7, represented: 2, partial: 1, contradicted: 1, notAddressed: 3, basisVersion: 3 };
+  value.coverage = { ...value.coverage, assessed: 4, represented: 2, partial: 1, contradicted: 1, notAddressed: 3, basisVersion: 3 };
   client.getGeoValue.mockResolvedValue(value);
   show("coverage");
-  expect(await screen.findByText("2 / 7 次相关结论被完整表达，1 次不完整，1 次存在冲突，3 次未涉及。")).toBeInTheDocument();
+  const sentence = await screen.findByText("2 / 4 次相关结论被完整表达，1 次不完整，1 次存在冲突；另有 3 次未涉及。");
+  // The tone of a count, like the headline beside it: nothing marks an answer that did not speak of a conclusion as a fault.
+  expect(sentence.className).toBe("text-ui text-text-2");
+  expect(sentence.className).not.toMatch(/danger|warn|error|red/);
+});
+
+it("says what it is when every relevant answer left the conclusions unspoken: no headline to compute, and no zero", async () => {
+  const value = { ...empty(), version: 3 };
+  value.coverage = { ...value.coverage, notAddressed: 5, basisVersion: 3 };
+  client.getGeoValue.mockResolvedValue(value);
+  show("coverage");
+  expect(await screen.findByText("回答还没有谈到这些结论，5 次未涉及。")).toBeInTheDocument();
+  expect(screen.queryByText(/0 \/ 0|0%/)).not.toBeInTheDocument();
 });
 
 it("says nothing about versions when the coverage was measured on the current profile", async () => {
@@ -77,7 +89,7 @@ it("says nothing about versions when the coverage was measured on the current pr
   value.coverage = { ...value.coverage, assessed: 1, represented: 1, basisVersion: 3 };
   client.getGeoValue.mockResolvedValue(value);
   show("coverage");
-  expect(await screen.findByText("1 / 1 次相关结论被完整表达，0 次不完整，0 次存在冲突，0 次未涉及。")).toBeInTheDocument();
+  expect(await screen.findByText("1 / 1 次相关结论被完整表达，0 次不完整，0 次存在冲突。")).toBeInTheDocument();
   expect(screen.queryByText(/下一轮测量后按新版本判断/)).not.toBeInTheDocument();
 });
 

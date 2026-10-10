@@ -52,7 +52,7 @@ function hasContent(value: GeoValue, mode: ValueMode): boolean {
   if (entriesOf(value, mode).length) return true;
   if (mode === "summary" || mode === "profile") return Boolean(text(value.data?.summary)) || hasScope(value.data?.scope);
   if (mode === "actions") return !!value.research?.length;
-  if (mode === "coverage") return !!(value.coverage?.assessed || value.coverage?.uncertain || value.coverage?.notApplicable || value.observations?.length);
+  if (mode === "coverage") return !!(value.coverage?.assessed || value.coverage?.notAddressed || value.coverage?.uncertain || value.coverage?.notApplicable || value.observations?.length);
   return false;
 }
 
@@ -93,9 +93,7 @@ function ValueBody({ geoId, value, mode, className }: { geoId: string; value: Ge
       {["summary", "profile"].includes(mode) && <ScopeDetail scope={data.scope} />}
       {text(data.summary) && ["summary", "profile"].includes(mode) && <p className="mb-3 max-w-measure text-ui leading-relaxed text-text-2">{text(data.summary)}</p>}
       {mode === "coverage" ? <>
-        <p className="text-ui text-text-2">{value.coverage?.assessed
-          ? `${value.coverage.represented} / ${value.coverage.assessed} 次相关结论被完整表达，${value.coverage.partial} 次不完整，${value.coverage.contradicted} 次存在冲突，${value.coverage.notAddressed} 次未涉及。`
-          : "还没有足够的回答判断药品价值是否被准确表达。"}</p>
+        <p className="text-ui text-text-2">{coverageSentence(value.coverage)}</p>
         {Boolean(value.coverage?.uncertain || value.coverage?.notApplicable) && <p className="mt-2 text-caption text-text-3">尚不能判断 {value.coverage.uncertain} 条，不适用 {value.coverage.notApplicable} 条。</p>}
         {Boolean(value.coverage?.assessed && value.coverage?.basisVersion && value.coverage.basisVersion !== value.version) && <p className="mt-2 text-caption text-text-3">以上按第 {value.coverage.basisVersion} 版药品价值分析测得；分析已更新到第 {value.version} 版，下一轮测量后按新版本判断。</p>}
         {!!value.observations?.length && <Disclosure summary={value.observations.length > OBSERVATIONS_SHOWN ? `查看回答中的表达 · 共 ${value.observations.length} 条` : "查看回答中的表达"} className="mt-3">
@@ -141,6 +139,22 @@ function BasisLine({ version, updatedAt }: { version: number; updatedAt: string 
   if (!(version > 0)) return null;
   const day = formatDay(updatedAt);
   return <p className="mt-3 text-caption text-text-3">{day ? `依据版本 ${version} · 更新于 ${day}` : `依据版本 ${version}`}</p>;
+}
+
+const NO_COVERAGE = "还没有足够的回答判断药品价值是否被准确表达。";
+
+/**
+ * The coverage headline as a sentence: of the times the answers spoke of a conclusion, how many put it completely, how many without a
+ * condition it needs, how many against the evidence. 未涉及 is a count of its own beside the headline, in the tone of a count: an answer
+ * that did not speak of a conclusion has said nothing about it, which is not a fault of the product (owner ruling 2026-10-10).
+ */
+function coverageSentence(coverage: GeoValue["coverage"] | undefined): string {
+  if (!coverage) return NO_COVERAGE;
+  if (coverage.assessed) {
+    const unspoken = coverage.notAddressed > 0 ? `；另有 ${coverage.notAddressed} 次未涉及` : "";
+    return `${coverage.represented} / ${coverage.assessed} 次相关结论被完整表达，${coverage.partial} 次不完整，${coverage.contradicted} 次存在冲突${unspoken}。`;
+  }
+  return coverage.notAddressed > 0 ? `回答还没有谈到这些结论，${coverage.notAddressed} 次未涉及。` : NO_COVERAGE;
 }
 
 const START_DRAFT = "请结合现有资料开始药品价值分析，说明与本项目决策相关的获益、风险、适用性、费用与可及性；资料不足的部分保留未知。";

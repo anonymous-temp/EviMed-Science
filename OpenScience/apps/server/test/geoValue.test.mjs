@@ -4,7 +4,7 @@ import path from "node:path";
 import { openScopedFileNoFollow, resolveScopedPath } from "../src/security.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { GEO_VALUE_DOMAINS, geoValueContext, geoValueJudged, mergeGeoValue, geoValueImpacts, summarizeGeoValueCoverage } from "@evimed/domain";
+import { GEO_VALUE_DOMAINS, geoValueContext, geoValueJudged, mergeGeoValue, geoValueImpacts, summarizeGeoValueCoverage, summarizeGeoValueCoverageCounts } from "@evimed/domain";
 import { buildJudgeInput, verifyJudgement, GEO_JUDGE_INSTRUCTIONS } from "../src/geoJudge.mjs";
 import { importGeoValue } from "../src/geoValueImport.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
@@ -85,6 +85,34 @@ test("semantic coverage preserves unknowns and reasonable non-recommendation out
   const summary = summarizeGeoValueCoverage([{ status: "represented" }, { status: "partial" }, { status: "not_applicable" }, {}]);
   assert.equal(summary.assessed, 2);
   assert.equal(summary.value, 50);
+});
+
+test("the coverage headline is represented over assessed: unspoken, inapplicable and uncertain stay outside it, lost conditions are partial, and no index reads it (G10d)", async () => {
+  const rows = (/** @type {string} */ status, /** @type {number} */ count) => Array.from({ length: count }, () => ({ status }));
+  const mixed = [...rows("represented", 2), ...rows("partial", 1), ...rows("contradicted", 1), ...rows("not_addressed", 3), ...rows("not_applicable", 2), ...rows("uncertain", 2)];
+  const summary = summarizeGeoValueCoverage(mixed);
+  assert.deepEqual([summary.assessed, summary.represented, summary.value], [4, 2, 50], "what the answers said about a finding: 2 of 4 completely");
+  assert.deepEqual([summary.notAddressed, summary.notApplicable, summary.uncertain], [3, 2, 2], "the rest is counted, and shown beside the headline");
+  // 未涉及 is not negative: any number of them leaves the headline where it was, and when every relevant answer left a finding unspoken
+  // there is no headline at all - unknown, never a zero.
+  assert.equal(summarizeGeoValueCoverage([...mixed, ...rows("not_addressed", 40)]).value, 50);
+  assert.equal(summarizeGeoValueCoverage(rows("not_addressed", 5)).value, null);
+  assert.deepEqual(summarizeGeoValueCoverageCounts({ represented: 2, partial: 1, contradicted: 1, not_addressed: 3, not_applicable: 2, uncertain: 2 }), summary,
+    "the page's counts, taken where the observations are stored, are the same arithmetic");
+
+  // A represented finding whose conditions the answer lost is partial, and the headline counts it as not completely expressed.
+  const input = { owner: { userId: "u", projectId: "p" }, product: {}, competitors: [], careFlags: [], claims: [],
+    value: { version: 2, data: { findings: [{ id: "benefit", statement: "Low certainty benefit in adults" }] } }, question: { text: "Who benefits?" }, answer: "It may help." };
+  const judged = verifyJudgement({ valueCoverage: [{ findingId: "benefit", status: "represented", quote: "It may help.", conditionsPreserved: false }] }, buildJudgeInput(input), input);
+  assert.equal(judged.valueCoverage[0].status, "partial");
+  assert.deepEqual([summarizeGeoValueCoverage(judged.valueCoverage).assessed, summarizeGeoValueCoverage(judged.valueCoverage).value], [1, 0]);
+
+  // It feeds no index: the metric definitions, the code that computes them and the job that stores them never read what the judge found.
+  for (const file of ["../../../packages/domain/src/geoMetrics.mjs", "../../../packages/domain/src/geo/metrics.json", "../src/geoMetricsJob.mjs"]) {
+    const text = await fs.readFile(new URL(file, import.meta.url), "utf8");
+    assert.ok(text.length > 1_000, `${file} was read`);
+    assert.doesNotMatch(text, /valueCoverage|valueBasisVersion|summarizeGeoValueCoverage/, `${file} does not read the value coverage`);
+  }
 });
 
 test("answer interpretation retains clinical conditions, drops fabricated quotations only, and leaves absent observations unknown", () => {
