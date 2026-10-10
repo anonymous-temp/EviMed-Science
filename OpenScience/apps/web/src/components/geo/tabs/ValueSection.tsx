@@ -36,7 +36,7 @@ export function ValueSection({ geoId, project, mode = "profile" }: { geoId: stri
   return (
     <TabSection title={TITLES[mode]} level={["decisions", "sources"].includes(mode) ? "compact" : mode === "profile" ? "ui" : "section"} className="mb-6">
       {["summary", "profile"].includes(mode) && <ScopeDetail scope={data.scope} />}
-      {text(data.summary) && ["summary", "profile"].includes(mode) && <p className="mb-3 max-w-body text-ui leading-relaxed text-text-2">{text(data.summary)}</p>}
+      {text(data.summary) && ["summary", "profile"].includes(mode) && <p className="mb-3 max-w-measure text-ui leading-relaxed text-text-2">{text(data.summary)}</p>}
       {mode === "coverage" ? <>
         <p className="text-ui text-text-2">{value?.coverage?.assessed
           ? `${value?.coverage.represented} / ${value?.coverage.assessed} 次相关结论被完整表达，${value?.coverage.partial} 次不完整，${value?.coverage.contradicted} 次存在冲突。`
@@ -47,8 +47,8 @@ export function ValueSection({ geoId, project, mode = "profile" }: { geoId: stri
           <ul className="divide-y divide-border">
             {value?.observations.slice(0, 20).map((observation, index) => <li key={`${observation.findingId}:${index}`} className="py-3 text-ui">
               <p className="text-text-2">{engineName(observation.engine)} · {STATUS[observation.status] ?? "尚不能判断"}</p>
-              {observation.quote && <blockquote className="mt-1 max-w-body break-words text-text">{observation.quote}</blockquote>}
-              {observation.reason && <p className="mt-1 max-w-body text-caption text-text-3">{observation.reason}</p>}
+              {observation.quote && <blockquote className="mt-1 max-w-measure break-words text-text">{observation.quote}</blockquote>}
+              {observation.reason && <p className="mt-1 max-w-measure text-caption text-text-3">{observation.reason}</p>}
             </li>)}
           </ul>
         </Disclosure>}
@@ -56,14 +56,14 @@ export function ValueSection({ geoId, project, mode = "profile" }: { geoId: stri
         {!shown.length && <p className="text-ui text-text-3">{mode === "sources" ? "有依据变化时，在这里查看受影响的分析与内容。" : "可以先从已有资料和当前最重要的问题开始分析。"}</p>}
         {!!shown.length && <ul className="divide-y divide-border">
           {shown.map((entry, index) => <li key={String(record(entry).id ?? index)} className="py-3">
-            <p className="max-w-body break-words text-ui leading-relaxed text-text">{text(entry)}</p>
+            <p className="max-w-measure break-words text-ui leading-relaxed text-text">{text(entry)}</p>
             <FindingDetail entry={record(entry)} />
             {mode === "actions" && <AskAi project={project} label="推进这个问题" draft={`请推进这项 GEO 机会：${text(entry)}。先读取已有价值分析与研究结果，再选择需要的科研方法，保留不确定性并完成可支持的内容。`} />}
           </li>)}
         </ul>}
         {mode === "actions" && !!value?.research?.length && <Disclosure summary="查看相关研究" className="mt-3">
           <ul className="space-y-3">{value?.research.map(task => <li key={task.id} className="text-ui">
-            <p className="max-w-body text-text">{task.question}</p><span className="text-caption text-text-3">{TASK[task.status] ?? "研究中"}</span>
+            <p className="max-w-measure text-text">{task.question}</p><span className="text-caption text-text-3">{TASK[task.status] ?? "研究中"}</span>
             <AskAi project={project} label="继续分析" draft={`请查看这项研究的已有结果并用于 GEO：${task.question ?? "药品价值分析"}。先读现有报告，只补确有必要的缺口。`} />
           </li>)}</ul>
         </Disclosure>}
@@ -90,7 +90,7 @@ function FindingDetail({ entry }: { entry: Record<string, unknown> }) {
   if (!known.length && !sources.length && !hasScope(entry.scope)) return null;
   return <Disclosure summary="依据与适用条件" className="mt-2">
     <ScopeDetail scope={entry.scope} />
-    <dl className="space-y-2 text-caption text-text-2">{known.map(([label, content], index) => <div key={`${label}:${index}`}><dt>{label}</dt><dd className="max-w-body break-words">{content}</dd></div>)}</dl>
+    <dl className="space-y-2 text-caption text-text-2">{known.map(([label, content], index) => <div key={`${label}:${index}`}><dt>{label}</dt><dd className="max-w-measure break-words">{content}</dd></div>)}</dl>
     {!!sources.length && <ul className="mt-2 space-y-1 text-caption">{sources.map((source, index) => <li key={index} className="break-words">{source.href ? <a href={source.href} target="_blank" rel="noreferrer" className="text-accent underline">{source.label}</a> : source.label}{source.version && <span className="ml-2 text-text-3">版本 {source.version}</span>}{source.digest && <span className="block break-all text-text-3">SHA-256 {source.digest}</span>}</li>)}</ul>}
   </Disclosure>;
 }
@@ -112,7 +112,7 @@ function ScopeDetail({ scope }: { scope: unknown }) {
   const known = scopeRows(scope);
   if (!known.length && !text(scope)) return null;
   return <Disclosure summary="分析范围" className="mb-3">
-    {text(scope) && <p className="max-w-body break-words text-caption text-text-2">{text(scope)}</p>}
-    <dl className="space-y-2 text-caption text-text-2">{known.map(([label, content], index) => <div key={`${label}:${index}`}><dt>{label}</dt><dd className="max-w-body break-words">{content}</dd></div>)}</dl>
+    {text(scope) && <p className="max-w-measure break-words text-caption text-text-2">{text(scope)}</p>}
+    <dl className="space-y-2 text-caption text-text-2">{known.map(([label, content], index) => <div key={`${label}:${index}`}><dt>{label}</dt><dd className="max-w-measure break-words">{content}</dd></div>)}</dl>
   </Disclosure>;
 }
