@@ -356,11 +356,14 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const closeEditor = () => setEditor(null);
   // A project with no task: the page says what a scheduled task is and offers the one button to make the first — in the pane beside
   // the list, or in the list itself where the list is the page. Asking for a task to be chosen, with none to choose, is not an answer.
-  const none = agendas !== null && !error && !agendas.some(agenda => !agenda.payload.archivedAt);
+  // Nothing is known of the project's tasks while they are being read, or when the first read failed: the list column says so, and the
+  // pane says nothing. A later read that fails leaves the tasks on screen, and the pane as it was.
+  const known = agendas !== null && !(error && agendas.length === 0);
+  const none = known && !agendas.some(agenda => !agenda.payload.archivedAt);
   const firstRun = <EmptyState icon={CalendarClock} title="还没有定时任务" description={FIRST_RUN_SENTENCE}
     action={<Button onClick={() => setEditor({})}>新建任务</Button>} className="min-h-0 flex-1" />;
   const main = !selectedId
-    ? agendas === null || error ? null
+    ? !known ? null
       : none ? firstRun
         : <EmptyState icon={CalendarClock} title="选择一项任务" description="任务的对话在这里打开。" className="min-h-0 flex-1" />
     : agendas === null ? <div className="px-6 py-6"><FilesSkeleton /></div>

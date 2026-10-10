@@ -289,6 +289,15 @@ describe("scheduled tasks", () => {
       expect(within(list()).getAllByRole("button", { name: "新建任务" })).toHaveLength(1);
       expect(document.querySelector("[data-task-main]")).toBeNull();
     });
+    it("keeps asking for a task to be chosen when a later read fails with tasks on screen — the pane does not go blank", async () => {
+      render("/app/autopilot");
+      await screen.findByText("选择一项任务");
+      mocks.listAgendas.mockRejectedValue(new Error("offline"));
+      await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+      expect(await screen.findByRole("alert")).toHaveTextContent("定时任务暂不可用");
+      expect(screen.getByRole("link", { name: "心衰证据追踪" })).toBeInTheDocument();
+      expect(screen.getByText("选择一项任务")).toBeInTheDocument();
+    });
     it("does not say the page is empty while the tasks are still being read, or when they could not be", async () => {
       mocks.listAgendas.mockReturnValue(new Promise(() => undefined)); render("/app/autopilot");
       await screen.findByRole("heading", { name: "定时任务", level: 1 });
