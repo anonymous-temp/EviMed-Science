@@ -2637,5 +2637,11 @@
         }
       ]
     }
+  },
+  "longitudinal": {
+    "forecast.trajectories": {"required":["historyId","providerId","endpoint","horizonsDays"],"optional":["scenario","samples","modelVersion"]},
+    "forecast.evaluate": {"required":["predictionId","outcomeHistoryId"],"optional":["windowDays","eventCodes","followupCode","bootstrap","split","trainingOverlap","riskSet","groupBy"]},
+    "forecast.compare": {"required":["predictionId","otherPredictionId"],"optional":["bootstrap","mode"]},
+    "forecast.trial_benchmark": {"required":["benchmarkId"],"optional":["bootstrap"]}
   }
 }
