@@ -10,7 +10,6 @@ import {
   cancelOrder,
   clearStop,
   confirmTopup,
-  getDistribution,
   markOrderLost,
   marketStatus,
   noteCitation,
@@ -384,16 +383,13 @@ export function defineGeoMarketScenarios(test, makeFixture, options = {}) {
       assert.equal(reconcile.status, "ok");
       assert.equal(reconcile.diff, 0);
 
-      const view = await getDistribution(w.deps, { userId: p.userId, geoProjectId: p.id });
-      assert.deepEqual(view.budget, { totalCny: 1000, dailyCny: 1000 });
-      assert.equal(view.spentCny, 100);
-      assert.equal(view.reservedCny, 0);
-      assert.equal(view.market.configured, true);
-      assert.equal(view.orders[0].state, "settled");
-      assert.equal(view.orders[0].media, "健康时报网首发");
-      assert.equal(view.orders[0].domain, "jksb.com.cn");
-      assert.equal(view.orders[0].publishedUrl, url);
-      await assert.rejects(getDistribution(w.deps, { userId: "someone-else", geoProjectId: p.id }), { code: "geo_project_not_found" });
+      // What the 投放 tab reads of it (GeoService.distributionOf, on the database) is the order, its outlet and the ledger: the outlet's name
+      // and domain are the catalogue's, the money is the ledger's (asserted above), and an order is its project's owner's alone.
+      assert.equal((await marketStatus(w.deps)).configured, true);
+      assert.equal((await store.getOrder(order.id)).publishedUrl, url);
+      const [outlet] = await store.getMediaRows("website", ["101"]);
+      assert.deepEqual([outlet.name, outlet.domain], ["健康时报网首发", "jksb.com.cn"]);
+      await assert.rejects(cancelOrder(w.deps, { userId: "someone-else", geoProjectId: p.id, orderId: order.id }), { code: "geo_order_not_found" });
 
       assert.deepEqual(await noteCitation(w.deps, { url, engine: "deepseek" }), { matched: true, first: true, firstForOrder: true, orderId: order.id, articleId: order.articleId });
       assert.equal((await noteCitation(w.deps, { url, engine: "deepseek" })).first, false);
@@ -638,7 +634,7 @@ export function defineGeoMarketScenarios(test, makeFixture, options = {}) {
       assert.equal((await orders(store, p.id))[0].state, "planned");
       for (const run of [tickPoll, tickReconcile, tickTopups, tickCatalogue]) assert.equal((await run(w.deps)).skipped, "market_unconfigured");
       assert.equal(w.fake.state.requests.length, before, "no request reached the vendor");
-      assert.equal((await getDistribution(w.deps, { userId: p.userId, geoProjectId: p.id })).market.configured, false);
+      assert.equal((await marketStatus(w.deps)).configured, false);
       assert.equal((await marketStatus(w.deps)).notes.includes("market_unconfigured"), true);
       assert.equal((await moneyOf(store, p.id)).reservedCny, 0, "a plan holds no money");
     } finally { await w.close(); }

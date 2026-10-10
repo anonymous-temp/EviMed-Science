@@ -44,7 +44,7 @@ import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoSpecifiedInfoAccuracy, g
 /** A failure mode as the page says it. @param {string | null} code */
 const failureModeWord = (code) => (code ? /** @type {Record<string, string>} */ (GEO_FAILURE_MODE_LABELS_ZH)[code] ?? null : null);
 import {
-  GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH, GEO_ORDER_CANCELLABLE_STATES,
+  GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH,
   GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoCellRows,
 } from "@evimed/domain";
 import { geoLockCheck, geoProgramMinimal } from "./geoWrites.mjs";
@@ -53,7 +53,7 @@ import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tall
 import { geoSourceFromRow } from "./geoStore.mjs";
 import { nextWeeklySlot, programSteps, wantedSteps } from "./geoOrchestrator.mjs";
 import { HttpError } from "./security.mjs";
-import { GEO_ORDER_ARTICLE_LIVE_STATES, projectMoney } from "./geoMarketStore.mjs";
+import { GEO_ORDER_ARTICLE_LIVE_STATES, ORDER_SELECT, mapOrder, orderCancellable, projectMoney } from "./geoMarketStore.mjs";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
 
@@ -1393,10 +1393,12 @@ export class GeoService {
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {{ marketConfigured?: boolean }} [options] */
   async distributionOf(project, { marketConfigured = geoMarketConfigured(this.config) } = {}) {
     const [orders, money, targets, ownedLinks] = await Promise.all([
+      // The orders as the market reads them (its own derived times: when the send began, when the state was entered), with the names.
       this.store.query(`SELECT o.*, a.title AS article_title, a.layer AS article_layer, m.name AS media_name, m.domain AS media_domain
-        FROM evimed_geo.orders o LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
+        FROM (${ORDER_SELECT} WHERE o.geo_project_id = $1 ORDER BY o.created_at DESC LIMIT 500) o
+          LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
           LEFT JOIN evimed_geo.media m ON m.media_type = o.media_type AND m.resource_id = o.resource_id
-        WHERE o.geo_project_id = $1 ORDER BY o.created_at DESC LIMIT 500`, [project.id]),
+        ORDER BY o.created_at DESC`, [project.id]),
       // The money is the ledger's (projectMoney, the market's own view): a
       // rejected order still holds its reserve until the refund is in the
       // balance, and a refund after settlement is money back.
@@ -1419,12 +1421,18 @@ export class GeoService {
       reservedCny: ledger.reservedCny,
       suggestedBudgetCny: suggested,
       market: { configured: Boolean(marketConfigured) },
-      orders: orders.rows.map((/** @type {any} */ row) => ({
-        id: String(row.id), articleId: text(row.article_id), articleTitle: text(row.article_title), media: text(row.media_name),
-        domain: text(row.media_domain), layer: text(row.article_layer), state: String(row.state), priceCny: num(row.price_cny ?? row.reserve_cny),
-        publishedUrl: text(row.published_url), checks: Array.isArray(row.checks) ? row.checks : [], updatedAt: iso(row.updated_at),
-        cancellable: GEO_ORDER_CANCELLABLE_STATES.includes(String(row.state)),
-      })),
+      orders: orders.rows.map((/** @type {any} */ row) => {
+        const order = mapOrder(row);
+        return {
+          id: String(row.id), articleId: text(row.article_id), articleTitle: text(row.article_title), media: text(row.media_name),
+          domain: text(row.media_domain), layer: text(row.article_layer), state: String(row.state),
+          // What the outlet finally charged, once it has; the plan's price, then the reserve, before.
+          priceCny: order.settledCny ?? order.priceCny ?? order.reserveCny,
+          publishedUrl: text(row.published_url), checks: Array.isArray(row.checks) ? row.checks : [], updatedAt: iso(row.updated_at),
+          // 撤单 is offered where the market takes it: not a send in flight, not an order the outlet has taken.
+          cancellable: orderCancellable(order),
+        };
+      }),
       ownedLinks,
     };
   }

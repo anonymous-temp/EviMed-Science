@@ -2,7 +2,7 @@ import { GEO_PLACEMENT_LABELS_ZH, stripGeoClaimReferences } from "@evimed/domain
 import { HttpError } from "./security.mjs";
 import { APPEAL_REASONS, MEDIA_FIELD_TYPES, MEDIA_TYPES, mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { compareProtectedSpans, extractProtectedSpans, htmlToText, markdownToHtml, sha256Hex, splitLeadingTitle } from "./geoMarketText.mjs";
-import { dailyReserved, projectMoney } from "./geoMarketStore.mjs";
+import { dailyReserved, projectMoney, sendInFlight } from "./geoMarketStore.mjs";
 import { geoAudienceAllows } from "./geoService.mjs";
 
 export { projectMoney };
@@ -348,11 +348,6 @@ async function transition(ctx, order, to, { detail = {}, patch = {}, ledger = []
     from: [order.state], to, at: ctx.now().toISOString(), detail, patch,
     ledger: ledger.map((row) => ({ ...row, userId: order.userId, geoProjectId: order.geoProjectId })),
   });
-}
-
-/** Whether a reserved order's send began after it was reserved (in flight, or interrupted). @param {any} order */
-function sendInFlight(order) {
-  return order.state === "reserved" && order.sentAt != null && (order.stateAt == null || Date.parse(order.sentAt) >= Date.parse(order.stateAt));
 }
 
 /** The reserve an order still holds by its state (what the ledger must agree with). @param {any} order */
@@ -1817,52 +1812,6 @@ export async function setBudget(deps, { userId, geoProjectId, totalCny, dailyCny
     ledgerRow: { amountCny: total, note: JSON.stringify({ dailyCny: daily }) } });
   if (!project) throw marketFailure("404", "geo_project_not_found", "No such GEO project.");
   return { budget: { totalCny: total, dailyCny: daily } };
-}
-
-/**
- * The 投放 tab (build spec §3).
- * @param {MarketDeps} deps @param {{ userId: string, geoProjectId: string }} input
- */
-export async function getDistribution(deps, { userId, geoProjectId }) {
-  const ctx = context(deps);
-  const project = await ctx.store.getProject({ geoProjectId, userId });
-  if (!project) throw marketFailure("404", "geo_project_not_found", "No such GEO project.");
-  const view = projectMoney(project, await ctx.store.ledgerSums({ geoProjectId: project.id }));
-  const orders = await ctx.store.listOrders({ geoProjectId: project.id, userId, limit: 200, newestFirst: true });
-  const articles = new Map((await ctx.store.getArticles(orders.map((order) => order.articleId))).map((article) => [article.id, article]));
-  /** @type {Map<string, any>} */
-  const media = new Map();
-  for (const mediaType of MEDIA_TYPES) {
-    const ids = orders.filter((order) => order.mediaType === mediaType).map((order) => order.resourceId);
-    for (const row of await ctx.store.getMediaRows(mediaType, ids)) media.set(mediaKey(row.mediaType, row.resourceId), row);
-  }
-  return {
-    budget: project.budget ? { totalCny: view.budgetCny, dailyCny: view.dailyCny } : null,
-    spentCny: view.spentCny,
-    reservedCny: view.reservedCny,
-    suggestedBudgetCny: await ctx.store.suggestedBudget(project.id, project.tier),
-    market: { configured: ctx.configured },
-    orders: orders.map((order) => {
-      const outlet = media.get(mediaKey(order.mediaType, order.resourceId));
-      const article = articles.get(order.articleId);
-      return {
-        id: order.id,
-        articleId: order.articleId,
-        articleTitle: article?.title ?? "",
-        media: outlet?.name ?? "",
-        domain: outlet?.domain ?? null,
-        layer: article?.layer ?? null,
-        state: order.state,
-        priceCny: order.settledCny ?? order.priceCny,
-        publishedUrl: order.publishedUrl,
-        checks: (order.checks ?? []).map((check) => ({ checkpoint: check.checkpoint, at: check.at, reachable: check.reachable ?? null,
-          domainMatch: check.domainMatch ?? null, protectedTotal: check.protectedTotal ?? null, protectedMatched: check.protectedMatched ?? null })),
-        updatedAt: order.updatedAt,
-        // 撤单 is offered only where it can work: a plan, a reserve not yet sent, a sent order the outlet has not taken.
-        cancellable: order.state === "planned" || order.state === "submitted" || (order.state === "reserved" && !sendInFlight(order)),
-      };
-    }),
-  };
 }
 
 /**
