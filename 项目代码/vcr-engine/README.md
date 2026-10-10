@@ -428,6 +428,12 @@ failed on the code it replaced; the comment on the case says what it pins.
    `design_effect_null` on the field that states the effect; the type I error of
    a design is `design.simulate`'s measure on the same scenario (N43, N44).
    The exact single-arm design is given its size and so computes at a null rate.
+9. **A key the engine accepts and cannot apply is named, not ignored.** The result's
+   `diagnostics.notApplied` lists `{ key, field, reason }` for each such key and the job
+   goes on with the rest (an unanchored MAIC's `treatmentColumn` the table cannot honour,
+   an assurance's `design.allocation` that the stated arm sizes contradict: N14f, N19d).
+   A key that takes effect says where it did: `diagnostics.treatmentArm`, `.arms`,
+   `.sites`, `.frozenDesign`, `.eventForecast`, `.tauPrior`, `.weights`, `.valueSourcesUsed`.
 ### Binary single-arm contracts (design methods 1.1.0)
 
 `single_arm` requires `design.n`, `truth.nullRate`, `truth.responseRate` and
