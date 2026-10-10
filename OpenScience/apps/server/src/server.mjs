@@ -3290,15 +3290,32 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           subject: run.title ?? run.question ?? null,
         });
       };
+      // A step of this completion that throws costs that step and none of those behind it. About twenty are awaited before
+      // the run's transcript is written, its memory extracted and its lessons queued, and only some of them guarded
+      // themselves: a throw in any other went to `onRunFinishedError`, one audit line, and the run's transcript, memory
+      // and lessons were skipped without a word (2026-10-10 review M-17). Each failure is audited under the step's name;
+      // the credit settlement is still the `finally`'s.
+      const step = async (/** @type {string} */ name, /** @type {() => unknown} */ work) => {
+        try {
+          return await work();
+        } catch (error) {
+          await securityAudit(config, "run.completion.step", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "run_completion_step_failed",
+            detail: `${name}: ${String(/** @type {any} */ (error)?.message ?? "").slice(0, 200)}`,
+          }).catch(() => {});
+          return undefined;
+        }
+      };
       try {
-      await completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork });
+      await step("evolution.runtime", () => completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork }));
       const gapCode = evolution && !internalFor(project.userId, project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
       if (gapCode) {
-        await evolution.integration.publish({ id: `run-gap:${project.id}:${run.id}`, type: "runtime-gap", gapCode, userId:project.userId,projectId:project.id,
-          code: gapCode, track: "M", origin: "platform-inference" });
+        await step("evolution.gap", () => evolution.integration.publish({ id: `run-gap:${project.id}:${run.id}`, type: "runtime-gap", gapCode, userId:project.userId,projectId:project.id,
+          code: gapCode, track: "M", origin: "platform-inference" }));
       }
       if (resultProvenance) {
-        await resultCaptureQueue.drain();
+        await step("results.drain", () => resultCaptureQueue.drain());
         try {
           // Every deliverable file the run left gets a version, receipt or not
           // (2026-10-04): the receipt labels what was graded, and the files a
@@ -3320,17 +3337,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
       await attributeLateCalls(project, run);
       const evaluationRun = runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project));
-      runEvents.publish(run.id, "run/state", {
-        state: run.status,
-        phase: run.phase ?? null,
-        errorCode: run.errorCode ?? null,
-        verification: run.verification ?? null,
-        attempts: run.attempts ?? 0,
+      await step("run.events", () => {
+        runEvents.publish(run.id, "run/state", {
+          state: run.status,
+          phase: run.phase ?? null,
+          errorCode: run.errorCode ?? null,
+          verification: run.verification ?? null,
+          attempts: run.attempts ?? 0,
+        });
+        runtimeEventPump.noteRun(project, run);
       });
-      runtimeEventPump.noteRun(project, run);
       await observeRunMetrics(project, run);
       // Join the run to what it used and produced, off the path: one job per run, never throws.
-      await availability.collector?.enqueueRun(project, run);
+      await step("availability", () => availability.collector?.enqueueRun(project, run));
       if (sourceUnderstandingRuntime) {
         await sourceUnderstandingRuntime.complete(project, run).catch(async error => {
           await securityAudit(config, "source.runtime.release", "failed", {
@@ -3360,7 +3379,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (verifiedEpisodeId) {
         const verificationId = autopilotLogicalDispatchId(run.dispatchId);
         if (isUnsentAutopilotLeaseLoss(run)) {
-          await autopilotService.recordUnsentAttempt(project.userId, verifiedEpisodeId, { projectId: project.id, run, verificationId });
+          await step("autopilot.verification", () => autopilotService.recordUnsentAttempt(project.userId, verifiedEpisodeId, { projectId: project.id, run, verificationId }));
         } else {
           const cleanupTarget = runtimeManager.boundedRuntimeCleanupTarget(project);
           const verdict = await readVerificationVerdict(project, run);
@@ -3389,7 +3408,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           }));
         }
       }
-      const autopilotOwned = await completeOwnedAutopilotRun({
+      const autopilotOwned = await step("autopilot.complete", () => completeOwnedAutopilotRun({
         service: autopilotService, runtimeManager, usageLedger,
         readDelta: async () => {
           let claims = [];
@@ -3412,7 +3431,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           code: typeof error?.code === "string" ? error.code
             : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
         }),
-      }, project, run);
+      }, project, run));
       // The platform's own evidence programme: a finished episode, or a recorded independent check of one of its claims, is the
       // moment a card may be earned (evidenceProgramme.mjs `settleEpisode`, which waits for what is not in yet). Nothing for any run
       // that is not the programme's, and a failure here never touches the run.
@@ -3454,7 +3473,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           code: typeof error?.code === "string" ? error.code : "geo_run_completion_failed",
         }));
       }
-      await settleCharge(evaluationRun);
+      await step("credits.settle", () => settleCharge(evaluationRun));
       // Background work is not a person's research: a lesson, a source being
       // read and an evaluation cell run in the account's internal projects,
       // and each reports where it belongs (the knowledge base's own row). On
