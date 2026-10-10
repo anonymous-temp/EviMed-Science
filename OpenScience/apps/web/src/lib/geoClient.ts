@@ -589,7 +589,8 @@ export interface GeoMonitoring {
   arms: {
     pilot: Array<{ date: string; value: number | null; coverage?: string | null }>;
     control: Array<{ date: string; value: number | null; coverage?: string | null }>;
-    netEffect: GeoCell & { noiseBand: number | null };
+    /** `noiseBand`: the band the change was judged against; `noiseMeasured` false: it is the default, not a measured one; null: not recorded (an older row). */
+    netEffect: GeoCell & { noiseBand: number | null; noiseMeasured?: boolean | null };
   };
   byEngine: Array<{ engine: GeoEngine; points: GeoSeriesPoint[] }>;
   /** Each registered rival's mention rate over the same questions as ours (M-16 beside M-01S), per full measurement. */
@@ -773,7 +774,9 @@ export interface GeoValue {
   impacts: Array<{ change: Record<string, unknown>; findingIds: string[]; groupIds: string[]; articleIds: string[] }>;
   /** `basisVersion`: the value-profile version the latest round was judged against (null before any judged round). */
   coverage: { assessed: number; represented: number; partial: number; contradicted: number; uncertain: number; notApplicable: number; value: number | null; basisVersion?: number | null };
+  /** At most twenty, the ones that say something first and the most recent answers first; `coverage` counts every one of `observationsTotal`. */
   observations: Array<{ findingId: string; status: string; quote: string; reason: string; engine: string; basisVersion: number | null; rubricVersion: string | null; askedAt: string | null }>;
+  observationsTotal?: number;
 }
 
 export function getGeoValue(geoId: string) {

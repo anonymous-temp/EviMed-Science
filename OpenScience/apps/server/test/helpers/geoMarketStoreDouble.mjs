@@ -8,6 +8,7 @@ import {
   EPSILON_CNY,
   GEO_ORDER_ARTICLE_LIVE_STATES,
   articleLiveError,
+  articleRefusalAtSend,
   dailyReserved,
   projectMoney,
   GEO_MARKET_STORE_LIMITS,
@@ -299,8 +300,8 @@ export class GeoMarketStoreDouble {
     }
   }
 
-  /** @param {string} orderId @param {{ at: string, dayStart: string, reserveDetail?: Record<string, any>, sendDetail: Record<string, any>, patch?: Record<string, any> }} move */
-  async reserveForSend(orderId, { at, dayStart, reserveDetail = {}, sendDetail, patch = {} }) {
+  /** @param {string} orderId @param {{ at: string, dayStart: string, reserveDetail?: Record<string, any>, sendDetail: Record<string, any>, patch?: Record<string, any>, articleSha256?: string | null }} move */
+  async reserveForSend(orderId, { at, dayStart, reserveDetail = {}, sendDetail, patch = {}, articleSha256 = null }) {
     const when = assertAt(at);
     const since = assertAt(dayStart);
     assertDetail(reserveDetail);
@@ -308,8 +309,12 @@ export class GeoMarketStoreDouble {
     assertOrderPatch(patch);
     const order = this.orders.get(String(orderId));
     if (!order || order.state !== "planned") return null;
+    // The article and the project as they stand now, as the SQL store reads them inside its transaction (M-1).
+    const refusal = articleRefusalAtSend(this.articles.get(order.articleId), articleSha256);
+    if (refusal) return { refused: refusal };
     const project = this.projects.get(order.geoProjectId);
     if (!project || project.deletedAt) return { refused: "project_missing" };
+    if (project.status !== "active") return { refused: "project_not_active" };
     const money = projectMoney(project, await this.ledgerSums({ geoProjectId: order.geoProjectId }));
     if (money.availableCny == null || money.availableCny + EPSILON_CNY < order.reserveCny) return { refused: "budget_exhausted" };
     if (money.dailyCny != null && dailyReserved(await this.ledgerSums({ geoProjectId: order.geoProjectId, since })) + order.reserveCny > money.dailyCny + EPSILON_CNY) {

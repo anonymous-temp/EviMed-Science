@@ -218,6 +218,11 @@ async function doubleFixture() {
     async tamperLedger(row) {
       store.ledger.push(assertLedgerRow({ ...row, userId: null }, new Date().toISOString()));
     },
+    // What another writer does to a row while the market is working on it (a finding that opens, a pause).
+    alter: {
+      article: async (id, patch) => { Object.assign(store.articles.get(id), patch); },
+      project: async (id, patch) => { Object.assign(store.projects.get(id), patch); },
+    },
     async close() {},
   };
 }

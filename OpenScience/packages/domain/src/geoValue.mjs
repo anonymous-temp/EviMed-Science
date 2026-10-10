@@ -101,6 +101,23 @@ export function geoValueContext(profile, filter = {}) {
   }
 }
 
+/** The findings a measurement judge is shown, and a round freezes, at most. */
+export const GEO_VALUE_JUDGED_FINDINGS = 60
+
+/**
+ * What the measurement judge is shown of a profile, and what a round freezes of it:
+ * the scope, the summary and the findings it can answer for by id. The rest of a
+ * profile (research reports with their excerpts, landscape, decisions, lessons,
+ * source changes) is the researcher's working material: it grows with every run,
+ * the judge does not read it, and a prompt prefix and a frozen basis that carry it
+ * grow without bound (D-02: four imported runs made a 76 KB prefix of 42 findings).
+ * @param {Record<string, any> | null} profile
+ */
+export function geoValueJudged(profile) {
+  const { scope, summary, findings } = geoValueContext(profile)
+  return { scope, summary, findings: findings.filter((entry) => entry?.id).slice(0, GEO_VALUE_JUDGED_FINDINGS) }
+}
+
 /**
  * Only explicit links establish an impact. A changed source calls for a look;
  * it does not make every result wrong or prevent further work.
@@ -126,20 +143,30 @@ export function geoValueImpacts(profile, articles = []) {
 export const GEO_VALUE_COVERAGE_STATUSES = Object.freeze(['represented', 'partial', 'contradicted', 'not_addressed', 'not_applicable', 'uncertain'])
 
 /**
+ * The summary of coverage counts, by status: the same arithmetic as {@link summarizeGeoValueCoverage}, for a
+ * reader that counted the observations where they are stored instead of loading them.
+ * @param {Record<string, number> | null | undefined} counts observations per status; a status outside GEO_VALUE_COVERAGE_STATUSES is not counted
+ */
+export function summarizeGeoValueCoverageCounts(counts) {
+  const count = (/** @type {string} */ status) => Number(counts?.[status] ?? 0)
+  const assessed = count('represented') + count('partial') + count('contradicted') + count('not_addressed')
+  return {
+    assessed, represented: count('represented'), partial: count('partial'), contradicted: count('contradicted'),
+    notAddressed: count('not_addressed'), uncertain: count('uncertain'), notApplicable: count('not_applicable'),
+    value: assessed ? count('represented') / assessed * 100 : null,
+  }
+}
+
+/**
  * Supplementary observations, deliberately outside GVI and clinical scoring.
  * Each measure exposes its actual denominator and leaves unjudged cases unknown.
  * @param {any[]} observations
  */
 export function summarizeGeoValueCoverage(observations) {
-  const rows = observations.filter((row) => GEO_VALUE_COVERAGE_STATUSES.includes(row?.status))
-  const assessed = rows.filter((row) => !['uncertain', 'not_applicable'].includes(row.status))
-  return {
-    assessed: assessed.length, represented: rows.filter((row) => row.status === 'represented').length,
-    partial: rows.filter((row) => row.status === 'partial').length,
-    contradicted: rows.filter((row) => row.status === 'contradicted').length,
-    notAddressed: rows.filter((row) => row.status === 'not_addressed').length,
-    uncertain: rows.filter((row) => row.status === 'uncertain').length,
-    notApplicable: rows.filter((row) => row.status === 'not_applicable').length,
-    value: assessed.length ? rows.filter((row) => row.status === 'represented').length / assessed.length * 100 : null,
+  /** @type {Record<string, number>} */
+  const counts = {}
+  for (const row of observations) {
+    if (GEO_VALUE_COVERAGE_STATUSES.includes(row?.status)) counts[row.status] = (counts[row.status] ?? 0) + 1
   }
+  return summarizeGeoValueCoverageCounts(counts)
 }

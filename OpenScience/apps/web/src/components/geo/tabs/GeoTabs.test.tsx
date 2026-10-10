@@ -1167,6 +1167,25 @@ describe("效果", () => {
     expect(screen.getByText("引擎不同，不可比")).toBeInTheDocument();
   });
 
+  it("says when the fluctuation band is the platform's default and not a measured one (Q-2)", async () => {
+    const withBand = (netEffect: Record<string, unknown>) => client.getGeoMonitoring.mockResolvedValue({
+      ...monitoringFilled, arms: { ...monitoringFilled.arms, netEffect: { ...monitoringFilled.arms.netEffect, value: 12, noiseBand: 5, ...netEffect } },
+    });
+    withBand({ noiseMeasured: false });
+    const unmeasured = renderTab(<EffectSection project={geoProject()} />);
+    expect(await screen.findByText("波动范围 ±5（噪声阈值未实测）")).toBeInTheDocument();
+    unmeasured.unmount();
+    // A measured band, and a row written before the flag was kept, are not called unmeasured.
+    withBand({ noiseMeasured: true });
+    const measured = renderTab(<EffectSection project={geoProject()} />);
+    expect(await screen.findByText("波动范围 ±5")).toBeInTheDocument();
+    measured.unmount();
+    withBand({});
+    renderTab(<EffectSection project={geoProject()} />);
+    expect(await screen.findByText("波动范围 ±5")).toBeInTheDocument();
+    expect(screen.queryByText(/噪声阈值未实测/)).not.toBeInTheDocument();
+  });
+
   it("a net effect inside the fluctuation band is 持平", async () => {
     client.getGeoMonitoring.mockResolvedValue({
       ...monitoringFilled,

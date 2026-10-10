@@ -345,6 +345,42 @@ test("the full program, from nothing to monitoring: runs, rounds, schedules and 
   assert.equal(world.dispatched.length, 5);
 });
 
+test("a tiny question set locked in conversation is a diagnosis, not the full programme (D-30)", options, async () => {
+  // Three measured questions in two groups, no control group, nothing requested: the lock is allowed (the owner's rule: nothing is
+  // refused), and used to be recorded `done`, which made the project's idle orchestrator request all eight steps from it.
+  const world = harness();
+  const { project, userId } = await newProject();
+  const current = () => /** @type {Promise<any>} */ (store.getProject(userId, project.id));
+  const written = await geoRuntimeWrite({ store, project: await current(), what: "questions", body: { data: { groups: [
+    { name: "G1", pool: "P1", questions: [{ text: "这个药怎么用？", kind: "typical", isMeasured: true }, { text: "副作用大吗？", kind: "typical", isMeasured: true }] },
+    { name: "G2", pool: "P3", questions: [{ text: "和别的药比怎么样？", kind: "typical", isMeasured: true }] },
+  ] } } });
+  assert.equal(written.ok, true);
+  const locked = await geoRuntimeWrite({ store, project: await current(), what: "lock_questions", body: { data: {} } });
+  assert.equal(locked.ok, true, "the lock stays allowed");
+  assert.equal(locked.measuredCount, 3);
+  assert.match(locked.issues.map((/** @type {any} */ issue) => issue.message).join(" "), /locked as a minimal set/);
+  assert.equal((await statuses(project.id)).questions, "minimal");
+  assert.equal(Object.values((await reload(project.id)).steps).some((step) => step.requested), false, "nothing requested yet");
+
+  await world.orchestrator.advance(project.id);
+  const requested = Object.entries((await reload(project.id)).steps).filter(([, step]) => step.requested).map(([name]) => name);
+  assert.deepEqual(requested, ["diagnosis"], "a diagnosis, not eight steps");
+  assert.deepEqual(world.enqueued.map((round) => round.kind), ["single_step"], "one single-step round: no baseline, no noise round");
+  assert.ok(world.dispatched.every((run) => run.capabilityId === "geo-insight"), `only the minimal upstream may run: ${world.dispatched.map((run) => run.capabilityId)}`);
+
+  // The same tiny set in a project that asked for the whole programme is still measured as a minimal set: the lock is the same, the round the same.
+  const asked = await newProject();
+  for (const step of ["evidence", "journey", "questions", "diagnosis", "sources", "content", "distribution", "monitoring"]) await store.setStep(asked.project.id, step, { requested: true });
+  const askedProject = () => /** @type {Promise<any>} */ (store.getProject(asked.userId, asked.project.id));
+  await geoRuntimeWrite({ store, project: await askedProject(), what: "questions", body: { data: { groups: [
+    { name: "G1", pool: "P1", questions: [{ text: "这个药怎么用？", kind: "typical", isMeasured: true }] }] } } });
+  assert.equal((await geoRuntimeWrite({ store, project: await askedProject(), what: "lock_questions", body: { data: {} } })).ok, true);
+  assert.equal((await statuses(asked.project.id)).questions, "minimal");
+  // The suite's database is shared by every test's tick: these two projects do not take part in the others'.
+  await q(`UPDATE evimed_geo.projects SET status = 'paused' WHERE id = ANY($1::text[])`, [[project.id, asked.project.id]]);
+});
+
 test("a single step (信源分析与预期) builds only its minimal upstream: identity, 30 questions, one round, the strategy", options, async () => {
   const world = harness();
   const { project, control, user, userId } = await newProject("诺和盈");

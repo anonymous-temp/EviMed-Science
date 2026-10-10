@@ -56,6 +56,52 @@ export async function writeGeoValue(store, userId, geoId, patch, runId = null) {
   });
 }
 
+/** The coverage observations a reply carries at most; the counts beside them are over every one. */
+export const GEO_VALUE_OBSERVATIONS_SHOWN = 20;
+
+/**
+ * What the judge found of the profile's findings in the answers of the project's latest finished measurement round
+ * (`judge_extract.valueCoverage`), read where it is stored. One entry per finding per answer: 400 answers and 20 findings
+ * are eight thousand entries and nearly three megabytes of JSON, which the runtime's client refuses past four (D-08) — so
+ * the counts are taken in SQL, grouped by the profile version each answer was judged against and by status, and only the
+ * first `GEO_VALUE_OBSERVATIONS_SHOWN` entries of each version come back, those that say something (any status but
+ * `not_applicable`) before those that do not, the most recent answers first.
+ * @param {any} store @param {string} geoId @param {{ engine?: string | null, groupId?: string | null, audience?: string | null }} [filter]
+ * @returns {Promise<{ counts: Array<{ basisVersion: number | null, status: string | null, n: number }>,
+ *   sample: Array<Record<string, any> & { basisVersion: number | null }> }>}
+ */
+export async function readGeoValueCoverage(store, geoId, { engine = null, groupId = null, audience = null } = {}) {
+  const basis = `CASE WHEN jsonb_typeof(f.judge_extract -> 'valueBasisVersion') = 'number' THEN (f.judge_extract ->> 'valueBasisVersion')::numeric END`;
+  const from = `FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(f.judge_extract -> 'valueCoverage') = 'array'
+      THEN f.judge_extract -> 'valueCoverage' ELSE '[]'::jsonb END) WITH ORDINALITY AS obs(entry, position)
+    WHERE f.geo_project_id = $1 AND f.judged_at IS NOT NULL AND jsonb_typeof(obs.entry) = 'object'
+      AND ($2::text IS NULL OR s.engine = $2)
+      AND ($3::text IS NULL OR s.question_id IN (SELECT id FROM evimed_geo.questions WHERE geo_project_id = $1 AND group_id = $3))
+      AND ($4::text IS NULL OR s.question_id IN (SELECT q.id FROM evimed_geo.questions q JOIN evimed_geo.question_groups g ON g.id = q.group_id WHERE q.geo_project_id = $1 AND g.audience = $4))
+      AND s.round_id =
+        (SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'weekly', 'single_step')
+          AND status IN ('done', 'partial') ORDER BY created_at DESC LIMIT 1)`;
+  const parameters = [geoId, engine, groupId, audience];
+  const [counted, shown] = await Promise.all([
+    store.query(`SELECT ${basis} AS basis, obs.entry ->> 'status' AS status, count(*)::integer AS n ${from} GROUP BY 1, 2`, parameters),
+    store.query(`SELECT * FROM (
+        SELECT obs.entry, ${basis} AS basis, f.judge_extract -> 'rubricVersion' AS rubric, s.engine, s.round_id, s.asked_at,
+          row_number() OVER (PARTITION BY ${basis}
+            ORDER BY (coalesce(obs.entry ->> 'status', '') = 'not_applicable'), s.asked_at DESC NULLS LAST, s.id, obs.position) AS place
+        ${from}) ranked
+      WHERE place <= ${GEO_VALUE_OBSERVATIONS_SHOWN} ORDER BY basis DESC NULLS LAST, place`, parameters),
+  ]);
+  return {
+    counts: counted.rows.map((/** @type {any} */ row) => ({ basisVersion: row.basis == null ? null : Number(row.basis), status: row.status ?? null, n: Number(row.n) })),
+    sample: shown.rows.map((/** @type {any} */ row) => {
+      const basisVersion = row.basis == null ? null : Number(row.basis);
+      return { ...row.entry, engine: row.engine, roundId: row.round_id, basisVersion, rubricVersion: row.rubric ?? null,
+        askedAt: row.asked_at ? new Date(row.asked_at).toISOString() : null };
+    }),
+  };
+}
+
 /** @param {any} row */
 export function geoResearchRow(row) {
   const detail = row.detail ?? {};
@@ -74,13 +120,27 @@ export async function readGeoResearch(store, geoId) {
   return rows.rows.map(geoResearchRow);
 }
 
+/** Research tasks one project may have queued or running at once, unless the deployment sets another (`OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN`). */
+export const GEO_RESEARCH_MAX_OPEN = 5;
+const RESEARCH_OPEN_STATES = Object.freeze(["pending", "claimed", "running"]);
+
 /**
  * Reuse the GEO run ledger and its normal allowance checks. A repeated request
  * is the same task, including after a restart. Retry is an explicit operation,
  * not a loop caused by an incomplete scientific result.
+ *
+ * Each task is a billed specialist run, so a project holds at most `maxOpen`
+ * of them queued or running: a request that would add one past that is answered
+ * with a notice and queues nothing (`capped`), and the question is not lost —
+ * the run keeps it as a finding or an opportunity and asks again when a task
+ * has finished. Asking for a task that is already open adds nothing and is
+ * never refused. The count and the insert share one lock, so two requests made
+ * together cannot both take the last place.
  * @param {any} store @param {string} userId @param {string} geoId @param {Record<string, any>} input
+ * @param {{ maxOpen?: number }} [options]
+ * @returns {Promise<{ request: ReturnType<typeof geoResearchRow> | null, notice: string | null, capped?: true }>}
  */
-export async function requestGeoResearch(store, userId, geoId, input) {
+export async function requestGeoResearch(store, userId, geoId, input, { maxOpen = GEO_RESEARCH_MAX_OPEN } = {}) {
   const capabilityId = String(input.capabilityId ?? "");
   const question = String(input.question ?? input.brief ?? "").trim();
   if (!GEO_RESEARCH_CAPABILITIES.includes(capabilityId) || !question) return {
@@ -93,15 +153,29 @@ export async function requestGeoResearch(store, userId, geoId, input) {
     findingIds: Array.isArray(input.findingIds) ? input.findingIds : [],
     groupIds: Array.isArray(input.groupIds) ? input.groupIds : [], opportunityId: input.opportunityId ?? null,
     context: geoValueObject(input.context) ? input.context : null };
-  const result = await store.query(`INSERT INTO evimed_geo.schedule_marks (geo_project_id, key, user_id, kind, state, detail)
-    VALUES ($1, $2, $3, 'run', 'pending', $4::jsonb)
-    ON CONFLICT (geo_project_id, key) DO UPDATE SET
-      state = CASE WHEN $5 AND schedule_marks.state IN ('done', 'failed') THEN 'pending' ELSE schedule_marks.state END,
-      dispatch_id = CASE WHEN $5 AND schedule_marks.state IN ('done', 'failed') THEN NULL ELSE schedule_marks.dispatch_id END,
-      run_id = CASE WHEN $5 AND schedule_marks.state IN ('done', 'failed') THEN NULL ELSE schedule_marks.run_id END,
-      session_id = CASE WHEN $5 AND schedule_marks.state IN ('done', 'failed') THEN NULL ELSE schedule_marks.session_id END,
-      detail = CASE WHEN $5 AND schedule_marks.state IN ('done', 'failed')
-        THEN schedule_marks.detail || jsonb_build_object('allowed', schedule_marks.attempts + 1) ELSE schedule_marks.detail END
-    RETURNING *`, [geoId, key, userId, JSON.stringify(detail), input.retry === true]);
-  return { request: geoResearchRow(result.rows[0]), notice: null };
+  return store.transaction(async (/** @type {any} */ client) => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-geo-research:' || $1))", [geoId]);
+    const known = (await client.query(`SELECT state FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = $2`, [geoId, key])).rows[0];
+    // A task already open is the same task; a new one, or a finished one retried, takes a place.
+    if (!known || (input.retry === true && ["done", "failed"].includes(known.state))) {
+      const open = Number((await client.query(`SELECT count(*) AS n FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND kind = 'run'
+        AND starts_with(key, 'run:research:') AND state = ANY($2::text[])`, [geoId, RESEARCH_OPEN_STATES])).rows[0].n);
+      if (open >= maxOpen) {
+        return { request: null, capped: /** @type {const} */ (true), notice: maxOpen > 0
+          ? `This project already has ${open} research tasks queued or running (the limit is ${maxOpen}). Keep this question as a finding or an opportunity and ask again when some have finished; other work can continue.`
+          : "This deployment queues no research from GEO. Keep this question as a finding or an opportunity; other work can continue." };
+      }
+    }
+    const result = await client.query(`INSERT INTO evimed_geo.schedule_marks (geo_project_id, key, user_id, kind, state, detail)
+      VALUES ($1, $2, $3, 'run', 'pending', $4::jsonb)
+      ON CONFLICT (geo_project_id, key) DO UPDATE SET
+        state = CASE WHEN $5 AND schedule_marks.state IN ('done', 'failed') THEN 'pending' ELSE schedule_marks.state END,
+        dispatch_id = CASE WHEN $5 AND schedule_marks.state IN ('done', 'failed') THEN NULL ELSE schedule_marks.dispatch_id END,
+        run_id = CASE WHEN $5 AND schedule_marks.state IN ('done', 'failed') THEN NULL ELSE schedule_marks.run_id END,
+        session_id = CASE WHEN $5 AND schedule_marks.state IN ('done', 'failed') THEN NULL ELSE schedule_marks.session_id END,
+        detail = CASE WHEN $5 AND schedule_marks.state IN ('done', 'failed')
+          THEN schedule_marks.detail || jsonb_build_object('allowed', schedule_marks.attempts + 1) ELSE schedule_marks.detail END
+      RETURNING *`, [geoId, key, userId, JSON.stringify(detail), input.retry === true]);
+    return { request: geoResearchRow(result.rows[0]), notice: null };
+  });
 }

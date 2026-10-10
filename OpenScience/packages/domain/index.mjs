@@ -41,6 +41,7 @@ export {
   GEO_RESEARCH_CAPABILITIES,
   GEO_VALUE_COLLECTIONS,
   GEO_VALUE_COVERAGE_STATUSES,
+  GEO_VALUE_JUDGED_FINDINGS,
   geoValueObject,
   geoValueCanonical,
   mergeGeoValue,
@@ -48,8 +49,10 @@ export {
   geoValueText,
   geoValueActive,
   geoValueContext,
+  geoValueJudged,
   geoValueImpacts,
   summarizeGeoValueCoverage,
+  summarizeGeoValueCoverageCounts,
 } from './src/geoValue.mjs'
 
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityEntry} AvailabilityEntry */

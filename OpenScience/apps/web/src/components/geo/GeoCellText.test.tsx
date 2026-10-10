@@ -33,6 +33,12 @@ describe("a GEO number", () => {
     expect(geoSampleText({ ...cell(null, null, null, "not_measurable"), reason: "engines_differ" })).toBeNull();
   });
 
+  it("says “样本不足” for a change whose comparison rests on too few answers, as for a cell under the floor (Q-2)", () => {
+    const thin = { ...cell(null, null, null, "not_measurable"), reason: "insufficient_sample" };
+    expect(geoCellWord(thin)).toBe("样本不足");
+    expect(geoSampleText(thin)).toBeNull();
+  });
+
   it("says “未测” for an engine that was not measured and “—” for what cannot be measured — never zero", () => {
     expect(geoCellWord(cell(null, null, null, "absent"))).toBe("未测");
     expect(geoCellWord(cell(0, 0, 0, "absent"))).toBe("未测");

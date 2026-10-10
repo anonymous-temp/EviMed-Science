@@ -121,7 +121,7 @@ test("the tool codes are classified for a run, the route codes are registered, a
     "geo_gateway_timeout", "geo_gateway_rate_limited", "geo_gateway_token_missing", "geo_gateway_token_invalid", "geo_upstream_error",
     "geo_response_invalid", "geo_response_too_large", "social_posts_unconfigured"];
   const terminal = ["geo_request_invalid", "geo_request_too_large", "geo_read_what_invalid", "geo_read_filter_invalid", "geo_write_what_invalid",
-    "geo_write_payload_invalid", "social_posts_query_invalid", "social_posts_platform_invalid", "social_posts_sort_invalid", "social_posts_limit_invalid"];
+    "geo_write_payload_invalid", "geo_write_rejected", "social_posts_query_invalid", "social_posts_platform_invalid", "social_posts_sort_invalid", "social_posts_limit_invalid"];
   for (const code of recoverable) assert.equal(classifyEvidenceSourceError(code), "recoverable", code);
   for (const code of terminal) assert.equal(classifyEvidenceSourceError(code), "terminal", code);
   const [toolFamily] = ERROR_CODE_FAMILIES.find(([pattern]) => pattern.test("geo_disabled")) ?? [];

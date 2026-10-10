@@ -34,6 +34,8 @@ export function EffectSection({ project }: { project: GeoProject }) {
   });
   const cell = readGeoCell(data?.arms?.netEffect);
   const band = typeof data?.arms?.netEffect?.noiseBand === "number" ? data.arms.netEffect.noiseBand : null;
+  // A band nobody measured is the platform's default, and the page says so beside the number it judges.
+  const bandUnmeasured = data?.arms?.netEffect?.noiseMeasured === false;
   const flat = cell.status === "ok" && cell.value !== null && band !== null && Math.abs(cell.value) <= band;
   const net = cell.status !== "ok" || cell.value === null ? null : flat ? "持平" : signed(cell.value);
   const input = useMemo(() => ({
@@ -64,7 +66,7 @@ export function EffectSection({ project }: { project: GeoProject }) {
             <LegendMark series="rival-1" color={rivalColor(0)}>对照组</LegendMark>
           </>
         )}
-        meta={band !== null ? `波动范围 ±${Math.round(band * 10) / 10}` : undefined}
+        meta={band !== null ? `波动范围 ±${Math.round(band * 10) / 10}${bandUnmeasured ? "（噪声阈值未实测）" : ""}` : undefined}
         state={monitoring.state.kind === "loading" ? "loading"
           : monitoring.state.kind === "error" ? "error"
             : dates.length === 0 ? "empty" : "content"}

@@ -993,9 +993,15 @@ async function placeOrder(ctx, project, order, state) {
     reserveDetail: { reserveCny: order.reserveCny, priceCny: order.priceCny, chargeAt: "submit" },
     sendDetail: { title, bodySha256, spans, spanCount: spans.length, terms: drugTerms(project).slice(0, 50) },
     patch: { bodySha256 },
+    // What the checks above read, outside any lock: the write reads the article and the project again under its own (M-1).
+    articleSha256: article.contentSha256,
   });
   if (!reservation) return "conflict";
-  if ("refused" in reservation) return reservation.refused;
+  if ("refused" in reservation) {
+    // The article stopped being placeable while the file was read (a safety finding opened, it was withdrawn): the plan goes, as at the first check.
+    if (reservation.refused === "article_not_placeable") return withdraw("article_not_placeable");
+    return reservation.refused;
+  }
   const current = reservation.order;
   /** @type {{ orderNid: string } | null} */
   let answer = null;
@@ -1412,6 +1418,42 @@ async function settleOrder(ctx, order) {
 }
 
 /**
+ * What the first verification of an order records beside its settlement: the outlet's tally of placements per engine and the
+ * article's move to published. Each is its own try, counted and never allowed to stop the other or the settlement; the article's
+ * move is a compare-and-set and so can be made again.
+ * @param {ReturnType<typeof context>} ctx @param {any} order @param {Date} now @param {Record<string, number>} counts
+ */
+async function afterFirstVerification(ctx, order, now, counts) {
+  try {
+    const project = await ctx.store.getProject({ geoProjectId: order.geoProjectId });
+    for (const engine of project?.engines ?? []) {
+      await ctx.store.incrementMediaOutcome({ mediaType: order.mediaType, resourceId: order.resourceId, engine, placed: 1, at: now.toISOString() });
+    }
+  } catch { counts.errors += 1; }
+  try {
+    await ctx.store.advanceArticleStatus(order.articleId, ["publishable", "placed"], "published", now.toISOString());
+  } catch { counts.errors += 1; }
+}
+
+/**
+ * Settle every verified order that still holds its reserve: a settlement that failed after the order became verified (a store
+ * fault between the two writes) is finished here, whatever its age - an order is verified for as long as it is unsettled, the
+ * checkpoints do not settle it, and the verify list stops reaching it after a week (M-2). `settleOrder` is a compare-and-set,
+ * so an order another process settled meanwhile is left as it is.
+ * @param {ReturnType<typeof context>} ctx @param {Record<string, number>} counts
+ */
+async function settleVerifiedOrders(ctx, counts) {
+  const stranded = (await listAllOrders(ctx.store, { states: ["verified"], hasVendorNid: true })).filter((order) => order.settledCny == null);
+  for (const order of stranded) {
+    try {
+      const settled = await settleOrder(ctx, order);
+      if (settled?.state === "settled") { counts.settled += 1; counts.recovered += 1; }
+      await ctx.store.advanceArticleStatus(order.articleId, ["publishable", "placed"], "published", ctx.now().toISOString());
+    } catch { counts.errors += 1; }
+  }
+}
+
+/**
  * Check one published order at one checkpoint.
  * @param {ReturnType<typeof context>} ctx @param {any} order @param {string} checkpoint @param {Record<string, number>} counts
  */
@@ -1484,15 +1526,16 @@ async function verifyOrder(ctx, order, checkpoint, counts) {
     const firstVerification = !events.some((event) => event.toState === "verified" && event.fromState !== "verified");
     const verified = await transition(ctx, order, "verified", { detail: { checkpoint }, patch: { checks } });
     if (!verified) return;
-    if (firstVerification) {
-      const project = await ctx.store.getProject({ geoProjectId: order.geoProjectId });
-      for (const engine of project?.engines ?? []) {
-        await ctx.store.incrementMediaOutcome({ mediaType: order.mediaType, resourceId: order.resourceId, engine, placed: 1, at: now.toISOString() });
-      }
-      await ctx.store.advanceArticleStatus(order.articleId, ["publishable", "placed"], "published", now.toISOString());
+    // The money first. A verified order holds its reserve until it is settled, and the bookkeeping beside it (the outlet's tally,
+    // the article's status) used to run between the two writes: one fault there stranded the order verified with its reserve held
+    // and its spend unrecorded (M-2). The settlement is attempted before them; they run once whatever it did, each on its own, and a
+    // settlement that failed is finished by the next tick (`settleVerifiedOrders`).
+    try {
+      const settled = await settleOrder(ctx, verified);
+      if (settled?.state === "settled") counts.settled += 1;
+    } finally {
+      if (firstVerification) await afterFirstVerification(ctx, verified, now, counts);
     }
-    const settled = await settleOrder(ctx, verified);
-    if (settled?.state === "settled") counts.settled += 1;
     return;
   }
   await ctx.store.annotateOrder(order.id, { at: now.toISOString(), detail: { phase: "check", check }, patch: { checks } });
@@ -1506,7 +1549,9 @@ async function verifyOrder(ctx, order, checkpoint, counts) {
  */
 export async function tickVerify(deps) {
   const ctx = context(deps);
-  const counts = { due: 0, checked: 0, passed: 0, failed: 0, appeals: 0, settled: 0, errors: 0 };
+  const counts = { due: 0, checked: 0, passed: 0, failed: 0, appeals: 0, settled: 0, recovered: 0, errors: 0 };
+  // Money before pages: a verified order that was never settled needs no reader to be.
+  try { await settleVerifiedOrders(ctx, counts); } catch { counts.errors += 1; }
   if (!ctx.webReader) return { ...counts, skipped: "web_reader_unavailable" };
   const now = ctx.now();
   // Checkpoints end at +48 h; a week of slack covers a verifier that was down.

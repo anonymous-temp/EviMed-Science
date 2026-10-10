@@ -24,10 +24,14 @@
 // - A write refuses item by item: a 200 with `ok: false` and the issues is a
 //   write that wrote nothing, not an error. An error code here means the call
 //   itself could not be read — a `what` outside the vocabulary, a payload of
-//   the wrong shape, a filter with an unknown engine.
+//   the wrong shape, a filter with an unknown engine — or could not be stored:
+//   a constraint of the database's own that the write module did not check
+//   (`geo_write_rejected`, 422) is this payload's fault and the run corrects
+//   it; it is not an outage the run gives up on.
 // - What failed underneath (a database's SQLSTATE) is the operator's to know
 //   and never the run's: its code goes to `report`, the run hears
-//   `geo_gateway_unavailable`.
+//   `geo_gateway_unavailable` — or, for the constraint above, the named
+//   refusal without the code.
 // - Only this file's error codes are double-quoted string literals starting
 //   `geo_` or `social_posts_`: `agentRuns.test.mjs` scans them and holds every
 //   one classified recoverable or terminal.
@@ -49,7 +53,7 @@ const requestLimits = Object.freeze({ read: 16 * 1024, write: 300 * 1024, social
 const answerBudgetMs = 10_000;
 const readFilterFields = Object.freeze(["version", "audience", "round", "engine", "pool", "groupId", "questionId", "limit", "offset"]);
 /** The write module's refusals of a whole call, which reach the run as they are. */
-const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_request_too_large", "geo_read_what_invalid"]);
+const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_write_rejected", "geo_request_too_large", "geo_read_what_invalid"]);
 
 class GeoGatewayError extends Error {
   /** @param {number} status @param {string} code @param {string} message */
@@ -261,9 +265,11 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
         const request = writeRequest(body);
         work = async () => {
           const result = await geoRuntimeWrite({ store: geo.store, project, what: request.what, body: request.body, renameProject: geo.renameProject ?? null,
-            articleGate: geo.articleGate ?? null, articleExists: geo.articleExists ?? (async () => false) });
+            articleGate: geo.articleGate ?? null, articleExists: geo.articleExists ?? (async () => false),
+            researchMaxOpen: Number.isSafeInteger(config.geoResearchMaxOpen) ? config.geoResearchMaxOpen : null });
           geo.service.counters.writes += 1;
           geo.service.counters.writeIssues += result.issues.length;
+          if (result.capped) geo.service.counters.researchCapped = (geo.service.counters.researchCapped ?? 0) + 1;
           return { what: request.what, ...result };
         };
       } else {
@@ -291,8 +297,12 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
       // version the project does not have is the filter being wrong; nothing
       // else of theirs is a code the run's verdict knows.
       if (error instanceof HttpError) {
-        if (passThroughCodes.has(error.code)) error = gatewayError(error.status, error.code, error.message);
-        else if (error.status === 404) error = gatewayError(400, "geo_read_filter_invalid", error.message);
+        if (passThroughCodes.has(error.code)) {
+          // The run hears the refusal; which constraint of the database made it is the operator's.
+          const underneath = /** @type {any} */ (error).cause?.code;
+          if (typeof underneath === "string" && /^[A-Za-z0-9_]{1,64}$/.test(underneath)) report(underneath);
+          error = gatewayError(error.status, error.code, error.message);
+        } else if (error.status === 404) error = gatewayError(400, "geo_read_filter_invalid", error.message);
       }
       const known = error instanceof GeoGatewayError;
       const status = known ? /** @type {any} */ (error).status : 503;

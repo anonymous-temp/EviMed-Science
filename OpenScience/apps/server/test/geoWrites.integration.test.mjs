@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
+import { GEO_AUDIENCES } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { brandRegistry } from "../src/geoParse.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
@@ -94,6 +95,38 @@ test("a write's calls it cannot read are refused whole; its items are refused on
     [1, "claimKey", "invalid"], [1, "sourceKind", "unknown_value"], [2, "quote", "missing"], [3, "claimKey", "duplicate"], [4, undefined, "invalid"],
     [5, "secret", "ignored_fields"],
   ]);
+});
+
+test("a question set the database's own CHECK refuses is a named rejection, not an outage, and nothing of it is stored", options, async () => {
+  // D-01: a database whose audience CHECK predates the `caregiver` word refuses the one bulk insert
+  // with a raw 23514; the gateway used to answer that as `geo_gateway_unavailable`, which a run reads
+  // as "give the platform's data up". The set is the run's to correct, so it is a named refusal.
+  const project = await freshProject();
+  const constraint = "question_groups_audience_check";
+  const setAudienceCheck = (/** @type {readonly string[]} */ words) => database.transaction(async (/** @type {any} */ client) => {
+    await client.query(`ALTER TABLE evimed_geo.question_groups DROP CONSTRAINT ${constraint}`);
+    await client.query(`ALTER TABLE evimed_geo.question_groups ADD CONSTRAINT ${constraint} CHECK (audience IN (${words.map((word) => `'${word}'`).join(", ")}))`);
+  });
+  const groups = [
+    { name: "Doctors", pool: "P1", audience: "physician", questions: [{ text: "Which dose?", kind: "typical", isMeasured: true }] },
+    { name: "Caregivers", pool: "P3", audience: "caregiver", questions: [{ text: "Who gives the injection?", kind: "typical", isMeasured: true }] },
+  ];
+  await setAudienceCheck(["patient", "physician"]);
+  try {
+    await assert.rejects(write(project, "questions", { data: { groups } }), (/** @type {any} */ error) => {
+      assert.deepEqual([error.status, error.code], [422, "geo_write_rejected"]);
+      assert.equal(error.cause?.code, "23514", "the database's SQLSTATE stays with the error for the operator");
+      assert.equal(error.message.includes("question_groups"), false, "the run is not told the table");
+      return true;
+    });
+    assert.deepEqual(await store.questionSets(project.id), [], "the write is one transaction: not even the set row is left");
+    // An error that is not an integrity violation is not mapped: it still reaches the gateway as itself.
+    // The set without the new word is accepted by the same database.
+    assert.equal((await write(project, "questions", { data: { groups: [groups[0]] } })).ok, true);
+  } finally {
+    await setAudienceCheck(GEO_AUDIENCES);
+  }
+  assert.equal((await write(project, "questions", { data: { groups } })).ok, true, "once the CHECK knows the word the whole set is written");
 });
 
 test("a claim is versioned by what it says; its bookkeeping changes in place", options, async () => {
@@ -203,24 +236,42 @@ test("locking retains small and incomplete sets with coverage notices, and prote
   const lock = async (/** @type {Record<string, any>} */ data = {}) => write(project, "lock_questions", { data });
   assert.deepEqual((await lock()).issues.map((/** @type {any} */ issue) => issue.code), ["not_found"], "nothing to lock yet");
 
+  const questionsStep = async () => (await store.getProject(USER, project.id))?.steps.questions.status;
   await write(project, "questions", { data: { groups: fullSet({ pools: ["P1", "P2", "P3"] }) } });
   let refused = await lock();
   assert.equal(refused.ok, true);
   assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice"]);
+  assert.equal(await questionsStep(), "done", "48 measured questions and control groups: the full programme's set");
 
   await write(project, "questions", { data: { groups: fullSet({ control: 1 }) } });
   refused = await lock();
   assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice"]);
+  assert.equal(await questionsStep(), "done", "one control group is a notice, not a thin set");
 
   await write(project, "questions", { data: { groups: fullSet({ perGroup: 2 }) } });
   refused = await lock();
-  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice"], "24 measured is usable with a scope notice");
+  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice", "notice"], "24 measured is usable with a scope notice, and says it is a minimal set");
+  assert.match(refused.issues[1].message, /locked as a minimal set/);
+  assert.equal(await questionsStep(), "minimal", "under the suggested low bound: a diagnosis (D-30)");
 
-  // A set of 36 with no control groups: the run saying "minimal" does not make it one.
+  // A set of 36 with no control groups: the run saying "minimal" does not make it the program's, but the set is a minimal one all the same.
   await write(project, "questions", { data: { groups: fullSet({ control: 0, perGroup: 3 }) } });
   refused = await lock({ minimal: true });
   assert.equal(refused.ok, true, "limited measurements remain useful regardless of the program shape");
   assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code).sort(), ["notice", "notice", "notice"]);
+  assert.equal(await questionsStep(), "minimal", "no control group: a diagnosis");
+
+  // Enough questions but no control group is thin as well; a full set with its controls is not.
+  await write(project, "questions", { data: { groups: fullSet({ control: 0 }) } });
+  assert.equal((await lock()).ok, true);
+  assert.equal(await questionsStep(), "minimal", "48 measured questions and no control group");
+  await write(project, "questions", { data: { groups: fullSet() } });
+  assert.equal((await lock()).ok, true);
+  assert.equal(await questionsStep(), "done", "and the upgrade is a full set locked after it");
+
+  // The set of 36 without controls again, as the rest of the test goes on from it.
+  await write(project, "questions", { data: { groups: fullSet({ control: 0, perGroup: 3 }) } });
+  assert.equal((await lock()).ok, true);
   // A single step asked for downstream (信源), the questions only its upstream: a minimal set —
   // 30 or more measured, four pools, control groups only a notice.
   await store.setStep(project.id, "sources", { status: "queued", requested: true });
@@ -228,17 +279,17 @@ test("locking retains small and incomplete sets with coverage notices, and prote
   assert.equal(minimal.ok, true, JSON.stringify(minimal.issues));
   assert.equal(minimal.measuredCount, 36);
   assert.equal(minimal.alreadyLocked, true);
-  assert.equal((await store.getProject(USER, project.id))?.steps.questions.status, "done", "an already locked set keeps its completion state");
+  assert.equal((await store.getProject(USER, project.id))?.steps.questions.status, "minimal", "an already locked set keeps its completion state");
 
   // The full program asked for: the questions step itself is requested.
   await store.setStep(project.id, "questions", { requested: true });
   const program = /** @type {any} */ (await store.getProject(USER, project.id));
-  await write(program, "questions", { data: { groups: fullSet() } });
+  const fullSetWritten = await write(program, "questions", { data: { groups: fullSet() } });
   const full = await write(program, "lock_questions", { data: {} });
   assert.equal(full.ok, true, JSON.stringify(full.issues));
-  assert.deepEqual([full.version, full.measuredCount], [5, 48]);
+  assert.deepEqual([full.version, full.measuredCount], [fullSetWritten.version, 48]);
   assert.equal((await store.getProject(USER, project.id))?.steps.questions.status, "done");
-  const again = await write(program, "lock_questions", { data: { version: 5 } });
+  const again = await write(program, "lock_questions", { data: { version: fullSetWritten.version } });
   assert.equal(again.alreadyLocked, true, "locking twice is a no-op");
 });
 
@@ -262,6 +313,12 @@ test("the lock rule is a pure function of the set", () => {
   assert.deepEqual(geoLockCheck(groups(3, 20, 4), false).refusals, [], "3 of 20 is inside the tolerance");
   assert.equal(geoLockCheck(groups(3, 12, 11), false).notices[0].code, "notice", "132 questions remain usable within the queue resource ceiling");
   assert.deepEqual(geoLockCheck(groups(0, 10, 3), true).refusals, [], "a minimal set of 30 locks without control groups");
+  // A set is thin below the suggested low bound or with no control group; it is never refused for that.
+  assert.equal(geoLockCheck(groups(3, 12, 4), false).thin, false);
+  assert.equal(geoLockCheck(groups(3, 12, 3), false).thin, true, "36 measured under the full programme's 40");
+  assert.equal(geoLockCheck(groups(0, 12, 4), false).thin, true, "48 measured and no control group");
+  assert.equal(geoLockCheck(groups(1, 12, 4), false).thin, false, "a single control group is a notice");
+  assert.deepEqual(geoLockCheck(groups(0, 12, 3), false).refusals, []);
 });
 
 test("targets are forecasts or commercial, three tiers, no duplicates; sources and articles check what they point at", options, async () => {

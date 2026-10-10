@@ -13,7 +13,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.mjs";
 import { GeoJudge, tickParse } from "../src/geoJudge.mjs";
-import { tickMetrics } from "../src/geoMetricsJob.mjs";
+import { netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
 import { noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { GEO_TABLES_FOR_TESTS, fakeModel, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
@@ -638,6 +638,59 @@ test("a noise round writes the noise bands, and the net effect is not computed b
   } finally {
     await h.probe.close();
   }
+});
+
+test("the net effect reads the arms' earlier cells: an insufficient cell with counts pools, one without is no observation, a computed row keeps its band (Q-2)", options, async () => {
+  await reset();
+  await seed("geo_n");
+  const ENGINES = ["deepseek", "doubao"];
+  const round = (/** @type {string} */ id, /** @type {string} */ kind, /** @type {string} */ date) => database.query(
+    `INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, status, sample_date, ref) VALUES ($1, 'user_geo_n', 'geo_n', $2, 1, 'done', $3, $4::jsonb)`,
+    [id, kind, date, JSON.stringify({ balance: { engines: ENGINES } })]);
+  const arm = (/** @type {string} */ roundId, /** @type {string} */ armName, /** @type {string} */ metricId, /** @type {string | null} */ pool, /** @type {Record<string, any>} */ cell) => ({
+    scope: "arm", arm: armName, pool, metricId, dataType: "measured", ...cell,
+  });
+  const write = (/** @type {string} */ roundId, /** @type {any[]} */ rows) => store.writeMetrics({ roundId, geoProjectId: "geo_n", userId: "user_geo_n", computedAt: new Date("2026-10-06T00:00:00Z"), rows });
+  await round("r-base", "baseline", "2026-09-01");
+  await round("r-week", "weekly", "2026-10-06");
+  // Mention (M-01) in P2: the baseline cells are ok (100 answers each); the week's are 8 answers, insufficient.
+  await write("r-base", [
+    arm("r-base", "pilot", "M-01", "P2", { numerator: 20, denominator: 100, value: 20, status: "ok" }),
+    arm("r-base", "control", "M-01", "P2", { numerator: 20, denominator: 100, value: 20, status: "ok" }),
+    // The index has no counts: its own status is the floor, and this one is under it.
+    arm("r-base", "pilot", "M-19", null, { value: 40, status: "ok" }),
+    arm("r-base", "control", "M-19", null, { value: 40, status: "ok" }),
+  ]);
+  await write("r-week", [
+    arm("r-week", "pilot", "M-01", "P2", { numerator: 5, denominator: 8, value: 62.5, status: "insufficient" }),
+    arm("r-week", "control", "M-01", "P2", { numerator: 2, denominator: 8, value: 25, status: "insufficient" }),
+    arm("r-week", "pilot", "M-19", null, { value: 90, status: "insufficient" }),
+    arm("r-week", "control", "M-19", null, { value: 41, status: "ok" }),
+  ]);
+
+  const percent = await store.armSeries({ geoProjectId: "geo_n", setVersion: 1, metricId: "M-01", pool: "P2" });
+  assert.deepEqual(percent.pilot.map((point) => [point.date, point.value, point.numerator, point.denominator]),
+    [["2026-09-01", 20, 20, 100], ["2026-10-06", 62.5, 5, 8]], "a cell under the floor keeps its counts, so the window can be held to the floor as a whole");
+  const index = await store.armSeries({ geoProjectId: "geo_n", setVersion: 1, metricId: "M-19", pool: null });
+  assert.deepEqual(index.pilot.map((point) => [point.date, point.value]), [["2026-09-01", 40], ["2026-10-06", null]], "an insufficient index cell is no observation");
+  assert.deepEqual(index.control.map((point) => [point.date, point.value]), [["2026-09-01", 40], ["2026-10-06", 41]]);
+
+  // The week's four weeks do not make thirty answers: no number, and the row says why.
+  const input = { project: { id: "geo_n" }, round: { setVersion: 1, sampleDate: "2026-10-06" }, controlGroups: 4, engines: ENGINES };
+  const thin = await netEffectRows(store, input);
+  const row = (/** @type {any[]} */ rows, /** @type {string | null} */ pool, /** @type {string} */ variant) => rows.find((entry) => entry.pool === pool && entry.variant === variant);
+  const mention = row(thin, "P2", "M-01");
+  assert.deepEqual([mention.status, mention.reason, mention.value], ["not_measurable", "insufficient_sample", null]);
+  const gvi = row(thin, null, "M-19");
+  assert.deepEqual([gvi.status, gvi.value], ["not_measurable", null], "the pilot's current index cell is out, so its window has no value");
+
+  // A computed row keeps the band it was judged against: through the store's writer, onto the row.
+  await write("r-week", [{ scope: "project", pool: null, metricId: "NET", variant: "M-19", value: 7, numerator: 7, denominator: 0, status: "ok", reason: "up", dataType: "derived", noiseBand: 5, noiseMeasured: false },
+    { scope: "pool", pool: "P2", metricId: "NET", variant: "M-01", value: 3, numerator: 3, denominator: 0, status: "ok", reason: "flat", dataType: "derived", noiseBand: 4.5, noiseMeasured: true },
+    { scope: "pool", pool: "P3", metricId: "NET", variant: "M-08", value: null, status: "not_measurable", reason: "insufficient_sample", dataType: "derived" }]);
+  const stored = await rows(`SELECT variant, noise_band::float8 AS noise_band, noise_measured FROM evimed_geo.metrics WHERE metric_id = 'NET' ORDER BY variant`);
+  assert.deepEqual(stored, [{ variant: "M-01", noise_band: 4.5, noise_measured: true }, { variant: "M-08", noise_band: null, noise_measured: null },
+    { variant: "M-19", noise_band: 5, noise_measured: false }]);
 });
 
 // ---------------------------------------------------------------- a probe that is not there

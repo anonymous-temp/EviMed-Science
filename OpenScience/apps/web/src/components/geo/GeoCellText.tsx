@@ -14,6 +14,8 @@ import type { GeoUnit } from "./geoText";
  *    (G8): whether it cited us cannot be told, which is not the same as “—”.
  *  - `not_measurable` because the two measurements a change compares were
  *    taken on different engines → “引擎不同，不可比”.
+ *  - `not_measurable` because a window of the comparison rests on fewer answers
+ *    than the cell floor → “样本不足”, as a cell under it is.
  *  - any other `not_measurable`, or no cell at all → “—”.
  */
 
@@ -37,6 +39,7 @@ export function geoCellWord(cell: GeoCell | null | undefined, unit: GeoUnit = "p
   if (cell.status === "absent") return "未测";
   if (cell.status === "not_measurable" && cell.reason === "citations_without_links") return GEO_LINKLESS_WORD;
   if (cell.status === "not_measurable" && cell.reason === "engines_differ") return GEO_ENGINES_DIFFER_WORD;
+  if (cell.status === "not_measurable" && cell.reason === "insufficient_sample") return "样本不足";
   if (cell.status !== "ok" || cell.value === null) return "—";
   return formatGeoValue(cell.value, unit);
 }

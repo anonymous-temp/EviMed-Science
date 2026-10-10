@@ -1,6 +1,6 @@
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { geoInterventionIdentity } from "./moduleEvolutionAdapters.mjs";
-import { geoValueContext } from "@evimed/domain";
+import { geoValueJudged } from "@evimed/domain";
 /**
  * SQL for 「循证 GEO」's measurement tables (build spec §2): rounds, probe
  * jobs, snapshots, facts, errors and metrics, plus the reads of the content
@@ -285,13 +285,18 @@ export class GeoMeasureStore {
     }));
     // The cards are the ground truth: a project with verified claims in its product-zone cards is judged against those and nothing
     // else (a claim its card ruler marked ⚠ never reached a card). A project with no cards yet is judged against its claim table.
-    const carded = claimRows.filter((claim) => claim.cardId);
+    // A card the zone has taken back stands for nothing it said (C-3): its claims are out of both, the cards' and the table's - the
+    // owner took them back, and an answer is not right or wrong against them.
     const frozen = roundId ? (await this.round(roundId))?.ref?.evaluationBasis : null;
+    const withdrawn = frozen?.claims ? new Set() : await this.#withdrawnCards(claimRows.map((claim) => claim.cardId).filter(Boolean));
+    const standing = claimRows.filter((claim) => !claim.cardId || !withdrawn.has(claim.cardId));
+    const carded = standing.filter((claim) => claim.cardId);
     return {
       project,
       judgeProduct: frozen?.product ?? project.product, judgeCompetitors: frozen?.competitors ?? project.competitors,
-      value: frozen?.value ?? { version: Number(profile.rows[0]?.version ?? 0), data: geoValueContext(profile.rows[0]?.data) },
-      claims: frozen?.claims ?? (carded.length ? carded : claimRows),
+      // What the judge reads of the profile (scope, summary, findings) and nothing it does not: the round freezes this, row by row.
+      value: frozen?.value ?? { version: Number(profile.rows[0]?.version ?? 0), data: geoValueJudged(profile.rows[0]?.data) },
+      claims: frozen?.claims ?? (carded.length ? carded : standing),
       careFlags: frozen?.careFlags ?? careFlags,
       owned: {
         domains: owned.rows.map((row) => String(row.domain).toLowerCase()).filter(Boolean),
@@ -299,6 +304,20 @@ export class GeoMeasureStore {
           ...ownedLinks.rows.map((row) => String(row.url)).filter((url) => !geoOwnedLinkKey(url).named)].filter(Boolean),
       },
     };
+  }
+
+  /**
+   * Which of these cards the evidence zone has taken back (`evidence_cards.withdrawn`). The zone's tables are another module's: a
+   * deployment without them has no card to have taken back, and a card id nobody holds is not withdrawn.
+   * @param {string[]} cardIds @returns {Promise<Set<string>>}
+   */
+  async #withdrawnCards(cardIds) {
+    const ids = [...new Set(cardIds.map(String))];
+    if (!ids.length) return new Set();
+    const present = (await this.query(`SELECT to_regclass('evimed_frontier.evidence_cards') IS NOT NULL AS present`)).rows[0]?.present === true;
+    if (!present) return new Set();
+    const rows = await this.query(`SELECT id FROM evimed_frontier.evidence_cards WHERE id = ANY($1::text[]) AND withdrawn IS NOT NULL`, [ids]);
+    return new Set(rows.rows.map((/** @type {any} */ row) => String(row.id)));
   }
 
   /**
@@ -1009,12 +1028,13 @@ export class GeoMeasureStore {
           values.push(randomId("gm_"), userId, geoProjectId, roundId, row.scope, row.pool ?? null, row.engine ?? null, row.groupId ?? null,
             row.arm ?? null, row.metricId, row.variant ?? null, row.rival ?? null, row.reason ?? null, row.numerator ?? null,
             row.denominator ?? null, row.value ?? null, row.ciLow ?? null, row.ciHigh ?? null, row.status, row.dataType ?? "measured",
-            row.snapshotCount ?? null, computedAt.toISOString());
+            row.snapshotCount ?? null, row.noiseBand ?? null, row.noiseMeasured ?? null, computedAt.toISOString());
           const n = values.length;
-          return `(${Array.from({ length: 22 }, (_, index) => `$${n - 21 + index}`).join(", ")})`;
+          return `(${Array.from({ length: 24 }, (_, index) => `$${n - 23 + index}`).join(", ")})`;
         });
         await client.query(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id, round_id, scope, pool, engine, group_id, arm, metric_id,
-            variant, rival, reason, numerator, denominator, value, ci_low, ci_high, status, data_type, snapshot_count, computed_at)
+            variant, rival, reason, numerator, denominator, value, ci_low, ci_high, status, data_type, snapshot_count, noise_band, noise_measured,
+            computed_at)
           VALUES ${tuples.join(", ")}`, values);
       }
     });
@@ -1027,6 +1047,13 @@ export class GeoMeasureStore {
    * balance, `noteRoundBalance`; null for a round measured before it was
    * recorded). Whether two rounds are comparable is the caller's to decide by
    * those engines (metrics.json net_effect.comparability_keys).
+   *
+   * A cell under the 30-answer floor (`insufficient`) is kept when it carries
+   * its counts, so the net effect can pool it with its window's other weeks
+   * and hold the pooled window to the floor (`netEffect`); one without counts
+   * (the index, whose floor is the cell's own status) cannot be held to
+   * anything and is no observation: its value is kept in the table for the
+   * record and does not enter a comparison.
    * @param {{ geoProjectId: string, setVersion: number | null, metricId: string, pool: string | null, variant?: string | null }} key
    */
   async armSeries({ geoProjectId, setVersion, metricId, pool, variant = null }) {
@@ -1042,7 +1069,7 @@ export class GeoMeasureStore {
     for (const row of result.rows) {
       const arm = row.arm === "control" ? "control" : row.arm === "pilot" ? "pilot" : null;
       if (!arm) continue;
-      const measurable = row.status === "ok" || row.status === "insufficient";
+      const measurable = row.status === "ok" || (row.status === "insufficient" && num(row.denominator) !== null);
       const date = typeof row.sample_date === "string" ? row.sample_date.slice(0, 10) : /** @type {string} */ (iso(row.sample_date)).slice(0, 10);
       const engines = Array.isArray(row.engines) ? row.engines.map(String).sort() : null;
       series[arm].push({ date, value: measurable ? num(row.value) : null, numerator: measurable ? num(row.numerator) : null,

@@ -114,6 +114,8 @@ export function standardCatalogue() {
  * @property {{ project: (row: any) => Promise<void>, group: (row: any) => Promise<void>, article: (row: any) => Promise<void>,
  *   source: (row: any) => Promise<void>, target: (row: any) => Promise<void> }} seed
  * @property {(row: { geoProjectId: string, orderId: string, kind: string, amountCny: number }) => Promise<void>} tamperLedger
+ * @property {{ article: (id: string, patch: Record<string, any>) => Promise<void>, project: (id: string, patch: Record<string, any>) => Promise<void> }} [alter]
+ *   what a second writer does to a row meanwhile: an article's status, safety, gate or hash, a project's status
  * @property {() => Promise<void>} close
  */
 
@@ -735,6 +737,128 @@ export function defineGeoMarketMoneyPathScenarios(test, makeFixture, options = {
         assert.equal(order.state, "submitted");
       }
       assert.deepEqual(projectIdentityBreaks(await orders(store, p.id), await store.ledgerSums({ geoProjectId: p.id })), []);
+    } finally { await w.close(); }
+  });
+
+  /**
+   * A tick in which `change` happens while the file is being read: after the article was checked and before the reserve (M-1).
+   * @param {any} w @param {(p: { id: string, articleIds: string[] }) => Promise<void>} change
+   */
+  const tickWith = async (w, change) => {
+    const p = await w.project();
+    const inner = w.deps.articleBody;
+    w.deps.articleBody = async (/** @type {any} */ article, /** @type {any} */ project) => { await change(p); return inner(article, project); };
+    const counts = await tickOrders(w.deps);
+    const [order] = await orders(w.fixture.store, p.id);
+    return { p, counts, order, sends: w.fake.requestsTo("/api/media/send").length, money: await moneyOf(w.fixture.store, p.id) };
+  };
+
+  for (const [name, patch] of /** @type {Array<[string, Record<string, any>]>} */ ([
+    ["a clinical-safety finding that opens", { safety: "open", status: "draft" }], ["a withdrawal", { status: "withdrawn" }], ["a failed gate", { gate: "failed" }],
+  ])) {
+    test(`race (M-1): ${name} after the article was checked stops the send, and the plan with it`, options, async () => {
+      const w = await world(makeFixture);
+      try {
+        const { counts, order, sends, money, p } = await tickWith(w, (p) => w.fixture.alter.article(p.articleIds[0], patch));
+        assert.equal(sends, 0, "an article with a finding against it is never placed");
+        assert.equal(order.state, "cancelled", "the plan is withdrawn, as at the first check");
+        assert.equal(counts.submitted, 0);
+        assert.equal(counts.skipped.article_not_placeable, 1);
+        assert.deepEqual([money.reservedCny, money.settledCny], [0, 0], "nothing was held");
+        assert.deepEqual(projectIdentityBreaks(await orders(w.fixture.store, p.id), await w.fixture.store.ledgerSums({ geoProjectId: p.id })), []);
+      } finally { await w.close(); }
+    });
+  }
+
+  test("race (M-1): an article re-reviewed after its file was read is not sent as the file that was read", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const { counts, order, sends, money } = await tickWith(w, (p) => w.fixture.alter.article(p.articleIds[0], { contentSha256: "b".repeat(64) }));
+      assert.equal(sends, 0, "what goes out is what passed review, and the review moved");
+      assert.equal(order.state, "planned", "the plan waits for the next tick, which reads the new file against the new hash");
+      assert.equal(counts.skipped.article_changed_since_review, 1);
+      assert.deepEqual([money.reservedCny, money.settledCny], [0, 0]);
+    } finally { await w.close(); }
+  });
+
+  test("race (M-1): a project paused after the tick listed it is not sent for", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const { counts, order, sends, money } = await tickWith(w, (p) => w.fixture.alter.project(p.id, { status: "paused" }));
+      assert.equal(sends, 0, "paused is paused");
+      assert.equal(order.state, "planned", "the plan stays for when it is resumed");
+      assert.equal(counts.skipped.project_not_active, 1);
+      assert.deepEqual([money.reservedCny, money.settledCny], [0, 0]);
+    } finally { await w.close(); }
+  });
+
+  /**
+   * An order sent, published, and about to be verified at +1 h, with a store that fails the first call of one method (M-2).
+   * @param {any} w @param {(method: string, args: any[]) => boolean} failing
+   */
+  const publishedWithFlakyStore = async (w, failing) => {
+    const store = w.fixture.store;
+    const p = await w.project();
+    await tickOrders(w.deps);
+    let [order] = await orders(store, p.id);
+    w.fake.setOrder(order.vendorOrderNid, { status: 1 });
+    await tickPoll(w.deps);
+    const url = "https://www.jksb.com.cn/p/2026/0925/9.html";
+    w.fake.setOrder(order.vendorOrderNid, { status: 2, order_url: url });
+    w.reader.pages.set(url, { html: publishedHtml(ARTICLE_MARKDOWN) });
+    await tickPoll(w.deps);
+    let failed = false;
+    const flaky = new Proxy(store, {
+      get(target, key) {
+        const value = Reflect.get(target, key, target);
+        if (typeof value !== "function") return value;
+        return async (/** @type {any[]} */ ...args) => {
+          if (!failed && failing(String(key), args)) { failed = true; throw new Error("transient store failure"); }
+          return value.apply(target, args);
+        };
+      },
+    });
+    w.clock.advance(HOUR + 60_000);
+    [order] = await orders(store, p.id);
+    return { p, store, flaky, order };
+  };
+
+  test("a fault in the bookkeeping beside a settlement no longer strands the verified order with its reserve held (M-2)", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const { p, store, flaky, order } = await publishedWithFlakyStore(w, (method) => method === "incrementMediaOutcome");
+      const first = await tickVerify({ ...w.deps, store: flaky });
+      assert.equal(first.errors, 1, "the fault is counted");
+      const settled = await store.getOrder(order.id);
+      assert.equal(settled.state, "settled", "the money was settled before the bookkeeping");
+      assert.equal(settled.settledCny, 100);
+      const money = await moneyOf(store, p.id);
+      assert.deepEqual([money.reservedCny, money.settledCny], [0, 100], "the reserve is released and the spend recorded");
+      assert.deepEqual(projectIdentityBreaks(await orders(store, p.id), await store.ledgerSums({ geoProjectId: p.id })), []);
+      const [article] = await store.getArticles([p.articleIds[0]]);
+      assert.equal(article.status, "published", "the article's own move ran although the tally before it failed");
+    } finally { await w.close(); }
+  });
+
+  test("a settlement that failed is finished by a later tick, however late (M-2)", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const { p, store, flaky, order } = await publishedWithFlakyStore(w, (method, args) => method === "transitionOrder" && args[1]?.to === "settled");
+      const first = await tickVerify({ ...w.deps, store: flaky });
+      assert.equal(first.errors >= 1, true);
+      let current = await store.getOrder(order.id);
+      assert.deepEqual([current.state, current.settledCny], ["verified", null], "stranded between the two writes");
+      assert.equal((await moneyOf(store, p.id)).reservedCny, 110, "the reserve is still held");
+      // Nine days on, past the week the verify list reaches back: the order is settled all the same.
+      w.clock.advance(9 * DAY);
+      const later = await tickVerify(w.deps);
+      assert.deepEqual([later.recovered, later.settled], [1, 1]);
+      current = await store.getOrder(order.id);
+      assert.deepEqual([current.state, current.settledCny], ["settled", 100]);
+      const money = await moneyOf(store, p.id);
+      assert.deepEqual([money.reservedCny, money.settledCny], [0, 100]);
+      assert.deepEqual(projectIdentityBreaks(await orders(store, p.id), await store.ledgerSums({ geoProjectId: p.id })), []);
+      assert.equal((await tickVerify(w.deps)).recovered, 0, "and only once");
     } finally { await w.close(); }
   });
 

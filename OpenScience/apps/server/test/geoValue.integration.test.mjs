@@ -53,6 +53,57 @@ test("semantic observations respect real profile, group, audience and engine bou
   assert.equal(historical.observations[0].basisVersion, 1);
 });
 
+test("a round of eight thousand observations comes back as exact counts and twenty observations, the ones that say something first (D-08)", options, async () => {
+  // 400 judged answers with 20 findings each were 2.87 MB of observations in every reply, and the runtime's client refuses past 4.
+  const project = await fresh();
+  await store.writeValue("alice", project.id, { findings: Array.from({ length: 20 }, (_, index) => ({ id: `f${index}`, statement: `Finding ${index}` })) });
+  const round = `gr_${randomUUID()}`;
+  await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status) VALUES($1,'alice',$2,'baseline','done')", [round, project.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,asked_at)
+    SELECT 'gs_' || $4 || g, 'alice', $1, $2, CASE WHEN g % 2 = 0 THEN 'deepseek' ELSE 'kimi' END, now() - make_interval(secs => g) FROM generate_series(1, $3::integer) g`,
+  [project.id, round, 400, round]);
+  // Even-numbered findings do not apply to the question; the odd ones are judged partly represented, and the first fifth of the answers were judged
+  // against an older profile (basis 1) than the rest (basis 2).
+  await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,judge_extract)
+    SELECT 'gs_' || $3 || g, 'alice', $1, now(), jsonb_build_object('valueBasisVersion', CASE WHEN g <= 80 THEN 1 ELSE 2 END, 'rubricVersion', 'rubric-7', 'valueCoverage',
+      (SELECT jsonb_agg(jsonb_build_object('findingId', 'f' || f, 'status', CASE WHEN f % 2 = 0 THEN 'not_applicable' ELSE 'partial' END, 'quote', 'q', 'reason', 'r') ORDER BY f)
+        FROM generate_series(0, 19) f))
+    FROM generate_series(1, $2::integer) g`, [project.id, 400, round]);
+  await store.writeValue("alice", project.id, { findings: [{ id: "f0", limitations: "newer" }] });
+  await store.writeValue("alice", project.id, { findings: [{ id: "f0", limitations: "newer still" }] });
+  const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
+  const value = await service.valueOf(project);
+  assert.equal(value.version, 3);
+  assert.equal(value.coverage.basisVersion, 2, "the newest basis the round used, never two mixed");
+  assert.equal(value.observationsTotal, 320 * 20, "320 answers on basis 2, twenty observations each");
+  assert.deepEqual([value.coverage.assessed, value.coverage.partial, value.coverage.notApplicable, value.coverage.represented], [3200, 3200, 3200, 0], "exact counts over every observation");
+  assert.equal(value.observations.length, 20);
+  assert.ok(value.observations.every((observation) => observation.status === "partial" && observation.basisVersion === 2 && observation.rubricVersion === "rubric-7"),
+    "the observations that say something first; the ones that do not apply only when there are no others");
+  assert.ok(Buffer.byteLength(JSON.stringify(value)) < 30_000, "the reply no longer grows with the round");
+  const newest = value.observations.map((observation) => Date.parse(observation.askedAt));
+  assert.deepEqual([...newest].sort((a, b) => b - a), newest, "the most recent answers first");
+  // A version asked for is read only against itself, and so is its sample.
+  const older = await service.valueOf(project, { version: 1 });
+  assert.equal(older.coverage.basisVersion, 1);
+  assert.equal(older.observationsTotal, 80 * 20);
+  assert.ok(older.observations.length === 20 && older.observations.every((observation) => observation.basisVersion === 1));
+  // The scope filters count what they scope.
+  const kimi = await service.valueOf(project, { engine: "kimi" });
+  assert.equal(kimi.observationsTotal, 160 * 20);
+  assert.ok(kimi.observations.every((observation) => observation.engine === "kimi"));
+  // A round whose observations all do not apply: they are the sample, there being no others, and the rate is unknown, never zero.
+  const quiet = await fresh();
+  await store.writeValue("alice", quiet.id, { findings: [{ id: "f1", statement: "Unrelated to these questions" }] });
+  const quietRound = `gr_${randomUUID()}`;
+  await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status) VALUES($1,'alice',$2,'weekly','done')", [quietRound, quiet.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,asked_at) VALUES ($1,'alice',$2,$3,'kimi',now())`, [`gs_${quietRound}`, quiet.id, quietRound]);
+  await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,judge_extract) VALUES ($1,'alice',$2,now(),$3::jsonb)`,
+    [`gs_${quietRound}`, quiet.id, JSON.stringify({ valueBasisVersion: 1, valueCoverage: Array.from({ length: 30 }, () => ({ findingId: "f1", status: "not_applicable" })) })]);
+  const none = await service.valueOf(quiet);
+  assert.deepEqual([none.observationsTotal, none.observations.length, none.coverage.assessed, none.coverage.value], [30, 20, 0, null]);
+});
+
 test("backend owns versions, merges concurrent partial work, and isolates readers", options, async () => {
   const project = await fresh();
   await Promise.all([write(project, "value", { findings: [{ id: "f1", statement: "Conflicting effectiveness evidence" }] }),
@@ -107,6 +158,85 @@ test("research uses existing dispatch, deduplicates, preserves a failed result a
   assert.notEqual(dispatched[0].dispatchId, dispatched[1].dispatchId);
 });
 
+test("a project holds a limited number of research tasks open; a task already open is never refused and a finished one frees its place (D-06)", options, async () => {
+  // Forty distinct requests were all accepted, each a billed specialist run.
+  const project = await fresh();
+  const ask = (index, extra = {}) => store.requestResearch("alice", project.id, { capabilityId: "adr-analysis", question: `Question ${index}`, ...extra });
+  const accepted = [];
+  for (let index = 0; index < 5; index += 1) accepted.push(await ask(index));
+  assert.ok(accepted.every((entry) => entry.request && entry.notice === null && !entry.capped), "five places by default");
+  const sixth = await ask(5);
+  assert.deepEqual([sixth.request, sixth.capped], [null, true]);
+  assert.match(sixth.notice ?? "", /already has 5 research tasks queued or running \(the limit is 5\)/);
+  assert.equal((await store.researchRequests(project.id)).length, 5, "nothing was queued");
+  // The same task asked again is the same task, at the limit as well.
+  const again = await ask(2);
+  assert.equal(again.request?.id, accepted[2].request.id);
+  assert.equal(again.capped, undefined);
+  // A running task still holds its place; a finished one frees it.
+  await store.query(`UPDATE evimed_geo.schedule_marks SET state = 'running' WHERE geo_project_id = $1 AND key = $2`, [project.id, accepted[0].request.id]);
+  assert.equal((await ask(6)).capped, true);
+  await store.query(`UPDATE evimed_geo.schedule_marks SET state = 'done' WHERE geo_project_id = $1 AND key = $2`, [project.id, accepted[0].request.id]);
+  assert.ok((await ask(6)).request, "a place is free");
+  // Asking again for a finished task is a new open one: refused while the limit is held, accepted once there is room.
+  assert.equal((await ask(0, { retry: true })).capped, true);
+  await store.query(`UPDATE evimed_geo.schedule_marks SET state = 'failed' WHERE geo_project_id = $1 AND key = $2`, [project.id, accepted[1].request.id]);
+  const retried = await ask(0, { retry: true });
+  assert.equal(retried.request?.status, "pending", "room for the retry of the finished one");
+  // The limit is a deployment's: a smaller one, and none at all.
+  const small = await fresh();
+  const askSmall = (index) => geoRuntimeWrite({ store, project: small, what: "research", researchMaxOpen: 2,
+    body: { data: { capabilityId: "adr-analysis", question: `Small ${index}` } } });
+  assert.deepEqual([(await askSmall(0)).ok, (await askSmall(1)).ok], [true, true]);
+  const refused = await askSmall(2);
+  assert.deepEqual([refused.ok, refused.capped, refused.research], [false, true, null]);
+  assert.deepEqual(refused.issues.map((issue) => issue.code), ["notice"]);
+  const none = await fresh();
+  const closed = await geoRuntimeWrite({ store, project: none, what: "research", researchMaxOpen: 0, body: { data: { capabilityId: "adr-analysis", question: "Any" } } });
+  assert.deepEqual([closed.ok, closed.capped], [false, true]);
+  assert.match(closed.issues[0].message, /queues no research/);
+  // Two requests made together cannot both take the last place.
+  const race = await fresh();
+  const results = await Promise.all(Array.from({ length: 8 }, (_unused, index) =>
+    store.requestResearch("alice", race.id, { capabilityId: "adr-analysis", question: `Race ${index}` }, { maxOpen: 3 })));
+  assert.equal(results.filter((entry) => entry.request).length, 3);
+  assert.equal(results.filter((entry) => entry.capped).length, 5);
+});
+
+test("a research task the allowance refuses does not hold the programme's own steps back (D-07)", options, async () => {
+  // A mark refused for a reason of its own (a balance under that specialist's estimate) was tried first on every tick, and the tick
+  // ended with it: three ticks attempted only meta-analysis and never geo-insight, although the evidence step was requested.
+  const project = await fresh();
+  await store.setStep(project.id, "evidence", { requested: true, status: "queued" });
+  await store.requestResearch("alice", project.id, { capabilityId: "meta-analysis", question: "Pooled effect in adults" });
+  const calls = [];
+  const orchestrator = new GeoOrchestrator({ store, config: {}, dispatchRun: async (input) => {
+    calls.push(input.capabilityId);
+    if (input.capabilityId === "meta-analysis") throw Object.assign(new Error("balance"), { code: "credits_insufficient_for_capability" });
+    return { runId: `r${calls.length}`, sessionId: "s", status: "running" };
+  } });
+  const first = await orchestrator.advance(project.id);
+  assert.deepEqual(calls, ["meta-analysis", "geo-insight"], "research keeps its place in the order; the programme is tried in the same tick");
+  assert.equal(first.dispatched?.runId, "r2");
+  assert.equal(first.deferred, "credits_insufficient_for_capability", "and the refusal is still reported");
+  assert.equal((await store.researchRequests(project.id))[0].status, "pending", "the task waits for its balance, not for a person");
+  // The programme's run holds the one slot, so the refused task is not tried again until it ends.
+  await orchestrator.advance(project.id);
+  assert.deepEqual(calls, ["meta-analysis", "geo-insight"]);
+  // A refusal of the programme's own step still ends the tick: the steps after it depend on it.
+  const waiting = await fresh();
+  await store.setStep(waiting.id, "evidence", { requested: true, status: "queued" });
+  await store.setStep(waiting.id, "journey", { requested: true, status: "queued" });
+  const refused = [];
+  const refusing = new GeoOrchestrator({ store, config: {}, dispatchRun: async (input) => {
+    refused.push(input.capabilityId);
+    throw Object.assign(new Error("balance"), { code: "credits_insufficient_for_capability" });
+  } });
+  const outcome = await refusing.advance(waiting.id);
+  assert.equal(refused.length, 1, "one programme attempt a tick");
+  assert.equal(outcome.deferred, "credits_insufficient_for_capability");
+});
+
 test("population change versions a claim; retraction never resurrects an older active claim; frozen rounds keep their basis", options, async () => {
   const project = await fresh();
   const claim = { claimKey: "benefit", statement: "Effect in the studied population", quote: "Adults were enrolled", sourceRef: "trial", population: "Adults" };
@@ -123,6 +253,26 @@ test("population change versions a claim; retraction never resurrects an older a
   await store.upsertClaims("alice", project.id, [{ ...claim, status: "retired" }]);
   assert.equal((await measure.projectContext(project.id)).claims.length, 0);
   assert.equal((await measure.projectContext(project.id, roundId)).claims[0].version, 2);
+});
+
+test("a round freezes the scope, the summary and the findings of the profile, not its research reports (D-02)", options, async () => {
+  const project = await fresh();
+  const excerpt = "EXCERPT-OF-A-LONG-REPORT ".repeat(240);
+  await store.writeValue("alice", project.id, { scope: { population: "adults" }, summary: "Benefit uncertain", findings: [{ id: "f1", statement: "Benefit uncertain" }],
+    landscape: [{ id: "l1", statement: "Three alternatives" }], lessons: [{ id: "n1", text: "A lesson" }],
+    researchResults: [1, 2, 3, 4].map((index) => ({ id: `run:${index}:pack`, capabilityId: "comprehensive-drug-evaluation", materials: [{ path: `pack/${index}.md`, excerpt }] })) });
+  const measure = new GeoMeasureStore(database);
+  const context = await measure.projectContext(project.id);
+  assert.equal(context.value.version, 1);
+  assert.deepEqual(Object.keys(context.value.data), ["scope", "summary", "findings"]);
+  assert.deepEqual(context.value.data.findings, [{ id: "f1", statement: "Benefit uncertain" }]);
+  assert.ok(JSON.stringify(context.value).length < 500, "the basis a round freezes does not grow with the reports");
+  // A round frozen before this change keeps what it froze, whatever it holds.
+  const roundId = `gr_${randomUUID()}`;
+  const old = { version: 1, data: { findings: [{ id: "f1", statement: "Frozen" }], researchResults: [{ id: "old", materials: [{ excerpt }] }] } };
+  await database.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,ref) VALUES ($1,'alice',$2,'baseline',$3::jsonb)`,
+    [roundId, project.id, JSON.stringify({ evaluationBasis: { claims: [], value: old, careFlags: [] } })]);
+  assert.deepEqual((await measure.projectContext(project.id, roundId)).value, old);
 });
 
 test("source replacement marks only linked work and keeps earlier conclusions readable", options, async () => {

@@ -12,6 +12,7 @@ import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { GeoCards } from "../src/geoCards.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
+import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
@@ -83,6 +84,36 @@ test("an article that cites claims of the project's cards resolves, and the find
   assert.equal(stored.refCheckedSha, createHash("sha256").update(text).digest("hex"));
   // An article that cites nothing says none, not resolved.
   assert.equal((await cards.checkText(project, { text: "一句没有数字的话。", layer: "popular" })).status, "none");
+});
+
+test("the claims of a card taken back are no longer what the judge holds an answer to; a round already frozen keeps its basis (C-3)", options, async () => {
+  // The owner-facing list showed 0 claims for a card taken back while the judge still held answers to all of them.
+  const aside = { claimKey: "aside", statement: "常见不良反应为恶心。", quote: "常见恶心", sourceRef: "信尔美说明书 2025 版", sourceKind: "label", inLabel: true, artifactPath: ".evimed-sources/label.txt" };
+  const { project, first } = await carded([dose, contra]);
+  const measure = new GeoMeasureStore(db);
+  const keys = async (/** @type {string | null} */ roundId = null) => (await measure.projectContext(project.id, roundId)).claims.map((/** @type {any} */ claim) => claim.key).sort();
+  const cardIds = first.cards.map((/** @type {any} */ card) => card.cardId);
+  assert.ok(cardIds.length >= 1);
+  assert.deepEqual(await keys(), ["contra", "dose"], "both claims are carded, and carded they are judged");
+  // A round frozen now keeps what it froze.
+  const frozen = (await measure.projectContext(project.id));
+  await db.query("INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, ref) VALUES ('gr_c3', 'alice', $1, 'baseline', $2::jsonb)",
+    [project.id, JSON.stringify({ evaluationBasis: { claims: frozen.claims, value: frozen.value, careFlags: frozen.careFlags } })]);
+  const withdraw = (/** @type {string} */ id) => db.query(`UPDATE evimed_frontier.evidence_cards SET withdrawn = '{"at":"2026-10-07T00:00:00Z","reason":"撤回"}'::jsonb WHERE id = $1`, [id]);
+  // One card taken back takes its claims out, and the others' stay.
+  await withdraw(cardIds[0]);
+  const remaining = (await db.query("SELECT claim_key FROM evimed_geo.claims WHERE geo_project_id = $1 AND card_id <> $2 ORDER BY claim_key", [project.id, cardIds[0]])).rows.map((row) => row.claim_key);
+  assert.deepEqual(await keys(), remaining, "only the claims of cards that stand");
+  // Every card taken back: nothing is held to what the owner took back, and the claim table does not bring it in by the back door.
+  for (const id of cardIds.slice(1)) await withdraw(id);
+  assert.deepEqual(await keys(), [], "no claim of a withdrawn card, from the cards or from the table");
+  // A claim never carded is still the table's, and is what a project without live cards is judged against.
+  await store.upsertClaims("alice", project.id, [aside]);
+  assert.deepEqual(await keys(), ["aside"]);
+  // The frozen round keeps what it froze (the owner's withdrawal does not reach back into answers asked under it).
+  assert.deepEqual(await keys("gr_c3"), ["contra", "dose"]);
+  // A cards listing says the same as the judge: no claim stands in a card taken back.
+  assert.deepEqual((await cards.list(project)).cards.map((/** @type {any} */ card) => card.claims.length), cardIds.map(() => 0));
 });
 
 test("a claim that is not in the cited revision, a card that is not the project's, and another account's card are each unresolved", options, async () => {

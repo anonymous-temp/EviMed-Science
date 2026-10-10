@@ -78,6 +78,55 @@ test("failed specialist runs keep usable reports, optional value JSON is not req
   assert.match(result.materials[0].excerpt, /not incidence/);
 });
 
+test("a GEO capability's own deliverables are never imported as research; its geo-value.json still is (D-02)", async () => {
+  // Four imported programme runs used to put 42 findings and 76 KB of excerpts into every judge prompt.
+  for (const capability of ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"]) {
+    const writes = [], reads = [];
+    await importGeoValue({ store: { writeValue: async (...args) => writes.push(args) }, project: { userId: "u", workspaceDir: "/work" },
+      geoProject: { id: "g" }, run: { id: `run-${capability}`, status: "completed", deliverables: [{ id: "pack", capability }] },
+      capabilityOutputs: async () => ["claims.json", "question-map.json", "revision-notes.md", "strategy.json"],
+      readFile: async (_root, path) => {
+        reads.push(path);
+        if (path.endsWith("geo-value.json")) return Buffer.from(JSON.stringify({ findings: [{ id: "f1", statement: "Benefit is uncertain in adults" }] }));
+        return Buffer.from("An excerpt of the programme's own deliverable. ".repeat(200));
+      }, report: () => {} });
+    assert.deepEqual(reads, ["deliverables/pack/geo-value.json"], `${capability}: only the value file is read`);
+    assert.equal(writes.length, 1, capability);
+    assert.deepEqual(Object.keys(writes[0][2]), ["findings"], `${capability}: no researchResults`);
+  }
+  // Nothing written when the GEO run left no value file.
+  const none = [];
+  await importGeoValue({ store: { writeValue: async (...args) => none.push(args) }, project: { userId: "u", workspaceDir: "/work" }, geoProject: { id: "g" },
+    run: { id: "run-quiet", status: "completed", deliverables: [{ id: "pack", capability: "geo-content" }] },
+    readFile: async (_root, path) => { if (path.endsWith("geo-value.json")) throw new Error("Not produced"); return Buffer.from("article text"); }, report: () => {} });
+  assert.deepEqual(none, []);
+  // A specialist's report, on the other hand, is the research the next turn reuses.
+  const research = [];
+  await importGeoValue({ store: { writeValue: async (...args) => research.push(args) }, project: { userId: "u", workspaceDir: "/work" }, geoProject: { id: "g" },
+    run: { id: "run-research", status: "completed", deliverables: [{ id: "review", capability: "comprehensive-drug-evaluation" }] },
+    readFile: async (_root, path) => { if (path.endsWith("report.md")) return Buffer.from("A usable synthesis."); throw new Error("Not produced"); }, report: () => {} });
+  assert.equal(research[0][2].researchResults[0].capabilityId, "comprehensive-drug-evaluation");
+});
+
+test("the judge is shown the scope, the summary and the findings of a profile, not its research reports or the rest (D-02)", () => {
+  const excerpt = "EXCERPT-OF-A-LONG-REPORT ".repeat(240);
+  const data = { scope: { population: "adults" }, summary: "Benefit uncertain", findings: [{ id: "f1", statement: "Benefit uncertain" }, { statement: "no id" }],
+    researchResults: [{ id: "run:1:a", materials: [{ path: "a/report.md", excerpt }] }, { id: "run:2:a", materials: [{ path: "b/report.md", excerpt }] }],
+    landscape: [{ id: "l1", statement: "Three alternatives" }], decisions: [{ id: "d1" }], lessons: [{ id: "n1", text: "LESSON" }], sourceChanges: [{ id: "c1" }] };
+  const input = { owner: { userId: "u", projectId: "p" }, product: {}, competitors: [], careFlags: [], claims: [], value: { version: 3, data },
+    question: { text: "Is it appropriate for me?" }, answer: "The benefit remains uncertain." };
+  const built = buildJudgeInput(input);
+  const project = JSON.parse(built.prefix.slice(built.prefix.indexOf("{")));
+  assert.deepEqual(Object.keys(project.value), ["scope", "summary", "findings"]);
+  assert.deepEqual(project.value.findings, [{ id: "f1", statement: "Benefit uncertain" }], "only a finding the judge can answer for by id");
+  assert.equal(built.prefix.includes("EXCERPT-OF-A-LONG-REPORT") || built.prefix.includes("LESSON"), false);
+  assert.ok(built.prefix.length < 2_000, `the prefix does not grow with the research reports (${built.prefix.length})`);
+  assert.deepEqual(built.valueFindings.map((entry) => entry.id), ["f1"]);
+  // At most sixty findings, as before.
+  const many = buildJudgeInput({ ...input, value: { version: 3, data: { findings: Array.from({ length: 80 }, (_, index) => ({ id: `f${index}`, statement: "x" })) } } });
+  assert.equal(many.valueFindings.length, 60);
+});
+
 test("declared specialist artifacts are reusable while unsafe paths remain outside the import", async () => {
   const writes = [], reads = [];
   await importGeoValue({ store: { writeValue: async (...args) => writes.push(args) },
@@ -97,28 +146,43 @@ test("declared specialist artifacts are reusable while unsafe paths remain outsi
   assert.ok(reads.every(path => !path.includes("secret") && !path.includes("outside") && !path.includes("plot")));
 });
 
+/**
+ * A store double whose coverage read answers as the SQL does (D-08): the observation counts by (value basis, status), and the first
+ * observations of each basis. The SQL itself is exercised against a real database in geoValue.integration.test.mjs.
+ * @param {Array<{ basis: number, entries: Array<Record<string, any>>, engine?: string, roundId?: string }>} facts @param {{ filter?: any }} [received]
+ */
+const coverageRead = (facts, received = {}) => async (/** @type {string} */ _id, /** @type {any} */ filter) => {
+  received.filter = filter;
+  /** @type {Map<string, { basisVersion: number, status: string, n: number }>} */
+  const counts = new Map();
+  const sample = [];
+  for (const fact of facts) {
+    for (const entry of fact.entries) {
+      const key = `${fact.basis}:${entry.status}`;
+      counts.set(key, { basisVersion: fact.basis, status: entry.status, n: (counts.get(key)?.n ?? 0) + 1 });
+      sample.push({ ...entry, engine: fact.engine ?? "deepseek", roundId: fact.roundId ?? null, basisVersion: fact.basis, rubricVersion: null, askedAt: null });
+    }
+  }
+  return { counts: [...counts.values()], sample };
+};
+
 test("coverage never combines different value bases and passes audience/group/engine scope to the measurement read", async () => {
-  let parameters;
+  const received = {};
   const store = { latestValue: async () => ({ version: 2, data: { findings: [] } }), researchRequests: async () => [], listArticles: async () => [],
-    query: async (_sql, args) => {
-      parameters = args;
-      return { rows: [1, 2].map(version => ({ engine: "deepseek", judge_extract: { valueBasisVersion: version,
-        valueCoverage: [{ findingId: "f1", status: "represented" }] } })) };
-    } };
+    valueCoverage: coverageRead([1, 2].map(version => ({ basis: version, entries: [{ findingId: "f1", status: "represented" }] })), received) };
   const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
   const value = await service.valueOf({ id: "g" }, { groupId: "group", audience: "caregiver", engine: "deepseek" });
   assert.equal(value.coverage.assessed, 1);
   assert.equal(value.coverage.basisVersion, 2);
   assert.ok(value.observations.every(observation => observation.basisVersion === 2));
-  assert.deepEqual(parameters, ["g", "deepseek", "group", "caregiver"]);
+  assert.deepEqual(received.filter, { engine: "deepseek", groupId: "group", audience: "caregiver" });
 });
 
 test("a profile written after the round keeps that round's coverage, read against the basis it was judged on", async () => {
   // The round froze value version 2; a research import then wrote version 3. Before the fix the page
   // filtered on the latest version and showed nothing until the next round.
   const store = { latestValue: async (_id, version) => ({ version: version ?? 3, data: { findings: [] } }), researchRequests: async () => [], listArticles: async () => [],
-    query: async () => ({ rows: [{ engine: "kimi", round_id: "r1", judge_extract: { valueBasisVersion: 2,
-      valueCoverage: [{ findingId: "f1", status: "represented" }, { findingId: "f2", status: "partial" }] } }] }) };
+    valueCoverage: coverageRead([{ basis: 2, engine: "kimi", roundId: "r1", entries: [{ findingId: "f1", status: "represented" }, { findingId: "f2", status: "partial" }] }]) };
   const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
   const current = await service.valueOf({ id: "g" });
   assert.equal(current.version, 3);
@@ -130,6 +194,20 @@ test("a profile written after the round keeps that round's coverage, read agains
   assert.equal(asked.coverage.basisVersion, 3);
 });
 
+test("the reply carries a bounded sample of the observations and their total; the counts are over all of them (D-08)", async () => {
+  const entries = [...Array.from({ length: 300 }, (_, index) => ({ findingId: `f${index % 20}`, status: index % 3 === 0 ? "not_applicable" : "represented" })),
+    ...Array.from({ length: 40 }, (_, index) => ({ findingId: `f${index % 20}`, status: "partial" }))];
+  const store = { latestValue: async () => ({ version: 1, data: { findings: [] } }), researchRequests: async () => [], listArticles: async () => [],
+    valueCoverage: coverageRead([{ basis: 1, entries }]) };
+  const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
+  const value = await service.valueOf({ id: "g" });
+  assert.equal(value.observationsTotal, 340, "the total is every observation on the basis");
+  assert.equal(value.observations.length, 20, "and the reply carries twenty of them");
+  assert.deepEqual([value.coverage.assessed, value.coverage.represented, value.coverage.partial, value.coverage.notApplicable], [240, 200, 40, 100],
+    "the counts are over every observation, not the twenty");
+  const empty = await new GeoService({ store: { ...store, latestValue: async () => ({ version: 0, data: {} }) }, config: { geoEnabled: true, geoAudience: "all" } }).valueOf({ id: "g" });
+  assert.deepEqual([empty.observations, empty.observationsTotal, empty.coverage.basisVersion], [[], 0, null], "no profile, no coverage");
+});
 
 test("judge output contract requests semantic assessments and refusals cannot become measured omissions", () => {
   const schema = JSON.parse(GEO_JUDGE_INSTRUCTIONS.split("\n").at(-1));
