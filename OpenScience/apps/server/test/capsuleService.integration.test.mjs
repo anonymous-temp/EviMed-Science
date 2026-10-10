@@ -109,6 +109,20 @@ test("runtime notes are idempotent and take effect at once, and a retirement tak
 });
 
 
+// 2026-10-10 review M-8, against the real store: a note beside an enabled received pack was kept in a capsule nothing read.
+test("a note taken beside a received pack enabled for the project is read, and the pack stays enabled", options, async () => {
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'beside-pack','Beside pack',1048576) ON CONFLICT DO NOTHING", [other]);
+  const documents = new ProductDocuments(database);
+  const pack = await documents.put(other, "capsule", `pack-${randomUUID()}`, { title: "Shared pack", imported: true, activationMode: "guest" }, { expectedRevision: 0 });
+  await service.activate(other, pack.id, { mode: "guest", projectId: "beside-pack" });
+  const note = await service.note(other, "beside-pack", { factKind: "preference", content: "Prefer forest plots with prediction intervals." });
+  assert.equal(await service.inForce(other, "beside-pack", note.payload.capsuleId), true);
+  assert.equal((await service.recall(other, { projectId: "beside-pack", query: "forest" })).items.length, 1);
+  const active = (await service.active(other, "beside-pack")).items;
+  assert.deepEqual(active.map((item) => item.capsuleId), [note.payload.capsuleId, pack.id]);
+  assert.deepEqual(active.map((item) => item.mode), ["own", "guest"]);
+});
+
 /** An index whose recall does whatever the case needs. Nothing else is reached:
  *  the capsule service asks it for the account generation and for hits. */
 function indexDouble(recall) {

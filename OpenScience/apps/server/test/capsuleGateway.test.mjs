@@ -7,7 +7,7 @@ import { RuntimeManager, issueEviMedWorkloadToken } from "../src/runtimeManager.
 import { createCapsuleGatewayHandler } from "../src/capsuleGateway.mjs";
 import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
 
-async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null, subscriptions = null, clinicalContext = null } = {}) {
+async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null, subscriptions = null, clinicalContext = null, noteInForce = true, noteStatus = "approved" } = {}) {
   const dir = await mkdtemp("/tmp/evimed-capsule-gateway-");
   const secret = randomBytes(32).toString("hex");
   const project = { userId: "owner", id: "project-one" };
@@ -21,7 +21,9 @@ async function fixture(t, { memorySubstrate = null, sessions = null, recallItems
   const calls = [];
   const service = {
     recall: async (userId, input) => { calls.push({ action: "recall", userId, input }); return { items: structuredClone(recallItems), contextOnly: true }; },
-    note: async (userId, projectId, input) => { calls.push({ action: "note", userId, projectId, input }); return { status: "candidate" }; },
+    note: async (userId, projectId, input) => { calls.push({ action: "note", userId, projectId, input }); return { id: "note-1", payload: { status: noteStatus, capsuleId: "notes-capsule" } }; },
+    // Whether the capsule a note landed in is read by this project (`CapsuleService.inForce`).
+    inForce: async (userId, projectId, capsuleId) => { calls.push({ action: "inForce", userId, projectId, capsuleId }); return noteInForce; },
   };
   let exists = true;
   let authorize;
@@ -386,4 +388,26 @@ test("with several conversations running the pause asked is the account's and th
   assert.equal((await g.request("recall", { query: "x" })).status, 503, "the tool reports memory unavailable; it does not recall for a researcher who may have asked for nothing");
   assert.equal((await g.request("note", { factKind: "preference", content: "x" })).status, 503);
   assert.deepEqual(g.calls, []);
+});
+
+// 2026-10-10 review M-8: the answer to a note was a constant. A note stored in a capsule nothing reads must not be
+// reported as taking effect.
+test("a note answers takesEffect from what the service says is in force, and says when it is not", async (t) => {
+  const f = await fixture(t);
+  const taken = await (await f.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
+  assert.equal(taken.takesEffect, true);
+  assert.equal(taken.notice, undefined);
+  assert.deepEqual(f.calls.filter((call) => call.action === "inForce"), [{ action: "inForce", userId: "owner", projectId: "project-one", capsuleId: "notes-capsule" }],
+    "the account and the project come from the credential; the capsule is the one the note landed in");
+
+  const unread = await fixture(t, { noteInForce: false });
+  const kept = await (await unread.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
+  assert.equal(kept.takesEffect, false);
+  assert.match(kept.notice, /不会被读取/);
+  assert.equal(kept.entry.id, "note-1", "it is kept, and the answer does not pretend otherwise");
+
+  const undone = await fixture(t, { noteStatus: "retired" });
+  assert.equal((await (await undone.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json()).takesEffect, false,
+    "a note the researcher already undid is not in force by being noted again");
+  assert.equal(undone.calls.filter((call) => call.action === "inForce").length, 0, "nothing to ask about a note that is not approved");
 });

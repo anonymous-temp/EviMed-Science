@@ -366,3 +366,52 @@ test("a received pack's text cannot close the trial block or open a platform blo
   assert.doesNotMatch(context, /<evimed-brief>|<evimed-system>/);
   assert.match(context, /合并前先报告 I²/, "the method itself still reaches the trial");
 });
+
+// 2026-10-10 review M-8: the notes capsule was put in force only when the project's active list was EMPTY, so with a
+// received pack already enabled for the project a note was stored, approved, in a capsule nothing read — and the
+// gateway still told the model `takesEffect: true`.
+test("a note lands in force even when a received pack already occupies the project's list, and never displaces it", async () => {
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  const pack = await documents.put(USER, "capsule", "pack-n", { title: "李主任的工作方式", imported: true, activationMode: "guest" }, { expectedRevision: 0 });
+  await service.activate(USER, pack.id, { mode: "guest", projectId: "project_1" });
+
+  const note = await service.note(USER, "project_1", { factKind: "preference", content: "回答先给结论" });
+  const recalled = await service.recall(USER, { query: "结论", projectId: "project_1" });
+  assert.deepEqual(recalled.items.map((item) => item.id), [note.id], "what the assistant noted is read by the next recall");
+  assert.equal(await service.inForce(USER, "project_1", note.payload.capsuleId), true);
+  assert.equal(await service.inForce(USER, "project_2", note.payload.capsuleId), false, "in force where it was noted, not in another project");
+  assert.deepEqual((await service.active(USER, "project_1")).items.map((item) => [item.capsuleId === pack.id ? "pack" : "notes", item.mode]),
+    [["notes", "own"], ["pack", "guest"]], "the researcher's own first, the borrowed pack kept");
+  // The profile reads own capsules; the note is theirs to the platform's predicate.
+  assert.equal((await service.profileFacts(USER, "project_1", ["preference"])).length, 1);
+
+  // A second note, and the same note again, change nothing about what is in force.
+  await service.note(USER, "project_1", { factKind: "preference", content: "表格优先" });
+  await service.note(USER, "project_1", { factKind: "preference", content: "回答先给结论" });
+  assert.equal((await service.active(USER, "project_1")).items.length, 2);
+});
+
+test("a note stored in a capsule that cannot be put in force says so instead of claiming to be in force", async () => {
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  for (let index = 1; index <= 8; index += 1) {
+    const pack = await documents.put(USER, "capsule", `pack-${index}`, { title: `参考胶囊 ${index}`, imported: true, activationMode: "guest" }, { expectedRevision: 0 });
+    await service.activate(USER, pack.id, { mode: "guest", projectId: "project_1" });
+  }
+  const note = await service.note(USER, "project_1", { factKind: "preference", content: "回答先给结论" });
+  assert.equal(note.payload.status, "approved", "the note is kept — the researcher sees it among their own");
+  assert.equal(await service.inForce(USER, "project_1", note.payload.capsuleId), false, "but eight capsules are already in force here, and none is evicted for it");
+  assert.equal((await service.active(USER, "project_1")).items.length, 8);
+  assert.deepEqual((await service.recall(USER, { query: "结论", projectId: "project_1" })).items, []);
+});
+
+test("an own capsule in force account-wide is in force for a project, and so is a project's note beside it", async () => {
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  const own = await service.ownCapsule(USER, { create: true });
+  assert.equal(await service.inForce(USER, "project_1", own.id), true);
+  const note = await service.note(USER, "project_1", { factKind: "preference", content: "回答先给结论" });
+  assert.equal(await service.inForce(USER, "project_1", note.payload.capsuleId), true);
+  assert.equal(await service.inForce(USER, "project_1", "missing-capsule"), false);
+});

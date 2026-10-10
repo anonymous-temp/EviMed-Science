@@ -172,7 +172,15 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         // a method (capsuleMethods.mjs). `reviewRequired` stays in the answer
         // as false, for a runtime that still reads it.
         const entry = await service.note(user.id, identity.projectId, { factKind: body.factKind, content: body.content, origin: "inferred" });
-        sendJson(res, 200, { entry, reviewRequired: false, takesEffect: true, contextOnly: true });
+        // "At once" is true of a note that is approved and sits in a capsule this project reads. A note kept in a capsule
+        // nothing reads (the project's list is full), or one the researcher already undid, is stored and does not take
+        // effect, and the model is told so (2026-10-10 review M-8: the answer was a constant).
+        const takesEffect = entry?.payload?.status === "approved"
+          && await service.inForce(user.id, identity.projectId, String(entry.payload.capsuleId));
+        sendJson(res, 200, {
+          entry, reviewRequired: false, takesEffect, contextOnly: true,
+          ...(takesEffect ? {} : { notice: "这条已存下，但目前不会被读取：本项目已启用的胶囊数已到上限，或这条已被用户撤销。" }),
+        });
       }
     } catch (error) {
       const safe = error instanceof HttpError ? error : new HttpError(503, "capsule_unavailable", "Research memory is unavailable.");
