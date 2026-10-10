@@ -864,6 +864,7 @@ services:
       # acceptance-*/audit-*/eval-method-* projects are the platform's own (not charged, outside the project
       # ceiling and the runtime slots); unset, there is none. Both containers decide it from the same value.
       OPEN_SCIENCE_ACCEPTANCE_USERNAME:
+      # The loop's own spend caps, in CNY. Value-less: unset is zero, which is no cap (owner, 2026-09-21 and 2026-10-10).
       OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY:

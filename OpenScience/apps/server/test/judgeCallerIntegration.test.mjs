@@ -167,6 +167,17 @@ test('J5 and J6 supply actual metered Flash drift baselines in judge vocabulary'
   assert.equal(flash, 2);
 });
 
+test('the J1 baseline call is held to the learning daily cap only when the deployment sets one: unset and zero are no cap (review L-7)', async () => {
+  const { createMethodScreenBaseline } = await import('../src/methodConsolidation.mjs');
+  for (const [setting, expected] of [[undefined, 0], [0, 0], [7, 7]]) {
+    let seen;
+    const baseline = createMethodScreenBaseline({ config: { deepseekModel: 'deepseek-flash', ...(setting === undefined ? {} : { learningDailyLimitCny: setting }) }, usageLedger: {},
+      callModel: async (_deps, call) => { seen = call.limits.moduleDaily; return { choices: [{ message: { content: JSON.stringify({ screened: { selected: [], rejected: [] } }) } }] }; } });
+    await baseline({ id: 'job', userId: 'user', projectId: 'project' }, [{ id: '0', left: { id: 'a', name: 'a', description: '' }, right: { id: 'b', name: 'b', description: '' } }]);
+    assert.equal(seen, expected, `learningDailyLimitCny ${setting === undefined ? 'unset' : setting}`);
+  }
+});
+
 test('J1 samples the original SCREEN semantics through one metered model call, never a runtime', async () => {
   const { MethodConsolidation, createMethodScreenBaseline } = await import('../src/methodConsolidation.mjs');
   const { createJudgeService } = await import('../src/judgeService.mjs');

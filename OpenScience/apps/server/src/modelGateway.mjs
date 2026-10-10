@@ -1359,7 +1359,7 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
       id: randomUUID(), userId: call.userId, projectId: call.projectId, model: body.model,
       runId: call.runId ?? null, purpose: call.purpose,
       operation: call.operation, taskId: call.taskId, module: call.module,
-      moduleLimit: call.purpose === "learning" ? Number(call.limits?.moduleDaily ?? config.learningDailyLimitCny ?? 10) : Number(call.limits?.moduleDaily ?? 0),
+      moduleLimit: call.purpose === "learning" ? Number(call.limits?.moduleDaily ?? config.learningDailyLimitCny ?? 0) : Number(call.limits?.moduleDaily ?? 0),
       budgetPurpose: call.purpose,
       priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency,
       requestFingerprint: createHash("sha256").update(encodedBody).digest("hex"),

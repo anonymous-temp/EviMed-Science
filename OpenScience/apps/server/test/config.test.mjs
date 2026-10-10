@@ -582,9 +582,11 @@ test("opt-in local auto configuration loads mode-600 EviMed service secrets", as
   }
 });
 
-test("the learning loop's caps default to ten yuan a day and none a week or a run, which is what the config comment says", () => {
+test("the learning loop has no cap by default, a day, a week or a run (owner ruling of 2026-09-21; the daily one read 10 CNY from 2026-10-07 to 2026-10-10)", () => {
   const config = loadConfig({ dataDir: "/tmp/os-config-learning-caps" });
-  assert.deepEqual([config.learningDailyLimitCny, config.learningWeeklyLimitCny, config.learningRunLimitCny], [10, 0, 0]);
+  assert.deepEqual([config.learningDailyLimitCny, config.learningWeeklyLimitCny, config.learningRunLimitCny], [0, 0, 0]);
+  // A deployment that sets one still has it: zero is the default, not a ceiling on what may be set.
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-learning-caps", learningDailyLimitCny: 25 }).learningDailyLimitCny, 25);
 });
 
 test("the agent run monitor outlasts a systematic review by default", () => {
@@ -593,11 +595,10 @@ test("the agent run monitor outlasts a systematic review by default", () => {
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-monitor" }).agentRunMonitorTimeoutMs, 24 * 60 * 60_000);
 });
 
-test("learning has a daily budget while source-understanding remains uncapped by default", () => {
+test("learning and source-understanding are uncapped by default", () => {
   const config = loadConfig({ dataDir: "/tmp/os-config-budgets" });
   assert.equal(config.learningWindow, "", "a lesson is distilled whenever its run has finished");
-  assert.equal(config.learningDailyLimitCny, 10, "method consolidation shares the learning daily budget");
-  for (const key of ["learningRunLimitCny", "learningWeeklyLimitCny",
+  for (const key of ["learningDailyLimitCny", "learningRunLimitCny", "learningWeeklyLimitCny",
     "sourceUnderstandingRunLimitCny", "sourceUnderstandingDailyLimitCny", "sourceUnderstandingWeeklyLimitCny",
     "userRunSpendLimit", "userDailySpendLimit", "userWeeklySpendLimit"]) {
     assert.equal(config[key], 0, `${key} is no cap`);

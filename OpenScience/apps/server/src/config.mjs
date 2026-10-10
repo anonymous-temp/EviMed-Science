@@ -2777,14 +2777,15 @@ export function loadConfig(overrides = {}) {
     learningWindowTimeZone: String(overrides.learningWindowTimeZone
       ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE ?? "Asia/Shanghai"),
     // The learning loop's own caps, counted over `learning` spend only
-    // (`boundedRunBudget.mjs`). Zero means no cap. The daily cap is 10 CNY
-    // unless set (since 2026-10-07, when the Jev judge sites J1/J11/J12/J14/J16
-    // were booked to this purpose, `judgeSites.mjs`; they draw on it too); the
-    // weekly and per-run caps are off unless set. A step that meets the daily
-    // cap defers its job to the next window (`usage_budget_exceeded`), so a
-    // consolidation pass approves what it can before its model steps.
+    // (`boundedRunBudget.mjs`). Zero means no cap, and none is set by default:
+    // the owner's ruling of 2026-09-21 (nothing is to stop the product from being
+    // exercised while it is tested), restored on 2026-10-10 after the daily cap
+    // had read 10 CNY since 2026-10-07. The Jev sites booked to this purpose (J1,
+    // J14 and J16, `judgeSites.mjs`) draw on a cap that is set as well. A step
+    // that meets one defers its job to the next window (`usage_budget_exceeded`)
+    // rather than failing it.
     learningDailyLimitCny: Number(overrides.learningDailyLimitCny
-      ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 10),
+      ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 0),
     learningWeeklyLimitCny: Number(overrides.learningWeeklyLimitCny
       ?? process.env.OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY ?? 0),
     learningRunLimitCny: Number(overrides.learningRunLimitCny
