@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { FRONTIER_EVIDENCE_TYPES } from "@evimed/domain";
 import {
   FRONTIER_AI_MINUTE_INSTRUCTIONS,
   FRONTIER_DIGEST_INSTRUCTIONS,
@@ -212,6 +214,31 @@ test("the edit asks for no 「为什么值得看」: the summary's last sentence
   assert.match(FRONTIER_EDIT_INSTRUCTIONS, /最后一句说明它对临床实践或科研意味着什么，只依据原文，不夸大/);
   assert.equal(FRONTIER_TEXT_LIMITS.summary, 140);
   assert.equal(Object.hasOwn(FRONTIER_TEXT_LIMITS, "reason"), false);
+});
+
+test("D-04: the edit prompt says a design the vocabulary has no key for is `other`, never the nearest design — and the cases that hold it load", async () => {
+  // Production, 2026-10-10: 「多准则决策分析评估NSCLC全面基因组检测价值」 was typed observational by the model (basis model, PubMed type only
+  // Journal Article) because nothing told it what to do with a design the list lacks; the authority term of that label let it be selected.
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /研究设计不在词表里的（卫生经济学评价、决策分析、建模、方法学研究、问卷调查、病例报告）一律填 other，不要套用最接近的设计/);
+  assert.ok(FRONTIER_EVIDENCE_TYPES.includes("other"), "the key the rule points at is in the vocabulary");
+  assert.equal(FRONTIER_EDIT_INSTRUCTIONS.split("\n").filter((line) => line.includes("一律填 other")).length, 1, "one line, not a second rule");
+
+  const cases = JSON.parse(await readFile(new URL("../../../evals/frontier-editing/cases.json", import.meta.url), "utf8"));
+  assert.deepEqual([cases.lane.length, cases.same_event.length, cases.evidence_type.length], [5, 11, 3], "the sections the other readers use are as they were");
+  assert.deepEqual(cases.evidence_type.map((entry) => entry.id), ["synthetic-mcda-genomic-testing", "synthetic-cost-effectiveness-model", "synthetic-pharmacist-survey"]);
+  assert.equal(cases.evidence_type[0].public_id, "5a5fed19cd8ee71f", "the incident's own item");
+  for (const entry of cases.evidence_type) {
+    assert.deepEqual(entry.expect, ["other"], entry.id);
+    assert.ok(entry.expect.every((type) => FRONTIER_EVIDENCE_TYPES.includes(type)), entry.id);
+    assert.ok(entry.why.length > 20, entry.id);
+    // The case goes through the editor's own input builder, and an answer typed `other` is a verified edit of it.
+    const input = buildModelInput({ ...entry.edit, allowedLanes: ["evidence"] });
+    assert.match(input, /^允许的栏目：evidence/);
+    assert.ok(input.endsWith(`摘要：${entry.edit.abstract}`), `${entry.id}: the abstract is the last, whole`);
+    const verified = verifyEdit(answer({ title_zh: "一项研究的评价", summary_zh: "", evidence_type: "other" }), { ...entry.edit, allowedLanes: ["evidence"] }, input);
+    assert.equal(verified.output.evidenceType, "other", entry.id);
+    assert.ok(!verified.failed.has("evidence_type"), entry.id);
+  }
 });
 
 test("an edit that passes every check is published as written, with what the model was shown and its hash", async () => {

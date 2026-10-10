@@ -7,7 +7,7 @@
  * stay right. It calls the live model through the platform's own
  * `FrontierEditor`, so the prompts under test are the ones that ship.
  *
- *   node evals/frontier-editing/run_eval.mjs [--runs 3] [--key-file <path>] [--only <case-id>] [--editor <module>]
+ *   node evals/frontier-editing/run_eval.mjs [--runs 3] [--key-file <path>] [--only <case-id>] [--kind all|lane|same-event|evidence-type] [--editor <module>]
  *
  * `--editor` runs another copy of `frontierEditor.mjs` (placed beside it, so
  * its imports resolve) — the control arm of a prompt change.
@@ -41,11 +41,12 @@ const editor = new FrontierEditor({ deepseekProviderEnabled: true, deepseekApiKe
   { owner: { userId: "eval", projectId: "eval" } });
 const allowedLanes = FRONTIER_LANES.filter((lane) => lane !== "mixed");
 const wanted = (/** @type {{ id: string }} */ item) => !values.only || item.id === values.only;
-if (!["all", "lane", "same-event"].includes(values.kind)) throw new Error("--kind must be all, lane, or same-event");
+if (!["all", "lane", "same-event", "evidence-type"].includes(values.kind)) throw new Error("--kind must be all, lane, same-event, or evidence-type");
+const runsKind = (/** @type {string} */ kind) => values.kind === "all" || values.kind === kind;
 
 /** @type {any[]} */
 const results = [];
-for (const item of (values.kind === "same-event" ? [] : cases.lane.filter(wanted))) {
+for (const item of (runsKind("lane") ? cases.lane.filter(wanted) : [])) {
   const answers = [];
   for (let run = 0; run < runs; run += 1) {
     const screened = await editor.screen([{ key: "1", ...item.screen, allowedLanes }]);
@@ -58,7 +59,18 @@ for (const item of (values.kind === "same-event" ? [] : cases.lane.filter(wanted
   results.push({ kind: "lane", id: item.id, passed, runs, answers, why: item.why });
   console.log(`${passed === runs ? "PASS" : "FAIL"} lane ${item.id} ${passed}/${runs} ${JSON.stringify(answers)}`);
 }
-for (const item of (values.kind === "lane" ? [] : cases.same_event.filter(wanted))) {
+// A design the vocabulary has no key for must come back as `other`, not as the nearest design (D-04).
+for (const item of (runsKind("evidence-type") ? (cases.evidence_type ?? []).filter(wanted) : [])) {
+  const answers = [];
+  for (let run = 0; run < runs; run += 1) {
+    const edited = await editor.edit({ ...item.edit, allowedLanes, defaults: { lane: "evidence" } });
+    answers.push(edited.output?.evidenceType ?? `error:${edited.error}`);
+  }
+  const passed = answers.filter((answer) => item.expect.includes(answer)).length;
+  results.push({ kind: "evidence-type", id: item.id, passed, runs, answers, why: item.why });
+  console.log(`${passed === runs ? "PASS" : "FAIL"} evidence-type ${item.id} ${passed}/${runs} ${JSON.stringify(answers)}`);
+}
+for (const item of (runsKind("same-event") ? cases.same_event.filter(wanted) : [])) {
   const answers = [];
   for (let run = 0; run < runs; run += 1) {
     const judged = await editor.judgeSameEvent({ report: item.report, candidates: item.candidates });
