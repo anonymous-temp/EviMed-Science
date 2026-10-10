@@ -84,8 +84,7 @@ export function RightPane({
   };
 
   if (inspectorMaximized) {
-    // The pane header stays the top row — PaneTitlebarInset (rendered inside
-    // each header) clears the macOS traffic lights, so no extra strip here.
+    // The pane header stays the top row, so no extra strip here.
     return <div className="fixed inset-0 z-drawer bg-surface">{children}</div>;
   }
 
@@ -197,17 +196,5 @@ function OverlayPane({
       {children}
     </div>
   );
-}
-
-/** Spacer at the start of a pane header row: when the pane is maximized on
- *  macOS its header becomes the window's top row, so this clears the native
- *  traffic lights (keeping everything on one line) and lets them drag the
- *  window. Renders nothing otherwise. */
-export function PaneTitlebarInset() {
-  const inspectorMaximized = useUiStore((s) => s.inspectorMaximized);
-  const overlayTitlebar = false;
-  if (!inspectorMaximized || !overlayTitlebar) return null;
-  // Headers pad 16px (px-4); the lights need ~78px clear in total.
-  return <div data-tauri-drag-region className="w-[62px] shrink-0 self-stretch" />;
 }
 

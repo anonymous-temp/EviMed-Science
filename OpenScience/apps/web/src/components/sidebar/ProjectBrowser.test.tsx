@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getWebProjectId, setWebProjectId, WebApiError, type WebAgentRun } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
-import { PROJECT_EXPLAINER } from "@/lib/projectNames";
 import { RUNS_CHANGED_EVENT } from "@/lib/runPresentation";
 import { provideFrameSessionSearch } from "@/lib/runtimeUiBridge";
 import { hintVcrDraftProject } from "@/components/vcr/useVcrProjectIds";
@@ -138,11 +137,11 @@ describe("ProjectBrowser — the projects and their tasks", () => {
   });
 
   // The section is named and not explained (2026-09-23 plan §4: the
-  // interface does not describe how the system works).
+  // interface does not describe how the system works). The sentence that once explained it, kept here so that it stays gone.
   it("names the section without a sentence about what a project is", async () => {
     renderBrowser();
     const section = await screen.findByRole("region", { name: "项目" });
-    expect(section).not.toHaveAccessibleDescription(PROJECT_EXPLAINER);
+    expect(section).not.toHaveAccessibleDescription("一个项目 = 独立的工作区、对话与记忆范围，各有自己的研究环境。");
     expect(within(section).getByRole("heading", { name: "项目" })).not.toHaveAttribute("title");
   });
 

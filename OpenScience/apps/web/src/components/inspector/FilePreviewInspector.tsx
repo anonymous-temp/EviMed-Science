@@ -60,7 +60,6 @@ function ViewerFallback() {
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
-import { PaneTitlebarInset } from "./RightPane";
 import { toast } from "@/lib/toast";
 import { parseFailureMessage } from "@/lib/errorText";
 import { labelFor } from "@/lib/statusLabel";
@@ -213,7 +212,6 @@ export function FilePreviewInspector({
   return (
     <div className="flex h-full flex-col">
       {!embedded && <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
-        <PaneTitlebarInset />
         <span className="truncate text-ui font-medium text-text">{data.filename}</span>
         {tag && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-caption text-muted">{tag}</span>}
         {canToggle && (
