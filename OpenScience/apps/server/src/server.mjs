@@ -6397,7 +6397,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       //
       //   POST /api/agent-runs/dispatch
       //     { sessionId, dispatchId?, text, automated?: boolean, line?: "answer" | "<capability id>" }
-      //   202 { data: run }   run.routeReason (zh) and run.estimatedMinutes say where it went (C3)
+      //   202 { data: run }   run.estimatedMinutes says how long it usually takes (C3); where it went is the ledger's machine reason
       //   400 invalid_agent_run — an unknown field; a `line` that is neither `answer` nor a public
       //       capability id; a `line` on a conversation already bound to a capability
       //

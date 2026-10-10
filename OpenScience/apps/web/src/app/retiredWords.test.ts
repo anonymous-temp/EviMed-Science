@@ -63,6 +63,12 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["未经校验的文件不会被当作交付物", "same: what a run wrote is delivered"],
   ["请自行复核", "a chore the platform hands its reader; the per-claim marks say what was checked"],
   ["用密钥验回执", "what a receipt key signs is not the reader's to know (owner decision 2026-09-29)"],
+  // Why the platform routed a request as it did (R28) is the ledger's machine reason, for operations; no sentence for the reader.
+  ["按问题内容交给", "a run's route is not explained to the researcher"],
+  ["不需要交付报告", "same"],
+  ["你在问题里点名了", "same"],
+  ["按你的选择", "same: a choice the researcher made is not repeated back to them as a routing reason"],
+  ["路由判断没有给出结论", "same"],
   ["引用均为来源原文片段", "a coding file's quotes are spans of its source by construction; the viewer does not vouch for them"],
   ["不由模型生成", "same"],
   // The two modules' names (R10 plan §1, the owner's rulings of 2026-10-07): 「循证 GEO」 again —

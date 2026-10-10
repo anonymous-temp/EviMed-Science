@@ -759,8 +759,6 @@ export interface WebAgentRun {
   // The question as asked, truncated. A run list keyed only by id is a list of
   // hashes.
   question?: string | null;
-  /** Why the router chose this capability, in the reader's words. */
-  routeReason?: string | null;
   /** How long this capability usually takes, as a range in minutes. */
   estimatedMinutes?: { min: number; max: number } | null;
   usage?: WebRunUsage | null;

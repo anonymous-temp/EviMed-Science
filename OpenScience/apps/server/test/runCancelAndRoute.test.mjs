@@ -1,5 +1,6 @@
-// Stopping a run, and telling the researcher where it went and for how long
-// (C3, 2026-09-18; appendix E §5.3 and §9.2).
+// Stopping a run, and telling the researcher for how long it will work (C3, 2026-09-18; appendix E §5.3 and §9.2). Where a run went is the
+// ledger's machine reason, for operations: the reader's sentence for it (「按问题内容交给…」, 「直接回答：…」) had no screen and was deleted
+// 2026-10-10 (owner ruling: the platform's reasons for its own routing are the back office's).
 import assert from "node:assert/strict";
 import { appendFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,47 +10,18 @@ import test from "node:test";
 import { capabilityBrief } from "@evimed/domain";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { runFinishedNotifies } from "../src/notificationService.mjs";
-import { RUN_ESTIMATE_FALLBACKS, normalizeRunEstimate, routeReasonText, runEstimate } from "../src/runRoute.mjs";
+import * as runRoute from "../src/runRoute.mjs";
+import { RUN_ESTIMATE_FALLBACKS, normalizeRunEstimate, runEstimate } from "../src/runRoute.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { HttpError } from "../src/security.mjs";
 import { SpecialistClassifier } from "../src/specialistClassifier.mjs";
 
-test("every route reason the router mints reads as one Chinese sentence, and an unknown one reads as nothing", () => {
-  const cases = [
-    ["session-binding", "meta-analysis", /^按这个对话选定的能力「.+」运行$/],
-    ["unrouted:open-domain", "open-domain-answer", /^直接回答：这个问题不需要交付报告$/],
-    ["unrouted:open-domain:classifier:timeout", "open-domain-answer", /^直接回答：这个问题不需要交付报告（路由判断没有给出结论，按规则处理）$/],
-    ["llm:0.87", "clinical-evidence-synthesis", /^按问题内容交给「临床证据深度分析」$/],
-    // The same sentence whichever model decided: the reader is told where the question went, not who read it.
-    ["jev:0.87", "clinical-evidence-synthesis", /^按问题内容交给「临床证据深度分析」$/],
-    ["matched:named:meta-analysis", "meta-analysis", /^你在问题里点名了「.+」$/],
-    ["matched:clinical-evidence-synthesis:safety-medicine", "clinical-evidence-synthesis", /^问题提到了需要核对用药安全的药品，交给「临床证据深度分析」$/],
-    ["matched:adr-analysis", "adr-analysis", /^按问题里的交付要求交给「.+」$/],
-    ["matched:adr-analysis:classifier:empty_content", "adr-analysis", /^按问题里的交付要求交给「.+」（路由判断没有给出结论，按规则处理）$/],
-    ["autopilot:literature-sentinel", "clinical-evidence-synthesis", /^由你设定的定时任务发起$/],
-    ["adopted:runtime-ui", null, /^来自对话窗口$/],
-    ["adopted:runtime-ui:llm:0.91", "clinical-evidence-synthesis", /^来自对话窗口，按问题内容交给「临床证据深度分析」$/],
-    ["adopted:runtime-ui:jev:0.91", "clinical-evidence-synthesis", /^来自对话窗口，按问题内容交给「临床证据深度分析」$/],
-    // The conversation window's assistant decides whether to deliver; the
-    // note says where the task came from and claims nothing about reports.
-    ["adopted:runtime-ui:unrouted:open-domain", "open-domain-answer", /^来自对话窗口$/],
-  ];
-  for (const [reason, agent, expected] of cases) {
-    const text = routeReasonText(reason, agent);
-    assert.match(String(text), expected, `${reason} → ${text}`);
-    assert.doesNotMatch(String(text), /[a-z]{4,}/, `${reason} leaked a machine word: ${text}`);
-  }
-  assert.equal(routeReasonText("choice:answer", "open-domain-answer"), "按你的选择：普通问答");
-  assert.equal(routeReasonText("choice:clinical-evidence-synthesis", "clinical-evidence-synthesis"), "按你的选择：临床证据深度分析");
-  assert.equal(routeReasonText("choice:no-such-capability", "no-such-capability"), "按你的选择：对应的能力");
-  assert.equal(routeReasonText("something-new", "x"), null, "a reason this build does not know is not guessed at");
-  assert.equal(routeReasonText(null, null), null);
-  assert.equal(routeReasonText("llm:0.87", "no-such-capability"), "按问题内容交给对应的能力");
-  // Only the confidence the classifiers mint: a malformed one is a reason this build does not know.
-  for (const malformed of ["jev:", "jev:high", "jev:2.5", "jev:0.9:extra", "jev:-0.2"]) assert.equal(routeReasonText(malformed, "meta-analysis"), null, malformed);
+test("the platform keeps no sentence about why a run went where it went", () => {
+  assert.equal(runRoute.routeReasonText, undefined, "the reader's sentence for a route reason is gone; the machine reason stays in the ledger");
+  assert.deepEqual(Object.keys(runRoute).sort(), ["RUN_ESTIMATE_FALLBACKS", "normalizeRunEstimate", "runEstimate"]);
 });
 
-test("a route the Jev classifier settled reads as the same sentence as one the Flash classifier chose", async () => {
+test("a route the Jev classifier settled is minted as the machine reason the ledger reads", async () => {
   const agents = [{ id: "meta-analysis", version: "1.0.0", runtimeAgent: "evimed-meta-analysis", title: "Meta", description: "systematic review and meta-analysis" }];
   const classifier = new SpecialistClassifier({ llmRoutingEnabled: true, llmRoutingConfidenceThreshold: 0.75, deepseekProviderEnabled: true, deepseekApiKey: "sk-test",
     deepseekBaseUrl: "https://api.deepseek.com", deepseekModel: "deepseek-v4-pro", production: false, modelGatewayTimeoutMs: 30_000 }, {
@@ -58,8 +30,6 @@ test("a route the Jev classifier settled reads as the same sentence as one the F
   const route = await classifier.classify("请做 Meta 分析", agents);
   assert.equal(route?.agentId, "meta-analysis");
   assert.match(String(route?.reason), /^jev:0\.87$/);
-  assert.equal(routeReasonText(route?.reason, route?.agentId), routeReasonText("llm:0.87", "meta-analysis"));
-  assert.match(String(routeReasonText(route?.reason, route?.agentId)), /^按问题内容交给「.+」$/);
 });
 
 test("an estimate is the capability's display range, else its manifest's, else the fallback table", () => {
@@ -91,7 +61,7 @@ async function withStore(fn) {
   }
 }
 
-test("a run keeps the estimate and the route it was dispatched with, in the reader's words", async () => {
+test("a run keeps the estimate and the machine route reason it was dispatched with", async () => {
   await withStore(async ({ store, project, binding }) => {
     const run = await store.dispatch(project, {
       sessionId: binding.sessionId, dispatchId: "route_1", question: "问题",
@@ -100,7 +70,7 @@ test("a run keeps the estimate and the route it was dispatched with, in the read
       estimatedMinutes: { min: 30, max: 120 },
     }, async () => ({ accepted: true }));
     assert.deepEqual(run.estimatedMinutes, { min: 30, max: 120 });
-    assert.equal(run.routeReason, "按问题内容交给「临床证据深度分析」");
+    assert.equal(run.routeReason, undefined, "no sentence of the platform's about its routing");
     assert.equal(run.effectiveRouteReason, "llm:0.93", "the machine reason stays for operations");
     const [listed] = await store.list(project);
     assert.deepEqual(listed.estimatedMinutes, { min: 30, max: 120 });
@@ -145,7 +115,7 @@ test("cancelling records who stopped the run, is idempotent, and names the child
   });
 });
 
-test("the cancel route stops the kernel first, then the ledger, and the dispatch answer says where the run went", async () => {
+test("the cancel route stops the kernel first, then the ledger, and the dispatch answer carries the estimate", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-run-cancel-route-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false });
   const address = await app.listen(0, "127.0.0.1");
@@ -164,7 +134,7 @@ test("the cancel route stops the kernel first, then the ledger, and the dispatch
     });
     assert.equal(dispatched.status, 202);
     const run = (await dispatched.json()).data;
-    assert.equal(typeof run.routeReason, "string", "the dispatch answer carries the route in the reader's words");
+    assert.equal(run.routeReason, undefined, "the dispatch answer carries no sentence about the route");
     assert.ok(run.estimatedMinutes && run.estimatedMinutes.min >= 1 && run.estimatedMinutes.max >= run.estimatedMinutes.min, JSON.stringify(run.estimatedMinutes));
     // A run that is certainly still going, written the way the ledger holds
     // one: the mock runtime ends its own runs before a test can stop them.
@@ -293,7 +263,7 @@ test("deleting a conversation that is still working stops its kernel session fir
   }
 });
 
-test("a line the researcher chose replaces the router and is said as theirs", async () => {
+test("a line the researcher chose replaces the router and is recorded as theirs", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-run-line-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false });
   const address = await app.listen(0, "127.0.0.1");
@@ -315,14 +285,14 @@ test("a line the researcher chose replaces the router and is said as theirs", as
     const answer = (await answered.json()).data;
     assert.equal(answer.effectiveAgentId, "open-domain-answer");
     assert.equal(answer.effectiveRouteReason, "choice:answer", "no router and no classifier had a say");
-    assert.equal(answer.routeReason, "按你的选择：普通问答");
+    assert.equal(answer.routeReason, undefined);
 
     // Any public capability, by id, for a question the router would send elsewhere.
     assert.equal((await put("ses_meta", { mode: "open-domain" })).status, 200);
     const meta = (await (await dispatch({ sessionId: "ses_meta", dispatchId: "line_meta", text: "今天天气怎么样", line: "meta-analysis" })).json()).data;
     assert.equal(meta.effectiveAgentId, "meta-analysis");
     assert.equal(meta.effectiveRouteReason, "choice:meta-analysis");
-    assert.match(meta.routeReason, /^按你的选择：/);
+    assert.equal(meta.routeReason, undefined);
     assert.ok(meta.estimatedMinutes, "the chosen capability's estimate comes with it");
 
     // Refused, not ignored: a line that is not one, a capability this

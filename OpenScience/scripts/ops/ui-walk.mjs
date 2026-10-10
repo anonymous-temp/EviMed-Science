@@ -217,6 +217,8 @@ export const BACK_OFFICE = [
   /文件摘要/, /摘要未记录/, /记录不完整：/, /运行镜像/, /未被观察的部分/, /生成过程未被观察/, /没有可读取的核对意见/, /(?:已|未)保存此版本/, /引用均为来源原文片段/, /不由模型生成/,
   // A run's verdict sentences: no gate sending work back, no chore for the reader, no word of a signing key.
   /退回修复/, /未经校验的文件不会被当作交付物/, /请自行复核/, /用密钥验回执/,
+  // Why a request was routed as it was is the ledger's, not a sentence for the researcher.
+  /按问题内容交给/, /这个问题不需要交付报告/, /路由判断没有给出结论/,
 ];
 
 /**
