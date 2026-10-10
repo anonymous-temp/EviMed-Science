@@ -20,8 +20,15 @@
  * Every refusal is the same code the container always used (`capsule_password_busy`) with the `reason` it was refused for,
  * so a caller that only knew the code still reads it right and a counter can tell the three apart.
  *
+ * The three limits are the deployment's (review C4e): `OPEN_SCIENCE_CAPSULE_KDF_CONCURRENCY`, `_MAX_WAITING` and `_MAX_WAIT_MS`
+ * in `config.mjs`, set once at start through `configure` (`capsuleContainer.mjs` holds the process's one gate). The numbers
+ * below are what the gate was built with and what the configuration defaults to.
+ *
  * @module capsuleKdfGate
  */
+
+/** The gate's limits as it was built: one derivation at a time, six accounts waiting, ten seconds of waiting. */
+export const KDF_GATE_DEFAULTS = Object.freeze({ concurrency: 1, maxWaiting: 6, maxWaitMs: 10_000 });
 
 /** The reasons a request is refused, in the words the operator's counter uses. */
 export const KDF_REFUSAL_REASONS = Object.freeze(["account_busy", "queue_full", "waited_out"]);
@@ -44,10 +51,26 @@ export class PasswordKdfGate {
    * @param {{ concurrency?: number, maxWaiting?: number, maxWaitMs?: number }} [options] the derivations that may run at once,
    *   the accounts that may wait for one, and how long one may wait
    */
-  constructor({ concurrency = 1, maxWaiting = 6, maxWaitMs = 10_000 } = {}) {
+  constructor({ concurrency = KDF_GATE_DEFAULTS.concurrency, maxWaiting = KDF_GATE_DEFAULTS.maxWaiting, maxWaitMs = KDF_GATE_DEFAULTS.maxWaitMs } = {}) {
     this.concurrency = concurrency;
     this.maxWaiting = maxWaiting;
     this.maxWaitMs = maxWaitMs;
+  }
+
+  /** The limits the gate runs on now. */
+  get limits() { return { concurrency: this.concurrency, maxWaiting: this.maxWaiting, maxWaitMs: this.maxWaitMs }; }
+
+  /**
+   * Set the limits from the deployment's configuration. Meant for start, before the first request: a request that is already
+   * running or waiting keeps the place it has, and the new limits apply to the requests that come after. A value that is no
+   * limit (not a whole number, or below its minimum: one derivation, an empty line, a wait of a millisecond) leaves that limit
+   * as it was — the configuration has already refused it by name, and a gate must never be left unable to run anything.
+   * @param {{ concurrency?: unknown, maxWaiting?: unknown, maxWaitMs?: unknown }} limits
+   */
+  configure({ concurrency, maxWaiting, maxWaitMs }) {
+    if (Number.isSafeInteger(concurrency) && /** @type {number} */ (concurrency) >= 1) this.concurrency = /** @type {number} */ (concurrency);
+    if (Number.isSafeInteger(maxWaiting) && /** @type {number} */ (maxWaiting) >= 0) this.maxWaiting = /** @type {number} */ (maxWaiting);
+    if (Number.isSafeInteger(maxWaitMs) && /** @type {number} */ (maxWaitMs) >= 1) this.maxWaitMs = /** @type {number} */ (maxWaitMs);
   }
 
   /** How many derivations are running and how many requests are waiting. */

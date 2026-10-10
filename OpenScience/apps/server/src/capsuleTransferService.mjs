@@ -64,7 +64,10 @@ const notTextOnly = () => {
   return new HttpError(400, "capsule_share_not_text_only", "The shared pack carries more than text.");
 };
 
-/** The most live (not revoked) snapshots one account keeps: each is a file of up to 2 MiB that stays on the disk until it is revoked. */
+/**
+ * The most live (not revoked) snapshots one account keeps: each is a file of up to 2 MiB that stays on the disk until it is revoked.
+ * This is the default; the deployment's is `OPEN_SCIENCE_CAPSULE_MAX_LIVE_SNAPSHOTS` (review C4e), handed in as `maxLiveSnapshots`.
+ */
 export const MAX_LIVE_SNAPSHOTS = 300;
 /** How long a snapshot file may sit without a record before it is taken for a crashed write's leftover, not one being written. */
 const SNAPSHOT_FILE_GRACE_MS = 60 * 60_000;

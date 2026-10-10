@@ -68,3 +68,45 @@ test("the actual app delivers a persisted capsule create, activate and recall wo
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("the actual app takes the capsule store's limits from its configuration: the snapshot cap of an account and the password gate (review C4e)", {
+  skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
+}, async () => {
+  const container = await import("../src/capsuleContainer.mjs");
+  const { KDF_GATE_DEFAULTS } = await import("../src/capsuleKdfGate.mjs");
+  const dataDir = await mkdtemp(path.join("/tmp", "evimed-capsule-limits-"));
+  const app = createWebApiApp({ evimedWorkloadSigningSecret: randomBytes(32).toString("hex"), dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
+    bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl,
+    capsuleMaxLiveSnapshots: 1, capsuleKdfConcurrency: 2, capsuleKdfMaxWaiting: 3, capsuleKdfMaxWaitMs: 1234 });
+  const username = `limits${randomUUID().slice(0, 8)}`;
+  let user;
+  try {
+    user = await app.store.createUser(username, "test-only-limits-password", "Limits fixture");
+    const address = await app.listen(0, "127.0.0.1");
+    const base = `http://127.0.0.1:${address.port}`;
+    const login = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username, password: "test-only-limits-password" }) });
+    assert.equal(login.status, 200);
+    const auth = await login.json();
+    const headers = { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0], "x-open-science-csrf": auth.data.csrfToken };
+    const capsule = (await (await fetch(`${base}/api/capsules`, { method: "POST", headers, body: JSON.stringify({ title: "Limits" }) })).json()).data;
+    const entry = await fetch(`${base}/api/capsules/${capsule.id}/entries`, { method: "POST", headers,
+      body: JSON.stringify({ factKind: "method_preference", layer: "methods", content: "Preserve confidence intervals." }) });
+    assert.equal(entry.status, 201);
+    const exportOnce = () => fetch(`${base}/api/capsules/${capsule.id}/exports`, { method: "POST", headers, body: JSON.stringify({ password: "test-only-export-password" }) });
+    assert.equal((await exportOnce()).status, 201, "the first live snapshot is within the cap the configuration set");
+    const refused = await exportOnce();
+    assert.equal(refused.status, 409, "the second is past a cap of one — the shipped 300 would have taken it");
+    assert.equal((await refused.json()).code, "capsule_snapshots_limit");
+    // Revoking one makes room again, as it always did.
+    const live = (await (await fetch(`${base}/api/capsules/${capsule.id}/exports`, { headers })).json()).data.items[0];
+    assert.equal((await fetch(`${base}/api/capsules/${capsule.id}/exports/${live.id}`, { method: "DELETE", headers, body: JSON.stringify({ expectedRevision: live.revision }) })).status, 200);
+    assert.equal((await exportOnce()).status, 201);
+    assert.deepEqual(container.passwordKdfGateLimits(), { concurrency: 2, maxWaiting: 3, maxWaitMs: 1234 }, "and the password gate runs on the configured limits");
+  } finally {
+    container.configurePasswordKdfGate?.(KDF_GATE_DEFAULTS);
+    if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

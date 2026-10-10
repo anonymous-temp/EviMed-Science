@@ -621,6 +621,13 @@ services:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS:
+      # What bounds the capsule store itself, sharing on or off: the password key derivations that run at once, how many
+      # accounts may wait for one and for how long, and the live snapshots an account keeps. Value-less: unset keeps
+      # config.mjs's defaults (1, 6, 10000 ms, 300).
+      OPEN_SCIENCE_CAPSULE_KDF_CONCURRENCY:
+      OPEN_SCIENCE_CAPSULE_KDF_MAX_WAITING:
+      OPEN_SCIENCE_CAPSULE_KDF_MAX_WAIT_MS:
+      OPEN_SCIENCE_CAPSULE_MAX_LIVE_SNAPSHOTS:
       # 「循证 GEO」 (geoService.mjs) and the media marketplace it places orders
       # through. Value-less: unset keeps config.mjs's defaults — the module off,
       # open to every account once on, no social channel, no marketplace. The

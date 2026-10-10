@@ -293,6 +293,12 @@ const operatorLevers = {
   OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNT_AGE_DAYS: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_FINISHED_RUNS: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY: ["open-science-web"],
+  // What bounds the capsule store (review C4e): a limit that does not arrive leaves the derivation gate and the snapshot cap at their
+  // shipped numbers while the operator believes they raised or lowered them.
+  OPEN_SCIENCE_CAPSULE_KDF_CONCURRENCY: ["open-science-web"],
+  OPEN_SCIENCE_CAPSULE_KDF_MAX_WAITING: ["open-science-web"],
+  OPEN_SCIENCE_CAPSULE_KDF_MAX_WAIT_MS: ["open-science-web"],
+  OPEN_SCIENCE_CAPSULE_MAX_LIVE_SNAPSHOTS: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS: ["open-science-web"],

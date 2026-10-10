@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { KDF_REFUSAL_REASONS, PasswordKdfGate } from "../src/capsuleKdfGate.mjs";
+import { KDF_GATE_DEFAULTS, KDF_REFUSAL_REASONS, PasswordKdfGate } from "../src/capsuleKdfGate.mjs";
 
 /** A task the test finishes when it chooses. */
 function manual() {
@@ -118,4 +118,24 @@ test("callers that name no account are one account among the others", async () =
   assert.equal(await pending(named), true, "a named account waits behind it");
   first.finish(); await running;
   assert.equal(await named, "a");
+});
+
+test("the limits are the deployment's: set from the configuration, left alone by a value that is no limit, and by default the ones the gate shipped with (review C4e)", async () => {
+  assert.deepEqual({ ...KDF_GATE_DEFAULTS }, { concurrency: 1, maxWaiting: 6, maxWaitMs: 10_000 });
+  const gate = new PasswordKdfGate();
+  assert.deepEqual(gate.limits, KDF_GATE_DEFAULTS);
+  gate.configure({ concurrency: 2, maxWaiting: 0, maxWaitMs: 50 });
+  assert.deepEqual(gate.limits, { concurrency: 2, maxWaiting: 0, maxWaitMs: 50 });
+  // Two run at once and the line is empty, so a third is refused where it stands.
+  const holds = [manual(), manual()];
+  const runs = holds.map((held, index) => gate.run(`acct-${index}`, held.task));
+  assert.deepEqual(gate.load, { running: 2, waiting: 0 });
+  await assert.rejects(gate.run("acct-2", async () => 1), (error) => error.reason === "queue_full");
+  // Nothing that is not a limit takes a limit away: zero derivations, a negative line, a fraction, a string, nothing.
+  gate.configure({ concurrency: 0, maxWaiting: -1, maxWaitMs: 0.5 });
+  gate.configure({ concurrency: "3", maxWaiting: "4", maxWaitMs: "5" });
+  gate.configure({});
+  assert.deepEqual(gate.limits, { concurrency: 2, maxWaiting: 0, maxWaitMs: 50 });
+  for (const held of holds) held.finish();
+  await Promise.all(runs);
 });

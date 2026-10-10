@@ -166,6 +166,11 @@ const LEVERS = [
   ["OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNT_AGE_DAYS", "capsuleShareCorroborationMinAccountAgeDays", 14, ["-1", "366", "x"]],
   ["OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_FINISHED_RUNS", "capsuleShareCorroborationMinFinishedRuns", 3, ["-1", "1001"]],
   ["OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY", "capsuleShareDeliveriesPerDay", 50, ["0", "1001"]],
+  // What bounds the capsule store itself (review C4e): password derivations at once, the line for one, how long to wait, and the live snapshots of an account.
+  ["OPEN_SCIENCE_CAPSULE_KDF_CONCURRENCY", "capsuleKdfConcurrency", 1, ["0", "5", "x"]],
+  ["OPEN_SCIENCE_CAPSULE_KDF_MAX_WAITING", "capsuleKdfMaxWaiting", 6, ["-1", "101"]],
+  ["OPEN_SCIENCE_CAPSULE_KDF_MAX_WAIT_MS", "capsuleKdfMaxWaitMs", 10000, ["99", "60001"]],
+  ["OPEN_SCIENCE_CAPSULE_MAX_LIVE_SNAPSHOTS", "capsuleMaxLiveSnapshots", 300, ["0", "5001"]],
   ["OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT", "evidenceZoneSubscriptionMaxPerProject", 5, ["0", "21"]],
   ["OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS", "evidenceZoneSubscriptionMaxItems", 6, ["0", "31"]],
 ];
