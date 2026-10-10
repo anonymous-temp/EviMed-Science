@@ -115,13 +115,15 @@ test("metric families: one line off, the module's counts on", () => {
   assert.deepEqual(geoMetricFamilies(false, null).map((family) => [family.name, family.series[0].value]), [["open_science_geo_enabled", 0]]);
   const families = geoMetricFamilies(true, {
     tables: { projects: 3, active: 2, openErrors: 4, urgentErrors: 1, safetyStops: 1, openRounds: 0 },
-    service: { projectsCreated: 3, reads: 10, writes: 5, writeIssues: 2, notFound: 1 },
+    service: { projectsCreated: 3, reads: 10, writes: 5, writeIssues: 2, notFound: 1, researchCapped: 4 },
     social: { configured: true, counters: { searches: 1, requests: 6, collected: 5, noResults: 0, failed: 1 }, lastError: null },
   });
   const byName = new Map(families.map((family) => [family.name, family]));
   assert.equal(byName.get("open_science_geo_enabled")?.series[0].value, 1);
   assert.deepEqual(byName.get("open_science_geo_open_errors")?.series.map((series) => series.value), [4, 1]);
   assert.equal(byName.get("open_science_geo_safety_stops")?.series[0].value, 1);
+  assert.equal(byName.get("open_science_geo_service_total")?.series.find((series) => series.labels?.kind === "researchCapped")?.value, 4,
+    "research requests over the limit are counted (D-06)");
   assert.ok(byName.get("open_science_geo_social_requests_total")?.series.some((series) => series.labels?.outcome === "failed" && series.value === 1));
   for (const family of families) assert.match(family.name, /^open_science_geo_[a-z_]+$/);
 });

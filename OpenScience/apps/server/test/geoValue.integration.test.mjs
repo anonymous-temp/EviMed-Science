@@ -107,6 +107,51 @@ test("research uses existing dispatch, deduplicates, preserves a failed result a
   assert.notEqual(dispatched[0].dispatchId, dispatched[1].dispatchId);
 });
 
+test("a project holds a limited number of research tasks open; a task already open is never refused and a finished one frees its place (D-06)", options, async () => {
+  // Forty distinct requests were all accepted, each a billed specialist run.
+  const project = await fresh();
+  const ask = (index, extra = {}) => store.requestResearch("alice", project.id, { capabilityId: "adr-analysis", question: `Question ${index}`, ...extra });
+  const accepted = [];
+  for (let index = 0; index < 5; index += 1) accepted.push(await ask(index));
+  assert.ok(accepted.every((entry) => entry.request && entry.notice === null && !entry.capped), "five places by default");
+  const sixth = await ask(5);
+  assert.deepEqual([sixth.request, sixth.capped], [null, true]);
+  assert.match(sixth.notice ?? "", /already has 5 research tasks queued or running \(the limit is 5\)/);
+  assert.equal((await store.researchRequests(project.id)).length, 5, "nothing was queued");
+  // The same task asked again is the same task, at the limit as well.
+  const again = await ask(2);
+  assert.equal(again.request?.id, accepted[2].request.id);
+  assert.equal(again.capped, undefined);
+  // A running task still holds its place; a finished one frees it.
+  await store.query(`UPDATE evimed_geo.schedule_marks SET state = 'running' WHERE geo_project_id = $1 AND key = $2`, [project.id, accepted[0].request.id]);
+  assert.equal((await ask(6)).capped, true);
+  await store.query(`UPDATE evimed_geo.schedule_marks SET state = 'done' WHERE geo_project_id = $1 AND key = $2`, [project.id, accepted[0].request.id]);
+  assert.ok((await ask(6)).request, "a place is free");
+  // Asking again for a finished task is a new open one: refused while the limit is held, accepted once there is room.
+  assert.equal((await ask(0, { retry: true })).capped, true);
+  await store.query(`UPDATE evimed_geo.schedule_marks SET state = 'failed' WHERE geo_project_id = $1 AND key = $2`, [project.id, accepted[1].request.id]);
+  const retried = await ask(0, { retry: true });
+  assert.equal(retried.request?.status, "pending", "room for the retry of the finished one");
+  // The limit is a deployment's: a smaller one, and none at all.
+  const small = await fresh();
+  const askSmall = (index) => geoRuntimeWrite({ store, project: small, what: "research", researchMaxOpen: 2,
+    body: { data: { capabilityId: "adr-analysis", question: `Small ${index}` } } });
+  assert.deepEqual([(await askSmall(0)).ok, (await askSmall(1)).ok], [true, true]);
+  const refused = await askSmall(2);
+  assert.deepEqual([refused.ok, refused.capped, refused.research], [false, true, null]);
+  assert.deepEqual(refused.issues.map((issue) => issue.code), ["notice"]);
+  const none = await fresh();
+  const closed = await geoRuntimeWrite({ store, project: none, what: "research", researchMaxOpen: 0, body: { data: { capabilityId: "adr-analysis", question: "Any" } } });
+  assert.deepEqual([closed.ok, closed.capped], [false, true]);
+  assert.match(closed.issues[0].message, /queues no research/);
+  // Two requests made together cannot both take the last place.
+  const race = await fresh();
+  const results = await Promise.all(Array.from({ length: 8 }, (_unused, index) =>
+    store.requestResearch("alice", race.id, { capabilityId: "adr-analysis", question: `Race ${index}` }, { maxOpen: 3 })));
+  assert.equal(results.filter((entry) => entry.request).length, 3);
+  assert.equal(results.filter((entry) => entry.capped).length, 5);
+});
+
 test("population change versions a claim; retraction never resurrects an older active claim; frozen rounds keep their basis", options, async () => {
   const project = await fresh();
   const claim = { claimKey: "benefit", statement: "Effect in the studied population", quote: "Adults were enrolled", sourceRef: "trial", population: "Adults" };

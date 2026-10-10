@@ -202,6 +202,10 @@ const operatorLevers = {
   // the plugin's address, token file and contract floor are what makes it read
   // anything. A lever that does not arrive leaves the feed on, or off, or
   // paying, with the operator believing otherwise.
+  // 「循证 GEO」's research queue (2026-10-10, D-06): each queued task is a billed specialist run, so the ceiling on how many a
+  // project holds open is a spend limit, and one that never arrived would leave the default in force while the operator
+  // believes theirs applies.
+  OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN: ["open-science-web"],
   OPEN_SCIENCE_FRONTIER_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_FRONTIER_AUDIENCE: ["open-science-web"],
   OPEN_SCIENCE_FRONTIER_PREVIEW_USERS: ["open-science-web"],

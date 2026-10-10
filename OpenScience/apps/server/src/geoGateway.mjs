@@ -265,9 +265,11 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
         const request = writeRequest(body);
         work = async () => {
           const result = await geoRuntimeWrite({ store: geo.store, project, what: request.what, body: request.body, renameProject: geo.renameProject ?? null,
-            articleGate: geo.articleGate ?? null, articleExists: geo.articleExists ?? (async () => false) });
+            articleGate: geo.articleGate ?? null, articleExists: geo.articleExists ?? (async () => false),
+            researchMaxOpen: Number.isSafeInteger(config.geoResearchMaxOpen) ? config.geoResearchMaxOpen : null });
           geo.service.counters.writes += 1;
           geo.service.counters.writeIssues += result.issues.length;
+          if (result.capped) geo.service.counters.researchCapped = (geo.service.counters.researchCapped ?? 0) + 1;
           return { what: request.what, ...result };
         };
       } else {

@@ -410,8 +410,8 @@ export class GeoStore {
   /** @param {string} geoId */
   researchRequests(geoId) { return readGeoResearch(this, geoId); }
 
-  /** @param {string} userId @param {string} geoId @param {Record<string, any>} input */
-  requestResearch(userId, geoId, input) { return requestGeoResearch(this, userId, geoId, input); }
+  /** @param {string} userId @param {string} geoId @param {Record<string, any>} input @param {{ maxOpen?: number }} [options] */
+  requestResearch(userId, geoId, input, options) { return requestGeoResearch(this, userId, geoId, input, options); }
 
   /**
    * @param {{ database: any, statementTimeoutMs?: number, entityVocabulary?: { tag: (input: { texts: string[] }) => Promise<string[] | null> } | null }} options

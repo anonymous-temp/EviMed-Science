@@ -32,6 +32,12 @@ function geoDouble(config, { failRead = null, failStep = null, social = null } =
         async projectByControlProject(/** @type {string} */ userId, /** @type {string} */ projectId) {
           return userId === project.userId && projectId === project.projectId ? project : null;
         },
+        async requestResearch(/** @type {string} */ _userId, /** @type {string} */ id, /** @type {any} */ input, /** @type {any} */ options) {
+          calls.push(["requestResearch", id, input.question, options ?? null]);
+          return input.question === "over the limit"
+            ? { request: null, capped: true, notice: "This project already has 3 research tasks queued or running (the limit is 3)." }
+            : { request: { id: "run:research:one", status: "pending" }, notice: null };
+        },
         async setStep(/** @type {string} */ id, /** @type {string} */ step, /** @type {any} */ fields) {
           if (failStep) throw failStep;
           calls.push(["setStep", id, step, fields.status]);
@@ -180,6 +186,24 @@ test("a write the database refuses by a constraint of its own is the payload's f
     const answer = await broken("write", { what: "step", data: { step: "evidence", status: "running" } });
     assert.deepEqual([answer.status, answer.body.code], [503, "geo_gateway_unavailable"], code);
   }
+});
+
+test("the research limit is the deployment's, and a request over it is counted and answered with a notice (D-06)", async (t) => {
+  const limited = { ...on, geoResearchMaxOpen: 3 };
+  const { geo, calls } = geoDouble(limited);
+  const { post } = await serve(t, createGeoGatewayHandler(limited, runtimeManager, { geo }));
+  const queued = await post("write", { what: "research", data: { capabilityId: "adr-analysis", question: "fits" } });
+  assert.deepEqual([queued.status, queued.body.data.ok, queued.body.data.capped], [200, true, undefined]);
+  const capped = await post("write", { what: "research", data: { capabilityId: "adr-analysis", question: "over the limit" } });
+  assert.deepEqual([capped.status, capped.body.data.ok, capped.body.data.capped], [200, false, true]);
+  assert.match(capped.body.data.issues[0].message, /the limit is 3/);
+  assert.deepEqual(calls.filter((call) => call[0] === "requestResearch").map((call) => call[3]), [{ maxOpen: 3 }, { maxOpen: 3 }], "the deployment's limit reaches the store");
+  assert.equal(geo.service.counters.researchCapped, 1, "only the refusal is counted");
+  // A configuration without the key leaves the store's own default.
+  const plain = geoDouble(on);
+  const { post: unconfigured } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo: plain.geo }));
+  await unconfigured("write", { what: "research", data: { capabilityId: "adr-analysis", question: "fits" } });
+  assert.deepEqual(plain.calls.filter((call) => call[0] === "requestResearch").map((call) => call[3]), [null]);
 });
 
 test("each project has a per-minute ceiling per operation", async (t) => {

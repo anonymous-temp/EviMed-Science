@@ -324,7 +324,7 @@ export class GeoService {
     this.errorListLimit = Number.isSafeInteger(config.geoDiagnosisErrorLimit) && config.geoDiagnosisErrorLimit > 0 ? config.geoDiagnosisErrorLimit : 300;
     /** @param {string} metricId */
     this.metricName = (metricId) => metricName?.(metricId) ?? /** @type {Record<string, string>} */ (GEO_METRIC_LABELS_ZH)[metricId] ?? null;
-    this.counters = { projectsCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, forbidden: 0 };
+    this.counters = { projectsCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, forbidden: 0, researchCapped: 0 };
   }
 
   ready() { return this.store.ready(); }
@@ -1801,8 +1801,8 @@ export function geoMetricFamilies(enabled, snapshot) {
     add("open_rounds", "Measurement rounds queued or running.", "gauge", [{ value: tables.openRounds }]);
   }
   const service = snapshot.service ?? {};
-  add("service_total", "What the service did since this process started.", "counter",
-    ["projectsCreated", "reads", "writes", "writeIssues", "notFound", "forbidden"].map((kind) => ({ labels: { kind }, value: Number(/** @type {any} */ (service)[kind] ?? 0) })));
+  add("service_total", "What the service did since this process started (researchCapped: research requests over OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN, answered with a notice).", "counter",
+    ["projectsCreated", "reads", "writes", "writeIssues", "notFound", "forbidden", "researchCapped"].map((kind) => ({ labels: { kind }, value: Number(/** @type {any} */ (service)[kind] ?? 0) })));
   // The evidence chain (flywheel F21): the product zone's cards made from the claim table, and what was held back or refused.
   if (snapshot.cards) {
     add("cards_total", "Product-zone card writes since this process started, by what happened.", "counter",

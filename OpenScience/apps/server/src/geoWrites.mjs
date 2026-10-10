@@ -1117,8 +1117,10 @@ const isIntegrityViolation = (error) => typeof /** @type {any} */ (error)?.code 
  * @param {{ store: import("./geoStore.mjs").GeoStore, project: any, what: string, body: Record<string, any>,
  *   renameProject?: ((userId: string, projectId: string, name: string) => Promise<unknown>) | null,
  *   articleExists?: ((project: any, path: string) => Promise<boolean>) | null,
- *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>) | null }} input
- *   `articleGate` reads an article's gate from the run ledger; without it every article is `unverified`
+ *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>) | null,
+ *   researchMaxOpen?: number | null }} input
+ *   `articleGate` reads an article's gate from the run ledger; without it every article is `unverified`.
+ *   `researchMaxOpen` is the most research tasks a project holds queued or running (`OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN`)
  * @returns {Promise<{ ok: boolean, ids: string[], issues: GeoIssue[], [key: string]: any }>}
  */
 export async function geoRuntimeWrite(input) {
@@ -1135,7 +1137,7 @@ export async function geoRuntimeWrite(input) {
 }
 
 /** @param {Parameters<typeof geoRuntimeWrite>[0]} input */
-async function writeToProject({ store, project, what, body, renameProject = null, articleGate = null, articleExists = null }) {
+async function writeToProject({ store, project, what, body, renameProject = null, articleGate = null, articleExists = null, researchMaxOpen = null }) {
   if (!GEO_WRITE_WHATS.includes(what)) throw failure(400, "geo_write_what_invalid", `what must be one of: ${GEO_WRITE_WHATS.join(", ")}.`);
   if (!withinSize(body, GEO_WRITE_LIMITS.jsonBytes)) throw failure(413, "geo_request_too_large", "The write is larger than 256 KB.");
   /** @type {GeoIssue[]} */
@@ -1148,9 +1150,9 @@ async function writeToProject({ store, project, what, body, renameProject = null
       return done([String(written.version)], { value: written });
     }
     case "research": {
-      const result = await store.requestResearch(userId, project.id, dataOf(body));
+      const result = await store.requestResearch(userId, project.id, dataOf(body), researchMaxOpen == null ? undefined : { maxOpen: researchMaxOpen });
       if (result.notice) issues.push({ code: "notice", message: result.notice });
-      return done(result.request ? [result.request.id] : [], { research: result.request });
+      return done(result.request ? [result.request.id] : [], { research: result.request, ...(result.capped ? { capped: true } : {}) });
     }
     case "product": {
       const { product, competitors } = validatedProduct(dataOf(body), issues);
