@@ -152,6 +152,40 @@ test("a project holds a limited number of research tasks open; a task already op
   assert.equal(results.filter((entry) => entry.capped).length, 5);
 });
 
+test("a research task the allowance refuses does not hold the programme's own steps back (D-07)", options, async () => {
+  // A mark refused for a reason of its own (a balance under that specialist's estimate) was tried first on every tick, and the tick
+  // ended with it: three ticks attempted only meta-analysis and never geo-insight, although the evidence step was requested.
+  const project = await fresh();
+  await store.setStep(project.id, "evidence", { requested: true, status: "queued" });
+  await store.requestResearch("alice", project.id, { capabilityId: "meta-analysis", question: "Pooled effect in adults" });
+  const calls = [];
+  const orchestrator = new GeoOrchestrator({ store, config: {}, dispatchRun: async (input) => {
+    calls.push(input.capabilityId);
+    if (input.capabilityId === "meta-analysis") throw Object.assign(new Error("balance"), { code: "credits_insufficient_for_capability" });
+    return { runId: `r${calls.length}`, sessionId: "s", status: "running" };
+  } });
+  const first = await orchestrator.advance(project.id);
+  assert.deepEqual(calls, ["meta-analysis", "geo-insight"], "research keeps its place in the order; the programme is tried in the same tick");
+  assert.equal(first.dispatched?.runId, "r2");
+  assert.equal(first.deferred, "credits_insufficient_for_capability", "and the refusal is still reported");
+  assert.equal((await store.researchRequests(project.id))[0].status, "pending", "the task waits for its balance, not for a person");
+  // The programme's run holds the one slot, so the refused task is not tried again until it ends.
+  await orchestrator.advance(project.id);
+  assert.deepEqual(calls, ["meta-analysis", "geo-insight"]);
+  // A refusal of the programme's own step still ends the tick: the steps after it depend on it.
+  const waiting = await fresh();
+  await store.setStep(waiting.id, "evidence", { requested: true, status: "queued" });
+  await store.setStep(waiting.id, "journey", { requested: true, status: "queued" });
+  const refused = [];
+  const refusing = new GeoOrchestrator({ store, config: {}, dispatchRun: async (input) => {
+    refused.push(input.capabilityId);
+    throw Object.assign(new Error("balance"), { code: "credits_insufficient_for_capability" });
+  } });
+  const outcome = await refusing.advance(waiting.id);
+  assert.equal(refused.length, 1, "one programme attempt a tick");
+  assert.equal(outcome.deferred, "credits_insufficient_for_capability");
+});
+
 test("population change versions a claim; retraction never resurrects an older active claim; frozen rounds keep their basis", options, async () => {
   const project = await fresh();
   const claim = { claimKey: "benefit", statement: "Effect in the studied population", quote: "Adults were enrolled", sourceRef: "trial", population: "Adults" };

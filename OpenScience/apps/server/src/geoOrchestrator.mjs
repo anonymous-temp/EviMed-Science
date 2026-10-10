@@ -1057,6 +1057,10 @@ export class GeoOrchestrator {
       const outcome = await this.#dispatch(project, spec);
       if (outcome.dispatched) result.dispatched = outcome.dispatched;
       if (outcome.deferred) result.deferred = outcome.deferred;
+      // A research task the start was refused for (a balance that does not cover that specialist, say) waits for its own
+      // reason and holds nothing back: the programme's steps are tried in the same tick (D-07). Any other deferral is the
+      // programme waiting on its own order, and the later steps wait with it.
+      if (outcome.deferred && spec.purpose === "research") continue;
       // A run was attempted (or the slot is taken): one per tick.
       if (outcome.dispatched || outcome.deferred || outcome.busy) return;
     }
