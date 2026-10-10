@@ -6,7 +6,7 @@ import { evolutionSourceRequestManifest } from './evolutionSourceRequests.mjs';
 import { jevTransport } from "./jevTransport.mjs";
 import { createJudgeService } from './judgeService.mjs';
 import { createJudgeGatewayHandler, JUDGE_GATEWAY_PATH } from './judgeGateway.mjs';
-import { createVcrCloudEgress } from './vcrCloudEgress.mjs';
+import { createVcrCloudEgress, createVcrSessionResolver } from './vcrCloudEgress.mjs';
 import { VcrStore } from './vcrStore.mjs';
 import { vcrCloudDestinations } from './vcrCloudProjection.mjs';
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
@@ -4518,12 +4518,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // that books a runtime's spend: the model gateway, the metered web search, and the engines' model credentials.
   const autopilotRunScope = autopilotService ? createAutopilotRunScope({ store, agentRuns, service: autopilotService }) : null;
   const assertVcrCloudAccess = vcrPrivacyStore ? createVcrCloudEgress({ store: vcrPrivacyStore, destinations: () => vcrCloudDestinations(config),
-    resolveSession: async caller => {
-      const project = await sourceProject({ userId: caller.userId, projectId: caller.projectId });
-      const runs = await agentRuns.list(project);
-      const runId = caller.runId ?? agentRuns.runIdForSession(caller.sessionId, runs);
-      return runs.find(row => row.id === runId)?.sessionId ?? caller.sessionId ?? null;
-    },
+    resolveSession: createVcrSessionResolver({ sourceProject, agentRuns }),
   }) : null;
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,

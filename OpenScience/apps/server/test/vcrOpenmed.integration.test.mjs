@@ -1,4 +1,5 @@
-import { createVcrCloudEgress } from '../src/vcrCloudEgress.mjs';
+import { createVcrCloudEgress, createVcrSessionResolver } from '../src/vcrCloudEgress.mjs';
+import { AgentRunStore } from '../src/agentRuns.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -43,9 +44,59 @@ test('history permission reads work with VCR disabled and do not create a schema
   try{
     const history=new VcrStore({database:empty});
     assert.equal(await history.hasClinicalContext('owner','ordinary'),false);
+    assert.equal(await history.holdsStudy('owner','ordinary'),false);
     assert.deepEqual(await history.cloudDependencies('owner','ordinary','session'),[]);
     assert.equal((await empty.query("SELECT to_regclass('evimed_vcr.studies') AS found")).rows[0].found,null);
   }finally{await empty.close();await isolatedEmpty.drop();}
+});
+
+test('a project holds a study for the privacy hook exactly when the account can read one in it, hidden ones included', options, async () => {
+  const target = await study();
+  assert.equal(await vcr.store.holdsStudy('owner', target.projectId), true);
+  assert.equal(await vcr.store.holdsStudy('stranger', target.projectId), false, 'another account holds none in this project');
+  assert.equal(await vcr.store.holdsStudy('owner', `${target.projectId}_other`), false, 'nor does the owner in a project without one');
+  await database.query("INSERT INTO evimed_vcr.members (study_id, user_id, role, invited_by) VALUES ($1,'colleague','site','owner')", [target.id]);
+  assert.equal(await vcr.store.holdsStudy('colleague', target.projectId), true, 'a member reads the study, so its cached conversations are theirs to revalidate');
+  await vcr.store.softDeleteStudy(target.id, 'owner');
+  assert.equal(await vcr.store.holdsStudy('owner', target.projectId), true, 'a hidden study still owns cached clinical conversations');
+});
+
+test('the privacy hook with the production session resolver: a project with no study never reads its ledger, one with a recorded clinical read always does', options, async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'vcr-egress-chain-'));
+  try {
+    const projectFor = async id => {
+      const base = path.join(root, id);
+      const project = { id, userId: 'owner', rootDir: base, baseDir: base, metaDir: path.join(base, '.openscience'), workspaceDir: path.join(base, 'workspace') };
+      await fs.mkdir(project.metaDir, { recursive: true });
+      await fs.mkdir(project.workspaceDir, { recursive: true });
+      return project;
+    };
+    const plain = await projectFor('plain-project');
+    const clinical = await projectFor('clinical-project');
+    const damage = project => fs.writeFile(path.join(project.metaDir, 'runs.jsonl'), 'this is not a run ledger\n');
+    const runs = new AgentRunStore({ get: async () => null }, { model: 'deepseek/deepseek-v4-pro', monitorIntervalMs: 60_000 });
+    const resolveSession = createVcrSessionResolver({ agentRuns: runs, sourceProject: async job => {
+      assert.equal(job.userId, 'owner');
+      return job.projectId === plain.id ? plain : clinical;
+    } });
+    const egress = createVcrCloudEgress({ store: vcr.store, resolveSession, destinations: () => [origin] });
+    const callerIn = (project, sessionId) => ({ userId: 'owner', projectId: project.id, sessionId });
+
+    // A project without a study: the call is answered whatever state its ledger is in.
+    await egress(callerIn(plain, 'session_plain'), { messages: ['an ordinary question'] });
+    await damage(plain);
+    await egress(callerIn(plain, 'session_plain'), { messages: ['an ordinary question'] });
+
+    // A project with a study whose conversation read a projection that no permission covers: checked, then refused...
+    const held = await vcr.store.createStudy({ userId: 'owner', projectId: clinical.id, name: 'Synthetic privacy chain', question: 'q', dataTier: 'T0' });
+    await vcr.store.inheritCloudDependency(held.id, 'session_clinical', 'run_clinical', `prj_${'b'.repeat(48)}`);
+    await assert.rejects(egress(callerIn(clinical, 'session_clinical'), { messages: ['cached clinical context'] }), { code: 'vcr_cloud_processing_not_authorized' });
+    // ...a conversation of the same project that read nothing goes through...
+    await egress(callerIn(clinical, 'session_unrelated'), { messages: ['an unrelated question'] });
+    // ...and a ledger it cannot read refuses the call: for this project nobody can say which conversation it is.
+    await damage(clinical);
+    await assert.rejects(egress(callerIn(clinical, 'session_unrelated'), { messages: ['an unrelated question'] }), { code: 'agent_runs_corrupt' });
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
 
 test('protected original -> approved projection -> fact -> runtime read; revoke removes outbound evidence, preserves protected replay, and deletion cascades', options, async () => {
