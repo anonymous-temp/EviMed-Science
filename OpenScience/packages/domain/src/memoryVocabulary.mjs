@@ -48,6 +48,8 @@ import { workspaceLayout } from './workspaceLayout.mjs'
 export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   { tag: 'evimed-evolution', role: 'injected', emitters: ['apps/server/src/evolutionRuns.mjs'] },
   { tag: 'evimed-handbook', role: 'injected', emitters: ['apps/server/src/capabilityHandbooks.mjs'] },
+  // A platform handbook on probation, served to a sampled share of runs so its harm test can observe it (2026-10-10).
+  { tag: 'evimed-platform-handbook', role: 'injected', emitters: ['apps/server/src/capabilityHandbooks.mjs'] },
   { tag: 'evimed-brief', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   { tag: 'evimed-capsule', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   // A 「试用一次」 conversation's borrowed capsule, in its dispatch context.
