@@ -19,18 +19,47 @@ export function migrateJudgeDrift(database) {
   }
   return migrations.get(database);
 }
+/**
+ * How often one process runs the retention delete. J4 records an observation for
+ * every judged report line, so a delete after every insert was a table-wide
+ * statement per line; the summary reads eight days of a 35-day table, so an hour
+ * of lag in the prune changes nothing anyone reads.
+ */
+export const DRIFT_PRUNE_INTERVAL_MS = 60 * 60 * 1000;
+/** How long after a failed retention delete the next observation may try again. */
+export const DRIFT_PRUNE_RETRY_MS = 60 * 1000;
+/** @type {WeakMap<object, number>} when each database was last pruned, by this process */
+const lastPruned = new WeakMap();
+/**
+ * @param {any} database
+ * @param {{ site: string, model: string, promptFingerprint: string, agreement: boolean }} observation
+ * @param {{ now?: () => number }} [options]
+ */
 export async function recordJudgeDrift(
   database,
   { site, model, promptFingerprint, agreement },
+  { now = Date.now } = {},
 ) {
   await migrateJudgeDrift(database);
   await database.query(
     "INSERT INTO evimed_judge.drift(site,model,prompt_fingerprint,agreement) VALUES($1,$2,$3,$4)",
     [site, model, promptFingerprint, agreement],
   );
-  await database.query(
-    "DELETE FROM evimed_judge.drift WHERE created_at < now() - interval '35 days'",
-  );
+  const at = now();
+  const previous = lastPruned.get(database);
+  if (previous !== undefined && at - previous < DRIFT_PRUNE_INTERVAL_MS) return;
+  // The observation is already recorded: a retention delete that fails is reported
+  // and tried again with the next observation, never counted against this one.
+  try {
+    await database.query(
+      "DELETE FROM evimed_judge.drift WHERE created_at < now() - interval '35 days'",
+    );
+    lastPruned.set(database, at);
+  } catch (error) {
+    process.stderr.write(`judge drift retention delete failed: ${String(error?.code ?? "unknown").slice(0, 40)}\n`);
+    // Back off a minute rather than an hour, so a burst of observations is not a burst of failing deletes.
+    lastPruned.set(database, at - DRIFT_PRUNE_INTERVAL_MS + DRIFT_PRUNE_RETRY_MS);
+  }
 }
 /** Seven completed consecutive UTC days; missing observations never imply agreement. */
 export async function judgeDriftSummary(database, config) {

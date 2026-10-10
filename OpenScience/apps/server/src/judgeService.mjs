@@ -301,8 +301,10 @@ export function createJudgeService({
           random() >= 0.02))
     )
       return;
-    if (backgroundActive >= Number(config.jevBackgroundConcurrency ?? 4))
+    if (backgroundActive >= Number(config.jevBackgroundConcurrency ?? 4)) {
+      count(site, "drift_busy");
       return;
+    }
     backgroundActive++;
     let deadline, baselineWork;
     const controller = new AbortController();
@@ -341,6 +343,7 @@ export function createJudgeService({
         promptFingerprint: result.promptFingerprint,
         agreement,
       });
+      count(site, "drift_compared");
     } catch {
       count(site, "drift_failed");
     } finally {
@@ -668,8 +671,14 @@ export function createJudgeService({
         { name: "open_science_jev_skipped_total", type: "counter",
           help: "Work a registered Jev site was not asked to do, by reason: run_out_of_scope counts runs; lines_over_cap and lines_after_notice_limit count report lines.",
           series: rows.filter((row) => row.outcome.startsWith("skip_")).map((row) => ({ value: row.value, labels: { site: row.site, reason: row.outcome.slice(5) } })) },
+        { name: "open_science_jev_drift_observations_total", type: "counter",
+          help: "Drift comparisons by site: compared (an observation was recorded), failed (the original path or the record failed), expired (an engine's receipt came back too late), busy (no room to sample).",
+          series: rows.filter((row) => row.outcome.startsWith("drift_")).map((row) => ({ value: row.value, labels: { site: row.site, outcome: row.outcome.slice(6) } })) },
         { name: "open_science_jev_drift_below_baseline_seven_days", help: "Seven consecutive observed UTC days below calibrated baseline.", type: "gauge",
           series: observed.map((row) => ({ value: row.belowBaselineSevenDays ? 1 : 0, labels: { site: row.site } })) },
+        { name: "open_science_jev_drift_baseline_configured", type: "gauge",
+          help: "Whether a site's pin carries the baseline agreement its drift alert compares with; 0 means JevCalibrationDrift cannot fire for that site.",
+          series: observed.map((row) => ({ value: row.baselineConfigured ? 1 : 0, labels: { site: row.site } })) },
         { name: "open_science_jev_baseline_agreement", help: "Observed agreement against trusted baseline; absent samples are omitted.", type: "gauge",
           series: observed.filter((row) => row.agreement !== null).map((row) => ({ value: row.agreement, labels: { site: row.site } })) },
       ];
