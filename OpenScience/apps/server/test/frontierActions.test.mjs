@@ -91,6 +91,11 @@ test("the Markdown record carries what a reader needs to cite and find the work 
     "由 EviMed「前沿动态」于 2026-09-22 存入。"]) {
     assert.ok(record.includes(expected), expected);
   }
+  // The record is the researcher's own document. What the platform's model did to the 导读 and the advice to read the original first are the
+  // back office's, not a footer on their file (owner ruling 2026-10-10).
+  assert.doesNotMatch(record, /导读由模型根据原文写成|数字已逐字核对|引用前请阅读原文/);
+  assert.match(record, /由 EviMed「前沿动态」于 2026-09-22 存入。\n$/);
+  assert.match(frontierLibraryRecord({ item: itemRow(), savedAt: new Date("2026-09-22T04:00:00Z"), day: "2026-09-21", reason: "和我的课题有关。" }), /存入。和我的课题有关。\n$/);
   const closed = frontierLibraryRecord({ item: itemRow({ open_access: null, abstract_raw: null, date_precision: "inferred" }), savedAt: new Date(), day: "2026-09-21" });
   assert.match(closed, /开放获取：无开放获取全文，这里只存题录和链接/);
   assert.doesNotMatch(closed, /原文摘要|发布日期/, "no abstract to show, and an inferred date is not stated as a date");
