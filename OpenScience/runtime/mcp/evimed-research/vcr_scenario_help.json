@@ -983,6 +983,9 @@
     },
     "comparator.map_prior": {
       "endpoints": ["binary","continuous"],
+      "notes": [
+        "tauPrior is the prior on the between-study spread tau, on the analysis scale (a logit for events / n): half_normal has density proportional to exp(-tau^2 / (2 scale^2)), half_cauchy proportional to 1 / (1 + (tau / scale)^2) over the whole half line, and uniform is flat on [0, scale] and zero beyond scale. With two historical studies a half-Cauchy prior leaves the predictive spread without a finite value (diagnostics.tauPrior says so); three or more, or a half-normal prior, make it finite. current.estimate and current.se are on the analysis scale as well: the logit of the control rate (and its standard error on that scale) on the events / n path, the scale of historical.estimate on the estimate / se path."
+      ],
       "rows": [
         {"path":"historical","type":"object","required":true},
         {"path":"historical.events","type":"list","count":{"min":2,"max":200},"items":{"type":"integer","min":0}},

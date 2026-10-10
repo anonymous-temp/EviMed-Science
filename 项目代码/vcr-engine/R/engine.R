@@ -1472,6 +1472,8 @@ vcr_job_map_prior <- function(job, output_dir = NULL, ...) {
          vcr_measure("tau_posterior_median", map$tauPosteriorMedian, source = "aggregate")),
        counts = vcr_counts(priorEffectiveSampleSize = ess_rob),
        diagnostics = list(mixture = mix, robustMixture = robust, robustWeight = w_r,
+                          tauPrior = c(map$tauPrior, list(support = map$tauSupport, nodes = map$gridNodes, reach = map$tauMax, finitePredictiveVariance = map$finitePredictiveVariance,
+                                                          note = if (!map$finitePredictiveVariance) "With two studies the posterior of tau under a half-Cauchy prior has no finite second moment: map_sd depends on how far the quadrature reaches (reach); three studies, or a half-normal prior, make it finite." else NULL)),
                           essMapMoment = ess_map, essMapElir = elir_map, conflict = conflict, k = map$k,
                           thresholds = list(conflictBound = bound),
                           note = "Under strict type-I control, borrowing does not buy power (Kopp-Schneider 2020)."),

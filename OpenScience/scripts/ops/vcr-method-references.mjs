@@ -55,6 +55,7 @@ export const NUMERIC_REFERENCES = {
   N14e: { methods: ['comparator.maic'], anchors: ['ESS = (sum w)^2 / sum w^2 -- no code of the engine', 'abs(ess_job - ess_ref) / ess_ref < 1e-6'] },
   N17b: { methods: ['evidence.reconstruct_km'], anchors: ['Cox on the original rows', 'abs(lhr_rec - lhr_true) <= 0.05'] },
   N21b: { methods: ['comparator.map_prior'], anchors: ['against independent references', 'abs(vcr_measure_value(r, "map_mean") - pm) < 1e-4', 'abs(vcr_measure_value(r, "map_effective_sample_size_elir") - rb_elir) < 1e-3'] },
+  N21c: { methods: ['comparator.map_prior'], anchors: ['edges[i], edges[i + 1L], rel.tol = 1e-12', 'ok_rows <- all(vapply(rows, function(x) x$ok, logical(1)))'] },
   N22b: { methods: ['design.procova'], anchors: ['N = (z_a + z_b)^2 (s1^2/p + s0^2/(1-p)) / delta^2', 'abs(g(full, "variance_ratio") - want_full / want_unadj) < 1e-12'] },
   N27a: { methods: ['accrual.poisson_gamma'], anchors: ['10/50/90% = 16.20 / 20.13 / 25.30 months', 'abs(m$value - 20.13) < 0.01'] },
   N27b: { methods: ['accrual.poisson_gamma'], anchors: ['INDEPENDENT constructions that use no accrual code', 'all(abs(z1[c("median")]) <= 3)'] },
