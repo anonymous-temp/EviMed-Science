@@ -47,11 +47,34 @@ export function decodeJudgeAnswers(
         : Math.min(
             ...Object.values(decisions).map((value) => value.confidence),
           );
+  const value = decodeJudgeValue(site, request.state, decisions);
+  // A batch of independent items is sure item by item: the batch's confidence above stays the minimum
+  // (it settles whole only when every item does), and what the sure items decided travels with an
+  // escalated answer for a caller that can adopt part of a batch (J-5).
+  const sure =
+    site === "J5"
+      ? request.state.items.map((_, i) =>
+          ["medical", "news", "category", "roundup", "specialties"].every(
+            (question) => decisions[`${question}${i}`].confidence >= threshold,
+          ),
+        )
+      : null;
+  const partial =
+    sure && sure.some(Boolean) && !sure.every(Boolean)
+      ? {
+          items: value.items.filter((_, i) => sure[i]),
+          unsettledIds: request.state.items
+            .filter((_, i) => !sure[i])
+            .map((item) => item.id),
+        }
+      : null;
   return {
-    value: decodeJudgeValue(site, request.state, decisions),
+    value,
     decisions,
     confidence,
     outcome: confidence >= threshold ? "settled" : "escalated",
+    ...(partial ? { partial } : {}),
+    ...(sure ? { itemsSettled: sure.filter(Boolean).length, itemsTotal: sure.length } : {}),
     promptFingerprint: judgePromptFingerprint(
       site,
       request.questions,
@@ -617,6 +640,8 @@ export function createJudgeService({
           value: decoded.value,
           model: first.model,
           promptFingerprint: fingerprint,
+          ...(decoded.partial ? { partial: decoded.partial } : {}),
+          ...(decoded.itemsTotal ? { itemsSettled: decoded.itemsSettled, itemsTotal: decoded.itemsTotal } : {}),
         };
       };
       const active = work();
@@ -629,6 +654,11 @@ export function createJudgeService({
       void active.then(completed, completed);
       const result = await Promise.race([active, expired]);
       circuits.set(site, { failures: 0, until: 0 });
+      // How many items of a batch were sure, settled batch or not: the batch counter alone reads 0 of 9.
+      if (result.itemsTotal) {
+        if (result.itemsSettled) count(site, "item_settled", result.itemsSettled);
+        if (result.itemsTotal > result.itemsSettled) count(site, "item_escalated", result.itemsTotal - result.itemsSettled);
+      }
       if (result.confidence < threshold)
         return finish("escalated", "judge_uncertain", {
           ...result,
@@ -687,6 +717,9 @@ export function createJudgeService({
         { name: "open_science_jev_fallback_reasons_total", type: "counter",
           help: "Why Jev decisions fell back to the original path, by site and the service's own code (judge_calibration_mismatch: a calibrated site's prompt no longer matches what was measured).",
           series: [...reasons].map(([key, value]) => { const [site, code] = key.split(":"); return { value, labels: { site, code } }; }) },
+        { name: "open_science_jev_items_total", type: "counter",
+          help: "Items of a batch of independent items (J5) by whether each was sure on its own: settled, or escalated to the original path; a batch is settled only when all of its items are.",
+          series: rows.filter((row) => row.outcome.startsWith("item_")).map((row) => ({ value: row.value, labels: { site: row.site, outcome: row.outcome.slice(5) } })) },
         { name: "open_science_jev_skipped_total", type: "counter",
           help: "Work a registered Jev site was not asked to do, by reason: run_out_of_scope counts runs; lines_over_cap and lines_after_notice_limit count report lines.",
           series: rows.filter((row) => row.outcome.startsWith("skip_")).map((row) => ({ value: row.value, labels: { site: row.site, reason: row.outcome.slice(5) } })) },
