@@ -5,6 +5,15 @@ import {createHash} from 'node:crypto';
 import {canonicalJson,validateCapabilityManifest} from '@evimed/domain';
 import {writeFileExclusiveNoFollow} from './security.mjs';
 const shellQuote=value=>"'"+String(value).replaceAll("'", "'\\''")+"'";
+const clipText=(value,max)=>{const text=typeof value==='string'?value.trim().replace(/\s+/g,' '):'';return text.length>max?text.slice(0,max-1)+'…':text;};
+const clipList=(value,count,max)=>(Array.isArray(value)?value:[]).map(item=>clipText(item,max)).filter(Boolean).slice(0,count);
+/** What the proposal says of itself, for the inbox item that announces it. It is not part of the staged manifest, whose identity it must not change.
+ * @param {any} card @param {any} candidate */
+export function engineReviewSummary(card,candidate){
+  const proposal=candidate?.proposal??card?.proposal??{};
+  return{goal:clipText(card?.goal,300),change:clipText(proposal.change,200),reason:clipText(proposal.reason,200),
+    files:Object.keys(candidate?.files??{}).slice(0,12),benefits:clipList(proposal.predictedBenefits,3,120),harms:clipList(proposal.possibleHarms,3,120)};
+}
 /** Prepare review input only. Development pipelines may turn it into a PR; generated agents
  * never obtain authority to edit platform source or merge/deploy it. @param {any} config */
 export function createEvolutionEngineReviewWriter(config){
@@ -39,6 +48,6 @@ export function createEvolutionEngineReviewWriter(config){
     const identity=createHash('sha256').update(canonicalJson(manifest)).digest('hex'),root=path.join(config.dataDir,'.openscience','evolution-engine-review',identity);
     await writeFileExclusiveNoFollow(config.dataDir,path.join(root,'manifest.json'),canonicalJson(manifest)+'\n',{mode:0o444}).catch(error=>{if(error.code!=='EEXIST')throw error;});
     await writeFileExclusiveNoFollow(config.dataDir,path.join(root,'pr-body.txt'),body,{mode:0o444}).catch(error=>{if(error.code!=='EEXIST')throw error;});
-    return{kind:'engine-review-input',identity,digest,cardId:card.id,candidateId:candidate.id??card.id,relativeDirectory:path.relative(config.dataDir,root),form:capability?'new-capability':'engine',capabilityId:capability?.id??null,prepareCommand:`node OpenScience/scripts/dev/open-evolution-pr.mjs --staging=${shellQuote(root)} --dry-run`,diagnostics:pendingContracts.map(contractKind=>({code:'pending-domain-registration',contractKind})),files:['manifest.json','pr-body.txt']};
+    return{kind:'engine-review-input',identity,digest,cardId:card.id,candidateId:candidate.id??card.id,relativeDirectory:path.relative(config.dataDir,root),form:capability?'new-capability':'engine',capabilityId:capability?.id??null,prepareCommand:`node OpenScience/scripts/dev/open-evolution-pr.mjs --staging=${shellQuote(root)} --dry-run`,diagnostics:pendingContracts.map(contractKind=>({code:'pending-domain-registration',contractKind})),files:['manifest.json','pr-body.txt'],summary:engineReviewSummary(card,candidate)};
   };
 }

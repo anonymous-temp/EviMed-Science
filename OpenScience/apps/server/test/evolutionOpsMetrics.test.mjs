@@ -146,3 +146,39 @@ test("a running module's scrape reads the executor from the controller's admissi
     assert.match(text, /^open_science_evolution_reference_recalled_total 0$/m);
   } finally { await app.close(); await rm(dataDir, { recursive: true, force: true }); }
 });
+
+test("the loops' own limits reach the scrape: the account floors by class", async () => {
+  const snapshot = await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ signals: { aggregated: { user: 2, operator: 1 }, heldBack: { user: 4, operator: 0 } } }) } });
+  const families = evolutionOpsMetricFamilies(true, snapshot);
+  assert.equal(sample(families, "open_science_evolution_signal_groups", { class: "user", outcome: "held_back" }), 4);
+  assert.equal(sample(families, "open_science_evolution_signal_groups", { class: "operator", outcome: "aggregated" }), 1);
+  assert.equal(families.find((family) => family.name === "open_science_evolution_signal_groups").series.length, 4);
+  const reviews = evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ engineReviews: { announced: 3, announceFailed: 1, adopted: 2, declined: 1 } }) } }));
+  for (const [outcome, value] of [["announced", 3], ["announce_failed", 1], ["adopted", 2], ["declined", 1]]) assert.equal(sample(reviews, "open_science_evolution_engine_reviews_total", { outcome }), value, outcome);
+  assert.equal(sample(evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ policy: { ignoredFields: 5 } }) } })), "open_science_evolution_policy_ignored_fields_total"), 5);
+  const window = evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ heavyWindow: { open: false, started: { inside: 4, outside: 1 } } }) } }));
+  assert.equal(sample(window, "open_science_evolution_heavy_window_open"), 0);
+  assert.equal(sample(window, "open_science_evolution_heavy_jobs_started_total", { window: "inside" }), 4);
+  assert.equal(sample(window, "open_science_evolution_heavy_jobs_started_total", { window: "outside" }), 1);
+  const research = evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ selfResearch: {
+    collected: 40, merged: 31, alreadyScreened: 3, screened: 28, shortlisted: 9, fullTexts: 5, cards: 3, rejected: 1, venueEvents: 2,
+    capHits: { collect: 0, screen: 1, shortlist: 2, fullText: 1, cards: 0 }, triageBatchesFailed: 1, extractFailed: 2, venueQuotesRejected: 4, sourcesRead: 20, sourcesSkipped: 4,
+    fullTextFallbacks: { web_read_robots_disallowed: 3, not_arxiv: 2 }, enrichment: { semanticScholar: { no_key: 2 }, openAlex: { ok: 1, http_429: 1 } } } }) } }));
+  for (const [stage, value] of [["collected", 40], ["merged", 31], ["already_screened", 3], ["screened", 28], ["shortlisted", 9], ["full_texts", 5], ["cards", 3], ["rejected", 1], ["venue_events", 2]]) {
+    assert.equal(sample(research, "open_science_evolution_self_research_items_total", { stage }), value, stage);
+  }
+  assert.equal(sample(research, "open_science_evolution_self_research_cap_hits_total", { cap: "shortlist" }), 2);
+  assert.equal(sample(research, "open_science_evolution_self_research_failures_total", { kind: "venue_quote" }), 4);
+  assert.equal(sample(research, "open_science_evolution_self_research_failures_total", { kind: "triage_batch" }), 1);
+  assert.equal(sample(research, "open_science_evolution_self_research_sources_total", { state: "skipped" }), 4);
+  assert.equal(sample(research, "open_science_evolution_self_research_full_text_fallbacks_total", { reason: "web_read_robots_disallowed" }), 3);
+  assert.equal(sample(research, "open_science_evolution_self_research_enrichment_total", { provider: "semanticScholar", outcome: "no_key" }), 2);
+  assert.equal(sample(research, "open_science_evolution_self_research_enrichment_total", { provider: "openAlex", outcome: "http_429" }), 1);
+  const requests = evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ sourceRequests: { filed: 3, duplicate: 2, invalid: 1, unsupportedHost: 4, notAFeed: 5, unreachable: 6, capReached: 7, admitted: 8, lapsed: 9, waiting: 10 } }) } }));
+  for (const [outcome, value] of [["filed", 3], ["duplicate", 2], ["invalid", 1], ["unsupported_host", 4], ["not_a_feed", 5], ["unreachable", 6], ["cap_reached", 7], ["admitted", 8], ["lapsed", 9]]) {
+    assert.equal(sample(requests, "open_science_evolution_source_requests_total", { outcome }), value, outcome);
+  }
+  assert.equal(sample(requests, "open_science_evolution_source_requests_waiting"), 10);
+  // A module that composed no counters says nothing rather than zeros.
+  assert.equal(evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: {} })).some((family) => family.name === "open_science_evolution_signal_groups"), false);
+});

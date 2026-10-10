@@ -27,6 +27,7 @@ describe('evolution discovery boundaries', () => {
     mocks.dossiers.mockResolvedValue([
       {id: 'd1', payload: {title: '生存分析扩展', status: 'building'}}, {id: 'd2', payload: {goal: '补全真实世界数据校准', status: 'waiting_resource'}},
       {id: 'd3', payload: {status: 'planned'}}, {id: 'd4', payload: {status: 'planned'}}, {id: 'd5', payload: {title: '未知阶段的计划', status: 'something_new'}},
+      {id: 'd6', payload: {title: '收紧召回的相关性下限', status: 'adopted'}}, {id: 'd7', payload: {title: '放宽路由的兜底', status: 'declined'}},
     ]);
     render(<MemoryRouter><EvolutionPanel /></MemoryRouter>);
     await userEvent.click(await screen.findByText('研发计划'));
@@ -35,6 +36,9 @@ describe('evolution discovery boundaries', () => {
     // The two plans with nothing to say are not printed as identical placeholder rows, and a status the table does not know prints no raw value.
     expect(screen.queryByText('研发计划', {selector: 'li, li *'})).not.toBeInTheDocument(); expect(screen.queryByText('待开始')).not.toBeInTheDocument();
     expect(screen.getByText('未知阶段的计划')).toBeInTheDocument(); expect(screen.queryByText('something_new')).not.toBeInTheDocument();
+    // The operator's answer to a proposal for the platform's own code is shown in words.
+    expect(screen.getByText('收紧召回的相关性下限')).toBeInTheDocument(); expect(screen.getByText('待实现')).toBeInTheDocument();
+    expect(screen.getByText('放宽路由的兜底')).toBeInTheDocument(); expect(screen.getByText('已否决')).toBeInTheDocument();
   });
   it('says there is no plan when every stored plan is empty of words', async () => {
     mocks.access = {enabled: true, operator: true}; mocks.dossiers.mockResolvedValue([{id: 'd3', payload: {status: 'planned'}}]);

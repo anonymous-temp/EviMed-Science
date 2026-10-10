@@ -32,3 +32,18 @@ test('V4 requires positive scientific evidence and exhausted monitoring states e
 })
 
 test('unknown evidence tiers cannot bypass scorer calibration',()=>{assert.equal(selectEvolutionCandidate({...evidence,evidenceTier:'unknown'}).outcome,'invalid-evidence')})
+
+// A model-scored promotion needs a calibrated scorer, deterministic checks that ran, and no regression on them against the incumbent. A written checklist
+// is neither a model nor a judge and needs none of it (review D-E19).
+test('a model-scored promotion needs a calibrated scorer and deterministic checks that ran without regressing; a checklist needs neither',()=>{
+  const model={...evidence,evidenceTier:'model',score:0.9,baseline:0.7,historicalBest:0.7,anchorCalibrated:true,modelScoredLabel:true,deterministicChecksPassed:true}
+  assert.deepEqual([selectEvolutionCandidate(model).outcome,selectEvolutionCandidate(model).promote],['improved',true])
+  assert.deepEqual(selectEvolutionCandidate({...model,anchorCalibrated:false}),{outcome:'invalid-evidence',reason:'model-score-not-calibrated',promote:false,scope:null})
+  assert.equal(selectEvolutionCandidate({...model,modelScoredLabel:false}).reason,'model-score-not-calibrated')
+  assert.deepEqual(selectEvolutionCandidate({...model,deterministicChecksPassed:false,deterministicChecksRegressed:true}),{outcome:'regressed',reason:'deterministic-check-regressed',promote:false,scope:null})
+  assert.deepEqual(selectEvolutionCandidate({...model,deterministicChecksPassed:false}),{outcome:'invalid-evidence',reason:'deterministic-checks-missing',promote:false,scope:null})
+  assert.equal(selectEvolutionCandidate({...model,deterministicChecksPassed:undefined}).reason,'deterministic-checks-missing')
+  const checklist={...model,evidenceTier:'checklist',anchorCalibrated:false,modelScoredLabel:false,deterministicChecksPassed:undefined}
+  assert.deepEqual([selectEvolutionCandidate(checklist).outcome,selectEvolutionCandidate(checklist).promote],['improved',true])
+  assert.equal(selectEvolutionCandidate({...checklist,score:0.6}).outcome,'regressed','a checklist candidate worse than the incumbent beyond the noise band is a regression')
+})

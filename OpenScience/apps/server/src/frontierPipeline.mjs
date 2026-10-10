@@ -77,6 +77,7 @@ import {
   isPeak,
 } from "@evimed/domain";
 import { FRONTIER_EDITOR_VERSION, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT_CHARS, buildModelInput, isChineseTitle } from "./frontierEditor.mjs";
+import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
 import { FrontierGlossary, FrontierGlossaryStore } from "./frontierGlossary.mjs";
 import { bumpFrontierVersion, migrateFrontier } from "./frontierPersistence.mjs";
 import { tsvectorLiteral } from "./kbChunker.mjs";
@@ -784,7 +785,7 @@ export class FrontierPipeline {
           continue;
         }
         const source = sources.get(entry.source_id);
-        if (entry.source_id === "arxiv-agent-self-improvement" || entry.facts?.discovery_only === true) {
+        if (isDiscoveryOnlySource(entry.source_id) || entry.facts?.discovery_only === true) {
           await this.#finishEntry(entry, "dropped", "evolution-discovery-only");
           summary.dropped += 1;
           continue;

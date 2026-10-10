@@ -34,7 +34,13 @@ export function selectEvolutionCandidate(evidence) {
   if (evidence.leaked || evidence.receiptValid !== true) return verdict('invalid-evidence', 'evidence-integrity')
   if (evidence.confirmatory !== true || evidence.firstAttempt !== true) return verdict('insufficient-evidence', 'fresh-first-attempt-required')
   if (!['exact','published','checklist','model'].includes(evidence.evidenceTier)) return verdict('invalid-evidence','unknown-evidence-tier')
-  if (evidence.evidenceTier === 'model' && !(evidence.anchorCalibrated && evidence.deterministicChecksPassed && evidence.modelScoredLabel)) return verdict('invalid-evidence', 'model-score-not-calibrated')
+  if (evidence.evidenceTier === 'model') {
+    if (!(evidence.anchorCalibrated && evidence.modelScoredLabel)) return verdict('invalid-evidence', 'model-score-not-calibrated')
+    // The deterministic checks (numbers, units, quotations) must have run on every unit and the candidate must be no worse on them than the version it
+    // replaces, within the noise of that version's own repeats. Not that every unit came out perfect: the score already carries each unit's failure, and a
+    // candidate that is no worse than what serves today is not made unpromotable by the units the incumbent also gets wrong.
+    if (evidence.deterministicChecksPassed !== true) return evidence.deterministicChecksRegressed === true ? verdict('regressed', 'deterministic-check-regressed') : verdict('invalid-evidence', 'deterministic-checks-missing')
+  }
   if (evidence.tool === true) {
     if (!(evidence.hiddenCases >= 2 && evidence.hiddenPassed === evidence.hiddenCases && evidence.crossImplementationPassed !== false)) return verdict('regressed', 'absolute-reference-failed')
     return verdict(evidence.scope ? 'scoped' : 'improved', 'absolute-reference-passed', true)

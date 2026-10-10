@@ -400,6 +400,18 @@ export class NotificationService {
     // notice. Absent, the inbox is exactly what it was — in-app only.
     /** @type {{ registry: any, onChange: (item: any) => void, onAction?: (item: any, actionId: string) => Promise<void> } | null} */
     this.channels = null;
+    /** What carries out the action a module put on its own notice, whatever channels are attached (`onAction`). @type {Array<(item: any, actionId: string) => Promise<void>>} */
+    this.actionHandlers = [];
+  }
+
+  /**
+   * A module that puts actions on its own notice registers what carries them out. Every handler is shown every item that is answered,
+   * looks at its source and does nothing for one that is not its own; it runs before the item resolves, so a handler that throws leaves
+   * the item open to be answered again, and an item already resolved, or answered at another revision, is not acted on twice.
+   * @param {(item: any, actionId: string) => Promise<void>} handler
+   */
+  onAction(handler) {
+    if (typeof handler === "function") this.actionHandlers.push(handler);
   }
 
   /**
@@ -662,8 +674,9 @@ export class NotificationService {
     // An action the IM module put on its own notice (「解除绑定」) is carried
     // out before the item resolves, so a failure leaves it open to try again;
     // an item already resolved, or read at another revision, is not acted on.
-    if (this.channels?.onAction && !item.resolvedAt && item.revision === expectedRevision) {
-      await this.channels.onAction(item, action);
+    if (!item.resolvedAt && item.revision === expectedRevision) {
+      for (const handler of this.actionHandlers) await handler(item, action);
+      if (this.channels?.onAction) await this.channels.onAction(item, action);
     }
     return this.#update(userId, id, expectedRevision,
       `read_at=coalesce(read_at,clock_timestamp()),resolved_at=clock_timestamp(),resolution=jsonb_build_object('actionId',$4::text,'source','user')`, action, true);

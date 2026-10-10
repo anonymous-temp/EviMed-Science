@@ -22,6 +22,8 @@ the P0 feeds actually do (2026-09-21/22) and how this reader answers it:
 - Identifiers: ``prism:doi`` / ``dc:identifier doi:…`` / DOI-bearing links give ``doi``;
   PubMed's ``pubmed:<pmid>`` ids give ``pmid``; arXiv ids lose their version (``arxiv:<id>``)
   and get arXiv's DataCite DOI ``10.48550/arxiv.<id>`` so versions revise one entry.
+- ``config.arxiv_comment`` (the AI-discovery arXiv rows): the abstract is followed by the paper's ``comment`` and
+  ``journal_ref`` as the authors wrote them, which is where "Accepted at NeurIPS 2026" and a code link appear.
 - Feed-tracking query tags named in ``config.strip_params`` (medRxiv's ``rss=1``) are removed
   from links. Website feeds consult robots.txt (``api`` false) unless the registry marks the feed
   an API (``config.api``).
@@ -95,6 +97,20 @@ def _entry_text(item: Any) -> str:
     return longest if len(longest) > len(summary) else summary
 
 
+def _with_arxiv_comment(text: str, item: Any) -> str:
+    """The abstract followed by what the authors wrote beside it (``config.arxiv_comment``).
+
+    arXiv's ``comment`` and ``journal_ref`` are where a paper says where it was accepted ("Accepted at NeurIPS 2026"),
+    long before any proceedings exist, and where it links its code. They are the authors' words and stay labelled so.
+    """
+    parts = [text] if text else []
+    for label, key in (("Comments", "arxiv_comment"), ("Journal reference", "arxiv_journal_ref")):
+        value = clean_markup(item.get(key))
+        if value:
+            parts.append(f"{label}: {value}")
+    return "\n\n".join(parts)
+
+
 def feed_entry(item: Any, *, source: SourceConfig, base: str, naive_zone) -> NormalizedEntry | None:
     config = source.config or {}
     title = clean_markup(item.get("title"))
@@ -121,6 +137,8 @@ def feed_entry(item: Any, *, source: SourceConfig, base: str, naive_zone) -> Nor
     text = _entry_text(item)
     if text.strip().lower().rstrip(".") in NO_ABSTRACT or text.strip() == title:
         text = ""
+    if arxiv and config.get("arxiv_comment"):
+        text = _with_arxiv_comment(text, item)
     published_at, precision = _entry_date(item, naive_zone)
     journal = clean_markup(item.get("prism_publicationname") or item.get("dc_source")) or None
     return make_entry(

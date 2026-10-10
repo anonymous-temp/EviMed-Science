@@ -279,6 +279,21 @@ const operatorLevers = {
   OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH: ["open-science-web"],
+  // The floor of different accounts an operator's own signals and leads need before the platform loop reads them (2026-10-10, D-E12): validated by
+  // both the API and the controller, so both must receive it, or one would switch the module off over a value the other never saw.
+  OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR: ["open-science-web", "open-science-runtime-controller"],
+  // The hours the heavy evolution work waits for (2026-10-10, E13w): the worker runs in the API, so only the API reads it. A window that never arrived
+  // would leave the default in force while an operator believes theirs applies, or leave the work running by day at full price.
+  OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW: ["open-science-web"],
+  // The weekly self-research funnel's caps (2026-10-10, E13e): numeric settings the evolution module validates in both processes, so both receive them;
+  // the worker that applies them runs in the API. One that never arrived would leave the default in force while an operator believes theirs applies.
+  OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_SCREEN_LIMIT: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_SHORTLIST_LIMIT: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_FULL_TEXT_LIMIT: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_CARD_LIMIT: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_TEXT_CHARS: ["open-science-web", "open-science-runtime-controller"],
+  // How long a request for a source waits for the plugin (2026-10-10, E12g): validated in both processes like the other numeric settings.
+  OPEN_SCIENCE_EVOLUTION_SOURCE_REQUEST_LAPSE_DAYS: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: ["open-science-web"],
