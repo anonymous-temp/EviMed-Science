@@ -177,9 +177,10 @@ export class CapsuleIdentityStore {
 
 export function capsuleAccountHash(userId) { return createHash("sha256").update(productId(userId, "user")).digest("hex"); }
 
+/** Remove one protected file. @returns {Promise<boolean>} whether there was a file to remove */
 export async function unlinkCapsuleFile(directory, name) {
   if (!/^[a-zA-Z0-9_-]+\.(?:json|evimedcap)(?:\.[a-f0-9-]{36}\.tmp)?$/.test(name)) throw unavailable();
-  await fs.unlink(path.join(directory, name)).catch(error => { if (error.code !== "ENOENT") throw error; });
+  return fs.unlink(path.join(directory, name)).then(() => true, error => { if (error.code !== "ENOENT") throw error; return false; });
 }
 
 /** Atomic, durable replacement for deletion state only; never used to replace identity keys. */

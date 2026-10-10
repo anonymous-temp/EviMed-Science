@@ -201,32 +201,49 @@ test("a password copy opens the same container offline, and a wrong password doe
   await assert.rejects(async () => unwrapWithPassword(container.passwordWrap, "wrong"), /unable to authenticate|bad decrypt|Unsupported/i);
 });
 
-test("unwrapping honors the cost a container was actually wrapped with, not today's default", async () => {
-  // `wrapWithPassword` writes its own `maxmem` into the header next to N/r/p so
-  // a build whose default has since moved can still open an older container.
-  // Hand-built rather than packed, because the point is a header whose cost
-  // disagrees with today's constant.
-  //
-  // N=262144,r=8 needs 256 MiB — more than this build's own 96 MiB default —
-  // so this only opens if `unwrapWithPassword` reads the header. Asserted on
-  // the success path deliberately: a test that instead fed scrypt a too-small
-  // maxmem and caught the throw left OpenSSL's error queue dirty, and the very
-  // next test in the process failed inside an unrelated `createPrivateKey`.
-  const password = "correct horse battery staple";
-  const salt = randomBytes(16);
-  const params = { N: 262144, r: 8, p: 1 };
-  const maxmem = 320 * 1024 * 1024;
+/** A password wrap built by hand from a header and the scrypt cost it names, for costs the packer never writes. */
+function handWrap({ params, maxmem, password, packKey = randomBytes(32), salt = randomBytes(16) }) {
   const derived = scryptSync(password, salt, 32, { ...params, maxmem });
-  const packKey = randomBytes(32);
   const nonce = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", derived, nonce);
   const body = Buffer.concat([cipher.update(packKey), cipher.final()]);
   const header = Buffer.from(JSON.stringify({ kdf: "scrypt", ...params, maxmem, salt: salt.toString("base64") }), "utf8");
   const headerLength = Buffer.alloc(2);
   headerLength.writeUInt16BE(header.length);
-  const wrapped = Buffer.concat([headerLength, header, nonce, body, cipher.getAuthTag()]);
+  return { packKey, wrapped: Buffer.concat([headerLength, header, nonce, body, cipher.getAuthTag()]) };
+}
 
+test("unwrapping honors the recorded memory limit of a cost this platform wrote, not today's default", async () => {
+  // `wrapWithPassword` writes its own `maxmem` into the header next to N/r/p, so a build whose default has since moved
+  // still opens an older container. Hand-built rather than packed, because the point is a header whose recorded limit
+  // disagrees with today's constant. Asserted on the success path deliberately: a test that fed scrypt a too-small
+  // maxmem and caught the throw left OpenSSL's error queue dirty, and the very next test in the process failed inside
+  // an unrelated `createPrivateKey`.
+  const password = "correct horse battery staple";
+  const { packKey, wrapped } = handWrap({ params: { N: 32768, r: 8, p: 1 }, maxmem: 64 * 1024 * 1024, password });
   assert.deepEqual(await unwrapWithPassword(wrapped, password), packKey);
+});
+
+test("a key derivation this platform never wrote is refused by name before the primitive runs (review C-10)", async () => {
+  // The header travels with the container, so a hostile sender signs a pack of their own whose password wrap asks for any
+  // cost the old ceilings let through: N=2^18 at r=8 is 256 MiB and seconds of a pool thread, run on the one process-wide
+  // slot, for every request of that sender. The platform has only ever written N=2^15, r=8, p=1, so that is all it opens.
+  const originalSync = crypto.scryptSync;
+  const originalAsync = crypto.scrypt;
+  try {
+    crypto.scryptSync = () => { throw new Error("A cost nobody wrote reached the primitive"); };
+    crypto.scrypt = () => { throw new Error("A cost nobody wrote reached the primitive"); };
+    syncBuiltinESMExports();
+    for (const bad of [{ N: 262144, r: 8, p: 1 }, { N: 65536, r: 8, p: 1 }, { N: 16384, r: 8, p: 1 }, { N: 32768, r: 16, p: 1 }, { N: 32768, r: 8, p: 2 }, { N: 32768, r: 1, p: 1 }]) {
+      await assert.rejects(
+        async () => unwrapWithPassword(wrapWithHeader(bad), "correct horse battery staple"),
+        (error) => error.code === "capsule_password_params_unsupported" && /not one this platform writes/.test(error.message),
+        JSON.stringify(bad),
+      );
+    }
+  } finally {
+    crypto.scryptSync = originalSync; crypto.scrypt = originalAsync; syncBuiltinESMExports();
+  }
 });
 
 test("a password wrap records the cost it used, so a later build can reproduce it", async () => {
@@ -257,7 +274,7 @@ test("a header naming more memory than we will spend is refused, by its own name
   // what arrived, then bound it.
   await assert.rejects(
     async () => unwrapWithPassword(wrapWithHeader({ N: 2 ** 30 }), "correct horse battery staple"),
-    (error) => error.code === "capsule_password_params_unsupported" && /ceiling/.test(error.message),
+    (error) => error.code === "capsule_password_params_unsupported" && /not one this platform writes/.test(error.message),
   );
   // The ceiling applies to the recorded number too, not only to what N implies.
   await assert.rejects(
@@ -407,6 +424,89 @@ test("password derivation is asynchronous and excess concurrent work is refused"
   await assert.rejects(packForBob({ password: "test-only-concurrent-placeholder" }), error => error.code === "capsule_password_busy");
   await first;
   assert.equal(yielded, true);
+});
+
+/**
+ * Holds every `crypto.scrypt` result until the test lets it go, so who is running a derivation, and who is waiting for one,
+ * is a state the test sets rather than a race it hopes to win. The real derivation still runs; only its callback waits.
+ * @returns {{ started: string[], held: (() => void)[], release: (count?: number) => void, reached: (count: number) => Promise<void>, restore: () => void }}
+ */
+function holdScrypt() {
+  const original = crypto.scrypt;
+  /** @type {string[]} */ const started = [];
+  /** @type {(() => void)[]} */ const held = [];
+  crypto.scrypt = (...args) => {
+    const callback = args.pop();
+    started.push(String(args[0]));
+    return original(...args, (error, key) => { held.push(() => callback(error, key)); });
+  };
+  syncBuiltinESMExports();
+  return {
+    started, held,
+    release(count = 1) { for (const resume of held.splice(0, count)) resume(); },
+    async reached(count) { for (let attempt = 0; attempt < 400 && held.length < count; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5)); assert.ok(held.length >= count, `${held.length} derivations are waiting, expected ${count}`); },
+    // Whatever a failing test left held is let go, or its derivation would keep the process-wide slot from every later test.
+    restore() { crypto.scrypt = original; syncBuiltinESMExports(); for (const resume of held.splice(0)) resume(); },
+  };
+}
+/** Whether a promise has settled, without waiting for it. @param {Promise<unknown>} promise */
+async function settledWithin(promise, ms = 40) {
+  let settled = false;
+  promise.then(() => { settled = true; }, () => { settled = true; });
+  await new Promise((resolve) => setTimeout(resolve, ms));
+  return settled;
+}
+
+test("a second account waits its turn for the derivation instead of being refused, and one account holds one place (review C-10)", async () => {
+  const hold = holdScrypt();
+  try {
+    const first = packForBob({ password: "test-only-first-account", account: "acct-a" });
+    await hold.reached(1);
+    // The same account asking again is refused by name and takes nobody's place.
+    await assert.rejects(packForBob({ password: "test-only-first-again", account: "acct-a" }),
+      (error) => error.code === "capsule_password_busy" && error.reason === "account_busy");
+    // Another account is not refused: it waits behind the first.
+    const second = packForBob({ password: "test-only-second-account", account: "acct-b" });
+    assert.equal(await settledWithin(second), false, "the second account is waiting, not refused");
+    assert.deepEqual(hold.started, ["test-only-first-account"], "only one derivation runs at a time");
+    hold.release();
+    assert.ok((await first).passwordWrap);
+    await hold.reached(1);
+    assert.deepEqual(hold.started, ["test-only-first-account", "test-only-second-account"]);
+    hold.release();
+    assert.ok((await second).passwordWrap);
+  } finally { hold.restore(); }
+});
+
+test("an account that keeps asking goes to the back of the line each time, so it cannot keep the others out (review C-10)", async () => {
+  const hold = holdScrypt();
+  try {
+    const order = [];
+    const request = (account) => packForBob({ password: `test-only-${account}`, account }).then((container) => { order.push(account); return container; });
+    const a1 = request("acct-a");
+    await hold.reached(1);
+    const b = request("acct-b");
+    const c = request("acct-c");
+    // A is back at the door while its own derivation runs: refused, and B and C keep their places.
+    await assert.rejects(request("acct-a"), (error) => error.code === "capsule_password_busy");
+    hold.release();
+    await a1;
+    // A asks again the moment it is done: it queues behind B and C, not in front of them.
+    const a2 = request("acct-a");
+    await hold.reached(1);
+    assert.deepEqual(hold.started, ["test-only-acct-a", "test-only-acct-b"], "B runs next, not A's second request");
+    hold.release();
+    await b;
+    await hold.reached(1);
+    assert.equal(hold.started.at(-1), "test-only-acct-c");
+    hold.release();
+    await c;
+    await hold.reached(1);
+    assert.equal(hold.started.at(-1), "test-only-acct-a");
+    hold.release();
+    await a2;
+    assert.deepEqual(order, ["acct-a", "acct-b", "acct-c", "acct-a"]);
+  } finally { hold.restore(); }
 });
 
 test("workstyle scope cannot smuggle optional profile and knowledge entries", async () => {

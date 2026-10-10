@@ -55,6 +55,8 @@ import {
   validateCapsuleManifest,
 } from "@evimed/domain";
 
+import { PasswordKdfGate } from "./capsuleKdfGate.mjs";
+
 /** Key sizes and the scheme's fixed parameters. */
 const PACK_KEY_BYTES = 32;
 const NONCE_BYTES = 12;
@@ -62,27 +64,31 @@ const TAG_BYTES = 16;
 const HKDF_INFO = "evimedcap/v1/pack-key";
 /** scrypt parameters for a password-wrapped copy. N=2^15 is ~100ms on a laptop. */
 const SCRYPT_PARAMS = Object.freeze({ N: 32768, r: 8, p: 1, maxmem: 96 * 1024 * 1024 });
-/** The most a container's own header may ask us to allocate to open it.
- *  Enough for the supported 256 MiB legacy cost, with a bounded work factor
- *  and one active password derivation per process. */
-const MAX_PASSWORD_KDF_BYTES = 384 * 1024 * 1024;
-const MAX_PASSWORD_KDF_WORK = 262144 * 8;
-let passwordKdfsRunning = 0;
+/**
+ * The costs a password wrap is opened with: the ones this platform has written, and no others. The header travels with the
+ * container, so its N, r and p are the sender's choice, and any cost the sender names is memory and pool-thread time spent
+ * on the sender's behalf in the one process everybody shares; refusing every cost the platform never wrote leaves nothing
+ * for a hostile header to choose (review C-10). A new default is added here before it is written, and an old one stays as
+ * long as a container written with it may still be opened.
+ */
+const ACCEPTED_KDF_COSTS = Object.freeze([
+  Object.freeze({ N: 32768, r: 8, p: 1 }),
+]);
+/** The most memory limit a header may record: its own number is only a limit scrypt checks, never an allocation. */
+const MAX_RECORDED_MAXMEM = 384 * 1024 * 1024;
+/** One derivation at a time, in turn per account. See capsuleKdfGate.mjs. */
+const passwordKdfGate = new PasswordKdfGate();
 
 function containerError(code, message) { return Object.assign(new Error(message), { code }); }
 
-/** Bound thread-pool work process-wide. Password requests never block the event loop. */
-async function derivePasswordKey(password, salt, params) {
+/** Bound thread-pool work process-wide, and share it out account by account. Password requests never block the event loop. */
+async function derivePasswordKey(password, salt, params, account) {
   if (typeof password !== "string" || !password || Buffer.byteLength(password) > 1024) {
     throw containerError("capsule_password_wrap_invalid", "A password must contain between 1 and 1024 UTF-8 bytes.");
   }
-  if (passwordKdfsRunning >= 1) throw containerError("capsule_password_busy", "Another capsule password operation is in progress.");
-  passwordKdfsRunning++;
-  try {
-    return await new Promise((resolve, reject) => {
-      scrypt(password, salt, PACK_KEY_BYTES, params, (error, key) => error ? reject(error) : resolve(key));
-    });
-  } finally { passwordKdfsRunning--; }
+  return passwordKdfGate.run(account, () => new Promise((resolve, reject) => {
+    scrypt(password, salt, PACK_KEY_BYTES, params, (error, key) => error ? reject(error) : resolve(key));
+  }));
 }
 
 /** @param {string | Buffer | Uint8Array} input @returns {string} */
@@ -160,7 +166,8 @@ function privateKeyFrom(base64) {
  *   attribution?: string,
  *   card?: { title?: string, author?: string, summary?: string, changelog?: string },
  *   password?: string,
- * }} input
+ *   account?: string,
+ * }} input `account` is whose turn a password derivation takes (see capsuleKdfGate.mjs)
  * @returns {Promise<PackedContainer>}
  */
 export async function packCapsule(input) {
@@ -231,7 +238,7 @@ export async function packCapsule(input) {
 
   const shape = validateCapsuleManifest(manifest);
   if (!shape.ok) throw containerError(shape.issues[0].code, shape.issues[0].message);
-  const passwordWrap = packKey && input.password ? await wrapWithPassword(packKey, input.password) : null;
+  const passwordWrap = packKey && input.password ? await wrapWithPassword(packKey, input.password, input.account) : null;
   if (passwordWrap) manifest.encryption.passwordWrapSha256 = sha256Hex(passwordWrap);
   const signature = signBytes(null, Buffer.from(signablePayload(manifest), "utf8"), signingKey);
   manifest.signature = { alg: CAPSULE_SIGNATURE_ALG, keyId: input.issuer.signingKeyId, value: signature.toString("base64") };
@@ -357,12 +364,12 @@ function unwrapForRecipient(manifest, recipient) {
  * old container after the defaults move — hardcoding today's parameters is how
  * an archive becomes unopenable.
  *
- * @param {Buffer} packKey @param {string} password
+ * @param {Buffer} packKey @param {string} password @param {string} [account]
  * @returns {Promise<Buffer>}
  */
-async function wrapWithPassword(packKey, password) {
+async function wrapWithPassword(packKey, password, account) {
   const salt = randomBytes(16);
-  const derived = await derivePasswordKey(password, salt, SCRYPT_PARAMS);
+  const derived = await derivePasswordKey(password, salt, SCRYPT_PARAMS, account);
   const nonce = randomBytes(NONCE_BYTES);
   const cipher = createCipheriv("aes-256-gcm", derived, nonce);
   const body = Buffer.concat([cipher.update(packKey), cipher.final()]);
@@ -378,16 +385,16 @@ async function wrapWithPassword(packKey, password) {
  *
  * `wrapWithPassword` writes N/r/p and `maxmem` into the header for a real
  * reason: scrypt's `maxmem` must cover whatever N/r/p it is asked to run, and a
- * build whose own default has since moved — larger or smaller — must still
- * honor the cost an *older* container was actually wrapped with rather than
- * substitute today's number for it.
+ * build whose own default has since moved must still honor the cost an *older*
+ * container was actually wrapped with rather than substitute today's number for it.
  *
  * But the header travels with the container, so every one of those fields is
  * attacker-chosen. scrypt allocates 128·N·r bytes; a hostile header naming
- * N=2^30 is an instruction to allocate 128 GiB, and honoring it faithfully
- * would turn "someone sent me a file" into an out-of-memory kill. Deriving the
- * requirement and capping it is the whole point — the same rule as a
- * model-supplied path having to pass the write guard before it is written to.
+ * N=2^30 is an instruction to allocate 128 GiB, and one naming N=2^18 is 256 MiB
+ * and seconds of a pool thread, again and again, on a derivation slot every
+ * account shares (review C-10). So the header chooses nothing: its N, r and p
+ * must be a set this platform has written (`ACCEPTED_KDF_COSTS`), and the memory
+ * the primitive is allowed is derived from that set, never read from the header.
  *
  * Refusal is a named code rather than a generic key failure: "this container
  * asks for more than we will spend" and "your password is wrong" are different
@@ -400,26 +407,22 @@ function passwordKdfCost(header) {
   const N = header?.N;
   const r = header?.r;
   const p = header?.p;
-  // scrypt requires N to be a power of two greater than one; r and p positive.
-  // Checked here rather than left to the primitive so a malformed header is
+  // Positive integers and a well-formed salt, checked here rather than left to the primitive so a malformed header is
   // refused by its own name instead of surfacing as an opaque OpenSSL string.
   const sane = [N, r, p].every((value) => Number.isSafeInteger(value) && value > 0)
-    && N > 1 && Number.isInteger(Math.log2(N)) && p <= 4
     && header.kdf === "scrypt" && typeof header.salt === "string" && /^[A-Za-z0-9+/]{22}==$/.test(header.salt);
   if (!sane) throw capsuleParamsUnsupported(`scrypt parameters N=${header?.N} r=${header?.r} p=${header?.p} are not a usable set.`);
   const required = 128 * r * (N + p + 2);
-  if (!Number.isSafeInteger(N * r * p) || N * r * p > MAX_PASSWORD_KDF_WORK) throw capsuleParamsUnsupported("This container exceeds the supported scrypt work ceiling.");
-  if (header.maxmem !== undefined && (!Number.isSafeInteger(header.maxmem) || header.maxmem <= 0)) throw capsuleParamsUnsupported("The recorded scrypt memory limit is invalid.");
-  const maxmem = header.maxmem ?? SCRYPT_PARAMS.maxmem;
-  if (required > MAX_PASSWORD_KDF_BYTES || maxmem > MAX_PASSWORD_KDF_BYTES) {
+  if (!ACCEPTED_KDF_COSTS.some((cost) => cost.N === N && cost.r === r && cost.p === p)) {
     throw capsuleParamsUnsupported(
-      `this container asks for ${Math.round(Math.max(required, maxmem) / 1024 / 1024)} MiB to derive its key, above the ${MAX_PASSWORD_KDF_BYTES / 1024 / 1024} MiB ceiling.`,
+      `scrypt parameters N=${N} r=${r} p=${p} (${Math.round(required / 1024 / 1024)} MiB) are not one this platform writes, so this container's key derivation is not run.`,
     );
   }
-  // The header's own number when it covers its own parameters; the derived
-  // requirement when it does not, so an old container whose recorded ceiling
-  // was too tight still opens rather than failing on a number it wrote itself.
-  return { N, r, p, maxmem: Math.max(maxmem, required) };
+  if (header.maxmem !== undefined && (!Number.isSafeInteger(header.maxmem) || header.maxmem <= 0 || header.maxmem > MAX_RECORDED_MAXMEM)) {
+    throw capsuleParamsUnsupported("The recorded scrypt memory limit is invalid.");
+  }
+  // The limit scrypt checks its own need against: today's for the set, raised to what the set needs.
+  return { N, r, p, maxmem: Math.max(SCRYPT_PARAMS.maxmem, required) };
 }
 
 /** @param {string} message @returns {Error & { code: string }} */
@@ -430,10 +433,10 @@ function capsuleParamsUnsupported(message) {
 }
 
 /**
- * @param {Buffer} wrapped @param {string} password
+ * @param {Buffer} wrapped @param {string} password @param {{ account?: string }} [options] `account` is whose turn the derivation takes
  * @returns {Promise<Buffer>}
  */
-export async function unwrapWithPassword(wrapped, password) {
+export async function unwrapWithPassword(wrapped, password, { account } = {}) {
   if (!Buffer.isBuffer(wrapped) || wrapped.length < 2) throw containerError("capsule_password_wrap_invalid", "The password wrap is truncated.");
   const headerLength = wrapped.readUInt16BE(0);
   if (headerLength < 2 || headerLength > 1024 || wrapped.length !== 2 + headerLength + NONCE_BYTES + PACK_KEY_BYTES + TAG_BYTES) {
@@ -444,7 +447,7 @@ export async function unwrapWithPassword(wrapped, password) {
   catch { throw containerError("capsule_password_wrap_invalid", "The password wrap has invalid metadata."); }
   const rest = wrapped.subarray(2 + headerLength);
   const params = passwordKdfCost(header);
-  const derived = await derivePasswordKey(password, Buffer.from(header.salt, "base64"), params);
+  const derived = await derivePasswordKey(password, Buffer.from(header.salt, "base64"), params, account);
   const nonce = rest.subarray(0, NONCE_BYTES);
   const tag = rest.subarray(rest.length - TAG_BYTES);
   const body = rest.subarray(NONCE_BYTES, rest.length - TAG_BYTES);
@@ -543,8 +546,9 @@ function safeEqualHex(left, right) {
  *   recipient?: { encKeyId: string, privateKey: string, publicKey: string },
  *   passwordWrap?: Buffer,
  *   password?: string,
- * }} keys
- * @returns {Promise<{ ok: true, manifest: import("@evimed/domain").CapsuleManifest, entries: Record<string, string> } | { ok: false, issues: { code: string, message: string }[] }>}
+ *   account?: string,
+ * }} keys `account` is whose turn a password derivation takes (see capsuleKdfGate.mjs)
+ * @returns {Promise<{ ok: true, manifest: import("@evimed/domain").CapsuleManifest, entries: Record<string, string> } | { ok: false, issues: { code: string, message: string, reason?: string }[] }>}
  */
 export async function openCapsule(container, keys) {
   const verified = verifyCapsule(container, keys.issuer);
@@ -563,13 +567,13 @@ export async function openCapsule(container, keys) {
         if (!Buffer.isBuffer(keys.passwordWrap) || !safeEqualHex(sha256Hex(keys.passwordWrap), manifest.encryption.passwordWrapSha256)) {
           throw containerError("capsule_password_wrap_invalid", "The password wrap does not match the signed manifest.");
         }
-        packKey = await unwrapWithPassword(keys.passwordWrap, keys.password);
+        packKey = await unwrapWithPassword(keys.passwordWrap, keys.password, { account: keys.account });
       }
       else return { ok: false, issues: [{ code: "capsule_key_missing", message: "the container is encrypted and no key was offered." }] };
     } catch (error) {
       // Authentication, cost and admission errors remain distinct from a wrong password.
       if (["capsule_password_params_unsupported", "capsule_password_wrap_invalid", "capsule_password_wrap_unauthenticated", "capsule_password_busy"].includes(error?.code)) {
-        return { ok: false, issues: [{ code: error.code, message: error.message }] };
+        return { ok: false, issues: [{ code: error.code, message: error.message, ...(error.reason ? { reason: error.reason } : {}) }] };
       }
       return { ok: false, issues: [{ code: "capsule_key_invalid", message: `the offered key does not open this container: ${error?.message ?? error}` }] };
     }
