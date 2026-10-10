@@ -294,8 +294,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
         accrual = vcr_platform.shape({"kind": "accrual_forecast"})["data"]
         self.assertEqual(accrual["runStates"], ["target", "eventTarget", "eventHazard", "byTimes"])
         self.assertEqual([line.split(":", 1)[0] for line in accrual["keys"]], ["target", "eventTarget", "eventHazard", "byTimes"])
-        # An event target is counted among the patients still to enrol, and the shape says what happens beyond them.
-        self.assertTrue(any("eventTarget counts events among the patients still to enrol" in note and "scenario_value_invalid at eventTarget" in note for note in accrual["notes"]))
+        # An event target is counted among every patient, enrolled and still to enrol, and the shape says what happens beyond them.
+        self.assertTrue(any("eventTarget counts events among every patient the forecast follows" in note and "scenario_value_invalid at eventTarget" in note for note in accrual["notes"]))
 
     def test_read_says_what_matching_returns(self):
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_read"]["description"]

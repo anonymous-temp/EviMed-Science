@@ -143,7 +143,9 @@ VCR_TIPPING_DEFAULT_DELTAS <- c(1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10, 15, 20, 
     arms <- list(treatment = count(arm == 1), control = count(arm == 0))
   }
   if (any(vapply(arms, function(a) a[["n"]] < 1, logical(1)))) vcr_abort("input_shape_invalid", "scenario.treatmentColumn", "Both arms need at least one person.")
-  list(arms = arms, source = .vcr_source_label(subj, "observed"), counts = vcr_table_counts(subj), cohort = cohort$info)
+  # the data the analysis rests on: the outcome and, with two arms, the arm column
+  used <- vcr_used_sources(list(list(df = subj, columns = c(oc, if (identical(design, "two_arm")) .vcr_column_name(sc$treatmentColumn, "arm", "scenario.treatmentColumn")))))
+  list(arms = arms, source = if (is.na(used$source)) "observed" else used$source, used = used, counts = vcr_table_counts(subj), cohort = cohort$info)
 }
 
 .vcr_tp_binary <- function(job, sc, output_dir) {
@@ -211,7 +213,7 @@ VCR_TIPPING_DEFAULT_DELTAS <- c(1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10, 15, 20, 
   unit_label <- function(row) if (is.null(row)) NULL else list(k1 = row$k1, k0 = row$k0, distance = dist[which(g$k1 == row$k1 & g$k0 == row$k0)],
                                                               rateTreatmentMissing = if (m1 > 0) row$k1 / m1 else NULL,
                                                               rateControlMissing = if (two && m0 > 0) row$k0 / m0 else NULL, p = row$p, significant = row$significant)
-  msrc <- if (identical(inp$source, "aggregate")) "aggregate" else "calculated"
+  msrc <- if (identical(inp$source, "aggregate")) "aggregate" else vcr_estimate_source(inp$used$source)
   measures <- list(vcr_measure("primary_p_value", prim$p, source = msrc),
                    vcr_measure("grid_cells", nrow(g), source = msrc),
                    vcr_measure("cells_changing_conclusion", sum(changed), source = msrc),
@@ -239,6 +241,7 @@ VCR_TIPPING_DEFAULT_DELTAS <- c(1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10, 15, 20, 
          worstCase = list(k1 = worst$k1, k0 = worst$k0, p = worst_row$p, significant = worst_row$significant, changesConclusion = worst_row$significant != prim_sig),
          conclusionRobustInDirection = is.null(near_dir),
          boundary = boundary, gridCells = nrow(g),
+         valueSourcesUsed = if (is.null(inp$used)) NULL else vcr_value_sources_used(inp$used),
          enumeration = "exact: every number of responders among the missing in each arm, the analysis's own test at each",
          reading = "The tipping point is where the conclusion changes, not a verdict. Judge it against what is known about why the outcomes are missing, in each arm.",
          cohort = inp$cohort),
@@ -372,8 +375,11 @@ vcr_cox_binary <- function(time, status, arm, maxit = 50L, tol = 1e-10) {
   early <- status == 0L & time < horizon
   counts <- vcr_table_counts(subj, events = sum(status))
   counts$events <- sum(status)
+  # the data the analysis rests on: the arm, and the time and status columns
+  used <- vcr_used_sources(c(list(list(df = subj, columns = tc)), .vcr_outcome_parts(sc, tabs, subj, "time_to_event")))
+  est_src <- vcr_estimate_source(used$source)
   not_est <- function(detail) list(status = "not_estimable", notEstimableRule = "primary_analysis_not_estimable", measures = list(), counts = counts,
-                                   diagnostics = list(detail = detail, horizon = horizon, cohort = cohort$info))
+                                   diagnostics = list(detail = detail, horizon = horizon, cohort = cohort$info, valueSourcesUsed = vcr_value_sources_used(used)))
   prim <- vcr_cox_binary(time, status, arm)
   if (is.null(prim)) return(not_est("An arm has no event inside the horizon, or the Cox model has no maximum: there is no primary hazard ratio to relax."))
   crit <- stats::qnorm(1 - alpha / sided)
@@ -495,18 +501,19 @@ vcr_cox_binary <- function(time, status, arm, maxit = 50L, tol = 1e-10) {
   unit <- as.character(sc$timeUnit %||% "months")
   sd_ci <- stats::qnorm(0.975)
   measures <- list(
-    vcr_measure("primary_log_hazard_ratio", prim$beta, source = "calculated", interval = vcr_interval("confidence", prim$beta - sd_ci * sqrt(prim$variance), prim$beta + sd_ci * sqrt(prim$variance))),
-    vcr_measure("primary_hazard_ratio", exp(prim$beta), source = "calculated", interval = vcr_interval("confidence", exp(prim$beta - sd_ci * sqrt(prim$variance)), exp(prim$beta + sd_ci * sqrt(prim$variance)))),
-    vcr_measure("delta_one_log_hazard_ratio", at1$estimate, simulated = TRUE, mcse = at1$mcse, source = "calculated"),
-    vcr_measure("imputed_early_censored_people", n_e, source = .vcr_source_label(subj, "observed")))
-  if (!is.null(worst)) measures <- c(measures, list(vcr_measure("worst_case_log_hazard_ratio", worst$beta, source = "calculated")))
-  if (is.finite(tip) && is.finite(tip_mcse)) measures <- c(measures, list(vcr_measure("tipping_delta", tip, simulated = TRUE, mcse = tip_mcse, source = "calculated")))
+    vcr_measure("primary_log_hazard_ratio", prim$beta, source = est_src, interval = vcr_interval("confidence", prim$beta - sd_ci * sqrt(prim$variance), prim$beta + sd_ci * sqrt(prim$variance))),
+    vcr_measure("primary_hazard_ratio", exp(prim$beta), source = est_src, interval = vcr_interval("confidence", exp(prim$beta - sd_ci * sqrt(prim$variance)), exp(prim$beta + sd_ci * sqrt(prim$variance)))),
+    vcr_measure("delta_one_log_hazard_ratio", at1$estimate, simulated = TRUE, mcse = at1$mcse, source = est_src),
+    vcr_measure("imputed_early_censored_people", n_e, source = if (is.na(used$source)) "observed" else used$source))
+  if (!is.null(worst)) measures <- c(measures, list(vcr_measure("worst_case_log_hazard_ratio", worst$beta, source = est_src)))
+  if (is.finite(tip) && is.finite(tip_mcse)) measures <- c(measures, list(vcr_measure("tipping_delta", tip, simulated = TRUE, mcse = tip_mcse, source = est_src)))
   failed_share <- 1 - Mok / length(rows)
   limited <- failed_share > 0.2 || (is.finite(tip) && !is.finite(tip_mcse)) || n_e == 0L
   list(status = "succeeded", conclusion = if (limited) "limited" else "estimable", measures = measures,
        counts = counts,
        diagnostics = list(
          endpoint = "time_to_event", horizon = horizon, timeUnit = unit, alpha = alpha, sided = sided, direction = threat, directionWasStated = !is.null(sc$direction),
+         valueSourcesUsed = vcr_value_sources_used(used),
          deltaApplies = applies, deltas = deltas,
          primary = list(logHazardRatio = prim$beta, se = sqrt(prim$variance), z = prim_z, conclusion = prim_class, events = prim$events),
          earlyCensored = list(people = n_e, treatment = sum(early & arm == 1L), control = sum(early & arm == 0L), share = n_e / length(time)),

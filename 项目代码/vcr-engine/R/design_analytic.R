@@ -244,6 +244,48 @@ vcr_event_probability <- function(event_rate, accrual_duration, followup_duratio
   lam / s * (1 - (exp(-s * F) - exp(-s * Tt)) / (s * A))
 }
 
+#' The same probability for any control distribution the engine simulates
+#' (exponential, Weibull, piecewise exponential), by quadrature.
+#'
+#' The Lachin-Foulkes expression above is the exponential special case. A subject
+#' contributes an event if the event comes before the exponential dropout and before
+#' the end of that subject's follow-up (uniform entry over [0, A], analysis at
+#' A + F), so with S the arm's survival function (the control's raised to the
+#' hazard ratio) and G(t) = a(t) exp(-eta t), a(t) = 1 up to F and (A + F - t) / A
+#' from F to A + F, the probability is the integral of f(t) G(t) with f = -S'.
+#' Integrating by parts (G(0) = 1, G(A + F) = 0) leaves only the survival function,
+#'
+#'   P = 1 - eta * int_0^F S e^{-eta t} dt
+#'         - (1 / A) * int_F^{A+F} S e^{-eta t} (1 + eta (A + F - t)) dt,
+#'
+#' and, for a single entry time (A = 0), P = 1 - S(F) e^{-eta F} - eta * int_0^F S e^{-eta t} dt.
+#' S is bounded, so a Weibull shape below 1, whose density is unbounded at 0, needs
+#' no special care. The integrals are adaptive quadrature at a relative tolerance of
+#' 1e-12, split where the integrand has a kink (F, A + F and the breaks of a
+#' piecewise distribution); there is nothing random in it. `hazard_ratio` 1 is the
+#' control arm. An infinite follow-up is the expression's limit.
+vcr_event_probability_dist <- function(dist, hazard_ratio, accrual_duration, followup_duration, dropout_rate = 0) {
+  A <- accrual_duration; Fu <- followup_duration; eta <- dropout_rate
+  S <- function(t) vcr_dist_survival(dist, t)^hazard_ratio
+  Tt <- A + Fu
+  kinks <- function(lo, hi) {
+    breaks <- if (identical(dist$kind, "piecewise")) dist$breaks else numeric()
+    sort(unique(c(lo, hi, breaks[breaks > lo & breaks < hi])))
+  }
+  quad <- function(g, lo, hi) {
+    if (!(hi > lo)) return(0)
+    pts <- kinks(lo, hi)
+    sum(vapply(seq_len(length(pts) - 1L), function(i) {
+      if (is.infinite(pts[i + 1L])) stats::integrate(g, pts[i], Inf, rel.tol = 1e-12, subdivisions = 500L)$value
+      else stats::integrate(g, pts[i], pts[i + 1L], rel.tol = 1e-12, subdivisions = 500L)$value
+    }, numeric(1)))
+  }
+  during <- if (eta > 0) eta * quad(function(t) S(t) * exp(-eta * t), 0, Fu) else 0
+  if (!is.finite(Fu)) return(1 - during)
+  if (!(A > 0)) return(1 - S(Fu) * exp(-eta * Fu) - during)
+  1 - during - quad(function(t) S(t) * exp(-eta * t) * (1 + eta * (Tt - t)), Fu, Tt) / A
+}
+
 #' Sample size for a two-sample comparison of means: pooled variance, normal
 #' approximation. The t-test the simulator applies needs a few more subjects
 #' (the exact t power at this N is slightly below the target), and that gap is

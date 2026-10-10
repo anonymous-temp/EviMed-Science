@@ -193,6 +193,7 @@ export function qualityReportView(quality) {
   const specific = Object.values(object(object(report.utility).specific)).map(object);
   const violations = list(object(report.constraints).violations ?? report.constraints).map((entry) => numeric(object(entry).violations)).filter((value) => value !== null);
   const generator = object(report.generator);
+  const copiesReleased = numeric(object(report.release).copies);
   const groups = [
     { key: "fidelity", label: "保真度", rows: [
       ks.length ? row("ks", "最大 KS 距离", Math.max(...ks)) : null,
@@ -220,6 +221,10 @@ export function qualityReportView(quality) {
     groups,
     trainingRecords: numeric(generator.trainingObservations ?? generator.trainingRecords),
     copies: numeric(generator.syntheticCopies ?? generator.copies ?? generator.m),
+    // Which table each group of numbers describes, when the generator made several copies and the release holds them all: the
+    // hard-constraint count and the leakage rows read every copy stacked, the fidelity and utility rows the first.
+    scope: copiesReleased !== null && copiesReleased > 1
+      ? `硬约束与泄露检查读的是发布的全部 ${copiesReleased} 份合成记录（叠在一起）；保真度与可用性描述第 1 份，其余各份的数值在逐份评分里。` : null,
   };
 }
 

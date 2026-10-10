@@ -390,6 +390,22 @@ export function confidenceLevelOfDispersion(label) {
   return level > 0.5 && level < 1 ? level : null;
 }
 
+/**
+ * A confidence level as a fraction. A registry states the level of an analysis's
+ * interval as a percent (CT.gov's `ciPctValue` is `"95"`), the pooling read takes
+ * a fraction, and a row stored while the two disagreed holds the percent, so a
+ * number above 1 and up to 100 is a percent and anything else is returned as it
+ * is. A level outside 0.5 to 0.9999 is not rewritten here: the reader refuses it
+ * by name (`confidence_level_invalid`) instead of defaulting it to 95%.
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+export function confidenceLevelOf(value) {
+  const level = number(value);
+  if (level === null) return null;
+  return level > 1 && level <= 100 ? level / 100 : level;
+}
+
 /** Months between two ISO-ish dates (`YYYY-MM` or `YYYY-MM-DD`), or null. */
 export function monthsBetween(from, to) {
   const parse = (/** @type {string} */ value) => {
@@ -686,7 +702,7 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
           timeFrame,
           scale: effect.scale,
           statisticalMethod: text(analysis?.statisticalMethod),
-          confidenceLevel: number(analysis?.ciPctValue),
+          confidenceLevel: confidenceLevelOf(analysis?.ciPctValue),
           sides: text(analysis?.ciNumSides),
           pValue: text(analysis?.pValue),
           nonInferiorityType: text(analysis?.nonInferiorityType),

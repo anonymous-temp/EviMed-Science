@@ -154,7 +154,9 @@ vcr_nc_verdict <- function(low, high, primary_estimate = NULL) {
     if (!all(y %in% c(0, 1))) vcr_abort("input_shape_invalid", "scenario.controls", sprintf("The outcome column '%s' is a 0/1 event indicator.", cn))
     Y[, j] <- y
   }
-  base <- list(n = nrow(subj), cohort = cohort$info, weighting = w$method, estimand = w$estimand, covariates = covs)
+  # the data this analysis rests on: the covariates, the arm and the outcome columns it analysed
+  used <- vcr_used_sources(list(list(df = subj, columns = c(covs, tc, columns))))
+  base <- list(n = nrow(subj), cohort = cohort$info, weighting = w$method, estimand = w$estimand, covariates = covs, used = used)
   if (is.null(w$fit$allWeights)) {
     return(c(base, list(refusal = list(rule = w$fit$rule %||% "entropy_balance_infeasible", detail = w$fit$detail))))
   }
@@ -212,7 +214,7 @@ vcr_job_negative_control <- function(job, output_dir = NULL, cancel_file = NULL,
   if (!is.null(an$refusal)) {
     return(list(status = "not_estimable", notEstimableRule = an$refusal$rule, measures = list(),
                 counts = vcr_counts(realPatients = an$n),
-                diagnostics = list(detail = an$refusal$detail, weighting = an$weighting, cohort = an$cohort)))
+                diagnostics = list(detail = an$refusal$detail, weighting = an$weighting, cohort = an$cohort, valueSourcesUsed = vcr_value_sources_used(an$used))))
   }
   if (!is.null(an$interrupted)) {
     if (identical(an$interrupted, "canceled")) {
@@ -249,7 +251,8 @@ vcr_job_negative_control <- function(job, output_dir = NULL, cancel_file = NULL,
     return(list(status = "not_estimable", notEstimableRule = "negative_controls_not_estimable", measures = list(),
                 counts = vcr_counts(realPatients = if (is.null(an)) NULL else an$n),
                 diagnostics = list(controls = lapply(rows, function(r) r[c("name", "source", "reason")]),
-                                   weighting = an$weighting, cohort = an$cohort)))
+                                   weighting = an$weighting, cohort = an$cohort,
+                                   valueSourcesUsed = if (is.null(an)) NULL else vcr_value_sources_used(an$used))))
   }
   k <- length(usable)
   flagged <- sum(vapply(usable, function(r) identical(r$verdict, "signals_bias"), logical(1)))
@@ -274,7 +277,8 @@ vcr_job_negative_control <- function(job, output_dir = NULL, cancel_file = NULL,
   }
   limited <- k < min_k || length(usable) < length(rows) || any(vapply(usable, function(r) r$failureShare > 0.01, logical(1)))
   # with no column analysed in the engine every estimate was typed by the caller: the measures are a summary of those numbers, and say so
-  msrc <- if (is.null(an)) "aggregate" else "calculated"
+  # (analysed here: a computed number is `calculated`, or `imputed` when it rests on an imputed column; see vcr_estimate_source)
+  msrc <- if (is.null(an)) "aggregate" else vcr_estimate_source(an$used$source)
   measures <- list(
     vcr_measure("negative_controls_analysed", k, source = msrc),
     vcr_measure("negative_controls_signalling_bias", flagged, source = msrc))
@@ -301,6 +305,7 @@ vcr_job_negative_control <- function(job, output_dir = NULL, cancel_file = NULL,
                        expectedFalseFlags = 0.05 * k,
                        reading = "Each control is expected to be null. A flag is a signal of residual bias or of different ascertainment in the two sources; with 95% intervals about one control in twenty is flagged by chance."),
          calibration = calibration,
+         valueSourcesUsed = if (is.null(an)) NULL else vcr_value_sources_used(an$used),
          weighting = if (is.null(an)) NULL else an$weighting, estimand = if (is.null(an)) NULL else an$estimand,
          balance = if (is.null(an)) NULL else an$balance, support = if (is.null(an)) NULL else an$support,
          bootstrapReplicates = if (is.null(an)) NULL else an$bootstrapReplicates, cohort = if (is.null(an)) NULL else an$cohort,

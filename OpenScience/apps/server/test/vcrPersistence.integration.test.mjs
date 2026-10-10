@@ -60,6 +60,17 @@ test("the migration creates every declared table and runs twice without complain
   assert.equal(after[0].n, VCR_TABLES.length);
 });
 
+test("D-personNames the names of the accounts on a study are display names, from the real users table", options, async () => {
+  const insert = (/** @type {string} */ id, /** @type {string} */ name) => q(
+    "INSERT INTO evimed_control.users (id, name, auth_type) VALUES ($1, $2, 'development') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name", [id, name]);
+  await insert("vcr-login-a", "vcr-login-a");                       // a local account whose display name is still its login name
+  await insert("vcr-mail-b", "li.mei@lab.example.org");             // an identity whose name was its provider's address
+  await insert("vcr-real-c", "李主任");
+  const names = await /** @type {VcrStoreBase} */ (store).personNames(["vcr-login-a", "vcr-mail-b", "vcr-real-c", "vcr-absent-d"]);
+  assert.deepEqual([...names.entries()].sort(), [["vcr-login-a", "研究成员"], ["vcr-mail-b", "研究成员"], ["vcr-real-c", "李主任"]]);
+  assert.equal(names.has("vcr-absent-d"), false);
+});
+
 test("a study is one project per account, and a second one is refused", options, async () => {
   const id = await seedStudy();
   const row = (await q("SELECT project_id FROM evimed_vcr.studies WHERE id = $1", [id]))[0];
