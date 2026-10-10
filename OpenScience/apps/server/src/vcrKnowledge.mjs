@@ -295,7 +295,7 @@ export class VcrKnowledge {
         : await this.store.getPack(study.userId, binding.packId);
       // Review metadata can change without rewriting the selected clinical body.
       const pack = row?.version === binding.packVersion ? {...binding.packBody,status:row.status} : binding.packBody;
-      return {binding,origin:binding.origin,pack,row,resolution:"recorded"};
+      return {binding,origin:/** @type {"shipped" | "stored"} */ (binding.origin),pack,row,resolution:"recorded"};
     }
     try {
       const resolved = await this.resolvePack(study.userId, binding.packId);
