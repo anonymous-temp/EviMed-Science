@@ -44,10 +44,31 @@
 import { medicationSafetyIn, platformIdentifiersIn } from "@evimed/domain";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 
-/** How many entries one model call judges: a pack is at most a hundred. */
+/** How many entries (or windows of a long entry) one model call judges: a pack is at most a hundred entries. */
 const BATCH = 20;
-/** How much of one entry the model reads. The code re-checks against all of it. */
+/** How much of one entry the model reads in one piece. A longer entry is read in overlapping windows of this
+ * size, each judged, so no part of an entry that may mount as a method goes unread (an entry may hold 20,000
+ * characters; until 2026-10-10 only the first 4,000 were shown to the model while the whole entry counted as judged). */
 const ENTRY_CHARACTERS = 4_000;
+/** How much two consecutive windows share, so a sentence across a window edge is still read whole in one of them. */
+const WINDOW_OVERLAP = 200;
+
+/**
+ * The pieces the model is shown for one entry: the entry itself, or its windows, each with its own id.
+ * @param {{ id: string, factKind: string, content: string }} entry
+ * @returns {{ id: string, entryId: string, factKind: string, content: string }[]}
+ */
+function piecesOf(entry) {
+  const content = String(entry.content ?? "");
+  if (content.length <= ENTRY_CHARACTERS) return [{ id: entry.id, entryId: entry.id, factKind: entry.factKind, content }];
+  /** @type {{ id: string, entryId: string, factKind: string, content: string }[]} */
+  const pieces = [];
+  for (let start = 0, index = 0; start < content.length; start += ENTRY_CHARACTERS - WINDOW_OVERLAP, index += 1) {
+    pieces.push({ id: `${entry.id}#${index}`, entryId: entry.id, factKind: entry.factKind, content: content.slice(start, start + ENTRY_CHARACTERS) });
+    if (start + ENTRY_CHARACTERS >= content.length) break;
+  }
+  return pieces;
+}
 
 /** Link shapes that act by themselves or carry what they should not. */
 const LINK_RULES = Object.freeze([
@@ -146,19 +167,27 @@ export class CapsuleScanner {
       model = "unavailable";
       for (const entry of judged) unchecked.add(entry.id);
     } else if (judged.length > 0) {
-      const batches = Math.ceil(judged.length / BATCH);
+      const pieces = judged.flatMap(piecesOf);
+      const batches = Math.ceil(pieces.length / BATCH);
       let failures = 0;
-      for (let start = 0; start < judged.length; start += BATCH) {
-        const batch = judged.slice(start, start + BATCH);
-        const verdicts = await this.#judge(owner, batch);
-        if (!verdicts) {
+      let uncovered = 0;
+      for (let start = 0; start < pieces.length; start += BATCH) {
+        const batch = pieces.slice(start, start + BATCH);
+        const result = await this.#judge(owner, batch);
+        if (!result) {
           failures += 1;
-          for (const entry of batch) unchecked.add(entry.id);
+          for (const piece of batch) unchecked.add(piece.entryId);
           continue;
         }
-        for (const [id, verdict] of verdicts) flagged.set(id, { source: "model", code: "instructs_agent", reason: verdict.reason });
+        for (const piece of batch) {
+          const verdict = result.flagged.get(piece.id);
+          if (verdict) flagged.set(piece.entryId, { source: "model", code: "instructs_agent", reason: verdict.reason });
+          // A piece the model returned no verdict for was not judged — `{"verdicts":[]}` used to pass a whole
+          // batch as judged. It is the module's own rule: what could not be judged is `unchecked`.
+          else if (!result.covered.has(piece.id)) { unchecked.add(piece.entryId); uncovered += 1; }
+        }
       }
-      if (failures > 0) model = failures === batches ? "unavailable" : "partial";
+      if (failures > 0 || uncovered > 0) model = failures === batches ? "unavailable" : "partial";
     }
     const byId = new Map(entries.map((entry) => [entry.id, entry]));
     const kept = entries.filter((entry) => !flagged.has(entry.id)).map((entry) => entry.id);
@@ -188,11 +217,11 @@ export class CapsuleScanner {
   }
 
   /**
-   * One model call over a batch; the verdicts that survive re-verification,
-   * or null when the call itself failed.
+   * One model call over a batch of pieces: the flags that survive re-verification and the ids the model gave
+   * any verdict for, or null when the call itself failed.
    * @param {{ userId: string, projectId: string }} owner
    * @param {readonly { id: string, factKind: string, content: string }[]} batch
-   * @returns {Promise<Map<string, { reason: string }> | null>}
+   * @returns {Promise<{ flagged: Map<string, { reason: string }>, covered: Set<string> } | null>}
    */
   async #judge(owner, batch) {
     const controller = new AbortController();
@@ -218,7 +247,7 @@ export class CapsuleScanner {
             {
               role: "user",
               content: JSON.stringify({
-                entries: batch.map((entry) => ({ id: entry.id, kind: entry.factKind, content: String(entry.content).slice(0, ENTRY_CHARACTERS) })),
+                entries: batch.map((entry) => ({ id: entry.id, kind: entry.factKind, content: String(entry.content) })),
               }),
             },
           ],
@@ -230,7 +259,10 @@ export class CapsuleScanner {
       const ids = new Map(batch.map((entry) => [entry.id, entry]));
       /** @type {Map<string, { reason: string }>} */
       const accepted = new Map();
+      /** Ids of this batch the model answered for, either way. @type {Set<string>} */
+      const covered = new Set();
       for (const verdict of verdicts) {
+        if (typeof verdict?.instructing === "boolean" && ids.has(String(verdict.id ?? ""))) covered.add(String(verdict.id));
         if (verdict?.instructing !== true) continue;
         const entry = ids.get(String(verdict.id ?? ""));
         const quote = squashed(verdict.quote);
@@ -239,7 +271,7 @@ export class CapsuleScanner {
         if (!entry || quote.length < 2 || !squashed(entry.content).includes(quote)) continue;
         accepted.set(entry.id, { reason: squashed(verdict.reason).slice(0, 200) || "要求助手做研究方法以外的事" });
       }
-      return accepted;
+      return { flagged: accepted, covered };
     } catch {
       return null;
     } finally {
