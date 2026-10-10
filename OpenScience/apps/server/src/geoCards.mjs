@@ -23,6 +23,11 @@
  *   owner publishes it.
  * - **Idempotent by content.** The plan is a pure function of the claims, so a card already as planned is left alone: no new
  *   revision, no new notice. A card that was taken back (`withdrawn`) is not written again.
+ * - **A group's card is the one its identity names.** The card of a group (a journey stage and a clinical question) is made with a
+ *   request identity that is a function of the project and the group, and the zone derives the card's id from it; every refresh finds
+ *   the card there. The mapping on the claim rows is the record of where a claim was written and nothing the card is found by: a
+ *   claim that changes group still names the card it left, and is written into the card of its new group, which is made if it is not
+ *   there. A group left with no claim keeps the card it had, as its owner has it.
  * - **The lower layers cite the cards.** `checkText` reads the claim references of an article's text and resolves each against
  *   the card revision it names — the project's own cards, or a published card of an official zone — by the domain's one rule
  *   (`geoReferenceGraph`); `staleReferences` asks the zone's change log whether a cited card was corrected, updated in its
@@ -208,7 +213,6 @@ export class GeoCards {
     const zone = await this.ensureProductZone(project);
     const zones = this.#zones();
     const owner = { id: project.userId };
-    const cardOf = new Map(claims.map((claim) => [claim.id, claim.cardId]));
     /** @type {Array<{ cardId: string, revision: number, journeyStage: any, title: string, change: "created" | "updated" | "unchanged", claims: number, articleId: string | null }>} */
     const cards = [];
     /** @type {Array<{ title: string, code: string }>} */
@@ -216,11 +220,11 @@ export class GeoCards {
     /** @type {Array<{ title: string, reason: string }>} */
     const skipped = [];
     for (const card of plan.cards) {
+      // A group's card is the one its identity names, never one a claim's mapping points to: the mapping is the record of where a
+      // claim was written, and a claim that changed group still names the card it left (two groups found one card by it and wrote
+      // over each other on every refresh).
       const requestId = cardRequestId(project.id, card.groupKey);
-      const known = card.map.map((entry) => cardOf.get(entry.claimId)).find((id) => typeof id === "string" && id) ?? null;
-      // A card whose claims no longer name it is found by the identity it was made with, not made again and refused as a conflict.
-      const existing = (known ? await this.#cardRow(zone.id, project.userId, known) : null)
-        ?? await this.#cardRow(zone.id, project.userId, evidenceCardId(project.userId, requestId));
+      const existing = await this.#cardRow(zone.id, project.userId, evidenceCardId(project.userId, requestId));
       if (existing?.withdrawn) { skipped.push({ title: card.payload.title, reason: "card_withdrawn" }); continue; }
       try {
         let cardId = existing?.id ?? null;
