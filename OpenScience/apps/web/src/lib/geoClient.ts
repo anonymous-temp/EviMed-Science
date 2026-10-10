@@ -589,7 +589,8 @@ export interface GeoMonitoring {
   arms: {
     pilot: Array<{ date: string; value: number | null; coverage?: string | null }>;
     control: Array<{ date: string; value: number | null; coverage?: string | null }>;
-    netEffect: GeoCell & { noiseBand: number | null };
+    /** `noiseBand`: the band the change was judged against; `noiseMeasured` false: it is the default, not a measured one; null: not recorded (an older row). */
+    netEffect: GeoCell & { noiseBand: number | null; noiseMeasured?: boolean | null };
   };
   byEngine: Array<{ engine: GeoEngine; points: GeoSeriesPoint[] }>;
   /** Each registered rival's mention rate over the same questions as ours (M-16 beside M-01S), per full measurement. */

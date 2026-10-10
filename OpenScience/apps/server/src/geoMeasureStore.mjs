@@ -1009,12 +1009,13 @@ export class GeoMeasureStore {
           values.push(randomId("gm_"), userId, geoProjectId, roundId, row.scope, row.pool ?? null, row.engine ?? null, row.groupId ?? null,
             row.arm ?? null, row.metricId, row.variant ?? null, row.rival ?? null, row.reason ?? null, row.numerator ?? null,
             row.denominator ?? null, row.value ?? null, row.ciLow ?? null, row.ciHigh ?? null, row.status, row.dataType ?? "measured",
-            row.snapshotCount ?? null, computedAt.toISOString());
+            row.snapshotCount ?? null, row.noiseBand ?? null, row.noiseMeasured ?? null, computedAt.toISOString());
           const n = values.length;
-          return `(${Array.from({ length: 22 }, (_, index) => `$${n - 21 + index}`).join(", ")})`;
+          return `(${Array.from({ length: 24 }, (_, index) => `$${n - 23 + index}`).join(", ")})`;
         });
         await client.query(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id, round_id, scope, pool, engine, group_id, arm, metric_id,
-            variant, rival, reason, numerator, denominator, value, ci_low, ci_high, status, data_type, snapshot_count, computed_at)
+            variant, rival, reason, numerator, denominator, value, ci_low, ci_high, status, data_type, snapshot_count, noise_band, noise_measured,
+            computed_at)
           VALUES ${tuples.join(", ")}`, values);
       }
     });
@@ -1027,6 +1028,13 @@ export class GeoMeasureStore {
    * balance, `noteRoundBalance`; null for a round measured before it was
    * recorded). Whether two rounds are comparable is the caller's to decide by
    * those engines (metrics.json net_effect.comparability_keys).
+   *
+   * A cell under the 30-answer floor (`insufficient`) is kept when it carries
+   * its counts, so the net effect can pool it with its window's other weeks
+   * and hold the pooled window to the floor (`netEffect`); one without counts
+   * (the index, whose floor is the cell's own status) cannot be held to
+   * anything and is no observation: its value is kept in the table for the
+   * record and does not enter a comparison.
    * @param {{ geoProjectId: string, setVersion: number | null, metricId: string, pool: string | null, variant?: string | null }} key
    */
   async armSeries({ geoProjectId, setVersion, metricId, pool, variant = null }) {
@@ -1042,7 +1050,7 @@ export class GeoMeasureStore {
     for (const row of result.rows) {
       const arm = row.arm === "control" ? "control" : row.arm === "pilot" ? "pilot" : null;
       if (!arm) continue;
-      const measurable = row.status === "ok" || row.status === "insufficient";
+      const measurable = row.status === "ok" || (row.status === "insufficient" && num(row.denominator) !== null);
       const date = typeof row.sample_date === "string" ? row.sample_date.slice(0, 10) : /** @type {string} */ (iso(row.sample_date)).slice(0, 10);
       const engines = Array.isArray(row.engines) ? row.engines.map(String).sort() : null;
       series[arm].push({ date, value: measurable ? num(row.value) : null, numerator: measurable ? num(row.numerator) : null,

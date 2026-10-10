@@ -1470,7 +1470,11 @@ export class GeoService {
       arms: {
         pilot: points("pilot"),
         control: points("control"),
-        netEffect: { ...geoCellFromRow(netRow), noiseBand: noise.rows[0] ? num(noise.rows[0].value) : null },
+        // The band the net effect was judged against is its own row's, with whether it was measured or the default; a row written
+        // before the band was kept shows mention's measured band, as it did, and says nothing about it.
+        netEffect: { ...geoCellFromRow(netRow),
+          noiseBand: netRow?.noise_band != null ? num(netRow.noise_band) : noise.rows[0] ? num(noise.rows[0].value) : null,
+          noiseMeasured: netRow?.noise_band != null ? netRow.noise_measured === true : null },
       },
       byEngine: project.engines.map((engine) => ({
         engine, points: (engineSeries.get(`${GEO_VIEW_METRIC_IDS.mention}\u0000${engine}`) ?? []).map(({ date, value, coverage }) => ({ date, value, coverage })),

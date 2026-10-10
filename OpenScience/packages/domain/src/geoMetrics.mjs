@@ -1213,7 +1213,8 @@ export function noiseBand(noiseRows, { metricId = 'M-01' } = {}) {
 
 /**
  * @typedef {{ date: string, value?: number|null, numerator?: number|null, denominator?: number|null }} GeoSeriesPoint
- * @typedef {{ date: string, value: number|null, numerator: number|null, denominator: number|null, points: number }} GeoTrendPoint
+ * @typedef {{ date: string, value: number|null, numerator: number|null, denominator: number|null, points: number, answers: number|null }} GeoTrendPoint
+ *   `answers`: the answers behind the window, the sum of the denominators of the points that carry one (null when none does, as an index's do not)
  */
 
 /** @param {string} date @returns {number} */
@@ -1236,13 +1237,15 @@ function windowValue(points, end, weeks) {
   })
   if (!inWindow.length) return null
   const date = inWindow[inWindow.length - 1].date
+  const counted = inWindow.filter((point) => isNumber(point.denominator))
+  const answers = counted.length ? counted.reduce((sum, point) => sum + /** @type {number} */ (point.denominator), 0) : null
   if (inWindow.every((point) => isNumber(point.numerator) && isNumber(point.denominator))) {
     const numerator = inWindow.reduce((sum, point) => sum + /** @type {number} */ (point.numerator), 0)
     const denominator = inWindow.reduce((sum, point) => sum + /** @type {number} */ (point.denominator), 0)
-    return { date, value: denominator ? round2(PERCENT * numerator / denominator) : null, numerator, denominator, points: inWindow.length }
+    return { date, value: denominator ? round2(PERCENT * numerator / denominator) : null, numerator, denominator, points: inWindow.length, answers }
   }
   const values = inWindow.map((point) => point.value).filter(isNumber)
-  return { date, value: values.length ? round2(pythonSum(values) / values.length) : null, numerator: null, denominator: null, points: inWindow.length }
+  return { date, value: values.length ? round2(pythonSum(values) / values.length) : null, numerator: null, denominator: null, points: inWindow.length, answers }
 }
 
 /**
@@ -1279,7 +1282,10 @@ export function rollingTrend(points, weeks = Number(geoConstant(TABLE.net_effect
  * − its baseline window), each window `ROLLING_WINDOW_WEEKS` weeks. Within the
  * noise threshold — measured by {@link noiseBand}, or the default and flagged
  * as not measured — it is flat, never an arrow. Fewer control groups than the
- * table's minimum, or a missing window, is `not_computable`, never a number.
+ * table's minimum, a missing window, or a window resting on fewer answers than
+ * `STD_CELL_MIN_SAMPLES` (`insufficient_sample`: the cell floor, applied to the
+ * pooled window, whose rate then moves by more than the threshold on chance
+ * alone) is `not_computable`, never a number.
  * @param {GeoSeriesPoint[]} pilotSeries
  * @param {GeoSeriesPoint[]} controlSeries
  * @param {{ noise?: { value: number|null, measured: boolean }|null, weeks?: number, baselineDate?: string|null, controlGroupCount?: number|null }} [options]
@@ -1303,8 +1309,13 @@ export function netEffect(pilotSeries, controlSeries, options = {}) {
     const baselineEnd = dayOf(options.baselineDate ?? sorted[0].date)
     const baseline = windowValue(sorted, baselineEnd, weeks)
     const current = windowValue(sorted, dayOf(sorted[sorted.length - 1].date), weeks)
-    if (!baseline || baseline.value === null) missing.push({ input: `${arm}.baseline`, reason: 'not_measurable' })
-    if (!current || current.value === null) missing.push({ input: `${arm}.current`, reason: 'not_measurable' })
+    /** @param {GeoTrendPoint|null} window @param {'baseline'|'current'} which */
+    const check = (window, which) => {
+      if (!window || window.value === null) missing.push({ input: `${arm}.${which}`, reason: 'not_measurable' })
+      else if (window.answers !== null && window.answers < MIN_SAMPLES) missing.push({ input: `${arm}.${which}`, reason: 'insufficient_sample' })
+    }
+    check(baseline, 'baseline')
+    check(current, 'current')
     if (baseline && current) arms[arm] = { baseline, current }
   }
   if (missing.length) return { status: 'not_computable', missing }

@@ -453,19 +453,20 @@ test("net effect is pilot change minus control change, flat inside the noise ban
 });
 
 test("M-15 is P4's own recommended rate, so P4's net effect computes", () => {
+  // Thirty answers an arm: the net effect is held to the cell floor (below it, see the next test).
   /** @param {string} date @param {number} pilotRecommended @param {number} controlRecommended */
   const round = (date, pilotRecommended, controlRecommended) => [
-    ...many(10, (i) => row({ pool: "P4", groupId: "g41", isControl: false, askedAt: date }, { ...ours, recommendedOurs: i < pilotRecommended })),
-    ...many(10, (i) => row({ pool: "P4", groupId: "g42", isControl: true, askedAt: date }, { ...ours, recommendedOurs: i < controlRecommended })),
+    ...many(30, (i) => row({ pool: "P4", groupId: "g41", isControl: false, askedAt: date }, { ...ours, recommendedOurs: i < pilotRecommended })),
+    ...many(30, (i) => row({ pool: "P4", groupId: "g42", isControl: true, askedAt: date }, { ...ours, recommendedOurs: i < controlRecommended })),
   ];
-  const baseline = computeGeoMetrics(round("2026-08-03", 6, 6), { owned: OWNED });
+  const baseline = computeGeoMetrics(round("2026-08-03", 18, 18), { owned: OWNED });
   const pool = cellOf(baseline.cells, { metricId: "M-15", scope: "pool", pool: "P4" });
-  assert.deepEqual([pool.numerator, pool.denominator, pool.value, pool.status], [12, 20, 60, "insufficient"]);
-  assert.deepEqual([pool.ciLow, pool.ciHigh], wilsonInterval(12, 20));
+  assert.deepEqual([pool.numerator, pool.denominator, pool.value, pool.status], [36, 60, 60, "ok"]);
+  assert.deepEqual([pool.ciLow, pool.ciHigh], wilsonInterval(36, 60));
   assert.equal(cellOf(baseline.cells, { metricId: "M-15", scope: "project" }).value, 60);
   assert.equal(baseline.cells.some((cell) => cell.metricId === "M-03" && cell.pool === "P4"), false, "M-03 itself stays undefined for P4");
 
-  const later = computeGeoMetrics(round("2026-09-28", 2, 6), { owned: OWNED });
+  const later = computeGeoMetrics(round("2026-09-28", 6, 18), { owned: OWNED });
   /** @param {"pilot"|"control"} arm */
   const series = (arm) => [baseline, later].map((result, index) => {
     const cell = cellOf(result.cells, { metricId: "M-15", scope: "arm", pool: "P4", arm });
@@ -476,6 +477,38 @@ test("M-15 is P4's own recommended rate, so P4's net effect computes", () => {
   assert.deepEqual([effect.pilotChange, effect.controlChange, effect.value], [-40, 0, -40]);
   assert.equal(effect.verdict, "down", "recommended less often on risk questions: the direction P4 wants");
   assert.equal(geoMetricDefinition("M-15")?.direction, "down");
+});
+
+test("a net effect is not computed from a window under the 30-answer floor (Q-2)", () => {
+  /** @param {string} date @param {number} k @param {number} n */
+  const point = (date, k, n) => ({ date, numerator: k, denominator: n, value: n ? pythonRound(100 * k / n, 2) : null });
+  const options = { baselineDate: "2026-09-01", controlGroupCount: 3, noise: { measured: true, value: 4 } };
+  // Pilot 2/8 -> 5/8 against control 2/8 -> 2/8 used to read "up, +18.75" from windows of eight answers.
+  const small = netEffect([point("2026-09-01", 2, 8), point("2026-09-15", 5, 8)], [point("2026-09-01", 2, 8), point("2026-09-15", 2, 8)], options);
+  assert.equal(small.status, "not_computable");
+  assert.equal(small.value, undefined, "never a number");
+  assert.deepEqual(small.missing, [
+    { input: "pilot.baseline", reason: "insufficient_sample" }, { input: "pilot.current", reason: "insufficient_sample" },
+    { input: "control.baseline", reason: "insufficient_sample" }, { input: "control.current", reason: "insufficient_sample" },
+  ]);
+  // The same change on 30 answers a window is a result.
+  const floor = netEffect([point("2026-09-01", 8, 30), point("2026-09-15", 20, 30)], [point("2026-09-01", 8, 30), point("2026-09-15", 8, 30)], options);
+  assert.deepEqual([floor.status, floor.verdict], ["computed", "up"]);
+  // A window pools its weeks: four weeks of eight answers are thirty-two, as a four-week cell would be.
+  const weeks = ["2026-09-08", "2026-09-15", "2026-09-22", "2026-09-29"];
+  const pooled = netEffect([point("2026-09-01", 12, 32), ...weeks.map((date) => point(date, 5, 8))], [point("2026-09-01", 12, 32), ...weeks.map((date) => point(date, 3, 8))], options);
+  assert.equal(pooled.status, "computed");
+  assert.deepEqual([pooled.pilot?.current.answers, pooled.control?.current.answers], [32, 32]);
+  // Only the current window is thin: the baseline is fine, and the thin window is named.
+  const early = { ...options, baselineDate: "2026-08-03" };
+  const thin = netEffect([point("2026-08-03", 12, 40), point("2026-09-15", 5, 8)], [point("2026-08-03", 12, 40), point("2026-09-15", 3, 8)], early);
+  assert.deepEqual(thin.missing, [{ input: "pilot.current", reason: "insufficient_sample" }, { input: "control.current", reason: "insufficient_sample" }]);
+  // A week with no value (not measurable) beside a small one does not hide the floor.
+  const holed = netEffect([point("2026-08-03", 12, 40), { date: "2026-09-08", value: null, numerator: null, denominator: null }, point("2026-09-15", 5, 8)],
+    [point("2026-08-03", 12, 40), point("2026-09-15", 3, 8)], early);
+  assert.deepEqual(holed.missing?.[0], { input: "pilot.current", reason: "insufficient_sample" });
+  // An index carries no counts, so there is nothing here to hold it to: its cells' own status is the floor (the store drops an insufficient one).
+  assert.equal(netEffect([{ date: "2026-09-01", value: 20 }, { date: "2026-09-15", value: 35 }], [{ date: "2026-09-01", value: 20 }, { date: "2026-09-15", value: 24 }], options).status, "computed");
 });
 
 // ------------------------------------------------------------------ hard lines, names

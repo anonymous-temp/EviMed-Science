@@ -142,3 +142,39 @@ test("a week is compared with the baseline only on the engines both were measure
   assert.equal(sameEngines(["qianwen"], ["kimi", "qianwen"]), false);
   assert.equal(sameEngines(null, ["kimi"]), false);
 });
+
+test("a net effect is not stored from windows under the answer floor, and a computed one keeps the band it was judged against (Q-2)", async () => {
+  // Pilot 2/8 -> 5/8 against control 2/8 -> 2/8 was stored `ok`, "up", from windows of eight answers: far under the 30 a cell needs.
+  const ENGINES = ["kimi", "qianwen"];
+  const point = (/** @type {string} */ date, /** @type {number} */ k, /** @type {number} */ n) => ({ date, value: (100 * k) / n, numerator: k, denominator: n, engines: ENGINES });
+  const storeWith = (/** @type {{ pilot: any[], control: any[] }} */ series) => /** @type {any} */ ({
+    baselineDate: async () => "2026-09-25",
+    // A noise round exists only for the metrics the table names; the store answers for those and for nothing else.
+    latestNoiseBand: async () => ({ value: 2, measured: true }),
+    armSeries: async () => structuredClone(series),
+  });
+  const input = { project: { id: "geo_x" }, round: { setVersion: 5, sampleDate: "2026-10-05" }, controlGroups: 4, engines: ENGINES };
+
+  const small = await netEffectRows(storeWith({
+    pilot: [point("2026-09-25", 2, 8), point("2026-10-05", 5, 8)], control: [point("2026-09-25", 2, 8), point("2026-10-05", 2, 8)],
+  }), input);
+  assert.ok(small.length >= 9, "every pool metric and the index");
+  assert.ok(small.every((row) => row.status === "not_measurable" && row.reason === "insufficient_sample" && row.value === null && row.noiseBand === undefined),
+    JSON.stringify(small[0]));
+
+  // With the answers behind it, the same change is a result, and its row says which band judged it.
+  const enough = await netEffectRows(storeWith({
+    pilot: [point("2026-09-25", 40, 100), point("2026-10-05", 60, 100)], control: [point("2026-09-25", 40, 100), point("2026-10-05", 40, 100)],
+  }), input);
+  // (The domain's rolling windows overlap this early: the pilot's current window pools 40/100 and 60/100, so +10.)
+  assert.ok(enough.every((row) => row.status === "ok" && row.value === 10 && row.reason === "up"), JSON.stringify(enough[0]));
+  const byMetric = (/** @type {string} */ metric) => enough.filter((row) => row.variant === metric);
+  assert.ok(byMetric("M-01").length > 0 && byMetric("M-01").every((row) => row.noiseBand === 2 && row.noiseMeasured === true), "mention has a noise round");
+  const defaulted = enough.filter((row) => !["M-01", "M-03", "M-10"].includes(String(row.variant)));
+  assert.ok(defaulted.length > 0 && defaulted.every((row) => row.noiseBand === geoConstant("RANKING_NOISE_DEFAULT_THRESHOLD") && row.noiseMeasured === false),
+    "every other metric was judged against the default, and says so");
+
+  // Too few control groups is still the structural reason, whatever the answers.
+  assert.ok((await netEffectRows(storeWith({ pilot: [point("2026-09-25", 2, 8), point("2026-10-05", 5, 8)], control: [point("2026-09-25", 2, 8), point("2026-10-05", 2, 8)] }),
+    { ...input, controlGroups: 0 })).every((row) => row.reason === "too_few_control_groups"));
+});

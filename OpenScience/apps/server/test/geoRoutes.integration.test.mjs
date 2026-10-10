@@ -434,6 +434,13 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.deepEqual(monitoring.arms.control, [{ date: "2026-09-24", value: 30.1, coverage: "v1|P1|deepseek|web;fast;newchat" }]);
   assert.equal(monitoring.arms.netEffect.value, 0.06);
   assert.equal(monitoring.arms.netEffect.noiseBand, 0.04);
+  assert.equal(monitoring.arms.netEffect.noiseMeasured, null, "a row written before it kept its band says nothing about it");
+  // Q-2: the net effect's own row names the band it was judged against and whether anyone measured it.
+  for (const [band, measured] of [[5, false], [0.05, true]]) {
+    await insert(`UPDATE evimed_geo.metrics SET noise_band = $2, noise_measured = $3 WHERE id = $1`, [`m-net-${id}`, band, measured]);
+    const stored = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data.arms.netEffect;
+    assert.deepEqual([stored.noiseBand, stored.noiseMeasured], [band, measured]);
+  }
   assert.deepEqual(monitoring.byEngine.find((/** @type {any} */ entry) => entry.engine === "deepseek").points, [{ date: "2026-09-24", value: 0.42, coverage: "v1|P1|deepseek|web;fast;newchat" }]);
   assert.equal(monitoring.newErrors[0].id, `e-${id}`);
   assert.equal(monitoring.next.kind, "weekly", "past a baseline, the next is the weekly round");

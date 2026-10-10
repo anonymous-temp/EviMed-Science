@@ -358,6 +358,8 @@ CREATE TABLE IF NOT EXISTS evimed_geo.metrics (
   status         text NOT NULL CHECK (status IN ${inList(GEO_CELL_STATUSES)}),
   data_type      text NOT NULL DEFAULT 'measured' CHECK (data_type IN ${inList(GEO_DATA_TYPES)}),
   snapshot_count integer,
+  noise_band     numeric,
+  noise_measured boolean,
   computed_at    timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS geo_metrics_lookup_idx ON evimed_geo.metrics (geo_project_id, metric_id, computed_at);
@@ -569,6 +571,10 @@ ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS checks jsonb NOT NULL DEFA
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS variant text;
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS rival text;
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS reason text;
+-- A NET row's own threshold (the band a change must clear to count as one) and whether it was measured (noise rounds) or the
+-- default: the verdict in reason is only as good as the band it was judged against, and the page says which it was.
+ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS noise_band numeric;
+ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS noise_measured boolean;
 -- The order the run wrote a question map in: one write is one statement, and
 -- rows of one statement share their created_at.
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS judge_extract jsonb;

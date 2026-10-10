@@ -229,6 +229,14 @@ export function sameEngines(measured, engines) {
  * it). Only rounds measured on the engines this round was measured on are
  * compared; when the baseline window holds none, the row says `engines_differ`
  * — 引擎不同，不可比 — instead of a number.
+ *
+ * And over enough answers: a window under the 30-answer cell floor
+ * (`STD_CELL_MIN_SAMPLES`) gives no number either — the row says
+ * `insufficient_sample` (Q-2: pilot 2/8 → 5/8 against control 2/8 → 2/8 used to
+ * be stored `ok`, "up", on windows of eight answers). A computed row keeps the
+ * threshold its verdict was judged against and whether that threshold was
+ * measured (`noise_band`, `noise_measured`); only M-01, M-03 and M-10 have a
+ * noise round, so the other metrics' rows say it was the default.
  * @param {import("./geoMeasureStore.mjs").GeoMeasureStore} store
  * @param {{ project: { id: string }, round: { setVersion: number | null, sampleDate: string | null, surface?: any }, controlGroups: number, engines: readonly string[] }} input
  */
@@ -267,11 +275,14 @@ export async function netEffectRows(store, { project, round, controlGroups, engi
         rows.push({ ...where, value: null, numerator: null, denominator: null, status: "not_measurable", reason: "engine_version_unknown" });
         continue;
       }
+      // The verdict is only as good as the band it was judged against: the row keeps that band and whether it was measured
+      // (a noise round exists for M-01, M-03 and M-10) or the default, and the page says which.
+      const why = (/** @type {string} */ reason) => (effect.missing ?? []).some((entry) => entry.reason === reason);
       rows.push(effect.status === "computed"
         ? { ...where, value: effect.value ?? null, numerator: effect.pilotChange ?? null, denominator: effect.controlChange ?? null, status: "ok",
-          reason: effect.verdict ?? null }
+          reason: effect.verdict ?? null, noiseBand: effect.noiseThreshold ?? null, noiseMeasured: effect.noiseMeasured ?? null }
         : { ...where, value: null, numerator: null, denominator: null, status: "not_measurable",
-          reason: (effect.missing ?? []).some((entry) => entry.reason === "too_few_control_groups") ? "too_few_control_groups" : "not_computable" });
+          reason: why("too_few_control_groups") ? "too_few_control_groups" : why("insufficient_sample") ? "insufficient_sample" : "not_computable" });
     }
   }
   return rows;
