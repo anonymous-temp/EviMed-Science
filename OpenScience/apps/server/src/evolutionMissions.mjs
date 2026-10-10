@@ -17,6 +17,9 @@ const TERMINAL = new Set(['complete', 'rejected', 'impossible', 'cancelled', 'de
 const WAKE_EVENT_TYPES = Object.freeze({ 'new-data': 'dataset-ready', 'new-tool': 'tool-ready', 'new-method': 'method-ready', 'new-model': 'environment-changed' });
 const DEFERRED_WAKE_CONDITIONS = Object.freeze(['new-data', 'new-method', 'new-tool', 'new-model']);
 const metBy = (/** @type {string[]|undefined} */ conditions, /** @type {any} */ event) => (conditions ?? []).some(type => type === event.type || WAKE_EVENT_TYPES[type] === event.type);
+/** The states of an engine proposal's opportunity that new evidence does not reopen: the proposal waits for an operator's answer (`review`), or the operator
+ * adopted it and it is work to implement (`adopted`). A declined one is closed, and reopens like any other when what it rests on changes. */
+const ENGINE_REVIEW_KEPT = new Set(['review', 'adopted']);
 const digest = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const localDay = date => new Date(date.getTime() + 8 * 3600000).toISOString().slice(0, 10);
 export const evolutionReplayHeldOut = id => parseInt(digest(`heldout:${id}`).slice(0,8),16)%5===0;
@@ -71,11 +74,11 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const breakdown = evolutionPriorityBreakdown(features, P.weights);
       const signature = digest([input.evidenceRoots ?? [], input.prerequisites ?? [], features]);
       if (previous?.payload.resourceSignature === signature) return previous;
-      // A new signature reopens a dossier, and ends a deferral (`defer`); a review input waiting for a person is not made void by new evidence.
+      // A new signature reopens a dossier, and ends a deferral (`defer`); a review input waiting for a person, or work a person adopted, is not made void by new evidence.
       return service.save('dossier', id, { ...previous?.payload, ...input, resourceSignature: signature, opportunity: true,
         priorityBreakdown: breakdown, score: Object.values(breakdown).reduce((sum, x) => sum + x, 0),
         ...(previous?.payload.deferred ? { deferred: false, deferredAt: null, wakeConditions: [] } : {}),
-        createdAt: previous?.payload.createdAt ?? service.now().toISOString(), status: previous?.payload.status === 'review' ? 'review' : input.prerequisites?.length ? 'waiting_resource' : 'planned',
+        createdAt: previous?.payload.createdAt ?? service.now().toISOString(), status: ENGINE_REVIEW_KEPT.has(previous?.payload.status) ? previous.payload.status : input.prerequisites?.length ? 'waiting_resource' : 'planned',
         cheapestNextStep: input.cheapestNextStep ?? 'measure-current-version', failureHypotheses: input.failureHypotheses ?? [],
         evidenceRoots: [...new Set(input.evidenceRoots ?? [])] }, previous);
     });
@@ -170,9 +173,10 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     const all = await service.list('mission');
     const thisWeek = all.filter(row => row.payload.week === week);
     const current = (await policy.current()).policy;
-    // Published, impossible and answered-by-a-review-input (`run`) opportunities are done; a deferred one waits for its wake conditions.
+    // Published, impossible and answered-by-a-review-input (`run`) opportunities are done, whether the operator has answered the input or not
+    // (`adopted` is work to implement, `declined` is closed until what it rests on changes); a deferred one waits for its wake conditions.
     const dossiers = (await service.dossiers())
-      .filter(row => row.payload.opportunity === true && !['published', 'impossible', 'review'].includes(row.payload.status) && !row.payload.deferred);
+      .filter(row => row.payload.opportunity === true && !['published', 'impossible', 'review', 'adopted', 'declined'].includes(row.payload.status) && !row.payload.deferred);
     const created = [];
     const busy = new Set(all.filter(row => !TERMINAL.has(row.payload.status)).map(row => `${row.payload.moduleId}:${row.payload.opportunityId}`));
     // Modules missing their weekly allocation go first; measured priority orders opportunities inside a module.
@@ -327,7 +331,11 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
         const reviewId=result.review?.identity??null;
         const done=await update(await service.get(mission.id),{status:'complete',completed:true,result:{outcome:'review-prepared',reviewId},reason:'reviewed-release-pr-required',engineReview:result.review??null,lastResult:status,researchCostCny:await cost(missionId),confirmedPromotions:0});
         const dossier=mission.payload.opportunityId?await service.get(mission.payload.opportunityId):null;
-        if(dossier?.payload.opportunity===true)await service.save('dossier',dossier.id,{...dossier.payload,status:'review',review:{missionId,reviewId,at:service.now().toISOString()}},dossier);
+        // A proposal an operator has already answered (this mission ran again after its end was lost) keeps its answer.
+        if(dossier?.payload.opportunity===true&&!['adopted','declined'].includes(dossier.payload.status))await service.save('dossier',dossier.id,{...dossier.payload,status:'review',review:{missionId,reviewId,at:service.now().toISOString()}},dossier);
+        // The operators are told of the proposal. The mission is over either way: a pass that fails here is made up by the worker's next
+        // housekeeping, which announces every prepared proposal nobody has been told of.
+        if(dossier?.payload.opportunity===true)await service.callbacks.engineReviewPrepared?.(dossier.id);
         return done;
       }
       return update(await service.get(mission.id),{status:status==='impossible'?'impossible':'waiting_resource',completed:status==='impossible',reason:result?.reason??'module-engine-resource',engineReview:result?.review??null,lastResult:status,researchCostCny:await cost(missionId),confirmedPromotions:0});

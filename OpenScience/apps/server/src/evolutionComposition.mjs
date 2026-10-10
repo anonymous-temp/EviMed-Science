@@ -36,6 +36,7 @@ import { createEvolutionCandidateEvaluator } from "./evolutionCandidateEvaluator
 import { auditDevelopmentTranscript, createCandidateExposureAudit, priorDevelopmentRuns, referenceRecallLabel } from "./evolutionExposureChain.mjs";
 import { createEvolutionReferenceCuration, certifyEvolutionReferenceReview } from "./evolutionReferenceCuration.mjs";
 import { createEvolutionEngineReviewWriter } from "./evolutionEngineReview.mjs";
+import { createEvolutionEngineReviews } from "./evolutionEngineReviews.mjs";
 import { createPlatformSkillSupply } from "./platformSkillSupply.mjs";
 import { createPaperGoldEvaluator } from "./paperGoldEvaluator.mjs";
 import { createEvolutionGatewayHandler } from "./evolutionGateway.mjs";
@@ -282,6 +283,11 @@ export function createEvolution({ config, store, documents, jobs, database, usag
         budgetSummary: { costCny: Number(spending.incomplete) ? null : Number(spending.cost) } });
     },
   } });
+  // A proposal for the platform's own code reaches the operators' inbox with two actions; the first answer closes it (`evolutionEngineReviews.mjs`).
+  const engineReviews = createEvolutionEngineReviews({ service, notifications, config });
+  notifications?.onAction?.(engineReviews.decide);
+  service.callbacks.engineReviewPrepared = async dossierId => { try { await engineReviews.announce(dossierId); } catch { engineReviews.counters.announceFailed++; } };
+  service.callbacks.announceEngineReviews = async () => { try { await engineReviews.announcePending(); } catch { engineReviews.counters.announceFailed++; } };
   const feedback = createEvolutionFeedback({ service, maintenance, resolvePositiveEvidence, observeHandbookOutcome });
   service.callbacks.observeFeedback = feedback.observeFeedback;
   const scout = createEvolutionScout({ config, service, runs, registry, decisions, fetchImpl, judgeService,
@@ -430,7 +436,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     const baselineHash=createHash('sha256').update(canonicalJson(baselineFiles)).digest('hex');
     if(!prior)await service.save('dossier',id,{...card,developmentBasis:{...card.developmentBasis,baselineFiles,baselineHash},moduleEngine:true,missionId:card.id.replace(/-engine-review$/,''),status:'planned'});
     const known=await service.get(id);
-    if(known.payload.status==='review')return {status:'review',review:known.payload.review,replay:true};
+    if(['review','adopted','declined'].includes(known.payload.status))return {status:'review',review:known.payload.review,replay:true};
     return build({dossierId:id},{signal:undefined,...options,job:{id:card.id}});
   }};
   service.callbacks.acquireResource = createEvolutionResourceAcquisition({service,scout,candidateEvaluator,loops});
@@ -609,7 +615,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   // What the candidate executor has done and refused, read from the runtime controller where it acts (`evolutionOpsMetrics.mjs`).
   const executorCounters = async () => (await controller.evolutionAdmissionAvailable())?.executor ?? null;
   // The counters of the limits that act inside the loops, scraped through `evolutionOpsMetrics.mjs`.
-  const limitCounters = () => ({ signals: loops.signals.counters });
-  return { service, loops, engineBuilder, model, budgeted, runtimeSession, limitCounters, observeVerifiedRun: feedback.observeVerifiedRun, decisions, maintenance, worker, integration, routes, gateway, toolAdmission, executorCounters, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
+  const limitCounters = () => ({ signals: loops.signals.counters, engineReviews: engineReviews.counters });
+  return { service, loops, engineBuilder, engineReviews, model, budgeted, runtimeSession, limitCounters, observeVerifiedRun: feedback.observeVerifiedRun, decisions, maintenance, worker, integration, routes, gateway, toolAdmission, executorCounters, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
     observeFeedback: feedback.observeFeedback };
 }

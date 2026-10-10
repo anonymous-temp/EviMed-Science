@@ -95,6 +95,12 @@ export function evolutionOpsMetricFamilies(composed, snapshot, refusal = null) {
       { value: Number(limits.signals.heldBack?.[accountClass]) || 0, labels: { class: accountClass, outcome: "held_back" } },
     ]),
   });
+  if (limits.engineReviews) families.push({
+    name: "open_science_evolution_engine_reviews_total", type: "counter",
+    help: "Proposals for the platform's own code, since process start: inbox items sent to the operators, passes where nobody could be told (retried within the minute), and the answers given: adopted (kept as work to implement) or declined.",
+    series: [["announced", "announced"], ["announceFailed", "announce_failed"], ["adopted", "adopted"], ["declined", "declined"]]
+      .map(([key, outcome]) => ({ value: Number(limits.engineReviews[key]) || 0, labels: { outcome } })),
+  });
   families.push({
     name: "open_science_evolution_executor_reachable", type: "gauge", series: [{ value: snapshot.executor ? 1 : 0 }],
     help: "Whether the runtime controller answered for the candidate executor's counters on this scrape (0: the executor series below are absent).",

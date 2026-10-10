@@ -171,6 +171,9 @@ export class EvolutionWorker {
       }
       for(const review of await this.service.list('maintenance-review')) if(review.payload.restoration?.state==='pending' && review.payload.restoration.decisionId) await this.service.enqueue('decision',{decisionId:review.payload.restoration.decisionId},`restore-decision:${review.id}:${day}`);
     });
+    // A proposal for the platform's code was prepared and nobody has been told yet (the first attempt failed, or it was prepared before the inbox item
+    // existed): the operators hear of it within the minute.
+    await this.every('engine-reviews', { ms: MINUTE }, async () => { await this.service.callbacks?.announceEngineReviews?.(); });
     await this.every('release', { ms: DAY }, async () => {
       const releaseId = String(this.config.releaseId ?? ''), sourceRevision = String(this.config.sourceRevision ?? '');
       if (/^[a-zA-Z0-9._-]{1,128}$/.test(releaseId) && !/^unknown$/i.test(releaseId) && /^[a-f0-9]{40}$/i.test(sourceRevision)) {
