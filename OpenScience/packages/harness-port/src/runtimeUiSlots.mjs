@@ -114,11 +114,6 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
   'conversation.input.left': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   'conversation.input.attachments': Object.freeze({ kind: 'single', scope: 'session-maybe', declaredBy: 'ui-conversation' }),
   'conversation.input.right': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
-  // The model and thinking-intensity seat at the composer's right end: the same children table, occupied by
-  // `ui-model-selection`'s `ModelSelect` at priority 0. Its label is the catalogue's own model name and an
-  // adapter-named effort ("deepseek-flash High"), neither of which a locale key can reach, so the shell withdraws
-  // the seat for a researcher by occupying it below the kernel's entry with nothing (`runtimeUiShell.mjs`).
-  'conversation.input.model': Object.freeze({ kind: 'single', scope: 'session', declaredBy: 'ui-conversation' }),
   // The transcript: the `chat` view's children table. `assistant-step` is
   // taken over three times, each below the last — the reply check at -1, the
   // delivered files at -2, the source cards at -3 — and each draws the entry it
