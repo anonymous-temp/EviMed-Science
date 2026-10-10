@@ -939,6 +939,7 @@
     "comparator.maic": {
       "endpoints": ["continuous","binary","time_to_event"],
       "notes": [
+        "Arms. Anchored: treatmentColumn is the arm column of the IPD trial (1 = the active arm, 0 = the common comparator) and outcomeColumn the outcome the arms' weighted means are taken of. Unanchored: the IPD patients are the active arm; naming treatmentColumn selects the rows of arm 1 (a table that holds both arms of a trial), without it every row is the active arm. A treatmentColumn the table cannot honour (not in the table, not a complete 1/0 column, no row in arm 1) is reported in diagnostics.notApplied with the reason and every row is used.",
         "Scales. Unanchored: aggregateOutcome and aggregateSe are the aggregate trial's outcome and its standard error on the outcome's OWN scale (a proportion for link logit, a positive mean or rate for link log, any number for identity), the scale of the outcomeColumn's mean; the engine applies the link to the level and the delta method to the standard error. A level outside the link's domain (a proportion not strictly between 0 and 1 on logit, a mean not above 0 on log) is refused (scenario_value_invalid). Anchored: aggregateEstimate and aggregateSe are already the aggregate trial's contrast and its standard error on the link scale (a log odds ratio, a log risk ratio, a mean difference)."
       ],
       "rows": [
@@ -951,7 +952,7 @@
         {"path":"aggregateEstimate","type":"number","unit":"link scale","required":true,"when":[{"path":"anchored","in":["true"]}]},
         {"path":"aggregateOutcome","type":"number","unit":"the outcome's own scale","required":true,"when":[{"path":"anchored","notIn":["true"]}]},
         {"path":"aggregateSe","type":"number","gt":0,"required":true},
-        {"path":"outcomeColumn","type":"string","maxLength":64,"role":"column","default":"y","when":[{"path":"anchored","notIn":["true"]}]},
+        {"path":"outcomeColumn","type":"string","maxLength":64,"role":"column","default":"y"},
         {"path":"link","type":"string","values":["identity","log","logit"],"default":"identity"},
         {"path":"unadjustedEffectModifiers","type":"list","count":{"min":0,"max":50},"items":{"type":"string","maxLength":80}}
       ],

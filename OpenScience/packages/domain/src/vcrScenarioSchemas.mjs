@@ -653,7 +653,9 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     aggregateEstimate: req(gated(number({ unit: 'link scale' }), is('anchored', 'true'))),
     aggregateOutcome: req(gated(number({ unit: 'the outcome\'s own scale' }), isNot('anchored', 'true'))),
     aggregateSe: req(number({ gt: 0 })),
-    outcomeColumn: gated({ ...COLUMN, default: 'y' }, isNot('anchored', 'true')),
+    // The outcome the weighted means are taken of: the column the IPD trial measured it in, anchored or not (the anchored contrast is the
+    // difference of the arms' weighted means of it, so an anchored job names it too).
+    outcomeColumn: { ...COLUMN, default: 'y' },
     link: string({ values: ['identity', 'log', 'logit'], default: 'identity' }),
     unadjustedEffectModifiers: array(string({ maxLength: 80 }), { min: 0, max: 50 }),
   }),

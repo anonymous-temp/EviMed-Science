@@ -357,6 +357,55 @@ vcr_case("N14e", c("AC-08", "AC-30"), function() {
                         far$status, far$notEstimableRule %||% "", fine$diagnostics$weights$effectiveSampleSize %||% NA_real_, fine$conclusion %||% NA))
 })
 
+vcr_case("N14f", c("AC-04", "AC-08", "AC-30"), function() {
+  # The two keys of a MAIC that were accepted and not honoured. (1) An ANCHORED job could not name its outcome column: the domain
+  # gated `outcomeColumn` to the unanchored route and refused it for an anchored one (scenario_field_unknown), although the anchored
+  # contrast is the difference of the arms' weighted means of an outcome, so the anchored MAIC could only ever read a column called
+  # `y`. (2) An UNANCHORED job that named `treatmentColumn` had it ignored, so a table holding both arms of the IPD trial was pooled
+  # into one "active arm". Now the rows of arm 1 are the active arm; a column the table cannot honour is reported in
+  # diagnostics.notApplied with the reason, the job goes on with every row, and nothing is refused.
+  set.seed(1415L, kind = VCR_RNG_KIND)
+  n1 <- 80L; n0 <- 80L
+  x <- c(stats::rnorm(n1, 0.4, 1), stats::rnorm(n0, -0.6, 1)); arm <- c(rep(1L, n1), rep(0L, n0))
+  y <- c(1 + 0.8 * x[seq_len(n1)] + stats::rnorm(n1, 0, 0.5), -0.5 + 0.8 * x[n1 + seq_len(n0)] + stats::rnorm(n0, 0, 0.5))
+  tg <- 0.1
+  # (1) the anchored job names its outcome column; the same data under the default name `y` is the same job
+  df_y <- data.frame(USUBJID = sprintf("S%03d", seq_along(x)), arm = arm, x = x, y = y)
+  df_r <- data.frame(USUBJID = sprintf("S%03d", seq_along(x)), arm = arm, x = x, response = y)
+  anch <- list(covariates = list("x"), targets = list(x = tg), aggregateEstimate = 0.1, aggregateSe = 0.1, anchored = TRUE, treatmentColumn = "arm")
+  run <- function(df, sc, tag) vcr_test_run(vcr_test_job("comparator.maic", sc, list(vcr_test_input(df, paste0("snp_n14f_", tag, ":subject"), "subject")), seed = 3L, replicates = 200L, job_id = paste0("job_n14f_", tag)))
+  a_y <- run(df_y, anch, "ay"); a_r <- run(df_r, c(anch, list(outcomeColumn = "response")), "ar")
+  est_a <- vcr_measure_value(a_r, "indirect_estimate")
+  # reference: the arms' means weighted by exp(l x) with l solving the moment equation, and the contrast against the aggregate's
+  solve_l <- function(xs, target) stats::uniroot(function(l) { w <- exp(l * (xs - max(xs))); sum(w * xs) / sum(w) - target }, c(-50, 50), tol = 1e-13)$root
+  l_all <- solve_l(x, tg); w_all <- exp(l_all * (x - max(x)))
+  ref_anch <- stats::weighted.mean(y[arm == 1], w_all[arm == 1]) - stats::weighted.mean(y[arm == 0], w_all[arm == 0]) - 0.1
+  ok_1 <- identical(a_y$status, "succeeded") && identical(a_r$status, "succeeded") && identical(est_a, vcr_measure_value(a_y, "indirect_estimate")) && abs(est_a - ref_anch) < 1e-8
+  # (2) an unanchored job on the both-arms table, naming the arm column: the active arm only
+  una <- list(covariates = list("x"), targets = list(x = tg), outcomeColumn = "y", aggregateOutcome = 0.5, aggregateSe = 0.1)
+  sel <- run(df_y, c(una, list(treatmentColumn = "arm")), "sel"); pooled <- run(df_y, una, "pool")
+  xs <- x[arm == 1]; l1 <- solve_l(xs, tg); w1 <- exp(l1 * (xs - max(xs)))
+  ref_sel <- stats::weighted.mean(y[arm == 1], w1) - 0.5
+  ref_pool <- stats::weighted.mean(y, w_all) - 0.5
+  ts <- sel$diagnostics$treatmentArm
+  ok_2 <- identical(sel$status, "succeeded") && abs(vcr_measure_value(sel, "indirect_estimate") - ref_sel) < 1e-8 && sel$counts$realPatients == n1 &&
+    identical(ts$column, "arm") && ts$rowsUsed == n1 && ts$rowsOtherArm == n0 && is.null(sel$diagnostics$notApplied) &&
+    abs(vcr_measure_value(pooled, "indirect_estimate") - ref_pool) < 1e-8 && abs(ref_sel - ref_pool) > 0.3 && pooled$counts$realPatients == n1 + n0 && is.null(pooled$diagnostics$treatmentArm)
+  # (3) a column the table cannot honour: named in notApplied with the reason, every row used, no refusal
+  df_site <- cbind(df_y, site = rep(c("a", "b", "c", "d"), length.out = length(x)))
+  bad_site <- run(df_site, c(una, list(treatmentColumn = "site")), "site")
+  gone <- run(df_y, c(una, list(treatmentColumn = "no_such_column")), "gone")
+  no_active <- run(transform(df_y, arm = 0L), c(una, list(treatmentColumn = "arm")), "noactive")
+  na_of <- function(r) { v <- r$diagnostics$notApplied; if (length(v) == 1L) c(v[[1]]$key, v[[1]]$field, v[[1]]$reason) else character(0) }
+  ok_3 <- all(vapply(list(bad_site, gone, no_active), function(r) identical(r$status, "succeeded") && abs(vcr_measure_value(r, "indirect_estimate") - ref_pool) < 1e-8 && r$counts$realPatients == n1 + n0, logical(1))) &&
+    identical(na_of(bad_site)[1:2], c("treatmentColumn", "scenario.treatmentColumn")) && grepl("1/0", na_of(bad_site)[3], fixed = TRUE) &&
+    grepl("not in the table", na_of(gone)[3], fixed = TRUE) && grepl("no row is in arm 1", na_of(no_active)[3], fixed = TRUE)
+  list(pass = ok_1 && ok_2 && ok_3,
+       detail = sprintf("anchored, outcome column named `response`: estimate %.8f, equal to the default-named job (%s) and to the independent weighted contrast %.8f; unanchored on a table of both arms (%d + %d), treatmentColumn named: estimate %.8f (independent %.8f, active arm only; pooling both arms would give %.8f), realPatients %s; a 4-level column, a missing column, an all-control column: notApplied '%s' / '%s' / '%s', estimate on every row %.8f",
+                        est_a, identical(est_a, vcr_measure_value(a_y, "indirect_estimate")), ref_anch, n1, n0, vcr_measure_value(sel, "indirect_estimate"), ref_sel, ref_pool, sel$counts$realPatients,
+                        na_of(bad_site)[3], na_of(gone)[3], na_of(no_active)[3], vcr_measure_value(bad_site, "indirect_estimate")))
+})
+
 vcr_case("N15b", c("AC-08", "AC-11"), function() {
   # The MAIC standard error accounts for the weights having been estimated. With
   # the aggregate trial's own error set to zero, the reported SE of an unanchored

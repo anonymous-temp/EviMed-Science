@@ -200,6 +200,10 @@ VCR_ENGINE_OWN_ISSUE_CODES <- c(
   v
 }
 
+#' A key the scenario states and the method could not apply, with the reason: the result
+#' names it (`diagnostics.notApplied`) instead of ignoring it, and the job goes on.
+vcr_not_applied <- function(key, reason) list(key = key, field = paste0("scenario.", key), reason = reason)
+
 #' A protocol-shaped `failed` result built from nothing but the job's own
 #' identifiers. Used when the normal path itself could not run.
 vcr_minimal_failed <- function(job, hash, started, code, detail) {
@@ -1278,6 +1282,24 @@ vcr_job_maic <- function(job, output_dir = NULL, ...) {
   }
   subj <- .vcr_main_table(vcr_job_tables(job))
   vcr_require_individual(subj, "A MAIC", method = "comparator.maic")
+  anchored <- isTRUE(as.logical(sc$anchored))
+  # An unanchored MAIC compares the IPD trial's active arm with the aggregate trial. A table that holds both arms of the trial says so by
+  # naming its arm column: the rows of arm 1 are the active arm (the first version pooled both arms and ignored the key). A column the
+  # table cannot honour is reported, not refused, and every row is used as before.
+  not_applied <- list(); arm_selection <- NULL
+  if (!anchored && !is.null(sc$treatmentColumn)) {
+    tc <- .vcr_column_name(sc$treatmentColumn, "arm", "scenario.treatmentColumn")
+    arm <- if (tc %in% names(subj)) subj[[tc]] else NULL
+    why <- if (is.null(arm)) "the column is not in the table"
+           else if (anyNA(arm) || !all(arm %in% c(0, 1))) "the column is not a complete 1/0 column"
+           else if (!any(arm == 1)) "no row is in arm 1" else NULL
+    if (is.null(why)) {
+      arm_selection <- list(column = tc, activeArm = 1L, rowsUsed = sum(arm == 1), rowsOtherArm = sum(arm == 0))
+      subj <- subj[arm == 1, , drop = FALSE]
+    } else {
+      not_applied <- c(not_applied, list(vcr_not_applied("treatmentColumn", sprintf("%s, so every row is taken as the active arm", why))))
+    }
+  }
   covs <- vcr_chr(sc$covariates)
   if (!all(covs %in% names(subj))) vcr_abort("input_shape_invalid", "scenario.covariates", "The covariates are columns of the table.")
   X <- as.matrix(subj[, covs, drop = FALSE])
@@ -1289,9 +1311,9 @@ vcr_job_maic <- function(job, output_dir = NULL, ...) {
   boot <- list(replicates = vcr_bootstrap_replicates(vcr_scalar(job$replicates, NULL)), seed = job$seed, cores = vcr_cores(job$cores))
   # the data this estimate rests on: the matched covariates, the outcome and, anchored, the arm
   used <- vcr_used_sources(list(list(df = subj, columns = c(covs, .vcr_column_name(sc$outcomeColumn, "y", "scenario.outcomeColumn"),
-    if (isTRUE(as.logical(sc$anchored))) .vcr_column_name(sc$treatmentColumn, "arm", "scenario.treatmentColumn")))))
+    if (anchored) .vcr_column_name(sc$treatmentColumn, "arm", "scenario.treatmentColumn") else arm_selection$column))))
   est_src <- vcr_estimate_source(used$source)
-  res <- if (isTRUE(as.logical(sc$anchored))) {
+  res <- if (anchored) {
     tc <- .vcr_column_name(sc$treatmentColumn, "arm", "scenario.treatmentColumn")
     if (!(tc %in% names(subj))) vcr_abort("input_shape_invalid", "scenario.treatmentColumn", "The treatment column is not in the table.")
     arm <- subj[[tc]]
@@ -1305,7 +1327,8 @@ vcr_job_maic <- function(job, output_dir = NULL, ...) {
   if (is.null(res$estimate)) {
     return(list(status = "not_estimable", notEstimableRule = res$rule %||% "entropy_balance_infeasible",
                 measures = list(), counts = vcr_counts(realPatients = nrow(subj)),
-                diagnostics = list(detail = res$detail, valueSourcesUsed = vcr_value_sources_used(used))))
+                diagnostics = c(list(detail = res$detail, valueSourcesUsed = vcr_value_sources_used(used)),
+                                if (length(not_applied)) list(notApplied = not_applied))))
   }
   # What the weights are worth, said in the result and never a refusal: the estimate stands, and the conclusion says what it rests on.
   # No weights at all (a target outside the covariates' range) is the not-estimable return above; weights whose moments the solver did
@@ -1327,6 +1350,8 @@ vcr_job_maic <- function(job, output_dir = NULL, ...) {
                                          converged = isTRUE(res$converged), iterations = res$iterations,
                                          worstRelativeDiscrepancy = res$discrepancy),
                           limitedBy = as.list(limited_by),
+                          treatmentArm = arm_selection,
+                          notApplied = if (length(not_applied)) not_applied else NULL,
                           conclusionCeiling = res$conclusionCeiling %||% NULL,
                           varianceBasis = res$varianceBasis, se = res$se,
                           bootstrapReplicates = if (!is.null(res$bootstrap)) res$bootstrap$replicates else NULL,

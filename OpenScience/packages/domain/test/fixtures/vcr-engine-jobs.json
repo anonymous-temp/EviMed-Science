@@ -973,6 +973,45 @@
       }
     },
     {
+      "name": "an anchored MAIC that names its outcome and its arm columns",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_comparator",
+        "method": "comparator.maic",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age"
+          ],
+          "targets": {
+            "age": 60
+          },
+          "anchored": true,
+          "aggregateEstimate": -0.2,
+          "aggregateSe": 0.1,
+          "unadjustedEffectModifiers": [
+            "ecog"
+          ],
+          "outcomeColumn": "response",
+          "treatmentColumn": "arm"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
       "name": "evalue #18",
       "job": {
         "jobId": "job_1",
