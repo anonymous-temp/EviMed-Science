@@ -5171,6 +5171,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             messages: handbookJudgeMessages({ text, capabilityId }) });
           return { ...result.value, independent: result.modelReported === true && /^qwen/i.test(result.model) };
         }) : null,
+        // A model of an independent family (the Jev judge port, site J23) reads what the lesson tells a reader to do, before it can be promoted. Asked straight
+        // through the judge service like the evolution module's other Jev sites; uncalibrated as shipped, so until it is measured the check is skipped and counted.
+        harm: judgeService ? async ({ text }) => judgeService.judge("J23", { text }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID,
+          taskId: `hb-harm:${createHash("sha256").update(text).digest("hex").slice(0, 32)}`, module: "evolution",
+          limits: { daily: 0, weekly: 0, moduleDaily: config.evolutionDailyBudgetCny ?? 10 } }) : null,
+        audit: (event, detail) => securityAudit(config, event, "recorded", detail),
         established: (userIds) => evidenceEstablishedAuthors(productDatabase, userIds),
         recentGuestRun: async (userId, runId) => (runId ? (await guestMarkedRuns(productDatabase, userId, [runId])).has(runId) : false),
       });

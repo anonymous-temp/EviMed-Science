@@ -1259,12 +1259,12 @@ function reviewJevSettings(overrides, keyPresent) {
     throw new Error(`OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS must be a whole number from 1000 to 120000, got ${JSON.stringify(timeoutValue)}.`);
   }
   for(const [site,policy] of Object.entries(pin.sites??{})) {
-    if(!/^J([1-9]|1[0-9]|2[0-2])$/.test(site)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(site))throw new Error('Unknown registered Jev policy pin.');
+    if(!/^J([1-9]|1[0-9]|2[0-3])$/.test(site)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(site))throw new Error('Unknown registered Jev policy pin.');
     if(!(Number(policy.threshold)>0&&Number(policy.threshold)<=1)||!['uncalibrated','calibrated'].includes(policy.calibration))throw new Error('Invalid registered Jev threshold or calibration pin.');
     if(policy.calibration==='calibrated'&&!/^[a-f0-9]{64}$/.test(policy.promptFingerprint??''))throw new Error('A calibrated Jev policy needs its measured prompt fingerprint.');
   }
   const disabled = String(overrides.jevDisabledSites ?? process.env.OPEN_SCIENCE_JEV_DISABLED_SITES ?? '').split(',').map(value=>value.trim()).filter(Boolean);
-  if(disabled.some(id=>!/^J([1-9]|1[0-9]|2[0-2])$/.test(id)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(id)))throw new Error('OPEN_SCIENCE_JEV_DISABLED_SITES contains an unknown site.');
+  if(disabled.some(id=>!/^J([1-9]|1[0-9]|2[0-3])$/.test(id)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(id)))throw new Error('OPEN_SCIENCE_JEV_DISABLED_SITES contains an unknown site.');
   // An empty value is "not set" (`NAME=` in .env.example and in a private override), not the number 0.
   const onlineTimeout=Number(overrides.jevOnlineTimeoutMs ?? (process.env.OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS || 3000));
   const concurrency=Number(overrides.jevBackgroundConcurrency ?? (process.env.OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY || 4));

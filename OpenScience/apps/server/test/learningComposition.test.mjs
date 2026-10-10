@@ -347,3 +347,11 @@ test("what later became of a result has its producers: a correction and a recalc
   assert.match(join, /memoryPausedFor\(researchMemory, project\.userId, project\.id, run\.sessionId\)/);
   assert.match(join, /!state\.learning && !state\.trial/);
 });
+
+test("the platform handbook path is handed the independent-family harm check and a ledger to write its refusals in", () => {
+  // Constructed with neither, it would skip every check and say so on a counter nobody reads (review L14c): wired is not fed.
+  const call = serverSource.slice(serverSource.indexOf("platformHandbooks = createPlatformHandbooks({"), serverSource.indexOf("evolution.service.callbacks.handbookSelection"));
+  assert.match(call, /harm: judgeService \? async \(\{ text \}\) => judgeService\.judge\("J23", \{ text \}, \{ userId: await evolutionService\.owner\(\), projectId: EVOLUTION_PROJECT_ID,/);
+  assert.match(call, /module: "evolution",\s*limits: \{ daily: 0, weekly: 0, moduleDaily: config\.evolutionDailyBudgetCny \?\? 10 \}/, "booked to the evolution module's own day, like its other Jev sites");
+  assert.match(call, /audit: \(event, detail\) => securityAudit\(config, event, "recorded", detail\),/);
+});

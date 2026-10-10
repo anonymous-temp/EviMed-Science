@@ -5,11 +5,18 @@
  *
  * Hidden knowledge:
  *
- * - **Four gates, in the order of what each costs, and only one of them is a model's judgement.** (1) Field checks in code, a closed list: the lesson is
+ * - **Five gates, in the order of what each costs, and two of them are a model's judgement.** (1) Field checks in code, a closed list: the lesson is
  *   prose only (no attachment), holds no identifier format (DOI, PMID, registry number, address, path), no number that looks like data (four digits or a
  *   decimal), and no name, identifier or number that occurs in the source account's project facts — compared as whole tokens, never as prose. (2) One model
  *   call asks whether it is general method knowledge — no project fact, no patient, no product, no unpublished result — and names the lesson's class from a
- *   closed list; an answer that is not that shape is dropped, never softened. (3) The author rule of plan §7. (4) The independent re-check, below.
+ *   closed list; an answer that is not that shape is dropped, never softened. (3) A model of an independent family (the Jev judge port, site J23) is asked
+ *   whether the lesson carries harmful or manipulative instructions; see the next bullet. (4) The author rule of plan §7. (5) The independent re-check, below.
+ * - **The harm check cannot hurt the author, and it never blocks anything it could not answer.** A lesson the judge settles as harmful is not promoted:
+ *   its candidate is rejected with the reason `harm_flagged`, counted and written to the security ledger (the entry's id, never the account). The author's own
+ *   handbook is a different record and is not touched — it is theirs, it keeps serving them, and nothing is shown to anyone. When the judge is not composed,
+ *   unconfigured, not calibrated for its prompt, disabled, unavailable, over budget or unsure, nothing is flagged and the lesson goes on exactly as it did before
+ *   the check existed; the skipped check is counted by its reason. J23 ships uncalibrated (`deps-version.json`), so until an operator measures it the check
+ *   is skipped and says so. Which model capability would make it deletable: a base model that could be trusted not to follow a poisoned lesson at all.
  * - **The author rule is the plan's, written once.** The account is established — three published cards that each carry a ✓ (`evidenceVerifiedCards`) — or
  *   its lesson is corroborated: another account, with no run that drew on a received pack, taught a lesson of the same capability and class that also
  *   passed the first two gates. Until then it waits, recorded and not in the supply; the moment the second account's lesson passes, both are promoted. A new
@@ -130,17 +137,24 @@ export function handbookSkillFiles(text) {
  *   facts: (userId: string, projectId: string | null) => Promise<{ names?: string[], identifiers?: string[], numbers?: string[] }>,
  *   judge: (input: { text: string, capabilityId: string }) => Promise<any>,
  *   review?: ((input: { text: string, capabilityId: string }) => Promise<any>) | null,
+ *   harm?: ((input: { text: string, capabilityId: string }) => Promise<any>) | null,
  *   established: (userIds: string[]) => Promise<Set<string>>,
  *   recentGuestRun?: ((userId: string, runId: string | null) => Promise<boolean>) | null,
- *   perDay?: number, now?: () => Date, report?: ((code: string) => void) | null }} options
- *   `service` is the evolution service (records and tools); `supply` its platform skill supply.
+ *   perDay?: number, now?: () => Date, report?: ((code: string) => void) | null,
+ *   audit?: ((event: string, detail: { code: string, detail: string }) => Promise<unknown> | unknown) | null }} options
+ *   `service` is the evolution service (records and tools); `supply` its platform skill supply. `harm` asks the independent-family judge
+ *   (`judgeService.judge("J23", …)`) and answers with its result as it is (`{ outcome, value, code }`); absent, no lesson is checked and the skip is counted.
+ *   `audit` is the security ledger's writer, told the entry's id and never the account.
  */
-export function createPlatformHandbooks({ service, supply, facts, judge, review = null, established, recentGuestRun = null, perDay = HANDBOOK_DEFAULT_PER_DAY, now = () => new Date(), report = null }) {
+export function createPlatformHandbooks({ service, supply, facts, judge, review = null, harm = null, established, recentGuestRun = null, perDay = HANDBOOK_DEFAULT_PER_DAY, now = () => new Date(), report = null, audit = null }) {
   const counters = {
     considered: 0,
     outcomes: /** @type {Record<string, number>} */ (Object.fromEntries(HANDBOOK_CANDIDATE_STATES.map((state) => [state, 0]))),
     rejectedBy: /** @type {Record<string, number>} */ ({}),
     activated: 0, rechecksRefused: 0, failures: 0,
+    /** Harm checks by what came of them: clear, flagged, uncertain (the judge was unsure), skipped (no answer; `harmSkippedBy` says why). */
+    harmChecks: { clear: 0, flagged: 0, uncertain: 0, skipped: 0 },
+    harmSkippedBy: /** @type {Record<string, number>} */ ({}),
   };
   /** @param {string} state */
   const counted = (state) => { counters.outcomes[state] += 1; return state; };
@@ -193,6 +207,40 @@ export function createPlatformHandbooks({ service, supply, facts, judge, review 
     }
   }
 
+  /**
+   * The independent-family harm check of one lesson. It answers `flagged` only when the judge settled that the lesson carries harmful or manipulative
+   * instructions; every other outcome — clear, unsure, no judge, no calibration, a failure — lets the lesson go on as it would have, and is counted.
+   * Never throws: the check is advice about promotion, not a step the lesson depends on.
+   * @param {any} row
+   * @returns {Promise<{ flagged: boolean, outcome: "clear" | "flagged" | "uncertain" | "skipped", code?: string }>}
+   */
+  async function harmCheck(row) {
+    /** @param {unknown} value */
+    const closedCode = (value) => (typeof value === "string" && /^[a-z0-9_]{1,64}$/.test(value) ? value : "harm_check_failed");
+    /** @param {unknown} reason */
+    const skipped = (reason) => {
+      const code = closedCode(reason);
+      counters.harmChecks.skipped += 1;
+      counters.harmSkippedBy[code] = (counters.harmSkippedBy[code] ?? 0) + 1;
+      return /** @type {const} */ ({ flagged: false, outcome: "skipped", code });
+    };
+    if (!harm) return skipped("harm_check_not_composed");
+    let result;
+    try {
+      result = await harm({ text: shown(row.payload.text), capabilityId: row.payload.capabilityId });
+    } catch (error) {
+      report?.("learning_platform_handbook_harm_check_failed");
+      return skipped(/** @type {any} */ (error)?.code ?? "harm_check_failed");
+    }
+    if (result?.outcome === "settled" && typeof result.value?.harmful === "boolean") {
+      if (result.value.harmful) { counters.harmChecks.flagged += 1; return { flagged: true, outcome: "flagged" }; }
+      counters.harmChecks.clear += 1;
+      return { flagged: false, outcome: "clear" };
+    }
+    if (result?.outcome === "escalated") { counters.harmChecks.uncertain += 1; return { flagged: false, outcome: "uncertain", code: "judge_uncertain" }; }
+    return skipped(result?.code ?? "harm_check_unanswered");
+  }
+
   /** Run the model's gate over a stored lesson. @param {any} row */
   async function judgeRow(row) {
     const attempts = Number(row.payload.judgeAttempts ?? 0) + 1;
@@ -214,7 +262,16 @@ export function createPlatformHandbooks({ service, supply, facts, judge, review 
       counters.rejectedBy.not_general = (counters.rejectedBy.not_general ?? 0) + 1;
       return update(row, { status: counted("rejected"), reason: ["not_general"], judgeAttempts: attempts });
     }
-    const judged = await update(row, { lessonClass: verdict.lessonClass, judgedAt: now().toISOString(), judgeAttempts: attempts });
+    // Before the lesson can be promoted, corroborate another's, or be served to anyone: an independent family's reading of what it tells a reader to do.
+    const harmed = await harmCheck(row);
+    const harmChecked = { outcome: harmed.outcome, ...(harmed.code ? { code: harmed.code } : {}), at: now().toISOString() };
+    if (harmed.flagged) {
+      counters.rejectedBy.harm_flagged = (counters.rejectedBy.harm_flagged ?? 0) + 1;
+      // The entry's id (a hash), never the account: the candidate record in the operator's evolution project is what names it.
+      try { await audit?.("learning.platform_handbook.harm_flagged", { code: "harm_flagged", detail: `capability=${row.payload.capabilityId} entry=${row.id}` }); } catch { /* the ledger is a record of the decision, not a step in it */ }
+      return update(row, { status: counted("rejected"), reason: ["harm_flagged"], lessonClass: verdict.lessonClass, harmChecked, judgeAttempts: attempts });
+    }
+    const judged = await update(row, { lessonClass: verdict.lessonClass, judgedAt: now().toISOString(), judgeAttempts: attempts, harmChecked });
     await settleAuthor(judged);
     return (await service.get(row.id)) ?? judged;
   }
@@ -363,7 +420,8 @@ export function createPlatformHandbooks({ service, supply, facts, judge, review 
   return { consider, tick, observe, entries, observeTool: async input => {
     const rows=(await service.list("handbook-candidate")).filter(row=>row.payload.toolId===input.toolId && ["probation","effective"].includes(row.payload.status));
     return Promise.all(rows.map(row=>observe({...input,entryId:row.id,version:row.payload.version??1})));
-  }, stats: () => ({ ...counters, outcomes: { ...counters.outcomes }, rejectedBy: { ...counters.rejectedBy }, perDay, reviewConfigured: Boolean(review) }) };
+  }, stats: () => ({ ...counters, outcomes: { ...counters.outcomes }, rejectedBy: { ...counters.rejectedBy }, harmChecks: { ...counters.harmChecks },
+    harmSkippedBy: { ...counters.harmSkippedBy }, perDay, reviewConfigured: Boolean(review) }) };
 }
 
 /**
@@ -392,6 +450,12 @@ export function platformHandbookMetricFamilies(stats) {
       series: Object.entries(stats.rejectedBy).map(([reason, value]) => ({ value, labels: { reason } })) },
     { name: "open_science_learning_platform_handbooks_activated_total", type: "counter", help: "Lessons that passed the independent re-check and became text-only skills in the platform supply.", series: [{ value: stats.activated }] },
     { name: "open_science_learning_platform_handbooks_reviewer_configured", type: "gauge", help: "1 when an independent reviewer of another model family is configured; 0 means no candidate can become effective.", series: [{ value: stats.reviewConfigured ? 1 : 0 }] },
+    { name: "open_science_learning_platform_handbooks_harm_checks_total", type: "counter",
+      help: "Harm checks of a lesson before it can be promoted, by outcome: clear, flagged (not promoted; the author's own handbook is untouched), uncertain (the judge was unsure) or skipped (no answer; the reasons are the next family).",
+      series: ["clear", "flagged", "uncertain", "skipped"].map((outcome) => ({ value: stats.harmChecks?.[outcome] ?? 0, labels: { outcome } })) },
+    { name: "open_science_learning_platform_handbooks_harm_check_skipped_total", type: "counter",
+      help: "Why a harm check gave no answer and the lesson went on unchecked: the judge not composed, unconfigured or not calibrated for its prompt, disabled, busy, over budget, timed out or failed.",
+      series: Object.entries(stats.harmSkippedBy ?? {}).map(([reason, value]) => ({ value, labels: { reason } })) },
     { name: "open_science_learning_platform_handbooks_per_day", type: "gauge", help: "The most candidates re-checked and activated in a day (OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY).", series: [{ value: stats.perDay }] },
   ];
 }
