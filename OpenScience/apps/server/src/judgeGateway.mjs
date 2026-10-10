@@ -80,8 +80,10 @@ export function createJudgeGatewayHandler({ config, judgeService, runtimeManager
         body.site === "comparison"
           ? await judgeService.compareEngine(body.input, context)
           : await judgeService.judge(body.site, body.input, context);
-      const { answers, ...publicResult } = result;
+      // The answers and the Jev client's own failure code stay in the control plane.
+      const { answers, cause, ...publicResult } = result;
       void answers;
+      void cause;
       sendJson(res, 200, publicResult);
     } catch (error) {
       sendError(res, error);

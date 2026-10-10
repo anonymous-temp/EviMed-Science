@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { recordJudgeDrift, judgeDriftSummary } from "./judgePersistence.mjs";
 /** Shared Jev decisions; uncertainty always returns control to the caller. */
-import { callJev } from "./jevModel.mjs";
+import { callJev, requestRefusalCode } from "./jevModel.mjs";
 import {
   JUDGE_SITES,
   buildJudgeRequest,
@@ -483,7 +483,9 @@ export function createJudgeService({
             requests.set(key, (requests.get(key) ?? 0) + 1);
             return result;
           } catch (error) {
-            const key = `${site}:failed`;
+            // A refusal of this request or this account is not the provider failing: it
+            // stays out of the series the JevFailing alert reads (`requestRefusalCode`).
+            const key = `${site}:${requestRefusalCode(error) ? "refused" : "failed"}`;
             requests.set(key, (requests.get(key) ?? 0) + 1);
             throw error;
           }
@@ -620,6 +622,12 @@ export function createJudgeService({
       void sample.finally(() => pending.delete(sample));
       return settled;
     } catch (error) {
+      // The Jev client's own code (`jev_payment_required`, `jev_auth_failed`, ...),
+      // for a caller that reports why: a code only, never a message.
+      const cause = /^[a-z0-9_]{1,64}$/.test(String(error?.code ?? "")) ? { cause: String(error.code) } : {};
+      const refusal = requestRefusalCode(error);
+      if (refusal)
+        return finish("fallback", refusal, { promptFingerprint: fingerprint, cost: observedCost, ...cause });
       const failures = (circuits.get(site)?.failures ?? 0) + 1;
       circuits.set(site, {
         failures,
@@ -630,7 +638,7 @@ export function createJudgeService({
         error?.message === "judge_timeout" || controller.signal.aborted
           ? "judge_timeout"
           : "judge_provider_failure",
-        { promptFingerprint: fingerprint, cost: observedCost },
+        { promptFingerprint: fingerprint, cost: observedCost, ...cause },
       );
     } finally {
       clearTimeout(timer);

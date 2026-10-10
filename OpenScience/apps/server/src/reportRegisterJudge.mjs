@@ -99,7 +99,8 @@ export async function reviewDeliveredRegister({ project, run, judgeService, onNo
             regexBaseline: { leakage: legacyRegisterPattern.test(item.text) },
           });
         } catch { continue; }
-        if (["judge_disabled", "judge_unconfigured", "judge_uncalibrated", "judge_calibration_mismatch"].includes(decision.code)) return;
+        // The service cannot judge at all, or the account cannot pay: every later line would meet the same refusal.
+        if (["judge_disabled", "judge_unconfigured", "judge_uncalibrated", "judge_calibration_mismatch", "judge_budget_exceeded"].includes(decision.code)) return;
         if (decision.outcome !== "settled" || decision.value?.leakage !== true) continue;
         const detail = `报告第 ${item.line} 行可能夹带执行过程表述：${item.text.slice(0, 180)}`;
         notices.push(runNotice("runtime_leakage", detail, {
