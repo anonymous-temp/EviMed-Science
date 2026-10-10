@@ -41,3 +41,15 @@ test('the proposer is shown bounded summaries of missions and cards, never their
  assert.ok(user.content.length<80_000,`the message is ${user.content.length} characters`);
  assert.ok(!user.content.includes('policySnapshot')&&!user.content.includes('zzzzzzzzzzzz'.repeat(30)));
 });
+test('the proposer itself is handed the bounded summaries, and the message built from them keeps the same bound',async()=>{
+ const service=store();let handed;
+ const p=createEvolutionPolicy({service,now:()=>new Date('2026-10-02'),propose:async input=>{handed=input;return {field:'stagnationRounds',value:4,hypothesis:'x'};}});
+ const mission={id:'m1',moduleId:'tools',kind:'research',status:'rejected',month:'2026-09',policyVersion:1,completed:true,result:{outcome:'regressed',reason:'floor'},researchCostCny:2,
+  decisions:[{big:'x'.repeat(10_000)}],policySnapshot:DEFAULT_EVOLUTION_POLICY,baseline:{policy:{text:'y'.repeat(5_000)}}};
+ await p.monthly({missions:[mission,{...mission,id:'held-out',replayIndependent:true}],mechanismCards:[{mechanism:'a',problem:'b',falsifiableExpectation:'c',targetObjects:['tools'],quote:'q'.repeat(5_000),source:{url:'https://example.test'}}],replay:async()=>null});
+ assert.deepEqual(handed.missions.map(item=>[item.id,item.outcome,item.reason,item.researchCostCny]),[['m1','regressed','floor',2]]);
+ assert.ok(!('decisions' in handed.missions[0])&&!('policySnapshot' in handed.missions[0])&&!('baseline' in handed.missions[0]));
+ assert.deepEqual(Object.keys(handed.mechanismCards[0]).sort(),['estimatedCostCny','falsifiableExpectation','mechanism','problem','targetObjects']);
+ const [,user]=evolutionPolicyProposalMessages(handed);
+ assert.deepEqual(JSON.parse(user.content).missions,handed.missions);assert.deepEqual(JSON.parse(user.content).mechanismCards,handed.mechanismCards);
+});
