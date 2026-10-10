@@ -139,6 +139,8 @@ export const GEO_MARKET_STORE_LIMITS = Object.freeze({
   mediaKeysMax: 1_000,
   /** Candidate media one read may return. */
   candidatesMax: 5_000,
+  /** Projects one turn mark may carry. */
+  servedMax: 10_000,
   /** Orders one insert may create. */
   ordersBatchMax: 100,
   /** Ledger rows one transition may write. */
@@ -554,15 +556,42 @@ export class GeoMarketStore {
 
   /**
    * Projects with a distribution budget: active ones (to place orders), or
-   * every one not deleted (to reconcile — a paused project still has money out).
-   * @param {number} limit @param {{ activeOnly?: boolean }} [options]
+   * every one not deleted (to reconcile — a paused project still has money out),
+   * oldest first. A page at a time: `offset` walks the whole list.
+   * @param {number} limit @param {{ activeOnly?: boolean, offset?: number }} [options]
    */
-  async listBudgetedProjects(limit, { activeOnly = true } = {}) {
+  async listBudgetedProjects(limit, { activeOnly = true, offset = 0 } = {}) {
     assertLimit(limit, GEO_MARKET_STORE_LIMITS.listMax);
     const result = await this.#query(`SELECT * FROM evimed_geo.projects
-      WHERE budget IS NOT NULL AND ($2::boolean IS FALSE OR status = 'active') AND deleted_at IS NULL ORDER BY created_at, id LIMIT $1`,
-    [limit, activeOnly]);
+      WHERE budget IS NOT NULL AND ($2::boolean IS FALSE OR status = 'active') AND deleted_at IS NULL ORDER BY created_at, id LIMIT $1 OFFSET $3`,
+    [limit, activeOnly, assertOffset(offset)]);
     return result.rows.map(mapProject);
+  }
+
+  /**
+   * The active projects with a budget in the order the market serves them: the one it took its turn with longest ago first, a
+   * project it has not served yet before any that it has, then by age. The order holds while a tick pages through it, because the
+   * turns are marked after the tick (`markProjectsServed`), not during.
+   * @param {number} limit @param {{ offset?: number }} [options]
+   */
+  async listProjectsInTurn(limit, { offset = 0 } = {}) {
+    assertLimit(limit, GEO_MARKET_STORE_LIMITS.listMax);
+    const result = await this.#query(`SELECT * FROM evimed_geo.projects
+      WHERE budget IS NOT NULL AND status = 'active' AND deleted_at IS NULL
+      ORDER BY market_served_at NULLS FIRST, created_at, id LIMIT $1 OFFSET $2`, [limit, assertOffset(offset)]);
+    return result.rows.map(mapProject);
+  }
+
+  /**
+   * The market took its turn with these projects at `at`: they go behind the ones it has not served since.
+   * @param {string[]} ids @param {string} at
+   */
+  async markProjectsServed(ids, at) {
+    const unique = [...new Set(ids.map(String))];
+    if (unique.length > GEO_MARKET_STORE_LIMITS.servedMax) throw storeError("Too many projects in one mark.");
+    if (!unique.length) return 0;
+    const result = await this.#query(`UPDATE evimed_geo.projects SET market_served_at = $2 WHERE id = ANY($1::text[])`, [unique, assertAt(at)]);
+    return result.rowCount ?? 0;
   }
 
   /**
@@ -581,12 +610,21 @@ export class GeoMarketStore {
     });
   }
 
-  /** Articles that may be placed: publishable, placed or published. @param {string} geoProjectId @param {number} limit */
-  async listPlaceableArticles(geoProjectId, limit) {
+  /**
+   * Articles that may be placed: publishable, placed or published — and, of those, the ones that hold no order in `withoutOrderIn`
+   * (the states in which an article is placed or being placed; an article that holds one cannot take another). Oldest first,
+   * except that a control-group article, which is never placed, comes after every other: neither an article already placed nor
+   * one that is never placed takes a place in the list from one that may be (M-4).
+   * @param {string} geoProjectId @param {number} limit @param {{ withoutOrderIn?: readonly string[] }} [options]
+   */
+  async listPlaceableArticles(geoProjectId, limit, { withoutOrderIn = [] } = {}) {
     assertLimit(limit, GEO_MARKET_STORE_LIMITS.listMax);
+    for (const state of withoutOrderIn) assertOneOf(state, ORDER_STATES, "order state");
     const result = await this.#query(`${ARTICLE_SELECT}
-      WHERE a.geo_project_id = $1 AND a.status IN ('publishable', 'placed', 'published') ORDER BY a.created_at, a.id LIMIT $2`,
-    [String(geoProjectId), limit]);
+      WHERE a.geo_project_id = $1 AND a.status IN ('publishable', 'placed', 'published')
+        AND NOT EXISTS (SELECT 1 FROM evimed_geo.orders o WHERE o.geo_project_id = a.geo_project_id AND o.article_id = a.id AND o.state = ANY($3::text[]))
+      ORDER BY coalesce(g.is_control, false), a.created_at, a.id LIMIT $2`,
+    [String(geoProjectId), limit, [...withoutOrderIn]]);
     return result.rows.map(mapArticle);
   }
 

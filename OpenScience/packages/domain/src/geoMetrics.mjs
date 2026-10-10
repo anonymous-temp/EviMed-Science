@@ -22,7 +22,8 @@
  *   unadjudicated answer is not a correct one. An engine that was not measured
  *   is `absent`. A rate over fewer answers than `STD_CELL_MIN_SAMPLES` is
  *   `insufficient` (the UI's 「样本不足」) — the value is kept for the record,
- *   never for display. Suspect answers (login page, empty shell) leave the
+ *   never for display — and so is a ratio of two cells that are (M-13; the
+ *   script reports it ok, the one place this port's status differs from it). Suspect answers (login page, empty shell) leave the
  *   denominator; refusals stay in it.
  * - **Rows are the platform's, the shape is fixed.** A row is one snapshot
  *   joined with its question's pool and group and its facts row
@@ -77,7 +78,7 @@ import sanityTable from './geo/sanity.json' with { type: 'json' }
  * @property {Record<string, number|string|number[]|null>} constants
  * @property {{ value_decimals: number, wilson_z: number, pool_metric_ids: string[], gvi_normalizable_metric_ids: string[], gvi_inverse_rank_metric_ids: string[], uneven_denominator_metric_ids: string[], top_n_variant_max_position: number, percent_scale: number, derived_metrics: Record<string, { kind: 'ratio'|'copy', numerator?: { pool: string, metric: string }, denominator?: { pool: string, metric: string }, source?: { pool: string, metric: string }, pool_cell?: boolean }> }} computation
  * @property {Record<string, { display_name: string, citation_display: string, optional: boolean, planned: boolean }>} engines
- * @property {{ snapshot_statuses: string[], in_denominator_statuses: string[], excluded_round_kinds: string[], noise_round_kind: string, inclusion_surface_mode: string, inclusion_metric_ids: string[], error_closed_statuses: string[], noise_band_sd_multiplier: number, noise_band_metric_ids: string[], insufficient_gvi_below_answers: string }} platform
+ * @property {{ snapshot_statuses: string[], in_denominator_statuses: string[], excluded_round_kinds: string[], noise_round_kind: string, inclusion_surface_mode: string, inclusion_metric_ids: string[], error_closed_statuses: string[], noise_band_sd_multiplier: number, noise_band_metric_ids: string[], insufficient_gvi_below_answers: string, insufficient_ratio_input_statuses: string[] }} platform
  */
 /**
  * @typedef {object} GeoProbeSanityTable
@@ -211,6 +212,8 @@ const IN_DENOMINATOR = new Set(PLATFORM.in_denominator_statuses)
 const SNAPSHOT_STATUSES = new Set(PLATFORM.snapshot_statuses)
 const EXCLUDED_ROUND_KINDS = new Set(PLATFORM.excluded_round_kinds)
 const INCLUSION_METRIC_IDS = new Set(PLATFORM.inclusion_metric_ids)
+/** The statuses of a ratio's input cell that make the ratio itself `insufficient` (Q-4). */
+const THIN_RATIO_INPUTS = new Set(PLATFORM.insufficient_ratio_input_statuses)
 const DIMENSION_WEIGHTS = TABLE.gvi.dimension_weights
 const DIMENSIONS = Object.keys(DIMENSION_WEIGHTS)
 
@@ -311,7 +314,10 @@ export function wilsonInterval(numerator, denominator) {
 // ------------------------------------------------------------------ core cells
 
 /**
- * @typedef {{ value: number|null, measurable: boolean, numerator: number|null, denominator: number|null, reason: string|null }} CoreCell
+ * @typedef {{ value: number|null, measurable: boolean, numerator: number|null, denominator: number|null, reason: string|null,
+ *   thin?: boolean }} CoreCell
+ *   `thin`: a cell derived from cells that are `insufficient` is itself (a ratio carries the two rates, not the answers they were
+ *   taken over, so the floor that holds a rate cannot see its denominators).
  */
 
 /** @param {number|null} value @param {{ numerator?: number|null, denominator?: number|null }} [parts] @returns {CoreCell} */
@@ -351,7 +357,7 @@ function finish(metricId, core, where, snapshotCount) {
   const counted = isNumber(core.numerator) && isNumber(core.denominator)
   let status = /** @type {GeoMetricCell['status']} */ ('ok')
   if (!core.measurable) status = 'not_measurable'
-  else if (percent && counted && /** @type {number} */ (core.denominator) < MIN_SAMPLES) status = 'insufficient'
+  else if ((percent && counted && /** @type {number} */ (core.denominator) < MIN_SAMPLES) || core.thin === true) status = 'insufficient'
   const interval = core.measurable && percent && counted
     ? wilsonInterval(/** @type {number} */ (core.numerator), /** @type {number} */ (core.denominator))
     : null
@@ -420,10 +426,23 @@ function emptyCell(metricId, where, status, reason) {
  * @property {boolean|null} safetyHit
  */
 
-/** @param {unknown} url @returns {string} */
-function hostOf(url) {
-  const match = /https?:\/\/([^/\s]+)/.exec(String(url ?? ''))
-  return match ? match[1].toLowerCase() : ''
+/**
+ * The host an http(s) link points at, lower case, without credentials, port or a trailing dot; empty for anything else. The URL parser
+ * decides where the host ends: the pattern this replaced took everything up to the first `/`, so `https://owned.com?utm_source=x`,
+ * `https://owned.com:443/a` and `https://user@owned.com/` kept their query, port and credentials in the "host" (the brand's own link
+ * was not ours, and `https://attacker.com?ref=x.owned.com` was), and the string keys the sources table. A string the parser cannot read
+ * falls back to the pattern, cut at the same `/`, `?` and `#`.
+ * @param {unknown} url @returns {string}
+ */
+export function geoCitationHost(url) {
+  const text = String(url ?? '').trim()
+  try {
+    const parsed = new URL(text)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.hostname.toLowerCase().replace(/\.$/, '') : ''
+  } catch {
+    const match = /https?:\/\/([^/?#\s]+)/i.exec(text)
+    return match ? match[1].replace(/^.*@/, '').replace(/:\d*$/, '').toLowerCase().replace(/\.$/, '') : ''
+  }
 }
 
 /**
@@ -465,7 +484,7 @@ export function isOurCitation(citation, owned) {
 
 /** @param {GeoCitation} citation @param {OwnedSources} owned */
 function citationIsOurs(citation, owned) {
-  const domain = String(citation?.domain || hostOf(citation?.url)).toLowerCase()
+  const domain = String(citation?.domain || geoCitationHost(citation?.url)).toLowerCase()
   if (domain && owned.domains.some((owner) => domain === owner || domain.endsWith(`.${owner}`))) return true
   const key = canonicalGeoUrl(citation?.url)
   return Boolean(key) && owned.urls.has(key)
@@ -490,7 +509,7 @@ function prepare(row, ctx) {
   const rivalCounts = {}
   for (const brand of brands) if (brand.competitor && count(brand) > 0) rivalCounts[brand.name] = count(brand)
   const citations = (inDenominator && Array.isArray(row.citations) ? row.citations : []).map((citation) => ({
-    domain: String(citation?.domain || hostOf(citation?.url)).toLowerCase(),
+    domain: String(citation?.domain || geoCitationHost(citation?.url)).toLowerCase(),
     ours: citationIsOurs(citation, ctx.owned),
     inBody: typeof citation?.inBody === 'boolean' ? citation.inBody : null,
   }))
@@ -996,8 +1015,11 @@ export function computeGeoMetrics(rows, options = {}) {
         const a = poolCell(top.pool, top.metric)
         const b = poolCell(bottom.pool, bottom.metric)
         const derivable = a && b && a.value !== null && b.value !== null && b.value !== 0 && a.status !== 'not_measurable' && b.status !== 'not_measurable'
+        // A ratio of two rates is as thin as the thinner of them: M-13 is not a percent, so the floor that holds a rate over fewer
+        // than STD_CELL_MIN_SAMPLES answers never saw it, and pools of 3 and 4 answers gave a ratio read as a measurement (Q-4).
         cells.push(finish(id, derivable
-          ? measured(/** @type {number} */ (a.value) / /** @type {number} */ (b.value), { numerator: a.value, denominator: b.value })
+          ? { ...measured(/** @type {number} */ (a.value) / /** @type {number} */ (b.value), { numerator: a.value, denominator: b.value }),
+            thin: THIN_RATIO_INPUTS.has(a.status) || THIN_RATIO_INPUTS.has(b.status) }
           : unmeasurable('conversion_not_derivable'), project, baselineCount(inPools([top.pool, bottom.pool]))))
         continue
       }

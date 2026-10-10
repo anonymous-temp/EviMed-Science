@@ -718,12 +718,21 @@ function geoSettings(overrides) {
     // request over the limit is answered with a notice and is not lost (the run keeps the question as a finding or an opportunity),
     // and a finished task frees its place. 0 queues none. Counted as `open_science_geo_service_total{kind="researchCapped"}`.
     geoResearchMaxOpen: integer("geoResearchMaxOpen", "OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN", 5, 0, 100),
+    // Calls one project's runtime may make to the probe host in a minute (`geo_visibility_probe`: providers, ask, screenshot, counted
+    // together). The probe answers one request at a time for minutes through the platform's logged-in vendor accounts, and the skills
+    // use the tool for the one question a person asks about; this is the ceiling of a loop, not of a run. A call over it is refused
+    // with `geo_probe_gateway_rate_limited` (429), which reaches the operator's ledger by its code. 12 is the social channel's.
+    geoProbeCallsPerMinute: integer("geoProbeCallsPerMinute", "OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE", 12, 1, 600),
     geoSocialUrl: origin("geoSocialUrl", "OPEN_SCIENCE_GEO_SOCIAL_URL"),
     geoSocialTimeoutMs: integer("geoSocialTimeoutMs", "OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS", 140_000, 5_000,
       MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS - 10_000),
     // Engines measured through the marketplace's inclusion check instead of the
     // probe (spec §7.4) — only `baidu` (文心) is meant to be here.
     geoInclusionEngines: inclusionEngines,
+    // How long the vendor's inclusion check may stay pending (or its poll keep failing) before the job is failed, counted from the request
+    // being taken. A leased job keeps its round open, and a vendor that never answers held it for ever; a failed job lets the round close
+    // without that question on that engine (「未测」). Counted as `open_science_geo_inclusion_total{event="expired"}`.
+    geoInclusionMaxHoldHours: integer("geoInclusionMaxHoldHours", "OPEN_SCIENCE_GEO_INCLUSION_MAX_HOLD_HOURS", 6, 1, 168),
     // Whether the parse loop follows the links an answer cites (flywheel F21, 2026-10-06): each is a public page read through the web
     // reader (robots honoured, paced per site) and a small judge call under the module's daily budget, at most three links per
     // answer. Off by default: the cited sentences are recorded and called neither good nor bad. Counted as

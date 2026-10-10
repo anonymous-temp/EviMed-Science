@@ -116,6 +116,11 @@ const BACKOFF_CAP_MS = catalogue("PROBE_BACKOFF_CAP_SEC", 60) * 1_000;
 const BUSY_MAX = catalogue("PROBE_BACKOFF_MAX_RETRIES", 6);
 /** A suspect or failed ask is asked again after this times its attempt number. */
 const RETRY_DELAY_MS = 2 * 60_000;
+/**
+ * How long the vendor's inclusion check may stay pending before its job is failed, so that its round can close (Q-7): the
+ * deployment's `OPEN_SCIENCE_GEO_INCLUSION_MAX_HOLD_HOURS`, counted from the request being taken. Six hours unless it says another.
+ */
+export const GEO_INCLUSION_MAX_HOLD_HOURS = 6;
 /** The inclusion channel: how long a submitted task is held, and how often it is polled. */
 const INCLUSION_HOLD_MS = 30 * 60_000;
 const INCLUSION_POLL_MS = 60_000;
@@ -313,6 +318,7 @@ export class GeoProbeBreaker {
  * @property {number} recountAt when the parse loop last looked for facts counted under an older registry (epoch ms, 0 = never)
  * @property {any} judge
  * @property {Record<string, number>} checkTotals   what the judge's three checks and the link checks found, since this process started (counted, never decided on)
+ * @property {Record<string, number>} inclusionTotals   what the inclusion channel did, since this process started (submitted, polled, done, failed, expired)
  * @property {any} upstream
  * @property {Set<string>} alerted
  * @property {string} owner
@@ -344,6 +350,7 @@ export function geoMeasureState(key) {
     recountAt: 0,
     judge: null,
     checkTotals: {},
+    inclusionTotals: {},
     upstream: null,
     alerted: new Set(),
     owner: `geo-probe-${process.pid}-${randomId().slice(0, 8)}`,
@@ -490,7 +497,7 @@ export async function enqueueRound(deps, { geoProjectId, kind, questionIds = nul
  * @property {string[]} resumed
  * @property {{ night: number, cap: number }} held
  * @property {number} roundsFinished
- * @property {{ submitted: number, polled: number, done: number, failed: number }} inclusion
+ * @property {{ submitted: number, polled: number, done: number, failed: number, expired: number }} inclusion
  * @property {string | null} probe  why the probe asked nothing: locked, unconfigured, busy_backoff, host_paused, misconfigured
  */
 
@@ -508,10 +515,17 @@ export async function tickProbe(deps) {
   const counts = {
     asked: 0, valid: 0, refusal: 0, suspect: 0, failed: 0, busy: 0, retried: 0, screenshotsStored: 0,
     paused: [], tripped: [], resumed: [], held: { night: 0, cap: 0 }, roundsFinished: 0,
-    inclusion: { submitted: 0, polled: 0, done: 0, failed: 0 }, probe: null,
+    inclusion: { submitted: 0, polled: 0, done: 0, failed: 0, expired: 0 }, probe: null,
   };
   const inclusionEngines = measurableEngines(deps).filter((engine) => !GEO_PROBE_ENGINES.includes(engine));
-  if (deps.inclusion && inclusionEngines.length) await inclusionPass(deps, state, inclusionEngines, counts);
+  if (deps.inclusion && inclusionEngines.length) {
+    try {
+      await inclusionPass(deps, state, inclusionEngines, counts);
+    } finally {
+      // Counted since this process started, `open_science_geo_inclusion_total{event}`.
+      for (const [event, count] of Object.entries(counts.inclusion)) if (count) state.inclusionTotals[event] = (state.inclusionTotals[event] ?? 0) + count;
+    }
+  }
 
   const configured = Boolean(String(config.geoProbeUrl ?? "").trim());
   if (!configured) {
@@ -802,6 +816,19 @@ async function inclusionPass(deps, state, engines, counts) {
   const now = deps.now ?? (() => new Date());
   const start = now();
   await store.recoverExpiredLeases(start);
+  const configuredHours = Number(config.geoInclusionMaxHoldHours);
+  const holdLimitMs = (Number.isFinite(configuredHours) && configuredHours > 0 ? configuredHours : GEO_INCLUSION_MAX_HOLD_HOURS) * 3_600_000;
+  /**
+   * A request the vendor still leaves pending (or whose poll keeps failing) after the limit is given up: the job fails, which is what lets
+   * its round close. Until then every poll held it again, and it was held for good: a leased job keeps its round open.
+   * @param {{ id: string, submittedAt: string | null }} job @param {Date} at
+   */
+  const heldTooLong = async (job, at) => {
+    if (!job.submittedAt || at.getTime() - Date.parse(job.submittedAt) < holdLimitMs) return false;
+    await store.finishJob(job.id, { now: at, status: "failed", errorCode: "inclusion_hold_expired" });
+    counts.inclusion.expired += 1;
+    return true;
+  };
 
   for (const job of await store.inclusionJobsToPoll({ now: start, engines, limit: 20 })) {
     const at = now();
@@ -811,12 +838,14 @@ async function inclusionPass(deps, state, engines, counts) {
       result = await inclusion.poll(job.engine, job.externalRef);
       counts.inclusion.polled += 1;
     } catch {
+      if (await heldTooLong(job, at)) continue;
       await store.holdInclusionJob(job.id, /** @type {string} */ (job.externalRef), {
         now: at, leaseUntil: new Date(at.getTime() + INCLUSION_HOLD_MS), runAfter: new Date(at.getTime() + 5 * INCLUSION_POLL_MS),
       });
       continue;
     }
     if (result.status === "pending") {
+      if (await heldTooLong(job, at)) continue;
       await store.holdInclusionJob(job.id, /** @type {string} */ (job.externalRef), {
         now: at, leaseUntil: new Date(at.getTime() + INCLUSION_HOLD_MS), runAfter: new Date(at.getTime() + INCLUSION_POLL_MS),
       });

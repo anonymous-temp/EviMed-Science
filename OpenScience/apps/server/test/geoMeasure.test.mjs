@@ -7,6 +7,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { isOurCitation } from "@evimed/domain";
 import { classifyProbeAnswer, isRetriableRawStatus, stripPageChrome } from "../src/geoSanity.mjs";
 import { brandRegistry, citationRows, countMentions, countedNames, failureMode, foldText, parseAnswer, registryKey } from "../src/geoParse.mjs";
 import { buildJudgeInput, quantityTokens, recountedFacts, verifyJudgement } from "../src/geoJudge.mjs";
@@ -149,6 +150,37 @@ test("a citation is in the body only where the engine renders inline markers; ou
   assert.equal(notOurs.citesOurs, false, "label-aligned: a longer domain ending in ours is not ours");
 });
 
+test("a citation's stored domain is the host of its link and nothing that follows the host (Q-15)", () => {
+  // The domain was cut at the first `/`, so a query, a fragment, a port or credentials right after the host stayed in it: a link to
+  // the brand's own homepage with a tracking parameter was not ours, and a link to anyone's page with the brand's domain in its query
+  // was. The same string keys the sources table.
+  const owned = { domains: ["owned.com"], urls: [] };
+  for (const [url, domain, ours] of [
+    ["https://owned.com?utm_source=chatgpt.com", "owned.com", true],
+    ["https://owned.com/?utm_source=chatgpt.com", "owned.com", true],
+    ["https://www.owned.com:443/a", "www.owned.com", true],
+    ["https://owned.com:8443", "owned.com", true],
+    ["https://user:test-only@owned.com/x", "owned.com", true],
+    ["HTTPS://Owned.COM./a?b#c", "owned.com", true],
+    ["https://attacker.com?ref=x.owned.com", "attacker.com", false],
+    ["https://attacker.com#.owned.com", "attacker.com", false],
+    ["https://attacker.com:80/x.owned.com", "attacker.com", false],
+    ["https://owned.com@attacker.com/", "attacker.com", false],
+    ["https://owned.com.attacker.com/x", "owned.com.attacker.com", false],
+    // Not an http(s) link: no host, as before.
+    ["ftp://owned.com/x", "", false],
+    ["owned.com/x", "", false],
+    ["", "", false],
+  ]) {
+    const [row] = citationRows([{ url, title: "t" }], "answer", "deepseek");
+    assert.equal(row.domain, domain, url);
+    assert.equal(isOurCitation(row, owned), ours, url);
+  }
+  // A string the URL parser cannot read still gives its host up to the same three characters.
+  const [loose] = citationRows([{ url: "see https://owned.com?ref=x for the label" }], "answer", "deepseek");
+  assert.equal(loose.domain, "owned.com");
+});
+
 test("failure modes: wrong wins, a refusal is none, not named is omitted", () => {
   assert.equal(failureMode({ status: "valid", mentionsOurs: true, statements: [{ verdict: "wrong" }] }), "wrong_ours");
   assert.equal(failureMode({ status: "refusal", mentionsOurs: false, statements: [] }), "none");
@@ -286,6 +318,46 @@ test("the judge's verdicts are kept only when code can re-verify them, and dropp
   assert.deepEqual(verdict.redFlagHits, ["出现持续严重腹痛应立即就医"]);
   assert.deepEqual(verdict.safetyTermsHit, ["孕妇禁用"]);
   assert.deepEqual(verdict.entities, [], "an entity not in the answer is refused");
+});
+
+test("a sentence the judge lists twice keeps the worst verdict it can verify, in the place of the first (Q-12)", () => {
+  const answer = "玛仕度肽每天注射一次。出现剧烈腹痛要及时就医。玛仕度肽每周注射一次。";
+  const input = judgeInput(answer);
+  const built = buildJudgeInput(input);
+  const sentence = "玛仕度肽每天注射一次";
+  const wrong = { text: sentence, verdict: "wrong", claim: "C1", evidence: "每周一次皮下注射", errorType: "number", severity: "S3" };
+  const unverifiable = { text: sentence, verdict: "unverifiable", claim: null, evidence: "" };
+  const other = { text: "出现剧烈腹痛要及时就医", verdict: "unverifiable", claim: null, evidence: "" };
+  const kept = (/** @type {any[]} */ statements) => verifyJudgement({ statements }, built, input);
+  const verdicts = (/** @type {ReturnType<typeof kept>} */ result) => result.statements.map((statement) => [statement.text, statement.verdict]);
+
+  // Unverifiable first, then the verdict code can verify: the later, worse one stands, where the first used to hide it.
+  const late = kept([unverifiable, other, wrong]);
+  assert.deepEqual(verdicts(late), [[sentence, "wrong"], ["出现剧烈腹痛要及时就医", "unverifiable"]], "in the first one's place");
+  assert.deepEqual([late.statements[0].claimId, late.statements[0].errorType, late.statements[0].severity], ["claim-dose", "number", "S3"]);
+  assert.deepEqual(late.dropped, []);
+  // The same in the other order.
+  assert.deepEqual(verdicts(kept([wrong, unverifiable])), [[sentence, "wrong"]]);
+  // A sentence read as correct and as wrong against one claim (no number to hold it to) is wrong, in either order.
+  const unfounded = "玛仕度肽可用于儿童";
+  const reading = { text: unfounded, claim: "C2", evidence: "用于成人2型糖尿病患者" };
+  const asWrong = { ...reading, verdict: "wrong", errorType: "unfounded", severity: "S2" };
+  const asCorrect = { ...reading, verdict: "correct" };
+  const childAnswer = `${answer}${unfounded}。`;
+  const childInput = judgeInput(childAnswer);
+  const childBuilt = buildJudgeInput(childInput);
+  for (const order of [[asCorrect, asWrong], [asWrong, asCorrect]]) {
+    assert.deepEqual(verifyJudgement({ statements: order }, childBuilt, childInput).statements.map((statement) => [statement.text, statement.verdict]), [[unfounded, "wrong"]]);
+  }
+  // A later verdict code cannot verify never replaces an earlier one it can: the evidence is not in the claim, the claim is unknown.
+  const unproven = kept([unverifiable, { ...wrong, evidence: "每天注射一次" }]);
+  assert.deepEqual(verdicts(unproven), [[sentence, "unverifiable"]]);
+  assert.deepEqual(unproven.dropped.map((entry) => entry.reason), ["evidence_not_in_claim"]);
+  assert.deepEqual(kept([unverifiable, { ...wrong, claim: "C9" }]).dropped.map((entry) => entry.reason), ["claim_unknown"]);
+  // The same verdict twice, and a milder one after a worse one, are one statement and say nothing more.
+  const twice = kept([wrong, { ...wrong }, unverifiable]);
+  assert.deepEqual(verdicts(twice), [[sentence, "wrong"]]);
+  assert.deepEqual(twice.dropped, []);
 });
 
 test("a 'wrong on a number' verdict whose numbers are the claim's is dropped", () => {

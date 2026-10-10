@@ -7,10 +7,12 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { ALL_ERROR_CODES, GEO_MEDIA_MARKET_ERROR_CODES, errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
 import { loadConfig } from "../src/config.mjs";
 import { geoMarketReadiness } from "../src/geoMarket.mjs";
 import { geoMarketConfigured } from "../src/geoService.mjs";
 import {
+  MEDIA_MARKET_ERROR_CODES,
   MediaMarketClient,
   createMediaMarketClient,
   mediaMarketConfigured,
@@ -35,6 +37,21 @@ test("a send that got any answer but a clean envelope is unknown, whatever the s
   const refused = scriptedFetch([new Response(JSON.stringify({ code: 0, msg: "敏感词", time: "1", data: null }), { status: 200 })]);
   const refusedClient = new MediaMarketClient({ baseUrl: "https://market.example.cn", apiKey: "k-123456", fetchImpl: refused.fetchImpl, ...quick });
   await assert.rejects(refusedClient.send("website", { resourceId: "1", title: "t", contentHtml: "<p>x</p>", thirdId: "go_1" }), { code: "media_market_refused" });
+});
+
+test("every code the client throws is in the registry with a sentence of its own, and is the vendor's boundary, not a verdict on a run (M-6)", async () => {
+  // The market passes these through to a route as they are; a code the registry did not know showed a reader the bare identifier.
+  assert.deepEqual([...GEO_MEDIA_MARKET_ERROR_CODES].sort(), [...MEDIA_MARKET_ERROR_CODES].sort(), "the registry lists what the client throws");
+  // And what the client's source throws is what it lists: a code written at a throw and not in the list is found here.
+  const source = fs.readFileSync(new URL("../src/mediaMarketClient.mjs", import.meta.url), "utf8");
+  const thrown = new Set([...source.matchAll(/marketError\(\d{3}, "(media_market_[a-z_]+)"/g)].map((match) => match[1]));
+  assert.ok(thrown.size >= 8, `the scan found ${thrown.size} codes`);
+  assert.deepEqual([...thrown].filter((code) => !MEDIA_MARKET_ERROR_CODES.includes(code)), []);
+  for (const code of MEDIA_MARKET_ERROR_CODES) {
+    assert.ok(ALL_ERROR_CODES.includes(code), `${code} is registered`);
+    assert.match(errorCodeMessage(code), /媒介集市/, `${code} has a sentence of its own`);
+    assert.equal(errorCodeOutcome(code), "upstream", code);
+  }
 });
 
 test("configured means a URL and a usable key file, one definition everywhere", async () => {

@@ -533,7 +533,7 @@ test("another account's GEO project is a 404 on every route, reads and writes al
   hooks.exporter = { async export() { throw new Error("must not be reached"); } };
   const routes = [
     ["GET", `/api/geo/projects/${id}`], ["PATCH", `/api/geo/projects/${id}`, { tier: "1" }], ["DELETE", `/api/geo/projects/${id}`, {}],
-    ["GET", `/api/geo/projects/${id}/evidence`], ["GET", `/api/geo/projects/${id}/journey`], ["GET", `/api/geo/projects/${id}/questions`],
+    ["GET", `/api/geo/projects/${id}/value`], ["GET", `/api/geo/projects/${id}/evidence`], ["GET", `/api/geo/projects/${id}/journey`], ["GET", `/api/geo/projects/${id}/questions`],
     ["POST", `/api/geo/projects/${id}/questions/gq_x/unmeasure`, {}], ["GET", `/api/geo/projects/${id}/diagnosis`],
     ["GET", `/api/geo/projects/${id}/answers/s-x`], ["GET", `/api/geo/projects/${id}/screenshots/${"c".repeat(64)}`],
     ["GET", `/api/geo/projects/${id}/sources`], ["GET", `/api/geo/projects/${id}/sources/gsrc_x`], ["POST", `/api/geo/projects/${id}/tier`, { tier: "1" }], ["GET", `/api/geo/projects/${id}/articles`],
@@ -550,6 +550,52 @@ test("another account's GEO project is a 404 on every route, reads and writes al
   hooks.market = null;
   hooks.orchestrator = null;
   hooks.exporter = null;
+});
+
+test("GET /value: the project's value profile as the page reads it, with the coverage of the judged answers, and a 404 for another account (D-25)", options, async () => {
+  const created = await call("POST", "/api/geo/projects", { body: { brandName: "玛仕度肽", coverageDays: 90, engines: ["deepseek"] } });
+  assert.equal(created.status, 201, JSON.stringify(created.payload));
+  const id = created.payload.data.id;
+  const project = /** @type {any} */ (await store.getProject(ALICE, id));
+  // Nothing written yet: an empty profile at version 0 and no coverage, not an error.
+  const empty = await call("GET", `/api/geo/projects/${id}/value`);
+  assert.equal(empty.status, 200, JSON.stringify(empty.payload));
+  assert.equal(empty.headers.get("cache-control"), "no-store");
+  assert.deepEqual(Object.keys(empty.payload.data).sort(), ["coverage", "data", "impacts", "observations", "observationsTotal", "research", "runId", "updatedAt", "version"]);
+  assert.deepEqual([empty.payload.data.version, empty.payload.data.observations, empty.payload.data.observationsTotal, empty.payload.data.research, empty.payload.data.impacts],
+    [0, [], 0, [], []]);
+  assert.deepEqual([empty.payload.data.coverage.assessed, empty.payload.data.coverage.value, empty.payload.data.coverage.basisVersion], [0, null, null]);
+
+  // The run writes findings (one keyed, one retired), a source change that names the keyed one, and asks for a research task.
+  const written = await geoRuntimeWrite({ store, project, what: "value", body: { data: {
+    scope: { population: "成人", region: "CN" }, summary: "获益与风险需结合人群判断",
+    findings: [{ key: "eff-adults", statement: "成人体重下降有证据", dimension: "effectiveness", groupIds: ["g1"] }, { id: "old", statement: "已不适用", status: "retired" }],
+    sourceChanges: [{ id: "chg", findingIds: ["eff-adults"], status: "needs_review" }],
+  } } });
+  assert.equal(written.ok, true, JSON.stringify(written.issues));
+  const round = `gr-${randomBytes(4).toString("hex")}`;
+  await database.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, status) VALUES ($1, $2, $3, 'baseline', 'done')`, [round, ALICE, id]);
+  const snapshot = `gs-${randomBytes(4).toString("hex")}`;
+  await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, round_id, engine, asked_at) VALUES ($1, $2, $3, $4, 'deepseek', now())`, [snapshot, ALICE, id, round]);
+  await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, judged_at, judge_extract) VALUES ($1, $2, $3, now(), $4::jsonb)`,
+    [snapshot, ALICE, id, JSON.stringify({ valueBasisVersion: 1, valueCoverage: [{ findingId: "eff-adults", status: "represented" }] })]);
+
+  const read = await call("GET", `/api/geo/projects/${id}/value`);
+  assert.equal(read.status, 200, JSON.stringify(read.payload));
+  const { data } = read.payload;
+  assert.equal(data.version, 1);
+  assert.deepEqual(data.data.scope, { population: "成人", region: "CN" });
+  assert.equal(data.data.summary, "获益与风险需结合人群判断");
+  assert.deepEqual(data.data.findings.map((/** @type {any} */ finding) => [finding.id, finding.key]), [["eff-adults", "eff-adults"]], "the retired finding is not shown; the keyed one has its key as its id");
+  assert.deepEqual(data.impacts.map((/** @type {any} */ impact) => [impact.change.id, impact.findingIds]), [["chg", ["eff-adults"]]]);
+  assert.deepEqual([data.coverage.assessed, data.coverage.represented, data.coverage.value, data.coverage.basisVersion], [1, 1, 100, 1]);
+  assert.deepEqual(data.observations.map((/** @type {any} */ observation) => [observation.findingId, observation.status]), [["eff-adults", "represented"]]);
+  assert.equal(data.observationsTotal, 1);
+  assert.match(data.updatedAt, /^\d{4}-\d{2}-\d{2}T/);
+
+  // Another account reads nothing of it, and a project that is not there is the same refusal.
+  refused(await call("GET", `/api/geo/projects/${id}/value`, { user: MALLORY }), 404, "geo_project_not_found");
+  refused(await call("GET", "/api/geo/projects/geo_nope/value"), 404, "geo_project_not_found");
 });
 
 test("deleting a GEO project hides it from 循证 GEO and leaves its control-plane project alone", options, async () => {

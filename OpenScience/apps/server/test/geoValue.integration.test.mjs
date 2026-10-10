@@ -53,6 +53,26 @@ test("semantic observations respect real profile, group, audience and engine bou
   assert.equal(historical.observations[0].basisVersion, 1);
 });
 
+test("a finding written with a key alone is stored under it as its id, and an amendment with an empty list changes nothing (D-09, D-10)", options, async () => {
+  const project = await fresh();
+  const first = await store.writeValue("alice", project.id, { findings: [{ key: "eff-adults", statement: "keyed only", groupIds: ["g1"] }] });
+  assert.equal(first.changed, true);
+  assert.deepEqual((await store.latestValue(project.id)).data.findings.map((/** @type {any} */ finding) => [finding.id, finding.key, finding.groupIds]), [["eff-adults", "eff-adults", ["g1"]]]);
+  // The judge is shown it, and a round's frozen basis carries it.
+  const context = await new GeoMeasureStore(database).projectContext(project.id);
+  assert.deepEqual(context?.value?.data?.findings?.map((/** @type {any} */ finding) => finding.id), ["eff-adults"]);
+  // An amendment by key with an empty list keeps the links, adds no version, and one with a list replaces them.
+  const kept = await store.writeValue("alice", project.id, { findings: [{ key: "eff-adults", groupIds: [] }] });
+  assert.equal(kept.changed, false, "no change, no new version");
+  assert.equal(kept.version, first.version);
+  const runtime = await write(project, "value", { findings: [{ id: "eff-adults", groupIds: [], limitations: "adults only" }] });
+  assert.equal(runtime.ok, true);
+  const amended = (await store.latestValue(project.id)).data.findings;
+  assert.deepEqual(amended.map((/** @type {any} */ finding) => [finding.id, finding.groupIds, finding.limitations]), [["eff-adults", ["g1"], "adults only"]]);
+  await store.writeValue("alice", project.id, { findings: [{ id: "eff-adults", groupIds: ["g2"] }] });
+  assert.deepEqual((await store.latestValue(project.id)).data.findings[0].groupIds, ["g2"]);
+});
+
 test("a round of eight thousand observations comes back as exact counts and twenty observations, the ones that say something first (D-08)", options, async () => {
   // 400 judged answers with 20 findings each were 2.87 MB of observations in every reply, and the runtime's client refuses past 4.
   const project = await fresh();

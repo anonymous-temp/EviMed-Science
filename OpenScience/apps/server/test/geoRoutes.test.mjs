@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
-import { ALL_ERROR_CODES, GEO_ROUTE_ERROR_CODES } from "@evimed/domain";
+import { ALL_ERROR_CODES, GEO_MEDIA_MARKET_ERROR_CODES, GEO_ROUTE_ERROR_CODES } from "@evimed/domain";
 import { createGeoRoutes, geoRoutePattern } from "../src/geoRoutes.mjs";
 import { GeoService, geoAudienceAllows, geoMetricFamilies, geoReadiness } from "../src/geoService.mjs";
 import { readFile } from "node:fs/promises";
@@ -77,16 +77,21 @@ test("every code the routes and the service answer with is registered", async ()
   // The refusals a request can meet: an HttpError, directly or through the
   // service's `failure` helper. Readiness codes are the readiness board's.
   const emitted = new Set();
-  for (const file of ["../src/geoRoutes.mjs", "../src/geoService.mjs"]) {
+  // The market's refusals are the routes' too (`marketFailure("409", …)`, a status written as a string), and the vendor's codes pass
+  // through them: the scan reads the market as it reads the routes (M-6, which a scan of the routes and the service alone could not see).
+  for (const file of ["../src/geoRoutes.mjs", "../src/geoService.mjs", "../src/geoMarket.mjs", "../src/geoMarketOperations.mjs"]) {
     const text = await readFile(new URL(file, import.meta.url), "utf8");
-    for (const [, code] of text.matchAll(/(?:failure|HttpError)\(\s*\d{3},\s*"(geo_[a-z0-9_]+)"/g)) emitted.add(code);
+    for (const [, code] of text.matchAll(/(?:failure|HttpError|marketFailure)\(\s*"?\d{3}"?,\s*"((?:geo|media_market)_[a-z0-9_]+)"/g)) emitted.add(code);
     for (const [, code] of text.matchAll(/new HttpError\(\d{3}, "(geo_[a-z0-9_]+)"/g)) emitted.add(code);
   }
   assert.ok(emitted.size >= 15, `only ${emitted.size} codes were found; the scan did not run`);
+  for (const code of ["geo_order_in_flight", "geo_order_not_found_at_vendor", "geo_topup_not_pending", "geo_topup_invalid", "media_market_unconfigured"]) {
+    assert.ok(emitted.has(code), `the scan reaches the market: ${code}`);
+  }
   const unregistered = [...emitted].filter((code) => !ALL_ERROR_CODES.includes(code)).sort();
   assert.deepEqual(unregistered, [], `emitted but not registered: ${unregistered.join(", ")}`);
   // A page's refusal is a page's; the one tool code the service throws is the runtime read's own.
-  assert.deepEqual([...emitted].filter((code) => !GEO_ROUTE_ERROR_CODES.includes(code)), ["geo_read_what_invalid"]);
+  assert.deepEqual([...emitted].filter((code) => !GEO_ROUTE_ERROR_CODES.includes(code) && !GEO_MEDIA_MARKET_ERROR_CODES.includes(code)), ["geo_read_what_invalid"]);
 });
 
 test("readiness: off is green and says so; on it is red only for the module's own invariants", async () => {
@@ -117,6 +122,7 @@ test("metric families: one line off, the module's counts on", () => {
     tables: { projects: 3, active: 2, openErrors: 4, urgentErrors: 1, safetyStops: 1, openRounds: 0 },
     service: { projectsCreated: 3, reads: 10, writes: 5, writeIssues: 2, notFound: 1, researchCapped: 4 },
     social: { configured: true, counters: { searches: 1, requests: 6, collected: 5, noResults: 0, failed: 1 }, lastError: null },
+    inclusion: { submitted: 6, polled: 40, done: 4, failed: 1, expired: 1 },
   });
   const byName = new Map(families.map((family) => [family.name, family]));
   assert.equal(byName.get("open_science_geo_enabled")?.series[0].value, 1);
@@ -125,6 +131,10 @@ test("metric families: one line off, the module's counts on", () => {
   assert.equal(byName.get("open_science_geo_service_total")?.series.find((series) => series.labels?.kind === "researchCapped")?.value, 4,
     "research requests over the limit are counted (D-06)");
   assert.ok(byName.get("open_science_geo_social_requests_total")?.series.some((series) => series.labels?.outcome === "failed" && series.value === 1));
+  assert.equal(byName.get("open_science_geo_inclusion_total")?.series.find((series) => series.labels?.event === "expired")?.value, 1,
+    "an inclusion check given up on after its age limit is counted (Q-7)");
+  assert.equal(new Map(geoMetricFamilies(true, { tables: null, service: {}, social: null, worker: null, inclusion: {} }).map((family) => [family.name, family])).has("open_science_geo_inclusion_total"), false,
+    "a deployment that never used the channel exports no series for it");
   for (const family of families) assert.match(family.name, /^open_science_geo_[a-z_]+$/);
 });
 

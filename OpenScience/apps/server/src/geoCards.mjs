@@ -15,12 +15,19 @@
  * - **The ruler reads the real source.** A claim's quotation is looked for in the preserved source file the claim names
  *   (`artifactPath`, read from the project's workspace without following links). A claim whose file cannot be read is
  *   `source_unavailable` and held — a card never carries the quotation as its own source, which would make its ✓ say
- *   nothing.
+ *   nothing. Held for that reason it keeps its place in the project's record of which card holds it (nothing was found against
+ *   it, and the judge keeps holding answers to it); a claim whose quotation the ruler read and did not find, or that is no longer
+ *   active, loses its place. A card whose claims no longer name it is found by the identity it was made with.
  * - **Writes are origin `geo`.** Through `EvidenceZoneService.saveEditorial(…, "geo")`, which a product zone accepts from its
  *   owner and nobody else (`evidenceWriteAllowed`). The card is written as the project's account; it stays a draft until the
  *   owner publishes it.
  * - **Idempotent by content.** The plan is a pure function of the claims, so a card already as planned is left alone: no new
  *   revision, no new notice. A card that was taken back (`withdrawn`) is not written again.
+ * - **A group's card is the one its identity names.** The card of a group (a journey stage and a clinical question) is made with a
+ *   request identity that is a function of the project and the group, and the zone derives the card's id from it; every refresh finds
+ *   the card there. The mapping on the claim rows is the record of where a claim was written and nothing the card is found by: a
+ *   claim that changes group still names the card it left, and is written into the card of its new group, which is made if it is not
+ *   there. A group left with no claim keeps the card it had, as its owner has it.
  * - **The lower layers cite the cards.** `checkText` reads the claim references of an article's text and resolves each against
  *   the card revision it names — the project's own cards, or a published card of an official zone — by the domain's one rule
  *   (`geoReferenceGraph`); `staleReferences` asks the zone's change log whether a cited card was corrected, updated in its
@@ -43,6 +50,7 @@ import {
 } from "@evimed/domain";
 import { clinicalSafetyRuleHits } from "@evimed/domain/clinical-evidence";
 import { readEvidenceChangeLog } from "./evidenceChangeLog.mjs";
+import { evidenceCardId } from "./evidenceZoneService.mjs";
 import { HttpError } from "./security.mjs";
 
 /** The longest preserved source text a card keeps (the zone service's own bound). */
@@ -52,6 +60,13 @@ const MAX_SOURCE_TEXT = 2_000_000;
 const failure = (status, code, message) => new HttpError(status, code, message);
 /** @param {string} value */
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+/** The request identity a group's card is made with: a function of the project and the group. @param {string} projectId @param {string} groupKey */
+const cardRequestId = (projectId, groupKey) => `gc-${sha256(`${projectId}\0${groupKey}`).slice(0, 40)}`;
+/**
+ * Why the ruler held a claim for a moment rather than for good: it could not read the source file this time, which says nothing about
+ * the claim. Every other reason is about the claim itself.
+ */
+const HELD_FOR_NOW = new Set(["source_unavailable"]);
 
 /**
  * A value in the one form two equal values share, for comparing a stored card with a planned one: object keys sorted, so
@@ -198,7 +213,6 @@ export class GeoCards {
     const zone = await this.ensureProductZone(project);
     const zones = this.#zones();
     const owner = { id: project.userId };
-    const cardOf = new Map(claims.map((claim) => [claim.id, claim.cardId]));
     /** @type {Array<{ cardId: string, revision: number, journeyStage: any, title: string, change: "created" | "updated" | "unchanged", claims: number, articleId: string | null }>} */
     const cards = [];
     /** @type {Array<{ title: string, code: string }>} */
@@ -206,8 +220,11 @@ export class GeoCards {
     /** @type {Array<{ title: string, reason: string }>} */
     const skipped = [];
     for (const card of plan.cards) {
-      const known = card.map.map((entry) => cardOf.get(entry.claimId)).find((id) => typeof id === "string" && id) ?? null;
-      const existing = known ? await this.#cardRow(zone.id, project.userId, known) : null;
+      // A group's card is the one its identity names, never one a claim's mapping points to: the mapping is the record of where a
+      // claim was written, and a claim that changed group still names the card it left (two groups found one card by it and wrote
+      // over each other on every refresh).
+      const requestId = cardRequestId(project.id, card.groupKey);
+      const existing = await this.#cardRow(zone.id, project.userId, evidenceCardId(project.userId, requestId));
       if (existing?.withdrawn) { skipped.push({ title: card.payload.title, reason: "card_withdrawn" }); continue; }
       try {
         let cardId = existing?.id ?? null;
@@ -216,7 +233,7 @@ export class GeoCards {
         let change = "unchanged";
         if (!existing || !same(comparable(existing), comparable({ ...card.payload, sources: card.payload.sources.map((/** @type {any} */ source) => ({ ...source, sha256: sha256(source.documentText) })) }))) {
           const body = existing ? { ...card.payload, expectedRevision: existing.revision }
-            : { ...card.payload, requestId: `gc-${sha256(`${project.id}\0${card.groupKey}`).slice(0, 40)}` };
+            : { ...card.payload, requestId };
           const saved = await zones.saveEditorial(owner, body, zone.id, existing?.id ?? null, true, "geo");
           cardId = String(saved.evidence.id);
           revision = Number(saved.evidence.revision);
@@ -239,7 +256,8 @@ export class GeoCards {
     }
     // A claim the ruler no longer verifies is no longer in its card's plan, so the card above was brought to the claims that
     // stand; here its mapping is cleared. A group left with no claim at all has no plan, and its card stays as its owner has it.
-    const heldIds = plan.held.map((entry) => entry.claimId);
+    // A claim held only because its source file could not be read this time keeps its place: nothing was found against it.
+    const heldIds = plan.held.filter((entry) => !HELD_FOR_NOW.has(entry.reason)).map((entry) => entry.claimId);
     if (heldIds.length) await this.store.clearClaimCards(project.id, heldIds);
     this.counters.claimsHeld += plan.held.length;
     return { zoneId: zone.id, cards, held: plan.held, failed, skipped };

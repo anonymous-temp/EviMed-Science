@@ -1589,8 +1589,13 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     // deployment actually runs a probe host, because a runtime that can call
     // the tool but gets nothing back is worse than one that cannot: a run
     // reads an unreachable channel as a channel where nobody mentions the
-    // product.
-    if (String(config.geoProbeUrl ?? "").trim()) {
+    // product. And only to an account the module is on and open to, the GEO
+    // gateway's own rule (Q-8, 2026-10-10): the probe host answers one request
+    // at a time through the platform's logged-in vendor accounts, so its
+    // address is not a thing every runtime gets. The gateway checks the same
+    // admission again when the call arrives, for a runtime started before the
+    // switch moved.
+    if (String(config.geoProbeUrl ?? "").trim() && geoAudienceAllows(config, { id: String(project.userId ?? "") })) {
       const geoProbeGatewayUrl = String(gateways ? gateways.geoProbe ?? "" : config.geoProbeGatewayInternalUrl ?? "").trim();
       let parsedProbe;
       try {

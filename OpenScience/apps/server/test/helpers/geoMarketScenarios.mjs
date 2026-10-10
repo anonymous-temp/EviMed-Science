@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { geoClaimReferenceMarker } from "@evimed/domain";
 import {
+  MARKET_RULES,
   cancelOrder,
   clearStop,
   confirmTopup,
@@ -1136,6 +1137,243 @@ export function defineGeoMarketMoneyPathScenarios(test, makeFixture, options = {
       assert.equal(money.reservedCny, 0);
       assert.equal(money.availableCny, 850);
       assert.deepEqual(projectIdentityBreaks(await orders(store, p.id), await store.ledgerSums({ geoProjectId: p.id })), []);
+    } finally { await w.close(); }
+  });
+
+  test("turns (M-3): a project past the first page is planned in the tick that reaches it, not never", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const page = MARKET_RULES.projectsPerPage;
+      // The fiftieth projects, older than the next, with nothing to place; then one more with an article. The tick read the fifty oldest
+      // and stopped, so the fifty-first was out of every tick that ever ran.
+      for (let index = 0; index < page; index += 1) await w.project({ id: `geo_old${String(index).padStart(2, "0")}`, userId: `u_old${index}`, articles: [] });
+      const late = await w.project({ id: "geo_late", userId: "u_late", articles: [{}] });
+      const tick = await tickOrders(w.deps);
+      assert.equal(tick.projects, page + 1, "every project with a budget had its turn");
+      assert.equal(tick.planned, 1);
+      assert.equal((await orders(store, late.id)).length, 1);
+      assert.equal((await tickOrders(w.deps)).projects, page + 1, "and the next tick again, whichever is first");
+    } finally { await w.close(); }
+  });
+
+  test("turns (M-3): with more projects than a tick may send for, each is sent for in turn", options, async () => {
+    const w = await world(makeFixture, { balance: 1_000_000 });
+    try {
+      const store = w.fixture.store;
+      const count = MARKET_RULES.projectsPerPage + 10;
+      const ids = [];
+      for (let index = 0; index < count; index += 1) {
+        const id = `geo_n${String(index).padStart(3, "0")}`;
+        ids.push(id);
+        await w.project({ id, userId: `u_${id}`, articles: [{}], totalCny: 1_000, dailyCny: 1_000 });
+      }
+      const ticks = Math.ceil(count / MARKET_RULES.sendsPerTick);
+      let sent = 0;
+      for (let tick = 1; tick <= ticks; tick += 1) {
+        const counts = await tickOrders(w.deps);
+        assert.ok(counts.submitted <= MARKET_RULES.sendsPerTick, "the sends of a tick stay under its cap");
+        sent += counts.submitted;
+      }
+      assert.equal(sent, count, `${count} projects, ${ticks} ticks`);
+      const unsent = [];
+      for (const id of ids) if (!(await orders(store, id)).some((order) => order.state === "submitted")) unsent.push(id);
+      assert.deepEqual(unsent, [], "the ones the first page could not reach were sent for as well");
+    } finally { await w.close(); }
+  });
+
+  test("turns (M-3): a tick that has made its sends stops there, and the projects it did not reach come first in the next", options, async () => {
+    const w = await world(makeFixture, { balance: 1_000_000 });
+    try {
+      const store = w.fixture.store;
+      const count = MARKET_RULES.sendsPerTick + 2;
+      const ids = [];
+      for (let index = 0; index < count; index += 1) {
+        const id = `geo_s${String(index).padStart(2, "0")}`;
+        ids.push(id);
+        await w.project({ id, userId: `u_${id}`, articles: [{}], totalCny: 1_000, dailyCny: 1_000 });
+      }
+      const first = await tickOrders(w.deps);
+      assert.equal(first.submitted, MARKET_RULES.sendsPerTick);
+      assert.equal(first.projects, MARKET_RULES.sendsPerTick, "it went no further than the project that made the last send");
+      assert.equal((await orders(store, ids.at(-1))).length, 0, "the two it did not reach have no plan yet");
+      const second = await tickOrders(w.deps);
+      assert.equal(second.submitted, 2, "the two it did not reach");
+      assert.deepEqual((await orders(store, ids.at(-1))).map((order) => order.state), ["submitted"]);
+      assert.equal(second.projects, count, "and then the rest, whose orders are sent already");
+    } finally { await w.close(); }
+  });
+
+  test("turns (M-3): a project that is skipped every tick does not keep its place at the front", options, async () => {
+    // The module closed to the account of every project of the first page: they are skipped in every tick, and before turns they
+    // were the first page of every tick, so the project after them was never reached.
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const page = MARKET_RULES.projectsPerPage;
+      const blocked = new Set();
+      for (let index = 0; index < page; index += 1) {
+        const id = `geo_x${String(index).padStart(2, "0")}`;
+        blocked.add(`u_${id}`);
+        await w.project({ id, userId: `u_${id}`, articles: [{}] });
+      }
+      const open = await w.project({ id: "geo_open", userId: "u_open", articles: [{}] });
+      const deps = { ...w.deps, config: { ...w.deps.config, geoAudience: "operators", operatorUsers: ["u_open"] } };
+      const tick = await tickOrders(deps);
+      assert.equal(tick.skipped.audience_not_allowed, page);
+      assert.equal(tick.planned, 1);
+      assert.equal((await orders(store, open.id)).length, 1);
+      assert.equal(blocked.size, page);
+    } finally { await w.close(); }
+  });
+
+  test("reconciliation (M-3): a project past the five-hundredth is checked too", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      // Five hundred projects older than the one with the break: a budget, no orders, nothing to reconcile.
+      const older = new Date(w.clock.now().getTime() - 30 * DAY).toISOString();
+      for (let index = 0; index < 500; index += 1) {
+        await w.fixture.seed.project({ id: `geo_f${String(index).padStart(3, "0")}`, userId: `u_f${index}`, budget: { totalCny: 100, dailyCny: 100 }, createdAt: older });
+      }
+      const p = await w.project({ articles: [{}] });
+      await tickOrders(w.deps);
+      assert.equal((await tickReconcile(w.deps)).status, "ok");
+      const [order] = await orders(store, p.id);
+      await w.fixture.tamperLedger({ geoProjectId: p.id, orderId: order.id, kind: "release", amountCny: 5 });
+      w.clock.advance(DAY);
+      const broken = await tickReconcile(w.deps);
+      assert.equal(broken.projectBreaks, 1, "the 501st project's ledger disagrees with its orders, and the reconciliation says so");
+      assert.equal(broken.status, "mismatch");
+      assert.equal((await store.latestReconciliation()).details.projectBreaks[0].geoProjectId, p.id);
+    } finally { await w.close(); }
+  });
+
+  test("turns (M-3): the store lists active budgeted projects never served first, then the one served longest ago, and marks are bounded", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const at = (/** @type {number} */ minute) => new Date(Date.parse("2026-10-10T00:00:00.000Z") + minute * 60_000).toISOString();
+      const budget = { totalCny: 100, dailyCny: 100 };
+      for (const [index, id] of ["geo_a", "geo_b", "geo_c", "geo_d"].entries()) await w.fixture.seed.project({ id, userId: `u_${id}`, budget, createdAt: at(index) });
+      await w.fixture.seed.project({ id: "geo_paused", userId: "u_paused", budget, status: "paused", createdAt: at(0) });
+      await w.fixture.seed.project({ id: "geo_nobudget", userId: "u_nobudget", createdAt: at(0) });
+      const turn = async (/** @type {number} */ limit = 50, /** @type {number} */ offset = 0) => (await store.listProjectsInTurn(limit, { offset })).map((project) => project.id);
+      assert.deepEqual(await turn(), ["geo_a", "geo_b", "geo_c", "geo_d"], "none served: by age; a paused project and one without a budget have no turn");
+      assert.equal(await store.markProjectsServed(["geo_a", "geo_c", "geo_nowhere"], at(10)), 2, "a project that is not there is not marked");
+      assert.deepEqual(await turn(), ["geo_b", "geo_d", "geo_a", "geo_c"], "the ones never served first; the ones served at the same time by age");
+      await store.markProjectsServed(["geo_b"], at(20));
+      await store.markProjectsServed(["geo_a"], at(30));
+      assert.deepEqual(await turn(), ["geo_d", "geo_c", "geo_b", "geo_a"], "then the one served longest ago");
+      assert.deepEqual(await turn(2), ["geo_d", "geo_c"]);
+      assert.deepEqual(await turn(2, 2), ["geo_b", "geo_a"], "a page at a time through the same order");
+      assert.deepEqual(await turn(2, 4), []);
+      // A project's turn is not an edit, and a stable list for reconciling is still by age and still pages.
+      assert.deepEqual((await store.listBudgetedProjects(2, { activeOnly: false, offset: 0 })).map((project) => project.id), ["geo_a", "geo_paused"]);
+      assert.deepEqual((await store.listBudgetedProjects(2, { activeOnly: false, offset: 2 })).map((project) => project.id), ["geo_b", "geo_c"]);
+      assert.deepEqual((await store.listBudgetedProjects(10, { activeOnly: false, offset: 4 })).map((project) => project.id), ["geo_d"]);
+      await assert.rejects(store.listProjectsInTurn(501), { code: "geo_market_store_invalid" });
+      await assert.rejects(store.listProjectsInTurn(10, { offset: 100_001 }), { code: "geo_market_store_invalid" });
+      await assert.rejects(store.listBudgetedProjects(10, { offset: -1 }), { code: "geo_market_store_invalid" });
+      await assert.rejects(store.markProjectsServed(Array.from({ length: 10_001 }, (_, index) => `geo_${index}`), at(40)), { code: "geo_market_store_invalid" });
+      await assert.rejects(store.markProjectsServed(["geo_a"], "not a time"), { code: "geo_market_store_invalid" });
+      assert.equal(await store.markProjectsServed([], at(40)), 0);
+    } finally { await w.close(); }
+  });
+
+  /**
+   * `count` articles of the project written before its others, each seeded as `status` in `group`, and — with `holding` — each holding
+   * one planned order (a live order, whatever came after it: the market's rule is the same for planned, placed and settled).
+   * @param {any} w @param {{ id: string, userId: string }} p @param {number} count
+   * @param {{ status?: string, group?: string, holding?: boolean }} [options]
+   */
+  const writtenBefore = async (w, p, count, { status = "placed", group = "g1", holding = true } = {}) => {
+    const at = w.clock.now().toISOString();
+    const ids = [];
+    for (let index = 0; index < count; index += 1) {
+      const id = `${p.id}_old${String(index).padStart(3, "0")}`;
+      ids.push(id);
+      w.bodies.set(id, ARTICLE_MARKDOWN);
+      await w.fixture.seed.article({ id, userId: p.userId, geoProjectId: p.id, layer: "popular", title: `旧稿 ${index}`, groupId: `${p.id}_${group}`, gate: "passed", safety: "clear",
+        contentSha256: sha256Hex(ARTICLE_MARKDOWN), status, createdAt: new Date(Date.parse(at) - DAY - (count - index) * 1_000).toISOString() });
+      if (holding) {
+        await w.fixture.store.insertOrders([{ userId: p.userId, geoProjectId: p.id, articleId: id, mediaType: "website", resourceId: "101", priceCny: 100, reserveCny: 110 }], at);
+      }
+    }
+    return ids;
+  };
+
+  test("window (M-4): articles that already hold an order do not keep a new one out of the plan", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      // Two hundred articles placed long ago, each holding its order, and two new ones. The list was the oldest two hundred articles
+      // that may be placed, placed ones included, so after the two hundredth placement a new article was never planned.
+      const p = await w.project({ totalCny: 100_000, dailyCny: 100_000, articles: [{}, {}] });
+      await writtenBefore(w, p, 200);
+      const tick = await tickOrders(w.deps);
+      const fresh = (await orders(store, p.id)).filter((order) => p.articleIds.includes(order.articleId));
+      assert.equal(tick.planned, 2, "both new articles are planned");
+      assert.deepEqual(fresh.map((order) => order.state), ["planned", "planned"]);
+      assert.equal((await orders(store, p.id)).length, 202);
+    } finally { await w.close(); }
+  });
+
+  test("window (M-4): what the plans already made hold back from the budget is all of them, not those of the articles listed", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      // Two hundred planned reserves of 110 hold back 22,000 of 22,200: room for one more placement (132 or 165), not two.
+      const p = await w.project({ totalCny: 22_200, dailyCny: 22_200, articles: [{}, {}] });
+      await writtenBefore(w, p, 200);
+      const tick = await tickOrders(w.deps);
+      assert.equal(tick.planned, 1, "one placement fits in what is left");
+      assert.equal(tick.skipped.budget_exhausted, 1);
+      assert.equal((await orders(store, p.id)).length, 201);
+    } finally { await w.close(); }
+  });
+
+  test("window (M-4): an article whose placement failed is a candidate again, however old", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const p = await w.project({ totalCny: 100_000, dailyCny: 100_000, articles: [] });
+      const [oldId] = await writtenBefore(w, p, 1, { holding: false });
+      const at = w.clock.now().toISOString();
+      const [first] = await store.insertOrders([{ userId: p.userId, geoProjectId: p.id, articleId: oldId, mediaType: "website", resourceId: "101", priceCny: 100, reserveCny: 110 }], at);
+      await store.transitionOrder(first.id, { from: ["planned"], to: "cancelled", at, detail: { reason: "cancelled_by_user" } });
+      const tick = await tickOrders(w.deps);
+      assert.equal(tick.planned, 1, "it holds no order now");
+      const mine = await orders(store, p.id);
+      assert.deepEqual(mine.map((order) => [order.state, order.resourceId === "101"]).sort(), [["cancelled", true], ["planned", false]], "on another outlet than the one that failed");
+    } finally { await w.close(); }
+  });
+
+  test("window (M-4): two hundred control-group articles, which are never placed, do not keep a new one out either", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const p = await w.project({ totalCny: 5_000, dailyCny: 5_000, articles: [{}] });
+      await writtenBefore(w, p, 200, { status: "published", group: "gc", holding: false });
+      const tick = await tickOrders(w.deps);
+      assert.equal(tick.planned, 1);
+      assert.deepEqual((await orders(store, p.id)).map((order) => order.articleId), p.articleIds);
+      assert.equal(tick.skipped.control_group_article, 199, "the new article took the first place of the two hundred; the control-group ones fill the rest and are skipped by name");
+    } finally { await w.close(); }
+  });
+
+  test("window (M-4): the store lists the articles that hold no order in the given states, control-group ones last", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const p = await w.project({ totalCny: 100_000, dailyCny: 100_000, articles: [{ control: true }, {}] });
+      const [held] = await writtenBefore(w, p, 1);
+      const ids = async (/** @type {readonly string[]} */ states, limit = 200) => (await store.listPlaceableArticles(p.id, limit, { withoutOrderIn: states })).map((article) => article.id);
+      assert.deepEqual(await ids([]), [held, p.articleIds[1], p.articleIds[0]], "with no state named every article is listed: the oldest first, the control-group one last");
+      assert.deepEqual(await ids(["planned"]), [p.articleIds[1], p.articleIds[0]], "the one holding a planned order is not");
+      assert.deepEqual(await ids(["settled"]), [held, p.articleIds[1], p.articleIds[0]], "an order in another state does not hold it");
+      assert.deepEqual(await ids(["planned"], 1), [p.articleIds[1]]);
+      await assert.rejects(store.listPlaceableArticles(p.id, 10, { withoutOrderIn: ["no_such_state"] }), { code: "geo_market_store_invalid" });
     } finally { await w.close(); }
   });
 }

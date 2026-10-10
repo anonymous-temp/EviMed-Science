@@ -1764,13 +1764,14 @@ export async function geoReadiness({ config, geo, database }) {
 
 /**
  * Everything the metrics endpoint shows about the module, read once per scrape.
- * @param {{ service: GeoService, social?: any, worker?: any, cards?: any, questionBank?: any, measureState?: { checkTotals?: Record<string, number> } | null }} geo
+ * @param {{ service: GeoService, social?: any, worker?: any, cards?: any, questionBank?: any, measureState?: { checkTotals?: Record<string, number>, inclusionTotals?: Record<string, number> } | null }} geo
  */
 export async function geoMetricsSnapshot(geo) {
   let tables = null;
   try { tables = await geo.service.metricsSnapshot(); } catch { tables = null; }
   return { tables, service: { ...geo.service.counters }, social: geo.social?.status?.() ?? null, worker: geo.worker?.status?.() ?? null,
-    cards: geo.cards?.metrics?.() ?? null, checks: geo.measureState?.checkTotals ?? null, questionBank: geo.questionBank?.metrics?.() ?? null };
+    cards: geo.cards?.metrics?.() ?? null, checks: geo.measureState?.checkTotals ?? null, inclusion: geo.measureState?.inclusionTotals ?? null,
+    questionBank: geo.questionBank?.metrics?.() ?? null };
 }
 
 /**
@@ -1818,6 +1819,11 @@ export function geoMetricFamilies(enabled, snapshot) {
   if (snapshot.checks) {
     add("checks_total", "What the judge's checks found in measured answers since this process started: a claim beyond the label, safety information left out, and the cited links (exists, missing, unreadable, what the page says).", "counter",
       Object.entries(snapshot.checks).map(([check, value]) => ({ labels: { check }, value: Number(value) })));
+  }
+  // The inclusion channel (Baidu): requests taken, polled, answered, failed, and given up on after OPEN_SCIENCE_GEO_INCLUSION_MAX_HOLD_HOURS.
+  if (snapshot.inclusion && Object.keys(snapshot.inclusion).length) {
+    add("inclusion_total", "What the inclusion-check channel did since this process started (expired: a check still pending at OPEN_SCIENCE_GEO_INCLUSION_MAX_HOLD_HOURS, its job failed so its round can close).", "counter",
+      Object.entries(snapshot.inclusion).map(([event, value]) => ({ labels: { event }, value: Number(value) })));
   }
   const social = snapshot.social;
   if (social?.counters) {

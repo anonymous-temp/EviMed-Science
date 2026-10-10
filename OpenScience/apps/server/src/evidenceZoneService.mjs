@@ -115,6 +115,14 @@ function identity(prefix, userId, body) {
     throw error(400, "invalid", "Invalid request identity.");
   return `${prefix}_${createHash("sha256").update(`${userId}:${body.requestId}`).digest("hex").slice(0, 32)}`;
 }
+/**
+ * The id a card made with this request identity has, as `save` derives it: a function of the account and the request id, so a writer
+ * that gave one can find its card again without keeping the id (a project's cards, `geoCards.mjs`).
+ * @param {string} userId @param {string} requestId
+ */
+export function evidenceCardId(userId, requestId) {
+  return identity("ec", userId, { requestId });
+}
 const DROPPED_TEXT = Symbol("droppedSourceText");
 /**
  * A source whose text the card does not keep (no public address) keeps the passages the card's own claims quote from it,

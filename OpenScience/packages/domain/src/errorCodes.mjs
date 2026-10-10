@@ -403,6 +403,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "geo_probe_gateway_failed",
   "geo_probe_gateway_token_missing",
   "geo_probe_gateway_token_invalid",
+  // Who may use the probe (Q-8, 2026-10-10): the module off or not open to the account, and one project's window of calls a minute.
+  // Both mean "this runtime may not put a question to a vendor now", which is a limitation the report states, never a vendor
+  // that stayed silent.
+  "geo_probe_disabled",
+  "geo_probe_gateway_rate_limited",
   // The private evidence API is not configured for this deployment. It is host
   // configuration, like the Unpaywall case above, and the keyless public
   // sources are what the tool falls back to — failing a run over it would
@@ -1579,7 +1584,15 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_article_state_invalid',
   'geo_order_not_found',
   'geo_order_not_cancellable',
+  // The market's refusals of an operator or owner action (geoMarket.mjs, `marketFailure`): an order whose send is still on its way,
+  // an unknown order the vendor does not hold, a top-up that is no longer waiting or confirmed for no amount.
+  'geo_order_in_flight',
+  'geo_order_not_found_at_vendor',
   'geo_topup_not_found',
+  'geo_topup_not_pending',
+  'geo_topup_invalid',
+  // A citation reported for an engine this deployment does not know (`noteCitation`).
+  'geo_engine_invalid',
   'geo_operator_required',
   'geo_unavailable',
   // A paused project runs nothing: 「让 AI 做」 and 导出 wait until it is resumed.
@@ -1596,6 +1609,25 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_member_user_required',
   'geo_member_owner_fixed',
   'geo_member_detail_invalid',
+])
+
+/**
+ * Every code the media marketplace's client throws (`mediaMarketClient.mjs`, `MEDIA_MARKET_ERROR_CODES`), which the market passes through
+ * to a route as they are: the vendor could not be reached, did not answer in time, refused, or answered something that is not an
+ * answer. The client's list is held equal to this one by a test.
+ */
+export const GEO_MEDIA_MARKET_ERROR_CODES = Object.freeze([
+  'media_market_unconfigured',
+  'media_market_unreachable',
+  'media_market_timeout',
+  'media_market_send_unknown',
+  'media_market_refused',
+  'media_market_unauthorized',
+  'media_market_rate_limited',
+  'media_market_http_error',
+  'media_market_response_invalid',
+  'media_market_response_too_large',
+  'media_market_request_invalid',
 ])
 
 /**
@@ -1793,6 +1825,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...libraryErrorCodes,
   ...capsuleTransferErrorCodes,
   ...GEO_ROUTE_ERROR_CODES,
+  ...GEO_MEDIA_MARKET_ERROR_CODES,
   ...VCR_ROUTE_ERROR_CODES,
   ...VCR_GATEWAY_ERROR_CODES,
   ...VCR_WRITE_ISSUE_CODES,
@@ -1917,6 +1950,24 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   tooluniverse_unavailable: '补充科研数据源尚未配置，可继续使用其他文献和指南来源。',
   tooluniverse_busy: '补充科研数据源正忙，请稍后再试或继续使用其他来源。',
   tooluniverse_rate_limited: '补充科研数据源请求过于频繁，请稍后再试。',
+  geo_probe_disabled: '循证 GEO 没有对这个账号开放，可见度探测不可用；报告会写明这一点，不会把没测的当作没提到。',
+  geo_probe_gateway_rate_limited: '这个项目一分钟内的可见度探测太频繁了，稍后再试；被拒的这次不算测量，也不会记成没提到。',
+  geo_order_in_flight: '这笔订单正在发给媒体，要等媒体收到之后才能撤；稍后再试。',
+  geo_order_not_found_at_vendor: '媒介集市里没有查到这个订单号对应这家媒体的订单；核对订单号，别重复下单。',
+  geo_topup_not_pending: '这笔充值已经处理过，不再等待确认。',
+  geo_topup_invalid: '实付金额要大于 0。',
+  geo_engine_invalid: '这个引擎名不对，请从项目里测量的引擎中选择。',
+  media_market_unconfigured: '媒介集市还没有接通，这一步暂时做不了；计划和预算照常可用。',
+  media_market_unreachable: '媒介集市这次连不上，稍后再试。',
+  media_market_timeout: '媒介集市没有在时限内答复，这一步的结果还不确定；先别重复操作。',
+  media_market_send_unknown: '订单可能已经发到媒介集市，也可能没有；系统不会重发，需要运营人员核对后处理。',
+  media_market_refused: '媒介集市拒绝了这次请求。',
+  media_market_unauthorized: '媒介集市不接受本部署的密钥，需要运营人员更换。',
+  media_market_rate_limited: '媒介集市限制了本部署的请求频率，稍后再试。',
+  media_market_http_error: '媒介集市返回了异常状态，稍后再试。',
+  media_market_response_invalid: '媒介集市的答复格式不对，这次结果没有采用。',
+  media_market_response_too_large: '媒介集市的答复超过了大小上限，这次结果没有采用。',
+  media_market_request_invalid: '发给媒介集市的请求不符合要求（媒体类型、订单号、标题或正文），已拒绝。',
   geo_project_paused: '这个项目已暂停，继续之后再让 AI 做。',
   geo_source_not_found: '找不到这个信源，它可能已被移除。',
   geo_producer_invalid: '出品方设置不对：类型选“企业”或“医生”，医生要写姓名，与产品的关系只能选列出的几种。',
@@ -2867,6 +2918,8 @@ export function errorCodeOutcome(code) {
   if (Object.hasOwn(DOCUMENT_EXPORT_ERROR_MESSAGES, text)) return 'upstream'
   if (Object.hasOwn(SOURCE_CHANGE_ERROR_MESSAGES, text)) return 'upstream'
   if (GEO_ROUTE_ERROR_CODES.includes(text)) return 'upstream'
+  // The media marketplace is a downstream service: what it refused, or did not answer, is at its boundary, never a verdict on a run.
+  if (GEO_MEDIA_MARKET_ERROR_CODES.includes(text)) return 'upstream'
   if (VCR_ROUTE_ERROR_CODES.includes(text) || VCR_GATEWAY_ERROR_CODES.includes(text)) return 'upstream'
   // The rest of the module's codes and the protocol's per-field issues are about
   // the module, the engine channel or the shape of a computation's request —

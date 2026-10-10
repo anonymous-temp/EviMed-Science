@@ -168,6 +168,29 @@ class ProbeRefusalTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "geo_probe_unavailable")
         self.assertTrue(caught.exception.retryable)
 
+    def test_a_module_closed_to_the_account_is_not_retryable_and_a_busy_window_is(self):
+        # The gateway refuses an account the module is not open to with a 503 that waiting cannot change, and a project
+        # that called too often with a 429 that a minute does. Telling the run to retry the first is an invitation to loop.
+        def refused(status, code):
+            def opener(request, timeout=None):  # noqa: ARG001
+                raise urllib.error.HTTPError(GATEWAY, status, "refused", {}, io.BytesIO(json.dumps({"code": code}).encode("utf-8")))
+
+            with mock.patch.dict("os.environ", {"EVIMED_GEO_PROBE_GATEWAY_URL": GATEWAY}), \
+                 mock.patch.object(geo_probe.public_sources, "_gateway_settings", lambda: ("secret", "token")), \
+                 mock.patch.object(geo_probe.public_sources, "_OPENER", mock.Mock(open=opener)):
+                with self.assertRaises(geo_probe.GeoProbeError) as caught:
+                    geo_probe.probe({"op": "ask", "question": "q"})
+            return caught.exception
+
+        closed = refused(503, "geo_probe_disabled")
+        self.assertEqual(closed.code, "geo_probe_disabled")
+        self.assertFalse(closed.retryable)
+        windowed = refused(429, "geo_probe_gateway_rate_limited")
+        self.assertEqual(windowed.code, "geo_probe_gateway_rate_limited")
+        self.assertTrue(windowed.retryable)
+        # An outage with no code of its own is still worth one more try.
+        self.assertTrue(refused(503, "").retryable)
+
     def test_the_closed_vocabularies_are_enforced_before_the_call(self):
         for arguments, code in (
             ({"op": "fetch"}, "geo_probe_op_invalid"),

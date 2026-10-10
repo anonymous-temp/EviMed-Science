@@ -40,7 +40,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { GEO_METRICS, isOurCitation } from "@evimed/domain";
+import { GEO_METRICS, geoCitationHost, isOurCitation } from "@evimed/domain";
 import { stripPageChrome } from "./geoSanity.mjs";
 
 /** Written into `facts.parser_version`; bump when what is counted changes. */
@@ -212,12 +212,6 @@ export function listItemLines(body) {
   return body.split(/\r?\n/u).filter((line) => LIST_ITEM.test(line)).map(foldText);
 }
 
-/** @param {unknown} url */
-function hostOf(url) {
-  const match = /https?:\/\/([^/\s]+)/u.exec(String(url ?? ""));
-  return match ? match[1].toLowerCase() : "";
-}
-
 const INLINE_MARKERS = Object.freeze([
   (/** @type {number} */ n) => `[${n}]`, (/** @type {number} */ n) => `[^${n}]`, (/** @type {number} */ n) => `【${n}】`,
   (/** @type {number} */ n) => `[citation:${n}]`, (/** @type {number} */ n) => `^${n}^`, (/** @type {number} */ n) => `［${n}］`,
@@ -251,7 +245,7 @@ export function citationRows(searchResults, answer, engine) {
       const reported = item.in_body ?? item.inBody;
       inBody = typeof reported === "boolean" ? reported : INLINE_MARKERS.some((marker) => text.includes(marker(index + 1)));
     }
-    return { url, domain: hostOf(url), title: String(item.title ?? "").slice(0, 300), inBody };
+    return { url, domain: geoCitationHost(url), title: String(item.title ?? "").slice(0, 300), inBody };
   });
 }
 

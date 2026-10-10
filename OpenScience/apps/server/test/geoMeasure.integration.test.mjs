@@ -362,6 +362,80 @@ test("an S3 error notifies once, is confirmed by ten fresh asks, closes only aft
   }
 });
 
+test("a wrong statement whose error was never written is recorded by the housekeeping, notified and queued for confirmation, once (Q-6)", options, async () => {
+  await reset();
+  await seed("geo_q6", { engines: ["deepseek"] });
+  const h = await harness({ answers: ({ question }) => (question === Q1 ? { answer: A_WRONG, searchResults: OWNED_LABEL } : { answer: A_RIGHT }) });
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_q6", kind: "baseline", questionIds: ["geo_q6_q1"] });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    // The facts are written and the error is not: a restart, or a database error, between the two. Nothing re-parses the answer (it has
+    // its facts), so before the housekeeping looked for it the error row, its S3 notice and its confirmation round were lost for good,
+    // while the wrong-statement counts still included it.
+    const lost = new Proxy(store, {
+      get(target, key) {
+        const value = Reflect.get(target, key, target);
+        if (key === "upsertError") return async () => { throw new Error("connection terminated unexpectedly"); };
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    await assert.rejects(tickParse({ ...h.deps, store: lost, maxParse: 10 }), /connection terminated unexpectedly/);
+    const [fact] = await rows(`SELECT failure_mode, errors_owed, statements FROM evimed_geo.facts`);
+    assert.equal(fact.failure_mode, "wrong_ours");
+    assert.equal(fact.statements.filter((/** @type {any} */ statement) => statement.verdict === "wrong").length, 1);
+    assert.equal(fact.errors_owed, true, "the facts row says an error is owed");
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.errors`))[0].n, 0);
+    assert.equal(h.notices.length, 0);
+
+    // A fresh facts row is left to the parse tick that wrote it: a minute's grace.
+    assert.equal((await tickErrors(h.deps)).recorded, 0);
+    h.clock.advance(61_000);
+    const swept = await tickErrors(h.deps);
+    assert.equal(swept.recorded, 1, "the housekeeping wrote the error");
+    const [error] = await rows(`SELECT * FROM evimed_geo.errors`);
+    assert.deepEqual({ engine: error.engine, severity: error.severity, status: error.status, question: error.question_id, type: error.error_type },
+      { engine: "deepseek", severity: "S3", status: "open", question: "geo_q6_q1", type: "number" });
+    assert.equal(error.statement, WRONG);
+    assert.equal(h.notices.length, 1, "and told the owner of an S3 error, as the parse tick would have");
+    assert.equal(h.notices[0].errorId, error.id);
+    assert.equal(error.confirm.status, "pending", "and queued its confirmation round");
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind = 'confirm'`))[0].n, 1);
+    assert.equal((await rows(`SELECT errors_owed FROM evimed_geo.facts`))[0].errors_owed, false, "and nothing is owed any more");
+
+    // Idempotent: nothing more is recorded, told or queued however often it runs.
+    for (let again = 0; again < 2; again += 1) {
+      h.clock.advance(61_000);
+      assert.equal((await tickErrors(h.deps)).recorded, 0);
+    }
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.errors`))[0].n, 1);
+    assert.equal(h.notices.length, 1);
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind = 'confirm'`))[0].n, 1);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an error recorded in the parse tick leaves nothing owed, and a facts row with no wrong statement never owed any (Q-6)", options, async () => {
+  await reset();
+  await seed("geo_q6b");
+  const h = await harness();
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_q6b", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    h.clock.advance(3 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    await tickParse({ ...h.deps, maxParse: 20 });
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.errors`))[0].n, 1);
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.facts WHERE errors_owed`))[0].n, 0, "recorded in the tick that wrote the facts");
+    assert.ok((await rows(`SELECT count(*)::int AS n FROM evimed_geo.facts`))[0].n > 1, "facts without a wrong statement are there too");
+    h.clock.advance(61_000);
+    assert.equal((await tickErrors(h.deps)).recorded, 0);
+    assert.equal(h.notices.length, 1);
+  } finally {
+    await h.probe.close();
+  }
+});
+
 test("an answer asked before an error moved, in the same millisecond, is not a later answer and does not close it", options, async () => {
   await reset();
   await seed("geo_ms");
@@ -393,6 +467,93 @@ test("an answer asked before an error moved, in the same millisecond, is not a l
 });
 
 // ---------------------------------------------------------------- the breaker
+
+/** An inclusion channel double: the vendor's answer to a request is whatever `answer(requestId, polls)` says. */
+function inclusionDouble(/** @type {(requestId: string, polls: number) => "pending" | "valid" | "throw"} */ answer) {
+  /** @type {Map<string, number>} */
+  const polls = new Map();
+  return {
+    engines: () => ["baidu"],
+    submit: async (/** @type {any} */ task) => ({ requestId: `req_${task.thirdId}`, engine: task.engine }),
+    poll: async (/** @type {string} */ engine, /** @type {string} */ requestId) => {
+      const n = (polls.get(requestId) ?? 0) + 1;
+      polls.set(requestId, n);
+      const outcome = answer(requestId, n);
+      if (outcome === "throw") throw new Error("the vendor is not answering");
+      return outcome === "pending"
+        ? { engine, surface: { mode: "inclusion" }, status: "pending", hit: null, requestId }
+        : { engine, surface: { mode: "inclusion" }, status: "valid", hit: true, keywordRes: "玛仕度肽", requestId, shareUrl: null, screenshotUrl: null };
+    },
+  };
+}
+
+test("an inclusion check still pending past its age limit fails its job so the round closes; an answer inside or beyond it is kept (Q-7)", options, async () => {
+  await reset();
+  await seed("geo_q7", { engines: ["baidu"] });
+  /** @type {string | null} */
+  let answered = null;
+  const inclusion = inclusionDouble((requestId) => (requestId === answered ? "valid" : "pending"));
+  const h = await harness({ answers: () => ({ answer: A_RIGHT }), inclusion, config: { geoInclusionMaxHoldHours: 2 } });
+  try {
+    const round = await enqueueRound(h.deps, { geoProjectId: "geo_q7", kind: "baseline" });
+    assert.equal(round.planned, 3);
+    assert.equal((await tickProbe(h.deps)).inclusion.submitted, 3);
+    const held = await rows(`SELECT id, external_ref, submitted_at FROM evimed_geo.probe_jobs ORDER BY id`);
+    assert.ok(held.every((job) => job.external_ref && job.submitted_at), "each job holds the vendor's request and says since when");
+
+    // Pending for two minutes short of the limit: held again, not failed, and the round stays open.
+    h.clock.advance(61_000);
+    assert.equal((await tickProbe(h.deps)).inclusion.expired, 0);
+    h.clock.advance(117 * 60_000);
+    const inside = await tickProbe(h.deps);
+    assert.deepEqual([inside.inclusion.polled, inside.inclusion.expired, inside.roundsFinished], [3, 0, 0]);
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.probe_jobs WHERE status = 'leased'`))[0].n, 3);
+    const stamps = await rows(`SELECT submitted_at FROM evimed_geo.probe_jobs`);
+    assert.deepEqual(stamps.map((row) => row.submitted_at.toISOString()), held.map((job) => job.submitted_at.toISOString()), "the time is when the request was taken, not the last poll");
+
+    // Past the limit: one request the vendor has answered by now is kept, the two still pending are given up on.
+    answered = held[0].external_ref;
+    h.clock.advance(3 * 60_000);
+    const past = await tickProbe(h.deps);
+    assert.deepEqual([past.inclusion.done, past.inclusion.expired, past.roundsFinished], [1, 2, 1]);
+    const jobs = await rows(`SELECT status, error_code FROM evimed_geo.probe_jobs ORDER BY id`);
+    assert.deepEqual(jobs.map((job) => [job.status, job.error_code]).sort(), [["done", null], ["failed", "inclusion_hold_expired"], ["failed", "inclusion_hold_expired"]]);
+    const [closed] = await rows(`SELECT status FROM evimed_geo.rounds WHERE id = $1`, [round.roundId]);
+    assert.equal(closed.status, "partial", "the round is closed, with the two questions unmeasured on that engine");
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.snapshots`))[0].n, 1, "no answer is made up for them");
+    assert.equal(h.state.inclusionTotals.expired, 2, "and the expiries are counted for the operator's metrics");
+    assert.equal(h.state.inclusionTotals.done, 1);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an inclusion poll that keeps failing is given up on at the same limit, and a job held before the time was kept starts counting at its next hold (Q-7)", options, async () => {
+  await reset();
+  await seed("geo_q7b", { engines: ["baidu"] });
+  const inclusion = inclusionDouble(() => "throw");
+  const h = await harness({ answers: () => ({ answer: A_RIGHT }), inclusion, config: { geoInclusionMaxHoldHours: 1 } });
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_q7b", kind: "baseline", questionIds: ["geo_q7b_q1"] });
+    await tickProbe(h.deps);
+    // A job held by the build before this one has a request and no time. Its first hold here starts the clock; it is not failed by it.
+    await database.query(`UPDATE evimed_geo.probe_jobs SET submitted_at = NULL`);
+    h.clock.advance(6 * 60_000);
+    const first = await tickProbe(h.deps);
+    assert.deepEqual([first.inclusion.expired, first.roundsFinished], [0, 0]);
+    const [stamped] = await rows(`SELECT submitted_at FROM evimed_geo.probe_jobs`);
+    assert.ok(stamped.submitted_at && Math.abs(stamped.submitted_at.getTime() - h.clock.now().getTime()) < 5_000, "the clock started at that hold");
+    // The vendor never answers a poll: 53 minutes on it is still held, an hour and five on it is not.
+    h.clock.advance(53 * 60_000);
+    assert.equal((await tickProbe(h.deps)).inclusion.expired, 0);
+    h.clock.advance(12 * 60_000);
+    const last = await tickProbe(h.deps);
+    assert.deepEqual([last.inclusion.expired, last.roundsFinished], [1, 1]);
+    assert.deepEqual((await rows(`SELECT status, error_code FROM evimed_geo.probe_jobs`)).map((job) => [job.status, job.error_code]), [["failed", "inclusion_hold_expired"]]);
+  } finally {
+    await h.probe.close();
+  }
+});
 
 test("an engine that keeps returning a login page is paused, holds its round until a re-check fails, then the round finishes without it, and it resumes when its tab is back", options, async () => {
   await reset();

@@ -99,7 +99,8 @@ export const MARKET_RULES = Object.freeze({
   catalogMaxPages: 2_000,
   sendsPerTick: 10,
   verifyPerTick: 20,
-  projectsPerTick: 50,
+  // Projects read at a time: a tick pages through every project it serves, and a page is what one read returns.
+  projectsPerPage: 50,
   placementsPerArticle: 1,
   maxFailedPlacementsPerArticle: 3,
   coveragePriceBandCny: Object.freeze([55, 130]),
@@ -307,6 +308,20 @@ function context(deps) {
 async function fire(hook, event) {
   if (!hook) return false;
   try { await hook(event); return true; } catch { return false; }
+}
+
+/**
+ * Every project with a budget, oldest first, a page at a time (the store caps one read at 500).
+ * @param {any} store @param {{ activeOnly?: boolean }} [options]
+ */
+async function listAllBudgetedProjects(store, { activeOnly = true } = {}) {
+  const projects = [];
+  for (let offset = 0; ; offset += 500) {
+    const page = await store.listBudgetedProjects(500, { activeOnly, offset });
+    projects.push(...page);
+    if (page.length < 500) break;
+  }
+  return projects;
 }
 
 /** @param {any} store @param {Record<string, any>} filter @param {number} [max] */
@@ -819,13 +834,17 @@ async function reservedToday(ctx, geoProjectId) {
  * @param {Set<string>} blocked @param {Record<string, any>} counts
  */
 async function planProject(ctx, project, candidates, blocked, counts) {
-  const articles = await ctx.store.listPlaceableArticles(project.id, 200);
+  // The articles that can take a placement: not the ones that already hold an order (placed, being placed or planned), which are
+  // the oldest and, in a project that has placed a good many, all of the first two hundred (M-4).
+  const articles = await ctx.store.listPlaceableArticles(project.id, 200, { withoutOrderIn: LIVE_STATES });
   if (!articles.length) return;
   const mediaByKey = new Map(candidates.map((media) => [mediaKey(media.mediaType, media.resourceId), media]));
   const { usage, orders: recent } = await domainUsage(ctx, project.id, mediaByKey);
   const articleOrders = await listAllOrders(ctx.store, { geoProjectId: project.id, articleIds: articles.map((article) => article.id) }, 2_000);
   const money = projectMoney(project, await ctx.store.ledgerSums({ geoProjectId: project.id }));
-  const plannedReserve = articleOrders.filter((order) => order.state === "planned").reduce((total, order) => total + (order.reserveCny ?? 0), 0);
+  // What the plans already made hold back from the budget is every planned order of the project, not those of the articles listed above.
+  const plannedReserve = (await listAllOrders(ctx.store, { geoProjectId: project.id, states: ["planned"] }, 2_000))
+    .reduce((total, order) => total + (order.reserveCny ?? 0), 0);
   let room = round2((money.availableCny ?? 0) - plannedReserve);
   const hard = candidates.filter((media) => media.available && !media.blacklisted && !media.flags?.medicalRefused
     && media.domainVerified === true && media.priceCny != null && media.priceCny <= MARKET_RULES.autoSelectMaxPriceCny);
@@ -1071,7 +1090,15 @@ async function keepLateOrderNumber(ctx, order, orderNid) {
 /**
  * Plan and place: for every active project with a budget, plan placements
  * for its publishable articles, then (market configured, orders not stopped)
- * reserve and send up to `sendsPerTick` of them.
+ * reserve and send up to `sendsPerTick` of them, in all.
+ *
+ * The projects are served in turn (`listProjectsInTurn`): the one served longest
+ * ago first, a page at a time, through all of them or until the tick has made its
+ * sends. A tick that stops at its send cap leaves the projects it did not reach
+ * at the front of the next, and the ones it served go behind them; so no project
+ * is out of the tick for good however many there are, and one with many orders
+ * waiting cannot keep the others waiting (M-3). The turns are marked when the tick
+ * ends, so the order holds while it pages.
  * @param {MarketDeps} deps
  */
 export async function tickOrders(deps) {
@@ -1080,8 +1107,9 @@ export async function tickOrders(deps) {
    *   notDelivered: number, skipped: Record<string, number> }} */
   const counts = { projects: 0, planned: 0, withdrawn: 0, recovered: 0, submitted: 0, unknown: 0, refused: 0, notDelivered: 0, skipped: {} };
   const skip = (/** @type {string} */ reason) => { counts.skipped[reason] = (counts.skipped[reason] ?? 0) + 1; };
-  const projects = await ctx.store.listBudgetedProjects(MARKET_RULES.projectsPerTick);
-  if (!projects.length) return counts;
+  const started = ctx.now().toISOString();
+  const first = await ctx.store.listProjectsInTurn(MARKET_RULES.projectsPerPage);
+  if (!first.length) return counts;
   if (ctx.configured) counts.recovered = await recoverInterruptedSends(ctx);
   const candidates = await ctx.store.listCandidateMedia({ maxPriceCny: MARKET_RULES.autoSelectMaxPriceCny, limit: 5_000 });
   const candidatesByKey = new Map(candidates.map((media) => [mediaKey(media.mediaType, media.resourceId), media]));
@@ -1124,18 +1152,37 @@ export async function tickOrders(deps) {
       else skip(outcome);
     }
   };
-  for (const project of projects) {
-    counts.projects += 1;
-    // Placing spends the owner's budget: only while the module is still open to them.
-    const owner = ctx.userById ? await ctx.userById(project.userId) : { id: project.userId };
-    if (!owner) { skip("owner_missing"); continue; }
-    if (!geoAudienceAllows(ctx.config, owner)) { skip("audience_not_allowed"); continue; }
-    try {
-      const run = await ctx.store.withProjectLock(project.id, () => work(project));
-      if (!run.locked) skip("project_busy");
-    } catch {
-      skip("error");
+  /** The projects whose turn this tick took, for marking when it ends. @type {Set<string>} */
+  const served = new Set();
+  try {
+    let page = first;
+    let offset = 0;
+    paging: while (page.length) {
+      offset += page.length;
+      for (const project of page) {
+        // The sends are the tick's: once they are made the projects not yet reached keep their place for the next.
+        if (sends >= MARKET_RULES.sendsPerTick) break paging;
+        if (served.has(project.id)) continue;
+        served.add(project.id);
+        counts.projects += 1;
+        // Placing spends the owner's budget: only while the module is still open to them.
+        const owner = ctx.userById ? await ctx.userById(project.userId) : { id: project.userId };
+        if (!owner) { skip("owner_missing"); continue; }
+        if (!geoAudienceAllows(ctx.config, owner)) { skip("audience_not_allowed"); continue; }
+        try {
+          const run = await ctx.store.withProjectLock(project.id, () => work(project));
+          if (!run.locked) skip("project_busy");
+        } catch {
+          skip("error");
+        }
+      }
+      if (page.length < MARKET_RULES.projectsPerPage) break;
+      page = await ctx.store.listProjectsInTurn(MARKET_RULES.projectsPerPage, { offset });
     }
+  } finally {
+    // Every project that had its turn goes behind the others, whatever came of it: one that is skipped every tick (its owner is
+    // gone, the module is closed to them) must not sit at the front for good.
+    try { await ctx.store.markProjectsServed([...served], started); } catch { skip("turns_unrecorded"); }
   }
   return counts;
 }
@@ -1664,7 +1711,7 @@ export async function tickReconcile(deps) {
   const residual = round2(diff + debitSum - creditSum);
   // Every project's ledger against its orders.
   const projectBreaks = [];
-  for (const project of await ctx.store.listBudgetedProjects(500, { activeOnly: false })) {
+  for (const project of await listAllBudgetedProjects(ctx.store, { activeOnly: false })) {
     const breaks = projectIdentityBreaks(await listAllOrders(ctx.store, { geoProjectId: project.id }, 20_000), await ctx.store.ledgerSums({ geoProjectId: project.id }));
     for (const item of breaks) projectBreaks.push({ geoProjectId: project.id, ...item });
   }

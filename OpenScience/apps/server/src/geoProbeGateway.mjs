@@ -15,6 +15,16 @@
 // never composes an upstream path and never names the probe host, exactly as
 // it never names a bibliographic host.
 //
+// Who may ask is the GEO gateway's admission (2026-10-10, Q-8): the runtime's
+// token names the account and the project, and the module has to be on and open
+// to that account. The probe host answers one request at a time, for minutes,
+// through the platform's own logged-in accounts at the consumer vendors, so a
+// token that opens the model gateway is not enough to reach it; and one
+// project's runtime is held to a window of calls a minute
+// (`OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE`), the ceiling of a loop and not of
+// a run. A refused call is `measurement: "failed"` like every other, and the
+// tool tells the run the channel was not measured.
+//
 // The upstream contract this speaks to, verified against a live host:
 //   GET  /providers            -> readiness per vendor ("tab_found" = logged in)
 //   POST /ask                  -> {question, provider|providers, deep, new_chat}
@@ -33,6 +43,9 @@ const allowedProviders = new Set(["deepseek", "doubao", "yuanbao", "qianwen", "k
 // newline, so "run-1.png\n" satisfied the pattern and went straight into a URL
 // path. The test that caught it is in geoProbeGateway.test.mjs.
 const screenshotName = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:png|jpg|jpeg|webp)(?![\s\S])/;
+
+/** Calls one project's runtime may make to the probe in a minute, unless the deployment sets another (`OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE`). */
+export const GEO_PROBE_CALLS_PER_MINUTE = 12;
 
 const maxQuestionLength = 2_000;
 const maxAnswerLength = 200_000;
@@ -198,10 +211,13 @@ function probeOrigin(config) {
 
 /** Loopback, RFC1918, CGNAT, link-local, or a name with no public dot. */
 export function isPrivateHost(hostname) {
-  const host = String(hostname ?? "").toLowerCase();
+  // The URL parser hands an IPv6 literal over in brackets.
+  const host = String(hostname ?? "").toLowerCase().replace(/^\[(.*)\]$/, "$1");
   if (!host) return false;
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
-  if (host === "::1" || host.startsWith("fd") || host.startsWith("fe80:")) return true;
+  // An IPv6 literal is judged as an address: loopback, unique-local (fc00::/7) or link-local (fe80::/10). It is not a name, so
+  // it never reaches the "no public dot" rule below, and a name that merely starts with `fd` (fda.gov) is not a unique-local address.
+  if (host.includes(":")) return host === "::1" || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host);
   const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
   if (ipv4) {
     const octets = ipv4.slice(1, 5).map(Number);
@@ -464,8 +480,16 @@ export function probeUpstream(config, { fetchImpl = fetch } = {}) {
   };
 }
 
-export function createGeoProbeGatewayHandler(config, runtimeManager, { fetchImpl = fetch } = {}) {
+/**
+ * @param {Record<string, any>} config
+ * @param {any} runtimeManager
+ * @param {{ fetchImpl?: typeof fetch, geo?: { service?: { allows: (user: { id: string }) => boolean } } | null }} [dependencies]
+ *   `geo` is the composed module or null when it is off (what the GEO gateway is given)
+ */
+export function createGeoProbeGatewayHandler(config, runtimeManager, { fetchImpl = fetch, geo = null } = {}) {
   const upstream = probeUpstream(config, { fetchImpl });
+  /** @type {Map<string, { until: number, count: number }>} */
+  const windows = new Map();
   return async function geoProbeGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
@@ -479,10 +503,43 @@ export function createGeoProbeGatewayHandler(config, runtimeManager, { fetchImpl
     timeout.unref?.();
     try {
       const token = bearerToken(req);
+      let identity;
       try {
-        runtimeManager.assertActiveModelGatewayToken(token);
+        identity = runtimeManager.assertActiveModelGatewayToken(token);
       } catch {
         throw gatewayError(401, "geo_probe_gateway_token_invalid", "GEO probe authentication failed.");
+      }
+      // The module's own admission, before anything of the request is read.
+      if (!config.geoEnabled || !geo?.service) {
+        throw gatewayError(
+          503,
+          "geo_probe_disabled",
+          "循证 GEO is switched off for this deployment, so the GEO probe is not available. Measured visibility is unavailable; "
+          + "state that in the report rather than presenting an estimate as a measurement.",
+        );
+      }
+      if (!geo.service.allows({ id: String(identity?.userId ?? "") })) {
+        throw gatewayError(
+          503,
+          "geo_probe_disabled",
+          "循证 GEO is not open to this account, so the GEO probe is not available. Measured visibility is unavailable; "
+          + "state that in the report rather than presenting an estimate as a measurement.",
+        );
+      }
+      // A window per account and project, counted before the body is read and whatever the call turns out to be.
+      const now = Date.now();
+      for (const [key, window] of windows) if (window.until <= now) windows.delete(key);
+      const windowKey = `${identity?.userId}\u0000${identity?.projectId}`;
+      const window = windows.get(windowKey) ?? { until: now + 60_000, count: 0 };
+      windows.set(windowKey, window);
+      const limit = Number.isSafeInteger(config.geoProbeCallsPerMinute) && config.geoProbeCallsPerMinute > 0
+        ? config.geoProbeCallsPerMinute : GEO_PROBE_CALLS_PER_MINUTE;
+      if (++window.count > limit) {
+        throw gatewayError(
+          429,
+          "geo_probe_gateway_rate_limited",
+          "Too many GEO probe calls from this project in a minute. This is a measurement failure, not a result: wait, then retry; do not record it.",
+        );
       }
       const request = validatedRequest(await readJsonBody(req, 64 * 1024));
 

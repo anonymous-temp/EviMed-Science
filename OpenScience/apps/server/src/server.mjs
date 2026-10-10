@@ -4683,6 +4683,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   });
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
+    // The module's own admission, as the GEO gateway below is given it.
+    geo,
   });
   // rt: the same gateways at https://<domain>/runtime-gateway/… for a runtime
   // outside this host (plan §3.1 #5).

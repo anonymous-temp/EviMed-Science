@@ -22,6 +22,8 @@ const claims = {
     sourceLabel: "信尔美说明书", sourceKind: "label", inLabel: true, artifactPath: ".evimed-sources/label.txt" },
   contra: { claimKey: "contra", statement: "对本品活性成分或辅料过敏者禁用。", quote: "对本品活性成分或辅料过敏者禁用", sourceRef: "信尔美说明书 2025 版",
     sourceLabel: "信尔美说明书", sourceKind: "label", inLabel: true, artifactPath: ".evimed-sources/label.txt" },
+  titration: { claimKey: "titration", statement: "每周一次 2.5 mg，4 周后增至 5 mg。", quote: "每周一次 2.5 mg，4 周后增至 5 mg", sourceRef: "信尔美说明书 2025 版",
+    sourceLabel: "信尔美说明书", sourceKind: "label", inLabel: true, artifactPath: ".evimed-sources/label.txt" },
   weight: { claimKey: "trial:weight", statement: "第 48 周体重下降 14.1%。", quote: "lost 14.1% of body weight at week 48", sourceRef: "10.1056/NEJMoa0000000",
     sourceKind: "trial", journeyStage: { key: "治疗选择", label: "治疗选择" }, clinicalQuestion: "用药后体重能降多少？", comparisonType: "head_to_head", artifactPath: ".evimed-sources/trial.txt" },
   // Not verifiable: the quotation is not in its source, and a source that cannot be read.
@@ -247,4 +249,99 @@ test("a zone the owner deleted is made again, and a taken-back card is not writt
   const again = await service.refresh(await store.getProject("alice", geo.id), { readSource });
   assert.equal(again.zoneId, first.zoneId, "the same project makes the same zone again");
   assert.equal(again.cards.length, 1);
+});
+
+// ------------------------------------------------------------------------------------------------------------------------
+// A fault of one read must not strand a project's cards (C-1), and a claim that changes group must not corrupt them (C-2).
+
+/** Every card of the zone, by title as JavaScript orders it: its revision and the card claim ids it holds. */
+const cardsInZone = async () => (await db.query(`SELECT id, revision, title, (SELECT coalesce(array_agg(c->>'claimId' ORDER BY c->>'claimId'), '{}') FROM jsonb_array_elements(claims) c) AS ids
+  FROM evimed_frontier.evidence_cards`)).rows.sort((left, right) => (left.title < right.title ? -1 : 1));
+/** Where each claim's latest version says it stands: `[card, card claim id, revision]`. @param {string} geoId */
+const placeOf = async (geoId) => Object.fromEntries((await db.query(`SELECT DISTINCT ON (claim_key) claim_key, card_id, card_claim_id, card_revision FROM evimed_geo.claims
+  WHERE geo_project_id=$1 ORDER BY claim_key, version DESC`, [geoId])).rows.map((row) => [row.claim_key, [row.card_id, row.card_claim_id, row.card_revision]]));
+
+test("a refresh that cannot read the sources leaves the cards and the claims' place in them, and the next one finds them as they were (C-1)", options, async () => {
+  const geo = await project({}, ["dose", "contra"]);
+  const service = withPeople();
+  const first = await service.refresh(geo, { readSource });
+  const cardId = first.cards[0].cardId;
+  // The preserved files could not be read this once: both claims are held for it, and held for it is not held for good.
+  const blind = await service.refresh(await store.getProject("alice", geo.id), { readSource: async () => null });
+  assert.deepEqual(blind.held.map((entry) => [entry.claimKey, entry.reason]).sort(), [["contra", "source_unavailable"], ["dose", "source_unavailable"]]);
+  assert.deepEqual([blind.cards, blind.failed], [[], []]);
+  assert.deepEqual(await placeOf(geo.id), { dose: [cardId, "dose", 1], contra: [cardId, "contra", 1] }, "a claim that could not be read right now is still in its card");
+  // The files are readable again: the card is found, as planned, and nothing is written.
+  const again = await service.refresh(await store.getProject("alice", geo.id), { readSource });
+  assert.deepEqual(again.failed, []);
+  assert.deepEqual(again.cards.map((card) => [card.cardId, card.change, card.revision]), [[cardId, "unchanged", 1]]);
+  assert.equal((await cardsInZone()).length, 1);
+  // A claim whose quotation the ruler read and did not find is held for good, and does leave.
+  const edited = new Map(FILES);
+  edited.set(".evimed-sources/label.txt", "【用法用量】成人推荐起始剂量为每周一次 2.5 mg。");
+  await service.refresh(await store.getProject("alice", geo.id), { readSource: async (claim) => edited.get(claim.artifactPath) ?? null });
+  assert.equal((await placeOf(geo.id)).contra[0], null);
+});
+
+test("a project whose claims lost their card finds it again by the identity it was made with, and marks them into it (C-1)", options, async () => {
+  const geo = await project({}, ["dose", "contra"]);
+  const service = withPeople();
+  const first = await service.refresh(geo, { readSource });
+  const cardId = first.cards[0].cardId;
+  // The state an earlier refresh left behind when one failed read cleared the mapping.
+  await store.clearClaimCards(geo.id, (await store.listClaims(geo.id)).map((claim) => claim.id));
+  assert.equal((await placeOf(geo.id)).dose[0], null);
+  const again = await service.refresh(await store.getProject("alice", geo.id), { readSource });
+  assert.deepEqual(again.failed, [], "creating the card again with its own identity was refused as a conflict, for ever");
+  assert.deepEqual(again.cards.map((card) => [card.cardId, card.change, card.revision]), [[cardId, "unchanged", 1]]);
+  assert.deepEqual(await placeOf(geo.id), { dose: [cardId, "dose", 1], contra: [cardId, "contra", 1] });
+  // And when the card itself has to change, it is the same card that changes.
+  await store.clearClaimCards(geo.id, (await store.listClaims(geo.id)).map((claim) => claim.id));
+  await store.upsertClaims("alice", geo.id, [{ ...claims.dose, statement: "成人推荐起始剂量为每周一次 2.5 mg，4 周后增至 5 mg。", quote: "成人推荐起始剂量为每周一次 2.5 mg，4 周后增至 5 mg" }]);
+  const changed = await service.refresh(await store.getProject("alice", geo.id), { readSource });
+  assert.deepEqual(changed.failed, []);
+  assert.deepEqual(changed.cards.map((card) => [card.cardId, card.change, card.revision]), [[cardId, "updated", 2]]);
+  assert.equal((await cardsInZone()).length, 1);
+});
+
+test("a claim that changes group moves to its new group's card, and a refresh with nothing changed writes no revision (C-2)", options, async () => {
+  const geo = await project({}, ["dose", "contra", "titration"]);
+  const service = withPeople();
+  const first = await service.refresh(geo, { readSource });
+  const label = first.cards[0].cardId;
+  assert.deepEqual((await cardsInZone()).map((card) => [card.revision, card.ids]), [[1, ["contra", "dose", "titration"]]]);
+  // A later run gives the dose its own clinical question: a new version of the claim, in another group.
+  await store.upsertClaims("alice", geo.id, [{ ...claims.dose, clinicalQuestion: "起始剂量是多少？" }]);
+  const moved = await service.refresh(await store.getProject("alice", geo.id), { readSource });
+  assert.deepEqual(moved.failed, []);
+  assert.deepEqual(moved.cards.map((card) => [card.title, card.change, card.revision]).sort(),
+    [["说明书与基本信息：关键结论", "updated", 2], ["起始剂量是多少？", "created", 1]]);
+  const rows = await cardsInZone();
+  assert.deepEqual(rows.map((card) => [card.title, card.revision, card.ids]), [
+    ["说明书与基本信息：关键结论", 2, ["contra", "titration"]], ["起始剂量是多少？", 1, ["dose"]]]);
+  const own = rows.find((card) => card.title === "起始剂量是多少？").id;
+  assert.deepEqual(await placeOf(geo.id), { dose: [own, "dose", 1], contra: [label, "contra", 2], titration: [label, "titration", 2] },
+    "every claim stands in the card that holds it, at the revision it stands in");
+  // Nothing has changed since: no refresh writes a revision, however many are made.
+  for (let round = 0; round < 3; round += 1) {
+    const idle = await service.refresh(await store.getProject("alice", geo.id), { readSource });
+    assert.deepEqual(idle.cards.map((card) => card.change), ["unchanged", "unchanged"], `refresh ${round + 1}`);
+    assert.deepEqual((await cardsInZone()).map((card) => card.revision), [2, 1]);
+  }
+});
+
+test("a group split three ways keeps one card for each, and the one that keeps the group's own question keeps the group's card (C-2)", options, async () => {
+  const geo = await project({}, ["dose", "contra", "titration"]);
+  const service = withPeople();
+  await service.refresh(geo, { readSource });
+  await store.upsertClaims("alice", geo.id, [{ ...claims.dose, clinicalQuestion: "起始剂量是多少？" }, { ...claims.contra, clinicalQuestion: "谁不能用？" }]);
+  for (let round = 0; round < 3; round += 1) {
+    const result = await service.refresh(await store.getProject("alice", geo.id), { readSource });
+    assert.deepEqual(result.failed, [], `refresh ${round + 1}`);
+    if (round > 0) assert.deepEqual(result.cards.map((card) => card.change), ["unchanged", "unchanged", "unchanged"]);
+  }
+  assert.deepEqual((await cardsInZone()).map((card) => [card.title, card.ids]), [
+    ["说明书与基本信息：关键结论", ["titration"]], ["谁不能用？", ["contra"]], ["起始剂量是多少？", ["dose"]]]);
+  const place = await placeOf(geo.id);
+  assert.deepEqual(Object.values(place).map(([cardId]) => cardId).sort(), (await cardsInZone()).map((card) => card.id).sort());
 });
