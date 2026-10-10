@@ -15,7 +15,7 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
 }));
 
 const empty = (): GeoValue => ({ version: 0, updatedAt: null, data: {}, research: [], impacts: [], observations: [],
-  coverage: { assessed: 0, represented: 0, partial: 0, contradicted: 0, uncertain: 0, notApplicable: 0, value: null } });
+  coverage: { assessed: 0, represented: 0, partial: 0, contradicted: 0, notAddressed: 0, uncertain: 0, notApplicable: 0, value: null } });
 beforeEach(() => {
   client.getGeoValue.mockReset();
   open.mockReset();
@@ -60,8 +60,16 @@ it("keeps the last round's coverage after the profile moves on, and says which v
   value.coverage = { ...value.coverage, assessed: 3, represented: 2, partial: 1, basisVersion: 3 };
   client.getGeoValue.mockResolvedValue(value);
   show("coverage");
-  expect(await screen.findByText("2 / 3 次相关结论被完整表达，1 次不完整，0 次存在冲突。")).toBeInTheDocument();
+  expect(await screen.findByText("2 / 3 次相关结论被完整表达，1 次不完整，0 次存在冲突，0 次未涉及。")).toBeInTheDocument();
   expect(screen.getByText("以上按第 3 版药品价值分析测得；分析已更新到第 4 版，下一轮测量后按新版本判断。")).toBeInTheDocument();
+});
+
+it("says how many answers did not address the claim, so the four parts add up to what was assessed", async () => {
+  const value = { ...empty(), version: 3 };
+  value.coverage = { ...value.coverage, assessed: 7, represented: 2, partial: 1, contradicted: 1, notAddressed: 3, basisVersion: 3 };
+  client.getGeoValue.mockResolvedValue(value);
+  show("coverage");
+  expect(await screen.findByText("2 / 7 次相关结论被完整表达，1 次不完整，1 次存在冲突，3 次未涉及。")).toBeInTheDocument();
 });
 
 it("says nothing about versions when the coverage was measured on the current profile", async () => {
@@ -69,7 +77,7 @@ it("says nothing about versions when the coverage was measured on the current pr
   value.coverage = { ...value.coverage, assessed: 1, represented: 1, basisVersion: 3 };
   client.getGeoValue.mockResolvedValue(value);
   show("coverage");
-  expect(await screen.findByText("1 / 1 次相关结论被完整表达，0 次不完整，0 次存在冲突。")).toBeInTheDocument();
+  expect(await screen.findByText("1 / 1 次相关结论被完整表达，0 次不完整，0 次存在冲突，0 次未涉及。")).toBeInTheDocument();
   expect(screen.queryByText(/下一轮测量后按新版本判断/)).not.toBeInTheDocument();
 });
 
@@ -263,7 +271,7 @@ describe("a long list is not cut without a word", () => {
 
   it("lists twenty of the answers a round was judged on, counts them all, and shows the rest on request", async () => {
     const observations = Array.from({ length: 25 }, (_, index) => ({ findingId: `f${index}`, status: "represented", quote: `回答 ${index + 1}`, reason: "", engine: "deepseek", basisVersion: 3, rubricVersion: "1", askedAt: null }));
-    client.getGeoValue.mockResolvedValue({ ...empty(), version: 3, observations, coverage: { assessed: 25, represented: 25, partial: 0, contradicted: 0, uncertain: 0, notApplicable: 0, value: 100, basisVersion: 3 } });
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 3, observations, coverage: { assessed: 25, represented: 25, partial: 0, contradicted: 0, notAddressed: 0, uncertain: 0, notApplicable: 0, value: 100, basisVersion: 3 } });
     show("coverage");
     await userEvent.click(await screen.findByText("查看回答中的表达 · 共 25 条"));
     const fold = screen.getByText("回答 1").closest("details") as HTMLElement;
@@ -275,7 +283,7 @@ describe("a long list is not cut without a word", () => {
 
   it("a fold that fits says no total", async () => {
     const observations = [{ findingId: "f1", status: "represented", quote: "回答 1", reason: "", engine: "deepseek", basisVersion: 3, rubricVersion: "1", askedAt: null }];
-    client.getGeoValue.mockResolvedValue({ ...empty(), version: 3, observations, coverage: { assessed: 1, represented: 1, partial: 0, contradicted: 0, uncertain: 0, notApplicable: 0, value: 100, basisVersion: 3 } });
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 3, observations, coverage: { assessed: 1, represented: 1, partial: 0, contradicted: 0, notAddressed: 0, uncertain: 0, notApplicable: 0, value: 100, basisVersion: 3 } });
     show("coverage");
     expect(await screen.findByText("查看回答中的表达")).toBeInTheDocument();
   });

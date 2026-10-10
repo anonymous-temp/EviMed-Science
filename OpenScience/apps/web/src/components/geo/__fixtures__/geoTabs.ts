@@ -426,7 +426,7 @@ export const valueFilled: GeoValue = {
   },
   research: [{ id: "r_1", question: "这个安全信号说明什么？", status: "failed", runId: "run_1" }],
   impacts: [{ change: { id: "c_1" }, findingIds: ["f_saf"], groupIds: [], articleIds: [] }],
-  coverage: { assessed: 4, represented: 3, partial: 1, contradicted: 0, uncertain: 0, notApplicable: 0, value: 75, basisVersion: 3 },
+  coverage: { assessed: 4, represented: 3, partial: 1, contradicted: 0, notAddressed: 0, uncertain: 0, notApplicable: 0, value: 75, basisVersion: 3 },
   observations: [
     { findingId: "f_eff", status: "represented", quote: "疗效明显优于安慰剂", reason: "", engine: "deepseek", basisVersion: 3, rubricVersion: "1", askedAt: "2026-10-07T08:00:00.000Z" },
   ],

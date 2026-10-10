@@ -92,7 +92,7 @@ function ValueBody({ geoId, value, mode, className }: { geoId: string; value: Ge
       {text(data.summary) && ["summary", "profile"].includes(mode) && <p className="mb-3 max-w-measure text-ui leading-relaxed text-text-2">{text(data.summary)}</p>}
       {mode === "coverage" ? <>
         <p className="text-ui text-text-2">{value.coverage?.assessed
-          ? `${value.coverage.represented} / ${value.coverage.assessed} 次相关结论被完整表达，${value.coverage.partial} 次不完整，${value.coverage.contradicted} 次存在冲突。`
+          ? `${value.coverage.represented} / ${value.coverage.assessed} 次相关结论被完整表达，${value.coverage.partial} 次不完整，${value.coverage.contradicted} 次存在冲突，${value.coverage.notAddressed} 次未涉及。`
           : "还没有足够的回答判断药品价值是否被准确表达。"}</p>
         {Boolean(value.coverage?.uncertain || value.coverage?.notApplicable) && <p className="mt-2 text-caption text-text-3">尚不能判断 {value.coverage.uncertain} 条，不适用 {value.coverage.notApplicable} 条。</p>}
         {Boolean(value.coverage?.assessed && value.coverage?.basisVersion && value.coverage.basisVersion !== value.version) && <p className="mt-2 text-caption text-text-3">以上按第 {value.coverage.basisVersion} 版药品价值分析测得；分析已更新到第 {value.version} 版，下一轮测量后按新版本判断。</p>}
