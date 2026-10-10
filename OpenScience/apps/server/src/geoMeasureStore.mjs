@@ -285,14 +285,18 @@ export class GeoMeasureStore {
     }));
     // The cards are the ground truth: a project with verified claims in its product-zone cards is judged against those and nothing
     // else (a claim its card ruler marked ⚠ never reached a card). A project with no cards yet is judged against its claim table.
-    const carded = claimRows.filter((claim) => claim.cardId);
+    // A card the zone has taken back stands for nothing it said (C-3): its claims are out of both, the cards' and the table's - the
+    // owner took them back, and an answer is not right or wrong against them.
     const frozen = roundId ? (await this.round(roundId))?.ref?.evaluationBasis : null;
+    const withdrawn = frozen?.claims ? new Set() : await this.#withdrawnCards(claimRows.map((claim) => claim.cardId).filter(Boolean));
+    const standing = claimRows.filter((claim) => !claim.cardId || !withdrawn.has(claim.cardId));
+    const carded = standing.filter((claim) => claim.cardId);
     return {
       project,
       judgeProduct: frozen?.product ?? project.product, judgeCompetitors: frozen?.competitors ?? project.competitors,
       // What the judge reads of the profile (scope, summary, findings) and nothing it does not: the round freezes this, row by row.
       value: frozen?.value ?? { version: Number(profile.rows[0]?.version ?? 0), data: geoValueJudged(profile.rows[0]?.data) },
-      claims: frozen?.claims ?? (carded.length ? carded : claimRows),
+      claims: frozen?.claims ?? (carded.length ? carded : standing),
       careFlags: frozen?.careFlags ?? careFlags,
       owned: {
         domains: owned.rows.map((row) => String(row.domain).toLowerCase()).filter(Boolean),
@@ -300,6 +304,20 @@ export class GeoMeasureStore {
           ...ownedLinks.rows.map((row) => String(row.url)).filter((url) => !geoOwnedLinkKey(url).named)].filter(Boolean),
       },
     };
+  }
+
+  /**
+   * Which of these cards the evidence zone has taken back (`evidence_cards.withdrawn`). The zone's tables are another module's: a
+   * deployment without them has no card to have taken back, and a card id nobody holds is not withdrawn.
+   * @param {string[]} cardIds @returns {Promise<Set<string>>}
+   */
+  async #withdrawnCards(cardIds) {
+    const ids = [...new Set(cardIds.map(String))];
+    if (!ids.length) return new Set();
+    const present = (await this.query(`SELECT to_regclass('evimed_frontier.evidence_cards') IS NOT NULL AS present`)).rows[0]?.present === true;
+    if (!present) return new Set();
+    const rows = await this.query(`SELECT id FROM evimed_frontier.evidence_cards WHERE id = ANY($1::text[]) AND withdrawn IS NOT NULL`, [ids]);
+    return new Set(rows.rows.map((/** @type {any} */ row) => String(row.id)));
   }
 
   /**
