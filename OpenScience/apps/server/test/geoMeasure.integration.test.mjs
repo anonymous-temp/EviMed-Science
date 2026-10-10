@@ -13,7 +13,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.mjs";
 import { GeoJudge, tickParse } from "../src/geoJudge.mjs";
-import { netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
+import { measureRound, netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
 import { noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { GEO_TABLES_FOR_TESTS, fakeModel, judgeCallParts, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
@@ -852,6 +852,84 @@ test("the net effect reads the arms' earlier cells: an insufficient cell with co
   const stored = await rows(`SELECT variant, noise_band::float8 AS noise_band, noise_measured FROM evimed_geo.metrics WHERE metric_id = 'NET' ORDER BY variant`);
   assert.deepEqual(stored, [{ variant: "M-01", noise_band: 4.5, noise_measured: true }, { variant: "M-08", noise_band: null, noise_measured: null },
     { variant: "M-19", noise_band: 5, noise_measured: false }]);
+});
+
+// ---------------------------------------------------------------- the arms a net effect compares (Q-3)
+
+/**
+ * A finished round whose answers are seeded straight into the tables: `mentions[groupId]` of each group's questions mention our product.
+ * @param {{ project: string, id: string, kind: string, date: string, factsAt: string, groups: Record<string, string[]>, mentions: Record<string, number> }} spec
+ */
+async function seededRound({ project, id, kind, date, factsAt, groups, mentions }) {
+  await database.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, engines, status, planned, done, sample_date, created_at, started_at, finished_at)
+    VALUES ($1, $2, $3, $4, 1, ARRAY['deepseek'], 'done', 0, 0, $5::date, $6, $6, $6)`, [id, `user_${project}`, project, kind, date, factsAt]);
+  for (const [groupId, questionIds] of Object.entries(groups)) {
+    for (const [index, questionId] of questionIds.entries()) {
+      const snapshot = `${id}_${questionId}`;
+      const mentioned = index < (mentions[groupId] ?? 0);
+      await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, citations, surface)
+        VALUES ($1, $2, $3, $4, $5, 'deepseek', $6, 'valid', 'a seeded answer', '[]'::jsonb, '{"mode":"web"}'::jsonb)`, [snapshot, `user_${project}`, id, project, questionId, factsAt]);
+      await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, brands, mentions_ours, first_ours, recommended_ours, retrieval_triggered,
+          statements, failure_mode, judged_at, created_at) VALUES ($1, $2, $3, $4::jsonb, $5, $5, false, false, '[]'::jsonb, $6, $7, $7)`,
+      [snapshot, `user_${project}`, project, JSON.stringify(mentioned ? [{ name: "玛仕度肽", ours: true, competitor: false, position: 1, inRecommendation: false, count: 1 }] : []),
+        mentioned, mentioned ? "correct" : "omitted", factsAt]);
+    }
+  }
+}
+
+test("the net effect compares the groups both windows measured: a control group that leaves after the baseline leaves the baseline's control arm too (Q-3)", options, async () => {
+  await reset();
+  const names = (/** @type {string} */ prefix, /** @type {number} */ count) => Array.from({ length: count }, (_, index) => `${prefix}_q${index + 1}`);
+  const pilot = names("pg", 30);
+  const controls = Object.fromEntries(["c1", "c2", "c3", "c4"].map((id) => [id, names(id, 10)]));
+  await seedGeoProject(database, {
+    id: "geo_arm", userId: "user_geo_arm", projectId: "proj_geo_arm", engines: ["deepseek"],
+    groups: [{ id: "pg", pool: "P2" }, ...Object.keys(controls).map((id) => ({ id, pool: "P2", isControl: true }))],
+    questions: [...pilot.map((id) => ({ id, groupId: "pg", text: `pilot ${id}` })), ...Object.entries(controls).flatMap(([group, ids]) => ids.map((id) => ({ id, groupId: group, text: `control ${id}` })))],
+    claims: [DOSING],
+  });
+  const groups = { pg: pilot, ...controls };
+  const net = async (/** @type {string} */ roundId) => (await rows(`SELECT numerator::float8 AS pilot_change, denominator::float8 AS control_change, value::float8 AS net, status, reason
+    FROM evimed_geo.metrics WHERE round_id = $1 AND metric_id = 'NET' AND scope = 'pool' AND pool = 'P2' AND variant = 'M-01'`, [roundId]))[0];
+
+  // The baseline: the pilot mentions us in 6 of 30 answers, each of the first three control groups in 2 of 10, the fourth in 8 of 10.
+  await seededRound({ project: "geo_arm", id: "r_base", kind: "baseline", date: "2026-08-01", factsAt: "2026-08-01T10:00:00Z", groups,
+    mentions: { pg: 6, c1: 2, c2: 2, c3: 2, c4: 8 } });
+  assert.equal((await tickMetrics({ store, now: () => new Date("2026-08-02T00:00:00Z") })).rounds, 1);
+  assert.deepEqual((await rows(`SELECT value::float8 AS value, denominator::float8 AS denominator FROM evimed_geo.metrics WHERE round_id = 'r_base' AND scope = 'arm' AND arm = 'control'
+    AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => [row.value, row.denominator]), [[35, 40]], "the baseline's control arm was the four groups");
+
+  // The fourth control group is touched by an article after the baseline: it leaves the control arm from now on.
+  await database.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, group_id, status, safety) VALUES ('a_c4', 'user_geo_arm', 'geo_arm', 'c4', 'draft', 'clear')`);
+  // Five weeks on: the pilot has risen to 12 of 30, the three clean control groups have not moved (and the fourth is still answered).
+  await seededRound({ project: "geo_arm", id: "r_week", kind: "weekly", date: "2026-09-05", factsAt: "2026-09-05T10:00:00Z", groups,
+    mentions: { pg: 12, c1: 2, c2: 2, c3: 2, c4: 8 } });
+  assert.equal((await tickMetrics({ store, now: () => new Date("2026-09-06T00:00:00Z") })).rounds, 1);
+
+  // The control arm is c1–c3 in both windows: 20 % then 20 %, no change; the pilot gained 20 points. (Against the baseline's four groups
+  // the control arm read 35 % then 20 %, a fall of 15 points that no group suffered, and the net effect 35.)
+  const effect = await net("r_week");
+  assert.deepEqual({ ...effect }, { pilot_change: 20, control_change: 0, net: 20, status: "ok", reason: "up" });
+  // The cells each round stored stay as they were measured.
+  assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_base' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [35]);
+  assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_week' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [20]);
+  // Each round records which groups its arms were.
+  const [recorded] = await rows(`SELECT ref -> 'balance' -> 'arms' AS arms FROM evimed_geo.rounds WHERE id = 'r_week'`);
+  assert.deepEqual(recorded.arms, { pilot: ["pg"], control: ["c1", "c2", "c3"] });
+  const [baseline] = await rows(`SELECT ref -> 'balance' -> 'arms' AS arms FROM evimed_geo.rounds WHERE id = 'r_base'`);
+  assert.deepEqual(baseline.arms, { pilot: ["pg"], control: ["c1", "c2", "c3", "c4"] });
+
+  // A baseline measured before the arms were recorded is compared by the groups its answers belong to: the same number.
+  await database.query(`UPDATE evimed_geo.rounds SET ref = ref #- '{balance,arms}' WHERE id = 'r_base'`);
+  assert.equal((await rows(`SELECT ref -> 'balance' -> 'arms' AS arms FROM evimed_geo.rounds WHERE id = 'r_base'`))[0].arms, null);
+  await measureRound({ store, now: () => new Date("2026-09-07T00:00:00Z") }, "r_week");
+  assert.deepEqual({ ...(await net("r_week")) }, { pilot_change: 20, control_change: 0, net: 20, status: "ok", reason: "up" });
+
+  // With the fourth group clean again the arm is the same four groups in both windows: the stored cells are the comparison (35 % both times).
+  await database.query(`DELETE FROM evimed_geo.articles WHERE id = 'a_c4'`);
+  await measureRound({ store, now: () => new Date("2026-09-08T00:00:00Z") }, "r_week");
+  assert.deepEqual({ ...(await net("r_week")) }, { pilot_change: 20, control_change: 0, net: 20, status: "ok", reason: "up" });
+  assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_week' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [35]);
 });
 
 // ---------------------------------------------------------------- a probe that is not there

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { geoConstant } from "@evimed/domain";
 import { GEO_JUDGE_INSTRUCTIONS, GeoJudge, judgeFailureIsTheAnswers } from "../src/geoJudge.mjs";
-import { balanceRows, netEffectRows, sameEngines } from "../src/geoMetricsJob.mjs";
+import { armsOf, balanceRows, commonArms, netEffectRows, sameEngines } from "../src/geoMetricsJob.mjs";
 import { GEO_PROBE_BREAK_AFTER, GeoProbeBreaker, engineAnswers } from "../src/geoProbeQueue.mjs";
 
 test("the circuit breaker's threshold is the owner's five, read from the domain's table", () => {
@@ -177,4 +177,39 @@ test("a net effect is not stored from windows under the answer floor, and a comp
   // Too few control groups is still the structural reason, whatever the answers.
   assert.ok((await netEffectRows(storeWith({ pilot: [point("2026-09-25", 2, 8), point("2026-10-05", 5, 8)], control: [point("2026-09-25", 2, 8), point("2026-10-05", 2, 8)] }),
     { ...input, controlGroups: 0 })).every((row) => row.reason === "too_few_control_groups"));
+});
+
+test("a net effect counts the control groups every compared round had, not the ones the newest round has (Q-3)", async () => {
+  assert.deepEqual(armsOf(new Map([["g2", true], ["g1", false], ["g3", true], ["g4", true]]), new Set(["g3"])), { pilot: ["g1"], control: ["g2", "g4"] },
+    "a control group an article touched is not in the arm; the arms are sorted");
+  const wide = { pilot: ["p1"], control: ["c1", "c2", "c3", "c4"] };
+  const narrow = { pilot: ["p1"], control: ["c1", "c2", "c3"] };
+  const wider = { pilot: ["p1", "p2"], control: ["c2", "c3", "c9"] };
+  assert.deepEqual(commonArms([wide, narrow]), narrow);
+  assert.deepEqual(commonArms([wide, narrow, wider]), { pilot: ["p1"], control: ["c2", "c3"] });
+  assert.deepEqual(commonArms([]), { pilot: [], control: [] });
+
+  const ENGINES = ["kimi", "qianwen"];
+  const point = (/** @type {string} */ roundId, /** @type {string} */ date, /** @type {number} */ k) => ({ roundId, date, value: k, numerator: k, denominator: 100, engines: ENGINES });
+  const series = { pilot: [point("r1", "2026-09-25", 20), point("r2", "2026-10-25", 40)], control: [point("r1", "2026-09-25", 20), point("r2", "2026-10-25", 20)] };
+  const storeWith = (/** @type {Array<{ roundId: string, date: string, engines: string[], arms: any }>} */ rounds) => /** @type {any} */ ({
+    baselineDate: async () => "2026-09-25",
+    latestNoiseBand: async () => ({ value: 2, measured: true }),
+    armSeries: async () => structuredClone(series),
+    armRounds: async () => rounds,
+    // No answers on file: nothing to compute again, the stored cells stand.
+    roundSkippedEngines: async () => [], roundFactRows: async () => [], round: async () => ({ engines: ENGINES }), projectContext: async () => null,
+  });
+  const input = { project: { id: "geo_x" }, round: { id: "r2", setVersion: 5, sampleDate: "2026-10-25" }, controlGroups: 4, engines: ENGINES };
+  const rounds = [{ roundId: "r1", date: "2026-09-25", engines: ENGINES, arms: wide }, { roundId: "r2", date: "2026-10-25", engines: ENGINES, arms: narrow }];
+
+  // The caller counted four control groups; the two rounds share two, which is under the table's minimum.
+  const two = { pilot: ["p1"], control: ["c1", "c2"] };
+  const shared = await netEffectRows(storeWith([rounds[0], { ...rounds[1], arms: two }]), { ...input, arms: two });
+  assert.ok(shared.every((row) => row.reason === "too_few_control_groups"), "two shared groups are under the table's minimum, whatever the caller counted");
+  // Without arms the caller's count and the stored cells are all there is (a caller that does not know its arms).
+  assert.ok((await netEffectRows(storeWith(rounds), input)).every((row) => row.status === "ok"));
+  // A round measured before arms were recorded, with no answers on file, is left as stored and does not narrow what is shared.
+  const legacy = await netEffectRows(storeWith([{ ...rounds[0], arms: null }, rounds[1]]), { ...input, arms: narrow });
+  assert.ok(legacy.every((row) => row.status === "ok"), JSON.stringify(legacy[0]));
 });
