@@ -77,9 +77,10 @@ export class EvolutionWorker {
       this.abortController = new AbortController();
       if (this.closed) this.abortController.abort();
       let lost = false;
+      /** @type {any} */ let mission = null;
       const heartbeat = setInterval(() => { this.service.jobs.renew(job.userId, job.id, job.leaseToken, this.config.evolutionLeaseMs ?? 120000).then((/** @type {boolean} */ owned) => { if (!owned) { lost = true; this.interrupt(); } }).catch(() => { lost = true; this.interrupt(); }); }, Math.max(1000, Math.floor((this.config.evolutionLeaseMs ?? 120000) / 4)));
       try {
-        const mission = await this.callbacks.ensureMission?.(job);
+        mission = await this.callbacks.ensureMission?.(job);
         if (this.callbacks.ensureMission && !mission?.id && !['evolution-event','evolution-digest','evolution-plan'].includes(job.kind)) {
           return await this.service.jobs.fail(job.userId, job.id, job.leaseToken, {code:'usage_budget_exceeded',message:'The next mission waits for its budget allocation.'}, {retry:true,refundAttempt:true,delayMs:3600000});
         }
@@ -98,6 +99,7 @@ export class EvolutionWorker {
         if (refusal === 'run') {
           const exhausted = { code: 'evolution_run_budget_exhausted', status: 409 };
           await this.resourceWait(job, exhausted);
+          await this.failMission(mission, exhausted);
           return this.service.jobs.fail(job.userId, job.id, job.leaseToken,
             { code: 'evolution_run_budget_exhausted', message: 'The work needs more than one run may spend; the closed failure record preserves its next step.' }, { retry: false });
         }
@@ -115,7 +117,7 @@ export class EvolutionWorker {
         }
         const terminal = Number(job.attempts ?? 1) >= Math.min(job.maxAttempts ?? 10, this.config.evolutionMaxJobAttempts ?? 3)
           || [400, 401, 403, 404, 422].includes(error?.status ?? error?.statusCode);
-        if (terminal) await this.resourceWait(job, error);
+        if (terminal) { await this.resourceWait(job, error); await this.failMission(mission, error); }
         return this.service.jobs.fail(job.userId, job.id, job.leaseToken, { code: 'evolution_job_failed', message: 'Evolution work failed; the closed failure record preserves its next step.' }, { retry: !terminal, delayMs: this.config.evolutionRetryMs ?? 60000 });
       } finally { clearInterval(heartbeat); this.abortController = null; }
     } finally { this.running = false; }
@@ -183,6 +185,13 @@ export class EvolutionWorker {
     const quarter = `${local.getUTCFullYear()}-Q${Math.floor(local.getUTCMonth()/3)+1}`;
     // Audit composition curates and seals the quarter only after independent tasks exist.
     await this.service.enqueue('audit', {month:previousMonth,quarter}, `heldout-audit:${previousMonth}`);
+  }
+  /** A job that will not be tried again ends the mission opened to carry its cost as failed (`recordJob`); one that will be leaves it open.
+   * @param {any} mission @param {any} error */
+  async failMission(mission, error) {
+    if (!mission?.id) return;
+    try { await this.callbacks.recordMission?.(mission, { status: 'failed', code: String(error?.code ?? 'evolution_job_failed') }); }
+    catch { /* the job's own failure is what is reported */ }
   }
   /**
    * Missions the pause stopped wait for `search-resumed`, the one event they wake on (`missions.wake`), and nothing else said it, so research

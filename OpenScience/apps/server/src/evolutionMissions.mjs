@@ -9,8 +9,9 @@ import { validateModuleEvolutionPolicy } from './moduleEvolutionPolicies.mjs';
 
 export const EVOLUTION_OPPORTUNITY_SOURCES = Object.freeze(['demand', 'method', 'data', 'success', 'combination', 'contradiction', 'self-research', 'repair']);
 /** `deferred`: parked on a resource that did not come within its window. Terminal, so the module goes on; the opportunity keeps its
- * wake conditions (`defer`) and comes back when one of them is met (`wake`). */
-const TERMINAL = new Set(['complete', 'rejected', 'impossible', 'cancelled', 'deferred']);
+ * wake conditions (`defer`) and comes back when one of them is met (`wake`). `failed`: the job a mission was opened for did not succeed
+ * (`recordJob`). */
+const TERMINAL = new Set(['complete', 'rejected', 'impossible', 'cancelled', 'deferred', 'failed']);
 /** What a mission waits for, named in the mission's vocabulary, and the event that meets it. */
 const WAKE_EVENT_TYPES = Object.freeze({ 'new-data': 'dataset-ready', 'new-tool': 'tool-ready', 'new-method': 'method-ready', 'new-model': 'environment-changed' });
 const DEFERRED_WAKE_CONDITIONS = Object.freeze(['new-data', 'new-method', 'new-tool', 'new-model']);
@@ -219,8 +220,12 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     if (!row?.id) return;
     const fresh = await service.get(row.id);
     const status = result?.status ?? result?.payload?.status;
+    // A mission opened for a job (`ensureJob` names the job) ends with it, whatever the job's kind is called: the self-research job's kind is
+    // `research`, which is also the kind of an opportunity's weekly mission, and that one concludes itself (`run`, `finalizeMission`). Review D-E9.
+    const forJob = typeof fresh.payload.jobId === 'string';
+    if (forJob && status === 'failed') return update(fresh, { researchCostCny: await cost(row.id), status: 'failed', reason: result?.code ?? 'job-failed', lastResult: 'failed', failedAt: service.now().toISOString() });
     return update(fresh, { researchCostCny: await cost(row.id), ...(Number.isFinite(fresh.payload.regressions)?{}:!fresh.payload.candidate&&!fresh.payload.verdictId&&!fresh.payload.publication?{regressions:0,regressionBasis:'no-activated-candidate-administrative-job',regressionObservations:[]}:{}), lastResult: status ?? 'completed',
-      ...(['research','transfer','transfer-audit','combination','prune'].includes(fresh.payload.kind) || ['waiting_resource','waiting_confirmation','waiting_budget','frozen','ready'].includes(status) ? {} : { completed: true, status: 'complete', completedAt: service.now().toISOString() }) });
+      ...((!forJob && ['research','transfer','transfer-audit','combination','prune'].includes(fresh.payload.kind)) || ['waiting_resource','waiting_confirmation','waiting_budget','frozen','ready'].includes(status) ? {} : { completed: true, status: 'complete', completedAt: service.now().toISOString() }) });
   }
 
   async function publish(moduleId, candidate, result) {

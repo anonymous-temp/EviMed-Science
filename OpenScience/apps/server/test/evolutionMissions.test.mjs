@@ -229,3 +229,22 @@ test('a module whose best opportunity is parked inside its resource window takes
  f.advance(6*86400000);
  assert.deepEqual((await missions.plan({week:'2026-10-19'})).missions,[],'every opportunity of the module has an open mission');
 });
+test('a mission opened for a job ends with the job whatever kind the job has, and fails with it; a research mission concludes itself',async()=>{
+ const {missions}=planner({});
+ // The self-research job's mission is named for its job and has kind `research`, which is also the kind of an opportunity's weekly mission.
+ const row=await missions.ensureJob({id:'job-research',kind:'evolution-research',payload:{}});
+ assert.equal(row.payload.kind,'research');assert.equal(row.payload.jobId,'job-research');
+ const done=await missions.recordJob(row,{status:'complete',added:1});
+ assert.deepEqual([done.payload.status,done.payload.completed],['complete',true]);assert.ok(done.payload.completedAt);
+ const scout=await missions.ensureJob({id:'job-scout',kind:'evolution-scout',payload:{}});
+ assert.equal((await missions.recordJob(scout,{status:'complete'})).payload.status,'complete','the kinds that always ended with their job still do');
+ const budgeted=await missions.ensureJob({id:'job-audit',kind:'evolution-audit',payload:{moduleId:'tools'}});
+ assert.equal((await missions.recordJob(budgeted,{status:'waiting_resource'})).payload.status,'ready','a job that reports it is waiting leaves its mission open');
+ const broken=await missions.ensureJob({id:'job-meta',kind:'evolution-meta',payload:{}});
+ const failed=await missions.recordJob(broken,{status:'failed',code:'evolution_job_failed'});
+ assert.deepEqual([failed.payload.status,failed.payload.reason,failed.payload.completed],['failed','evolution_job_failed',undefined]);
+ assert.equal((await missions.fund(failed)).payload.status,'failed','a failed mission is not funded again');
+ const weekly=await missions.create({id:'weekly-research',moduleId:'tools',kind:'research',category:'research'});
+ assert.equal((await missions.recordJob(weekly,{status:'complete'})).payload.status,'ready','a mission that carries research is concluded by its own run');
+ assert.equal((await missions.recordJob(weekly,{status:'failed'})).payload.status,'ready','and is not failed by a job that reports it');
+});
