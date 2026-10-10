@@ -16,7 +16,7 @@ const INSTRUCTIONS_EXAMPLE = "适用情况：…\n需要的输入：…\n步骤�
  *
  * Creating (`create`) shows an example in each field and a switch — on by default — that selects the new skill for the
  * current project as it is saved, because a skill nobody has switched on is used nowhere and nothing else in the form says
- * so. Editing keeps the same captions and none of that. A name or text that is empty or only spaces is named in place and
+ * so. Editing keeps the same captions and none of that. A name, purpose or text that is empty or only spaces is named in place and
  * sends nothing: the server would refuse it with a toast that names no field.
  */
 export function SkillEditor({ initial, busy, onSave, onCancel, create }: {
@@ -27,18 +27,20 @@ export function SkillEditor({ initial, busy, onSave, onCancel, create }: {
 }) {
   const [value, setValue] = useState(initial);
   const [useInProject, setUseInProject] = useState(true);
-  const [errors, setErrors] = useState<{ title?: string; instructions?: string }>({});
-  const titleField = useRef<HTMLInputElement>(null), instructionsField = useRef<HTMLTextAreaElement>(null);
+  const [errors, setErrors] = useState<{ title?: string; description?: string; instructions?: string }>({});
+  const titleField = useRef<HTMLInputElement>(null), instructionsField = useRef<HTMLTextAreaElement>(null), purposeField = useRef<HTMLTextAreaElement>(null);
   const base = useId();
   const purposeHint = `${base}-purpose-hint`, instructionsHint = `${base}-instructions-hint`;
 
   const submit = () => {
     const found = {
       ...(value.title.trim() ? {} : { title: "请填写名称" }),
+      ...(value.description.trim() ? {} : { description: "请写出什么时候使用这个技能" }),
       ...(value.instructions.trim() ? {} : { instructions: "请写出这个技能怎么做" }),
     };
     setErrors(found);
     if (found.title) { titleField.current?.focus(); return; }
+    if (found.description) { purposeField.current?.focus(); return; }
     if (found.instructions) { instructionsField.current?.focus(); return; }
     onSave({ ...value, title: value.title.trim(), description: value.description.trim() }, !!create && useInProject);
   };
@@ -46,6 +48,7 @@ export function SkillEditor({ initial, busy, onSave, onCancel, create }: {
     setValue({ ...value, ...next });
     // The sentence goes as soon as the field is being fixed, not at the next save.
     if (next.title !== undefined && errors.title) setErrors({ ...errors, title: undefined });
+    if (next.description !== undefined && errors.description) setErrors({ ...errors, description: undefined });
     if (next.instructions !== undefined && errors.instructions) setErrors({ ...errors, instructions: undefined });
   };
 
@@ -53,7 +56,7 @@ export function SkillEditor({ initial, busy, onSave, onCancel, create }: {
     <Input ref={titleField} label="名称" value={value.title} maxLength={80} aria-required="true" disabled={busy}
       placeholder={create ? TITLE_EXAMPLE : undefined} error={errors.title} onChange={event => change({ title: event.target.value })} />
     <div>
-      <Textarea label="用途" value={value.description} maxLength={1024} disabled={busy} aria-describedby={purposeHint}
+      <Textarea ref={purposeField} label="用途" aria-required="true" error={errors.description} value={value.description} maxLength={1024} disabled={busy} aria-describedby={purposeHint}
         placeholder={create ? PURPOSE_EXAMPLE : undefined} onChange={event => change({ description: event.target.value })} />
       <p id={purposeHint} className="mt-2 text-caption text-text-3">{PURPOSE_HINT}</p>
     </div>

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-protocol",
-  "version": "sha256:c17d906cf2139672363f5dbb07163b44ba25027484c59fd057934077ee589be0",
+  "version": "sha256:ed866c3e5070cd7165e93c24e23d96ea8719343f6a525942f9201d2aab0edee0",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 29,
@@ -1113,7 +1113,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this 虚拟临床研究 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people (a published trial's own figures -- registry records, extracted values, precedents -- are not this study's people and come back whole). what: study also returns intendedUseCeiling, the highest use the study's results can be labelled with and why. what: pack reads the study's disease knowledge pack (an index of its sections; filter.kind reads one section whole) or, with none bound, the catalogue (filter.query searches it); what: library lists the account's reusable population definitions. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with their evidence quotes and the facts written for them, and the language criteria still waiting for the run's answer.",
+      "description": "Read this 虚拟临床研究 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people (a published trial's own figures -- registry records, extracted values, precedents -- are not this study's people and come back whole). what: study also returns intendedUseCeiling, the highest use the study's results can be labelled with and why. what: pack reads the study's disease knowledge pack (an index of its sections; filter.kind reads one section whole) or, with none bound, the catalogue (filter.query searches it); what: library lists the account's reusable population definitions. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema, and the language criteria still waiting for the run's answer.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1188,6 +1188,12 @@
                 "maxLength": 160,
                 "pattern": "^[A-Za-z0-9_.:@-]+$"
               },
+              "protocolVersionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9_.:@-]+$"
+              },
               "query": {
                 "type": "string",
                 "minLength": 1,
@@ -1202,7 +1208,7 @@
               "offset": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 10000
+                "maximum": 1048576
               }
             },
             "additionalProperties": false
@@ -1229,7 +1235,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "Queue a deterministic computation on the 虚拟临床研究 engine and read where it got to. start returns a jobId; status reports state, progress and the saved result; cancel stops it and keeps the completed batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the frozen setting of one method (kind). The engine reads only the keys its method names: a key it does not read, a required one that is missing, or a design or endpoint the method does not implement is refused by the field's path -- never guess a key. Before you write a scenario here, or the configuration of a trial scenario, patient set, population or comparator in vcr_write, call action shape with the kind: it answers every key that method reads (type, unit, range, default, required or optional, the endpoint or design it is read for) and a valid example; shape with no kind lists the kinds. Patient-level kinds name their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence is evidence_pool and match_criteria is built by the platform from the protocol; maic_time_to_event_comparator takes reconstructionResultId, never rows. A computation of one of the study's objects (a trial scenario, population, patient set, comparator or design grid) names it: subjectId is the id vcr_write returned, and its result is filed under that object alone; with none, the one object the scenario fits is taken, and several are refused with the list. How to read the results is in the vcr-analysis skill.",
+      "description": "Queue a deterministic computation on the 虚拟临床研究 engine and read where it got to. start returns a jobId; status reports state, progress and the saved result; cancel stops it and keeps the completed batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the frozen setting of one method (kind). The engine reads only the keys its method names: a key it does not read, a required one that is missing, or a design or endpoint the method does not implement is refused by the field's path -- never guess a key. Before you write a scenario here, or the configuration of a trial scenario, patient set, population or comparator in vcr_write, call action shape with the kind: it answers every key that method reads (type, unit, range, default, required or optional, the endpoint or design it is read for) and a valid example; shape with no kind lists the kinds. Patient-level kinds name their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence is evidence_pool and match_criteria is built by the platform from the protocol; maic_time_to_event_comparator takes reconstructionResultId, never rows. A computation of one of the study's objects (a trial scenario, population, patient set, comparator or design grid) names it: subjectId is the id vcr_write returned, and its result is filed under that object alone; with none, the one object the scenario fits is taken, and several are refused with the list. How to read the results is in the vcr-analysis skill.For matching, selection names one protocolVersionId or up to ten protocolVersionIds, subjectKeys and direction; continue a frozen batch with snapshotId and offset. ",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1309,6 +1315,58 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 120
+          },
+          "selection": {
+            "type": "object",
+            "properties": {
+              "protocolVersionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9_.:@-]+$"
+              },
+              "protocolVersionIds": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[A-Za-z0-9_.:@-]+$"
+                }
+              },
+              "subjectKeys": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 5000,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[A-Za-z0-9_.:@-]+$"
+                }
+              },
+              "direction": {
+                "type": "string",
+                "enum": [
+                  "trial_to_patient",
+                  "patient_to_trial"
+                ]
+              },
+              "asOf": {
+                "type": "string"
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "snapshotId": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "additionalProperties": false
           },
           "reconstructionResultId": {
             "type": "string",

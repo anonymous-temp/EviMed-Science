@@ -18,7 +18,7 @@ import { VCR_ACCESS_CODES, VcrAccess } from "../src/vcrAccess.mjs";
 import { VCR_DATA_PLANE_CODES, VcrDataPlane, parseTable, pseudonymOf, sha256OfBytes, snapshotView, studyPseudonymKey, tableView } from "../src/vcrDataPlane.mjs";
 import { VcrDataStore } from "../src/vcrDataStore.mjs";
 import { VcrMembers } from "../src/vcrMembers.mjs";
-import { vcrMatchingExecutor, vcrSubjectTableSeam } from "../src/vcrComposition.mjs";
+import { vcrMatchingExecutor, vcrMatchingSeam, vcrSubjectTableSeam } from "../src/vcrComposition.mjs";
 import { vcrId } from "../src/vcrStoreBase.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { COHORT_SIZE, FIELD_MAP, cohortCsv, dictionaryCsv, fingerprints, patientNo, streamOf, survivalOf, visitsCsv } from "./helpers/vcrIntakeData.mjs";
@@ -502,12 +502,22 @@ const MATCH_CRITERIA = [
 const matchStoreOver = (criteria) => ({
   async listCriteria() { return criteria; }, async listFacts() { return []; }, async latestLanguageJudgments() { return new Map(); },
 });
-const runMatching = (principal, criteria = MATCH_CRITERIA) => {
-  const run = vcrMatchingExecutor({ matchStore: matchStoreOver(criteria), store: { async studyById() { return { id: STUDY_FOR_MATCH, userId: principal }; } },
-    subjectTable: vcrSubjectTableSeam({ dataPlane: plane }) });
-  return run({ job: { id: "job_m", studyId: STUDY_FOR_MATCH, scenarioHash: "e".repeat(64), seed: 1,
-    inputs: [{ kind: "evidence", id: "matching:asof:2026-10-05T00:00:00.000Z" }, { kind: "evidence", id: "matching:protocol:prt_1" }, { kind: "evidence", id: "matching:facts:0123456789abcdef" }],
-    scenario: { criteria: criteria.map((criterion) => ({ id: criterion.id, kind: criterion.kind, type: criterion.criterionType, state: "unknown" })) } }, onProgress: async () => {} });
+const runMatching = async (principal, criteria = MATCH_CRITERIA) => {
+  const snapshots = new Map();
+  const matchStore = {
+    ...matchStoreOver(criteria),
+    async latestProtocol() { return { id: "prt_1" }; },
+    async candidateSubjects() { return []; },
+    async saveMatchingSnapshot({ id, payload }) { snapshots.set(id, payload); },
+    async matchingSnapshot(_studyId, id) { return snapshots.get(id); },
+    async matchingFactsByIds() { return []; },
+    async languageJudgmentsByIds() { return []; },
+  };
+  const study = { id: STUDY_FOR_MATCH, userId: principal };
+  const parts = { matchStore, store: { async studyById() { return study; } }, subjectTable: vcrSubjectTableSeam({ dataPlane: plane }) };
+  const frozen = await vcrMatchingSeam({ ...parts, now: () => new Date("2026-10-05T00:00:00.000Z") }).matchScenario(study);
+  return vcrMatchingExecutor(parts)({ job: { id: "job_m", studyId: STUDY_FOR_MATCH, scenarioHash: "e".repeat(64), seed: 1,
+    inputs: frozen.inputs, scenario: frozen.scenario }, onProgress: async () => {} });
 };
 /** @type {string} */ let STUDY_FOR_MATCH = "";
 

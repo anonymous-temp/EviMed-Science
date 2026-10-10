@@ -113,7 +113,7 @@ export const GEO_JUDGE_INSTRUCTIONS = [
   "按重要性依次做以下几件事：",
   "1. statements：最多 30 条，最重要的（讲错的、涉及适应证、用法用量、禁忌、不良反应的）在前。从回答中逐句摘出关于本品（品牌名、别名、通用名或明确指代本品的说法）的事实性陈述。text 必须逐字照抄回答原句，不改一个字。每句对照主张库判定：",
   "   - topic：indication 适应证 / dosage 用法用量 / contraindication 禁忌 / adverse_reaction 不良反应 / other 其他。前四类是「指定信息」，回答里出现的每一句都要摘出来判定。",
-  "valueCoverage：针对 value.findings 中与本问题相关的发现，给出可选数组，每条 {findingId,status,quote,reason,conditionsPreserved}。status 为 represented/partial/contradicted/not_addressed/not_applicable/uncertain。represented、partial、contradicted 的 quote 必须逐字来自回答。只评价给定结论的表达与限定条件是否保留，不能把研究材料自动当成已证实事实；有冲突、过期或资料不足时写 uncertain。conditionsPreserved 可为 true/false/null。没提品牌不等于没表达价值，不适合该药的人群、不宜推荐或无关问题用 not_applicable，不惩罚合理的不推荐。缺失价格不能当成经济性差。判断人群、剂型、比较对象、时间、利益与风险；FAERS 信号不是发生率或因果。缺少依据时保留未知，禁止补造。",
+  "valueCoverage：针对 value.findings 中与本问题相关的发现，必须输出 valueCoverage 数组并评价相关发现；不相关用 not_applicable，不能省略整组评价。无发现时给空数组，每条 {findingId,status,quote,reason,conditionsPreserved}。status 为 represented/partial/contradicted/not_addressed/not_applicable/uncertain。represented、partial、contradicted 的 quote 必须逐字来自回答。只评价给定结论的表达与限定条件是否保留，不能把研究材料自动当成已证实事实；有冲突、过期或资料不足时写 uncertain。conditionsPreserved 可为 true/false/null。人群、比较对象或确定性等关键限制没有在回答中表达，就判 partial、conditionsPreserved:false；不能从用户问题或主张库替回答补上缺失的限制。没提品牌不等于没表达价值，不适合该药的人群、不宜推荐或无关问题用 not_applicable，不惩罚合理的不推荐。缺失价格不能当成经济性差。判断人群、剂型、比较对象、时间、利益与风险；FAERS 信号不是发生率或因果。缺少依据时保留未知，禁止补造。纯拒答时用 uncertain 或 not_applicable，不能把未回答记为零分的 not_addressed。",
   "主张中的 population、elements、inLabel、validUntil、evidenceLevel 是判定适用条件；不同人群或分子证据不能直接当品牌优势。过期且没有当前依据时不可认定为当前已证实。",
   "   - verdict：correct（与某条主张一致）/ wrong（与某条主张矛盾，或主张库明确不支持）/ unverifiable（主张库没有相关内容，无法判定）。",
   "   - claim：判定所依据的主张编号（如 C3）；unverifiable 可为 null。",
@@ -132,7 +132,7 @@ export const GEO_JUDGE_INSTRUCTIONS = [
   "",
   "只依据给出的主张库判定，不用你自己的知识补充；拿不准的判 unverifiable。编号只能用给出的编号。不要输出任何解释。",
   "输出格式（键名固定）：",
-  "{\"statements\":[{\"text\":\"\",\"topic\":\"dosage\",\"verdict\":\"correct\",\"claim\":\"C1\",\"evidence\":\"\",\"errorType\":null,\"severity\":null}],\"offLabel\":[],\"omittedSafety\":[],\"citationClaims\":[{\"link\":\"L1\",\"statement\":\"\"}],\"refusal\":false,\"entities\":[],\"recommendations\":[],\"careHint\":false,\"redFlagsExpected\":[],\"redFlagsHit\":[],\"safetyTerms\":[]}",
+  "{\"statements\":[{\"text\":\"\",\"topic\":\"dosage\",\"verdict\":\"correct\",\"claim\":\"C1\",\"evidence\":\"\",\"errorType\":null,\"severity\":null}],\"offLabel\":[],\"omittedSafety\":[],\"citationClaims\":[{\"link\":\"L1\",\"statement\":\"\"}],\"refusal\":false,\"entities\":[],\"recommendations\":[],\"careHint\":false,\"redFlagsExpected\":[],\"redFlagsHit\":[],\"safetyTerms\":[],\"valueCoverage\":[{\"findingId\":\"给定发现的id\",\"status\":\"uncertain\",\"quote\":\"\",\"reason\":\"\",\"conditionsPreserved\":null}]}",
 ].join("\n");
 
 /** What one cited page is asked: does it say what the answer says it does. */
@@ -430,7 +430,8 @@ export function verifyJudgement(answer, built, input) {
     if (quote && !present(quote)) continue;
     if (["represented", "partial", "contradicted"].includes(row.status) && !present(quote)) continue;
     observed.add(row.findingId);
-    valueCoverage.push({ findingId: row.findingId, status: row.status, quote, reason: String(row.reason ?? "").slice(0, 1200),
+    valueCoverage.push({ findingId: row.findingId, status: answer.refusal === true && row.status !== "not_applicable" ? "uncertain"
+      : row.status === "represented" && row.conditionsPreserved === false ? "partial" : row.status, quote, reason: String(row.reason ?? "").slice(0, 1200),
       conditionsPreserved: typeof row.conditionsPreserved === "boolean" ? row.conditionsPreserved : null });
   }
   return {

@@ -10,6 +10,7 @@ import { ContentTab } from "./ContentTab";
 import { Distribution, hasDistribution } from "./DistributionTab";
 
 const client = vi.hoisted(() => ({
+  getGeoValue: vi.fn(),
   getGeoArticles: vi.fn(),
   getGeoArticleText: vi.fn(),
   withdrawGeoArticle: vi.fn(),
@@ -63,6 +64,7 @@ const rowOf = (title: string) => screen.getByText(title).closest("li") as HTMLEl
 
 beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
+  client.getGeoValue.mockResolvedValue({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } });
   store.select.mockClear();
   client.runGeoStep.mockResolvedValue({ sessionId: "ses_geo_1" });
   client.getGeoMonitoring.mockResolvedValue(monitoringFilled);

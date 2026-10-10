@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-package",
-  "version": "sha256:55a19e6cd8499f3949891602cb9370d44ab3d0c8a1f0251500e51a1f5d28b5b2",
+  "version": "sha256:c97bbd89c754b939a28f29473ad479b854b6c59dc4419d4de999062e44894570",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 22,
@@ -742,7 +742,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this 虚拟临床研究 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people (a published trial's own figures -- registry records, extracted values, precedents -- are not this study's people and come back whole). what: study also returns intendedUseCeiling, the highest use the study's results can be labelled with and why. what: pack reads the study's disease knowledge pack (an index of its sections; filter.kind reads one section whole) or, with none bound, the catalogue (filter.query searches it); what: library lists the account's reusable population definitions. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with their evidence quotes and the facts written for them, and the language criteria still waiting for the run's answer.",
+      "description": "Read this 虚拟临床研究 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people (a published trial's own figures -- registry records, extracted values, precedents -- are not this study's people and come back whole). what: study also returns intendedUseCeiling, the highest use the study's results can be labelled with and why. what: pack reads the study's disease knowledge pack (an index of its sections; filter.kind reads one section whole) or, with none bound, the catalogue (filter.query searches it); what: library lists the account's reusable population definitions. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema, and the language criteria still waiting for the run's answer.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -817,6 +817,12 @@
                 "maxLength": 160,
                 "pattern": "^[A-Za-z0-9_.:@-]+$"
               },
+              "protocolVersionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9_.:@-]+$"
+              },
               "query": {
                 "type": "string",
                 "minLength": 1,
@@ -831,7 +837,7 @@
               "offset": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 10000
+                "maximum": 1048576
               }
             },
             "additionalProperties": false

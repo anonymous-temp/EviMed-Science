@@ -52,20 +52,34 @@ per key clinical question on the patient journey, every claim with its verbatim
 quotation and a ✓ or ⚠ against its source; differences from a comparator belong
 here, labelled by how they are known (head to head, anchored indirect, or only for
 reference). The **popular** layer is yours: it explains the disease, the
-treatment choices and the evidence to patients and families, and it says only what
-a clinical card says.
+treatment choices and the evidence to patients and families. It preserves the
+source, scope and certainty of the finding it explains.
 
 `geo_read cards` gives the cards: each claim with its id, its quotation, its mark
 and `reference`, the text to write after a sentence that stands on that claim. Cite
-only claims marked ✓. In the popular text, the question-and-answer and the
-correction, **every sentence that states a fact ends with the `reference` of the
-claim it stands on** (the platform takes the markers off before anything is
-published, and reads each one against the card revision it names). A number in a
+only claims marked ✓ as verified card claims. When a popular, question-and-answer
+or correction sentence rests on such a claim, end it with that exact `reference`
+(the platform removes markers before publication and checks the named revision). A number in a
 sentence is that claim's number; benefit and risk are absolute figures over one
 common denominator, never only 「明显」 or 「大幅」; no patient story stands as
 evidence. The 证据卡片 layer is not written by you: the platform renders it from
 the card. `mcp__evimed__frontier_search` shows what has been said about the product lately; a
 retraction or correction of a source is a reason to read it again before you cite.
+
+A missing card, claim-library entry or question group is not a reason to stop the
+batch. Continue a useful draft from the preserved research or source text that is
+available, naming its origin and uncertainty; keep an unresolved subgroup or
+calculation as a local limitation. Qualitative observations can be explained
+without a fabricated number, quotation or verified-card marker. A summary is not
+its source's verbatim quotation. If registration needs a question group, create a
+minimal group for the actual question, without presenting an inferred question as
+observed demand. Write the article before registering its path. Existing source,
+safety and publication checks still apply to the resulting draft; a partial draft
+does not become verified or authorized for distribution by being written.
+For example, low-certainty effectiveness findings without cards still support an
+explicitly uncertain draft now, rather than waiting for cards to arrive. If file
+tools are unavailable, put that useful draft in the answer and do not register a
+file path: a registration tool cannot create the article bytes.
 
 ## What goes into a batch
 
@@ -191,9 +205,9 @@ tool names or ids.
 ## Before you submit
 
 1. **`traceability-review`** — every number and quotation in every article
-   traces to a claim, and every claim to its source; in the popular, Q&A and
-   correction layers, every fact-stating sentence ends with the `reference` of a
-   ✓ claim of `geo_read cards`, and its numbers are that claim's.
+   traces to its preserved source. Sentences based on a verified card retain its
+   exact `reference` and numbers. A draft based on other available research names
+   that origin and its uncertainty without inventing a card, source or quotation.
 2. **`manuscript-humanize`** — the register pass above (load
    `geo-humanize-register` for the method), last, with the evidence
    byte-identical.

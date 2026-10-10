@@ -704,6 +704,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         matchStore.candidateSubjects({ studyId: study.id, visibleBy: minute }),
       ]);
       let frozenTable = null;
+      const tableIdentity = subjectTable?.identity ? await subjectTable.identity(study).catch(() => null) : null;
       if (subjectTable?.read) {
         const table = await subjectTable.read(study).catch(() => null);
         if (table?.available) {
@@ -729,7 +730,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         scenario: { criteria: criteria.map((criterion) => ({
           id: criterion.id, kind: criterion.kind, type: criterion.criterionType, state: "unknown",
         })) },
-        inputs: [...matchingInputs({ asOf: minute, protocolVersionId: protocol.id, facts, judgments, table: frozenTable }), { kind: 'evidence', id: `${MATCHING_SNAPSHOT_PREFIX}${snapshot.id}` }],
+        inputs: [...matchingInputs({ asOf: minute, protocolVersionId: protocol.id, facts, judgments, table: frozenTable ?? tableIdentity }), { kind: 'evidence', id: `${MATCHING_SNAPSHOT_PREFIX}${snapshot.id}` }],
       };
     },
 

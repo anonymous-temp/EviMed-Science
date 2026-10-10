@@ -1,8 +1,13 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { openScopedFileNoFollow, resolveScopedPath } from "../src/security.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mergeGeoValue, geoValueImpacts, summarizeGeoValueCoverage } from "@evimed/domain";
-import { buildJudgeInput, verifyJudgement } from "../src/geoJudge.mjs";
+import { buildJudgeInput, verifyJudgement, GEO_JUDGE_INSTRUCTIONS } from "../src/geoJudge.mjs";
 import { importGeoValue } from "../src/geoValueImport.mjs";
+import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { GeoService } from "../src/geoService.mjs";
 
 test("partial, conflicting and negative findings survive an incremental update without manufactured fields", () => {
@@ -105,4 +110,55 @@ test("coverage never combines different value bases and passes audience/group/en
   assert.equal(value.coverage.assessed, 1);
   assert.ok(value.observations.every(observation => observation.basisVersion === 2));
   assert.deepEqual(parameters, ["g", "deepseek", "group", "caregiver"]);
+});
+
+
+test("judge output contract requests semantic assessments and refusals cannot become measured omissions", () => {
+  const schema = JSON.parse(GEO_JUDGE_INSTRUCTIONS.split("\n").at(-1));
+  assert.ok(Array.isArray(schema.valueCoverage));
+  const input = { owner: { userId: "u", projectId: "p" }, product: {}, competitors: [], careFlags: [], claims: [],
+    value: { version: 3, data: { findings: [{ id: "benefit", statement: "Adult evidence is uncertain" }] } },
+    question: { text: "What is known?" }, answer: "I cannot provide medical advice." };
+  const built = buildJudgeInput(input);
+  const result = verifyJudgement({ refusal: true, valueCoverage: [{ findingId: "benefit", status: "not_addressed" }] }, built, input);
+  assert.equal(result.valueCoverage[0].status, "uncertain");
+  assert.equal(summarizeGeoValueCoverage(result.valueCoverage).value, null);
+  assert.deepEqual(verifyJudgement({ refusal: true }, built, input).valueCoverage, []);
+});
+
+
+test("explicitly lost clinical conditions cannot count as fully represented value", () => {
+  const input = { owner: { userId: "u", projectId: "p" }, product: {}, competitors: [], careFlags: [], claims: [],
+    value: { version: 2, data: { findings: [{ id: "benefit", statement: "Low certainty benefit in adults" }] } },
+    question: { text: "Who benefits?" }, answer: "It may help." };
+  const judged = verifyJudgement({ valueCoverage: [{ findingId: "benefit", status: "represented", quote: "It may help.", conditionsPreserved: false }] }, buildJudgeInput(input), input);
+  assert.equal(judged.valueCoverage[0].status, "partial");
+  assert.equal(summarizeGeoValueCoverage(judged.valueCoverage).value, 0);
+});
+
+
+test("article registration rejects only nonexistent files and keeps available partial drafts", async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "geo-article-existing-"));
+  await fs.mkdir(path.join(workspace, "deliverables/d/articles"), { recursive: true });
+  await fs.writeFile(path.join(workspace, "deliverables/d/articles/present.md"), "Partial supported draft");
+  await fs.writeFile(path.join(workspace, "deliverables/d/articles/empty.md"), "");
+  await fs.symlink("present.md", path.join(workspace, "deliverables/d/articles/symlink.md"));
+  const registered = [];
+  const store = { claimIds: async () => [], query: async () => ({ rows: [] }),
+    registerArticles: async (_user, _project, articles) => { registered.push(...articles); return articles.map((_, i) => String(i)); } };
+  const result = await geoRuntimeWrite({ store, project: { id: "g", userId: "u" }, what: "articles",
+    body: { items: ["absent", "present", "empty", "symlink"].map(name => ({ path: `deliverables/d/articles/${name}.md`, layer: "correction", safety: "clear", contentSha256: "a".repeat(64) })) },
+    articleExists: async (_project, relative) => {
+      let opened;
+      try { opened = await openScopedFileNoFollow(workspace, resolveScopedPath(workspace, relative)); const stat = await opened.handle.stat(); return stat.isFile() && stat.size > 0; }
+      catch (error) { if (["ENOENT", "ENOTDIR"].includes(error.code)) return false; throw error; }
+      finally { await opened?.handle.close(); }
+    } });
+  assert.equal(result.ok, true);
+  assert.equal(registered.length, 1);
+  assert.equal(registered[0].path, "deliverables/d/articles/present.md");
+  assert.equal(registered[0].gate, "unverified");
+  assert.ok(result.issues.filter(issue => issue.code === "not_found").length >= 2);
+  assert.ok(result.issues.some(issue => issue.code === "unavailable"));
+  await fs.rm(workspace, { recursive: true, force: true });
 });

@@ -189,7 +189,7 @@ describe("no title over an empty box", () => {
 
   it("holds on the matching tab before anything was judged: one sentence and one button, and no toolbar over it", async () => {
     const raw = fixture("ev201/matching.json");
-    Object.assign(raw, { candidates: [], forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null });
+    Object.assign(raw, { candidates: [], protocols: [], protocolVersionId: null, comparisons: [], timeline: [], forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null });
     installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/matching`]: raw });
     const view = await drawTab(<MatchingTab studyId={STUDY_ID} study={study((rawStudy) => { rawStudy.steps.matching = { status: "none", requested: false }; })} />);
     expect(view.container.querySelector("[data-vcr-step-empty='matching']")).not.toBeNull();

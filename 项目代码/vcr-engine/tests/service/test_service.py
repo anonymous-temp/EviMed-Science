@@ -825,7 +825,11 @@ class CancelAndLimitsTest(EngineCase):
         client.post("/jobs", json=self.job("runaway", "burn", cpuSecondsLimit=1))
         state = self.wait_for(client, "runaway", timeout=90)
         self.assertEqual((state["state"], state["error"]), ("failed", "cpu_limit_exceeded"))
-        self.assertGreaterEqual(state["cpuSeconds"], 1.0)
+        # Linux signals the CPU limit using scheduler accounting; wait4's
+        # process usage and the API's millisecond rounding can fall just below
+        # that whole-second boundary even when SIGXCPU enforced the limit.
+        accounting_tolerance = 2 / os.sysconf("SC_CLK_TCK") + 0.001
+        self.assertGreaterEqual(state["cpuSeconds"], 1.0 - accounting_tolerance)
 
     def test_the_child_environment_is_an_allowlist(self) -> None:
         client = self.client(VCR_ENGINE_CORES="2", VCR_R_LIBS="/opt/somewhere", VCR_ENGINE_MAX_INPUT_BYTES="1048576")

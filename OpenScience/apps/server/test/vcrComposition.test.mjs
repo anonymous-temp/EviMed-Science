@@ -697,16 +697,25 @@ const TABLE_CRITERIA = [
 ];
 const tableJob = () => ({ id: "job_t", studyId: "std_1", scenarioHash: "d".repeat(64), seed: 1, inputs: matchingInputs(),
   scenario: { criteria: TABLE_CRITERIA.map((criterion) => ({ id: criterion.id, kind: criterion.kind, type: criterion.criterionType, state: "unknown" })) } });
+function frozenTableExecutor(parts) {
+  // The candidate roster reflects the fixture's actual chart facts.
+  parts.matchStore.candidateSubjects = async () => [...new Set((await parts.matchStore.listFacts()).map(fact => fact.subjectKey))];
+  const execute = vcrMatchingExecutor(parts);
+  return async ({ job, onProgress }) => {
+    const frozen = await vcrMatchingSeam({ ...parts, now: () => new Date(AS_OF) }).matchScenario(await parts.store.studyById(job.studyId));
+    return execute({ job: { ...job, inputs: frozen.inputs, scenario: frozen.scenario }, onProgress });
+  };
+}
 const owner = { async studyById() { return { id: "std_1", userId: "u1" }; } };
 const stateOf = (assessment, id) => assessment.judgments.find((judgment) => judgment.criterionId === id).state;
 
 test("a study whose subjects are rows of the subject table is matched from the table: each row a candidate, unknown where the table holds nothing", async () => {
   const matchStore = matchStoreDouble({ async listCriteria() { return TABLE_CRITERIA; }, async listFacts() { return []; } });
   const asked = [];
-  const run = vcrMatchingExecutor({ matchStore, store: owner, subjectTable: { async read(study) { asked.push(study.id); return subjectTable(); } } });
+  const run = frozenTableExecutor({ matchStore, store: owner, subjectTable: { async read(study) { asked.push(study.id); return subjectTable(); } } });
   const result = await run({ job: tableJob(), onProgress: async () => {} });
   assert.deepEqual(validateEngineResult(result), []);
-  assert.deepEqual(asked, ["std_1"]);
+  assert.deepEqual(asked, ["std_1", "std_1"], "the table is read while freezing and again while executing");
   assert.equal(result.assessments.length, 4, "four rows, four candidates: no document and no fact was needed to have them");
   assert.ok(result.assessments.every((assessment) => assessment.source === "subject_table"), "table-only candidates are marked as such");
   const [young, minor, elder, last] = result.assessments.map((assessment) => assessment);
@@ -743,7 +752,7 @@ test("a person who is a row of the table and has documents is one candidate with
     surface: "否认心梗史", source: { documentId: "doc-1", start: 0, end: 5, quote: "否认心梗史" }, extractedBy: "model" };
   const matchStore = matchStoreDouble({ async listCriteria() { return TABLE_CRITERIA; }, async listFacts() { return [documentFact]; } });
   const documents = { async read(_study, { subjectKey }) { return subjectKey === person ? { text: "否认心梗史。" } : null; } };
-  const run = vcrMatchingExecutor({ matchStore, store: owner, documents, subjectTable: { read: async () => subjectTable() } });
+  const run = frozenTableExecutor({ matchStore, store: owner, documents, subjectTable: { read: async () => subjectTable() } });
   const result = await run({ job: tableJob(), onProgress: async () => {} });
   assert.equal(result.assessments.length, 4, "the same pseudonym: one person, not two");
   const both = result.assessments.find((assessment) => assessment.subjectKey === person);
@@ -760,20 +769,20 @@ test("a table the plane will not hand over leaves the other sources as they were
     ["refused", async () => { throw Object.assign(new Error("no grant"), { code: "vcr_no_grant" }); }, { available: false, reason: "vcr_no_grant" }],
     ["absent", async () => ({ available: false, reason: "no_subject_table" }), { available: false, reason: "no_subject_table" }],
   ]) {
-    const run = vcrMatchingExecutor({ matchStore, store: owner, subjectTable: { read } });
+    const run = frozenTableExecutor({ matchStore, store: owner, subjectTable: { read } });
     const result = await run({ job: tableJob(), onProgress: async () => {} });
     assert.deepEqual(result.assessments.map((assessment) => assessment.subjectKey), ["P-001"], `${label}: only the fact-based candidate`);
     assert.deepEqual(result.diagnostics.subjectTable, expected, label);
   }
   // No table seam at all (no plane composed) is how every deployment behaved before, and says nothing.
-  const none = await vcrMatchingExecutor({ matchStore, store: owner })({ job: tableJob(), onProgress: async () => {} });
+  const none = await frozenTableExecutor({ matchStore, store: owner })({ job: tableJob(), onProgress: async () => {} });
   assert.equal("subjectTable" in none.diagnostics, false);
 });
 
 test("a table that has columns withheld by the access judgment answers only with what was released", async () => {
   const released = subjectTable({ extra: { header: ["USUBJID", "arm", "sex"], rows: [["P9000000000000001", "TRT", "女"], ["P9000000000000002", "TRT", "男"]],
     withheld: [{ shape: "subject", reason: "sealed", fields: ["AGE"] }] } });
-  const run = vcrMatchingExecutor({ matchStore: matchStoreDouble({ async listCriteria() { return TABLE_CRITERIA; }, async listFacts() { return []; } }), store: owner,
+  const run = frozenTableExecutor({ matchStore: matchStoreDouble({ async listCriteria() { return TABLE_CRITERIA; }, async listFacts() { return []; } }), store: owner,
     subjectTable: { read: async () => released } });
   const result = await run({ job: tableJob(), onProgress: async () => {} });
   for (const assessment of result.assessments) assert.equal(stateOf(assessment, "crt_age"), "unknown", "a column the judgment withheld is a criterion nobody can decide from a value");

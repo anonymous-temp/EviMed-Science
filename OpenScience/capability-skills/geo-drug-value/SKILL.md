@@ -48,7 +48,9 @@ An observation with no source link remains source-unknown: do not borrow a
 neighboring finding's sourceRefs or invent a source label. A value summary is
 not a verbatim source quotation. Copy quotes only from preserved source text;
 keep useful qualitative observations with their stated origin when that text
-is unavailable.
+is unavailable. For example, an unsourced caregiver observation keeps sourceRefs
+absent; a name such as `fixture:caregiver-report` would invent a source identity,
+not preserve its origin. Describe the caregiver origin in prose instead.
 Do not ask the user to fill every field. When identity is ambiguous, continue
 safe disease/molecule analysis, label the identity limit, and ask only the
 question that matters for product-specific work. Do not withhold the entire task.
@@ -153,3 +155,8 @@ burden. Innovation means a meaningful clinical difference, not merely novelty.
 Research and content continue with what is supported. Unavailable calculations,
 unknown applicability and unresolved conflicts stay visible at the relevant
 conclusion. Do not build an additional completeness gate or human approval step.
+
+Describe platform changes only after the corresponding write tool succeeds. A
+planned update or final-answer explanation is not a saved record. If a write is
+unavailable or fails, say which useful analysis remains in the answer and which
+record was not saved; preserve prior findings and continue supported work.

@@ -137,7 +137,11 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     canRun={study.abilities.includes('run') && study.abilities.includes('read_patient_level')}
     onProtocol={setProtocolVersionId} onCandidate={pick} onReload={reload} /> : null;
   const nothing = data.candidates.length === 0 && !data.forecast && !data.pendingReview
-    && (data.ledger ?? []).length === 0 && (data.sites ?? []).length === 0 && (data.followup ?? []).length === 0;
+    && (data.ledger ?? []).length === 0 && (data.sites ?? []).length === 0 && (data.followup ?? []).length === 0
+    && !(data.timeline?.length || data.comparisons?.length);
+  if (nothing && view === "matching" && !data.protocols?.length) {
+    return <VcrStepPending studyId={studyId} study={study} step="matching" hint={study.tier === "T0" ? VCR_MATCHING_EMPTY_T0 : undefined} />;
+  }
   if (nothing) {
     return (
       <div className="flex flex-col gap-6">

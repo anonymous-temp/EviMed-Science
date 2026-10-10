@@ -82,13 +82,16 @@ describe("匹配与招募 — choosing a person", () => {
     expect(screen.getByRole("button", { name: /^P-0192/ })).toHaveAttribute("aria-current", "true");
   });
 
-  // The other direction has no data path on the platform: a switch whose other side is always empty is not drawn.
-  it("has only the one direction — no switch to 给患者找试验 — and asks for it by name", async () => {
+  it("switches between both supported matching directions and reads each by name", async () => {
     drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
     await screen.findByRole("heading", { name: "P-0201" });
-    expect(screen.queryByRole("radio", { name: "给患者找试验" })).toBeNull();
-    expect(screen.queryByRole("radio", { name: "给试验找患者" })).toBeNull();
     expect(matchingReads(server).every((query) => query.get("direction") === "trial_to_patient")).toBe(true);
+    await userEvent.click(screen.getByRole("radio", { name: "给患者找试验" }));
+    await waitFor(() => expect(matchingReads(server).some((query) => query.get("direction") === "patient_to_trial")).toBe(true));
+    expect(screen.getByRole("radio", { name: "给患者找试验" })).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(screen.getByRole("radio", { name: "给试验找患者" }));
+    await waitFor(() => expect(matchingReads(server).at(-1)?.get("direction")).toBe("trial_to_patient"));
+    expect(screen.getByRole("radio", { name: "给试验找患者" })).toHaveAttribute("aria-checked", "true");
   });
 
   // The ranking hint orders a coordinator's work; it is never a probability.

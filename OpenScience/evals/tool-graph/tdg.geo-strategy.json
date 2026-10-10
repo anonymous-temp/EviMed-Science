@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-strategy",
-  "version": "sha256:689cdb31f50413a2f36bd47ef913eeefdfe4accd521c3ff550dcd4402288bbb2",
+  "version": "sha256:c5cdedaaf5efdfb6740a3a8e48b4487f2094d95139e58d82040af1976cdab98a",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 25,
@@ -491,7 +491,7 @@
     {
       "name": "mcp__evimed__geo_read",
       "source": "mcp",
-      "description": "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links, monitoring or cards (evidence cards: claims with id, quotation, ✓/⚠ and the reference to cite). Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.value includes drug-value findings, opportunities, research outputs and answer coverage; research lists specialist tasks. filter.version reads an earlier value basis. Missing or unjudged is unknown, never zero.",
+      "description": "Read this 循证 GEO project's product, claims, questions, journey, diagnosis, metrics, answers, errors, sources, strategy, targets, articles, orders and monitoring. Cards carry quote-checked evidence and citation ids. Value holds scoped findings, research and coverage; research lists specialist tasks. filter.version reads a prior value basis. Numeric cells retain denominators and status; unknown is never zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -672,7 +672,7 @@
     {
       "name": "mcp__evimed__geo_write",
       "source": "mcp",
-      "description": "Write this 循证 GEO project's data; valid items survive individual refusals. value merges optional drug-value context; send known fields, reuse ids to amend. research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}.",
+      "description": "Write this 循证 GEO project; valid items survive individual refusals. value merges findings; reuse ids to amend. questions: groups[].questions[].isMeasured:true selects probes before lock_questions; existing answers are not required. research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}.",
       "inputSchema": {
         "type": "object",
         "properties": {

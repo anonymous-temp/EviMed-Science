@@ -13,7 +13,7 @@
 # Public so a study's conversation can be bound to it, `display.listed: false`
 # so it is entered only from 「虚拟临床研究」.
 id: vcr-package
-version: 1.0.1
+version: 1.1.0
 title: Virtual Clinical Research Package
 category: Study Design
 description: The deliverable of a virtual clinical research study — a package whose sections follow HARPER,

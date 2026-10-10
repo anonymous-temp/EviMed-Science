@@ -4,13 +4,14 @@
 // decides who sees the module, readiness and metrics report it, and deleting
 // the control-plane project or the account takes the GEO rows with it.
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { geoScreenshotFile } from "../src/geoScreenshots.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
+import { issueModelGatewayRuntimeToken } from "../src/runtimeManager.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -36,7 +37,8 @@ before(async () => {
   isolated = await createGeoTestDatabase(databaseUrl, "geoapp");
   const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-geo-app-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
-    stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url, operatorMetricsToken: "test-only-metrics-token",
+    stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url,
+    modelGatewaySigningSecret: "test-geo-app-signing-secret-0123456789abcdef", operatorMetricsToken: "test-only-metrics-token",
     operatorUsers: [accounts.operator], geoEnabled: true, geoAudience: "operators", geoPreviewUsers: [accounts.preview, accounts.leaver, accounts.lastLeaver] });
   for (const id of Object.values(accounts)) await app.store.createUser(id, PASSWORD, id);
   const address = await app.listen(0, "127.0.0.1");
@@ -228,4 +230,52 @@ test("deleting a project or an account removes the screenshots only its answers 
   const gone = await call("lastLeaver", "DELETE", "/api/account", { confirm: accounts.lastLeaver, password: PASSWORD });
   assert.equal(gone.status, 200, JSON.stringify(gone.body));
   await assert.rejects(stat(geoScreenshotFile(dataDir, leaverOwn)), { code: "ENOENT" });
+});
+
+
+test("the real runtime gateway registers existing unverified drafts and refuses missing, empty or symlink files itemwise", options, async () => {
+  const created = await call("preview", "POST", "/api/geo/projects", { brandName: "Artifact Wiring" });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const { id, projectId } = created.body.data;
+  const owner = await context.app.store.userById(accounts.preview);
+  const project = await context.app.store.requireProject(owner, projectId);
+  const jti = `fixture_${randomUUID()}`;
+  const token = issueModelGatewayRuntimeToken({ secret: context.app.config.modelGatewaySigningSecret,
+    userId: owner.id, projectId, jti });
+  const runtime = { modelGatewayToken: token, modelGatewayTokenJti: jti };
+  context.app.runtimeManager.activateModelGatewayRuntime(project, runtime);
+  const internal = async (/** @type {string} */ what, /** @type {any} */ payload) => {
+    const response = await fetch(`${context.base}/internal/geo/v1/write`, { method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ what, ...payload }) });
+    const envelope = await response.json();
+    return { status: response.status, body: envelope.data ?? envelope };
+  };
+  try {
+    const group = await internal("questions", { data: { groups: [{ pool: "P1", name: "Partial safety explanation",
+      questions: [{ text: "What does a reporting signal establish?", isMeasured: false }] }] } });
+    assert.equal(group.status, 200, JSON.stringify(group.body));
+    assert.equal(group.body.ok, true, JSON.stringify(group.body));
+    const folder = "deliverables/geo-content-file-wiring/articles";
+    await mkdir(path.join(project.workspaceDir, folder), { recursive: true });
+    const draft = "An unverified partial draft: a reporting signal does not establish incidence or causality.\n";
+    await writeFile(path.join(project.workspaceDir, folder, "present.md"), draft);
+    await writeFile(path.join(project.workspaceDir, folder, "empty.md"), "");
+    await symlink("present.md", path.join(project.workspaceDir, folder, "symlink.md"));
+    const written = await internal("articles", { items: ["missing", "present", "empty", "symlink"].map(name => ({
+      path: `${folder}/${name}.md`, layer: "popular", groupId: group.body.ids[0], claimIds: [], safety: "clear",
+      contentSha256: createHash("sha256").update(name === "empty" ? "" : draft).digest("hex"), gate: "passed",
+    })) });
+    assert.equal(written.status, 200, JSON.stringify(written.body));
+    assert.equal(written.body.ok, true, JSON.stringify(written.body));
+    assert.equal(written.body.ids.length, 1);
+    assert.deepEqual(written.body.articles.map((/** @type {any} */ row) => ({ path: row.path, gate: row.gate })),
+      [{ path: `${folder}/present.md`, gate: "unverified" }], "a useful partial draft stays accepted without a verified card or run verdict");
+    assert.equal(written.body.issues.filter((/** @type {any} */ issue) => issue.code === "not_found").length, 2);
+    assert.ok(written.body.issues.some((/** @type {any} */ issue) => issue.code === "unavailable"));
+    assert.deepEqual(await rows("SELECT path, gate FROM evimed_geo.articles WHERE geo_project_id=$1", [id]),
+      [{ path: `${folder}/present.md`, gate: "unverified" }], "the real database has only the file that exists safely in the full owner's workspace");
+  } finally {
+    context.app.runtimeManager.deactivateModelGatewayRuntime(runtime);
+  }
 });

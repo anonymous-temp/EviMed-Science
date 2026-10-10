@@ -1099,11 +1099,12 @@ const BASELINE_MISSING = Object.freeze({ code: "baseline_missing",
  * One `geo_write` call against a resolved GEO project.
  * @param {{ store: import("./geoStore.mjs").GeoStore, project: any, what: string, body: Record<string, any>,
  *   renameProject?: ((userId: string, projectId: string, name: string) => Promise<unknown>) | null,
+ *   articleExists?: ((project: any, path: string) => Promise<boolean>) | null,
  *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>) | null }} input
  *   `articleGate` reads an article's gate from the run ledger; without it every article is `unverified`
  * @returns {Promise<{ ok: boolean, ids: string[], issues: GeoIssue[], [key: string]: any }>}
  */
-export async function geoRuntimeWrite({ store, project, what, body, renameProject = null, articleGate = null }) {
+export async function geoRuntimeWrite({ store, project, what, body, renameProject = null, articleGate = null, articleExists = null }) {
   if (!GEO_WRITE_WHATS.includes(what)) throw failure(400, "geo_write_what_invalid", `what must be one of: ${GEO_WRITE_WHATS.join(", ")}.`);
   if (!withinSize(body, GEO_WRITE_LIMITS.jsonBytes)) throw failure(413, "geo_request_too_large", "The write is larger than 256 KB.");
   /** @type {GeoIssue[]} */
@@ -1244,9 +1245,21 @@ export async function geoRuntimeWrite({ store, project, what, body, renameProjec
         store.query(`SELECT id FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
         store.query(`SELECT id FROM evimed_geo.errors WHERE geo_project_id = $1`, [project.id]),
       ]);
-      const articles = validatedArticles(items, issues, { claimIds, groupIds: new Set(groups.rows.map((/** @type {any} */ row) => String(row.id))),
+      const candidates = validatedArticles(items, issues, { claimIds, groupIds: new Set(groups.rows.map((/** @type {any} */ row) => String(row.id))),
         errorIds: new Set(errors.rows.map((/** @type {any} */ row) => String(row.id))) });
-      for (const article of articles) {
+      const articles = [];
+      for (const article of candidates) {
+        let exists = true;
+        try { exists = !articleExists || await articleExists(project, article.path); }
+        catch {
+          issues.push({ field: "path", code: "unavailable", message: `Article file ${article.path} could not be safely inspected. This article was not registered; other supported work can continue.` });
+          continue;
+        }
+        if (!exists) {
+          issues.push({ field: "path", code: "not_found", message: `Article file ${article.path} is not available in this project's workspace. Write the file before registering it; useful analysis may remain in the answer.` });
+          continue;
+        }
+        articles.push(article);
         const gate = articleGate ? await articleGate(project, { runId: article.runId ?? null, deliverableId: article.deliverableId ?? null, path: article.path }) : null;
         article.gate = GEO_ARTICLE_GATES.includes(String(gate)) ? gate : "unverified";
       }

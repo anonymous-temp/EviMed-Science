@@ -8,7 +8,7 @@
 # Hidden from 科研工具 by `display.listed: false`; the GEO module dispatches it
 # for 「导出提案资料包」 and after each weekly round.
 id: geo-proposal
-version: 1.0.3
+version: 1.1.0
 title: GEO Proposal
 category: Content Production
 description: The client-facing output of an evidence-based GEO project, built only from the project's frozen

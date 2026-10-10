@@ -34,7 +34,7 @@ export function ValueSection({ geoId, project, mode = "profile" }: { geoId: stri
     : mode === "coverage" ? "请结合本轮原始回答、药品价值及适用条件，分析哪些内容被正确表达、遗漏或误解，并区分证据、传播、检索和测量问题。"
     : `请结合现有资料完善${TITLES[mode]}，说明与本项目决策相关的获益、风险、适用性、费用与可及性；资料不足的部分保留未知。`;
   return (
-    <TabSection title={TITLES[mode]} level={mode === "decisions" ? "compact" : mode === "profile" ? "ui" : "section"} className="mb-6">
+    <TabSection title={TITLES[mode]} level={["decisions", "sources"].includes(mode) ? "compact" : mode === "profile" ? "ui" : "section"} className="mb-6">
       {["summary", "profile"].includes(mode) && <ScopeDetail scope={data.scope} />}
       {text(data.summary) && ["summary", "profile"].includes(mode) && <p className="mb-3 max-w-body text-ui leading-relaxed text-text-2">{text(data.summary)}</p>}
       {mode === "coverage" ? <>
@@ -53,13 +53,13 @@ export function ValueSection({ geoId, project, mode = "profile" }: { geoId: stri
         </Disclosure>}
       </> : <>
         {!shown.length && <p className="text-ui text-text-3">{mode === "sources" ? "有依据变化时，在这里查看受影响的分析与内容。" : "可以先从已有资料和当前最重要的问题开始分析。"}</p>}
-        <ul className="divide-y divide-border">
+        {!!shown.length && <ul className="divide-y divide-border">
           {shown.map((entry, index) => <li key={String(record(entry).id ?? index)} className="py-3">
             <p className="max-w-body break-words text-ui leading-relaxed text-text">{text(entry)}</p>
             <FindingDetail entry={record(entry)} />
             {mode === "actions" && <AskAi project={project} label="推进这个问题" draft={`请推进这项 GEO 机会：${text(entry)}。先读取已有价值分析与研究结果，再选择需要的科研方法，保留不确定性并完成可支持的内容。`} />}
           </li>)}
-        </ul>
+        </ul>}
         {mode === "actions" && !!value?.research?.length && <Disclosure summary="查看相关研究" className="mt-3">
           <ul className="space-y-3">{value?.research.map(task => <li key={task.id} className="text-ui">
             <p className="max-w-body text-text">{task.question}</p><span className="text-caption text-text-3">{TASK[task.status] ?? "研究中"}</span>

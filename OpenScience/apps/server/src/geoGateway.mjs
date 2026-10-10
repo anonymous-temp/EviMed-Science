@@ -214,7 +214,7 @@ export function geoGatewayRoutePattern(pathname) {
 /**
  * @param {any} config
  * @param {any} runtimeManager
- * @param {{ geo: { service: any, store: any, social?: any, renameProject?: any, articleGate?: any } | null, report?: (code: string) => void, budgetMs?: number }} dependencies
+ * @param {{ geo: { service: any, store: any, social?: any, renameProject?: any, articleGate?: any, articleExists?: any } | null, report?: (code: string) => void, budgetMs?: number }} dependencies
  *   `geo` is the composed module or null when it is off; `report` hears the code of a failure the run is only told was one
  */
 export function createGeoGatewayHandler(config, runtimeManager, { geo, report = () => {}, budgetMs = answerBudgetMs }) {
@@ -261,7 +261,7 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
         const request = writeRequest(body);
         work = async () => {
           const result = await geoRuntimeWrite({ store: geo.store, project, what: request.what, body: request.body, renameProject: geo.renameProject ?? null,
-            articleGate: geo.articleGate ?? null });
+            articleGate: geo.articleGate ?? null, articleExists: geo.articleExists ?? (async () => false) });
           geo.service.counters.writes += 1;
           geo.service.counters.writeIssues += result.issues.length;
           return { what: request.what, ...result };

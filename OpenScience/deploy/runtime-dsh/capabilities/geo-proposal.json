@@ -1,6 +1,6 @@
 {
   "id": "geo-proposal",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "title": "GEO Proposal",
   "description": "The client-facing output of an evidence-based GEO project, built only from the project's frozen platform data — the proposal package (Excel workbook, feasibility and strategy reports in Word, PowerPoint and HTML decks) or the weekly report (PDF and Word) with net effect, cited articles and new misstatements.",
   "whenToUse": "“循证 GEO”项目要导出给甲方的东西交给我：提案资料包（Excel、两份 Word、PPT、HTML），或每周的周报（PDF 与 Word）。只从平台已有的测量数据出，项目还没有测量结果时不要委派我；周报由平台每周自动安排。",

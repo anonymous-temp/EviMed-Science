@@ -171,8 +171,8 @@ test("the model gateway records a source understanding run's calls as source und
     method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({ messages: [{ role: "user", content: "Read the frozen input." }] }),
   });
-  assert.equal(response.status, 200);
-  await response.json();
+  const payload = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(payload));
   // Scoped to the bounded run: the run's own title is a separate, control-plane
   // call recorded under `title`.
   const rows = await f.app.store.database.query(

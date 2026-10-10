@@ -7,6 +7,7 @@ import { PlanTab } from "./PlanTab";
 import { tierSentence } from "./PlanStrategy";
 
 const client = vi.hoisted(() => ({
+  getGeoValue: vi.fn(),
   getGeoEvidence: vi.fn(),
   getGeoJourney: vi.fn(),
   getGeoSources: vi.fn(),
@@ -25,6 +26,7 @@ function renderPlan() {
 
 beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
+  client.getGeoValue.mockResolvedValue({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } });
   client.getGeoEvidence.mockResolvedValue(evidenceFilled);
   client.getGeoJourney.mockResolvedValue(journeyFilled);
   client.getGeoSources.mockResolvedValue(sourcesFilled);

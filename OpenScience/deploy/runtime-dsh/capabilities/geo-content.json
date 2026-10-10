@@ -1,6 +1,6 @@
 {
   "id": "geo-content",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "title": "GEO Content",
   "description": "Step 6 of an evidence-based GEO project — audience-specific content grounded in drug value, clinical evidence and real decisions. Choose useful formats, retain benefit-risk conditions and uncertainty, reuse specialist research, and register medically reviewed articles and corrections in the project.",
   "whenToUse": "“循证 GEO”项目的写稿交给我：按主战场和讲错我方，从主张库写深度分析、证据卡片、科普稿件、问答与纠错材料，每篇一份工作记录，医学审核后去 AI 味。完整方案里平台会在信源分析之后按批次安排我；用户在对话里给了自己的稿件要优化或去 AI 味时，可以直接委派我。",

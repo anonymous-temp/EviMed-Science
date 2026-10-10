@@ -13,7 +13,7 @@
 # produced by this run at all — `vcrMatching.mjs` computes it, and the run's job
 # is to locate evidence and to answer the criteria only language can decide.
 id: vcr-matching
-version: 1.0.2
+version: 1.1.0
 title: Virtual Clinical Research — Matching and Recruitment
 category: Clinical Research
 description: Two-way eligibility matching for a trial protocol — structure the criteria, locate each patient fact
@@ -32,6 +32,7 @@ skills:
 - vcr-matching
 - citation-integrity
 tools:
+- mcp__evimed__dataset_semantics
 - mcp__evimed__vcr_read
 - mcp__evimed__vcr_write
 - mcp__evimed__vcr_simulate

@@ -303,9 +303,10 @@ it("creating a skill saves it from the drawer, selects it for the current projec
   skills.projectSkills.mockResolvedValue({ revision: 7, payload: { skills: [{ skillId: "skill:other", revision: 3 }] } });
   const drawer = await openCreate();
   await userEvent.type(within(drawer).getByLabelText("名称"), "我的检索方案");
+  await userEvent.type(within(drawer).getByLabelText("用途"), "核对检索资料时使用。");
   await userEvent.type(within(drawer).getByLabelText("技能说明"), "先查指南，再查试验登记。");
   await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
-  await waitFor(() => expect(skills.createPersonalSkill).toHaveBeenCalledWith({ expectedRevision: 0, title: "我的检索方案", description: "", instructions: "先查指南，再查试验登记。" }));
+  await waitFor(() => expect(skills.createPersonalSkill).toHaveBeenCalledWith({ expectedRevision: 0, title: "我的检索方案", description: "核对检索资料时使用。", instructions: "先查指南，再查试验登记。" }));
   // The skill is on for the project the reader is in without a second visit.
   await waitFor(() => expect(skills.saveProjectSkills).toHaveBeenCalledTimes(1));
   expect(skills.saveProjectSkills).toHaveBeenCalledWith("owned-project", 7, [{ skillId: "skill:other", revision: 3 }, { skillId: "skill:created", revision: 1 }]);
@@ -331,6 +332,7 @@ it("a skill saved with the switch off is not selected for the project", async ()
   skills.getPersonalSkill.mockResolvedValue(created);
   const drawer = await openCreate();
   await userEvent.type(within(drawer).getByLabelText("名称"), "我的检索方案");
+  await userEvent.type(within(drawer).getByLabelText("用途"), "核对检索资料时使用。");
   await userEvent.type(within(drawer).getByLabelText("技能说明"), "先查指南。");
   await userEvent.click(within(drawer).getByRole("switch", { name: "保存后在“我的研究”里使用" }));
   await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
@@ -350,6 +352,7 @@ it("an empty or space-only name or text is named in place and nothing is sent", 
   await userEvent.type(within(drawer).getByLabelText("名称"), "检索");
   expect(within(drawer).queryByText("请填写名称")).not.toBeInTheDocument();
   expect(within(drawer).getByText("请写出这个技能怎么做")).toBeInTheDocument();
+  await userEvent.type(within(drawer).getByLabelText("用途"), "核对检索资料时使用。");
   await userEvent.type(within(drawer).getByLabelText("技能说明"), "  \n ");
   await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
   expect(within(drawer).getByText("请写出这个技能怎么做")).toBeInTheDocument();
@@ -363,6 +366,7 @@ it("two clicks on 保存 while the first is on its way make one skill", async ()
   skills.getPersonalSkill.mockResolvedValue(created);
   const drawer = await openCreate();
   await userEvent.type(within(drawer).getByLabelText("名称"), "我的检索方案");
+  await userEvent.type(within(drawer).getByLabelText("用途"), "核对检索资料时使用。");
   await userEvent.type(within(drawer).getByLabelText("技能说明"), "先查指南。");
   const save = within(drawer).getByRole("button", { name: "保存" });
   await userEvent.click(save);
@@ -384,6 +388,7 @@ it("a skill that was saved but could not be switched on for the project is kept,
   skills.saveProjectSkills.mockRejectedValue(new WebApiError("later", { status: 503 }));
   const drawer = await openCreate();
   await userEvent.type(within(drawer).getByLabelText("名称"), "我的检索方案");
+  await userEvent.type(within(drawer).getByLabelText("用途"), "核对检索资料时使用。");
   await userEvent.type(within(drawer).getByLabelText("技能说明"), "先查指南。");
   await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
   await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/extensions/skills/skill%3Acreated"));
@@ -395,6 +400,7 @@ it("a skill the server refused to create says why and leaves the form as it was"
   skills.createPersonalSkill.mockRejectedValue(new WebApiError("bad", { status: 400, code: "extension_contract_invalid" }));
   const drawer = await openCreate();
   await userEvent.type(within(drawer).getByLabelText("名称"), "我的检索方案");
+  await userEvent.type(within(drawer).getByLabelText("用途"), "核对检索资料时使用。");
   await userEvent.type(within(drawer).getByLabelText("技能说明"), "先查指南。");
   await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
   await waitFor(() => expect(useToastStore.getState().toasts.map(toast => toast.message)).toContain("提交的内容格式不正确，请检查后重新提交。"));
@@ -419,4 +425,18 @@ it("the method pack's group is marked with the module's radar by the name the se
   const group = await screen.findByRole("region", { name: "方法包" });
   expect(group.querySelector("svg.lucide-radar")).not.toBeNull();
   expect(screen.getByRole("region", { name: "科研分析" }).querySelector("svg.lucide-radar")).toBeNull();
+});
+
+it("an empty native purpose is refused in place before saving, then clears as it is supplied", async () => {
+  const drawer = await openCreate();
+  await userEvent.type(within(drawer).getByLabelText("名称"), "检索核对");
+  await userEvent.type(within(drawer).getByLabelText("技能说明"), "Preserve quotations.");
+  await userEvent.type(within(drawer).getByLabelText("用途"), "   ");
+  await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
+  expect(within(drawer).getByText("请写出什么时候使用这个技能")).toBeInTheDocument();
+  expect(within(drawer).getByLabelText("用途")).toHaveFocus();
+  expect(within(drawer).getByLabelText("用途")).toHaveAttribute("aria-required", "true");
+  expect(skills.createPersonalSkill).not.toHaveBeenCalled();
+  await userEvent.type(within(drawer).getByLabelText("用途"), "核对来源时使用。");
+  expect(within(drawer).queryByText("请写出什么时候使用这个技能")).not.toBeInTheDocument();
 });

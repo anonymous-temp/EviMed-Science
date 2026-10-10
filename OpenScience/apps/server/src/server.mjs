@@ -2084,6 +2084,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /** @type {{ store: GeoStore, service: GeoService, social: ReturnType<typeof createSocialCrawlClient>, worker: any, orchestrator: any,
    *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown>,
    *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>,
+   *   articleExists: (project: any, articlePath: string) => Promise<boolean>,
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
    *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
@@ -2138,6 +2139,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const id = deliverableId ?? deliverableIdOfPath(articlePath);
         const run = id ? await geoDeliverableRun(project, id, runId) : null;
         return run ? geoArticleGateOf(run, id) : "unverified";
+      },
+      articleExists: async (project, articlePath) => {
+        const controlProject = await sourceProject({ userId: project.userId, projectId: project.projectId });
+        try {
+          const file = await openScopedFileNoFollow(controlProject.workspaceDir, resolveScopedPath(controlProject.workspaceDir, articlePath));
+          try {
+            return file.stat.isFile() && file.stat.size > 0;
+          } finally { await file.handle.close(); }
+        } catch (error) {
+          if (["ENOENT", "ENOTDIR"].includes(String(/** @type {any} */ (error)?.code))) return false;
+          throw error;
+        }
       },
       articleRunId: async (project, deliverableId) => (await geoDeliverableRun(project, deliverableId, null))?.id ?? null,
     };
@@ -4499,7 +4512,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const autopilotRunScope = autopilotService ? createAutopilotRunScope({ store, agentRuns, service: autopilotService }) : null;
   const assertVcrCloudAccess = vcrPrivacyStore ? createVcrCloudEgress({ store: vcrPrivacyStore, destinations: () => vcrCloudDestinations(config),
     resolveSession: async caller => {
-      const project = await store.requireProject({ id: caller.userId }, caller.projectId);
+      const project = await sourceProject({ userId: caller.userId, projectId: caller.projectId });
       const runs = await agentRuns.list(project);
       const runId = caller.runId ?? agentRuns.runIdForSession(caller.sessionId, runs);
       return runs.find(row => row.id === runId)?.sessionId ?? caller.sessionId ?? null;
@@ -4651,7 +4664,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const vcrGatewayHandler = createVcrGatewayHandler(config, runtimeManager, {
     vcr, attributeRun, report: (code) => process.stderr.write(`vcr gateway: ${code}\n`),
     readProducerRun: async (study, runId) => {
-      const project = await store.requireProject({ id: study.userId }, study.projectId);
+      const project = await sourceProject({ userId: study.userId, projectId: study.projectId });
       const run = (await agentRuns.list(project)).find(row => row.id === runId);
       return run ? { id: run.id, sessionId: run.sessionId ?? null, agentId: run.agentId ?? null, model: run.model ?? null,
         platformSkills: run.platformSkillGeneration ?? null, personalSkills: run.personalSkillGeneration ?? null,

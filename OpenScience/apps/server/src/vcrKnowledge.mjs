@@ -286,7 +286,9 @@ export class VcrKnowledge {
     const binding = await this.store.studyBinding(study.id);
     if (!binding) return null;
     if (binding.packBody) {
-      const row = binding.origin === 'stored' ? await this.store.getPack(study.userId,binding.packId) : null;
+      const row = binding.origin !== "stored" ? null : this.platform.enabled
+        ? await this.store.getReadablePack(study.userId, binding.packId, { platformPacks: true })
+        : await this.store.getPack(study.userId, binding.packId);
       // Review metadata can change without rewriting the selected clinical body.
       const pack = row?.version === binding.packVersion ? {...binding.packBody,status:row.status} : binding.packBody;
       return {binding,origin:binding.origin,pack,row};
