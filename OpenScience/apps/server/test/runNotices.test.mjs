@@ -112,6 +112,10 @@ test("the run side's degraded lines are titled by the template they were written
     ["request size 2400000 bytes passed the compaction byte limit 2000000 and nothing could be compacted", "run_compaction_nothing", "请求过大，没有可压缩的内容"],
     ["request size 2400000 bytes passed the compaction byte limit 2000000; the forced compaction failed: timeout", "run_compaction_failed", "请求过大，强制压缩失败"],
     ["turn ended with children still running: h-1, h-2", "run_children_outlived_turn", "一轮结束时仍有子任务在运行"],
+    // The runtime image's own account of a hand-off it cannot read (`RUN_PROTOCOL_SKEW_OPENING`, 2026-10-10 review D8). Both
+    // directions of the skew are one named notice, not 「运行中有环节未能正常生效」.
+    [`${domain.RUN_PROTOCOL_SKEW_OPENING} 3 is not the one this runtime image reads (2): the dispatch's brief, context, memory and run id were not read`, "run_protocol_skew", "运行时镜像与控制面的交接版本不一致"],
+    [`${domain.RUN_PROTOCOL_SKEW_OPENING} missing: the control plane that wrote it is older than this runtime image (2); the dispatch's routed capability is not read from it`, "run_protocol_skew", "运行时镜像与控制面的交接版本不一致"],
   ];
   for (const [line, code, title] of cases) {
     const [described] = describedQualityNotices([runSideDegradedNotice(line)]);

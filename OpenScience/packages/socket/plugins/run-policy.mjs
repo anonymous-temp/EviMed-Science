@@ -48,6 +48,8 @@ import {
   sourceTypeSidecarPath,
   withRetrievedSources,
   workspaceLayout,
+  RUN_CONTEXT_PROTOCOL,
+  RUN_PROTOCOL_SKEW_OPENING,
   planFileFor,
   briefFileForSession,
   deliverySummaryFileFor,
@@ -91,7 +93,7 @@ import {
   awaitSelection,
   buildDelegation,
   buildInlineMethod,
-  namedCapabilityIds, routedCapabilityOf,
+  namedCapabilityIds, capabilityIdOf,
   childReport,
   completionCheck,
   contentTriggerIssues,
@@ -408,11 +410,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         completed: false,
         /** Capabilities whose method is already in front of this session. */
         inlineCapabilities: new Set(),
-        /** The control plane's context block for this dispatch, kept because it
-         *  is where a routed session's capability is named. */
-        contextText: null,
+        /** The capability the control plane routed this dispatch to, from the
+         *  index it wrote, or ''. Never read out of the context block: that
+         *  carries recalled memories and knowledge text. */
+        routedCapability: '',
         /** The capability the control plane bound this conversation to when it was opened, or ''. */
         binding: '',
+        /** The hand-off protocol disagreements already said for this session, so each is said once. */
+        protocolSaid: new Set(),
         /** Set when the turn ended: the receipt is written and the bytes are
          *  the delivery. Within a turn a deliverable stays editable. */
         frozen: false,
@@ -613,7 +618,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    *
    * An internal capability is dispatched by its own background workflow and
    * is not something a conversation takes on — except in that workflow's own
-   * run, which the control plane routed to it in the context it wrote. That
+   * run, which the control plane routed to it in the index it wrote. That
    * run does the work here now that delegation is on demand, and refusing it
    * its method failed every distillation, relation and source-understanding
    * run as `specialist_required_skill_missing` (production, 2026-09-21: the
@@ -624,7 +629,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const inlineManifest = (entry, capabilityId) => {
     const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === capabilityId)
     if (!manifest) return null
-    if (manifest.visibility === 'internal' && routedCapabilityOf(entry.contextText) !== capabilityId) return null
+    if (manifest.visibility === 'internal' && entry.routedCapability !== capabilityId) return null
     return manifest
   }
 
@@ -637,24 +642,26 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /**
    * The capability this session is working as, when there is exactly one.
    *
-   * The control plane's explicit route or session binding comes first. The
-   * context also contains a catalogue naming other capabilities; those names
-   * must not suppress the routed capability's tools on the first request.
-   * Without an explicit route, one model plan or one named capability is the
-   * fallback. Ambiguous unbound work activates neither capability.
+   * The control plane's explicit route (the dispatch index's `capability`) or
+   * session binding comes first, and outranks the model's own plan: a plan that
+   * names a second capability delegates it, and the routed one is still the
+   * root's. The context also contains a catalogue naming other capabilities;
+   * those names must not suppress the routed capability's tools on the first
+   * request, and are not read at all. Without an explicit route, one model plan
+   * or one capability named in the researcher's own request is the fallback.
+   * Ambiguous unbound work activates neither capability.
    * @param {Record<string, any>} entry
    * @returns {{ capabilityId: string, item: Record<string, any> | null } | null}
    */
   const boundCapability = (entry) => {
-    const routed = routedCapabilityOf(entry.contextText)
-    if (routed) return { capabilityId: routed, item: null }
+    if (entry.routedCapability) return { capabilityId: entry.routedCapability, item: null }
     if (entry.binding) return { capabilityId: entry.binding, item: null }
     const planned = [...new Set(entry.items.map((/** @type {any} */ item) => String(item.capability ?? '')).filter(Boolean))]
     if (planned.length > 1) return null
     if (planned.length === 1) {
       return { capabilityId: planned[0], item: entry.items.find((/** @type {any} */ candidate) => String(candidate.capability ?? '') === planned[0]) ?? null }
     }
-    const named = namedCapabilityIds(`${entry.briefText ?? ''}\n${entry.contextText ?? ''}`, ctx.get('evimedCapabilities') ?? [])
+    const named = namedCapabilityIds(entry.briefText, ctx.get('evimedCapabilities') ?? [])
     if (named.length === 1) return { capabilityId: named[0], item: null }
     if (named.length > 1) return null
     return null
@@ -961,17 +968,24 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         entry.runId = `native_${(await sha256Hex(`${entry.cwd}\n${step.sessionId}`)).slice(0, 32)}`
         await putRunMirror(ctx, entry, config.bundleVersion)
       }
+      // Both messages go to an agent the registry has to produce, and `injectContext(undefined)` throws: a registry that has lost
+      // the agent for a moment must not fail the step (the step already said so above, where it handed over the dispatch's
+      // context). The scope message is marked delivered only once it was, so the next step that has an agent tells it.
       if (step.root && entry.runId && entry.pathContextRunId !== entry.runId) {
-        injectContext(ctx.get('agents')?.get?.(step.agentId),
-          `当前运行作用域：本次运行 ${entry.runId}，会话 ${entry.sessionId}。本次计划在 ${planFileFor(entry.runId)}，本次状态在 ${runStateFileFor(entry.runId)}；需要计划进度时用 evimed_plan action:status。项目资料和已交付成果仍共享；根目录 ${workspaceLayout.planFile} 与 ${workspaceLayout.runStateFile} 是旧运行历史，不代表本次任务，不得用其他会话的计划或状态替代当前用户请求。`, name)
-        entry.pathContextRunId = entry.runId
+        const scopeAgent = ctx.get('agents')?.get?.(step.agentId)
+        if (scopeAgent) {
+          injectContext(scopeAgent,
+            `当前运行作用域：本次运行 ${entry.runId}，会话 ${entry.sessionId}。本次计划在 ${planFileFor(entry.runId)}，本次状态在 ${runStateFileFor(entry.runId)}；需要计划进度时用 evimed_plan action:status。项目资料和已交付成果仍共享；根目录 ${workspaceLayout.planFile} 与 ${workspaceLayout.runStateFile} 是旧运行历史，不代表本次任务，不得用其他会话的计划或状态替代当前用户请求。`, name)
+          entry.pathContextRunId = entry.runId
+        }
       }
       const decision = stepPolicy(entry.budget, entry.limits)
       if (!decision.allow) {
         // Rejecting a step without saying why teaches the model nothing. The
         // explanation is injected first so it arrives on the next step the
         // model does get.
-        injectContext(ctx.get('agents')?.get?.(step.agentId), `<evimed-budget>${decision.reason}</evimed-budget>`, name)
+        const budgetAgent = ctx.get('agents')?.get?.(step.agentId)
+        if (budgetAgent) injectContext(budgetAgent, `<evimed-budget>${decision.reason}</evimed-budget>`, name)
         diagnostics(step.sessionId)?.notice?.(decision.reason)
       }
       return decision.allow ? { allow: true } : { allow: false, code: decision.code, reason: decision.reason }
@@ -2850,13 +2864,24 @@ async function loadBrief(ctx, agent, sessionState, config) {
 }
 
 /**
+ * Say a disagreement about the hand-off protocol, once per session and line: the brief is looked at before every root step,
+ * and the same sentence at each of them would bury the run's other notes.
+ * @param {any} ctx @param {Record<string, any>} entry @param {string} line
+ */
+function sayProtocolSkew(ctx, entry, line) {
+  if (entry.protocolSaid.has(line)) return
+  entry.protocolSaid.add(line)
+  const diagnostics = ctx.get('evimedDiagnostics')
+  ;(diagnostics?.forSession?.(entry.sessionId) ?? diagnostics)?.degrade?.(line)
+}
+
+/**
  * The capability id in a session's binding file, or ''. A closed shape the control plane writes (`{ capability }`); the
  * id is then resolved against the mounted catalogue like any other, and an internal capability still needs its dispatch.
  * @param {string | null} raw @returns {string}
  */
 function parseBinding(raw) {
-  const capability = raw == null ? '' : String(parseJson(raw)?.capability ?? '')
-  return /^[a-z0-9][a-z0-9-]{0,63}$/.test(capability) ? capability : ''
+  return capabilityIdOf(raw == null ? '' : parseJson(raw)?.capability)
 }
 
 /**
@@ -2898,6 +2923,18 @@ async function loadBriefRevision(ctx, agent, entry, config) {
   if (rawIndex == null) return
   const index = parseJson(rawIndex)
   if (index?.sessionId && index.sessionId !== sessionId) return
+  // The hand-off revision this index was written under (`RUN_CONTEXT_PROTOCOL`). One this image was not built for is refused
+  // by name before anything of it is read: files and fields that moved between revisions read as another run's, and a
+  // run that took them for its own was running on someone else's brief. An index that states none predates the field and is
+  // read as before, with the skew said once.
+  if (index && typeof index === 'object') {
+    if (index.protocol === undefined) {
+      sayProtocolSkew(ctx, entry, `${RUN_PROTOCOL_SKEW_OPENING} missing: the control plane that wrote it is older than this runtime image (${RUN_CONTEXT_PROTOCOL}); the dispatch's routed capability is not read from it`)
+    } else if (index.protocol !== RUN_CONTEXT_PROTOCOL) {
+      sayProtocolSkew(ctx, entry, `${RUN_PROTOCOL_SKEW_OPENING} ${JSON.stringify(index.protocol)?.slice(0, 40)} is not the one this runtime image reads (${RUN_CONTEXT_PROTOCOL}): the dispatch's brief, context, memory and run id were not read`)
+      return
+    }
+  }
   const legacyMatches = legacyIndex?.runId === index?.runId && (!legacyIndex?.sessionId || legacyIndex.sessionId === sessionId) && (legacyOwned || scopedIndex != null)
   const contextRevision = String(index?.contextRevision ?? '')
   // Legacy indexes have no revision and preserve the old inject-once behavior.
@@ -2940,6 +2977,9 @@ async function loadBriefRevision(ctx, agent, entry, config) {
     entry.frozen = false
   }
   entry.limits = runLimits(config, index?.budget && typeof index.budget === 'object' ? index.budget : {})
+  // What this dispatch was routed to, from the index the control plane wrote and only from it. Stated by every revision, so a
+  // follow-up run that is not routed does not keep the previous run's route.
+  entry.routedCapability = capabilityIdOf(index?.capability)
   const brief = await readFileAt(ctx, cwd, briefFileForSession(sessionId))
     ?? (legacyMatches ? await readFileAt(ctx, cwd, workspaceLayout.briefFile) : null)
   const context = await readFileAt(ctx, cwd, `${sessionBriefDir}/context.md`)
@@ -2952,7 +2992,6 @@ async function loadBriefRevision(ctx, agent, entry, config) {
   const memory = await readFileAt(ctx, cwd, `${sessionBriefDir}/memory.md`)
     ?? (legacyMatches ? await readFileAt(ctx, cwd, workspaceLayout.briefMemoryFile) : null)
   entry.briefText = brief
-  entry.contextText = typeof context === 'string' ? context : null
   entry.memoryText = typeof memory === 'string' && memory.trim() ? memory : null
   entry.knowledgeEntries = (await listDirAt(ctx, cwd, workspaceLayout.knowledgeDir)).length
   const parts = []

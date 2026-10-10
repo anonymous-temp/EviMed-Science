@@ -32,6 +32,7 @@ import {
 import { expectedPluginTools, pluginProofMismatch, pluginUpstreamHealth, provenPluginSettings, readRuntimeResponseBody } from "../src/runtimeManager.mjs";
 import { renderProfilePatch, runtimeEnvironment } from "../src/dshProfilePatch.mjs";
 import { PLUGIN_ID, PLUGIN_REGISTRY, PLUGIN_SUPPORT_SNAPSHOT, pluginEntry, pluginRegistryFrom } from "../src/pluginService.mjs";
+import { RUN_CONTEXT_PROTOCOL } from "@evimed/domain";
 import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
 
 /**
@@ -2333,6 +2334,7 @@ test("dispatching a DSH prompt writes the run's own id into the workspace brief"
   assert.equal(written.sessionId, "ses_brief");
   assert.equal(written.runId, "run_brief_1");
   assert.match(written.contextRevision, /^req_/);
+  assert.equal(written.protocol, RUN_CONTEXT_PROTOCOL, "the index states the hand-off revision it was written under, for the image to check");
 });
 
 test("dispatching a DSH prompt without a run id leaves the brief index unwritten", async (t) => {
@@ -2390,6 +2392,7 @@ test("a reserved session receives strict context before its first DSH create", a
   });
   const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", session.id);
   assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), {
+    protocol: RUN_CONTEXT_PROTOCOL,
     runId: "run_strict_1",
     sessionId: session.id,
     contextRevision: "req_strict_1",
@@ -2414,11 +2417,85 @@ test("a follow-up and repair commit distinct session context revisions", async (
   });
   const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", sessionId);
   assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), {
+    protocol: RUN_CONTEXT_PROTOCOL,
     runId: "run_same",
     sessionId,
     contextRevision: "req_repair",
   });
   assert.equal(await readFile(path.join(root, "context.md"), "utf8"), "# Repair context\n");
+});
+
+test("the capability a dispatch was routed to is stated in the session's index, and only there", async (t) => {
+  // 2026-10-10 review D5: the runtime used to learn the route by parsing a sentence out of context.md, a file that also embeds
+  // the researcher's recalled memories and knowledge text. The index is the control plane's own structured word.
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => {
+    await manager.closeAll();
+    await rm(rootDir, { recursive: true, force: true });
+  });
+  await manager.start(project);
+  const sessionId = "ses_routed";
+  const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", sessionId);
+  const index = async () => JSON.parse(await readFile(path.join(root, "index.json"), "utf8"));
+
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "first", system: "# Context\n", routedCapability: "method-distillation", runId: "run_a", requestId: "req_1", strictContext: true,
+  });
+  assert.equal((await index()).capability, "method-distillation");
+  assert.equal(await readFile(path.join(root, "context.md"), "utf8"), "# Context\n", "the context carries no route of its own to read");
+
+  // A steer into the running run writes no context, so the context on disk is still the routed one: its index says so too.
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "<evimed-correction>x</evimed-correction>", runId: "run_a", requestId: "req_2", mode: "steer", strictContext: true,
+  });
+  assert.equal((await index()).capability, "method-distillation");
+  assert.equal((await index()).contextRevision, "req_2");
+
+  // Another run does not inherit it: a dispatch states its route, an unrouted one states none.
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "second", system: "# Context 2\n", routedCapability: null, runId: "run_b", requestId: "req_3", strictContext: true,
+  });
+  assert.equal("capability" in await index(), false);
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "<evimed-correction>y</evimed-correction>", runId: "run_c", requestId: "req_4", mode: "steer", strictContext: true,
+  });
+  assert.equal("capability" in await index(), false, "and a steer of a run that never stated one has nothing to keep");
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "third", system: "# Context 3\n", routedCapability: "method-distillation", runId: "run_d", requestId: "req_5", strictContext: true,
+  });
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "<evimed-correction>z</evimed-correction>", runId: "run_e", requestId: "req_6", mode: "steer", strictContext: true,
+  });
+  assert.equal("capability" in await index(), false, "a steer keeps the route of its own run, not of the run before it");
+
+  // Not an id: refused where it is written, not read back as one.
+  await assert.rejects(() => manager.dispatchPrompt(project, sessionId, {
+    text: "bad", system: "# Context\n", routedCapability: "../../etc", runId: "run_f", requestId: "req_7", strictContext: true,
+  }), { code: "invalid_id" });
+});
+
+test("the brief writers file a dispatch under its session and refuse a call without one; nothing is written project-wide any more", async (t) => {
+  // 2026-10-10 review D9: every caller passes a session id since e2eca41c4, and the branches that wrote the project-wide
+  // context, memory and index were left behind. A call that names no session is a mistake, and it is refused where it is made
+  // rather than written to a file every session of the project would read.
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => {
+    await manager.closeAll();
+    await rm(rootDir, { recursive: true, force: true });
+  });
+  for (const call of [
+    () => manager.writeRunContextFile(project, "# Context\n"),
+    () => manager.writeRunMemoryFile(project, "memory"),
+    () => manager.writeRunBriefIndex(project, "run_1"),
+    () => manager.writeRunContextFile(project, "# Context\n", { sessionId: null }),
+  ]) {
+    await assert.rejects(call, { code: "invalid_id" });
+  }
+  await assert.rejects(() => readFile(path.join(project.workspaceDir, ".evimed-brief", "context.md"), "utf8"), { code: "ENOENT" });
+  await assert.rejects(() => readFile(path.join(project.workspaceDir, ".evimed-brief", "memory.md"), "utf8"), { code: "ENOENT" });
+  await assert.rejects(() => readFile(path.join(project.workspaceDir, ".evimed-brief", "index.json"), "utf8"), { code: "ENOENT" });
+  await manager.writeRunContextFile(project, "# Context\n", { sessionId: "ses_own" });
+  assert.equal(await readFile(path.join(project.workspaceDir, ".evimed-brief", "sessions", "ses_own", "context.md"), "utf8"), "# Context\n");
 });
 
 test("a bounded runtime excludes interactive prompts until its episode releases the runtime", async (t) => {

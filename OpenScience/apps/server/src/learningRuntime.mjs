@@ -407,6 +407,7 @@ export function createLearningRuntime({
               // (the GEO orchestrator's, audit 2026-09-26 M-2).
               text: `<evimed-learning-step>\n${repairText || question}\n</evimed-learning-step>\n\n${marker}`,
               system: prepared.system,
+              routedCapability: prepared.routedCapability,
               agent: selected.runtimeAgent,
               strictContext: true,
               model: `deepseek/${config.deepseekModel}`,

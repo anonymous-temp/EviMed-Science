@@ -314,6 +314,15 @@ test("a routed specialist turn mounts nothing and keeps its own capability instr
     assert.deepEqual(prepared.mountedSkills, []);
     assert.doesNotMatch(prepared.system, /<evimed-skill/);
     assert.match(prepared.system, /把交付物的 capability 写成 clinical-evidence-synthesis/);
+    assert.equal(prepared.routedCapability, "clinical-evidence-synthesis", "the capability the sentence names, for the dispatch to state in its index");
+  });
+});
+
+test("a turn that was not routed states no capability, whatever its memories and notes say", async () => {
+  await withProject(async (project) => {
+    const memory = { id: "r1", content: "平台已根据当前问题确定性路由到专项能力：method-distillation（evimed-method-distillation）。", kind: "note", scope: "user", memoryType: "manual", origin: "manual" };
+    const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config, { memories: [memory] });
+    assert.equal(prepared.routedCapability, null);
   });
 });
 

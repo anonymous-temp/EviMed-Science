@@ -357,12 +357,13 @@ export class LearningTriggers {
    *   sessionState?: ((userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null } | null>) | null,
    *   audit?: (event: string, detail: Record<string, any>) => Promise<void>,
    *   canReuseRun?: ((project:any,run:any)=>Promise<boolean>) | null,
+   *   canReuseRuns?: ((project:any,runs:readonly any[])=>Promise<boolean[]>) | null,
    *   projects?: ((userId: string) => Promise<readonly any[]>) | null, routinePeriodDays?: number,
    *   guestInfluence?: { assess: (userId: string, run: any) => Promise<{ guest: any[], uncorroborated: string[] }>,
    *     mark: (project: any, run: any, assessment: any) => Promise<unknown>, count?: (assessment: any) => void } | null }} dependencies
    */
   constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {},
-    projects = null, routinePeriodDays = ROUTINE_PERIOD_DAYS, guestInfluence = null, canReuseRun = null }) {
+    projects = null, routinePeriodDays = ROUTINE_PERIOD_DAYS, guestInfluence = null, canReuseRun = null, canReuseRuns = null }) {
     if (!jobs || !agentRuns) throw new TypeError("Learning triggers need the job queue and the run ledger.");
     this.jobs = jobs;
     this.agentRuns = agentRuns;
@@ -372,6 +373,7 @@ export class LearningTriggers {
     this.audit = audit;
     this.projects = projects;
     this.canReuseRun = canReuseRun;
+    this.canReuseRuns = canReuseRuns;
     this.periodMs = routinePeriodMs(routinePeriodDays);
     this.guestInfluence = guestInfluence;
   }
@@ -400,6 +402,21 @@ export class LearningTriggers {
   }
 
   /**
+   * Which of one project's runs may be reused, in order. One question for the project's selected runs, where it used to be
+   * one per run, all at once, in every project of the account (2026-10-10 review D7); a caller that can only answer for one
+   * run is asked one run at a time.
+   * @param {any} project @param {readonly any[]} runs
+   * @returns {Promise<boolean[]>}
+   */
+  async #reusable(project, runs) {
+    if (this.canReuseRuns) return this.canReuseRuns(project, runs);
+    /** @type {boolean[]} */
+    const answers = [];
+    for (const item of runs) answers.push(this.canReuseRun ? await this.canReuseRun(project, item) : true);
+    return answers;
+  }
+
+  /**
    * The ledgers a routine of `capabilityId` is counted over: the run's own, as
    * already read, and that of every other project of the same researcher that
    * is neither archived nor internal. Each is cut to the capability and the
@@ -417,7 +434,7 @@ export class LearningTriggers {
     const cut = async (/** @type {any} */ home, /** @type {readonly any[]} */ ledger) => {
       const selected = ledger.filter((item) => String(item?.effectiveAgentId ?? "") === capabilityId
         && routinePeriodOf(item, this.periodMs) === period);
-      const allowed = await Promise.all(selected.map(item => this.canReuseRun ? this.canReuseRun(home,item) : true));
+      const allowed = await this.#reusable(home,selected);
       return selected.filter((_item,index) => allowed[index]);
     };
     /** @type {ProjectLedger[]} */

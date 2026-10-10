@@ -54,6 +54,25 @@ test('clinical source dependencies stay outside shared lessons, including routin
   assert.deepEqual(ledgers[0].runs.map(entry=>entry.id),['ordinary']);
 });
 
+test("a routine counted across an account's projects asks the clinical-context question once per project, not once per run", async () => {
+  // 2026-10-10 review D7: `ledgersFor` asked the VCR store about every selected run, concurrently, in every project of the account.
+  const projects = [projectOf("home"), projectOf("other"), projectOf("third")];
+  const ledger = Object.fromEntries(projects.map((project) => [project.id, [run({ id: `${project.id}_1` }), run({ id: `${project.id}_2` }), run({ id: `${project.id}_3` })]]));
+  /** @type {[string, number][]} */
+  const asked = [];
+  const worker = new LearningTriggers({
+    jobs: { enqueue: async () => {} },
+    agentRuns: { list: async (project) => ledger[project.id] },
+    projects: async () => projects,
+    canReuseRuns: async (project, runs) => { asked.push([project.id, runs.length]); return runs.map((entry) => entry.id !== "other_2"); },
+  });
+  const ledgers = await worker.ledgersFor(projects[0], ledger.home, ledger.home[2], "clinical-evidence-synthesis");
+  assert.deepEqual(asked, [["home", 3], ["other", 3], ["third", 3]], "one question for each project's selected runs");
+  assert.deepEqual(ledgers.map((entry) => entry.runs.map((item) => item.id)), [
+    ["home_1", "home_2", "home_3"], ["other_1", "other_3"], ["third_1", "third_2", "third_3"],
+  ], "and a run whose conversation read clinical context is still left out");
+});
+
 test("a finished delivery is a lesson by itself; one that needed repairs in its own turn is the repair lesson", () => {
   const clean = run();
   assert.deepEqual(triggers(learningTriggersFor({ run: clean, runs: [clean] })), ["delivered"]);

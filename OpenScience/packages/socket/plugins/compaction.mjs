@@ -260,18 +260,22 @@ export function takeRequest(requests, agent) {
  * one it will not demand, and a compaction that refuses to happen because the
  * projection was mid-write is worse than one that carries fewer handles.
  *
+ * The handles are the engine's own shape (`StateHandle` in the port: `kind`, `id`, `detail`), with a kind
+ * from `STATE_HANDLE_KINDS`: a field the engine does not read, or a kind the packet has no place for, is a
+ * handle that reaches the summary without its context or in the wrong order.
+ *
  * @param {{runMirror: any, planIndex: any, evidence: any, runIdForSession?: (sessionId: string) => string}} tables
  * @param {any} agent
- * @returns {Promise<{kind: string, id: string, note?: string}[]>}
+ * @returns {Promise<{kind: string, id: string, detail?: string}[]>}
  */
 export async function readRunHandles(tables, agent) {
-  /** @type {{kind: string, id: string, note?: string}[]} */
+  /** @type {{kind: string, id: string, detail?: string}[]} */
   const handles = []
-  /** @param {string} kind @param {unknown} id @param {string} [note] */
-  const add = (kind, id, note) => {
+  /** @param {string} kind @param {unknown} id @param {string} [detail] */
+  const add = (kind, id, detail) => {
     const value = typeof id === 'string' ? id.trim() : ''
     if (!value) return
-    handles.push(note ? { kind, id: value, note } : { kind, id: value })
+    handles.push(detail ? { kind, id: value, detail } : { kind, id: value })
   }
   try {
     const sessionId = String(agent?.session?.header?.parentSession ?? agent?.sessionId ?? agent?.session?.id ?? '')
@@ -283,9 +287,10 @@ export async function readRunHandles(tables, agent) {
     const evidence = (await tables.evidence.select({ runId: run.runId })) ?? []
     const state = projectRunState({ run, planIndex, evidence, now: '' })
     add('plan', planFileFor(run.runId), 'this run’s plan is authoritative; this summary is not')
-    add('run-state', runStateFileFor(run.runId), 'this run only; other session state is not this task')
+    add('projection', runStateFileFor(run.runId), 'this run only; other session state is not this task')
+    // The plan index holds the run policy's `publicItem`s: `id` and `status`.
     for (const item of state.plan.items ?? []) {
-      add('deliverable', item.deliverableId, item.state ? `plan item is ${item.state}` : undefined)
+      add('deliverable', item.id, item.status ? `plan item is ${item.status}` : undefined)
     }
     for (const record of evidence) add('source', record?.sourceId, record?.status)
     const limits = state.budget?.limits ?? {}

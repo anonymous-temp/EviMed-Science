@@ -57,3 +57,60 @@ test("a step of the run-finished hook that throws costs that step, and memory ex
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+// 2026-10-10 review D7: the question "may this run's work be copied into memory, methods and the evaluation corpus" is the VCR
+// store's, asked first in the hook, and a store that could not answer used to read as "no" through a bare `.catch(() => false)`.
+// "No" is the right default for a privacy boundary and stays; what was wrong is that nothing said so: the run's evolution
+// outcome, handbook observations, graph evidence and memory extraction were skipped with no audit line and no number.
+test("a clinical-privacy check that cannot answer is audited under its step and counted, the run still completes, and nothing is copied from it", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-run-finished-privacy-"));
+  const asked = [];
+  const vcrPrivacyStore = {
+    async hasClinicalContext() { asked.push("one"); throw Object.assign(new Error("the privacy store is down"), { code: "privacy_store_down" }); },
+    async clinicalContextsHeld() { asked.push("many"); throw Object.assign(new Error("the privacy store is down"), { code: "privacy_store_down" }); },
+  };
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memoryExtractionEnabled: false,
+    researchMemory: memoryStore, operatorMetricsToken: "test-only-metrics-token", vcrPrivacyStore });
+  try {
+    const address = await app.listen(0, "127.0.0.1");
+    const base = `http://127.0.0.1:${address.port}`;
+    const headers = { "X-Open-Science-Project": "default", "Content-Type": "application/json" };
+
+    /** @type {string[]} */
+    const extracted = [];
+    const recordRun = app.memoryIntelligence.recordRun.bind(app.memoryIntelligence);
+    app.memoryIntelligence.recordRun = async (/** @type {any[]} */ ...args) => { extracted.push(args[1].id); return recordRun(...args); };
+
+    assert.equal((await fetch(`${base}/api/research-sessions/ses_privacy`, { method: "PUT", headers, body: JSON.stringify({ mode: "open-domain" }) })).status, 200);
+    const dispatched = await fetch(`${base}/api/agent-runs/dispatch`, { method: "POST", headers, body: JSON.stringify({ sessionId: "ses_privacy", dispatchId: "dispatch_privacy", text: "抗凝药物的出血风险怎么评估？" }) });
+    assert.equal(dispatched.status, 202, await dispatched.clone().text());
+    const runId = (await dispatched.json()).data.id;
+
+    const failure = async () => (await auditRows(dataDir)).find((row) => row.action === "run.completion.step" && row.status === "failed");
+    let row = await failure();
+    for (const started = Date.now(); !row && Date.now() - started < 8_000;) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      row = await failure();
+    }
+    assert.ok(row, "the failed check is audited");
+    assert.equal(row.code, "privacy_store_down");
+    assert.match(String(row.detail), /^clinical\.context: the privacy store is down/, "under the step's name, with the reason");
+    assert.deepEqual((await auditRows(dataDir)).filter((entry) => entry.action === "run.completion.step").map((entry) => String(entry.detail).split(":")[0]), ["clinical.context"], "and no other step failed");
+
+    // The run's own completion goes on: it reaches a terminal state and the counter says how often this happened.
+    let status = "running";
+    for (const started = Date.now(); status === "running" && Date.now() - started < 8_000;) {
+      status = (await (await fetch(`${base}/api/agent-runs`, { headers })).json()).data.find((/** @type {any} */ item) => item.id === runId)?.status ?? "running";
+      if (status === "running") await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.notEqual(status, "running", "the run finished");
+    const metrics = await (await fetch(`${base}/api/ops/metrics`, { headers: { Authorization: "Bearer test-only-metrics-token" } })).text();
+    assert.ok(metrics.split("\n").includes('evimed_run_completion_step_failures_total{step="clinical.context"} 1'), "counted under the step's name");
+    // Fail closed, as before: a question that could not be answered is a "no".
+    assert.deepEqual(extracted, [], "nothing is extracted into memory from a run whose privacy question failed");
+    assert.deepEqual([...new Set(asked)], ["one"]);
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

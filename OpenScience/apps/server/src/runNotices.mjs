@@ -106,6 +106,8 @@ const runSideDegradedTemplates = Object.freeze([
   [(line) => line.startsWith("capability catalogue") || line.startsWith("capability manifest"), "run_capability_catalogue_incomplete"],
   [(line) => line.startsWith("evidence ingest"), "run_evidence_ingest_failed"],
   [(line) => line.startsWith("runtime_turn_end_unknown"), "run_turn_end_unknown"],
+  // The image and the control plane were built for different hand-off revisions (`RUN_CONTEXT_PROTOCOL`), in either direction.
+  [(line) => line.startsWith(domain.RUN_PROTOCOL_SKEW_OPENING), "run_protocol_skew"],
 ]);
 
 /** @param {string} line @returns {StoredNotice} */

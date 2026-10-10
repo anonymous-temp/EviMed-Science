@@ -930,25 +930,25 @@ export function buildInlineMethod(input) {
 }
 
 /**
- * The capability the control plane routed this session to, read from the
- * context file it wrote before the first prompt (`researchContext.mjs`'s
- * routing line, 「平台已根据当前问题确定性路由到专项能力：<id>（<agent>）」). A
- * sentence of ours in a file the run cannot pre-write, parsed for one
- * closed-vocabulary id — not a judgement about language.
- * @param {unknown} text @returns {string | null}
+ * A capability id as the control plane writes one into a structured file (a
+ * session's binding, a dispatch's index), or '' when the value is not one.
+ *
+ * The index is written by the control plane and read as input all the same: an
+ * id has to look like an id before anything is looked up by it.
+ * @param {unknown} value @returns {string}
  */
-export function routedCapabilityOf(text) {
-  const match = /确定性路由到专项能力：([a-z0-9][a-z0-9-]{0,63})（/.exec(String(text ?? ''))
-  return match ? match[1] : null
+export function capabilityIdOf(value) {
+  return typeof value === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(value) ? value : ''
 }
 
 /**
  * The capability ids a text names, matched against the catalogue.
  *
  * A closed vocabulary — the ids this deployment mounted — so this is a lookup,
- * not a reading of language (principle 5). It exists because a session the
- * control plane routed to one capability says so in its own context block, and
- * the run side has no other structured way to learn what it was bound to.
+ * not a reading of language (principle 5). Only for text the researcher wrote
+ * as a request: a dispatch's context embeds recalled memories and knowledge
+ * text, which anyone who can plant a note can fill with ids, so it is never an
+ * input here. What a dispatch was routed to is the index's `capability`.
  *
  * @param {string | null | undefined} text @param {readonly Record<string, any>[]} capabilities
  * @returns {string[]}

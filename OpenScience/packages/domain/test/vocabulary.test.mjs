@@ -31,7 +31,11 @@ import {
   phaseOfToolCall,
   receiptFileFor,
   receiptFilesFor,
+  RUN_CONTEXT_PROTOCOL,
+  RUN_PROTOCOL_SKEW_OPENING,
+  briefFileForSession,
   resolveContractKind,
+  workspaceLayout,
   runGate,
   runPhase,
   runStateFileFor,
@@ -136,6 +140,15 @@ test("the path guard refuses the question, the receipt and the state projection"
   assert.ok(!isProtectedWritePath("task-plan.json"));
   assert.equal(runStateFileFor("run_123"), ".evimed-run/runs/run_123/state.json");
   assert.throws(() => runStateFileFor("../other"), /Invalid run id/);
+});
+
+test("the hand-off between the control plane and the runtime image has a revision, and a fixed opening for what the image says of one it cannot read", () => {
+  // Revision 2 is the per-session brief and the per-run plan, projection and receipt. A change to where those files are filed or to what the
+  // index states bumps it, so a control plane and an image built for different ones refuse each other by name (2026-10-10 review D8).
+  assert.equal(RUN_CONTEXT_PROTOCOL, 2);
+  assert.ok(briefFileForSession("ses_1").startsWith(`${workspaceLayout.briefDir}/sessions/ses_1/`));
+  assert.equal(receiptFileFor("run_1"), ".evimed-run/runs/run_1/delivery-receipt.json");
+  assert.equal(RUN_PROTOCOL_SKEW_OPENING, "brief index protocol", "the control plane's table of run-side lines matches the image's lines by this opening");
 });
 
 test("a run's receipt and summary are files of its own, under the protected run directory", () => {

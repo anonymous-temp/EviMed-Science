@@ -93,6 +93,8 @@ export class RunMetrics {
     /** @type {Map<string, { labels: Record<string, string>, value: number }>} */
     this.sources = new Map();
     this.failures = 0;
+    /** @type {Map<string, { labels: Record<string, string>, value: number }>} */
+    this.stepFailures = new Map();
   }
 
   /**
@@ -135,6 +137,16 @@ export class RunMetrics {
     this.failures += 1;
   }
 
+  /**
+   * A step of the run-finished hook that threw (`step` in `onRunFinished`). Each costs only itself and is audited under its
+   * name; this is the number, so a step that fails often is seen without reading the audit ledger. The names are a closed list
+   * in the hook, and a spelling outside it is one series.
+   * @param {string} step
+   */
+  stepFailed(step) {
+    this.#add(this.stepFailures, { step: /^[a-z][a-z0-9._-]{0,47}$/.test(String(step)) ? String(step) : "other" }, 1);
+  }
+
   /** The exposition lines, HELP and TYPE included, for `/api/ops/metrics`. */
   lines() {
     return [
@@ -166,6 +178,9 @@ export class RunMetrics {
       ...family("evimed_run_metric_failures_total", "counter",
         "Finished runs whose outcome could not be counted in the series above.",
         [sample("evimed_run_metric_failures_total", this.failures, {})]),
+      ...family("evimed_run_completion_step_failures_total", "counter",
+        "Steps of the run-finished hook that threw since this process started, by step. Each costs only itself; nonzero means finished runs went without what that step records.",
+        [...this.stepFailures.values()].map(({ labels, value }) => sample("evimed_run_completion_step_failures_total", value, labels))),
     ];
   }
 
