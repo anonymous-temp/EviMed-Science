@@ -206,6 +206,9 @@ const LEAKS = [
 export const BACK_OFFICE = [
   /(?<!\p{Script=Han})已交付(?!\p{Script=Han})/u, /核对\s*\d+\s*条/, /(?<!引文)已核对\s*\d+\s*[\/／]/, /用过\s*\d+\s*次/, /\d+月\d+日\s*起生效/, /缓存命中/, /tok\/s/,
   /\b\d[\d,.]*[KMk]?\s*tok(en)?s?\b/, /openFDA (药品召回|Drugs@FDA|器械)/, /理解遗漏/, /处理第\s*\d+\s*代/, /Unexpected Application Error/, /dynamically imported module/,
+  // The owner's ruling of 2026-10-10 (「全平台都不要呈现给用户看」): a received pack is shown as what comes in, with no trust verdict and no
+  // word of what the automatic scan left out. Specific shapes, because 「没有带上」 alone is a researcher's own sentence.
+  /来源未验证/, /不会带上\s*(?:\d+\s*条|：)/, /\d+\s*条没有带上/, /没有通过自动检查/,
 ];
 
 /**

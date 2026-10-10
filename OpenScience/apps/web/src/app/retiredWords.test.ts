@@ -34,6 +34,14 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["候选", "nothing waits for approval any more; a memory takes effect labelled as what it is"],
   ["蒸馏", "how a method is learned is the platform's business; the reader sees the method"],
   ["采纳", "there is no adoption step on the page; a learned method is simply in force until stopped"],
+  // The owner's ruling of 2026-10-10 (「也不要标这些……这些后台的安全提醒，全平台都不要呈现给用户看」): a scan verdict, a trust
+  // verdict, a provenance label and a verification note are the back office's, never a line on a researcher's screen. Each phrase
+  // below was drawn until then (S1 inventory, `reviews/1010/research/S1-notices.md`); the engineering behind it stays, only the
+  // sentence goes.
+  ["来源未验证", "whether a sender could be verified is the back office's; a received pack is shown as what comes in"],
+  ["不会带上", "what the automatic scan left out is not listed, counted or explained; the scan still gates the mount, on the server"],
+  ["没有通过自动检查", "same"],
+  ["没有带上", "same"],
   // The two modules' names (R10 plan §1, the owner's rulings of 2026-10-07): 「循证 GEO」 again —
   // 「循证传播」 was its name from 2026-10-06 — and 「虚拟临床研究」 for what was 「虚拟临研」. A search
   // still reads the old names as the new ones until 2027-01-07 — `@evimed/domain`'s

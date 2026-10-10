@@ -7,7 +7,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { Tabs } from "@/components/ui/Tabs";
-import { CAPSULE_SCAN_REASONS, capsuleEntryLabel, fromSender } from "@/lib/capsuleText";
+import { capsuleEntryLabel, fromSender, takenEntries } from "@/lib/capsuleText";
 import { takeDownSnapshot } from "@/lib/capsuleShareClient";
 import { useCapsuleShareFeature } from "@/lib/capsuleShareFeature";
 import { formatDateTime } from "@/lib/format";
@@ -212,9 +212,9 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
  * it holds and what will not be taken, and take it whole — then what is waiting
  * to be taken and what was taken.
  *
- * A file made for this account opens with no password. What the automatic check
- * will leave out is part of what is previewed, entry by entry, with its reason
- * in the researcher's words: 「不会带上」.
+ * A file made for this account opens with no password. The preview is what comes
+ * in; whether the sender could be verified and what the automatic check will
+ * leave out are the back office's and are not said (owner ruling 2026-10-10).
  */
 export function ImportPanel({ onImported }: { onImported: (capsule: CapsuleRecord) => void }) {
   const [password, setPassword] = useState("");
@@ -224,12 +224,11 @@ export function ImportPanel({ onImported }: { onImported: (capsule: CapsuleRecor
   const { busy, error, notice, setError, setNotice, perform, mounted } = useAction();
 
   const upgrading = preview?.upgrades ?? null;
+  const taken = preview ? takenEntries(preview.entries, preview.scan) : [];
   const status = preview ? [
-    preview.issuerTrust === "verified" ? "已验证" : "来源未验证",
-    `${preview.entries.length} 条`,
+    `${taken.length} 条`,
     ...(preview.hostedStatus === "revoked" ? ["已撤回"] : []),
     ...(preview.newerSnapshotId ? ["有更新版本"] : []),
-    ...(preview.scan?.dropped.length ? [`不会带上 ${preview.scan.dropped.length} 条`] : []),
   ].join(" · ") : "";
 
   return <div className="space-y-8">
@@ -267,15 +266,11 @@ export function ImportPanel({ onImported }: { onImported: (capsule: CapsuleRecor
         </p>}
         <p className="text-ui text-text">{status}</p>
         <ul className="space-y-1">
-          {preview.entries.map(entry => {
-            const dropped = preview.scan?.dropped.find(item => item.id === entry.id);
-            return <li key={entry.id}>
-              <Disclosure summary={`${capsuleEntryLabel(entry.factKind)}${dropped ? ` · 不会带上：${CAPSULE_SCAN_REASONS[dropped.code] ?? "没有通过自动检查"}` : ""}`}>
-                <p className="max-w-measure whitespace-pre-wrap text-ui text-text">{entry.content}</p>
-                {dropped?.source === "model" && dropped.reason && <p className="mt-1 text-caption text-text-3">{dropped.reason}</p>}
-              </Disclosure>
-            </li>;
-          })}
+          {taken.map(entry => <li key={entry.id}>
+            <Disclosure summary={capsuleEntryLabel(entry.factKind)}>
+              <p className="max-w-measure whitespace-pre-wrap text-ui text-text">{entry.content}</p>
+            </Disclosure>
+          </li>)}
         </ul>
         {!upgrading && <Input label="收下后的胶囊名称" value={title} disabled={busy} maxLength={150} onChange={event => setTitle(event.target.value)} />}
         <Button disabled={busy || !preview.canImport || (!upgrading && !title.trim())} onClick={() => void perform(async () => {

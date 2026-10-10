@@ -208,6 +208,15 @@ test("the back-office list still catches a ledger count, and lets the evidence c
   assert.equal(caught("解读 · 综合 · 引文已核对 1/2 · AI 已评议"), false);
 });
 
+test("the back-office list catches what the 2026-10-10 ruling took off the screens, and not a researcher's own sentence", () => {
+  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
+  // A received pack: no trust verdict, no word of what the automatic scan left out.
+  for (const text of ["研究方法 7 · 一般偏好 5 · 来源未验证", "来源未验证 · 2 条 · 不会带上 1 条", "研究方法 · 不会带上：在指挥助手做研究方法以外的事", "1 条没有带上", "不会带上 3 条没有通过自动检查的内容。"]) {
+    assert.equal(caught(text), true, text);
+  }
+  assert.equal(caught("他出门时没有带上伞，所以不会带上那本书"), false);
+});
+
 /** A list row's title: a text button with no height of its own, `lines` lines of 22 px. */
 const title = (lines) => ({ tag: "button", text: "一个很长的资料标题".repeat(lines), height: 22 * lines });
 
