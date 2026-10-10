@@ -52,3 +52,28 @@ test('J23, the harm check on a lesson before it can be promoted: one yes/no ques
   assert.equal((await mismatched.judge('J23',input,{userId:'u'})).code,'judge_calibration_mismatch');
   await Promise.all([uncalibrated.close(),calibrated.close(),mismatched.close()]);
 });
+
+test('the master switch (OPEN_SCIENCE_JEV_ENABLED) stands every registered site down before any provider call, the reply check included, and leaves the per-site list as it was',async()=>{
+  const{JUDGE_SITE_IDS}=await import('../src/judgeSites.mjs');
+  let calls=0;
+  const counting=async(...args)=>{calls++;return callImpl(...args);};
+  // Whatever the input is, a site that is off answers before it is read: the registry is walked, not a hand-picked few.
+  const off=createJudgeService({calibrationMode:true,config:{...config,jevEnabled:false},callImpl:counting});
+  for(const site of JUDGE_SITE_IDS){
+    const result=await off.judge(site,{line:'x',items:{}},{userId:'u',projectId:'p'});
+    assert.deepEqual([site,result.outcome,result.code],[site,'fallback','judge_disabled']);
+  }
+  assert.equal(calls,0,'no site reached the provider');
+  const status=off.status();
+  assert.equal(status.enabled,false,'the master switch shows in status, and so in /api/ready');
+  assert.deepEqual(Object.entries(status.sites).filter(([,site])=>site.enabled).map(([id])=>id),[],'no site reads as enabled');
+  // On (the default, with the flag absent or true) the same registry is not stood down, and the per-site list still switches one site off.
+  for(const jevEnabled of [undefined,true]){
+    const on=createJudgeService({calibrationMode:true,config:{...config,...(jevEnabled===undefined?{}:{jevEnabled}),jevDisabledSites:['J3']},callImpl:counting});
+    assert.equal(on.status().enabled,true);
+    assert.equal((await on.judge('J4',{line:'x'},{userId:'u',projectId:'p'})).outcome,'settled');
+    assert.equal((await on.judge('J3',{question:'q',capabilities:[{id:'a',title:'A'}]},{userId:'u',projectId:'p'})).code,'judge_disabled');
+    await on.close();
+  }
+  await off.close();
+});

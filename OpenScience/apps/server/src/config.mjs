@@ -1258,6 +1258,11 @@ function reviewConfigured(overrides) {
  *   with a key in place, and the reply check then asks the reviewer model
  *   about every sentence, as it did before Jev (principle 15: the reason is
  *   cost and latency, the counter is `open_science_review_jev_requests_total`).
+ * - `OPEN_SCIENCE_JEV_ENABLED` (owner, 2026-10-10; default on) is the one switch
+ *   for every Jev site at once, the reply check's included: off, the key stays
+ *   mounted and each site takes the path it had before Jev. The per-site list
+ *   (`OPEN_SCIENCE_JEV_DISABLED_SITES`) and the reply check's own lever stay as
+ *   narrower switches under it.
  * - The timeout is how long a reply check waits for Jev before the reviewer
  *   takes every sentence. Jev answered in 0.2–1.3 s in the 2026-09-21 probes,
  *   so fifteen seconds is an outage, not a slow answer.
@@ -1299,15 +1304,17 @@ function reviewJevSettings(overrides, keyPresent) {
   const registerValue = overrides.jevRegisterMaxLines ?? (process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES || REGISTER_JUDGE_MAX_LINES);
   const registerMaxLines = Number(registerValue);
   if(!Number.isSafeInteger(registerMaxLines)||registerMaxLines<1||registerMaxLines>5000)throw new Error(`OPEN_SCIENCE_JEV_REGISTER_MAX_LINES must be a whole number from 1 to 5000, got ${JSON.stringify(registerValue)}.`);
+  // Read once and folded into both flags below, so a consumer that reads only the reply check's flag cannot miss the master switch.
+  const master = Boolean(overrides.jevEnabled ?? boolEnv("OPEN_SCIENCE_JEV_ENABLED", true));
   return {
-    reviewJevEnabled: overrides.reviewJevEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_JEV_ENABLED", keyPresent),
+    reviewJevEnabled: master && Boolean(overrides.reviewJevEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_JEV_ENABLED", keyPresent)),
     reviewJevModel: model,
     reviewJevApiBase: String(pin.apiBase ?? "").replace(/\/+$/, ""),
     reviewJevSupportConfidence: threshold,
     reviewJevMaxRequestTokens: maxRequestTokens,
     reviewJevMaxStateTokens: maxStateTokens,
     reviewJevTimeoutMs: timeoutMs,
-    jevEnabled: overrides.jevEnabled ?? keyPresent,
+    jevEnabled: master && keyPresent,
     jevDisabledSites: disabled,
     jevOnlineTimeoutMs: onlineTimeout,
     jevBackgroundConcurrency: concurrency,

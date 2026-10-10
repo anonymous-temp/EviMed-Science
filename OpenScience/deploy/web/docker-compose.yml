@@ -736,6 +736,8 @@ services:
       # config.mjs's defaults. The controller gets none of it — no runtime
       # ever talks to Jev.
       OPEN_SCIENCE_REVIEW_JEV_ENABLED:
+      # The one switch for every Jev site, the reply check's included. Value-less: unset keeps config.mjs's default, on.
+      OPEN_SCIENCE_JEV_ENABLED:
       OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS: ${OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS:-15000}
       OPEN_SCIENCE_JEV_DISABLED_SITES: ${OPEN_SCIENCE_JEV_DISABLED_SITES:-}
       OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS: ${OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS:-3000}

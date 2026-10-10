@@ -277,19 +277,21 @@ export function createJudgeService({
   const status = () => ({
     model: config.reviewJevModel ?? null,
     configured: Boolean(config.typesafeApiKey),
+    // The master switch: false is every site standing down to its original path.
+    enabled: config.jevEnabled !== false,
     sites: Object.fromEntries(
       Object.entries(JUDGE_SITES).map(([id, p]) => [
         id,
         {
           enabled:
             Boolean(config.typesafeApiKey) &&
+            config.jevEnabled !== false &&
             (id === "reply-check"
               ? config.reviewJevEnabled === true
-              : (config.jevEnabled ?? true) &&
-                (calibrationMode ||
-                  (config.jevSites?.[id]?.calibration === "calibrated" &&
-                    typeof config.jevSites?.[id]?.promptFingerprint ===
-                      "string"))) &&
+              : calibrationMode ||
+                (config.jevSites?.[id]?.calibration === "calibrated" &&
+                  typeof config.jevSites?.[id]?.promptFingerprint ===
+                    "string")) &&
             !disabled.has(id),
           calibration: config.jevSites?.[id]?.calibration ?? p.calibration,
           calibrated:
@@ -404,11 +406,12 @@ export function createJudgeService({
       };
     };
     if (!policy) return finish("fallback", "judge_unknown_site");
+    // The master switch (config.jevEnabled, OPEN_SCIENCE_JEV_ENABLED) stands every site down, the reply check's too;
+    // that site has its own narrower lever beside it, and no other site does.
     if (
       closed ||
-      (site === "reply-check"
-        ? config.reviewJevEnabled !== true
-        : config.jevEnabled === false) ||
+      config.jevEnabled === false ||
+      (site === "reply-check" && config.reviewJevEnabled !== true) ||
       disabled.has(site)
     )
       return finish("fallback", "judge_disabled");
