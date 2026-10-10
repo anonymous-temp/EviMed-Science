@@ -77,7 +77,7 @@ import {
 } from "@evimed/domain";
 import { callReviewModel, reviewModelApiKey, ReviewModelError } from "./reviewModel.mjs";
 import { JEV_RETRY_DELAY_MS, callJev } from "./jevModel.mjs";
-import { judgeCitedSentences } from "./replyCheckJev.mjs";
+import { judgeCitedSentences, judgeServiceJev } from "./replyCheckJev.mjs";
 import { VCR_REPLY_SCHEMA, acceptReplyClaims, replyNumberSentences, studyNumbers, vcrReplyMessage, vcrReplySystemPrompt, vcrReplyVerdicts } from "./vcrReplyCheck.mjs";
 import { StudyReviews, assertStudyReviewConfiguration, studyReviewConfiguration, studyReviewDigest } from "./studyReview.mjs";
 import { ProductJobs } from "./productJobs.mjs";
@@ -978,9 +978,11 @@ export class ReviewService {
         threshold: Number(this.config.reviewJevSupportConfidence),
         jevLimits: this.config,
         jev: this.jevEnabled
-          ? async (request) => { if(this.judgeService){const result=await this.judgeService.judge('reply-check',request.state,{userId:row.user_id,projectId:row.project_id,runId:row.run_id});if(!result.answers)throw new Error(result.code);return result;} return callJev({ ...ledger, retryDelayMs: Math.min(this.retryDelayMs, JEV_RETRY_DELAY_MS) }, {
-            userId: row.user_id, projectId: row.project_id, runId: row.run_id, purpose: "review", operation: "reply-check", ...request,
-          }); }
+          ? this.judgeService
+            ? judgeServiceJev(this.judgeService, { userId: row.user_id, projectId: row.project_id, runId: row.run_id })
+            : (request) => callJev({ ...ledger, retryDelayMs: Math.min(this.retryDelayMs, JEV_RETRY_DELAY_MS) }, {
+              userId: row.user_id, projectId: row.project_id, runId: row.run_id, purpose: "review", operation: "reply-check", ...request,
+            })
           : null,
         reviewer: ({ sentences: rest, references: restReferences }) => callReviewModel(ledger, {
           userId: row.user_id, projectId: row.project_id, runId: row.run_id,
