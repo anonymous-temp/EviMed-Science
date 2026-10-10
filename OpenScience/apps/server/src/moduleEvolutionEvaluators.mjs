@@ -38,7 +38,9 @@ export function createModuleEvolutionEvaluators({ planner, editor, judgeFrontier
       };
       units.push(await (input.checkpointUnit ? input.checkpointUnit(item.id, runUnit) : runUnit()));
     }
-    return { pool: input.batch ? input.pool : "development", units, evaluatorVersion: "autopilot-prefix-v1", evidenceTier:"model",deterministicChecksPassed:true, policyHash: revision?.policy ? digest(revision.policy) : null, model: planner.model };
+    // The planner's decisions are checked against the closed actions each case expects: a written checklist, not a model's grade, so no judge is calibrated and the
+    // score is the share of expected actions met (review D-E19).
+    return { pool: input.batch ? input.pool : "development", units, evaluatorVersion: "autopilot-checklist-v1", evidenceTier:"checklist", checkScope: "closed-expected-actions", policyHash: revision?.policy ? digest(revision.policy) : null, model: planner.model };
   };
   if (editor) runners.frontier = async (input) => {
     if (["confirmation","audit"].includes(input.pool) && !judgeFrontier) return {pool:"confirmation",units:[],reason:"source_fidelity_judge_unavailable"};
@@ -60,11 +62,12 @@ export function createModuleEvolutionEvaluators({ planner, editor, judgeFrontier
       const numbersCorrect = edited.numbers && edited.numbers.missing.length === 0 && edited.numbers.unitMismatches.length === 0;
       return { id: item.id, groupId: item.groupId ?? item.id, score: !item.abstentionExpected && correctLane && numbersCorrect && (!fidelity || fidelity.supported === true) && ["passed", "repaired"].includes(edited.verification) ? 1 : 0,
         sourceHash: item.sourceHash ?? edited.modelInputSha256, executionInputHash:edited.modelInputSha256, policyRevisionId: edited.editorVersion,
-        slices: { lane: correctLane, numbers: Boolean(numbersCorrect), sourceFidelity: fidelity?.supported ?? null, verification: edited.verification }, contextBytes: Buffer.byteLength(edited.modelInput)+Buffer.byteLength(revision?.policy?.editInstructions??FRONTIER_EDIT_INSTRUCTIONS)+(confirmation?0:Buffer.byteLength(revision?.policy?.screenInstructions??FRONTIER_SCREEN_INSTRUCTIONS)) };
+        // The deterministic check of this unit (every number and unit of the rewrite is in its source); the mission compares its share with the incumbent's.
+        deterministicPassed: Boolean(numbersCorrect), slices: { lane: correctLane, numbers: Boolean(numbersCorrect), sourceFidelity: fidelity?.supported ?? null, verification: edited.verification }, contextBytes: Buffer.byteLength(edited.modelInput)+Buffer.byteLength(revision?.policy?.editInstructions??FRONTIER_EDIT_INSTRUCTIONS)+(confirmation?0:Buffer.byteLength(revision?.policy?.screenInstructions??FRONTIER_SCREEN_INSTRUCTIONS)) };
       };
       units.push(await (input.checkpointUnit ? input.checkpointUnit(item.id, runUnit) : runUnit()));
     }
-    return { pool: input.batch ? input.pool : "development", units, evaluatorVersion: "frontier-source-v1", evidenceTier: "model", deterministicChecksPassed: units.every(unit=>unit.slices?.numbers === true), checkScope: "source-fidelity-and-numeric", policyHash: revision?.policy ? digest(revision.policy) : null, model: editor.model };
+    return { pool: input.batch ? input.pool : "development", units, evaluatorVersion: "frontier-source-v1", evidenceTier: "model", checkScope: "source-fidelity-and-numeric", policyHash: revision?.policy ? digest(revision.policy) : null, model: editor.model };
   };
   if (geoJudge && generateGeo) runners.geo = async (input) => {
     if (!Array.isArray(input.batch) || !input.batch.length) return { pool: "development", units: [] };
@@ -82,13 +85,15 @@ export function createModuleEvolutionEvaluators({ planner, editor, judgeFrontier
       const omitted = judged.checks.omittedSafety.length;
       return { id: item.id, groupId: item.groupId ?? item.id, sourceHash: item.sourceHash ?? digest(item.claims), executionInputHash:digest({claims:item.claims,question:item.question}),
         score: item.abstentionExpected ? (judged.refusal === true && unsupported.length === 0 && !judged.checks.offLabel.length && !judged.dropped.length ? 1 : 0) : accuracy.rate === null || unsupported.length || omitted || judged.checks.offLabel.length || judged.dropped.length ? 0 : accuracy.rate,
+        // The deterministic check of this unit (the answer states no quantity its claims do not).
+        deterministicPassed: unsupported.length === 0,
         slices: { correctness: accuracy.rate, importantRiskOmissions: omitted, unsupportedNumbers: unsupported.length,
           offLabel: judged.checks.offLabel.length,abstentionObserved:judged.refusal === true }, costCny: generated.costCny ?? null,
         policyRevisionId: input.candidate?.revisionId ?? null, contextBytes: generated.contextBytes ?? null };
       };
       units.push(await (input.checkpointUnit ? input.checkpointUnit(item.id, runUnit) : runUnit()));
     }
-    return {pool: input.pool, units, evaluatorVersion: "geo-card-source-v1", evidenceTier: "model", deterministicChecksPassed: units.every(unit=>unit.slices?.unsupportedNumbers === 0), checkScope: "card-fidelity-and-numeric", model: geoJudge.model};
+    return {pool: input.pool, units, evaluatorVersion: "geo-card-source-v1", evidenceTier: "model", checkScope: "card-fidelity-and-numeric", model: geoJudge.model};
   };
   return runners;
 }

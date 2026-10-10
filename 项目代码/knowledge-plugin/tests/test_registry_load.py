@@ -33,7 +33,8 @@ def test_the_committed_registry_is_a_fresh_deterministic_build():
 
 def test_every_row_validates(document):
     rows = load_registry(REGISTRY, {})
-    assert len(rows) == len(document["sources"]) == 722
+    # 722 before 2026-10-10; the single arXiv discovery query is replaced by the 28 ai-discovery rows (tests/adapters/test_ai_discovery.py)
+    assert len(rows) == len(document["sources"]) == 749
     assert sum(r.enabled for r in rows) >= 256
 
 

@@ -37,6 +37,7 @@ import asyncio
 import gzip
 import hashlib
 import json
+import re
 import sys
 import time
 import urllib.robotparser
@@ -71,7 +72,7 @@ GZIP_OVER = 48 * 1024
 GAP_S = 1.5
 HOST_GAP_S = {"export.arxiv.org": 3.1, "api.medrxiv.org": 2.1, "api.biorxiv.org": 2.1}
 PII_KEYS = frozenset({"contact_name", "contact_email", "contact_phone", "contact_address", "contact_wechat",
-                      "creator_info"})
+                      "creator_info", "email"})  # "email": the author and committer of a GitHub commit
 UTC = timezone.utc
 
 
@@ -94,7 +95,12 @@ def _ext(content_type: str, url: str) -> str:
     return "txt"
 
 
-def _redact(body: bytes, content_type: str) -> tuple[bytes, list[str]]:
+_EMAIL_IN_TEXT = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+")
+
+
+def _redact(body: bytes, content_type: str, scrub_emails: bool = False) -> tuple[bytes, list[str]]:
+    """``PII_KEYS`` values become ``REDACTED``; with ``scrub_emails`` so does every address written inside a string
+    (a commit message carries its co-authors' ``Name <address>`` trailers)."""
     if "json" not in content_type.lower():
         return body, []
     try:
@@ -115,6 +121,9 @@ def _redact(body: bytes, content_type: str) -> tuple[bytes, list[str]]:
             return out
         if isinstance(node, list):
             return [walk(v) for v in node]
+        if scrub_emails and isinstance(node, str) and _EMAIL_IN_TEXT.search(node):
+            hits.append("email-in-text")
+            return _EMAIL_IN_TEXT.sub("REDACTED", node)
         return node
 
     redacted = walk(payload)
@@ -168,6 +177,7 @@ class RecordingFetcher:
     def __init__(self, case_dir: Path, *, credentials: bool = True, browser_cdp: str = BROWSER_CDP) -> None:
         self.case_dir = case_dir
         self.credentials = credentials
+        self.scrub_emails = False
         self.browser_cdp = browser_cdp
         self._protected: ProtectedFetcher | None = None
         self.robots_log: list[dict] = []
@@ -292,7 +302,7 @@ class RecordingFetcher:
 
     def _store(self, meta: dict, body: bytes, content_type: str) -> None:
         original_sha = hashlib.sha256(body).hexdigest()
-        body, redacted = _redact(body, content_type)
+        body, redacted = _redact(body, content_type, self.scrub_emails)
         name = f"{len(self.exchanges) + 1:02d}.{_ext(content_type, meta['url'])}"
         packed = len(body) > GZIP_OVER
         if packed:
@@ -358,6 +368,21 @@ ADAPTER_CASES: dict[str, dict] = {
     "json-api/medrxiv-details": {"source": "medrxiv-api-details", "budget": 3, "last_ok_hours": 24},
     "json-api/crossref-retraction-updates": {"source": "crossref-retraction-updates", "budget": 1},
     "json-api/medhelm": {"source": "stanford-medhelm", "budget": 2},
+    # AI discovery (2026-10-10): the sources the weekly self-research reads. The Hugging Face rows are relay rows, recorded
+    # here from the dev box over a direct connection (the recorder has no relay).
+    "atom/ai-discovery-arxiv-agents-memory": {"source": "ai-discovery-arxiv-agents-memory", "budget": 1},
+    "atom/ai-discovery-arxiv-venue-accepted": {"source": "ai-discovery-arxiv-venue-accepted", "budget": 1},
+    "json-api/ai-discovery-hf-daily-papers": {"source": "ai-discovery-hf-daily-papers", "budget": 3,
+                                              "note": "relay row recorded directly; three days of the Daily Papers list (today and two before)"},
+    "json-api/ai-discovery-hf-models": {"source": "ai-discovery-hf-models-deepseek", "budget": 1,
+                                        "note": "relay row recorded directly"},
+    "json-api/ai-discovery-github-releases": {"source": "ai-discovery-gh-langchain-ai-langgraph", "budget": 1},
+    "json-api/ai-discovery-github-commits": {"source": "ai-discovery-acl-anthology-ingest", "budget": 1, "scrub_emails": True,
+                                             "config": {"url": "https://api.github.com/repos/acl-org/acl-anthology/commits?per_page=30"},
+                                             "note": "the first 30 commits (the row asks for 100); the addresses of commit authors and co-authors are replaced by REDACTED"},
+    "rss/ai-discovery-hf-blog": {"source": "ai-discovery-hf-blog", "budget": 1, "note": "relay row recorded directly"},
+    "rss/ai-discovery-anthropic-research": {"source": "ai-discovery-anthropic-research", "budget": 1},
+    "rss/ai-discovery-pmlr-volumes": {"source": "ai-discovery-pmlr-volumes", "budget": 1},
     "json-api/prepare-registry": {"source": "prepare-guideline-registry", "budget": 1},
     "json-api/star-rating": {"source": "star-guideline-rating-cn", "budget": 2,
                              "note": "first two pages of the 152-page walk"},
@@ -493,6 +518,7 @@ async def record_adapter_case(name: str, spec: dict) -> dict:
                         first_contact_at=None, cursor={})
     adapter = REGISTRY[source.access]
     fetcher = RecordingFetcher(case_dir)
+    fetcher.scrub_emails = bool(spec.get("scrub_emails"))
     parse_notes: list[str] = []
     errors: list[dict] = []
     try:

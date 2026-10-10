@@ -1,0 +1,103 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/O+R2WYjoTduRDUOsLuOBEacr4F4</id>
+  <title>arXiv Query: search_query=abs:"test-time training" AND cat:cs.LG&amp;id_list=&amp;start=0&amp;max_results=3</title>
+  <updated>2026-10-10T18:46:46Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=abs:%22test-time+training%22+AND+cat:cs.LG&amp;start=0&amp;max_results=3&amp;id_list=" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>3</opensearch:itemsPerPage>
+  <opensearch:totalResults>147</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2610.12002v1</id>
+    <title>Agentic-TTT: Training test-time policy for test-time training</title>
+    <updated>2026-10-08T14:06:26Z</updated>
+    <link href="https://arxiv.org/abs/2610.12002v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2610.12002v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Test-time training (TTT) adapts an LLM's parameters using signals derived from test inputs, and can make striking improvements in pre-specified settings such as IMO competitions or designated open problems. By turning deployment experience into parameter updates, TTT provides a direct mechanism for model-level self-improvement. Yet TTT is not universally beneficial: each TTT algorithm works in different settings, and applying an ill-suited method could waste test-time compute or even damage model performance. Therefore, such parameter-level self-improvement requires agency: the model must decide when TTT is warranted, which algorithm to invoke, and whether an existing skill can be reused. To fill this gap, we introduce Agentic-TTT, which learns a test-time policy to govern those decisions. Agentic-TTT turns TTT procedures into callable tools, treats accumulated skills as an evolving deployment environment, and trains its policy using the observed utility gains from its decisions. On our benchmark, Agentic-TTT nearly doubles the utility over the backbone model, learns to trade off utility against compute, and generalizes to domains unseen during training. Together, these results point toward autonomous self-improvement: models that can decide how to learn from their own deployment experience.</summary>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-10-08T14:06:26Z</published>
+    <arxiv:primary_category term="cs.LG"/>
+    <author>
+      <name>Jiahao Lu</name>
+    </author>
+    <author>
+      <name>Mohan Kankanhalli</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2610.08553v1</id>
+    <title>DeltaTTT: Layerwise Optimization for Nonlinear Recurrent Memory</title>
+    <updated>2026-10-06T15:40:06Z</updated>
+    <link href="https://arxiv.org/abs/2610.08553v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2610.08553v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Sequential test-time training adapts a memory network through successive updates, each computing an inner-loop gradient based on the network's previous state. Intuitively, this state dependence should allow each update to account for what the memory has already learned and better incorporate new information. However, we find that this expected advantage does not consistently materialize in nonlinear memories: a fixed-base parallel TTT baseline outperforms its serial counterpart. Our exploratory experiments point to a key underlying difficulty: nonlinear memories can be harder to optimize than linear ones within a single pass over the sequence. To alleviate this optimization difficulty, we introduce DeltaTTT, which replaces joint inner-loop optimization of a two-layer memory network with layerwise learning. Each layer is assigned a local prediction target and updated through a state-dependent delta rule. This formulation retains a nonlinear readout while enabling chunkwise parallel computation. Experiments on DeltaNet and LaCT backbones show improvements in language modeling and retrieval over their recurrent baselines.</summary>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-10-06T15:40:06Z</published>
+    <arxiv:primary_category term="cs.LG"/>
+    <author>
+      <name>Yining Li</name>
+    </author>
+    <author>
+      <name>Dongchen Han</name>
+    </author>
+    <author>
+      <name>Jie Fu</name>
+    </author>
+    <author>
+      <name>Gao Huang</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2610.06269v1</id>
+    <title>Evolving in Thought Space: Training a Small Model at Test Time Unlocks Better Discoveries</title>
+    <updated>2026-10-05T13:04:05Z</updated>
+    <link href="https://arxiv.org/abs/2610.06269v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2610.06269v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Open-ended scientific discovery often requires repeatedly proposing and evaluating candidate solutions. LLM-based systems can support this process by generating and refining executable solutions from verifier feedback. Methods such as TTT-Discover use test-time training (TTT) to update the solution-generating LLM from verifier feedback, adapting its generation policy to improve subsequent proposals on the target problem. However, this becomes expensive when reliable execution requires a large model, since training must maintain gradients, optimizer states, and policy statistics while repeatedly generating long, structured outputs. It also complicates credit assignment: outcome-level verifier feedback must jointly evaluate the high-level strategy and its low-level implementation. In this work, we introduce Guidance-TTT, which separates these roles. A compact guidance model is trained at test time to propose high-level strategic changes, while a frozen execution model implements them as complete executable solutions. At each step, the system selects a promising previously discovered solution, proposes a change, executes and verifies it, and updates only the guidance model using an adaptive group-relative RL objective. This concentrates test-time learning on short strategic decisions while retaining the implementation capability of a substantially stronger model without adapting it. Without web access, Guidance-TTT produces strong solutions across four distinct domains: combinatorial optimization (Polyomino Packing), heuristic programming (AHC058), machine learning (Lasso), and GPU kernel optimization (TriMul). Across these tasks, it outperforms the best solutions reported in prior work while remaining competitive with state-of-the-art results on public online leaderboards. Code is available at https://github.com/Human-Agent-Society/reef/tree/guidance-ttt-support.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-10-05T13:04:05Z</published>
+    <arxiv:comment>35 pages, including references and appendice</arxiv:comment>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Chonghe Jiang</name>
+    </author>
+    <author>
+      <name>Ao Qu</name>
+    </author>
+    <author>
+      <name>Siyuan Liu</name>
+    </author>
+    <author>
+      <name>Ruoyun Ma</name>
+    </author>
+    <author>
+      <name>Zijian Zhou</name>
+    </author>
+    <author>
+      <name>Dingyi Zhuang</name>
+    </author>
+    <author>
+      <name>Bo Liu</name>
+    </author>
+    <author>
+      <name>Han Zheng</name>
+    </author>
+    <author>
+      <name>Hanfei Yu</name>
+    </author>
+    <author>
+      <name>Baichuan Mo</name>
+    </author>
+    <author>
+      <name>Jinhua Zhao</name>
+    </author>
+    <author>
+      <name>Paul Pu Liang</name>
+    </author>
+  </entry>
+</feed>

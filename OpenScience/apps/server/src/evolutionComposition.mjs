@@ -36,6 +36,9 @@ import { createEvolutionCandidateEvaluator } from "./evolutionCandidateEvaluator
 import { auditDevelopmentTranscript, createCandidateExposureAudit, priorDevelopmentRuns, referenceRecallLabel } from "./evolutionExposureChain.mjs";
 import { createEvolutionReferenceCuration, certifyEvolutionReferenceReview } from "./evolutionReferenceCuration.mjs";
 import { createEvolutionEngineReviewWriter } from "./evolutionEngineReview.mjs";
+import { createEvolutionEngineReviews } from "./evolutionEngineReviews.mjs";
+import { createEvolutionSourceRequests } from "./evolutionSourceRequests.mjs";
+import { createFrontierEvolutionDiscovery } from "./frontierEvolution.mjs";
 import { createPlatformSkillSupply } from "./platformSkillSupply.mjs";
 import { createPaperGoldEvaluator } from "./paperGoldEvaluator.mjs";
 import { createEvolutionGatewayHandler } from "./evolutionGateway.mjs";
@@ -80,7 +83,7 @@ export function createEvolutionDecisionModel({ config, usageLedger, fetchImpl, o
 /** Compose the optional platform loop using the same ledger, runtime and inbox as research.
  * @param {any} dependencies */
 export function createEvolution({ config, store, documents, jobs, database, usageLedger, notifications, registry, runtimeManager,
-  researchSessions, agentRuns, evaluationIsolation, sourceService, autopilot, dataSemantics, controller, canRun, resolvePositiveEvidence = null, observeHandbookOutcome = null, judgeService = null, report = () => {}, fetchImpl = fetch }) {
+  researchSessions, agentRuns, evaluationIsolation, sourceService, autopilot, dataSemantics, controller, canRun, resolvePositiveEvidence = null, observeHandbookOutcome = null, judgeService = null, report = () => {}, fetchImpl = fetch, webReader = null }) {
   if (!config.evolutionEnabled || !database || !documents || !jobs || !usageLedger) return null;
   const settingsIssues = validateEvolutionConfiguration(config);
   // A module whose settings are wrong stays off with the reason reported; it never stops the platform (`loadConfig` refuses first).
@@ -149,7 +152,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     dispatch: input => runs.dispatch(input), runtimeManager, controller, fetchImpl });
   const limits = { daily: config.evolutionDailyBudgetCny, weekly: 0 };
   const model = createEvolutionDecisionModel({ config, usageLedger, fetchImpl, owner: () => service.owner() });
-  const loops = createEvolutionLoops({service,integration,config,database,registry,model,fetchImpl});
+  const loops = createEvolutionLoops({service,integration,config,database,registry,model,fetchImpl,webReader});
   service.callbacks.observeSignal = input => loops.signals.record(input);
   service.callbacks.moduleObservation = input => loops.observe(input);
   // Nested callbacks inherit the worker's mission; independent maintenance has its own durable allocation.
@@ -282,9 +285,18 @@ export function createEvolution({ config, store, documents, jobs, database, usag
         budgetSummary: { costCny: Number(spending.incomplete) ? null : Number(spending.cost) } });
     },
   } });
+  // A proposal for the platform's own code reaches the operators' inbox with two actions; the first answer closes it (`evolutionEngineReviews.mjs`).
+  const engineReviews = createEvolutionEngineReviews({ service, notifications, config });
+  notifications?.onAction?.(engineReviews.decide);
+  service.callbacks.engineReviewPrepared = async dossierId => { try { await engineReviews.announce(dossierId); } catch { engineReviews.counters.announceFailed++; } };
+  service.callbacks.announceEngineReviews = async () => { try { await engineReviews.announcePending(); } catch { engineReviews.counters.announceFailed++; } };
   const feedback = createEvolutionFeedback({ service, maintenance, resolvePositiveEvidence, observeHandbookOutcome });
   service.callbacks.observeFeedback = feedback.observeFeedback;
-  const scout = createEvolutionScout({ config, service, runs, registry, decisions, fetchImpl, judgeService,
+  // The sources the platform asks the knowledge-source plugin for (`evolutionSourceRequests.mjs`): filed from what the scout finds, kept until the plugin has them.
+  const frontierSources = config.frontierEnabled ? createFrontierEvolutionDiscovery({ database }) : null;
+  const sourceRequests = createEvolutionSourceRequests({ service, fetchImpl, lapseDays: config.evolutionSourceRequestLapseDays, sources: () => frontierSources?.sources() ?? Promise.resolve([]) });
+  service.callbacks.reconcileSourceRequests = async () => { try { await sourceRequests.reconcile(); } catch { /* looked at again in six hours */ } };
+  const scout = createEvolutionScout({ config, service, runs, registry, decisions, fetchImpl, judgeService, sourceRequests,
     normalizeFeatures: input => model("Normalize only missing structural fields from this preserved scout result and the supplied actual inventory. Return JSON {literatureQuery:string,implementationMissing:boolean,reason:string}. literatureQuery must preserve the named research method, not its example findings; omit the date window, which code applies. implementationMissing is true only when the described executable calculation is absent from the actual inventory; a prose mention is not an implementation. Do not infer literature counts, invent sources, change the method, or declare correctness. This is metadata extraction, not a new search or validation.", input),
     references: (card, options) => candidateEvaluator.prepareCases(card, options) });
   const verification = createEvolutionVerification({ execute: (body, options) => controller.execVerify(body, options),
@@ -430,7 +442,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     const baselineHash=createHash('sha256').update(canonicalJson(baselineFiles)).digest('hex');
     if(!prior)await service.save('dossier',id,{...card,developmentBasis:{...card.developmentBasis,baselineFiles,baselineHash},moduleEngine:true,missionId:card.id.replace(/-engine-review$/,''),status:'planned'});
     const known=await service.get(id);
-    if(known.payload.status==='review')return {status:'review',review:known.payload.review,replay:true};
+    if(['review','adopted','declined'].includes(known.payload.status))return {status:'review',review:known.payload.review,replay:true};
     return build({dossierId:id},{signal:undefined,...options,job:{id:card.id}});
   }};
   service.callbacks.acquireResource = createEvolutionResourceAcquisition({service,scout,candidateEvaluator,loops});
@@ -608,6 +620,9 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   };
   // What the candidate executor has done and refused, read from the runtime controller where it acts (`evolutionOpsMetrics.mjs`).
   const executorCounters = async () => (await controller.evolutionAdmissionAvailable())?.executor ?? null;
-  return { service, loops, engineBuilder, model, budgeted, runtimeSession, observeVerifiedRun: feedback.observeVerifiedRun, decisions, maintenance, worker, integration, routes, gateway, toolAdmission, executorCounters, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
+  // The counters of the limits that act inside the loops, scraped through `evolutionOpsMetrics.mjs`.
+  const limitCounters = () => ({ signals: loops.signals.counters, engineReviews: engineReviews.counters, policy: loops.policy.counters, selfResearch: loops.selfResearch.counters, sourceRequests: sourceRequests.counters,
+    heavyWindow: { open: worker.heavyWindowOpen(), started: worker.counters.heavyStarted } });
+  return { service, loops, engineBuilder, engineReviews, model, budgeted, runtimeSession, limitCounters, observeVerifiedRun: feedback.observeVerifiedRun, decisions, maintenance, worker, integration, routes, gateway, toolAdmission, executorCounters, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
     observeFeedback: feedback.observeFeedback };
 }
