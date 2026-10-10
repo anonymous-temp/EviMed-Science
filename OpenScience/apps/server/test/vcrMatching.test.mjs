@@ -856,6 +856,23 @@ test('same-event conflicting lab results stay unknown; a visible sourced correct
   assert.equal(assess([first,correction]).summary,'ineligible');
 });
 
+test('an explicit as-of replay uses a clinical fact the platform wrote later but could read by then (E-03)', () => {
+  // Production shape: every clinical-format fact carries createdAt (when the row was written), and a replay of a past
+  // instant extracts after that instant. visibleAt is the clock that decides whether a fact belongs to the replay.
+  const source = chart('2026-08-20 血肌酐 1.1 mg/dL。');
+  const clinical = { schema: 1, assertion: 'affirmed', experiencer: 'patient' };
+  const base = { id: 'written-late', subjectKey: 'p1', variable: 'creatinine', value: 1.1, unit: 'mg/dL', occurredAt: '2026-08-20T00:00:00Z', visibleAt: '2026-09-01T00:00:00Z' };
+  const criteria = [{ id: 'lab', kind: 'inclusion', requirement: { op: 'compare', variable: 'creatinine', comparator: 'lte', value: 1.5, unit: 'mg/dL' } }];
+  const assess = (/** @type {any} */ fact, asOf = '2026-09-15') => assessSubject({ criteria, facts: [fact], asOf, documents: source.documents });
+  const legacy = assess(source.fact('血肌酐 1.1 mg/dL', base));
+  assert.equal(legacy.summary, 'eligible', 'the control: the same reading in the legacy shape decides the criterion');
+  const written = assess(source.fact('血肌酐 1.1 mg/dL', { ...base, clinical, createdAt: '2026-10-05T00:00:00Z' }));
+  assert.equal(written.summary, 'eligible', 'written on 10-05, readable on 09-01: it belongs to a replay as of 09-15');
+  assert.deepEqual(written.voidedFacts, []);
+  // Valid time still decides: a reading that only became visible after the instant stays out.
+  assert.equal(assess(source.fact('血肌酐 1.1 mg/dL', { ...base, clinical, createdAt: '2026-10-05T00:00:00Z', visibleAt: '2026-09-20T00:00:00Z' })).factsWithheldAsFuture, 1);
+});
+
 test('a model cannot attach a guessed unit to a quote that omits it, or bypass units with equality',()=>{
   const source=chart('2026-09-01患者血肌酐1.0，单位未记载。');
   const clinical={schema:1,assertion:'affirmed',experiencer:'patient',laboratory:{originalValue:1,originalUnit:'未给单位'}};

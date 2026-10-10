@@ -29,6 +29,21 @@ test('a correction changes the current view without erasing the original or rewr
   assert.equal(clinicalFactView([...rows, competing], '2026-04-01').conflicts.length, 2);
 });
 
+test('a fact the platform wrote after the view time is still in the view; only a correction is held to that clock', () => {
+  // A replay of a past instant extracts everything after that instant: createdAt is when the row was written (system time),
+  // visibleAt is what the platform could read by then (valid time), and the caller has already applied the second.
+  const original = fact('f1', 2, { createdAt: '2026-10-05' });
+  assert.deepEqual(clinicalFactView([original], '2026-09-15').facts.map(f => f.value), [2]);
+  // A correction written after the instant is a later rewrite of that moment: it neither supersedes nor counts as a second reading.
+  const corrected = fact('f2', 1, { createdAt: '2026-10-06', clinical: { correctionOf: 'f1', correctionReason: 'Source correction' } });
+  const before = clinicalFactView([original, corrected], '2026-09-15');
+  assert.deepEqual(before.facts.map(f => f.value), [2]);
+  assert.deepEqual(before.superseded, []);
+  assert.deepEqual(clinicalFactView([original, corrected], '2026-10-07').facts.map(f => f.value), [1]);
+  // A fact with no createdAt (a legacy row, a table cell) is never cut.
+  assert.deepEqual(clinicalFactView([fact('f3', 3)], '2020-01-01').facts.map(f => f.value), [3]);
+});
+
 test('conflicts are explicit within an episode, never resolved by recency or across subjects', () => {
   const a = fact('a', 1, { clinical: { eventId: 'visit1' } });
   const b = fact('b', 2, { clinical: { eventId: 'visit1' } });

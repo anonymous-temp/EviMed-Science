@@ -160,14 +160,20 @@ export function clinicalTerminologyContext(pack, criteria) {
 
 /** A correction supersedes a fact only in a view that could already see that correction.
  * Distinct episodes are not merged; explicit contradictions and same-episode disagreements stay visible.
+ *
+ * Two clocks, kept apart. What the platform could read by `asOf` (`visibleAt`, valid time) is the caller's cut and
+ * is already made; `createdAt` is when a row was written (system time), and a replay of a past instant writes
+ * every row after that instant. So a fact is never left out of the view for being written late. Only a correction
+ * is held to the clock: one written after `asOf` is a later rewrite of that moment, not a record of it, so it is not
+ * part of the view at all — it neither supersedes nor stands as a second reading.
  * @param {any[]} facts @param {string|number|Date} asOf */
 export function clinicalFactView(facts, asOf) {
   const at = new Date(asOf).getTime();
-  const visible = facts.filter(f => !f.createdAt || new Date(f.createdAt).getTime() <= at);
+  const visible = facts.filter(f => !f.clinical?.correctionOf || !f.createdAt || new Date(f.createdAt).getTime() <= at);
   const byId = new Map(visible.map(f => [f.id, f]));
   const replaced = new Set();
   for (const fact of visible) {
-    const original = byId.get(fact.clinical?.correctionOf);
+    const original = fact.clinical?.correctionOf ? byId.get(fact.clinical.correctionOf) : undefined;
     if (original && original.subjectKey === fact.subjectKey && original.variable === fact.variable) replaced.add(original.id);
   }
   const active = visible.filter(f => !replaced.has(f.id));
