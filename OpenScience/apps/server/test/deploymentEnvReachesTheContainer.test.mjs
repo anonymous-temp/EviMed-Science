@@ -278,6 +278,8 @@ const operatorLevers = {
   OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_FULL_TEXT_LIMIT: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_CARD_LIMIT: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_TEXT_CHARS: ["open-science-web", "open-science-runtime-controller"],
+  // How long a request for a source waits for the plugin (2026-10-10, E12g): validated in both processes like the other numeric settings.
+  OPEN_SCIENCE_EVOLUTION_SOURCE_REQUEST_LAPSE_DAYS: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: ["open-science-web"],

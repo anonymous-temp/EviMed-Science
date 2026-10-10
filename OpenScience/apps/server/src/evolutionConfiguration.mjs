@@ -11,6 +11,7 @@ export const EVOLUTION_CONFIG_SCHEMA=Object.freeze({
   evolutionSelfResearchShortlistLimit:{env:'OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_SHORTLIST_LIMIT',default:30,min:1,max:200,integer:true},
   evolutionSelfResearchFullTextLimit:{env:'OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_FULL_TEXT_LIMIT',default:12,min:1,max:50,integer:true},
   evolutionSelfResearchCardLimit:{env:'OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_CARD_LIMIT',default:8,min:1,max:50,integer:true},
+  evolutionSourceRequestLapseDays:{env:'OPEN_SCIENCE_EVOLUTION_SOURCE_REQUEST_LAPSE_DAYS',default:30,min:1,max:365,integer:true},
   evolutionSelfResearchTextChars:{env:'OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_TEXT_CHARS',default:60000,min:5000,max:200000,integer:true},
   evolutionMaxPaperScoutsPerDay:{env:'OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY',default:8,min:0,max:200,integer:true},
   evolutionDecisionTimeoutMs:{env:'OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS',default:86400000,min:1000,max:7*86400000,integer:true},

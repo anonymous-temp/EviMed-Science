@@ -146,6 +146,15 @@ export function evolutionOpsMetricFamilies(composed, snapshot, refusal = null) {
       series: entries(research.enrichment).flatMap(([provider, outcomes]) => entries(outcomes).map(([outcome, value]) => ({ value: Number(value) || 0, labels: { provider, outcome } }))),
     });
   }
+  if (limits.sourceRequests) families.push({
+    name: "open_science_evolution_source_requests_total", type: "counter",
+    help: "What became of the sources the scout suggested for the knowledge-source plugin, since process start: filed (on the list the plugin pulls), duplicate (already filed), invalid (not an https address with a name), unsupported_host (a host the plugin does not admit), not_a_feed (the address is not an RSS or Atom feed with entries), unreachable, cap_reached (the plugin reads twenty-five), and, of the filed ones, admitted (the plugin took it) and lapsed (it had not in OPEN_SCIENCE_EVOLUTION_SOURCE_REQUEST_LAPSE_DAYS).",
+    series: [["filed", "filed"], ["duplicate", "duplicate"], ["invalid", "invalid"], ["unsupportedHost", "unsupported_host"], ["notAFeed", "not_a_feed"], ["unreachable", "unreachable"],
+      ["capReached", "cap_reached"], ["admitted", "admitted"], ["lapsed", "lapsed"]].map(([key, outcome]) => ({ value: Number(limits.sourceRequests[key]) || 0, labels: { outcome } })),
+  }, {
+    name: "open_science_evolution_source_requests_waiting", type: "gauge", series: [{ value: Number(limits.sourceRequests.waiting) || 0 }],
+    help: "Sources on the list the knowledge-source plugin pulls that it has neither taken nor let lapse, at the last look (at most 25).",
+  });
   families.push({
     name: "open_science_evolution_executor_reachable", type: "gauge", series: [{ value: snapshot.executor ? 1 : 0 }],
     help: "Whether the runtime controller answered for the candidate executor's counters on this scrape (0: the executor series below are absent).",

@@ -174,6 +174,11 @@ test("the loops' own limits reach the scrape: the account floors by class", asyn
   assert.equal(sample(research, "open_science_evolution_self_research_full_text_fallbacks_total", { reason: "web_read_robots_disallowed" }), 3);
   assert.equal(sample(research, "open_science_evolution_self_research_enrichment_total", { provider: "semanticScholar", outcome: "no_key" }), 2);
   assert.equal(sample(research, "open_science_evolution_self_research_enrichment_total", { provider: "openAlex", outcome: "http_429" }), 1);
+  const requests = evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ sourceRequests: { filed: 3, duplicate: 2, invalid: 1, unsupportedHost: 4, notAFeed: 5, unreachable: 6, capReached: 7, admitted: 8, lapsed: 9, waiting: 10 } }) } }));
+  for (const [outcome, value] of [["filed", 3], ["duplicate", 2], ["invalid", 1], ["unsupported_host", 4], ["not_a_feed", 5], ["unreachable", 6], ["cap_reached", 7], ["admitted", 8], ["lapsed", 9]]) {
+    assert.equal(sample(requests, "open_science_evolution_source_requests_total", { outcome }), value, outcome);
+  }
+  assert.equal(sample(requests, "open_science_evolution_source_requests_waiting"), 10);
   // A module that composed no counters says nothing rather than zeros.
   assert.equal(evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: {} })).some((family) => family.name === "open_science_evolution_signal_groups"), false);
 });

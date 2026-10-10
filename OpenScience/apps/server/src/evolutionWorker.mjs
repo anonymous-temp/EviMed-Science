@@ -184,6 +184,8 @@ export class EvolutionWorker {
     // A proposal for the platform's code was prepared and nobody has been told yet (the first attempt failed, or it was prepared before the inbox item
     // existed): the operators hear of it within the minute.
     await this.every('engine-reviews', { ms: MINUTE }, async () => { await this.service.callbacks?.announceEngineReviews?.(); });
+    // The sources the platform asked the knowledge-source plugin for: those it has taken leave the list, and those it keeps declining lapse.
+    await this.every('source-requests', { ms: 6 * 60 * MINUTE }, async () => { await this.service.callbacks?.reconcileSourceRequests?.(); });
     await this.every('release', { ms: DAY }, async () => {
       const releaseId = String(this.config.releaseId ?? ''), sourceRevision = String(this.config.sourceRevision ?? '');
       if (/^[a-zA-Z0-9._-]{1,128}$/.test(releaseId) && !/^unknown$/i.test(releaseId) && /^[a-f0-9]{40}$/i.test(sourceRevision)) {

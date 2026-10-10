@@ -2750,6 +2750,9 @@ export function loadConfig(overrides = {}) {
     evolutionSelfResearchShortlistLimit: Number(overrides.evolutionSelfResearchShortlistLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_SHORTLIST_LIMIT ?? 30),
     evolutionSelfResearchFullTextLimit: Number(overrides.evolutionSelfResearchFullTextLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_FULL_TEXT_LIMIT ?? 12),
     evolutionSelfResearchCardLimit: Number(overrides.evolutionSelfResearchCardLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_CARD_LIMIT ?? 8),
+    // A request the knowledge-source plugin has not taken in this many days is closed as lapsed. The plugin pulls the list daily, so a request it still
+    // has not taken after a month is one it declines, and it must not hold one of the twenty-five places for ever.
+    evolutionSourceRequestLapseDays: Number(overrides.evolutionSourceRequestLapseDays ?? process.env.OPEN_SCIENCE_EVOLUTION_SOURCE_REQUEST_LAPSE_DAYS ?? 30),
     evolutionSelfResearchTextChars: Number(overrides.evolutionSelfResearchTextChars ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_TEXT_CHARS ?? 60_000),
     evolutionMaxPaperScoutsPerDay: Number(overrides.evolutionMaxPaperScoutsPerDay ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY ?? 8),
     evolutionDecisionTimeoutMs: Number(overrides.evolutionDecisionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS ?? 86_400_000),

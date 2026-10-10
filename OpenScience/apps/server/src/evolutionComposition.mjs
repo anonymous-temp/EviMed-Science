@@ -37,6 +37,8 @@ import { auditDevelopmentTranscript, createCandidateExposureAudit, priorDevelopm
 import { createEvolutionReferenceCuration, certifyEvolutionReferenceReview } from "./evolutionReferenceCuration.mjs";
 import { createEvolutionEngineReviewWriter } from "./evolutionEngineReview.mjs";
 import { createEvolutionEngineReviews } from "./evolutionEngineReviews.mjs";
+import { createEvolutionSourceRequests } from "./evolutionSourceRequests.mjs";
+import { createFrontierEvolutionDiscovery } from "./frontierEvolution.mjs";
 import { createPlatformSkillSupply } from "./platformSkillSupply.mjs";
 import { createPaperGoldEvaluator } from "./paperGoldEvaluator.mjs";
 import { createEvolutionGatewayHandler } from "./evolutionGateway.mjs";
@@ -290,7 +292,11 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   service.callbacks.announceEngineReviews = async () => { try { await engineReviews.announcePending(); } catch { engineReviews.counters.announceFailed++; } };
   const feedback = createEvolutionFeedback({ service, maintenance, resolvePositiveEvidence, observeHandbookOutcome });
   service.callbacks.observeFeedback = feedback.observeFeedback;
-  const scout = createEvolutionScout({ config, service, runs, registry, decisions, fetchImpl, judgeService,
+  // The sources the platform asks the knowledge-source plugin for (`evolutionSourceRequests.mjs`): filed from what the scout finds, kept until the plugin has them.
+  const frontierSources = config.frontierEnabled ? createFrontierEvolutionDiscovery({ database }) : null;
+  const sourceRequests = createEvolutionSourceRequests({ service, fetchImpl, lapseDays: config.evolutionSourceRequestLapseDays, sources: () => frontierSources?.sources() ?? Promise.resolve([]) });
+  service.callbacks.reconcileSourceRequests = async () => { try { await sourceRequests.reconcile(); } catch { /* looked at again in six hours */ } };
+  const scout = createEvolutionScout({ config, service, runs, registry, decisions, fetchImpl, judgeService, sourceRequests,
     normalizeFeatures: input => model("Normalize only missing structural fields from this preserved scout result and the supplied actual inventory. Return JSON {literatureQuery:string,implementationMissing:boolean,reason:string}. literatureQuery must preserve the named research method, not its example findings; omit the date window, which code applies. implementationMissing is true only when the described executable calculation is absent from the actual inventory; a prose mention is not an implementation. Do not infer literature counts, invent sources, change the method, or declare correctness. This is metadata extraction, not a new search or validation.", input),
     references: (card, options) => candidateEvaluator.prepareCases(card, options) });
   const verification = createEvolutionVerification({ execute: (body, options) => controller.execVerify(body, options),
@@ -615,7 +621,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   // What the candidate executor has done and refused, read from the runtime controller where it acts (`evolutionOpsMetrics.mjs`).
   const executorCounters = async () => (await controller.evolutionAdmissionAvailable())?.executor ?? null;
   // The counters of the limits that act inside the loops, scraped through `evolutionOpsMetrics.mjs`.
-  const limitCounters = () => ({ signals: loops.signals.counters, engineReviews: engineReviews.counters, policy: loops.policy.counters, selfResearch: loops.selfResearch.counters,
+  const limitCounters = () => ({ signals: loops.signals.counters, engineReviews: engineReviews.counters, policy: loops.policy.counters, selfResearch: loops.selfResearch.counters, sourceRequests: sourceRequests.counters,
     heavyWindow: { open: worker.heavyWindowOpen(), started: worker.counters.heavyStarted } });
   return { service, loops, engineBuilder, engineReviews, model, budgeted, runtimeSession, limitCounters, observeVerifiedRun: feedback.observeVerifiedRun, decisions, maintenance, worker, integration, routes, gateway, toolAdmission, executorCounters, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
     observeFeedback: feedback.observeFeedback };
