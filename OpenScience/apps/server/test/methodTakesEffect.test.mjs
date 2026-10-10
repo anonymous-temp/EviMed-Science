@@ -106,8 +106,9 @@ test("the page reads 「新」 and 「从你的 N 次研究学到」 off the rec
 test("only an unresolved conflict withholds a method, because no measurement repairs one", async () => {
   const learning = new LearningService({ documents: documents() });
   const created = await distilled(learning);
+  const other = await distilled(learning, "another-method");
   const conflicted = await learning.recordRelations(USER, created.id, [
-    { type: "conflicts_with", target: "another-method", evidence: "两条方法对同一步给出相反要求", proposedBy: "consolidate:job_1" },
+    { type: "conflicts_with", target: other.id, evidence: "两条方法对同一步给出相反要求", proposedBy: "consolidate:job_1" },
   ], () => true);
   const verdict = promotionVerdict(methodRecordFrom(conflicted));
   assert.equal(verdict.status, "candidate");

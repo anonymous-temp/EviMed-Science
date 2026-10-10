@@ -299,8 +299,10 @@ test("nothing that generates a method can assert its status, and a conflict is t
   // An unresolved conflict with another method is what no measurement repairs,
   // and it is what still refuses. `approve` recomputes the verdict from the
   // stored record, so a caller's opinion is not an input either way.
+  // (With a method that is in force: a conflict with one that is not holds nothing back, see the test below.)
+  const other = await create(learning, { frontmatter: frontmatter({ name: "other-thing" }) });
   const conflicted = await learning.recordRelations("u1", created.id, [
-    { type: "conflicts_with", target: "other-thing", evidence: "两条方法对同一步给出相反要求", proposedBy: "consolidate:job_1" },
+    { type: "conflicts_with", target: other.id, evidence: "两条方法对同一步给出相反要求", proposedBy: "consolidate:job_1" },
   ], () => true);
   await assert.rejects(
     () => learning.approve("u1", created.id, { expectedRevision: conflicted.revision }),
@@ -313,6 +315,61 @@ test("nothing that generates a method can assert its status, and a conflict is t
     expectedRevision: conflicted.revision, frontmatter: frontmatter(), body: `${BODY}\n\nA later thought.`,
   });
   assert.deepEqual(moved.payload.learning.evaluations, [], "a changed body keeps no verdict about the old text");
+});
+
+test("a conflict withholds a method only while the method it conflicts with is in force (review L-3)", async () => {
+  const { learning } = service();
+  const conflict = (target) => ({ type: "conflicts_with", target, evidence: "两条方法对同一步给出相反要求", proposedBy: "consolidate:job_1" });
+  const waiting = async (name, against) => {
+    // A method that carries a recorded conflict and has just been amended: back to `candidate`, relations kept.
+    const made = await create(learning, { frontmatter: frontmatter({ name }) });
+    const related = await learning.recordRelations("u1", made.id, against.map(conflict), () => true);
+    const amended = await learning.amendMethod("u1", made.id, { expectedRevision: related.revision, frontmatter: frontmatter({ name }), body: `${BODY}\n\nA later thought on ${name}.` });
+    assert.equal(amended.payload.status, "candidate");
+    return amended;
+  };
+  const refuses = (document) => assert.rejects(() => learning.approve("u1", document.id, { expectedRevision: document.revision }),
+    (error) => error.code === "method_not_promotable" && /unresolved conflict/.test(error.message));
+
+  // The other method is in force: the library would tell a run two opposite things, so it still refuses.
+  const rival = await create(learning, { frontmatter: frontmatter({ name: "rival" }) });
+  const mine = await waiting("mine", [rival.id]);
+  await refuses(mine);
+  // The rival is stopped: nothing is told to any run that contradicts it, and the latch is gone.
+  const stopped = await learning.retire("u1", rival.id, { expectedRevision: rival.revision, reason: "stopped by hand" });
+  const approved = await learning.approve("u1", mine.id, { expectedRevision: mine.revision });
+  assert.equal(approved.payload.status, "approved");
+  assert.equal(approved.payload.statusReason, effectiveStatusReason({ ...approved.payload, status: "approved" }));
+  // ...and it holds again when the rival is brought back, for the next time the method changes.
+  const back = await learning.rollback("u1", rival.id, { expectedRevision: stopped.revision, targetRevision: rival.revision });
+  assert.equal(back.payload.status, "approved");
+  await refuses(await learning.amendMethod("u1", mine.id, { expectedRevision: approved.revision, frontmatter: frontmatter({ name: "mine" }), body: `${BODY}\n\nAnother thought.` }));
+
+  // A counterpart that is gone, or only a candidate itself, is not in force either.
+  assert.equal((await learning.approve("u1", (await waiting("ghost-facing", ["method:learned:ghost"])).id, { expectedRevision: 3 })).payload.status, "approved");
+
+  // Of two methods that contradict each other and wait, the one the pass reaches first takes effect and the other then waits.
+  const left = await waiting("left", ["method:learned:right"]);
+  const right = await waiting("right", [left.id]);
+  assert.equal(right.payload.status, "candidate");
+  assert.equal((await learning.approve("u1", left.id, { expectedRevision: left.revision })).payload.status, "approved", "its rival is only a candidate");
+  await refuses(right);
+});
+
+test("a method brought back keeps a conflict with a method in force and loses one with a method that is not", async () => {
+  const { learning } = service();
+  const conflict = (target) => ({ type: "conflicts_with", target, evidence: "相反", proposedBy: "consolidate:job_1" });
+  const rival = await create(learning, { frontmatter: frontmatter({ name: "rival" }) });
+  const mine = await create(learning, { frontmatter: frontmatter({ name: "mine" }) });
+  const related = await learning.recordRelations("u1", mine.id, [conflict(rival.id)], () => true);
+  const retired = await learning.retire("u1", mine.id, { expectedRevision: related.revision, reason: "stopped by hand" });
+  const held = await learning.rollback("u1", mine.id, { expectedRevision: retired.revision, targetRevision: mine.revision });
+  assert.equal(held.payload.status, "candidate", "the rival is in force");
+  const stopped = await learning.retire("u1", rival.id, { expectedRevision: rival.revision });
+  assert.equal(stopped.payload.status, "retired");
+  const again = await learning.retire("u1", mine.id, { expectedRevision: held.revision });
+  const freed = await learning.rollback("u1", mine.id, { expectedRevision: again.revision, targetRevision: mine.revision });
+  assert.equal(freed.payload.status, "approved", "the rival is not");
 });
 
 test("the paired evaluation no longer reads a baseline to decide effect", async () => {
