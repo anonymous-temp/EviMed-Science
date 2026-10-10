@@ -9,6 +9,7 @@
 import { createRequire } from 'node:module';
 import { createFrameKit } from '../../src/runtimeUiKit.mjs';
 import { FRAME_VOCABULARY } from '../../src/runtimeUiFrame.mjs';
+import { modelDirectory, seatInject } from './nativeModelSeat.mjs';
 
 /**
  * @param {Record<string, { kind: string }>} declared slot name → contract, as the kernel would have declared them
@@ -105,10 +106,17 @@ export const SHIPPED_ROW_HOOKS = Object.freeze({
 });
 
 /**
+ * The kernel's composer model seat as `ui-model-selection` registers it (priority 0, `locale: 'model'`, an `inject` that hands its occupant
+ * the session's model directory; read off the shipped client at 0.1.7-rc.2, see helpers/nativeModelSeat.mjs). A single slot has no key,
+ * so this one is held apart from the keyed entries above: a takeover has to go below it and carry the `inject`, or its props are empty.
+ */
+export const SHIPPED_MODEL_SEAT = Object.freeze({ locale: 'model', inject: seatInject(modelDirectory()) });
+
+/**
  * A kernel that has declared every slot in the pinned table, with the shipped
- * entries of the keyed ones already registered at priority 0 — so a takeover
- * that forgets to go below them fails here as it would in the page, and one
- * that forgets what they inject does too.
+ * entries of the keyed ones — and the model seat — already registered at
+ * priority 0, so a takeover that forgets to go below them fails here as it
+ * would in the page, and one that forgets what they inject does too.
  */
 export function kernelSlots() {
   const slots = fakeSlots(FRAME_VOCABULARY.slots);
@@ -118,6 +126,9 @@ export function kernelSlots() {
       slots.registrations.push({ name, options: { name, key }, component: 'shipped', ...(inject ? { inject } : {}) });
     }
   }
+  slots.registrations.push({
+    name: 'conversation.input.model', options: { name: 'conversation.input.model', ...SHIPPED_MODEL_SEAT }, component: 'shipped', ...SHIPPED_MODEL_SEAT,
+  });
   return slots;
 }
 
