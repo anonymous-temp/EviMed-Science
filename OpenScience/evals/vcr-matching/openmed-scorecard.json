@@ -938,5 +938,545 @@
     }
   ],
   "verificationScope": "These suites overlap and must not be summed as unique tests. No full ci:web or deployed production acceptance is claimed. The last production logic change has focused matching/gateway coverage and the full domain suite; the multi-protocol integration test was added afterward without changing production logic.",
-  "updatedAt": "2026-10-09T18:18:27.656788+00:00"
+  "updatedAt": "2026-10-10T02:04:23.747023+00:00",
+  "localReview20261010": {
+    "reviewDate": "2026-10-10",
+    "reviewedCommit": "f8567451a",
+    "fixCommits": [
+      "a0ba7eb66",
+      "5eb1742cf"
+    ],
+    "integrationTableCommit": "9e82d66b0",
+    "deploymentPerformed": false,
+    "productionTestsPerformed": false,
+    "enhancedExtractionDefault": "off; empty study allow-list",
+    "evidenceDirectory": "/tmp/evimed-integration-audit/openmed",
+    "evidenceRetention": "Operator-retained local acceptance artifacts; full traces are not committed.",
+    "artifactHashes": {
+      "clinical-official-restored/predictions.json": "9404024ed2b66bf979a1f174f4dcf23155eb0bf6ad6efa6efd0938ce8f5f3edc",
+      "clinical-official-restored/manifest.json": "80b93d871a2f2be59484f33ebe7e55f116a5cb07e879b545c58f5d494e8a8b15",
+      "clinical-official-score.json": "e643c012829e76532123d9783778705de82e30edc3148efff6d95f99099cc898",
+      "native-official-restored/observations.json": "31bcc265cdd1c67e4b69ee5ee3e6b424d4c78315516a04b8154c8897f7a7708a",
+      "native-official-restored/public/predictions.json": "52ac21774c6b973892677669cb24313cb556b2993a8696709a1afebb34502b7e",
+      "public-official-score.json": "c844474a589f90ab1cbf07d1278d757cd853de0e4fdba874ffb5e0498ce6060b",
+      "public-baseline-score.json": "b657061204a9b09e65bf8ceaf784371fa316df5480140595ea5ec56fed07f93b",
+      "public-bailian-score.json": "65080c023cb21a09efd9c14050756fb469f938a04aa0de995ef6437821e5f420",
+      "public-fallback-v2/predictions.json": "1fca99dde108436df112c67622844b0b78406146275d335a60ab264f719177a3",
+      "public-fallback-v2/provider.jsonl": "e42a60f1ef7a04956c53c58715a300fb94880f2f0427e64ce62ff5cd6053c1d1",
+      "focused.log": "11a2d61b29258e67fce0c3d695433f7c8fdb42b3d8aaf7aaf21060016e2e0bf5",
+      "matching-fix.log": "d8287b062a6d8170fa3bc1774bc36cfb07c99f79de341b87e058972a47cedef4",
+      "unknown-unit-fix.log": "3c8ae7d6e2cc50931518362d26b1b138a6e3566dc29c77bbe1262217d1da4f5b",
+      "table-merge.log": "afe653b61c69ace2f0663f60f53fc65f23081cc307425c00e328b47649f3303a",
+      "domain-extraction.log": "a52476695e50c6952829a64698b8748692394a96864e671176a2927981494f77",
+      "contract.log": "5bd2bff71329c02a2c321f2aae6e297ec0271d737aab6d0c10c30b08ee5c82e9"
+    },
+    "engineeringRegression": {
+      "focusedPostgres": {
+        "passed": 60,
+        "failed": 0,
+        "skipped": 0
+      },
+      "latestMatchingAndDomain": {
+        "passed": 53,
+        "failed": 0
+      },
+      "publicGrounding": {
+        "passed": 3,
+        "failed": 0
+      },
+      "mergedTableRoster": {
+        "passed": 2,
+        "failed": 0
+      },
+      "contractInventory": {
+        "passed": 2,
+        "failed": 0
+      },
+      "scope": "Focused suites overlap; counts must not be summed as distinct tests."
+    },
+    "syntheticClinical": {
+      "sourceCommit": "a0ba7eb66bd6c437f3b451a90b5f3ec5e03e5a38",
+      "sourceDiffHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "manifestHash": "80b93d871a2f2be59484f33ebe7e55f116a5cb07e879b545c58f5d494e8a8b15",
+      "observedProvider": "official DeepSeek",
+      "observedModels": [
+        "deepseek-flash"
+      ],
+      "patientSourceGroups": 12,
+      "cells": 72,
+      "repeats": 2,
+      "arms": {
+        "native": {
+          "scorecard": [
+            {
+              "task": "eligibility",
+              "dataClass": "synthetic",
+              "cases": 24,
+              "sourceGroups": 12,
+              "missing": 0,
+              "invalid": 0,
+              "n": 24,
+              "correct": 21,
+              "unknown": 11,
+              "accuracy": 0.875,
+              "byState": {
+                "eligible": {
+                  "tp": 7,
+                  "fp": 2,
+                  "fn": 1,
+                  "precision": 0.7777777777777778,
+                  "recall": 0.875,
+                  "f1": 0.8235294117647058
+                },
+                "ineligible": {
+                  "tp": 4,
+                  "fp": 0,
+                  "fn": 0,
+                  "precision": 1.0,
+                  "recall": 1.0,
+                  "f1": 1.0
+                },
+                "insufficient_evidence": {
+                  "tp": 10,
+                  "fp": 1,
+                  "fn": 2,
+                  "precision": 0.9090909090909091,
+                  "recall": 0.8333333333333334,
+                  "f1": 0.8695652173913043
+                }
+              },
+              "macroF1": 0.8976982097186701,
+              "accuracyInterval": {
+                "low": 0.6666666666666666,
+                "high": 1.0,
+                "groups": 12,
+                "seed": 20261009,
+                "repeats": 2000
+              },
+              "eligibleReference": 8,
+              "falseExclusions": 0,
+              "falseExclusionRate": 0.0,
+              "falseExclusionInterval": {
+                "low": 0.0,
+                "high": 0.0,
+                "groups": 12,
+                "seed": 20261009,
+                "repeats": 2000
+              },
+              "eligibleRecall": 0.875,
+              "falseInclusions": 2,
+              "anyFalseExclusionPerGroupWilson95": {
+                "groups": 4,
+                "observed": 0,
+                "low": 0,
+                "high": 0.48990002040399916
+              },
+              "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+            }
+          ],
+          "completed": 24,
+          "attempted": 24,
+          "writesWithIssues": 2,
+          "writeIssues": 2,
+          "medianLatencyMs": 2678.5,
+          "requests": 24,
+          "settledCostCny": 0.02954876,
+          "unpricedRequests": 0,
+          "observedModels": [
+            "deepseek-flash"
+          ]
+        },
+        "on": {
+          "scorecard": [
+            {
+              "task": "eligibility",
+              "dataClass": "synthetic",
+              "cases": 24,
+              "sourceGroups": 12,
+              "missing": 0,
+              "invalid": 1,
+              "n": 24,
+              "correct": 22,
+              "unknown": 14,
+              "accuracy": 0.9166666666666666,
+              "byState": {
+                "eligible": {
+                  "tp": 6,
+                  "fp": 0,
+                  "fn": 2,
+                  "precision": 1.0,
+                  "recall": 0.75,
+                  "f1": 0.8571428571428571
+                },
+                "ineligible": {
+                  "tp": 4,
+                  "fp": 0,
+                  "fn": 0,
+                  "precision": 1.0,
+                  "recall": 1.0,
+                  "f1": 1.0
+                },
+                "insufficient_evidence": {
+                  "tp": 12,
+                  "fp": 2,
+                  "fn": 0,
+                  "precision": 0.8571428571428571,
+                  "recall": 1.0,
+                  "f1": 0.9230769230769231
+                }
+              },
+              "macroF1": 0.9267399267399267,
+              "accuracyInterval": {
+                "low": 0.7916666666666666,
+                "high": 1.0,
+                "groups": 12,
+                "seed": 20261009,
+                "repeats": 2000
+              },
+              "eligibleReference": 8,
+              "falseExclusions": 0,
+              "falseExclusionRate": 0.0,
+              "falseExclusionInterval": {
+                "low": 0.0,
+                "high": 0.0,
+                "groups": 12,
+                "seed": 20261009,
+                "repeats": 2000
+              },
+              "eligibleRecall": 0.75,
+              "falseInclusions": 0,
+              "anyFalseExclusionPerGroupWilson95": {
+                "groups": 4,
+                "observed": 0,
+                "low": 0,
+                "high": 0.48990002040399916
+              },
+              "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+            }
+          ],
+          "completed": 24,
+          "attempted": 24,
+          "writesWithIssues": 2,
+          "writeIssues": 3,
+          "medianLatencyMs": 2938.5,
+          "requests": 24,
+          "settledCostCny": 0.0338028,
+          "unpricedRequests": 0,
+          "observedModels": [
+            "deepseek-flash"
+          ]
+        },
+        "off": {
+          "scorecard": [
+            {
+              "task": "eligibility",
+              "dataClass": "synthetic",
+              "cases": 24,
+              "sourceGroups": 12,
+              "missing": 0,
+              "invalid": 0,
+              "n": 24,
+              "correct": 21,
+              "unknown": 11,
+              "accuracy": 0.875,
+              "byState": {
+                "eligible": {
+                  "tp": 7,
+                  "fp": 2,
+                  "fn": 1,
+                  "precision": 0.7777777777777778,
+                  "recall": 0.875,
+                  "f1": 0.8235294117647058
+                },
+                "ineligible": {
+                  "tp": 4,
+                  "fp": 0,
+                  "fn": 0,
+                  "precision": 1.0,
+                  "recall": 1.0,
+                  "f1": 1.0
+                },
+                "insufficient_evidence": {
+                  "tp": 10,
+                  "fp": 1,
+                  "fn": 2,
+                  "precision": 0.9090909090909091,
+                  "recall": 0.8333333333333334,
+                  "f1": 0.8695652173913043
+                }
+              },
+              "macroF1": 0.8976982097186701,
+              "accuracyInterval": {
+                "low": 0.6666666666666666,
+                "high": 1.0,
+                "groups": 12,
+                "seed": 20261009,
+                "repeats": 2000
+              },
+              "eligibleReference": 8,
+              "falseExclusions": 0,
+              "falseExclusionRate": 0.0,
+              "falseExclusionInterval": {
+                "low": 0.0,
+                "high": 0.0,
+                "groups": 12,
+                "seed": 20261009,
+                "repeats": 2000
+              },
+              "eligibleRecall": 0.875,
+              "falseInclusions": 2,
+              "anyFalseExclusionPerGroupWilson95": {
+                "groups": 4,
+                "observed": 0,
+                "low": 0,
+                "high": 0.48990002040399916
+              },
+              "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+            }
+          ],
+          "completed": 24,
+          "attempted": 24,
+          "writesWithIssues": 0,
+          "writeIssues": 0,
+          "medianLatencyMs": 2808.5,
+          "requests": 24,
+          "settledCostCny": 0.02929588,
+          "unpricedRequests": 0,
+          "observedModels": [
+            "deepseek-flash"
+          ]
+        }
+      },
+      "limitations": [
+        "Authored synthetic regression, not independent clinician validation or a representative cohort.",
+        "Native DSH predictions pass through the real control-plane gateway, located fact writer and matching executor; this is not a deployed browser-to-kernel acceptance test.",
+        "An unknown judgment caused by a refused fact is not evidence of better clinical understanding. Write failures are reported separately.",
+        "Repeated prompts share the patient/source cluster; the reported interval does not treat repetitions as independent patients.",
+        "No automatic production promotion or clinical qualification follows this scorecard.",
+        "Native and off are the same prompt control, with independently ordered repetitions.",
+        "Enhanced guidance reduced false inclusions from 2/24 in each control to 0/24, but eligible recall declined from 7/8 to 6/8; its one malformed response remains invalid.",
+        "The clinical batch ran at a0ba7eb66; the later unlisted-unit fix has deterministic source-evidence regression coverage, not a new full model batch."
+      ]
+    },
+    "publicExtraction": {
+      "officialDeepSeek": [
+        {
+          "task": "ner",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 10,
+          "sourceGroups": 10,
+          "missing": 0,
+          "invalid": 0,
+          "strict": {
+            "tp": 195,
+            "fp": 47,
+            "fn": 91,
+            "precision": 0.8057851239669421,
+            "recall": 0.6818181818181818,
+            "f1": 0.7386363636363636
+          },
+          "overlap": {
+            "tp": 208,
+            "fp": 34,
+            "fn": 78,
+            "precision": 0.859504132231405,
+            "recall": 0.7272727272727273,
+            "f1": 0.7878787878787878
+          }
+        },
+        {
+          "task": "relation",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 10,
+          "sourceGroups": 10,
+          "missing": 0,
+          "invalid": 0,
+          "relations": {
+            "tp": 4,
+            "fp": 78,
+            "fn": 65,
+            "precision": 0.04878048780487805,
+            "recall": 0.057971014492753624,
+            "f1": 0.052980132450331126
+          }
+        }
+      ],
+      "historicalRawOffsets": [
+        {
+          "task": "ner",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 10,
+          "sourceGroups": 10,
+          "missing": 0,
+          "invalid": 4,
+          "strict": {
+            "tp": 0,
+            "fp": 175,
+            "fn": 286,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "overlap": {
+            "tp": 61,
+            "fp": 114,
+            "fn": 225,
+            "precision": 0.3485714285714286,
+            "recall": 0.21328671328671328,
+            "f1": 0.2646420824295011
+          }
+        },
+        {
+          "task": "relation",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 10,
+          "sourceGroups": 10,
+          "missing": 0,
+          "invalid": 4,
+          "relations": {
+            "tp": 0,
+            "fp": 30,
+            "fn": 69,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        }
+      ],
+      "fallbackBailianDeepSeekV4Flash": [
+        {
+          "task": "ner",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 10,
+          "sourceGroups": 10,
+          "missing": 0,
+          "invalid": 1,
+          "strict": {
+            "tp": 177,
+            "fp": 57,
+            "fn": 109,
+            "precision": 0.7564102564102564,
+            "recall": 0.6188811188811189,
+            "f1": 0.6807692307692308
+          },
+          "overlap": {
+            "tp": 196,
+            "fp": 38,
+            "fn": 90,
+            "precision": 0.8376068376068376,
+            "recall": 0.6853146853146853,
+            "f1": 0.7538461538461538
+          }
+        },
+        {
+          "task": "relation",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 10,
+          "sourceGroups": 10,
+          "missing": 0,
+          "invalid": 1,
+          "relations": {
+            "tp": 2,
+            "fp": 34,
+            "fn": 67,
+            "precision": 0.05555555555555555,
+            "recall": 0.028985507246376812,
+            "f1": 0.0380952380952381
+          }
+        }
+      ],
+      "interpretation": "Exact source grounding removed the four historical malformed outputs in the fresh official batch and restored meaningful strict-span scoring. Relation quality remains poor (4 TP, 78 FP, 65 FN), so neither relation quality nor clinical matching qualification is established.",
+      "limits": [
+        "Ten frozen DrugProt training/development abstracts; six development cases and four frozen pilot holdout abstracts.",
+        "Comparison is a local development regression and transport repair, not an untouched independent efficacy experiment.",
+        "Bailian fallback uses an evaluation-only Messages compatibility bridge and cannot certify the production model gateway or billing."
+      ]
+    },
+    "nativeConversation": {
+      "providerAttempts": 26,
+      "canaries": 2,
+      "canaryLeaks": 0,
+      "outputLeaks": 0,
+      "turns": [
+        {
+          "id": "01-extract",
+          "code": 0
+        },
+        {
+          "id": "02-followup",
+          "code": 0
+        },
+        {
+          "id": "03-supplement",
+          "code": 0
+        },
+        {
+          "id": "04-subject-switch",
+          "code": 0
+        },
+        {
+          "id": "05-tool-failure",
+          "code": 0
+        },
+        {
+          "id": "06-revoked-cache",
+          "code": 1
+        },
+        {
+          "id": "07-fresh-context",
+          "code": 0
+        }
+      ],
+      "preservedMeasurements": [
+        [
+          "age",
+          44,
+          "year"
+        ],
+        [
+          "age",
+          16,
+          "year"
+        ],
+        [
+          "serum_creatinine",
+          1,
+          "mg/dL"
+        ]
+      ],
+      "limit": "Two declared synthetic canaries; no automatic PII-detection or full browser-to-kernel deployment qualification."
+    },
+    "confirmedFixes": [
+      {
+        "problem": "Current medication denial incorrectly decided absence throughout a historical window",
+        "commit": "a0ba7eb66",
+        "regression": "apps/server/test/vcrMatching.test.mjs"
+      },
+      {
+        "problem": "Public model counted raw offsets and produced four malformed/truncated outputs plus zero strict-span true positives",
+        "commit": "a0ba7eb66",
+        "change": "Compact exact surfaces with occurrence selectors; platform derives UTF-16 offsets and refuses unsupported mentions/endpoints"
+      },
+      {
+        "problem": "Unknown conversion-vocabulary lab units could be invented without source support",
+        "commit": "5eb1742cf",
+        "change": "Exact unknown laboratory units require literal source support"
+      },
+      {
+        "problem": "Integration could drop table-only subjects or use changed table data under a frozen job",
+        "commit": "9e82d66b0",
+        "change": "Full frozen table roster, table file and field-definition identity; pagination and changed-identity refusal"
+      }
+    ],
+    "remainingClinicalLimitations": [
+      "52 statuses are engineering implementation declarations, not 52 clinically accepted functions.",
+      "Chinese corpus has 12 authored development cases; no independently labeled untouched Chinese clinical holdout.",
+      "Negation, temporality, terminology, abbreviations and relation metadata include model interpretations, not mechanically verified clinical truth.",
+      "Source dates are checked only through optional dateSurface; occurredAt and declared clinical intervals can still be model interpretations.",
+      "Public DrugProt ten-abstract pilot is not a clinical cohort, causal dataset, official leaderboard or clinical qualification.",
+      "Two privacy canaries cannot establish universal PII detection.",
+      "Native/off prompts are the same extraction control except labels/order; only on adds enhanced guidance.",
+      "No production deployment or production tests performed."
+    ]
+  }
 }
