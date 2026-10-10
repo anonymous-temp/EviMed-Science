@@ -394,10 +394,15 @@ export class EvolutionFrontierSignals {
     const floor = Number((await this.database.query("SELECT coalesce(max(seq),0) AS floor FROM evimed_frontier.item_changes WHERE changed_at<=$1",
       [new Date(this.service.now().getTime() - EVOLUTION_FRONTIER_LOOKBACK_MS)])).rows[0]?.floor ?? 0);
     const after = Math.max(saved, floor);
+    // An item of a platform-produced source is EviMed's own evidence card echoed back through the feed (flywheel F09):
+    // it carries its study's identifiers, so read as a paper it would be the module's own output scouted and
+    // confirmed against as fresh literature. The frontier's matcher leaves it out for the same reason.
     const found = await this.database.query(`SELECT c.seq, i.id, i.title_raw, i.canonical_url, i.published_at,
       i.identity_key, t.abstract_raw, t.body_excerpt FROM evimed_frontier.item_changes c
-      JOIN evimed_frontier.items i ON i.id=c.item_id LEFT JOIN evimed_frontier.item_texts t ON t.item_id=i.id
-      WHERE c.seq>$1 AND c.op='upsert' AND c.reason='published' AND i.state='published' ORDER BY c.seq LIMIT 25`, [after]);
+      JOIN evimed_frontier.items i ON i.id=c.item_id JOIN evimed_frontier.sources s ON s.id=i.primary_source_id
+      LEFT JOIN evimed_frontier.item_texts t ON t.item_id=i.id
+      WHERE c.seq>$1 AND c.op='upsert' AND c.reason='published' AND i.state='published' AND NOT s.platform_produced
+      ORDER BY c.seq LIMIT 25`, [after]);
     const events = [];
     for (const row of found.rows) {
       const paper = { id: String(row.id), title: row.title_raw, url: row.canonical_url,

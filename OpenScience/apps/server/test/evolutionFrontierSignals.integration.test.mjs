@@ -129,3 +129,18 @@ test("papers become scouting runs only inside the daily count, once per paper, a
   assert.equal(refused?.scouted, false);
   assert.equal(refused?.reason, "daily-cap");
 });
+
+test("the platform's own card echoed back through the feed is not literature: it never becomes a publication event", options, async () => {
+  // Flywheel F09 echoes EviMed's evidence cards into the feed as items of a `platform_produced` source. They carry
+  // their study's DOIs and registry numbers, so read as papers they would hand the module its own output as fresh
+  // literature to scout and to confirm against (the frontier's matcher excludes them for the same reason, D-05).
+  await insertSource(database, "evimed-evidence");
+  await database.query("UPDATE evimed_frontier.sources SET platform_produced=true WHERE id='evimed-evidence'");
+  const echo = await insertItem(database, { sourceId: "evimed-evidence", title: "Echoed evidence card", abstract: "Abstract of the echoed card" });
+  await database.query("INSERT INTO evimed_frontier.item_changes(item_id,op,reason,changed_at) VALUES ($1,'upsert','published',$2)", [echo.id, NOW]);
+  await published("Independent report after the echo");
+  await signals.tick();
+  const titles = (await events()).map((event) => event.paper.title);
+  assert.ok(titles.includes("Independent report after the echo"));
+  assert.ok(!titles.includes("Echoed evidence card"), "an echo of the platform's own card is not a paper");
+});
