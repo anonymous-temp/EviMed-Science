@@ -95,9 +95,17 @@ test("the lessons are queued from the terminal hook by themselves, after the mem
   const noMemory = hook.indexOf("if (!researchMemory.configured) {");
   assert.ok(hook.indexOf("await queueLessons(null);", noMemory) > noMemory,
     "a deployment without a memory store still learns from its runs");
-  const internalGuard = hook.indexOf("if (internalFor(project.userId, project.id) || !reusableClinicalContext) return;");
+  // The first occurrence of this guard belongs to the inbox; the one that keeps the platform's own projects out of memory and
+  // lessons is the last, below the transcript branch.
+  const internalGuard = hook.lastIndexOf("if (internalFor(project.userId, project.id)) return;");
   assert.ok(internalGuard > 0 && internalGuard < noMemory,
     "any run in an internal project (an evaluation harness's among them) never queues a lesson or seeds memory");
+  // A conversation that read a clinical source is checked like any other (the reply check is a notice that holds nothing back,
+  // B1-reply) and seeds neither memory nor lessons: its guard sits below the reply check and above both.
+  const replyCheck = hook.indexOf("review.service.considerReply(");
+  const clinicalGuard = hook.indexOf("if (!reusableClinicalContext) return;", replyCheck);
+  assert.ok(replyCheck > internalGuard && clinicalGuard > replyCheck && clinicalGuard < noMemory && clinicalGuard < afterMemory,
+    "a clinical conversation's reply is checked, and the same conversation never queues a lesson or seeds memory");
 });
 
 test("background work in an internal project never reaches the inbox as a person's research", () => {
