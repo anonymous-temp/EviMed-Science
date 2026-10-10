@@ -22,12 +22,14 @@ export async function createNativeDsh({root,executable,dump,gateway,token,maxTok
     const args=['headless','--patch',path.join(root,'patch.yml'),'--json',...(sessionId?['--session-id',sessionId]:[]),prompt];
     const child=spawn(executable,args,{cwd,env:{PATH:process.env.PATH,DSH_HOME:path.join(root,'sessions'),DSH_TELEMETRY_MODE:'DISABLED',CLINICAL_EVAL_WORKLOAD_TOKEN:token},stdio:['ignore','pipe','pipe']});
     let output='',diagnostics='';child.stdout.on('data',x=>output+=x);child.stderr.on('data',x=>diagnostics+=x);
-    const timer=setTimeout(()=>child.kill('SIGTERM'),180000);const started=Date.now();
-    const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('exit',resolve);});clearTimeout(timer);
+    let timedOut=false;
+    const timer=setTimeout(()=>{timedOut=true;child.kill('SIGTERM');},180000);const started=Date.now();
+    const forceTimer=setTimeout(()=>child.kill('SIGKILL'),185000);
+    const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('exit',resolve);});clearTimeout(timer);clearTimeout(forceTimer);
     await fs.writeFile(path.join(root,filename+'.events.jsonl'),output,{mode:0o600});
     await fs.writeFile(path.join(root,filename+'.diagnostics.log'),diagnostics,{mode:0o600});
     const events=output.split('\n').filter(Boolean).map(line=>{try{return JSON.parse(line);}catch{return{type:'unparsed'};}});
-    return {code,events,latencyMs:Date.now()-started,sessionId:events.find(e=>e.type==='session')?.sessionId??sessionId,
+    return {code,timedOut,events,latencyMs:Date.now()-started,sessionId:events.find(e=>e.type==='session')?.sessionId??sessionId,
       text:events.findLast(e=>e.type==='final')?.text??'',diagnosticBytes:diagnostics.length};
   };
 }

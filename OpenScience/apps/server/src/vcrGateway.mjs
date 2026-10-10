@@ -58,6 +58,7 @@
 import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
 import { clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
 import { createHash } from "node:crypto";
+import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
 
 import {
   VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
@@ -109,6 +110,7 @@ export const VCR_FORBIDDEN_WRITE_KEYS = Object.freeze([
 
 /** Codes this gateway answers with. */
 export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
+  ...VCR_LONGITUDINAL_ERROR_CODES,
   "vcr_disabled", "vcr_no_study", "vcr_gateway_token_missing", "vcr_gateway_token_invalid", "vcr_gateway_rate_limited",
   "vcr_gateway_timeout", "vcr_gateway_unavailable", "vcr_request_invalid", "vcr_request_too_large",
   "vcr_read_what_invalid", "vcr_read_filter_invalid", "vcr_write_what_invalid", "vcr_write_payload_invalid",
@@ -1042,6 +1044,22 @@ const WRITERS = {
     return saved?.id ?? null;
   },
 
+  async history(item, {service,study}) {
+    if (!item.only(['snapshotId','asOf','mappings','split','priorHistoryId','includeClinicalFacts','perturbation'])) return null;
+    const longitudinal = service.packages.longitudinal;
+    if (!longitudinal) return void item.bad('snapshotId','数据平面尚未接入；可以继续文献情景分析。');
+    const saved = await longitudinal.freezeHistory(study,item.row,study.userId);
+    return saved.id;
+  },
+  async forecast_design(item,{service,study}) {
+    if (!item.only(['predictionId','controlPredictionId','horizonDays','allocation','alpha','power','prognosticEvaluationId','randomizationAt','lambda','gamma'])) return null;
+    const longitudinal = service.packages.longitudinal;
+    if (!longitudinal) return void item.bad('predictionId','数据平面尚未接入；可以继续文献情景分析。');
+    const queued = await longitudinal.enqueueDesign(study,item.row,study.userId);
+    if (!queued.available) return void item.bad('predictionId',`这项计算缺少可用输入：${queued.code}。其他研究结果继续保留。`);
+    return queued.jobId;
+  },
+
   /**
    * One model's assessment record (ICH M15 Appendix 1), as the next version of its key. The ratings are the run's judgment and
    * each is checked against the three words; the model risk is not a field: the platform derives it from influence and consequence
@@ -1795,6 +1813,11 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
  *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any }} request
  */
 async function startJob(vcr, study, request) {
+  if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,request.kind)) {
+    if (!vcr.longitudinal) throw gatewayError(503,'vcr_gateway_unavailable','纵向数据尚未接入；其他分析可以继续。');
+    const {job} = await vcr.longitudinal.prepare(study,request,study.userId);
+    return {action:'start',jobId:job.id,state:job.state,progress:job.progress};
+  }
   if (request.kind === "pool_evidence") {
     if (!vcr.evidence?.poolParameter) throw gatewayError(503, "vcr_gateway_unavailable", "证据参数化未接入本部署：这一步暂不可用。");
     const unknown = Object.keys(request.scenario).filter((key) => !POOL_REQUEST_FIELDS.includes(key));

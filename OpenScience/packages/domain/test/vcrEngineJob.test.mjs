@@ -24,6 +24,7 @@ import {
   VCR_COX_FEW_EVENTS,
   VCR_JOB_KINDS,
   VCR_JOB_METHODS,
+  VCR_LONGITUDINAL_JOBS,
   VCR_MAX_REPLICATES,
   VCR_MODEL_TIERS,
   VCR_NOT_ESTIMABLE_RULES,
@@ -99,7 +100,7 @@ test("the engine's generated snapshot carries exactly the live schemas, patterns
   assert.deepEqual(snapshot.scenarioSchemas, plain(VCR_SCENARIO_SCHEMAS), "regenerate it: node 项目代码/vcr-engine/tests/helpers/emit-domain-snapshot.mjs");
   assert.deepEqual(snapshot.designSupport, plain(VCR_DESIGN_SUPPORT));
   assert.deepEqual(snapshot.patterns, plain(VCR_PATTERNS));
-  assert.deepEqual(snapshot.jobMethods, plain(VCR_JOB_METHODS));
+  assert.deepEqual(snapshot.jobMethods, plain(Object.fromEntries(Object.entries(VCR_JOB_METHODS).filter(([kind]) => !Object.hasOwn(VCR_LONGITUDINAL_JOBS,kind)))));
   assert.deepEqual(snapshot.observedOnlyMethods, [...VCR_OBSERVED_ONLY_METHODS]);
   assert.deepEqual(snapshot.columnSources, [...VCR_COLUMN_SOURCES]);
   assert.deepEqual(snapshot.columnSourceLimits, plain(VCR_COLUMN_SOURCE_LIMITS));
@@ -113,7 +114,7 @@ test("the engine's generated snapshot carries exactly the live schemas, patterns
 test("every method has one scenario schema, every kind one method, and both tables are total", () => {
   assert.deepEqual(Object.keys(VCR_SCENARIO_SCHEMAS).sort(), [...VCR_ENGINE_METHOD_IDS].sort());
   assert.ok(VCR_ENGINE_METHOD_IDS.length >= 25, "the 24 methods of the first release and the comparator-effect methods after them");
-  assert.equal(VCR_ENGINE_METHOD_IDS.length, VCR_JOB_KINDS.length, "one kind per method");
+  assert.equal(VCR_ENGINE_METHOD_IDS.length + Object.keys(VCR_LONGITUDINAL_JOBS).length, VCR_JOB_KINDS.length, "engine and cloud/control-plane kinds are distinct");
   assert.deepEqual(Object.keys(VCR_JOB_METHODS).sort(), [...VCR_JOB_KINDS].sort());
   assert.equal(new Set(Object.values(VCR_JOB_METHODS)).size, VCR_JOB_KINDS.length, "no two kinds run one method");
   for (const kind of VCR_PATIENT_LEVEL_JOB_KINDS) assert.ok(VCR_JOB_KINDS.includes(kind), kind);
@@ -410,7 +411,7 @@ test("the comparator-effect methods are appended, read patients, and every rule 
   // The kinds appended after the first 24 are this stream's four in the order they were added, then whatever other streams appended
   // (the robustness methods): derived from the domain, so a stream that appends a kind does not edit this line.
   assert.deepEqual([...VCR_JOB_KINDS].slice(24, 24 + COMPARATOR_EFFECT_METHODS.length), COMPARATOR_EFFECT_METHODS.map(([, kind]) => kind), "appended in the order they were added");
-  assert.equal(VCR_JOB_KINDS.length, Object.keys(VCR_ENGINE_METHODS).length, "and every kind after them has its method");
+  assert.equal(VCR_JOB_KINDS.length, Object.keys(VCR_ENGINE_METHODS).length + Object.keys(VCR_LONGITUDINAL_JOBS).length, "every kind has an engine or control-plane method");
   for (const [method, kind] of COMPARATOR_EFFECT_METHODS) {
     assert.equal(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind], method, kind);
     assert.ok(VCR_PATIENT_LEVEL_JOB_KINDS.includes(kind), `${kind} reads patient-level rows`);

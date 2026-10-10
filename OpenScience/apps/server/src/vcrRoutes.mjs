@@ -65,6 +65,8 @@ import {
 
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { fileView, importAttemptAuditDetail, importAuditDetail, snapshotView, sourceView, tableView, uploadAttemptAuditDetail, uploadAuditDetail } from "./vcrDataPlane.mjs";
+import { VCR_LONGITUDINAL_JOBS, suppressForModel } from '@evimed/domain';
+import { LONGITUDINAL_TEMPLATES } from './vcrLongitudinal.mjs';
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { isSiteScopedRole } from "./vcrRecruit.mjs";
 
@@ -127,6 +129,10 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id/jobs": ["read"],
   "GET /studies/:id/jobs/:job": ["read"],
   "POST /studies/:id/jobs": ["run"],
+  "GET /studies/:id/longitudinal": ["read"],
+  "POST /studies/:id/longitudinal/histories": ["run"],
+  "POST /studies/:id/longitudinal/predictions": ["run"],
+  "POST /studies/:id/longitudinal/benchmarks": ["run"],
   "POST /studies/:id/jobs/:job/cancel": ["run"],
   "POST /studies/:id/budget": ["manage_study"],
   "POST /studies/:id/assumptions": ["write"],
@@ -584,6 +590,22 @@ export function createVcrRoutes(dependencies) {
     }
 
     const section = parts[2];
+    if (section === 'longitudinal') {
+      const {study} = await authorize(id,method === 'GET' ? 'read' : 'run');
+      const longitudinal = service.packages.longitudinal;
+      if (!longitudinal && method === 'GET') return reply({available:false,records:[],providers:[],templates:LONGITUDINAL_TEMPLATES});
+      if (!longitudinal) throw UNAVAILABLE();
+      if (method === 'GET' && parts.length === 3) return reply(suppressForModel(await longitudinal.view(study)));
+      if (method === 'POST' && parts.length === 4 && ['histories','predictions','benchmarks'].includes(parts[3])) {
+        const fields = parts[3] === 'histories' ? ['snapshotId','asOf','mappings','split','priorHistoryId','includeClinicalFacts','perturbation']
+          : parts[3] === 'benchmarks' ? ['model','comparisons','split','trainingOverlap']
+          : ['schema','historyId','origin','endpoint','horizonsDays','rows','model','scenario','priorPredictionId','subjectKeyMode'];
+        const body = await bodyOf(req,Math.max(maxJsonBytes,8*1024*1024),fields);
+        const save = parts[3] === 'histories' ? longitudinal.freezeHistory : parts[3] === 'predictions' ? longitudinal.importPrediction : longitudinal.importBenchmark;
+        return reply(suppressForModel(await save(study,body,String(user.id))),201);
+      }
+      throw new HttpError(404,'not_found','Longitudinal route not found.');
+    }
 
     // --- the seven tabs --------------------------------------------------------
     if (parts.length === 3 && method === "GET" && VCR_TABS.includes(section)) {
@@ -858,6 +880,11 @@ export function createVcrRoutes(dependencies) {
         }
         const { study } = await authorize(id, "run");
         if (!hooks.jobs?.enqueue) throw UNAVAILABLE();
+        if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,body.kind)) {
+          if (!service.packages.longitudinal) throw UNAVAILABLE();
+          const {job} = await service.packages.longitudinal.prepare(study,body,String(user.id));
+          return reply(job,201);
+        }
         if (body.kind === 'match_criteria') {
           await requireAbility(study, 'read_patient_level');
           if (body.scenario || body.inputs) throw new HttpError(400, 'vcr_matching_selection_invalid', 'Matching accepts owned record selection, not a caller scenario.');

@@ -1,3 +1,4 @@
+import { VCR_LONGITUDINAL_ERROR_CODES } from './vcrLongitudinal.mjs';
 import { EVOLUTION_ERROR_MESSAGES } from './evolution.mjs';
 import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
@@ -253,6 +254,7 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // the study's platform data was not reachable and goes on with what it has
   // — it never writes a number the engine did not compute, and a registry it
   // could not reach is 「不可得」, never zero.
+  ...VCR_LONGITUDINAL_ERROR_CODES,
   "vcr_disabled",
   "vcr_no_study",
   "vcr_unconfigured",
@@ -1146,6 +1148,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
 ])
 
 export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
+  ...VCR_LONGITUDINAL_ERROR_CODES,
   'vcr_disabled',
   'vcr_no_study',
   'vcr_gateway_token_missing',
@@ -1508,6 +1511,23 @@ export function turnEndErrorCode(kind, wireCode) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  vcr_split_invalid: '请为验证指定患者、时间或中心划分，并检查日期顺序。',
+  vcr_history_perturbation_invalid: '请指定要省略的事件代码或有效的历史起始日期。',
+  vcr_benchmark_invalid: '请按试验效果模板提供比较记录和已有证据的引用。',
+  vcr_longitudinal_not_found: '这个研究中没有该历史或预测版本，请选择已有记录。',
+  vcr_forecast_provider_unavailable: '尚未接入所选预测模型；可以导入预测文件或继续文献情景分析。',
+  vcr_forecast_endpoint_unsupported: '所选模型未提供这个终点的预测，请更换模型或导入外部结果。',
+  vcr_forecast_horizon_unsupported: '所选模型不支持这个预测跨度，请调整时间范围。',
+  vcr_forecast_fields_unavailable: '本次预测使用的部分字段已不可用，其他研究结果仍可查看。',
+  vcr_forecast_request_changed: '这次请求与原来的计算输入不同，请创建新的预测版本。',
+  vcr_forecast_unavailable: '这次计算没有得到预测结果，已保存的其他结果仍可使用。',
+  vcr_history_input_changed: '输入文件与冻结版本不同，请从当前文件创建新的历史版本。',
+  vcr_history_mapping_missing: '请先说明事件代码、受试者编号及观测和可用时间所在的列。',
+  vcr_history_required: '请选择一个已冻结的历史版本作为预测输入。',
+  vcr_history_subject_mapping: '请使用快照提供的受试者代号列连接随访记录。',
+  vcr_history_too_large: '这批历史超过单次计算容量，请分批处理；已有结果会保留。',
+  vcr_longitudinal_changed: '该记录的文件内容已改变，请使用完整保存的版本或重新导入。',
+  vcr_prediction_rows_missing: '预测文件中缺少结果行，请按模板补充。',
   registry_reported_not_site_confirmed: '登记记录反映抓取时的信息，尚未由研究中心确认当前招募情况。',
   vcr_clinical_fact_invalid: '这条事实的临床字段不完整或格式有误，请按原文补齐或保留未知。',
   vcr_cloud_permission_invalid: '云端处理授权信息不完整，请核对用途、服务范围和授权依据。',

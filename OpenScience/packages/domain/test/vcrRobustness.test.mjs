@@ -14,7 +14,7 @@ import {
   ALL_ERROR_CODES,
   VCR_ENGINE_METHODS,
   VCR_JOB_KINDS,
-  VCR_JOB_METHODS,
+  VCR_JOB_METHODS, VCR_LONGITUDINAL_METHODS,
   VCR_NEGATIVE_CONTROL_CALIBRATION_MIN,
   VCR_NEGATIVE_CONTROL_VERDICTS,
   VCR_NEGATIVE_CONTROL_VERDICT_LABELS_ZH,
@@ -109,5 +109,5 @@ test("prognostic adjustment: the word every result carries about regulators is t
 test("the robustness methods are listed once in the dispatch the engine publishes, so a method added later cannot be skipped by the evidence", () => {
   // every method of the domain has a schema and a kind: the evidence generator derives its method list from this registry
   assert.deepEqual(Object.keys(VCR_SCENARIO_SCHEMAS).sort(), Object.keys(VCR_ENGINE_METHODS).sort());
-  assert.deepEqual(new Set(Object.values(VCR_JOB_METHODS)), new Set(Object.keys(VCR_ENGINE_METHODS)));
+  assert.deepEqual(new Set(Object.values(VCR_JOB_METHODS)), new Set([...Object.keys(VCR_ENGINE_METHODS),...Object.keys(VCR_LONGITUDINAL_METHODS)]));
 });

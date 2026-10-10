@@ -40,6 +40,7 @@ tools:
 - mcp__evimed__term_normalize
 - mcp__evimed__kb_search
 - mcp__evimed__literature_search
+- mcp__evimed__dataset_semantics
 produces:
 - contractKind: vcr-matching-assessment
   outputs:

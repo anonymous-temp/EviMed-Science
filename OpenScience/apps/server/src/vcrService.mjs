@@ -66,7 +66,7 @@ export const VCR_READ_MAX_ITEMS = 50;
 export const VCR_READ_WHATS = Object.freeze([
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
   "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
-  "trial_registry_record", "pack", "library", "model_assessments",
+  "trial_registry_record", "pack", "library", "model_assessments", "longitudinal",
 ]);
 
 /**
@@ -122,7 +122,7 @@ export const VCR_PUBLISHED_FIGURE_READS = Object.freeze(["evidence", "precedents
 export const VCR_WRITE_WHATS = Object.freeze([
   "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
-  "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment",
+  "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment", "history", "forecast_design",
 ]);
 
 /** @param {unknown} value */
@@ -414,7 +414,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge };
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, longitudinal: /** @type {any} */ (null) };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -1178,8 +1178,9 @@ export class VcrService {
     const current = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
     const modelAnalysis = isModelDocumentKind(String(options.kind ?? ""))
       ? buildModelAnalysis({ inputs: await readModelAnalysisInputs(store, study), results, versions: await store.modelPlanVersions(study.id) }) : null;
-    return vcrReportModel({ study, definition, assumptions, results, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current, exports }) })), staleMarks: stale, population, comparator,
+    const report = vcrReportModel({ study, definition, assumptions, results, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current, exports }) })), staleMarks: stale, population, comparator,
       scenarios, models, seal: vcrSealState(study), modelAnalysis });
+    return this.packages.longitudinal ? {...report,longitudinal:await this.packages.longitudinal.view(study)} : report;
   }
 
   /**
@@ -1284,6 +1285,8 @@ export class VcrService {
         // name, never profiled.
         return dataPlane.runtimeProfile(study, filter);
       }
+      case 'longitudinal': return this.packages.longitudinal ? this.packages.longitudinal.view(study)
+        : {available:false,code:'vcr_data_plane_unavailable',alternatives:['literature_scenario','trial_design']};
       case "subject_document": {
         const documents = this.packages.documents;
         if (!documents?.subjectDocuments) {

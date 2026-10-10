@@ -64,6 +64,8 @@ import { clinicalDocumentWindow } from './vcrDocumentWindow.mjs';
  */
 
 import { createHash } from "node:crypto";
+import { createVcrLongitudinal } from './vcrLongitudinal.mjs';
+import { VCR_LONGITUDINAL_METHODS } from '@evimed/domain';
 
 import { VCR_ENGINE_PROTOCOL_VERSION, canonicalScenarioJson, vcrResultOutputPayload } from "@evimed/domain";
 
@@ -1040,6 +1042,12 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     store, config, engine, access, dataPlane: dataPlaneSeam, evidence, matching, jobs, seal, matchStore, evidenceStore, documents,
   });
 
+  const longitudinal = createVcrLongitudinal({store,dataStore,dataPlane,matchStore,access,jobs,config,fetchImpl});
+  if (longitudinal) {
+    for (const method of Object.keys(VCR_LONGITUDINAL_METHODS)) jobs.localExecutors[method] = longitudinal.execute;
+    service.attach({longitudinal});
+  }
+
   const corrections = createVcrCorrectionCases({ store, matchStore, dataPlane, access });
   // The disease packs and the account's library of population definitions: read and written by the study's pages,
   // by the runtime's `pack` and `library` and by the population writer; the job queue is the comparison's.
@@ -1047,7 +1055,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const knowledge = new VcrKnowledge({ store: knowledgeStore, studyStore: store, dataStore, jobs });
   service.attach({ corrections, knowledge });
   composed = {
-    store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore,
+    store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).

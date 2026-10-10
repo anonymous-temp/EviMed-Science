@@ -558,6 +558,11 @@ test("DL-8 the compose stack runs the engine with the environment, secrets, path
   assert.equal(planeEngine.read_only, true, "the engine only reads");
   assert.equal(web.environment.OPEN_SCIENCE_VCR_DATA_PLANE_DIR, "${OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR:+/data-plane}",
     "the config names the plane exactly when the host directory is bound");
+  assert.equal(web.environment.OPEN_SCIENCE_VCR_FORECAST_PROVIDERS_FILE, "${OPEN_SCIENCE_VCR_FORECAST_HOST_DIR:+/run/evimed/vcr-forecast/providers.json}");
+  assert.equal(bindsOf(web)["/run/evimed/vcr-forecast"].read_only, true);
+  for (const [name, service] of Object.entries(compose.services)) {
+    if (name !== "open-science-web") assert.equal(bindsOf(service)["/run/evimed/vcr-forecast"], undefined, `${name} must not mount forecast credentials`);
+  }
 
   // /jobs is a named volume, given to the uid the engine runs as by a one-shot that holds CAP_CHOWN and nothing else.
   assert.ok((engine.volumes ?? []).includes("evimed-vcr-jobs:/jobs"));
@@ -585,6 +590,7 @@ test("DL-8 the compose stack runs the engine with the environment, secrets, path
 test("DL-9 DL-11 DL-12 DL-19 the web image carries the profiler, the release manifest binds it, the overlay keeps the module off, and every variable is documented", async () => {
   const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
   assert.match(dockerfile, /^COPY --from=build \/app\/scripts\/vcr \.\/scripts\/vcr$/m);
+  assert.ok(dockerfile.includes("COPY --from=build /app/packages/contracts/healthflux/candidates.json ./packages/contracts/healthflux/candidates.json"));
   const manifest = await readFile(path.join(repoRoot, "scripts/ops/generate-release-manifest.mjs"), "utf8");
   assert.match(manifest, /^ {2}"scripts\/vcr",$/m);
   const overlay = await readFile(path.join(repoRoot, "deploy/web/docker-compose.api-only.yml"), "utf8");

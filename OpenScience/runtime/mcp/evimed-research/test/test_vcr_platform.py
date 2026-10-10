@@ -62,6 +62,7 @@ import('@evimed/domain').then((m) => {
       : node.t === 'array' ? names(node.items) : null;
   const out = {};
   for (const [kind, method] of Object.entries(m.VCR_JOB_METHODS)) {
+    if (!m.VCR_ENGINE_METHODS[method]) continue; // Control-plane forecast schemas are read through longitudinal.
     const endpoints = [...m.VCR_ENGINE_METHODS[method].endpoints];
     out[kind] = { method, endpoints, keys: Object.fromEntries(Object.entries(m.VCR_SCENARIO_SCHEMAS[method].fields)
       .map(([key, field]) => [key, { endpoints: endpoints.length ? readFor(field.when, endpoints) : null, children: names(field) }])) };

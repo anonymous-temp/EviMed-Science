@@ -683,6 +683,7 @@ export const VCR_JOB_KINDS = frozen([
   // --- appended (2026-10-04): the robustness methods ---
   'negative_control_comparator', 'tipping_point', 'prognostic_adjustment_comparator',
   // --- end robustness methods ---
+  'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
 ])
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({

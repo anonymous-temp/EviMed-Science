@@ -20,7 +20,7 @@ import {
   VCR_ENGINE_PROTOCOL_VERSION,
   VCR_INTENDED_USES,
   VCR_JOB_KINDS,
-  VCR_JOB_METHODS,
+  VCR_JOB_METHODS, VCR_LONGITUDINAL_METHODS,
   VCR_MIN_CELL_SIZE,
   VCR_MODEL_TIERS,
   VCR_REPLICATES_NULL_MIN,
@@ -151,15 +151,15 @@ test("every engine method has a job kind, and every job kind a method", () => {
   // a convention someone guesses.
   const mapped = new Set(/** @type {string[]} */ (Object.values(VCR_JOB_METHODS)));
   assert.deepEqual(VCR_ENGINE_METHOD_IDS.filter((id) => !mapped.has(id)), [], "a method no job kind can ask for");
-  assert.equal(VCR_JOB_KINDS.length, VCR_ENGINE_METHOD_IDS.length);
+  assert.equal(VCR_JOB_KINDS.length, VCR_ENGINE_METHOD_IDS.length + Object.keys(VCR_LONGITUDINAL_METHODS).length);
 });
 
 test("every job kind maps to a method this build publishes", () => {
   for (const kind of VCR_JOB_KINDS) {
     const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
     assert.ok(method, `job kind ${kind} has no method`);
-    assert.ok(VCR_ENGINE_METHOD_IDS.includes(method), `method ${method} is not published`);
-    assert.ok(/** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method].version, `method ${method} has no version`);
+    assert.ok([...VCR_ENGINE_METHOD_IDS,...Object.keys(VCR_LONGITUDINAL_METHODS)].includes(method), `method ${method} is not published`);
+    assert.ok(/** @type {Record<string, any>} */ ({...VCR_ENGINE_METHODS,...VCR_LONGITUDINAL_METHODS})[method].version, `method ${method} has no version`);
   }
 });
 

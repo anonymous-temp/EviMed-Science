@@ -9,6 +9,7 @@ import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
 import { VcrTornadoChart } from "../VcrDiagrams";
 import { SourceTag } from "../VcrMarks";
 import { VcrModelAssessments } from "../VcrModelAssessments";
+import { VcrLongitudinalPanel } from '../VcrLongitudinalPanel';
 import { VcrNumber } from "../VcrNumber";
 import { NotApplicableCard, PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useVcrLoad, VcrHeadline, VcrTabError, VcrToolbar } from "../vcrTabKit";
@@ -48,14 +49,15 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
   const nothing = !data.model && !data.trajectories && !data.example && data.panels.length === 0 && !data.sensitivity
     && data.assessments.records.length === 0;
   if (nothing) {
-    return failed
+    return <div className="flex flex-col gap-6"><VcrLongitudinalPanel studyId={studyId} canRun={study.abilities.includes('run')} />{failed
       ? <VcrStepFailed studyId={studyId} study={study} step="patients" partial={data.partial} />
-      : <VcrStepPending studyId={studyId} study={study} step="patients" />;
+      : <VcrStepPending studyId={studyId} study={study} step="patients" />}</div>;
   }
   const twin = data.twin ?? (data.model?.twinLabel ? { label: data.model.twinLabel, reason: data.model.twinReason ?? null } : null);
 
   return (
     <div className="flex flex-col gap-6">
+      <VcrLongitudinalPanel studyId={studyId} canRun={study.abilities.includes('run')} />
       {data.sets && data.sets.length > 0 && (
         <VcrToolbar>
           {data.sets.map((set) => (

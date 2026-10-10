@@ -67,7 +67,7 @@ const list = (value) => (Array.isArray(value) ? value : []);
  */
 export const VCR_RESULT_KINDS = Object.freeze([
   "population", "patient_set", "comparator", "trial_scenario", "design_grid",
-  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile",
+  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal",
 ]);
 
 /** Which lineage node kind each research object is. */

@@ -89,6 +89,7 @@ const CPU_COMMITTED_SQL = `CASE WHEN state IN ('queued','running') OR
  */
 
 import { createHash } from "node:crypto";
+import { VCR_LONGITUDINAL_METHODS, VCR_LONGITUDINAL_JOBS, validateLongitudinalScenario } from '@evimed/domain';
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -390,6 +391,7 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
  * @param {string} kind
  */
 export function vcrResultKindFor(kind) {
+  if (Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind)) return 'longitudinal';
   const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind] ?? "";
   if (["build_cohort", "generate_population", "literature_population", "synthesize_population", "population_quality"].includes(kind)) return "population";
   if (["generate_patients", "generate_patients_continuous", "generate_patients_binary"].includes(kind)) return "patient_set";
@@ -504,8 +506,10 @@ export class VcrJobs {
       throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
     }
     const studyId = String(input.studyId);
-    const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
-    const methodVersion = /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method]?.version ?? "";
+    const method = /** @type {Record<string, string>} */ ({...VCR_JOB_METHODS,...VCR_LONGITUDINAL_JOBS})[kind];
+    const methodVersion = /** @type {Record<string, any>} */ ({...VCR_ENGINE_METHODS,...VCR_LONGITUDINAL_METHODS})[method]?.version ?? "";
+    const longitudinal = Object.hasOwn(VCR_LONGITUDINAL_JOBS,kind);
+    if (longitudinal && input.internal !== true) throw new HttpError(400,'vcr_job_scenario_invalid','Longitudinal jobs freeze owned input references before enqueue.');
     let scenario = object(input.scenario);
     const principal = String(input.principal ?? input.userId);
 
@@ -526,7 +530,8 @@ export class VcrJobs {
     // fact ledger server-side and takes no snapshot, though the domain files its kind under the
     // patient-level ones: its input is a frozen as-of, a protocol id and a token of the facts.
     const runsLocally = typeof this.localExecutors[method] === "function";
-    const callerIssues = [...validateCallerInputs(asked, { kind: (input.internal === true && list(input.derived).length) || runsLocally ? undefined : kind })];
+    const callerIssues = longitudinal && input.internal === true ? []
+      : [...validateCallerInputs(asked, { kind: (input.internal === true && list(input.derived).length) || runsLocally ? undefined : kind })];
     const derivedEntries = list(input.derived).map(object);
     // A caller other than the orchestrator may only point at a reconstruction result for the job that reads one.
     if (derivedEntries.length && input.internal !== true && !derivedEntries.every((entry) => isReconstructionReference(kind, entry))) {
@@ -556,7 +561,8 @@ export class VcrJobs {
     };
 
     // 3. what the engine will check (a locally computed method has no engine to read a table)
-    const issues = validateEngineJob(job).filter((issue) => !(runsLocally && issue.code === "patient_input_required"));
+    const issues = longitudinal ? validateLongitudinalScenario(method,scenario)
+      : validateEngineJob(job).filter((issue) => !(runsLocally && issue.code === "patient_input_required"));
     if (issues.length) throw this.#invalid("vcr_job_scenario_invalid", issues);
 
     const key = vcrIdempotencyKey({ key: input.idempotencyKey ?? null, kind, studyId, scenarioHash, inputs, seed });
@@ -910,7 +916,7 @@ export class VcrJobs {
       || Number(job.attempts ?? row.attempts) !== Number(row.attempts)) return { action: "skipped", state: "lease_changed" };
     const frozen = this.#engineJob(row);
     const local = this.localExecutors[String(row.method)];
-    if (local) return this.#runLocal(row, frozen, local, owner);
+    if (local) return this.#runLocal(row, { ...frozen, principal: String(object(row.checkpoint).principal ?? row.user_id) }, local, owner);
     if (!this.engine?.configured?.()) {
       return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), error: { code: "engine_unavailable",
         message: "计算引擎未接入本部署，这一步暂不可用。" } });
@@ -1099,6 +1105,7 @@ export class VcrJobs {
       const result = await executor({
         job: { ...frozen, scenarioHash: String(row.scenario_hash ?? "") },
         onProgress: (/** @type {any} */ progress) => this.progress(String(row.id), progress ?? {}, owner, Number(row.attempts)),
+        isCanceled: async () => { const current = await this.#row(String(row.id)); return !current || current.state !== 'running' || current.lease_owner !== owner || current.attempts !== row.attempts; },
       });
       return this.finish(String(row.id), {
         status: String(result?.status ?? "succeeded"),

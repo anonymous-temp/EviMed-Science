@@ -52,6 +52,7 @@ import {
   VCR_REAL_PATIENT_SOURCES, VCR_VALUE_SOURCES,
 } from './vcrVocabulary.mjs'
 import { VCR_DESIGN_SUPPORT, validateScenario, vcrIsNullScenario } from './vcrScenarioSchemas.mjs'
+import { VCR_LONGITUDINAL_JOBS } from './vcrLongitudinal.mjs'
 
 // The schemas live in their own module (they are the file most likely to be
 // edited); the protocol's callers find them here, beside the validators.
@@ -120,6 +121,7 @@ export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
  * everywhere else and a mismatch would otherwise queue the wrong computation.
  */
 export const VCR_JOB_METHODS = Object.freeze({
+  ...VCR_LONGITUDINAL_JOBS,
   profile_snapshot: 'profile.snapshot',
   build_cohort: 'cohort.build',
   generate_population: 'population.scenario',

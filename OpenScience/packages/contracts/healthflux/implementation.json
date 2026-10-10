@@ -1,0 +1,362 @@
+{
+  "schema": 1,
+  "branch": "codex/vcr-longitudinal-integration-20261010",
+  "base": "3561e64bd",
+  "principles": [
+    "DeepSeek + pinned DSH remains the only agent kernel",
+    "No local model weights, training, GPU serving or second patient database",
+    "AI selects and interprets; code performs arithmetic and preserves inputs",
+    "An unavailable operation does not withhold other research or erase partial results",
+    "Uncertainty and missing evidence are represented, not fabricated"
+  ],
+  "tasks": [
+    {
+      "id": "D01",
+      "title": "Longitudinal uploads and explicit field mappings",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs",
+        "apps/server/src/vcrDataPlane.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D02",
+      "title": "Task-specific data readiness without admission thresholds",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D03",
+      "title": "Reuse source-anchored clinical extraction with assertion and medication state",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs",
+        "packages/domain/src/clinicalFact.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D04",
+      "title": "Replay occurrence and availability clocks at the prediction origin",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D05",
+      "title": "Resolve duplicates, correction chains and conflicting revisions",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D06",
+      "title": "Immutable histories, predictions and incremental snapshot lineage",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinalStore.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D07",
+      "title": "Reuse study grants, field grants and destination-specific cloud permission",
+      "status": "reused",
+      "evidence": [
+        "apps/server/src/vcrAccess.mjs",
+        "apps/server/src/vcrCloudProjection.mjs",
+        "apps/server/src/vcrLongitudinalStore.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D08",
+      "title": "Connect a real partner incremental feed",
+      "status": "external_dependency",
+      "evidence": [
+        "apps/server/src/vcrImport.mjs",
+        "apps/server/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": [
+        "Requires the partner endpoint, incremental cursor semantics, credentials and authorized dataset. Existing FHIR/OMOP/ADaM intake and explicit priorHistoryId updates are implemented; no live partner connector is claimed."
+      ]
+    },
+    {
+      "id": "M01",
+      "title": "Evidence-based candidate and API availability register",
+      "status": "implemented",
+      "evidence": [
+        "packages/contracts/healthflux/candidates.json"
+      ],
+      "remaining": [
+        "Candidate publications do not establish callable APIs or commercial/data-processing rights."
+      ]
+    },
+    {
+      "id": "M02",
+      "title": "Versioned event-history and marginal endpoint prediction contract",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrLongitudinal.mjs",
+        "packages/contracts/healthflux/providers.example.json"
+      ],
+      "remaining": [
+        "v1 is marginal endpoint-by-horizon output. Joint event trajectories and multimodal model training are not implemented or represented as present."
+      ]
+    },
+    {
+      "id": "M03",
+      "title": "Cloud batching, cancellation, replay, time/cost tracking and rollback",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrForecastProvider.mjs",
+        "apps/server/src/vcrLongitudinal.mjs",
+        "deploy/web/docker-compose.yml",
+        "deploy/web/.env.example"
+      ],
+      "remaining": [
+        "Only the generic cloud protocol is tested. Configure and probe an actual licensed provider. Cost is provider-reported; unknown charges cannot be bounded by a client-side estimate."
+      ]
+    },
+    {
+      "id": "M04",
+      "title": "Import externally computed predictions",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrRoutes.mjs",
+        "apps/server/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "M05",
+      "title": "Re-predict from a new history or model while preserving prior versions",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "M06",
+      "title": "Per-row numerical meaning checks with partial retention",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "M07",
+      "title": "Keep literature scenarios and sensitivity analysis usable without a model",
+      "status": "reused",
+      "evidence": [
+        "capabilities/vcr-analysis/SKILL.md",
+        "apps/server/src/vcrOrchestrator.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "V01",
+      "title": "Separate synthetic engineering, clinical NLP and actual outcome evaluations",
+      "status": "implemented",
+      "evidence": [
+        "evals/method-quality/run_native_longitudinal.mjs",
+        "packages/contracts/openmed/implementation.json",
+        "packages/domain/src/vcrForecastEvaluation.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "V02",
+      "title": "Freeze patient, calendar, site and trial-family splits",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs",
+        "packages/domain/src/vcrTrialBenchmark.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "V03",
+      "title": "Same-subject persistence, trend and independent risk/trial baselines",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrForecastEvaluation.mjs",
+        "packages/domain/src/vcrTrialBenchmark.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "V04",
+      "title": "Errors, calibration, distribution scoring, censoring and patient-cluster intervals",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrForecastEvaluation.mjs"
+      ],
+      "remaining": [
+        "AUROC/AP use observed-at-horizon cases. IPCW uses marginal independent-censoring assumptions; conditional/competing-risk models and full trajectory-distribution scores require a separate model contract."
+      ]
+    },
+    {
+      "id": "V05",
+      "title": "Keep predictive, parameter, model and Monte Carlo uncertainties distinct",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrLongitudinal.mjs",
+        "packages/domain/src/vcrForecastEvaluation.mjs"
+      ],
+      "remaining": [
+        "Model and parameter uncertainty remain not estimated unless the external provider supplies the corresponding distribution. Patient bootstrap does not replace these."
+      ]
+    },
+    {
+      "id": "V06",
+      "title": "Replay perturbations, freshness and local split shift diagnostics",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs",
+        "packages/domain/src/vcrForecastEvaluation.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "V07",
+      "title": "Independent preserved-evidence RCT benchmark machinery",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrTrialBenchmark.mjs",
+        "apps/server/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": [
+        "Requires rights-cleared independent trial predictions, preserved result sources and declared trial-family identities. No HealthFlux benchmark or clinical replication is claimed."
+      ]
+    },
+    {
+      "id": "R01",
+      "title": "Dynamic endpoint forecasts at requested horizons",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs",
+        "apps/web/src/components/vcr/VcrLongitudinalPanel.tsx"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "R02",
+      "title": "Paired model scenario contrasts with explicit causal limits",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrForecastEvaluation.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "R03",
+      "title": "Translate saved common-subject forecasts to the existing design engine",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "R04",
+      "title": "Reuse prognostic adjustment and connect heldout correlations to PROCOVA design",
+      "status": "reused_with_conditions",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs",
+        "packages/domain/src/vcrScenarioSchemas.mjs",
+        "capabilities/vcr-analysis/SKILL.md"
+      ],
+      "remaining": [
+        "Actual patient-level binary/survival adjustment uses the existing externally supplied, prespecified score-column workflow. This adapter does not relabel a forecast as an observed trial outcome or claim EMA qualification. Real clinical use needs independent validation and trial-specific pre-randomization inputs."
+      ]
+    },
+    {
+      "id": "R05",
+      "title": "Predicted outcomes never become observed matching facts",
+      "status": "reused",
+      "evidence": [
+        "apps/server/src/vcrMatching.mjs",
+        "apps/server/src/vcrLongitudinal.mjs",
+        "capabilities/vcr-matching/SKILL.md"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "R06",
+      "title": "Separate trial-effect models from patient trajectory predictions",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrTrialBenchmark.mjs"
+      ],
+      "remaining": [
+        "No new treatment-effect model is trained or served locally. The module evaluates externally supplied trial-effect outputs; it does not infer causal identification from forecast differences."
+      ]
+    },
+    {
+      "id": "L01",
+      "title": "Integrate history, import, versions and validation into the patient tab",
+      "status": "implemented",
+      "evidence": [
+        "apps/web/src/components/vcr/VcrLongitudinalPanel.tsx",
+        "apps/web/src/lib/vcrLongitudinalClient.ts"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "L02",
+      "title": "Update all five DSH skills, existing tools and report number sources",
+      "status": "implemented",
+      "evidence": [
+        "capabilities/vcr-analysis/SKILL.md",
+        "capabilities/vcr-evidence/SKILL.md",
+        "capabilities/vcr-matching/SKILL.md",
+        "capabilities/vcr-package/SKILL.md",
+        "capabilities/vcr-protocol/SKILL.md",
+        "apps/server/src/vcrService.mjs",
+        "runtime/mcp/evimed-research/vcr_platform.py"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "L03",
+      "title": "T2D pilot across literature, longitudinal and imported-prediction paths",
+      "status": "implemented",
+      "evidence": [
+        "evals/method-quality/run_native_longitudinal.mjs",
+        "apps/server/test/vcrLongitudinal.integration.test.mjs"
+      ],
+      "remaining": [
+        "The executed pilot is authored synthetic data and a real DeepSeek API through pinned DSH. It is not real patient validation or a live dedicated world-model service."
+      ]
+    },
+    {
+      "id": "L04",
+      "title": "Test arithmetic, permissions, provider failures, UI and real DeepSeek/DSH execution",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/test/vcrLongitudinal.test.mjs",
+        "apps/server/test/vcrForecastProvider.test.mjs",
+        "apps/server/test/vcrLongitudinal.integration.test.mjs",
+        "apps/web/src/components/vcr/VcrLongitudinalPanel.test.tsx",
+        "evals/method-quality/run_native_longitudinal.mjs",
+        "apps/server/src/vcrForecastCalculation.mjs",
+        "apps/server/test/vcrForecastCalculation.test.mjs",
+        "apps/server/test/vcrComposition.test.mjs"
+      ],
+      "remaining": [
+        "Full hosted production deployment, real partner prediction service and prospective clinical validation are outside this isolated branch acceptance."
+      ]
+    }
+  ]
+}

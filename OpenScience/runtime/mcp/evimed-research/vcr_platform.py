@@ -62,12 +62,12 @@ import public_sources
 READ_WHATS = (
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
     "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
-    "trial_registry_record", "pack", "library", "model_assessments",
+    "trial_registry_record", "pack", "library", "model_assessments", "longitudinal",
 )
 WRITE_WHATS = (
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
     "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
-    "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment",
+    "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment", "history", "forecast_design",
 )
 # The engine's job kinds, in the domain's order (`VCR_JOB_KINDS` in
 # `packages/domain/src/vcrVocabulary.mjs`): the 24 of the first release, then the
@@ -82,6 +82,7 @@ JOB_KINDS = (
     "weighted_cox_comparator", "maic_time_to_event_comparator", "aipw_comparator", "covariate_set_comparator",
     # robustness methods (2026-10-04)
     "negative_control_comparator", "tipping_point", "prognostic_adjustment_comparator",
+    "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
 POOLING_CALIBRES = ("closest", "overall", "next_closest")
@@ -632,7 +633,7 @@ def _job_answer(data: dict, action: str) -> dict:
             "summary": "Job %s is %s%s." % (job_id, state, where),
             "data": data,
             "warnings": [],
-            "next_actions": ["Call again with action status and this jobId; do other work while it runs."],
+            "next_actions": ["Read status when progress changes. If it remains queued or unchanged, continue independent work and report it as pending; the platform worker owns execution. Avoid repeated unchanged polling in the same turn."],
         }
     if state == "failed":
         error = data.get("error") if isinstance(data.get("error"), dict) else {}

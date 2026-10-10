@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "providers": [
+    {
+      "id": "partner-forecast",
+      "name": "Partner endpoint forecast",
+      "enabled": false,
+      "protocol": "evimed-event-history-v1",
+      "url": "https://forecast.example.org/v1/predict",
+      "tokenFile": "/run/evimed/vcr-forecast/forecast-token",
+      "model": "partner-model",
+      "version": "pinned-version",
+      "inputCodes": [
+        "HbA1c"
+      ],
+      "endpoints": [
+        "HbA1c"
+      ],
+      "maxHorizonDays": 365,
+      "batchSize": 100,
+      "timeoutMs": 30000,
+      "maxResponseBytes": 8388608,
+      "seedSupported": false,
+      "idempotencySupported": false,
+      "termsReference": "Replace with the actual executed data processing terms",
+      "apiEvidence": "Replace with the actual provider contract and live probe receipt",
+      "trainingOverlap": "unknown",
+      "maxJobCost": null,
+      "costCurrency": null,
+      "estimatedBatchCost": null
+    }
+  ],
+  "notes": [
+    "Configure OPEN_SCIENCE_VCR_FORECAST_PROVIDERS_FILE on the control plane. The example is disabled and is not a real HealthFlux API.",
+    "For the hosted Compose stack, set OPEN_SCIENCE_VCR_FORECAST_HOST_DIR to an operator-owned directory containing providers.json and the token files referenced under /run/evimed/vcr-forecast/. Only open-science-web mounts this directory, read-only; the R service and DSH runtime do not.",
+    "Credentials stay outside the runtime. Numeric patient projections require the existing source grant and destination permission.",
+    "Cost is provider-reported; missing prices and unknown billing outcomes remain unknown. maxJobCost limits subsequent known/estimated-cost batches and is not a hard provider-side billing guarantee.",
+    "A config edit disables or rolls back future batches. Existing predictions retain their actual version.",
+    "The adapter supplies marginal endpoint forecasts; it does not claim a joint generative event-path model."
+  ]
+}

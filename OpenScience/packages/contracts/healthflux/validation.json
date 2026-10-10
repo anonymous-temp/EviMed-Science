@@ -1,0 +1,407 @@
+{
+  "schema": 1,
+  "recordedAt": "2026-10-10T11:58:45.520298+00:00",
+  "branch": "codex/vcr-longitudinal-integration-20261010",
+  "baseCommit": "3561e64bd43a850d566b4010e67d8bf93a4c8990",
+  "scope": "Isolated branch engineering acceptance; no production merge, deployment or clinical qualification.",
+  "checks": [
+    {
+      "name": "domain regression",
+      "passed": 861,
+      "failed": 0,
+      "log": "vcr-long-domain-verified.log",
+      "note": "Full domain suite before final additive baseline comparison metadata; focused tests below cover that final delta."
+    },
+    {
+      "name": "final longitudinal arithmetic",
+      "passed": 10,
+      "failed": 0,
+      "log": "vcr-long-domain-focused-final.log"
+    },
+    {
+      "name": "VCR server regression with PostgreSQL",
+      "passed": 1004,
+      "failed": 0,
+      "skipped": 16,
+      "log": "vcr-long-vcr-verified.log",
+      "note": "R environment absent in this broad run. Later tests below exercise real R and the final projection/provenance changes."
+    },
+    {
+      "name": "final data plane, composition, forecast provider and worker regressions",
+      "passed": 111,
+      "failed": 0,
+      "log": "vcr-long-final-integration.log"
+    },
+    {
+      "name": "MCP research",
+      "passed": 899,
+      "failed": 0,
+      "skipped": 1,
+      "log": "vcr-long-mcp-final.log"
+    },
+    {
+      "name": "MCP memory",
+      "passed": 9,
+      "failed": 0,
+      "log": "vcr-long-mcp-final.log"
+    },
+    {
+      "name": "final VCR MCP after polling guidance",
+      "passed": 37,
+      "failed": 0,
+      "log": "vcr-long-mcp-focused-final.log"
+    },
+    {
+      "name": "VCR frontend",
+      "passed": 269,
+      "failed": 0,
+      "files": 19,
+      "log": "vcr-long-ui-verified.log"
+    },
+    {
+      "name": "all-web initial attempt",
+      "passed": 2267,
+      "failed": 5,
+      "log": "vcr-long-web-final.log",
+      "note": "Four existing intake tests timed out under concurrent load; one result-inspector asynchronous assertion raced. No unrelated frontend source was changed."
+    },
+    {
+      "name": "affected web files rerun with one worker",
+      "passed": 45,
+      "failed": 0,
+      "log": "vcr-long-web-retry.log"
+    },
+    {
+      "name": "web production build",
+      "status": "passed",
+      "log": "vcr-long-build.log"
+    },
+    {
+      "name": "real R T0 study chain",
+      "passed": 1,
+      "failed": 0,
+      "log": "vcr-long-r-seam.log",
+      "note": "This log also records the old method-count assertion failure; its corrected R/control-plane distinction passes in the next check."
+    },
+    {
+      "name": "real R method and receipt contract after distinction",
+      "passed": 1,
+      "failed": 0,
+      "log": "vcr-long-r-health-final.log"
+    },
+    {
+      "name": "R design numerical references",
+      "passed": 5,
+      "failed": 0,
+      "log": "vcr-long-r-reference.log"
+    },
+    {
+      "name": "R PROCOVA numerical references",
+      "passed": 2,
+      "failed": 0,
+      "log": "vcr-long-r-procova.log"
+    },
+    {
+      "name": "server types and lint",
+      "status": "passed",
+      "logs": [
+        "vcr-long-server-types-verified.log",
+        "vcr-long-server-lint-verified.log"
+      ]
+    },
+    {
+      "name": "domain types and lint",
+      "status": "passed",
+      "logs": [
+        "vcr-long-domain-type-verified.log",
+        "vcr-long-domain-lint-verified.log"
+      ]
+    },
+    {
+      "name": "preflight copy agreement",
+      "passed": 2,
+      "failed": 0,
+      "log": "vcr-long-preflight-final.log"
+    },
+    {
+      "name": "release audit harness",
+      "passed": 42,
+      "failed": 0,
+      "log": "vcr-long-release-audit.log"
+    },
+    {
+      "name": "capability manifests, skill packages, skill vocabulary and credential audit",
+      "status": "passed",
+      "logs": [
+        "vcr-long-capabilities-final.log",
+        "vcr-long-skills-final.log",
+        "vcr-long-vocabulary-final.log",
+        "vcr-long-secrets-final.log"
+      ]
+    }
+  ],
+  "native": {
+    "executable": "0.1.7-rc.2",
+    "observedModels": [
+      "deepseek-flash"
+    ],
+    "dataClass": "authored_synthetic",
+    "subjects": 200,
+    "turns": 7,
+    "checks": {
+      "historyCreated": true,
+      "evaluationCreated": true,
+      "designQueued": true,
+      "prognosticQueued": true,
+      "fallbackComparisonQueued": true,
+      "allTurnsExited": true
+    },
+    "providerRequests": 26,
+    "privacyCanaryLeaks": 0,
+    "latencyMs": [
+      11326,
+      10980,
+      9616,
+      10236,
+      10515,
+      11224,
+      11150
+    ],
+    "ledgerCost": {
+      "amount": 0.07925164,
+      "currency": "CNY",
+      "meaning": "Platform usage ledger; not an independently reconciled vendor invoice."
+    },
+    "testedSourceManifest": "native-9/manifest.json",
+    "receipt": "native-9/observations.json",
+    "manualReview": {
+      "baselineDirection": "Correct in final metric reading and final continuation response.",
+      "limitation": "Generative prose is not clinically qualified. One response used the word significant while also stating the comparison is not a significance test; the deterministic output makes no significance claim."
+    },
+    "designValidation": "Native session submitted analytic and PROCOVA jobs. R execution is covered separately by numeric references and the T0 engine chain; the native session did not run those queued R jobs."
+  },
+  "iterations": [
+    {
+      "attempt": 1,
+      "outcome": "Exposed forecast-to-design input binding and generic error reporting; corrected."
+    },
+    {
+      "attempt": 3,
+      "outcome": "Seven functional turns passed with the original synthetic fixture."
+    },
+    {
+      "attempt": 4,
+      "outcome": "Continuation after missing provider passed; small heldout display and empty legacy measures confused prose."
+    },
+    {
+      "attempt": 5,
+      "outcome": "Agent mistook original subject-column metadata for the generated computation key; clarified projection and added automatic declared-key mapping."
+    },
+    {
+      "attempt": 6,
+      "outcome": "Repeated unchanged queue polling exhausted the native test turn; polling guidance and timeout recording corrected, planning-only fixture scope made explicit."
+    },
+    {
+      "attempt": 7,
+      "outcome": "An optional profile job was ahead of evaluation; the harness previously advanced only one lease sweep. Controlled worker sweeps corrected."
+    },
+    {
+      "attempt": 8,
+      "outcome": "All functional checks passed; narrative contradicted the persistence error comparison. Added deterministic point-estimate comparison directions."
+    },
+    {
+      "attempt": 9,
+      "outcome": "All seven functional turns passed; manual review confirmed corrected comparison directions and continued work after missing provider."
+    }
+  ],
+  "visual": {
+    "screens": [
+      "vcr-long-ui-desktop.png",
+      "vcr-long-ui-mobile.png",
+      "vcr-long-ui-dark.png"
+    ],
+    "overflow": false,
+    "browserErrors": 0,
+    "mechanicalDetectorFindings": 0
+  },
+  "externalPrerequisites": [
+    "Partner endpoint, credentials and incremental cursor contract for a live incremental data feed.",
+    "Actual dedicated forecast service, licensed access and provider-specific probe; generic protocol is implemented and tested.",
+    "Rights-cleared real longitudinal outcomes and independent trial benchmarks for clinical validation."
+  ],
+  "artifactDirectory": "/home/coder/workspace/EviMedScience/.evimed-local/acceptance/vcr-longitudinal-20261010",
+  "artifactSha256": {
+    "native-1/01-literature.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-1/01-literature.events.jsonl": "803ce51a4916eced76bad54f88659ff0cb58d17d864b6a11d8116e375c8cc333",
+    "native-1/02-freeze.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-1/02-freeze.events.jsonl": "44ea19cb0f92403c8de981b85af761cff0a328dfc1b0d97565373e64601bc472",
+    "native-1/03-evaluate.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-1/03-evaluate.events.jsonl": "f26a3a52baeb131bf1364af266d06c337ac789e2ff45deb0b7887d02b0a3a499",
+    "native-1/04-read-results.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-1/04-read-results.events.jsonl": "3d324e464636d8344160164a85f716c4a0694e993c80701eaa53380c8833bb12",
+    "native-1/05-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-1/05-design.events.jsonl": "d233d9056e9e2fc85e40aa49d8ce44b53b86841852d2ab7df352b55679f148f2",
+    "native-1/06-unavailable-provider.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-1/06-unavailable-provider.events.jsonl": "20e1fb3793a82d7ce079909b253321e3abfc498b093eb26adc3342399dcd779c",
+    "native-1/manifest.json": "5566592d8c9e86e71c7ecf9e4f8d51463b867847eaa39ca764a7860c83cd0cfb",
+    "native-1/observations.json": "70b5a437b43f7e3c10734e6a5da0c083198a07be1f0deb398f771bb14276b6ed",
+    "native-1/receipts.json": "66fe8809513d40ed08b972a9365479b3e92f942d10215dd3dcc4e37e6e8dc25c",
+    "native-1/run.log": "d04b67f373d16a1d7a65376d936be4d2de171c6e4f5061c6819d786452e909ab",
+    "native-2/01-literature.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-2/01-literature.events.jsonl": "21d681ae97d0485b4437ffb7e2d2ca534807d7b02da250bc9001be32fd30c714",
+    "native-2/02-freeze.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-2/02-freeze.events.jsonl": "008b8db14d25e92d8485ae89f3686f944873331f3768350a71c8cecc6e77e282",
+    "native-2/03-evaluate.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-2/03-evaluate.events.jsonl": "5a36b8f5a085a5d3c57a0c34afd7a3f5509e861c75e1d8fda15381564ff6dd1f",
+    "native-2/04-read-results.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-2/04-read-results.events.jsonl": "665a6e292696472c6935da5367d90e88b947ae5788ea163b7db714236f1db7e3",
+    "native-2/05-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-2/05-design.events.jsonl": "9fc59d8fbe55f9e89f03149558709e056d42d1a354edc8336dd161eb1ed7f356",
+    "native-2/06-unavailable-provider.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-2/06-unavailable-provider.events.jsonl": "677cee622fe2a7faf9a4b4d9c094552a09f851bc6e1ec48d77a1e256e20caa2f",
+    "native-2/manifest.json": "d1c81b23e4ddbe2184036eef7a543e49975ea7d61c65e4afb58510030686718a",
+    "native-2/observations.json": "16000fbf31043359e403c3d9898e9d4f0d0d56d3f1aaba700cc0adff0ba18c15",
+    "native-2/receipts.json": "6ab2673dcb4fe19c07a9399b1f53cc6848bcd1c15a9c9d9fe3a26cdff9e26ed8",
+    "native-2/run.log": "b1d49c77aad7e69a3f1181a6b11e09094dd61a6ed6402bc4bc8404856410141f",
+    "native-3/01-literature.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-3/01-literature.events.jsonl": "de16e5f7717d9ea1928c70755d366e1ae6505ba14a3418d5089468e227f08493",
+    "native-3/02-freeze.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-3/02-freeze.events.jsonl": "66d104d4358dd821cd9a2a65f3d07a85e3b21a6a790be10801763e237ad54d75",
+    "native-3/03-evaluate.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-3/03-evaluate.events.jsonl": "c1063b9239419db003659263538fe7bc2f2a0038ab148c12fa33f9517c6b63d9",
+    "native-3/04-read-results.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-3/04-read-results.events.jsonl": "31bcf1c751aa65e2f83c1b8d2ba848a0bba782cf697649f92dd340337621d9da",
+    "native-3/05-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-3/05-design.events.jsonl": "d12d2fc5abfa6fe6fa8184eddfd7cef207b09063cbe2af16bc4f92ed1183d289",
+    "native-3/06-prognostic-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-3/06-prognostic-design.events.jsonl": "7cb6e36e47188526e19e3742287847461e234cda02c565b8d1697a016acc9d17",
+    "native-3/07-unavailable-provider.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-3/07-unavailable-provider.events.jsonl": "6d1cfd961144a82d8f5604c22c69a828e71fa416fa54c3cee099b8359a4c102e",
+    "native-3/manifest.json": "5174f060b803a403c763ef79aaaa1cc76acfbd2a0652205a28d2c9fba12be7c5",
+    "native-3/observations.json": "2539b800f32116664c3f10ed264d0d39a957111b3c14a06f89b9eb548c97bbb2",
+    "native-3/receipts.json": "2f56e282ceea1a0df5368c2cafee9fbe6bc9446ee60bc941029fc1ebc0cfbe8a",
+    "native-3/run.log": "c89238e4e6c146fa21b6a8f86f837591fb972ab06212a414dd4d874d46590997",
+    "native-4/01-literature.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-4/01-literature.events.jsonl": "0c870d36e9ca1571daa2f25b4efab84ec2cd393551b4433f411fe211975dd88b",
+    "native-4/02-freeze.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-4/02-freeze.events.jsonl": "ae7a4b0413e2b5d659bf4ced82870b9a931fb3ca4522a2f3b27944c9320108c0",
+    "native-4/03-evaluate.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-4/03-evaluate.events.jsonl": "4970f77d337234751e1df2606930f93bfc35a29768b4083cf53bd25771accdbe",
+    "native-4/04-read-results.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-4/04-read-results.events.jsonl": "8a92795aa17191389ba86c101010960dce69ea3ed34d344e1453f0d5318d2546",
+    "native-4/05-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-4/05-design.events.jsonl": "70dc8034d3626d91249feb99202141688044aabd5aef0002da25d96a9a134e06",
+    "native-4/06-prognostic-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-4/06-prognostic-design.events.jsonl": "3afaadc076c5a7f22d39d216156153ba55a3185e86de06c1a913d7b5299f4104",
+    "native-4/07-unavailable-provider.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-4/07-unavailable-provider.events.jsonl": "69e284b216491d71f121c68a872174d4cb037f167af92509677f87bb016e95b9",
+    "native-4/manifest.json": "12e00e9ac61f5d98aad3799f0f6648c8bd484c0a083fad560caf7bb3f898b494",
+    "native-4/observations.json": "df689a954a6560dd56873b6be36542cc180ff67b7c1b02915863c7fbb956f914",
+    "native-4/receipts.json": "16c7d512a485df8c1d24c212fa48f0d857339869c3f4a25c7657db235afac970",
+    "native-4/run.log": "d7f5b50c7e06ba522c5057c5aee17d48f48ca54401f182b80c98df2ace3651f1",
+    "native-5/01-literature.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-5/01-literature.events.jsonl": "0d02fc3a31e884f64b3735b193834dbf6406f76e105b8efd81714d6a3754a956",
+    "native-5/02-freeze.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-5/02-freeze.events.jsonl": "299eaff3046f8dd2110a1887663089c6cd821194a64f54a4b7f5bd234c003b89",
+    "native-5/manifest.json": "d18c1adc2337b4824b19f24b7bcb4ecdef80df6a78a6dd9a9f41cd424c6520e7",
+    "native-5/receipts.json": "3e216bef1b5c54234dd475a93d71d14ebe717f33d176d6277af4f5f27e6685b7",
+    "native-5/run.log": "2fb0871ca6dd0496bab09e2decdb96ff1eca886a1f4bf288293953fc181b8b14",
+    "native-6/01-literature.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-6/01-literature.events.jsonl": "9fe7083cd04bcbbb22803a444eb34d671e8bff915fac76794723ba134051a033",
+    "native-6/02-freeze.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-6/02-freeze.events.jsonl": "2b780e48421ba0522581feba66f7ad6f9cc68b406bc6a98b04d046c2649d81ce",
+    "native-6/03-evaluate.diagnostics.log": "2fad1a4467bf5cb4583525dbe14dc0726949d4dcf388dc391c91cbc2e7ca889b",
+    "native-6/03-evaluate.events.jsonl": "88171b3f7531e75c88d5cf47ecf72320a6ec08772bb3e0e7b60be2776249f445",
+    "native-6/04-read-results.diagnostics.log": "2fad1a4467bf5cb4583525dbe14dc0726949d4dcf388dc391c91cbc2e7ca889b",
+    "native-6/04-read-results.events.jsonl": "8815a5ccf6f26618467d6dac9d6974e636cfb0532ca5d2d3f60fc001013c5584",
+    "native-6/05-design.diagnostics.log": "2fad1a4467bf5cb4583525dbe14dc0726949d4dcf388dc391c91cbc2e7ca889b",
+    "native-6/05-design.events.jsonl": "6982e43298743579dd6ed28a9812e86aa41f5c9c74244e2156c438301258d4b6",
+    "native-6/manifest.json": "b6d6f38861a825458b472722782d34ee441e89c52d0b63ee41500340e40d0acf",
+    "native-6/receipts.json": "19b2e7c7402104f7c5b77769184ab307d35d6a4e9a665c7274d0d288fdacd641",
+    "native-6/run.log": "5316413c095f3534534fad8cba04ac5e5f7e5a6d055846074933178e0c361e65",
+    "native-7/01-literature.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-7/01-literature.events.jsonl": "a887a21542fd1610cb57d7c03bfa7fc7bbd305f8f93d9b1f1e51d2560e6e0f53",
+    "native-7/02-freeze.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-7/02-freeze.events.jsonl": "4ec7959f2021355bb3226b3f2df51c67578ba084e55556a091723da90b139283",
+    "native-7/03-evaluate.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-7/03-evaluate.events.jsonl": "c4c704b196d77da03d41da0fb630d94930537aab94e80d2947fab0e80526ef62",
+    "native-7/04-read-results.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-7/04-read-results.events.jsonl": "835c9ce7c53d056c23d0923b8893a4c07a68f3f0d5f02d0c9f6e32e9474ce478",
+    "native-7/05-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-7/05-design.events.jsonl": "f3c6ed48881b1aadec6c2ef5371d713419569753f5fd0d19e2b92793c3d7bcb1",
+    "native-7/manifest.json": "d1433bcf677e3517b22f75accddfc75183437a4d195ffe412a00aa21bc30acb7",
+    "native-7/receipts.json": "a6080e494dfd1ac7d5ef84939497c4abcc7e83cdb29212411ad28a41dbabc551",
+    "native-7/run.log": "1326a74110d63949292d584ae6f2d2740de37129b97ebded926b0c884192fc65",
+    "native-8/01-literature.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-8/01-literature.events.jsonl": "b8839b28932b002e291558e197348b8a30e41745f34585f49ae2633de3930766",
+    "native-8/02-freeze.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-8/02-freeze.events.jsonl": "8bee93e3c55ecb503fce14907289765a20b3033e3c896a056efbbe5becedee26",
+    "native-8/03-evaluate.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-8/03-evaluate.events.jsonl": "53c4880df1059c3ba3c60650dcef8a9a0ed053fad3f423a710bf2105ce9e8504",
+    "native-8/04-read-results.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-8/04-read-results.events.jsonl": "83798b5b821a2bba571881176e4cfad50c911b8e5c965fce6a21e8cd7a0ff9ff",
+    "native-8/05-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-8/05-design.events.jsonl": "311f674b238757ea595f1518a9af734feedab469d19a013c8ebf8ab60eb55e79",
+    "native-8/06-prognostic-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-8/06-prognostic-design.events.jsonl": "1e069d0d384fe3eaf77e7f34a7942b206bd11a0987eb2a426a1b99fe4a321116",
+    "native-8/07-unavailable-provider.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-8/07-unavailable-provider.events.jsonl": "ebd16bd0f54871688a5cd0866b1d254c865c46e67b88e2cd3b6d9a22db9ed3ff",
+    "native-8/manifest.json": "de35dee106bf31490f3c4a2dbd124533729b59c8c5addcad981d6fdc571ef90f",
+    "native-8/observations.json": "30cdd6355824f718197ff2fa736796ea4590cd99abaeddde7b27836779e02e79",
+    "native-8/receipts.json": "01b8843d607c2eb5336e044e9fd4f80220dd6e8147e82922e105bc7f9d47be22",
+    "native-8/run.log": "b4fa922b407fe5d00549c8b7acaca2519bed59f111b3a959a8a1017b6935fcc1",
+    "native-9/01-literature.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-9/01-literature.events.jsonl": "b64da24406e744fa87924777acf379eea75d6bb6b8e5db548db221c08e1e9834",
+    "native-9/02-freeze.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-9/02-freeze.events.jsonl": "2811dd99432e3f43d74547ecc206234defd430c1c2461142ac74f512c72f77b6",
+    "native-9/03-evaluate.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-9/03-evaluate.events.jsonl": "8f920fd01c2aab0bc3d37270742341ddd8def45d3ef39833a17cb9e9d6f9a800",
+    "native-9/04-read-results.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-9/04-read-results.events.jsonl": "e2dde5fa5a53296cbaff5562ddc8de03a1c55adcb68cbe17a482513e8ca1919d",
+    "native-9/05-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-9/05-design.events.jsonl": "cf2e965642b5209f0e1ad36c6207931628757971a62102b12fdbae8e86705fad",
+    "native-9/06-prognostic-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-9/06-prognostic-design.events.jsonl": "d99ee33ba50501ee1583c33085317243da32d32ed586c1735a98903793a837d2",
+    "native-9/07-unavailable-provider.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-9/07-unavailable-provider.events.jsonl": "6d283a104c7c19026fc6b120821729807fb7290bbdd441300f7b9ca7293960bf",
+    "native-9/manifest.json": "17b89ef635abf7ff307a51e2ae75bd1be8ca1e7fcae1c1f08db41fe79dcfdc32",
+    "native-9/observations.json": "b5cc6e2aa236913f922c6f8f0b09e5c7b93406daed8f861594f4f6a0c0abdbc8",
+    "native-9/receipts.json": "6dfc303159aa73b7e947fedcfe782faa1915bac1ed1416c868b6434ed17308d3",
+    "native-9/run.log": "c2b885ab825653f42a749a9f0b123c14ed162488d55cf09763647ce4ffdfcd5a",
+    "vcr-long-build.log": "b9b277df6d4ded5eb2e9f2943df61d87b7f0a3087e811bf73229a765192dbba8",
+    "vcr-long-capabilities-final.log": "78f94cd7440f0280e71d85e72360d803c165454e552622ba4a028223602af1a6",
+    "vcr-long-design-detect.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "vcr-long-domain-focused-final.log": "5090c2f3e2369c5f68f1387cf9fa5ee3e4941c61da9b34ee7c885436b20946a6",
+    "vcr-long-domain-lint-verified.log": "75dc9730bae5858aa3a9845a0e389254efed16ec75d7f1457249884301eedbc8",
+    "vcr-long-domain-type-verified.log": "9e1441865f0eef8c383ea8d3cdeded90a3a0ee8dd10d6c64f8749200693d3112",
+    "vcr-long-domain-verified.log": "44a1c0ad662c77ec9d9325a403a13be9966e27e0bb26fa02e78979a4fa06e256",
+    "vcr-long-final-integration.log": "221e5c9e9ef1ebef8984c29b3acdf46b202a6f639fb0a3709e02750cd8136776",
+    "vcr-long-mcp-final.log": "77b8ebe5ad0cb37ed10e3e97d703a87c4c8786702b6836bed68bb9c35bcd09de",
+    "vcr-long-mcp-focused-final.log": "fc7651322790cd1643a2d2afefbc3f4accb547252ed722e933306b89958af00b",
+    "vcr-long-preflight-final.log": "67484627ae4f2a113b3c605279af505a49a9d2415b3af968f3954938c2a0dbf8",
+    "vcr-long-r-health-final.log": "13020fc37e4f601b842e66cf54fbd7697a9195886fe019e74214e63ff2e6bb3b",
+    "vcr-long-r-procova.log": "5bc8c74a21d94e47896021d5742097c991fe3996b550da62a0b7bf7e0826e3d2",
+    "vcr-long-r-reference.log": "ccf8a0acda840bb4878084419afa79681dd19e3b94b0fddde6c417e26f43853d",
+    "vcr-long-r-seam.log": "75a73f88b5e603cb8b4f38f20f300eb9a1d23925baefb33dc13d42ab6debceb5",
+    "vcr-long-release-audit.log": "a504a419a465d8ca5074771720031d6d7fb98cfed369a38b18e563612a7a2104",
+    "vcr-long-secrets-final.log": "e5feb70c7b06af8d9776628cd8e86d260a3b46760f7725ef307fdd2b8e571c8c",
+    "vcr-long-server-lint-verified.log": "f39e44957db2219b2effdc9c67da62b3bbdf541a7f403367a44ecc7bbb4eb6cf",
+    "vcr-long-server-types-verified.log": "b713b6db4aa96fb9f30f7a3ee1dd0798137f413bf05f099896ffa1c784d3b364",
+    "vcr-long-skills-final.log": "4a43cc44e6a51f8c5695607410f3adc9634bb7c7b5aaff3515991667db273907",
+    "vcr-long-ui-dark.png": "a100d02d4550ee677ffe2a65c3beed16f5a02c5aba27ba605769ad4c08a33e6a",
+    "vcr-long-ui-desktop.png": "309d38d840dea93bd4b21808d05f4176727c55cfd7d48e2cb27770440dc64cad",
+    "vcr-long-ui-mobile.png": "c6cc7dabe36547c27de280bafb6fd2fc8c2dc2cc2b09c9e2ced481276d0d7247",
+    "vcr-long-ui-verified.log": "34cf7a00142fb432d7bb9aae88d23e7c3c2e49999742bff719709dddf6518f9b",
+    "vcr-long-vcr-verified.log": "b724a8a480b37a7f2208142b23059687304b93857cbc5c06c259c30060ab0441",
+    "vcr-long-vocabulary-final.log": "77efe399fd437fec2c83224cd089af22fe60e9e262b8aa5370785229ca3b6538",
+    "vcr-long-web-final.log": "fc94960abd3091e49f8fa5345853b1ee38514f06607b5b842a8aed21f9502366",
+    "vcr-long-web-retry.log": "ee4259cab8a07679308099b0a4ca65f262fc3047e44fd0faa4406eff811ea446"
+  },
+  "limits": [
+    "No local model weights, model training or GPU serving.",
+    "Endpoint-by-horizon marginals do not constitute joint event-path generation or replication of HealthFlux.",
+    "Scenario contrasts are not identified treatment effects.",
+    "Model and parameter uncertainty stay unestimated unless supplied with an appropriate external distribution.",
+    "Full hosted deployment and prospective clinical performance are not claimed."
+  ]
+}
