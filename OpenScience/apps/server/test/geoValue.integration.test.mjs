@@ -125,6 +125,26 @@ test("population change versions a claim; retraction never resurrects an older a
   assert.equal((await measure.projectContext(project.id, roundId)).claims[0].version, 2);
 });
 
+test("a round freezes the scope, the summary and the findings of the profile, not its research reports (D-02)", options, async () => {
+  const project = await fresh();
+  const excerpt = "EXCERPT-OF-A-LONG-REPORT ".repeat(240);
+  await store.writeValue("alice", project.id, { scope: { population: "adults" }, summary: "Benefit uncertain", findings: [{ id: "f1", statement: "Benefit uncertain" }],
+    landscape: [{ id: "l1", statement: "Three alternatives" }], lessons: [{ id: "n1", text: "A lesson" }],
+    researchResults: [1, 2, 3, 4].map((index) => ({ id: `run:${index}:pack`, capabilityId: "comprehensive-drug-evaluation", materials: [{ path: `pack/${index}.md`, excerpt }] })) });
+  const measure = new GeoMeasureStore(database);
+  const context = await measure.projectContext(project.id);
+  assert.equal(context.value.version, 1);
+  assert.deepEqual(Object.keys(context.value.data), ["scope", "summary", "findings"]);
+  assert.deepEqual(context.value.data.findings, [{ id: "f1", statement: "Benefit uncertain" }]);
+  assert.ok(JSON.stringify(context.value).length < 500, "the basis a round freezes does not grow with the reports");
+  // A round frozen before this change keeps what it froze, whatever it holds.
+  const roundId = `gr_${randomUUID()}`;
+  const old = { version: 1, data: { findings: [{ id: "f1", statement: "Frozen" }], researchResults: [{ id: "old", materials: [{ excerpt }] }] } };
+  await database.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,ref) VALUES ($1,'alice',$2,'baseline',$3::jsonb)`,
+    [roundId, project.id, JSON.stringify({ evaluationBasis: { claims: [], value: old, careFlags: [] } })]);
+  assert.deepEqual((await measure.projectContext(project.id, roundId)).value, old);
+});
+
 test("source replacement marks only linked work and keeps earlier conclusions readable", options, async () => {
   const project = await fresh();
   await store.writeValue("alice", project.id, { findings: [{ id: "f1", statement: "Old source conclusion", sources: [{ sourceId: "src-old" }] },

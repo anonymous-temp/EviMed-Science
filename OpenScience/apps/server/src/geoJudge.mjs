@@ -1,4 +1,4 @@
-import { GEO_VALUE_COVERAGE_STATUSES, geoValueContext, geoValueList } from "@evimed/domain";
+import { GEO_VALUE_COVERAGE_STATUSES, geoValueJudged, geoValueList } from "@evimed/domain";
 /**
  * The model's reading of a measured answer, and code's check of it (build
  * spec §5 "Parse + judge", plan §4.3).
@@ -318,7 +318,8 @@ export function buildJudgeInput(input) {
     claims: claims.map((claim) => ({ id: claim.alias, statement: claim.statement, quote: String(claim.quote ?? "").slice(0, CLAIM_QUOTE_CHARS),
       label: labelClaim(claim), population: claim.population ?? null, elements: claim.elements ?? {}, inLabel: claim.inLabel ?? null,
       evidenceLevel: claim.evidenceLevel ?? null, validUntil: claim.validUntil ?? null })),
-    value: { ...geoValueContext(input.value?.data), findings: geoValueContext(input.value?.data).findings.filter((entry) => entry?.id).slice(0, 60) },
+    // The scope, the summary and the findings: research reports and the rest of the profile are not what an answer is judged against.
+    value: geoValueJudged(input.value?.data),
     redFlags: input.careFlags.map((flag) => ({ id: flag.id, text: flag.text, node: flag.node ?? null })),
   };
   const { body } = stripPageChrome(input.answer);

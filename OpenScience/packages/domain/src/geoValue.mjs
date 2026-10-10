@@ -101,6 +101,23 @@ export function geoValueContext(profile, filter = {}) {
   }
 }
 
+/** The findings a measurement judge is shown, and a round freezes, at most. */
+export const GEO_VALUE_JUDGED_FINDINGS = 60
+
+/**
+ * What the measurement judge is shown of a profile, and what a round freezes of it:
+ * the scope, the summary and the findings it can answer for by id. The rest of a
+ * profile (research reports with their excerpts, landscape, decisions, lessons,
+ * source changes) is the researcher's working material: it grows with every run,
+ * the judge does not read it, and a prompt prefix and a frozen basis that carry it
+ * grow without bound (D-02: four imported runs made a 76 KB prefix of 42 findings).
+ * @param {Record<string, any> | null} profile
+ */
+export function geoValueJudged(profile) {
+  const { scope, summary, findings } = geoValueContext(profile)
+  return { scope, summary, findings: findings.filter((entry) => entry?.id).slice(0, GEO_VALUE_JUDGED_FINDINGS) }
+}
+
 /**
  * Only explicit links establish an impact. A changed source calls for a look;
  * it does not make every result wrong or prevent further work.

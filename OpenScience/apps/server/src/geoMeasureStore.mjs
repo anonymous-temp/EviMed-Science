@@ -1,6 +1,6 @@
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { geoInterventionIdentity } from "./moduleEvolutionAdapters.mjs";
-import { geoValueContext } from "@evimed/domain";
+import { geoValueJudged } from "@evimed/domain";
 /**
  * SQL for 「循证 GEO」's measurement tables (build spec §2): rounds, probe
  * jobs, snapshots, facts, errors and metrics, plus the reads of the content
@@ -290,7 +290,8 @@ export class GeoMeasureStore {
     return {
       project,
       judgeProduct: frozen?.product ?? project.product, judgeCompetitors: frozen?.competitors ?? project.competitors,
-      value: frozen?.value ?? { version: Number(profile.rows[0]?.version ?? 0), data: geoValueContext(profile.rows[0]?.data) },
+      // What the judge reads of the profile (scope, summary, findings) and nothing it does not: the round freezes this, row by row.
+      value: frozen?.value ?? { version: Number(profile.rows[0]?.version ?? 0), data: geoValueJudged(profile.rows[0]?.data) },
       claims: frozen?.claims ?? (carded.length ? carded : claimRows),
       careFlags: frozen?.careFlags ?? careFlags,
       owned: {

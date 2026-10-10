@@ -78,6 +78,55 @@ test("failed specialist runs keep usable reports, optional value JSON is not req
   assert.match(result.materials[0].excerpt, /not incidence/);
 });
 
+test("a GEO capability's own deliverables are never imported as research; its geo-value.json still is (D-02)", async () => {
+  // Four imported programme runs used to put 42 findings and 76 KB of excerpts into every judge prompt.
+  for (const capability of ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"]) {
+    const writes = [], reads = [];
+    await importGeoValue({ store: { writeValue: async (...args) => writes.push(args) }, project: { userId: "u", workspaceDir: "/work" },
+      geoProject: { id: "g" }, run: { id: `run-${capability}`, status: "completed", deliverables: [{ id: "pack", capability }] },
+      capabilityOutputs: async () => ["claims.json", "question-map.json", "revision-notes.md", "strategy.json"],
+      readFile: async (_root, path) => {
+        reads.push(path);
+        if (path.endsWith("geo-value.json")) return Buffer.from(JSON.stringify({ findings: [{ id: "f1", statement: "Benefit is uncertain in adults" }] }));
+        return Buffer.from("An excerpt of the programme's own deliverable. ".repeat(200));
+      }, report: () => {} });
+    assert.deepEqual(reads, ["deliverables/pack/geo-value.json"], `${capability}: only the value file is read`);
+    assert.equal(writes.length, 1, capability);
+    assert.deepEqual(Object.keys(writes[0][2]), ["findings"], `${capability}: no researchResults`);
+  }
+  // Nothing written when the GEO run left no value file.
+  const none = [];
+  await importGeoValue({ store: { writeValue: async (...args) => none.push(args) }, project: { userId: "u", workspaceDir: "/work" }, geoProject: { id: "g" },
+    run: { id: "run-quiet", status: "completed", deliverables: [{ id: "pack", capability: "geo-content" }] },
+    readFile: async (_root, path) => { if (path.endsWith("geo-value.json")) throw new Error("Not produced"); return Buffer.from("article text"); }, report: () => {} });
+  assert.deepEqual(none, []);
+  // A specialist's report, on the other hand, is the research the next turn reuses.
+  const research = [];
+  await importGeoValue({ store: { writeValue: async (...args) => research.push(args) }, project: { userId: "u", workspaceDir: "/work" }, geoProject: { id: "g" },
+    run: { id: "run-research", status: "completed", deliverables: [{ id: "review", capability: "comprehensive-drug-evaluation" }] },
+    readFile: async (_root, path) => { if (path.endsWith("report.md")) return Buffer.from("A usable synthesis."); throw new Error("Not produced"); }, report: () => {} });
+  assert.equal(research[0][2].researchResults[0].capabilityId, "comprehensive-drug-evaluation");
+});
+
+test("the judge is shown the scope, the summary and the findings of a profile, not its research reports or the rest (D-02)", () => {
+  const excerpt = "EXCERPT-OF-A-LONG-REPORT ".repeat(240);
+  const data = { scope: { population: "adults" }, summary: "Benefit uncertain", findings: [{ id: "f1", statement: "Benefit uncertain" }, { statement: "no id" }],
+    researchResults: [{ id: "run:1:a", materials: [{ path: "a/report.md", excerpt }] }, { id: "run:2:a", materials: [{ path: "b/report.md", excerpt }] }],
+    landscape: [{ id: "l1", statement: "Three alternatives" }], decisions: [{ id: "d1" }], lessons: [{ id: "n1", text: "LESSON" }], sourceChanges: [{ id: "c1" }] };
+  const input = { owner: { userId: "u", projectId: "p" }, product: {}, competitors: [], careFlags: [], claims: [], value: { version: 3, data },
+    question: { text: "Is it appropriate for me?" }, answer: "The benefit remains uncertain." };
+  const built = buildJudgeInput(input);
+  const project = JSON.parse(built.prefix.slice(built.prefix.indexOf("{")));
+  assert.deepEqual(Object.keys(project.value), ["scope", "summary", "findings"]);
+  assert.deepEqual(project.value.findings, [{ id: "f1", statement: "Benefit uncertain" }], "only a finding the judge can answer for by id");
+  assert.equal(built.prefix.includes("EXCERPT-OF-A-LONG-REPORT") || built.prefix.includes("LESSON"), false);
+  assert.ok(built.prefix.length < 2_000, `the prefix does not grow with the research reports (${built.prefix.length})`);
+  assert.deepEqual(built.valueFindings.map((entry) => entry.id), ["f1"]);
+  // At most sixty findings, as before.
+  const many = buildJudgeInput({ ...input, value: { version: 3, data: { findings: Array.from({ length: 80 }, (_, index) => ({ id: `f${index}`, statement: "x" })) } } });
+  assert.equal(many.valueFindings.length, 60);
+});
+
 test("declared specialist artifacts are reusable while unsafe paths remain outside the import", async () => {
   const writes = [], reads = [];
   await importGeoValue({ store: { writeValue: async (...args) => writes.push(args) },

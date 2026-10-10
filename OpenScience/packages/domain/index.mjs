@@ -41,6 +41,7 @@ export {
   GEO_RESEARCH_CAPABILITIES,
   GEO_VALUE_COLLECTIONS,
   GEO_VALUE_COVERAGE_STATUSES,
+  GEO_VALUE_JUDGED_FINDINGS,
   geoValueObject,
   geoValueCanonical,
   mergeGeoValue,
@@ -48,6 +49,7 @@ export {
   geoValueText,
   geoValueActive,
   geoValueContext,
+  geoValueJudged,
   geoValueImpacts,
   summarizeGeoValueCoverage,
 } from './src/geoValue.mjs'
