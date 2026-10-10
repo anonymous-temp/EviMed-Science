@@ -149,7 +149,7 @@ export function buildRecalculationCard({ paper, items, verdict, adjudication, re
 
   const lead = claims.find((claim) => claim.claimType === "calculated") ?? claims[0];
   const adjudicationLine = verdict === "not_reproduced_adjudicated" && adjudication
-    ? `裁定意见：${adjudication.verdict === "paper_error" ? "差异来自论文本身的错误" : "差异在合理范围内"}（另一模型家族复核，代码验证，证明哈希 ${adjudication.verificationProof.proofHash.slice(0, 12)}）。` : "";
+    ? `裁定意见：${adjudication.verdict === "paper_error" ? "差异来自论文本身的错误" : "差异在合理范围内"}。` : "";
   const answer = `${label}：${lead.claim}`.slice(0, 600);
   const generated = at.toISOString();
   const card = {
@@ -159,12 +159,12 @@ export function buildRecalculationCard({ paper, items, verdict, adjudication, re
     body: [
       "## 结论", `${label}。`, ...(adjudicationLine ? [adjudicationLine] : []),
       "", "## 论文报告与平台复算", ...claims.map((claim, position) => `${position + 1}. ${claim.claim}`),
-      "", "## 方法", `平台独立复算：${receipt.method}；回执 ${receipt.id}。容差按论文印出数字的精度计算，与评测打分用的是同一规则。`,
+      "", "## 方法", `平台独立复算：${receipt.method}。容差按论文印出数字的精度计算。`,
     ].join("\n"),
     sources: [source, receiptSource],
     limitations: ["这是对一篇已发表论文的独立复算，不是对其结论是否正确的评价。", adjudicationLine].filter(Boolean).join("\n"),
     provenance: `平台复算核验：${proofId}`,
-    content: { question: `平台能否独立复现《${paper.title}》报告的数值？`, answer, context: `复算由平台的循证进化模块完成，每个数字都来自复算回执。` },
+    content: { question: `平台能否独立复现《${paper.title}》报告的数值？`, answer },
     claims,
     producer: { kind: "platform", name: EVIDENCE_PLATFORM_PRODUCER_NAME, relation: "none" },
     originality: "recalculation",

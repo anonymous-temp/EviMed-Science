@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 import { Drawer } from "@/components/ui/Drawer";
 import { StatTile } from "@/components/ui/StatTile";
 import type { VcrValue, VcrValueDetail } from "@/lib/vcrClient";
-import { ReviewChip, SourceTag } from "./VcrMarks";
+import { SourceTag } from "./VcrMarks";
 import { intervalText, isPlaceholder, mcseText, sourceLabel, valueSentence, valueText } from "./vcrText";
 import { vcrTabPath } from "./vcrTabs";
 
@@ -91,7 +91,6 @@ export function VcrValueDrawer({ label, value, onClose }: { label: string; value
           </p>
           <p className="mt-2 flex flex-wrap items-center gap-2">
             <SourceTag source={value.source} />
-            <ReviewChip state={value.review} />
           </p>
           {interval && <p className="mt-2 text-ui text-text-2">{interval}</p>}
           {value.mcse != null && <p className="mt-1 text-caption text-text-3">{`${mcseText(value.mcse)} 为蒙特卡洛标准误`}</p>}
@@ -173,7 +172,6 @@ export function VcrStat({ label, value, note, lead = false, className }: {
       note={(
         <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
           <SourceTag source={value.source} />
-          <ReviewChip state={value.review} />
           {note}
         </span>
       )}

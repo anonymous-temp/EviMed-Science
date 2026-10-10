@@ -244,7 +244,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
         lines = {line.split(":", 1)[0]: line for line in data["keys"]}
         self.assertEqual(lines["accrual.duration"], "accrual.duration: number >=0 (time units); required once accrual is given")
         self.assertIn("accrual.followup: number >=0 (time units)", lines["accrual.followup"])
-        self.assertIn("number >=0 <1 (proportion per 12 time units); optional; default 0", lines["accrual.dropoutAnnual"])
+        self.assertIn("number >=0 <1 (proportion per year); optional; default 0", lines["accrual.dropoutAnnual"])
         self.assertEqual(lines["accrual"], "accrual: object; optional; read only when endpoint.type is time_to_event")
         self.assertNotIn("read only when", lines["accrual.duration"], "a key inside accrual does not repeat accrual's own gate")
         self.assertIn("exactly one of truth.treatmentRate, truth.riskDifference, truth.oddsRatio", " ".join(data["rules"]))
@@ -515,7 +515,7 @@ class VcrSimulateTests(_GatewayCase):
             {"code": "scenario_value_invalid", "field": "scenario.accrual.dropoutAnnual"}, {"code": "scenario_field_missing", "field": "scenario.accrual.duration"},
             {"code": "design_not_supported", "field": "scenario.design.kind"}]})
         rows = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "design_analytic", "scenario": {}})["error"]["message"]
-        self.assertIn("accrual.dropoutAnnual: number >=0 <1 (proportion per 12 time units); optional; default 0", rows)
+        self.assertIn("accrual.dropoutAnnual: number >=0 <1 (proportion per year); optional; default 0", rows)
         self.assertIn("accrual.duration: number >=0 (time units); required once accrual is given", rows)
         self.assertIn("design.kind × endpoint.type this method implements", rows)
 

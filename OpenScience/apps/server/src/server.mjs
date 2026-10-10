@@ -197,6 +197,7 @@ import { MaintenanceService } from "./maintenanceService.mjs";
 import { CapsuleService } from "./capsuleService.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
+import { configurePasswordKdfGate } from "./capsuleContainer.mjs";
 import { CapsuleShareLinks } from "./capsuleShareLinks.mjs";
 import { CapsuleSharing } from "./capsuleSharing.mjs";
 import { capsuleShareMetricFamilies, capsuleStewardshipMetricFamilies } from "./capsuleShareMetrics.mjs";
@@ -288,7 +289,7 @@ import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { EvidenceCardFromResult } from "./evidenceCardFromResult.mjs";
 import { EvidenceAuthors } from "./evidenceAuthors.mjs";
 import { createCitationGift } from "./evidenceCitationGift.mjs";
-import { EvidenceContinuation } from "./evidenceContinuation.mjs";
+import { EvidenceContinuation, evidenceOriginNotes } from "./evidenceContinuation.mjs";
 import { EvidenceOrigins } from "./evidenceOrigins.mjs";
 import { createEvidencePublishRoutes } from "./evidencePublishRoutes.mjs";
 import { evidencePublishMetricFamilies } from "./evidencePublishMetrics.mjs";
@@ -339,7 +340,6 @@ import { composeVcr, vcrMetricFamilies, vcrMetricsSnapshot, withVcrEngineWarning
 import { createAvailability } from "./availabilityModule.mjs";
 import { availabilityMetricFamilies } from "./availabilityService.mjs";
 import { evolutionOpsMetricFamilies, evolutionOpsSnapshot } from "./evolutionOpsMetrics.mjs";
-import { loadMethodValidation } from "./vcrMethodValidation.mjs";
 import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
 import { VcrOrchestrator, vcrRunId } from "./vcrOrchestrator.mjs";
@@ -1519,9 +1519,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const capsuleService = productDocuments
     ? new CapsuleService(productDocuments, { indexing: memoryIndexing, strictIndex: config.memoryIndexStrict, scanner: capsuleScanner })
     : null;
+  // The password derivation's gate is the process's one, and its limits are the deployment's (review C4e).
+  configurePasswordKdfGate({ concurrency: config.capsuleKdfConcurrency, maxWaiting: config.capsuleKdfMaxWaiting, maxWaitMs: config.capsuleKdfMaxWaitMs });
   // The researcher's standing profile and the decision whether a dispatch hands it over (review M6, `residentProfile.mjs`).
   const residentProfiles = new ResidentProfiles({ config, store: researchMemory, capsules: capsuleService });
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
+    maxLiveSnapshots: config.capsuleMaxLiveSnapshots,
     privateAccountCleanup: userId => removePrivateExtensionFiles(config.dataDir, userId),
     // What became of an account's capsule cleanup: a deletion that rolled back and was released, or a cleanup that stopped on a code.
     report: (event, details) => { void securityAudit(config, "capsule.account-cleanup", event === "rolled_back" ? "released" : "failed", { userId: details.userId, code: details.code ?? event }).catch(() => {}); },
@@ -2744,7 +2747,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const availability = createAvailability({
     config, authStore: store, registry: agentRegistry, database: productDatabase, jobs: productJobs, documents: productDocuments,
     agentRuns: () => agentRuns, usageLedger, connectorCredentials, extensionService, skillSupply,
-    methodValidation: () => loadMethodValidation({ file: config.vcrMethodValidationFile, engine: vcr?.engine }),
     vcrEngine: () => vcr?.engineProbe?.snapshot() ?? null,
     vcrEngineRefresh: () => vcr?.engineProbe?.refresh?.() ?? Promise.resolve(null),
     mutation: maintenanceMutation,
@@ -3937,7 +3939,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
       // every platform-level consumer (capsuleShareTrust.mjs, plan §7).
       guestInfluence: productDatabase ? createGuestInfluence({ database: productDatabase, documents: productDocuments,
-        minAccounts: config.capsuleShareCorroborationMinAccounts, keptDays: config.capsuleShareCorroborationKeptDays }) : null,
+        minAccounts: config.capsuleShareCorroborationMinAccounts, keptDays: config.capsuleShareCorroborationKeptDays,
+        minAccountAgeDays: config.capsuleShareCorroborationMinAccountAgeDays, minFinishedRuns: config.capsuleShareCorroborationMinFinishedRuns }) : null,
       // A conversation trying someone else's capsule teaches the loop nothing.
       sessionState: researchMemory.configured
         ? (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId) : null,
@@ -4492,6 +4495,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // pack a 「试用一次」 conversation is trying. An unreadable scope must never
       // turn a selected library into permission to read the whole knowledge base.
       notes: async (userId, projectId, sessionId) => {
+        /** @type {string[]} */
+        let fromCard = [];
         const bound = await (async () => {
           const owner = await store.userById(userId);
           if (!owner) return null;
@@ -4499,10 +4504,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // A turn the control plane dispatched already carries the instruction in its own context; said twice it is only longer.
           const dispatched = (await agentRuns.activeRuns(project)).some((/** @type {any} */ run) => run.sessionId === sessionId && run.dispatchId);
           const session = await researchSessions.get(project, sessionId);
+          // A conversation that began from an evidence card is told, out of the researcher's sight, what the card's quote is
+          // (`EVIDENCE_ORIGIN_NOTE`); the draft the researcher reads no longer says it.
+          fromCard = await evidenceOriginNotes(evidencePublish?.origins, project, session ?? { sessionId });
           return [dispatched ? null : boundConversationNote(session, await agentRegistry),
             await sourceConversationContext(sourceService, project, session, true)].filter(Boolean).join("\n") || null;
         })().catch(() => SOURCE_SCOPE_UNAVAILABLE_CONTEXT);
-        return [...(bound ? [bound] : []), ...await sessionDispatchNotes({ researchMemory, capsules: capsuleService }, userId, projectId, sessionId).catch(() => [])];
+        return [...(bound ? [bound] : []), ...fromCard, ...await sessionDispatchNotes({ researchMemory, capsules: capsuleService }, userId, projectId, sessionId).catch(() => [])];
       },
       recordRecall: (project, runId, items) => agentRuns.recordLearning(project, runId, {
         appendRecalledMemories: items.map((item) => (item.source === "capsule"
@@ -4838,7 +4846,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       : null;
     vcr.jobs.notifier = vcr.notifier;
     const orchestrator = new VcrOrchestrator({
-      store: vcr.store, jobs: vcr.jobs, config, notifier: vcr.notifier, seal: vcr.seal,
+      store: vcr.store, jobs: vcr.jobs, config, notifier: vcr.notifier, seal: vcr.seal, longitudinal: vcr.longitudinal ?? null,
       queueExport: documentExportService && vcrDocumentAdapter ? (user, study, row) => vcrDocumentAdapter.queue(documentExportService, user, study, row) : null,
       queueReviews: (studyId, options) => vcr.review?.queue(studyId, options) ?? Promise.resolve([]),
       dispatchRun: overrides.vcrDispatchRun ?? dispatchVcrRun,
@@ -6367,7 +6375,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       //
       //   POST /api/agent-runs/dispatch
       //     { sessionId, dispatchId?, text, automated?: boolean, line?: "answer" | "<capability id>" }
-      //   202 { data: run }   run.routeReason (zh) and run.estimatedMinutes say where it went (C3)
+      //   202 { data: run }   run.estimatedMinutes says how long it usually takes (C3); where it went is the ledger's machine reason
       //   400 invalid_agent_run — an unknown field; a `line` that is neither `answer` nor a public
       //       capability id; a `line` on a conversation already bound to a capability
       //

@@ -1375,20 +1375,6 @@
     ],
     "attention": [
       {
-        "kind": "ai_set",
-        "tone": "attention",
-        "tab": "data",
-        "text": "2 条关键假设由 AI 设定",
-        "items": [
-          "对照组中位 PFS",
-          "目标 HR"
-        ],
-        "action": {
-          "label": "去复核",
-          "tab": "data"
-        }
-      },
-      {
         "kind": "not_estimable",
         "tone": "attention",
         "tab": "comparator",
@@ -1475,14 +1461,14 @@
         "at": "昨天 09:21",
         "text": "假设卡「对照组 ORR」已更新",
         "by": null,
-        "state": "reviewed"
+        "state": null
       },
       {
         "id": "review:rvw_1",
         "at": "昨天 09:07",
         "text": "统计复核：假设卡「对照组 ORR」 · 已复核",
         "by": null,
-        "state": "reviewed"
+        "state": null
       }
     ],
     "reviews": [
@@ -1496,7 +1482,7 @@
         "current": true,
         "by": null,
         "at": "昨天 09:07",
-        "note": "审查意见供参考，不代表实证验证。",
+        "note": null,
         "findings": []
       }
     ],

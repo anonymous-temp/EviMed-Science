@@ -1932,7 +1932,7 @@ async function verifySourceSpan({ item, documents, study, subjectKey, documentId
     source: { documentId, start, end, quote: span.quote },
   }, { documents: new Map([[documentId, { text: document.text }]]) });
   if (!verdict.ok) {
-    item.bad(field, `原文里核对不上（${verdict.reason}）：start 到 end 之间的字要和 quote 逐字一致，quote 要包含 surface、数值及所声明的检验单位。`, "vcr_evidence_unverified");
+    item.bad(field, `原文里核对不上（${verdict.reason}）：start 到 end 之间的字要和 quote 逐字一致，quote 要包含 surface、数值，以及紧挨着数值写出的单位。`, "vcr_evidence_unverified");
     return null;
   }
   return { document, span: { start: /** @type {number} */ (start), end: /** @type {number} */ (end), quote: span.quote } };

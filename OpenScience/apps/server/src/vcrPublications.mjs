@@ -122,12 +122,11 @@ export function publicationContent({ model, reports, kind, title }) {
     return { heading: headingOf(kind, String(report?.section ?? "main"), title), text: rendered.text, values };
   });
   const use = String(model.intendedUse ?? model.study?.intendedUse ?? "exploratory");
-  const records = list(object(model.review).records);
-  const current = records.filter((record) => object(record).current !== false && object(record).status !== "failed").length;
   const stale = list(model.stale).length;
   const seal = object(model.seal);
+  // The limitations a public page states are the study's own (results not recomputed, the outcome seal, that a simulation is not
+  // evidence). How many reviews the platform holds is its record, not a limitation of the study (owner ruling 2026-10-10).
   const limitations = [
-    current ? `已有 ${current} 项复核；复核是签注，不是证据。` : "尚未完成复核。",
     ...(stale ? [`有 ${stale} 项结果在上游变更后尚未重算。`] : []),
     ...(seal.required && typeof seal.note === "string" && seal.note ? [seal.note] : []),
     VCR_SIMULATION_NOT_EVIDENCE,

@@ -114,6 +114,15 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
   'conversation.input.left': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   'conversation.input.attachments': Object.freeze({ kind: 'single', scope: 'session-maybe', declaredBy: 'ui-conversation' }),
   'conversation.input.right': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
+  // The model and effort seat at the right end of the toolbar, after `conversation.input.right`: the same children table declares it and
+  // renders it with the owner's `locked`. `ui-model-selection` occupies it at priority 0 with the kernel's `ModelSelect`, registered with
+  // `locale: 'model'` and an `inject` that hands its occupant `{ available, directory, load, select }` -- the session's shared model
+  // directory (a snapshot store: the session's `current` selection, the catalogue `groups` with each model's advertised `reasoning`, a
+  // `pending` selection), a verb that refreshes the catalogue, and the call that sends `session.selectModel`. The kernel's own seat reads
+  // 「deepseek-flash High」, the catalogue's model id and the adapter's English effort name, which no locale key reaches. When the row's
+  // controls cannot share a line it sets `--dsh-composer-model-text-display` and `--dsh-composer-model-icon-display`, for an occupant's
+  // compact form. A takeover must carry that `inject` (`kit.occupyOver`), or its props are empty.
+  'conversation.input.model': Object.freeze({ kind: 'single', scope: 'session', declaredBy: 'ui-conversation' }),
   // The transcript: the `chat` view's children table. `assistant-step` is
   // taken over three times, each below the last — the reply check at -1, the
   // delivered files at -2, the source cards at -3 — and each draws the entry it

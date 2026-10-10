@@ -9,9 +9,11 @@ import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import WebSocket, { WebSocketServer } from "ws";
 import { allowanceRefusalSentence } from "@evimed/domain";
+import { FRAME_VOCABULARY } from "@evimed/harness-port/runtime-ui-frame";
 import { HttpError } from "../src/security.mjs";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { loadConfig } from "../src/config.mjs";
+import { MODEL_REASONING_EFFORTS } from "../src/modelReasoningPolicy.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
 import { createRuntimeUiServer } from "../src/runtimeUiServer.mjs";
 import { issueRuntimeUiFrame, renewRuntimeUiFrame } from "../src/runtimeUiFrames.mjs";
@@ -1465,6 +1467,22 @@ test('native model selection permits only the certified Flash route and closed r
   assert.equal(isDeniedRuntimeUiMethod('session/modelCatalog'), false);
   assert.equal(isDeniedRuntimeUiMethod('session/initializeDefaultModel'), true);
   assert.equal(isDeniedRuntimeUiMethod('credentials/set'), true);
+});
+
+test('every thinking intensity the composer offers is one the proxy admits, and every one it admits has a word there', async t => {
+  // The researcher's model seat (「思考强度」, packages/harness-port) names each level in Chinese and sends the kernel's own selection for it. A level
+  // on one side and not the other is a choice the page offers and the proxy refuses, or one the proxy admits and the page cannot name.
+  const offered = Object.keys(FRAME_VOCABULARY.reasoningEffortLabels);
+  assert.deepEqual(offered, [...MODEL_REASONING_EFFORTS]);
+  assert.ok(Object.values(FRAME_VOCABULARY.reasoningEffortLabels).every(word => /^[\u4e00-\u9fff]+$/.test(word)), 'each in Chinese, with no English effort name');
+  const f = await fixture(t);
+  for (const reasoningEffort of offered) {
+    const response = await fetch(`${f.base}/api/session/selectModel`, { method: 'POST', headers: {
+      cookie: f.cookie, origin: UI_ORIGIN, 'content-type': 'application/json',
+    }, body: JSON.stringify({ type: 'client-request', rpcId: `offered-${reasoningEffort}`, method: 'session/selectModel',
+      payload: { args: { request: { sessionId: 's-one', provider: 'deepseek-official', model: f.config.deepseekModel, reasoningEffort } } } }) });
+    assert.equal(response.status, 200, `${reasoningEffort} is offered by the page and refused by the proxy`);
+  }
 });
 
 test('native mux selection preserves the effort and rejects provider or metadata changes before forwarding', async t => {

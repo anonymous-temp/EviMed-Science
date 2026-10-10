@@ -48,7 +48,7 @@ export function ZoneSubscription({ zoneId, projectId }: { zoneId: string; projec
       <>
         <p className="text-ui text-text">
           {subscription.status === "active"
-            ? `已用作“${current.name}”的参考：这个项目的对话会把专区里的卡片当作线索，引用时只引用原始来源。`
+            ? `已用作“${current.name}”的参考：这个项目的对话会把专区里的卡片当作线索。`
             : `已用作“${current.name}”的参考，但${subscription.message ?? "专区暂时没有内容。"}`}
         </p>
         <Button size="sm" variant="secondary" disabled={busy} onClick={() => void act(async () => { await unsubscribeZone(current.id, zoneId); return null; })}>取消用作参考</Button>

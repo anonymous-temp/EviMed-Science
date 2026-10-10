@@ -114,23 +114,62 @@ describe("immutable result inspection", () => {
     expect(shown("export")).toHaveAttribute("data-source", JSON.stringify({ versionId: latest.versionId }));
     expect(shown("corrections")).toHaveAttribute("data-version", latest.versionId);
   });
-  it("shows what the producing run found about a version, as warnings in the reader's words", async () => {
+  it("shows the clinical-safety finding the producing run left about a version, as a warning in the reader's words", async () => {
     const found: ResultVersion = { ...latest, findings: [
-      { id: "run-finding-0", kind: "legacy_notice", status: "safety", message: "涉及临床安全，请核对：阿司匹林一级预防：出血风险" },
-      { id: "run-finding-1", kind: "legacy_notice", status: "must-fix", message: "有一处依据需要核对：证据矩阵第 1 条结论" },
+      { id: "run-finding-0", kind: "clinical_safety_caution", status: "safety", message: "阿司匹林一级预防：出血风险：老年人应由医生评估。" },
     ] };
     api.list.mockResolvedValue({ items: [found], nextCursor: null }); api.get.mockResolvedValue(found);
     mount(found.versionId);
-    expect(await screen.findByText(/⚠ 涉及临床安全，请核对：阿司匹林一级预防：出血风险/)).toBeInTheDocument();
-    expect(screen.getByText(/⚠ 有一处依据需要核对：证据矩阵第 1 条结论/)).toBeInTheDocument();
+    expect(await screen.findByText(/⚠ 阿司匹林一级预防：出血风险：老年人应由医生评估。/)).toBeInTheDocument();
     expect(screen.queryByText(/尚未核实/)).toBeNull();
+  });
+  // R23, 2026-10-10: a claim's finding is its mark. The platform's English sentence under each claim is gone; the line says the two words
+  // the product fixed for a quotation check, and the sources it rests on follow.
+  it("draws a claim's finding as its mark and the fixed words of the quotation check, with its sources", async () => {
+    const source = { kind: "source" as const, id: "10.9999/paper", path: ".evimed-sources/paper/fulltext.md", digest: "e".repeat(64), versionId: "rv_source", availability: "captured" as const };
+    const marked: ResultVersion = { ...latest, findings: [
+      { id: "claim-CLM-001", kind: "claim_source_binding", status: "verified", message: "", elementId: "CLM-001", sourceRefs: [source] },
+      { id: "claim-CLM-002", kind: "claim_source_binding", status: "quote_not_found", message: "", elementId: "CLM-002", sourceRefs: [] },
+    ] };
+    api.list.mockResolvedValue({ items: [marked], nextCursor: null }); api.get.mockResolvedValue(marked);
+    mount(marked.versionId);
+    expect(await screen.findByText("✓ 引文已核对")).toBeInTheDocument();
+    expect(screen.getByText("⚠ 未核对上")).toBeInTheDocument();
+    expect(screen.getByText(/\.evimed-sources\/paper\/fulltext\.md/)).toBeInTheDocument();
+    expect(screen.queryByText(/Recorded claim-to-source|remains separately assessed/)).toBeNull();
+  });
+  // R24, 2026-10-10: a file's digest, a source's digest, and the platform's list of what was not recorded about a version are the back office's.
+  it("shows a version's sources by name, with no digest, no digest of the file and no list of what was not recorded", async () => {
+    const source = { kind: "source" as const, id: "10.9999/paper", path: ".evimed-sources/paper/fulltext.md", digest: "e".repeat(64), versionId: "rv_source", availability: "captured" as const };
+    const gaps: ResultVersion = { ...latest, inputs: [source], coverage: { ...latest.coverage, producer: "unknown", gaps: ["producer_bytes_not_bound", "unobserved_execution"] } };
+    api.list.mockResolvedValue({ items: [gaps], nextCursor: null }); api.get.mockResolvedValue(gaps);
+    const { container } = mount(gaps.versionId);
+    expect(await screen.findByText(/\.evimed-sources\/paper\/fulltext\.md · 原文可用/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看原文版本" })).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/文件摘要|摘要|eeeeeeeeeeee|bbbbbbbbbbbb|记录不完整|文件内容未经核对|执行过程未记录/);
+  });
+  it("lists the changed sources of a comparison by name only", () => {
+    const changed: ResultVersion = { ...latest, inputs: [{ kind: "source", id: "s1", path: "a.md", digest: "1".repeat(64), versionId: "rv_s1", availability: "captured" }] };
+    const before: ResultVersion = { ...old, inputs: [{ kind: "source", id: "s1", path: "a.md", digest: "2".repeat(64), versionId: "rv_s0", availability: "captured" }] };
+    const { container } = render(<ResultComparison current={changed} prior={before} before="a" after="a" />);
+    expect(screen.getByText("新增或改变来源 1；移除或替换来源 1")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/摘要|111111111111|222222222222/);
+  });
+  // R22, 2026-10-10: the run's own notices are no longer copied into a version, so most versions carry no finding at all. Such a version
+  // is not a version that was "not verified": there is nothing to say, and an empty section says nothing too.
+  it("says nothing of verification, and draws no empty section, for a version with no findings, sources or numbers", async () => {
+    mount(latest.versionId);
+    await screen.findByText("新结论");
+    expect(screen.queryByText("依据与核对意见")).toBeNull();
+    expect(screen.queryByText(/没有可读取的核对意见|尚未核实/)).toBeNull();
   });
   it("resets content and findings when a different immutable version is selected", async () => {
     mount(old.versionId); await screen.findByText("旧结论");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "结果版本" }), latest.versionId);
     expect(await screen.findByText("新结论")).toBeInTheDocument();
     expect(screen.queryByText(/旧版本原文不可用/)).toBeNull();
-    expect(screen.getByText(/尚未核实/)).toBeInTheDocument();
+    // The newer version has nothing of its own to say: the older version's finding is gone, and nothing is said in its place.
+    expect(screen.queryByText("依据与核对意见")).toBeNull();
   });
   it("shows read failures with retry and never presents them as a clean review", async () => {
     api.raw.mockRejectedValueOnce(new Error("保存的内容已删除")); mount();

@@ -5,11 +5,14 @@
 //       pack could be signed — and shown to every recipient as 「来自 … 的分享」 — with either.
 //   (a) `trialContext` read a received pack whatever had happened to it since the trial began.
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { strFromU8, unzipSync } from "fflate";
 
 import { CapsuleService } from "../src/capsuleService.mjs";
-import { NEUTRAL_SENDER_NAME, senderDisplayName, sharedFrom } from "../src/capsuleShareLabel.mjs";
+import { NEUTRAL_SENDER_NAME, SIGNATURE_MAX_CHARS, senderDisplayName, shareSignature, sharedFrom } from "../src/capsuleShareLabel.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
@@ -31,6 +34,27 @@ test("a sender is named by their display name, and by a neutral label when that 
   assert.equal(senderDisplayName("someone@example.invalid", "oidc_0123", "研究者"), "研究者");
   assert.equal(senderDisplayName("alice", "alice", "研究者"), "研究者");
   assert.equal(senderDisplayName("李主任", "alice", "研究者"), "李主任");
+});
+
+test("a share is signed with what its sender typed for it, else their display name, by the one rule and with one bound (2026-10-10 review C4c)", () => {
+  assert.equal(SIGNATURE_MAX_CHARS, 60);
+  assert.equal(shareSignature("心内科  王医生", "李主任", "share_sender_1"), "心内科 王医生", "typed, whitespace flattened");
+  assert.equal(shareSignature("名".repeat(60), "李主任", "share_sender_1"), "名".repeat(60), "the bound itself is allowed");
+  // None typed: today's name, by today's rule.
+  for (const none of [undefined, null, "", "   ", 42]) assert.equal(shareSignature(none, "李主任", "share_sender_1"), "李主任", String(none));
+  assert.equal(shareSignature(undefined, "alice", "alice"), NEUTRAL_SENDER_NAME);
+  assert.equal(shareSignature(undefined, "ada@example.invalid", "oidc_0123"), NEUTRAL_SENDER_NAME);
+  // Typed, but a name that cannot be shown: the neutral label, not a refusal and not the account's name.
+  for (const typed of ["wang@example.invalid", "王医生 <wang@example.invalid>", "share_sender_1", "SHARE_SENDER_1"]) assert.equal(shareSignature(typed, "李主任", "share_sender_1"), NEUTRAL_SENDER_NAME, typed);
+  // Past the bound is the one thing refused, by returning null for the caller to name.
+  assert.equal(shareSignature("名".repeat(61), "李主任", "share_sender_1"), null);
+  // What the recipient's recall then says under each entry.
+  assert.equal(sharedFrom({ payload: { imported: true, card: { author: shareSignature("王医生", "李主任", "share_sender_1") } } })?.label, "来自 王医生 的分享");
+});
+
+test("the share dialog's 署名 field is bounded by the number the control plane enforces", async () => {
+  const dialogSide = await readFile(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/src/lib/capsuleText.ts"), "utf8");
+  assert.equal(Number(/export const CAPSULE_SIGNATURE_MAX_CHARS = (\d+);/.exec(dialogSide)?.[1]), SIGNATURE_MAX_CHARS);
 });
 
 test("a method pack is signed with the sender's display name, never their login name or address", async () => {

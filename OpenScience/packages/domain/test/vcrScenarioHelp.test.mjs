@@ -56,7 +56,7 @@ test("the incident: accrual reads duration, followup and dropoutAnnual with thei
   assert.equal(duration.unit, "time units");
   assert.equal(duration.required, true);
   assert.equal(followup.unit, "time units");
-  assert.equal(dropout.unit, "proportion per 12 time units");
+  assert.equal(dropout.unit, "proportion per year", "a proportion lost per year, whatever the scenario's time unit is (E4)");
   assert.equal(dropout.default, 0);
   assert.deepEqual([dropout.min, dropout.lt], [0, 1]);
   assert.deepEqual(rows.find((row) => row.path === "accrual")?.when, [{ path: "endpoint.type", in: ["time_to_event"] }], "accrual belongs to the time-to-event endpoint");

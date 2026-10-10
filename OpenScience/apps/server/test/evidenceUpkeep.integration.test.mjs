@@ -635,7 +635,8 @@ test("a calculated claim whose receipt verifies is judged on the receipt's facts
   assert.equal((await cardRow(card.id)).revision, card.revision, "an upheld claim writes no revision");
   const [entry] = (await log.list({ cardId: card.id })).items;
   assert.equal(entry.category, "searched_no_change");
-  assert.match(entry.summary, /数字已按平台保存的回执重新核对/);
+  assert.match(entry.summary, /数字已重新核对/);
+  assert.doesNotMatch(entry.summary, /回执/);
   assert.doesNotMatch(entry.summary, /原文句子/, "there was no source sentence");
 });
 
@@ -657,7 +658,7 @@ test("a receipt that no longer verifies upholds the challenge without a model ca
   assert.equal(after.withdrawn, null, "another calculation still stands, so the card does");
   const [entry] = (await log.list({ cardId: card.id })).items;
   assert.equal(entry.category, "withdrawal");
-  assert.match(entry.summary, /CALC-1.*计算依据对不上平台保存的回执，已撤回该条结论/);
+  assert.match(entry.summary, /CALC-1.*计算依据没有核对上，已撤回该条结论/);
   assert.doesNotMatch(entry.summary, /原文不能支持/);
   assert.equal((await rows("SELECT count(*)::int AS n FROM evimed_frontier.evidence_challenges WHERE id=$1 AND outcome='withdraw'", [filed.challenge.id]))[0].n, 1);
   assert.equal(challenges.stats().calculationFailed, 1);
@@ -680,8 +681,8 @@ test("a model that withdraws a calculated claim whose receipt verifies is held t
   assert.equal(await challenges.recheckTick(), "resolved");
   assert.deepEqual((await cardRow(card.id)).claims.map((/** @type {any} */ claim) => claim.claimId), ["CALC-1", "CLM-1"]);
   const [entry] = (await log.list({ cardId: card.id })).items;
-  assert.match(entry.summary, /CALC-2.*回执只能支持数字本身，不能支持这条结论的表述，已撤回该条结论/);
-  assert.doesNotMatch(entry.summary, /对不上平台保存的回执/);
+  assert.match(entry.summary, /CALC-2.*数字本身有依据，但这条结论的表述没有依据，已撤回该条结论/);
+  assert.doesNotMatch(entry.summary, /没有核对上/);
   assert.equal(challenges.stats().calculationFailed, 0, "this was the model's judgement, not the code's finding");
 });
 
@@ -746,7 +747,7 @@ test("an amendment of a calculated claim's wording is held to the receipt again:
   assert.deepEqual(await claimMarks(card.id), { "CALC-1": "verified", "CLM-1": "verified" }, "and the amended claim still verifies against its receipt");
   const [entry] = (await log.list({ cardId: card.id })).items;
   assert.equal(entry.category, "correction");
-  assert.match(entry.summary, /修正了该条结论的表述，数字仍与平台保存的回执一致/);
+  assert.match(entry.summary, /修正了该条结论的表述，数字仍然核对得上/);
 });
 
 test("a producer is told of a challenge to a calculated claim in the receipt's words, not a quotation's", options, async () => {

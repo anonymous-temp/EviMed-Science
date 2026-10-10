@@ -7,9 +7,11 @@
  * gathers the facts the ladder (`projectAvailability`, in the domain) needs —
  * what this deployment's composition offers (`deploymentComposition`), what the
  * engines say about themselves (`availabilityEngineProbe`), which data sources
- * the account can reach (`connectorCredentials`), whether a method has been
- * measured (`vcrMethodValidation`) and what finished operations did here (the
- * collector's records) — and hands them over. A fact it cannot read is left
+ * the account can reach (`connectorCredentials`) and what finished operations
+ * did here (the collector's records) — and hands them over. Whether a method's
+ * numeric validation has been measured is not among them: that is the platform's
+ * confidence in itself, kept in the method library, and not a limit a label
+ * should carry (owner ruling 2026-10-10). A fact it cannot read is left
  * out, never replaced by a guess: an engine that was not asked is not "ready",
  * and a record store that cannot be read makes every label `unverified`.
  *
@@ -98,13 +100,12 @@ export class AvailabilityService {
    *   vcrEngine?: (() => import("./vcrEngineProbe.mjs").VcrEngineReading | null) | null,
    *   vcrEngineRefresh?: (() => Promise<import("./vcrEngineProbe.mjs").VcrEngineReading | null>) | null,
    *   connectorStatus?: ((userId: string) => Promise<any[]>) | null,
-   *   methodValidation?: (() => Promise<{ status: string, reason?: string } | null>) | null,
    *   extensionViews?: ((user: any) => Promise<any[]>) | null,
    *   skillSupply?: import("./skillSupplyService.mjs").SkillSupply | null,
    *   now?: () => Date,
    * }} dependencies
    */
-  constructor({ config, registry, store = null, engineProbe = null, vcrEngine = null, vcrEngineRefresh = null, connectorStatus = null, methodValidation = null, extensionViews = null, skillSupply = null, now = () => new Date() }) {
+  constructor({ config, registry, store = null, engineProbe = null, vcrEngine = null, vcrEngineRefresh = null, connectorStatus = null, extensionViews = null, skillSupply = null, now = () => new Date() }) {
     this.config = config;
     this.registry = registry;
     this.store = store;
@@ -114,7 +115,6 @@ export class AvailabilityService {
     this.vcrEngine = vcrEngine;
     this.vcrEngineRefresh = vcrEngineRefresh;
     this.connectorStatus = connectorStatus;
-    this.methodValidation = methodValidation;
     this.extensionViews = extensionViews;
     this.skillSupply = skillSupply;
     this.now = now;
@@ -166,15 +166,10 @@ export class AvailabilityService {
     } else if (user.id && this.connectorStatus) {
       try { connectors = new Map((await this.connectorStatus(user.id)).map((row) => [String(row.id), String(row.source)])); } catch { connectors = null; }
     }
-    /** @type {{ status: string, reason?: string } | null} */
-    let validation = null;
-    if (this.config.vcrEnabled && this.methodValidation) {
-      try { validation = await this.methodValidation(); } catch { validation = null; }
-    }
     /** @type {import("./vcrEngineProbe.mjs").VcrEngineReading | null} */
     let vcrEngine = null;
     try { vcrEngine = this.vcrEngine?.() ?? null; } catch { vcrEngine = null; }
-    return { config, subject, evidence, engines, connectors, validation, vcrEngine, declined: declinedTools(config, subject) };
+    return { config, subject, evidence, engines, connectors, vcrEngine, declined: declinedTools(config, subject) };
   }
 
   /**
@@ -235,9 +230,6 @@ export class AvailabilityService {
       } else if (facts.vcrEngine.state === "not_configured") {
         reasons.push({ code: "vcr-engine-not-configured", source: "deployment-composition" });
       }
-    }
-    if (module === "vcr" && facts.validation?.status === "unmeasured") {
-      reasons.push({ code: "method-unmeasured", detail: facts.validation.reason ?? "unmeasured", source: "method-validation" });
     }
     // Software its own scripts import that the runtime image does not install: installed is not runnable (N09).
     for (const reason of this.skillSupply?.softwareReasons(manifest.id, facts.subject) ?? []) {

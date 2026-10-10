@@ -134,7 +134,7 @@ export function evidenceFeedRss(page, { publicUrl, selfPath }) {
     '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel>',
     "<title>EviMed 证据中心</title>",
     `<link>${xml(absolute(evidencePublicPath("/")))}</link>`,
-    "<description>EviMed 证据专区里平台的官方证据卡，和作者公开的原创研究。证据卡只是索引，请引用它列出的原始来源。</description>",
+    "<description>EviMed 证据专区里平台的官方证据卡，和作者公开的原创研究。</description>",
     "<language>zh-CN</language>",
     `<lastBuildDate>${new Date(page.generatedAt).toUTCString()}</lastBuildDate>`,
     `<atom:link rel="self" type="application/rss+xml" href="${xml(absolute(selfPath))}"/>`,

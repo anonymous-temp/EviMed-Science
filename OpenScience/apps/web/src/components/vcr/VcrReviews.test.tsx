@@ -10,7 +10,7 @@ describe('the reviews a study shows', () => {
   it('names an AI review by what it reviewed, says what it found and that one did not finish, and offers no approval', () => {
     draw(<VcrReviews reviews={[
       { id: 'clinical', reviewerKind: 'ai', role: 'clinical', label: 'AI临床复核', state: '有修订建议', status: 'done', current: true,
-        by: null, at: '昨天 09:07', note: '审查意见供参考，不代表实证验证。', findings: [{ id: 'F1', fix: '保留适用人群限制。' }] },
+        by: null, at: '昨天 09:07', note: null, findings: [{ id: 'F1', fix: '保留适用人群限制。' }] },
       { id: 'stats', reviewerKind: 'ai', role: 'statistical', label: 'AI统计复核', state: '审查未完成', status: 'failed', current: false,
         by: null, note: '审查暂未完成；已完成的研究与导出仍可使用。', findings: [] },
     ]} />);
@@ -18,6 +18,8 @@ describe('the reviews a study shows', () => {
     expect(screen.getByText(/保留适用人群限制/)).toBeInTheDocument();
     expect(screen.getByText(/导出仍可使用/)).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    // A finished review carries no hedge about itself (owner ruling 2026-10-10); only a review that could not finish says what happened.
+    expect(document.body.textContent).not.toMatch(/供参考|实证验证/);
     // The model that wrote a review, its configuration and its input digest are the platform's record, not the reader's.
     expect(document.body.textContent).not.toMatch(/qwen|deepseek|revision|digest|study-review/i);
   });

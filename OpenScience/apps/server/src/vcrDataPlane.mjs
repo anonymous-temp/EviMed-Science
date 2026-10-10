@@ -118,6 +118,7 @@ import {
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
 import { DEPLOYMENT_PERMISSION_HASH, buildCloudProjection, cloudAuthorization, cloudPermission, cloudState, deploymentCloudPermission, originalProjectionSpan, projectionHash, vcrCloudDestinations } from "./vcrCloudProjection.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
+import { documentReading } from "./vcrDocumentWindow.mjs";
 import { VCR_IMPORT_FORMATS, VCR_INTAKE_SCRATCH, VCR_TABLE_LIMITS, isVcrIntakeScratchLocation } from "./vcrIntakeLayout.mjs";
 import { VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES } from "./vcrPersistence.mjs";
 import { vcrEffectiveSeal, vcrOutcomeColumns, vcrSealRequired } from "./vcrSeal.mjs";
@@ -3376,7 +3377,8 @@ export class VcrDataPlane {
    * @param {string} studyId @param {string} projectionId @param {any} context @param {any} window */
   async recordDocumentWindow(studyId, projectionId, context, window) {
     await this.store.recordCloudWindow(studyId, projectionId, context, {
-      hash: window.windowHash, served: window.coverage.served, extraction: 'unknown',
+      // The text's own length rides with the range, so what was never served can be said without opening the document again.
+      hash: window.windowHash, served: window.coverage.served, chars: window.coverage.served[1] + window.coverage.after, extraction: 'unknown',
     });
   }
 
@@ -3564,6 +3566,14 @@ export class VcrDataPlane {
     for (const row of await this.store.liveProjectionsOfStudy(study.id)) {
       projectionsOf.set(String(row.document_id), [...(projectionsOf.get(String(row.document_id)) ?? []), { id: String(row.id), at: row.created_at ? new Date(row.created_at).toISOString() : null }]);
     }
+    // What runs were shown of each reviewed document: geometry the reads recorded, never text and never who read it.
+    const windows = await this.store.documentWindows(study.id).catch(() => new Map());
+    const filed = (/** @type {any} */ file) => {
+      const view = fileView(file, true, projectionsOf.get(file.id));
+      return file.role === "document"
+        ? { ...view, reading: windows.has(file.id) ? documentReading(windows.get(file.id), file.detail?.chars ?? null) : null }
+        : view;
+    };
     const openings = new Map();
     for (const source of sources) {
       const mine = source.userId === String(viewer.id);
@@ -3586,7 +3596,7 @@ export class VcrDataPlane {
           valueSource: source.valueSource, status: source.status, createdAt: source.createdAt,
           upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes, documents: this.documentUpload(), cloudDestinations: vcrCloudDestinations(this.config), imports: this.importUpload() },
           // A source the viewer holds no grant on is a name and a state: its files' names, its map and who may read it are not theirs to see.
-          files: readable ? own.map((file) => fileView(file, true, projectionsOf.get(file.id))) : [],
+          files: readable ? own.map(filed) : [],
           fieldMap: {
             state: source.fieldMapState, hash: source.fieldMapHash, by: source.fieldMapBy || null,
             confirmedBy: source.fieldMapConfirmedBy, confirmedAt: source.fieldMapConfirmedAt,

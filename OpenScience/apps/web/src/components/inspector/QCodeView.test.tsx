@@ -12,9 +12,11 @@ const DOC = JSON.stringify({
 });
 
 describe("QCodeView", () => {
-  it("renders the codebook, highlighted spans, and the exact-quote guarantee", () => {
+  it("renders the codebook and the highlighted spans, and does not vouch for them", () => {
     const { container } = render(<QCodeView filename="study.qcode" text={DOC} />);
-    expect(container.textContent).toContain("引用均为来源原文片段");
+    // Every highlight is a span of the source by construction; telling the researcher so is a trust badge of the back office (owner ruling 2026-10-10).
+    expect(container.textContent).not.toMatch(/引用均为来源原文片段|不由模型生成|精确片段/);
+    expect(container.textContent).toContain("study.qcode · 1 个来源 · 2 个编码");
     // codebook shows both codes
     expect(screen.getByRole("button", { name: /trust/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /fear/ })).toBeInTheDocument();

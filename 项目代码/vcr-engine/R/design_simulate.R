@@ -258,6 +258,7 @@ vcr_scenario_runner <- function(scenario) {
   gs_design <- if (gs) vcr_group_sequential(vcr_num(design$informationRates), alpha / sided,
                                             design$spending %||% "obrien_fleming") else NULL
   acc <- scenario$accrual
+  tu <- vcr_time_unit(scenario)
   # a deterministic calendar length, when the scenario states an accrual
   duration_fixed <- if (!is.null(acc) && !is.null(acc$duration)) vcr_scalar(acc$duration, 0) + vcr_scalar(acc$followup, 0) else NA_real_
 
@@ -298,7 +299,7 @@ vcr_scenario_runner <- function(scenario) {
     vcr_rmst_analytic(.vcr_scale_hazard(dist, hr), tau) - vcr_rmst_analytic(dist, tau)
   } else log(hr)
   list(estimand = estimand, groupSequential = gs_design, run = function(i) {
-    d <- vcr_sim_tte(n1, n0, dist, hr, accrual, followup, dropout, max_followup = max_fu)
+    d <- vcr_sim_tte(n1, n0, dist, hr, accrual, followup, dropout, dropout_period = tu$perYear, max_followup = max_fu)
     dur <- if (is.finite(followup)) .vcr_accrual_end(d$entry, accrual) + followup else max(d$entry + d$time)
     if (identical(method, "rmst")) {
       rule <- vcr_tau_rule(d$time, d$status, d$arm, tau)
@@ -576,11 +577,13 @@ vcr_summarize_replicates <- function(values, estimand, scenario, done) {
     ess<-values[,"externalEss"];good<-is.finite(ess)
     if(sum(good)>1)add(vcr_measure("mean_external_effective_sample_size",mean(ess[good]),simulated=TRUE,mcse=vcr_mcse_mean(ess[good]),source=src))
   }
+  # The calendar length is in the scenario's time unit; the measure named in months, and a cost per month, are in months.
+  tu <- vcr_time_unit(scenario)
   dur <- if ("duration" %in% colnames(values)) values[, "duration"] else numeric(0)
   dur <- dur[is.finite(dur)]
   if ("duration_months" %in% wanted) {
-    if (length(dur) > 1L) add(vcr_measure("duration_months", mean(dur), simulated = TRUE,
-                                          mcse = if (stats::sd(dur) > 0) vcr_mcse_mean(dur) else 0, source = src))
+    if (length(dur) > 1L) add(vcr_measure("duration_months", mean(dur) * tu$months, simulated = TRUE,
+                                          mcse = if (stats::sd(dur) > 0) vcr_mcse_mean(dur) * tu$months else 0, source = src))
     else notes[[length(notes) + 1L]] <- vcr_issue("performance_measure_unsupported", "performance",
       "duration_months needs the scenario's accrual duration (and follow-up) to be stated; it was not computed.")
   }
@@ -592,7 +595,7 @@ vcr_summarize_replicates <- function(values, estimand, scenario, done) {
     monthly <- if (is.list(cs)) vcr_scalar(cs$perMonth, 0) else 0
     if (is.list(cs) && length(ss[is.finite(ss)]) > 1L && (!(monthly > 0) || length(dur) > 1L)) {
       per <- vcr_scalar(cs$perPatient, 0) * values[, "sampleSize"] + vcr_scalar(cs$perSite, 0) * vcr_scalar(cs$sites, 0) +
-        (if (monthly > 0) monthly * values[, "duration"] else 0)
+        (if (monthly > 0) monthly * values[, "duration"] * tu$months else 0)
       per <- per[is.finite(per)]
       add(vcr_measure("cost", mean(per), simulated = TRUE, mcse = if (stats::sd(per) > 0) vcr_mcse_mean(per) else 0, source = src,
                       note = if (monthly > 0) "perPatient x N + perSite x sites + perMonth x duration" else "perPatient x N + perSite x sites (no cost per month is stated)"))
@@ -672,7 +675,7 @@ vcr_analytic_check <- function(scenario, measures) {
       exact <- vcr_logrank_power(hr, dist, n1, n0,
                                  vcr_scalar(accrual$duration, 0),
                                  vcr_scalar(accrual$followup, Inf),
-                                 vcr_dropout_hazard(vcr_scalar(accrual$dropoutAnnual, 0)),
+                                 vcr_dropout_hazard(vcr_scalar(accrual$dropoutAnnual, 0), vcr_time_unit(scenario)$perYear),
                                  alpha, vcr_scalar(accrual$maxFollowup, Inf), sided = sided)
       analytic <- list(name = "power", value = exact$power,
                        basis = "asymptotic_logrank_score",

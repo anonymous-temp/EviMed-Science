@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { declineDelivery, importDelivery, listPendingDeliveries, openDelivery, type PendingDelivery } from "@/lib/capsuleShareClient";
-import { CAPSULE_ENTRY_TYPES, CAPSULE_SCAN_REASONS, fromSender } from "@/lib/capsuleText";
+import { CAPSULE_ENTRY_TYPES, fromSender } from "@/lib/capsuleText";
 import {
   announceMemoryChanged, disableCapsule, enableReceivedCapsule, fetchReceivedCapsules, startCapsuleTrial, type ReceivedCapsule,
 } from "@/lib/memoryClient";
@@ -12,7 +12,6 @@ import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 import { LoadError } from "@/components/cards/LoadError";
 import { Button } from "@/components/ui/Button";
-import { Disclosure } from "@/components/ui/Disclosure";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
 import { Switch } from "@/components/ui/Switch";
@@ -122,10 +121,10 @@ export function ReceivedShelf() {
  * project the shell is in and nowhere else (build spec §9.4 #6), are in its
  * 「⋯」. The switch reads "in force here": account-wide, or in this project.
  *
- * Said only when it matters (2026-09-23 inventory §1.7): a source this
- * service cannot verify, and what the automatic scan left out. When it was
- * received, that a signature checked out, and how far the scan got are the
- * back office's.
+ * Said only what the pack is and who sent it (owner ruling 2026-10-10). When it
+ * was received, whether a signature checked out, how far the scan got and what
+ * it left out are the back office's: the scan still gates what is mounted, on
+ * the server, and the shelf shows the pack as what comes in.
  */
 function ReceivedPacks() {
   const navigate = useNavigate();
@@ -177,7 +176,6 @@ function ReceivedPacks() {
       <h3 id="received-capsules" className="text-ui font-semibold text-text">收到的胶囊</h3>
       <List label="收到的胶囊" className="mt-2">
         {data.map((pack) => {
-          const dropped = pack.scan?.dropped ?? [];
           return (
             <ListRow
               key={pack.id}
@@ -192,26 +190,10 @@ function ReceivedPacks() {
                   <p>{[
                     pack.card?.author ? fromSender(pack.card.author) : null,
                     pack.card?.summary || contents(pack),
-                    pack.issuerTrust === "verified" ? null : "来源未验证",
                     pack.enabledIn === "project" && project ? `只在“${project.name}”启用` : null,
                   ].filter(Boolean).join(" · ")}</p>
                   {pack.upgradedAt && pack.card?.changelog && <p>{formatDay(pack.upgradedAt)}更新：{pack.card.changelog}</p>}
                   {pack.methods.length > 0 && <p className="truncate">{pack.methods.join("、")}</p>}
-                  {dropped.length > 0 && (
-                    <Disclosure summary={`${dropped.length} 条没有带上`} summaryClassName="text-caption" className="mt-1">
-                      <ul className="space-y-1.5 border-l border-border pl-3">
-                        {dropped.map((item) => (
-                          <li key={item.id}>
-                            <span className="text-text-2">{item.excerpt}</span>
-                            <span className="block">
-                              {CAPSULE_SCAN_REASONS[item.code] ?? "没有通过自动检查"}
-                              {item.source === "model" && item.reason ? `：${item.reason}` : ""}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </Disclosure>
-                  )}
                 </>
               )}
               trailing={(

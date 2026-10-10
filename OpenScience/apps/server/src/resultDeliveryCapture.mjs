@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { workspaceLayout } from "@evimed/domain";
 import { attachClaimSourceLocations, claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
-import { normalizeResultPath } from "@evimed/domain/result-provenance";
+import { normalizeResultPath, RUN_FINDING_ID_PREFIX } from "@evimed/domain/result-provenance";
 import { clinicalResultLinks } from "./resultImpact.mjs";
 import { describedQualityNotices } from "./runNotices.mjs";
 import { askOnce, captureSkillResults, findSkillExecutions, readSkillExecution } from "./skillExecution.mjs";
@@ -57,22 +57,28 @@ export async function sourceCapture(project, relativePath, limit) {
 }
 
 /**
- * The findings of the run that produced a result, as findings of that result.
+ * The findings of the run that produced a result that are findings of that
+ * result: its clinical-safety ones.
  *
- * A finished run's ledger record carries them as `qualityNotices` — the gate's
- * `SAFETY — ` and `MUST FIX — ` findings and the platform's own notes, with the
- * identity each was raised under. This read `qualityFindings`, a name only the
- * in-flight completion outcome uses and a stored run never has, so a version
- * never showed what its run had found about it. Each is described in the
- * reader's Chinese (`describedQualityNotices`, the same table the inbox and the
- * run page use) and keeps its severity as its status; none is tied to a claim of
- * the matrix, because a run-level finding is not a verdict on one.
+ * A finished run's ledger record carries its notices as `qualityNotices` — the
+ * gate's `SAFETY — ` and `MUST FIX — ` findings and the platform's own notes,
+ * with the identity each was raised under. All of them used to be copied into
+ * every version the run captured, and the result inspector printed each as a
+ * `⚠` line: a context compaction, a receipt that did not match, a repair round,
+ * forty titles of the platform's own machinery under a researcher's report
+ * (S1 inventory, R22). Since the owner's ruling of 2026-10-10 a version is handed
+ * what is content: the pharmacist's cautions and the gate's clinical-framing
+ * findings (`severity: safety`), described in the reader's Chinese
+ * (`describedQualityNotices`, the table the inbox uses), and its claim marks
+ * from the matrix. The rest stays in the run's ledger, where an operator reads
+ * it. None is tied to a claim of the matrix, because a run-level finding is not
+ * a verdict on one.
  * @param {{ qualityNotices?: unknown }} run
  * @returns {{ id: string, kind: string, status: string, message: string }[]}
  */
 export function runFindingsOf(run) {
-  return describedQualityNotices(run?.qualityNotices).map((notice, index) => ({
-    id: `run-finding-${index}`, kind: notice.code, status: notice.severity,
+  return describedQualityNotices(run?.qualityNotices).filter(notice => notice.severity === "safety").map((notice, index) => ({
+    id: `${RUN_FINDING_ID_PREFIX}${index}`, kind: notice.code, status: notice.severity,
     message: notice.detail ? `${notice.title}：${notice.detail}` : (notice.title || notice.text),
   }));
 }

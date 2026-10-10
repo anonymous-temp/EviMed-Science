@@ -86,8 +86,7 @@
  * and 预期用途 (默认「探索」) — which report a change back (`vcr-options`) for
  * the shell to write to the study, and six single-task starters: a short name
  * on each pill and a whole sentence into the composer, never sent. There is
- * no form; anything the reader does not say the platform sets and labels
- * 「AI 设定」 (plan §9.3).
+ * no form; anything the reader does not say the platform sets (plan §9.3).
  *
  * Picking a tool binds this conversation to it through the shell
  * (`bind-capability`), which is the control plane's own deterministic route —

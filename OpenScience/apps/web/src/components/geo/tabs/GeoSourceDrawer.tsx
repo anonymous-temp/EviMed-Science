@@ -27,10 +27,6 @@ const CONDITION_WORDS: Array<{ key: keyof GeoSourceRow["conditions"]; label: str
   { key: "medical", label: "医疗" },
 ];
 
-export function unverifiedConditions(conditions: GeoSourceRow["conditions"] | null | undefined): string[] {
-  return CONDITION_WORDS.filter(({ key }) => conditions?.[key] == null).map(({ label }) => label);
-}
-
 /**
  * What a 信源 row stands for (plan R13 E-15, design reference §15.3): the answers of the latest round that cite the site — the
  * answers the row's three numbers count. The ones that misstate us come first, each as 「引擎 · 问题 · 日期」 with the wrong
@@ -272,12 +268,16 @@ function AnswerRow({ geoId, answer }: { geoId: string; answer: GeoSourceAnswer }
   );
 }
 
-/** The three conditions, said as words, and what an article there costs: the last thing the drawer says about the site. */
+/**
+ * The conditions the platform knows, said as words, and what an article there costs: the last thing the drawer says about the site. A
+ * condition it has not checked is not listed and nothing says so — "not verified" is the platform's bookkeeping (owner ruling 2026-10-10) —
+ * and a site about which it knows nothing of the three, its layer or its price has no such section.
+ */
 function Conditions({ source }: { source: Pick<GeoSourceRow, "conditions" | "layer" | "market"> }) {
-  const missing = unverifiedConditions(source.conditions);
   const known = CONDITION_WORDS.filter(({ key }) => source.conditions?.[key] != null);
   const price = source.market && typeof source.market.price === "number" ? yuan(source.market.price) : null;
   const layer = source.layer ? GEO_SOURCE_LAYER_WORDS[source.layer] ?? null : null;
+  if (!layer && known.length === 0 && !price) return null;
   return (
     <section aria-label="投放条件" data-geo-source-detail="" className="text-ui text-text-2">
       <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -293,14 +293,8 @@ function Conditions({ source }: { source: Pick<GeoSourceRow, "conditions" | "lay
             </span>
           );
         })}
-        {missing.length > 0 && (
-          <span data-geo-condition-unverified={missing.length === CONDITION_WORDS.length ? "all" : "some"}>
-            {missing.length === CONDITION_WORDS.length ? "三项都未核实" : `${missing.join("、")}未核实`}
-          </span>
-        )}
         {price && <span>{`单篇价格 ${price}`}</span>}
       </p>
-      {missing.length > 0 && <p className="mt-1 text-caption text-text-3">“未核实”是平台还没核对这一项，不等于不满足。</p>}
     </section>
   );
 }

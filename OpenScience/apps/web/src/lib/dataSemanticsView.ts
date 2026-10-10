@@ -28,7 +28,7 @@ const TYPE_LABELS: Record<string, string> = { integer: "整数", number: "数值
 const label = (table: Readonly<Record<string, string>>, key: unknown, fallback = "未登记") => (typeof key === "string" && Object.hasOwn(table, key) ? table[key] : fallback);
 
 export const facetLabel = (facet: string) => label(DATA_FACET_LABELS_ZH, facet, "其他");
-export const basisLabel = (basis: string) => label(SEMANTIC_BASIS_LABELS_ZH, basis, "来源未登记");
+export const basisLabel = (basis: string) => label(SEMANTIC_BASIS_LABELS_ZH, basis, "未登记");
 export const outcomeLabel = (outcome: string) => (Object.hasOwn(DATA_CHECK_OUTCOMES, outcome) ? (DATA_CHECK_OUTCOMES as Record<string, { zh: string }>)[outcome].zh : "未登记的检查结果");
 export const familyLabel = (family: string) => label(DATA_CHECK_FAMILY_LABELS_ZH, family, "检查");
 export const notCheckedLabel = (reason: string) => label(DATA_CHECK_NOT_CHECKED_REASONS as Readonly<Record<string, string>>, reason, "没有运行");
@@ -62,11 +62,15 @@ export function factText(facet: string, value: unknown): string {
   return String(value);
 }
 
-/** Where a fact stands, as the line under it says it: whose words, which file, what the model read. */
+/**
+ * What a fact rests on, as the line under it says it, in plain words (owner ruling 2026-10-10: not a tag beside every fact, not a count):
+ * 「依据：你的说明“…”」, 「依据：数据字典（文件）」, 「依据：AI 判断（它读到的）」.
+ */
 export function factSource(fact: SemanticFactSummary): string {
-  if (fact.basis === "researcher_confirmed") return fact.statement ? `你说：“${fact.statement}”` : "你在文件页确认过";
-  if (fact.basis === "dictionary_stated") return fact.statedIn ? `见 ${fact.statedIn.path.split("/").pop()}` : "";
-  return fact.inferredFrom?.length ? `依据：${fact.inferredFrom.join("；")}` : "";
+  const basis = basisLabel(fact.basis);
+  if (fact.basis === "researcher_confirmed") return `依据：${basis}${fact.statement ? `“${fact.statement}”` : "（在文件页确认）"}`;
+  if (fact.basis === "dictionary_stated") return `依据：${basis}${fact.statedIn ? `（${fact.statedIn.path.split("/").pop()}）` : ""}`;
+  return `依据：${basis}${fact.inferredFrom?.length ? `（${fact.inferredFrom.join("；")}）` : ""}`;
 }
 
 /** A finding's subject: the column, the table, the step — never an id. */

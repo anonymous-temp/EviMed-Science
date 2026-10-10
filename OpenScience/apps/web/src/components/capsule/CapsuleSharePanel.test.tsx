@@ -34,6 +34,24 @@ describe("分享给平台里的人", () => {
     expect(await screen.findByText("已发给 1 位；其余 2 位没有送达（名字没有对上，或对方不能接收）。")).toBeInTheDocument();
   });
 
+  it("signs a delivery and a link with the card it is given — the sender's 署名 — and sends nothing extra without one", async () => {
+    client.deliverCapsule.mockResolvedValue({ delivered: 1, notDelivered: 0, snapshot: null });
+    client.createShareLink.mockResolvedValue({ token: "t".repeat(32), path: `/app/memory/shared/${"t".repeat(32)}`, link: {}, snapshot: {} });
+    const { rerender } = render(<CapsuleSharePanel capsuleId="cap-1" card={{ author: "心内科 王医生" }} />);
+    await userEvent.type(screen.getByLabelText("发给平台内的账号"), "Alice Reader");
+    await userEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(client.deliverCapsule).toHaveBeenCalledWith("cap-1", { recipients: ["Alice Reader"], card: { author: "心内科 王医生" } }));
+    await userEvent.click(screen.getByRole("button", { name: "创建分享链接" }));
+    await waitFor(() => expect(client.createShareLink).toHaveBeenCalledWith("cap-1", { card: { author: "心内科 王医生" } }));
+    // The signature is the dialog's to change between shares: the next one is made with whatever it holds then.
+    rerender(<CapsuleSharePanel capsuleId="cap-1" card={undefined} />);
+    await userEvent.type(screen.getByLabelText("发给平台内的账号"), "Bob Reader");
+    await userEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(client.deliverCapsule).toHaveBeenLastCalledWith("cap-1", { recipients: ["Bob Reader"] }));
+    await userEvent.click(screen.getByRole("button", { name: "创建分享链接" }));
+    await waitFor(() => expect(client.createShareLink).toHaveBeenLastCalledWith("cap-1"));
+  });
+
   it("says nothing arrived without saying why, and shows what an unsuccessful send said", async () => {
     client.deliverCapsule.mockResolvedValueOnce({ delivered: 0, notDelivered: 1, snapshot: null });
     render(<CapsuleSharePanel capsuleId="cap-1" />);
@@ -80,13 +98,15 @@ describe("分享给平台里的人", () => {
     await waitFor(() => expect(client.revokeShareLink).toHaveBeenCalledWith("cap-1", "l1"));
   });
 
-  it("exports the method pack and says it holds text only", async () => {
+  it("exports the method pack, and does not assure the researcher what the file holds", async () => {
     client.downloadMethodPack.mockResolvedValue(undefined);
-    render(<CapsuleSharePanel capsuleId="cap-1" />);
-    expect(screen.getByText("已学到的做法按通用的技能格式导出；脚本不会随它分享。")).toBeInTheDocument();
+    const { container } = render(<CapsuleSharePanel capsuleId="cap-1" />);
+    expect(screen.getByText("已学到的做法按通用的技能格式导出。")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "导出做法" }));
     await waitFor(() => expect(client.downloadMethodPack).toHaveBeenCalledWith("cap-1"));
-    expect(await screen.findByText(/只含文字/)).toBeInTheDocument();
+    expect(await screen.findByText("已下载。每个做法一个文件夹，带署名和来源，可以放进其他支持技能的工具。")).toBeInTheDocument();
+    // The mechanism assurances are the back office's (owner ruling 2026-10-10).
+    expect(container.textContent).not.toMatch(/只含文字|不含脚本|脚本不会/);
   });
 
   it("does nothing without a capsule", () => {

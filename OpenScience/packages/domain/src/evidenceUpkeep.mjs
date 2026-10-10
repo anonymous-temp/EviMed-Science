@@ -174,12 +174,12 @@ export function evidenceChangeSummaryZh({ category, trigger, facts = {} }) {
     if (trigger === 'challenge') {
       if (category === 'withdrawal') {
         const ground = !facts.calculated ? '原文不能支持'
-          : facts.receiptVerified ? '回执只能支持数字本身，不能支持这条结论的表述' : '它的计算依据对不上平台保存的回执'
+          : facts.receiptVerified ? '数字本身有依据，但这条结论的表述没有依据' : '它的计算依据没有核对上'
         const card = facts.cardWithdrawn ? (facts.lostCalculationBasis ? '，本卡的结论里已没有一条带计算依据，一手分析无法成立，本卡一并撤回' : '，本卡因没有保留任何结论而一并撤回') : ''
         return `读者对${claim}提出质疑；复核认定${ground}，已撤回该条结论${card}${revisions(facts)}。`
       }
-      if (category === 'correction') return `读者对${claim}提出质疑；复核后修正了该条结论的表述${facts.calculated ? '，数字仍与平台保存的回执一致' : '和所依据的原文句子'}${revisions(facts)}。`
-      return `读者对${claim}提出质疑；复核后维持原结论，${facts.calculated ? '数字已按平台保存的回执重新核对' : '所依据的原文句子已重新核对'}。`
+      if (category === 'correction') return `读者对${claim}提出质疑；复核后修正了该条结论的表述${facts.calculated ? '，数字仍然核对得上' : '和所依据的原文句子'}${revisions(facts)}。`
+      return `读者对${claim}提出质疑；复核后维持原结论，${facts.calculated ? '数字已重新核对' : '所依据的原文句子已重新核对'}。`
     }
     if (trigger === 'source_change') {
       const sources = count(facts.sourceCount)

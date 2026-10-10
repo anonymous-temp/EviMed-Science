@@ -3,13 +3,17 @@ import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { parseFailureMessage } from "@/lib/errorText";
 import { formatClock, formatDay } from "@/lib/format";
-import { bindingFormatLabel, bindingLocatorLabel, bindingStatusLabel, bindingsForSelection, getResultLineage, lineageChangeLabel, reproductionLabel,
-  snapshotKindLabel, snapshotUnknownLabel, unboundReasonLabel, type LineageChangeRow, type ResultLineage, type ResultVersion } from "@/lib/resultProvenance";
+import { bindingFormatLabel, bindingLocatorLabel, bindingStatusLabel, bindingsForSelection, getResultLineage, lineageChangeLabel,
+  snapshotKindLabel, unboundReasonLabel, type LineageChangeRow, type ResultLineage, type ResultVersion } from "@/lib/resultProvenance";
 
 /**
  * The numerical chain of one version: how its bytes were produced and what was not observed, which calculation each
  * printed number came from (and with what formatting), and, from a calculation, which printed values depend on it and
  * what a newer calculation would move in them. A label, never a verdict: nothing here withholds the report.
+ *
+ * How it was made is said plainly — the method and its settings, the seed, the script, the inputs, the interpreter. What the platform
+ * recorded about its own record is not: digests, the image the run was in, the exit status, which parts were "not observed", and the
+ * verdicts it gives its own record are the back office's (owner ruling 2026-10-10), and a version whose origin is unknown says nothing here.
  */
 export function ResultLineagePanel({ version, selectedText = null, onOpen }: {
   version: ResultVersion; selectedText?: string | null; onOpen: (target: { versionId: string; path: string; runId: string | null }) => void;
@@ -32,23 +36,18 @@ export function ResultLineagePanel({ version, selectedText = null, onOpen }: {
   const calculationPath = (versionId: string) => bindings?.calculations.find((item) => item.versionId === versionId)?.path
     ?? lineage?.calculations.find((item) => item.versionId === versionId)?.path ?? "计算结果";
   const selected = selectedText && bindings ? bindingsForSelection(version, selectedText) : null;
-  const reproduction = snapshot ? reproductionLabel(snapshot.reproduction) : null;
   // Open where there is a chain to read: a calculation, or a version whose numbers were checked. A version with no numbers stays folded.
   const hasChain = Boolean(snapshot && ["engine_job", "skill_script", "render"].includes(snapshot.kind)) || Boolean(bindings && ["bound", "partly_bound", "unbound"].includes(bindings.status));
   return <Disclosure summary="数值与计算来源" defaultOpen={hasChain}>
     <div className="space-y-4 py-2">
-      {snapshot && <section aria-label="生成方式" className="space-y-1">
+      {snapshot && snapshot.kind !== "unobserved" && <section aria-label="生成方式" className="space-y-1">
         <p>生成方式：{snapshotKindLabel(snapshot.kind)}{snapshot.method ? ` · ${snapshot.method.id}${snapshot.method.version ? ` 第 ${snapshot.method.version} 版` : ""}` : ""}</p>
         {snapshot.method?.executed && <p className="text-caption text-muted">实际执行：{Object.entries(snapshot.method.executed).map(([key, value]) => `${key}=${String(value)}`).join("，")}</p>}
         {snapshot.method?.seed != null && <p className="text-caption text-muted">随机种子 {snapshot.method.seed}</p>}
-        {snapshot.script && <p className="break-all text-caption text-muted">代码：{snapshot.script.path ?? snapshot.method?.id ?? "计算引擎"}{snapshot.script.digest ? ` · 摘要 ${snapshot.script.digest.slice(0, 12)}` : ""} · {snapshot.script.verified ? "已核对" : "未核对"}</p>}
-        {snapshot.inputs.map((input) => <p key={`${input.id}:${input.versionId ?? input.digest}`} className="break-all text-caption text-muted">输入：{input.path ?? input.id}{input.digest ? ` · 摘要 ${input.digest.slice(0, 12)}` : " · 摘要未记录"}{input.versionId && ["available", "captured"].includes(input.availability) ? " · 已保存此版本" : " · 未保存此版本"}</p>)}
+        {snapshot.script?.path && <p className="break-all text-caption text-muted">代码：{snapshot.script.path}</p>}
+        {snapshot.inputs.map((input) => <p key={`${input.id}:${input.versionId ?? input.digest}`} className="break-all text-caption text-muted">输入：{input.path ?? input.id}</p>)}
         {snapshot.transformations.map((item) => <p key={`${item.datasetId}:${item.name}`} className="text-caption text-muted">数据变换：{item.name} 第 {item.version} 版（数据集 {item.datasetId}）</p>)}
-        {snapshot.environment.facts && <p className="text-caption text-muted">运行环境：{snapshot.environment.facts.interpreter ?? "已记录"}{snapshot.environment.facts.packages ? ` · ${Object.keys(snapshot.environment.facts.packages).length} 个软件包的版本` : ""}{snapshot.environment.facts.imageId ? ` · 运行镜像 ${snapshot.environment.facts.imageId.replace(/^sha256:/, "").slice(0, 12)}` : ""}</p>}
-        {snapshot.process && <p className="text-caption text-muted">运行结果：{snapshot.process.exitCode === 0 ? "正常结束" : snapshot.process.exitCode == null ? "未记录" : `退出码 ${snapshot.process.exitCode}`}{snapshot.process.sourcesUnchanged === false ? "，运行中输入文件发生了变化" : ""}</p>}
-        {reproduction && <p className={snapshot.reproduction === "observed_execution" ? "text-caption text-muted" : "text-caption text-verify-pending"}>{reproduction}</p>}
-        {!snapshot.recorded && <p className="text-caption text-verify-pending">此版本保存时没有记录生成过程。</p>}
-        {snapshot.unknown.length > 0 && <ul aria-label="未被观察的部分" className="list-disc space-y-1 pl-5 text-caption text-verify-pending">{snapshot.unknown.map((code) => <li key={code}>{snapshotUnknownLabel(code)}</li>)}</ul>}
+        {(snapshot.environment.facts?.interpreter || snapshot.environment.facts?.packages) && <p className="text-caption text-muted">运行环境：{[snapshot.environment.facts.interpreter, snapshot.environment.facts.packages ? `${Object.keys(snapshot.environment.facts.packages).length} 个软件包的版本` : null].filter(Boolean).join(" · ")}</p>}
       </section>}
 
       {bindings && <section aria-label="数值核对" className="space-y-2">
@@ -69,7 +68,6 @@ export function ResultLineagePanel({ version, selectedText = null, onOpen }: {
         {bindings.unbound.length > 0 && <ul aria-label="没有对应计算值的数值" className="list-disc space-y-1 pl-5 text-caption text-verify-pending">
           {bindings.unbound.map((item, index) => <li key={index}>“{item.printed}”（{bindingLocatorLabel(item.locator)}）：{unboundReasonLabel(item)}</li>)}
         </ul>}
-        {bindings.unresolved.length > 0 && <p className="text-caption text-verify-pending">渲染时有 {bindings.unresolved.length} 处引用没有找到对应的计算值，报告里写的是“未计算”。</p>}
         {bindings.truncated && <p className="text-caption text-muted">数值较多，只列出了前面的一部分。</p>}
       </section>}
 

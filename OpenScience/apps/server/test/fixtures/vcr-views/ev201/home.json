@@ -157,20 +157,6 @@
       },
       "attention": [
         {
-          "kind": "ai_set",
-          "tone": "attention",
-          "tab": "data",
-          "text": "2 条关键假设由 AI 设定",
-          "items": [
-            "对照组中位 PFS",
-            "目标 HR"
-          ],
-          "action": {
-            "label": "去复核",
-            "tab": "data"
-          }
-        },
-        {
           "kind": "not_estimable",
           "tone": "attention",
           "tab": "comparator",

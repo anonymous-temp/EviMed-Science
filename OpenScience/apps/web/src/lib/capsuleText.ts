@@ -17,25 +17,23 @@ export function capsuleEntryLabel(factKind: string): string {
   return CAPSULE_ENTRY_TYPES.find((item) => item.value === factKind)?.label ?? "研究记录";
 }
 
-/** Why the automatic scan dropped an entry of a shared pack, in the reader's words. */
-export const CAPSULE_SCAN_REASONS: Record<string, string> = {
-  names_platform_tool: "提到了平台自己的工具或路径",
-  unsafe_link_scheme: "含有会自己执行的链接",
-  auto_loading_image: "含有一打开就会加载的图片链接",
-  credential_in_link: "链接里带着账号和口令",
-  instructs_agent: "在指挥助手做研究方法以外的事",
-};
-
-/** How far the language half of the scan got. What it did not judge stays in
- *  force as context but is never loaded into a run as a method until a later
- *  scan (the next trial or enable) has judged it. */
-export const CAPSULE_SCAN_MODEL_STATUS: Record<string, string> = {
-  ok: "签名、格式和内容检查都已完成",
-  partial: "签名和格式检查已完成；内容检查只完成了一部分（没检查到的方法先只作参考、不载入运行，下次试用或启用时再检查）",
-  unavailable: "签名和格式检查已完成；内容检查暂时不可用（其中的方法先只作参考、不载入运行，下次试用或启用时再检查）",
-};
+/**
+ * The entries of a previewed pack that come in. The automatic scan still decides, on the server, what is mounted; the screen shows what
+ * comes in and neither lists, counts nor explains what the scan left out (owner ruling 2026-10-10: a scan result, a trust verdict and a
+ * model-written reason are the back office's).
+ */
+export function takenEntries<T extends { id: string }>(entries: readonly T[], scan?: { dropped?: ReadonlyArray<{ id: string }> } | null): T[] {
+  const left = new Set((scan?.dropped ?? []).map((item) => item.id));
+  return entries.filter((entry) => !left.has(entry.id));
+}
 
 /** 「来自 …」 with a typed space only before Latin text: 「来自李主任」, 「来自 Alice」. */
 export function fromSender(author: string): string {
   return /^[A-Za-z0-9]/.test(author) ? `来自 ${author}` : `来自${author}`;
 }
+
+/**
+ * The longest signature (署名) the share dialog takes, in characters: the bound the control plane enforces
+ * (`SIGNATURE_MAX_CHARS` in `capsuleShareLabel.mjs`; a server test holds the two equal).
+ */
+export const CAPSULE_SIGNATURE_MAX_CHARS = 60;

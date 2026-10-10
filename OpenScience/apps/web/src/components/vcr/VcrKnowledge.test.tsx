@@ -48,13 +48,13 @@ beforeEach(() => {
 const posted = (method: string, path: string) => network.productRequest.mock.calls.filter((call) => call[0] === path && call[1] === method);
 
 describe("病种定义包 on 定义与证据", () => {
-  it("marks a draft 「AI 草拟」, lists each source with its link and licence, and lets the lead promote it", async () => {
+  it("shows a draft pack without a label about who wrote it, lists each source with its link and licence, and lets the lead promote it", async () => {
     const changed = vi.fn();
     draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={knowledgeOf()} canWrite onChanged={changed} />);
     const pack = document.querySelector("[data-vcr-pack]") as HTMLElement;
     expect(pack).toHaveAttribute("data-vcr-pack", "ai-draft");
     expect(within(pack).getByText("某罕见病")).toBeInTheDocument();
-    expect(within(pack).getByText("AI 草拟")).toBeInTheDocument();
+    expect(within(pack).queryByText("AI 草拟")).not.toBeInTheDocument();
     // The pack's own version number is the platform's, not a reader's.
     expect(within(pack).queryByText("v2")).toBeNull();
     expect(pack).toHaveTextContent("术语 3 · 表型 0 · 终点 2 · 入排条件 4");
@@ -68,12 +68,24 @@ describe("病种定义包 on 定义与证据", () => {
     expect(changed).toHaveBeenCalled();
   });
 
-  it("shows a curated pack as 「已整理」 with nothing to promote", () => {
+  it("shows a curated pack with nothing to promote, and no status tag", () => {
     const curated = knowledgeOf({ pack: { origin: "shipped", id: "nsclc", diseaseKey: "nsclc", name: "NSCLC", nameZh: "非小细胞肺癌", version: 1, status: "curated", counts: { terms: 42 }, sources: [], canPromote: false } });
     draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={curated} canWrite onChanged={() => undefined} />);
-    expect(screen.getByText("已整理")).toBeInTheDocument();
-    expect(screen.queryByText("AI 草拟")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^已整理$|AI 草拟/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "复核后标为已整理" })).not.toBeInTheDocument();
+  });
+
+  it("says, without a version number, that the study now reads the newest edition when the one it chose is no longer in the catalogue (E-11)", () => {
+    const pack = { origin: "shipped", id: "nsclc", diseaseKey: "nsclc", name: "NSCLC", nameZh: "非小细胞肺癌", version: 3, status: "curated", counts: { terms: 42 }, sources: [], canPromote: false };
+    draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={knowledgeOf({ pack: { ...pack, binding: { version: 2, resolution: "newest_compatible" } } })} canWrite onChanged={() => undefined} />);
+    expect(document.querySelector("[data-vcr-pack-edition]")).toHaveTextContent("现按最新的一版读取");
+    expect(within(document.querySelector("[data-vcr-pack]") as HTMLElement).queryByText(/v\d|第 \d 版/)).toBeNull();
+  });
+
+  it("says nothing about the edition when the study reads the one it chose", () => {
+    const pack = { origin: "shipped", id: "nsclc", diseaseKey: "nsclc", name: "NSCLC", nameZh: "非小细胞肺癌", version: 3, status: "curated", counts: { terms: 42 }, sources: [], canPromote: false };
+    draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={knowledgeOf({ pack: { ...pack, binding: { version: 3, resolution: "recorded" } } })} canWrite onChanged={() => undefined} />);
+    expect(document.querySelector("[data-vcr-pack-edition]")).toBeNull();
   });
 
   it("names the library definitions the study used, with their versions and uses and the pack entries they rest on", () => {
@@ -96,7 +108,7 @@ describe("病种定义包 on 定义与证据", () => {
     const changed = vi.fn();
     draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={knowledgeOf({ pack: null, definitions: [] })} canWrite onChanged={changed} />);
     const select = await screen.findByLabelText("选用病种定义包");
-    expect(within(select).getByRole("option", { name: "某罕见病（AI 草拟）" })).toBeInTheDocument();
+    expect(within(select).getByRole("option", { name: "某罕见病" })).toBeInTheDocument();
     await userEvent.selectOptions(select, "nsclc");
     await userEvent.click(screen.getByRole("button", { name: "绑定" }));
     await waitFor(() => expect(posted("POST", `/vcr/studies/${STUDY_ID}/pack`)).toHaveLength(1));

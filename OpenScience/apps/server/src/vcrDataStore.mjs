@@ -353,9 +353,33 @@ export class VcrDataStore extends VcrStoreBase {
 
   /** @param {string} studyId @param {string} projectionId @param {any} context @param {any} window */
   async recordCloudWindow(studyId, projectionId, context, window) {
+    // Keyed by the range as well as the text's hash: two stretches of a note that read alike are two stretches, and keyed by the
+    // text alone the second replaced the first and the document read as less covered than it was.
+    const key = `${window.served?.[0]}-${window.served?.[1]}:${window.hash}`;
     await this.rows(`UPDATE ${this.schema}.cloud_reads SET windows=windows || $4::jsonb
       WHERE study_id=$1 AND session_id=$2 AND projection_id=$3`,
-    [studyId,context.sessionId,projectionId,JSON.stringify({[window.hash]:{...window,runId:context.runId}})]);
+    [studyId,context.sessionId,projectionId,JSON.stringify({[key]:{...window,runId:context.runId}})]);
+  }
+
+  /**
+   * The windows runs were served of each reviewed document, by document: the recorded ranges of the newest reviewed projection of it
+   * across every conversation that read it (an older projection's offsets are another text's). A document with a projection and no
+   * read is there with no windows; one with no projection is not there. Geometry and the text's length only — no text, no run, no session.
+   * @param {string} studyId
+   * @returns {Promise<Map<string, Array<{ served?: unknown, chars?: unknown }>>>}
+   */
+  async documentWindows(studyId) {
+    const rows = await this.rows(`WITH newest AS (SELECT DISTINCT ON (document_id) id, document_id FROM ${this.schema}.document_projections
+        WHERE study_id=$1 ORDER BY document_id, created_at DESC, id DESC)
+      SELECT n.document_id, r.windows FROM newest n LEFT JOIN ${this.schema}.cloud_reads r ON r.projection_id=n.id AND r.study_id=$1`, [studyId]);
+    /** @type {Map<string, Array<{ served?: unknown, chars?: unknown }>>} */
+    const byDocument = new Map();
+    for (const row of rows) {
+      const held = byDocument.get(String(row.document_id)) ?? [];
+      for (const window of Object.values(row.windows ?? {})) held.push({ served: window?.served, chars: window?.chars });
+      byDocument.set(String(row.document_id), held);
+    }
+    return byDocument;
   }
 
   /** @param {{studyId:string,sourceId:string,actor:string,permission:any}} input */

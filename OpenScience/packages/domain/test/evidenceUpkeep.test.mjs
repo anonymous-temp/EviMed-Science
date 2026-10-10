@@ -63,13 +63,15 @@ test("an entry's sentence is made from facts and says what happened in plain Chi
   assert.match(said({ category: "correction", trigger: "challenge", facts: { claimId: "CLM-2", revisionBefore: 2, revisionAfter: 3 } }), /CLM-2.*修正/);
   assert.match(said({ category: "withdrawal", trigger: "challenge", facts: { claimId: "CLM-2", cardWithdrawn: true } }), /撤回该条结论.*本卡.*撤回/);
   assert.match(said({ category: "searched_no_change", trigger: "challenge", facts: { claimId: "CLM-2" } }), /维持原结论/);
-  // A calculated claim is checked against its receipt, never a source: its entries do not say "原文".
+  // A calculated claim is checked against its calculation basis, never a source: its entries do not say "原文", and (owner ruling
+  // 2026-10-10) they do not talk of the platform's receipts either: the basis was or was not matched.
   const calculated = { claimId: "CALC-1", calculated: true };
-  assert.match(said({ category: "withdrawal", trigger: "challenge", facts: calculated }), /CALC-1.*计算依据对不上平台保存的回执，已撤回该条结论。$/);
-  assert.match(said({ category: "withdrawal", trigger: "challenge", facts: { ...calculated, receiptVerified: true } }), /回执只能支持数字本身，不能支持这条结论的表述，已撤回该条结论。$/, "a number the receipt bears is not called untraceable");
+  assert.match(said({ category: "withdrawal", trigger: "challenge", facts: calculated }), /CALC-1.*计算依据没有核对上，已撤回该条结论。$/);
+  assert.match(said({ category: "withdrawal", trigger: "challenge", facts: { ...calculated, receiptVerified: true } }), /数字本身有依据，但这条结论的表述没有依据，已撤回该条结论。$/, "a number the basis bears is not called untraceable");
   assert.match(said({ category: "withdrawal", trigger: "challenge", facts: { ...calculated, cardWithdrawn: true, lostCalculationBasis: true } }), /已没有一条带计算依据，一手分析无法成立，本卡一并撤回/);
-  assert.match(said({ category: "correction", trigger: "challenge", facts: calculated }), /修正了该条结论的表述，数字仍与平台保存的回执一致/);
-  assert.match(said({ category: "searched_no_change", trigger: "challenge", facts: calculated }), /维持原结论，数字已按平台保存的回执重新核对/);
+  assert.match(said({ category: "correction", trigger: "challenge", facts: calculated }), /修正了该条结论的表述，数字仍然核对得上/);
+  assert.match(said({ category: "searched_no_change", trigger: "challenge", facts: calculated }), /维持原结论，数字已重新核对/);
+  for (const category of ["withdrawal", "correction", "searched_no_change"]) assert.doesNotMatch(said({ category, trigger: "challenge", facts: { ...calculated, receiptVerified: true } }), /回执|平台保存/, category);
   for (const category of ["withdrawal", "correction", "searched_no_change"]) assert.doesNotMatch(said({ category, trigger: "challenge", facts: calculated }), /原文/, category);
   assert.match(said({ category: "correction", trigger: "producer_edit", facts: { revisionBefore: 1, revisionAfter: 2 } }), /出品方更新了本卡/);
   assert.match(said({ category: "new_evidence_conclusion_changed", trigger: "producer_edit", facts: { itemCount: 2, revisionBefore: 1, revisionAfter: 2 } }), /核对了 2 项新研究并更新了本卡；结论有变化（第 1 版 → 第 2 版）/);

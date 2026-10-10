@@ -1,6 +1,5 @@
 import { Link } from "react-router";
 import type { EvidenceCard, EvidenceZone } from "@/lib/evidenceZoneClient";
-import { evidenceReviewLabel } from "./EvidenceReading";
 
 /**
  * The first group of the 关注 feed, headed like the day groups below it (not a bordered block of its
@@ -44,7 +43,6 @@ export function FollowedEvidenceZones({ zones, cards }: { zones: readonly Eviden
                 {(card.content?.answer || card.summary) && (
                   <p className="mt-1 line-clamp-2 max-w-measure text-caption text-text-2">{card.content?.answer || card.summary}</p>
                 )}
-                {evidenceReviewLabel(card) && <p className="mt-1 text-caption text-text-3">{evidenceReviewLabel(card)}</p>}
               </li>
             ))}
           </ul>

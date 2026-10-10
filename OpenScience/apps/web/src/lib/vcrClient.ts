@@ -219,7 +219,7 @@ export type VcrSteps = Partial<Record<VcrStepKey, VcrStep>>;
 export interface VcrAttention {
   kind: string;
   text: string;
-  /** `attention` is the amber 「AI 设定 / 缺口」 line; `stale` is the grey one. */
+  /** `attention` is the amber line (a gap, a failed step, a wait for the allowance); `stale` is the grey one. */
   tone?: "attention" | "stale" | "neutral";
   /** The names under the line: the three assumptions, the three gaps. */
   items?: string[];
@@ -276,7 +276,7 @@ export interface VcrRecruitTodo {
 export interface VcrReviewSummary {
   id: string; reviewerKind: "ai" | "human"; role: string; label: string; state: string;
   status: "queued" | "running" | "done" | "failed"; current: boolean;
-  by?: string | null; at?: string | null; note: string;
+  by?: string | null; at?: string | null; note?: string | null;
   /**
    * One sentence each (`fix`, or `message` where the reviewer wrote no fix) and, when the finding is about an object this study holds, the
    * way to it. The reviewer's path into the frozen snapshot and the JSON it quoted are the review's own provenance and are not sent.
@@ -355,7 +355,7 @@ export interface VcrChange {
   at: string;
   text: string;
   by?: string | null;
-  state?: VcrReviewState | "stale" | null;
+  state?: "stale" | null;
 }
 
 /** A design on the trade-off scatter and in the grid. */
@@ -512,7 +512,6 @@ export interface VcrCriterion {
   kept: number | null;
   excluded: number | null;
   unknown: number | null;
-  review?: VcrReviewState | null;
   source?: VcrValueSource | null;
   /** 「v2 修改」. */
   changed?: string | null;
@@ -805,7 +804,7 @@ export interface VcrComparatorTab {
   methods?: Array<{ label: string; version?: string | null; note?: string | null; passed?: boolean }>;
   /** ICH E10's four conditions. */
   e10?: Array<{ key: string; label: string; state: "met" | "partial" | "doubtful"; note?: string | null }>;
-  estimand?: { rows: Array<{ label: string; value: string }>; note?: string | null; source?: VcrValueSource | null; review?: VcrReviewState | null } | null;
+  estimand?: { rows: Array<{ label: string; value: string }>; note?: string | null; source?: VcrValueSource | null } | null;
   comparability: VcrProfileRow[];
   comparabilityNote?: string | null;
   /** The ten comparability dimensions, each with its state. */
@@ -822,8 +821,8 @@ export interface VcrComparatorTab {
   /** 「不可估计」 — the gaps, and what each one would answer. */
   gaps: { title?: string | null; needs?: string | null; items: Array<{ title: string; detail?: string | null; answers?: string | null }>; conclusion?: string | null; rule?: string | null } | null;
   counts: VcrCounts | null;
-  /** 「本页结论：有限制地估计 · AI 设定 · 未复核」. */
-  verdict?: { conclusion: VcrConclusion | null; review: VcrReviewState; reviewed?: boolean } | null;
+  /** 「本页结论：有限制地估计」. */
+  verdict?: { conclusion: VcrConclusion | null } | null;
   stale: VcrStaleNote | null;
   partial: VcrPartial | null;
 }
@@ -843,7 +842,6 @@ export interface VcrTrialTab {
   headline?: string | null;
   /** ADEMP, one line each. */
   ademp: Array<{ key: string; label: string; text: string }>;
-  ademReview?: VcrReviewState | null;
   designs: VcrDesign[];
   /** The columns of the design grid, in order. */
   columns: Array<{ key: string; label: string; unit?: string | null }>;
@@ -900,6 +898,14 @@ export interface VcrCandidate {
   priority?: { label: string; score: number | null; rationale: string | null } | null;
 }
 
+/** A sentence a verdict rests on, where it is (the document by the name the data tab lists it under, or a cell of the data table) and the date of what it records. */
+export interface VcrCriterionCitation {
+  quote: string;
+  source?: string | null;
+  at?: string | null;
+  locator?: { documentId?: string; start?: number | null; end?: number | null; snapshotId?: string; field?: string } | null;
+}
+
 /** One rule judged against one candidate. */
 export interface VcrCriterionJudgement {
   /**
@@ -917,7 +923,9 @@ export interface VcrCriterionJudgement {
    * The patient's own sentence, and where it is from. `locator` is where the sentence stands: a span of a document
    * (`documentId`, `start`, `end` — the same span a fact of the clinical timeline cites) or a cell of the data table (`snapshotId`, `field`).
    */
-  evidence?: { quote: string; source?: string | null; at?: string | null; locator?: { documentId?: string; start?: number | null; end?: number | null; snapshotId?: string; field?: string } | null } | null;
+  evidence?: VcrCriterionCitation | null;
+  /** Every citation the verdict rests on (at most three), the first of them being `evidence`: an unknown that waits on a prescription also shows the administration it was set against. */
+  evidenceItems?: VcrCriterionCitation[];
   /** What to ask for: 「申请近 4 周头颅 MRI」. */
   request?: string | null;
   requestNote?: string | null;
@@ -964,6 +972,8 @@ export interface VcrPatientTrials {
 export interface VcrClinicalTimelineEntry {
   id: string; variable: string; value: unknown; unit: string | null; at: string | null; assertion: string; experiencer: string | null;
   medicationState: string | null; correctionOf: string | null; quote: string | null;
+  /** The document the fact is in, by the name the data tab lists it under. */
+  document?: string | null;
   superseded?: boolean; conflictFactIds?: string[]; correctionReason?: string | null;
   /** The fact was read from a basis (a record, a reviewed text, a permission) that has since changed. */
   basis?: "updated";
@@ -1206,7 +1216,7 @@ export interface VcrPackSource {
   accessed?: string | null;
 }
 
-/** A disease knowledge pack, without its sections (`VCR_PACK_STATUSES`: curated 已整理, ai-draft AI 草拟). */
+/** A disease knowledge pack, without its sections (`VCR_PACK_STATUSES`: curated, ai-draft — the status decides whether a lead may promote it, and the page does not tag it). */
 export interface VcrPackSummary {
   origin: "shipped" | "stored";
   id: string;
@@ -1220,6 +1230,8 @@ export interface VcrPackSummary {
   reviewedBy?: string | null;
   reviewedAt?: string | null;
   boundAt?: string | null;
+  /** Whether the pack read is the edition the study chose, or the newest one standing in for an edition the catalogue no longer holds. */
+  binding?: { resolution: "recorded" | "newest_compatible" } | null;
   /** A draft the reader may promote (the lead, or an operator). */
   canPromote?: boolean;
   /** A platform pack (flywheel F26): who made it by the name they allow, from which of their versions, and whether a source has changed since. */
@@ -1825,6 +1837,7 @@ export function readVcrPackSummary(raw: unknown): VcrPackSummary {
     counts: Object.fromEntries(Object.entries(obj(value.counts)).filter((entry): entry is [string, number] => typeof entry[1] === "number")),
     sources: arr(value.sources).map(readPackSource),
     reviewedBy: text(value.reviewedBy), reviewedAt: text(value.reviewedAt), boundAt: text(value.boundAt), canPromote: value.canPromote === true,
+    ...(obj(value.binding).resolution === "newest_compatible" ? { binding: { resolution: "newest_compatible" as const } } : {}),
     ...(value.platform && typeof value.platform === "object" ? { platform: value.platform as VcrPackSummary["platform"] } : {}),
     ...(value.platformRequest && typeof value.platformRequest === "object" ? { platformRequest: value.platformRequest as VcrPackSummary["platformRequest"] } : {}),
   };
@@ -2427,6 +2440,8 @@ export interface VcrIntakeFile {
   erased?: boolean;
   /** The reviewed texts saved of this record that are still live. */
   projections?: Array<{ id: string; at: string | null }>;
+  /** A reviewed record: how many characters a run was shown of its text and how many it never was (`null` when it is not reviewed). */
+  reading: { chars: number | null; read: number; skipped: number | null; complete: boolean } | null;
 }
 
 export interface VcrIntakeIssue { code: string; message: string; table: string | null; column: string | null }
@@ -2570,6 +2585,8 @@ function readIntakeFile(raw: Loose): VcrIntakeFile {
     sourceFormat: text(raw.sourceFormat), pages: finite(raw.pages), blankPages: finite(raw.blankPages), importFormat: text(raw.importFormat),
     ...(raw.erased === true ? { erased: true } : {}),
     ...(arr(raw.projections).length ? { projections: arr(raw.projections).map((projection) => ({ id: text(projection.id) ?? "", at: text(projection.at) })) } : {}),
+    reading: finite(obj(raw.reading).read) !== null
+      ? { chars: finite(obj(raw.reading).chars), read: finite(obj(raw.reading).read) ?? 0, skipped: finite(obj(raw.reading).skipped), complete: obj(raw.reading).complete === true } : null,
   };
 }
 

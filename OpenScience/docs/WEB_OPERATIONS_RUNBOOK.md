@@ -1658,10 +1658,25 @@ as-of time before queueing. Continue a batch using its `inputSnapshotId` and
 `nextOffset`, not current mutable inputs. Requested candidates remain partitioned
 into evaluated, pending and explicitly unavailable. Multi-protocol jobs retain
 independent protocol and input identities; recruitment availability, ranking and
-eligibility are different facts. Monitor `open_science_vcr_matching_records` alongside
-existing job and usage metrics. Compare unknowns, incomplete assessments, fact-write
-issues, eligible recall, latency and actual costs separately. Metric labels do not
-carry subject identifiers or clinical text.
+eligibility are different facts. Monitor `open_science_vcr_matching_records{kind}`, a
+gauge of stored rows counted over every revision, with no patient, study or subject
+label: `contextual_facts` (facts written with the clinical block), `legacy_facts` (facts
+written without it), `producer_receipts` (the model-call receipts behind facts and
+language judgments), `incomplete_assessments` (assessments that ended
+insufficient_evidence), `frozen_batches` (frozen matching inputs) and
+`reviewed_projections` (reviewed text projections of documents).
+`open_science_vcr_matching_producers{model}` splits the producer receipts by the model
+that answered the producing run's latest call (`unrecorded` where the run ledger could
+not say), so a change of model behind the stored evidence is visible; it carries no run,
+request or hash. Read the writes a run
+was refused from `open_science_vcr_service_total{kind="writeIssues"}` and job outcomes
+from `open_science_vcr_jobs_total`. The matching gauge does not measure eligible recall,
+latency or spend, and none of the three is a series of its own: eligible recall needs
+reference labels, so only the offline scorers compute it
+(`evals/method-quality/score_native_clinical.py` and `clinical_metrics.py`); a job's
+latency is the gap between `created_at` and `finished_at` on its job record; spend is the
+rows of `evimed_usage.model_requests` for purpose `vcr`. Compare them separately, not as
+one number. Metric labels do not carry subject identifiers or clinical text.
 
 The repeatable local acceptance commands are:
 

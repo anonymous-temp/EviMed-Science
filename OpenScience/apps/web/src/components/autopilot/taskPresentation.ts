@@ -1,4 +1,4 @@
-import { AGENDA_MIN_EPISODE_BUDGET_CNY, AUTOPILOT_BUDGET_ERROR_CODES, BALANCE_REFUSAL_CODES, knownErrorCodeMessage, type VERIFICATION_UNSCHEDULED_REASONS } from "@evimed/domain";
+import { AGENDA_MIN_EPISODE_BUDGET_CNY, AUTOPILOT_BUDGET_ERROR_CODES, BALANCE_REFUSAL_CODES, knownErrorCodeMessage } from "@evimed/domain";
 import type { AgendaRecord, AgendaSchedule, EpisodePayload, EpisodeRecord, ResearchState } from "@/lib/autopilotClient";
 export const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 export const TASK_TYPES = [
@@ -143,15 +143,12 @@ export const FOUND_PREFIX: Record<ResearchState["found"][number]["check"], strin
 const UNRESOLVED_PREFIX: Record<Exclude<ResearchState["unresolved"][number]["kind"], "not_run" | "not_rechecked">, string> = {
   unchecked: "尚未独立复核：", check_unavailable: "复核未能进行：", weakened: "被复核削弱：", question: "你的问题：",
 };
-/** Why no independent check will be made, one line each. An agenda that stopped leaves a re-check either unstarted or cancelled with it; both read the same. */
-const NOT_RECHECKED: Record<typeof VERIFICATION_UNSCHEDULED_REASONS[number], string> = {
-  agenda_stopped: "任务已停止，未做独立复核：", agenda_paused: "任务已暂停，未做独立复核：",
-  verification_cap: "超出每次研究复核的条数，未安排独立复核：", verification_budget_unavailable: "单次上限不够再支付一次复核，未安排独立复核：",
-};
 export function unresolvedText(item: ResearchState["unresolved"][number]): string {
   // A run that did not run says nothing about the question, and the line says so.
   if (item.kind === "not_run") return "最近一次研究没有完成，结果未知。";
-  if (item.kind === "not_rechecked") return `${NOT_RECHECKED[item.reason as keyof typeof NOT_RECHECKED] ?? "未做独立复核："}${item.text ?? ""}`;
+  // Why no independent check will be made (the task stopped or paused, the cap, the budget) is the platform's reason, not the reader's: the
+  // finding is listed as it is (owner ruling 2026-10-10).
+  if (item.kind === "not_rechecked") return item.text ?? "";
   return `${UNRESOLVED_PREFIX[item.kind]}${item.text ?? ""}`;
 }
 /** What a researcher is told about an added document; a usable one needs no word. */

@@ -433,10 +433,20 @@ export const MEASURE_META = Object.freeze({
   ...ROBUSTNESS_MEASURE_META,
 });
 
-/** The unit words the engine writes, said in Chinese. */
-const UNIT_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
-  months: "个月", month: "个月", days: "天", day: "天", weeks: "周", years: "年", "%": "%",
+/**
+ * The time units a page names, keyed by the domain's one table (`VCR_TIME_UNITS`; a test holds the two to each other): the word after
+ * a number (a horizon of 24 个月) and the bare unit (时间单位：月).
+ */
+export const TIME_UNIT_WORDS = Object.freeze(/** @type {Record<string, { after: string, bare: string }>} */ ({
+  days: { after: "天", bare: "天" }, weeks: { after: "周", bare: "周" }, months: { after: "个月", bare: "月" }, years: { after: "年", bare: "年" },
 }));
+/** The unit words the engine and the platform write, said in Chinese: the time units by their table, their singular forms, and the percent sign. */
+const UNIT_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
+  ...Object.fromEntries(Object.entries(TIME_UNIT_WORDS).map(([unit, words]) => [unit, words.after])),
+  month: TIME_UNIT_WORDS.months.after, day: TIME_UNIT_WORDS.days.after, "%": "%",
+}));
+/** A unit as a page says it: an English unit word of the engine's or the platform's in Chinese, any other spelling as it was written. @param {string | null} unit */
+export const zhUnit = (unit) => (unit === null ? null : UNIT_WORDS[unit] ?? unit);
 
 /** @param {string} name */
 const isProportionName = (name) => MEASURE_META[name]?.percent === true || name.startsWith("probability_by_");
@@ -801,7 +811,8 @@ export function presentVcrReview(review, context = {}) {
     // revision and an input digest are the platform's own record, and a reader of the page has no use for any of them.
     state, status, current: review.current !== false, by: ai ? null : review.reviewerName ?? null,
     at: context.raw === true ? at : zhTime(at, context.now ?? new Date()),
-    note: status === 'failed' ? '审查暂未完成；已完成的研究与导出仍可使用。' : '审查意见供参考，不代表实证验证。',
+    // What happened and what still works, when a review could not finish; a finished review carries no hedge about itself (owner ruling 2026-10-10).
+    note: status === 'failed' ? '审查暂未完成；已完成的研究与导出仍可使用。' : null,
     findings: findings.map(finding => context.raw === true
       ? { id: finding.id, kind: finding.kind, location: finding.location, evidence: finding.evidence,
         message: finding.message, fix: finding.fix, response: finding.response ?? null }

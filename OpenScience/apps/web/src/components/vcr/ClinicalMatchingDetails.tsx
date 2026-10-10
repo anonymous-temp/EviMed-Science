@@ -119,10 +119,15 @@ export function CriterionTable({ label, rows, facts, extraColumns = [] }: {
       key: 'evidence',
       header: '患者证据',
       isEmpty: (row) => !row.evidence,
+      // Up to three citations, the first still `evidence`: each with its quote, the document it is in and the date of what it records.
       cell: (row) => row.evidence ? (
-        <span className="block">
-          <span className="block text-text">{`“${row.evidence.quote}”`}</span>
-          <span className="block text-caption text-text-3">{[row.evidence.source, row.evidence.at].filter(Boolean).join(' · ')}</span>
+        <span className="flex flex-col gap-1.5">
+          {(row.evidenceItems?.length ? row.evidenceItems : [row.evidence]).map((item, index) => (
+            <span key={`${item.quote}-${index}`} className="block">
+              <span className="block text-text">{`“${item.quote}”`}</span>
+              <span className="block text-caption text-text-3">{[item.source, item.at].filter(Boolean).join(' · ')}</span>
+            </span>
+          ))}
         </span>
       ) : null,
     },
@@ -292,7 +297,7 @@ export function ClinicalTimeline({ studyId, data, mayReadOriginal, subject }: {
         <p className="text-caption text-text-3">{[formatDay(entry.at) || '日期未记载', assertions[entry.assertion] ?? '未知',
           entry.experiencer ? experiencers[entry.experiencer] : null, entry.medicationState ? medicationStates[entry.medicationState] : null,
           entry.correctionOf ? '更正记录' : null, entry.superseded ? '已有更正' : null, entry.conflictFactIds?.length ? '记录有冲突' : null,
-          entry.basis === 'updated' ? '依据已更新' : null].filter(Boolean).join(' · ')}</p>
+          entry.basis === 'updated' ? '依据已更新' : null, entry.document ?? null].filter(Boolean).join(' · ')}</p>
         <p className="text-ui text-text">{entry.quote ?? `${entry.variable}：${factValueText(entry.value)}${entry.unit ? ` ${entry.unit}` : ''}`}</p>
         {entry.correctionReason && <p className="text-caption text-text-2">{entry.correctionReason}</p>}
         {/* The original can be read wherever the fact cites a span of it; whether the server can open that span is the server's answer, said right here. */}

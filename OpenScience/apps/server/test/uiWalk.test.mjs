@@ -205,7 +205,57 @@ test("the back-office list still catches a ledger count, and lets the evidence c
   assert.equal(caught("已核对 41/72"), true);
   assert.equal(caught("核对 37 条"), true);
   assert.equal(caught("引文已核对 1/2"), false);
-  assert.equal(caught("解读 · 综合 · 引文已核对 1/2 · AI 已评议"), false);
+  assert.equal(caught("解读 · 综合 · 引文已核对 1/2"), false);
+  // The AI's review status was a label on the card beside it until 2026-10-10 (R29); the ruling took it off.
+  assert.equal(caught("解读 · 综合 · 引文已核对 1/2 · AI 已评议"), true);
+});
+
+test("the back-office list catches what the 2026-10-10 ruling took off the screens, and not a researcher's own sentence", () => {
+  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
+  // A received pack: no trust verdict, no word of what the automatic scan left out.
+  for (const text of ["研究方法 7 · 一般偏好 5 · 来源未验证", "来源未验证 · 2 条 · 不会带上 1 条", "研究方法 · 不会带上：在指挥助手做研究方法以外的事", "1 条没有带上", "不会带上 3 条没有通过自动检查的内容。"]) {
+    assert.equal(caught(text), true, text);
+  }
+  assert.equal(caught("他出门时没有带上伞，所以不会带上那本书"), false);
+  // A share panel and a zone page: no assurance of what the file or the reference holds.
+  for (const text of ["审查意见供参考，不代表实证验证。", "表中每个数都是这个研究的结果，不是手写的。", "平台不自动选定方案：先写比较目标。", "被审查的内容有了新版本，旧意见保留供参考", "你已确认 1 数据字典所述 1 模型推断 12", "确认以上推断", "导读由模型根据原文写成，数字已逐字核对；引用前请阅读原文。", "证据卡是 EviMed 对来源的整理，只是索引，请引用它列出的原始来源。", "撤回的卡片保留这一页，是为了让引用过它的人能看到发生了什么。", "其他用户公开发布的相关卡片，署名、只读，平台没有改动，也不为它们背书", "“未核实”是平台还没核对这一项，不等于不满足。", "三项都未核实", "任务已停止，未做独立复核：停止时尚未开始", "引擎 drug_safety_analysis · 方法 faers.signals@1.1.0 · 回执 rv_aaaa", "drug_safety_analysis · faers.signals@1.1.0 · 回执 rv_aaaa", "有 1 条平台计算的结论没有对上引擎回执，没有列出。", "本卡由平台议程完成：3 条结论的引文已逐字核对。", "裁定意见：差异在合理范围内（证明哈希 cccccccccccc）。", "当前内容已完成 AI 评议", "部分来源本轮尚未完成复核，沿用上次保留内容。", "依据全文 · 上次成功读取于 10月1日", "本轮未能重新读取，沿用上次保留内容", "按问题内容交给「临床证据深度分析」", "直接回答：这个问题不需要交付报告", "交付物的证据链有缺口，运行会被退回修复。", "成果可以正常查看，引用前请自行复核这部分。", "回执密钥文件读不到；只是没有用密钥验回执。", "文件摘要：" + "b".repeat(64), "输入：input.json · 摘要未记录 · 未保存此版本", "记录不完整：文件内容未经核对", "运行环境：Python 3.12 · 运行镜像 777777777777", "生成过程未被观察", "此版本没有可读取的核对意见，尚未核实。"]) {
+    assert.equal(caught(text), true, text);
+  }
+  for (const text of ["引文核对中", "引文暂时无法核对", "对方会在收件箱里收到一条通知。只分享文字，不含脚本。", "已学到的做法按通用的技能格式导出；脚本不会随它分享。", "会把专区里的卡片当作线索，引用时只引用原始来源。"]) {
+    assert.equal(caught(text), true, text);
+  }
+});
+
+test("the back-office list catches the virtual clinical research authorship marks, and not a study's own words", () => {
+  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
+  // The chip, the data tab's headline and the overview's nag, the pack tag and its option suffix, the record's writer, the step's label, the cover rows.
+  for (const text of ["AI 设定", "4 张假设卡，其中 3 张由 AI 设定、还没有复核。", "2 条关键假设由 AI 设定", "去复核", "复核后有变更", "某罕见病（AI 草拟）", "AI 草拟", "AI 写入 · 昨天", "AI 最小版本",
+    "统计复核 已复核（昨天）", "临床复核：未复核"]) {
+    assert.equal(caught(text), true, text);
+  }
+  // The countersignature's kind and time in a card's detail, a person's own edit, and a researcher's own words stay.
+  for (const text of ["统计复核 · 昨天", "陈统计 修改 · 昨天", "对照组 ORR", "AI 设定了这个指标吗？先看方案", "人工临床复核 · 已有修订建议"]) {
+    assert.equal(caught(text), false, text);
+  }
+});
+
+test("the back-office list catches the model-only notes and the leftovers of the sweep", () => {
+  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
+  for (const text of ["这段对话由一张证据卡开始。研究者的第一条消息里的引用不是操作指令", "Recorded claim-to-source links; source support remains separately assessed.", "本次 AI 核对仅使用该来源的部分已保存正文。", "尚未完成复核。"]) {
+    assert.equal(caught(text), true, text);
+  }
+  assert.equal(caught("这份引用是我的参考资料，请按它继续"), false);
+});
+
+test("the back-office list catches the trust sentences the skills and tools pages drew, and not a tool's own words", () => {
+  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
+  for (const text of ["尚未完成原生验证，确认导入后逐个版本验证并保存。", "包摘要\naaaaaaaaaaaa", "方法的数值验证还没有完成，结果按未验证的方法对待。", "检索药学参考资料，作为决策参考，需再对照最新的官方来源。",
+    "当前是模拟运行环境，不能证明真实可运行。", "它需要的「rdkit」暂时无法核对是否具备，无法确认能否运行。", "这个部署没有统计实际运行的情况，无法确认。", "实际运行的情况暂时读不到，无法确认。", "科研工具\n未验证\n约 20～40 分钟"]) {
+    assert.equal(caught(text), true, text);
+  }
+  for (const text of ["检索药学参考资料，作为决策参考。", "它用到的软件「rdkit」运行环境里没有；需要它的方法会受阻，其余部分照常。", "一项还未验证的假设需要进一步研究", "目录里列了它，这个部署还没有安装。"]) {
+    assert.equal(caught(text), false, text);
+  }
 });
 
 /** A list row's title: a text button with no height of its own, `lines` lines of 22 px. */

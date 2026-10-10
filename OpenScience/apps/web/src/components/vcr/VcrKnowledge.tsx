@@ -1,6 +1,5 @@
 import { useId, useRef, useState } from "react";
 import { ExternalLink } from "lucide-react";
-import { VCR_PACK_STATUS_LABELS_ZH } from "@evimed/domain";
 import {
   bindVcrPack,
   compareVcrDefinition,
@@ -39,10 +38,10 @@ import { numberText } from "./vcrText";
  * definitions it used, and the account's library itself.
  *
  * Hidden knowledge:
- *  - **「AI 草拟」 is shown wherever a draft's content is in use.** A draft is a
- *    pack the AI wrote from literature and guidelines so the study could go on;
- *    it carries the label until somebody who may reviews it and promotes it.
- *    The label is on a live value and never a gate — nothing waits for it.
+ *  - **A draft pack is not labelled.** A draft is a pack the AI wrote from
+ *    literature and guidelines so the study could go on; a lead who may reviews
+ *    it and promotes it (the button below). Nothing waits for that, and the page
+ *    does not tag a pack with who wrote it (owner ruling 2026-10-10).
  *  - **Every source is a link and a licence.** A pack entry rests on sources; the
  *    card lists each one with the licence it is used under and whether it is
  *    reused with attribution, linked only, or authored here.
@@ -57,11 +56,6 @@ const SOURCE_USE: Readonly<Record<string, string>> = Object.freeze({ attribution
 const SECTION_LABELS: ReadonlyArray<readonly [string, string]> = Object.freeze([
   ["terms", "术语"], ["phenotypes", "表型"], ["endpoints", "终点"], ["criteria", "入排条件"],
 ]);
-
-/** 「已整理」 / 「AI 草拟」: who stands behind the pack. */
-export function PackStatusTag({ status }: { status: VcrPackSummary["status"] }) {
-  return <Tag tone={status === "ai-draft" ? "warn" : "neutral"}>{VCR_PACK_STATUS_LABELS_ZH[status]}</Tag>;
-}
 
 function packName(pack: Pick<VcrPackSummary, "name" | "nameZh">): string {
   return pack.nameZh ?? pack.name ?? "未命名";
@@ -143,10 +137,11 @@ function PackRow({ studyId, pack, onChanged }: { studyId: string; pack: VcrPackS
     <div data-vcr-pack={pack.status} className="flex flex-col gap-2">
       <p className="flex flex-wrap items-center gap-2 text-ui text-text">
         <span className="font-medium">{packName(pack)}</span>
-        <PackStatusTag status={pack.status} />
         <span className="text-caption text-text-3">{counts}</span>
         {pack.canPromote && <Button size="sm" variant="secondary" loading={busy} onClick={promote}>复核后标为已整理</Button>}
       </p>
+      {/* The study chose an edition of this pack that the catalogue no longer holds: say that what it reads now is the newest. */}
+      {pack.binding?.resolution === "newest_compatible" && <p data-vcr-pack-edition="newest" className="text-caption text-text-2">目录里已没有这个研究当初选定的那一版，现按最新的一版读取。</p>}
       {pack.platform && <PlatformAttribution platform={pack.platform} />}
       {pack.platformRequest && <PlatformRequest studyId={studyId} request={pack.platformRequest} onChanged={onChanged} />}
       {pack.sources.length > 0 && (
@@ -237,7 +232,7 @@ function BindPackSection({ studyId, onChanged }: { studyId: string; onChanged: (
           <div className="min-w-48">
             <Select id={selectId} label="选用病种定义包" value={choice} onChange={(event) => setChoice(event.target.value)}>
               <option value="">请选择</option>
-              {state.data.map((pack) => <option key={`${pack.origin}-${pack.id}`} value={pack.id}>{`${packName(pack)}${pack.status === "ai-draft" ? "（AI 草拟）" : ""}`}</option>)}
+              {state.data.map((pack) => <option key={`${pack.origin}-${pack.id}`} value={pack.id}>{packName(pack)}</option>)}
             </Select>
           </div>
           <Button variant="secondary" loading={busy} disabled={!choice} onClick={bind}>绑定</Button>

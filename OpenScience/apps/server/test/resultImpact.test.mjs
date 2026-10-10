@@ -146,6 +146,10 @@ test("canonical clinical links preserve exact source versions and explicit deriv
   assert.deepEqual(links.findings[1].sourceRefs, links.findings[0].sourceRefs);
   assert.equal(links.findings[1].status, "not_run");
   assert.equal(links.findings.length, 3);
+  // The mark is the finding (owner ruling 2026-10-10): the platform's English sentence once under every claim is gone, and what a claim's
+  // status says is the reader's two words, drawn by the inspector from the kind and the status.
+  assert.deepEqual(links.findings.map(finding => [finding.kind, finding.status, finding.message]),
+    [["claim_source_binding", "verified", ""], ["claim_source_binding", "not_run", ""], ["claim_source_binding", "not_run", ""]]);
 });
 test("current source revocation or deletion redacts public impacts without changing their stored advisory record", async () => {
   for (const availability of ["restricted", "deleted"]) {

@@ -35,7 +35,7 @@ import {
   runSideDegradedNotice,
 } from "./runNotices.mjs";
 import { describeRunArtifacts, describeRunArtifactRoles } from "./runArtifacts.mjs";
-import { normalizeRunEstimate, routeReasonText } from "./runRoute.mjs";
+import { normalizeRunEstimate } from "./runRoute.mjs";
 import {
   assembleRunProgress,
   claimSummaryOf,
@@ -764,16 +764,8 @@ function foldEvents(events) {
   // Every run has a name (C3). One nobody gave a title is called by what it
   // asked; that is `question`, the source an automatic title may replace.
   for (const [id, run] of runs) {
-    // Why it went where it went, in the reader's words (C3), derived from the
-    // machine reason the ledger keeps for operations.
-    const routeReason = routeReasonText(run.effectiveRouteReason, run.effectiveAgentId);
-    const named = run.titleSource === "auto" || run.titleSource === "user";
-    if (named && !routeReason) continue;
-    runs.set(id, Object.freeze({
-      ...run,
-      ...(routeReason ? { routeReason } : {}),
-      ...(named ? {} : { title: derivedRunTitle(run), titleSource: "question" }),
-    }));
+    if (run.titleSource === "auto" || run.titleSource === "user") continue;
+    runs.set(id, Object.freeze({ ...run, title: derivedRunTitle(run), titleSource: "question" }));
   }
   return runs;
 }

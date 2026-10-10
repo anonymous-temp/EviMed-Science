@@ -84,8 +84,18 @@ const ACCEPTED_KDF_COSTS = Object.freeze([
 ]);
 /** The most memory limit a header may record: its own number is only a limit scrypt checks, never an allocation. */
 const MAX_RECORDED_MAXMEM = 384 * 1024 * 1024;
-/** One derivation at a time, in turn per account. See capsuleKdfGate.mjs. */
+/** One derivation at a time, in turn per account, unless the deployment's configuration says otherwise. See capsuleKdfGate.mjs. */
 const passwordKdfGate = new PasswordKdfGate();
+
+/**
+ * Give the process's one gate the deployment's limits (`OPEN_SCIENCE_CAPSULE_KDF_*`, review C4e). Called once at start by the
+ * composition root; the gate is process-wide because the memory it guards is.
+ * @param {{ concurrency?: number, maxWaiting?: number, maxWaitMs?: number }} limits
+ */
+export function configurePasswordKdfGate(limits) { passwordKdfGate.configure(limits); }
+
+/** The limits the process's gate runs on now. */
+export function passwordKdfGateLimits() { return passwordKdfGate.limits; }
 
 function containerError(code, message) { return Object.assign(new Error(message), { code }); }
 

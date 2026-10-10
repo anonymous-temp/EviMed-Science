@@ -1206,7 +1206,7 @@
       "origin": "capability",
       "version": "1.3.2",
       "source": {"kind":"release"},
-      "digest": "sha256:c6e3435066b9acb9d96158f76c1455df7beb59e756f13b48d21c1b2b4d92611f",
+      "digest": "sha256:2d178c58825cd6835f68c20e26fafb0b504e541a18683184ef758c9cde80bc5d",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"b973bd5478e5b2e1e66beee99211890cf3b6c993b19034b9116d4d3e9592d981"}],
       "dependencies": [

@@ -131,8 +131,8 @@ test("a run with no independent check labels no review step and the card still s
   assert.equal(built.status, "card");
   assert.deepEqual(built.card.disclosure.aiSteps, ["search", "screen", "extract", "synthesize"]);
   assert.equal(built.headlineClaimId, null, "an unchecked claim is never the first sentence");
-  assert.match(built.card.content.context, /引文已逐字核对/);
-  assert.doesNotMatch(built.card.content.context, /独立复核/);
+  // The card does not say that the platform's agenda made it, nor how many claims an independent re-check left standing (owner ruling 2026-10-10).
+  assert.equal(built.card.content.context, undefined);
 });
 
 test("a card built with no decision id is refused by name", () => {
@@ -197,6 +197,11 @@ test("an original analysis is composed from the receipt: every number rendered f
   assert.deepEqual(evidenceOriginalityBasisIssues({ originality: built.card.originality, claims: built.card.claims, zoneKind: "official" }), [], "and the official zone accepts a first-hand card");
   assert.equal(built.card.sources[0].url, null);
   assert.match(built.card.sources[0].documentText, /values\[0\]\.ror\.value\t2\.4012\tratio/, "the card keeps the machine values its sentences were rendered from");
+  // The body and the limitations are the analysis, not its pipeline: no receipt id after a claim, no sentence on how the platform computed or
+  // finished the card (owner ruling 2026-10-10). The claims keep their type, 平台计算, and the reporting standard is a fact of the card.
+  assert.match(built.card.body, /## 平台计算的结论/);
+  assert.doesNotMatch(`${built.card.body}\n${built.card.limitations}\n${built.card.content.context ?? ""}`, /回执|本卡由平台议程完成|分析引擎计算|按路径读回/);
+  assert.match(built.card.content.context, /^按 READUS-PV 报告规范写成。$/);
   assert.deepEqual(evidenceLineage(built.card.lineage), built.card.lineage);
   assert.deepEqual(evidenceProducer(built.card.producer), built.card.producer);
 });

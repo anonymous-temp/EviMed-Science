@@ -152,9 +152,12 @@ export const VCR_TIME_KIND_LABELS_ZH = Object.freeze({ occurred_at: '发生时�
 export const VCR_CONCLUSIONS = frozen(['estimable', 'limited', 'not_estimable'])
 export const VCR_CONCLUSION_LABELS_ZH = Object.freeze({ estimable: '可估计', limited: '有限制地估计', not_estimable: '不可估计' })
 
-/** A countersignature on one version, never a gate (§10.2). */
+/**
+ * A countersignature on one version, never a gate (§10.2). The state is the ledger's own record (it decides whether the
+ * countersignature is offered); it has no label because no page prints it, and none must: who set a value and whether it was
+ * countersigned is not a mark on the value (owner ruling 2026-10-10).
+ */
 export const VCR_REVIEW_STATES = frozen(['ai_set', 'reviewed', 'changed_after_review'])
-export const VCR_REVIEW_STATE_LABELS_ZH = Object.freeze({ ai_set: 'AI 设定', reviewed: '已复核', changed_after_review: '复核后有变更' })
 /** Who may countersign (§10.2). */
 export const VCR_REVIEWER_KINDS = frozen(['ai', 'human'])
 export const VCR_REVIEW_LIFECYCLE = frozen(['queued', 'running', 'done', 'failed'])
@@ -434,7 +437,7 @@ export const VCR_STEP_LABELS_ZH = Object.freeze({
 /** A step's state, on the study record (`studies.steps`). */
 export const VCR_STEP_STATUSES = frozen(['none', 'queued', 'running', 'done', 'minimal', 'stale', 'failed'])
 export const VCR_STEP_STATUS_LABELS_ZH = Object.freeze({
-  none: '未开始', queued: '排队中', running: '进行中', done: '已完成', minimal: 'AI 最小版本', stale: '已过期', failed: '未完成',
+  none: '未开始', queued: '排队中', running: '进行中', done: '已完成', minimal: '已完成', stale: '已过期', failed: '未完成',
 })
 /** What each step needs before it can run (the orchestrator's `NEEDS`). */
 export const VCR_STEP_NEEDS = Object.freeze({

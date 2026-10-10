@@ -1013,3 +1013,83 @@ test('a fact whose words were erased on a withdrawal is void for any verdict, wi
   assert.deepEqual(verifyFactEvidence({ ...fact, withdrawn: { at: AS_OF, digest: 'a'.repeat(64) } }, { documents, asOf: Date.parse(AS_OF) }), { ok: false, reason: 'source_withdrawn' });
   assert.ok(VCR_FACT_VOID_REASONS.includes('source_withdrawn'));
 });
+
+test('a newer prescribed, planned or unknown-state exposure that could reset the washout leaves it unknown with a named reason, not satisfied from the older administration (E-04)', () => {
+  const asOf = Date.parse('2026-10-01T00:00:00Z');
+  const washout = { id: 'washout', kind: 'exclusion', criterionType: 'prior_treatment', requirement: { op: 'elapsed_since', variable: 'docetaxel', days: 28, comparator: 'gte' } };
+  const patient = { schema: 1, assertion: 'affirmed', experiencer: 'patient' };
+  /** @param {string} id @param {string} state @param {string|null} occurredAt */
+  const exposure = (id, state, occurredAt) => ({ id, variable: 'docetaxel', polarity: 'affirmed', occurredAt, visibleAt: '2026-09-01T00:00:00Z',
+    source: { documentId: 'd', start: 0, end: 4, quote: id }, clinical: { ...patient, medication: { state } } });
+  const given = exposure('given', 'administered', '2026-06-01T00:00:00Z');
+  const verdict = (/** @type {any[]} */ facts) => evaluateCriterion(washout, { facts, asOf });
+
+  assert.equal(verdict([given]).state, SATISFIED, 'the control: 122 days since the last administration clears a 28-day washout');
+  // The administration is old; a prescription five days ago may have been given since. Dropping it read the washout as clear.
+  for (const state of ['prescribed', 'planned', 'historical_list', 'unknown']) {
+    const judged = verdict([given, exposure('later', state, '2026-09-26T00:00:00Z')]);
+    assert.equal(judged.state, UNKNOWN, state);
+    assert.deepEqual(judged.missing, [{ variable: 'docetaxel', reason: 'unresolved_exposure' }], `${state}: the gap names why`);
+    assert.deepEqual(judged.evidence.map(item => item.factId), ['later', 'given'], `${state}: the reader sees the prescription and the administration it is set against`);
+  }
+  // Nothing is blocked that could not change the answer: an older exposure, one dated after the assessment, and one too old to matter.
+  assert.equal(verdict([given, exposure('older', 'prescribed', '2026-05-01T00:00:00Z')]).state, SATISFIED, 'older than the last administration');
+  assert.equal(verdict([given, exposure('same-day', 'prescribed', '2026-06-01T00:00:00Z')]).state, SATISFIED, 'the administration of the same day settles it');
+  assert.equal(verdict([given, exposure('future', 'prescribed', '2026-10-05T00:00:00Z')]).state, SATISFIED, 'not yet a fact of this assessment');
+  assert.equal(verdict([given, exposure('old-enough', 'prescribed', '2026-08-01T00:00:00Z')]).state, SATISFIED, '61 days: given or not, the washout is clear');
+  assert.equal(verdict([given, exposure('undated', 'prescribed', null)]).state, SATISFIED, 'an exposure that cannot be placed decides nothing, as an undated administration does beside a dated one');
+  // A newer administration is the latest exposure and is read as before; the prescription beside it adds nothing.
+  assert.equal(verdict([given, exposure('again', 'administered', '2026-09-20T00:00:00Z'), exposure('rx', 'prescribed', '2026-09-26T00:00:00Z')]).state, UNKNOWN, 'the prescription after the last administration is still unresolved');
+  assert.equal(verdict([given, exposure('again', 'administered', '2026-09-28T00:00:00Z'), exposure('rx', 'prescribed', '2026-09-26T00:00:00Z')]).state, PENDING_RECHECK, 'an administration after the prescription settles it');
+
+  // With no administration at all the washout was unknown for want of a record; now it says what the chart does hold.
+  const only = verdict([exposure('rx', 'prescribed', '2026-09-26T00:00:00Z')]);
+  assert.equal(only.state, UNKNOWN);
+  assert.deepEqual(only.missing, [{ variable: 'docetaxel', reason: 'unresolved_exposure' }]);
+  assert.deepEqual(verdict([exposure('rx-old', 'prescribed', '2026-06-01T00:00:00Z')]).missing, [{ variable: 'docetaxel', reason: 'not_recorded' }], 'a prescription too old to matter is still no record of an administration');
+  assert.deepEqual(verdict([]).missing, [{ variable: 'docetaxel', reason: 'not_recorded' }]);
+
+  // Through the assessment: the gap is the subject's, named, and the subject is not read as eligible.
+  const source = chart('2026-06-01 给予多西他赛。2026-09-26 处方多西他赛。');
+  const written = (/** @type {string} */ surface, /** @type {string} */ id, /** @type {string} */ state, /** @type {string} */ occurredAt) =>
+    source.fact(surface, { id, variable: 'docetaxel', occurredAt, clinical: { ...patient, medication: { state } } });
+  const assessed = assessSubject({ criteria: [washout], asOf: '2026-10-01', documents: source.documents,
+    facts: [written('给予多西他赛', 'given', 'administered', '2026-06-01T00:00:00Z'), written('处方多西他赛', 'rx', 'prescribed', '2026-09-26T00:00:00Z')] });
+  assert.equal(assessed.summary, 'insufficient_evidence');
+  assert.deepEqual(assessed.evidenceGaps, [{ variable: 'docetaxel', reason: 'unresolved_exposure', criterionIds: ['washout'] }]);
+  assert.deepEqual(assessed.blockingExclusionUnknowns, ['washout']);
+});
+
+test('a unit the quote prints beside another number does not support this fact\'s value, with or without a laboratory block; a unit written as a word is not chased (E-10)', () => {
+  const clinical = (/** @type {any} */ laboratory) => ({ schema: 1, assertion: 'affirmed', experiencer: 'patient', ...(laboratory ? { laboratory } : {}) });
+  const check = (/** @type {string} */ text, /** @type {string} */ surface, /** @type {any} */ rest) => {
+    const source = chart(text);
+    return verifyFactEvidence(source.fact(surface, rest), { documents: source.documents });
+  };
+  const two = '血糖 6.1 mmol/L（110 mg/dL）';
+  // The fact's own number, 6.1, carries mmol/L; mg/dL belongs to 110. Both used to pass: mg/dL is in the quote.
+  const wrongUnit = { variable: 'glucose', value: 6.1, unit: 'mg/dL' };
+  assert.deepEqual(check(two, two, { ...wrongUnit, clinical: clinical({ analyte: 'glucose', originalValue: 6.1, originalUnit: 'mg/dL' }) }), { ok: false, reason: 'unit_not_in_span' }, 'laboratory block');
+  assert.deepEqual(check(two, two, { ...wrongUnit }), { ok: false, reason: 'unit_not_in_span' }, 'no clinical block at all');
+  assert.deepEqual(check(two, two, { ...wrongUnit, clinical: clinical(null) }), { ok: false, reason: 'unit_not_in_span' }, 'clinical block without a laboratory one');
+  assert.deepEqual(check(two, two, { variable: 'glucose', value: 6.1, unit: 'mmol/L' }), { ok: true, reason: null }, 'the unit that is beside it');
+  assert.deepEqual(check(two, '110 mg/dL', { variable: 'glucose', value: 110, unit: 'mg/dL' }), { ok: true, reason: null }, 'and the other number takes the other unit');
+  // A unit outside the table that is a ratio is held to the quote whether or not the fact says laboratory.
+  assert.deepEqual(check('HbA1c 48，单位未记载', 'HbA1c 48，单位未记载', { variable: 'hba1c', value: 48, unit: 'mmol/mol' }), { ok: false, reason: 'unit_not_in_span' });
+  assert.deepEqual(check('HbA1c 48 mmol/mol', 'HbA1c 48 mmol/mol', { variable: 'hba1c', value: 48, unit: 'mmol/mol' }), { ok: true, reason: null });
+  // The converted value and the original are each held to their own unit.
+  const converted = clinical({ analyte: 'glucose', originalValue: 110, originalUnit: 'mg/dL' });
+  assert.deepEqual(check(two, two, { variable: 'glucose', value: 6.1, unit: 'mmol/L', clinical: converted }), { ok: true, reason: null });
+  assert.deepEqual(check(two, two, { variable: 'glucose', value: 6.1, unit: 'mmol/L', clinical: clinical({ analyte: 'glucose', originalValue: 6.1, originalUnit: 'mg/dL' }) }),
+    { ok: false, reason: 'unit_not_in_span' }, 'an original unit that is beside a different number');
+  // A fact whose unit is a word the chart spells otherwise keeps passing: 岁 for year.
+  assert.deepEqual(check('年龄44岁', '年龄44岁', { variable: 'age', value: 44, unit: 'year' }), { ok: true, reason: null });
+  assert.deepEqual(check('体重 70 公斤', '体重 70 公斤', { variable: 'weight', value: 70, unit: 'kg' }), { ok: true, reason: null });
+  // Through the evaluator: the wrong unit voids the fact, so the threshold is unknown rather than read from 6.1 mg/dL.
+  const source = chart(two);
+  const guessed = source.fact(two, { id: 'g', variable: 'glucose', value: 6.1, unit: 'mg/dL' });
+  const assessed = assessSubject({ criteria: [{ id: 'glu', kind: 'inclusion', requirement: { op: 'compare', variable: 'glucose', comparator: 'lte', value: 126, unit: 'mg/dL' } }],
+    facts: [guessed], documents: source.documents, asOf: AS_OF });
+  assert.equal(assessed.summary, 'insufficient_evidence');
+  assert.deepEqual(assessed.voidedFacts, [{ factId: 'g', variable: 'glucose', reason: 'unit_not_in_span' }]);
+});

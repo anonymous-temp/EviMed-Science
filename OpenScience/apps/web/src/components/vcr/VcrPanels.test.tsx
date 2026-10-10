@@ -352,11 +352,12 @@ describe("试验先例", () => {
 /* ------------------------------------------------------------------ the package */
 
 describe("the package reader", () => {
-  it("prints the cover truthfully — 未复核 included — then the sections, the contents and the file", async () => {
+  it("prints the cover — the intended use and the seal, with no review state — then the sections, the contents and the file", async () => {
     draw(<VcrPackageReader studyId={STUDY_ID} exportId="exp_2" onBack={() => undefined} />);
     expect(await screen.findByRole("heading", { name: "研究包 v1" })).toBeInTheDocument();
-    expect(screen.getByText("已复核（昨天）")).toBeInTheDocument();
-    expect(screen.getByText("未复核")).toBeInTheDocument();
+    expect(screen.getByText("预期用途")).toBeInTheDocument();
+    expect(screen.getByText("结局封存")).toBeInTheDocument();
+    expect(screen.queryByText(/已复核|未复核|复核后有变更/)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /研究与分析概要/ })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "研究包目录" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开完整研究包" })).toHaveAttribute("href", "/app/runs/run_12/files/package.pdf");
@@ -369,7 +370,7 @@ describe("the package reader", () => {
     server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/export/exp_2`]: payload });
     draw(<VcrPackageReader studyId={STUDY_ID} exportId="exp_2" onBack={() => undefined} />);
     expect(await screen.findByRole("heading", { name: "研究包 v1" })).toBeInTheDocument();
-    expect(screen.getByText("未复核")).toBeInTheDocument();
+    expect(screen.getByText("预期用途")).toBeInTheDocument();
     expect(screen.queryByText(/点开任何一个数字/)).toBeNull();
     expect(screen.queryByRole("navigation", { name: "研究包目录" })).toBeNull();
     expect(screen.getByRole("link", { name: "打开完整研究包" })).toBeInTheDocument();

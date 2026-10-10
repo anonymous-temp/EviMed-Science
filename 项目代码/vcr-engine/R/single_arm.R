@@ -108,8 +108,9 @@ vcr_analyse_one_sample_logrank <- function(time, status, benchmark, alpha = 0.02
   acc <- sc[["accrual"]]
   accrual <- acc %||% list(kind = "uniform", duration = 0)
   followup <- vcr_scalar(acc[["followup"]], Inf); dropout <- vcr_scalar(acc[["dropoutAnnual"]], 0); max_fu <- vcr_scalar(acc[["maxFollowup"]], Inf)
+  periods <- vcr_time_unit(sc)$perYear
   list(estimand = log(hr), run = function(i) {
-    x <- vcr_sim_tte(n, 0L, dist, hr, accrual, followup, dropout, max_followup = max_fu)
+    x <- vcr_sim_tte(n, 0L, dist, hr, accrual, followup, dropout, dropout_period = periods, max_followup = max_fu)
     dur <- if (is.finite(followup)) .vcr_accrual_end(x$entry, accrual) + followup else max(x$entry + x$time)
     c(vcr_analyse_one_sample_logrank(x$time, x$status, dist, alpha, sided, alternative), sampleSize = n, duration = dur, generatedRecords = n)
   })
@@ -146,7 +147,7 @@ vcr_single_arm_analytic <- function(scenario) {
     if (is_null) return(list(name = "type_one_error", value = alpha, basis = "asymptotic_one_sample_logrank"))
     hr <- vcr_scalar(tr[["hazardRatio"]], NA_real_); dist <- vcr_control_distribution(tr)
     acc <- scenario[["accrual"]] %||% list()
-    A <- vcr_scalar(acc[["duration"]], 0); Fu <- vcr_scalar(acc[["followup"]], NA_real_); eta <- vcr_dropout_hazard(vcr_scalar(acc[["dropoutAnnual"]], 0))
+    A <- vcr_scalar(acc[["duration"]], 0); Fu <- vcr_scalar(acc[["followup"]], NA_real_); eta <- vcr_dropout_hazard(vcr_scalar(acc[["dropoutAnnual"]], 0), vcr_time_unit(scenario)$perYear)
     if (!is.finite(Fu) || is.finite(vcr_scalar(acc[["maxFollowup"]], Inf)) || !identical(as.character(acc[["kind"]] %||% "uniform"), "uniform")) return(NULL)
     horizon <- A + Fu
     # moments of one patient's score contribution X = (cumulative benchmark hazard at the observed time) - (event indicator)

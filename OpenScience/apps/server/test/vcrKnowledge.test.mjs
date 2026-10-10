@@ -501,3 +501,40 @@ test("the capability reads a pack through the tool's own path: the gateway, the 
   const library = await call("read", { what: "library" });
   assert.deepEqual([library.status, library.data.definitions, library.data.used], [200, [], []]);
 });
+
+test("a binding that kept no copy of its pack reads the edition it recorded when the catalogue holds it, else the newest compatible edition, and the read says which (E-11)", async () => {
+  const { knowledge, store } = compose();
+  /** @param {number} packVersion @param {Record<string, any>} [extra] */
+  const bind = (packVersion, extra = {}) => store.state.bindings.set("std_a", { studyId: "std_a", userId: "u1", origin: "shipped", packId: "demo_cancer", packVersion,
+    boundBy: "u1", boundAt: "2026-09-01T00:00:00.000Z", ...extra });
+
+  // The catalogue holds version 3 of the pack. A study that recorded 3 reads 3 and says it is the one it recorded.
+  bind(3);
+  const same = await knowledge.studyKnowledge(STUDY_A);
+  assert.equal(same.pack?.version, 3);
+  assert.deepEqual(same.pack?.binding, { version: 3, resolution: "recorded" });
+
+  // A study bound when the pack was at 2 had no copy to keep: it used to lose the pack without a word.
+  bind(2);
+  const moved = await knowledge.studyKnowledge(STUDY_A);
+  assert.equal(moved.pack?.version, 3, "the newest edition stands in for the one the catalogue no longer holds");
+  assert.deepEqual(moved.pack?.binding, { version: 2, resolution: "newest_compatible" }, "and the read says it is not the one the study chose");
+  assert.ok(moved.pack?.counts.criteria, "the pack is a pack, with its sections");
+  // The run reads the same pack and learns which edition it is.
+  const read = /** @type {any} */ (await knowledge.runtimeReadPack(STUDY_A, {}));
+  assert.deepEqual([read.bound?.version, read.bound?.boundVersion, read.bound?.resolution], [3, 2, "newest_compatible"]);
+  assert.ok(await knowledge.studyPack(STUDY_A), "and so does everything else that works from the study's pack");
+
+  // A pack this build cannot read is not stood in for: the study reads no pack, as before.
+  const future = new VcrKnowledge({ store: /** @type {any} */ (store), studyStore: studyStoreWith([]), shipped: { demo_cancer: { ...CURATED, schema: "evimed.vcr.knowledge-pack/9" } } });
+  assert.equal((await future.studyKnowledge(STUDY_A)).pack, null);
+  // A pack the catalogue no longer has at all is not either.
+  const gone = new VcrKnowledge({ store: /** @type {any} */ (store), studyStore: studyStoreWith([]), shipped: {} });
+  assert.equal((await gone.studyKnowledge(STUDY_A)).pack, null);
+
+  // A binding that kept its copy is the recorded edition whatever the catalogue holds now.
+  bind(2, { packBody: { ...CURATED, version: 2 } });
+  const kept = await knowledge.studyKnowledge(STUDY_A);
+  assert.equal(kept.pack?.version, 2);
+  assert.deepEqual(kept.pack?.binding, { version: 2, resolution: "recorded" });
+});

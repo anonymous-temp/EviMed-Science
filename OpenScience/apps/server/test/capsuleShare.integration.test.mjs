@@ -9,7 +9,8 @@ import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { packCapsule } from "../src/capsuleContainer.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleShareLinks } from "../src/capsuleShareLinks.mjs";
-import { resetCapsuleShareMetrics } from "../src/capsuleShareMetrics.mjs";
+import { sharedFrom } from "../src/capsuleShareLabel.mjs";
+import { capsuleShareMetricFamilies, resetCapsuleShareMetrics } from "../src/capsuleShareMetrics.mjs";
 import { CapsuleSharing } from "../src/capsuleSharing.mjs";
 import { createGuestInfluence, shareIsCorroborated } from "../src/capsuleShareTrust.mjs";
 import { CapsuleTransferService, renderCapsuleTransferFiles } from "../src/capsuleTransferService.mjs";
@@ -18,6 +19,7 @@ import { createEvolutionLearningCoupling } from "../src/evolutionLearningCouplin
 import { LearningTriggers } from "../src/learningTriggers.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
+import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -186,6 +188,72 @@ test("a recipient is never told a sender's login id or e-mail address, in the li
   }
 });
 
+test("a sender may sign each share with a name of their own, and the recipient sees that name wherever the sender would have been named (C4c)", options, async () => {
+  const { capsule } = await authored("按署名分享的做法。");
+  // Without one the share is signed as it always was: the display name.
+  const plain = await transfers.exportPreview(author, capsule.id, { scopes: ["workstyle"] });
+  assert.equal(plain.card.author, "李主任");
+  assert.equal((await transfers.exportPreview(author, capsule.id, { scopes: ["workstyle"], card: { author: "   " } })).card.author, "李主任", "a blank signature is none");
+  // The signature typed for a share is the card's author, and the card's default title follows it.
+  const signed = await transfers.exportPreview(author, capsule.id, { scopes: ["workstyle"], card: { author: "  心内科  王医生 " } });
+  assert.equal(signed.card.author, "心内科 王医生", "whitespace is flattened");
+  assert.equal(signed.card.title, "心内科 王医生的工作方式");
+
+  // An in-app delivery: stored with the snapshot, and the list, the notice, the opened delivery, the copy and recall all say it.
+  const delivered = await sharing.deliver(author, capsule.id, { recipients: [alice, bob], card: { author: "心内科 王医生" } });
+  assert.equal(delivered.snapshot.card.author, "心内科 王医生", "stored with the share");
+  const mine = (await sharing.pending(alice)).find((item) => item.snapshotId === delivered.snapshot.id);
+  assert.equal(mine.sender.name, "心内科 王医生");
+  assert.equal(mine.card.author, "心内科 王医生");
+  assert.match((await shareNotices(alice)).find((item) => item.source.id === `delivery/${mine.id}`).title, /^心内科 王医生 向你分享了/);
+  const opened = await sharing.open(alice, mine.id);
+  assert.equal(opened.delivery.sender.name, "心内科 王医生");
+  assert.equal(opened.preview.card.author, "心内科 王医生");
+  const copy = await sharing.import(alice, mine.id, { expectedDigest: opened.preview.archiveSha256, title: "王医生的做法" });
+  assert.equal(copy.payload.share.authorName, "心内科 王医生");
+  assert.equal(sharedFrom(copy)?.label, "来自 心内科 王医生 的分享", "the label a recall puts under each entry");
+  const fact = (await capsules.entries(alice, copy.id)).items[0];
+  assert.equal(sharedFrom(copy, fact.payload)?.label, "来自 心内科 王医生 的分享");
+  assert.ok(!JSON.stringify([mine, opened, copy]).includes("李主任"), "the account's display name is nowhere in what the recipient was handed");
+  // And when it is taken back before the other recipient opened it.
+  const snapshot = (await transfers.history(author, capsule.id)).items.find((item) => item.id === delivered.snapshot.id);
+  await transfers.revoke(author, capsule.id, snapshot.id, snapshot.revision);
+  await sharing.afterRevoke(author, snapshot.id);
+  assert.ok((await shareNotices(bob)).some((item) => item.title.startsWith("心内科 王医生撤回了发给你的一份分享")), "the withdrawal names the signature too");
+
+  // A link.
+  const link = await sharing.createLink(author, capsule.id, { card: { author: "Dr. Wang (Cardiology)" } });
+  const redeemed = await sharing.openLink(dave, link.token);
+  assert.equal(redeemed.preview.card.author, "Dr. Wang (Cardiology)");
+  const linked = await sharing.importLink(dave, link.token, { expectedDigest: redeemed.preview.archiveSha256, title: "x" });
+  assert.equal(linked.payload.share.authorName, "Dr. Wang (Cardiology)");
+
+  // A file: the snapshot's card, and what a recipient of the file reads.
+  const file = await transfers.export(author, capsule.id, { password: "test-only-signature-password", scopes: ["workstyle"], card: { author: "王医生" } });
+  assert.equal(file.snapshot.card.author, "王医生");
+  assert.equal((await transfers.preview(carol, { archive: file.archive, password: "test-only-signature-password" })).card.author, "王医生");
+  // The next share is signed as the sender chooses again: nothing was remembered.
+  assert.equal((await transfers.exportPreview(author, capsule.id, { scopes: ["workstyle"] })).card.author, "李主任");
+});
+
+test("a signature is bounded, and one that is the login name or holds an address becomes the neutral label instead of an error (C4c)", options, async () => {
+  const { capsule } = await authored("署名的边界。");
+  /** @param {unknown} typed */
+  const signedAs = async (typed) => (await transfers.exportPreview(author, capsule.id, { scopes: ["workstyle"], card: { author: typed } })).card.author;
+  for (const typed of ["wang@example.invalid", "王医生 <wang@example.invalid>", author, author.toUpperCase()]) assert.equal(await signedAs(typed), "一位研究者", typed);
+  assert.equal(await signedAs("名".repeat(60)), "名".repeat(60), "the bound itself is allowed");
+  for (const tooLong of ["名".repeat(61), "x".repeat(151)]) {
+    await assert.rejects(signedAs(tooLong), { code: "capsule_transfer_invalid" }, `${tooLong.length} characters`);
+    await assert.rejects(sharing.deliver(author, capsule.id, { recipients: [alice], card: { author: tooLong } }), { code: "capsule_transfer_invalid" });
+  }
+  await assert.rejects(signedAs(42), { code: "capsule_transfer_invalid" });
+  // A delivery signed with an address says the neutral label to its recipient, and no address anywhere.
+  const delivered = await sharing.deliver(author, capsule.id, { recipients: [carol], card: { author: "wang@example.invalid" } });
+  const mine = (await sharing.pending(carol)).find((item) => item.snapshotId === delivered.snapshot.id);
+  assert.equal(mine.sender.name, "一位研究者");
+  assert.ok(!JSON.stringify([mine, delivered.snapshot]).includes("example.invalid"));
+});
+
 test("a share link is redeemed by an account until its expiry, its cap or its revocation, and stores no plaintext token", options, async () => {
   const { capsule } = await authored("先 PROSPERO 登记。");
   const made = await sharing.createLink(author, capsule.id, { maxUses: 2 });
@@ -335,7 +403,8 @@ test("a share is corroborated only by other accounts that kept it enabled for th
   const made = await sharing.deliver(author, capsule.id, { recipients: [alice, bob, carol, dave] });
   const hash = made.snapshot.manifestSha256;
   const days = 14;
-  const at = (offset) => ({ database, minAccounts: 3, keptDays: days, now: () => Date.now() + offset * DAY });
+  // The keeping period is what this test is about; an account's age and runs are the next test's (they are switched off here).
+  const at = (offset) => ({ database, minAccounts: 3, keptDays: days, minAccountAgeDays: 0, minFinishedRuns: 0, now: () => Date.now() + offset * DAY });
   /** @type {any[]} */ const copies = [];
   for (const userId of [alice, bob, carol]) {
     const notice = (await shareNotices(userId)).find((item) => item.source.id.startsWith("delivery/"));
@@ -359,6 +428,72 @@ test("a share is corroborated only by other accounts that kept it enabled for th
   await capsules.enableReceived(copies[2][0], copies[2][1].id);
   assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, at(1)), false);
   assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, at(15)), true);
+});
+
+/** A delivery of `snapshotId` taken in and kept enabled by `userId`, as that recipient would. @param {string} userId @param {string} snapshotId */
+async function takenIn(userId, snapshotId) {
+  const delivery = (await sharing.pending(userId)).find((item) => item.snapshotId === snapshotId);
+  assert.ok(delivery, `${userId} has the delivery`);
+  const opened = await sharing.open(userId, delivery.id);
+  const copy = await sharing.import(userId, delivery.id, { expectedDigest: opened.preview.archiveSha256, title: "x" });
+  await capsules.enableReceived(userId, copy.id);
+  return copy;
+}
+/** One model request of `userId` in the usage ledger, for `runId`. @param {string} userId @param {string | null} runId @param {{ purpose?: string, status?: string }} [how] */
+async function ledgerRow(userId, runId, { purpose = "kernel", status = "settled" } = {}) {
+  await migrateUsageLedger(database);
+  await database.query(`INSERT INTO evimed_usage.model_requests (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,
+      reserved_cost,actual_cost,priced,reservation_expires_at,created_at,settled_at,purpose)
+    VALUES ($1,$2,NULL,$3,'deepseek-flash','v','CNY',$4,$5,0.01,0.01,true,now(),now(),now(),$6)`, [randomUUID(), userId, runId, "c".repeat(64), status, purpose]);
+}
+/** Finished research runs for `userId`: `count` distinct runs, each with a settled kernel request. @param {string} userId @param {number} count @param {string} prefix */
+async function finishedRuns(userId, count, prefix) { for (let index = 0; index < count; index += 1) await ledgerRow(userId, `${prefix}-${index}`); }
+/** @param {string} userId @param {number} instant when the account is judged @param {number} days how old it was then */
+const createdBefore = (userId, instant, days) => database.query("UPDATE evimed_control.users SET created_at=$2::timestamptz WHERE id=$1", [userId, new Date(instant - days * DAY).toISOString()]);
+
+test("an account counts toward a share's corroboration only when it is old enough and has finished runs; the keepers left out are counted, nothing is blocked", options, async () => {
+  resetCapsuleShareMetrics();
+  const { capsule } = await authored("只有真实使用过平台的账号才算数。");
+  const made = await sharing.deliver(author, capsule.id, { recipients: [alice, bob, carol] });
+  const hash = made.snapshot.manifestSha256;
+  const copies = [];
+  for (const userId of [alice, bob, carol]) copies.push(await takenIn(userId, made.snapshot.id));
+
+  // The same pack, judged fifteen days on: all three kept it for the period, so the period is not what tells them apart.
+  const evaluation = Date.now() + 15 * DAY;
+  const judged = (extra = {}) => ({ database, minAccounts: 3, keptDays: 14, minAccountAgeDays: 14, minFinishedRuns: 3, now: () => evaluation, ...extra });
+  await createdBefore(alice, evaluation, 60);   // old, will have runs
+  await createdBefore(bob, evaluation, 30);     // old, too few runs
+  await createdBefore(carol, evaluation, 3);    // runs, but three days old
+  await finishedRuns(alice, 3, `run-a-${tag}`);
+  // What is not a finished run of bob's: the same run again, a request still reserved, a background purpose, a request with no run.
+  await ledgerRow(bob, `run-b-${tag}-0`); await ledgerRow(bob, `run-b-${tag}-0`); await ledgerRow(bob, `run-b-${tag}-1`);
+  await ledgerRow(bob, `run-b-${tag}-2`, { status: "reserved" }); await ledgerRow(bob, `run-b-${tag}-3`, { purpose: "learning" }); await ledgerRow(bob, null);
+  await finishedRuns(carol, 5, `run-c-${tag}`);
+
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged({ minAccounts: 1 })), true, "one established keeper is enough where one is asked");
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged({ minAccounts: 2 })), false, "bob has two finished runs and carol is three days old: three keepers, one counted");
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged()), false, "three accounts that kept it are not three that count");
+  const seen = Object.fromEntries(capsuleShareMetricFamilies().find((family) => family.name === "open_science_capsule_share_keepers_total").series.map((row) => [row.labels.outcome, row.value]));
+  assert.deepEqual(seen, { counted: 3, account_too_new: 3, too_few_runs: 3 }, "each of the three judgements saw the same three keepers: alice counted, carol too new, bob with too few runs");
+
+  // Time and use make an account count; nothing else changed.
+  await ledgerRow(bob, `run-b-${tag}-4`);
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged({ minAccounts: 2 })), true, "bob's third finished run makes two");
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged()), false, "carol is still three days old");
+  await createdBefore(carol, evaluation, 20);
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged()), true, "and at twenty days she counts");
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged({ minAccountAgeDays: 30, minFinishedRuns: 0 })), false, "the thresholds are the operator's: thirty days leaves carol out again");
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged({ minAccountAgeDays: 0, minFinishedRuns: 0 })), true, "and zero asks nothing of an account");
+
+  // The learning loop's question, asked through the same options a deployment configures.
+  await createdBefore(carol, evaluation, 3);
+  const factId = (await capsules.entries(alice, copies[0].id)).items[0].id;
+  const run = { recalledMemories: [{ id: `capsule:${factId}`, kind: "method_preference", scope: "capsule" }] };
+  const assess = (extra) => createGuestInfluence({ database, documents, ...judged(extra) }).assess(alice, run);
+  assert.deepEqual((await assess({})).uncorroborated, [copies[0].id], "three keepers, two that count: not corroborated");
+  assert.deepEqual((await assess({ minAccounts: 2 })).uncorroborated, [], "asked for two, the two that count are enough");
+  await createdBefore(carol, evaluation, 20);
 });
 
 test("a run that used an uncorroborated guest capsule still learns for its own account, and reaches no platform signal; a corroborated one does", options, async () => {
@@ -386,7 +521,7 @@ test("a run that used an uncorroborated guest capsule still learns for its own a
   const audited = [];
   const triggersAt = (offset) => new LearningTriggers({ jobs: { enqueue: async (_user, _kind, payload) => queued.push(payload) }, agentRuns: { list: async () => [], runWorkflowProjection: async () => null },
     audit: async (event, detail) => audited.push([event, detail.code]),
-    guestInfluence: createGuestInfluence({ database, documents, minAccounts: 1, keptDays: 14, now: () => Date.now() + offset * DAY }) });
+    guestInfluence: createGuestInfluence({ database, documents, minAccounts: 1, keptDays: 14, minAccountAgeDays: 0, minFinishedRuns: 0, now: () => Date.now() + offset * DAY }) });
   const [guestA, guestB, vouchedA, vouchedB] = ["g1", "g2", "v1", "v2"].map((name) => finished(`run_${name}_${tag}`, { recalledMemories: recalled }));
   const early = await triggersAt(0).afterRun(project, { ...guestA });
   await triggersAt(0).afterRun(project, { ...guestB });

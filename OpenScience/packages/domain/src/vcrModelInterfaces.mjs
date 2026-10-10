@@ -57,6 +57,10 @@ export const VCR_DEFAULT_MODEL_INTERFACE = 'baseline_to_outcome'
 /** Shapes handled by the statistical patient-set generator. Cloud history models
  * use forecast_trajectories; they must never fall through into an R simulator. */
 export const VCR_HOSTED_MODEL_INTERFACES = frozen(['baseline_to_outcome'])
+/** Shapes the longitudinal forecast path hosts (`forecast_trajectories` with the deployment's configured cloud forecast providers, or a
+ * prediction a researcher imported): a patient set that names a model of one of these is run there. Together with the generator's
+ * shapes, these are every shape the card contract knows. */
+export const VCR_FORECAST_MODEL_INTERFACES = frozen(['event_history_to_trajectories'])
 
 /** The time units a horizon is stated in, with the days each stands for (a month is the mean Gregorian month). */
 export const VCR_HORIZON_UNIT_DAYS = Object.freeze({ days: 1, weeks: 7, months: 30.4375, years: 365.25 })

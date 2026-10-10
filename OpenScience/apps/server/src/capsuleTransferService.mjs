@@ -5,7 +5,7 @@ import { CAPSULE_FACT_ORIGINS } from "@evimed/domain";
 import { packCapsule, openCapsule, verifyCapsule } from "./capsuleContainer.mjs";
 import { capsuleAccountHash, protectedCapsuleDirectory, readProtectedCapsuleFile, writeProtectedCapsuleFile, unlinkCapsuleFile, syncCapsuleDirectory } from "./capsuleIdentityStore.mjs";
 import { buildAgentSkillsPack } from "./capsuleMethodPack.mjs";
-import { senderDisplayName } from "./capsuleShareLabel.mjs";
+import { senderDisplayName, shareSignature } from "./capsuleShareLabel.mjs";
 import { guestMarkedRuns } from "./capsuleShareTrust.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
@@ -64,7 +64,10 @@ const notTextOnly = () => {
   return new HttpError(400, "capsule_share_not_text_only", "The shared pack carries more than text.");
 };
 
-/** The most live (not revoked) snapshots one account keeps: each is a file of up to 2 MiB that stays on the disk until it is revoked. */
+/**
+ * The most live (not revoked) snapshots one account keeps: each is a file of up to 2 MiB that stays on the disk until it is revoked.
+ * This is the default; the deployment's is `OPEN_SCIENCE_CAPSULE_MAX_LIVE_SNAPSHOTS` (review C4e), handed in as `maxLiveSnapshots`.
+ */
 export const MAX_LIVE_SNAPSHOTS = 300;
 /** How long a snapshot file may sit without a record before it is taken for a crashed write's leftover, not one being written. */
 const SNAPSHOT_FILE_GRACE_MS = 60 * 60_000;
@@ -357,17 +360,18 @@ export class CapsuleTransferService {
   }
 
   /**
-   * The card a pack of this account carries: who sent it (the account's
-   * display name, never its id), what it is called and what it holds, and —
-   * for one that replaces an earlier snapshot — what changed. The sender may
-   * name the title, summary and changelog; the author is the account's own.
+   * The card a pack of this account carries: who sent it, what it is called and what it holds, and — for one that replaces an
+   * earlier snapshot — what changed. The sender may name the title, summary and changelog, and may sign this share with a name
+   * of their own (署名, 2026-10-10 review C4c): the card's author, which is what every recipient sees — on the card, as the
+   * delivery's sender, and as the label a recall puts under each entry. Without one the share is signed with the account's
+   * display name, and a signature that is the login name or holds an address is the neutral label (`shareSignature`).
    * @param {string} userId @param {readonly { factKind: string, sha256: string }[]} entries
    * @param {any} previous the snapshot record this one replaces, or null @param {any} requested
    */
   async #card(userId, entries, previous, requested) {
     const asked = capsuleCard(requested) ?? {};
-    // The display name, and when that is the login name or holds an address, a neutral label (`senderDisplayName`).
-    const name = senderDisplayName((await this.documents.database.query("SELECT name FROM evimed_control.users WHERE id=$1", [userId])).rows[0]?.name, userId);
+    const name = shareSignature(asked.author, (await this.documents.database.query("SELECT name FROM evimed_control.users WHERE id=$1", [userId])).rows[0]?.name, userId);
+    if (name === null) throw invalid();
     const author = cardText(name.slice(0, CARD_LIMITS.author), CARD_LIMITS.author) || undefined;
     const changes = previous
       ? capsuleChangelog((previous.payload.sourceEntries ?? []).map((/** @type {any} */ entry) => entry.sha256), entries.map((entry) => entry.sha256))

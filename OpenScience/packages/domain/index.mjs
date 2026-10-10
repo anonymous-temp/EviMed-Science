@@ -1482,7 +1482,6 @@ export {
   VCR_REVIEW_LIFECYCLE,
   VCR_REVIEW_KIND_LABELS_ZH,
   VCR_REVIEW_STATES,
-  VCR_REVIEW_STATE_LABELS_ZH,
   VCR_RISK_USE_CEILING,
   VCR_ROBUSTNESS_STAGES,
   VCR_ROBUSTNESS_STAGE_LABELS_ZH,
@@ -1569,6 +1568,7 @@ export {
 export {
   VCR_DEFAULT_MODEL_INTERFACE,
   VCR_EVENT_HISTORY_CARD_FIELDS,
+  VCR_FORECAST_MODEL_INTERFACES,
   VCR_HORIZON_UNIT_DAYS,
   VCR_HOSTED_MODEL_INTERFACES,
   VCR_MODEL_INTERFACES,
@@ -1577,6 +1577,18 @@ export {
   vcrModelCardIssues,
   vcrModelInterfaceOf,
 } from './src/vcrModelInterfaces.mjs'
+
+// vcrTimeUnits — the one closed table of time units (the model cards' horizon table), the spellings a source writes them in, and
+// the conversions: evidence in mixed units is converted before it is pooled, and a scenario's unit is stated, taken from its
+// evidence, or months
+export {
+  VCR_DEFAULT_TIME_UNIT,
+  VCR_TIME_UNITS,
+  vcrCommonTimeUnit,
+  vcrConvertTime,
+  vcrTimeUnitOf,
+  vcrTimeUnitPeriodsPerYear,
+} from './src/vcrTimeUnits.mjs'
 
 // vcrSuppression — 2 exports: small-cell suppression for everything a model may read: every people-count
 // below the floor, in any shape the stores produce
@@ -1643,7 +1655,6 @@ export {
   VCR_PACK_SECTIONS,
   VCR_PACK_SECTION_LABELS_ZH,
   VCR_PACK_STATUSES,
-  VCR_PACK_STATUS_LABELS_ZH,
   VCR_PACK_TERM_KINDS,
   VCR_PACK_USE_CLASSES,
   validateKnowledgePack,

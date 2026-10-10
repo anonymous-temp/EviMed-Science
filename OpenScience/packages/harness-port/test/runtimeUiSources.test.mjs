@@ -182,3 +182,66 @@ test('the list follows the answer it belongs to, under the files and the check',
   apply(bare, {}, outside, undefined, kitFor(bare, outside));
   assert.equal(bare.slots.registrations.filter((/** @type {any} */ row) => row.component !== 'shipped').length, 0);
 });
+
+// R19, 2026-10-10: the list of knowledge-base files an answer cites drew two lines about the checker itself — 「引文核对中」 while the shell
+// resolved the references, and 「引文暂时无法核对」 when it could not. Like the reply check (整改方案 §5.3), nothing is drawn while checking or
+// when the check fails; the list appears when it has something to show.
+import { createRequire } from 'node:module';
+
+const webRequire = createRequire(new URL('../../../apps/web/package.json', import.meta.url));
+const CITING = `二甲双胍是首选用药。<!-- evimed-source: {"sourceId":"src_${'a'.repeat(32)}","quote":"二甲双胍是首选用药。"} -->`;
+
+/**
+ * The answer row over a real DOM, so its effect runs: the sources body applied to a kernel whose answer row is a plain element, the shell's
+ * channel either absent, silent or answering as the test says.
+ * @param {{ reply?: (request: any) => any, silent?: boolean }} channel
+ */
+async function citedAnswer({ reply, silent = false }) {
+  const { JSDOM } = webRequire('jsdom');
+  const dom = new JSDOM('<!doctype html><div id="root"></div>');
+  const host = /** @type {Record<string, any>} */ (/** @type {unknown} */ (globalThis));
+  const saved = { window: host.window, document: host.document, act: host.IS_REACT_ACT_ENVIRONMENT };
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+  try {
+    const React = webRequire('react');
+    const { createRoot } = webRequire('react-dom/client');
+    const { entry, kit } = frame();
+    if (reply || silent) {
+      kit.hub.attach((/** @type {string} */ type, /** @type {any} */ fields) => {
+        if (type !== 'source-citations' || silent) return;
+        process.nextTick(() => kit.hub.deliver('source-citations', { requestId: fields.requestId, ...reply?.(fields) }));
+      });
+    }
+    const props = { ...answerProps(), node: { ...answerProps().node, data: { ...answerProps().node.data, blocks: [{ kind: 'text', text: CITING }] } } };
+    const container = dom.window.document.getElementById('root');
+    const root = createRoot(container);
+    await React.act(async () => { root.render(React.createElement(entry.component, props)); });
+    await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+    const html = container?.innerHTML ?? '';
+    await React.act(async () => { root.unmount(); });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return html;
+  } finally {
+    Object.assign(globalThis, { window: saved.window, document: saved.document, IS_REACT_ACT_ENVIRONMENT: saved.act });
+    dom.window.close();
+  }
+}
+
+test('an answer citing knowledge-base files draws nothing about the checker while it works or when it fails', async () => {
+  /** What of the checker's own state a row drew: its words, or its list. @param {string} html */
+  const drawn = (html) => html.match(/引文核对中|引文暂时无法核对|引用的资料/)?.[0] ?? null;
+  assert.equal(drawn(await citedAnswer({ silent: true })), null, 'while the shell is still resolving the references');
+  assert.equal(drawn(await citedAnswer({})), null, 'with no channel to the shell');
+  assert.equal(drawn(await citedAnswer({ reply: () => ({ ok: false }) })), null, 'when the shell answers that it could not');
+});
+
+test('the list of cited files appears when the check has something to show, with each mark', async () => {
+  const resolved = await citedAnswer({ reply: () => ({ ok: true, items: [
+    { sourceId: `src_${'a'.repeat(32)}`, title: '中国 2 型糖尿病防治指南', status: 'verified', page: 12 },
+    { sourceId: `src_${'b'.repeat(32)}`, title: '另一份资料', status: 'quote_not_found' },
+  ] }) });
+  assert.match(resolved, /aria-label="引用的资料"/);
+  assert.match(resolved, /✓ 中国 2 型糖尿病防治指南 · 第 12 页/);
+  assert.match(resolved, /⚠ 另一份资料/);
+  assert.match(resolved, /引文未核对上/);
+});

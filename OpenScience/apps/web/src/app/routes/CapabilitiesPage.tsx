@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search } from "lucide-react";
 import { capabilityListed, searchMatches } from "@evimed/domain";
-import { fetchWebResearchEstimates, webErrorMessage, listWebResearchAgents, type WebAvailabilityState, type WebResearchAgent, type WebResearchEstimate } from "@/lib/apiClient";
+import { availabilityIsDrawn, fetchWebResearchEstimates, webErrorMessage, listWebResearchAgents, type WebResearchAgent, type WebResearchEstimate } from "@/lib/apiClient";
 import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
 import { capabilityIcon } from "@/lib/capabilityIcons";
 import { bindConversationCapability } from "@/lib/dispatch";
@@ -192,19 +192,6 @@ export function CapabilitiesPage() {
 }
 
 /**
- * The states a reader can act on, and so are drawn — a label and its sentence.
- * The rest (installed, executable, unverified) are operational history: how
- * often something ran on this deployment, which a version bump turns from one
- * word into another with nothing a researcher could see changing, and which
- * opens the same conversation either way — the system explaining itself
- * (AGENTS.md, 「The interface never explains the system」; DESIGN.md 页面结构
- * rule 4). They draw nothing; the sentence stays for assistive technology and
- * the label stays in the API. Still a label, never a gate: no tool is hidden
- * or disabled for what its state says.
- */
-const SENTENCE_SHOWN = new Set<WebAvailabilityState>(["limited", "unavailable", "source-planned"]);
-
-/**
  * One tool: its icon and name, one sentence, how long it usually takes, what
  * this deployment can truthfully say about it when that is something to act on
  * — and, where the allowance is simulated, what it usually takes out of it,
@@ -218,14 +205,16 @@ function ToolCard({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; esti
   const allowance = allowanceText(estimate);
   const availability = agent.availability ?? null;
   const sentenceId = `availability-${agent.id}`;
-  const shown = availability !== null && SENTENCE_SHOWN.has(availability.state);
+  // Only a state the reader can act on is drawn (`availabilityIsDrawn`); the rest is neither seen nor read out. No tool is hidden
+  // or disabled for what its state says.
+  const shown = availability !== null && availabilityIsDrawn(availability.state);
   return (
     <button
       type="button"
       onClick={onOpen}
       disabled={busy}
       aria-label={`用“${agent.title}”开始一次对话`}
-      aria-describedby={availability ? sentenceId : undefined}
+      aria-describedby={shown ? sentenceId : undefined}
       className="flex min-h-32 w-full flex-col gap-1.5 rounded-card bg-surface-1 p-4 text-left transition-colors duration-fast hover:bg-surface-2 disabled:cursor-wait disabled:opacity-40"
     >
       <span className="flex items-center gap-2 text-ui font-semibold text-text">
@@ -233,8 +222,8 @@ function ToolCard({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; esti
         {agent.title}
       </span>
       <span className="text-ui text-text-2">{agent.description}</span>
-      {availability && (
-        <span id={sentenceId} className={shown ? "text-caption text-text-3" : "sr-only"}>
+      {shown && (
+        <span id={sentenceId} className="text-caption text-text-3">
           {availability.text}
         </span>
       )}

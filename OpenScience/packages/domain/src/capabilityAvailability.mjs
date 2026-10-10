@@ -69,7 +69,6 @@ export const AVAILABILITY_RECORD_SOURCES = Object.freeze([
   'operation-record',
   'engine-health',
   'connector-registry',
-  'method-validation',
   'runtime-mode',
   'extension-installation',
   'collector',
@@ -158,7 +157,6 @@ const REASONS = Object.freeze({
   // that do not compute stand, and a computation submitted now is accepted and continues by itself once the engine is back.
   'vcr-engine-not-answering': ['limited', () => '统计计算引擎现在没有回应；提交的计算会被受理，引擎恢复后自动继续。'],
   'vcr-engine-not-configured': ['limited', () => '这个部署没有接入统计计算引擎；需要计算的那一步暂不可用，其余步骤照常。'],
-  'method-unmeasured': ['limited', () => '方法的数值验证还没有完成，结果按未验证的方法对待。'],
   'optional-tool-not-offered': ['limited', (d) => `「${verbOf(d)}」在这个部署上没有提供；其余部分照常。`],
   // A package carried here needs software, data or weights that this deployment's runtime does not have.
   'dependency-software-missing': ['limited', (d) => `它用到的软件「${softwareOf(d)}」运行环境里没有；需要它的方法会受阻，其余部分照常。`],

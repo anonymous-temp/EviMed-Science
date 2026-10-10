@@ -84,7 +84,12 @@ test("a non-reproduction card carries the adjudication, and says what the evalua
   const { card } = built("not_reproduced_adjudicated", [item(0.9)], review);
   assert.match(card.title, /（未复现（分歧已经裁定））/);
   assert.match(card.body, /差异来自论文本身的错误/);
-  assert.match(card.body, /证明哈希 cccccccccccc/);
+  // The verdict is content; which model family judged, how it was verified and the proof's hash are the evaluator's (owner ruling 2026-10-10).
+  assert.doesNotMatch(`${card.body}\n${card.limitations}`, /证明哈希|cccccccccccc|模型家族|代码验证/);
+  // Neither does the method section name the receipt or the evaluation rule, nor does the card say which module made it.
+  assert.match(card.body, /平台独立复算：.+。容差按论文印出数字的精度计算。/);
+  assert.doesNotMatch(card.body, /回执 evolution-|评测打分/);
+  assert.equal(card.content.context, undefined);
 });
 
 /** The publisher's collaborators, in memory. */

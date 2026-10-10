@@ -189,9 +189,9 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         .catch(() => { if (alive) setResult({ ok: false }); });
       return () => { alive = false; };
     }, [key]);
-    if (!references.length) return null;
-    if (!result) return h('p', { style: meta }, '引文核对中');
-    if (!result.ok) return h('p', { style: meta }, '引文暂时无法核对');
+    // Nothing is drawn while the references are being resolved or when they could not be: the checker's own state is the back office's,
+    // as with the reply check (整改方案 §5.3, owner ruling 2026-10-10). The list appears when it has something to show.
+    if (!references.length || !result || !result.ok) return null;
     return h('ul', { 'aria-label': '引用的资料', style: { ...meta, padding: 0, listStyle: 'none' } },
       ...result.items.map((/** @type {any} */ item, /** @type {number} */ index) => h('li', { key: `${item.sourceId}:${index}` },
         h('button', { type: 'button', style: { ...textButton, ...meta }, onClick: () => kit.hub.send('open-source', item) },

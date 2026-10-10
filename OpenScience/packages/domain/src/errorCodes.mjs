@@ -2129,7 +2129,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_engine_timeout: '计算引擎这次没有及时应答；作业会自动重试。',
   vcr_engine_secret_missing: '计算引擎的口令没有配置，引擎按未配置处理；请联系管理员。',
   vcr_engine_token_file_short: '计算引擎的口令文件太短（至少 32 字节），引擎按未配置处理；请联系管理员。',
-  vcr_engine_receipt_key_file_unavailable: '回执密钥文件读不到；计算照常进行，结果仍按输出哈希核对，只是没有用密钥验回执。请联系管理员。',
+  vcr_engine_receipt_key_file_unavailable: '回执密钥文件读不到；计算照常进行。请联系管理员。',
   vcr_engine_catalogue_mismatch: '计算引擎和平台的方法目录对不上，已停用这个引擎；请联系管理员升级。',
   vcr_engine_not_found: '引擎里找不到这项作业，可能已被清理；重新排一次即可。',
   vcr_engine_response_invalid: '计算引擎的应答格式不对，这次没有采用；可以重新计算。',
@@ -2192,7 +2192,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_model_exists: '这个名字和版本的模型已经存在；换一个名字或版本。',
   // The module's own health (an operator reads these).
   vcr_migration_failed: '虚拟临床研究的数据表升级失败，模块已停用；请联系管理员。',
-  vcr_engine_receipt_key_unusable: '配置了计算引擎的回执密钥，但读不到或太短（至少 32 字节）；计算照常进行，结果仍按输出哈希核对，只是没有用密钥验回执。请联系管理员修正。',
+  vcr_engine_receipt_key_unusable: '配置了计算引擎的回执密钥，但读不到或太短（至少 32 字节）；计算照常进行。请联系管理员修正。',
   vcr_loop_failed: '虚拟临床研究的后台循环出错，已记录并会重试。',
   vcr_orchestrator_failed: '虚拟临床研究的自动编排出错，已记录并会重试。',
   vcr_worker_loop_missing: '虚拟临床研究的后台循环没有启动；请联系管理员。',
@@ -2291,8 +2291,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   runtime_canceled: '运行已被取消。可以重新发起，或从某一步分叉后继续。',
   runtime_stopped: '运行进程中断，已按中断记录收尾。重试即可继续。',
   runtime_deliverable_never_submitted:
-    '运行已经写出交付文件，但没有提交校验就结束了，因此没有通过质量门、也没有可交付的成果。'
-    + '文件仍在工作区里，可以重新发起让它提交；未经校验的文件不会被当作交付物。',
+    '运行已经写出交付文件，但没有提交就结束了。'
+    + '文件仍在工作区里，可以重新发起让它提交。',
   runtime_session_error: '模型调用失败。稍后重试；若反复出现请缩小题面范围。',
   runtime_spend_limit_reached: '模型调用被用量上限拒绝：这次运行或账户的花费已到上限，已经写出的文件仍在工作区里。可在“设置 → 用量”查看已用与上限，上限恢复或调高后再继续。',
   runtime_session_not_found: '运行时还没有这个会话，因此它还没有产生任何记录。',
@@ -2426,11 +2426,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // repair is, because 28 of 179 production runs ended here with a finished
   // report on disk and a screen that said 「暂无交付物。」
   specialist_deliverable_not_accepted:
-    '交付物已经写好，但没有通过交付契约校验，因此没有作为成果发布。'
-    + '文件没有被删除，仍在本次运行的工作区里；按退回意见修好后可以重新提交。',
+    '交付物已经写好，但没有通过交付契约的检查。'
+    + '文件没有被删除，仍在本次运行的工作区里。',
   specialist_receipt_digest_mismatch:
-    '写下交付回执之后文件又被改动过，盘上的这一版没有经过质量门判定，因此不能当作已核验的成果发布。'
-    + '文件仍在工作区里，可以自行取用；若这是有意的收尾修改，请让运行在最后一次修改之后再提交一次。',
+    '写下交付回执之后文件又被改动过。'
+    + '文件仍在工作区里，可以自行取用。',
   specialist_job_timeout:
     '专科引擎运行超过了部署设定的单次时限，已被停止。已经写出的文件保留在工作区里；'
     + '重新发起（范围较大的请求可以缩小范围）也许就能完成。',
@@ -2473,8 +2473,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
     '保存下来的原始来源与检索时写下的内容已经不一致，从中摘出的引文不能算作原文。'
     + '不要改动、截断或重排已保存的来源；确需更新时重新检索一次。',
   specialist_delegated_evidence_read:
-    '这份成果里有一部分证据是分工子任务读取的，主运行没有亲自核对，因此标注为“未完成核验”。'
-    + '成果可以正常查看，引用前请自行复核这部分。',
+    '这份成果里有一部分证据是分工子任务读取的，主运行没有亲自读过原文。'
+    + '成果可以正常查看。',
   specialist_evidence_repair_failed:
     '按退回意见做的修复没能完成，成果保持未通过状态。已经写好的文件仍在工作区里，可以自行取用或重新发起。',
   specialist_evidence_repair_snapshot_failed:
@@ -2695,7 +2695,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   // The specific family comes first: matching is in order, and an evidence
   // defect is not an engine failure — telling a reader to retry it would send
   // them to the wrong place.
-  [/^specialist_evidence_/, '交付物的证据链有缺口，运行会被退回修复。'],
+  [/^specialist_evidence_/, '交付物的证据链有缺口。'],
   [/^(meta|specialist)_/, '专科引擎这次没能完成，稍后重试或缩小范围。'],
   [/^runtime_/, '运行时出现问题，稍后重试。'],
   [/^credits_/, '额度不足或已达上限。'],

@@ -20,7 +20,7 @@
 
     "drug_label_search": { "group": "药品与安全", "use": "查药品说明书，国内和美国的都可查，可引用到具体章节。" },
     "dailymed_label": { "group": "药品与安全", "use": "查美国 FDA 药品说明书的各个版本，并比较不同版本在章节上的变化。" },
-    "pharmacy_reference_search": { "group": "药品与安全", "use": "检索药学参考资料，作为决策参考，需再对照最新的官方来源。" },
+    "pharmacy_reference_search": { "group": "药品与安全", "use": "检索药学参考资料，作为决策参考。" },
     "drug_term_normalize": { "group": "药品与安全", "use": "把药名规范成标准名称，给出同义名和 ATC 编码。" },
     "adr_case_query": { "group": "药品与安全", "use": "查询药品不良反应病例。" },
     "adr_signal_analysis": { "group": "药品与安全", "use": "做不良反应信号分析，并给出可追溯的来源。" },

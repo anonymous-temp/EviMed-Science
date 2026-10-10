@@ -1749,7 +1749,7 @@
                 "min": 0,
                 "lt": 1,
                 "default": 0,
-                "unit": "proportion per 12 time units"
+                "unit": "proportion per year"
               },
               "maxFollowup": {
                 "t": "number",
@@ -1795,7 +1795,7 @@
                 "min": 0,
                 "lt": 1,
                 "default": 0,
-                "unit": "proportion per 12 time units"
+                "unit": "proportion per year"
               },
               "maxFollowup": {
                 "t": "number",
@@ -1815,6 +1815,22 @@
               ]
             }
           },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "default": "months",
           "when": {
             "path": "endpoint.type",
             "in": [
@@ -2110,7 +2126,7 @@
                 "min": 0,
                 "lt": 1,
                 "default": 0,
-                "unit": "proportion per 12 time units"
+                "unit": "proportion per year"
               },
               "maxFollowup": {
                 "t": "number",
@@ -2156,7 +2172,7 @@
                 "min": 0,
                 "lt": 1,
                 "default": 0,
-                "unit": "proportion per 12 time units"
+                "unit": "proportion per year"
               },
               "maxFollowup": {
                 "t": "number",
@@ -2176,6 +2192,22 @@
               ]
             }
           },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "default": "months",
           "when": {
             "path": "endpoint.type",
             "in": [
@@ -2471,7 +2503,7 @@
                 "min": 0,
                 "lt": 1,
                 "default": 0,
-                "unit": "proportion per 12 time units"
+                "unit": "proportion per year"
               },
               "maxFollowup": {
                 "t": "number",
@@ -2517,7 +2549,7 @@
                 "min": 0,
                 "lt": 1,
                 "default": 0,
-                "unit": "proportion per 12 time units"
+                "unit": "proportion per year"
               },
               "maxFollowup": {
                 "t": "number",
@@ -2537,6 +2569,22 @@
               ]
             }
           },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "default": "months",
           "when": {
             "path": "endpoint.type",
             "in": [
@@ -4540,9 +4588,25 @@
               "min": 0,
               "lt": 1,
               "default": 0,
-              "unit": "proportion per 12 time units"
+              "unit": "proportion per year"
             }
           },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "default": "months",
           "when": {
             "path": "endpoint.type",
             "in": [
@@ -5272,7 +5336,7 @@
                 "min": 0,
                 "lt": 1,
                 "default": 0,
-                "unit": "proportion per 12 time units"
+                "unit": "proportion per year"
               },
               "maxFollowup": {
                 "t": "number",
@@ -5318,7 +5382,7 @@
                 "min": 0,
                 "lt": 1,
                 "default": 0,
-                "unit": "proportion per 12 time units"
+                "unit": "proportion per year"
               },
               "maxFollowup": {
                 "t": "number",
@@ -5338,6 +5402,22 @@
               ]
             }
           },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "default": "months",
           "when": {
             "path": "endpoint.type",
             "in": [
@@ -6112,7 +6192,7 @@
                 "min": 0,
                 "lt": 1,
                 "default": 0,
-                "unit": "proportion per 12 time units"
+                "unit": "proportion per year"
               },
               "maxFollowup": {
                 "t": "number",
@@ -6158,7 +6238,7 @@
                 "min": 0,
                 "lt": 1,
                 "default": 0,
-                "unit": "proportion per 12 time units"
+                "unit": "proportion per year"
               },
               "maxFollowup": {
                 "t": "number",
@@ -6178,6 +6258,22 @@
               ]
             }
           },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "default": "months",
           "when": {
             "path": "endpoint.type",
             "in": [
@@ -7637,6 +7733,15 @@
         "maxNameLength": 80,
         "maxNamedRules": 100
       }
+    }
+  },
+  "timeUnits": {
+    "default": "months",
+    "daysPerUnit": {
+      "days": 1,
+      "weeks": 7,
+      "months": 30.4375,
+      "years": 365.25
     }
   },
   "jobKinds": [

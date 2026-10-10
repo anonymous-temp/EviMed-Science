@@ -52,7 +52,7 @@ export function EvidenceCommunityCards({ zoneId, from }: { zoneId: string; from?
     <section aria-label="社区卡片" className="space-y-3">
       <div>
         <h3 className="text-ui font-medium text-text">社区卡片</h3>
-        <p className="mt-1 text-caption text-text-3">其他用户公开发布的相关卡片，署名、只读，平台没有改动，也不为它们背书；点开卡片可以看到来源和核对结果。</p>
+        <p className="mt-1 text-caption text-text-3">其他用户公开发布的相关卡片；点开卡片可以看到来源和核对结果。</p>
       </div>
       <ul className="divide-y divide-border">
         {items.map((card) => (

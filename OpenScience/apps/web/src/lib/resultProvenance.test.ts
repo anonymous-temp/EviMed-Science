@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignResultAnchors, bindingFormatLabel, bindingsForSelection, bindingStatusLabel, replayEnvironmentLabel, reproductionLabel, resultEnvironmentDifference, resultGapLabel, resultTextDifference, resultValueDifference, selectionResultAnchor, snapshotKindLabel, snapshotUnknownLabel, type ResultVersion, type ValueBindings } from "./resultProvenance";
+import { assignResultAnchors, bindingFormatLabel, bindingsForSelection, bindingStatusLabel, replayEnvironmentLabel, resultEnvironmentDifference, resultGapLabel, resultTextDifference, resultValueDifference, selectionResultAnchor, snapshotKindLabel, type ResultVersion, type ValueBindings } from "./resultProvenance";
 
 describe("result anchors and differences", () => {
   it("anchors a selected table cell to its immutable row and column", () => {
@@ -90,12 +90,10 @@ describe("the numerical chain in words", () => {
     expect(bindingFormatLabel({ id: "round", places: 0, grouped: true })).toBe("保留 0 位小数，千分位");
     expect(bindingFormatLabel({ id: "round", places: 2, magnitude: true })).toBe("保留 2 位小数，省略负号");
   });
-  it("labels how bytes came about, whether code ran and what was not observed", () => {
-    expect(snapshotKindLabel("unobserved")).toBe("生成过程未被观察");
-    expect(reproductionLabel("generated_not_executed")).toMatch(/没有它运行过的记录/);
-    expect(reproductionLabel("declared_execution")).toMatch(/未能核对/);
-    expect(reproductionLabel("not_applicable")).toBeNull();
-    expect(snapshotUnknownLabel("undeclared_dependencies")).toMatch(/其他文件和网络/);
+  it("labels how bytes came about, and why a recalculation or an export is not available", () => {
+    expect(snapshotKindLabel("engine_job")).toBe("确定性计算引擎");
+    expect(snapshotKindLabel("render")).toBe("平台按计算值渲染");
+    expect(snapshotKindLabel("unobserved")).toBe("");
     expect(resultGapLabel("dependencies_not_observed")).toMatch(/其他文件和网络/);
     expect(resultGapLabel("values_unbound")).toBe("文中有数值没有对应的计算值");
   });

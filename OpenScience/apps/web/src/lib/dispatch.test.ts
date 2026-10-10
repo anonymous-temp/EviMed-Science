@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WebApiError, type WebAgentRun, type WebResearchAgent } from "@/lib/apiClient";
+import { WebApiError, type WebAgentRun } from "@/lib/apiClient";
 
 const mocks = vi.hoisted(() => ({
   putWebResearchSession: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
   cancelWebAgentRun: mocks.cancelWebAgentRun,
 }));
 
-import { bindConversationCapability, dispatchResearch, minutesText, newResearchSessionId, rerouteRun, routeLineOf } from "./dispatch";
+import { bindConversationCapability, dispatchResearch, newResearchSessionId, rerouteRun } from "./dispatch";
 
 const SAFE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
@@ -34,11 +34,6 @@ function run(over: Partial<WebAgentRun> = {}): WebAgentRun {
     ...over,
   } as WebAgentRun;
 }
-
-const catalog = [
-  { id: "clinical-evidence-synthesis", version: "2.13.0", title: "Clinical evidence", estimatedMinutes: [15, 30] },
-  { id: "meta-analysis", version: "1.0.0", title: "Meta", estimatedMinutes: [30, 180] },
-] as unknown as WebResearchAgent[];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -120,46 +115,12 @@ describe("rerouteRun", () => {
   });
 });
 
-describe("routeLineOf", () => {
-  it("names the capability in the product's words, with the run's own duration and reason", () => {
-    const line = routeLineOf(run({ routeReason: "题面是一个需要逐条核验文献的临床问题", estimatedMinutes: { min: 15, max: 30 } }));
-    expect(line).toEqual({
-      agentId: "clinical-evidence-synthesis",
-      label: "临床证据深度分析",
-      answerLine: false,
-      minutes: "通常 15～30 分钟",
-      reason: "题面是一个需要逐条核验文献的临床问题",
-    });
-  });
-
-  it("falls back to the capability's display figure, then the catalogue's, and says nothing without one", () => {
-    // clinical-evidence-synthesis's display block says 30～70.
-    expect(routeLineOf(run()).minutes).toBe("通常 30～70 分钟");
-    const unknown = { effectiveAgentId: "not-in-the-table", agentId: "not-in-the-table" };
-    expect(routeLineOf(run(unknown), [{ ...catalog[0], id: "not-in-the-table" }]).minutes).toBe("通常 15～30 分钟");
-    expect(routeLineOf(run(unknown)).minutes).toBeNull();
-  });
-
-  it("calls the answer line 普通问答", () => {
-    const line = routeLineOf(run({ mode: "open-domain", agentId: null, effectiveAgentId: "open-domain-answer" }));
-    expect(line).toMatchObject({ agentId: null, label: "普通问答", answerLine: true });
-  });
-
-  // The ledger's own routing code is for the ledger; a reader gets the
-  // control plane's Chinese sentence or nothing.
-  it("never shows the internal routing code as the reason", () => {
-    const line = routeLineOf(run({ effectiveRouteReason: "session-binding" } as Partial<WebAgentRun>));
-    expect(line.reason).toBeNull();
-  });
-});
-
-describe("minutesText", () => {
-  it("renders a range, a single figure, and nothing for a missing or empty one", () => {
-    expect(minutesText({ min: 15, max: 30 })).toBe("通常 15～30 分钟");
-    expect(minutesText({ min: 5, max: 5 })).toBe("通常约 5 分钟");
-    expect(minutesText(null)).toBeNull();
-    expect(minutesText({ min: 0, max: 0 })).toBeNull();
-    expect(minutesText({ min: Number.NaN, max: 3 })).toBeNull();
+// The route line (a capability's name, a duration and the control plane's sentence for why) had no screen and was deleted 2026-10-10:
+// why the platform routed a request as it did is the back office's (owner ruling). Nothing of it is exported any more.
+describe("the route line", () => {
+  it("is not produced: no label, no duration and no reason for a run's route", async () => {
+    const module = await import("./dispatch");
+    for (const name of ["routeLineOf", "minutesText", "ANSWER_LINE_LABEL"]) expect(name in module, name).toBe(false);
   });
 });
 

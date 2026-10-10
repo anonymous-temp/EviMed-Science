@@ -41,3 +41,24 @@ export function senderDisplayName(name, accountId, fallback = NEUTRAL_SENDER_NAM
   if (EMAIL_ADDRESS.test(shown)) return fallback;
   return shown;
 }
+
+/**
+ * The longest signature (署名) a sharer may type for one share, in characters: what an inbox notice shows of a sender
+ * (`capsuleSharing.mjs` clips it there), so a name someone chose is never cut. The share dialog's field has the same bound.
+ */
+export const SIGNATURE_MAX_CHARS = 60;
+
+/**
+ * The name one share is signed with (2026-10-10 review, C4c): what the sharer typed for it, else the account's display name as
+ * `senderDisplayName` has always made it. A typed signature goes through the same rule, so one that is the login name or holds an
+ * e-mail address becomes the neutral label — it is a name that cannot be shown, not a request to refuse. The only refusal is a
+ * signature past `SIGNATURE_MAX_CHARS`, answered with null for the caller to refuse by name.
+ * @param {unknown} typed what the sharer typed for this share, if anything @param {unknown} accountName the account's display name
+ * @param {unknown} accountId @returns {string | null}
+ */
+export function shareSignature(typed, accountName, accountId) {
+  const asked = typeof typed === "string" ? typed.replace(/\s+/g, " ").trim() : "";
+  if (!asked) return senderDisplayName(accountName, accountId);
+  if ([...asked].length > SIGNATURE_MAX_CHARS) return null;
+  return senderDisplayName(asked, accountId);
+}

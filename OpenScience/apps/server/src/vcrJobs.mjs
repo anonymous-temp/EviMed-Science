@@ -1434,7 +1434,11 @@ export class VcrJobs {
           notEstimableRule: result.notEstimableRule ?? null,
           counts: object(result.counts), measures: sourced,
           diagnostics: { ...object(result.diagnostics), ...(partial ? { partial: true, ...(status === "canceled" ? { canceled: true } : {}) } : {}),
-            ...(assumedInputs ? { inputsAssumed: true } : {}) },
+            ...(assumedInputs ? { inputsAssumed: true } : {}),
+            // The unit the scenario's times were stated in and where it came from (stated, taken from its evidence, or assumed to be
+            // months), frozen with the job by the orchestrator: what the numbers of a result are in, said by the result. (The engine's
+            // own `timeUnit` is a method's echo of the word it was given; this is the control plane's account of how it was settled.)
+            ...(Object.keys(object(detail.timeUnitBasis)).length ? { timeUnitBasis: object(detail.timeUnitBasis) } : {}) },
           tables: list(result.tables),
         };
         let filed = incoming;

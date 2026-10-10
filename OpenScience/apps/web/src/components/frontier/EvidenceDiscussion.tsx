@@ -13,43 +13,34 @@ import { evidenceDay } from "./evidenceDate";
 export const evidenceDiscussionCount = (evidence: Pick<EvidenceCard, "reviews" | "discussion">) =>
   (evidence.reviews?.length ?? 0) + evidence.discussion.length;
 
-/** An AI review is current only while the source is clean of a retraction or a concern and the card is the revision that was reviewed. */
-const aiReviewCurrent = (evidence: EvidenceCard) =>
-  !evidence.sources.some((source) => source.publicationStatus) &&
-  evidence.editorial?.status === "ai-reviewed" &&
-  evidence.editorial.reviewRevision === evidence.revision;
-
+/**
+ * The AI's findings about the card are content, and stay under their heading. Who the AI reviewer was, when it read the card and whether
+ * its review is current are the pipeline's bookkeeping, and are not said (owner ruling 2026-10-10). The line that no reader has reviewed
+ * the current content is about the readers, and stays.
+ */
 export function EvidenceReviews({ evidence }: { evidence: EvidenceCard }) {
   const editorial = evidence.editorial;
+  const findings = editorial?.findings ?? [];
   return (
     <>
-      {editorial && (
+      {findings.length > 0 && (
         <section>
           <h3 className="mb-2 text-ui font-medium text-text">AI 证据评议</h3>
-          <p className="text-caption text-text-3">
-            {editorial.reviewer?.name || "待评议"}
-            {editorial.reviewedAt && ` · ${evidenceDay(editorial.reviewedAt)}`}
-          </p>
-          <p className="mt-2 text-ui text-text-2">
-            {aiReviewCurrent(evidence) ? "当前内容已完成 AI 评议" : "当前内容待重新评议"}
-          </p>
-          {(editorial.findings?.length || 0) > 0 && (
-            <ul className="mt-3 space-y-2">
-              {editorial.findings?.map((finding, index) => (
-                <li key={index} className="text-ui text-text-2">
-                  {finding.text}
-                  <EvidenceReferences
-                    evidence={evidence}
-                    indexes={finding.sourceIndex ? [finding.sourceIndex] : []}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-          {!evidence.reviews?.some((entry) => entry.current) && (
-            <p className="mt-2 text-caption text-text-3">尚无当前内容的用户评议</p>
-          )}
+          <ul className="space-y-2">
+            {findings.map((finding, index) => (
+              <li key={index} className="text-ui text-text-2">
+                {finding.text}
+                <EvidenceReferences
+                  evidence={evidence}
+                  indexes={finding.sourceIndex ? [finding.sourceIndex] : []}
+                />
+              </li>
+            ))}
+          </ul>
         </section>
+      )}
+      {editorial && !evidence.reviews?.some((entry) => entry.current) && (
+        <p className="text-caption text-text-3">尚无当前内容的用户评议</p>
       )}
       {evidence.review && (
         <section>

@@ -1,74 +1,19 @@
 /**
- * Why a run went where it went, and roughly how long it will take — both in
- * the reader's words (C3, 2026-09-18).
+ * How long a run is expected to take, in minutes (C3, 2026-09-18).
  *
- * The ledger records a route as a machine reason (`llm:0.87`, or `jev:0.87`
+ * The ledger records the route as a machine reason (`llm:0.87`, or `jev:0.87`
  * when the Jev routing site decided, `matched:named:meta-analysis`,
- * `unrouted:open-domain:classifier:timeout`),
- * which is what operations and the batch evaluations read and must keep
- * reading. A researcher was shown nothing at all: the answer line and the
- * report line look the same from the composer, and a question that went to a
- * forty-minute pipeline gave no sign it would (2026-09-18 review, E §5.3).
- * This translates the closed vocabulary the router itself mints — a format,
- * not language (principle 1) — and returns nothing for a reason it does not
- * know rather than a guess.
+ * `unrouted:open-domain:classifier:timeout`), which is what operations and the
+ * batch evaluations read and must keep reading. It used to be translated into a
+ * Chinese sentence for the reader (「按问题内容交给…」, 「直接回答：…」); no screen
+ * drew it, and why the platform routed a request as it did is the back office's
+ * (owner ruling 2026-10-10), so the translation is gone. What stays here is the
+ * estimate a researcher is told: how long the work they asked for usually takes.
  *
  * @module runRoute
  */
 
-import { capabilityTitle } from "@evimed/domain";
-
 const answerAgentId = "open-domain-answer";
-
-/** @param {string | null | undefined} id */
-function named(id) {
-  const title = capabilityTitle(id);
-  return title ? `「${title}」` : "对应的能力";
-}
-
-/**
- * The route, as one Chinese sentence, or null when the reason is not one the
- * router mints.
- * @param {string | null | undefined} reason the ledger's `effectiveRouteReason`
- * @param {string | null | undefined} agentId the ledger's `effectiveAgentId`
- * @returns {string | null}
- */
-export function routeReasonText(reason, agentId) {
-  let rest = typeof reason === "string" ? reason : "";
-  if (!rest) return null;
-  // Said last, because it qualifies whatever the route was: the model that
-  // decides routes gave no answer, so the rules decided.
-  let fallback = "";
-  const classifier = /:classifier:[a-z0-9_.-]+$/.exec(rest);
-  if (classifier) {
-    rest = rest.slice(0, classifier.index);
-    fallback = "（路由判断没有给出结论，按规则处理）";
-  }
-  let adopted = "";
-  if (rest.startsWith("adopted:runtime-ui")) {
-    adopted = "来自对话窗口";
-    rest = rest.slice("adopted:runtime-ui".length).replace(/^:/, "");
-    if (!rest) return `${adopted}${fallback}`;
-  }
-  let sentence = null;
-  // The researcher's own choice, said as theirs.
-  if (rest === "choice:answer") sentence = "按你的选择：普通问答";
-  else if (rest.startsWith("choice:")) sentence = `按你的选择：${capabilityTitle(agentId) ?? "对应的能力"}`;
-  else if (rest === "session-binding") sentence = `按这个对话选定的能力${named(agentId)}运行`;
-  // Only a dispatch was routed. A question asked in the conversation window
-  // goes to the research assistant there, which plans deliverables whenever
-  // the question calls for them: on 2026-09-19 a task that delivered two
-  // reports was described as 「不需要交付报告」.
-  else if (rest === "unrouted:open-domain") sentence = adopted ? null : "直接回答：这个问题不需要交付报告";
-  // The same sentence whichever model decided (`llm:` the Flash classifier, `jev:` the Jev routing site): the reader is told where the question went.
-  else if (/^(?:llm|jev):(?:0|1)(?:\.\d+)?$/.test(rest)) sentence = `按问题内容交给${named(agentId)}`;
-  else if (rest.startsWith("matched:named:")) sentence = `你在问题里点名了${named(agentId)}`;
-  else if (rest === "matched:clinical-evidence-synthesis:safety-medicine") sentence = `问题提到了需要核对用药安全的药品，交给${named(agentId)}`;
-  else if (rest.startsWith("matched:")) sentence = `按问题里的交付要求交给${named(agentId)}`;
-  else if (rest.startsWith("autopilot:")) sentence = "由你设定的定时任务发起";
-  if (!sentence) return adopted ? `${adopted}${fallback}` : null;
-  return `${adopted ? `${adopted}，` : ""}${sentence}${fallback}`;
-}
 
 /**
  * The fallback table for a capability that declares no estimate (C3): an

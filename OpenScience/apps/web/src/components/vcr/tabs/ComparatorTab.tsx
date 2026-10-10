@@ -7,11 +7,11 @@ import { ChartCard } from "@/components/ui/ChartCard";
 import { Tag } from "@/components/ui/Tag";
 import { VcrSeriesLegend, VcrSurvivalChart } from "../VcrCharts";
 import { VcrSmdDot } from "../VcrDiagrams";
-import { ConclusionChip, markKindOf, ReviewChip, SourceTag } from "../VcrMarks";
+import { ConclusionChip, markKindOf, SourceTag } from "../VcrMarks";
 import { VcrNumber } from "../VcrNumber";
 import { NotEstimableCard, PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useVcrLoad, VcrFacts, VcrHeadline, VcrSection, VcrTabError } from "../vcrTabKit";
-import { conclusionLabel, intervalText, isPlaceholder, reviewLabel } from "../vcrText";
+import { conclusionLabel, intervalText, isPlaceholder } from "../vcrText";
 
 const ROUTE_LABELS = VCR_COMPARATOR_ROUTE_LABELS_ZH as Record<string, string>;
 
@@ -139,7 +139,7 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
                   footnote={data.curves.some((curve) => markKindOf(curve.source) === "dashed")
                     ? "虚线为从已发表图表重建的伪个体数据，不是观察到的曲线。"
                     : undefined}
-                  meta={<span className="flex items-center gap-1.5"><ConclusionChip state={data.verdict?.conclusion ?? null} /><ReviewChip state={data.verdict?.review ?? null} /></span>}
+                  meta={<span className="flex items-center gap-1.5"><ConclusionChip state={data.verdict?.conclusion ?? null} /></span>}
                 >
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,14rem)]">
                     <VcrSurvivalChart curves={data.curves} rmst={data.rmst ? { tau: data.rmst.tau ?? null, label: data.rmst.label } : null} />
@@ -157,8 +157,6 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="text-section font-semibold text-text">估计目标</h2>
                           <SourceTag source={estimand.source ?? undefined} />
-                          <span className="flex-1" />
-                          <ReviewChip state={estimand.review ?? null} />
                         </div>
                       )}
                     >
@@ -211,9 +209,7 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
             <p data-vcr-verdict="" className="flex flex-wrap items-center gap-2 text-caption text-text-3">
               本页结论：
               <ConclusionChip state={data.verdict.conclusion} />
-              <ReviewChip state={data.verdict.review} />
-              {!data.verdict.reviewed && <span>未复核</span>}
-              <span className="sr-only">{`${conclusionLabel(data.verdict.conclusion)}，${reviewLabel(data.verdict.review)}`}</span>
+              <span className="sr-only">{conclusionLabel(data.verdict.conclusion)}</span>
             </p>
           )}
         </div>

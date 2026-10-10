@@ -3,7 +3,7 @@ import { WebApiError } from "@/lib/apiClient";
 import { fieldMapBody, freezeBody, grantBody, sourceBody, uploadQuery } from "@/lib/vcrIntakeBodies";
 import { readVcrIntake, type VcrIntakeSource } from "@/lib/vcrClient";
 import { fixture } from "../__fixtures__/serverFixtures";
-import { IMPORT_FORMATS, documentAccept, editorRows, entriesOf, importAccept, importProblem, importSummary, intakeErrorMessage, mapProblem, rowProblem, uploadProblem } from "./intakeState";
+import { IMPORT_FORMATS, documentAccept, editorRows, entriesOf, importAccept, importProblem, importSummary, intakeErrorMessage, mapProblem, readingText, rowProblem, uploadProblem } from "./intakeState";
 import { knownErrorCodeMessage } from "@evimed/domain";
 
 /** The second source of the sealed page: one file, a map with problems. */
@@ -230,5 +230,22 @@ describe("a source held in a standard format", () => {
     // A column that says only where it came from is still said, and a column that says nothing is not sent.
     const only = editorRows(held([{ table: "cohort.csv", column: "SEX", role: "other", valueSource: "imputed" }]));
     expect(entriesOf(only).find((entry) => entry.column === "SEX")).toMatchObject({ role: "other", valueSource: "imputed" });
+  });
+});
+
+describe("how much of a reviewed record a run was shown (E-06)", () => {
+  const reading = (extra: Partial<NonNullable<ReturnType<typeof readVcrIntake>["sources"][number]["files"][number]["reading"]>>) => ({ chars: 900, read: 300, skipped: 600, complete: false, ...extra });
+  it("is a sentence only for a reviewed record, and says 读过 where it means shown, never 提取", () => {
+    expect(readingText(null)).toBeNull();
+    expect(readingText(reading({ read: 300 }))).toBe("已读 300 / 900 字，其余没读到");
+    expect(readingText(reading({ read: 900, skipped: 0, complete: true }))).toBe("全文已读");
+    expect(readingText(reading({ read: 0, skipped: 900 }))).toBe("尚未读取");
+    expect(readingText(reading({ chars: null, skipped: null }))).toBe("已读 300 字");
+    for (const sentence of [readingText(reading({})), readingText(reading({ complete: true, read: 900 }))]) expect(sentence).not.toMatch(/提取|抽取/);
+  });
+  it("is read from the page's payload as counts, and a file without the block reads as none", () => {
+    const intake = readVcrIntake({ ...fixture("intake/data-sealed.json").intake, sources: [{ ...fixture("intake/data-sealed.json").intake.sources[0], files: [
+      { id: "a", name: "a", role: "document", reading: { chars: 10, read: 4, skipped: 6, complete: false } }, { id: "b", name: "b", role: "document" }] }] });
+    expect(intake.sources[0].files.map((file) => file.reading)).toEqual([{ chars: 10, read: 4, skipped: 6, complete: false }, null]);
   });
 });

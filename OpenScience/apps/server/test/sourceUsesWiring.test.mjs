@@ -14,7 +14,8 @@ test("the run-finish hook records a run's uses beside its transcript, and not fo
   assert.ok(transcript > 0 && hook > transcript, "recorded after the transcript is written, from the same sessions");
   const call = serverSource.slice(hook, hook + 600);
   assert.match(call, /sessions/);
-  assert.match(call, /skip: Boolean\(evaluationRun\) \|\| internalFor\(project\.userId, project\.id\)/);
+  // Background work is the platform's internal projects (the paired-evaluation runs it also skipped were deleted 2026-10-10).
+  assert.match(call, /skip: internalFor\(project\.userId, project\.id\)/);
   assert.match(call, /run\.source_uses\.record/, "a failure to record is audited, not swallowed");
 });
 
