@@ -736,6 +736,47 @@ test("Jev's model, gate and ceilings are the pin and nothing else, and it is on 
   }
 });
 
+test("the Jev levers read an empty value as unset, and keep their bounds", () => {
+  // `.env.example` shows these as `NAME=`, and a private override line `NAME=` is the common way to leave one alone; an
+  // empty string is not a number (`Number("")` is 0), so reading it as one stopped the process at start.
+  const names = ["OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS", "OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY", "OPEN_SCIENCE_JEV_DISABLED_SITES"];
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  try {
+    for (const name of names) delete process.env[name];
+    const defaults = loadConfig({ rootDir: repoRoot });
+    assert.equal(defaults.jevOnlineTimeoutMs, 3000);
+    assert.equal(defaults.jevBackgroundConcurrency, 4);
+    assert.deepEqual(defaults.jevDisabledSites, []);
+    for (const name of names) process.env[name] = "";
+    const empty = loadConfig({ rootDir: repoRoot });
+    assert.equal(empty.jevOnlineTimeoutMs, 3000, "empty reads as unset");
+    assert.equal(empty.jevBackgroundConcurrency, 4, "empty reads as unset");
+    assert.deepEqual(empty.jevDisabledSites, []);
+    process.env.OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS = "1500";
+    process.env.OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY = "8";
+    const set = loadConfig({ rootDir: repoRoot });
+    assert.equal(set.jevOnlineTimeoutMs, 1500);
+    assert.equal(set.jevBackgroundConcurrency, 8);
+    for (const [name, bad, message] of [
+      ["OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS", "50", /OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS must be from 100 to 3000/],
+      ["OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS", "4000", /OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS must be from 100 to 3000/],
+      ["OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS", "soon", /OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS must be from 100 to 3000/],
+      ["OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY", "0", /OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY must be from 1 to 32/],
+      ["OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY", "33", /OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY must be from 1 to 32/],
+    ]) {
+      const before = process.env[name];
+      process.env[name] = bad;
+      assert.throws(() => loadConfig({ rootDir: repoRoot }), message, `${name}=${bad}`);
+      process.env[name] = before;
+    }
+  } finally {
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
+});
+
 test("the register judge's per-run line cap has a default, bounds, and reads an empty value as unset", () => {
   const saved = process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES;
   try {

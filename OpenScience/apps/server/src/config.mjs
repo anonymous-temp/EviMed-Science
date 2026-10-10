@@ -1255,8 +1255,9 @@ function reviewJevSettings(overrides, keyPresent) {
   }
   const disabled = String(overrides.jevDisabledSites ?? process.env.OPEN_SCIENCE_JEV_DISABLED_SITES ?? '').split(',').map(value=>value.trim()).filter(Boolean);
   if(disabled.some(id=>!/^J([1-9]|1[0-9]|2[0-2])$/.test(id)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(id)))throw new Error('OPEN_SCIENCE_JEV_DISABLED_SITES contains an unknown site.');
-  const onlineTimeout=Number(overrides.jevOnlineTimeoutMs ?? process.env.OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS ?? 3000);
-  const concurrency=Number(overrides.jevBackgroundConcurrency ?? process.env.OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY ?? 4);
+  // An empty value is "not set" (`NAME=` in .env.example and in a private override), not the number 0.
+  const onlineTimeout=Number(overrides.jevOnlineTimeoutMs ?? (process.env.OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS || 3000));
+  const concurrency=Number(overrides.jevBackgroundConcurrency ?? (process.env.OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY || 4));
   if(!Number.isSafeInteger(onlineTimeout)||onlineTimeout<100||onlineTimeout>3000)throw new Error('OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS must be from 100 to 3000.');
   if(!Number.isSafeInteger(concurrency)||concurrency<1||concurrency>32)throw new Error('OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY must be from 1 to 32.');
   // Report lines the register judge (J4) reads per finished run, one Jev request each:
