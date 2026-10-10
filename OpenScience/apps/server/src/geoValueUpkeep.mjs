@@ -68,14 +68,15 @@ const numberOf = (value) => `CASE WHEN jsonb_typeof(${value}) = 'number' THEN ($
 
 /**
  * Every version number a stored object of the project points to: the table above, and the research results the latest profile holds
- * (a result carries the version its request was made on). $1 is the project.
+ * (a result carries the version its request was made on). $1 is the project. A union, not a concatenation: a project's answers are
+ * thousands of rows and name a handful of versions, and what is held for the comparison is the versions.
  */
 const POINTED = [
   ...GEO_VALUE_REFERENCES.map((reference) => `SELECT ${numberOf(reference.value)} AS v FROM evimed_geo.${reference.table} WHERE geo_project_id = $1`),
   `SELECT ${numberOf("entry -> 'basisVersion'")} AS v FROM evimed_geo.value_profiles latest
     CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(latest.data -> 'researchResults') = 'array' THEN latest.data -> 'researchResults' ELSE '[]'::jsonb END) entry
     WHERE latest.geo_project_id = $1 AND latest.version = (SELECT max(version) FROM evimed_geo.value_profiles WHERE geo_project_id = $1) AND jsonb_typeof(entry) = 'object'`,
-].join("\n      UNION ALL ");
+].join("\n      UNION ");
 
 /**
  * The versions of a project's profile that are not kept — not among the latest `$2`, not the first of their calendar month in the
