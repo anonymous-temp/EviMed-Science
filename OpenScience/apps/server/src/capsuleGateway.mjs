@@ -4,6 +4,12 @@ import { HttpError, readJson, sendError, sendJson } from "./security.mjs";
 
 export const CAPSULE_GATEWAY_PATH = "/internal/capsules/v1";
 
+/** What a recall answers while the researcher has paused recall: an answer, not an error, and not "no memories". */
+const RECALL_PAUSED = Object.freeze({
+  items: [], mode: "paused", contextOnly: true, sources: { memory: 0, capsule: 0 },
+  notice: "用户已暂停记忆（整个账号或本项目）：这里不读取，也不代表没有相关记忆。",
+});
+
 /** The workload credential, never a caller-supplied field, fixes account and project.
  *
  * `memorySubstrate` is the research-memory half of a recall; without it the
@@ -24,6 +30,12 @@ export const CAPSULE_GATEWAY_PATH = "/internal/capsules/v1";
  * credential still fixes the account and the project; a conversation of
  * another project is one with no state here.
  *
+ * `paused` is the researcher's own 「记忆」 switches (`memoryPausedFor`): the account's, 「本项目不使用记忆」, and a trial conversation's.
+ * The records half of a recall honours them inside `memorySubstrate`; this is where the capsule half and the note do (2026-10-10
+ * review M-1). Recall paused answers `mode: "paused"` and reads nothing; learning paused refuses the note by name. Asked of the one
+ * running conversation, or of none when several are running (then the account's and the project's switches only); a switch that
+ * cannot be read fails the call, so the tool reports memory unavailable instead of reading for a researcher who may have asked for none.
+ *
  * 无痕 and 「本次不用」 were read here until 2026-09-20 and are gone with the bar
  * that was their only control.
  * `subscriptions` is the project's evidence-zone subscriptions (`evidenceZoneSubscription.mjs`, flywheel F18): one more provider of a
@@ -34,6 +46,7 @@ export const CAPSULE_GATEWAY_PATH = "/internal/capsules/v1";
  *   clinicalContext?: ((identity:any,runs:any[])=>Promise<boolean>) | null,
  *   sessions?: { running: (user: any, project: any) => Promise<{ id: string, sessionId: string }[]>,
  *     state: (userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null }>,
+ *     paused?: (userId: string, projectId: string, sessionId: string | null) => Promise<{ learning: boolean, recall: boolean, trial: boolean }>,
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null }} dependencies */
 export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null, handbooks = null, evaluationIsolation = null, subscriptions = null, clinicalContext = null }) {
@@ -107,6 +120,9 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       // (build spec §9.4-5; the recall half landed on 2026-09-29).
       const writesNothing = await evaluationIsolation?.isEvaluation(identity) || states.some((state) => Boolean(state.trialCapsuleId));
       const trialConversation = running.length === 1 && Boolean(states[0]?.trialCapsuleId);
+      const pause = sessions?.paused
+        ? await sessions.paused(currentUser.id, identity.projectId, running.length === 1 ? running[0].sessionId : null)
+        : null;
       if (action === "recall") {
         if (body.factKinds !== undefined && (!Array.isArray(body.factKinds) || body.factKinds.length > CAPSULE_FACT_KINDS.length || body.factKinds.some((kind) => !CAPSULE_FACT_KINDS.includes(kind)))) {
           throw new HttpError(400, "capsule_payload_invalid", "Invalid memory kinds.");
@@ -122,11 +138,11 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
             notice: "这是一段试用别人胶囊的对话：只读这个胶囊，不读用户自己的记忆。" });
           return;
         }
-        const recalled = await recallAcrossMemory({ capsules: service, memorySubstrate }, currentUser, {
+        const recalled = pause?.recall ? { ...RECALL_PAUSED } : await recallAcrossMemory({ capsules: service, memorySubstrate }, currentUser, {
           ...body, projectId: identity.projectId,
           sessionId: running.length === 1 ? running[0].sessionId : null,
         });
-        if (sessions && running.length === 1) {
+        if (!pause?.recall && sessions && running.length === 1) {
           await sessions.recordRecall(project, running[0].id, recalled.items).catch(() => null);
         }
         // Reference context of the evidence zones this project follows. A failure to read costs the recall this part only.
@@ -141,6 +157,13 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         sendJson(res, 200, {
           entry: null, reviewRequired: false, takesEffect: false, contextOnly: true,
           notice: "这是一段试用别人胶囊的对话：这条没有记下。需要记住的话，请用户在普通对话里再说一次。",
+        });
+      } else if (pause?.learning) {
+        // The researcher's own pause (the account's, or 「本项目不使用记忆」): nothing is written, and the answer says that and
+        // is not a success. A trial conversation was refused above with its own notice.
+        sendJson(res, 200, {
+          entry: null, reviewRequired: false, takesEffect: false, contextOnly: true, status: "memory_paused",
+          notice: "用户已暂停记忆（整个账号或本项目）：这条没有记下。需要记住的话，请用户先在记忆设置里恢复记忆。",
         });
       } else {
         // A model's claim that its input was explicit is not the researcher's

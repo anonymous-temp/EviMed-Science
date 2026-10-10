@@ -66,9 +66,11 @@ export async function recallAcrossMemory({ capsules = null, memorySubstrate = nu
   // The deployment's recall switch covers both stores. An answer, not an
   // error: the caller asked a well-formed question of a deployment that has
   // recall turned off, and `mode: "disabled"` says so — the same shape a
-  // researcher's own recall pause produces, so a run moves on rather than
-  // retrying a tool that is working as configured, and nothing in the answer
-  // can be read as "this researcher has no memories".
+  // researcher's own recall pause produces at the capsule gateway (`mode:
+  // "paused"`, `capsuleGateway.mjs`: the pause is asked there, once, for both
+  // halves), so a run moves on rather than retrying a tool that is working as
+  // configured, and nothing in the answer can be read as "this researcher has
+  // no memories".
   if (memorySubstrate && memorySubstrate.recallEnabled === false) {
     return { items: [], mode: "disabled", contextOnly: true, sources: { memory: 0, capsule: 0 } };
   }

@@ -2961,6 +2961,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   runtimeManager.learningService = learningService;
   // And what each launch mounted of it, for the loop's counters.
   runtimeManager.learningMetrics = learningMetrics;
+  // The researcher's own 「记忆」 switches, which the memory page promises over everything a run is handed — the learned and
+  // capsule methods a launch mounts and the resident profile a dispatch writes, not only the records
+  // (`RuntimeManager.recallPausedFor`; 2026-10-10 review M-1, L-5). Unassigned, the manager reads "nothing paused".
+  runtimeManager.memoryPause = (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId);
   /** Actual project-owned native inventory, independent of optional research-session metadata.
    * @param {any} user @param {any} project @param {string} sessionId */
   async function authorizeOwnedNativeSession(user, project, sessionId) {
@@ -4481,6 +4485,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     sessions: researchMemory.configured ? {
       running: (_user, project) => agentRuns.activeRuns(project),
       state: (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId),
+      // The researcher's own switches, which the capsule half of a recall and a note honour as the records half does.
+      paused: (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId),
       // What a conversation's own state adds at its first step: the capability it is bound to (a conversation typed in the
       // kernel's frame passes through no dispatch, so this is where it learns the binding — `boundConversationNote`), and the
       // pack a 「试用一次」 conversation is trying. An unreadable scope must never
