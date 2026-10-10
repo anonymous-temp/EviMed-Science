@@ -81,7 +81,7 @@ export function AskAi({
       aria-busy={busy || undefined}
       onClick={() => {
         setBusy(true);
-        void open({ projectId: project.projectId, sessionId: project.sessionId ?? null }, text).catch(() => undefined).finally(() => setBusy(false));
+        void open({ projectId: project.projectId, sessionId: project.sessionId ?? null }, text).finally(() => setBusy(false));
       }}
       className={buttonClasses({ variant: "text", size: "sm", className: `text-accent hover:text-accent ${className ?? ""}` })}
     >

@@ -74,7 +74,7 @@ export function TaskPane({ agenda, execution, lock, ledgerRun, projectId }: {
   if (sessionId) return <div ref={pane} role="region" aria-label="任务对话" data-task-pane="conversation" className="relative min-h-0 flex-1" />;
   const zone = scheduleOf(agenda).timeZone;
   const box = (kind: string, children: ReactNode) => <div role="region" aria-label="任务对话" data-task-pane={kind} className="min-h-0 flex-1 overflow-y-auto">
-    <div className="mx-auto max-w-body space-y-4 px-6 py-8">{children}</div>
+    <div className="mx-auto max-w-measure space-y-4 px-6 py-8">{children}</div>
   </div>;
 
   if (lock) {

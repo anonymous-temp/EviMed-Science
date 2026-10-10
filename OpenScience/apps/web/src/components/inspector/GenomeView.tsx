@@ -244,9 +244,9 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
       </div>
 
       <div className="border-t border-border px-3 py-1 text-caption text-muted">
-        Drag to pan · scroll to zoom
-        {rows.length > 0 && Math.max(...rows) + 1 > MAX_ROWS && ` · showing ${MAX_ROWS} of ${Math.max(...rows) + 1} rows`}
-        {data.truncated && " · file truncated at 50,000 features"}
+        拖动平移 · 滚轮缩放
+        {rows.length > 0 && Math.max(...rows) + 1 > MAX_ROWS && ` · 共 ${Math.max(...rows) + 1} 行，显示前 ${MAX_ROWS} 行`}
+        {data.truncated && " · 文件太大，只读取了前 50,000 个特征"}
       </div>
     </div>
   );

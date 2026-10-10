@@ -1,7 +1,9 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router";
+import { webErrorMessage } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { toast } from "@/lib/toast";
 
 /** Where a GEO conversation opens: the control-plane project and, when there is one, its conversation. */
 export interface GeoConversationTarget {
@@ -21,18 +23,30 @@ export interface GeoConversationTarget {
  *
  * The project list is re-read first when the project is not in it yet — a
  * project created a moment ago — so the sidebar shows the group it lands in.
+ *
+ * It never rejects. A project that cannot be proved or opened (the network, a
+ * project deleted in another tab) is said in a toast, once, here, and the
+ * answer is `false`: every button that calls this gives its spinner back and
+ * nothing is left to swallow at the call site. `true` is a conversation that
+ * was opened.
  */
 export function useOpenGeoConversation() {
   const navigate = useNavigate();
-  return useCallback(async (target: GeoConversationTarget, draft?: string) => {
-    const store = useProjectStore.getState();
-    if (!store.projects.some((project) => project.id === target.projectId)) await store.load();
-    const sessionId = target.sessionId ?? undefined;
-    await useProjectStore.getState().select(target.projectId, () => {
-      navigate("/app/chat", {
-        state: { runtimeUiIntent: newRuntimeUiIntent(draft, sessionId) },
-        flushSync: true,
+  return useCallback(async (target: GeoConversationTarget, draft?: string): Promise<boolean> => {
+    try {
+      const store = useProjectStore.getState();
+      if (!store.projects.some((project) => project.id === target.projectId)) await store.load();
+      const sessionId = target.sessionId ?? undefined;
+      await useProjectStore.getState().select(target.projectId, () => {
+        navigate("/app/chat", {
+          state: { runtimeUiIntent: newRuntimeUiIntent(draft, sessionId) },
+          flushSync: true,
+        });
       });
-    });
+      return true;
+    } catch (error: unknown) {
+      toast.error(webErrorMessage(error, { fallback: "对话暂时无法打开，请稍后重试。" }));
+      return false;
+    }
   }, [navigate]);
 }

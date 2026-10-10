@@ -50,9 +50,7 @@ export function GeoErrorCard({
   const draft = zh`${engineName(error.engine)}在回答里说“${error.statement}”，和${product}的说明书不一致${error.evidenceQuote ? `（说明书：${error.evidenceQuote}）` : ""}。写一篇纠错稿，把正确的说法讲清楚。`;
   const correct = () => {
     setBusy(true);
-    void open({ projectId: project.projectId, sessionId: project.sessionId }, draft)
-      .catch(() => undefined)
-      .finally(() => setBusy(false));
+    void open({ projectId: project.projectId, sessionId: project.sessionId }, draft).finally(() => setBusy(false));
   };
 
   return (

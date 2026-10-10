@@ -322,7 +322,7 @@ function Footer({ project, source, detail }: { project: GeoProject; source: GeoS
       sentences: wrong.flatMap((answer) => answer.wrong ?? []),
     });
     setBusy(true);
-    void open({ projectId: project.projectId, sessionId: project.sessionId }, draft).catch(() => undefined).finally(() => setBusy(false));
+    void open({ projectId: project.projectId, sessionId: project.sessionId }, draft).finally(() => setBusy(false));
   };
   return (
     <footer className="sticky -bottom-6 z-sticky -mx-6 -mb-6 mt-6 border-t border-border bg-surface px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">

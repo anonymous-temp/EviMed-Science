@@ -39,7 +39,7 @@ export function MatchingPanelControls({ studyId, data, canRun, onProtocol, onCan
     </Select>
     <Disclosure summary="比较多个方案">
       <div className="grid gap-3 md:grid-cols-2">
-        <Select label="选择方案（最多 10 项）" multiple className="h-auto min-h-control-primary" value={panel} onChange={event => setPanel(Array.from(event.target.selectedOptions).map(option => option.value).slice(0, 10))}>
+        <Select label="选择方案（最多 10 项）" multiple className="h-auto min-h-form-primary" value={panel} onChange={event => setPanel(Array.from(event.target.selectedOptions).map(option => option.value).slice(0, 10))}>
           {protocols.map(protocol => <option key={protocol.id} value={protocol.id}>{protocol.title || `方案版本 ${protocol.version}`}</option>)}
         </Select>
         <Select label="受试者" value={subject} onChange={event => { setSubject(event.target.value); if (event.target.value) onCandidate(event.target.value); }}>

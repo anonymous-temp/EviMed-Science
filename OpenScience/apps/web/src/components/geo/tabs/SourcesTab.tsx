@@ -46,11 +46,12 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const sources = (Array.isArray(data?.sources) ? data.sources : []).filter((source) => source && source.domain);
-  if (sources.length === 0) return <StepPending geoId={geoId} project={project} step="sources" />;
+  // The changed sources of the drug-value analysis are the project's own: they are read here before the engines' citations exist.
+  if (sources.length === 0) return <><ValueSection geoId={geoId} project={project} mode="sources" className="mb-6" /><StepPending geoId={geoId} project={project} step="sources" /></>;
   const linkless = (Array.isArray(data?.linklessEngines) ? data.linklessEngines : []).filter(Boolean);
   return (
     <div data-geo-tab="sources">
-      <ValueSection geoId={geoId} project={project} mode="sources" />
+      <ValueSection geoId={geoId} project={project} mode="sources" className="mb-6" />
       <SourceList geoId={geoId} project={project} sources={sources} engines={project.engines} />
       {/* An engine whose citations had no link is not missing from the list
           by accident: it is said, not dropped (G8). */}
