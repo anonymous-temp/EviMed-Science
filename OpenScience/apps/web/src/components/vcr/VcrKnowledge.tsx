@@ -147,6 +147,8 @@ function PackRow({ studyId, pack, onChanged }: { studyId: string; pack: VcrPackS
         <span className="text-caption text-text-3">{counts}</span>
         {pack.canPromote && <Button size="sm" variant="secondary" loading={busy} onClick={promote}>复核后标为已整理</Button>}
       </p>
+      {/* The study chose an edition of this pack that the catalogue no longer holds: say that what it reads now is the newest. */}
+      {pack.binding?.resolution === "newest_compatible" && <p data-vcr-pack-edition="newest" className="text-caption text-text-2">目录里已没有这个研究当初选定的那一版，现按最新的一版读取。</p>}
       {pack.platform && <PlatformAttribution platform={pack.platform} />}
       {pack.platformRequest && <PlatformRequest studyId={studyId} request={pack.platformRequest} onChanged={onChanged} />}
       {pack.sources.length > 0 && (

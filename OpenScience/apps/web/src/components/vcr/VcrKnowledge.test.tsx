@@ -76,6 +76,19 @@ describe("病种定义包 on 定义与证据", () => {
     expect(screen.queryByRole("button", { name: "复核后标为已整理" })).not.toBeInTheDocument();
   });
 
+  it("says, without a version number, that the study now reads the newest edition when the one it chose is no longer in the catalogue (E-11)", () => {
+    const pack = { origin: "shipped", id: "nsclc", diseaseKey: "nsclc", name: "NSCLC", nameZh: "非小细胞肺癌", version: 3, status: "curated", counts: { terms: 42 }, sources: [], canPromote: false };
+    draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={knowledgeOf({ pack: { ...pack, binding: { version: 2, resolution: "newest_compatible" } } })} canWrite onChanged={() => undefined} />);
+    expect(document.querySelector("[data-vcr-pack-edition]")).toHaveTextContent("现按最新的一版读取");
+    expect(within(document.querySelector("[data-vcr-pack]") as HTMLElement).queryByText(/v\d|第 \d 版/)).toBeNull();
+  });
+
+  it("says nothing about the edition when the study reads the one it chose", () => {
+    const pack = { origin: "shipped", id: "nsclc", diseaseKey: "nsclc", name: "NSCLC", nameZh: "非小细胞肺癌", version: 3, status: "curated", counts: { terms: 42 }, sources: [], canPromote: false };
+    draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={knowledgeOf({ pack: { ...pack, binding: { version: 3, resolution: "recorded" } } })} canWrite onChanged={() => undefined} />);
+    expect(document.querySelector("[data-vcr-pack-edition]")).toBeNull();
+  });
+
   it("names the library definitions the study used, with their versions and uses and the pack entries they rest on", () => {
     draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={knowledgeOf()} canWrite={false} onChanged={() => undefined} />);
     const used = document.querySelector("[data-vcr-used-definition]") as HTMLElement;

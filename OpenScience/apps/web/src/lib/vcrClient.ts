@@ -1175,6 +1175,8 @@ export interface VcrPackSummary {
   reviewedBy?: string | null;
   reviewedAt?: string | null;
   boundAt?: string | null;
+  /** Whether the pack read is the edition the study chose, or the newest one standing in for an edition the catalogue no longer holds. */
+  binding?: { resolution: "recorded" | "newest_compatible" } | null;
   /** A draft the reader may promote (the lead, or an operator). */
   canPromote?: boolean;
   /** A platform pack (flywheel F26): who made it by the name they allow, from which of their versions, and whether a source has changed since. */
@@ -1761,6 +1763,7 @@ export function readVcrPackSummary(raw: unknown): VcrPackSummary {
     counts: Object.fromEntries(Object.entries(obj(value.counts)).filter((entry): entry is [string, number] => typeof entry[1] === "number")),
     sources: arr(value.sources).map(readPackSource),
     reviewedBy: text(value.reviewedBy), reviewedAt: text(value.reviewedAt), boundAt: text(value.boundAt), canPromote: value.canPromote === true,
+    ...(obj(value.binding).resolution === "newest_compatible" ? { binding: { resolution: "newest_compatible" as const } } : {}),
     ...(value.platform && typeof value.platform === "object" ? { platform: value.platform as VcrPackSummary["platform"] } : {}),
     ...(value.platformRequest && typeof value.platformRequest === "object" ? { platformRequest: value.platformRequest as VcrPackSummary["platformRequest"] } : {}),
   };
