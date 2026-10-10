@@ -751,6 +751,13 @@ function routePattern(pathname) {
     pathname === KB_SEARCH_GATEWAY_PATH ||
     pathname === FRONTIER_GATEWAY_PATH
   ) return pathname;
+  // The rest of the runtime's and the engines' gateways: one label each, a prefix gateway's operations folded
+  // into `:action` so a caller cannot mint labels. Until 2026-10-10 these fell through to "/static" too
+  // (production: 181 workload-token refusals in a day filed as static traffic, their gateway unknowable).
+  if (pathname === JUDGE_GATEWAY_PATH || pathname === TOOL_UNIVERSE_GATEWAY_PATH) return pathname;
+  for (const prefix of [DATA_SEMANTICS_GATEWAY_PATH, EVOLUTION_GATEWAY_PATH, EXTENSION_GATEWAY_PATH, RESULT_GATEWAY_PATH]) {
+    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return `${prefix}/:action`;
+  }
   // The two scheduled-task operations are a closed pair: a metric label for each, never one per path a caller invents.
   if (pathname === `${TASK_TOOLS_GATEWAY_PATH}/schedule` || pathname === `${TASK_TOOLS_GATEWAY_PATH}/update`) return pathname;
   if (pathname.startsWith(REVIEW_GATEWAY_PREFIX)) return pathname.startsWith(`${REVIEW_GATEWAY_PREFIX}deliverables/`) ? `${REVIEW_GATEWAY_PREFIX}deliverables/:id` : pathname;

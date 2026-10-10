@@ -6362,6 +6362,35 @@ test("the internal gateways are labelled and ledgered like every other route", a
   });
 });
 
+test("every other internal gateway gets its own label, never /static", async () => {
+  // Production 2026-10-09/10: 181 workload-token refusals were filed as "POST /static" because the judge,
+  // ToolUniverse, semantics, evolution, extension and result gateways had no label.
+  await withApp(async ({ base, dataDir }) => {
+    const expected = new Map([
+      ["/internal/judge/v1/ask", "/internal/judge/v1/ask"],
+      ["/internal/tooluniverse/v1/rpc", "/internal/tooluniverse/v1/rpc"],
+      ["/internal/semantics/v1/read", "/internal/semantics/v1/:action"],
+      ["/internal/evolution/v1/status", "/internal/evolution/v1/:action"],
+      ["/internal/extensions/v1/x", "/internal/extensions/v1/:action"],
+      ["/internal/results/v1/rows", "/internal/results/v1/:action"],
+    ]);
+    for (const pathname of expected.keys()) {
+      await fetch(`${base}${pathname}`, { method: "POST", headers: { authorization: "Bearer not-a-token", "content-type": "application/json" }, body: "{}" });
+    }
+    const file = path.join(dataDir, ".openscience", "errors.jsonl");
+    let records = [];
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const text = await readFile(file, "utf8").catch(() => "");
+      records = text.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+      if (records.length >= expected.size) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.ok(records.length > 0, "the refusals reach the error ledger");
+    assert.ok(!records.some((entry) => entry.route === "/static"), "no gateway refusal may be filed as static traffic");
+    for (const record of records) assert.ok([...expected.values()].includes(record.route), `unexpected label ${record.route}`);
+  });
+});
+
 test("a download that does not finish is not audited as a completed delivery", async () => {
   // The audit used to be written before the first byte moved, and a read error
   // answered with a bare res.destroy(). A reader could be handed a truncated
