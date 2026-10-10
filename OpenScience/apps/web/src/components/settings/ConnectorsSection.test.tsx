@@ -157,6 +157,23 @@ describe("数据源", () => {
     await waitFor(() => expect(screen.queryByLabelText("OpenGWAS 凭据")).not.toBeInTheDocument());
   });
 
+  // Review L-7: the expiry said 「2026/9/23」 where every other page writes 「9月23日」.
+  it("says when a credential runs out as the rest of the app says a day", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-10T08:00:00Z"));
+    try {
+      mocks.fetchWebConnectors.mockResolvedValue([
+        connector({ source: "user", own: own({ expiresAt: "2026-09-23T12:00:00.000Z" }), needsAttention: false }),
+        connector({ id: "core", title: "CORE", source: "user", own: own({ expiresAt: "2026-10-20T12:00:00.000Z" }), needsAttention: false }),
+      ]);
+      render(<ConnectorsSection />);
+      const row = await screen.findByText("OpenGWAS").then(() => rowOf("OpenGWAS"));
+      expect(within(row).getByText(/有效期至 9月23日/)).toBeInTheDocument();
+      expect(within(rowOf("CORE")).getByText(/有效期至 10月20日/)).toBeInTheDocument();
+      expect(document.body.textContent).not.toMatch(/20\d\d\/\d/);
+    } finally { vi.useRealTimers(); }
+  });
+
   it("keeps replacing and removing the researcher's own credential in the row's 「⋯」, and asks before removing", async () => {
     const user = userEvent.setup();
     mocks.fetchWebConnectors.mockResolvedValue([

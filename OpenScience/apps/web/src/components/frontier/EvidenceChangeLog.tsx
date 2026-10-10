@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Tag, type TagTone } from "@/components/ui/Tag";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { FrontierSkeleton } from "./FrontierSkeleton";
+import { evidenceDay as day } from "./evidenceDate";
 import { useEvidenceScope } from "./useEvidenceScope";
 import {
   evidenceUpkeepErrorMessage,
@@ -10,12 +11,6 @@ import {
   type EvidenceChangeEntry,
 } from "@/lib/evidenceUpkeepClient";
 
-const day = (value: string) => {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleDateString("zh-CN", { year: "numeric", month: "numeric", day: "numeric" });
-};
 /** A correction or a withdrawal is the entry a reader should not miss; the rest is history. */
 const tone = (category: EvidenceChangeEntry["category"]): TagTone =>
   category === "withdrawal" || category === "correction" ? "warn" : "neutral";

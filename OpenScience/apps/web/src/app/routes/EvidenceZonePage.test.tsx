@@ -80,14 +80,18 @@ describe("a zone's page", () => {
   it("tells a published zone by what it holds — a creator and the day, never 「已发布」 or a clock — and a draft by 「草稿」", async () => {
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: readable, feedback: [] });
     client.listZoneEvidence.mockResolvedValue({ items: [card], total: 3, nextCursor: null });
+    // Review L-7: the zone header said 「2026/9/20」 where every other page writes 「9月20日」.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-10T08:00:00Z"));
     const published = mount();
     await screen.findByRole("heading", { level: 1 });
-    expect(screen.getByText("李研究 · 2026/9/20")).toBeInTheDocument();
+    expect(screen.getByText("李研究 · 9月20日")).toBeInTheDocument();
     expect(screen.queryByText(/已发布/)).toBeNull();
     published.unmount();
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: { ...readable, state: "draft", canEdit: true }, feedback: [] });
     mount();
-    expect(await screen.findByText(/^草稿 · 李研究 · 2026\/9\/20$/)).toBeInTheDocument();
+    expect(await screen.findByText("草稿 · 李研究 · 9月20日")).toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it("puts an owner's edit and publish in a menu, and publishes through it", async () => {

@@ -9,6 +9,7 @@ import {
   type WebConnectorCheck,
 } from "@/lib/apiClient";
 import { announceConnectorsChanged } from "@/lib/connectorAttention";
+import { formatDay } from "@/lib/format";
 import { capabilityTitle } from "@/lib/researchAgentUi";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
@@ -19,7 +20,8 @@ import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { ConnectorCredentialForm, type SavedConnectorCredential } from "./ConnectorCredentialForm";
 
-const day = (value: string) => new Date(value).toLocaleDateString("zh-CN");
+/** A day the way the rest of the app writes one: 「9月23日」 this year, the full date before it (not Intl's 「2026/9/23」). */
+const day = (value: string) => formatDay(value) || value;
 
 /** Whether a source is served for this researcher now: by the platform, or by their own credential. */
 function connected(connector: WebConnector) {

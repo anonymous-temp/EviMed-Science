@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { EvidenceAuthorPage } from "./EvidenceAuthorPage";
 
@@ -19,6 +19,7 @@ const manyCards = (count: number) => Array.from({ length: count }, (_, index) =>
 beforeEach(() => vi.clearAllMocks());
 
 describe("an author's page", () => {
+  afterEach(() => vi.useRealTimers());
   it("is titled by the author's name, with the way back to 前沿动态 and no row of the feed's views", async () => {
     client.fetchEvidenceAuthor.mockResolvedValue(author);
     mount();
@@ -60,6 +61,8 @@ describe("an author's page", () => {
   });
 
   it("opens on the cards, the zones one tab away and the change log only where there is one", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-10T08:00:00Z"));
     client.fetchEvidenceAuthor.mockResolvedValue(author);
     const plain = mount();
     expect(await screen.findByRole("link", { name: "试验药能预防卒中吗" })).toHaveAttribute("href", "/app/frontier/zones/ez_1/evidence/ec_1");
@@ -68,7 +71,7 @@ describe("an author's page", () => {
     expect(within(tabs).getByRole("tab", { name: /证据卡/ })).toHaveAttribute("aria-selected", "true");
     // One kind of thing at a time: the zones are not on the page until their tab is chosen.
     expect(screen.queryByRole("link", { name: "卒中研究" })).toBeNull();
-    expect(screen.getByText(/3 条结论 · 更新于 2026\/10\/4/)).toBeInTheDocument();
+    expect(screen.getByText(/3 条结论 · 更新于 10月4日/)).toBeInTheDocument();
     await userEvent.click(within(tabs).getByRole("tab", { name: /专区/ }));
     expect(screen.getByRole("link", { name: "卒中研究" })).toHaveAttribute("href", "/app/frontier/zones/ez_1");
     expect(screen.getByText("用户专区 · 2 条证据 · 3 人关注")).toBeInTheDocument();

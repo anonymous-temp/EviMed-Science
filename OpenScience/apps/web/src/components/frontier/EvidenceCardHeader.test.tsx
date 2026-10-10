@@ -1,9 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EvidenceCardHeader, evidenceNatureLabel, evidenceVerificationTally } from "./EvidenceCardHeader";
 import { card } from "./__fixtures__/evidenceCards";
 
 describe("the top of a card", () => {
+  // The day is written the way the rest of the app writes one (「10月4日」 this year), so the clock is fixed.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-10-10T08:00:00Z")); });
+  afterEach(() => vi.useRealTimers());
   it("names the producer and how they relate to the products, then the labels as small plain tags", () => {
     render(<EvidenceCardHeader evidence={card} />);
     const header = screen.getByTestId("evidence-card-header");
@@ -35,8 +38,8 @@ describe("the top of a card", () => {
     const header = screen.getByTestId("evidence-card-header");
     expect(header).toHaveClass("flex-wrap");
     expect(header.children).toHaveLength(4);
-    expect(screen.getByText("更新于 2026/10/4")).toBeInTheDocument();
-    expect(header.lastElementChild).toHaveTextContent("更新于 2026/10/4");
+    expect(screen.getByText("更新于 10月4日")).toBeInTheDocument();
+    expect(header.lastElementChild).toHaveTextContent("更新于 10月4日");
   });
   it("marks a draft, and draws a row for a card that has only that or only a day", () => {
     const bare = { ...card, producer: null, originality: null, claimVerification: null, currency: undefined };
@@ -45,7 +48,7 @@ describe("the top of a card", () => {
     rerender(<EvidenceCardHeader evidence={{ ...bare, state: "draft" }} />);
     expect(screen.getByText("草稿")).toBeInTheDocument();
     rerender(<EvidenceCardHeader evidence={bare} updatedAt="2026-10-04T12:00:00Z" />);
-    expect(screen.getByText("更新于 2026/10/4")).toBeInTheDocument();
+    expect(screen.getByText("更新于 10月4日")).toBeInTheDocument();
   });
   it("tells the 性质 of a card in one phrase, for the header's tag and a list's line alike", () => {
     expect(evidenceNatureLabel({ originality: "synthesis", primary: false })).toBe("解读 · 综合");
