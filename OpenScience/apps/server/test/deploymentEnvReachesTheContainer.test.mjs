@@ -265,6 +265,9 @@ const operatorLevers = {
   OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH: ["open-science-web"],
+  // The floor of different accounts an operator's own signals and leads need before the platform loop reads them (2026-10-10, D-E12): validated by
+  // both the API and the controller, so both must receive it, or one would switch the module off over a value the other never saw.
+  OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: ["open-science-web"],

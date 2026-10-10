@@ -1,5 +1,6 @@
 import { METHOD_RECORDS } from '@evimed/domain/method-records';
 import { evolutionKey } from './evolutionService.mjs';
+import { evolutionAccountClass, evolutionAccountFloors } from './evolutionAccountClasses.mjs';
 
 /** A task family describes research operations, not a paper title or a customer's question. @param {any} input */
 export function evolutionTaskFamily(input = {}) {
@@ -8,8 +9,8 @@ export function evolutionTaskFamily(input = {}) {
 }
 
 /** Rebuildable projection. Inventory alone means untested, never supported.
- * @param {{registry:any[],tools?:any[],signals?:any[],evaluations?:any[],supportedFamilies?:any[],graph?:any[],methods?:any,now?:Date}} input */
-export function deriveEvolutionCapabilityMap({ registry, tools = [], signals = [], evaluations = [], supportedFamilies = [], graph = [], methods = METHOD_RECORDS, now = new Date() }) {
+ * @param {{registry:any[],tools?:any[],signals?:any[],evaluations?:any[],supportedFamilies?:any[],graph?:any[],methods?:any,now?:Date,floors?:{user:number,operator:number}}} input */
+export function deriveEvolutionCapabilityMap({ registry, tools = [], signals = [], evaluations = [], supportedFamilies = [], graph = [], methods = METHOD_RECORDS, now = new Date(), floors = evolutionAccountFloors() }) {
   const cells = new Map();
   function add(capabilityId, version, family, evidence = null, dependencies = []) {
     const taskFamily = evolutionTaskFamily(family);
@@ -48,7 +49,7 @@ export function deriveEvolutionCapabilityMap({ registry, tools = [], signals = [
   }
   for (const row of signals) {
     const signal = row.payload ?? row;
-    if (signal.distinctAccounts < 5) continue;
+    if (signal.distinctAccounts < floors[evolutionAccountClass(signal.accountClass)]) continue;
     const family = evolutionTaskFamily(signal.codes), capabilityId = signal.codes.capability;
     let cell = [...cells.values()].find(item => item.capabilityId === capabilityId && item.taskFamily.operation === family.operation && item.taskFamily.inputShape === family.inputShape);
     if (!cell) cell = add(capabilityId, 'unavailable', family, null, [signal.codes.reason]);
@@ -62,11 +63,11 @@ export function deriveEvolutionCapabilityMap({ registry, tools = [], signals = [
     counts: Object.fromEntries(['supported', 'partial', 'unsupported', 'untested'].map(status => [status, [...cells.values()].filter(cell => cell.status === status).length])) };
 }
 
-/** @param {{service:any,registry:any,readGraph:()=>Promise<any[]>}} dependencies */
-export function createEvolutionCapabilityMap({ service, registry, readGraph }) {
+/** @param {{service:any,registry:any,readGraph:()=>Promise<any[]>,floors?:{user:number,operator:number}}} dependencies */
+export function createEvolutionCapabilityMap({ service, registry, readGraph, floors = evolutionAccountFloors() }) {
   return { async rebuild() {
     const map = deriveEvolutionCapabilityMap({ registry: (await registry).list({ includeInternal: false }), tools: await service.tools(),
-      signals: await service.list('signal-summary'), evaluations: await service.list('candidate-verdict'), supportedFamilies:await service.list('supported-family'), graph: await readGraph(), now: service.now() });
+      signals: await service.list('signal-summary'), evaluations: await service.list('candidate-verdict'), supportedFamilies:await service.list('supported-family'), graph: await readGraph(), now: service.now(), floors });
     const id = 'evolution-capability-map';
     await service.save('capability-map', id, map, await service.get(id));
     return map;

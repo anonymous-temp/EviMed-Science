@@ -6,6 +6,7 @@ import { evolutionKey, evolutionToolArchiveId } from './evolutionService.mjs';
 import { evolutionPriorityBreakdown } from './evolutionScout.mjs';
 import { EVOLUTION_MODULE_IDS } from './evolutionUsage.mjs';
 import { validateModuleEvolutionPolicy } from './moduleEvolutionPolicies.mjs';
+import { evolutionAccountFloors } from './evolutionAccountClasses.mjs';
 
 export const EVOLUTION_OPPORTUNITY_SOURCES = Object.freeze(['demand', 'method', 'data', 'success', 'combination', 'contradiction', 'self-research', 'repair']);
 /** `deferred`: parked on a resource that did not come within its window. Terminal, so the module goes on; the opportunity keeps its
@@ -160,6 +161,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const p = signal.payload;
       await opportunity({ moduleId: p.moduleId, sources: [evolutionOpportunitySource(p.kind)],
         taskFamily: p.codes, mechanismFamily: p.kind, evidenceRoots: [signal.id], features: { distinctAccounts: p.distinctAccounts, runtimeFailures: p.occurrences,
+          ...(p.accountClass === 'operator' ? { accountClass: 'operator', demandFloor: (signals.floors ?? evolutionAccountFloors(config)).operator } : {}),
           coverageGap: p.kind === 'unmet-demand' }, cheapestNextStep: 'reproduce-on-public-analogue', failureHypotheses: ['private-demand-may-not-transfer'] });
     }
     const capabilityMap = await map.rebuild();

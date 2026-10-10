@@ -7,11 +7,13 @@ import { HttpError } from "./security.mjs";
 export function evolutionPriorityBreakdown(features = {}, weights = {}) {
   const count = key => Math.max(0, Math.min(10_000, Number(features[key]) || 0));
   const w = { demand: 4, unlock: 3, reuse: 2, progress: 2, exploration: 1.5, cost: .2, ...weights };
+  // Demand counts once enough different accounts show it: five researchers, or the floor an operator-class summary carries in its features.
+  const demandFloor = Math.min(5, Math.max(1, Math.trunc(Number(features.demandFloor)) || 5));
   return { literature: 3 * Math.log1p(count("literature24Months")), failure: 4 * Math.log1p(count("runtimeFailures")),
     waiting: 5 * Math.log1p(count("waitingAgendas")), reference: 2 * Number(features.referenceCode === true),
     data: 2 * Number(features.reachableData === true), examples: Math.min(count("publishedExamples"), 5),
     coverage: 3 * Number(features.coverageGap === true), dependencies: -3 * count("unresolvedDependencies"),
-    demand: count("distinctAccounts") >= 5 ? w.demand * Math.log1p(count("distinctAccounts")) : 0,
+    demand: count("distinctAccounts") >= demandFloor ? w.demand * Math.log1p(count("distinctAccounts")) : 0,
     unlock: w.unlock * Math.log1p(count("unlockedFamilies")), reuse: w.reuse * Math.min(count("otherModules"), 3),
     progress: w.progress * Math.min(count("confirmedProgressPoints"), 5),
     exploration: w.exploration * Math.sqrt(Math.log(Math.max(1, count("totalResearch"))) / (1 + count("objectResearch"))),

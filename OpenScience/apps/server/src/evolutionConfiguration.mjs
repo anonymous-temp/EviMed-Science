@@ -6,6 +6,7 @@ export const EVOLUTION_CONFIG_SCHEMA=Object.freeze({
   evolutionMaxConcurrency:{env:'OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY',default:1,min:1,max:4,integer:true},
   evolutionLightConcurrency:{env:'OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY',default:2,min:1,max:2,integer:true},
   evolutionMaxDecisionCards:{env:'OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS',default:3,min:1,max:3,integer:true},
+  evolutionOperatorSignalFloor:{env:'OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR',default:1,min:1,max:5,integer:true},
   evolutionMaxPaperScoutsPerDay:{env:'OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY',default:8,min:0,max:200,integer:true},
   evolutionDecisionTimeoutMs:{env:'OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS',default:86400000,min:1000,max:7*86400000,integer:true},
   evolutionPollMs:{env:'OPEN_SCIENCE_EVOLUTION_POLL_MS',default:15000,min:100,max:3600000,integer:true},

@@ -146,3 +146,13 @@ test("a running module's scrape reads the executor from the controller's admissi
     assert.match(text, /^open_science_evolution_reference_recalled_total 0$/m);
   } finally { await app.close(); await rm(dataDir, { recursive: true, force: true }); }
 });
+
+test("the loops' own limits reach the scrape: the account floors by class", async () => {
+  const snapshot = await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ signals: { aggregated: { user: 2, operator: 1 }, heldBack: { user: 4, operator: 0 } } }) } });
+  const families = evolutionOpsMetricFamilies(true, snapshot);
+  assert.equal(sample(families, "open_science_evolution_signal_groups", { class: "user", outcome: "held_back" }), 4);
+  assert.equal(sample(families, "open_science_evolution_signal_groups", { class: "operator", outcome: "aggregated" }), 1);
+  assert.equal(families.find((family) => family.name === "open_science_evolution_signal_groups").series.length, 4);
+  // A module that composed no counters says nothing rather than zeros.
+  assert.equal(evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: {} })).some((family) => family.name === "open_science_evolution_signal_groups"), false);
+});

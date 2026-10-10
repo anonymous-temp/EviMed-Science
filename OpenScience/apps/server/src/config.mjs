@@ -2732,6 +2732,10 @@ export function loadConfig(overrides = {}) {
     evolutionLightConcurrency: Number(overrides.evolutionLightConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY ?? 2),
     evolutionSearchPaused: overrides.evolutionSearchPaused ?? boolEnv("OPEN_SCIENCE_EVOLUTION_SEARCH_PAUSED", false),
     evolutionMaxDecisionCards: Number(overrides.evolutionMaxDecisionCards ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS ?? 3),
+    // How many different accounts of a class a user-originated signal or lead needs before the platform loop reads it (review D-E12). Researchers
+    // need five, always: one person's private work must not steer the platform. An operator's own account is the platform's, and on a deployment
+    // with a handful of accounts five could never be reached, so the operator class is counted on its own against this floor (1 to 5).
+    evolutionOperatorSignalFloor: Number(overrides.evolutionOperatorSignalFloor ?? process.env.OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR ?? 1),
     evolutionMaxPaperScoutsPerDay: Number(overrides.evolutionMaxPaperScoutsPerDay ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY ?? 8),
     evolutionDecisionTimeoutMs: Number(overrides.evolutionDecisionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS ?? 86_400_000),
     evolutionPollMs: Number(overrides.evolutionPollMs ?? process.env.OPEN_SCIENCE_EVOLUTION_POLL_MS ?? 15_000),

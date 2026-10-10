@@ -20,7 +20,7 @@
 
 /**
  * @param {{ evolution: any, evaluationIsolation?: any, config?: any }} sources
- * @returns {Promise<{ toolAdmission: any, supply: any, isolation: any, executor: any, integration: any } | null>} null when the module is not composed
+ * @returns {Promise<{ toolAdmission: any, supply: any, isolation: any, executor: any, integration: any, limits: any } | null>} null when the module is not composed
  */
 export async function evolutionOpsSnapshot({ evolution, evaluationIsolation = null }) {
   if (!evolution) return null;
@@ -33,6 +33,8 @@ export async function evolutionOpsSnapshot({ evolution, evaluationIsolation = nu
     supply: evolution.supply?.status?.() ?? null,
     isolation: evaluationIsolation?.counters ?? null,
     integration: evolution.integration?.counters ?? null,
+    // The limits that act inside the loops themselves (the account floors, the proposals sent to the operators, ...), gathered by the composition.
+    limits: typeof evolution.limitCounters === "function" ? evolution.limitCounters() : null,
     executor,
   };
 }
@@ -83,6 +85,15 @@ export function evolutionOpsMetricFamilies(composed, snapshot, refusal = null) {
     name: "open_science_evolution_events_total", type: "counter",
     help: "Observations the other modules published to the evolution queue, by outcome since process start.",
     series: rows(snapshot.integration, { published: "published", failed: "failed" }),
+  });
+  const limits = snapshot.limits ?? {};
+  if (limits.signals) families.push({
+    name: "open_science_evolution_signal_groups", type: "gauge",
+    help: "User-originated signal groups at the platform loop's last aggregation, by account class (researcher or operator) and outcome: written as a summary because enough different accounts of the class showed it, or held back below the class's floor (five researchers; the operator floor for operators).",
+    series: ["user", "operator"].flatMap((accountClass) => [
+      { value: Number(limits.signals.aggregated?.[accountClass]) || 0, labels: { class: accountClass, outcome: "aggregated" } },
+      { value: Number(limits.signals.heldBack?.[accountClass]) || 0, labels: { class: accountClass, outcome: "held_back" } },
+    ]),
   });
   families.push({
     name: "open_science_evolution_executor_reachable", type: "gauge", series: [{ value: snapshot.executor ? 1 : 0 }],
