@@ -150,3 +150,22 @@ test("/api/ready names a site that is blocked and why", async () => {
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("/api/ready shows the master switch: off, every site reads as stood down to its original path (JEV-1)", async () => {
+  const service = createJudgeService({ config: { ...config, jevEnabled: false, jevSites: { J4: { calibration: "calibrated", threshold: 0.7, promptFingerprint: "pin4" } } }, callImpl: yesLast });
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-judge-master-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, bootstrapUser: "alice", bootstrapPassword: "correct horse battery staple", judgeService: service });
+  const address = await app.listen(0, "127.0.0.1");
+  try {
+    const ready = await (await fetch(`http://127.0.0.1:${address.port}/api/ready`)).json();
+    const jev = ready.data.checks.jev;
+    assert.equal(jev.enabled, false);
+    assert.deepEqual(Object.entries(jev.sites).filter(([, site]) => site.enabled).map(([id]) => id), []);
+    assert.equal(jev.sites.J4.calibrated, true, "the pins are untouched: the switch is not a calibration");
+    assert.equal((await service.judge("J4", { line: "x" })).code, "judge_disabled");
+  } finally {
+    await app.close();
+    await service.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
