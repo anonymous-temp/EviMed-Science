@@ -31,6 +31,7 @@ import { VisibilityTab } from "./VisibilityTab";
  */
 
 const client = vi.hoisted(() => ({
+  getGeoValue: vi.fn(async () => ({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } })),
   getGeoEvidence: vi.fn(),
   getGeoJourney: vi.fn(),
   getGeoQuestions: vi.fn(),
@@ -119,6 +120,7 @@ const CEILING: Readonly<Record<string, readonly string[]>> = Object.freeze({
 
 beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
+  client.getGeoValue.mockResolvedValue({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } });
   client.getGeoEvidence.mockResolvedValue(evidenceFilled);
   client.getGeoJourney.mockResolvedValue(journeyFilled);
   client.getGeoQuestions.mockResolvedValue(questionsFilled);

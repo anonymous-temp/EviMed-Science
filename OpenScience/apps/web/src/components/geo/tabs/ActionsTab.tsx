@@ -1,3 +1,4 @@
+import { ValueSection } from "./ValueSection";
 import { getGeoDistribution, type GeoProject } from "@/lib/geoClient";
 import { ContentTab } from "./ContentTab";
 import { Distribution, hasDistribution } from "./DistributionTab";
@@ -25,6 +26,7 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
   const marketOff = loaded?.market?.configured === false;
   return (
     <div data-geo-tab="actions" className="flex flex-col gap-10">
+      <ValueSection geoId={geoId} project={project} mode="actions" />
       <ContentTab
         geoId={geoId}
         project={project}

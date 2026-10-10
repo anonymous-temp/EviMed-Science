@@ -242,6 +242,7 @@ import { edgeFetch, edgeMetricFamilies, edgeProxyFromConfig, fetchWithEdge } fro
 import { pagesReadFromSessions } from "./webReadPages.mjs";
 import { createSourceChanges, sourceChangeMetricFamilies } from "./sourceChanges.mjs";
 import { createSourceUpdateLookup, sourceUpdateMetricFamilies } from "./sourceUpdates.mjs";
+import { geoValueSourceReplaced } from "./geoValueStore.mjs";
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
 import { cancelAutopilotVerification, AutopilotService, VERIFICATION_ARTIFACT, VERIFICATION_ROUTE_REASON, parseVerificationResult, verificationBrief,
@@ -1581,7 +1582,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // document is labelled and told (N15). `resultImpacts` is composed below; the hook runs only after boot.
   const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs, { evolutionSignals,
     judgeService,
-    afterReplace: event => resultImpacts?.reconcileReplacement(event.userId, event) ?? Promise.resolve(null),
+    afterReplace: async event => {
+      const outcomes = await Promise.allSettled([
+        resultImpacts?.reconcileReplacement(event.userId, event),
+        geoValueSourceReplaced(geo?.store, event),
+      ]);
+      const failed = outcomes.find(outcome => outcome.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+    },
     report: code => { void securityAudit(config, "source.replacement", "failed", { code }).catch(() => {}); },
   }) : null;
   const documentParser = new DocumentParserClient({

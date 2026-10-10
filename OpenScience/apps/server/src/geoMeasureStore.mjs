@@ -1,5 +1,6 @@
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { geoInterventionIdentity } from "./moduleEvolutionAdapters.mjs";
+import { geoValueContext } from "@evimed/domain";
 /**
  * SQL for 「循证 GEO」's measurement tables (build spec §2): rounds, probe
  * jobs, snapshots, facts, errors and metrics, plus the reads of the content
@@ -244,15 +245,15 @@ export class GeoMeasureStore {
    * Everything the parser and the judge read about a project: the product and
    * competitors, the active claims (latest version of each), the care red
    * flags of the latest journey, and what counts as our source.
-   * @param {string} geoProjectId
+   * @param {string} geoProjectId @param {string | null} [roundId]
    */
-  async projectContext(geoProjectId) {
+  async projectContext(geoProjectId, roundId = null) {
     const project = await this.project(geoProjectId);
     if (!project) return null;
-    const [claims, journey, owned, published, ownedLinks] = await Promise.all([
-      this.query(`SELECT DISTINCT ON (claim_key) id, claim_key, statement, quote, source_ref, source_kind, in_label, card_id, card_claim_id, card_revision
-        FROM evimed_geo.claims WHERE geo_project_id = $1 AND status = 'active'
-        ORDER BY claim_key, version DESC LIMIT 400`, [geoProjectId]),
+    const [claims, journey, owned, published, ownedLinks, profile] = await Promise.all([
+      this.query(`SELECT * FROM (SELECT DISTINCT ON (claim_key) *
+        FROM evimed_geo.claims WHERE geo_project_id = $1 ORDER BY claim_key, version DESC) latest
+        WHERE status = 'active' LIMIT 400`, [geoProjectId]),
       this.query(`SELECT data FROM evimed_geo.journeys WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [geoProjectId]),
       this.query(`SELECT domain FROM evimed_geo.sources WHERE geo_project_id = $1 AND layer = 'owned'`, [geoProjectId]),
       this.query(`SELECT DISTINCT published_url FROM evimed_geo.orders WHERE geo_project_id = $1 AND published_url IS NOT NULL
@@ -263,6 +264,7 @@ export class GeoMeasureStore {
       // stand for every page of its host there: it is left out, and its
       // citations are matched on the page by the link's own key instead.
       this.query(`SELECT url FROM evimed_geo.owned_links WHERE geo_project_id = $1 AND status = 'active'`, [geoProjectId]),
+      this.query(`SELECT version, data FROM evimed_geo.value_profiles WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [geoProjectId]),
     ]);
     /** @type {Array<{ id: string, text: string, node: string | null }>} */
     const careFlags = [];
@@ -276,16 +278,21 @@ export class GeoMeasureStore {
     }
     const claimRows = claims.rows.map((row) => ({
       id: String(row.id), key: String(row.claim_key), statement: String(row.statement), quote: String(row.quote),
+      version: Number(row.version), population: row.population ?? null, elements: row.elements ?? {},
+      evidenceLevel: row.evidence_level ?? null, validUntil: iso(row.valid_until),
       sourceRef: String(row.source_ref ?? ""), sourceKind: row.source_kind ?? null, inLabel: row.in_label ?? null,
       cardId: row.card_id ?? null, cardClaimId: row.card_claim_id ?? null, cardRevision: row.card_revision == null ? null : Number(row.card_revision),
     }));
     // The cards are the ground truth: a project with verified claims in its product-zone cards is judged against those and nothing
     // else (a claim its card ruler marked ⚠ never reached a card). A project with no cards yet is judged against its claim table.
     const carded = claimRows.filter((claim) => claim.cardId);
+    const frozen = roundId ? (await this.round(roundId))?.ref?.evaluationBasis : null;
     return {
       project,
-      claims: carded.length ? carded : claimRows,
-      careFlags,
+      judgeProduct: frozen?.product ?? project.product, judgeCompetitors: frozen?.competitors ?? project.competitors,
+      value: frozen?.value ?? { version: Number(profile.rows[0]?.version ?? 0), data: geoValueContext(profile.rows[0]?.data) },
+      claims: frozen?.claims ?? (carded.length ? carded : claimRows),
+      careFlags: frozen?.careFlags ?? careFlags,
       owned: {
         domains: owned.rows.map((row) => String(row.domain).toLowerCase()).filter(Boolean),
         urls: [...published.rows.map((row) => String(row.published_url)),

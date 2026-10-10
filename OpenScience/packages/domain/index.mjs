@@ -36,6 +36,12 @@ export { SOURCE_SCOPE_UNAVAILABLE_CONTEXT, sourceCitationProse, sourceCitationRe
 
 /** @typedef {import('./src/agenda.mjs').AgendaResultKind} AgendaResultKind */
 
+export {
+  GEO_VALUE_DOMAINS, GEO_RESEARCH_CAPABILITIES, GEO_VALUE_COLLECTIONS, GEO_VALUE_COVERAGE_STATUSES,
+  geoValueObject, geoValueCanonical, mergeGeoValue, geoValueList, geoValueText, geoValueActive,
+  geoValueContext, geoValueImpacts, summarizeGeoValueCoverage,
+} from './src/geoValue.mjs'
+
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityEntry} AvailabilityEntry */
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityReason} AvailabilityReason */
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityState} AvailabilityState */

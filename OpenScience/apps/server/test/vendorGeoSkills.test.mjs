@@ -226,10 +226,13 @@ test("with the private root holding only its README, the GEO capabilities still 
   // What a fresh clone ships: the capabilities are the platform's, the method
   // pack is not, and each skill says what a run does without it.
   const { validateCapabilityManifest } = await import("@evimed/domain");
+  const repositorySkills = new Set((await readdir(path.join(repoRoot, "capability-skills")))
+    .filter((name) => existsSync(path.join(repoRoot, "capability-skills", name, "SKILL.md"))));
   for (const id of ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"]) {
     const manifest = JSON.parse(await readFile(path.join(repoRoot, "deploy/runtime-dsh/capabilities", `${id}.json`), "utf8"));
     assert.equal(validateCapabilityManifest(manifest).ok, true, id);
-    assert.ok(!manifest.skills.some((skill) => skill.startsWith("geo-") && skill !== id), `${id} names a private skill in skills[]; only repository skills belong there`);
+    assert.ok(manifest.skills.includes("geo-drug-value"), `${id} must load the shared drug-value method`);
+    assert.ok(!manifest.skills.some((skill) => skill.startsWith("geo-") && !repositorySkills.has(skill)), `${id} names a private skill in skills[]; only repository skills belong there`);
     const body = await readFile(path.join(repoRoot, "capability-skills", id, "SKILL.md"), "utf8");
     assert.match(body, /本部署未安装 GEO 方法包/, `${id} does not say what happens without the method pack`);
     assert.match(body, /\$GEO_LIB/, `${id} does not say where the pack's shared layer is`);
@@ -242,7 +245,7 @@ test("with the private root holding only its README, the GEO capabilities still 
   for (const id of ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"]) {
     const body = await readFile(path.join(repoRoot, "capability-skills", id, "SKILL.md"), "utf8");
     const named = [...body.matchAll(/`((?:geo|patient|pharma)-[a-z0-9-]+)`/g)].map((match) => match[1])
-      .filter((name) => !["geo-private", "geo-insight", "geo-strategy", "geo-content", "geo-proposal"].includes(name));
+      .filter((name) => name !== "geo-private" && !repositorySkills.has(name));
     assert.ok(named.length >= 3, `${id} names ${named.length} method skills`);
     const missing = named.filter((name) => !shipped.has(name));
     assert.deepEqual(missing, [], `${id} names method skills the vendored pack does not have`);

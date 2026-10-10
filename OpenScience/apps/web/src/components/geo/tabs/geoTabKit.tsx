@@ -179,14 +179,14 @@ export function TabSection({
   title: string;
   /** A grey count at the heading's end. */
   meta?: ReactNode;
-  level?: "section" | "ui";
+  level?: "section" | "ui" | "compact";
   children: ReactNode;
   className?: string;
 }) {
   return (
     <section className={cn("mt-10 first:mt-0", className)}>
       <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className={cn(level === "section" ? "text-section" : "text-ui", "font-semibold text-text")}>{title}</h2>
+        <h2 className={cn(level === "compact" ? "text-compact font-medium" : level === "section" ? "text-section font-semibold" : "text-ui font-semibold", "text-text")}>{title}</h2>
         {meta && <span className="text-caption tabular-nums text-text-3">{meta}</span>}
       </div>
       {children}

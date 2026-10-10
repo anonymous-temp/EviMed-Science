@@ -79,7 +79,7 @@ export const GEO_SCHEMA = "evimed_geo";
 export const GEO_TABLES = Object.freeze([
   "projects", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
   "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles",
-  "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links", "members",
+  "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links", "members", "value_profiles",
 ]);
 
 /**
@@ -125,6 +125,16 @@ CREATE TABLE IF NOT EXISTS evimed_geo.projects (
   UNIQUE (user_id, project_id)
 );
 CREATE INDEX IF NOT EXISTS geo_projects_user_idx ON evimed_geo.projects (user_id, updated_at DESC) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS evimed_geo.value_profiles (
+  geo_project_id text NOT NULL REFERENCES evimed_geo.projects(id) ON DELETE CASCADE,
+  version integer NOT NULL,
+  user_id text NOT NULL,
+  data jsonb NOT NULL DEFAULT '{}'::jsonb,
+  run_id text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (geo_project_id, version)
+);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.claims (
   id             text PRIMARY KEY,
@@ -561,6 +571,7 @@ ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS rival text;
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS reason text;
 -- The order the run wrote a question map in: one write is one statement, and
 -- rows of one statement share their created_at.
+ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS judge_extract jsonb;
 ALTER TABLE evimed_geo.question_groups ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
 ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
 -- The measurement package's bookkeeping (geoMeasureStore.mjs): which probe job
@@ -603,6 +614,9 @@ ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS entity_keys text[];
 -- A claim's source as a reader names it (「玛仕度肽注射液说明书（国家药监局 2025）」);
 -- source_ref stays the machine reference the quote is checked against.
 ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS source_label text;
+ALTER TABLE evimed_geo.question_groups ADD COLUMN IF NOT EXISTS value_context jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE evimed_geo.sources ADD COLUMN IF NOT EXISTS value_context jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS value_context jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 -- One evidence chain (flywheel F21, 2026-10-06): the claim table stays the project's working index, and the claims a card
 -- ruler verifies are also written into the product zone's cards. journey_stage and clinical_question say which card a claim

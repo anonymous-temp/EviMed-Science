@@ -1,3 +1,4 @@
+import { ValueSection } from "./ValueSection";
 import { useMemo, useState } from "react";
 import { getGeoSources, type GeoProject, type GeoSourceRow } from "@/lib/geoClient";
 import { Disclosure } from "@/components/ui/Disclosure";
@@ -49,6 +50,7 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
   const linkless = (Array.isArray(data?.linklessEngines) ? data.linklessEngines : []).filter(Boolean);
   return (
     <div data-geo-tab="sources">
+      <ValueSection geoId={geoId} project={project} mode="sources" />
       <SourceList geoId={geoId} project={project} sources={sources} engines={project.engines} />
       {/* An engine whose citations had no link is not missing from the list
           by accident: it is said, not dropped (G8). */}

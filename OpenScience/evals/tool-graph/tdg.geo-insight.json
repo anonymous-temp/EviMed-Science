@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:3fb1a6f65c9b82100e4140f1820c662210781e20c2c77e12c171a9e2a8011c17",
+  "version": "sha256:22cbee4a0240a6453d4956610c719715191d4b58418eee5142580d0041043821",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 33,
@@ -754,7 +754,7 @@
     {
       "name": "mcp__evimed__geo_read",
       "source": "mcp",
-      "description": "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links, monitoring or cards (evidence cards: claims with id, quotation, ✓/⚠ and the reference to cite). Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.",
+      "description": "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links, monitoring or cards (evidence cards: claims with id, quotation, ✓/⚠ and the reference to cite). Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.value includes drug-value findings, opportunities, research outputs and answer coverage; research lists specialist tasks. filter.version reads an earlier value basis. Missing or unjudged is unknown, never zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -776,12 +776,22 @@
               "orders",
               "owned_links",
               "monitoring",
-              "cards"
+              "cards",
+              "value",
+              "research"
             ]
           },
           "filter": {
             "type": "object",
             "properties": {
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "audience": {
+                "type": "string",
+                "maxLength": 120
+              },
               "round": {
                 "type": "string",
                 "minLength": 1,
@@ -925,7 +935,7 @@
     {
       "name": "mcp__evimed__geo_write",
       "source": "mcp",
-      "description": "Write this 循证 GEO project's products: product identity, claims, a question set and its lock, journey, strategy and sources, three-tier targets, articles, placement preferences, or a step's status. owned_links registers a page the brand published itself {url, platform, title, publishedAt, groupId?} or retires one {id, status: retired}. Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 循证 GEO project's data; valid items survive individual refusals. value merges optional drug-value context; send known fields, reuse ids to amend. research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -943,7 +953,9 @@
               "articles",
               "placement_plan",
               "owned_links",
-              "step"
+              "step",
+              "value",
+              "research"
             ]
           },
           "items": {

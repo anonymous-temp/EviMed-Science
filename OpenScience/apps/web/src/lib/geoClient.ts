@@ -256,7 +256,7 @@ export interface GeoQuestionGroup {
   name: string;
   typicalQuestion: string;
   journeyStage: string | null;
-  audience: "patient" | "physician" | null;
+  audience: "patient" | "physician" | "caregiver" | "pharmacist" | "institution" | "other" | null;
   weight: number | null;
   isControl: boolean;
   signal: "collected" | "partial" | "no_signal" | "client" | null;
@@ -759,6 +759,20 @@ export function deleteGeoProject(geoId: string) {
 
 export function getGeoEvidence(geoId: string) {
   return productRequest<GeoEvidence>(`${project(geoId)}/evidence`);
+}
+
+export interface GeoValue {
+  version: number;
+  updatedAt: string | null;
+  data: Record<string, unknown>;
+  research: Array<{ id: string; question: string | null; status: string; runId: string | null }>;
+  impacts: Array<{ change: Record<string, unknown>; findingIds: string[]; groupIds: string[]; articleIds: string[] }>;
+  coverage: { assessed: number; represented: number; partial: number; contradicted: number; uncertain: number; notApplicable: number; value: number | null };
+  observations: Array<{ findingId: string; status: string; quote: string; reason: string; engine: string; basisVersion: number | null; rubricVersion: string | null; askedAt: string | null }>;
+}
+
+export function getGeoValue(geoId: string) {
+  return productRequest<GeoValue>(`${project(geoId)}/value`);
 }
 
 export function getGeoJourney(geoId: string) {

@@ -45,10 +45,11 @@
  */
 
 import { rm } from "node:fs/promises";
-import { canonicalGeoUrl, geoArticlePublishable, GEO_STEPS, STEP_WAITING_ALLOWANCE } from "@evimed/domain";
+import { canonicalGeoUrl, geoValueCanonical, geoArticlePublishable, GEO_STEPS, STEP_WAITING_ALLOWANCE } from "@evimed/domain";
 import { GEO_SCHEMA, migrateGeo } from "./geoPersistence.mjs";
 import { geoScreenshotFile } from "./geoScreenshots.mjs";
 import { randomId } from "./security.mjs";
+import { readGeoValue, writeGeoValue, readGeoResearch, requestGeoResearch } from "./geoValueStore.mjs";
 
 /** The statement timeout every GEO transaction sets for itself. */
 const STATEMENT_TIMEOUT_MS = 5_000;
@@ -161,6 +162,7 @@ export function questionGroupFromRow(row) {
     weight: num(row.weight),
     isControl: row.is_control === true,
     signal: text(row.signal),
+    valueContext: row.value_context ?? {},
   };
 }
 
@@ -186,6 +188,7 @@ export function geoSourceFromRow(row) {
   return {
     id: String(row.id),
     domain: String(row.domain),
+    valueContext: row.value_context ?? {},
     name: text(row.name),
     kind: text(row.kind),
     layer: text(row.layer),
@@ -214,6 +217,7 @@ export function geoArticleFromRow(row) {
     layer: text(row.layer),
     title: text(row.title),
     groupId: text(row.group_id),
+    valueContext: row.value_context ?? {},
     claimIds: Array.isArray(row.claim_ids) ? row.claim_ids.map(String) : [],
     gate: text(row.gate),
     safety: String(row.safety),
@@ -292,7 +296,7 @@ const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
 const OWNED_TABLES = Object.freeze(["facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
-  "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "articles", "owned_links", "members"]);
+  "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "articles", "owned_links", "members", "value_profiles"]);
 
 /** Whether this database has the GEO schema at all. @param {any} client */
 async function geoSchemaExists(client) {
@@ -397,6 +401,18 @@ const folded = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 const productTexts = (product) => [product?.brandName, product?.genericName, product?.indication].filter((value) => typeof value === "string" && value.trim());
 
 export class GeoStore {
+  /** @param {string} geoId @param {number | null} [version] */
+  latestValue(geoId, version = null) { return readGeoValue(this, geoId, version); }
+
+  /** @param {string} userId @param {string} geoId @param {Record<string, any>} patch @param {string | null} [runId] */
+  writeValue(userId, geoId, patch, runId = null) { return writeGeoValue(this, userId, geoId, patch, runId); }
+
+  /** @param {string} geoId */
+  researchRequests(geoId) { return readGeoResearch(this, geoId); }
+
+  /** @param {string} userId @param {string} geoId @param {Record<string, any>} input */
+  requestResearch(userId, geoId, input) { return requestGeoResearch(this, userId, geoId, input); }
+
   /**
    * @param {{ database: any, statementTimeoutMs?: number, entityVocabulary?: { tag: (input: { texts: string[] }) => Promise<string[] | null> } | null }} options
    *   `entityVocabulary` tags a product; without it, or while it cannot tag, a project has no keys.
@@ -634,7 +650,7 @@ export class GeoStore {
 
   /**
    * Write validated claims by key: a new key is version 1; a changed
-   * statement, quote or source is the next version; otherwise the claim's
+   * statement, quote, source or clinical scope is the next version; otherwise the claim's
    * bookkeeping is updated in place.
    *
    * A claim may also carry where it stands on the patient journey, the clinical question it answers, how a difference is known
@@ -649,17 +665,25 @@ export class GeoStore {
    */
   async upsertClaims(userId, geoId, items) {
     return this.transaction(async (client) => {
+      // Serialize a project's batches in one order, including new claim keys.
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-geo-claims:' || $1))", [geoId]);
       /** @type {Array<{ id: string, claimKey: string, version: number, change: 'created' | 'versioned' | 'updated' }>} */
       const written = [];
-      for (const item of items) {
+      for (const input of items) {
         const latest = (await client.query(`SELECT * FROM evimed_geo.claims WHERE geo_project_id = $1 AND claim_key = $2
-          ORDER BY version DESC LIMIT 1 FOR UPDATE`, [geoId, item.claimKey])).rows[0];
+          ORDER BY version DESC LIMIT 1 FOR UPDATE`, [geoId, input.claimKey])).rows[0];
+        const item = { ...(latest ? claimFromRow(latest) : {}), ...input };
         const values = [item.sourceKind ?? null, item.evidenceLevel ?? null, item.population ?? null, item.inLabel ?? null,
           JSON.stringify(item.elements ?? {}), item.verifiedAt ?? null, item.validUntil ?? null, item.status ?? "active", item.runId ?? null,
           item.sourceLabel ?? null, item.journeyStage == null ? null : JSON.stringify(item.journeyStage), item.clinicalQuestion ?? null,
           item.comparisonType ?? null, item.artifactPath ?? null];
         const same = latest && folded(latest.statement) === folded(item.statement) && folded(latest.quote) === folded(item.quote)
-          && folded(latest.source_ref) === folded(item.sourceRef);
+          && folded(latest.source_ref) === folded(item.sourceRef)
+          && (latest.population ?? null) === (item.population ?? null) && (latest.in_label ?? null) === (item.inLabel ?? null)
+          && (latest.evidence_level ?? null) === (item.evidenceLevel ?? null) && latest.status === (item.status ?? "active")
+          && (latest.source_kind ?? null) === (item.sourceKind ?? null)
+          && iso(latest.valid_until) === (item.validUntil ?? null)
+          && geoValueCanonical(latest.elements ?? {}) === geoValueCanonical(item.elements ?? {});
         if (same) {
           await client.query(`UPDATE evimed_geo.claims SET source_kind = $2, evidence_level = $3, population = $4, in_label = $5,
             elements = $6::jsonb, verified_at = $7, valid_until = $8, status = $9, run_id = coalesce($10, run_id),
@@ -793,7 +817,7 @@ export class GeoStore {
       groupIds.push(id);
       groupRows.push({ id, pool: group.pool ?? null, name: group.name ?? null, typical_question: group.typicalQuestion ?? null,
         journey_stage: group.journeyStage ?? null, audience: group.audience ?? null, bridge: group.bridge ?? null,
-        weight: group.weight ?? null, is_control: group.isControl === true, signal: group.signal ?? null, position });
+        weight: group.weight ?? null, is_control: group.isControl === true, signal: group.signal ?? null, value_context: group.valueContext ?? {}, position });
       /** @type {string[]} */
       const ids = [];
       for (const question of group.questions ?? []) {
@@ -808,10 +832,10 @@ export class GeoStore {
     }
     if (groupRows.length) {
       await client.query(`INSERT INTO evimed_geo.question_groups (id, user_id, geo_project_id, set_version, pool, name, typical_question,
-          journey_stage, audience, bridge, weight, is_control, signal, position)
-        SELECT g.id, $2, $3, $4, g.pool, g.name, g.typical_question, g.journey_stage, g.audience, g.bridge, g.weight, g.is_control, g.signal, g.position
+          journey_stage, audience, bridge, weight, is_control, signal, value_context, position)
+        SELECT g.id, $2, $3, $4, g.pool, g.name, g.typical_question, g.journey_stage, g.audience, g.bridge, g.weight, g.is_control, g.signal, g.value_context, g.position
         FROM jsonb_to_recordset($1::jsonb) AS g(id text, pool text, name text, typical_question text, journey_stage text, audience text,
-          bridge text, weight numeric, is_control boolean, signal text, position integer)`, [JSON.stringify(groupRows), userId, geoId, version]);
+          bridge text, weight numeric, is_control boolean, signal text, value_context jsonb, position integer)`, [JSON.stringify(groupRows), userId, geoId, version]);
     }
     if (questionRows.length) {
       await client.query(`INSERT INTO evimed_geo.questions (id, user_id, geo_project_id, group_id, set_version, text, kind, pool, platform,
@@ -984,7 +1008,7 @@ export class GeoStore {
    * Upsert the run-judged fields of sources by domain. The counts (`cited`,
    * mentions, wrong) are measured, and the market cell is the market's.
    * @param {string} userId @param {string} geoId
-   * @param {Array<{ domain: string, name?: string | null, kind?: string | null, layer?: string | null, icpOwner?: string | null,
+   * @param {Array<{ domain: string, valueContext?: Record<string, any>, name?: string | null, kind?: string | null, layer?: string | null, icpOwner?: string | null,
    *   icpMatches?: boolean | null, newsIndexed?: boolean | null, medicalVertical?: boolean | null, impostor?: boolean,
    *   blacklistReason?: string | null, checkedAt?: string | null }>} items
    */
@@ -994,18 +1018,19 @@ export class GeoStore {
       const ids = [];
       for (const item of items) {
         const result = await client.query(`INSERT INTO evimed_geo.sources (id, user_id, geo_project_id, domain, name, kind, layer, icp_owner,
-            icp_matches, news_indexed, medical_vertical, impostor, blacklist_reason, checked_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            icp_matches, news_indexed, medical_vertical, impostor, blacklist_reason, checked_at, value_context)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb)
           ON CONFLICT (geo_project_id, domain) DO UPDATE SET name = coalesce(EXCLUDED.name, sources.name),
             kind = coalesce(EXCLUDED.kind, sources.kind), layer = coalesce(EXCLUDED.layer, sources.layer),
             icp_owner = coalesce(EXCLUDED.icp_owner, sources.icp_owner), icp_matches = coalesce(EXCLUDED.icp_matches, sources.icp_matches),
             news_indexed = coalesce(EXCLUDED.news_indexed, sources.news_indexed),
             medical_vertical = coalesce(EXCLUDED.medical_vertical, sources.medical_vertical), impostor = EXCLUDED.impostor,
+            value_context = sources.value_context || EXCLUDED.value_context,
             blacklist_reason = EXCLUDED.blacklist_reason, checked_at = coalesce(EXCLUDED.checked_at, sources.checked_at), updated_at = now()
           RETURNING id`,
         [randomId("gsrc_"), userId, geoId, item.domain, item.name ?? null, item.kind ?? null, item.layer ?? null, item.icpOwner ?? null,
           item.icpMatches ?? null, item.newsIndexed ?? null, item.medicalVertical ?? null, item.impostor === true, item.blacklistReason ?? null,
-          item.checkedAt ?? null]);
+          item.checkedAt ?? null, JSON.stringify(item.valueContext ?? {})]);
         ids.push(String(result.rows[0].id));
       }
       return ids;
@@ -1036,20 +1061,22 @@ export class GeoStore {
    * ledger's verdict on the deliverable), never the run's own claim.
    * @param {string} userId @param {string} geoId
    * @param {Array<{ path: string, layer: string, title?: string | null, groupId?: string | null, claimIds: string[], gate: string, safety: string,
-   *   contentSha256?: string | null, protectedSha256?: string | null, deliverableId?: string | null, runId?: string | null }>} items
+   *   valueContext?: Record<string, any>, contentSha256?: string | null, protectedSha256?: string | null, deliverableId?: string | null, runId?: string | null }>} items
    */
   async registerArticles(userId, geoId, items) {
     return this.transaction(async (client) => {
       /** @type {string[]} */
       const ids = [];
+      const valueVersion = Number((await client.query(`SELECT version FROM evimed_geo.value_profiles WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [geoId])).rows[0]?.version ?? 0);
       for (const item of items) {
         const status = geoArticlePublishable(item) ? "publishable" : "draft";
         const result = await client.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, run_id, deliverable_id, path, layer, title,
-            group_id, claim_ids, gate, safety, content_sha256, protected_sha256, status, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13, $14, $15, clock_timestamp(), clock_timestamp())
+            group_id, claim_ids, gate, safety, content_sha256, protected_sha256, status, value_context, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13, $14, $15, $16::jsonb, clock_timestamp(), clock_timestamp())
           ON CONFLICT (geo_project_id, path) WHERE path IS NOT NULL DO UPDATE SET run_id = coalesce(EXCLUDED.run_id, articles.run_id),
             deliverable_id = coalesce(EXCLUDED.deliverable_id, articles.deliverable_id), layer = EXCLUDED.layer, title = EXCLUDED.title,
             group_id = EXCLUDED.group_id, claim_ids = EXCLUDED.claim_ids, gate = EXCLUDED.gate,
+            value_context = articles.value_context || EXCLUDED.value_context,
             safety = CASE WHEN articles.safety = 'open' THEN 'open' ELSE EXCLUDED.safety END,
             content_sha256 = EXCLUDED.content_sha256, protected_sha256 = EXCLUDED.protected_sha256,
             status = CASE WHEN articles.status NOT IN ('draft', 'publishable') THEN articles.status
@@ -1058,7 +1085,7 @@ export class GeoStore {
             updated_at = now()
           RETURNING id`,
         [randomId("gart_"), userId, geoId, item.runId ?? null, item.deliverableId ?? null, item.path, item.layer, item.title ?? null,
-          item.groupId ?? null, item.claimIds, item.gate, item.safety, item.contentSha256 ?? null, item.protectedSha256 ?? null, status]);
+          item.groupId ?? null, item.claimIds, item.gate, item.safety, item.contentSha256 ?? null, item.protectedSha256 ?? null, status, JSON.stringify({ ...item.valueContext, basisVersion: valueVersion })]);
         ids.push(String(result.rows[0].id));
       }
       return ids;

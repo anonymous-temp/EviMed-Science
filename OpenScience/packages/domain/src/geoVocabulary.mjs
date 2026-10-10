@@ -67,7 +67,7 @@ export const GEO_CLAIM_STATUSES = frozen(['active', 'expired', 'retired'])
 
 /** Question map. */
 export const GEO_QUESTION_KINDS = frozen(['typical', 'real', 'label_safety', 'client'])
-export const GEO_AUDIENCES = frozen(['patient', 'physician'])
+export const GEO_AUDIENCES = frozen(['patient', 'physician', 'caregiver', 'pharmacist', 'institution', 'other'])
 export const GEO_GROUP_SIGNALS = frozen(['collected', 'partial', 'no_signal', 'client'])
 
 /** Where a real phrasing was heard: a social platform, the open web, the client's own list. */
@@ -299,18 +299,19 @@ export const GEO_OWNED_LINK_STATUSES = frozen(['active', 'retired'])
 
 /** The runtime tools' words (`geo_read` / `geo_write`, spec §4). */
 export const GEO_READ_WHATS = frozen(['project', 'claims', 'questions', 'journey', 'diagnosis', 'metrics', 'snapshots', 'errors', 'sources',
-  'strategy', 'targets', 'articles', 'orders', 'owned_links', 'monitoring', 'cards'])
+  'strategy', 'targets', 'articles', 'orders', 'owned_links', 'monitoring', 'cards', 'value', 'research'])
 export const GEO_WRITE_WHATS = frozen(['product', 'claims', 'questions', 'lock_questions', 'journey', 'strategy', 'sources', 'targets',
-  'articles', 'placement_plan', 'owned_links', 'step'])
+  'articles', 'placement_plan', 'owned_links', 'step', 'value', 'research'])
 /** How a read or a write narrates in the conversation (`narration.mjs`). */
 export const GEO_READ_WHAT_LABELS_ZH = Object.freeze({
   project: '项目概况', claims: '结论库', questions: '问题地图', journey: '旅程', diagnosis: '诊断', metrics: '指标', snapshots: '回答快照',
   errors: '讲错记录', sources: '信源', strategy: '信源布局', targets: '三档目标', articles: '稿件', orders: '投放订单', owned_links: '自有发布',
-  monitoring: '监测', cards: '证据卡片',
+  monitoring: '监测', cards: '证据卡片', value: '药品价值分析', research: '相关研究',
 })
 export const GEO_WRITE_WHAT_LABELS_ZH = Object.freeze({
   product: '产品身份', claims: '结论库', questions: '问题地图', lock_questions: '锁定测量问句', journey: '旅程', strategy: '信源分析',
   sources: '信源表', targets: '三档目标', articles: '稿件', placement_plan: '投放偏好', owned_links: '自有发布', step: '进度',
+  value: '药品价值分析', research: '研究任务',
 })
 /** The export runs 「⋯」 offers. */
 export const GEO_EXPORT_KINDS = frozen(['weekly', 'proposal'])

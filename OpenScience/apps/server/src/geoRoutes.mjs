@@ -336,6 +336,7 @@ export function createGeoRoutes(dependencies) {
       throw new HttpError(404, "not_found", "GEO route not found.");
     }
     if (parts.length === 3 && method === "GET") {
+      if (tab === "value") return reply(await service.value(user, id));
       if (tab === "evidence") return reply(await service.evidence(user, id));
       if (tab === "journey") return reply(await service.journey(user, id));
       if (tab === "questions") {

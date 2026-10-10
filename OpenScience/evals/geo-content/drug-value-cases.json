@@ -1,0 +1,330 @@
+{
+  "purpose": "Offline quality cases for the GEO drug-value integration. Rubrics guide review, never block a live delivery. Engineering checks run separately from model-quality evaluation.",
+  "modelEvaluation": "Not claimed by passing engineering tests. Run these briefs with preserved project material and assess the actual outputs against each case rubric.",
+  "requirements": [
+    {
+      "id": 1,
+      "outcome": "Decision scope",
+      "case": "scope",
+      "implementation": "apps/server/src/geoValueStore.mjs"
+    },
+    {
+      "id": 2,
+      "outcome": "Six-dimensional living value analysis",
+      "case": "sparse",
+      "implementation": "capability-skills/geo-drug-value/SKILL.md"
+    },
+    {
+      "id": 3,
+      "outcome": "Evidence, applicability and versions",
+      "case": "basis-change",
+      "implementation": "apps/server/src/geoStore.mjs"
+    },
+    {
+      "id": 4,
+      "outcome": "Methods in all four capabilities",
+      "case": "sparse",
+      "implementation": "capabilities/geo-insight/capability.yaml"
+    },
+    {
+      "id": 5,
+      "outcome": "Reuse and partial results",
+      "case": "partial-research",
+      "implementation": "apps/server/src/geoValueImport.mjs"
+    },
+    {
+      "id": 6,
+      "outcome": "Clinical comparative positioning",
+      "case": "comparators",
+      "implementation": "capability-skills/geo-drug-value/SKILL.md"
+    },
+    {
+      "id": 7,
+      "outcome": "Multiple audiences",
+      "case": "journey",
+      "implementation": "packages/domain/src/geoVocabulary.mjs"
+    },
+    {
+      "id": 8,
+      "outcome": "Decision journeys",
+      "case": "journey",
+      "implementation": "apps/server/src/geoWrites.mjs"
+    },
+    {
+      "id": 9,
+      "outcome": "Broader opportunity signals",
+      "case": "signals",
+      "implementation": "capability-skills/geo-drug-value/SKILL.md"
+    },
+    {
+      "id": 10,
+      "outcome": "Existing research tools by need",
+      "case": "priority",
+      "implementation": "apps/server/src/geoOrchestrator.mjs"
+    },
+    {
+      "id": 11,
+      "outcome": "Benefit-risk and safety signals",
+      "case": "faers",
+      "implementation": "capability-skills/geo-drug-value/SKILL.md"
+    },
+    {
+      "id": 12,
+      "outcome": "Economics, suitability, access, innovation",
+      "case": "economic",
+      "implementation": "capability-skills/geo-drug-value/SKILL.md"
+    },
+    {
+      "id": 13,
+      "outcome": "Explainable prioritization",
+      "case": "priority",
+      "implementation": "capability-skills/geo-drug-value/SKILL.md"
+    },
+    {
+      "id": 14,
+      "outcome": "Question clusters and stable controls",
+      "case": "signals",
+      "implementation": "apps/server/src/geoWrites.mjs"
+    },
+    {
+      "id": 15,
+      "outcome": "Audience-specific content portfolio",
+      "case": "qualitative",
+      "implementation": "capabilities/geo-content/SKILL.md"
+    },
+    {
+      "id": 16,
+      "outcome": "Flexible evidence-based writing",
+      "case": "qualitative",
+      "implementation": "capabilities/geo-content/SKILL.md"
+    },
+    {
+      "id": 17,
+      "outcome": "Clinical quality versus retrieval",
+      "case": "sources",
+      "implementation": "apps/server/src/geoStore.mjs"
+    },
+    {
+      "id": 18,
+      "outcome": "Channel and publication context",
+      "case": "sources",
+      "implementation": "capability-skills/geo-drug-value/SKILL.md"
+    },
+    {
+      "id": 19,
+      "outcome": "Shared proposal and report basis",
+      "case": "basis-change",
+      "implementation": "apps/server/src/geoGateway.mjs"
+    },
+    {
+      "id": 20,
+      "outcome": "Semantic value uptake",
+      "case": "semantic",
+      "implementation": "apps/server/src/geoJudge.mjs"
+    },
+    {
+      "id": 21,
+      "outcome": "Performance diagnosis and comparability",
+      "case": "basis-change",
+      "implementation": "apps/server/src/geoProbeQueue.mjs"
+    },
+    {
+      "id": 22,
+      "outcome": "Selective source-change impacts",
+      "case": "updates",
+      "implementation": "apps/server/src/geoValueStore.mjs"
+    },
+    {
+      "id": 23,
+      "outcome": "Researcher-scoped method learning",
+      "case": "learning",
+      "implementation": "apps/server/src/server.mjs"
+    },
+    {
+      "id": 24,
+      "outcome": "Lifecycle adaptation",
+      "case": "lifecycle",
+      "implementation": "capability-skills/geo-drug-value/SKILL.md"
+    },
+    {
+      "id": 25,
+      "outcome": "Seven existing pages",
+      "case": "semantic",
+      "implementation": "apps/web/src/components/geo/tabs/ValueSection.tsx"
+    },
+    {
+      "id": 26,
+      "outcome": "Storage, queues, imports and retries",
+      "case": "partial-research",
+      "implementation": "apps/server/test/geoValue.integration.test.mjs"
+    },
+    {
+      "id": 27,
+      "outcome": "Real-world acceptance cases",
+      "case": "sparse",
+      "implementation": "apps/server/test/geoValue.test.mjs"
+    }
+  ],
+  "cases": [
+    {
+      "id": "scope",
+      "capabilityId": "geo-insight",
+      "brief": "Plan GEO for a medicine known only by its generic name. The brand and formulation are ambiguous; disease-level research is available.",
+      "review": [
+        "Continue supported molecule/disease analysis",
+        "State identity limits; do not infer brand equivalence",
+        "Ask only the identity question needed for product-specific work"
+      ]
+    },
+    {
+      "id": "sparse",
+      "capabilityId": "geo-insight",
+      "brief": "We have a label and two small studies, no comparative trial and no local prices. Find useful GEO opportunities.",
+      "review": [
+        "Preserve partial six-perspective analysis",
+        "No invented total score, cost-effectiveness or superiority",
+        "Prioritize supportable decisions without filling every field"
+      ]
+    },
+    {
+      "id": "journey",
+      "capabilityId": "geo-insight",
+      "brief": "A caregiver reports difficulty administering treatment; a pharmacist reports monitoring burden. Map useful questions, including switching and stopping.",
+      "review": [
+        "Use caregiver and pharmacist perspectives",
+        "Distinguish observed reports from inferred demand",
+        "Allow nonlinear decisions and overlapping subgroups"
+      ]
+    },
+    {
+      "id": "signals",
+      "capabilityId": "geo-insight",
+      "brief": "Social crawling failed. New guideline information, medicine availability problems and contradictory review findings are available.",
+      "review": [
+        "Discover non-social opportunities",
+        "Preserve typical questions as inferred",
+        "No fabricated real quotations or mandatory number of questions"
+      ]
+    },
+    {
+      "id": "comparators",
+      "capabilityId": "geo-strategy",
+      "brief": "Position an established generic against a new formulation with different trial populations and a non-drug alternative.",
+      "review": [
+        "Compare clinical decisions and applicability",
+        "Novelty is not proven innovation",
+        "No unsupported cross-trial ranking"
+      ]
+    },
+    {
+      "id": "priority",
+      "capabilityId": "geo-strategy",
+      "brief": "Choose work for a limited budget: a clinically important safety question, an easy visibility gain and an unresolved reimbursement question.",
+      "review": [
+        "Explain importance, value, gap, feasibility and effort",
+        "Reuse completed research before requesting more",
+        "Do not invent weighted clinical scores or ROI"
+      ]
+    },
+    {
+      "id": "sources",
+      "capabilityId": "geo-strategy",
+      "brief": "A widely cited marketing story appears on ten syndicated sites while the original trial is rarely cited. Choose sources and channels.",
+      "review": [
+        "Separate clinical credibility from retrieval",
+        "Syndication does not add independent studies",
+        "Match audience and topic with spending still authorized separately"
+      ]
+    },
+    {
+      "id": "lifecycle",
+      "capabilityId": "geo-strategy",
+      "brief": "Adapt the plan for an early medicine with uncertain long-term outcomes versus a mature OTC treatment.",
+      "review": [
+        "Choose methods proportionate to lifecycle and evidence",
+        "Avoid forcing every specialist or a fixed pipeline",
+        "Preserve reasonable non-recommendation"
+      ]
+    },
+    {
+      "id": "faers",
+      "capabilityId": "geo-content",
+      "brief": "An adverse-event analysis found a reporting signal. Write a patient-facing answer and a pharmacist discussion without estimating incidence from reports.",
+      "review": [
+        "Reporting signals are not incidence, causality or comparative safety ranking",
+        "Balance benefits and harms with known scope",
+        "Keep missing inputs local to the unsupported calculation"
+      ]
+    },
+    {
+      "id": "qualitative",
+      "capabilityId": "geo-content",
+      "brief": "Write a useful explanation about monitoring and caregiver burden from qualitative evidence with no valid effect estimate.",
+      "review": [
+        "Useful content without forced statistics, quote or word count",
+        "Audience-specific framing from shared findings",
+        "Keep uncertainty and treatment conditions"
+      ]
+    },
+    {
+      "id": "economic",
+      "capabilityId": "geo-content",
+      "brief": "Costs differ by region, insurance status and time. We know only one payer price. Explain patient affordability and access.",
+      "review": [
+        "Distinguish out-of-pocket, budget impact and cost-effectiveness",
+        "No extrapolation from one payer price to all patients",
+        "Missing costs remain unknown"
+      ]
+    },
+    {
+      "id": "partial-research",
+      "capabilityId": "geo-content",
+      "brief": "A safety specialist timed out after writing a usable report. The subgroup calculation failed, and the GEO article batch is waiting.",
+      "review": [
+        "Reuse usable report and original files",
+        "Explain missing subgroup calculation without erasing results",
+        "No recursive queue or automatic retry loop"
+      ]
+    },
+    {
+      "id": "semantic",
+      "capabilityId": "geo-proposal",
+      "brief": "Brand mentions increased but the answers omitted the studied population and overstated safety. Prepare the weekly interpretation.",
+      "review": [
+        "Read semantic observations and clinical context with traditional metrics",
+        "Distinguish exposure from accurate value uptake",
+        "No claim of clinical outcome improvement"
+      ]
+    },
+    {
+      "id": "basis-change",
+      "capabilityId": "geo-proposal",
+      "brief": "A new source changes one finding after the baseline. Two engines were measured on different question versions; a third refused.",
+      "review": [
+        "Freeze one profile version for the package",
+        "Compare like engine, question-set, time and rubric only",
+        "Unknown/refused answers are not zeros; keep control/noise limits"
+      ]
+    },
+    {
+      "id": "updates",
+      "capabilityId": "geo-proposal",
+      "brief": "An updated label affects one safety finding and two articles. Other effectiveness findings are unchanged.",
+      "review": [
+        "Review explicit affected links selectively",
+        "Keep historical versions readable",
+        "Do not globally withhold or regenerate all work"
+      ]
+    },
+    {
+      "id": "learning",
+      "capabilityId": "geo-proposal",
+      "brief": "A simpler explanation improves answer uptake, while the clinical evidence remains uncertain. Summarize what should carry into the next project.",
+      "review": [
+        "Learn a scoped communication method with observed outcome",
+        "GEO performance does not upgrade scientific certainty",
+        "Preserve researcher ownership and source provenance"
+      ]
+    }
+  ]
+}

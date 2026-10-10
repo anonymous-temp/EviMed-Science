@@ -47,7 +47,7 @@ const windowLimits = Object.freeze({ read: 120, write: 60, social: 12 });
 const requestLimits = Object.freeze({ read: 16 * 1024, write: 300 * 1024, social: 8 * 1024 });
 /** Reads and writes answer within ten seconds; a social crawl within the channel's own timeout. */
 const answerBudgetMs = 10_000;
-const readFilterFields = Object.freeze(["round", "engine", "pool", "groupId", "questionId", "limit", "offset"]);
+const readFilterFields = Object.freeze(["version", "audience", "round", "engine", "pool", "groupId", "questionId", "limit", "offset"]);
 /** The write module's refusals of a whole call, which reach the run as they are. */
 const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_request_too_large", "geo_read_what_invalid"]);
 
@@ -115,13 +115,18 @@ function readRequest(body) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).some((key) => !readFilterFields.includes(key))) {
     throw gatewayError(400, "geo_read_filter_invalid", `filter takes only: ${readFilterFields.join(", ")}.`);
   }
-  /** @type {{ round?: string, engine?: string, pool?: string, groupId?: string, questionId?: string, limit?: number, offset?: number }} */
+  /** @type {{ version?: number, audience?: string, round?: string, engine?: string, pool?: string, groupId?: string, questionId?: string, limit?: number, offset?: number }} */
   const filter = {};
   for (const key of ["round", "groupId", "questionId"]) {
     if (raw[key] == null) continue;
     if (!geoRowIdShape(raw[key])) throw gatewayError(400, "geo_read_filter_invalid", `filter.${key} is not an id.`);
     /** @type {any} */ (filter)[key] = raw[key];
   }
+  if (raw.version != null) {
+    if (!Number.isSafeInteger(raw.version) || raw.version < 1) throw gatewayError(400, "geo_read_filter_invalid", "version must be a positive integer.");
+    filter.version = raw.version;
+  }
+  if (typeof raw.audience === "string") filter.audience = raw.audience.slice(0, 120);
   if (raw.engine != null) {
     if (!GEO_ENGINES.includes(raw.engine)) throw gatewayError(400, "geo_read_filter_invalid", `filter.engine must be one of: ${GEO_ENGINES.join(", ")}.`);
     filter.engine = raw.engine;

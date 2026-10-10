@@ -20,12 +20,20 @@ target is 98 %, and traced 讲错我方 goes to zero; the tiers differ in mentio
 share and placements. The platform refuses an accuracy target below 98 %.
 
 First read `geo_read project` and `geo_read metrics`. If the project has no
-finished baseline yet, there is nothing to interpret: write nothing, and say in
-one sentence that the platform measures first and schedules this step itself
-(the platform refuses a strategy or targets written before it anyway).
+finished baseline yet, do not invent measured performance or forecast tiers.
+Continue supported clinical positioning and opportunity analysis in `geo_write
+value`; the platform measures first before accepting a calibrated strategy or
+targets. Existing qualitative work remains usable when measurements are absent.
 
 Work and write in Simplified Chinese; keep product names, approval numbers and
 outlet names exactly as their owners write them.
+
+## Drug value informs this work
+
+Load `geo-drug-value` before planning this task. Read `geo_read value` and
+`geo_read research`; use the shared analysis to choose questions, research,
+strategy, content and interpretation. Preserve partial findings. Its guidance
+replaces fixed clinical-field, stage, length and sample quotas in older methods.
 
 ## The method pack
 
@@ -103,9 +111,10 @@ traceable 讲错我方 are hard lines in every tier. Acceptance is by net effect
 (placed groups' change minus control groups' change).
 
 **Single-step, minimal mode.** When the brief asks for this step alone and the
-project has no measured question set, the platform first measures a minimal
-set of 30 questions; write the tiers against it with the minimal label, state
-that the numbers stand for those 30 questions only, and set `"minimal": true`.
+project has no measured question set, the platform first measures the available
+useful questions. State the actual measured scope and set `"minimal": true`.
+Write numeric targets only where supported; a useful strategy does not require
+all tiers or a forecast for every metric.
 
 ## The files, at their names
 

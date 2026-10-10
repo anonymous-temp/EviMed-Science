@@ -352,7 +352,7 @@ test("a single step (信源分析与预期) builds only its minimal upstream: id
   assert.deepEqual(answer, { sessionId: "session-1", runId: "run-1-geo-insight-a1" }, "「让 AI 做」 answers the run it dispatched");
   const brief = world.dispatched[0].brief;
   assert.match(brief, /单步模式/);
-  assert.match(brief, /共 30 个测量问句/);
+  assert.match(brief, /关键决策的测量问句/);
   assert.match(brief, /minimal:true/);
   assert.equal(brief.includes("· 旅程"), false);
   let steps = await statuses(project.id);
@@ -382,7 +382,7 @@ test("a single step (信源分析与预期) builds only its minimal upstream: id
   // Later, in the same project, the user asks for the full question map: the minimal version is redone.
   await world.orchestrator.runStep(user, project, "questions");
   assert.equal(world.dispatched.length, 3);
-  assert.match(world.dispatched[2].brief, /锁定 40–120 个测量问句/);
+  assert.match(world.dispatched[2].brief, /锁定适量测量问句/);
   assert.equal(world.dispatched[2].dispatchId, "geo-insight-a2", "a new attempt, never the old run's id");
 });
 

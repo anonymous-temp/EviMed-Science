@@ -22,6 +22,7 @@ persona: |
 safetyClass: clinical
 skills:
 - geo-proposal
+- geo-drug-value
 tools:
 - mcp__evimed__geo_read
 - mcp__evimed__geo_write
@@ -35,6 +36,8 @@ produces:
   - path: proposal-package.json
     role: data
     required: true
+  - path: geo-value.json
+    required: false
   - path: revision-notes.md
     role: work
     required: false

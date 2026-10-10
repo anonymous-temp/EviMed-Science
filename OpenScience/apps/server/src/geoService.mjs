@@ -39,7 +39,7 @@
  */
 
 import path from "node:path";
-import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoSpecifiedInfoAccuracy } from "@evimed/domain";
+import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoSpecifiedInfoAccuracy, geoValueContext, geoValueImpacts, summarizeGeoValueCoverage } from "@evimed/domain";
 
 /** A failure mode as the page says it. @param {string | null} code */
 const failureModeWord = (code) => (code ? /** @type {Record<string, string>} */ (GEO_FAILURE_MODE_LABELS_ZH)[code] ?? null : null);
@@ -777,6 +777,7 @@ export class GeoService {
     const list = (/** @type {unknown} */ value) => (Array.isArray(value) ? value : []);
     return {
       version: latest?.version ?? null,
+      decisions: list(data.decisions), valueContext: data.valueContext ?? {},
       subtypes: list(data.subtypes), personas: list(data.personas), stages: list(data.stages), careNodes: list(data.careNodes), files: list(data.files),
     };
   }
@@ -799,7 +800,7 @@ export class GeoService {
       version: chosen,
       groups: groups.map((group) => ({
         id: group.id, pool: group.pool, name: group.name, typicalQuestion: group.typicalQuestion, journeyStage: group.journeyStage,
-        audience: group.audience, weight: group.weight, isControl: group.isControl, signal: group.signal,
+        valueContext: group.valueContext, audience: group.audience, weight: group.weight, isControl: group.isControl, signal: group.signal,
         questions: group.questions.map((question) => ({
           id: question.id, text: question.text, kind: question.kind, platform: question.platform, sourceUrl: question.sourceUrl,
           isMeasured: question.isMeasured,
@@ -1263,7 +1264,7 @@ export class GeoService {
         const cited = counted === undefined ? source.cited : counted?.cited ?? {};
         const byEngine = counted?.byEngine ?? {};
         return {
-          id: source.id, domain: source.domain, name: source.name, kind: source.kind, layer: source.layer,
+          valueContext: source.valueContext, id: source.id, domain: source.domain, name: source.name, kind: source.kind, layer: source.layer,
           conditions: { icp: source.icpMatches, newsIndexed: source.newsIndexed, medical: source.medicalVertical },
           impostor: source.impostor,
           cited: Object.fromEntries(Object.entries(cited).map(([engine, pools]) => [engine,
@@ -1332,7 +1333,7 @@ export class GeoService {
     const stale = await this.cards?.staleReferences?.(project, articles).catch(() => null) ?? new Map();
     return {
       articles: articles.map((article) => ({
-        id: article.id, layer: article.layer, title: article.title, groupId: article.groupId,
+        valueContext: article.valueContext, id: article.id, layer: article.layer, title: article.title, groupId: article.groupId,
         question: article.groupId ? questions.get(article.groupId) ?? null : null, status: article.status, gate: article.gate,
         safety: article.safety, path: article.path, runId: article.runId, claimCount: article.claimIds.length,
         placements: counts.get(article.id) ?? 0, cited: citedIds.has(article.id),
@@ -1537,6 +1538,8 @@ export class GeoService {
     /** @template T @param {T[]} list */
     const page = (list) => ({ items: list.slice(offset, offset + limit), total: list.length, more: list.length > offset + limit });
     switch (what) {
+      case "value": return this.valueOf(project, filter);
+      case "research": return { items: await this.store.researchRequests(project.id) };
       case "project": {
         const view = await this.projectViewOf(project);
         return { project: { id: view.id, name: view.name, product: view.product, competitors: view.competitors, coverageDays: view.coverageDays,
@@ -1666,6 +1669,26 @@ export class GeoService {
   }
 
   // --- metrics for the operator endpoint ----------------------------------------------------
+
+  /** @param {any} user @param {string} id */
+  async value(user, id) { return this.valueOf(await this.requireProject(user, id)); }
+
+  /** Research metadata stays behind the page's findings and actions. @param {any} project @param {{groupId?: string, audience?: string, version?: number}} [filter] */
+  async valueOf(project, filter = {}) {
+    const [profile, research, articles] = await Promise.all([
+      this.store.latestValue(project.id, filter.version ?? null), this.store.researchRequests(project.id), this.store.listArticles(project.id),
+    ]);
+    const rows = profile.version ? (await this.store.query(`SELECT f.judge_extract, s.engine, s.asked_at, s.round_id
+      FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
+      WHERE f.geo_project_id = $1 AND f.judged_at IS NOT NULL AND s.round_id =
+        (SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'weekly', 'single_step')
+          AND status IN ('done', 'partial') ORDER BY created_at DESC LIMIT 1)`, [project.id])).rows : [];
+    const observations = rows.flatMap((row) => (Array.isArray(row.judge_extract?.valueCoverage) ? row.judge_extract.valueCoverage : [])
+      .map((/** @type {any} */ observation) => ({ ...observation, engine: row.engine, roundId: row.round_id,
+        basisVersion: row.judge_extract?.valueBasisVersion ?? null, rubricVersion: row.judge_extract?.rubricVersion ?? null, askedAt: iso(row.asked_at) })));
+    return { ...profile, data: { ...profile.data, ...geoValueContext(profile.data, filter) }, research,
+      impacts: geoValueImpacts(profile.data, articles), coverage: summarizeGeoValueCoverage(observations), observations };
+  }
 
   /** Counts for `/api/ops/metrics`, one query. */
   async metricsSnapshot() {

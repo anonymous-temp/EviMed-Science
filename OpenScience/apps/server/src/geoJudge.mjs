@@ -1,3 +1,4 @@
+import { GEO_VALUE_COVERAGE_STATUSES, geoValueContext, geoValueList } from "@evimed/domain";
 /**
  * The model's reading of a measured answer, and code's check of it (build
  * spec §5 "Parse + judge", plan §4.3).
@@ -112,6 +113,8 @@ export const GEO_JUDGE_INSTRUCTIONS = [
   "按重要性依次做以下几件事：",
   "1. statements：最多 30 条，最重要的（讲错的、涉及适应证、用法用量、禁忌、不良反应的）在前。从回答中逐句摘出关于本品（品牌名、别名、通用名或明确指代本品的说法）的事实性陈述。text 必须逐字照抄回答原句，不改一个字。每句对照主张库判定：",
   "   - topic：indication 适应证 / dosage 用法用量 / contraindication 禁忌 / adverse_reaction 不良反应 / other 其他。前四类是「指定信息」，回答里出现的每一句都要摘出来判定。",
+  "valueCoverage：针对 value.findings 中与本问题相关的发现，给出可选数组，每条 {findingId,status,quote,reason,conditionsPreserved}。status 为 represented/partial/contradicted/not_addressed/not_applicable/uncertain。represented、partial、contradicted 的 quote 必须逐字来自回答。只评价给定结论的表达与限定条件是否保留，不能把研究材料自动当成已证实事实；有冲突、过期或资料不足时写 uncertain。conditionsPreserved 可为 true/false/null。没提品牌不等于没表达价值，不适合该药的人群、不宜推荐或无关问题用 not_applicable，不惩罚合理的不推荐。缺失价格不能当成经济性差。判断人群、剂型、比较对象、时间、利益与风险；FAERS 信号不是发生率或因果。缺少依据时保留未知，禁止补造。",
+  "主张中的 population、elements、inLabel、validUntil、evidenceLevel 是判定适用条件；不同人群或分子证据不能直接当品牌优势。过期且没有当前依据时不可认定为当前已证实。",
   "   - verdict：correct（与某条主张一致）/ wrong（与某条主张矛盾，或主张库明确不支持）/ unverifiable（主张库没有相关内容，无法判定）。",
   "   - claim：判定所依据的主张编号（如 C3）；unverifiable 可为 null。",
   "   - evidence：从该主张的原文中逐字摘出支持你判定的一段（至少 4 个字）；unverifiable 可为空字符串。",
@@ -223,9 +226,11 @@ export function quantityTokens(value) {
  * @property {Record<string, any>} product
  * @property {Array<Record<string, any>>} competitors
  * @property {Array<{ id: string, key?: string | null, statement: string, quote: string, sourceRef?: string, sourceKind?: string | null,
- *   inLabel?: boolean | null, cardId?: string | null, cardClaimId?: string | null, cardRevision?: number | null }>} claims
+ *   inLabel?: boolean | null, cardId?: string | null, cardClaimId?: string | null, cardRevision?: number | null, population?: string | null, elements?: Record<string, any>,
+ *   evidenceLevel?: string | null, validUntil?: string | null }>} claims
  *   the verified claims of the project's cards when it has any, else its claim table
  * @property {Array<{ url: string, title?: string }>} [links]   the links the answer cites, as the engine reported them
+ * @property {{ version: number, data: Record<string, any> }} [value]
  * @property {Array<{ id: string, text: string, node?: string | null }>} careFlags
  * @property {{ text: string, pool?: string | null, journeyStage?: string | null }} question
  * @property {"geo" | "evolution"} [purpose]
@@ -244,6 +249,7 @@ const labelClaim = (claim) => claim.inLabel === true || claim.sourceKind === "la
  * @param {GeoJudgeInput} input
  */
 export function buildJudgeInput(input) {
+  /** @type {Array<Record<string, any> & {alias: string}>} */
   const claims = input.claims.map((claim, index) => ({ ...claim, alias: `C${index + 1}` }));
   const project = {
     product: {
@@ -253,7 +259,9 @@ export function buildJudgeInput(input) {
     },
     competitors: (input.competitors ?? []).map((competitor) => competitor?.brandName || competitor?.genericName).filter(Boolean),
     claims: claims.map((claim) => ({ id: claim.alias, statement: claim.statement, quote: String(claim.quote ?? "").slice(0, CLAIM_QUOTE_CHARS),
-      label: labelClaim(claim) })),
+      label: labelClaim(claim), population: claim.population ?? null, elements: claim.elements ?? {}, inLabel: claim.inLabel ?? null,
+      evidenceLevel: claim.evidenceLevel ?? null, validUntil: claim.validUntil ?? null })),
+    value: { ...geoValueContext(input.value?.data), findings: geoValueContext(input.value?.data).findings.filter((entry) => entry?.id).slice(0, 60) },
     redFlags: input.careFlags.map((flag) => ({ id: flag.id, text: flag.text, node: flag.node ?? null })),
   };
   const { body } = stripPageChrome(input.answer);
@@ -263,6 +271,7 @@ export function buildJudgeInput(input) {
   return {
     claims,
     links,
+    valueFindings: project.value.findings,
     shown,
     truncated: shown.length < body.length,
     prefix: `【项目】\n${JSON.stringify(project)}`,
@@ -280,6 +289,8 @@ export function buildJudgeInput(input) {
  * @typedef {{ offLabel: string[], omittedSafety: Array<{ claimId: string, claimKey: string | null, cardId: string | null, cardClaimId: string | null, cardRevision: number | null }>,
  *   citations: GeoCitationCheck[] }} GeoJudgeChecks
  * @typedef {object} GeoJudgement
+ * @property {Array<Record<string, any>>} [valueCoverage]
+ * @property {number} [valueBasisVersion]
  * @property {boolean} refusal
  * @property {GeoVerifiedStatement[]} statements
  * @property {string[]} entities
@@ -410,7 +421,20 @@ export function verifyJudgement(answer, built, input) {
   const flags = new Map(input.careFlags.map((flag) => [flag.id, flag.text]));
   const expectedIds = [...new Set(textList(answer.redFlagsExpected, flags.size))].filter((id) => flags.has(id));
   const hitIds = [...new Set(textList(answer.redFlagsHit, flags.size))].filter((id) => expectedIds.includes(id));
+  const knownFindings = new Set(built.valueFindings.map((entry) => entry.id));
+  const valueCoverage = [];
+  const observed = new Set();
+  for (const row of geoValueList(answer.valueCoverage).slice(0, 60)) {
+    if (!row || !knownFindings.has(row.findingId) || observed.has(row.findingId) || !GEO_VALUE_COVERAGE_STATUSES.includes(row.status)) continue;
+    const quote = typeof row.quote === "string" ? row.quote : "";
+    if (quote && !present(quote)) continue;
+    if (["represented", "partial", "contradicted"].includes(row.status) && !present(quote)) continue;
+    observed.add(row.findingId);
+    valueCoverage.push({ findingId: row.findingId, status: row.status, quote, reason: String(row.reason ?? "").slice(0, 1200),
+      conditionsPreserved: typeof row.conditionsPreserved === "boolean" ? row.conditionsPreserved : null });
+  }
   return {
+    valueCoverage, valueBasisVersion: input.value?.version ?? 0,
     refusal: answer.refusal === true,
     statements,
     entities,
@@ -660,8 +684,9 @@ export async function tickParse(deps) {
       counts.skipped = "budget_exhausted";
       break;
     }
-    if (!contexts.has(snapshot.geoProjectId)) contexts.set(snapshot.geoProjectId, await store.projectContext(snapshot.geoProjectId));
-    const context = contexts.get(snapshot.geoProjectId);
+    const contextKey = `${snapshot.geoProjectId}:${snapshot.roundId ?? "live"}`;
+    if (!contexts.has(contextKey)) contexts.set(contextKey, await store.projectContext(snapshot.geoProjectId, snapshot.roundId));
+    const context = contexts.get(contextKey);
     if (!context) continue;
     if (!questionsByProject.has(snapshot.geoProjectId)) {
       const questions = await store.questions(snapshot.geoProjectId);
@@ -680,9 +705,10 @@ export async function tickParse(deps) {
     if (!stuck) try {
       judged = await judge.judge({
         owner: { userId: context.project.userId, projectId: context.project.projectId },
-        product: context.project.product,
-        competitors: context.project.competitors,
+        product: context.judgeProduct ?? context.project.product,
+        competitors: context.judgeCompetitors ?? context.project.competitors,
         claims: context.claims,
+        value: context.value,
         careFlags: context.careFlags,
         question: { text: question?.text ?? "", pool: question?.pool ?? null, journeyStage: question?.journeyStage ?? null },
         answer: snapshot.answerText ?? "",
@@ -717,7 +743,8 @@ export async function tickParse(deps) {
         owner: { userId: context.project.userId, projectId: context.project.projectId }, counts });
     }
 
-    const extract = { recommendations: judged?.recommendations ?? [], entities: judged?.entities ?? [] };
+    const extract = { recommendations: judged?.recommendations ?? [], entities: judged?.entities ?? [],
+      valueCoverage: judged?.valueCoverage ?? [], valueBasisVersion: judged?.valueBasisVersion ?? 0, rubricVersion: GEO_JUDGE_VERSION };
     const code = parseAnswer({
       answer: snapshot.answerText,
       citations: snapshot.citations,

@@ -399,6 +399,10 @@ function validatedClaims(items, issues) {
       artifactPath: claimArtifactPath(item.artifactPath, read),
     };
     if (read.refused) return;
+    for (const field of ["sourceKind", "evidenceLevel", "population", "inLabel", "elements", "verifiedAt", "validUntil", "status"]) {
+      if (!Object.hasOwn(item, field)) delete claim[field];
+    }
+    if (!Object.hasOwn(item, "sourceLabel") && !Object.hasOwn(item, "sourceRefLabel")) delete claim.sourceLabel;
     seen.add(claimKey);
     claims.push(claim);
   });
@@ -407,7 +411,7 @@ function validatedClaims(items, issues) {
 
 // --- the question map -----------------------------------------------------------------------
 
-const GROUP_FIELDS = Object.freeze(["pool", "name", "typicalQuestion", "journeyStage", "audience", "bridge", "weight", "isControl", "signal", "questions"]);
+const GROUP_FIELDS = Object.freeze(["valueContext", "pool", "name", "typicalQuestion", "journeyStage", "audience", "bridge", "weight", "isControl", "signal", "questions"]);
 const QUESTION_FIELDS = Object.freeze(["text", "kind", "pool", "platform", "sourceUrl", "collectedAt", "isMeasured"]);
 
 /**
@@ -448,6 +452,7 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
     const value = {
       pool: group.word("pool", GEO_POOLS, { required: true }),
       name: typeof name === "string" ? geoGroupName(name) : name,
+      valueContext: isObject(item.valueContext) ? item.valueContext : {},
       typicalQuestion: group.text("typicalQuestion", 300),
       journeyStage: group.text("journeyStage", 60),
       audience: group.word("audience", GEO_AUDIENCES),
@@ -519,11 +524,12 @@ export function geoLockCheck(groups, minimal) {
     .map((question) => ({ ...question, pool: question.pool ?? group.pool })));
   const measured = measuredQuestions.length;
   const [low, high] = minimal ? GEO_MEASURED_RANGE.minimal : GEO_MEASURED_RANGE.full;
-  if (measured < low || measured > high) {
-    refusals.push({ field: "measured", code: "measured_count", message: `A ${minimal ? "minimal" : "full"} set measures ${low} to ${high} questions; this one measures ${measured}.` });
+  if (measured === 0) {
+    refusals.push({ field: "measured", code: "measured_count", message: "There is no measured question to ask." });
   }
+  if (measured > 0 && (measured < low || measured > high)) notices.push({ field: "measured", code: "notice", message: `This set measures ${measured} questions, outside the suggested ${low}–${high}; interpret within its actual scope.` });
   const missing = GEO_POOLS.filter((pool) => !measuredQuestions.some((question) => question.pool === pool));
-  if (missing.length) refusals.push({ field: "pools", code: "pools_missing", message: `Every pool needs a measured question; missing: ${missing.join(", ")}.` });
+  if (missing.length) notices.push({ field: "pools", code: "notice", message: `Pools without measured questions remain unmeasured: ${missing.join(", ")}.` });
   const control = measuredGroups.filter((group) => group.isControl).length;
   const share = measuredGroups.length ? control / measuredGroups.length : 0;
   const [fewest, most] = GEO_CONTROL_RANGE.groups;
@@ -533,7 +539,7 @@ export function geoLockCheck(groups, minimal) {
     : share < lowShare || share > highShare
       ? `Control groups should be about 20–30 % of the groups; here they are ${Math.round(share * 100)} %.`
       : null;
-  if (controlIssue) (minimal ? notices : refusals).push({ field: "control", code: minimal ? "notice" : "control_groups", message: controlIssue });
+  if (controlIssue) notices.push({ field: "control", code: "notice", message: controlIssue });
   return { refusals, notices, measured };
 }
 
@@ -545,9 +551,9 @@ export const GEO_JOURNEY_EXPECTED = Object.freeze(["subtypes", "personas", "file
 /** @param {Record<string, any>} data @param {GeoIssue[]} issues */
 function validatedJourney(data, issues) {
   const read = fields(data, issues, {});
-  read.unknown(["subtypes", "personas", "stages", "careNodes", "files"]);
+  read.unknown(["subtypes", "personas", "stages", "careNodes", "files", "decisions", "valueContext"]);
   /** @type {Record<string, any[]>} */
-  const journey = { subtypes: [], personas: [], stages: [], careNodes: [], files: [] };
+  const journey = { subtypes: [], personas: [], stages: [], careNodes: [], files: [], decisions: [], valueContext: [] };
   /** @param {string} field @param {(entry: Record<string, any>, index: number) => Record<string, any> | null} parse */
   const list = (field, parse) => {
     const value = data[field];
@@ -566,18 +572,20 @@ function validatedJourney(data, issues) {
   /** @param {string} field @param {Record<string, any>} entry @param {number} index @param {string[]} allowed @param {string} required */
   const open = (field, entry, index, allowed, required) => {
     const item = fields(entry, issues, { index });
-    item.unknown(allowed);
+    item.unknown([...allowed, "valueContext"]);
     const out = Object.fromEntries(allowed.map((key) => [key, Array.isArray(entry[key]) ? item.texts(key, 30, 500)
       : typeof entry[key] === "number" && Number.isFinite(entry[key]) ? String(entry[key]) : item.text(key, 2000, { multiline: true })]));
     if (!out[required]) item.refuse(required, "missing", `A ${field} entry needs ${required}.`);
-    return item.refused ? null : out;
+    return item.refused ? null : { ...out, ...(isObject(entry.valueContext) ? { valueContext: entry.valueContext } : {}) };
   };
+  list("decisions", (entry) => entry);
+  if (isObject(data.valueContext)) Object.assign(journey, { valueContext: data.valueContext });
   list("subtypes", (entry, index) => open("subtypes", entry, index, ["name", "definition", "size", "sizeQuality", "note"], "name"));
   list("personas", (entry, index) => open("personas", entry, index, ["name", "age", "situation", "voice", "note"], "name"));
   list("stages", (entry, index) => {
     const item = fields(entry, issues, { index });
-    item.unknown(["stage", "emotion", "thinking", "questions", "infoSources"]);
-    const stage = { stage: item.text("stage", 60, { required: true }), emotion: item.text("emotion", 300), thinking: item.text("thinking", 1000),
+    item.unknown(["stage", "emotion", "thinking", "questions", "infoSources", "valueContext"]);
+    const stage = { valueContext: isObject(/** @type {any} */ (entry)?.valueContext) ? /** @type {any} */ (entry).valueContext : {}, stage: item.text("stage", 60, { required: true }), emotion: item.text("emotion", 300), thinking: item.text("thinking", 1000),
       questions: item.texts("questions", 30, 300), infoSources: item.texts("infoSources", 30, 200) };
     return item.refused ? null : stage;
   });
@@ -761,7 +769,7 @@ export function geoStrategyDraft(data) {
 
 // --- sources, targets, articles, placement plan, step ---------------------------------------------
 
-const SOURCE_FIELDS = Object.freeze(["domain", "name", "kind", "layer", "icpOwner", "icpMatches", "newsIndexed", "medicalVertical", "impostor",
+const SOURCE_FIELDS = Object.freeze(["valueContext", "domain", "name", "kind", "layer", "icpOwner", "icpMatches", "newsIndexed", "medicalVertical", "impostor",
   "blacklistReason", "checkedAt"]);
 
 /**
@@ -854,6 +862,7 @@ function validatedSources(items, issues) {
     if (domain && !HOSTNAME.test(domain)) read.refuse("domain", "invalid", "domain must be a host name, e.g. example.com.");
     if (domain && seen.has(domain)) read.refuse("domain", "duplicate", "The same domain appears twice in this write.");
     const source = {
+      valueContext: isObject(/** @type {any} */ (entry)?.valueContext) ? /** @type {any} */ (entry).valueContext : {},
       domain, name: read.text("name", 120), kind: read.word("kind", GEO_SOURCE_KINDS), layer: read.word("layer", GEO_SOURCE_LAYERS),
       icpOwner: read.text("icpOwner", 120), icpMatches: read.flag("icpMatches"), newsIndexed: read.flag("newsIndexed"),
       medicalVertical: read.flag("medicalVertical"), impostor: read.flag("impostor") ?? false, blacklistReason: read.text("blacklistReason", 300),
@@ -912,7 +921,7 @@ function validatedTargets(items, issues) {
   return targets;
 }
 
-const ARTICLE_FIELDS = Object.freeze(["path", "layer", "title", "groupId", "claimIds", "gate", "safety", "contentSha256", "protectedSha256",
+const ARTICLE_FIELDS = Object.freeze(["valueContext", "path", "layer", "title", "groupId", "claimIds", "gate", "safety", "contentSha256", "protectedSha256",
   "deliverableId", "runId", "errorIds"]);
 
 /**
@@ -966,6 +975,7 @@ function validatedArticles(items, issues, known) {
       issues.push({ index, field: "errorIds", code: "notice", message: "A correction names the errors it corrects (errorIds, from geo_read errors); without them the error does not move to 处置中." });
     }
     const article = {
+      valueContext: isObject(item.valueContext) ? item.valueContext : {},
       path: pathValue, layer, title: read.text("title", 200), groupId, claimIds,
       safety: read.word("safety", RUN_ARTICLE_SAFETY, { required: true }),
       contentSha256, protectedSha256, deliverableId, runId: read.text("runId", 120), errorIds,
@@ -1101,6 +1111,15 @@ export async function geoRuntimeWrite({ store, project, what, body, renameProjec
   const userId = project.userId;
   const done = (/** @type {string[]} */ ids, extra = {}) => ({ ok: ids.length > 0, ids, issues, ...extra });
   switch (what) {
+    case "value": {
+      const written = await store.writeValue(userId, project.id, dataOf(body));
+      return done([String(written.version)], { value: written });
+    }
+    case "research": {
+      const result = await store.requestResearch(userId, project.id, dataOf(body));
+      if (result.notice) issues.push({ code: "notice", message: result.notice });
+      return done(result.request ? [result.request.id] : [], { research: result.request });
+    }
     case "product": {
       const { product, competitors } = validatedProduct(dataOf(body), issues);
       if (!Object.keys(product).length && competitors === undefined) return done([]);
