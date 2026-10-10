@@ -4,7 +4,7 @@ import path from "node:path";
 import { openScopedFileNoFollow, resolveScopedPath } from "../src/security.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { geoValueContext, geoValueJudged, mergeGeoValue, geoValueImpacts, summarizeGeoValueCoverage } from "@evimed/domain";
+import { GEO_VALUE_DOMAINS, geoValueContext, geoValueJudged, mergeGeoValue, geoValueImpacts, summarizeGeoValueCoverage } from "@evimed/domain";
 import { buildJudgeInput, verifyJudgement, GEO_JUDGE_INSTRUCTIONS } from "../src/geoJudge.mjs";
 import { importGeoValue } from "../src/geoValueImport.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
@@ -301,4 +301,24 @@ test("article registration rejects only nonexistent files and keeps available pa
   assert.ok(result.issues.filter(issue => issue.code === "not_found").length >= 2);
   assert.ok(result.issues.some(issue => issue.code === "unavailable"));
   await fs.rm(workspace, { recursive: true, force: true });
+});
+
+/** The shared drug-value method, as a GEO run reads it. */
+const drugValueSkill = async () => (await import("node:fs/promises")).readFile(new URL("../../../capability-skills/geo-drug-value/SKILL.md", import.meta.url), "utf8");
+
+test("the drug-value skill tells a run to list the knowledge-base file a finding rests on by its src_ id (D-19)", async () => {
+  // A replaced file reaches a finding only through that id (geoValueImpacts); the skill used to say nothing of it.
+  const skill = await drugValueSkill();
+  assert.match(skill, /`src_\.\.\.`/);
+  assert.match(skill, /`sourceRefs`/);
+});
+
+test("the drug-value skill states the six dimension words as the closed set a finding's dimension is written in (D-13)", async () => {
+  // The pages group findings by these words (the 获益与风险 section keeps `safety` and `effectiveness`; the labels are keyed by all six): a finding
+  // written under a word of the model's own, in either language, is hidden from the section it belongs to. A closed vocabulary is stated, whole.
+  const skill = (await drugValueSkill()).replace(/\s+/g, " ");
+  const sentence = /`dimension` is one of[^;.]*/.exec(skill)?.[0] ?? "";
+  assert.ok(sentence, "the skill has the sentence");
+  for (const word of Object.keys(GEO_VALUE_DOMAINS)) assert.ok(sentence.includes(`\`${word}\``), `${word} is in it`);
+  assert.equal(Object.keys(GEO_VALUE_DOMAINS).length, 6);
 });

@@ -109,6 +109,21 @@ export function geoArticleGateOf(run, deliverableId) {
   return "unverified";
 }
 
+/**
+ * An article's gate bound to the bytes it judged (M-10). The ledger's verdict is on a deliverable as the gate graded it, and its receipt
+ * names each file by the sha256 it was graded at. An article's `contentSha256` is the run's own declaration of the file it wrote, and the
+ * market sends the bytes that hash names — so a pass counts for the article only when the receipt's hash for its file is that hash. A file
+ * the run changed after grading, declared under another hash, or never named by the receipt was not judged: `unverified`, whatever the
+ * ledger says of the deliverable. A verdict that is not a pass is bound to nothing.
+ * @param {"passed" | "unverified" | "failed"} gate the ledger's verdict
+ * @param {{ gradedSha256: string | null | undefined, contentSha256: string | null | undefined }} bytes the receipt's hash for the article's file, and the run's
+ * @returns {"passed" | "unverified" | "failed"}
+ */
+export function geoArticleGateBound(gate, { gradedSha256, contentSha256 }) {
+  if (gate !== "passed") return gate;
+  return gradedSha256 && contentSha256 && gradedSha256 === contentSha256 ? "passed" : "unverified";
+}
+
 /** The steps a run reports on: the thinking steps. Diagnosis, distribution and
  *  monitoring are the platform's to mark, and `questions` is done by locking
  *  the set, never by saying so. */
@@ -1132,9 +1147,9 @@ const isIntegrityViolation = (error) => typeof /** @type {any} */ (error)?.code 
  * @param {{ store: import("./geoStore.mjs").GeoStore, project: any, what: string, body: Record<string, any>,
  *   renameProject?: ((userId: string, projectId: string, name: string) => Promise<unknown>) | null,
  *   articleExists?: ((project: any, path: string) => Promise<boolean>) | null,
- *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>) | null,
+ *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string, contentSha256?: string | null }) => Promise<string>) | null,
  *   researchMaxOpen?: number | null }} input
- *   `articleGate` reads an article's gate from the run ledger; without it every article is `unverified`.
+ *   `articleGate` reads an article's gate from the run ledger, for the bytes the run declares (`contentSha256`); without it every article is `unverified`.
  *   `researchMaxOpen` is the most research tasks a project holds queued or running (`OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN`)
  * @returns {Promise<{ ok: boolean, ids: string[], issues: GeoIssue[], [key: string]: any }>}
  */
@@ -1317,7 +1332,8 @@ async function writeToProject({ store, project, what, body, renameProject = null
           continue;
         }
         articles.push(article);
-        const gate = articleGate ? await articleGate(project, { runId: article.runId ?? null, deliverableId: article.deliverableId ?? null, path: article.path }) : null;
+        const gate = articleGate ? await articleGate(project, { runId: article.runId ?? null, deliverableId: article.deliverableId ?? null, path: article.path,
+          contentSha256: article.contentSha256 ?? null }) : null;
         article.gate = GEO_ARTICLE_GATES.includes(String(gate)) ? gate : "unverified";
       }
       const ids = articles.length ? await store.registerArticles(userId, project.id, articles) : [];

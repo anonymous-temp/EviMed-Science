@@ -123,6 +123,7 @@ test("metric families: one line off, the module's counts on", () => {
     service: { projectsCreated: 3, reads: 10, writes: 5, writeIssues: 2, notFound: 1, researchCapped: 4 },
     social: { configured: true, counters: { searches: 1, requests: 6, collected: 5, noResults: 0, failed: 1 }, lastError: null },
     inclusion: { submitted: 6, polled: 40, done: 4, failed: 1, expired: 1 },
+    imports: { imported: 9, failed: 2 },
   });
   const byName = new Map(families.map((family) => [family.name, family]));
   assert.equal(byName.get("open_science_geo_enabled")?.series[0].value, 1);
@@ -133,6 +134,9 @@ test("metric families: one line off, the module's counts on", () => {
   assert.ok(byName.get("open_science_geo_social_requests_total")?.series.some((series) => series.labels?.outcome === "failed" && series.value === 1));
   assert.equal(byName.get("open_science_geo_inclusion_total")?.series.find((series) => series.labels?.event === "expired")?.value, 1,
     "an inclusion check given up on after its age limit is counted (Q-7)");
+  assert.deepEqual(byName.get("open_science_geo_run_import_total")?.series.map((series) => [series.labels?.outcome, series.value]), [["imported", 9], ["failed", 2]],
+    "a run's import that lost a write is counted (D-24)");
+  assert.equal(new Map(geoMetricFamilies(true, { tables: null, service: {}, social: null, worker: null, inclusion: {} }).map((family) => [family.name, family])).has("open_science_geo_run_import_total"), false);
   assert.equal(new Map(geoMetricFamilies(true, { tables: null, service: {}, social: null, worker: null, inclusion: {} }).map((family) => [family.name, family])).has("open_science_geo_inclusion_total"), false,
     "a deployment that never used the channel exports no series for it");
   for (const family of families) assert.match(family.name, /^open_science_geo_[a-z_]+$/);
@@ -247,6 +251,57 @@ test("the cards route reads and writes only the caller's own project, and the pr
   assert.deepEqual(patched.at(-1), ["geo_mine", { producer: null }]);
   assert.equal(geoRoutePattern("/api/geo/projects/geo_mine/cards"), "/api/geo/projects/:id/cards");
   assert.equal(geoRoutePattern("/api/geo/projects/geo_mine/cards/refresh"), "/api/geo/projects/:id/cards/:item");
+});
+
+test("saving who speaks for the product writes the cards once, and what the cards could not do is theirs, never the save's (D-28)", async () => {
+  const audits = /** @type {any[]} */ ([]);
+  const refreshed = /** @type {any[]} */ ([]);
+  const added = /** @type {any[]} */ ([]);
+  const store = { async ensureSessionUser() { return { user: { id: "reader" } }; }, async assertCsrf() {} };
+  const project = { id: "geo_mine", userId: "owner", projectId: "p" };
+  const service = {
+    allows: () => true, isOperator: () => false,
+    async requireProject() { return project; },
+    async updateProject(/** @type {any} */ _user, /** @type {string} */ id, /** @type {any} */ patch) { return { id, userId: "owner", projectId: "p", ...patch }; },
+  };
+  /** @type {() => Promise<any>} */
+  let outcome = async () => ({ zoneId: "ez_1", cards: [{ cardId: "ec_1" }, { cardId: "ec_2" }], held: [], failed: [], skipped: [] });
+  const cards = { refresh: async (/** @type {any} */ user, /** @type {any} */ found) => { refreshed.push([user.id, found.id, found.producer?.kind ?? null]); return outcome(); } };
+  const members = { async list() { return []; }, async add(/** @type {any} */ input) { added.push(input.role); return { userId: input.userId, role: input.role }; }, async remove() { return { removed: 0 }; } };
+  const routes = createGeoRoutes({ store, service, config, maxJsonBytes: 65_536, cards, members, audit: async (event, status, details) => { audits.push([event, status, details.detail ?? null]); } });
+  const producer = { kind: "doctor", name: "张医生" };
+  const send = async (/** @type {string} */ method, /** @type {string} */ url, /** @type {unknown} */ body) => { const res = response(); await routes(request(method, url, body), res); return res.json().data; };
+
+  // The producer saved: the cards are written once, as the project's owner, from the project as it now is.
+  assert.deepEqual((await send("PATCH", "/api/geo/projects/geo_mine", { producer })).cards, { blockedBy: null, written: 2 });
+  assert.deepEqual(refreshed, [["owner", "geo_mine", "doctor"]]);
+  // A save that names no producer, or takes it away, writes nothing.
+  await send("PATCH", "/api/geo/projects/geo_mine", { coverageDays: 60 });
+  await send("PATCH", "/api/geo/projects/geo_mine", { producer: null });
+  assert.equal(refreshed.length, 1);
+  // The cards refused (nobody to review yet): the save stands, and the answer says what is missing.
+  outcome = async () => { throw Object.assign(new Error("reviewer"), { status: 409, code: "geo_card_reviewer_required" }); };
+  assert.deepEqual((await send("PATCH", "/api/geo/projects/geo_mine", { producer })).cards, { blockedBy: "reviewer", written: 0 });
+  outcome = async () => { throw Object.assign(new Error("producer"), { status: 409, code: "geo_card_producer_required" }); };
+  assert.equal((await send("PATCH", "/api/geo/projects/geo_mine", { producer })).cards.blockedBy, "producer");
+  // Any other failure is audited and still never fails the save.
+  outcome = async () => { throw Object.assign(new Error("zone"), { code: "evidence_zone_unavailable" }); };
+  const failed = await send("PATCH", "/api/geo/projects/geo_mine", { producer });
+  assert.deepEqual(failed.cards, { blockedBy: null, written: 0, failed: "evidence_zone_unavailable" });
+  assert.deepEqual(audits.at(-1), ["geo.cards.refresh", "failed", "evidence_zone_unavailable"]);
+  // The reviewing doctor named: the cards that waited for one are written. No other role changes who reviews.
+  outcome = async () => ({ cards: [{ cardId: "ec_1" }], held: [], failed: [], skipped: [] });
+  const before = refreshed.length;
+  assert.deepEqual((await send("POST", "/api/geo/projects/geo_mine/members", { userId: "doc", role: "medical_reviewer" })).cards, { blockedBy: null, written: 1 });
+  await send("POST", "/api/geo/projects/geo_mine/members", { userId: "viewer", role: "viewer" });
+  await send("POST", "/api/geo/projects/geo_mine/members", { userId: "editor", role: "editor" });
+  assert.deepEqual(added, ["medical_reviewer", "viewer", "editor"]);
+  assert.equal(refreshed.length, before + 1);
+  // Without the card hook a save is only a save.
+  const bare = createGeoRoutes({ store, service, config, maxJsonBytes: 65_536 });
+  const res = response();
+  await bare(request("PATCH", "/api/geo/projects/geo_mine", { producer }), res);
+  assert.equal(res.json().data.cards, undefined);
 });
 
 test("metric families: the evidence chain's cards and the judge's checks are counted", () => {

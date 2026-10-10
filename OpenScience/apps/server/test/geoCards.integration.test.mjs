@@ -165,6 +165,18 @@ test("a project that says no producer, or has no reviewer, writes no card and lo
   assert.equal((await db.query("SELECT count(*)::int AS n FROM evimed_geo.claims")).rows[0].n, 10, "every claim of both projects is still there");
 });
 
+test("a project's card chain says what blocks it: nobody speaking for the product, or no reviewing doctor (D-28)", options, async () => {
+  // The same two checks the write makes, asked without writing anything: the page reads them to say what to set up.
+  assert.equal(await withPeople().blockedBy(await project({ producer: null }, ["dose"])), "producer");
+  assert.equal(await cards.blockedBy(await project({}, ["dose"])), "reviewer", "the owner alone is an author, not a reviewing doctor");
+  assert.equal(await withPeople().blockedBy(await project({}, ["dose"])), null);
+  assert.equal(await cards.blockedBy(await project({ producer: { kind: "doctor", name: "张医生", relation: "user_of_therapy" } }, ["dose"])), null,
+    "a doctor is the author and the reviewer");
+  const counted = cards.counters.refused;
+  await cards.blockedBy(await project({ producer: null }, ["dose"]));
+  assert.equal(cards.counters.refused, counted, "asking is not a refusal");
+});
+
 test("a doctor project's doctor is the author and the reviewer, shown by hospital, department and specialty", options, async () => {
   const geo = await project({ producer: { kind: "doctor", name: "张医生", hospital: "某某医院", department: "内分泌科", specialty: "糖尿病", relation: "user_of_therapy" } }, ["dose"]);
   const result = await cards.refresh(geo, { readSource });

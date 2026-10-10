@@ -5,7 +5,7 @@
 // knows the worker is whole. Only the run dispatch itself is faked.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
@@ -134,4 +134,36 @@ test("the market's operator routes are live and an operator's; readiness knows t
   assert.equal(geo.ok, true, JSON.stringify(geo));
   assert.deepEqual(geo.worker.missing, []);
   assert.equal((geo.warnings ?? []).includes("geo_worker_loop_missing"), false);
+});
+
+test("what a run delivered is imported before the programme folds it, through the app's own wiring (D-24)", options, async () => {
+  const created = await call("reader", "POST", "/api/geo/projects", { brandName: "诺和盈" });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const { id, projectId } = created.body.data;
+  const asked = await call("reader", "POST", `/api/geo/projects/${id}/run`, { step: "evidence" });
+  assert.equal(asked.status, 200, JSON.stringify(asked.body));
+  const dispatch = dispatched.at(-1);
+  assert.equal(dispatch.capabilityId, "geo-insight");
+  // The run delivered its claim library into the project's workspace; the control plane heard nothing of its end.
+  const owner = await context.app.store.userById(accounts.reader);
+  const control = await context.app.store.requireProject(owner, projectId);
+  await mkdir(path.join(control.workspaceDir, "deliverables", "geo-insight"), { recursive: true });
+  await writeFile(path.join(control.workspaceDir, "deliverables", "geo-insight", "claims.json"), JSON.stringify({ claims: [
+    { claimKey: "dosing", statement: "每周一次皮下注射", quote: "本品每周一次皮下注射给药。", sourceRef: "说明书 2025 版", sourceKind: "label" }] }));
+  const claims = async () => Number((await context.app.store.database.query("SELECT count(*) AS n FROM evimed_geo.claims WHERE geo_project_id = $1", [id])).rows[0].n);
+  assert.equal(await claims(), 0);
+  // The next tick finds the run ended in the ledger: it imports the delivery, and only then decides the step.
+  const original = context.app.agentRuns.list;
+  context.app.agentRuns.list = async () => [{ id: `run-${dispatched.length}`, dispatchId: dispatch.dispatchId, status: "succeeded",
+    deliverables: [{ id: "geo-insight", capability: "geo-insight" }] }];
+  try {
+    await context.app.geo.orchestrator.advance(id);
+  } finally {
+    context.app.agentRuns.list = original;
+  }
+  assert.equal(await claims(), 1, "the delivered claim is registered");
+  const page = (await call("reader", "GET", `/api/geo/projects/${id}`)).body.data;
+  assert.equal(page.steps.evidence.status, "done", "the step is decided on what the import wrote");
+  const metrics = await (await fetch(`${context.base}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text();
+  assert.match(metrics, /^open_science_geo_run_import_total\{outcome="imported"\} [1-9]\d*$/m, "and the import is counted");
 });

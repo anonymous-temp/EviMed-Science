@@ -171,6 +171,40 @@ test("投放 tab: the money shown is the ledger's, including reserves held by a 
   } finally { await w.close(); }
 });
 
+test("投放 tab: 撤单 is offered only where the market takes it, and the price shown is the settled one (M-7)", options, async () => {
+  // The page offered 撤单 for every reserved order, and one whose send is in flight answers 409; and it showed the plan's price after the
+  // outlet's final price was known.
+  const { store, seed } = await fixture();
+  await seed.project({ id: "g7", userId: "u7" });
+  const at = new Date().toISOString();
+  const path = ["reserved", "submitted", "accepted", "published", "verified", "settled"];
+  /** An order of its own article, moved along the market's states to `state`. @param {number} n @param {string} [state] */
+  const order = async (n, state = "planned") => {
+    await seed.article({ id: `a7${n}`, userId: "u7", geoProjectId: "g7", contentSha256: "a".repeat(64) });
+    const [made] = await store.insertOrders([{ userId: "u7", geoProjectId: "g7", articleId: `a7${n}`, mediaType: "website", resourceId: `70${n}`, priceCny: 100, reserveCny: 110 }], at);
+    let from = "planned";
+    for (const to of state === "planned" ? [] : path.slice(0, path.indexOf(state) + 1)) {
+      await store.transitionOrder(made.id, { from: [from], to, at, ...(to === "settled" ? { patch: { settledCny: 94 } } : {}),
+        ...(to === "reserved" ? { ledger: [{ kind: "reserve", amountCny: 110, userId: "u7", geoProjectId: "g7" }] } : {}) });
+      from = to;
+    }
+    return made.id;
+  };
+  const planned = await order(1);
+  const reservedIdle = await order(2, "reserved");
+  const reservedSending = await order(3, "reserved");
+  await store.annotateOrder(reservedSending, { at: new Date(Date.parse(at) + 1_000).toISOString(), detail: { phase: "send_started" } });
+  const submitted = await order(4, "submitted");
+  const accepted = await order(5, "accepted");
+  const settled = await order(6, "settled");
+  const view = await service().distribution({ id: "u7" }, "g7");
+  const byId = new Map(view.orders.map((/** @type {any} */ row) => [row.id, row]));
+  assert.deepEqual([planned, reservedIdle, reservedSending, submitted, accepted, settled].map((id) => byId.get(id).cancellable), [true, true, false, true, false, false],
+    "a plan, a reserve not yet sent and a sent order the outlet has not taken; not a send in flight, not an order the outlet has taken");
+  assert.equal(byId.get(settled).priceCny, 94, "the outlet's final price, once there is one");
+  assert.equal(byId.get(planned).priceCny, 100, "the plan's price before");
+});
+
 test("撤单 then 撤回: a placed article whose order the user cancelled can be withdrawn, and is not placed again", options, async () => {
   const w = await world(fixture);
   try {

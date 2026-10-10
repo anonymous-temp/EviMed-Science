@@ -39,12 +39,12 @@
  */
 
 import path from "node:path";
-import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoSpecifiedInfoAccuracy, geoValueContext, geoValueImpacts, hardLines, summarizeGeoValueCoverageCounts } from "@evimed/domain";
+import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoSpecifiedInfoAccuracy, geoValueActive, geoValueContext, geoValueImpacts, geoValueList, hardLines, summarizeGeoValueCoverageCounts } from "@evimed/domain";
 
 /** A failure mode as the page says it. @param {string | null} code */
 const failureModeWord = (code) => (code ? /** @type {Record<string, string>} */ (GEO_FAILURE_MODE_LABELS_ZH)[code] ?? null : null);
 import {
-  GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH, GEO_ORDER_CANCELLABLE_STATES,
+  GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH,
   GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoCellRows,
 } from "@evimed/domain";
 import { geoLockCheck, geoProgramMinimal } from "./geoWrites.mjs";
@@ -53,7 +53,7 @@ import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tall
 import { geoSourceFromRow } from "./geoStore.mjs";
 import { nextWeeklySlot, programSteps, wantedSteps } from "./geoOrchestrator.mjs";
 import { HttpError } from "./security.mjs";
-import { GEO_ORDER_ARTICLE_LIVE_STATES, projectMoney } from "./geoMarketStore.mjs";
+import { GEO_ORDER_ARTICLE_LIVE_STATES, ORDER_SELECT, mapOrder, orderCancellable, projectMoney } from "./geoMarketStore.mjs";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
 
@@ -306,7 +306,7 @@ const PLAIN_ROW = "m.variant IS NULL AND m.rival IS NULL AND m.group_id IS NULL"
 export class GeoService {
   /**
    * @param {{ store: import("./geoStore.mjs").GeoStore, config: Record<string, any>, social?: any, now?: () => Date,
-   *   metricName?: ((metricId: string) => string | null) | null, cards?: { staleReferences?: Function, list?: Function } | null }} options
+   *   metricName?: ((metricId: string) => string | null) | null, cards?: { staleReferences?: Function, list?: Function, blockedBy?: Function } | null }} options
    *   `metricName` names a metric id for 「更多指标」; the metrics package can
    *   hand in its catalogue's names, and without it the domain's labels answer
    *   for the ids the platform reads and every other id is its own name.
@@ -607,13 +607,14 @@ export class GeoService {
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
   async projectViewOf(project) {
     const metricIds = GEO_OVERVIEW_METRICS.map((entry) => entry.metricId);
-    const [latest, series, targets, week, names, started] = await Promise.all([
+    const [latest, series, targets, week, names, started, cardsBlockedBy] = await Promise.all([
       this.#latestProjectMetrics([project.id], metricIds),
       this.#series([project.id], metricIds, "project", "", { coverage: true }),
       this.store.latestTargets(project.id),
       this.#week(project),
       this.#controlProjectNames([{ userId: project.userId, projectId: project.projectId }]),
       this.#startedAt([project]),
+      this.#cardsBlockedBy(project),
     ]);
     const rows = latest.get(project.id) ?? new Map();
     const points = series.get(project.id) ?? new Map();
@@ -634,12 +635,24 @@ export class GeoService {
       // Whether step 7 can run at all on this deployment: without a market a
       // page never asks for a budget or says the reader owes one (G20).
       market: { configured: geoMarketConfigured(this.config) },
+      // Why the verified claims are not becoming evidence cards: `producer` (nobody named as speaking for the product) or `reviewer`
+      // (no reviewing doctor), null when nothing is in the way. The run-end import used to refuse in a log and the page said nothing (D-28).
+      cards: { blockedBy: cardsBlockedBy },
       overview: {
         metrics,
         week,
         steps: project.steps,
       },
     };
+  }
+
+  /**
+   * Why the project's cards cannot be written now (geoCards.mjs `blockedBy`), or null. It decorates the page: a failure to ask is not a
+   * failure to show the project.
+   * @param {any} project @returns {Promise<"producer" | "reviewer" | null>}
+   */
+  async #cardsBlockedBy(project) {
+    try { return (await this.cards?.blockedBy?.(project)) ?? null; } catch { return null; }
   }
 
   /**
@@ -1393,10 +1406,12 @@ export class GeoService {
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {{ marketConfigured?: boolean }} [options] */
   async distributionOf(project, { marketConfigured = geoMarketConfigured(this.config) } = {}) {
     const [orders, money, targets, ownedLinks] = await Promise.all([
+      // The orders as the market reads them (its own derived times: when the send began, when the state was entered), with the names.
       this.store.query(`SELECT o.*, a.title AS article_title, a.layer AS article_layer, m.name AS media_name, m.domain AS media_domain
-        FROM evimed_geo.orders o LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
+        FROM (${ORDER_SELECT} WHERE o.geo_project_id = $1 ORDER BY o.created_at DESC LIMIT 500) o
+          LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
           LEFT JOIN evimed_geo.media m ON m.media_type = o.media_type AND m.resource_id = o.resource_id
-        WHERE o.geo_project_id = $1 ORDER BY o.created_at DESC LIMIT 500`, [project.id]),
+        ORDER BY o.created_at DESC`, [project.id]),
       // The money is the ledger's (projectMoney, the market's own view): a
       // rejected order still holds its reserve until the refund is in the
       // balance, and a refund after settlement is money back.
@@ -1419,12 +1434,18 @@ export class GeoService {
       reservedCny: ledger.reservedCny,
       suggestedBudgetCny: suggested,
       market: { configured: Boolean(marketConfigured) },
-      orders: orders.rows.map((/** @type {any} */ row) => ({
-        id: String(row.id), articleId: text(row.article_id), articleTitle: text(row.article_title), media: text(row.media_name),
-        domain: text(row.media_domain), layer: text(row.article_layer), state: String(row.state), priceCny: num(row.price_cny ?? row.reserve_cny),
-        publishedUrl: text(row.published_url), checks: Array.isArray(row.checks) ? row.checks : [], updatedAt: iso(row.updated_at),
-        cancellable: GEO_ORDER_CANCELLABLE_STATES.includes(String(row.state)),
-      })),
+      orders: orders.rows.map((/** @type {any} */ row) => {
+        const order = mapOrder(row);
+        return {
+          id: String(row.id), articleId: text(row.article_id), articleTitle: text(row.article_title), media: text(row.media_name),
+          domain: text(row.media_domain), layer: text(row.article_layer), state: String(row.state),
+          // What the outlet finally charged, once it has; the plan's price, then the reserve, before.
+          priceCny: order.settledCny ?? order.priceCny ?? order.reserveCny,
+          publishedUrl: text(row.published_url), checks: Array.isArray(row.checks) ? row.checks : [], updatedAt: iso(row.updated_at),
+          // 撤单 is offered where the market takes it: not a send in flight, not an order the outlet has taken.
+          cancellable: orderCancellable(order),
+        };
+      }),
       ownedLinks,
     };
   }
@@ -1715,8 +1736,14 @@ export class GeoService {
     const byStatus = {};
     for (const entry of onBasis) if (entry.status) byStatus[entry.status] = (byStatus[entry.status] ?? 0) + entry.n;
     const observations = basisVersion == null ? [] : sample.filter((observation) => observation.basisVersion === basisVersion).slice(0, GEO_VALUE_OBSERVATIONS_SHOWN);
+    // The changed sources a reader is asked to look at are those that reach a finding that still stands: a change that names no finding
+    // of the profile, or whose findings were retired since, asks for no look at anything. Nothing closes such a change, so counting every
+    // standing one made the count only grow (D-19); the total is kept beside it, and every change stays in `data.sourceChanges`.
+    const impacts = geoValueImpacts(profile.data, articles);
+    const standing = new Set(geoValueList(profile.data.findings).filter((finding) => finding && typeof finding === "object" && geoValueActive(finding)).map((finding) => finding.id));
     return { ...profile, data: { ...profile.data, ...geoValueContext(profile.data, filter) }, research,
-      impacts: geoValueImpacts(profile.data, articles), coverage: { ...summarizeGeoValueCoverageCounts(byStatus), basisVersion }, observations,
+      impacts: impacts.filter((impact) => impact.findingIds.some((id) => standing.has(id))), impactsTotal: impacts.length,
+      coverage: { ...summarizeGeoValueCoverageCounts(byStatus), basisVersion }, observations,
       observationsTotal: onBasis.reduce((total, entry) => total + entry.n, 0) };
   }
 
@@ -1777,14 +1804,15 @@ export async function geoReadiness({ config, geo, database }) {
 
 /**
  * Everything the metrics endpoint shows about the module, read once per scrape.
- * @param {{ service: GeoService, social?: any, worker?: any, cards?: any, questionBank?: any, measureState?: { checkTotals?: Record<string, number>, inclusionTotals?: Record<string, number> } | null }} geo
+ * @param {{ service: GeoService, social?: any, worker?: any, cards?: any, questionBank?: any, importDelivery?: { counters?: { imported: number, failed: number } } | null,
+ *   measureState?: { checkTotals?: Record<string, number>, inclusionTotals?: Record<string, number> } | null }} geo
  */
 export async function geoMetricsSnapshot(geo) {
   let tables = null;
   try { tables = await geo.service.metricsSnapshot(); } catch { tables = null; }
   return { tables, service: { ...geo.service.counters }, social: geo.social?.status?.() ?? null, worker: geo.worker?.status?.() ?? null,
     cards: geo.cards?.metrics?.() ?? null, checks: geo.measureState?.checkTotals ?? null, inclusion: geo.measureState?.inclusionTotals ?? null,
-    questionBank: geo.questionBank?.metrics?.() ?? null };
+    questionBank: geo.questionBank?.metrics?.() ?? null, imports: geo.importDelivery?.counters ? { ...geo.importDelivery.counters } : null };
 }
 
 /**
@@ -1822,6 +1850,12 @@ export function geoMetricFamilies(enabled, snapshot) {
     add("cards_total", "Product-zone card writes since this process started, by what happened.", "counter",
       ["zonesMade", "cardsCreated", "cardsUpdated", "cardsUnchanged", "claimsCarded", "claimsHeld", "refused", "referencesChecked", "referencesUnresolved",
         "articlesFlagged"].map((event) => ({ labels: { event }, value: Number(/** @type {any} */ (snapshot.cards)[event] ?? 0) })));
+  }
+  // What a finished run delivered and the import registered (geoDeliveryImport.mjs): a failed attempt lost a write (its value profile, claims
+  // or competitors) and is on the audit record as `geo.import`; the run is tried once more and then left.
+  if (snapshot.imports) {
+    add("run_import_total", "Finished runs' deliveries imported into their GEO projects since this process started: runs imported whole, and attempts that lost a write or threw.", "counter",
+      ["imported", "failed"].map((outcome) => ({ labels: { outcome }, value: Number(/** @type {any} */ (snapshot.imports)[outcome] ?? 0) })));
   }
   // The platform's own medication-question bank (flywheel F22), where the deployment has it on.
   if (snapshot.questionBank) {

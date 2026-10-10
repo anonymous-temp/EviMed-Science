@@ -55,6 +55,11 @@ import { HttpError, randomId } from "./security.mjs";
  *   answer (IRON-06).
  * - **Paused is paused**: nothing new is dispatched or enqueued for a paused
  *   project; a run already out is still folded when it ends.
+ * - **The two ticks serve projects in turn.** Each takes at most `projectsPerTick`
+ *   of them, the one it served longest ago first (`orchestrator_served_at`,
+ *   `schedule_served_at`), so with more projects than that the rest are reached by
+ *   a later tick; reading the same oldest ones every time left the 201st project
+ *   unscheduled for good.
  * - The worker's cross-process leases and daily claims are marks too, under
  *   the platform's own key space (`geo_project_id = '_platform'`, which no
  *   project or account deletion touches): `lease:<loop>` held by an owner
@@ -104,6 +109,9 @@ export const GEO_SCHEDULE = Object.freeze({
 /** Runs: at most five articles a batch, two tries a run, a claim that stalls for ten minutes is retried. */
 export const GEO_RUN_RULES = Object.freeze({ batchMax: 5, firstBatchesMax: 6, attempts: 2, staleClaimMinutes: 10, projectsPerTick: 200,
   noticeScanDays: 14, noticesPerTick: 20 });
+
+/** The column each loop's turns are marked in (`projects`): a closed set, since it is written into the query. */
+const TURN = Object.freeze({ program: "orchestrator_served_at", schedule: "schedule_served_at" });
 
 const DAY_MS = 86_400_000;
 
@@ -507,16 +515,21 @@ export class GeoOrchestrator {
    *   notifier?: ReturnType<typeof import("./geoNotify.mjs").createGeoNotifier> | null,
    *   dispatchRun?: ((input: GeoDispatch) => Promise<{ runId: string, sessionId: string | null, status?: string | null }>) | null,
    *   runStatus?: ((input: { userId: string, projectId: string, runId: string, dispatchId: string | null }) => Promise<{ status: string } | null>) | null,
+   *   importRun?: ((input: { userId: string, projectId: string, run: Record<string, any> }) => Promise<unknown>) | null,
    *   latestSessionId?: ((input: { userId: string, projectId: string }) => Promise<string | null>) | null,
    *   enqueueRound?: ((spec: { geoProjectId: string, kind: string, questionIds?: string[], engines?: string[], repeat?: number,
    *     ref?: Record<string, any> }) => Promise<any>) | null,
    *   noteCitation?: ((input: { orderId: string, engine: string }) => Promise<any>) | null,
-   *   policies?: any, now?: () => Date, report?: (code: string) => void }} dependencies
+   *   projectsPerTick?: number, policies?: any, now?: () => Date, report?: (code: string) => void }} dependencies
    *   `enqueueRound` is the measurement package's, bound to its deps; absent,
    *   diagnosis and the schedules wait and `status()` says measurement is not wired.
+   *   `projectsPerTick` is the most projects one tick of either loop takes (`GEO_RUN_RULES.projectsPerTick`); the rest wait for the next ticks.
+   *   `runStatus` answers the ledger's run (its `status`, and the rest of it when it has it). `importRun` is the end-of-run import
+   *   of what a run delivered (claims, the value profile, research results — geoDeliveryImport.mjs): idempotent, and awaited before
+   *   a run is folded into its steps, which read what it writes.
    */
-  constructor({ store, config = {}, notifier = null, dispatchRun = null, runStatus = null, latestSessionId = null, enqueueRound = null,
-    noteCitation = null, policies = createModuleEvolutionPolicies(), now = () => new Date(), report = () => {} }) {
+  constructor({ store, config = {}, notifier = null, dispatchRun = null, runStatus = null, importRun = null, latestSessionId = null, enqueueRound = null,
+    noteCitation = null, projectsPerTick = GEO_RUN_RULES.projectsPerTick, policies = createModuleEvolutionPolicies(), now = () => new Date(), report = () => {} }) {
     if (!store) throw new TypeError("The GEO orchestrator needs the GEO store.");
     this.policies = policies;
     this.store = store;
@@ -524,18 +537,20 @@ export class GeoOrchestrator {
     this.notifier = notifier;
     this.dispatchRun = dispatchRun;
     this.runStatus = runStatus;
+    this.importRun = importRun;
     this.latestSessionId = latestSessionId;
     this.enqueueRound = enqueueRound;
     this.noteCitation = noteCitation;
     this.now = now;
     this.report = report;
+    this.projectsPerTick = Number.isSafeInteger(projectsPerTick) && projectsPerTick > 0 ? projectsPerTick : GEO_RUN_RULES.projectsPerTick;
     this.timeZone = String(config.geoTimeZone || "Asia/Shanghai");
     this.leaseSeconds = Math.max(60, Math.round(Number(config.geoLeaseMs ?? 600_000) / 1000));
     this.owner = `geo-${process.pid}-${randomId().slice(0, 12)}`;
     /** @type {Map<string, Promise<unknown>>} one advance per project at a time, in this process */
     this.locks = new Map();
     this.counters = { ticks: 0, scheduleTicks: 0, dispatched: 0, deferred: 0, dispatchFailed: 0, runsFinished: 0, roundsEnqueued: 0,
-      roundsSkipped: 0, notices: 0, projectErrors: 0 };
+      roundsSkipped: 0, notices: 0, projectErrors: 0, importFailed: 0 };
     /** @type {string | null} */
     this.lastDeferral = null;
     /** @type {string | null} */
@@ -748,13 +763,38 @@ export class GeoOrchestrator {
     if (!row || ["done", "failed"].includes(row.state)) return false;
     await this.#exclusive(row.geo_project_id, async () => {
       const project = await this.#project(row.geo_project_id);
-      if (project) await this.#finishRun(project, { ...row, run_id: row.run_id ?? run.id }, String(run.status));
+      if (project) await this.#finishRun(project, { ...row, run_id: row.run_id ?? run.id }, String(run.status), run);
     });
     return true;
   }
 
-  /** @param {any} project @param {any} mark @param {string} status */
-  async #finishRun(project, mark, status) {
+  /**
+   * What a run delivered, imported before anything here reads it (D-24). The import is the composition's own, idempotent, and also
+   * started by the ledger's state change — fire and forget, from a process that may have restarted since; the fold that decides the
+   * steps from what the run wrote used to run after it with nothing between, and a restart or a write that failed there lost the
+   * run's value profile, claims and research results while the mark went on to completion. Awaited here: a call that finds the other
+   * one under way waits for it, and one that finds it failed tries once more. An import that cannot be made is counted and reported;
+   * the fold goes on with what is stored (a finished run's work is not held back by it).
+   * @param {any} project @param {any} mark @param {string} status @param {Record<string, any> | null} run the ledger's run, when the caller has it
+   */
+  async #importRun(project, mark, status, run) {
+    if (!this.importRun) return;
+    try {
+      const runId = String(run?.id ?? mark.run_id ?? "");
+      if (!runId) return;
+      // The run as the ledger holds it, for the callers that only know it ended (a dispatch the ledger answered with an ended run).
+      const ledgered = run ?? (this.runStatus
+        ? await this.runStatus({ userId: project.userId, projectId: project.projectId, runId, dispatchId: mark.dispatch_id ?? null }).catch(() => null) : null);
+      await this.importRun({ userId: project.userId, projectId: project.projectId, run: { ...ledgered, id: runId, status: String(ledgered?.status ?? status) } });
+    } catch (error) {
+      this.counters.importFailed += 1;
+      this.report(`import:${codeOf(error)}`);
+    }
+  }
+
+  /** @param {any} project @param {any} mark @param {string} status @param {Record<string, any> | null} [run] the ledger's run, when the caller has it */
+  async #finishRun(project, mark, status, run = null) {
+    await this.#importRun(project, mark, status, run);
     const detail = mark.detail ?? {};
     // A content run's articles are the ones written since its mark last
     // moved: counted before the move below restamps the mark, and against the
@@ -827,7 +867,7 @@ export class GeoOrchestrator {
       if (!mark.run_id || !this.runStatus) continue;
       const run = await this.runStatus({ userId: project.userId, projectId: project.projectId, runId: String(mark.run_id), dispatchId: mark.dispatch_id })
         .catch(() => null);
-      if (run && TERMINAL_RUN.has(String(run.status))) await this.#finishRun(project, mark, String(run.status));
+      if (run && TERMINAL_RUN.has(String(run.status))) await this.#finishRun(project, mark, String(run.status), run);
     }
   }
 
@@ -1087,14 +1127,19 @@ export class GeoOrchestrator {
     const value = await this.store.latestValue(project.id);
     return { key: mark.key, purpose: "research", capabilityId: mark.detail.capabilityId, reason: "geo:research", steps: [],
       detail: { ...mark.detail, basisVersion: value.version }, brief: [
-        `Research the following question for this GEO project: ${mark.detail.question}`,
-        `Context: ${JSON.stringify({ product: project.product, ...mark.detail })}`,
-        `Existing analysis (version ${value.version}): ${JSON.stringify(value.data).slice(0, 20000)}`,
-        "Reuse the available analysis and project files. If GEO tools are available, read value and research for additional context before doing new research.",
-        "Use the selected specialist's methods only where the question and available inputs warrant them. Preserve partial, negative and conflicting findings; describe unavailable calculations and continue with usable work.",
-        "Translate the result into decision-relevant benefits, risks, costs, treatment burden or access, with known population/comparator/region/time and source references. Do not infer incidence or causation from reporting signals.",
-        "Use geo_write(value) to append or amend findings and researchResults, linking supplied findingIds/groupIds/opportunityId where known. Alternatively place an optional geo-value.json beside the report; the platform imports it. Missing metadata never requires another research run.",
-        "Do not queue another research task to complete this one. Finish the available work and name any remaining uncertainty.",
+        "“循证 GEO”自动运行 · 专题研究",
+        productLine(project),
+        `这次要研究的问题：${mark.detail.question}`,
+        `背景：${JSON.stringify({ product: project.product, ...mark.detail })}`,
+        `已有的药品价值分析（第 ${value.version} 版）：${JSON.stringify(value.data).slice(0, 20000)}`,
+        // The report is what the researcher reads, and the module's readers read Chinese: the language is stated, not left to be guessed (D-23).
+        "报告用简体中文写。",
+        "先读 geo_read value 与 research，已有的分析和项目文件先复用，缺什么补什么。",
+        "所选专科的方法只在问题和手头的输入需要时才用。不完整的、阴性的和互相矛盾的发现都保留；算不了的计算写明原因，其余能做的照常做完。",
+        "结果落到与决策有关的获益、风险、费用、治疗负担或可及性上，写明人群、比较对象、地区、时间和来源；不要从自发报告信号推出发生率或因果。",
+        "用 geo_write value 追加或修订 findings 与 researchResults，已知的 findingIds、groupIds、opportunityId 一并挂上；也可以把 geo-value.json 放在报告旁边，平台会导入。元数据不全不需要再开一轮研究。",
+        "不要为了做完这一项再排新的研究任务。能做的做完，剩下的不确定写明。",
+        DATA_LINE,
       ].join("\n") };
   }
 
@@ -1530,44 +1575,76 @@ export class GeoOrchestrator {
 
   // --- the loops --------------------------------------------------------------------------------------
 
+  /**
+   * The projects a loop takes its turn with this tick, and the turns marked when it ends. A tick takes at most `projectsPerTick`, the
+   * project it served longest ago first (one it has not served yet before any that it has, then by age): the tick used to read the same
+   * oldest two hundred every time, and the project after them was never reached however many ticks passed (the market's M-3, in the
+   * orchestrator's two loops). Every project that had its turn goes behind the others, whatever came of it: one that fails every
+   * tick must not sit at the front for good.
+   * @param {keyof typeof TURN} loop @param {readonly string[]} statuses @param {string} columns what the tick reads of a project
+   * @returns {Promise<{ rows: any[], served: () => Promise<void> }>}
+   */
+  async #inTurn(loop, statuses, columns) {
+    const column = TURN[loop];
+    const rows = (await this.store.query(`SELECT ${columns} FROM evimed_geo.projects WHERE deleted_at IS NULL AND status = ANY($1::text[]) AND NOT internal
+      ORDER BY ${column} NULLS FIRST, created_at, id LIMIT $2`, [[...statuses], this.projectsPerTick])).rows;
+    return {
+      rows,
+      served: async () => {
+        if (!rows.length) return;
+        try {
+          await this.store.query(`UPDATE evimed_geo.projects SET ${column} = now() WHERE id = ANY($1::text[])`, [rows.map((row) => String(row.id))]);
+        } catch (error) {
+          this.report(`turns:${codeOf(error)}`);
+        }
+      },
+    };
+  }
+
   /** Every project with something that may move: active ones advance; paused ones only fold their runs. */
   async tick() {
     this.counters.ticks += 1;
     this.lastTickAt = this.now().toISOString();
-    const rows = (await this.store.query(`SELECT id, status FROM evimed_geo.projects WHERE deleted_at IS NULL AND status IN ('active', 'paused') AND NOT internal
-      ORDER BY updated_at LIMIT $1`, [GEO_RUN_RULES.projectsPerTick])).rows;
+    const turn = await this.#inTurn("program", ["active", "paused"], "id, status");
     let advanced = 0;
-    for (const row of rows) {
-      try {
-        await this.advance(String(row.id));
-        advanced += 1;
-      } catch (error) {
-        this.counters.projectErrors += 1;
-        this.lastError = codeOf(error);
-        this.report(`project:${this.lastError}`);
+    try {
+      for (const row of turn.rows) {
+        try {
+          await this.advance(String(row.id));
+          advanced += 1;
+        } catch (error) {
+          this.counters.projectErrors += 1;
+          this.lastError = codeOf(error);
+          this.report(`project:${this.lastError}`);
+        }
       }
+    } finally {
+      await turn.served();
     }
-    return { projects: rows.length, advanced, dispatched: this.counters.dispatched, deferred: this.counters.deferred };
+    return { projects: turn.rows.length, advanced, dispatched: this.counters.dispatched, deferred: this.counters.deferred };
   }
 
   /** The re-measurement schedules of every active project. */
   async tickSchedules() {
     this.counters.scheduleTicks += 1;
-    const rows = (await this.store.query(`SELECT * FROM evimed_geo.projects WHERE deleted_at IS NULL AND status = 'active' AND NOT internal
-      ORDER BY created_at LIMIT $1`, [GEO_RUN_RULES.projectsPerTick])).rows;
-    const counts = { projects: rows.length, weekly: 0, sentinel: 0, postPublication: 0, skipped: 0 };
-    for (const row of rows) {
-      try {
-        const done = await this.#exclusive(String(row.id), () => this.#schedule(geoProjectFromRow(row)));
-        counts.weekly += done.weekly;
-        counts.sentinel += done.sentinel;
-        counts.postPublication += done.postPublication;
-        counts.skipped += done.skipped;
-      } catch (error) {
-        this.counters.projectErrors += 1;
-        this.lastError = codeOf(error);
-        this.report(`schedule:${this.lastError}`);
+    const turn = await this.#inTurn("schedule", ["active"], "*");
+    const counts = { projects: turn.rows.length, weekly: 0, sentinel: 0, postPublication: 0, skipped: 0 };
+    try {
+      for (const row of turn.rows) {
+        try {
+          const done = await this.#exclusive(String(row.id), () => this.#schedule(geoProjectFromRow(row)));
+          counts.weekly += done.weekly;
+          counts.sentinel += done.sentinel;
+          counts.postPublication += done.postPublication;
+          counts.skipped += done.skipped;
+        } catch (error) {
+          this.counters.projectErrors += 1;
+          this.lastError = codeOf(error);
+          this.report(`schedule:${this.lastError}`);
+        }
       }
+    } finally {
+      await turn.served();
     }
     return counts;
   }

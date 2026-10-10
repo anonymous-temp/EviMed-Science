@@ -301,6 +301,25 @@ export function mapMedia(row) {
   };
 }
 
+/**
+ * Whether a reserved order's send began after it was reserved: in flight, or interrupted and not yet declared unknown. The market
+ * does not touch such an order, and neither may a cancel.
+ * @param {{ state: string, sentAt?: string | null, stateAt?: string | null }} order
+ */
+export function sendInFlight(order) {
+  return order.state === "reserved" && order.sentAt != null && (order.stateAt == null || Date.parse(order.sentAt) >= Date.parse(order.stateAt));
+}
+
+/**
+ * Whether the market takes a cancel of this order now (`cancelOrder`): a plan; a reserve whose send has not begun; a sent order the
+ * outlet has not taken. Not a send in flight (409 `geo_order_in_flight`), and not an order the outlet has taken. What the 投放 tab offers
+ * as 撤单 is this, so a button is not shown for a refusal.
+ * @param {{ state: string, sentAt?: string | null, stateAt?: string | null }} order
+ */
+export function orderCancellable(order) {
+  return order.state === "planned" || order.state === "submitted" || (order.state === "reserved" && !sendInFlight(order));
+}
+
 /** @param {Record<string, any>} row */
 export function mapOrder(row) {
   return {
@@ -389,7 +408,7 @@ export function mapReconciliation(row) {
   };
 }
 
-const ORDER_SELECT = `SELECT o.*,
+export const ORDER_SELECT = `SELECT o.*,
   (SELECT max(e.at) FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.detail->>'phase' = 'send_started') AS sent_at,
   (SELECT min(e.at) FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.to_state = 'submitted' AND e.from_state IS DISTINCT FROM 'submitted') AS submitted_at,
   (SELECT min(e.at) FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.to_state = 'accepted' AND e.from_state IS DISTINCT FROM 'accepted') AS accepted_at,

@@ -2,7 +2,7 @@ import { GEO_PLACEMENT_LABELS_ZH, stripGeoClaimReferences } from "@evimed/domain
 import { HttpError } from "./security.mjs";
 import { APPEAL_REASONS, MEDIA_FIELD_TYPES, MEDIA_TYPES, mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { compareProtectedSpans, extractProtectedSpans, htmlToText, markdownToHtml, sha256Hex, splitLeadingTitle } from "./geoMarketText.mjs";
-import { dailyReserved, projectMoney } from "./geoMarketStore.mjs";
+import { dailyReserved, projectMoney, sendInFlight } from "./geoMarketStore.mjs";
 import { geoAudienceAllows } from "./geoService.mjs";
 
 export { projectMoney };
@@ -275,6 +275,8 @@ const DAY = 24 * HOUR;
  * @property {{ read: (url: string, options?: { signal?: AbortSignal }) => Promise<{ receipt: any, text: string }> } | null} [webReader]
  * @property {(article: any, project: any) => Promise<{ title?: string, markdown?: string, html?: string }>} [articleBody]
  *   the article's reviewed body (the file behind `articles.path`)
+ * @property {(article: any, project: any) => Promise<string | null>} [gradedSha256] the sha256 the delivery gate graded the article's file at
+ *   (from the receipt of its run); null when that cannot be said. A send holds to it: the bytes sent are the bytes judged (M-10).
  * @property {(event: Record<string, any>) => Promise<unknown> | unknown} [notify] a user-facing notice (the safety kind)
  * @property {(event: Record<string, any>) => Promise<unknown> | unknown} [alertOperator] an operator alert (money, balance, unknown orders)
  * @property {Record<string, any>} [config] the server's config: `geoEnabled`, `geoAudience`, `operatorUsers`,
@@ -295,6 +297,7 @@ function context(deps) {
     configured: deps.market?.configured === true,
     webReader: deps.webReader ?? null,
     articleBody: deps.articleBody ?? null,
+    gradedSha256: deps.gradedSha256 ?? null,
     userById: deps.userById ?? null,
     notify: deps.notify ?? null,
     alertOperator: deps.alertOperator ?? null,
@@ -348,11 +351,6 @@ async function transition(ctx, order, to, { detail = {}, patch = {}, ledger = []
     from: [order.state], to, at: ctx.now().toISOString(), detail, patch,
     ledger: ledger.map((row) => ({ ...row, userId: order.userId, geoProjectId: order.geoProjectId })),
   });
-}
-
-/** Whether a reserved order's send began after it was reserved (in flight, or interrupted). @param {any} order */
-function sendInFlight(order) {
-  return order.state === "reserved" && order.sentAt != null && (order.stateAt == null || Date.parse(order.sentAt) >= Date.parse(order.stateAt));
 }
 
 /** The reserve an order still holds by its state (what the ledger must agree with). @param {any} order */
@@ -988,6 +986,10 @@ async function placeOrder(ctx, project, order, state) {
   if (source == null) return "article_body_unavailable";
   // What goes out must be what passed review (decision 7: the post-rewrite hash).
   if (sha256Hex(source) !== article.contentSha256) return "article_changed_since_review";
+  // ... and what the gate judged: the declared hash is the run's word, the receipt's is the gate's. A hash the receipt cannot give is
+  // no refusal (the article's pass was bound to it when it was granted); one it gives that is not the file's is (M-10).
+  const graded = ctx.gradedSha256 ? await ctx.gradedSha256(article, project).catch(() => null) : null;
+  if (graded && graded !== sha256Hex(source)) return "article_not_graded_as_sent";
   // The claim references the article carries (flywheel F21) are the platform's own marks, written after the sentences they support:
   // the hash above is of the reviewed file, markers and all, and what goes out is that text with the markers taken off.
   const split = typeof body.markdown === "string" ? splitLeadingTitle(stripGeoClaimReferences(body.markdown)) : null;
@@ -1060,8 +1062,19 @@ async function placeOrder(ctx, project, order, state) {
     return "unknown";
   }
   state.balance = round2(state.balance - order.priceCny);
-  const submitted = await transition(ctx, current, "submitted", { patch: { vendorOrderNid: answer.orderNid },
-    detail: { vendorOrderNid: answer.orderNid, mappingVersion: VENDOR_STATUS_MAP.version } });
+  /** @type {Awaited<ReturnType<typeof transition>>} */
+  let submitted = null;
+  try {
+    submitted = await transition(ctx, current, "submitted", { patch: { vendorOrderNid: answer.orderNid },
+      detail: { vendorOrderNid: answer.orderNid, mappingVersion: VENDOR_STATUS_MAP.version } });
+  } catch {
+    // The vendor holds the order and our write of it failed. Its number is the one thing that cannot be found again, so it is kept
+    // first, as for a send whose answer came late; the order stays reserved and is declared unknown by the recovery, for an operator
+    // to resolve with the number (M-9). The outlet is not sent to again in the meantime, as for any unknown order.
+    await keepLateOrderNumber(ctx, order, answer.orderNid).catch(() => {});
+    state.blocked.add(mediaKey(order.mediaType, order.resourceId));
+    return "unknown";
+  }
   if (!submitted) await keepLateOrderNumber(ctx, order, answer.orderNid);
   // Paid content says so: the article's record keeps the label (广告 or 商业合作), and the outlet was asked to carry it.
   await ctx.store.advanceArticleStatus(article.id, ["publishable"], "placed", ctx.now().toISOString(), { placementLabel });
@@ -1070,21 +1083,29 @@ async function placeOrder(ctx, project, order, state) {
 
 /**
  * The vendor created an order but ours moved while the send was out (another
- * process declared it unknown). The order number is never lost: it goes into
- * the order's history first; an `unknown` order is settled by it; anything
- * else is an operator's to look at.
+ * process declared it unknown), or the write that records it failed (M-9). The
+ * order number is never lost: it goes into the order's history first; an
+ * `unknown` order is settled by it; anything else is an operator's to look at.
+ * The operator is told with the number whatever became of the history write.
  * @param {ReturnType<typeof context>} ctx @param {any} order @param {string} orderNid
  */
 async function keepLateOrderNumber(ctx, order, orderNid) {
-  await ctx.store.annotateOrder(order.id, { at: ctx.now().toISOString(), detail: { phase: "late_send_result", vendorOrderNid: orderNid } });
-  const now = await ctx.store.getOrder(order.id);
+  /** @type {string | null} */
+  let state = null;
   let resolved = false;
-  if (now?.state === "unknown") {
-    resolved = Boolean(await transition(ctx, now, "submitted", { patch: { vendorOrderNid: orderNid },
-      detail: { vendorOrderNid: orderNid, reason: "late_send_result", mappingVersion: VENDOR_STATUS_MAP.version } }));
+  try {
+    await ctx.store.annotateOrder(order.id, { at: ctx.now().toISOString(), detail: { phase: "late_send_result", vendorOrderNid: orderNid } });
+    const now = await ctx.store.getOrder(order.id);
+    state = now?.state ?? null;
+    if (now?.state === "unknown") {
+      resolved = Boolean(await transition(ctx, now, "submitted", { patch: { vendorOrderNid: orderNid },
+        detail: { vendorOrderNid: orderNid, reason: "late_send_result", mappingVersion: VENDOR_STATUS_MAP.version } }));
+    }
+  } finally {
+    // Told whatever happened above: when the order's history cannot be written either, the alert is where the number is kept.
+    await fire(ctx.alertOperator, { type: "order_late_send_result", orderId: order.id, vendorOrderNid: orderNid, state: resolved ? "submitted" : state,
+      idempotencyKey: `geo:order:${order.id}:late_send_result` });
   }
-  await fire(ctx.alertOperator, { type: "order_late_send_result", orderId: order.id, vendorOrderNid: orderNid, state: resolved ? "submitted" : now?.state ?? null,
-    idempotencyKey: `geo:order:${order.id}:late_send_result` });
 }
 
 /**
@@ -1817,52 +1838,6 @@ export async function setBudget(deps, { userId, geoProjectId, totalCny, dailyCny
     ledgerRow: { amountCny: total, note: JSON.stringify({ dailyCny: daily }) } });
   if (!project) throw marketFailure("404", "geo_project_not_found", "No such GEO project.");
   return { budget: { totalCny: total, dailyCny: daily } };
-}
-
-/**
- * The 投放 tab (build spec §3).
- * @param {MarketDeps} deps @param {{ userId: string, geoProjectId: string }} input
- */
-export async function getDistribution(deps, { userId, geoProjectId }) {
-  const ctx = context(deps);
-  const project = await ctx.store.getProject({ geoProjectId, userId });
-  if (!project) throw marketFailure("404", "geo_project_not_found", "No such GEO project.");
-  const view = projectMoney(project, await ctx.store.ledgerSums({ geoProjectId: project.id }));
-  const orders = await ctx.store.listOrders({ geoProjectId: project.id, userId, limit: 200, newestFirst: true });
-  const articles = new Map((await ctx.store.getArticles(orders.map((order) => order.articleId))).map((article) => [article.id, article]));
-  /** @type {Map<string, any>} */
-  const media = new Map();
-  for (const mediaType of MEDIA_TYPES) {
-    const ids = orders.filter((order) => order.mediaType === mediaType).map((order) => order.resourceId);
-    for (const row of await ctx.store.getMediaRows(mediaType, ids)) media.set(mediaKey(row.mediaType, row.resourceId), row);
-  }
-  return {
-    budget: project.budget ? { totalCny: view.budgetCny, dailyCny: view.dailyCny } : null,
-    spentCny: view.spentCny,
-    reservedCny: view.reservedCny,
-    suggestedBudgetCny: await ctx.store.suggestedBudget(project.id, project.tier),
-    market: { configured: ctx.configured },
-    orders: orders.map((order) => {
-      const outlet = media.get(mediaKey(order.mediaType, order.resourceId));
-      const article = articles.get(order.articleId);
-      return {
-        id: order.id,
-        articleId: order.articleId,
-        articleTitle: article?.title ?? "",
-        media: outlet?.name ?? "",
-        domain: outlet?.domain ?? null,
-        layer: article?.layer ?? null,
-        state: order.state,
-        priceCny: order.settledCny ?? order.priceCny,
-        publishedUrl: order.publishedUrl,
-        checks: (order.checks ?? []).map((check) => ({ checkpoint: check.checkpoint, at: check.at, reachable: check.reachable ?? null,
-          domainMatch: check.domainMatch ?? null, protectedTotal: check.protectedTotal ?? null, protectedMatched: check.protectedMatched ?? null })),
-        updatedAt: order.updatedAt,
-        // 撤单 is offered only where it can work: a plan, a reserve not yet sent, a sent order the outlet has not taken.
-        cancellable: order.state === "planned" || order.state === "submitted" || (order.state === "reserved" && !sendInFlight(order)),
-      };
-    }),
-  };
 }
 
 /**

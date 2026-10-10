@@ -10,7 +10,6 @@ import {
   cancelOrder,
   clearStop,
   confirmTopup,
-  getDistribution,
   markOrderLost,
   marketStatus,
   noteCitation,
@@ -384,16 +383,13 @@ export function defineGeoMarketScenarios(test, makeFixture, options = {}) {
       assert.equal(reconcile.status, "ok");
       assert.equal(reconcile.diff, 0);
 
-      const view = await getDistribution(w.deps, { userId: p.userId, geoProjectId: p.id });
-      assert.deepEqual(view.budget, { totalCny: 1000, dailyCny: 1000 });
-      assert.equal(view.spentCny, 100);
-      assert.equal(view.reservedCny, 0);
-      assert.equal(view.market.configured, true);
-      assert.equal(view.orders[0].state, "settled");
-      assert.equal(view.orders[0].media, "健康时报网首发");
-      assert.equal(view.orders[0].domain, "jksb.com.cn");
-      assert.equal(view.orders[0].publishedUrl, url);
-      await assert.rejects(getDistribution(w.deps, { userId: "someone-else", geoProjectId: p.id }), { code: "geo_project_not_found" });
+      // What the 投放 tab reads of it (GeoService.distributionOf, on the database) is the order, its outlet and the ledger: the outlet's name
+      // and domain are the catalogue's, the money is the ledger's (asserted above), and an order is its project's owner's alone.
+      assert.equal((await marketStatus(w.deps)).configured, true);
+      assert.equal((await store.getOrder(order.id)).publishedUrl, url);
+      const [outlet] = await store.getMediaRows("website", ["101"]);
+      assert.deepEqual([outlet.name, outlet.domain], ["健康时报网首发", "jksb.com.cn"]);
+      await assert.rejects(cancelOrder(w.deps, { userId: "someone-else", geoProjectId: p.id, orderId: order.id }), { code: "geo_order_not_found" });
 
       assert.deepEqual(await noteCitation(w.deps, { url, engine: "deepseek" }), { matched: true, first: true, firstForOrder: true, orderId: order.id, articleId: order.articleId });
       assert.equal((await noteCitation(w.deps, { url, engine: "deepseek" })).first, false);
@@ -638,7 +634,7 @@ export function defineGeoMarketScenarios(test, makeFixture, options = {}) {
       assert.equal((await orders(store, p.id))[0].state, "planned");
       for (const run of [tickPoll, tickReconcile, tickTopups, tickCatalogue]) assert.equal((await run(w.deps)).skipped, "market_unconfigured");
       assert.equal(w.fake.state.requests.length, before, "no request reached the vendor");
-      assert.equal((await getDistribution(w.deps, { userId: p.userId, geoProjectId: p.id })).market.configured, false);
+      assert.equal((await marketStatus(w.deps)).configured, false);
       assert.equal((await marketStatus(w.deps)).notes.includes("market_unconfigured"), true);
       assert.equal((await moneyOf(store, p.id)).reservedCny, 0, "a plan holds no money");
     } finally { await w.close(); }
@@ -782,6 +778,28 @@ export function defineGeoMarketMoneyPathScenarios(test, makeFixture, options = {
     } finally { await w.close(); }
   });
 
+  test("a file other than the one the gate graded is not sent, though it is the one the run declared (M-10)", options, async () => {
+    // The file's hash is the declared one (so the review check passes), but the receipt graded other bytes: those were never judged.
+    const w = await world(makeFixture);
+    try {
+      const p = await w.project();
+      const asked = /** @type {any[]} */ ([]);
+      let graded = "c".repeat(64);
+      const deps = { ...w.deps, gradedSha256: async (/** @type {any} */ article) => { asked.push(article.id); return graded; } };
+      const refused = await tickOrders(deps);
+      assert.equal(refused.skipped.article_not_graded_as_sent, 1, "the graded bytes are other bytes");
+      assert.equal(refused.submitted, 0);
+      assert.equal(w.fake.requestsTo("/api/media/send").length, 0, "nothing reached the vendor");
+      assert.deepEqual([(await moneyOf(w.fixture.store, p.id)).reservedCny, (await orders(w.fixture.store, p.id))[0].state], [0, "planned"], "no money held; the plan waits");
+      // Graded bytes that are the file's: sent. Graded bytes unknown (no receipt to read): the declaration stands, as it did.
+      graded = sha256Hex(ARTICLE_MARKDOWN);
+      assert.equal((await tickOrders(deps)).submitted, 1);
+      assert.ok(asked.length >= 2);
+      await w.project({ id: "geo_p2", userId: "u2" });
+      assert.equal((await tickOrders({ ...deps, gradedSha256: async () => null })).submitted, 1, "an unknown verdict is not a refusal");
+    } finally { await w.close(); }
+  });
+
   test("race (M-1): a project paused after the tick listed it is not sent for", options, async () => {
     const w = await world(makeFixture);
     try {
@@ -910,6 +928,67 @@ export function defineGeoMarketMoneyPathScenarios(test, makeFixture, options = {
       assert.equal(order.vendorOrderNid, nid);
       assert.equal(order.state, "submitted", "a late answer settles the unknown");
       assert.ok(w.alerts.some((alert) => alert.type === "order_late_send_result" && alert.orderId === order.id));
+    } finally { await w.close(); }
+  });
+
+  test("failure: the vendor's order number is kept when recording the send fails after the vendor answered (M-9)", options, async () => {
+    // The vendor created the order, and the write that moves ours to `submitted` threw: the number used to be dropped on the floor, and the
+    // order ended `unknown` for an operator to find by hand.
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      const refuse = (/** @type {string[]} */ methods) => new Proxy(store, {
+        get(target, key) {
+          if (typeof key === "string" && methods.includes(key)) {
+            return async (/** @type {any[]} */ ...args) => {
+              if (key === "transitionOrder" && args[1]?.to !== "submitted") return target.transitionOrder(args[0], args[1]);
+              throw new Error("connection lost");
+            };
+          }
+          const value = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const first = await tickOrders({ ...w.deps, store: refuse(["transitionOrder"]) });
+      const nid = [...w.fake.state.orders.values()][0].order_nid;
+      assert.ok(nid, "the vendor created the order");
+      const [order] = await orders(store, p.id);
+      const events = await store.listOrderEvents(order.id, 500);
+      assert.ok(events.some((event) => event.detail?.phase === "late_send_result" && event.detail?.vendorOrderNid === nid), "the order number is in the order's history");
+      assert.ok(w.alerts.some((alert) => alert.type === "order_late_send_result" && alert.orderId === order.id && alert.vendorOrderNid === nid), "and an operator is told with it");
+      assert.equal(first.unknown, 1, "the send counts as one the operator holds, not as an error");
+      assert.equal(first.skipped.error ?? 0, 0);
+      // The outlet is not sent to again meanwhile: the vendor has an order there that ours does not know.
+      const sends = [...w.fake.state.orders.values()].length;
+      await tickOrders(w.deps);
+      assert.equal([...w.fake.state.orders.values()].length, sends, "nothing more is sent to the outlet or for the article");
+    } finally { await w.close(); }
+  });
+
+  test("failure: the number reaches the operator even when the order's history cannot be written either (M-9)", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      const down = new Proxy(store, {
+        get(target, key) {
+          if (key === "annotateOrder") return async () => { throw new Error("connection lost"); };
+          if (key === "transitionOrder") {
+            return async (/** @type {any} */ id, /** @type {any} */ change) => {
+              if (change.to === "submitted") throw new Error("connection lost");
+              return target.transitionOrder(id, change);
+            };
+          }
+          const value = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      await tickOrders({ ...w.deps, store: down });
+      const nid = [...w.fake.state.orders.values()][0].order_nid;
+      const [order] = await orders(store, p.id);
+      assert.ok(w.alerts.some((alert) => alert.type === "order_late_send_result" && alert.orderId === order.id && alert.vendorOrderNid === nid),
+        "the alert is the last place the number is kept");
     } finally { await w.close(); }
   });
 

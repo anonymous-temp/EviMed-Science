@@ -625,6 +625,12 @@ ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS entity_keys text[];
 -- \`updated_at\`: that orders the owner's project list, and a market tick is not an edit.
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS market_served_at timestamptz;
 
+-- The same for the orchestrator's two ticks (\`tick\`: the program; \`tickSchedules\`: the re-measurements): each takes at most a bound's
+-- worth of projects, the one it served longest ago first, so a project past the bound is reached by a later tick instead of never.
+-- NULL is not served yet. Not \`updated_at\`: that orders the owner's project list, and a tick is not an edit.
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS orchestrator_served_at timestamptz;
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS schedule_served_at timestamptz;
+
 -- A facts row with a judged-wrong statement owes the error ledger its error (Q-6): set when the facts are written, cleared when
 -- \`recordErrorsFromFacts\` has run. The two writes are not one transaction (the error also tells the owner and queues a confirmation
 -- round), so a restart or a failed write between them used to lose the error for good; the errors housekeeping records what is owed.

@@ -121,7 +121,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import { preservedConversationHistory } from "./conversationHistory.mjs";
@@ -319,7 +319,7 @@ import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
 import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
 import { createGeoQuestionBank, questionBankSummary } from "./geoQuestionBank.mjs";
-import { geoArticleGateOf } from "./geoWrites.mjs";
+import { geoArticleGateBound, geoArticleGateOf } from "./geoWrites.mjs";
 import { GeoService, geoAudienceAllows, isGeoPlaceholderName, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } from "./geoGateway.mjs";
@@ -2095,9 +2095,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // each route or loop that needs one reads it at the moment it is needed.
   /** @type {{ store: GeoStore, service: GeoService, social: ReturnType<typeof createSocialCrawlClient>, worker: any, orchestrator: any,
    *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown>,
-   *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>,
+   *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string, contentSha256?: string | null }) => Promise<string>,
    *   articleExists: (project: any, articlePath: string) => Promise<boolean>,
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
+   *   gradedSha256: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string | null>,
    *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
@@ -2132,6 +2133,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       importDelivery: createGeoDeliveryImport({ store: geoStore,
         capabilityOutputs: async (id) => ((await agentRegistry)?.get?.(id)?.outputs ?? []).map(output => output.path),
         report: (code) => process.stderr.write(`geo import: ${code}\n`),
+        // An attempt that lost a write is on the audit record as well as stderr, and in the metrics (`open_science_geo_run_import_total`).
+        audit: (event, status, details) => securityAudit(config, event, status, details),
         refreshCards: (geoProject, controlProject) => geo?.refreshCards(geoProject, controlProject) ?? Promise.resolve(null),
         checkReferences: (geoProject, article, text) => geoCards.checkArticle(geoProject, article, text),
         articleGate: (project, ref) => geo?.articleGate(project, ref) ?? Promise.resolve("unverified"),
@@ -2146,11 +2149,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       },
       // An article's gate is the run ledger's verdict on the deliverable it
       // was written in — the newest run of the project holding that
-      // deliverable (or the run named) — never the run's own claim.
-      articleGate: async (project, { runId, deliverableId, path: articlePath }) => {
+      // deliverable (or the run named) — never the run's own claim. A pass
+      // counts for the article only when the receipt graded the bytes the run
+      // declares for it (`geoArticleGateBound`, M-10).
+      articleGate: async (project, { runId, deliverableId, path: articlePath, contentSha256 = null }) => {
         const id = deliverableId ?? deliverableIdOfPath(articlePath);
         const run = id ? await geoDeliverableRun(project, id, runId) : null;
-        return run ? geoArticleGateOf(run, id) : "unverified";
+        const gate = run ? geoArticleGateOf(run, id) : "unverified";
+        return gate === "passed" ? geoArticleGateBound(gate, { contentSha256, gradedSha256: await geoGradedSha(project, run, id, articlePath) }) : gate;
       },
       articleExists: async (project, articlePath) => {
         const controlProject = await sourceProject({ userId: project.userId, projectId: project.projectId });
@@ -2165,6 +2171,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
       },
       articleRunId: async (project, deliverableId) => (await geoDeliverableRun(project, deliverableId, null))?.id ?? null,
+      // The sha256 the delivery gate graded an article's file at (its run's receipt), or null where the receipt cannot say: what a send is held to (M-10).
+      gradedSha256: async (project, { runId, deliverableId, path: articlePath }) => {
+        const id = deliverableId ?? deliverableIdOfPath(articlePath);
+        const run = id && articlePath ? await geoDeliverableRun(project, id, runId) : null;
+        return run ? geoGradedSha(project, run, id, articlePath) : null;
+      },
     };
   }
   // 「虚拟临床研究」: one call, seven packages (vcrComposition.mjs). Null when the
@@ -2215,6 +2227,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       .filter((run) => (!runId || run.id === runId) && (run.deliverables ?? []).some((/** @type {any} */ item) => item?.id === deliverableId))
       .sort((left, right) => String(right.startedAt ?? "").localeCompare(String(left.startedAt ?? "")));
     return runs[0] ?? null;
+  }
+  /**
+   * The sha256 a run's delivery receipt graded the file at `articlePath` at, in its entry for `deliverableId`: the bytes the gate judged,
+   * as it recorded them. Null when the receipt cannot be read or names no such file.
+   * @param {any} project @param {any} run @param {string} deliverableId @param {string} articlePath
+   */
+  async function geoGradedSha(project, run, deliverableId, articlePath) {
+    const owner = await store.userById(project.userId);
+    if (!owner) return null;
+    const receipt = await readDeliveryReceipt(await store.requireProject(owner, project.projectId), run).catch(() => null);
+    const wanted = articlePath.startsWith(`${deliverableDir(deliverableId)}/`) ? articlePath : `${deliverableDir(deliverableId)}/${articlePath}`;
+    const entry = receipt?.entries?.find((/** @type {any} */ item) => item?.deliverableId === deliverableId);
+    return entry?.files?.find((/** @type {any} */ file) => file?.path === wanted)?.sha256 ?? null;
   }
   const geoRoutes = createGeoRoutes({
     store, service: geo?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
@@ -3252,6 +3277,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (frontier && !internalFor(project.userId, project.id) && isResearcherOwnedWork(run)) frontier.profiles.noteConversation(project.userId, run);
       // A finished run in a GEO project: the claim library its geo-insight
       // deliverable holds is registered from the file (geoDeliveryImport.mjs).
+      // Not awaited here: the orchestrator asks for the same import when it
+      // folds the run, waits for this one or tries again if it failed, and only
+      // then reads what the run wrote (D-24).
       if (geo && !internalFor(project.userId, project.id)) {
         independentProductWork(() => geo.importDelivery(project, run)).catch((error) => process.stderr.write(`geo import: ${error?.code ?? error?.name ?? "failed"}\n`));
       }
@@ -4784,6 +4812,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       judgeService,
       catalogueJudgeContext: () => ensureEvidenceProject(store),
       store: new GeoMarketStore(productDatabase), market: marketClient, webReader, articleBody, config, timeZone: geoTimeZone,
+      // The bytes the delivery gate graded for an article's file, to hold a send to them (M-10); null where the receipt cannot say.
+      gradedSha256: (/** @type {any} */ article, /** @type {any} */ geoProject) => geoParts.gradedSha256(geoProject,
+        { runId: article?.runId ?? null, deliverableId: article?.deliverableId ?? null, path: article?.path ?? "" }),
       notify: (/** @type {any} */ event) => notifier.textChanged(event),
       alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
     };
@@ -4823,11 +4854,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     orchestrator = new GeoOrchestrator({
       store: geoParts.store, config, notifier, policies:evolutionModulePolicies,
       dispatchRun: overrides.geoDispatchRun ?? dispatchGeoRun,
+      // The ledger's run itself: the fold reads its status, and the import of what it delivered needs the rest of it.
       runStatus: async ({ userId, projectId, runId }) => {
         const owner = await store.userById(userId);
         if (!owner) return null;
-        const run = (await agentRuns.list(await store.requireProject(owner, projectId))).find((entry) => entry.id === runId);
-        return run ? { status: run.status } : null;
+        return (await agentRuns.list(await store.requireProject(owner, projectId))).find((entry) => entry.id === runId) ?? null;
+      },
+      // What a run delivered, imported before the fold reads it (geoDeliveryImport.mjs; the ledger's state change starts the same import).
+      importRun: async ({ userId, projectId, run }) => {
+        const owner = await store.userById(userId);
+        if (!owner) return null;
+        return geoParts.importDelivery(await store.requireProject(owner, projectId), run);
       },
       latestSessionId: async ({ userId, projectId }) => {
         const owner = await store.userById(userId);

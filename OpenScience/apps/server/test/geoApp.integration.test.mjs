@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { geoScreenshotFile } from "../src/geoScreenshots.mjs";
+import { RECEIPT_FORMAT_VERSION, receiptFileFor } from "@evimed/domain";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { issueModelGatewayRuntimeToken } from "../src/runtimeManager.mjs";
 import { createWebApiApp } from "../src/server.mjs";
@@ -170,6 +171,14 @@ test("an article's gate is read from the project's run ledger: the newest run ho
   const item = (/** @type {string} */ deliverable) => ({ path: `deliverables/${deliverable}/card.md`, layer: "card", groupId: map.ids[0], claimIds: [],
     safety: "clear", contentSha256: "d".repeat(64), gate: "passed" });
   const listed = /** @type {any[]} */ ([]);
+  // The gate graded the file `run_old` delivered at the bytes the run declares for it (a pass counts for those bytes alone, M-10).
+  const owner = await context.app.store.userById(accounts.preview);
+  const control = await context.app.store.requireProject(owner, project.projectId);
+  const receipt = { formatVersion: RECEIPT_FORMAT_VERSION, runId: "run_old", bundleVersion: "1", domainVersion: "1", entries: [{
+    deliverableId: "geo-content", contractKind: "geo-content-pack", capability: "geo-content", attempt: 1, acceptedAt: "2026-09-24T01:00:00.000Z", notices: [],
+    files: [{ path: "deliverables/geo-content/card-2.md", sha256: "d".repeat(64), bytes: 1 }] }] };
+  await mkdir(path.dirname(path.join(control.workspaceDir, receiptFileFor("run_old"))), { recursive: true });
+  await writeFile(path.join(control.workspaceDir, receiptFileFor("run_old")), JSON.stringify(receipt));
   const original = context.app.agentRuns.list;
   context.app.agentRuns.list = async (/** @type {any} */ controlProject) => {
     listed.push(controlProject.id);
@@ -197,6 +206,55 @@ test("an article's gate is read from the project's run ledger: the newest run ho
     assert.equal(new Set(relative.ids).size, 2);
     assert.equal(await geo.articleRunId(project, "geo-content"), "run_new", "the newest run holding the deliverable");
     assert.ok(listed.every((id) => id === created.body.data.projectId), "the ledger read is the GEO project's own");
+  } finally {
+    context.app.agentRuns.list = original;
+  }
+});
+
+test("a pass counts for an article only when the receipt graded the very bytes the run declares for it (M-10)", options, async () => {
+  const created = await call("preview", "POST", "/api/geo/projects", { brandName: "Graded Brand" });
+  const geo = context.app.geo;
+  const project = await geo.store.getProject(accounts.preview, created.body.data.id);
+  const control = await context.app.store.requireProject(await context.app.store.userById(accounts.preview), project.projectId);
+  const sha = (/** @type {string} */ value) => createHash("sha256").update(value).digest("hex");
+  // Two articles of one deliverable. The gate graded `good` as it is now, and `edited` as another text: the run changed it afterwards.
+  const text = { good: "# 好稿\n每周一次。\n", edited: "# 改过的稿\n每周两次。\n" };
+  const graded = { good: text.good, edited: "# 评审时的稿\n每周一次。\n" };
+  const folder = path.join(control.workspaceDir, "deliverables", "geo-content", "articles");
+  await mkdir(folder, { recursive: true });
+  for (const [name, body] of Object.entries(text)) await writeFile(path.join(folder, `${name}.md`), body);
+  const receipt = { formatVersion: RECEIPT_FORMAT_VERSION, runId: "run_graded", bundleVersion: "1", domainVersion: "1", entries: [{
+    deliverableId: "geo-content", contractKind: "geo-content-pack", capability: "geo-content", attempt: 1, acceptedAt: "2026-10-10T01:00:00.000Z", notices: [],
+    files: Object.entries(graded).map(([name, body]) => ({ path: `deliverables/geo-content/articles/${name}.md`, sha256: sha(body), bytes: Buffer.byteLength(body) })) }] };
+  await mkdir(path.dirname(path.join(control.workspaceDir, receiptFileFor("run_graded"))), { recursive: true });
+  await writeFile(path.join(control.workspaceDir, receiptFileFor("run_graded")), JSON.stringify(receipt));
+  const original = context.app.agentRuns.list;
+  context.app.agentRuns.list = async () => [{ id: "run_graded", status: "succeeded", startedAt: "2026-10-10T00:00:00.000Z",
+    deliverables: [{ id: "geo-content", status: "delivered", lastVerdict: "pass" }] }];
+  try {
+    const gate = (/** @type {string} */ name, /** @type {string | null} */ contentSha256) => geo.articleGate(project,
+      { runId: "run_graded", deliverableId: "geo-content", path: `deliverables/geo-content/articles/${name}.md`, contentSha256 });
+    assert.equal(await gate("good", sha(text.good)), "passed", "the declared bytes are the graded bytes");
+    assert.equal(await gate("good", sha("another text")), "unverified", "a declaration of other bytes is not covered by the pass");
+    assert.equal(await gate("edited", sha(text.edited)), "unverified", "the file was changed after grading and declared again: those bytes were never graded");
+    assert.equal(await gate("unnamed", sha("x")), "unverified", "a file the receipt does not name was not graded");
+    assert.equal(await gate("good", null), "unverified", "no declared bytes, nothing for the pass to be about");
+    // What a send is held to is the same record: the receipt's hash for the file, or null where it names none.
+    const graded = (/** @type {string} */ name) => geo.gradedSha256(project, { runId: "run_graded", deliverableId: "geo-content", path: `deliverables/geo-content/articles/${name}.md` });
+    assert.equal(await graded("good"), sha(text.good));
+    assert.equal(await graded("edited"), sha("# 评审时的稿\n每周一次。\n"), "the bytes the gate saw, not the ones at rest now");
+    assert.equal(await graded("unnamed"), null);
+    assert.equal(await geo.gradedSha256(project, { runId: null, deliverableId: "geo-other", path: "deliverables/geo-other/articles/x.md" }), null, "a deliverable no run holds");
+    // Through the registration the run makes: the stored verdict is the bound one.
+    const map = await geoRuntimeWrite({ store: geo.store, project, what: "questions",
+      body: { data: { groups: [{ pool: "P1", name: "g", questions: [{ text: "q", isMeasured: true }] }] } } });
+    const item = (/** @type {string} */ name) => ({ path: `deliverables/geo-content/articles/${name}.md`, layer: "card", groupId: map.ids[0], claimIds: [],
+      safety: "clear", contentSha256: sha(/** @type {Record<string, string>} */ (text)[name]), runId: "run_graded", deliverableId: "geo-content" });
+    const written = await geoRuntimeWrite({ store: geo.store, project, what: "articles", body: { items: [item("good"), item("edited")] }, articleGate: geo.articleGate });
+    assert.deepEqual(written.articles.map((/** @type {any} */ entry) => entry.gate), ["passed", "unverified"]);
+    const stored = await geo.store.listArticles(project.id);
+    assert.deepEqual(["good", "edited"].map((name) => stored.find((/** @type {any} */ article) => article.path.endsWith(`${name}.md`)).status), ["publishable", "draft"],
+      "only the article whose bytes were graded is publishable");
   } finally {
     context.app.agentRuns.list = original;
   }
