@@ -85,6 +85,9 @@ test("launches and runs count what they carried, and the families expose all of 
   counters.observeMount({ methods: 0, bytes: 0 });
   counters.observeRun({ loaded: 2, invoked: 1 });
   counters.observeRun({ loaded: 0, invoked: 0 });
+  counters.observeDeliverySample(true);
+  counters.observeDeliverySample(false);
+  counters.observeDeliverySample(false);
   const counts = await learningLedgerCounts(ledger());
   const families = learningMetricFamilies(true, counts, counters);
   const byName = new Map(families.map((family) => [family.name, family]));
@@ -93,8 +96,11 @@ test("launches and runs count what they carried, and the families expose all of 
     "open_science_learning_handbook_candidates", "open_science_learning_method_uses", "open_science_learning_distill_jobs",
     "open_science_learning_distill_results", "open_science_learning_spend_cny", "open_science_learning_mounts_total",
     "open_science_learning_mounted_methods_total", "open_science_learning_mounted_bytes_total",
-    "open_science_learning_runs_with_methods_total", "open_science_learning_run_methods_total",
+    "open_science_learning_runs_with_methods_total", "open_science_learning_run_methods_total", "open_science_learning_delivery_lessons_total",
   ]) assert.ok(byName.has(name), `${name} is exposed`);
+  assert.deepEqual(byName.get("open_science_learning_delivery_lessons_total")?.series, [
+    { value: 1, labels: { outcome: "distilled" } }, { value: 2, labels: { outcome: "sampled_out" } },
+  ], "a delivery the sample left out is a number, not a silence");
   assert.deepEqual(byName.get("open_science_learning_mounts_total")?.series.map((sample) => sample.value), [1, 1]);
   assert.equal(byName.get("open_science_learning_mounted_bytes_total")?.series[0].value, 1_500);
   assert.deepEqual(byName.get("open_science_learning_run_methods_total")?.series.map((sample) => sample.value), [2, 1]);

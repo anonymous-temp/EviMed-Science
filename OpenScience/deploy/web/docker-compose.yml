@@ -864,6 +864,8 @@ services:
       OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS:
+      # The share (0 to 1) of finished deliveries that queue a distillation; value-less: unset is the code's 0.33.
+      OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE:
       OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-key
       OPEN_SCIENCE_EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
       # The remaining public-source credentials the server resolves. Without

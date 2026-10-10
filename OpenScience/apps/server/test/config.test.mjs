@@ -588,6 +588,17 @@ test("the learning loop has no cap by default, a day, a week or a run (owner rul
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-learning-caps", learningDailyLimitCny: 25 }).learningDailyLimitCny, 25);
 });
 
+test("a third of the finished deliveries queue a distillation by default, the share is a fraction, and a share nobody could mean stops the process by name (review L-15)", () => {
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-share" }).learningDistillSampleShare, 0.33);
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-share", learningDistillSampleShare: 1 }).learningDistillSampleShare, 1, "every delivery, as before");
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-share", learningDistillSampleShare: 0 }).learningDistillSampleShare, 0, "none from a clean delivery is a choice, not an error");
+  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: "0.5" }).learningDistillSampleShare, 0.5);
+  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: "" }).learningDistillSampleShare, 0.33, "an empty value is unset, as .env.example and compose leave it");
+  for (const bad of ["1.5", "-0.1", "most", "NaN"]) {
+    assert.throws(() => configUnder({ OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: bad }), /OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE must be a number from 0 to 1/, bad);
+  }
+});
+
 test("the agent run monitor outlasts a systematic review by default", () => {
   // A day since 2026-09-21: no time ceiling may end a run that is working
   // while the product is being tested (owner ruling).

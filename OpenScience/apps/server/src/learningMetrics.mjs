@@ -54,6 +54,14 @@ export class LearningMetrics {
     this.runs = { withMethods: 0 };
     this.runMethodsLoaded = 0;
     this.runMethodsInvoked = 0;
+    this.deliveries = { distilled: 0, sampledOut: 0 };
+  }
+
+  /** One finished delivery that would have queued a lesson: whether the delivery sample took it (`LearningTriggers`).
+   *  @param {boolean} distilled */
+  observeDeliverySample(distilled) {
+    if (distilled) this.deliveries.distilled += 1;
+    else this.deliveries.sampledOut += 1;
   }
 
   /** One runtime launch: how many learned methods it mounted, and their bytes.
@@ -88,6 +96,12 @@ export class LearningMetrics {
         series: [{ value: this.mountedBytes }] },
       { name: "open_science_learning_runs_with_methods_total", help: "Finished runs that carried at least one learned method.", type: "counter",
         series: [{ value: this.runs.withMethods }] },
+      { name: "open_science_learning_delivery_lessons_total", type: "counter",
+        help: "Finished deliveries that would have queued a distillation (OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE), by whether the sample took them: distilled, or sampled_out and skipped.",
+        series: [
+          { value: this.deliveries.distilled, labels: { outcome: "distilled" } },
+          { value: this.deliveries.sampledOut, labels: { outcome: "sampled_out" } },
+        ] },
       { name: "open_science_learning_run_methods_total", help: "Learned methods finished runs carried, and the ones they used.", type: "counter", series: [
         { value: this.runMethodsLoaded, labels: { kind: "loaded" } },
         { value: this.runMethodsInvoked, labels: { kind: "invoked" } },

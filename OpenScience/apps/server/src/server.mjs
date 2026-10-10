@@ -3958,6 +3958,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     learningTriggers = new LearningTriggers({
       jobs: productJobs, agentRuns, memory: researchMemory, canReuseRun, canReuseRuns,
+      // A third of the finished deliveries are read for a lesson, by a hash of the run id (`OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE`); counted either way.
+      deliveryShare: config.learningDistillSampleShare, onDeliverySample: (distilled) => learningMetrics.observeDeliverySample(distilled),
       // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
       // every platform-level consumer (capsuleShareTrust.mjs, plan §7).
       guestInfluence: productDatabase ? createGuestInfluence({ database: productDatabase, documents: productDocuments,

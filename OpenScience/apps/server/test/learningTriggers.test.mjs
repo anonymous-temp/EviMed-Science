@@ -11,8 +11,9 @@ import test from "node:test";
 import { METHOD_INDUCTION_MIN_TRAJECTORIES } from "@evimed/domain";
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
-  LearningTriggers, ROUTINE_PERIOD_DAYS, correctionLessonFor, learningTriggersFor, lessonPeers, routinePeriodMs,
+  DELIVERY_SAMPLE_PURPOSE, LearningTriggers, ROUTINE_PERIOD_DAYS, correctionLessonFor, learningTriggersFor, lessonPeers, routinePeriodMs,
 } from "../src/learningTriggers.mjs";
+import { sampledByHash } from "../src/runSampling.mjs";
 import { DISTILLATION_TRIGGERS, buildDistillationInput, distillationDispatchId, lessonSignal } from "../src/methodDistillationRuns.mjs";
 
 const HOUR = 3_600_000;
@@ -346,6 +347,64 @@ test("the queue is fed with one job per lesson, and nothing when the researcher 
   const internalRuns = { list: async () => [internal], runWorkflowProjection: async () => null };
   assert.deepEqual(await new LearningTriggers({ jobs, agentRuns: internalRuns, internalAgent: async (id) => id === "source-understanding" })
     .afterRun(project, internal), { queued: [], skipped: null });
+});
+
+/** A finished run whose id the delivery sample takes (or leaves), found by looking, so the test does not depend on a particular hash. @param {number} share @param {boolean} taken @param {Record<string, any>} [overrides] */
+function sampledRun(share, taken, overrides = {}) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    const candidate = run(overrides);
+    if (sampledByHash(candidate.id, share, DELIVERY_SAMPLE_PURPOSE) === taken) return candidate;
+  }
+  throw new Error("no run id found for the sample");
+}
+
+test("only a share of the finished deliveries queue a lesson, chosen by a hash of the run id; the others are skipped and counted, and a correction is never sampled (review L-15)", async () => {
+  const project = { id: "project_1", userId: "user_1" };
+  const enqueued = [];
+  const jobs = { enqueue: async (_userId, kind, payload, options) => { enqueued.push({ kind, trigger: payload.trigger, key: options.idempotencyKey }); return { id: "job" }; } };
+  /** @type {boolean[]} */ const counted = [];
+  const triggersFor = (/** @type {any[]} */ ledger) => new LearningTriggers({ jobs, agentRuns: { list: async () => ledger, runWorkflowProjection: async () => null },
+    deliveryShare: 0.33, onDeliverySample: (distilled) => counted.push(distilled) });
+
+  // A delivery the sample takes is queued exactly as it was, with nothing added to the answer.
+  const inside = sampledRun(0.33, true);
+  assert.deepEqual(await triggersFor([inside]).afterRun(project, inside), { queued: ["delivered"], skipped: null });
+  // One it leaves is skipped: no job, the answer says which lesson was sampled out, and the counter heard of it.
+  const outside = sampledRun(0.33, false);
+  assert.deepEqual(await triggersFor([outside]).afterRun(project, outside), { queued: [], skipped: null, sampledOut: ["delivered"] });
+  assert.deepEqual(enqueued.map((job) => job.key), [`distill:${inside.id}:delivered`], "only the sampled delivery reached the queue");
+  assert.deepEqual(counted, [true, false]);
+
+  // The same run asked about again gets the same answer: the sample is a property of the run.
+  assert.deepEqual(await triggersFor([outside]).afterRun(project, outside), { queued: [], skipped: null, sampledOut: ["delivered"] });
+  assert.deepEqual(enqueued.length, 1);
+
+  // The lesson of a delivery that needed repairs is the delivery's lesson and is sampled with it.
+  const repaired = sampledRun(0.33, false, { repairRounds: { content: 1, structural: 0 } });
+  assert.deepEqual(await triggersFor([repaired]).afterRun(project, repaired), { queued: [], skipped: null, sampledOut: ["repair_accepted"] });
+
+  // A correction is an explicit signal: a run the sample left out still queues it, and only the delivery lesson goes.
+  const corrected = sampledRun(0.33, false, { corrections: 1 });
+  assert.deepEqual(await triggersFor([corrected]).afterRun(project, corrected), { queued: ["correction"], skipped: null, sampledOut: ["delivered"] });
+
+  // A run that was never going to queue a delivery lesson (failed, no artifacts) is not counted as sampled out.
+  counted.length = 0;
+  const empty = sampledRun(0.33, false, { artifacts: [] });
+  assert.deepEqual(await triggersFor([empty]).afterRun(project, empty), { queued: [], skipped: null });
+  assert.deepEqual(counted, []);
+});
+
+test("the share of deliveries is one by default, so every delivery queues its lesson as it always did, and zero queues no delivery lesson", async () => {
+  const project = { id: "project_1", userId: "user_1" };
+  const jobs = { enqueue: async () => ({ id: "job" }) };
+  const subject = sampledRun(0.33, false);
+  const agentRuns = { list: async () => [subject], runWorkflowProjection: async () => null };
+  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns }).afterRun(project, subject), { queued: ["delivered"], skipped: null });
+  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, deliveryShare: 1 }).afterRun(project, subject), { queued: ["delivered"], skipped: null });
+  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, deliveryShare: 0 }).afterRun(project, subject), { queued: [], skipped: null, sampledOut: ["delivered"] });
+  // A counter that throws never decides what is learned.
+  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, deliveryShare: 1, onDeliverySample: () => { throw new Error("counter down"); } }).afterRun(project, subject),
+    { queued: ["delivered"], skipped: null });
 });
 
 test("a lesson that could not be queued is audited, and the others still go", async () => {

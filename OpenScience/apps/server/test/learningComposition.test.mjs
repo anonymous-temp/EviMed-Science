@@ -355,3 +355,9 @@ test("the platform handbook path is handed the independent-family harm check and
   assert.match(call, /module: "evolution",\s*limits: \{ daily: 0, weekly: 0, moduleDaily: config\.evolutionDailyBudgetCny \?\? 10 \}/, "booked to the evolution module's own day, like its other Jev sites");
   assert.match(call, /audit: \(event, detail\) => securityAudit\(config, event, "recorded", detail\),/);
 });
+
+test("the composition root hands the lesson queue the configured delivery share and a counter for what the sample leaves out", () => {
+  // Constructed with neither, every delivery would queue a lesson at the default of one and nothing would count the others (review L-15).
+  const call = serverSource.slice(serverSource.indexOf("learningTriggers = new LearningTriggers({"), serverSource.indexOf("learningWorker = new LearningWorker({"));
+  assert.match(call, /deliveryShare: config\.learningDistillSampleShare, onDeliverySample: \(distilled\) => learningMetrics\.observeDeliverySample\(distilled\),/);
+});

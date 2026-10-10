@@ -514,6 +514,18 @@ function evidenceUpkeepSettings(overrides) {
 }
 
 /**
+ * A share from 0 to 1 (a sample of runs, `runSampling.mjs`), from an override or the environment. Unset or empty is the default; a value outside the
+ * range stops the process at start with the variable's name, as the module settings do, because a share nobody chose would decide how much is learned.
+ * @param {Record<string, any>} overrides @param {string} key @param {string} name @param {number} fallback
+ */
+function shareSetting(overrides, key, name, fallback) {
+  const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
+  const value = raw == null || raw === "" ? fallback : Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error(`${name} must be a number from 0 to 1, got ${JSON.stringify(raw)}.`);
+  return value;
+}
+
+/**
  * What the evidence flywheel's learning loop and its figures switch on (evidence-flywheel plan §5.2, §5.5, §11, 2026-10-06), each off by default
  * and each doing nothing at all while off — no table read, no timer, and a route that answers 404 by the module's own "not enabled" code.
  *
@@ -2797,6 +2809,10 @@ export function loadConfig(overrides = {}) {
     // ran at all.
     learningConsolidationIntervalMs: Number(overrides.learningConsolidationIntervalMs
       ?? process.env.OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS ?? 3_600_000),
+    // The share of finished deliveries that queue a distillation (owner decision 8, 2026-10-10; review L-15). Every successful run with artifacts used to cost a
+    // distillation run, and "no change" is the common answer. The share is chosen by a hash of the run id (`runSampling.mjs`), so a run is in or out for good;
+    // corrections and routines are explicit signals and are not sampled. 1 is every delivery, as before; 0 distils none from a clean delivery.
+    learningDistillSampleShare: shareSetting(overrides, "learningDistillSampleShare", "OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE", 0.33),
     // Who sees the operations page.
     //
     // An id list, empty by default, no new role and no approval flow. It gates one surface — the
