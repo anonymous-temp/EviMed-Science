@@ -167,7 +167,7 @@ const maxArtifacts = 64;
 const maxObservedChildSessions = 64;
 
 // Which rule picked the agent: `matched:adr-analysis`, `matched:named:peer-review`
-// or `llm:0.83`. Recording the decision without the reason makes a wrong route
+// `llm:0.83` or `jev:0.83`. Recording the decision without the reason makes a wrong route
 // indistinguishable from a right one taken for the wrong reason — the regex
 // firing on a stray word and the classifier answering at 0.76 look identical in
 // the ledger, and there is no way to tell which layer to fix.
