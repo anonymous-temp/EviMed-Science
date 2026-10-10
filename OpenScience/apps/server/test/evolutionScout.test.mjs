@@ -78,8 +78,40 @@ test('J11 semantic coverage recognizes an existing method without allowing inven
     const scout = createEvolutionScout({ config: { evolutionDependencyAllowlist: [] }, service, registry: Promise.resolve({ list: () => [] }), decisions: { propose: async () => {} },
       runs: { execute: async () => ({ run: { id: 'scout-run' }, output: { methodId: 'alias-method', goal: 'Reusable estimator', track: 'M', capabilityIds: ['statistical-analysis'], feasibility: { implementationMissing: true }, rankingFeatures: { literatureQuery: 'estimator' } } }) },
       references: async () => ({ ok: true, publicInputCount: 2, publishedReferenceCount: 2, independentImplementation: true }), fetchImpl: async () => new Response(JSON.stringify({ hitCount: 12, resultList: { result: [] } })),
-      judgeService: { judge: async (site, input) => { assert.equal(site, 'J11'); assert.ok(input.methods.some(item => item.id === 'existing-method')); return { outcome: 'settled', value: { methodId: matchedId } }; } } });
+      judgeService: { judge: async (site, input) => { assert.equal(site, 'J11'); assert.ok(input.methods.some(item => item.id === 'existing-method')); return { outcome: 'settled', calibration: 'calibrated', value: { methodId: matchedId } }; } } });
     const result = await scout.scout({}, { job: { id: 'job' } });
     assert.equal(rows.get(result.dossierId).payload.rankingFeatures.coverageGap, matchedId !== 'existing-method');
   }
+});
+
+test('J11 is advisory until its site is calibrated: an uncalibrated decision neither covers a method nor closes the eligibility gate, and is recorded as the judge\'s (JEV-3)', async () => {
+  const scoutWith = async (/** @type {any} */ decision) => {
+    const rows = new Map();
+    const tools = [{ id: 'existing-tool', payload: { methodId: 'existing-method', status: 'active', name: 'Equivalent method', description: 'Reusable estimator' } }];
+    const service = { now: () => new Date('2026-10-04T12:00:00Z'), owner: async () => 'operator', get: async (/** @type {string} */ id) => rows.get(id), list: async () => [], tools: async () => tools, callbacks: {},
+      save: async (/** @type {string} */ _kind, /** @type {string} */ id, /** @type {any} */ payload) => { const row = { id, payload }; rows.set(id, row); return row; }, addDossier: async (/** @type {any} */ payload) => service.save('dossier', payload.id, { ...payload, status: 'planned' }),
+      dossiers: async () => [...rows.values()].filter(row => row.payload.methodId), queueBuild: async () => {} };
+    const scout = createEvolutionScout({ config: { evolutionDependencyAllowlist: [] }, service, registry: Promise.resolve({ list: () => [] }), decisions: { propose: async () => {} },
+      runs: { execute: async () => ({ run: { id: 'scout-run' }, output: { methodId: 'alias-method', goal: 'Reusable estimator', track: 'M', capabilityIds: ['statistical-analysis'], feasibility: { implementationMissing: true }, rankingFeatures: { literatureQuery: 'estimator' } } }) },
+      references: async () => ({ ok: true, publicInputCount: 2, publishedReferenceCount: 2, independentImplementation: true }), fetchImpl: async () => new Response(JSON.stringify({ hitCount: 12, resultList: { result: [] } })),
+      judgeService: { judge: async () => decision } });
+    const result = await scout.scout({}, { job: { id: 'job' } });
+    return rows.get(result.dossierId).payload;
+  };
+  const says = { outcome: 'settled', value: { methodId: 'existing-method' } };
+  // Not calibrated (the pin says so, or the decision does not say): a confident "already covered" changes nothing the gate reads.
+  for (const calibration of ['uncalibrated', undefined]) {
+    const dossier = await scoutWith({ ...says, ...(calibration ? { calibration } : {}) });
+    assert.equal(dossier.rankingFeatures.coverageGap, true, `calibration ${calibration}: the method is still a gap`);
+    assert.equal(dossier.eligibility.eligible, true, 'and the candidate is still eligible');
+    assert.deepEqual(dossier.measurements.judgeCoverage, { source: 'judge', site: 'J11', outcome: 'settled', calibration: calibration ?? 'uncalibrated', methodId: 'existing-method', appliedToEligibility: false });
+  }
+  // Calibrated, it is what the site was calibrated to be: the coverage judgement, applied and still labelled as the judge's.
+  const calibrated = await scoutWith({ ...says, calibration: 'calibrated' });
+  assert.equal(calibrated.rankingFeatures.coverageGap, false);
+  assert.equal(calibrated.eligibility.eligible, false);
+  assert.equal(calibrated.measurements.judgeCoverage.appliedToEligibility, true);
+  assert.equal(calibrated.measurements.judgeCoverage.source, 'judge');
+  // No decision at all (the site fell back) records nothing.
+  assert.equal((await scoutWith({ outcome: 'fallback', code: 'judge_uncalibrated', value: null })).measurements.judgeCoverage, undefined);
 });

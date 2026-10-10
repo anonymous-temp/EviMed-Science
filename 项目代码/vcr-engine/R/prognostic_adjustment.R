@@ -86,6 +86,8 @@ vcr_prognostic_regulatory_status <- function() {
   }
   colnames(Z) <- paste0("z", seq_len(ncol(Z)))
   out <- list(subj = subj, arm = arm, Z = Z, score = Z[, 1], cohort = cohort$info, columns = c(sc_col, covs), tc = tc)
+  # the data the estimate rests on: the arm, the score, the covariates and the outcome columns; its label follows the weakest of them
+  parts <- list(list(df = subj, columns = c(tc, sc_col, covs)))
   if (identical(endpoint, "binary")) {
     oc <- .vcr_column_name(sc$outcomeColumn, "y", "scenario.outcomeColumn")
     if (!(oc %in% names(subj))) vcr_abort("input_shape_invalid", "scenario.outcomeColumn", "The outcome column is not in the table.")
@@ -93,11 +95,14 @@ vcr_prognostic_regulatory_status <- function() {
     if (anyNA(y)) vcr_abort("input_shape_invalid", "scenario.outcomeColumn", "The outcome has missing values.")
     if (!all(y %in% c(0, 1))) vcr_abort("input_shape_invalid", "scenario.outcomeColumn", "A binary outcome is 0/1.")
     out$y <- y
+    parts <- c(parts, list(list(df = subj, columns = oc)))
   } else {
     o <- vcr_outcome_frame(sc, tabs, subj, "time_to_event")
     if (anyNA(o$time) || anyNA(o$status)) vcr_abort("input_shape_invalid", "inputs", "Time and status are complete.")
     out$time <- o$time; out$status <- o$status
+    parts <- c(parts, .vcr_outcome_parts(sc, tabs, subj, "time_to_event"))
   }
+  out$used <- vcr_used_sources(parts)
   out
 }
 
@@ -109,10 +114,10 @@ vcr_prognostic_regulatory_status <- function() {
 #' Measures from (name, value, interval, unit) rows, leaving out any whose value
 #' is not a finite number: a quantity that does not exist in this data (a risk
 #' ratio with a zero risk) is absent, never a placeholder.
-.vcr_pa_measures <- function(rows) {
+.vcr_pa_measures <- function(rows, source = "calculated") {
   out <- lapply(rows, function(r) {
     if (!is.finite(r[[2]])) return(NULL)
-    vcr_measure(r[[1]], r[[2]], source = "calculated", interval = r[[3]], unit = if (length(r) >= 4L) r[[4]] else NULL)
+    vcr_measure(r[[1]], r[[2]], source = source, interval = r[[3]], unit = if (length(r) >= 4L) r[[4]] else NULL)
   })
   Filter(Negate(is.null), out)
 }
@@ -211,11 +216,11 @@ vcr_prognostic_regulatory_status <- function() {
     list("risk_treatment_standardised", m1, NULL),
     list("risk_control_standardised", m0, NULL),
     list("unadjusted_risk_difference", p1u - p0u, wald(p1u - p0u, se_unadj)),
-    list("empirical_variance_ratio", (se_rd / se_unadj)^2, NULL)))
+    list("empirical_variance_ratio", (se_rd / se_unadj)^2, NULL)), vcr_estimate_source(dat$used$source))
   list(status = "succeeded", conclusion = if (boot$failureShare > 0.01) "limited" else "estimable", measures = measures, counts = counts,
        diagnostics = list(
          endpoint = "binary", estimand = "marginal: each participant predicted under both arms, the predictions averaged (g-computation)",
-         regulatoryStatus = reg,
+         regulatoryStatus = reg, valueSourcesUsed = vcr_value_sources_used(dat$used),
          model = list(family = "binomial", terms = c("intercept", "arm", dat$columns), scoreColumn = dat$columns[1],
                       coefficients = as.list(stats::setNames(as.numeric(f$beta), c("intercept", "arm", dat$columns)))),
          standardErrors = list(basis = "influence function (M-estimation sandwich) for the model and the averaging",
@@ -398,12 +403,12 @@ vcr_cox_multi <- function(time, status, X, maxit = 50L, tol = 1e-10) {
     list("rmst_control_standardised", e$rmst0, ci(3), unit),
     list("survival_difference_at_tau", e$surv_diff, ci(4)),
     list("unadjusted_rmst_difference", un$estimate, vcr_interval("confidence", un$interval[1], un$interval[2]), unit),
-    list("empirical_variance_ratio", (bse[1] / bse[5])^2, NULL)))
+    list("empirical_variance_ratio", (bse[1] / bse[5])^2, NULL)), vcr_estimate_source(dat$used$source))
   list(status = "succeeded", conclusion = if (boot$failureShare > 0.01) "limited" else "estimable", measures = measures, counts = counts,
        diagnostics = list(
          endpoint = "time_to_event", tau = tau, timeUnit = unit,
          estimand = "marginal: the model's survival curves under each arm averaged over everyone, restricted mean survival time to tau",
-         regulatoryStatus = reg,
+         regulatoryStatus = reg, valueSourcesUsed = vcr_value_sources_used(dat$used),
          model = list(family = "Cox, Breslow ties", terms = c("arm", dat$columns), scoreColumn = dat$columns[1],
                       coefficients = as.list(stats::setNames(as.numeric(e$cox$beta), c("arm", dat$columns)))),
          standardErrors = list(basis = "Lin-Wei robust variance for the conditional log hazard ratio; stratified bootstrap for the marginal quantities",

@@ -54,7 +54,7 @@ import {
 import {
   presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab,
 } from "./vcrViewsTabs.mjs";
-import { numeric, withReviewState } from "./vcrViewsKit.mjs";
+import { dominatedScenarioMap, numeric, withReviewState } from "./vcrViewsKit.mjs";
 import { vcrReportModel } from "./vcrRender.mjs";
 import { buildModelAnalysis, isModelDocumentKind, readModelAnalysisInputs } from "./vcrModelDocuments.mjs";
 
@@ -67,7 +67,7 @@ export const VCR_READ_MAX_ITEMS = 50;
 export const VCR_READ_WHATS = Object.freeze([
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
   "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
-  "trial_registry_record", "pack", "library", "model_assessments", "longitudinal",
+  "trial_registry_record", "pack", "library", "model_assessments", "longitudinal", "candidate_trials",
 ]);
 
 /**
@@ -124,6 +124,7 @@ export const VCR_WRITE_WHATS = Object.freeze([
   "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
   "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
+  "candidate_trial",
 ]);
 
 /** @param {unknown} value */
@@ -441,11 +442,11 @@ export class VcrService {
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config: Record<string, any>, engine?: any, now?: () => Date,
    *   metricName?: ((id: string) => string | null) | null,
    *   access?: any, dataPlane?: any, evidence?: any, matching?: any, jobs?: any, seal?: any,
-   *   matchStore?: any, evidenceStore?: any, documents?: any, knowledge?: any }} options
+   *   matchStore?: any, evidenceStore?: any, documents?: any, knowledge?: any, patientTrials?: any }} options
    */
   constructor({ store, config, engine = null, now = () => new Date(), metricName = null,
     access = null, dataPlane = null, evidence = null, matching = null, jobs = null, seal = null,
-    matchStore = null, evidenceStore = null, documents = null, knowledge = null }) {
+    matchStore = null, evidenceStore = null, documents = null, knowledge = null, patientTrials = null }) {
     if (!store || !config) throw new TypeError("The VCR service needs its store and the config.");
     this.store = store;
     this.config = config;
@@ -459,7 +460,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null) };
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, patientTrials, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null) };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -1126,8 +1127,13 @@ export class VcrService {
     const clinicalTimeline = timeline.map(fact => ({ ...fact, superseded: longitudinal.superseded.includes(fact.id),
       conflicts: longitudinal.conflicts.find(entry => entry.factId === fact.id)?.withFacts ?? [] }));
     const candidateCoverage = protocol && matchStore.latestMatchingProgress ? await matchStore.latestMatchingProgress(study.id,protocol.id) : null;
+    // 「给患者找试验」: the patient the page asks for, and the trials that have judged them (the candidates a run found, and the study's own
+    // protocol) in order. Read only for that direction, and only for a patient the study holds.
+    const patientTrials = query.direction === "patient_to_trial" && (query.view ?? "matching") === "matching"
+      ? await this.#patientTrials(study, candidateRoster, query) : null;
     return {
       ...(candidateCoverage ? {candidateCoverage} : {}),
+      ...(patientTrials ? { patientTrials } : {}),
       protocols, candidateRoster, comparisons, timeline: clinicalTimeline,
       protocol, criteria, subjects, referrals, sites, siteFunnel, followups, selected, referralEvents, openByAssessment,
       tallies: Object.fromEntries(tallyRows.map((row) => [String(row.summary), Number(row.total)])),
@@ -1136,6 +1142,22 @@ export class VcrService {
       forecastResult: null,
       snapshotAt: null,
     };
+  }
+
+  /**
+   * What the matching tab needs of 「给患者找试验」: the patient (one the study holds, else none), the trials that have judged them in order,
+   * and the one chosen — `query.trial` when it is one of theirs, else the first — with the criteria it was judged on.
+   * @param {any} study @param {readonly string[]} roster @param {Record<string, string>} query
+   */
+  async #patientTrials(study, roster, query) {
+    const seam = this.packages.patientTrials;
+    if (!seam?.ranked) return { available: false, subjectKey: null, ranked: [], detail: null };
+    const subjectKey = query.candidate && roster.includes(query.candidate) ? query.candidate : null;
+    if (!subjectKey) return { available: true, subjectKey: null, ranked: [], detail: null };
+    const ranked = await seam.ranked(study, { subjectKey });
+    const chosen = ranked.find((/** @type {any} */ row) => row.id === query.trial) ?? ranked[0] ?? null;
+    const detail = chosen ? await seam.detail(study, { subjectKey, id: chosen.id, ranked }) : null;
+    return { available: true, subjectKey, ranked, detail };
   }
 
   // --- cross-study pages --------------------------------------------------------------
@@ -1431,6 +1453,13 @@ export class VcrService {
         }
         return knowledge.runtimeReadLibrary(study, filter);
       }
+      case "candidate_trials": {
+        const trials = this.packages.patientTrials;
+        if (!trials?.runtimeRead) {
+          return { available: false, code: "vcr_matching_unavailable", message: "给患者找试验在本部署尚未接入：这一步暂不可用，其余步骤照常。" };
+        }
+        return trials.runtimeRead(study, { ...filter, limit });
+      }
       case "precedents": {
         const evidence = this.packages.evidence;
         if (!evidence?.runtimeRead) {
@@ -1460,44 +1489,19 @@ export class VcrService {
 /**
  * Scenarios beaten on every measure of the team's comparison goal. Ties do not
  * dominate: a scenario equal on everything is not worse, and calling it
- * dominated would delete a legitimate choice from the page.
+ * dominated would delete a legitimate choice from the page. A tie includes two
+ * simulated numbers closer than three times their combined Monte-Carlo error
+ * (`dominatedScenarioMap`, the one rule the design page uses too).
  * @param {Array<{ id: string, label: string, result: any }>} scenarios
  * @param {{ measures?: Array<{ name: string, direction?: string }> }} goal
  */
 export function vcrDominatedScenarios(scenarios, goal) {
-  const measures = list(object(goal).measures).map((measure) => ({
-    name: String(object(measure).name), higherIsBetter: String(object(measure).direction ?? "higher") !== "lower",
-  })).filter((measure) => measure.name);
-  if (!measures.length) return [];
-  /** @param {any} scenario @param {string} name */
-  const valueOf = (scenario, name) => {
+  const beaten = dominatedScenarioMap(scenarios, (scenario, name) => {
     const found = list(object(scenario.result).measures).find((measure) => String(object(measure).name) === name);
     const value = Number(object(found).value);
-    return Number.isFinite(value) ? value : null;
-  };
-  /** @type {Array<{ id: string, label: string, dominatedBy: string }>} */
-  const dominated = [];
-  for (const candidate of scenarios) {
-    for (const other of scenarios) {
-      if (other.id === candidate.id) continue;
-      let strictlyBetterSomewhere = false;
-      let neverWorse = true;
-      for (const measure of measures) {
-        const mine = valueOf(candidate, measure.name);
-        const theirs = valueOf(other, measure.name);
-        if (mine == null || theirs == null) { neverWorse = false; break; }
-        const better = measure.higherIsBetter ? theirs > mine : theirs < mine;
-        const worse = measure.higherIsBetter ? theirs < mine : theirs > mine;
-        if (worse) { neverWorse = false; break; }
-        if (better) strictlyBetterSomewhere = true;
-      }
-      if (neverWorse && strictlyBetterSomewhere) {
-        dominated.push({ id: candidate.id, label: candidate.label, dominatedBy: other.id });
-        break;
-      }
-    }
-  }
-  return dominated;
+    return Number.isFinite(value) ? { value, mcse: Number(object(found).mcse) } : null;
+  }, goal);
+  return scenarios.filter((scenario) => beaten.has(scenario.id)).map((scenario) => ({ id: scenario.id, label: scenario.label, dominatedBy: String(beaten.get(scenario.id)?.id) }));
 }
 
 /** A readiness failure as `readinessCheck` in `server.mjs` reads one. @param {string} code @param {Record<string, any> | null} [details] */

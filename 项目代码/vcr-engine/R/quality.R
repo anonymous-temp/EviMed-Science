@@ -375,14 +375,23 @@ vcr_analysis_from_spec <- function(spec) {
 #' The whole suite. `analyses` is a list of declared estimands, each a
 #' function(data) -> list(estimate, interval), for the specific-utility axis
 #' (see `vcr_analysis_from_spec` for the JSON form the jobs use).
+#'
+#' `copies`: a generator that makes several copies and ships ALL of them describes the
+#' release, not one copy of it. Then the hard constraints and the disclosure axis are
+#' measured on the copies stacked (what leaves the platform: the union of copies leaks
+#' more than one, and a constraint broken only by the fourth is broken in the release),
+#' `synth` is the copy the fidelity and utility axes describe (the others are scored one
+#' by one by the caller), and `release` says so. The first version measured all of it on
+#' the first copy while the table that was shipped held every copy.
 vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
                                analyses = list(), criteria = NULL,
-                               generator = list(), tstr_outcome = NULL) {
+                               generator = list(), tstr_outcome = NULL, copies = NULL) {
   bands <- vcr_quality_bands()
+  release <- if (length(copies) > 1L) do.call(rbind, copies) else synth
   uni <- vcr_fidelity_univariate(train, synth)
   pair <- vcr_fidelity_pairwise(train, synth)
   prop <- tryCatch(vcr_utility_propensity(train, synth), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_, error = "propensity model could not be fitted"))
-  viol <- vcr_constraint_violations(synth, constraints)
+  viol <- vcr_constraint_violations(release, constraints)
   rare <- vcr_rare_combinations(train, synth)
 
   specific <- lapply(names(analyses), function(nm) {
@@ -409,7 +418,7 @@ vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
                         jointPassRateRelativeDifference = if (is.finite(joint_r) && joint_r > 0) abs(joint_s - joint_r) / joint_r else NA_real_)
   }
 
-  disclosure <- vcr_disclosure_report(train, synth, holdout)
+  disclosure <- vcr_disclosure_report(train, release, holdout)
   tstr <- if (!is.null(tstr_outcome) && !is.null(holdout) && nrow(holdout)) vcr_tstr(train, synth, holdout, tstr_outcome) else NULL
 
   bandsOut <- list(
@@ -439,6 +448,9 @@ vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
     bands = bandsOut,
     bandSources = lapply(bands, function(b) b$source),
     generator = generator,
+    release = list(copies = max(1L, length(copies)), rows = nrow(release),
+                   constraintsAndDisclosureOn = if (length(copies) > 1L) "every copy released, stacked" else "the table",
+                   fidelityAndUtilityOn = if (length(copies) > 1L) "copy 1 (the other copies are scored one by one in qualityByCopy)" else "the table"),
     advisory = TRUE,
     note = "Every band is a notice. Only the declared hard constraints are an invariant."
   )

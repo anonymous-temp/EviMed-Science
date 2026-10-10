@@ -276,6 +276,25 @@ test("a design is dominated only when the team's own goal makes it decidable, an
   assert.ok(presentDesigns(designsBundle({ grid: null })).designs.every((design) => design.dominated === false));
 });
 
+test("D10 the design page does not grey out a design for a power gap its own Monte-Carlo error explains", () => {
+  const bundle = {
+    scenarios: [scenario("a", 1, "A"), scenario("b", 2, "B"), scenario("c", 3, "C")],
+    results: [
+      result("a", [measure("power", 0.905), measure("expected_sample_size", 180)]),
+      result("b", [measure("power", 0.903), measure("expected_sample_size", 180)]),
+      result("c", [measure("power", 0.8), measure("expected_sample_size", 180)]),
+    ],
+    stale: [], executions: new Map(), decisions: [], forecastResults: [],
+    grid: { comparisonGoal: { measures: [{ name: "power", direction: "higher" }, { name: "expected_sample_size", direction: "lower" }] } },
+  };
+  const { designs } = presentDesigns(bundle);
+  const byCode = (/** @type {string} */ code) => designs.find((design) => design.code === code);
+  assert.equal(byCode("B").dominated, false, "0.905 and 0.903 at 0.004 each are the same power");
+  assert.equal(byCode("A").dominated, false);
+  assert.equal(byCode("C").dominated, true, "0.8 is beyond three combined errors of 0.905");
+  assert.ok(["A", "B"].includes(String(byCode("C").dominatedBy)));
+});
+
 test("a design keeps its own result even when another design's later run superseded it as the current one of its kind", () => {
   const bundle = designsBundle();
   // The current list holds only the newest; the design rows still point at their own.
@@ -852,6 +871,16 @@ test("the quality report reports numbers and never a verdict", () => {
   assert.ok(report.groups.flatMap((group) => group.rows).every((row) => row.value.source === "synthetic"));
   assert.doesNotMatch(JSON.stringify(report), /安全|匿名|合格|通过|风险低/, "a report is values, not a verdict");
   assert.equal(qualityReportView({}), null);
+  // a release of several copies says which table each group of numbers describes; a single table says nothing of the kind
+  assert.equal(report.scope, null);
+  const several = qualityReportView({
+    fidelity: { global: { sPMSE: 1.4 } }, disclosure: { available: true, membershipAuc: 0.6 }, constraints: [{ rule: "age_cap", violations: 192 }],
+    generator: { trainingObservations: 240, syntheticCopies: 5 }, release: { copies: 5, rows: 1200 },
+  });
+  assert.match(String(several.scope), /全部 5 份合成记录/);
+  assert.match(String(several.scope), /第 1 份/);
+  assert.doesNotMatch(JSON.stringify(several), /安全|匿名|合格|通过|风险低/);
+  assert.equal(several.groups.find((group) => group.key === "utility").rows.find((row) => row.key === "violations").value.value, 192, "the violations are the release's count");
 });
 
 test("a patient set's model card says what the model is, where it may be used, and what label it has earned", () => {

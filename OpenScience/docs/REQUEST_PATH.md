@@ -53,7 +53,7 @@
   ▼
 [D] 路由（分类器 + 安全网） server.mjs:791-846
   │  1. routeNamedSpecialist   specialistRouting.mjs:145-150   （点名即指令，最高优先）
-  │  2. SpecialistClassifier   specialistClassifier.mjs:107-188（LLM 判断，默认开）
+  │  2. SpecialistClassifier   specialistClassifier.mjs:107-188（LLM 判断，默认开；J3：Jev 先判，把握够才采信，不够就交给下一步的安全网、不再问 Flash，超时或出错才退回 Flash，等待上限 `OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS`，默认 3000 ms）
   │  3. routeOpenDomainSpecialist specialistRouting.mjs:152-192（正则安全网，只能"补"不能"改"）
   │  4. 都未命中 → open-domain-answer  server.mjs:834-846
   ▼

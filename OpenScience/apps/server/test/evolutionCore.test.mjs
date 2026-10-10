@@ -436,7 +436,7 @@ test('actual imported engine units appear as method cases, never complete resear
 test('J12 proposes only semantically same tools with actual overlapping cases, retaining lexical fallback', async () => {
   for (const relation of ['same', 'related', 'different', 'fallback']) {
     const f = fixture();
-    const maintenance = new EvolutionMaintenance({ service: f.service, judgeService: { judge: async site => { assert.equal(site, 'J12'); return relation === 'fallback' ? { outcome: 'fallback' } : { outcome: 'settled', value: { relation } }; } } });
+    const maintenance = new EvolutionMaintenance({ service: f.service, judgeService: { judge: async site => { assert.equal(site, 'J12'); return relation === 'fallback' ? { outcome: 'fallback' } : { outcome: 'settled', calibration: 'calibrated', value: { relation } }; } } });
     for (const id of ['one', 'two']) await f.service.registerTool({ id, track: 'M', artifactDigest: id, name: 'Cohort model', description: 'Cohort model', holdoutCases: [{ id: 'reference', sha256: 'immutable' }] });
     f.advance(31 * 86400000);
     const result = await maintenance.monthly();
@@ -445,6 +445,27 @@ test('J12 proposes only semantically same tools with actual overlapping cases, r
     assert.equal((await f.service.get('one')).payload.status, 'active');
     assert.equal((await f.service.get('two')).payload.status, 'active');
   }
+});
+
+test('J12 is advisory until its site is calibrated: an uncalibrated decision neither adds nor removes a merge review, and is recorded as the judge\'s (JEV-3)', async () => {
+  // A settled "different" would remove a lexically similar proposal and a settled "same" would add a dissimilar one; uncalibrated, neither may.
+  for (const [relation, lexicallySame] of [['different', true], ['same', false]]) {
+    const f = fixture();
+    const maintenance = new EvolutionMaintenance({ service: f.service, judgeService: { judge: async () => ({ outcome: 'settled', calibration: 'uncalibrated', value: { relation } }) } });
+    for (const [id, text] of [['one', 'Cohort model'], ['two', lexicallySame ? 'Cohort model' : 'Entirely unrelated wording here']])
+      await f.service.registerTool({ id, track: 'M', artifactDigest: id, name: text, description: text, holdoutCases: [{ id: 'reference', sha256: 'immutable' }] });
+    f.advance(31 * 86400000);
+    const result = await maintenance.monthly();
+    const reviews = await Promise.all(result.payload.reviews.map((/** @type {string} */ id) => f.service.get(id)));
+    assert.equal(reviews.some((/** @type {any} */ row) => row.payload.kind === 'merge'), lexicallySame, `an uncalibrated "${relation}" left the lexical proposal as it was`);
+    assert.deepEqual(result.payload.judgeAdvisory, [{ source: 'judge', site: 'J12', tools: ['one', 'two'], relation, calibration: 'uncalibrated', appliedToReview: false }]);
+  }
+  // No judgement at all records no advisory.
+  const f = fixture();
+  const maintenance = new EvolutionMaintenance({ service: f.service, judgeService: { judge: async () => ({ outcome: 'fallback', code: 'judge_uncalibrated', value: null }) } });
+  for (const id of ['one', 'two']) await f.service.registerTool({ id, track: 'M', artifactDigest: id, name: 'Cohort model', description: 'Cohort model', holdoutCases: [{ id: 'reference', sha256: 'immutable' }] });
+  f.advance(31 * 86400000);
+  assert.deepEqual((await maintenance.monthly()).payload.judgeAdvisory, []);
 });
 
 test('one failing wake is recorded on its own wait and never stops the waits behind it', async () => {

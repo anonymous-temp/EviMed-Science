@@ -61,7 +61,8 @@ describe("one learned method, opened from its row", () => {
     expect(within(drawer).getByText("1. 固定每个附件的副本。")).toBeInTheDocument();
     expect(drawer.textContent).not.toMatch(/pre-submission-freeze-check|Purpose/);
     // What it is, whose it is, which body, since when: one line.
-    expect(within(drawer).getByText("做法 · 从你的对话中学到 · 第 2 版 · 9月26日")).toBeInTheDocument();
+    expect(within(drawer).getByText("做法 · 第 2 版 · 9月26日")).toBeInTheDocument();
+    expect(drawer.textContent).not.toMatch(/从你的对话中学到|你定下的/);
     expect(await within(drawer).findByText("第 1 版 · 9月21日 ·")).toBeInTheDocument();
   });
 
@@ -73,9 +74,10 @@ describe("one learned method, opened from its row", () => {
     expect(within(drawer).getByText("什么时候用")).toBeInTheDocument();
   });
 
-  it("says a method the researcher set is theirs", () => {
+  it("says nothing of whose a method is, whether the researcher set it or it was learned (R11)", () => {
     open({ origin: "explicit" });
-    expect(screen.getByText(/做法 · 你定下的/)).toBeInTheDocument();
+    expect(screen.getByText(/^做法 · 第 \d+ 版/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/你定下的|从你的对话中学到/);
   });
 
   it("says when it is used: the situation it declared, else its routing hint", () => {
@@ -201,7 +203,7 @@ describe("one capability handbook, opened from its row", () => {
     const drawer = screen.getByRole("dialog", { name: "每一句结论落回来源" });
     expect(within(drawer).getByRole("status")).toHaveTextContent("正在读取");
     expect(await within(drawer).findByText("1. 对应每个引用。")).toBeInTheDocument();
-    expect(within(drawer).getByText("用在综合药品评价 · 从你的对话中学到 · 第 2 版 · 9月23日")).toBeInTheDocument();
+    expect(within(drawer).getByText("用在综合药品评价 · 第 2 版 · 9月23日")).toBeInTheDocument();
     expect(within(drawer).getByText("写综述结论时")).toBeInTheDocument();
     expect(await within(drawer).findByText("儿童疳证中医药新证据 · 9月22日")).toBeInTheDocument();
     // Never the model's own text when there are steps, and no state of whether it was measured.

@@ -133,6 +133,58 @@
         "Claim a coverage figure from fewer than ten slices without saying so."
       ],
       "gradedOn": "Whether the coverage figure, its interval and its slice count would survive a statistician asking where each of the three came from."
+    },
+    {
+      "id": "vcr-matching-006-registry-trials-for-a-patient",
+      "title": "EGFR 突变晚期肺腺癌患者 P-0192：在 ClinicalTrials.gov 里找他现在能去问的试验",
+      "why": "The patient-to-trials direction against the public registries, which is the one place the platform does not control the criteria: a record's eligibility text is prose with numbered lines, nested exceptions and sponsor shorthand. The three ways it goes wrong while looking finished are a paraphrase that moves a threshold (the criterion no longer says what the record says, and nobody can find the line it came from), a trial's status or site restated from memory instead of from the record, and a list ordered by how well the model thinks the patient fits. The platform reads the trial's identity from the record, finds where each quoted line stands in it, judges the patient in code and ranks the trials; the run's work is the reading.",
+      "inputs": {
+        "studyId": "std-nsclc-egfr",
+        "direction": "patient_to_trial",
+        "subjectKeys": [
+          "P-0192"
+        ],
+        "asOf": "2026-10-10T00:00:00Z"
+      },
+      "mustDo": [
+        "Search the registry for trials that are recruiting or about to, from the patient's own facts (diagnosis, stage, EGFR status, prior lines, age, sex, region), and read the record of each promising one before writing it.",
+        "Write each trial's criteria line by line with the sourceText copied from the record's eligibility text, so the platform can say where each stands; a criterion that only language can settle is a language criterion, not a guess.",
+        "Answer the language criteria the patient's chart does settle, each with the chart sentence, and leave the rest unknown.",
+        "Report the platform's ranking as it came back, and for each trial name the registry id, why it might fit, which criteria are still unknown and which document would settle them."
+      ],
+      "mustNotDo": [
+        "Type a trial's title, phase, status or sites; they are read from the record.",
+        "Rephrase a threshold, a window or an exception when structuring a criterion: a paraphrase that changes a number is a different trial.",
+        "Order the trials by a score of its own, call any of them a match percentage or an enrolment probability, or move a trial the platform ranked lower above another.",
+        "Say a trial has room for the patient: a registry status is not a site's capacity, and contacting the patient or the site is not this run's."
+      ],
+      "gradedOn": "Whether a reader can open each quoted line in the registry record and find it word for word, whether the order is the platform's, and whether the unknown criteria named are the ones a clinician would have to ask about."
+    },
+    {
+      "id": "vcr-matching-007-thin-chart-and-a-record-without-criteria",
+      "title": "一份只有出院小结的病历：为这位患者找试验，并且其中一条登记记录没有入排标准原文",
+      "why": "The case where the honest answer is mostly 「未知」. A discharge summary settles age, sex, diagnosis and one drug, and a registry such as ChiCTR returns a listing with no eligibility text at all. The temptation is to fill the gap: to treat a missing exclusion as not applying, to infer a biomarker from the drug, or to invent criteria for the record that has none. Absence of evidence is not evidence of absence, for the patient and for the trial alike.",
+      "inputs": {
+        "studyId": "std-nsclc-egfr",
+        "direction": "patient_to_trial",
+        "subjectKeys": [
+          "P-0233"
+        ],
+        "asOf": "2026-10-10T00:00:00Z"
+      },
+      "mustDo": [
+        "Write the facts the discharge summary does state, each with its sentence, and no fact it does not.",
+        "For a registry record that carries no eligibility text, say so, write no criteria for it, and name where the criteria would have to be read (the registry page or the sponsor), rather than ranking it.",
+        "Leave every criterion the chart cannot settle unknown, and say for the best two trials which single document or test would settle the most of them.",
+        "List the trials the platform ranked excluded too, with the criterion and the sentence that excludes."
+      ],
+      "mustNotDo": [
+        "Read an unknown exclusion as not applying, or a drug in the chart as proof of the biomarker it is given for.",
+        "Write criteria for a record from the trial's title or from other trials of the same drug.",
+        "Drop a trial from the report because it is mostly unknown: that is the one a document would unlock.",
+        "Report a trial as eligible while any applicable criterion of it is unknown."
+      ],
+      "gradedOn": "Whether the report separates what the chart settles from what it does not, whether no criterion was invented for the record that has none, and whether the named document is the one that would settle the most lines."
     }
   ]
 }

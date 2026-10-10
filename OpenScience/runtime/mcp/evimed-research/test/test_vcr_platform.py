@@ -294,8 +294,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
         accrual = vcr_platform.shape({"kind": "accrual_forecast"})["data"]
         self.assertEqual(accrual["runStates"], ["target", "eventTarget", "eventHazard", "byTimes"])
         self.assertEqual([line.split(":", 1)[0] for line in accrual["keys"]], ["target", "eventTarget", "eventHazard", "byTimes"])
-        # An event target is counted among the patients still to enrol, and the shape says what happens beyond them.
-        self.assertTrue(any("eventTarget counts events among the patients still to enrol" in note and "scenario_value_invalid at eventTarget" in note for note in accrual["notes"]))
+        # An event target is counted among every patient, enrolled and still to enrol, and the shape says what happens beyond them.
+        self.assertTrue(any("eventTarget counts events among every patient the forecast follows" in note and "scenario_value_invalid at eventTarget" in note for note in accrual["notes"]))
 
     def test_read_says_what_matching_returns(self):
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_read"]["description"]
@@ -415,6 +415,37 @@ class VcrReadWriteTests(_GatewayCase):
             vcr_platform.write({"what": "assumption", "items": [{}], "data": {}})
         self.assertEqual(caught.exception.code, "vcr_write_payload_invalid")
         self.assertEqual(len(_Gateway.seen), 1)
+
+    def test_the_trials_found_for_a_patient_are_a_write_and_a_read_of_their_own(self):
+        # 「给患者找试验」: a run writes the registry trial and its structured criteria, and reads them back.
+        self.assertIn("candidate_trial", vcr_platform.WRITE_WHATS)
+        self.assertIn("candidate_trials", vcr_platform.READ_WHATS)
+        definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
+        self.assertIn("candidate_trial", definitions["vcr_write"]["description"])
+        self.assertIn("candidate_trials", definitions["vcr_read"]["description"])
+        item = {"registryId": "NCT05000001", "subjectKeys": ["P-0192"], "criteria": [
+            {"kind": "inclusion", "criterionType": "demographic", "sourceText": "Age >= 18 years",
+             "requirement": {"op": "compare", "variable": "age", "comparator": "gte", "value": 18, "unit": "year"}}]}
+        _Gateway.answers["write"] = (200, {"data": {"what": "candidate_trial", "ok": True, "ids": ["ctr_1"], "issues": [], "results": [
+            {"index": 0, "id": "ctr_1", "registryId": "NCT05000001", "created": True, "criteria": 1, "located": 1,
+             "evaluated": [{"subjectKey": "P-0192", "summary": "eligible"}]}]}})
+        written = self.server.call_tool("vcr_write", {"what": "candidate_trial", "items": [item]})
+        self.assertEqual(written["status"], "success")
+        self.assertIn("Wrote candidate_trial: 1 written", written["summary"])
+        self.assertEqual(written["data"]["results"][0]["evaluated"][0]["summary"], "eligible")
+        self.assertEqual(_Gateway.seen[0]["body"], {"what": "candidate_trial", "items": [item]})
+
+        _Gateway.answers["read"] = (200, {"data": {"what": "candidate_trials", "trials": [{"id": "ctr_1", "registryId": "NCT05000001", "criteria": 1}], "more": False}})
+        read = self.server.call_tool("vcr_read", {"what": "candidate_trials", "filter": {"registryId": "NCT05000001"}})
+        self.assertEqual(read["status"], "success")
+        self.assertEqual(_Gateway.seen[1]["body"], {"what": "candidate_trials", "filter": {"registryId": "NCT05000001"}})
+
+        # A trial the registry does not have, or a criterion outside the grammar, is named on its item and the call goes on.
+        _Gateway.answers["write"] = (200, {"data": {"what": "candidate_trial", "ok": False, "ids": [], "issues": [
+            {"index": 0, "field": "registryId", "code": "registry_not_found", "message": "登记平台没有这个登记号的记录。"}]}})
+        refused = self.server.call_tool("vcr_write", {"what": "candidate_trial", "items": [{"registryId": "NCT00000000", "criteria": item["criteria"]}]})
+        self.assertEqual(refused["status"], "warning")
+        self.assertEqual(refused["warnings"], ["item 0, registryId: 登记平台没有这个登记号的记录。"])
 
     def test_an_answer_over_the_cap_is_refused_by_name(self):
         _Gateway.answers["read"] = (200, b'{"data": {"pad": "' + b"x" * (vcr_platform.MAX_RESPONSE_BYTES + 10) + b'"}}')

@@ -197,6 +197,25 @@ function sourceProjectOf(provenance, projectId) {
   return null;
 }
 
+/** How many projects a method's provenance names at most; a method learned from more is no one project's. */
+const SOURCE_PROJECTS_LIMIT = 20;
+
+/** The reason written on a method stopped because the only project it was learnt in was deleted: the reader's sentence. */
+const PROJECT_DELETED_REASON = "它只是从已删除的项目里学到的，已停用。";
+
+/**
+ * Every project a method has been learned in: the one it was first learnt in and each project a later lesson came from.
+ * A method written before the list existed names the first only, which is all it can say.
+ * @param {any} provenance @returns {string[]}
+ */
+export function methodSourceProjects(provenance) {
+  const found = [];
+  for (const value of [provenance?.sourceProjectId, ...(Array.isArray(provenance?.sourceProjectIds) ? provenance.sourceProjectIds : [])]) {
+    if (typeof value === "string" && value.trim() && !found.includes(value)) found.push(value);
+  }
+  return found.slice(0, SOURCE_PROJECTS_LIMIT);
+}
+
 /**
  * The shape `promotionVerdict` and `retirementProposal` read, assembled from a
  * stored document. Kept in one function because the two callers that build it
@@ -316,7 +335,8 @@ export class LearningService {
     const name = String(input.frontmatter?.name ?? "");
     const id = learnedMethodId(name);
     const sourceProjectId = sourceProjectOf(input.provenance, input.projectId);
-    const provenance = withResultLinks({ origin: "inferred", ...input.provenance, ...(sourceProjectId ? { sourceProjectId } : {}) });
+    const provenance = withResultLinks({ origin: "inferred", ...input.provenance,
+      ...(sourceProjectId ? { sourceProjectId, sourceProjectIds: [sourceProjectId] } : {}) });
     const createdAt = this.now().toISOString();
     const steps = cleanMethodSteps(input.steps);
     const scope = cleanMethodScope(input.scope);
@@ -451,6 +471,10 @@ export class LearningService {
     // Where the method was first learnt stays its source; a later lesson from
     // another project does not move it.
     const sourceProjectId = sourceProjectOf(current.payload.provenance, null) ?? sourceProjectOf(input.provenance, null);
+    // But every project a lesson came from is kept beside it: deleting a project retires only the methods that were
+    // learnt in no other (`retireProjectMethods`).
+    const sourceProjectIds = methodSourceProjects({ ...current.payload.provenance,
+      sourceProjectIds: [...methodSourceProjects(current.payload.provenance), sourceProjectOf(input.provenance, null)].filter(Boolean) });
     const payload = {
       ...current.payload,
       status: bodyChanged ? "candidate" : current.payload.status,
@@ -461,7 +485,8 @@ export class LearningService {
       contentDigest: digest,
       learning,
       // The result versions each lesson was learnt from accumulate: the method names every pair it was shaped by.
-      provenance: withResultLinks({ ...current.payload.provenance, ...input.provenance, ...(sourceProjectId ? { sourceProjectId } : {}) }, current.payload.provenance?.results),
+      provenance: withResultLinks({ ...current.payload.provenance, ...input.provenance,
+        ...(sourceProjectId ? { sourceProjectId } : {}), ...(sourceProjectIds.length ? { sourceProjectIds } : {}) }, current.payload.provenance?.results),
       // A new line when the revision brought one; otherwise the old one stands.
       ...(cleanMethodDisplay(input.display) ? { display: cleanMethodDisplay(input.display) } : {}),
       // New steps when the revision brought them; otherwise the old rendering
@@ -612,6 +637,52 @@ export class LearningService {
   async retire(userId, methodId, input) {
     const document = await this.getMethod(userId, methodId);
     return this.#setStatus(userId, methodId, "retired", input.expectedRevision, document, input.reason, input.link);
+  }
+
+  /**
+   * Stop the methods that were learnt only in a project that is being deleted (review M-10/M-11, 2026-10-10).
+   *
+   * A method is the researcher's, not the project's (`createCandidate`), and it used to outlive every project it came from.
+   * Deleting a project is asking for what it held to go, and a way of working drawn only from its conversations is part of
+   * that. A method that a lesson from another project also shaped keeps standing: it is not only this project's. Retired,
+   * not deleted: the reason is written on it, and it can be returned to like any stopped method.
+   * Run inside the project's deletion (`transactionClient`), so the project goes only if its methods are stopped.
+   *
+   * @param {string} userId @param {string} projectId @param {{ transactionClient?: any }} [options]
+   * @returns {Promise<{ retired: string[], kept: number }>}
+   */
+  async retireProjectMethods(userId, projectId, { transactionClient = null } = {}) {
+    /** @type {string[]} */
+    const retired = [];
+    let kept = 0;
+    /** @type {string | null} */
+    let cursor = null;
+    do {
+      const page = await this.documents.list(userId, "method", {
+        limit: 100, cursor,
+        filter: { recordType: LEARNED_METHOD_RECORD_TYPE, provenance: { sourceProjectId: projectId } },
+      });
+      for (const listed of page.items ?? []) {
+        if (listed.payload?.status === "retired") continue;
+        if (methodSourceProjects(listed.payload?.provenance).some((id) => id !== projectId)) { kept += 1; continue; }
+        // The revision read is the revision written against: one that moved in between is read again, a few times.
+        let document = listed;
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          if (document.payload?.status === "retired" || methodSourceProjects(document.payload?.provenance).some((id) => id !== projectId)) break;
+          const payload = { ...document.payload, status: "retired", statusReason: PROJECT_DELETED_REASON, statusChangedAt: this.now().toISOString() };
+          try {
+            await this.documents.put(userId, "method", document.id, payload, { expectedRevision: document.revision, transactionClient });
+            retired.push(document.id);
+            break;
+          } catch (error) {
+            if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 3) throw error;
+            document = await this.documents.get(userId, "method", document.id) ?? document;
+          }
+        }
+      }
+      cursor = page.nextCursor ?? null;
+    } while (cursor);
+    return { retired, kept };
   }
 
   /**

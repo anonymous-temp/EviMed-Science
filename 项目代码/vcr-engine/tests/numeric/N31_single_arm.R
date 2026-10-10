@@ -121,3 +121,47 @@ vcr_case("N31g", c("AC-04","AC-31","AC-38"), function() {
   })
   list(pass=all(vapply(rows,function(x)x$pass,logical(1))),detail=paste(vapply(rows,function(x)x$detail,character(1)),collapse="; "))
 })
+
+vcr_case("N31h", c("AC-09", "AC-10", "AC-29"), function() {
+  # The keys a frozen Simon design does not need still count. Its boundaries (n1, r1, n, r) are given, so `truth.alternativeRate` and
+  # `analysis.alpha`, which only choose boundaries in the analytic search, changed nothing in a simulation of it and were accepted and
+  # ignored (alpha 0.2 passed). Now the result carries the frozen design's exact operating characteristics at the null rate and at the
+  # alternative rate, and, when alpha is stated, whether its type I error is within it. The reference is the full joint binomial table
+  # written out here (as N31b does), not the engine's enumeration. `analysis.estimand` of an external-control design, required and never
+  # read, is the label the result carries; its schema admits only the ATT, which is what the standardisation targets.
+  joint_ref <- function(p, n1, n, r1, r) {
+    j <- outer(stats::dbinom(0:n1, n1, p), stats::dbinom(0:(n - n1), n - n1, p))
+    cont <- outer(0:n1, 0:(n - n1), function(a, b) a > r1)
+    rej <- cont & outer(0:n1, 0:(n - n1), function(a, b) a + b > r)
+    pet <- stats::pbinom(r1, n1, p)
+    c(rejection = sum(j[rej]), early = pet, size = n1 + (1 - pet) * (n - n1))
+  }
+  sc <- function(alpha = NULL, alt = 0.3, resp = 0.3) list(design = list(kind = "simon_two_stage", n1 = 10, n = 29, r1 = 1, r = 5), endpoint = list(type = "binary"),
+    truth = list(nullRate = 0.1, alternativeRate = alt, responseRate = resp), analysis = c(list(method = "simon_boundary", sided = 1), if (!is.null(alpha)) list(alpha = alpha)),
+    performance = list("power"))
+  run <- function(s, tag) vcr_test_run(vcr_test_job("design.simulate", s, seed = 3138L, replicates = 2000L, job_id = paste0("job_n31h_", tag)))
+  a05 <- run(sc(0.05), "a05"); a04 <- run(sc(0.04), "a04"); none <- run(sc(NULL), "none"); alt4 <- run(sc(0.05, alt = 0.4), "alt4")
+  f <- a05$diagnostics$frozenDesign
+  r0 <- joint_ref(0.1, 10, 29, 1, 5); r3 <- joint_ref(0.3, 10, 29, 1, 5); r4 <- joint_ref(0.4, 10, 29, 1, 5)
+  close <- function(got, want) abs(got$rejectionProbability - want[["rejection"]]) < 1e-12 && abs(got$earlyStopProbability - want[["early"]]) < 1e-12 && abs(got$expectedSampleSize - want[["size"]]) < 1e-10
+  ok_simon <- identical(a05$status, "succeeded") && close(f$atNullRate, r0) && close(f$atAlternativeRate, r3) && identical(f$atAlternativeRate$rate, 0.3) &&
+    isTRUE(f$typeOneErrorWithinAlpha) && identical(f$alpha, 0.05) && identical(f$basis, "exact_binomial_enumeration") &&
+    identical(a04$diagnostics$frozenDesign$typeOneErrorWithinAlpha, FALSE) && r0[["rejection"]] > 0.04 && r0[["rejection"]] <= 0.05 &&
+    is.null(none$diagnostics$frozenDesign$alpha) && is.null(none$diagnostics$frozenDesign$typeOneErrorWithinAlpha) && close(none$diagnostics$frozenDesign$atNullRate, r0) &&
+    close(alt4$diagnostics$frozenDesign$atAlternativeRate, r4) && identical(alt4$diagnostics$frozenDesign$atAlternativeRate$rate, 0.4)
+  # the simulation itself is what it was: the same power as N31b's table, within three Monte-Carlo errors
+  pw <- vcr_get_measure(a05, "power")
+  ok_sim <- !is.null(pw) && abs(pw$value - r3[["rejection"]]) <= 3 * pw$mcse
+  # the external-control design carries the estimand it declared
+  ext <- list(design = list(kind = "single_arm_external", n = 100), endpoint = list(type = "binary"), truth = list(controlRates = list(0.2, 0.4), treatmentRates = list(0.4, 0.6)),
+              external = list(kind = "stratified_beta_binomial", n = 200, targetPrevalence = 0.5, sourcePrevalence = 0.3, parameterInformation = 100, logOddsDrift = 0, sensitivityDrifts = list(-0.3, 0, 0.3)),
+              analysis = list(method = "stratified_risk_difference", estimand = "ATT", alpha = 0.025, sided = 1), performance = list("power"))
+  ex <- run(ext, "ext")
+  ok_ext <- identical(ex$status, "succeeded") && identical(ex$diagnostics$externalControl$estimand, "ATT")
+  list(pass = ok_simon && ok_sim && ok_ext,
+       detail = sprintf("frozen Simon 1/10, 5/29 at p0 0.1: rejection %.6f, early stop %.6f, expected size %.4f (joint table %.6f / %.6f / %.4f); at the alternative 0.3: %.6f / %.6f / %.4f (joint table %.6f / %.6f / %.4f); within alpha 0.05 %s, within 0.04 %s, no alpha stated -> %s; alternative 0.4 -> %.6f (joint table %.6f); simulated power %.4f vs %.4f; external-control estimand %s",
+                        f$atNullRate$rejectionProbability, f$atNullRate$earlyStopProbability, f$atNullRate$expectedSampleSize, r0[["rejection"]], r0[["early"]], r0[["size"]],
+                        f$atAlternativeRate$rejectionProbability, f$atAlternativeRate$earlyStopProbability, f$atAlternativeRate$expectedSampleSize, r3[["rejection"]], r3[["early"]], r3[["size"]],
+                        f$typeOneErrorWithinAlpha, a04$diagnostics$frozenDesign$typeOneErrorWithinAlpha, if (is.null(none$diagnostics$frozenDesign$typeOneErrorWithinAlpha)) "no verdict" else "a verdict",
+                        alt4$diagnostics$frozenDesign$atAlternativeRate$rejectionProbability, r4[["rejection"]], pw$value %||% NA_real_, r3[["rejection"]], ex$diagnostics$externalControl$estimand %||% "NULL"))
+})

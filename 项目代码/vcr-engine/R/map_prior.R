@@ -39,9 +39,13 @@
 #'
 #' @param y historical estimates on the analysis scale (logit, mean, log rate).
 #' @param se their standard errors.
-#' @param tau_prior list(kind = "half_normal", scale = s) or
-#'   list(kind = "half_cauchy", scale = s); `s` dominates when k < 5 and the
-#'   sensitivity of the answer to it is part of the deliverable.
+#' @param tau_prior list(kind = "half_normal", scale = s),
+#'   list(kind = "half_cauchy", scale = s) or list(kind = "uniform", scale = s);
+#'   `s` dominates when k < 5 and the sensitivity of the answer to it is part of
+#'   the deliverable. The priors are the ones their names say: half-normal,
+#'   density proportional to exp(-tau^2 / (2 s^2)); half-Cauchy, proportional to
+#'   1 / (1 + (tau / s)^2), over the whole half line; uniform, flat on [0, s] and
+#'   zero beyond `s`.
 #' @param grid number of quadrature nodes over tau.
 #' @return the predictive distribution for a new study's parameter, as a
 #'   discrete mixture of normals plus its moments.
@@ -51,16 +55,24 @@ vcr_map_prior <- function(y, se, tau_prior = list(kind = "half_normal", scale = 
   if (k != length(se)) stop("vcr_map_prior: y and se must have the same length")
   v <- se^2
   s <- tau_prior$scale
-  tau_max <- tau_max %||% max(6 * s, 4 * stats::sd(y) + 1e-6)
-  # Midpoint rule on [0, tau_max]: the integrand is smooth and bounded, and a
-  # fixed grid keeps the answer a function of the inputs alone.
-  h <- tau_max / grid
-  tau <- (seq_len(grid) - 0.5) * h
-  logp_tau <- switch(tau_prior$kind,
-    half_normal = stats::dnorm(tau, 0, s, log = TRUE),
-    half_cauchy = stats::dcauchy(tau, 0, s, log = TRUE),
-    uniform = rep(0, grid),
-    stop("vcr_map_prior: unknown tau prior ", tau_prior$kind))
+  if (!(tau_prior$kind %in% c("half_normal", "half_cauchy", "uniform"))) stop("vcr_map_prior: unknown tau prior ", tau_prior$kind)
+  if (identical(tau_prior$kind, "half_cauchy")) {
+    # The half-Cauchy has no upper end, and a share of its mass lies far out (10.5% beyond 6 s): cutting the grid there changed the
+    # prior. It is integrated over the whole half line by its own quantiles instead: the nodes tau = s tan(pi u / 2) at the midpoints u
+    # of an equal-mass grid, each carrying prior mass 1 / grid, so the prior enters as equal weights and the likelihood does the rest.
+    u <- (seq_len(grid) - 0.5) / grid
+    tau <- s * tan(pi * u / 2)
+    logp_tau <- rep(0, grid)
+  } else {
+    # Midpoint rule on [0, tau_max]: the integrand is smooth and bounded, and a
+    # fixed grid keeps the answer a function of the inputs alone. A uniform prior
+    # on [0, s] is zero beyond s, so its range is [0, s]; the first version gave it
+    # the range of the other priors and a flat prior on THAT, so `scale` was not its bound.
+    tau_max <- if (identical(tau_prior$kind, "uniform")) s else tau_max %||% max(6 * s, 4 * stats::sd(y) + 1e-6)
+    h <- tau_max / grid
+    tau <- (seq_len(grid) - 0.5) * h
+    logp_tau <- if (identical(tau_prior$kind, "uniform")) rep(0, grid) else stats::dnorm(tau, 0, s, log = TRUE)
+  }
   loglik <- vapply(tau, function(t) {
     w <- 1 / (v + t^2)
     mu <- sum(w * y) / sum(w)
@@ -81,7 +93,12 @@ vcr_map_prior <- function(y, se, tau_prior = list(kind = "half_normal", scale = 
     mean = mean_pred, sd = sqrt(var_pred),
     tauPosteriorMean = sum(wt * tau),
     tauPosteriorMedian = tau[which(cumsum(wt) >= 0.5)[1]],
-    k = k, tauPrior = tau_prior, gridNodes = grid, tauMax = tau_max
+    k = k, tauPrior = tau_prior, gridNodes = grid, tauMax = max(tau),
+    # What the quadrature stood for, for the result to say. The posterior of tau under a half-Cauchy prior falls like tau^-(k+1), so its
+    # second moment is finite from three studies and, with two, grows without bound as the quadrature reaches further out: the
+    # predictive sd is then a statement about how far it reached, and the result says so instead of passing it off as a property of the data.
+    tauSupport = switch(tau_prior$kind, uniform = "0 to scale", half_cauchy = "the whole half line, by the prior's quantiles", "0 to the larger of 6 scales and 4 sd of the estimates"),
+    finitePredictiveVariance = !(identical(tau_prior$kind, "half_cauchy") && k < 3L)
   )
 }
 

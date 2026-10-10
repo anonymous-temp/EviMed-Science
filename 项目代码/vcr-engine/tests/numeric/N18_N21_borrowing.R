@@ -145,6 +145,40 @@ vcr_case("N19c", c("AC-07", "AC-04"), function() {
                         deliberate$diagnostics$priorBasis, refused$status, paste(vcr_test_issue_codes(refused), collapse = ",")))
 })
 
+vcr_case("N19d", c("AC-07", "AC-04"), function() {
+  # `design.allocation` of a continuous or binary assurance. The arms of those designs are sized by nTreat and nControl; the key was
+  # accepted and never read, so a design stated as "200 treated, 80% allocated to treatment" was assessed with 200 controls. Now a
+  # stated allocation sizes the control arm when nControl is absent (n0 = n1 (1 - a) / a), and when nControl is stated the sizes are the
+  # more specific statement: the allocation is named in diagnostics.notApplied if it contradicts them. The reference is the integral of
+  # the z-test's power over the design prior written here, with the standard error of the arms actually sized.
+  run <- function(design, tag, endpoint = "continuous") {
+    sc <- list(design = design, endpoint = list(type = endpoint), designPrior = list(kind = "normal", mean = 0.3, sd = 0.15), analysis = list(alpha = 0.025, sided = 1))
+    sc$truth <- if (identical(endpoint, "binary")) list(controlRate = 0.3) else list(sd = 1)
+    if (identical(endpoint, "binary")) sc$designPrior <- list(kind = "normal", mean = 0.08, sd = 0.05)
+    vcr_test_run(vcr_test_job("design.assurance", sc, job_id = paste0("job_n19d_", tag)))
+  }
+  z <- stats::qnorm(0.975)
+  integral <- function(n1, n0) { se <- sqrt(1 / n1 + 1 / n0); stats::integrate(function(d) stats::pnorm(d / se - z) * stats::dnorm(d, 0.3, 0.15), -Inf, Inf, rel.tol = 1e-10)$value }
+  from_allocation <- run(list(nTreat = 200, allocation = 0.8), "alloc")          # nControl = 200 x 0.2 / 0.8 = 50
+  explicit <- run(list(nTreat = 200, nControl = 50), "explicit")
+  consistent <- run(list(nTreat = 200, nControl = 50, allocation = 0.8), "consistent")
+  contradicted <- run(list(nTreat = 200, nControl = 200, allocation = 0.8), "contradicted")
+  equal <- run(list(nTreat = 200), "equal")
+  na_keys <- function(r) vapply(r$diagnostics$notApplied %||% list(), function(x) x$key, character(1))
+  ok_cont <- abs(vcr_measure_value(from_allocation, "assurance") - integral(200, 50)) < 1e-8 && identical(vcr_measure_value(from_allocation, "assurance"), vcr_measure_value(explicit, "assurance")) &&
+    identical(from_allocation$diagnostics$arms, list(nTreat = 200, nControl = 50)) && length(na_keys(from_allocation)) == 0L &&
+    identical(vcr_measure_value(consistent, "assurance"), vcr_measure_value(explicit, "assurance")) && length(na_keys(consistent)) == 0L &&
+    abs(vcr_measure_value(contradicted, "assurance") - integral(200, 200)) < 1e-8 && identical(na_keys(contradicted), "design.allocation") &&
+    abs(vcr_measure_value(equal, "assurance") - integral(200, 200)) < 1e-8 && abs(integral(200, 50) - integral(200, 200)) > 0.05
+  # a binary endpoint takes the same rule: the allocation is the same job as the sizes it implies
+  bin_alloc <- run(list(nTreat = 300, allocation = 0.75), "bin_alloc", "binary"); bin_sized <- run(list(nTreat = 300, nControl = 100), "bin_sized", "binary")
+  ok_bin <- identical(bin_alloc$status, "succeeded") && identical(vcr_measure_value(bin_alloc, "assurance"), vcr_measure_value(bin_sized, "assurance")) && is.finite(vcr_measure_value(bin_alloc, "assurance"))
+  list(pass = ok_cont && ok_bin,
+       detail = sprintf("200 treated, allocation 0.8, no control size: assurance %.8f (integral at 200 + 50: %.8f; with 200 controls it would be %.8f); a consistent allocation beside nControl 50: notApplied %s; a contradicted one (200 + 200): assurance %.8f, notApplied %s; binary, 300 treated at 0.75 = nControl 100: %.8f vs %.8f",
+                        vcr_measure_value(from_allocation, "assurance"), integral(200, 50), integral(200, 200), if (length(na_keys(consistent))) "named" else "none",
+                        vcr_measure_value(contradicted, "assurance"), paste(na_keys(contradicted), collapse = ","), vcr_measure_value(bin_alloc, "assurance"), vcr_measure_value(bin_sized, "assurance")))
+})
+
 vcr_case("N20", c("AC-10", "AC-28"), function() {
   # The operating characteristics of a borrowing design over a grid of
   # control-rate drift (plan 5.3: type-I error and power in scenarios where the
@@ -294,4 +328,56 @@ vcr_case("N21b", c("AC-30", "AC-07"), function() {
                         far$status, far$notEstimableRule %||% "NULL", far$diagnostics$conflict$mapOnly$predictiveTailProbability,
                         far$diagnostics$conflict$robust$predictiveTailProbability, bound, nrow(tb %||% data.frame()),
                         sum(vapply(refused, function(x) identical(x$status, "failed"), logical(1)))))
+})
+
+vcr_case("N21c", c("AC-30", "AC-07"), function() {
+  # The tau priors are the ones their names say. The grid over tau ran on [0, max(6 s, 4 sd(y))] for every prior, so a UNIFORM prior was
+  # flat on that range and `scale` was not its upper bound (scale 0.5 on five studies: a predictive sd of 0.431 where U(0, 0.5) gives
+  # 0.279), and a HALF-CAUCHY was cut at 6 s, which drops 10.5% of its mass (three studies: 0.621 where it gives 0.731). Now the
+  # uniform prior lives on [0, s] and the half-Cauchy is integrated over the whole half line by its own quantiles. The reference is the
+  # posterior of tau times the prior density, mu integrated out under a flat prior as the engine does it, by adaptive quadrature
+  # written here over (0, 1e5] in decades (the half-Cauchy tail) -- not a grid. The half-normal, which was right, stays right.
+  ref <- function(y, se, kind, s) {
+    v <- se^2
+    L <- function(t) { w <- 1 / (v + t^2); mu <- sum(w * y) / sum(w); exp(-0.5 * sum(log(v + t^2)) - 0.5 * log(sum(w)) - 0.5 * sum(w * (y - mu)^2)) }
+    dens <- switch(kind, half_normal = function(t) 2 * stats::dnorm(t, 0, s), half_cauchy = function(t) 2 * stats::dcauchy(t, 0, s), uniform = function(t) rep(1 / s, length(t)))
+    top <- if (identical(kind, "uniform")) s else 1e5
+    edges <- c(0, if (identical(kind, "uniform")) s else c(10^seq(-3, 5, by = 0.5)))
+    edges <- edges[edges <= top]
+    integral <- function(f) sum(vapply(seq_len(length(edges) - 1L), function(i)
+      stats::integrate(function(t) vapply(t, f, numeric(1)), edges[i], edges[i + 1L], rel.tol = 1e-12, subdivisions = 500L)$value, numeric(1)))
+    mu_of <- function(t) { w <- 1 / (v + t^2); sum(w * y) / sum(w) }
+    vm_of <- function(t) 1 / sum(1 / (v + t^2))
+    z <- integral(function(x) dens(x) * L(x))
+    m1 <- integral(function(x) mu_of(x) * dens(x) * L(x)) / z
+    m2 <- integral(function(x) (vm_of(x) + x^2 + mu_of(x)^2) * dens(x) * L(x)) / z
+    c(mean = m1, sd = sqrt(m2 - m1^2))
+  }
+  five <- list(y = c(-0.9, -0.7, -1.1, -0.5, -0.8), se = c(0.25, 0.3, 0.35, 0.28, 0.4))
+  three <- list(y = c(-1.2, -0.2, -0.7), se = c(0.2, 0.25, 0.2))
+  two <- list(y = c(-0.9, -0.3), se = c(0.25, 0.3))
+  check <- function(d, kind, s, tol) {
+    m <- vcr_map_prior(d$y, d$se, list(kind = kind, scale = s)); r <- ref(d$y, d$se, kind, s)
+    list(kind = kind, s = s, k = length(d$y), mean = m$mean, sd = m$sd, ref_mean = r[["mean"]], ref_sd = r[["sd"]], ok = abs(m$mean - r[["mean"]]) < tol && abs(m$sd - r[["sd"]]) < tol,
+         d = max(abs(m$mean - r[["mean"]]), abs(m$sd - r[["sd"]])), tau_max = max(m$components$tau), tau_median = m$tauPosteriorMedian)
+  }
+  rows <- list(check(five, "uniform", 0.5, 1e-6), check(five, "uniform", 1, 1e-6), check(three, "half_cauchy", 0.25, 1e-4), check(three, "half_cauchy", 0.5, 1e-4),
+               check(five, "half_cauchy", 0.5, 1e-6), check(five, "half_normal", 0.5, 1e-6))
+  ok_rows <- all(vapply(rows, function(x) x$ok, logical(1)))
+  # `scale` is the bound of the uniform prior: no node, and so no posterior of tau, lies beyond it
+  ok_bound <- rows[[1]]$tau_max <= 0.5 && rows[[2]]$tau_max <= 1 && rows[[1]]$tau_median <= 0.5
+  # through the job: the same numbers, and the prior described in the result
+  job <- function(d, kind, s, id) vcr_test_run(vcr_test_job("comparator.map_prior", list(historical = list(estimate = as.list(d$y), se = as.list(d$se)), unitVariance = 4,
+                                                                                          tauPrior = list(kind = kind, scale = s)), seed = 21L, job_id = paste0("job_n21c_", id)))
+  j_u <- job(five, "uniform", 0.5, "u"); j_c2 <- job(two, "half_cauchy", 0.5, "c2"); j_c3 <- job(three, "half_cauchy", 0.25, "c3"); j_n <- job(five, "half_normal", 0.5, "n")
+  tp <- function(r) r$diagnostics$tauPrior
+  ok_job <- identical(j_u$status, "succeeded") && abs(vcr_measure_value(j_u, "map_sd") - rows[[1]]$ref_sd) < 1e-6 && vcr_measure_value(j_u, "tau_posterior_median") <= 0.5 &&
+    identical(tp(j_u)$kind, "uniform") && tp(j_u)$reach <= 0.5 && isTRUE(tp(j_u)$finitePredictiveVariance) && is.null(tp(j_u)$note) &&
+    abs(vcr_measure_value(j_c3, "map_sd") - rows[[3]]$ref_sd) < 1e-4 && isTRUE(tp(j_c3)$finitePredictiveVariance) &&
+    identical(tp(j_c2)$finitePredictiveVariance, FALSE) && grepl("no finite second moment", tp(j_c2)$note, fixed = TRUE) && tp(j_c2)$reach > 100 * 0.5 &&
+    identical(j_c2$status, "succeeded") && identical(tp(j_n)$kind, "half_normal") && isTRUE(tp(j_n)$finitePredictiveVariance)
+  list(pass = ok_rows && ok_bound && ok_job,
+       detail = sprintf("%s; the uniform prior's nodes end at %.3f and %.3f (scale 0.5 and 1); through the job: uniform sd %.6f, half-Cauchy on two studies says so (%s, reach %.0f)",
+                        paste(vapply(rows, function(x) sprintf("%s(%g) k=%d: sd %.6f vs %.6f (|d| %.1e)", x$kind, x$s, x$k, x$sd, x$ref_sd, x$d), character(1)), collapse = "; "),
+                        rows[[1]]$tau_max, rows[[2]]$tau_max, vcr_measure_value(j_u, "map_sd"), if (isFALSE(tp(j_c2)$finitePredictiveVariance)) "no finite variance" else "finite", tp(j_c2)$reach %||% NA_real_))
 })

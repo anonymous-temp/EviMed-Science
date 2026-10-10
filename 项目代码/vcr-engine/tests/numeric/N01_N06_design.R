@@ -413,6 +413,148 @@ vcr_case("N06e", c("AC-04", "AC-28", "AC-31"), function() {
                         identical(p1$scenarioHash, hash_of(pw)), identical(p2$scenarioHash, hash_of(pw_fast)), ev1, ev2))
 })
 
+vcr_case("N06f", c("AC-30", "AC-29"), function() {
+  # Required patients for the control distribution the scenario DECLARES. `design.analytic` took the
+  # event probability from an exponential matched on the control's median whatever the distribution was,
+  # so a Weibull or a piecewise control got another trial's number (shape 2, median 12, HR 0.7, 12 months of
+  # accrual and 12 of follow-up: 0.5758 against 0.7072, 22.8% too many patients) and the result did not
+  # say it had approximated. Now an exponential control keeps the Lachin-Foulkes closed form (N06b holds
+  # it to rpact) and a Weibull or piecewise one is integrated, and the result names the route.
+  # References that share no code with the engine: (1) the density f(t) G(t) integrated in the case by
+  # stats::integrate, where G is the share of a randomized subject still under observation at t;
+  # (2) a plain-R simulation of the whole trial -- entry, event, dropout, administrative censoring -- of
+  # 2 million subjects per arm (each share within 4.5 binomial standard errors); (3) the shape-1 Weibull
+  # and the constant-rate piecewise control equal the exponential closed form.
+  weibull_inv <- function(shape, scale) function(H) scale * H^(1 / shape)
+  pw_breaks <- c(6, 18); pw_rates <- c(0.05, 0.02, 0.04)
+  pw_cum <- c(0, cumsum(pw_rates[-3] * diff(c(0, pw_breaks))))
+  piecewise_inv <- function(H) { k <- findInterval(H, pw_cum); c(0, pw_breaks)[k] + (H - pw_cum[k]) / pw_rates[k] }
+  surv_w <- function(shape, scale) function(t, hr) exp(-hr * (t / scale)^shape)
+  dens_w <- function(shape, scale) function(t, hr) hr * (shape / scale) * (t / scale)^(shape - 1) * exp(-hr * (t / scale)^shape)
+  surv_p <- function(t, hr) exp(-hr * (pw_cum[findInterval(t, c(0, pw_breaks))] + pw_rates[findInterval(t, c(0, pw_breaks))] * (t - c(0, pw_breaks)[findInterval(t, c(0, pw_breaks))])))
+  dens_p <- function(t, hr) hr * pw_rates[findInterval(t, c(0, pw_breaks))] * surv_p(t, hr)
+  # (1) the density integral: G is 1 up to the follow-up F, falls linearly to 0 at A + F, and thins by the dropout
+  integral_of <- function(dens, hr, A, Fu, eta) {
+    G <- function(t) ifelse(t <= Fu, 1, (A + Fu - t) / A) * exp(-eta * t)
+    stats::integrate(function(t) dens(t, hr) * G(t), 0, Fu, rel.tol = 1e-11, subdivisions = 2000L)$value +
+      stats::integrate(function(t) dens(t, hr) * G(t), Fu, A + Fu, rel.tol = 1e-11, subdivisions = 2000L)$value
+  }
+  # (2) the simulated trial
+  sim_share <- function(inv_cumhaz, hr, A, Fu, eta, n, seed) {
+    set.seed(seed)
+    entry <- stats::runif(n, 0, A); t_event <- inv_cumhaz(-log(stats::runif(n)) / hr)
+    t_drop <- if (eta > 0) stats::rexp(n, eta) else Inf
+    mean(t_event <= pmin(t_drop, A + Fu - entry))
+  }
+  scenarios <- list(
+    list(id = "weibull2", dist = list(kind = "weibull", shape = 2, scale = 12 / log(2)^(1 / 2)), dens = dens_w(2, 12 / log(2)^(1 / 2)), inv = weibull_inv(2, 12 / log(2)^(1 / 2)), drop = 0),
+    list(id = "weibull0.7+dropout", dist = list(kind = "weibull", shape = 0.7, scale = 20), dens = dens_w(0.7, 20), inv = weibull_inv(0.7, 20), drop = 0.15),
+    list(id = "piecewise+dropout", dist = list(kind = "piecewise", breaks = as.list(pw_breaks), rates = as.list(pw_rates)), dens = dens_p, inv = piecewise_inv, drop = 0.10))
+  hr <- 0.7; A <- 12; Fu <- 12
+  rows <- lapply(seq_along(scenarios), function(i) {
+    s <- scenarios[[i]]
+    sc <- list(design = list(kind = "two_arm_fixed"), endpoint = list(type = "time_to_event"), truth = list(hazardRatio = hr, controlDistribution = s$dist),
+               accrual = list(duration = A, followup = Fu, dropoutAnnual = s$drop), analysis = list(alpha = 0.025, power = 0.9))
+    r <- vcr_test_run(vcr_test_job("design.analytic", sc))
+    eta <- vcr_dropout_hazard(s$drop)
+    ref0 <- integral_of(s$dens, 1, A, Fu, eta); ref1 <- integral_of(s$dens, hr, A, Fu, eta)
+    n_mc <- 2e6
+    mc0 <- sim_share(s$inv, 1, A, Fu, eta, n_mc, 1100L + i); mc1 <- sim_share(s$inv, hr, A, Fu, eta, n_mc, 2200L + i)
+    se <- function(p) sqrt(p * (1 - p) / n_mc)
+    p0 <- vcr_measure_value(r, "event_probability_control"); p1 <- vcr_measure_value(r, "event_probability_treatment")
+    ev <- vcr_measure_value(r, "required_events_exact")
+    list(id = s$id, status = r$status, route = r$diagnostics$eventProbability$route %||% "none", p0 = p0, p1 = p1, ref0 = ref0, ref1 = ref1,
+         d_ref = max(abs(p0 - ref0), abs(p1 - ref1)), z_mc = max(abs(p0 - mc0) / se(p0), abs(p1 - mc1) / se(p1)),
+         pev = vcr_measure_value(r, "event_probability"), req = vcr_measure_value(r, "required_patients"), want_req = ceiling(ev / ((ref0 + ref1) / 2)))
+  })
+  ok_rows <- all(vapply(rows, function(x) identical(x$status, "succeeded") && identical(x$route, "numerical_integration") &&
+    x$d_ref < 1e-8 && x$z_mc < 4.5 && x$req == x$want_req && abs(x$pev - (x$ref0 + x$ref1) / 2) < 1e-8, logical(1)))
+  # the figure the median-matched exponential gave for the first scenario, which must no longer be the answer
+  old_pev <- {
+    lam <- log(2) / 12; eta0 <- 0
+    ((1 - 0.5) * vcr_event_probability(lam, A, Fu, eta0) + 0.5 * vcr_event_probability(lam * hr, A, Fu, eta0))
+  }
+  ok_moved <- abs(rows[[1]]$pev - old_pev) > 0.1
+  # (3) special cases: the exponential, a shape-1 Weibull and a constant-rate piecewise control are one trial
+  base <- list(design = list(kind = "two_arm_fixed"), endpoint = list(type = "time_to_event"),
+               accrual = list(duration = A, followup = Fu, dropoutAnnual = 0.1), analysis = list(alpha = 0.025, power = 0.9))
+  run_with <- function(dist) vcr_test_run(vcr_test_job("design.analytic", c(base, list(truth = list(hazardRatio = hr, controlDistribution = dist)))))
+  lam <- 0.04
+  expo <- run_with(list(kind = "exponential", rate = lam)); weib1 <- run_with(list(kind = "weibull", shape = 1, scale = 1 / lam))
+  pw_const <- run_with(list(kind = "piecewise", breaks = list(5, 15), rates = list(lam, lam, lam)))
+  d_special <- max(abs(vcr_measure_value(weib1, "event_probability") - vcr_measure_value(expo, "event_probability")),
+                   abs(vcr_measure_value(pw_const, "event_probability") - vcr_measure_value(expo, "event_probability")))
+  route_of <- function(r) r$diagnostics$eventProbability$route %||% "none"
+  ok_special <- identical(route_of(expo), "closed_form") && identical(route_of(weib1), "numerical_integration") &&
+    d_special < 1e-10 && vcr_measure_value(weib1, "required_patients") == vcr_measure_value(expo, "required_patients") &&
+    vcr_measure_value(pw_const, "required_patients") == vcr_measure_value(expo, "required_patients")
+  list(pass = ok_rows && ok_moved && ok_special,
+       detail = sprintf("%s; the median-matched exponential's %.4f for the first scenario is no longer the answer (%.4f); exponential vs shape-1 Weibull vs constant-rate piecewise: max |d| = %.1e, route %s / %s",
+                        paste(vapply(rows, function(x) sprintf("%s: control %.6f/%.6f treatment %.6f/%.6f (engine/integral), |d| = %.1e, %.2f binomial SE from the simulated trial, required %d (route %s)",
+                                      x$id, x$p0, x$ref0, x$p1, x$ref1, x$d_ref, x$z_mc, as.integer(x$req), x$route), character(1)), collapse = "; "),
+                        old_pev, rows[[1]]$pev, d_special, route_of(expo), route_of(weib1)))
+})
+
+vcr_case("N06g", c("AC-04", "AC-28"), function() {
+  # The cost of a design needs a duration only for the part of it that is per month. A continuous or binary two-arm design has no
+  # accrual (the schema refuses one there), so its duration is unknown, and `cost` was withheld even when the costs stated were per patient
+  # and per site and the total is known exactly: the result said only that cost "needs ... an accrual duration; it was not computed".
+  # Now the per-patient and per-site parts are computed (cost is deterministic given the sizes, so the Monte-Carlo error is 0), and a
+  # cost per month on a design with no duration is still declined, with that reason. A time-to-event design with accrual keeps all three.
+  run <- function(sc, tag) vcr_test_run(vcr_test_job("design.simulate", sc, seed = 606L, replicates = 400L, job_id = paste0("job_n06g_", tag)))
+  cont <- function(costs) list(design = list(kind = "two_arm_fixed", nTreat = 40, nControl = 30), endpoint = list(type = "continuous"), truth = list(effect = 0.5, sd = 1),
+                               analysis = list(method = "ttest", alpha = 0.025, sided = 1), performance = list("power", "cost"), costs = costs)
+  notes_of <- function(r) vapply(r$diagnostics$performanceNotComputed %||% list(), function(i) as.character(i$detail), character(1))
+  # per patient and per site: 1000 x 70 + 5000 x 4 = 90000, exactly
+  fixed <- run(cont(list(perPatient = 1000, perSite = 5000, sites = 4)), "fixed")
+  cost <- vcr_get_measure(fixed, "cost")
+  # a cost per month on a design with no accrual: declined, with the reason
+  monthly <- run(cont(list(perPatient = 1000, perMonth = 200)), "monthly")
+  # a time-to-event design with accrual: all three parts, the duration being accrual + follow-up
+  tte <- function(costs) list(design = list(kind = "two_arm_fixed", nTreat = 60, nControl = 60), endpoint = list(type = "time_to_event"), truth = list(hazardRatio = 0.7, controlMedian = 12),
+                              analysis = list(method = "logrank", alpha = 0.025, sided = 1), accrual = list(kind = "uniform", duration = 12, followup = 12),
+                              performance = list("power", "cost"), costs = costs)
+  full <- run(tte(list(perPatient = 1000, perSite = 5000, sites = 4, perMonth = 200)), "full")
+  no_month <- run(tte(list(perPatient = 1000, perSite = 5000, sites = 4)), "nomonth")
+  none <- run(cont(list(sites = 3)), "none")
+  ok <- identical(fixed$status, "succeeded") && !is.null(cost) && cost$value == 90000 && identical(cost$mcse, 0) && !grepl("perMonth", cost$note, fixed = TRUE) &&
+    identical(monthly$status, "succeeded") && is.null(vcr_get_measure(monthly, "cost")) && any(grepl("per month", notes_of(monthly), fixed = TRUE)) &&
+    abs(vcr_measure_value(full, "cost") - (1000 * 120 + 5000 * 4 + 200 * 24)) < 1e-6 && abs(vcr_measure_value(no_month, "cost") - (1000 * 120 + 5000 * 4)) < 1e-6 &&
+    is.finite(vcr_measure_value(none, "cost")) && vcr_measure_value(none, "cost") == 0
+  list(pass = ok,
+       detail = sprintf("continuous 40 + 30 patients at 1000 each and 4 sites at 5000: cost %s (want 90000, MCSE %s); with a cost per month and no accrual: %s (%s); time to event, 120 patients, accrual 12 + follow-up 12: all three parts %s (want %d), without a monthly part %s (want %d)",
+                        format(cost$value %||% NA_real_), format(cost$mcse %||% NA_real_), if (is.null(vcr_get_measure(monthly, "cost"))) "not computed" else "computed", paste(notes_of(monthly), collapse = " | "),
+                        format(vcr_measure_value(full, "cost")), 1000L * 120L + 5000L * 4L + 200L * 24L, format(vcr_measure_value(no_month, "cost")), 1000L * 120L + 5000L * 4L))
+})
+
+vcr_case("N06h", c("AC-04", "AC-28"), function() {
+  # A grid stopped by its CPU budget before its last cell said `succeeded` with nothing but an issue entry for a trace: the later cells
+  # simply did not exist, and the cells that did run dropped their own conclusion (limited, capped) on the way into diagnostics.cells.
+  # Now the grid is `limited` when it did not run every cell it planned, or any cell ended failed, capped or limited; the result counts
+  # the cells planned against the cells run, and each cell carries its conclusion. The cells that finished are still the deliverable.
+  # Three designs on a continuous endpoint: a small one, one so large that its replicates alone outlast the budget (600,000 patients a
+  # replicate), and a small one that never gets its turn. The budget is 20 CPU seconds (the engine stops at 0.9 of it: the small cells need
+  # about three, so a machine several times slower still finishes them), the heavy cell needs minutes whatever the machine.
+  mk <- function(designs) list(design = list(kind = "two_arm_fixed", nTreat = 20, nControl = 20), endpoint = list(type = "continuous"), truth = list(effect = 0.5, sd = 1),
+                               analysis = list(method = "ttest", alpha = 0.025, sided = 1), performance = list("power"),
+                               designs = designs, truths = list(list(effect = 0.5)))
+  stopped <- vcr_test_run(vcr_test_job("design.grid", mk(list(list(nTreat = 20, nControl = 20), list(nTreat = 300000, nControl = 300000), list(nTreat = 25, nControl = 25))),
+                                       seed = 7L, replicates = 5000L, cores = 1L, job_id = "job_n06h_stop", extra = list(cpuSecondsLimit = 20, batchSize = 25L)))
+  whole <- vcr_test_run(vcr_test_job("design.grid", mk(list(list(nTreat = 20, nControl = 20), list(nTreat = 25, nControl = 25))), seed = 7L, replicates = 5000L, cores = 1L, job_id = "job_n06h_whole"))
+  d <- stopped$diagnostics
+  codes <- vcr_test_issue_codes(stopped)
+  ok <- identical(stopped$status, "succeeded") && identical(stopped$conclusion, "limited") && d$cellsPlanned == 3L && d$cellsRun == 2L && length(d$cells) == 2L &&
+    "cpu_budget_exhausted" %in% codes && identical(d$cells[[1]]$status, "succeeded") && identical(d$cells[[1]]$conclusion, "estimable") && identical(d$cells[[2]]$status, "failed") &&
+    identical(d$cells[[2]]$conclusion, "limited") &&
+    identical(whole$status, "succeeded") && identical(whole$conclusion, "estimable") && whole$diagnostics$cellsPlanned == 2L && whole$diagnostics$cellsRun == 2L &&
+    identical(whole$diagnostics$cells[[1]]$conclusion, "estimable") && isFALSE(whole$diagnostics$cells[[1]]$replicatesCapped)
+  list(pass = ok,
+       detail = sprintf("three designs, the second too large for a 20-second budget: status %s, conclusion %s, %s of %s cells run (cell statuses %s, conclusions %s), issues %s; a grid that runs every cell: conclusion %s, %s of %s cells",
+                        stopped$status, stopped$conclusion %||% "NULL", d$cellsRun %||% "NULL", d$cellsPlanned %||% "NULL",
+                        paste(vapply(d$cells, function(c_) c_$status, character(1)), collapse = "/"), paste(vapply(d$cells, function(c_) c_$conclusion %||% "NULL", character(1)), collapse = "/"),
+                        paste(codes, collapse = ","), whole$conclusion %||% "NULL", whole$diagnostics$cellsRun %||% "NULL", whole$diagnostics$cellsPlanned %||% "NULL"))
+})
+
 vcr_case("N04d", c("AC-29", "AC-30"), function() {
   # The analytic cross-check at a high replicate count. The log-rank power is a
   # first-order approximation, documented to sit within about a percentage point

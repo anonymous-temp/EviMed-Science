@@ -924,6 +924,10 @@ function vcrSettings(overrides) {
     // (vcrComposition, vcrGateway); the client clamps it to 5–60 s. Read since the registry client existed, defined
     // here only on 2026-10-10 — until then the variable reached nothing and the deadline was always 20 s.
     vcrRegistryTimeoutMs: integer("vcrRegistryTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS", 20_000, 5_000, 60_000),
+    // The most candidate trials one study holds (「给患者找试验」, vcrPatientTrials): each one costs an evaluation for every patient the
+    // study judges against it, so the count is bounded; a trial the study already holds can always be updated. Counter:
+    // `open_science_vcr_patient_trials_total{kind="capReached"}`.
+    vcrCandidateTrialsMax: integer("vcrCandidateTrialsMax", "OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX", 60, 1, 500),
     // The smallest cell a model is shown (vcrService.minCell): a deployment may raise the domain's floor, never lower it.
     vcrMinCellSize: integer("vcrMinCellSize", "OPEN_SCIENCE_VCR_MIN_CELL_SIZE", VCR_MIN_CELL_SIZE, VCR_MIN_CELL_SIZE, 1_000),
     // The largest derived table — reconstructed pseudo-patients, a forecast's probabilities — the control plane stores from an engine job (vcrJobs).
@@ -1270,6 +1274,11 @@ function reviewConfigured(overrides) {
  *   with a key in place, and the reply check then asks the reviewer model
  *   about every sentence, as it did before Jev (principle 15: the reason is
  *   cost and latency, the counter is `open_science_review_jev_requests_total`).
+ * - `OPEN_SCIENCE_JEV_ENABLED` (owner, 2026-10-10; default on) is the one switch
+ *   for every Jev site at once, the reply check's included: off, the key stays
+ *   mounted and each site takes the path it had before Jev. The per-site list
+ *   (`OPEN_SCIENCE_JEV_DISABLED_SITES`) and the reply check's own lever stay as
+ *   narrower switches under it.
  * - The timeout is how long a reply check waits for Jev before the reviewer
  *   takes every sentence. Jev answered in 0.2–1.3 s in the 2026-09-21 probes,
  *   so fifteen seconds is an outage, not a slow answer.
@@ -1311,15 +1320,17 @@ function reviewJevSettings(overrides, keyPresent) {
   const registerValue = overrides.jevRegisterMaxLines ?? (process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES || REGISTER_JUDGE_MAX_LINES);
   const registerMaxLines = Number(registerValue);
   if(!Number.isSafeInteger(registerMaxLines)||registerMaxLines<1||registerMaxLines>5000)throw new Error(`OPEN_SCIENCE_JEV_REGISTER_MAX_LINES must be a whole number from 1 to 5000, got ${JSON.stringify(registerValue)}.`);
+  // Read once and folded into both flags below, so a consumer that reads only the reply check's flag cannot miss the master switch.
+  const master = Boolean(overrides.jevEnabled ?? boolEnv("OPEN_SCIENCE_JEV_ENABLED", true));
   return {
-    reviewJevEnabled: overrides.reviewJevEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_JEV_ENABLED", keyPresent),
+    reviewJevEnabled: master && Boolean(overrides.reviewJevEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_JEV_ENABLED", keyPresent)),
     reviewJevModel: model,
     reviewJevApiBase: String(pin.apiBase ?? "").replace(/\/+$/, ""),
     reviewJevSupportConfidence: threshold,
     reviewJevMaxRequestTokens: maxRequestTokens,
     reviewJevMaxStateTokens: maxStateTokens,
     reviewJevTimeoutMs: timeoutMs,
-    jevEnabled: overrides.jevEnabled ?? keyPresent,
+    jevEnabled: master && keyPresent,
     jevDisabledSites: disabled,
     jevOnlineTimeoutMs: onlineTimeout,
     jevBackgroundConcurrency: concurrency,
@@ -2521,6 +2532,22 @@ export function loadConfig(overrides = {}) {
     memoryContextMaxChars: Number(
       overrides.memoryContextMaxChars ?? process.env.OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS ?? 20_000,
     ),
+    // The standing profile a conversation is handed up front (review M6, 2026-10-10): the most entries it carries, research
+    // records and capsule entries together, inside the 1,500 tokens the block is held to. What is always present is paid for on
+    // every request and takes attention from the question, so it is capped; the rest is the recall tool's, and the line beside
+    // the profile says how many there are.
+    memoryProfileMaxRecords: Number(
+      overrides.memoryProfileMaxRecords ?? process.env.OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS ?? 24,
+    ),
+    // How many items the recall tool answers with when the model does not say, and the most it may ask for. The tool is the
+    // one path to episodic and project memory, and an answer is read by the model whole: five, eight at most, each above the
+    // relevance floor below.
+    memoryRecallToolLimit: Number(
+      overrides.memoryRecallToolLimit ?? process.env.OPEN_SCIENCE_MEMORY_RECALL_TOOL_LIMIT ?? 5,
+    ),
+    memoryRecallToolMaxLimit: Number(
+      overrides.memoryRecallToolMaxLimit ?? process.env.OPEN_SCIENCE_MEMORY_RECALL_TOOL_MAX_LIMIT ?? 8,
+    ),
     // The similarity below which an index hit is not offered: by the memory
     // page's search (2026-09-26 audit, M-4: 「信尔美」 also listed five unrelated
     // memories of another project) and, since 2026-10-10 (review M-3), by the
@@ -2528,7 +2555,8 @@ export function loadConfig(overrides = {}) {
     // neighbours. Measured on the pinned embedder (qwen3.7-text-embedding,
     // 2026-09-14): relevant hits score 0.71–0.87, unrelated ones fall to about
     // 0.21. The durable kinds (profile, preference, behavior, correction) are
-    // recalled whatever they score; recall keeps its own budget.
+    // not looked up under it: they are the standing profile, handed to a
+    // conversation up front whatever they would score (`memoryProfileMaxRecords`).
     memorySearchMinScore: Number(
       overrides.memorySearchMinScore ?? process.env.OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE ?? 0.5,
     ),

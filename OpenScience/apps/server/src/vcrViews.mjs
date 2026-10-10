@@ -48,7 +48,7 @@ import { vcrExportHoldsDocument, vcrReportModel, vcrReportReviewRevision } from 
 import { modelDocumentReaderSections, renderModelDocument } from "./vcrModelDocuments.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import {
-  allResultsOf, countsView, evidenceLabel, finite, MODEL_TYPE_LABELS, VALIDATION_LABELS, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
+  allResultsOf, countsView, dominatedScenarioMap, evidenceLabel, finite, MODEL_TYPE_LABELS, VALIDATION_LABELS, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
   text, cpuText, zhTime, vcrFailureSentence, vcrPageSentence,
 } from "./vcrViewsKit.mjs";
 
@@ -1083,38 +1083,16 @@ export function presentDesigns(bundle) {
 }
 
 /**
- * Scenarios beaten on every measure of the team's comparison goal. Ties do not
- * dominate. The same rule as `vcrDominatedScenarios`, keyed by id here.
+ * Scenarios beaten on every measure of the team's comparison goal: the one rule, `dominatedScenarioMap`, over the numbers (and the
+ * Monte-Carlo errors) the design page stores, keyed by id.
  * @param {readonly Record<string, any>[]} scenarios @param {(scenario: any) => any} resultOf @param {Record<string, any>} goal
  */
 function dominatedOf(scenarios, resultOf, goal) {
-  const measures = list(goal.measures).map((measure) => ({
-    name: String(object(measure).name ?? ""), higherIsBetter: String(object(measure).direction ?? "higher") !== "lower",
-  })).filter((measure) => measure.name);
-  /** @type {Map<string, Record<string, any>>} */
-  const beaten = new Map();
-  if (!measures.length) return beaten;
-  const valueOf = (/** @type {any} */ scenario, /** @type {string} */ name) => {
+  return dominatedScenarioMap(scenarios, (scenario, name) => {
     const found = list(object(resultOf(scenario)).measures).find((entry) => String(object(entry).name) === name);
-    return finite(object(found).value);
-  };
-  for (const candidate of scenarios) {
-    for (const other of scenarios) {
-      if (other.id === candidate.id) continue;
-      let better = false;
-      let neverWorse = true;
-      for (const measure of measures) {
-        const mine = valueOf(candidate, measure.name);
-        const theirs = valueOf(other, measure.name);
-        if (mine === null || theirs === null) { neverWorse = false; break; }
-        const worse = measure.higherIsBetter ? theirs < mine : theirs > mine;
-        if (worse) { neverWorse = false; break; }
-        if (measure.higherIsBetter ? theirs > mine : theirs < mine) better = true;
-      }
-      if (neverWorse && better) { beaten.set(candidate.id, other); break; }
-    }
-  }
-  return beaten;
+    const value = finite(object(found).value);
+    return value === null ? null : { value, mcse: finite(object(found).mcse) };
+  }, goal);
 }
 
 // --- assumptions (shared by the overview and the data tab) -----------------------------------------------------------------

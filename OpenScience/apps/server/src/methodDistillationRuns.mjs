@@ -38,6 +38,8 @@ import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { readRunTranscript, transcriptExcerpt } from "./runTranscripts.mjs";
 import { learnedMethodId, methodScopeOf } from "./learningService.mjs";
 import { lessonPeers } from "./learningTriggers.mjs";
+import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
+import { endedBeforeReset } from "./researchMemory.mjs";
 import { HttpError } from "./security.mjs";
 
 /** The file the run reads its frozen input from. */
@@ -335,12 +337,16 @@ export class MethodDistillationRuns {
    *
    * `usedMethods` says which learned methods the run read and what became of the results produced under each
    * (`MethodFeedbackService.usedForLesson`). Optional: without it the input says it does not know.
+   * `resetInstant` says when the account last reset its memory: a lesson drawn from a conversation that ended before it is
+   * not written, even when its run was already under way when the reset came (the job was cancelled, and its worker only
+   * learns that after the write). Optional: without it nothing is held against a reset.
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any, jobs?: any, notifications?: any,
    *   readCorrections?: ((userId: string, recordIds: string[]) => Promise<{recordId: string, key?: string | null, text: string}[]>) | null,
    *   resolveProject?: ((userId: string, projectId: string) => Promise<any>) | null,
-   *   usedMethods?: ((project: any, run: any) => Promise<any>) | null}} dependencies
+   *   usedMethods?: ((project: any, run: any) => Promise<any>) | null,
+   *   resetInstant?: ((userId: string) => Promise<string | null>) | null}} dependencies
    */
-  constructor({ dispatch, readResult, learning, jobs = null, notifications = null, readCorrections = null, resolveProject = null, usedMethods = null }) {
+  constructor({ dispatch, readResult, learning, jobs = null, notifications = null, readCorrections = null, resolveProject = null, usedMethods = null, resetInstant = null }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method distillation requires the bounded run dispatcher and result reader.");
     }
@@ -353,6 +359,7 @@ export class MethodDistillationRuns {
     this.readCorrections = readCorrections;
     this.resolveProject = resolveProject;
     this.usedMethods = usedMethods;
+    this.resetInstant = resetInstant;
   }
 
   /**
@@ -458,6 +465,12 @@ export class MethodDistillationRuns {
       throw new HttpError(422, "method_candidate_invalid", `Unknown operation ${JSON.stringify(operation)}.`);
     }
     if (operation === "no_change") return { operation, methodId: undefined };
+    // The conversation this lesson comes from was over before the account reset its memory: what the reset deleted is not
+    // written back by a lesson that was already on its way (review M-11).
+    if (this.resetInstant && endedBeforeReset(run, await this.resetInstant(job.userId).catch(() => null))) {
+      recordSkippedBeforeReset("lesson");
+      return { operation: "no_change", methodId: undefined, skipped: "before_reset" };
+    }
     const signal = context.signal ?? lessonSignal({
       trigger: String(job.payload?.trigger ?? ""),
       corrections: [...(Array.isArray(job.payload?.corrections) ? job.payload.corrections : []),

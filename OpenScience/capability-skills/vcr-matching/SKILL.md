@@ -162,6 +162,28 @@ metadata:
 而读同一份病历的两位医生也只是部分一致。我们的评估报告四种状态之间的混淆、符合者召回、假排除率、阳性预测值和需筛人数，
 Report inter-rater agreement and disagreements as properties of that reference set, not a universal ceiling or a substitute for clinical validation.
 
+## 十、给患者找试验
+
+用户要为某位受试者找可参加的试验时（页面上的「为该患者找试验」，或在对话里直接说），做的是同一件事的另一头：不是一份方案找患者，而是一位患者找试验。条件的文法、事实的写法、语言条件的回答、判定由评估器做，都和上面一样。
+
+- 候选试验来自试验登记平台：`mcp__evimed__clinical_trial_search` 找正在招募或即将招募的，凭这位受试者的诊断、分期、生物标志物、年龄、性别和所在地区挑；有希望的用 `mcp__evimed__trial_registry_record` 读登记记录。本研究已经有的候选试验在 `mcp__evimed__vcr_read` `{ "what": "candidate_trials" }` 里，不必重复写。
+- 一个试验写成一项候选试验：`what: "candidate_trial"`，`registryId`、`subjectKeys`（这位受试者）和 `criteria`——登记记录里入选和排除标准的原句，一条一条按第一节的写法结构化，`sourceText` 逐字照抄，判不了的写成 `language`。试验的名称、分期、状态和中心由平台从登记记录读，你不写。写入时平台就把这位受试者对照这个试验判了，判定在返回值里。
+
+```json
+{ "what": "candidate_trial", "items": [ {
+  "registryId": "NCT05000001", "subjectKeys": ["P-001"],
+  "criteria": [
+    { "kind": "inclusion", "criterionType": "demographic", "sourceText": "Age >= 18 years",
+      "requirement": { "op": "compare", "variable": "age", "comparator": "gte", "value": 18, "unit": "year" } },
+    { "kind": "exclusion", "criterionType": "comorbidity", "sourceText": "Active brain metastases",
+      "requirement": { "op": "absent", "variable": "active_brain_metastasis" } } ] } ] }
+```
+
+- 补了这位受试者的新事实，或要让另一位受试者也对照已有的试验：同一个 `registryId` 再写一次，只写 `subjectKeys`，不带 `criteria`。条件要改就把整套 `criteria` 重写，平台会把受影响的判定重做。
+- 语言条件的回答用第三节的 `language_judgment`，写 `candidateTrialId`（读回的试验 id）代替 `protocolVersionId`；还欠哪些，读 `{ "what": "candidate_trials", "filter": { "subjectKey": "P-001" } }` 的 `requests[]`。
+- 同一次读取的 `ranking` 就是平台排好的顺序：全部满足的在前，其余按还差几条，被排除的在后，同样的再看登记状态；本研究自己的方案也在里面。顺序不是你的判断，不改它，也不写「匹配度」。
+- 交付 `matching-assessment.md`：每个试验一段——登记号、名称、状态、为什么可能合适、还缺哪些证据和怎么补，满足和不满足各引患者原句与试验原句；`matching.json` 写 `subjectKey`、`direction: "patient_to_trial"` 和 `trials[]`（抄自 `ranking`）。登记状态不等于某个中心现在有名额；联系患者、转诊、入组都不归你。
+
 ## 交付之前的两步
 
 1. **`traceability-review`** —— 交付物里的每一个数和每一句引文都要回得去：数回到 `matching.json` 的某个字段或回到一条带原文位置的抽取值，引文回到它声明的那份来源。回不去的，删掉或改成「不可得」；**不要为了让它闭嘴改数据**。

@@ -445,6 +445,50 @@ test("the standard error is derived on the analysis scale from the value and its
   assert.deepEqual(analysisScaleInput({ value: 1.4, ci_low: 1, ci_high: 2 }, { scale: "logit" }), { ok: false, reason: "proportion_not_derivable" });
 });
 
+test("D12 the hazard ratios a ClinicalTrials.gov analysis states pool: its percent level is read as 95%, not as 9,500%", async () => {
+  // The recorded FLAURA analyses carry `ciPctValue: "95"`. The registry client used to store 95 and the pooling
+  // read takes a fraction, so every registry hazard ratio was refused as confidence_level_invalid.
+  const hazards = RECORD.extractions.filter((item) => item.parameter === "hazard_ratio");
+  assert.equal(hazards.length, 2);
+  for (const hazard of hazards) {
+    const derived = analysisScaleInput({ value: hazard.value, ci_low: hazard.ciLow, ci_high: hazard.ciHigh, unit: hazard.unit, detail: hazard.detail }, { scale: "log" });
+    assert.equal(derived.ok, true, `${hazard.value}: ${JSON.stringify(derived)}`);
+    assert.ok(Math.abs(derived.se - (Math.log(hazard.ciHigh) - Math.log(hazard.ciLow)) / (2 * Z_95)) < 1e-6, "the standard error is that of a 95% interval");
+  }
+  // A row stored while the percent was the stored form (an `evidence_items` row is append-only) pools as well.
+  const legacy = analysisScaleInput({ value: 0.46, ci_low: 0.37, ci_high: 0.57, detail: { confidenceLevel: 95 } }, { scale: "log" });
+  assert.equal(legacy.ok, true);
+  assert.ok(Math.abs(legacy.se - (Math.log(0.57) - Math.log(0.37)) / (2 * Z_95)) < 1e-6);
+  const ninety = analysisScaleInput({ value: 10, ci_low: 8, ci_high: 13, detail: { confidenceLevel: 90 } }, { scale: "identity" });
+  assert.ok(Math.abs(ninety.se - 5 / (2 * 1.6448536269514722)) < 1e-12, "90 is 90%");
+  // A level that is no level is still refused by name; it is not turned into the 95% default.
+  for (const bad of [0, 1, 40, 150]) {
+    assert.deepEqual(analysisScaleInput({ value: 0.46, ci_low: 0.37, ci_high: 0.57, detail: { confidenceLevel: bad } }, { scale: "log" }),
+      { ok: false, reason: "confidence_level_invalid" }, String(bad));
+  }
+
+  // Through the pipeline: extract the record, then pool its hazard ratios.
+  const store = storeDouble();
+  const jobs = jobsDouble();
+  const pipeline = createVcrEvidencePipeline({ store, registry: registryDouble(), jobs, now: () => new Date(AT) });
+  await pipeline.extractPrecedent({
+    userId: "u1", studyId: "std_1", registryId: "NCT02296125",
+    endpointKeys: { "Median Progression Free Survival (PFS) (Months)": "pfs-blinded" },
+  });
+  const stored = store.evidence.filter((row) => row.parameter === "hazard_ratio");
+  assert.deepEqual(stored.map((row) => row.detail.confidenceLevel), [0.95, 0.95]);
+  const queued = await pipeline.poolParameter({ userId: "u1", studyId: "std_1", parameter: "hazard_ratio", endpointKey: "pfs-blinded", target: {} });
+  assert.equal(queued.status, "queued");
+  assert.equal(queued.armRole, "contrast");
+  const overall = queued.jobs.find((entry) => entry.calibre === "overall");
+  assert.equal(overall.studies, 2, "both analyses reach the pool");
+  assert.deepEqual(overall.excluded, [], "none is left out for its confidence level");
+  const scenario = jobs.enqueued.find((entry) => entry.detail.calibre === "overall").scenario;
+  assert.equal(scenario.scale, "log");
+  assert.equal(scenario.studies.length, 2);
+  assert.ok(scenario.studies.every((study) => Number.isFinite(study.se) && study.se > 0 && study.se < 0.5), JSON.stringify(scenario.studies));
+});
+
 test("a pool job is exactly the engine's contract: { studyId, estimate, se } on the analysis scale, plus method, level and scale", () => {
   const items = [
     { id: "evd_0001", value: 31, ci_low: 25, ci_high: 38, unit: "%", sample_size: 277, events: 86, arm: "SoC", source_ref: "ctgov:NCT02296125" },
@@ -735,6 +779,26 @@ test("an unreachable registry is reported and writes nothing", async () => {
   assert.equal(candidates.status, "registry_unavailable");
   assert.deepEqual(candidates.candidates, []);
   assert.deepEqual(candidates.registries.map((entry) => entry.status), ["registry_unavailable", "registry_unavailable"]);
+});
+
+test("a candidate trial's record is read like any registry read: identity out of the record, nothing written, a registry that cannot answer named", async () => {
+  const store = storeDouble();
+  const pipeline = createVcrEvidencePipeline({ store, registry: registryDouble(), now: () => new Date(AT) });
+  const answer = await pipeline.candidateRecord({ userId: "u1", registryId: "NCT02296125" });
+  assert.equal(answer.status, "ok");
+  assert.equal(answer.trial.registryId, "NCT02296125");
+  assert.equal(answer.trial.status, "COMPLETED");
+  assert.match(answer.trial.recordHash, /^[a-f0-9]{64}$/);
+  assert.match(answer.trial.eligibilityText, /^Inclusion Criteria:/);
+  assert.equal(store.precedents.length, 0, "a candidate is a lead for one patient, not evidence a card may cite: the library is not written");
+  assert.equal(store.evidence.length, 0);
+
+  const offline = createVcrEvidencePipeline({ store, registry: registryDouble({ outage: "ENOTFOUND" }) });
+  assert.deepEqual(await offline.candidateRecord({ userId: "u1", registryId: "NCT02296125" }), { status: "registry_unavailable", reason: "ENOTFOUND", registryId: "NCT02296125" });
+  const missing = createVcrEvidencePipeline({ store, registry: { ...registryDouble(), async record() { return { status: "registry_not_found", reason: "registry_not_found" }; } } });
+  assert.equal((await missing.candidateRecord({ userId: "u1", registryId: "NCT00000000" })).status, "registry_not_found");
+  const unconfigured = createVcrEvidencePipeline({ store, registry: null });
+  assert.equal((await unconfigured.candidateRecord({ userId: "u1", registryId: "NCT02296125" })).reason, "registry_not_configured");
 });
 
 test("the runtime's registry read answers structure, never throws, and never writes", async () => {

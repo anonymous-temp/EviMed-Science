@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SpecialistClassifier } from "../src/specialistClassifier.mjs";
+import { createJudgeService } from "../src/judgeService.mjs";
+import { buildJudgeRequest, judgePromptFingerprint } from "../src/judgeSites.mjs";
 
 const agents = [
   { id: "adr-analysis", version: "1.2.2", runtimeAgent: "evimed-adr-analysis", title: "ADR", description: "pharmacovigilance signal analysis" },
@@ -26,6 +28,52 @@ test("Jev explicit none is preserved while outages restore Flash", async () => {
   judgeService.judge = async () => ({ outcome: "fallback", code: "judge_timeout" });
   assert.equal((await classifier.classify("请做Meta分析", agents))?.agentId, "meta-analysis");
   assert.equal(fetchImpl.calls.length, 1);
+});
+
+test("J3 on the online path: an unsure Jev costs the dispatch no model call, a slow one no more than the online timeout before Flash answers, and an open circuit nothing (JEV-4)", async () => {
+  const question = "请做Meta分析";
+  const capabilities = agents.map((agent) => ({ id: agent.id, title: agent.title, description: agent.description, requiredInputs: [], starterPrompts: [] }));
+  const { questions } = buildJudgeRequest("J3", { question, capabilities });
+  const siteConfig = { reviewJevEnabled: true, typesafeApiKey: "test-not-secret", reviewJevModel: "jev-1.13.0", jevOnlineTimeoutMs: 100,
+    jevSites: { J3: { calibration: "calibrated", threshold: 0.8, promptFingerprint: judgePromptFingerprint("J3", questions, 0.8, "jev-1.13.0") } } };
+  /** Jev's answer to the one question, with these probabilities (none, adr-analysis, meta-analysis). */
+  const answering = (/** @type {number[]} */ [none, adr, meta]) => async (/** @type {any} */ _deps, /** @type {any} */ call) => ({ model: "jev-1.13.0", cost: 0, answers: { agentId: {
+    type: "choice", choice: [["none", none], ["adr-analysis", adr], ["meta-analysis", meta]].sort((a, b) => /** @type {number} */ (b[1]) - /** @type {number} */ (a[1]))[0][0],
+    confidence: (3 * Math.max(none, adr, meta) - 1) / 2, probabilities: { none, "adr-analysis": adr, "meta-analysis": meta } } }, questions: call.questions });
+
+  // Sure: Jev routes, and Flash is not asked.
+  const sure = createJudgeService({ config: siteConfig, callImpl: answering([0.02, 0.03, 0.95]) });
+  const flash = fetchReturning('{"agentId":"adr-analysis","confidence":1}');
+  const routed = await new SpecialistClassifier(baseConfig(), { fetchImpl: flash, judgeService: sure }).classify(question, agents);
+  assert.deepEqual([routed?.agentId, flash.calls.length], ["meta-analysis", 0]);
+  assert.match(routed?.reason ?? "", /^jev:0\.\d\d$/);
+  await sure.close();
+
+  // Unsure: the net decides, with no model call from the dispatch (the plan: an unsure Jev is a classifier with no verdict).
+  const unsure = createJudgeService({ config: siteConfig, callImpl: answering([0.4, 0.3, 0.3]) });
+  const asked = fetchReturning('{"agentId":"adr-analysis","confidence":1}');
+  assert.equal(await new SpecialistClassifier(baseConfig(), { fetchImpl: asked, judgeService: unsure }).classify(question, agents), null);
+  assert.equal(asked.calls.length, 0);
+  await unsure.close();
+
+  // Slow: a provider that never answers costs the dispatch the online timeout and no more, then Flash answers.
+  let sent = 0;
+  const hanging = createJudgeService({ config: siteConfig, callImpl: (_deps, call) => new Promise((_, reject) => { sent += 1; call.signal.addEventListener("abort", () => reject(new Error("aborted"))); }) });
+  const fallback = fetchReturning('{"agentId":"meta-analysis","confidence":0.9}');
+  const classifier = new SpecialistClassifier(baseConfig(), { fetchImpl: fallback, judgeService: hanging });
+  const started = Date.now();
+  assert.equal((await classifier.classify(question, agents))?.agentId, "meta-analysis");
+  assert.ok(Date.now() - started < 1500, `waited ${Date.now() - started} ms for a 100 ms online timeout`);
+  assert.deepEqual([sent, fallback.calls.length], [1, 1]);
+  // Three failures in a row open the circuit: the next dispatch asks Jev nothing and waits for nothing.
+  for (let i = 0; i < 2; i += 1) await classifier.classify(question, agents);
+  const before = sent;
+  const quick = Date.now();
+  assert.equal((await classifier.classify(question, agents))?.agentId, "meta-analysis");
+  assert.equal(sent, before, "an open circuit asks Jev nothing");
+  assert.equal(fallback.calls.length, 4, "and Flash answered every one of the four");
+  assert.ok(Date.now() - quick < 100);
+  await hanging.close();
 });
 
 function baseConfig(overrides = {}) {
