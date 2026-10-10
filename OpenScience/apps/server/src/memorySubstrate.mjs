@@ -6,7 +6,7 @@ import {
   researchMemoryRoots,
   userMemoryRoot,
 } from "./openVikingClient.mjs";
-import { recallContent, selectWithinBudget } from "./memoryRecallPolicy.mjs";
+import { DURABLE_RECALL_KINDS, recallContent, selectWithinBudget } from "./memoryRecallPolicy.mjs";
 import { annotateVersions, versionFields, versionsInForce } from "./memoryValidity.mjs";
 import { MEMORY_KINDS, memoryPausedFor } from "./researchMemory.mjs";
 import { HttpError } from "./security.mjs";
@@ -295,16 +295,27 @@ export class MemorySubstrate {
       targets: recallTargets(userId, { projectId, sessionId }),
       limit: this.contextLimit * CANDIDATE_OVERFETCH,
       peerId: projectId,
+      // The memory page's floor (2026-10-10 review M-3). Without one the index
+      // answers with its nearest neighbours however far they are, and a
+      // greeting was handed eight memories under 「与当前问题相关」. The
+      // builtin arm needs a term match for everything but the durable kinds;
+      // this is the same gate for the index arm, and the durable kinds join
+      // below.
+      scoreThreshold: this.searchMinScore,
     });
 
     const nominated = [];
     const seen = new Set();
-    for (const hit of hits) {
+    // Best score first, so a record nominated twice keeps its better one.
+    for (const hit of [...hits].sort((left, right) => right.score - left.score)) {
       const parsed = parseMemoryUri(hit.uri);
       // A hit we did not write — the server's own extraction, or a layout from
       // an older release. It names no record we can hydrate, so it is not a
       // candidate rather than a guess.
       if (!parsed || seen.has(parsed.recordId)) continue;
+      // Checked here as well as asked of the server: the floor is ours, and a
+      // server that treats its threshold differently must not lower it.
+      if (!(hit.score >= this.searchMinScore)) continue;
       seen.add(parsed.recordId);
       nominated.push({ recordId: parsed.recordId, score: hit.score });
     }
@@ -323,6 +334,16 @@ export class MemorySubstrate {
       }),
     ))
       .filter(Boolean);
+    // The researcher's standing profile joins whatever the index found, as it
+    // does on the builtin arm: who they are, how they work and what they have
+    // corrected stay relevant whatever the question is, and the index ranks by
+    // closeness to a question, so a greeting nominates none of it. Records the
+    // index also nominated keep their score; the rest enter unscored and rank
+    // by recency behind them.
+    const nominatedIds = new Set(hydrated.map(({ record }) => record.id));
+    for (const record of await this.#standingProfile(userId)) {
+      if (!nominatedIds.has(record.id)) hydrated.push({ record, score: 0 });
+    }
 
     // Which of them hold: in force and recallable, inside the validity
     // interval, in this project, one version of each fact. The index is asked
@@ -361,6 +382,24 @@ export class MemorySubstrate {
     return selectWithinBudget(await this.#reranked(query, ranked), {
       contextLimit: this.contextLimit,
       contextMaxChars: this.contextMaxChars,
+    });
+  }
+
+  /**
+   * The records of the durable kinds (`DURABLE_RECALL_KINDS`) in force for
+   * this account: the same fetch, by the same filter, as the builtin arm's.
+   * Scope, expiry and validity are decided afterwards, by the one decision
+   * both arms end in. A store that predates the listing (a test double)
+   * contributes none.
+   * @param {string} userId
+   */
+  async #standingProfile(userId) {
+    if (typeof this.store?.listRecords !== "function") return [];
+    // The store lists most important first; no more than the nominations are
+    // asked for, since the reservation they fill is half the prompt budget and
+    // the reranker reads every candidate.
+    return this.store.listRecords(userId, {
+      statuses: ["active"], kinds: [...DURABLE_RECALL_KINDS], pageSize: Math.min(100, this.contextLimit * CANDIDATE_OVERFETCH),
     });
   }
 

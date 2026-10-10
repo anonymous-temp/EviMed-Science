@@ -2462,12 +2462,14 @@ export function loadConfig(overrides = {}) {
     memoryContextMaxChars: Number(
       overrides.memoryContextMaxChars ?? process.env.OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS ?? 20_000,
     ),
-    // The similarity below which the memory page's search does not show an
-    // index hit (2026-09-26 audit, M-4: 「信尔美」 also listed five unrelated
-    // memories of another project). Measured on the pinned embedder
-    // (qwen3.7-text-embedding, 2026-09-14): relevant hits score 0.71–0.87,
-    // unrelated ones fall to about 0.21. Recall into a run keeps its own
-    // budget and is not affected.
+    // The similarity below which an index hit is not offered: by the memory
+    // page's search (2026-09-26 audit, M-4: 「信尔美」 also listed five unrelated
+    // memories of another project) and, since 2026-10-10 (review M-3), by the
+    // recall into a run, where a greeting was handed its eight nearest
+    // neighbours. Measured on the pinned embedder (qwen3.7-text-embedding,
+    // 2026-09-14): relevant hits score 0.71–0.87, unrelated ones fall to about
+    // 0.21. The durable kinds (profile, preference, behavior, correction) are
+    // recalled whatever they score; recall keeps its own budget.
     memorySearchMinScore: Number(
       overrides.memorySearchMinScore ?? process.env.OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE ?? 0.5,
     ),

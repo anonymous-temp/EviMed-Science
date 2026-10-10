@@ -47,7 +47,7 @@ function record(overrides = {}) {
 /** A research-memory store that records what was asked of it. */
 function fakeStore(records, { memos = [] } = {}) {
   const byId = new Map(records.map((row) => [row.id, row]));
-  const calls = { getRecord: [], relevant: 0, list: 0 };
+  const calls = { getRecord: [], relevant: 0, list: 0, listRecords: [] };
   return {
     calls,
     async getRecord(_userId, id) {
@@ -62,6 +62,11 @@ function fakeStore(records, { memos = [] } = {}) {
     },
     async listAllRecords() {
       return records;
+    },
+    // As the store answers it: the filters are the store's, so a caller that forgets one is seen.
+    async listRecords(_userId, { statuses = [], kinds = [] } = {}) {
+      calls.listRecords.push({ statuses, kinds });
+      return records.filter((row) => (!statuses.length || statuses.includes(row.status)) && (!kinds.length || kinds.includes(row.kind)));
     },
     async list() {
       calls.list += 1;
@@ -351,6 +356,80 @@ test("the profile keeps at most half the budget, whichever provider ranked it", 
     "the episodic match was crowded out; the budget is not shared");
   assert.equal(recalled.filter((row) => ["preference", "profile", "behavior", "correction"].includes(row.kind)).length, 2);
   assert.equal(recalled.length, 3, "nothing else was available to fill the remaining slot");
+});
+
+// 2026-10-10 review M-3: the index arm asked for the nearest neighbours at any distance and trusted the
+// nominations alone. A greeting therefore received up to eight memories however far they were, and a standing
+// preference outside the nominations never arrived — while the builtin arm always offers the durable kinds and needs
+// a term match for the rest, and memoryRecallPolicy.mjs says both arms must answer "which reach the prompt" alike.
+const uriOf = (row) => memoryUri(USER, { scope: row.scope, scopeId: row.scopeId, kind: row.kind, recordId: row.id });
+
+function standingFixture() {
+  return [
+    record({ id: "pref", kind: "preference", key: "tone", value: "Prefers tables over prose." }),
+    record({ id: "near", kind: "project_fact", scope: "project", scopeId: PROJECT, key: "cohort", value: "The cohort has 500 patients.", summary: "" }),
+    record({ id: "far", kind: "follow_up", scope: "project", scopeId: PROJECT, key: "reagent", value: "Order the reagent.", summary: "" }),
+  ];
+}
+
+test("a question the index finds nothing close to gets the researcher's standing profile and no episodic memory", async () => {
+  const records = standingFixture();
+  const [, near, far] = records;
+  const store = fakeStore(records);
+  // A greeting: only distant neighbours, nominated by an index that was asked for a floor and ignored it.
+  const index = fakeIndex([hit(uriOf(far), 0.31), hit(uriOf(near), 0.38)]);
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: index });
+
+  const recalled = await substrate.recall(USER, "你好", { projectId: PROJECT });
+
+  assert.deepEqual(recalled.map((row) => row.id), ["record:pref"], "the preference is the profile; the project facts were nowhere near the question");
+  assert.equal(index.calls.find[0].options.scoreThreshold, 0.5, "the page's floor is asked of the server as well");
+  assert.equal(store.calls.relevant, 0, "this is the index arm, not the fallback");
+});
+
+test("the standing profile is offered when the index nominated none of it, and each memory arrives once", async () => {
+  const records = standingFixture();
+  const [pref, near, far] = records;
+  const store = fakeStore(records);
+
+  const answered = new MemorySubstrate(openVikingConfig, { store, openViking: fakeIndex([hit(uriOf(near), 0.83), hit(uriOf(far), 0.3)]) });
+  assert.deepEqual((await answered.recall(USER, "how many patients", { projectId: PROJECT })).map((row) => row.id), ["record:near", "record:pref"],
+    "what the question is about first; the profile beside it; the distant fact not at all");
+
+  const empty = new MemorySubstrate(openVikingConfig, { store, openViking: fakeIndex([]) });
+  assert.deepEqual((await empty.recall(USER, "anything", { projectId: PROJECT })).map((row) => row.id), ["record:pref"],
+    "an index that found nothing is not a reason to forget who the researcher is");
+  assert.deepEqual(store.calls.listRecords.at(-1), { statuses: ["active"], kinds: ["profile", "preference", "behavior", "correction"] },
+    "the durable kinds, and in force only");
+
+  // A durable memory the index also nominates, below the floor or above it, is one row.
+  for (const score of [0.2, 0.9]) {
+    const both = new MemorySubstrate(openVikingConfig, { store, openViking: fakeIndex([hit(uriOf(pref), score)]) });
+    assert.deepEqual((await both.recall(USER, "tables", { projectId: PROJECT })).map((row) => row.id), ["record:pref"], String(score));
+  }
+});
+
+test("the profile that is offered is the one the decision allows: this project's scope, in force, not sensitive", async () => {
+  const records = [
+    record({ id: "mine", kind: "behavior", key: "habit", value: "Checks the protocol first.", scope: "project", scopeId: PROJECT }),
+    record({ id: "elsewhere", kind: "preference", key: "other", value: "Another project's taste.", scope: "project", scopeId: "prj_other" }),
+    record({ id: "pending", kind: "correction", key: "fix", value: "Not agreed yet.", status: "pending" }),
+    record({ id: "secret", kind: "profile", key: "who", value: "Sensitive.", sensitive: true }),
+    record({ id: "user-wide", kind: "profile", key: "role", value: "Clinical pharmacist." }),
+  ];
+  const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore(records), openViking: fakeIndex([]) });
+  const recalled = await substrate.recall(USER, "anything", { projectId: PROJECT });
+  assert.deepEqual(recalled.map((row) => row.id).sort(), ["record:mine", "record:user-wide"]);
+});
+
+test("the floor is the configured one, and a server that returns what it was asked not to is held to it", async () => {
+  const records = standingFixture();
+  const near = records[1];
+  const hits = [hit(uriOf(near), 0.83)];
+  const strict = new MemorySubstrate({ ...openVikingConfig, memorySearchMinScore: 0.9 }, { store: fakeStore(records), openViking: fakeIndex(hits) });
+  assert.deepEqual((await strict.recall(USER, "how many patients", { projectId: PROJECT })).map((row) => row.id), ["record:pref"]);
+  const lenient = new MemorySubstrate({ ...openVikingConfig, memorySearchMinScore: 0.8 }, { store: fakeStore(records), openViking: fakeIndex(hits) });
+  assert.deepEqual((await lenient.recall(USER, "how many patients", { projectId: PROJECT })).map((row) => row.id), ["record:near", "record:pref"]);
 });
 
 test("forgetting a project deletes its subtree, and says whether it did", async () => {
