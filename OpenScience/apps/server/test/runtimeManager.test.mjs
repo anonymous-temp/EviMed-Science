@@ -76,6 +76,22 @@ test("a test deployment with the browser proxy uses the hosted permission and UI
   }
 });
 
+test("a session that has chosen no thinking intensity starts from the deployment's configured one", () => {
+  // The composer's thinking-intensity seat reads the session's own choice, else the model's default effort -- which the adapter takes from this
+  // row. So the profile has to carry the deployment's effort, and a session that picked one keeps its own (the kernel stores that per session).
+  const config = {
+    production: false,
+    modelGatewayInternalUrl: "http://gateway:8787/internal/model/v1",
+    runtimeSandboxEnforcement: "partial",
+  };
+  const plan = { sandboxMode: "docker", dshHomeDir: "/runtime/dsh-home", capsuleMethodCount: 0 };
+  const patchFor = (settings) => renderProfilePatch(dshProfileInput({ ...config, ...settings }, project, plan, "deepseek-flash", "/runtime/workload-token"));
+  assert.match(patchFor({}), /\n    reasoningEffort: 'high'\n/, "unconfigured, the default is high");
+  for (const deepseekReasoningEffort of ["off", "low", "high", "max"]) {
+    assert.match(patchFor({ deepseekReasoningEffort }), new RegExp(`\\n    reasoningEffort: '${deepseekReasoningEffort}'\\n`));
+  }
+});
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -136,6 +136,11 @@ export const FRAME_VOCABULARY = Object.freeze({
     geo: Object.freeze({ coverageDays: 90, engines: GEO_DEFAULT_ENGINES }),
     vcr: Object.freeze({ start: 'auto', intendedUse: VCR_INTENDED_USES[0] }),
   }),
+  // The thinking intensity a researcher sets in the composer's model seat (`runtimeUiComposer.mjs`), in the product's words, keyed by the
+  // effort id the kernel's catalogue advertises. These are the four the proxy admits for `session/selectModel` (`MODEL_REASONING_EFFORTS` in
+  // the control plane, which a server test holds this list to); the adapter's own names for them are English (「High」), so the seat offers
+  // a level only when it has a word for it here.
+  reasoningEffortLabels: Object.freeze({ off: '关闭', low: '低', high: '高', max: '最高' }),
   // What a tool call says in the conversation, by the name its row is keyed
   // on: 「检索说明书 · 玛仕度肽」 rather than `mcp__evimed__drug_label_search`
   // (融合方案 §8.2). Derived from the domain's own tool list, so a tool added

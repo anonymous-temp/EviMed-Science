@@ -46,11 +46,16 @@ function occupiedAndInjected() {
   const services = [];
   for (const body of FRAME_BODIES) {
     const generation = {};
+    // The kernel's own occupant of the composer's model seat (`ui-model-selection`, priority 0). A takeover is made over an entry that exists
+    // (`kit.occupyOver`), so without one the product's seat would never register here and this test would walk past it.
+    const modelSeat = { options: { name: "conversation.input.model", locale: "model" }, component: "shipped", inject: () => ({}), locale: "model" };
     /** @type {any} */
     const ctx = {
       slots: {
         inject: (/** @type {string} */ _name, /** @type {() => any} */ setup) => setup(),
         register: (/** @type {any} */ options) => { occupied.push({ body: body.name, slot: options.name }); return () => {}; },
+        entries: (/** @type {string} */ slot) => (slot === "conversation.input.model" ? [modelSeat] : []),
+        subscribe: () => () => {},
       },
       locale: { addLanguage: () => () => {}, register: () => () => {}, setLocale() {}, subscribe: () => () => {} },
       sessions: { refresh: async () => {}, list: { getSnapshot: () => ({ byId: {} }), subscribe: () => () => {} }, scope: () => ({}) },
@@ -90,6 +95,7 @@ test("every slot a frame body occupies is declared by a row the hosted compositi
   const { occupied } = occupiedAndInjected();
   assert.ok(occupied.length >= 5, `only ${occupied.length} occupants were recorded; the bodies did not run`);
   assert.ok(occupied.some((entry) => entry.slot === "sidebar"), "the shell's left-column occupant was not recorded");
+  assert.ok(occupied.some((entry) => entry.slot === "conversation.input.model" && entry.body === "composer"), "the researcher's model seat was not recorded");
 
   const hostedOff = new Set([...HOSTED_DISABLED_BROWSER_PANELS, ...OPERATOR_ONLY_BROWSER_PANELS]);
   for (const { body, slot } of occupied) {
