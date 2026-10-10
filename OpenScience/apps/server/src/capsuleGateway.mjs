@@ -5,7 +5,7 @@ import { HttpError, readJson, sendError, sendJson } from "./security.mjs";
 export const CAPSULE_GATEWAY_PATH = "/internal/capsules/v1";
 
 /** What a recall answers while the researcher has paused recall: an answer, not an error, and not "no memories". */
-const RECALL_PAUSED = Object.freeze({
+const recallPaused = () => ({
   items: [], mode: "paused", contextOnly: true, sources: { memory: 0, capsule: 0 },
   notice: "用户已暂停记忆（整个账号或本项目）：这里不读取，也不代表没有相关记忆。",
 });
@@ -138,7 +138,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
             notice: "这是一段试用别人胶囊的对话：只读这个胶囊，不读用户自己的记忆。" });
           return;
         }
-        const recalled = pause?.recall ? { ...RECALL_PAUSED } : await recallAcrossMemory({ capsules: service, memorySubstrate }, currentUser, {
+        const recalled = pause?.recall ? recallPaused() : await recallAcrossMemory({ capsules: service, memorySubstrate }, currentUser, {
           ...body, projectId: identity.projectId,
           sessionId: running.length === 1 ? running[0].sessionId : null,
         });
