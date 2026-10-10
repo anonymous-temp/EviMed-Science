@@ -561,7 +561,7 @@ test("GET /value: the project's value profile as the page reads it, with the cov
   const empty = await call("GET", `/api/geo/projects/${id}/value`);
   assert.equal(empty.status, 200, JSON.stringify(empty.payload));
   assert.equal(empty.headers.get("cache-control"), "no-store");
-  assert.deepEqual(Object.keys(empty.payload.data).sort(), ["coverage", "data", "impacts", "observations", "observationsTotal", "research", "runId", "updatedAt", "version"]);
+  assert.deepEqual(Object.keys(empty.payload.data).sort(), ["coverage", "data", "impacts", "impactsTotal", "observations", "observationsTotal", "research", "runId", "updatedAt", "version"]);
   assert.deepEqual([empty.payload.data.version, empty.payload.data.observations, empty.payload.data.observationsTotal, empty.payload.data.research, empty.payload.data.impacts],
     [0, [], 0, [], []]);
   assert.deepEqual([empty.payload.data.coverage.assessed, empty.payload.data.coverage.value, empty.payload.data.coverage.basisVersion], [0, null, null]);
