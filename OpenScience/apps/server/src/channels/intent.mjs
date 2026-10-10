@@ -18,8 +18,9 @@
  * an uncertain answer, a slow or refused one, a verdict the code cannot use —
  * is the original classifier's, as before Jev, so a person waiting is never
  * left worse off than without it. (Until 2026-10-10 an uncertain answer was
- * read as the safe default instead: measured on 100 scenarios that left this
- * path 85 right against the original's 89, and handing those on makes it 92.)
+ * read as the safe default instead: measured on 100 scenarios in two passes that
+ * left this path 85 and 88 right against the original's 89, and handing those on
+ * makes it 91 and 95; evals/judge-sites/J2/benefit-2026-10-10.json.)
  *
  * Deletable when the kernel exposes session-level intent a control plane can
  * read; the scaffolding is one prompt and one shape check.

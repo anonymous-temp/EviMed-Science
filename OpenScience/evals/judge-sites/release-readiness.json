@@ -250,7 +250,7 @@
       "benefit": {
         "record": "evals/judge-sites/J9/benefit-2026-10-10.json",
         "decision": "original-path",
-        "reason": "Settled 9 of 14 traits, all right; the other 5 requests fail because one tied candidate of 50 voids the whole request. The comparison with the engine's own structured call, required by the plan, was not run; the site also selects one id where the original selects up to three."
+        "reason": "Settled 9 of 14 traits, all right; the other 5 requests fail because one tied candidate of 50 voids the whole request. The comparison with the engine's own structured call, required by the plan, was not run; the site also selects one id where the original selects up to three. Switching it on also needs an engine change (the engine keeps one id where the original keeps up to three fallbacks)."
       }
     },
     "J10": {
