@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { validateDeliveryReceipt, workspaceLayout } from "@evimed/domain";
+import { receiptFilesFor, validateDeliveryReceipt, workspaceLayout } from "@evimed/domain";
 import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
 import { LEARNING_PROJECT_ID, LEARNING_PROJECT_NAME, RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
 import { issueModelGatewayBudgetMarker } from "./modelGateway.mjs";
@@ -129,10 +129,25 @@ function resultArchive(project, dispatchId) {
   return { ...project, baseDir: project.metaDir, workspaceDir: path.join(project.metaDir, RESULT_ARCHIVE_DIR, dispatchId) };
 }
 
-/** @param {any} root a project, or a `resultArchive` @returns {Promise<boolean>} */
-async function hasReceipt(root) {
-  const stat = await fs.lstat(path.join(root.workspaceDir, workspaceLayout.receiptFile)).catch(() => null);
-  return Boolean(stat?.isFile());
+/**
+ * Where a root holds the receipt of a run: that run's own file in a project's
+ * workspace, or the project-wide file an older run left. An archive has only
+ * the latter — `archiveLatestResult` files the receipt there under the same
+ * name whatever it was read from — and is asked without a run.
+ * @param {any} root a project, or a `resultArchive` @param {string | null} [runId]
+ * @returns {Promise<string | null>} the receipt's path in the root's workspace
+ */
+async function receiptPath(root, runId = null) {
+  for (const relative of receiptFilesFor(runId ? [runId] : [])) {
+    const stat = await fs.lstat(path.join(root.workspaceDir, relative)).catch(() => null);
+    if (stat?.isFile()) return relative;
+  }
+  return null;
+}
+
+/** @param {any} root a project, or a `resultArchive` @param {string | null} [runId] @returns {Promise<boolean>} */
+async function hasReceipt(root, runId = null) {
+  return (await receiptPath(root, runId)) !== null;
 }
 
 /**
@@ -143,7 +158,7 @@ async function hasReceipt(root) {
  */
 async function resultAvailable(project, ledger, run) {
   if (await hasReceipt(resultArchive(project, run.dispatchId))) return true;
-  return ledger[0]?.id === run.id && hasReceipt(project);
+  return ledger[0]?.id === run.id && hasReceipt(project, run.id);
 }
 
 /**
@@ -161,11 +176,12 @@ async function archiveLatestResult(project, ledger) {
   const latest = ledger[0];
   if (latest?.status !== "succeeded" || !latest.dispatchId) return;
   const archive = resultArchive(project, latest.dispatchId);
-  if (await hasReceipt(archive) || !await hasReceipt(project)) return;
-  for (const relative of [...(latest.artifacts ?? []), workspaceLayout.receiptFile]) {
-    const loaded = await readOwnedFile(project, relative, MAX_OUTPUT_BYTES).catch(() => null);
+  const receipt = await receiptPath(project, latest.id);
+  if (await hasReceipt(archive) || !receipt) return;
+  for (const [from, to] of [...(latest.artifacts ?? []).map((/** @type {string} */ relative) => [relative, relative]), [receipt, workspaceLayout.receiptFile]]) {
+    const loaded = await readOwnedFile(project, from, MAX_OUTPUT_BYTES).catch(() => null);
     if (!loaded) continue;
-    await writeFileAtomicNoFollow(archive.baseDir, resolveScopedPath(archive.workspaceDir, relative), loaded.bytes, { mode: 0o600 });
+    await writeFileAtomicNoFollow(archive.baseDir, resolveScopedPath(archive.workspaceDir, to), loaded.bytes, { mode: 0o600 });
   }
   const root = path.join(project.metaDir, RESULT_ARCHIVE_DIR);
   const kept = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
@@ -450,10 +466,11 @@ export function createLearningRuntime({
       const archived = resultArchive(project, run.dispatchId);
       const source = await hasReceipt(archived) ? archived
         : identity.isolatedProject === true || ledger[0]?.id === run.id ? project : null;
-      if (!source || !await hasReceipt(source)) {
+      const receiptFile = source ? await receiptPath(source, source === archived ? null : run.id) : null;
+      if (!source || !receiptFile) {
         throw new HttpError(409, "learning_result_missing", "The learning run's delivered files are gone; its next attempt runs it again.");
       }
-      const receipt = await readOwnedFile(source, workspaceLayout.receiptFile, MAX_INPUT_BYTES);
+      const receipt = await readOwnedFile(source, receiptFile, MAX_INPUT_BYTES);
       const checked = validateDeliveryReceipt(JSON.parse(receipt.bytes.toString("utf8")));
       if (!checked.ok) throw new HttpError(409, "learning_receipt_invalid", "The learning delivery receipt is invalid.");
       const entries = checked.receipt.entries.filter((entry) => entry.capability === capabilityId);

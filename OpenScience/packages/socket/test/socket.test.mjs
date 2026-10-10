@@ -3,7 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 import { SEAMS } from "@evimed/harness-port";
-import { CONTRACT_KINDS, MCP_TOOL_NAMES, ROOT_VISIBLE_MCP_BASE_NAMES, workspaceLayout, TOOL_RESULT_PRUNER } from "@evimed/domain";
+import { CONTRACT_KINDS, MCP_TOOL_NAMES, ROOT_VISIBLE_MCP_BASE_NAMES, deliverySummaryFileFor, receiptFileFor, workspaceLayout, TOOL_RESULT_PRUNER } from "@evimed/domain";
 
 import {
   AGENT_PLUGIN_IDS,
@@ -285,7 +285,7 @@ test("the run domain stays on its deployed schema because DSH has no domain migr
 });
 
 test("the path guard refuses the question, the receipt and the state projection", () => {
-  for (const path of [workspaceLayout.briefFile, workspaceLayout.runStateFile, workspaceLayout.receiptFile, "data/cohort/rows.csv"]) {
+  for (const path of [workspaceLayout.briefFile, workspaceLayout.runStateFile, workspaceLayout.receiptFile, receiptFileFor("run_1"), deliverySummaryFileFor("run_1"), "data/cohort/rows.csv"]) {
     const decision = toolPolicy({ name: "write", args: { path } }, policyState);
     assert.equal(decision.allow, false, path);
     assert.equal(decision.code, "path_guard_denied");
@@ -298,6 +298,7 @@ test("the path guard reaches through bash without refusing ordinary reads", () =
   assert.equal(guardedBashTarget("rm -rf .evimed-brief/"), ".evimed-brief/");
   assert.equal(guardedBashTarget("echo x > .evimed-run/state.json"), ".evimed-run/state.json");
   assert.equal(guardedBashTarget("sed -i s/a/b/ delivery-receipt.json"), "delivery-receipt.json");
+  assert.equal(guardedBashTarget(`sed -i s/a/b/ ${receiptFileFor("run_1")}`), receiptFileFor("run_1"), "a run's own receipt is as unwritable as the project-wide one was");
   assert.equal(guardedBashTarget("cat .evimed-brief/research-brief.md"), null);
   assert.equal(guardedBashTarget("grep -r foo deliverables/"), null);
   assert.equal(guardedBashTarget("python3 analyze.py > deliverables/d1/out.txt"), null);

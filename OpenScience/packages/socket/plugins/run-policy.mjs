@@ -50,6 +50,9 @@ import {
   workspaceLayout,
   planFileFor,
   briefFileForSession,
+  deliverySummaryFileFor,
+  receiptFileFor,
+  receiptFilesFor,
   runStateFileFor,
 } from '@evimed/domain'
 import { capabilityCatalogue } from './guidance.mjs'
@@ -1166,9 +1169,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       at: new Date().toISOString(),
     })
     // The report node is unconditional. A run that failed silently and a run
-    // that never started are indistinguishable without one.
+    // that never started are indistinguishable without one. One per run: a
+    // project-wide file was overwritten by whichever run ended last.
     try {
-      await writeFileAt(ctx, cwd, workspaceLayout.deliverySummaryFile, summary)
+      await writeFileAt(ctx, cwd, deliverySummaryFileFor(entry.runId), summary)
     } catch (error) {
       session?.degrade?.(`delivery summary not written: ${errorMessage(error)}`)
     }
@@ -1193,8 +1197,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    * @returns {Promise<void>}
    */
   const refreshReceipt = async (entry, cwd) => {
-    const receipt = parseJson(await readFileAt(ctx, cwd, workspaceLayout.receiptFile) ?? '')
-    if (!receipt || !Array.isArray(receipt.entries) || receipt.runId !== entry.runId) return
+    const receipt = await readRunReceipt(ctx, cwd, entry.runId)
+    if (!receipt || !Array.isArray(receipt.entries)) return
     let changed = false
     /** @type {Record<string, any>[]} */
     const entries = []
@@ -1221,7 +1225,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     }
     if (!changed) return
     try {
-      await writeFileAt(ctx, cwd, workspaceLayout.receiptFile, `${JSON.stringify({ ...receipt, entries }, null, 2)}\n`)
+      await writeFileAt(ctx, cwd, receiptFileFor(entry.runId), `${JSON.stringify({ ...receipt, entries }, null, 2)}\n`)
     } catch (error) {
       diagnostics(entry.sessionId)?.degrade?.(`receipt not refreshed at the end of the turn: ${errorMessage(error)}`)
     }
@@ -2550,7 +2554,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           const expectedOutputs = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
           const cwd = entry.cwd || call.cwd
           const files = await readDeliverableFiles(ctx, cwd, item.id, expectedOutputs, item.contractKind)
-          const receipt = parseJson(await readFileAt(ctx, cwd, workspaceLayout.receiptFile) ?? '')
+          const receipt = await readRunReceipt(ctx, cwd, entry.runId)
           const priorReceipt = Array.isArray(receipt?.entries) ? receipt.entries.find((/** @type {any} */ candidate) => candidate.deliverableId === item.id) : null
           const currentDigests = await digestFiles(files, item.id)
           const receiptFiles = Array.isArray(priorReceipt?.files) ? priorReceipt.files : []
@@ -3174,17 +3178,19 @@ function recomputedAppraisal(claim, sourceTypes) {
  */
 async function writeReceipt(ctx, entry, receiptEntry, bundleVersion, call) {
   const cwd = entry.cwd || call.cwd
-  const existing = parseJson(await readFileAt(ctx, cwd, workspaceLayout.receiptFile) ?? '')
-  // Only this run's entries carry over. The receipt is one file at the
-  // workspace root, and this used to keep every entry already in it and stamp
-  // the whole file with the current run's id — so a project's receipt became a
-  // pile of other runs' accepted packages filed under whichever run wrote last.
-  // Read on production 2026-09-16: one receipt holding five entries accepted
-  // between 13:43 and 17:02 by five different runs, all labelled as the last.
-  // The control plane then snapshotted a previous run's package as this run's
-  // accepted work, and failed the repair with `repair_snapshot_failed`.
-  const sameRun = existing?.runId === entry.runId
-  const entries = sameRun && Array.isArray(existing?.entries)
+  // This run's entries, in this run's own file. The receipt was once one file at
+  // the workspace root that kept every entry already in it and stamped the whole
+  // file with the current run's id: read on production 2026-09-16, five runs'
+  // accepted packages filed under whichever run wrote last, and the control plane
+  // snapshotted a previous run's package as this run's. Keeping only the current
+  // run's entries cured that and left its twin: two runs alive at once still
+  // shared the file and erased each other's entries (2026-10-10, two concurrent
+  // sessions, one lost four of its six package files from its artifact list).
+  // What carries over now is what an earlier submission of this run wrote to its
+  // own file — or, for a run that began before receipts were per-run, the
+  // project-wide file when it names this run.
+  const existing = await readRunReceipt(ctx, cwd, entry.runId)
+  const entries = Array.isArray(existing?.entries)
     ? existing.entries.filter((/** @type {any} */ item) => item.deliverableId !== receiptEntry.deliverableId)
     : []
   const receipt = {
@@ -3198,7 +3204,22 @@ async function writeReceipt(ctx, entry, receiptEntry, bundleVersion, call) {
     domainVersion: DOMAIN_VERSION,
     entries: [...entries, receiptEntry],
   }
-  await writeFileAt(ctx, cwd, workspaceLayout.receiptFile, `${JSON.stringify(receipt, null, 2)}\n`)
+  await writeFileAt(ctx, cwd, receiptFileFor(entry.runId), `${JSON.stringify(receipt, null, 2)}\n`)
+}
+
+/**
+ * The receipt of one run: its own file, or — for a run that began before
+ * receipts were per-run — the project-wide file, accepted only when it names
+ * this run (that file belongs to whichever run wrote it last).
+ * @param {any} ctx @param {string} cwd @param {string} runId
+ * @returns {Promise<Record<string, any> | null>}
+ */
+async function readRunReceipt(ctx, cwd, runId) {
+  for (const relative of receiptFilesFor([runId])) {
+    const receipt = parseJson(await readFileAt(ctx, cwd, relative) ?? '')
+    if (receipt && receipt.runId === runId) return receipt
+  }
+  return null
 }
 
 /**

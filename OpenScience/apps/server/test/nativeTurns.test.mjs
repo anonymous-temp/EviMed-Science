@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { AgentRunStore, nativeTurnStartedDelivery } from "../src/agentRuns.mjs";
 import { normalizeTranscript, transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
+import { receiptFileFor } from "@evimed/domain";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
 import { noticeTexts } from "./helpers/noticeTexts.mjs";
 
@@ -403,8 +404,9 @@ function workflowEvents(accepted, planRunId = null) {
   return { events: [...events, ...pairs].sort((a, b) => a.seq - b.seq), item, acceptedAt: start + 103 };
 }
 
-/** @param {any} t @param {boolean} accepted @param {boolean} [complete] @param {Record<string, string> | null} [binding] the conversation's capability, when not the planned one */
-async function setupWorkflow(t, accepted, complete = true, binding = null) {
+/** @param {any} t @param {boolean} accepted @param {boolean} [complete] @param {Record<string, string> | null} [binding] the conversation's capability, when not the planned one
+ *  @param {string} [receiptAt] where the run left its receipt: the project-wide file, or `receiptFileFor(run)` */
+async function setupWorkflow(t, accepted, complete = true, binding = null, receiptAt = "delivery-receipt.json") {
   // A binding other than the planned capability needs the plan itself on record: the kernel names its workflow on the plan reply.
   const data = workflowEvents(accepted, binding ? "ordinary_kernel_owner" : null);
   const f = await setup(t, complete ? data.events : data.events.filter((event) => event.type !== "turn/end"));
@@ -426,7 +428,10 @@ async function setupWorkflow(t, accepted, complete = true, binding = null) {
     files: [{ path: "report.md", sha256: createHash("sha256").update(report).digest("hex"), bytes: Buffer.byteLength(report) }],
     acceptedAt: new Date(data.acceptedAt).toISOString(), attempt: 1, notices: ["Current native gate note"],
   }] };
-  if (accepted) await writeFile(path.join(f.project.workspaceDir, "delivery-receipt.json"), JSON.stringify(receipt));
+  if (accepted) {
+    await mkdir(path.dirname(path.join(f.project.workspaceDir, receiptAt)), { recursive: true });
+    await writeFile(path.join(f.project.workspaceDir, receiptAt), JSON.stringify(receipt));
+  }
   return { ...f, get store() { return f.store; }, adopt: () => f.adopt(async () => (binding ?? {
     effectiveAgentId: "clinical-evidence-synthesis", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
   })), receipt };
@@ -494,6 +499,30 @@ test("a witnessed current native receipt survives kernel loss and a control-plan
   assert.equal(finished.status, "succeeded");
   assert.deepEqual(finished.artifacts, ["report.md"]);
   assert.ok(noticeTexts(finished).includes("Current native gate note"));
+});
+
+test("a native turn's receipt is the file of the run its workflow was named, not the project's one file", async (t) => {
+  // The receipt is one file per run (`receiptFileFor`): a conversation turn is
+  // filed under the id the kernel gave its workflow, which the control plane
+  // learns from the session's projection or the plan's reply. Nothing is left
+  // at the project-wide path, so reading only that path would find no delivery.
+  const f = await setupWorkflow(t, true, false, null, receiptFileFor("ordinary_kernel_owner"));
+  await f.adopt();
+  f.restart();
+  const run = (await f.runs())[0];
+  const finished = await f.store.finishFromDurableRecord(f.project, run);
+  assert.equal(finished.status, "succeeded");
+  assert.deepEqual(finished.artifacts, ["report.md"]);
+  assert.ok(noticeTexts(finished).includes("Current native gate note"));
+  assert.equal(finished.verification ?? null, null);
+
+  // The negative control: the same receipt filed under another run's id is that
+  // run's, and delivers nothing here.
+  const other = await setupWorkflow(t, true, false, null, receiptFileFor("native_some_other_session"));
+  await other.adopt();
+  other.restart();
+  const unfiled = await other.store.finishFromDurableRecord(other.project, (await other.runs())[0]);
+  assert.deepEqual([unfiled.status, unfiled.errorCode, unfiled.artifacts], ["failed", "runtime_stopped", []], "a receipt of another run delivers nothing here");
 });
 
 test("a legacy basename receipt resolves only within its named deliverable and verifies the digest", async (t) => {

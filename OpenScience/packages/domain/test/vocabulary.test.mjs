@@ -21,6 +21,7 @@ import {
   SOCKET_TOOL_NAME_LIST,
   canTransition,
   classifyEvidenceSourceError,
+  deliverySummaryFileFor,
   delegationToolFilter,
   isEviMedToolName,
   isProtectedWritePath,
@@ -28,6 +29,8 @@ import {
   mcpToolBaseName,
   narrateToolCall,
   phaseOfToolCall,
+  receiptFileFor,
+  receiptFilesFor,
   resolveContractKind,
   runGate,
   runPhase,
@@ -133,6 +136,29 @@ test("the path guard refuses the question, the receipt and the state projection"
   assert.ok(!isProtectedWritePath("task-plan.json"));
   assert.equal(runStateFileFor("run_123"), ".evimed-run/runs/run_123/state.json");
   assert.throws(() => runStateFileFor("../other"), /Invalid run id/);
+});
+
+test("a run's receipt and summary are files of its own, under the protected run directory", () => {
+  // One receipt and one summary at the workspace root were shared by every run
+  // of a project, so two runs alive together erased each other's.
+  assert.equal(receiptFileFor("run_123"), ".evimed-run/runs/run_123/delivery-receipt.json");
+  assert.equal(deliverySummaryFileFor("run_123"), ".evimed-run/runs/run_123/delivery-summary.md");
+  for (const file of [receiptFileFor("run_123"), deliverySummaryFileFor("run_123")]) assert.ok(isProtectedWritePath(file), file);
+  assert.notEqual(receiptFileFor("run_a"), receiptFileFor("run_b"));
+  for (const invalid of ["../other", "", "a/b", undefined]) {
+    assert.throws(() => receiptFileFor(/** @type {any} */ (invalid)), /Invalid run id/);
+    assert.throws(() => deliverySummaryFileFor(/** @type {any} */ (invalid)), /Invalid run id/);
+  }
+});
+
+test("a receipt is looked for in the run's own file, then in the project-wide file older runs wrote", () => {
+  assert.deepEqual(receiptFilesFor(["run_a"]), [".evimed-run/runs/run_a/delivery-receipt.json", "delivery-receipt.json"]);
+  assert.deepEqual(receiptFilesFor(["native_k", "run_a", "native_k"]), [
+    ".evimed-run/runs/native_k/delivery-receipt.json", ".evimed-run/runs/run_a/delivery-receipt.json", "delivery-receipt.json",
+  ], "each id once, in the order given");
+  assert.deepEqual(receiptFilesFor([]), ["delivery-receipt.json"], "no run to ask about leaves the project-wide file");
+  // Ids come out of run records and tool results: one that cannot name a path is skipped, not thrown on.
+  assert.deepEqual(receiptFilesFor(["../x", "", null, undefined, "a/b", "run_ok"]), [".evimed-run/runs/run_ok/delivery-receipt.json", "delivery-receipt.json"]);
 });
 
 test("state transitions are enumerable and illegal moves throw", () => {
