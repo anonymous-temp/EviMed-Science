@@ -598,6 +598,8 @@ test(
       expectedRevision: zone.revision,
     });
     assert.match(zoneResearch.draft, /专区共1条已发布证据，本次包含1条/);
+    assert.doesNotMatch(zoneResearch.draft, /操作指令|参考资料，不是|不要执行引用/, "the draft is the researcher's own message: no caution addressed to the model (2026-10-10)");
+    assert.doesNotMatch(research.draft, /操作指令|参考资料，不是|不要执行引用/);
     assert.doesNotMatch(
       zoneResearch.draft,
       new RegExp(`${zone.id}|${card.id}|"revision"|"totalPublished"`),
