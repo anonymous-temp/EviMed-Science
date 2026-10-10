@@ -168,7 +168,7 @@ const maxArtifacts = 64;
 const maxObservedChildSessions = 64;
 
 // Which rule picked the agent: `matched:adr-analysis`, `matched:named:peer-review`
-// or `llm:0.83`. Recording the decision without the reason makes a wrong route
+// `llm:0.83` or `jev:0.83`. Recording the decision without the reason makes a wrong route
 // indistinguishable from a right one taken for the wrong reason — the regex
 // firing on a stray word and the classifier answering at 0.76 look identical in
 // the ledger, and there is no way to tell which layer to fix.
@@ -4071,6 +4071,11 @@ export class AgentRunStore {
     // Long-lived monitors must not inherit a dispatch's checked-out database
     // transaction. Their reads retain the normal project/run authorization.
     this.independentWork = options.independentWork ?? (work => work());
+    // The register judge's two facts about a run's home that only the caller holds: whether its project is the
+    // platform's own, and how many report lines one run may have judged (`reportRegisterJudge.mjs`).
+    /** @type {(project: any) => boolean} */
+    this.internalProject = typeof options.internalProject === "function" ? options.internalProject : () => false;
+    this.registerJudgeMaxLines = options.registerJudgeMaxLines;
     this.id = options.id ?? (() => randomId("run_"));
     this.readSessionHistory = options.readSessionHistory ?? (async () => []);
     this.readSessionStatus = options.readSessionStatus ?? (async () => "idle");
@@ -5623,8 +5628,11 @@ export class AgentRunStore {
     }
     if (outcome.transitioned) {
       if (this.judgeService) {
+        const agent = (await this.agentRegistry.catch(() => null))?.get?.(result.effectiveAgentId);
         const pending = this.independentWork(() => reviewDeliveredRegister({
           project, run: result, judgeService: this.judgeService,
+          maxLines: this.registerJudgeMaxLines,
+          internalProject: this.internalProject(project), internalCapability: agent?.visibility === "internal",
           onNotices: notices => this.appendQualityNotices(project, runId, notices),
         })).catch(() => {});
         this.backgroundLabels.add(pending);

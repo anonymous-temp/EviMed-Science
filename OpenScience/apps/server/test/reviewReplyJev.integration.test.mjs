@@ -9,6 +9,7 @@ import { after, before, test } from "node:test";
 import { REFERENCE_PRICE_LIST } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { UsageLedger } from "../src/usageLedger.mjs";
+import { createJudgeService } from "../src/judgeService.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { ReviewService, reviewMetricFamilies } from "../src/reviewService.mjs";
 
@@ -80,24 +81,26 @@ function choice(choice, p) {
   return { type: "choice", choice, confidence: Math.round(((3 * p - 1) / 2) * 100) / 100, probabilities };
 }
 
-/** @param {(body: any) => Response} jev */
-function service(jev) {
+/** @param {(body: any) => Response} jev @param {{ shared?: boolean }} [options] `shared`: Jev is reached through the shared judge service, as the server wires it */
+function service(jev, { shared = false } = {}) {
   /** @type {{ url: string, body: any }[]} */
   const sent = [];
+  const usageLedger = new UsageLedger(database);
+  const fetchImpl = /** @type {any} */ (async (/** @type {string} */ url, /** @type {any} */ init) => {
+    const body = JSON.parse(init.body);
+    sent.push({ url, body });
+    if (url.endsWith("/systemone")) return jev(body);
+    const escalated = [...body.messages[1].content.matchAll(/^S(\d+)/gm)].map((match) => Number(match[1]));
+    return reviewerAnswer({ verdicts: escalated.map((index) => ({
+      sentence: index, verdict: index === 2 ? "unsupported" : "supported", reason: "对照来源",
+      evidence: index === 2 ? "ruled out within 1 to 2 hours" : index === 0 ? "lowered HbA1c by 0.9 percentage points" : "best initial test for chest pain evaluation",
+      safety: index === 0 ? "consistent" : "none",
+    })) });
+  });
   const review = new ReviewService({
-    config, database, usageLedger: new UsageLedger(database), retryDelayMs: 0,
+    config, database, usageLedger, retryDelayMs: 0, fetchImpl,
+    ...(shared ? { judgeService: createJudgeService({ config, usageLedger, fetchImpl }) } : {}),
     store: { userById: async () => ({ id: userId }), requireProject: async () => ({ id: projectId, userId }) },
-    fetchImpl: /** @type {any} */ (async (/** @type {string} */ url, /** @type {any} */ init) => {
-      const body = JSON.parse(init.body);
-      sent.push({ url, body });
-      if (url.endsWith("/systemone")) return jev(body);
-      const escalated = [...body.messages[1].content.matchAll(/^S(\d+)/gm)].map((match) => Number(match[1]));
-      return reviewerAnswer({ verdicts: escalated.map((index) => ({
-        sentence: index, verdict: index === 2 ? "unsupported" : "supported", reason: "对照来源",
-        evidence: index === 2 ? "ruled out within 1 to 2 hours" : index === 0 ? "lowered HbA1c by 0.9 percentage points" : "best initial test for chest pain evaluation",
-        safety: index === 0 ? "consistent" : "none",
-      })) });
-    }),
     referenceResolver: {
       resolve: async () => ({ doi: new Map(), pmid: new Map() }),
       sourceTexts: async (/** @type {any[]} */ references) => new Map(references.map((reference) => [reference.number, SOURCES.get(reference.number) ?? ""])),
@@ -184,3 +187,21 @@ test("a Jev refusal hands every sentence to the reviewer and is released, not he
   assert.deepEqual(review.stats().jev.failures, { jev_payment_required: 1 });
   assert.equal((await review.readiness()).jev.warning, "jev_payment_required");
 });
+
+for (const [status, detail, code, outcome] of [[402, "Payment required.", "jev_payment_required", "failed"], [413, "Request too large.", "jev_request_too_large", "too_large"]]) {
+  test(`through the shared judge service a Jev ${status} reaches the reply check as ${code}, not as a bare failure`, options, async () => {
+    const { review, sent } = service(() => Response.json({ detail: { error_type: "api_usage_error", message: detail } }, { status }), { shared: true });
+    const identity = { userId, projectId };
+    const runId = `run_reply_jev_shared_${status}`;
+    assert.ok(await review.considerReply(identity, { id: runId, sessionId: `chat-jev-shared-${status}` }, { replyText: REPLY, turnSeq: 11 }));
+    assert.equal(await review.processReplyChecks("worker-jev"), 1);
+    assert.equal(sent.filter((request) => request.url.endsWith("/systemone")).length, 1);
+    const [check] = await review.replyChecksForSession(identity, `chat-jev-shared-${status}`);
+    assert.equal(check.status, "done", "Jev failing is never the check failing");
+    // The code the pass counts is the Jev client's own: it is what the runbook's
+    // readiness warning and the failures series name.
+    assert.deepEqual(review.stats().jev.failures, { [code]: 1 });
+    assert.equal(review.stats().jev.requests[outcome], 1);
+    if (outcome === "failed") assert.equal((await review.readiness()).jev.warning, code);
+  });
+}

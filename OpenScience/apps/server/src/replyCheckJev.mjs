@@ -188,6 +188,26 @@ export function jevDecisions(answers, { asked, threshold }) {
 }
 
 /**
+ * The first pass's `jev` function over the shared judge service: its answers, or
+ * an error carrying the failure's code the way `callJev`'s own errors do, because
+ * the pass counts and reports a failure by `.code` (`jev_payment_required`, ...)
+ * and a request over Jev's ceiling is told from a failure by it. The code is the
+ * Jev client's own when the provider or the account refused (`cause`), the
+ * judge service's otherwise (`judge_circuit_open`, `judge_timeout`,
+ * `judge_disabled`): never a message, so a failure no longer collapses to the
+ * pass's `jev_failed` default (J-9).
+ * @param {{ judge: (site: string, input: any, context: any) => Promise<any> }} judgeService
+ * @param {{ userId: string, projectId: string, runId?: string | null }} scope
+ */
+export function judgeServiceJev(judgeService, scope) {
+  return async (/** @type {{ state: any }} */ request) => {
+    const result = await judgeService.judge("reply-check", request.state, scope);
+    if (!result.answers) throw Object.assign(new Error(result.code), { code: result.cause ?? result.code });
+    return result;
+  };
+}
+
+/**
  * @typedef {object} JevPassSummary
  * @property {'off'|'none'|'answered'|'failed'|'too_large'|'partial'} outcome
  *   `none`: nothing Jev may settle (every cited sentence names a medicine or

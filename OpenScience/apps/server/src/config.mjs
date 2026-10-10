@@ -8,6 +8,7 @@ import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
+import { REGISTER_JUDGE_MAX_LINES } from "./reportRegisterJudge.mjs";
 
 /**
  * How much of the caller's window a gateway leaves itself to answer in.
@@ -1254,10 +1255,17 @@ function reviewJevSettings(overrides, keyPresent) {
   }
   const disabled = String(overrides.jevDisabledSites ?? process.env.OPEN_SCIENCE_JEV_DISABLED_SITES ?? '').split(',').map(value=>value.trim()).filter(Boolean);
   if(disabled.some(id=>!/^J([1-9]|1[0-9]|2[0-2])$/.test(id)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(id)))throw new Error('OPEN_SCIENCE_JEV_DISABLED_SITES contains an unknown site.');
-  const onlineTimeout=Number(overrides.jevOnlineTimeoutMs ?? process.env.OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS ?? 3000);
-  const concurrency=Number(overrides.jevBackgroundConcurrency ?? process.env.OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY ?? 4);
+  // An empty value is "not set" (`NAME=` in .env.example and in a private override), not the number 0.
+  const onlineTimeout=Number(overrides.jevOnlineTimeoutMs ?? (process.env.OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS || 3000));
+  const concurrency=Number(overrides.jevBackgroundConcurrency ?? (process.env.OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY || 4));
   if(!Number.isSafeInteger(onlineTimeout)||onlineTimeout<100||onlineTimeout>3000)throw new Error('OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS must be from 100 to 3000.');
   if(!Number.isSafeInteger(concurrency)||concurrency<1||concurrency>32)throw new Error('OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY must be from 1 to 32.');
+  // Report lines the register judge (J4) reads per finished run, one Jev request each:
+  // the bound on what one run can cost and take (`reportRegisterJudge.mjs`). Counted
+  // as `open_science_jev_skipped_total{site="J4",reason="lines_over_cap"}` when it binds.
+  const registerValue = overrides.jevRegisterMaxLines ?? (process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES || REGISTER_JUDGE_MAX_LINES);
+  const registerMaxLines = Number(registerValue);
+  if(!Number.isSafeInteger(registerMaxLines)||registerMaxLines<1||registerMaxLines>5000)throw new Error(`OPEN_SCIENCE_JEV_REGISTER_MAX_LINES must be a whole number from 1 to 5000, got ${JSON.stringify(registerValue)}.`);
   return {
     reviewJevEnabled: overrides.reviewJevEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_JEV_ENABLED", keyPresent),
     reviewJevModel: model,
@@ -1270,6 +1278,7 @@ function reviewJevSettings(overrides, keyPresent) {
     jevDisabledSites: disabled,
     jevOnlineTimeoutMs: onlineTimeout,
     jevBackgroundConcurrency: concurrency,
+    jevRegisterMaxLines: registerMaxLines,
     jevSites: pin.sites ?? {},
   };
 }

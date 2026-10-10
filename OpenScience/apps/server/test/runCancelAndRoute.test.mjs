@@ -12,6 +12,7 @@ import { runFinishedNotifies } from "../src/notificationService.mjs";
 import { RUN_ESTIMATE_FALLBACKS, normalizeRunEstimate, routeReasonText, runEstimate } from "../src/runRoute.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { HttpError } from "../src/security.mjs";
+import { SpecialistClassifier } from "../src/specialistClassifier.mjs";
 
 test("every route reason the router mints reads as one Chinese sentence, and an unknown one reads as nothing", () => {
   const cases = [
@@ -19,6 +20,8 @@ test("every route reason the router mints reads as one Chinese sentence, and an 
     ["unrouted:open-domain", "open-domain-answer", /^直接回答：这个问题不需要交付报告$/],
     ["unrouted:open-domain:classifier:timeout", "open-domain-answer", /^直接回答：这个问题不需要交付报告（路由判断没有给出结论，按规则处理）$/],
     ["llm:0.87", "clinical-evidence-synthesis", /^按问题内容交给「临床证据深度分析」$/],
+    // The same sentence whichever model decided: the reader is told where the question went, not who read it.
+    ["jev:0.87", "clinical-evidence-synthesis", /^按问题内容交给「临床证据深度分析」$/],
     ["matched:named:meta-analysis", "meta-analysis", /^你在问题里点名了「.+」$/],
     ["matched:clinical-evidence-synthesis:safety-medicine", "clinical-evidence-synthesis", /^问题提到了需要核对用药安全的药品，交给「临床证据深度分析」$/],
     ["matched:adr-analysis", "adr-analysis", /^按问题里的交付要求交给「.+」$/],
@@ -26,6 +29,7 @@ test("every route reason the router mints reads as one Chinese sentence, and an 
     ["autopilot:literature-sentinel", "clinical-evidence-synthesis", /^由你设定的定时任务发起$/],
     ["adopted:runtime-ui", null, /^来自对话窗口$/],
     ["adopted:runtime-ui:llm:0.91", "clinical-evidence-synthesis", /^来自对话窗口，按问题内容交给「临床证据深度分析」$/],
+    ["adopted:runtime-ui:jev:0.91", "clinical-evidence-synthesis", /^来自对话窗口，按问题内容交给「临床证据深度分析」$/],
     // The conversation window's assistant decides whether to deliver; the
     // note says where the task came from and claims nothing about reports.
     ["adopted:runtime-ui:unrouted:open-domain", "open-domain-answer", /^来自对话窗口$/],
@@ -41,6 +45,21 @@ test("every route reason the router mints reads as one Chinese sentence, and an 
   assert.equal(routeReasonText("something-new", "x"), null, "a reason this build does not know is not guessed at");
   assert.equal(routeReasonText(null, null), null);
   assert.equal(routeReasonText("llm:0.87", "no-such-capability"), "按问题内容交给对应的能力");
+  // Only the confidence the classifiers mint: a malformed one is a reason this build does not know.
+  for (const malformed of ["jev:", "jev:high", "jev:2.5", "jev:0.9:extra", "jev:-0.2"]) assert.equal(routeReasonText(malformed, "meta-analysis"), null, malformed);
+});
+
+test("a route the Jev classifier settled reads as the same sentence as one the Flash classifier chose", async () => {
+  const agents = [{ id: "meta-analysis", version: "1.0.0", runtimeAgent: "evimed-meta-analysis", title: "Meta", description: "systematic review and meta-analysis" }];
+  const classifier = new SpecialistClassifier({ llmRoutingEnabled: true, llmRoutingConfidenceThreshold: 0.75, deepseekProviderEnabled: true, deepseekApiKey: "sk-test",
+    deepseekBaseUrl: "https://api.deepseek.com", deepseekModel: "deepseek-v4-pro", production: false, modelGatewayTimeoutMs: 30_000 }, {
+    judgeService: { judge: async () => ({ outcome: "settled", confidence: 0.874, value: { agentId: "meta-analysis" } }) },
+  });
+  const route = await classifier.classify("请做 Meta 分析", agents);
+  assert.equal(route?.agentId, "meta-analysis");
+  assert.match(String(route?.reason), /^jev:0\.87$/);
+  assert.equal(routeReasonText(route?.reason, route?.agentId), routeReasonText("llm:0.87", "meta-analysis"));
+  assert.match(String(routeReasonText(route?.reason, route?.agentId)), /^按问题内容交给「.+」$/);
 });
 
 test("an estimate is the capability's display range, else its manifest's, else the fallback table", () => {

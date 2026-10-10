@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { recordJudgeDrift, judgeDriftSummary } from "./judgePersistence.mjs";
 /** Shared Jev decisions; uncertainty always returns control to the caller. */
-import { callJev } from "./jevModel.mjs";
+import { callJev, requestRefusalCode } from "./jevModel.mjs";
 import {
   JUDGE_SITES,
   buildJudgeRequest,
@@ -47,11 +47,34 @@ export function decodeJudgeAnswers(
         : Math.min(
             ...Object.values(decisions).map((value) => value.confidence),
           );
+  const value = decodeJudgeValue(site, request.state, decisions);
+  // A batch of independent items is sure item by item: the batch's confidence above stays the minimum
+  // (it settles whole only when every item does), and what the sure items decided travels with an
+  // escalated answer for a caller that can adopt part of a batch (J-5).
+  const sure =
+    site === "J5"
+      ? request.state.items.map((_, i) =>
+          ["medical", "news", "category", "roundup", "specialties"].every(
+            (question) => decisions[`${question}${i}`].confidence >= threshold,
+          ),
+        )
+      : null;
+  const partial =
+    sure && sure.some(Boolean) && !sure.every(Boolean)
+      ? {
+          items: value.items.filter((_, i) => sure[i]),
+          unsettledIds: request.state.items
+            .filter((_, i) => !sure[i])
+            .map((item) => item.id),
+        }
+      : null;
   return {
-    value: decodeJudgeValue(site, request.state, decisions),
+    value,
     decisions,
     confidence,
     outcome: confidence >= threshold ? "settled" : "escalated",
+    ...(partial ? { partial } : {}),
+    ...(sure ? { itemsSettled: sure.filter(Boolean).length, itemsTotal: sure.length } : {}),
     promptFingerprint: judgePromptFingerprint(
       site,
       request.questions,
@@ -75,6 +98,10 @@ export function createJudgeService({
   const requests = new Map(),
     counters = new Map(),
     circuits = new Map(),
+    // Why a decision fell back, by site and code: the outcome counter says that it did.
+    reasons = new Map(),
+    // Calibrated sites whose prompt no longer matches what was measured, since when.
+    blocked = new Map(),
     pending = new Set(),
     controllers = new Set();
   let backgroundActive = 0,
@@ -233,9 +260,9 @@ export function createJudgeService({
     }
   }
 
-  const count = (site, outcome) => {
+  const count = (site, outcome, by = 1) => {
     const key = `${site}:${outcome}`;
-    counters.set(key, (counters.get(key) ?? 0) + 1);
+    counters.set(key, (counters.get(key) ?? 0) + by);
   };
   const canonical = (value) =>
     JSON.stringify(value, (_, item) =>
@@ -270,6 +297,9 @@ export function createJudgeService({
             (config.jevSites?.[id]?.calibration === "calibrated" &&
               typeof config.jevSites?.[id]?.promptFingerprint === "string"),
           threshold: config.jevSites?.[id]?.threshold ?? p.threshold,
+          ...(blocked.has(id)
+            ? { blockedBy: "judge_calibration_mismatch", blockedSince: new Date(blocked.get(id)).toISOString() }
+            : {}),
         },
       ]),
     ),
@@ -279,6 +309,17 @@ export function createJudgeService({
       const [site, outcome] = key.split(":");
       return { site, outcome, value };
     });
+  /**
+   * Work a caller chose not to send to `site`, by reason: a run outside the
+   * site's scope, lines past a per-run bound. The caller owns the bound; this
+   * only makes it visible, so a cap that binds shows as a count instead of as
+   * judgements that quietly never happened.
+   * @param {string} site @param {string} reason @param {number} [by]
+   */
+  const skipped = (site, reason, by = 1) => {
+    if (Object.hasOwn(JUDGE_SITES, site) && /^[a-z_]{1,40}$/.test(reason) && Number.isSafeInteger(by) && by > 0)
+      count(site, `skip_${reason}`, by);
+  };
   const drift = async (site, result, context) => {
     const regex =
       ["J4", "J7"].includes(site) && context.regexBaseline !== undefined;
@@ -290,8 +331,10 @@ export function createJudgeService({
           random() >= 0.02))
     )
       return;
-    if (backgroundActive >= Number(config.jevBackgroundConcurrency ?? 4))
+    if (backgroundActive >= Number(config.jevBackgroundConcurrency ?? 4)) {
+      count(site, "drift_busy");
       return;
+    }
     backgroundActive++;
     let deadline, baselineWork;
     const controller = new AbortController();
@@ -330,6 +373,7 @@ export function createJudgeService({
         promptFingerprint: result.promptFingerprint,
         agreement,
       });
+      count(site, "drift_compared");
     } catch {
       count(site, "drift_failed");
     } finally {
@@ -341,6 +385,10 @@ export function createJudgeService({
     const policy = Object.hasOwn(JUDGE_SITES, site) ? JUDGE_SITES[site] : null;
     const finish = (outcome, code, extra = {}) => {
       count(Object.hasOwn(JUDGE_SITES, site) ? site : "unknown", outcome);
+      if (outcome === "fallback") {
+        const key = `${Object.hasOwn(JUDGE_SITES, site) ? site : "unknown"}:${code}`;
+        reasons.set(key, (reasons.get(key) ?? 0) + 1);
+      }
       return {
         outcome,
         value: null,
@@ -419,10 +467,15 @@ export function createJudgeService({
     if (site !== "reply-check" && !calibrationMode) {
       if (config.jevSites?.[site]?.calibration !== "calibrated")
         return finish("fallback", "judge_uncalibrated");
-      if (config.jevSites?.[site]?.promptFingerprint !== fingerprint)
+      // The calibration is bound to the prompt, capability ids and all (J3's options are the catalogue's), so
+      // a changed prompt stands the site down. That has to be seen: it is marked here and shows in status().
+      if (config.jevSites?.[site]?.promptFingerprint !== fingerprint) {
+        if (!blocked.has(site)) blocked.set(site, now());
         return finish("fallback", "judge_calibration_mismatch", {
           promptFingerprint: fingerprint,
         });
+      }
+      blocked.delete(site);
     }
     const configuredTimeout = policy.interactive
       ? Number(config.jevOnlineTimeoutMs ?? 3000)
@@ -472,7 +525,9 @@ export function createJudgeService({
             requests.set(key, (requests.get(key) ?? 0) + 1);
             return result;
           } catch (error) {
-            const key = `${site}:failed`;
+            // A refusal of this request or this account is not the provider failing: it
+            // stays out of the series the JevFailing alert reads (`requestRefusalCode`).
+            const key = `${site}:${requestRefusalCode(error) ? "refused" : "failed"}`;
             requests.set(key, (requests.get(key) ?? 0) + 1);
             throw error;
           }
@@ -585,6 +640,8 @@ export function createJudgeService({
           value: decoded.value,
           model: first.model,
           promptFingerprint: fingerprint,
+          ...(decoded.partial ? { partial: decoded.partial } : {}),
+          ...(decoded.itemsTotal ? { itemsSettled: decoded.itemsSettled, itemsTotal: decoded.itemsTotal } : {}),
         };
       };
       const active = work();
@@ -597,6 +654,11 @@ export function createJudgeService({
       void active.then(completed, completed);
       const result = await Promise.race([active, expired]);
       circuits.set(site, { failures: 0, until: 0 });
+      // How many items of a batch were sure, settled batch or not: the batch counter alone reads 0 of 9.
+      if (result.itemsTotal) {
+        if (result.itemsSettled) count(site, "item_settled", result.itemsSettled);
+        if (result.itemsTotal > result.itemsSettled) count(site, "item_escalated", result.itemsTotal - result.itemsSettled);
+      }
       if (result.confidence < threshold)
         return finish("escalated", "judge_uncertain", {
           ...result,
@@ -609,6 +671,12 @@ export function createJudgeService({
       void sample.finally(() => pending.delete(sample));
       return settled;
     } catch (error) {
+      // The Jev client's own code (`jev_payment_required`, `jev_auth_failed`, ...),
+      // for a caller that reports why: a code only, never a message.
+      const cause = /^[a-z0-9_]{1,64}$/.test(String(error?.code ?? "")) ? { cause: String(error.code) } : {};
+      const refusal = requestRefusalCode(error);
+      if (refusal)
+        return finish("fallback", refusal, { promptFingerprint: fingerprint, cost: observedCost, ...cause });
       const failures = (circuits.get(site)?.failures ?? 0) + 1;
       circuits.set(site, {
         failures,
@@ -619,7 +687,7 @@ export function createJudgeService({
         error?.message === "judge_timeout" || controller.signal.aborted
           ? "judge_timeout"
           : "judge_provider_failure",
-        { promptFingerprint: fingerprint, cost: observedCost },
+        { promptFingerprint: fingerprint, cost: observedCost, ...cause },
       );
     } finally {
       clearTimeout(timer);
@@ -636,6 +704,37 @@ export function createJudgeService({
         return { site, outcome, value };
       }),
     driftMetrics: () => judgeDriftSummary(database, config),
+    skipped,
+    /** The families `/api/ops/metrics` serves for the judge sites. */
+    async metricFamilies() {
+      const rows = metrics();
+      const observed = await judgeDriftSummary(database, config).catch(() => []);
+      return [
+        { name: "open_science_jev_decisions_total", help: "Registered Jev decisions by site.", type: "counter",
+          series: rows.filter((row) => ["settled", "escalated", "fallback"].includes(row.outcome)).map((row) => ({ value: row.value, labels: { site: row.site, outcome: row.outcome } })) },
+        { name: "open_science_jev_requests_total", help: "Registered Jev calls by site.", type: "counter",
+          series: [...requests].map(([key, value]) => { const [site, outcome] = key.split(":"); return { value, labels: { site, outcome } }; }) },
+        { name: "open_science_jev_fallback_reasons_total", type: "counter",
+          help: "Why Jev decisions fell back to the original path, by site and the service's own code (judge_calibration_mismatch: a calibrated site's prompt no longer matches what was measured).",
+          series: [...reasons].map(([key, value]) => { const [site, code] = key.split(":"); return { value, labels: { site, code } }; }) },
+        { name: "open_science_jev_items_total", type: "counter",
+          help: "Items of a batch of independent items (J5) by whether each was sure on its own: settled, or escalated to the original path; a batch is settled only when all of its items are.",
+          series: rows.filter((row) => row.outcome.startsWith("item_")).map((row) => ({ value: row.value, labels: { site: row.site, outcome: row.outcome.slice(5) } })) },
+        { name: "open_science_jev_skipped_total", type: "counter",
+          help: "Work a registered Jev site was not asked to do, by reason: run_out_of_scope counts runs; lines_over_cap and lines_after_notice_limit count report lines.",
+          series: rows.filter((row) => row.outcome.startsWith("skip_")).map((row) => ({ value: row.value, labels: { site: row.site, reason: row.outcome.slice(5) } })) },
+        { name: "open_science_jev_drift_observations_total", type: "counter",
+          help: "Drift comparisons by site: compared (an observation was recorded), failed (the original path or the record failed), expired (an engine's receipt came back too late), busy (no room to sample).",
+          series: rows.filter((row) => row.outcome.startsWith("drift_")).map((row) => ({ value: row.value, labels: { site: row.site, outcome: row.outcome.slice(6) } })) },
+        { name: "open_science_jev_drift_below_baseline_seven_days", help: "Seven consecutive observed UTC days below calibrated baseline.", type: "gauge",
+          series: observed.map((row) => ({ value: row.belowBaselineSevenDays ? 1 : 0, labels: { site: row.site } })) },
+        { name: "open_science_jev_drift_baseline_configured", type: "gauge",
+          help: "Whether a site's pin carries the baseline agreement its drift alert compares with; 0 means JevCalibrationDrift cannot fire for that site.",
+          series: observed.map((row) => ({ value: row.baselineConfigured ? 1 : 0, labels: { site: row.site } })) },
+        { name: "open_science_jev_baseline_agreement", help: "Observed agreement against trusted baseline; absent samples are omitted.", type: "gauge",
+          series: observed.filter((row) => row.agreement !== null).map((row) => ({ value: row.agreement, labels: { site: row.site } })) },
+      ];
+    },
     async close() {
       closed = true;
       clearInterval(comparisonCleanup);

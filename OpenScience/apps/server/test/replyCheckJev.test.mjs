@@ -4,7 +4,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { replyCitedSentences } from "@evimed/domain";
+import * as replyCheckJev from "../src/replyCheckJev.mjs";
 import { JEV_RELATION_CRITERIA, jevDecisions, jevReplyRequest, judgeCitedSentences } from "../src/replyCheckJev.mjs";
+import { JevError } from "../src/jevModel.mjs";
+import { createJudgeService } from "../src/judgeService.mjs";
+import { HttpError } from "../src/security.mjs";
 import { replyMessage } from "../src/reviewService.mjs";
 
 const REPLY = [
@@ -167,6 +171,38 @@ test("Jev failing, refusing or over its ceiling hands every sentence to the revi
   const judged = await judgeCitedSentences({ sentences, references, readable, threshold: 0.8, jev: null, reviewer: off.reviewer });
   assert.deepEqual(off.asked[0].sentences.map((/** @type {any} */ sentence) => sentence.index), [0, 1, 2, 3]);
   assert.equal(judged.jev.outcome, "off");
+});
+
+test("through the shared judge service a failure keeps its code: the Jev client's when it refused, the service's otherwise", async () => {
+  const config = { reviewJevEnabled: true, typesafeApiKey: "test-not-secret", reviewJevModel: "jev-1.13.0", reviewJevSupportConfidence: 0.8 };
+  const scope = { userId: "u", projectId: "p", runId: "run_1" };
+  const cases = [
+    [new JevError("jev_payment_required", "402", { status: 402 }), "jev_payment_required", "failed"],
+    [new JevError("jev_auth_failed", "401", { status: 401 }), "jev_auth_failed", "failed"],
+    [new JevError("jev_request_too_large", "too large"), "jev_request_too_large", "too_large"],
+    [new HttpError(402, "usage_module_budget_exceeded", "spent"), "usage_module_budget_exceeded", "failed"],
+    [new Error("socket hang up"), "judge_provider_failure", "failed"],
+  ];
+  for (const [error, code, outcome] of cases) {
+    const service = createJudgeService({ config, callImpl: async () => { throw error; } });
+    const spy = reviewerSpy();
+    const judged = await judgeCitedSentences({
+      sentences, references, readable, threshold: 0.8, jev: replyCheckJev.judgeServiceJev(service, scope), reviewer: spy.reviewer,
+    });
+    assert.deepEqual(judged.jev, { outcome, code, asked: 2, decided: 0, escalated: 0, medicine: 1 }, code);
+    assert.deepEqual(spy.asked[0].sentences.map((/** @type {any} */ sentence) => sentence.index), [0, 1, 2, 3], "the reviewer still takes every sentence");
+    await service.close();
+  }
+  // The service's own refusals to ask are named too, not folded into a default.
+  const off = createJudgeService({ config: { ...config, reviewJevEnabled: false }, callImpl: async () => { throw new Error("not called"); } });
+  const disabled = await judgeCitedSentences({ sentences, references, readable, threshold: 0.8, jev: replyCheckJev.judgeServiceJev(off, scope), reviewer: reviewerSpy().reviewer });
+  assert.equal(disabled.jev.code, "judge_disabled");
+  const failing = createJudgeService({ config, callImpl: async () => { throw new JevError("jev_upstream_error", "5xx", { status: 503 }); } });
+  for (let i = 0; i < 3; i += 1) await failing.judge("reply-check", { items: { S0: { sentence: "x", sources: { "[1]": "y" } } } }, scope);
+  const shut = await judgeCitedSentences({ sentences, references, readable, threshold: 0.8, jev: replyCheckJev.judgeServiceJev(failing, scope), reviewer: reviewerSpy().reviewer });
+  assert.equal(shut.jev.code, "judge_circuit_open");
+  await off.close();
+  await failing.close();
 });
 
 test("the gate: confident support at the threshold settles, below it escalates, and an answer that disagrees with itself decides nothing", () => {

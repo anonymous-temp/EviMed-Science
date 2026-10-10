@@ -77,6 +77,26 @@ export class JevError extends Error {
 }
 
 /**
+ * The judge result code for a failure that is about this one request or this
+ * account and not about the provider, or null for a failure that is the
+ * provider's or the network's. A request over Jev's ceilings (our own estimate,
+ * or the provider's 413 to a request our estimate let through), a missing pin,
+ * and the usage ledger turning the call away (the account's or the module's
+ * budget, a conflicting reservation) all say nothing about whether Jev is up:
+ * counting them toward a site's circuit let three oversize manuscripts, or one
+ * account's spent module budget, shut a site for everyone for five minutes and
+ * feed the JevFailing alert (J-8).
+ * @param {any} error @returns {string | null}
+ */
+export function requestRefusalCode(error) {
+  const code = String(error?.code ?? "");
+  if (code === "jev_request_too_large") return "judge_request_too_large";
+  if (code === "jev_unconfigured") return "judge_unconfigured";
+  if (code === "usage_budget_exceeded" || code === "usage_module_budget_exceeded") return "judge_budget_exceeded";
+  return code.startsWith("usage_") ? "judge_ledger_refused" : null;
+}
+
+/**
  * What a request will be billed, from above: the state and every question at
  * the gateway's conservative token estimate, plus Jev's own framing. Two
  * numbers, because the provider holds two ceilings.

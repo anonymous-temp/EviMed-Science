@@ -2,8 +2,9 @@
  * Why a run went where it went, and roughly how long it will take — both in
  * the reader's words (C3, 2026-09-18).
  *
- * The ledger records a route as a machine reason (`llm:0.87`,
- * `matched:named:meta-analysis`, `unrouted:open-domain:classifier:timeout`),
+ * The ledger records a route as a machine reason (`llm:0.87`, or `jev:0.87`
+ * when the Jev routing site decided, `matched:named:meta-analysis`,
+ * `unrouted:open-domain:classifier:timeout`),
  * which is what operations and the batch evaluations read and must keep
  * reading. A researcher was shown nothing at all: the answer line and the
  * report line look the same from the composer, and a question that went to a
@@ -59,7 +60,8 @@ export function routeReasonText(reason, agentId) {
   // the question calls for them: on 2026-09-19 a task that delivered two
   // reports was described as 「不需要交付报告」.
   else if (rest === "unrouted:open-domain") sentence = adopted ? null : "直接回答：这个问题不需要交付报告";
-  else if (/^llm:(?:0|1)(?:\.\d+)?$/.test(rest)) sentence = `按问题内容交给${named(agentId)}`;
+  // The same sentence whichever model decided (`llm:` the Flash classifier, `jev:` the Jev routing site): the reader is told where the question went.
+  else if (/^(?:llm|jev):(?:0|1)(?:\.\d+)?$/.test(rest)) sentence = `按问题内容交给${named(agentId)}`;
   else if (rest.startsWith("matched:named:")) sentence = `你在问题里点名了${named(agentId)}`;
   else if (rest === "matched:clinical-evidence-synthesis:safety-medicine") sentence = `问题提到了需要核对用药安全的药品，交给${named(agentId)}`;
   else if (rest.startsWith("matched:")) sentence = `按问题里的交付要求交给${named(agentId)}`;

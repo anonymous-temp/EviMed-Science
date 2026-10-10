@@ -3116,6 +3116,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   agentRuns = new AgentRunStore(researchSessions, {
     judgeService,
     agentRegistry,
+    // The register judge leaves the platform's own projects unread, and reads a bounded number of report lines per run.
+    internalProject: (project) => internalFor(project.userId, project.id),
+    registerJudgeMaxLines: config.jevRegisterMaxLines,
     // The evidence card a conversation was started from (「用这张卡继续研究」), recorded on its run and counted as a citation.
     originCardOf: (project, session) => evidencePublish?.origins.originCardOf(project, session) ?? Promise.resolve(null),
     onOriginCardRun: (project, run) => evidencePublish?.origins.runStarted(project, run),
@@ -5714,7 +5717,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
+        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -8714,7 +8717,7 @@ function addHistogramMetric(lines, name, help, series) {
 }
 
 async function operatorMetricsText({ webVitals = null, judgeService = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
+  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -9267,12 +9270,7 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, conf
       "counter", { value: Number(store.expiredSessionsPurged) || 0 });
   }
 
-  const judgeRows=judgeService?.metrics()??[];
-  addMetric(lines,'open_science_jev_decisions_total','Registered Jev decisions by site.','counter',judgeRows.filter(row=>['settled','escalated','fallback'].includes(row.outcome)).map(row=>({value:row.value,labels:{site:row.site,outcome:row.outcome}})));
-  addMetric(lines,'open_science_jev_requests_total','Registered Jev calls by site.','counter',(judgeService?.requestMetrics()??[]).map(row=>({value:row.value,labels:{site:row.site,outcome:row.outcome}})));
-  const driftRows=await judgeService?.driftMetrics().catch(()=>[])??[];
-  addMetric(lines,'open_science_jev_drift_below_baseline_seven_days','Seven consecutive observed UTC days below calibrated baseline.','gauge',driftRows.map(row=>({value:row.belowBaselineSevenDays?1:0,labels:{site:row.site}})));
-  addMetric(lines,'open_science_jev_baseline_agreement','Observed agreement against trusted baseline; absent samples are omitted.','gauge',driftRows.filter(row=>row.agreement!==null).map(row=>({value:row.agreement,labels:{site:row.site}})));
+  for (const family of await judgeService?.metricFamilies?.().catch(() => []) ?? []) addMetric(lines, family.name, family.help, family.type, family.series);
   return `${lines.join("\n")}\n`;
 }
 
@@ -9378,7 +9376,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null, vcr = null, credits = null) {
+async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null, vcr = null, credits = null, judgeService = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -9412,7 +9410,8 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     // the platform that cannot be reached is a warning on a green check.
     frontier: await readinessCheck(async () => frontierReadiness({ config, frontier, database: productDatabase })),
     // The independent reviewer: red only for its own invariants (reviewService.mjs).
-    jev: {required:false, ok:true, ...createJudgeService({config}).status()},
+    // The live service when there is one, so a site stood down by a changed prompt shows (`blockedBy`); else the configuration alone.
+    jev: {required:false, ok:true, ...(typeof judgeService?.status === "function" ? judgeService : createJudgeService({config})).status()},
     review: await readinessCheck(async () => (review ? review.service.readiness() : config.reviewEnabled
       ? Promise.reject(readinessFailure("review_unavailable", { reason: productDatabase ? "not_composed" : "no_product_database" }))
       : { required: false, enabled: false })),

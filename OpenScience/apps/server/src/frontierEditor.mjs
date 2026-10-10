@@ -1232,19 +1232,28 @@ export class FrontierEditor {
     const items = batch.slice(0, FRONTIER_SCREEN_BATCH);
     for (const entry of batch.slice(FRONTIER_SCREEN_BATCH)) errors.set(entry.key, "frontier_screen_batch_too_large");
     if (!items.length) return { verdicts, errors, providerErrors, calls };
+    /** What the model is shown of a group of entries, each numbered from 1 within it. @param {ScreenInput[]} entries */
+    const payloadOf = (entries) => ({
+      items: entries.map((entry, index) => ({
+        id: String(index + 1),
+        title: clip(entry.title, 400),
+        source: clip(entry.sourceName, 120),
+        excerpt: clip(entry.excerpt ?? "", FRONTIER_SCREEN_EXCERPT_CHARS),
+        lanes: entry.allowedLanes,
+      })),
+    });
+    /** The existing Flash screen of a group of entries. @param {ScreenInput[]} entries @returns {Promise<Map<string, ScreenVerdict> | null>} */
+    const flashScreen = async (entries) => validateScreen(entries, await this.#call([
+      { role: "system", content: policy.policy.screenInstructions },
+      { role: "user", content: JSON.stringify(payloadOf(entries)) },
+    ], SCREEN_MAX_TOKENS, SCREEN_TIMEOUT_MS));
+    /** @param {string} title */
+    const languageOf = (title) => isChineseTitle(title) ? "zh" : /[\u3040-\u30ff]/u.test(title) ? "ja" : /[a-z]/i.test(title) ? "en" : "und";
     /** @param {ScreenInput[]} group @returns {Promise<Map<string, ScreenVerdict> | null>} */
     const ask = async (group) => {
       calls += 1;
       this.counters.screenCalls += 1;
-      const payload = {
-        items: group.map((entry, index) => ({
-          id: String(index + 1),
-          title: clip(entry.title, 400),
-          source: clip(entry.sourceName, 120),
-          excerpt: clip(entry.excerpt ?? "", FRONTIER_SCREEN_EXCERPT_CHARS),
-          lanes: entry.allowedLanes,
-        })),
-      };
+      const payload = payloadOf(group);
       const baseline = async () => {
         const answer = await this.#call([
           { role: "system", content: FRONTIER_SCREEN_INSTRUCTIONS },
@@ -1258,22 +1267,38 @@ export class FrontierEditor {
             category: verdict.lane, specialties: verdict.specialties, roundup: verdict.digest };
         }) } };
       };
+      /** The entries J5 was sure of, with their verdicts, and the entries it was not (J-5). @type {{ kept: Map<string, ScreenVerdict>, rest: ScreenInput[] } | null} */
+      let adopted = null;
       if (this.judgeService && this.owner) {
         try {
           const result = await this.judgeService.judge("J5", { items: group.map((entry, index) => ({ id: String(index + 1), title: clip(entry.title, 400), summary: clip(entry.excerpt ?? "", FRONTIER_SCREEN_EXCERPT_CHARS), allowedCategories: entry.allowedLanes, allowedSpecialties: [...FRONTIER_SPECIALTIES] })) }, { ...this.owner, limits: { daily: 0, weekly: 0 }, module: "frontier", baseline });
           if (['settled', 'escalated'].includes(result?.outcome) && Array.isArray(result.value?.items)) {
             const value = { items: result.value.items.map((/** @type {any} */ item) => ({ id: item.id, medical: item.isMedical, news: item.isNews, lane: item.category, specialties: item.specialties, digest: item.roundup,
-              language: isChineseTitle(group[Number(item.id) - 1]?.title ?? "") ? "zh" : /[\u3040-\u30ff]/u.test(group[Number(item.id) - 1]?.title ?? "") ? "ja" : /[a-z]/i.test(group[Number(item.id) - 1]?.title ?? "") ? "en" : "und" })) };
+              language: languageOf(group[Number(item.id) - 1]?.title ?? "") })) };
             const verified = validateScreen(group, value);
             if (verified) return verified;
+          } else if (result?.outcome === "escalated" && Array.isArray(result.partial?.items) && result.partial.items.length) {
+            // Not every item was sure, but some were: keep those, and ask the model about the rest alone.
+            const sureIds = new Set(result.partial.items.map((/** @type {any} */ item) => String(item.id)));
+            /** @type {ScreenInput[]} */
+            const sure = [];
+            /** @type {ScreenInput[]} */
+            const rest = [];
+            group.forEach((entry, index) => (sureIds.has(String(index + 1)) ? sure : rest).push(entry));
+            // `validateScreen` numbers the entries it is given from 1, so the sure items are renumbered onto `sure`.
+            const kept = validateScreen(sure, { items: result.partial.items.map((/** @type {any} */ item) => ({
+              id: String(sure.indexOf(group[Number(item.id) - 1]) + 1), medical: item.isMedical, news: item.isNews, lane: item.category,
+              specialties: item.specialties, digest: item.roundup, language: languageOf(group[Number(item.id) - 1]?.title ?? "") })) });
+            if (kept) adopted = { kept, rest };
           }
         } catch { /* The existing Flash screen is the explicit fallback. */ }
       }
-      const answer = await this.#call([
-        { role: "system", content: policy.policy.screenInstructions },
-        { role: "user", content: JSON.stringify(payload) },
-      ], SCREEN_MAX_TOKENS, SCREEN_TIMEOUT_MS);
-      return validateScreen(group, answer);
+      // Outside the try above: a model failure here is the model's, as it is for a whole group, and is not asked again.
+      if (adopted) {
+        const others = adopted.rest.length ? await flashScreen(adopted.rest) : new Map();
+        return others ? new Map([...adopted.kept, ...others]) : null;
+      }
+      return flashScreen(group);
     };
     /** @param {ScreenInput[]} group */
     const attempt = async (group) => {
