@@ -507,10 +507,10 @@
       "origin": "capability",
       "version": "1.0.1",
       "source": {"kind":"release"},
-      "digest": "sha256:28ad0895651c736500ceeefc719353221aa9af8bb847f1f4cb60873a62ecf40d",
+      "digest": "sha256:86e3912583ad4e088f908b6295fb0c33a411e95ee975bced2e598aacbb5dc16e",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [{"path":"scripts/verify_result.py","sha256":"3fb75ee936ad10beb61da36019a7fea735656ac8dc29acbbaa903e41b5c29fcb"}],
-      "references": [{"path":"capability.yaml","sha256":"aab12d4531f85dddb36e9ff5d9dea7c93d45a919478a31c5c95c6d27915fabf7"}],
+      "references": [{"path":"capability.yaml","sha256":"6211f39cf878c7574f58254baf5f0a040d03ec6982be41666f7a51e5634c440e"}],
       "dependencies": [
         {"kind":"platform-tool","name":"gene_expression_differential","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"gene_expression_series","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -524,7 +524,7 @@
         {
           "name": "gene-expression-analysis-package",
           "kind": "deliverable",
-          "summaryZh": "给出 GEO 数据集编号，比较两组样本的基因表达差异，结果附校验与回执。",
+          "summaryZh": "给出 NCBI GEO 数据集编号，比较两组样本的基因表达差异，结果附校验与回执。",
           "accepts": ["seriesAccession","groupDefinition","platformAccession","outputLanguage"],
           "produces": [
             "gene-expression-report.md",
