@@ -302,3 +302,13 @@ test("article registration rejects only nonexistent files and keeps available pa
   assert.ok(result.issues.some(issue => issue.code === "unavailable"));
   await fs.rm(workspace, { recursive: true, force: true });
 });
+
+/** The shared drug-value method, as a GEO run reads it. */
+const drugValueSkill = async () => (await import("node:fs/promises")).readFile(new URL("../../../capability-skills/geo-drug-value/SKILL.md", import.meta.url), "utf8");
+
+test("the drug-value skill tells a run to list the knowledge-base file a finding rests on by its src_ id (D-19)", async () => {
+  // A replaced file reaches a finding only through that id (geoValueImpacts); the skill used to say nothing of it.
+  const skill = await drugValueSkill();
+  assert.match(skill, /`src_\.\.\.`/);
+  assert.match(skill, /`sourceRefs`/);
+});
