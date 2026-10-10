@@ -7,7 +7,8 @@ import { COLOR_ROLES, colorRole } from "@evimed/design-tokens";
 import { escapeHtml, externalLink, html, raw, safeHref, timeTag } from "../src/evidencePublicHtml.mjs";
 import { aigcMetadata, renderPage } from "../src/evidencePublicLayout.mjs";
 import { createEvidencePublicIndexing, evidenceAbsoluteUrl, evidenceSitemapXml } from "../src/evidencePublicIndexing.mjs";
-import { aboutPage, cardPage, claimCountsText, indexPage, metricsPage, requestsPage, simulationPage, simulationsPage, withdrawnCardPage, zonePage } from "../src/evidencePublicPages.mjs";
+import { aboutPage, cardPage, changesPage, claimCountsText, indexPage, metricsPage, requestsPage, simulationPage, simulationsPage, withdrawnCardPage, zonePage } from "../src/evidencePublicPages.mjs";
+import { evidenceFeedRss } from "../src/evidenceFeed.mjs";
 import { createEvidencePublicRoutes } from "../src/evidencePublicRoutes.mjs";
 import { evidencePublicStylesheet } from "../src/evidencePublicStyle.mjs";
 import { evidencePublicIsBot, evidencePublicDay } from "../src/evidencePublicReads.mjs";
@@ -86,8 +87,43 @@ test("a card page shows the producer first, the marks, the quotations, the sourc
   assert.match(body, /deepseek-v4-flash 2026-09/);
   assert.match(body, /有 2 项可能影响这张卡的新研究|2 项可能影响这张卡的新研究/);
   assert.match(body, /href="\/app\/frontier\/zones\/ez_0123456789ab\/evidence\/ec_0123456789ab"/, "the call to action leads into the app");
-  assert.match(body, /不要引用这张卡/, "a card says it is an index, not evidence");
+  assert.doesNotMatch(body, /只是索引|不要引用这张卡/, "a card page does not repeat that it is an index (the editorial note says how cards are cited)");
   assert.equal(/style=/.test(body), false, "no inline style");
+});
+
+// R32, 2026-10-10: the site-wide footer and the intro of each page said, again and again, that a card is only an index and how the platform keeps
+// its records. That is the editorial note's business (《编辑说明》 states it once); a page says what it is.
+test("no public page repeats that a card is only an index, or explains how the platform keeps its records", () => {
+  const zone = { id: "ez_0123456789ab", title: "Zone", description: "d", background: "", kind: "user", kindLabel: "用户专区", producer: null, owner: { id: "alice", name: "Alice" }, follows: 3, cards: 1, withdrawnCards: 0, currencyCounts: { current: 1 }, lastCheckedAt: null };
+  const full = { verification: { cards: 2, claims: 4, verified: 3, passRate: 0.75 }, corrections: { entries: 1, medianLatencyHours: 30 }, challenges: { filed: 2, upheld: 1, amended: 0, withdrawn: 0, open: 1, upheldShare: 1 } };
+  const pages = {
+    index: indexPage({ official: [], product: [], user: [{ ...zone }] }),
+    card: cardPage({ card: card(), links, view: "clinical" }),
+    withdrawn: withdrawnCardPage({ card: card({ withdrawn: { at: "2026-10-04T00:00:00Z", reason: "wrong", changeLogId: "7" } }) }),
+    changes: changesPage({ zone, items: [], nextBefore: null }),
+    metrics: metricsPage({ months: [{ month: "2026-10", data: true, figures: full }] }),
+    requests: requestsPage({ items: [] }),
+  };
+  const forbidden = /只是索引|请引用它列出的原始来源|不要引用这张卡|排序只看|没有付费字段|撤回的卡片保留这一页|每条说明由程序按事实写成|记录只追加|重新算出来的|平台没有审核过/;
+  for (const [name, page] of Object.entries(pages)) {
+    const text = renderPage({ ...page, path: "/evidence/x", noindex: true, publicUrl: "https://www.evimed.test", wide: false });
+    assert.doesNotMatch(text, forbidden, `${name} page and the footer around it`);
+    assert.match(text, /编辑说明/, `${name}: the way to the editorial note stays`);
+  }
+  // What each page is, stays.
+  assert.match(String(pages.index.body), /每张证据卡写明是谁出的、凭什么这样说，每条结论都标出它的引文有没有在来源里逐字找到（✓ 或 ⚠）。/);
+  assert.match(String(pages.changes.body), /更正、更新和撤回都记在这里：日期、改了什么、为什么改、由什么触发。/);
+  assert.match(String(pages.metrics.body), /月份按北京时间的日历月算。没有数据的月份写明没有数据，不写 0。/);
+  assert.match(String(pages.requests.body), /申请和附议需要登录 EviMed 账号/);
+  // The AI label and the disclosure are the labelling of published content, and stay.
+  assert.match(String(pages.card.body), /<span class="badge ai">AI 生成<\/span>/);
+  assert.match(String(pages.card.body), /AI 做了哪几步/);
+  const rss = evidenceFeedRss({ items: [], generatedAt: "2026-10-05T00:00:00Z" }, { publicUrl: "https://www.evimed.test", selfPath: "/evidence/feed.xml" });
+  assert.match(rss, /<description>EviMed 证据专区里平台的官方证据卡，和作者公开的原创研究。<\/description>/);
+  assert.doesNotMatch(rss, /只是索引/);
+  // The editorial note keeps the rules it states once.
+  assert.doesNotMatch(String(aboutPage().body), /运行闸门/);
+  assert.match(String(aboutPage().body), /引文没有核对上（⚠）的结论不发布/);
 });
 
 test("a calculated claim that did not check out says so in the words of the check, with no engine and no receipt (R30, 2026-10-10)", () => {

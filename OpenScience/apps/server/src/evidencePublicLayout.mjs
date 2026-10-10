@@ -85,7 +85,7 @@ ${feedLinks}
 ${body}
 </main>
 <footer class="site-footer"><div class="inner">
-<p>证据卡是 EviMed 对来源的整理，只是索引，请引用它列出的原始来源。${pathLink(evidencePublicPath("/about"), "编辑说明")} · <a href="${evidencePublicPath("/feed.xml")}">订阅</a> · <a href="/login">登录或注册</a></p>
+<p>${pathLink(evidencePublicPath("/about"), "编辑说明")} · <a href="${evidencePublicPath("/feed.xml")}">订阅</a> · <a href="/login">登录或注册</a></p>
 </div></footer>
 </body>
 </html>

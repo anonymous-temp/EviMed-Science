@@ -121,7 +121,7 @@ ${zone.description ? html`<p>${clip(zone.description, 120)}</p>` : ""}
     title: `${EVIDENCE_SITE_NAME}：官方专区、产品专区和用户专区`,
     description: "EviMed 证据中心公开的证据专区。官方专区、产品专区和用户专区分开列出，每张证据卡都写明出品方，每条结论都能追到来源原文。",
     body: html`<h1>${EVIDENCE_SITE_NAME}</h1>
-<p class="lede">每张证据卡写明是谁出的、凭什么这样说，每条结论都标出它的引文有没有在来源里逐字找到（✓ 或 ⚠）。证据卡只是索引，请引用它列出的原始来源。排序只看更新日期、关注数和读者评分，没有付费字段。详见${pathLink(evidencePublicPath("/about"), "编辑说明")}。</p>
+<p class="lede">每张证据卡写明是谁出的、凭什么这样说，每条结论都标出它的引文有没有在来源里逐字找到（✓ 或 ⚠）。详见${pathLink(evidencePublicPath("/about"), "编辑说明")}。</p>
 ${section("official", "官方专区", "由平台出品。", sections.official, false)}
 ${section("product", "产品专区", "由企业或医生出品，讲的是他们自己的产品；每个专区写明出品方和与产品的关系。", sections.product, true)}
 ${section("user", "用户专区", "由研究者出品、署名发表，并选择公开到互联网。", sections.user, false)}`,
@@ -284,7 +284,6 @@ export function cardPage({ card, links, view }) {
 <p class="meta">${card.originalityLabel ?? ""} · ${pathLink(zonePath(card.zone.id), card.zone.title)} · 作者 ${authorLink(card.creator)} · 第 ${card.revision} 版，更新于 ${timeTag(card.updatedAt)} · ${claimCountsText(card.claims)} · ${currencyBadge(card)}</p>
 ${card.hasPendingEvidence ? html`<p class="notice warn">平台发现了 ${card.pendingItems} 项可能影响这张卡的新研究，尚未纳入。读到的结论可能不是最新的。</p>` : ""}
 ${card.currency === "source_changed" ? html`<p class="notice warn">这张卡引用的来源出现了撤稿、更正或关注声明，依据这些来源的结论待复核。</p>` : ""}
-<p class="muted">证据卡是 EviMed 对来源的整理，只是索引：需要引用时，请引用下面列出的原始来源，不要引用这张卡。</p>
 <p>${view === "public" ? "公众版" : "临床版"} · 切换到 ${pathLink(`${cardPath(card.id)}?view=${other}`, other === "public" ? "公众版" : "临床版")}</p>
 ${card.summary ? html`<p class="lede">${card.summary}</p>` : ""}
 ${card.content?.question ? html`<p><strong>问题：</strong>${card.content.question}</p>` : ""}${card.content?.answer ? html`<p><strong>回答：</strong>${card.content.answer}</p>` : ""}
@@ -319,7 +318,7 @@ export function withdrawnCardPage({ card }) {
 <dt>所在专区</dt><dd>${pathLink(zonePath(card.zoneId), card.zoneTitle ?? "专区")}</dd>
 <dt>最后更新</dt><dd>${timeTag(card.updatedAt)}</dd>
 </dl>
-<p class="muted">撤回的卡片保留这一页，是为了让引用过它的人能看到发生了什么。</p>`,
+`,
   };
 }
 
@@ -336,7 +335,7 @@ export function changesPage({ zone, items, nextBefore }) {
     description: `${zone.title}的变更记录：更正、更新和撤回，每条写明日期、改了什么、为什么改、由什么触发。`,
     body: html`${producerLine(zone.producer, zone.owner.name)}
 <h1>变更记录：${pathLink(zonePath(zone.id), zone.title)}</h1>
-<p class="muted">更正、更新和撤回都记在这里：日期、改了什么、为什么改、由什么触发。每条说明由程序按事实写成。记录只追加，发布后不能改。</p>
+<p class="muted">更正、更新和撤回都记在这里：日期、改了什么、为什么改、由什么触发。</p>
 ${items.length ? html`<div class="table-wrap"><table>
 <thead><tr><th>日期</th><th>类别</th><th>说明</th><th>触发</th><th>卡片</th></tr></thead>
 <tbody>${items.map((entry) => html`<tr id="log-${entry.id}">
@@ -456,7 +455,7 @@ export function metricsPage({ months, questionBank = null, calibration = null })
     title: `按月公开的数 · ${EVIDENCE_SITE_NAME}`,
     description: "EviMed 证据中心每月公开的三个数：引文核对通过率、纠错的中位时效、质疑数及其结果。",
     body: html`<h1>按月公开的数</h1>
-<p class="muted">三个数都是从数据表里重新算出来的，不是另外记下的总数。月份按北京时间的日历月算。没有数据的月份写明没有数据，不写 0。</p>
+<p class="muted">月份按北京时间的日历月算。没有数据的月份写明没有数据，不写 0。</p>
 <ul>
 <li><strong>引文核对通过率</strong>：当月末仍然公开的证据卡里，所有结论中引文在来源里逐字找到的占比。</li>
 <li><strong>纠错中位时效</strong>：从来源变更（或读者提出质疑）到卡片更新的时间的中位数，只算由这两类信号引起的更正和撤回。</li>
@@ -530,7 +529,7 @@ export function requestsPage({ items }) {
     description: "任何人都可以申请官方专区的选题，按申请人数排序，谁申请都一样。",
     body: html`<h1>选题申请</h1>
 <p class="lede">任何人都可以申请官方专区的选题。这里按申请人数排序，谁申请都一样；同一个账号对同一个选题只算一票。</p>
-<p class="muted">申请和附议需要登录 EviMed 账号：${pathLink("/login", "登录或注册")}。这里列的是读者写的话，平台没有审核过，也不收录进搜索引擎。</p>
+<p class="muted">申请和附议需要登录 EviMed 账号：${pathLink("/login", "登录或注册")}。</p>
 ${items.length ? html`<ol class="list">${items.map((item) => html`<li><h3>${item.title}</h3><p class="meta">${item.requesters} 人申请${item.zoneId ? html` · 指向专区：${pathLink(zonePath(item.zoneId), item.zoneTitle)}` : ""} · ${timeTag(item.createdAt)}</p></li>`)}</ol>` : html`<p class="muted">现在没有人申请选题。</p>`}`,
   };
 }
