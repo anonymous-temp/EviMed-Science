@@ -50,7 +50,7 @@ test("the trajectory method is registered once: a method, a kind, a schema, a ti
   assert.ok(spec.crossChecks.length > 0);
   assert.equal(/** @type {Record<string, string>} */ (VCR_JOB_METHODS).generate_patients_longitudinal, "patients.longitudinal");
   assert.ok(VCR_JOB_KINDS.includes("generate_patients_longitudinal"));
-  assert.ok(VCR_JOB_KINDS.indexOf("generate_patients_longitudinal") === VCR_JOB_KINDS.length - 1, "appended: the runtime's list mirrors the domain's order");
+  assert.ok(VCR_JOB_KINDS.indexOf("generate_patients_longitudinal") === VCR_JOB_KINDS.indexOf("prognostic_adjustment_comparator") + 1, "appended after the robustness methods: the runtime's list mirrors the domain's order");
   assert.ok(/** @type {any} */ (VCR_SCENARIO_SCHEMAS)["patients.longitudinal"]);
 });
 

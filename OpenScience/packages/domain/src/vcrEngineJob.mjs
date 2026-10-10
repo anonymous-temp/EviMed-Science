@@ -137,7 +137,6 @@ export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
  * everywhere else and a mismatch would otherwise queue the wrong computation.
  */
 export const VCR_JOB_METHODS = Object.freeze({
-  ...VCR_LONGITUDINAL_JOBS,
   profile_snapshot: 'profile.snapshot',
   build_cohort: 'cohort.build',
   generate_population: 'population.scenario',
@@ -172,6 +171,8 @@ export const VCR_JOB_METHODS = Object.freeze({
   prognostic_adjustment_comparator: 'comparator.prognostic_adjustment',
   // --- end robustness methods ---
   generate_patients_longitudinal: 'patients.longitudinal',
+  // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).
+  ...VCR_LONGITUDINAL_JOBS,
 })
 
 /** Job kinds that read patient-level rows, and so need a snapshot grant (plan §8.1). */
