@@ -13,10 +13,16 @@ import { deliverableDir, GEO_RESEARCH_CAPABILITIES, geoValueObject } from "@evim
  * Importing their excerpts as "research" put six thousand characters of each
  * into the profile, the judge's prompt and every round's frozen basis, and the
  * profile grew with every run of the programme (D-02).
+ *
+ * Answers the codes of the writes that failed (`failed`): a failed write is reported and the next one goes on, and the caller
+ * decides whether the import is whole — a run's value that did not reach the profile is not something to forget (D-24).
  * @param {{ store: any, project: any, geoProject: any, run: any, readFile: Function, report: Function, capabilityOutputs?: (id: string) => Promise<string[]> }} input
+ * @returns {Promise<{ failed: string[] }>}
  */
 export async function importGeoValue({ store, project, geoProject, run, readFile, report, capabilityOutputs = async () => [] }) {
-  if (typeof store.writeValue !== "function") return;
+  /** @type {string[]} */
+  const failed = [];
+  if (typeof store.writeValue !== "function") return { failed };
   const request = typeof store.researchRequests === "function"
     ? (await store.researchRequests(geoProject.id)).find((entry) => entry.runId === run.id) : null;
   const deliverables = run.deliverables ?? run.progress?.deliverables ?? [];
@@ -34,7 +40,7 @@ export async function importGeoValue({ store, project, geoProject, run, readFile
         if (geoValueObject(parsed)) await store.writeValue(project.userId, geoProject.id, parsed, run.id);
         else report("geo_value_json_invalid");
       } else report("geo_value_json_too_large");
-    } catch { report("geo_value_import_failed"); }
+    } catch { failed.push("geo_value_import_failed"); report("geo_value_import_failed"); }
     if (!research) continue;
     const materials = [];
     // Exact, bounded artifact names rather than a recursive scan or another model call.
@@ -57,6 +63,7 @@ export async function importGeoValue({ store, project, geoProject, run, readFile
         findingIds: request?.findingIds ?? [], groupIds: request?.groupIds ?? [], opportunityId: request?.opportunityId ?? null,
         runStatus: run.status, verification: delivery.verification ?? "unverified", materials,
         summary: delivery.title ?? delivery.name ?? "Research output available", basis: "research_output" }] }, run.id);
-    } catch { report("geo_value_import_failed"); }
+    } catch { failed.push("geo_value_import_failed"); report("geo_value_import_failed"); }
   }
+  return { failed };
 }

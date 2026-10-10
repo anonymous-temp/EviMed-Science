@@ -2129,6 +2129,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       importDelivery: createGeoDeliveryImport({ store: geoStore,
         capabilityOutputs: async (id) => ((await agentRegistry)?.get?.(id)?.outputs ?? []).map(output => output.path),
         report: (code) => process.stderr.write(`geo import: ${code}\n`),
+        // An attempt that lost a write is on the audit record as well as stderr, and in the metrics (`open_science_geo_run_import_total`).
+        audit: (event, status, details) => securityAudit(config, event, status, details),
         refreshCards: (geoProject, controlProject) => geo?.refreshCards(geoProject, controlProject) ?? Promise.resolve(null),
         checkReferences: (geoProject, article, text) => geoCards.checkArticle(geoProject, article, text),
         articleGate: (project, ref) => geo?.articleGate(project, ref) ?? Promise.resolve("unverified"),
@@ -3238,6 +3240,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (frontier && !internalFor(project.userId, project.id) && isResearcherOwnedWork(run)) frontier.profiles.noteConversation(project.userId, run);
       // A finished run in a GEO project: the claim library its geo-insight
       // deliverable holds is registered from the file (geoDeliveryImport.mjs).
+      // Not awaited here: the orchestrator asks for the same import when it
+      // folds the run, waits for this one or tries again if it failed, and only
+      // then reads what the run wrote (D-24).
       if (geo && !internalFor(project.userId, project.id)) {
         independentProductWork(() => geo.importDelivery(project, run)).catch((error) => process.stderr.write(`geo import: ${error?.code ?? error?.name ?? "failed"}\n`));
       }
@@ -4801,11 +4806,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     orchestrator = new GeoOrchestrator({
       store: geoParts.store, config, notifier, policies:evolutionModulePolicies,
       dispatchRun: overrides.geoDispatchRun ?? dispatchGeoRun,
+      // The ledger's run itself: the fold reads its status, and the import of what it delivered needs the rest of it.
       runStatus: async ({ userId, projectId, runId }) => {
         const owner = await store.userById(userId);
         if (!owner) return null;
-        const run = (await agentRuns.list(await store.requireProject(owner, projectId))).find((entry) => entry.id === runId);
-        return run ? { status: run.status } : null;
+        return (await agentRuns.list(await store.requireProject(owner, projectId))).find((entry) => entry.id === runId) ?? null;
+      },
+      // What a run delivered, imported before the fold reads it (geoDeliveryImport.mjs; the ledger's state change starts the same import).
+      importRun: async ({ userId, projectId, run }) => {
+        const owner = await store.userById(userId);
+        if (!owner) return null;
+        return geoParts.importDelivery(await store.requireProject(owner, projectId), run);
       },
       latestSessionId: async ({ userId, projectId }) => {
         const owner = await store.userById(userId);

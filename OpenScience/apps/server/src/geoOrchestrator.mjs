@@ -507,6 +507,7 @@ export class GeoOrchestrator {
    *   notifier?: ReturnType<typeof import("./geoNotify.mjs").createGeoNotifier> | null,
    *   dispatchRun?: ((input: GeoDispatch) => Promise<{ runId: string, sessionId: string | null, status?: string | null }>) | null,
    *   runStatus?: ((input: { userId: string, projectId: string, runId: string, dispatchId: string | null }) => Promise<{ status: string } | null>) | null,
+   *   importRun?: ((input: { userId: string, projectId: string, run: Record<string, any> }) => Promise<unknown>) | null,
    *   latestSessionId?: ((input: { userId: string, projectId: string }) => Promise<string | null>) | null,
    *   enqueueRound?: ((spec: { geoProjectId: string, kind: string, questionIds?: string[], engines?: string[], repeat?: number,
    *     ref?: Record<string, any> }) => Promise<any>) | null,
@@ -514,8 +515,11 @@ export class GeoOrchestrator {
    *   policies?: any, now?: () => Date, report?: (code: string) => void }} dependencies
    *   `enqueueRound` is the measurement package's, bound to its deps; absent,
    *   diagnosis and the schedules wait and `status()` says measurement is not wired.
+   *   `runStatus` answers the ledger's run (its `status`, and the rest of it when it has it). `importRun` is the end-of-run import
+   *   of what a run delivered (claims, the value profile, research results — geoDeliveryImport.mjs): idempotent, and awaited before
+   *   a run is folded into its steps, which read what it writes.
    */
-  constructor({ store, config = {}, notifier = null, dispatchRun = null, runStatus = null, latestSessionId = null, enqueueRound = null,
+  constructor({ store, config = {}, notifier = null, dispatchRun = null, runStatus = null, importRun = null, latestSessionId = null, enqueueRound = null,
     noteCitation = null, policies = createModuleEvolutionPolicies(), now = () => new Date(), report = () => {} }) {
     if (!store) throw new TypeError("The GEO orchestrator needs the GEO store.");
     this.policies = policies;
@@ -524,6 +528,7 @@ export class GeoOrchestrator {
     this.notifier = notifier;
     this.dispatchRun = dispatchRun;
     this.runStatus = runStatus;
+    this.importRun = importRun;
     this.latestSessionId = latestSessionId;
     this.enqueueRound = enqueueRound;
     this.noteCitation = noteCitation;
@@ -535,7 +540,7 @@ export class GeoOrchestrator {
     /** @type {Map<string, Promise<unknown>>} one advance per project at a time, in this process */
     this.locks = new Map();
     this.counters = { ticks: 0, scheduleTicks: 0, dispatched: 0, deferred: 0, dispatchFailed: 0, runsFinished: 0, roundsEnqueued: 0,
-      roundsSkipped: 0, notices: 0, projectErrors: 0 };
+      roundsSkipped: 0, notices: 0, projectErrors: 0, importFailed: 0 };
     /** @type {string | null} */
     this.lastDeferral = null;
     /** @type {string | null} */
@@ -748,13 +753,38 @@ export class GeoOrchestrator {
     if (!row || ["done", "failed"].includes(row.state)) return false;
     await this.#exclusive(row.geo_project_id, async () => {
       const project = await this.#project(row.geo_project_id);
-      if (project) await this.#finishRun(project, { ...row, run_id: row.run_id ?? run.id }, String(run.status));
+      if (project) await this.#finishRun(project, { ...row, run_id: row.run_id ?? run.id }, String(run.status), run);
     });
     return true;
   }
 
-  /** @param {any} project @param {any} mark @param {string} status */
-  async #finishRun(project, mark, status) {
+  /**
+   * What a run delivered, imported before anything here reads it (D-24). The import is the composition's own, idempotent, and also
+   * started by the ledger's state change — fire and forget, from a process that may have restarted since; the fold that decides the
+   * steps from what the run wrote used to run after it with nothing between, and a restart or a write that failed there lost the
+   * run's value profile, claims and research results while the mark went on to completion. Awaited here: a call that finds the other
+   * one under way waits for it, and one that finds it failed tries once more. An import that cannot be made is counted and reported;
+   * the fold goes on with what is stored (a finished run's work is not held back by it).
+   * @param {any} project @param {any} mark @param {string} status @param {Record<string, any> | null} run the ledger's run, when the caller has it
+   */
+  async #importRun(project, mark, status, run) {
+    if (!this.importRun) return;
+    try {
+      const runId = String(run?.id ?? mark.run_id ?? "");
+      if (!runId) return;
+      // The run as the ledger holds it, for the callers that only know it ended (a dispatch the ledger answered with an ended run).
+      const ledgered = run ?? (this.runStatus
+        ? await this.runStatus({ userId: project.userId, projectId: project.projectId, runId, dispatchId: mark.dispatch_id ?? null }).catch(() => null) : null);
+      await this.importRun({ userId: project.userId, projectId: project.projectId, run: { ...ledgered, id: runId, status: String(ledgered?.status ?? status) } });
+    } catch (error) {
+      this.counters.importFailed += 1;
+      this.report(`import:${codeOf(error)}`);
+    }
+  }
+
+  /** @param {any} project @param {any} mark @param {string} status @param {Record<string, any> | null} [run] the ledger's run, when the caller has it */
+  async #finishRun(project, mark, status, run = null) {
+    await this.#importRun(project, mark, status, run);
     const detail = mark.detail ?? {};
     // A content run's articles are the ones written since its mark last
     // moved: counted before the move below restamps the mark, and against the
@@ -827,7 +857,7 @@ export class GeoOrchestrator {
       if (!mark.run_id || !this.runStatus) continue;
       const run = await this.runStatus({ userId: project.userId, projectId: project.projectId, runId: String(mark.run_id), dispatchId: mark.dispatch_id })
         .catch(() => null);
-      if (run && TERMINAL_RUN.has(String(run.status))) await this.#finishRun(project, mark, String(run.status));
+      if (run && TERMINAL_RUN.has(String(run.status))) await this.#finishRun(project, mark, String(run.status), run);
     }
   }
 

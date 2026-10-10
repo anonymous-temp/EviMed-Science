@@ -28,11 +28,21 @@ import { importGeoValue } from "./geoValueImport.mjs";
  * Build to delete: once runs register every claim themselves (the write now
  * ignores extra fields instead of refusing the item), this import only
  * confirms what is already there.
+ *
+ * Asked twice for a run, and the second ask is the one that matters (D-24): the
+ * ledger's state change starts it and moves on, and the orchestrator asks again
+ * when it folds the run into its steps, before it reads what the run wrote. A
+ * restart between the two loses the first, and a write that fails is no longer
+ * lost with it: the fold's ask waits for the attempt under way, or makes the
+ * one more that a failed attempt is owed, and every attempt that lost a write
+ * is counted and audited.
  */
 
 const TERMINAL = new Set(["succeeded", "failed", "canceled", "cancelled"]);
 /** Below the write's 256 KB body limit, with room for the envelope. */
 const CHUNK_BYTES = 200 * 1024;
+/** Attempts at one run's import in a process: the first, and one more for a write that failed. */
+const MAX_TRIES = 2;
 
 /**
  * @param {unknown[]} items
@@ -123,6 +133,7 @@ export const readWorkspaceFile = async (workspaceDir, relative) => readFileNoFol
 
 /**
  * @param {{ store: import("./geoStore.mjs").GeoStore, report?: (code: string) => void,
+ *   audit?: ((event: string, status: string, details: Record<string, any>) => Promise<unknown> | unknown) | null,
  *   readFile?: (rootDir: string, file: string) => Promise<Buffer | string>,
  *   listInsightFolders?: (workspaceDir: string) => Promise<string[]>,
  *   listDeliverableFolders?: (workspaceDir: string) => Promise<string[]>,
@@ -131,26 +142,31 @@ export const readWorkspaceFile = async (workspaceDir, relative) => readFileNoFol
  *   articleRunId?: ((project: any, deliverableId: string) => Promise<string | null>) | null,
  *   refreshCards?: ((geoProject: any, controlProject: any) => Promise<{ cards: unknown[], held: unknown[], failed: unknown[] } | null>) | null,
  *   checkReferences?: ((geoProject: any, article: any, text: string) => Promise<unknown>) | null }} deps
- *   `refreshCards` writes the project's verified claims into its product zone as cards (geoCards.mjs); what it refuses (no named
+ *   `audit` is where an attempt that lost a write is recorded for an operator (`geo.import`, failed). `refreshCards` writes the
+ *   project's verified claims into its product zone as cards (geoCards.mjs); what it refuses (no named
  *   producer, no reviewer) or fails to write is reported and never ends the import. `checkReferences` reads the claim references of
  *   each popular, question-and-answer and correction article against the cards and records the finding on the article; an
  *   article whose text is the one it last read is not read again.
  */
-export function createGeoDeliveryImport({ store, report = () => {}, readFile = readWorkspaceFile, listInsightFolders = insightFolders,
+export function createGeoDeliveryImport({ store, report = () => {}, audit = null, readFile = readWorkspaceFile, listInsightFolders = insightFolders,
   listDeliverableFolders = deliverableFolders, articleGate = null, articleRunId = null, refreshCards = null, checkReferences = null, capabilityOutputs = async () => [] }) {
-  /** Runs already imported by this process; the writes are idempotent either way. */
-  const seen = new Set();
+  /** Runs this process has imported whole (or has given up on: `MAX_TRIES`); the writes are idempotent either way. */
+  const done = new Set();
+  /** The imports under way, by run: a caller that meets one waits for it instead of repeating it or reading ahead of it. */
+  const running = new Map();
+  /** How often a run's import has been tried in this process. */
+  const tries = new Map();
+  /** What the imports did since this process started: runs imported whole, and attempts that lost a write or threw. */
+  const counters = { imported: 0, failed: 0 };
+
   /**
-   * @param {{ id: string, userId: string, workspaceDir: string }} project the control-plane project
-   * @param {Record<string, any>} run
-   * @returns {Promise<{ imported: number, issues: number, located: number, gated: number, carded?: number } | null>}
+   * One attempt at one run. A write that fails is reported, the others go on, and its code is pushed on `failed`: the caller decides
+   * whether the attempt was whole.
+   * @param {{ id: string, userId: string, workspaceDir: string }} project @param {Record<string, any>} run @param {any} geoProject
+   * @param {string[]} failed
    */
-  return async function importDelivery(project, run) {
-    if (!run?.id || !TERMINAL.has(String(run.status ?? "")) || seen.has(run.id)) return null;
-    const geoProject = await store.projectByControlProject(project.userId, project.id);
-    if (!geoProject) return null;
-    seen.add(run.id);
-    await importGeoValue({ store, project, geoProject, run, readFile, report, capabilityOutputs });
+  const importOne = async (project, run, geoProject, failed) => {
+    failed.push(...(await importGeoValue({ store, project, geoProject, run, readFile, report, capabilityOutputs })).failed);
     const deliverables = /** @type {any[]} */ (run.deliverables ?? run.progress?.deliverables ?? []);
     const ids = new Set(deliverables
       .filter((deliverable) => typeof deliverable?.id === "string" && (!deliverable.capability || deliverable.capability === "geo-insight"))
@@ -177,7 +193,9 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
           geoProject.competitors = (await store.projectByControlProject(project.userId, project.id))?.competitors ?? [];
           report(`competitors imported ${geoProject.competitors.length} of ${rivals.length}`);
         } catch (error) {
-          report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_competitors_import_failed");
+          const code = typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_competitors_import_failed";
+          failed.push(code);
+          report(code);
         }
       }
       const claims = Array.isArray(parsed?.claims) ? parsed.claims : Array.isArray(parsed) ? parsed : [];
@@ -187,7 +205,9 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
           imported += result.ids.length;
           issues += result.issues.filter((issue) => issue.code !== "ignored_fields").length;
         } catch (error) {
-          report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_claims_import_failed");
+          const code = typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_claims_import_failed";
+          failed.push(code);
+          report(code);
         }
       }
     }
@@ -279,4 +299,61 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
     }
     return { imported, issues, located, gated, ...(refreshCards ? { carded } : {}) };
   };
+
+  /** An attempt that lost a write or threw: counted and put on the audit record, where an operator reads it (stderr is nobody's). */
+  const recordFailure = async (/** @type {{ id: string, userId: string }} */ project, /** @type {Record<string, any>} */ run, /** @type {string[]} */ failed) => {
+    counters.failed += 1;
+    if (!audit) return;
+    try {
+      await audit("geo.import", "failed", { userId: project.userId, projectId: project.id, runId: String(run.id), code: failed[0] ?? "geo_import_failed",
+        detail: [...new Set(failed)].join(",") });
+    } catch { /* the record failing is not the import's failure */ }
+  };
+
+  /**
+   * The import of a run that has ended, once. A run is imported by whoever asks first and everyone who asks while it is under way
+   * waits for that attempt: the ledger's state change starts it, and the orchestrator's fold, which reads what it wrote, asks again
+   * and must not run ahead of it. An attempt that lost a write is tried once more by the next caller (a restart loses the first
+   * one's memory too, and the fold asks again), and then no more; the loss is counted and audited each time.
+   * @param {{ id: string, userId: string, workspaceDir: string }} project the control-plane project
+   * @param {Record<string, any>} run
+   * @returns {Promise<{ imported: number, issues: number, located: number, gated: number, carded?: number, failed?: string[] } | null>}
+   */
+  async function importDelivery(project, run) {
+    if (!run?.id || !TERMINAL.has(String(run.status ?? ""))) return null;
+    const id = String(run.id);
+    while (running.has(id)) await running.get(id)?.catch(() => {});
+    if (done.has(id)) return null;
+    const attempt = (async () => {
+      /** @type {string[]} */
+      const failed = [];
+      tries.set(id, (tries.get(id) ?? 0) + 1);
+      try {
+        const geoProject = await store.projectByControlProject(project.userId, project.id);
+        if (!geoProject) {
+          tries.delete(id);
+          return null;
+        }
+        const result = await importOne(project, run, geoProject, failed);
+        if (!failed.length) {
+          counters.imported += 1;
+          done.add(id);
+          tries.delete(id);
+          return result;
+        }
+        await recordFailure(project, run, failed);
+        if ((tries.get(id) ?? 0) >= MAX_TRIES) done.add(id);
+        return { ...result, failed };
+      } catch (error) {
+        failed.push(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_import_failed");
+        await recordFailure(project, run, failed);
+        if ((tries.get(id) ?? 0) >= MAX_TRIES) done.add(id);
+        throw error;
+      }
+    })().finally(() => { running.delete(id); });
+    running.set(id, attempt);
+    return attempt;
+  }
+  importDelivery.counters = counters;
+  return importDelivery;
 }

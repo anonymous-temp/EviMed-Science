@@ -1764,14 +1764,15 @@ export async function geoReadiness({ config, geo, database }) {
 
 /**
  * Everything the metrics endpoint shows about the module, read once per scrape.
- * @param {{ service: GeoService, social?: any, worker?: any, cards?: any, questionBank?: any, measureState?: { checkTotals?: Record<string, number>, inclusionTotals?: Record<string, number> } | null }} geo
+ * @param {{ service: GeoService, social?: any, worker?: any, cards?: any, questionBank?: any, importDelivery?: { counters?: { imported: number, failed: number } } | null,
+ *   measureState?: { checkTotals?: Record<string, number>, inclusionTotals?: Record<string, number> } | null }} geo
  */
 export async function geoMetricsSnapshot(geo) {
   let tables = null;
   try { tables = await geo.service.metricsSnapshot(); } catch { tables = null; }
   return { tables, service: { ...geo.service.counters }, social: geo.social?.status?.() ?? null, worker: geo.worker?.status?.() ?? null,
     cards: geo.cards?.metrics?.() ?? null, checks: geo.measureState?.checkTotals ?? null, inclusion: geo.measureState?.inclusionTotals ?? null,
-    questionBank: geo.questionBank?.metrics?.() ?? null };
+    questionBank: geo.questionBank?.metrics?.() ?? null, imports: geo.importDelivery?.counters ? { ...geo.importDelivery.counters } : null };
 }
 
 /**
@@ -1809,6 +1810,12 @@ export function geoMetricFamilies(enabled, snapshot) {
     add("cards_total", "Product-zone card writes since this process started, by what happened.", "counter",
       ["zonesMade", "cardsCreated", "cardsUpdated", "cardsUnchanged", "claimsCarded", "claimsHeld", "refused", "referencesChecked", "referencesUnresolved",
         "articlesFlagged"].map((event) => ({ labels: { event }, value: Number(/** @type {any} */ (snapshot.cards)[event] ?? 0) })));
+  }
+  // What a finished run delivered and the import registered (geoDeliveryImport.mjs): a failed attempt lost a write (its value profile, claims
+  // or competitors) and is on the audit record as `geo.import`; the run is tried once more and then left.
+  if (snapshot.imports) {
+    add("run_import_total", "Finished runs' deliveries imported into their GEO projects since this process started: runs imported whole, and attempts that lost a write or threw.", "counter",
+      ["imported", "failed"].map((outcome) => ({ labels: { outcome }, value: Number(/** @type {any} */ (snapshot.imports)[outcome] ?? 0) })));
   }
   // The platform's own medication-question bank (flywheel F22), where the deployment has it on.
   if (snapshot.questionBank) {

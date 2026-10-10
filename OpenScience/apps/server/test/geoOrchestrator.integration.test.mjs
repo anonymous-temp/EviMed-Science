@@ -12,6 +12,7 @@ import pg from "pg";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoStore, normalizedSteps } from "../src/geoStore.mjs";
 import { GeoOrchestrator } from "../src/geoOrchestrator.mjs";
+import { createGeoDeliveryImport } from "../src/geoDeliveryImport.mjs";
 import { createGeoNotifier } from "../src/geoNotify.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { HttpError } from "../src/security.mjs";
@@ -68,7 +69,7 @@ const q = async (sql, values = []) => (await database.query(sql, values)).rows;
  * refuses, once per queued failure), rounds are inserted as the measurement
  * would, notices and citations are recorded.
  */
-function harness({ at = null, geoStore = store } = /** @type {{ at?: string | null, geoStore?: GeoStore }} */ ({})) {
+function harness({ at = null, geoStore = store, runStatus = null, importRun = null } = /** @type {{ at?: string | null, geoStore?: GeoStore, runStatus?: any, importRun?: any }} */ ({})) {
   /** @type {any[]} */ const dispatched = [];
   /** @type {any[]} */ const enqueued = [];
   /** @type {any[]} */ const notices = [];
@@ -88,6 +89,8 @@ function harness({ at = null, geoStore = store } = /** @type {{ at?: string | nu
       return { runId: `run-${dispatched.length}-${input.dispatchId}`, sessionId: `session-${dispatched.length}`, status: "running" };
     },
     latestSessionId: async () => "session-latest",
+    ...(runStatus ? { runStatus } : {}),
+    ...(importRun ? { importRun } : {}),
     enqueueRound: async (spec) => {
       const project = (await q(`SELECT user_id, engines FROM evimed_geo.projects WHERE id = $1`, [spec.geoProjectId]))[0];
       const id = `gr_${randomUUID().replaceAll("-", "").slice(0, 16)}`;
@@ -790,4 +793,124 @@ test("a page the brand published itself gets the post-publication rounds a place
   world.setClock("2026-10-04T01:00:00Z");
   await world.orchestrator.tickSchedules();
   assert.equal(mine().length, 1);
+});
+
+// ---------------------------------------------------------------------------- the run-end import and the fold (D-24)
+
+/** The files a run delivered, readable the way the import reads a workspace. @param {Record<string, string>} delivered */
+const workspaceOf = (delivered) => async (/** @type {string} */ _root, /** @type {string} */ file) => {
+  if (!(file in delivered)) throw Object.assign(new Error("missing"), { code: "ENOENT" });
+  return delivered[file];
+};
+const DELIVERED_CLAIMS = JSON.stringify({ claims: [{ claimKey: "dosing", statement: "每周一次皮下注射", quote: "本品每周一次皮下注射给药。",
+  sourceRef: "说明书 2025 版", sourceKind: "label" }] });
+
+/**
+ * An insight run dispatched for the evidence step alone and ended in the ledger: what a process that restarted finds. The run's
+ * import is `importRun` of the orchestrator, as the composition wires it.
+ * @param {{ importDelivery?: ReturnType<typeof createGeoDeliveryImport> | null, importRun?: any }} wiring
+ */
+async function endedInsightRun({ importDelivery = null, importRun = null }) {
+  const made = await newProject();
+  await store.setStep(made.project.id, "evidence", { requested: true });
+  /** @type {Map<string, any>} */
+  const ledger = new Map();
+  const world = harness({
+    runStatus: async ({ runId }) => ledger.get(runId) ?? null,
+    importRun: importRun ?? (importDelivery ? ({ userId, projectId, run }) => importDelivery({ id: projectId, userId, workspaceDir: "/nowhere" }, run) : null),
+  });
+  await world.orchestrator.advance(made.project.id);
+  assert.equal(world.dispatched.length, 1);
+  const run = { id: `run-1-${world.dispatched[0].dispatchId}`, dispatchId: world.dispatched[0].dispatchId, status: "succeeded",
+    deliverables: [{ id: "geo-insight", capability: "geo-insight" }] };
+  ledger.set(run.id, run);
+  return { ...made, world, run };
+}
+
+test("a run the process never heard end is imported before the fold reads what the import writes (D-24)", options, async () => {
+  const importDelivery = createGeoDeliveryImport({ store, readFile: workspaceOf({ "deliverables/geo-insight/claims.json": DELIVERED_CLAIMS }),
+    listInsightFolders: async () => [] });
+  const { project, world } = await endedInsightRun({ importDelivery });
+  // The state change that would have started the import died with the process: the fold meets the ended run cold.
+  await world.orchestrator.advance(project.id);
+  assert.equal(Number((await q(`SELECT count(*) AS n FROM evimed_geo.claims WHERE geo_project_id = $1`, [project.id]))[0].n), 1, "the delivered claim is registered");
+  assert.equal((await statuses(project.id)).evidence, "done", "and the step is decided on it, not on the empty table");
+});
+
+test("the fold waits for the import the state change started instead of reading before it has written (D-24)", options, async () => {
+  /** @type {() => void} */
+  let release = () => {};
+  const gate = new Promise((resolve) => { release = () => resolve(null); });
+  let reads = 0;
+  const importDelivery = createGeoDeliveryImport({ store, listInsightFolders: async () => [],
+    readFile: async (_root, file) => {
+      if (file !== "deliverables/geo-insight/claims.json") throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      reads += 1;
+      await gate;
+      return DELIVERED_CLAIMS;
+    } });
+  const { project, control, world, run } = await endedInsightRun({ importDelivery });
+  // What the ledger's state change does: start the import and move on.
+  const started = importDelivery({ id: control.id, userId: control.userId, workspaceDir: "/nowhere" }, run);
+  let folded = false;
+  const fold = world.orchestrator.onRunFinished(control, run).then((result) => { folded = true; return result; });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.equal(folded, false, "the fold has not run ahead of the import");
+  release();
+  await Promise.all([started, fold]);
+  assert.equal(reads, 1, "one import, shared by both callers");
+  assert.equal((await statuses(project.id)).evidence, "done");
+});
+
+test("a write that failed is imported again when the fold asks; a second failure is recorded where an operator reads it (D-24)", options, async () => {
+  let failing = 1;
+  const flaky = Object.create(store);
+  flaky.writeValue = async (/** @type {any[]} */ ...args) => {
+    if (failing > 0) { failing -= 1; throw Object.assign(new Error("connection reset"), { code: "ECONNRESET" }); }
+    return store.writeValue(.../** @type {[string, string, any]} */ (args));
+  };
+  /** @type {any[]} */
+  const audits = [];
+  const importDelivery = createGeoDeliveryImport({ store: flaky, listInsightFolders: async () => [],
+    readFile: workspaceOf({ "deliverables/geo-insight/geo-value.json": JSON.stringify({ findings: [{ id: "f1", statement: "每周一次给药减轻注射负担" }] }) }),
+    audit: async (event, status, details) => { audits.push({ event, status, ...details }); } });
+  const { project, control, world, run } = await endedInsightRun({ importDelivery });
+  // The state change's import: its one write fails.
+  const first = await importDelivery({ id: control.id, userId: control.userId, workspaceDir: "/nowhere" }, run);
+  assert.deepEqual(first?.failed, ["geo_value_import_failed"]);
+  assert.equal((await store.latestValue(project.id)).version, 0, "nothing of the run's value was written");
+  // The fold imports it again; the write works now.
+  await world.orchestrator.onRunFinished(control, run);
+  assert.equal((await store.latestValue(project.id)).data.findings?.length, 1, "the finding the run delivered is in the profile");
+  assert.equal((await statuses(project.id)).evidence, "minimal", "useful findings alone make a minimal evidence step");
+  assert.equal(importDelivery.counters.failed, 1, "the failed attempt is counted");
+  assert.deepEqual(audits.map((entry) => [entry.event, entry.status, entry.code, entry.runId]), [["geo.import", "failed", "geo_value_import_failed", run.id]]);
+});
+
+test("an import that keeps failing is recorded twice and no more, and it never keeps the mark open (D-24)", options, async () => {
+  const flaky = Object.create(store);
+  flaky.writeValue = async () => { throw Object.assign(new Error("down"), { code: "ECONNRESET" }); };
+  /** @type {any[]} */
+  const audits = [];
+  const importDelivery = createGeoDeliveryImport({ store: flaky, listInsightFolders: async () => [],
+    readFile: workspaceOf({ "deliverables/geo-insight/geo-value.json": JSON.stringify({ findings: [{ id: "f1", statement: "x" }] }) }),
+    audit: async (event, status, details) => { audits.push({ event, status, ...details }); } });
+  const { project, control, world, run } = await endedInsightRun({ importDelivery });
+  const target = { id: control.id, userId: control.userId, workspaceDir: "/nowhere" };
+  await importDelivery(target, run);
+  await world.orchestrator.onRunFinished(control, run);
+  assert.equal(await importDelivery(target, run), null, "a run is tried twice in a process, not forever");
+  assert.equal(importDelivery.counters.failed, 2);
+  assert.equal(audits.length, 2);
+  const [mark] = await q(`SELECT state FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = 'run:insight'`, [project.id]);
+  assert.equal(mark.state, "done", "the mark completes; the run's other work stands");
+  assert.equal((await statuses(project.id)).evidence, "failed", "nothing reached the profile");
+});
+
+test("an import that throws is counted and never holds the fold back (D-24)", options, async () => {
+  const { project, control, world, run } = await endedInsightRun({ importRun: async () => { throw Object.assign(new Error("db"), { code: "57P01" }); } });
+  assert.equal(await world.orchestrator.onRunFinished(control, run), true);
+  assert.equal(world.orchestrator.status().counters.importFailed, 1);
+  const [mark] = await q(`SELECT state FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = 'run:insight'`, [project.id]);
+  assert.equal(mark.state, "done");
 });
