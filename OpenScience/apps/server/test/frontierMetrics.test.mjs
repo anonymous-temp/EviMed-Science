@@ -90,6 +90,14 @@ test("D-03: a cursor rewound because the plugin's numbering went back is a count
   assert.deepEqual(family(frontierMetricFamilies(true, snapshot(null)), "open_science_frontier_cursor_rewinds_total")?.series, [{ value: 0 }], "a plugin that never went back has counted none");
 });
 
+test("D-17: the stream pages asked for again with half the limit are a counter", () => {
+  const view = snapshot(null);
+  view.plugin.counters.pageShrinks = 3;
+  assert.deepEqual(family(frontierMetricFamilies(true, view), "open_science_frontier_page_shrinks_total")?.series, [{ value: 3 }]);
+  assert.equal(family(frontierMetricFamilies(true, view), "open_science_frontier_page_shrinks_total")?.type, "counter");
+  assert.deepEqual(family(frontierMetricFamilies(true, snapshot(null)), "open_science_frontier_page_shrinks_total")?.series, [{ value: 0 }]);
+});
+
 test("the edit failures are exported by kind as well as by field, and the trimmed summaries are counted", () => {
   const view = snapshot(null);
   view.editor = { counters: {

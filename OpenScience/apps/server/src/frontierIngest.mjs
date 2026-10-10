@@ -53,6 +53,10 @@ import { FRONTIER_META_KEYS, bumpFrontierVersion, metaNumber, migrateFrontier } 
  * - A contract major the platform does not consume is refused, not guessed at:
  *   the stream is not pulled until the manifest says a compatible version
  *   again, which is re-checked on every pull until it does.
+ * - A page over the client's response cap is asked for again with half the
+ *   limit, down to one entry, and the limit is back once a page is stored
+ *   (review 2026-10-10, D-17): the plugin bounds a page by count, the client
+ *   by bytes, and one fat catch-up page must not block every source.
  * - The plugin being down costs the feed its freshness and nothing else. The
  *   pull backs off exponentially by the code the client named, up to fifteen
  *   minutes, and resumes from the stored cursor — nothing lost, nothing twice.
@@ -226,7 +230,7 @@ export class FrontierIngest {
     /** @type {Record<string, string[]>} a few of the unknown values seen, for whoever reads the status */
     this.unknownValues = {};
     this.counters = { pulls: 0, pullFailures: 0, pages: 0, received: 0, inserted: 0, duplicates: 0, dropped: 0, invalid: 0,
-      placeholders: 0, mirrors: 0, mirrorFailures: 0, factKeysDropped: 0, cursorConflicts: 0 };
+      placeholders: 0, mirrors: 0, mirrorFailures: 0, factKeysDropped: 0, cursorConflicts: 0, pageShrinks: 0 };
   }
 
   /** @param {string} vocabulary @param {unknown} value */
@@ -524,6 +528,27 @@ export class FrontierIngest {
     return { from: cursor, to };
   }
 
+  /**
+   * One page of the stream. The plugin bounds a page by count and the client by bytes (8 MiB), so a catch-up page of long
+   * full-content feeds can be over the cap however it is asked for the same way: it was, every time, and the whole feed stood
+   * behind it (review 2026-10-10, D-17). On that one code the limit is halved and the page asked for again, down to a single
+   * entry — which the contract's bounds always fit, so the pull still fails by its code if it does not. The caller puts the
+   * limit back once the page is stored, so a stretch of ordinary pages after a fat one is read at full size again.
+   * @param {number} after @param {number} limit @param {(smaller: number) => void} shrunk told the limit the page was read at
+   */
+  async #entriesPage(after, limit, shrunk) {
+    for (;;) {
+      try {
+        return await this.plugin.entries({ after, limit });
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "knowledge_plugin_response_too_large" || limit <= 1) throw error;
+        limit = Math.max(1, Math.floor(limit / 2));
+        this.counters.pageShrinks += 1;
+        shrunk(limit);
+      }
+    }
+  }
+
   /** Whether a pull may run now (not inside a backoff window). */
   due() { return this.now().getTime() >= this.backoffUntil; }
 
@@ -578,8 +603,9 @@ export class FrontierIngest {
       }
       cursor = await this.#resyncIfPurged(cursor);
       let remirrored = false;
+      let limit = this.pageLimit;
       for (let page = 0; page < this.maxPagesPerPull; page += 1) {
-        const answer = await this.plugin.entries({ after: cursor, limit: this.pageLimit });
+        const answer = await this.#entriesPage(cursor, limit, (smaller) => { limit = smaller; });
         totals.pages += 1;
         totals.received += answer.entries.length + answer.skipped.length;
         totals.invalid += answer.skipped.length;
@@ -602,6 +628,7 @@ export class FrontierIngest {
         totals.duplicates += rows.length - stored.inserted;
         totals.dropped += rows.filter((row) => row.state === "dropped").length;
         cursor = Math.max(cursor, answer.nextAfter);
+        limit = this.pageLimit;
         if (!answer.hasMore) break;
       }
       this.cursor = cursor;

@@ -267,6 +267,36 @@ test("D-03: a stale health answer, or one that a second control plane has alread
   assert.deepEqual([ingest.status().rewinds.count, ingest.status().cursorAhead, ingest.status().state], [0, false, "ok"]);
 });
 
+const entryRequests = (/** @type {ReturnType<typeof memoryPlugin>} */ plugin) => plugin.requests.filter((request) => request.path === "/v1/entries").map((request) => Number(request.query.limit));
+
+test("D-17: a page over the client's response cap halves the page limit for the next request, and the limit comes back once a page is stored", options, async () => {
+  // The review's page_probe: 200 entries with summaries of the contract's maximum 20,000 characters are about 12 MB of JSON, more
+  // than the client's 8 MiB cap. The ingest asked for 500 every time, so the same request failed for ever: cursor 0, nothing stored,
+  // and every source of the feed blocked behind the one page.
+  const fat = "中".repeat(20_000);
+  const plugin = memoryPlugin({ sources: [pluginSource("nejm")], entries: Array.from({ length: 200 }, (_, index) => pluginEntry("nejm", index + 1, { summary: fat, language: "zh" })) });
+  const ingest = ingestFor(plugin, { pageLimit: 500 });
+  await ingest.mirrorSources();
+  const pulled = await ingest.pull();
+  assert.equal(pulled.inserted, 200);
+  assert.equal(await cursor(), 200);
+  // 500 and 250 both return all 200 (too large), 125 fits, and the page after it is asked for at the configured limit again.
+  assert.deepEqual(entryRequests(plugin), [500, 250, 125, 500]);
+  assert.equal(ingest.status().counters.pageShrinks, 2);
+  assert.equal(ingest.status().state, "ok");
+});
+
+test("D-17: the page limit halves down to one entry and no further: a single entry over the cap still fails the pull, by its code", options, async () => {
+  const plugin = memoryPlugin({ sources: [pluginSource("nejm")], entries: [pluginEntry("nejm", 1, { summary: "x".repeat(5_000) })] });
+  const client = new KnowledgePluginClient({ baseUrl: "http://plugin.test:8080", tokenFile, fetchImpl: plugin.fetchImpl, sleep: async () => {}, maxResponseBytes: 2048 });
+  const ingest = new FrontierIngest({ database, plugin: client, vocabulary: TEST_VOCABULARY, pageLimit: 500, pollMs: 1_000 });
+  await ingest.mirrorSources();
+  await assert.rejects(ingest.pull(), { code: "knowledge_plugin_response_too_large" });
+  assert.deepEqual(entryRequests(plugin), [500, 250, 125, 62, 31, 15, 7, 3, 1], "nine requests, the last at one entry, then it stops");
+  assert.equal(await cursor(), 0);
+  assert.equal(ingest.status().lastError, "knowledge_plugin_response_too_large");
+});
+
 test("the defensive re-check drops unsafe rows with a reason and filters facts to the whitelist", options, async () => {
   const plugin = memoryPlugin({ sources: [pluginSource("nejm")], entries: [
     pluginEntry("nejm", 1, { url: "javascript:alert(1)" }),

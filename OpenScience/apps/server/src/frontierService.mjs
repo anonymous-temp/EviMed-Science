@@ -1691,6 +1691,8 @@ export function frontierMetricFamilies(enabled, snapshot) {
     { labels: { outcome: "dropped" }, value: plugin.counters.dropped },
     { labels: { outcome: "invalid" }, value: plugin.counters.invalid },
   ]);
+  add("page_shrinks_total", "Times a stream page was over the client's response cap and was asked for again with half the page limit.", "counter",
+    [{ value: plugin.counters.pageShrinks ?? 0 }]);
   add("placeholder_sources_total", "Entries whose source the registry did not list, kept under a placeholder.", "counter", [{ value: plugin.counters.placeholders }]);
   add("unknown_vocabulary_total", "Plugin values this build does not know, by vocabulary (fallback applied, never refused).", "counter",
     Object.entries(plugin.unknownVocabulary).map(([vocabulary, value]) => ({ labels: { vocabulary }, value: Number(value) })));
