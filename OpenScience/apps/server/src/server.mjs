@@ -153,7 +153,9 @@ import { createLearningRoutes } from "./learningRoutes.mjs";
 import { HandbookLibrary } from "./handbookLibrary.mjs";
 import { createHandbookRoutes } from "./handbookRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
+import { memoryMetricFamilies, recordMethodsRetired } from "./memoryMetrics.mjs";
 import { resetLearnedMemory } from "./memoryReset.mjs";
+import { eraseRetiredMemos } from "./retiredMemos.mjs";
 import { sessionDispatchNotes, withTrialTitles } from "./memorySessions.mjs";
 import { createMemoryTimelineRoutes } from "./memoryTimeline.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
@@ -3976,6 +3978,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const user = await store.userById(userId);
         return user ? store.requireProject(user, projectId) : null;
       },
+      // A lesson from a conversation that was over before the account's last memory reset is not written (review M-11).
+      resetInstant: researchMemory.configured ? (userId) => researchMemory.resetInstant(userId) : null,
     });
     const handbookConsolidation = agentRegistry.then((registry) => new HandbookConsolidation({
       learning: learningService, jobs: productJobs, registry,
@@ -6934,10 +6938,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           ? await researchMemory.countUserMemory(user.id)
           : { structured: 0, manual: 0 };
         let memoryIndexPurge = null;
+        /** @type {{ tables: Record<string, number>, ledgered: boolean } | null} */
+        let retiredMemos = null;
         /** @type {string[]} */
         let geoScreenshots = [];
         /** @type {import("./vcrStoreBase.mjs").VcrArtifacts | null} */
         let vcrArtifacts = null;
+        // The ledger of erased accounts lives in the memory schema; it has to exist before the transaction that writes it opens.
+        if (productDatabase) await migrateResearchMemory(productDatabase);
         const data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
           beforeDelete: async (id, client) => {
@@ -6950,6 +6958,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               memoryIndexPurge = await memoryIndexing.prepareAccountDeletion(id, user.accountCreatedAt, client);
             }
             if (capsuleTransferService) await capsuleTransferService.prepareAccountDeletion(id, client);
+            // What the retired usememos store still holds of the account — its records and notes sit in tables that no foreign
+            // key reaches — and the ledger the retirement's archive is re-sealed against (review M-11).
+            if (client) retiredMemos = await eraseRetiredMemos(client, id);
             // The account's GEO rows, whether or not the module is on today.
             if (client) geoScreenshots = (await deleteGeoUserRows(client, id)).screenshots;
             // And its 虚拟临床研究 rows, on the same terms: the schema outlives the
@@ -6969,7 +6980,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         void memoryIndexWorker?.drainWithdrawals();
         clearSessionCookie(res, config.sessionCookieName);
         if (capsuleTransferService) await capsuleTransferService.finishAccountDeletion(user.id);
-        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryPurge, memoryIndexPurge, subjectsDeleted });
+        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryPurge, memoryIndexPurge, subjectsDeleted,
+          retiredMemos: retiredMemos?.tables ?? null });
         sendJson(res, 200, { data });
         return;
       }
@@ -7067,6 +7079,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const lessonRuns = learningProject ? await agentRuns.list(project).catch(() => []) : [];
           /** @type {{moved: number, preserved: string[]}} */
           let lessons = { moved: 0, preserved: [] };
+          let methodsStopped = 0;
           // The recall index holds derived copies and owns no record: every hit is
           // re-read from PostgreSQL before it is used, so a copy whose row is gone
           // is dropped there. The index is therefore never waited on here. The
@@ -7107,19 +7120,25 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               if (client) vcrArtifacts = (await deleteVcrProjectRows(client, user.id, project.id)).artifacts;
               // The learning jobs filed under it move to the learning project,
               // with what the waiting ones need to still be learnt (L-G1).
-              // Learned methods are the account's and are not touched at all.
               if (client && learningProject) {
                 lessons = await preserveProjectLessons({ client, userId: user.id, project, learningProject, runs: lessonRuns });
               }
+              // A method is the account's, but one learnt only in this project is part of what the project held: it is
+              // stopped with it (review M-10/M-11, 2026-10-10). A method that a lesson from another project also shaped
+              // is not only this project's and stands. In the deletion's own transaction.
+              if (client && learningService && !internalFor(user.id, project.id)) {
+                methodsStopped = (await learningService.retireProjectMethods(user.id, project.id, { transactionClient: client })).retired.length;
+              }
             },
           });
+          recordMethodsRetired("project_deleted", methodsStopped);
           // The audit line outlives the project. It used to be written into
           // the project's own `.openscience/audit.jsonl` a moment before that
           // directory was removed, so nobody could tell who deleted what, or
           // when (audit 2026-09-26, L-G11).
           await securityAudit(config, "project.delete", "completed", {
             userId: user.id,
-            detail: `project=${project.id} learning_jobs_moved=${lessons.moved} lesson_inputs_kept=${lessons.preserved.length}`,
+            detail: `project=${project.id} learning_jobs_moved=${lessons.moved} lesson_inputs_kept=${lessons.preserved.length} methods_stopped=${methodsStopped}`,
           });
           // The screenshots only those rows referenced, once the deletion has committed.
           await removeGeoScreenshotFiles(config.dataDir, geoScreenshots, (code) => process.stderr.write(`geo screenshot cleanup: ${code}\n`));
@@ -9310,6 +9329,9 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, conf
   if (config.capsuleShareEnabled === true) for (const family of capsuleShareMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // And what bounds the capsule store itself (password derivations refused, snapshot files removed, an account's cleanup), sharing on or off.
   if (capsuleService) for (const family of capsuleStewardshipMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // What the memory does and refuses (memoryMetrics.mjs): conversations held against a reset, a deleted project's methods, a
+  // deleted account's retired rows.
+  for (const family of memoryMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Recalculation cards (evidenceRecalculation.mjs): the switch, and what became of each proof the evolution module recorded.
   for (const family of evidenceRecalculationMetricFamilies(evidenceRecalculation, config)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The prediction registry (predictionRegistry.mjs): the switch, registrations, scores and what each published paper that named a registered trial led to.

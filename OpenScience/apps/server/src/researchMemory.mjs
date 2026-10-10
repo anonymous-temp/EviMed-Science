@@ -481,6 +481,22 @@ export async function memoryPausedFor(store, userId, projectId, sessionId = null
   };
 }
 
+/**
+ * Whether a conversation's run was over before the account reset its memory (`ResearchMemoryStore.noteReset`).
+ *
+ * The run's finish, or its start when the ledger has no finish. A run whose time cannot be read is not placed before
+ * anything: the same rule extraction applies to a message with no recorded sender, because a rule that needs the metadata
+ * to be present before it lets anything through is one missing field away from a platform that quietly stops learning.
+ * @param {{ finishedAt?: unknown, startedAt?: unknown } | null | undefined} run @param {string | null | undefined} resetAt
+ * @returns {boolean}
+ */
+export function endedBeforeReset(run, resetAt) {
+  if (!resetAt) return false;
+  const reset = Date.parse(resetAt);
+  const ended = Date.parse(String(run?.finishedAt ?? run?.startedAt ?? ""));
+  return Number.isFinite(reset) && Number.isFinite(ended) && ended < reset;
+}
+
 /** A session id as the kernel writes one. */
 const SESSION_ID = /^[A-Za-z0-9_-]{1,160}$/;
 
@@ -1723,6 +1739,30 @@ export class ResearchMemoryStore {
         updated_at = date_trunc('second', clock_timestamp())
       RETURNING *`, [owner, learning, recall, projects]);
     return publicSettings(result.rows[0]);
+  }
+
+  /**
+   * Record that the account asked to start from nothing, now (「重置记忆」). Taken before anything is deleted, so no
+   * conversation that ended after it can be mistaken for one that ended before. The switches are left as they are.
+   * @param {string} userId @returns {Promise<string>} the instant, to the millisecond
+   */
+  async noteReset(userId) {
+    const result = await this.#query(`INSERT INTO evimed_memory.settings AS s (user_id, reset_at, updated_at)
+      VALUES ($1, clock_timestamp(), date_trunc('second', clock_timestamp()))
+      ON CONFLICT (user_id) DO UPDATE SET reset_at = clock_timestamp(), updated_at = date_trunc('second', clock_timestamp())
+      RETURNING reset_at`, [assertUserId(userId)]);
+    return new Date(result.rows[0].reset_at).toISOString();
+  }
+
+  /**
+   * When the account last reset its memory, or null. What extraction and the learning loop hold a conversation against
+   * (`endedBeforeReset`).
+   * @param {string} userId @returns {Promise<string | null>}
+   */
+  async resetInstant(userId) {
+    const result = await this.#query("SELECT reset_at FROM evimed_memory.settings WHERE user_id=$1", [assertUserId(userId)]);
+    const at = result.rows[0]?.reset_at;
+    return at ? new Date(at).toISOString() : null;
   }
 
   // --------------------------------------------------------------- sessions

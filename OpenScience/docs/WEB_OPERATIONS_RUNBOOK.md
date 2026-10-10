@@ -721,8 +721,21 @@ not sufficient containment for those events.
   passphrase and decrypts it back before dropping anything; and drops them in
   one statement without CASCADE. The archive stays in
   `shared/backups/usememos-retired/` (0700; archive 0600, with its `.sha256`),
-  outside the thirty-day rotation. Then the credential files, once nothing
-  names them:
+  outside the thirty-day rotation. An account erased from the platform takes its
+  rows out of these tables while they exist; the archive is a dump and cannot be
+  edited in place, so the platform records each erased account by the two digests
+  the retired store knew it by (`evimed_memory.retired_erasures`) and
+
+  ```bash
+  sudo python3 scripts/ops/retire-usememos-tables.py --forget-erased
+  ```
+
+  re-seals every archive against that ledger (restores it into a scratch database
+  of the same server, deletes those rows, dumps, encrypts, decrypts back, replaces
+  the archive and its `.sha256`, drops the scratch database; an archive with
+  nothing to forget is left untouched; the role needs `CREATEDB`). Run it after
+  accounts have been erased, and before an archive is restored anywhere. Then the
+  credential files, once nothing names them:
 
   ```bash
   sudo ls -l /srv/evimed-science/shared/secrets/memos-*

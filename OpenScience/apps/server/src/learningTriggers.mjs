@@ -67,7 +67,8 @@
 
 import { METHOD_INDUCTION_MIN_TRAJECTORIES, isResearcherOwnedWork } from "@evimed/domain";
 import { isInternalProject } from "./internalProjects.mjs";
-import { memoryPausedFor } from "./researchMemory.mjs";
+import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
+import { endedBeforeReset, memoryPausedFor } from "./researchMemory.mjs";
 import { TRANSCRIPT_RETENTION_DAYS } from "./runTranscripts.mjs";
 
 /** The answer line: a plain question answered is not an operation to learn a
@@ -417,6 +418,16 @@ export class LearningTriggers {
   }
 
   /**
+   * When the account last reset its memory, or null: unreadable is not a reset, so a store that cannot say costs the loop
+   * nothing it had.
+   * @param {string} userId @returns {Promise<string | null>}
+   */
+  async #resetInstant(userId) {
+    if (typeof this.memory?.resetInstant !== "function") return null;
+    return this.memory.resetInstant(userId).catch(() => null);
+  }
+
+  /**
    * The ledgers a routine of `capabilityId` is counted over: the run's own, as
    * already read, and that of every other project of the same researcher that
    * is neither archived nor internal. Each is cut to the capability and the
@@ -426,16 +437,23 @@ export class LearningTriggers {
    * Throws when any of them cannot be read. A position counted over part of
    * the family is a wrong answer, and no routine is better than one induced
    * at the wrong run.
-   * @param {any} project @param {readonly any[]} runs @param {any} run @param {string} capabilityId
+   * `resetAt` is the account's last memory reset: a run that ended before it is no peer of a routine (review M-11), however
+   * recent its period is.
+   * @param {any} project @param {readonly any[]} runs @param {any} run @param {string} capabilityId @param {string | null} [resetAt]
    * @returns {Promise<ProjectLedger[]>}
    */
-  async ledgersFor(project, runs, run, capabilityId) {
+  async ledgersFor(project, runs, run, capabilityId, resetAt = null) {
     const period = routinePeriodOf(run, this.periodMs);
     const cut = async (/** @type {any} */ home, /** @type {readonly any[]} */ ledger) => {
       const selected = ledger.filter((item) => String(item?.effectiveAgentId ?? "") === capabilityId
         && routinePeriodOf(item, this.periodMs) === period);
       const allowed = await this.#reusable(home,selected);
-      return selected.filter((_item,index) => allowed[index]);
+      return selected.filter((item, index) => {
+        if (!allowed[index]) return false;
+        if (!endedBeforeReset(item, resetAt)) return true;
+        recordSkippedBeforeReset("routine_peer");
+        return false;
+      });
     };
     /** @type {ProjectLedger[]} */
     const ledgers = [{ project, runs: await cut(project,runs) }];
@@ -463,6 +481,12 @@ export class LearningTriggers {
     if ((await memoryPausedFor(this.memory, project.userId, project.id).catch(() => ({ learning: false }))).learning) {
       return { queued: [], skipped: "paused" };
     }
+    // A reset asked to start from nothing: a conversation that was over before it is not a lesson (review M-11).
+    const resetAt = await this.#resetInstant(project.userId);
+    if (endedBeforeReset(run, resetAt)) {
+      recordSkippedBeforeReset("lesson");
+      return { queued: [], skipped: "before_reset" };
+    }
     if (this.sessionState && run.sessionId) {
       const state = await this.sessionState(project.userId, project.id, run.sessionId).catch(() => null);
       // A conversation trying someone else's capsule leaves nothing behind:
@@ -478,7 +502,7 @@ export class LearningTriggers {
     /** @type {ProjectLedger[] | null} */
     let ledgers = null;
     if (capabilityId) {
-      ledgers = await this.ledgersFor(project, runs, run, capabilityId).catch(async (error) => {
+      ledgers = await this.ledgersFor(project, runs, run, capabilityId, resetAt).catch(async (error) => {
         await this.audit("learning.routine.family", {
           userId: project.userId, projectId: project.id, runId: run.id,
           code: typeof error?.code === "string" ? error.code : "learning_routine_family_unreadable",
@@ -524,6 +548,11 @@ export class LearningTriggers {
     const runs = await this.agentRuns.list(project).catch(() => []);
     const run = runs.find((/** @type {any} */ item) => item?.id === runId);
     if (!run) return { queued: [], skipped: "run_unavailable" };
+    // The run corrected is an old conversation when the correction comes late: one that ended before a reset is not a lesson.
+    if (endedBeforeReset(run, await this.#resetInstant(project.userId))) {
+      recordSkippedBeforeReset("lesson");
+      return { queued: [], skipped: "before_reset" };
+    }
     if (this.canReuseRun && !await this.canReuseRun(project,run)) return { queued: [], skipped: "clinical_context" };
     if (this.sessionState && run.sessionId) {
       const state = await this.sessionState(project.userId, project.id, run.sessionId).catch(() => null);

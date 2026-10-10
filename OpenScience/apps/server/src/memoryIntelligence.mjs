@@ -10,7 +10,8 @@ import {
 import { HttpError } from "./security.mjs";
 import { searchTokens } from "./memoryRecallPolicy.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
-import { memoryPausedFor, sourceLinkOf } from "./researchMemory.mjs";
+import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
+import { endedBeforeReset, memoryPausedFor, sourceLinkOf } from "./researchMemory.mjs";
 
 /**
  * What extraction may write.
@@ -906,9 +907,10 @@ function skippedResult(source, excluded, runSummary = null) {
  * here, or it will do the same. `unconfigured` is a deployment with no model to
  * extract with — a setting, and one that would otherwise put the notice on
  * every run it makes. `trial` is a conversation trying someone else's capsule.
- * `automated` is a run a script dispatched (see `recordRun`).
+ * `automated` is a run a script dispatched (see `recordRun`). `before_reset` is a
+ * conversation that was over before the account's last memory reset.
  */
-export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "automated", "paused", "unconfigured", "trial", "clinical_context"]));
+export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "automated", "paused", "unconfigured", "trial", "clinical_context", "before_reset"]));
 
 export class MemoryIntelligence {
   /** @param {any} config @param {any} memoryStore
@@ -1007,6 +1009,13 @@ export class MemoryIntelligence {
     // per run rather than cached: "pause" has to hold from the next run on.
     const pause = await memoryPausedFor(this.memoryStore, project.userId, project.id, run.sessionId ?? null);
     if (pause.learning) return skippedResult(pause.trial ? "trial" : "paused", excluded);
+    // A conversation that was already over when the researcher reset their memory is not learned from again — nor
+    // summarised: the reset asked to start from nothing, and an extraction that ran late (a retry, a run finished a
+    // moment before) would write back what was just deleted. Counted, so a reset that is still being honoured shows.
+    if (typeof this.memoryStore.resetInstant === "function" && endedBeforeReset(run, await this.memoryStore.resetInstant(project.userId))) {
+      recordSkippedBeforeReset("extraction");
+      return skippedResult("before_reset", excluded);
+    }
     const runSummary = await this.#recordRunSummary(project, run, sources, holdForOwner);
     if (sources.length === 0) return skippedResult("none", excluded, runSummary);
     // No model, no extraction. There used to be a fallback here: a keyword wall
