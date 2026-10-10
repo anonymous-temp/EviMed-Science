@@ -204,7 +204,15 @@ test("a finished bounded run is not held back by a request whose settlement will
   }
 });
 
-test("a finished step's result survives the next step's clear, outside the workspace the next run sees", async () => {
+test("a finished step's result survives the next step's clear, outside the workspace the next run sees", () => finishedStepResultSurvivesTheNextClear("delivery-receipt.json"));
+
+test("…and so does the result of a run that filed its receipt under its own id", async () => {
+  const { receiptFileFor } = await import("@evimed/domain");
+  await finishedStepResultSurvivesTheNextClear(receiptFileFor("run_a"));
+});
+
+/** @param {string} receiptAt where the finished run left its receipt: the project-wide file older runs wrote, or its own */
+async function finishedStepResultSurvivesTheNextClear(receiptAt) {
   // 2026-09-21: a delivered lesson waited for its usage to settle, the next
   // step emptied the one learning workspace, and the lesson was lost to ENOENT.
   const { createHash } = await import("node:crypto");
@@ -224,7 +232,8 @@ test("a finished step's result survives the next step's clear, outside the works
       "deliverables/lesson/method-candidate.json": JSON.stringify({ schemaVersion: 1, operation: "no_change", reason: "fixture" }),
     };
     for (const [relative, text] of Object.entries(files)) await writeFile(path.join(workspaceDir, relative), text);
-    await writeFile(path.join(workspaceDir, "delivery-receipt.json"), JSON.stringify({
+    await mkdir(path.dirname(path.join(workspaceDir, receiptAt)), { recursive: true });
+    await writeFile(path.join(workspaceDir, receiptAt), JSON.stringify({
       formatVersion: RECEIPT_FORMAT_VERSION, runId: "run_a", bundleVersion: "b", domainVersion: "d",
       entries: [{ deliverableId: "lesson", contractKind: "method-candidate", capability: "method-distillation",
         files: Object.entries(files).map(([relative, text]) => ({
@@ -277,7 +286,7 @@ test("a finished step's result survives the next step's clear, outside the works
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-});
+}
 
 // A name a client chose is never a waiver (follow-up to the review of 「循证进化」, 2026-10-05, B1). `acceptance-*`, `audit-*`
 // and `eval-method-*` are typed by the account that makes the project — or derived from the title it gives it — so they

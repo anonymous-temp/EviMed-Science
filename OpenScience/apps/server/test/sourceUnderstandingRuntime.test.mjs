@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, readdir, rename, rm, stat, symlink, utimes, w
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { carriesPlatformContext } from "@evimed/domain";
+import { carriesPlatformContext, receiptFileFor } from "@evimed/domain";
 import { UNCAPPED_CNY } from "../src/boundedRunBudget.mjs";
 import { createSourceUnderstandingRuntime, sourceUnderstandingBudget, sourceRunProject } from "../src/sourceUnderstandingRuntime.mjs";
 import { AgentRunStore } from "../src/agentRuns.mjs";
@@ -292,7 +292,8 @@ test("launch-only cancellation requires its protected session and cannot stop a 
   assert.ok(f.calls.includes(`release:${f.request.dispatchId}`));
 });
 
-async function acceptedFiles(f) {
+/** @param {any} f @param {string} [receiptAt] where the run left its receipt: the project-wide file older runs wrote, or its own */
+async function acceptedFiles(f, receiptAt = "delivery-receipt.json") {
   const scoped = sourceRunProject(f.home, f.state.bound);
   const directory = path.join(scoped.workspaceDir, "deliverables", "source-package");
   await mkdir(directory, { recursive: true });
@@ -304,7 +305,8 @@ async function acceptedFiles(f) {
     await writeFile(path.join(scoped.workspaceDir, relative), content);
     files.push({ path: relative, bytes: content.length, sha256: createHash("sha256").update(content).digest("hex") });
   }
-  await writeFile(path.join(scoped.workspaceDir, "delivery-receipt.json"), JSON.stringify({ formatVersion: 1,
+  await mkdir(path.dirname(path.join(scoped.workspaceDir, receiptAt)), { recursive: true });
+  await writeFile(path.join(scoped.workspaceDir, receiptAt), JSON.stringify({ formatVersion: 1,
     runId: "kernel-run-one", bundleVersion: "1.0.0", domainVersion: "1.0.0", entries: [{
       deliverableId: "source-package", contractKind: "source-understanding", capability: "source-understanding",
       files, acceptedAt: new Date().toISOString(), attempt: 1, notices: [],
@@ -324,6 +326,22 @@ test("result reads the owned accepted bytes and actual usage after active worksp
   assert.deepEqual(result.output, output);
   assert.equal(result.usage.inputTokens, 130);
   assert.equal(result.usage.modelId, "deepseek-v4-pro");
+});
+
+test("the receipt a run filed under its own id vouches for the understanding; another run's does not", async t => {
+  // A run's receipt is its own file (`receiptFileFor`), not the project-wide
+  // file every run of a workspace used to share.
+  const f = await fixture(t);
+  await f.runtime.dispatch(f.request);
+  const identity = { ...f.request, runId: "run-one", sessionId: "session-one" };
+  await acceptedFiles(f, receiptFileFor("run-two"));
+  const strangers = await f.runtime.readResult(identity);
+  assert.equal(strangers.status, "succeeded");
+  assert.equal(strangers.verification, "unverified", "the other run's receipt vouches for nothing here, and the understanding is still read");
+  await acceptedFiles(f, receiptFileFor("run-one"));
+  const own = await f.runtime.readResult(identity);
+  assert.equal(own.status, "succeeded");
+  assert.equal(own.verification, undefined);
 });
 
 test("a receipt that no longer vouches for the package labels the understanding unverified; it never withholds it", async t => {

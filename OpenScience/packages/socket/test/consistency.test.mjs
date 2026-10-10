@@ -21,7 +21,7 @@ import { createServer } from "node:http";
 import test from "node:test";
 
 import { SEAMS, __setHarnessModule, defineTool } from "@evimed/harness-port";
-import { CONTRACT_KINDS, SOCKET_TOOL_NAME_LIST, STUDY_TYPES, workspaceLayout } from "@evimed/domain";
+import { CONTRACT_KINDS, SOCKET_TOOL_NAME_LIST, STUDY_TYPES, deliverySummaryFileFor, receiptFileFor, workspaceLayout } from "@evimed/domain";
 
 import { GUIDANCE_SECTION_NAME, buildChildGuidanceText, buildGuidanceText } from "../src/guidanceText.mjs";
 import { RUN_DOMAIN_SPEC, projectRunState } from "../src/runMirror.mjs";
@@ -1274,7 +1274,7 @@ test("an accepted child delivery is not retried or downgraded by a later child e
   assert.equal(starts, 1, "an accepted package must not start a retry child");
   const status = await f.execute("evimed_plan", { action: "status" });
   assert.equal(status.value.data.items[0].status, "accepted");
-  assert.equal(JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`)).entries.length, 1);
+  assert.equal(JSON.parse(f.files.get(`/workspace/${receiptFileFor("accepted-child-tail")}`)).entries.length, 1);
 });
 
 test("a running delegation projects its child id before the child settles", async () => {
@@ -2090,37 +2090,60 @@ test("a completed native workflow may plan again and its receipt names actual wo
   await f.step(1);
   await f.execute("evimed_plan", { action: "write", clarifications: ["Direct answer"], deliverables: [], reason: "No file needed" });
   await f.endTurn();
-  assert.ok(f.files.get(`/workspace/${workspaceLayout.deliverySummaryFile}`), "the turn ending writes the delivery summary the completion tool used to write");
+  assert.ok(f.files.get(`/workspace/${deliverySummaryFileFor("ordinary_owner")}`), "the turn ending writes the delivery summary the completion tool used to write");
   await f.step(2);
   await f.execute("evimed_plan", { action: "write", clarifications: ["A new report"], deliverables: [{ id: "d2", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }] });
   for (const handler of f.ctx.listeners.get(SEAMS.events.turnStopping) ?? []) await handler({ agent: f.agent, turn: 2 });
   assert.ok(f.injected.length > 0, "a new plan must restore incomplete-delivery steering after completion");
   f.files.set("/workspace/deliverables/d2/brief.md", "# Report\nA synthetic summary.\n");
   assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d2" })).value.ok, true);
-  const receipt = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
+  const receipt = JSON.parse(f.files.get(`/workspace/${receiptFileFor("ordinary_owner")}`));
   assert.equal(receipt.entries[0].files[0].path, "deliverables/d2/brief.md");
 });
 
 test("a receipt carries only its own run's entries, never a previous run's", async () => {
-  // The receipt is one file at the workspace root. The writer used to keep
-  // every entry already in it and stamp the whole file with the current run's
-  // id, so a project's receipt became a pile of other runs' accepted packages
-  // filed under whichever run wrote last — read on production 2026-09-16 as
-  // five entries from five runs under one id.
+  // A run's receipt is its own file (`receiptFileFor`). The project-wide file
+  // older runs wrote may still hold a previous run's accepted package: it must
+  // not reappear under this run's id, and this run does not write over it —
+  // that file belongs to the run that wrote it, and the control plane may still
+  // be reading it for that run. Before receipts were per-run the writer kept
+  // every entry in the file and stamped it with the current run's id (read on
+  // production 2026-09-16: five runs' entries under one id).
+  const f = await nativePolicyFixture({ briefId: "ordinary_owner" });
+  await f.step(1);
+  const previous = JSON.stringify({
+    formatVersion: 1, runId: "run_a_previous_run", bundleVersion: "0", domainVersion: "0",
+    entries: [{ deliverableId: "old-deliverable", contractKind: "research-brief", capability: "research-brief", files: [], acceptedAt: "2026-01-01T00:00:00.000Z", attempt: 1, notices: [] }],
+  });
+  f.files.set(`/workspace/${workspaceLayout.receiptFile}`, previous);
+  await f.execute("evimed_plan", { action: "write", clarifications: ["A report"], deliverables: [{ id: "d2", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }] });
+  f.files.set("/workspace/deliverables/d2/brief.md", "# Report\nA synthetic summary.\n");
+  assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d2" })).value.ok, true);
+
+  const receipt = JSON.parse(f.files.get(`/workspace/${receiptFileFor("ordinary_owner")}`));
+  assert.equal(receipt.runId, "ordinary_owner");
+  assert.deepEqual(receipt.entries.map((/** @type {any} */ entry) => entry.deliverableId), ["d2"],
+    "a previous run's accepted deliverable must not reappear under this run's id");
+  assert.equal(f.files.get(`/workspace/${workspaceLayout.receiptFile}`), previous, "the project-wide file is left as the run that wrote it left it");
+});
+
+test("a run that began before receipts were per-run carries its accepted entries into its own file", async () => {
+  // The project-wide file names this very run: it was accepted before the
+  // release and the session went on after it. What it holds is this run's, so
+  // the next acceptance adds to it instead of starting over, and from then on
+  // the run's own file is the whole receipt.
   const f = await nativePolicyFixture({ briefId: "ordinary_owner" });
   await f.step(1);
   f.files.set(`/workspace/${workspaceLayout.receiptFile}`, JSON.stringify({
-    formatVersion: 1, runId: "run_a_previous_run", bundleVersion: "0", domainVersion: "0",
-    entries: [{ deliverableId: "old-deliverable", contractKind: "research-brief", capability: "research-brief", files: [], acceptedAt: "2026-01-01T00:00:00.000Z", attempt: 1, notices: [] }],
+    formatVersion: 1, runId: "ordinary_owner", bundleVersion: "0", domainVersion: "0",
+    entries: [{ deliverableId: "d-before", contractKind: "research-brief", capability: "research-brief", files: [], acceptedAt: "2026-01-01T00:00:00.000Z", attempt: 1, notices: [] }],
   }));
   await f.execute("evimed_plan", { action: "write", clarifications: ["A report"], deliverables: [{ id: "d2", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }] });
   f.files.set("/workspace/deliverables/d2/brief.md", "# Report\nA synthetic summary.\n");
   assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d2" })).value.ok, true);
 
-  const receipt = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
-  assert.notEqual(receipt.runId, "run_a_previous_run");
-  assert.deepEqual(receipt.entries.map((/** @type {any} */ entry) => entry.deliverableId), ["d2"],
-    "a previous run's accepted deliverable must not reappear under this run's id");
+  const receipt = JSON.parse(f.files.get(`/workspace/${receiptFileFor("ordinary_owner")}`));
+  assert.deepEqual(receipt.entries.map((/** @type {any} */ entry) => entry.deliverableId).sort(), ["d-before", "d2"]);
 });
 
 test("an accepted deliverable needs one control-plane authorization before a fresh receipt", async () => {
@@ -2170,7 +2193,7 @@ test("an accepted deliverable needs one control-plane authorization before a fre
   const secondBytes = "# Report\nCorrected and independently revalidated version.\n";
   f.files.set(path, secondBytes);
   assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
-  const current = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
+  const current = JSON.parse(f.files.get(`/workspace/${receiptFileFor("revision-owner")}`));
   const firstDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(firstBytes)).then((value) => [...new Uint8Array(value)].map((byte) => byte.toString(16).padStart(2, "0")).join(""));
   assert.notEqual(current.entries[0].files[0].sha256, firstDigest);
   } finally {
@@ -2213,7 +2236,7 @@ test("a control-plane-authorized revision gets one submission after the ordinary
 
     const resubmitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
     assert.equal(resubmitted.value.ok, true, JSON.stringify(resubmitted.value));
-    const receipt = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
+    const receipt = JSON.parse(f.files.get(`/workspace/${receiptFileFor("revision-owner")}`));
     assert.equal(receipt.entries[0].attempt, 2, "the receipt preserves the total attempt count");
     const replayed = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
     assert.equal(replayed.error?.code, "GUARDED", "the revision authorization must grant exactly one extra submission");
@@ -2281,7 +2304,7 @@ test("a same-run control-plane repair gets one submission after an unaccepted ce
 
   const resubmitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
   assert.equal(resubmitted.value.ok, true, JSON.stringify(resubmitted.value));
-  const receipt = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
+  const receipt = JSON.parse(f.files.get(`/workspace/${receiptFileFor("repair-run")}`));
   assert.equal(receipt.entries[0].attempt, 2, "the repair keeps the total attempt count");
   const replayed = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
   assert.equal(replayed.error?.code, "GUARDED", "the repair context grants exactly one extra submission");
@@ -2335,7 +2358,7 @@ test("asking again is the authorization: a follow-up turn may change what the la
 
   // And the receipt describes what was actually delivered in the end.
   await f.endTurn();
-  const receipt = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
+  const receipt = JSON.parse(f.files.get(`/workspace/${receiptFileFor("followup-owner")}`));
   assert.equal(receipt.entries[0].files[0].bytes, Buffer.byteLength("# Report\nSecond version, after the researcher asked.\n"));
 });
 

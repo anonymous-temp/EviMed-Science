@@ -135,7 +135,7 @@ export {
   isRegulatedContractKind,
 } from './src/contractKinds.mjs'
 
-// workspaceLayout — 16 exports
+// workspaceLayout — 23 exports
 export {
   BRIEF_DIR,
   KNOWLEDGE_DIR,
@@ -153,7 +153,10 @@ export {
   isProtectedWritePath,
   normalizeWorkspacePath,
   briefFileForSession,
+  deliverySummaryFileFor,
   planFileFor,
+  receiptFileFor,
+  receiptFilesFor,
   runStateFileFor,
   runStateFileForSession,
   workspaceLayout,

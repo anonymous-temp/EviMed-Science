@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { validateDeliveryReceipt, workspaceLayout } from "@evimed/domain";
+import { receiptFilesFor, validateDeliveryReceipt, workspaceLayout } from "@evimed/domain";
 import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
 import { RUNTIME_YIELDED_CODE, SOURCES_PROJECT_ID, SOURCES_PROJECT_NAME } from "./internalProjects.mjs";
 import { issueModelGatewayBudgetMarker } from "./modelGateway.mjs";
@@ -162,7 +162,18 @@ async function readUnderstanding(project, run) {
   let entry = null;
   let formatVersion = 1;
   try {
-    const checked = validateDeliveryReceipt((await readOwnedJson(project, workspaceLayout.receiptFile, MAX_INPUT_BYTES)).value);
+    // The run's own receipt, or the project-wide file a run before per-run
+    // receipts left in the same workspace.
+    let value;
+    for (const relative of receiptFilesFor([run.id])) {
+      try {
+        value = (await readOwnedJson(project, relative, MAX_INPUT_BYTES)).value;
+        break;
+      } catch (error) {
+        if (!isMissing(error)) throw error;
+      }
+    }
+    const checked = validateDeliveryReceipt(value);
     const entries = checked.ok ? checked.receipt.entries.filter(item => item.contractKind === CAPABILITY && item.capability === CAPABILITY) : [];
     if (entries.length === 1) { entry = entries[0]; formatVersion = checked.receipt.formatVersion; }
   } catch { /* no receipt, or none that can be read: the files are read all the same, and the path guard speaks for them below */ }

@@ -406,6 +406,22 @@ export class VcrStore extends VcrStoreBase {
     return vcrStudyFromRow(owned ?? (rows.length === 1 ? rows[0] : null));
   }
 
+  /**
+   * Whether the account holds a study in this project, a hidden one included: the only projects a clinical dependency
+   * can belong to (`cloud_reads` rows hang off a study). A project that holds none has nothing to revalidate, which is
+   * what lets a model call skip the rest of the check; and a deployment that never created the VCR schema holds none,
+   * and a normal model call does not create it. Two plain statements, no transaction: it runs before every model call.
+   * @param {string} userId @param {string} projectId @returns {Promise<boolean>}
+   */
+  async holdsStudy(userId, projectId) {
+    const present = (await this.database.query("SELECT to_regclass('evimed_vcr.studies') AS table_name")).rows[0]?.table_name;
+    if (!present) return false;
+    return (await this.database.query(`SELECT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.studies s
+      WHERE s.project_id=$1 AND (s.user_id=$2 OR EXISTS
+        (SELECT 1 FROM ${VCR_SCHEMA}.members m WHERE m.study_id=s.id AND m.user_id=$2))) AS held`,
+    [String(projectId), String(userId)])).rows[0]?.held === true;
+  }
+
   /** A hidden study still owns cached clinical conversations. No text is returned.
    * @param {string} userId @param {string} projectId @param {string|null} sessionId @param {string[]} [projectionIds] */
   async cloudDependencies(userId, projectId, sessionId, projectionIds = []) {

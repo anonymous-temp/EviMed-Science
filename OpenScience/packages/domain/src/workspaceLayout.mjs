@@ -69,9 +69,14 @@ export const workspaceLayout = Object.freeze({
   sessionBindingFile: (/** @type {string} */ sessionId) => `${BRIEF_DIR}/sessions/${sessionId}/binding.json`,
   /** The only plan artifact in the whole system (§7.1). */
   planFile: 'task-plan.json',
-  /** Written only by evimed_submit_deliverable. */
+  /** Written only by evimed_submit_deliverable. A run's own receipt is
+   *  `receiptFileFor(runId)`; this name is that file's name, and at the
+   *  workspace root it is the one project-wide receipt every run wrote before
+   *  receipts were per-run — still read (`receiptFilesFor`) for a run that
+   *  predates that, and still unwritable by a run (`PROTECTED_WRITE_PREFIXES`). */
   receiptFile: 'delivery-receipt.json',
-  /** Always produced, even for a partial delivery (Apodex report node). */
+  /** Always produced, even for a partial delivery (Apodex report node). One per
+   *  run: `deliverySummaryFileFor(runId)`. */
   deliverySummaryFile: 'delivery-summary.md',
   /** Where backstage prose belongs, relative to a deliverable's own directory.
    *
@@ -102,11 +107,60 @@ export function runStateFileFor(runId) {
   return `${RUN_STATE_DIR}/runs/${id}/state.json`
 }
 
+/** A file that belongs to one run, filed beside its projection.
+ * @param {string} runId @param {string} name @returns {string}
+ */
+function runFileFor(runId, name) {
+  return runStateFileFor(runId).replace(/state\.json$/, name)
+}
+
 /** The task plan belongs to one immutable workflow, not the whole project.
  * @param {string} runId @returns {string}
  */
 export function planFileFor(runId) {
-  return runStateFileFor(runId).replace(/state\.json$/, workspaceLayout.planFile)
+  return runFileFor(runId, workspaceLayout.planFile)
+}
+
+/** What one run delivered. The receipt used to be a single file at the workspace
+ * root, so two runs of a project took turns erasing each other's entries and the
+ * one that wrote first lost its artifact list; it is one file per run now, like
+ * the plan and the projection beside it.
+ * @param {string} runId @returns {string}
+ */
+export function receiptFileFor(runId) {
+  return runFileFor(runId, workspaceLayout.receiptFile)
+}
+
+/** The summary a run's turn ends with — per run for the same reason as its receipt.
+ * @param {string} runId @returns {string}
+ */
+export function deliverySummaryFileFor(runId) {
+  return runFileFor(runId, workspaceLayout.deliverySummaryFile)
+}
+
+/**
+ * Where the receipt of a run is looked for, best first: each run's own file,
+ * then the project-wide file that runs wrote before receipts were per-run. A
+ * reader takes the first that exists and still checks that it names the run it
+ * is reading for — the root file belongs to whichever run wrote it last.
+ *
+ * An id that cannot name a path is skipped rather than thrown on: the ids a
+ * control plane tries come out of run records and tool results, which are
+ * input, and a reader asking "is there a receipt" has a defined answer for no.
+ * @param {readonly (string | null | undefined)[]} runIds @returns {string[]}
+ */
+export function receiptFilesFor(runIds) {
+  /** @type {string[]} */
+  const found = []
+  for (const runId of runIds) {
+    try {
+      const file = receiptFileFor(String(runId ?? ''))
+      if (!found.includes(file)) found.push(file)
+    } catch {
+      // not an id a run can have
+    }
+  }
+  return [...found, workspaceLayout.receiptFile]
 }
 /** A native session's latest projection; different sessions never overwrite it.
  * @param {string} sessionId @returns {string}

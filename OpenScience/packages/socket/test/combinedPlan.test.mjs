@@ -56,7 +56,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { SEAMS, __setHarnessModule } from "@evimed/harness-port";
-import { DELEGATION_BASE_TOOLS, planFileFor, runStateFileFor, runStateFileForSession, workspaceLayout } from "@evimed/domain";
+import { DELEGATION_BASE_TOOLS, deliverySummaryFileFor, planFileFor, receiptFileFor, runStateFileFor, runStateFileForSession, workspaceLayout } from "@evimed/domain";
 import { RUN_DOMAIN_NAME } from "../src/runMirror.mjs";
 
 __setHarnessModule("@deepseek-ai/dsh-tools", {
@@ -275,6 +275,9 @@ function appraisalFiles({ complete = true } = {}, prefix = "/workspace/deliverab
 
 /* ------------------------------------------------------------- the fixture */
 
+/** The run every `combinedFixture` session belongs to unless a test installs its own index. */
+const COMBINED_RUN = "combined_run";
+
 /**
  * `projected` swaps the hand-written `evimedRun` stub for the real
  * `evidence-store` plugin, so the run's durable rows are projected into the
@@ -312,7 +315,7 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
     readText: async (/** @type {string} */ target) => {
-      if (!files.has(target) && target.endsWith(workspaceLayout.briefIndexFile)) return JSON.stringify({ runId: "combined_run", sessionId: "root-session" });
+      if (!files.has(target) && target.endsWith(workspaceLayout.briefIndexFile)) return JSON.stringify({ runId: COMBINED_RUN, sessionId: "root-session" });
       for (const [skill, body] of Object.entries(skillBodies)) {
         if (target === `/skills/${skill}/SKILL.md`) return body;
       }
@@ -414,8 +417,8 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   const writeFiles = (/** @type {Map<string, string>} */ entries) => {
     for (const [path, text] of entries) files.set(path, text);
   };
-  const receipt = () => {
-    const raw = files.get(`/workspace/${workspaceLayout.receiptFile}`);
+  const receipt = (/** @type {string} */ runId = COMBINED_RUN) => {
+    const raw = files.get(`/workspace/${receiptFileFor(runId)}`);
     return raw ? JSON.parse(raw) : null;
   };
   const plan = async () => {
@@ -701,7 +704,7 @@ test("a plan spanning two capabilities delegates twice, and each child submits o
   // And the run finishes when the turn does — there is no completion tool to
   // call, and nothing the model calls may be able to refuse the end of a turn.
   await f.endTurn();
-  const summary = f.files.get(`/workspace/${workspaceLayout.deliverySummaryFile}`);
+  const summary = f.files.get(`/workspace/${deliverySummaryFileFor(COMBINED_RUN)}`);
   assert.ok(summary, "the turn ending writes the delivery summary");
   assert.match(summary, /完整交付/, "both deliverables were accepted");
 });
@@ -856,7 +859,7 @@ test("one capability's rejection leaves the other's acceptance standing, and par
   );
 
   // And the summary the researcher reads distinguishes the two capabilities.
-  const summary = f.files.get(`/workspace/${workspaceLayout.deliverySummaryFile}`);
+  const summary = f.files.get(`/workspace/${deliverySummaryFileFor(COMBINED_RUN)}`);
   assert.ok(summary, "the delivery summary is written whatever happened");
   assert.match(summary, /部分交付/);
   assert.match(summary, /文献计量报告 \| bibliometric-analysis-report \| bibliometric-analysis \| accepted/);
@@ -1412,7 +1415,7 @@ test("a turn that ends while its children work does not deliver; the turn after 
   // our stopping reminder is bounded on purpose. What must not happen is the
   // run being sealed underneath them: no summary, no freeze.
   await f.endTurn();
-  assert.equal(f.files.get(`/workspace/${workspaceLayout.deliverySummaryFile}`), undefined, "a run with children still working has not delivered");
+  assert.equal(f.files.get(`/workspace/${deliverySummaryFileFor(COMBINED_RUN)}`), undefined, "a run with children still working has not delivered");
   for (const [, signal] of children.signals) assert.equal(signal.aborted, false, "ending a turn cancels nothing");
 
   // They settle, the root is woken with their results, and the turn that ends
@@ -1420,7 +1423,7 @@ test("a turn that ends while its children work does not deliver; the turn after 
   for (const [, settle] of children.settlers) settle({ stopReason: "completed", output: "done" });
   for (let tick = 0; tick < 20; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0));
   await f.endTurn();
-  assert.ok(f.files.get(`/workspace/${workspaceLayout.deliverySummaryFile}`), "with nothing outstanding, the turn ending delivers");
+  assert.ok(f.files.get(`/workspace/${deliverySummaryFileFor(COMBINED_RUN)}`), "with nothing outstanding, the turn ending delivers");
   assert.equal(f.starts.length, 2, "a settled child is not retried");
 });
 
@@ -2091,6 +2094,66 @@ test("two sessions concurrently write distinct plans and projections while shari
   await enter(f.agent,2);
   const restored=await call(f.agent,{action:'status'});assert.equal(restored.value.data.runId,'task_vcr');assert.equal(restored.value.data.revision,1);
   fs.writeText=originalWrite;
+});
+
+test("two runs of one project each keep their own receipt and delivery summary, whatever order they accept in", async () => {
+  // The receipt and the summary were one file each at the workspace root while
+  // the plan, the projection and the brief had become per run. The writer kept
+  // only the entries of the run that wrote last, so with two runs alive in one
+  // project the order A accepts, B accepts, A accepts again left A's receipt
+  // holding its second package alone and B's holding nothing -- and the
+  // control plane, which lists a run's artifacts from its receipt, dropped the
+  // files out of both runs' records without a word (2026-10-10, two concurrent
+  // sessions, one lost four of its six package files).
+  const f = await combinedFixture();
+  const other = { id: "other-agent", session: { id: "other-session", header: { cwd: "/workspace" } }, inject() {}, steer() {} };
+  f.ctx.provide("agents", { get: (/** @type {string} */ id) => (id === other.id ? other : f.agent) });
+  f.files.set("/workspace/.evimed-brief/sessions/root-session/index.json", JSON.stringify({ runId: "task_a", sessionId: "root-session", contextRevision: "a-1" }));
+  f.files.set("/workspace/.evimed-brief/sessions/other-session/index.json", JSON.stringify({ runId: "task_b", sessionId: "other-session", contextRevision: "b-1" }));
+  for (const agent of [f.agent, other]) {
+    for (const handler of f.ctx.listeners.get(SEAMS.events.promptAssemble) ?? []) await handler({ sections: [], contexts: [], tools: [], variables: {} }, { agent, scope: agent }, async () => ({}));
+    for (const handler of f.ctx.listeners.get(SEAMS.events.preStep) ?? []) await handler({ agent, turn: 1, step: 1, messages: [], signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] }));
+  }
+  const as = (/** @type {any} */ agent) => (/** @type {string} */ name, /** @type {any} */ args) => f.ctx.tools.execute({
+    agent, name, callId: `${agent.id}-${name}-${Math.random().toString(16).slice(2)}`, arguments: args, signal: AbortSignal.timeout(2000),
+  });
+  const a = as(f.agent), b = as(other);
+  const itemB = { ...PLAN_ITEMS.appraisal, id: "d-appraise-b" };
+  assert.equal((await a("evimed_plan", { action: "write", clarifications: ["A"], deliverables: [PLAN_ITEMS.bibliometric, PLAN_ITEMS.appraisal] })).value.ok, true);
+  assert.equal((await b("evimed_plan", { action: "write", clarifications: ["B"], deliverables: [itemB] })).value.ok, true);
+  f.writeFiles(bibliometricFiles());
+  f.writeFiles(appraisalFiles({}, "/workspace/deliverables/d-appraise"));
+  f.writeFiles(appraisalFiles({}, "/workspace/deliverables/d-appraise-b"));
+
+  assert.equal((await a("evimed_submit_deliverable", { deliverableId: "d-bib" })).value.ok, true);
+  assert.equal((await b("evimed_submit_deliverable", { deliverableId: "d-appraise-b" })).value.ok, true);
+  assert.equal((await a("evimed_submit_deliverable", { deliverableId: "d-appraise" })).value.ok, true);
+
+  const ids = (/** @type {any} */ receipt) => receipt.entries.map((/** @type {any} */ entry) => entry.deliverableId).sort();
+  const receiptA = f.receipt("task_a"), receiptB = f.receipt("task_b");
+  assert.ok(receiptA && receiptB, `each run has a receipt of its own: ${JSON.stringify([...f.files.keys()].filter((key) => key.includes("receipt")))}`);
+  assert.equal(receiptA.runId, "task_a");
+  assert.deepEqual(ids(receiptA), ["d-appraise", "d-bib"], "B's acceptance did not take A's first package out of A's receipt");
+  assert.equal(receiptB.runId, "task_b");
+  assert.deepEqual(ids(receiptB), ["d-appraise-b"], "A's second acceptance did not replace B's receipt");
+  assert.equal(f.files.has(`/workspace/${workspaceLayout.receiptFile}`), false, "nothing is filed in the project-wide slot any more");
+
+  // Both turns end, in the order that used to leave one summary standing.
+  for (const agent of [f.agent, other]) {
+    for (const handler of f.ctx.listeners.get(SEAMS.events.sessionEvent) ?? []) handler(agent.session, { type: "turn/end", seq: 99, data: { reason: { kind: "completed" } } });
+  }
+  for (let tick = 0; tick < 20; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  const summaryA = f.files.get(`/workspace/${deliverySummaryFileFor("task_a")}`), summaryB = f.files.get(`/workspace/${deliverySummaryFileFor("task_b")}`);
+  assert.ok(summaryA && summaryB, "each run ends with a summary of its own");
+  assert.match(summaryA, /运行 id：task_a/);
+  assert.match(summaryA, /文献计量报告/);
+  assert.match(summaryB, /运行 id：task_b/);
+  assert.equal(summaryB.includes("文献计量报告"), false, "B's summary does not list A's deliverables");
+  assert.equal(f.files.has(`/workspace/${workspaceLayout.deliverySummaryFile}`), false);
+  // The ends of the turns refreshed nothing they should not have: each file
+  // still names only its own run.
+  assert.deepEqual(ids(f.receipt("task_a")), ["d-appraise", "d-bib"]);
+  assert.deepEqual(ids(f.receipt("task_b")), ["d-appraise-b"]);
 });
 
 test("missing session materials never inject another session or an unidentified legacy brief", async () => {

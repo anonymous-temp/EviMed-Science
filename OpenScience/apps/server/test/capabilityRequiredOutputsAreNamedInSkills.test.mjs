@@ -21,6 +21,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
+import { briefFileForSession, workspaceLayout } from "@evimed/domain";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -67,4 +68,31 @@ test("the shipped skill copy is the manifest source's copy", async () => {
     if (source && shipped && source !== shipped) drifted.push(entry.name);
   }
   assert.deepEqual(drifted, [], `capabilities/ and capability-skills/ hold different SKILL.md bodies for: ${drifted.join(", ")}`);
+});
+
+// The same walk, for the other direction: a skill that sends a run to a path the platform stopped writing. The brief,
+// its context and memory, the run index and the state projection are per conversation or per run since e2eca41c4
+// (2026-10-10), and the control plane no longer refreshes the project-wide files. The clinical skill went on saying the
+// task was at `.evimed-brief/research-brief.md`: in a project that had run before, that file holds an earlier run's
+// question and is never rewritten, so a run that followed its skill re-read another run's task.
+test("no skill sends a run to a project-wide workspace file the platform no longer writes", async () => {
+  const roots = ["capabilities", "capability-skills", path.join("runtime", "skills", "evimed")].map((root) => path.join(repoRoot, root));
+  const skills = [];
+  for (const root of roots) {
+    for (const entry of (await readdir(root, { withFileTypes: true })).filter((candidate) => candidate.isDirectory())) {
+      const file = path.join(root, entry.name, "SKILL.md");
+      const text = await readIfPresent(file);
+      if (text) skills.push({ file: path.relative(repoRoot, file), text });
+    }
+  }
+  assert.ok(skills.length >= 60, `walked ${skills.length} SKILL.md files; the walk is wrong, not the tree`);
+  const retired = [workspaceLayout.briefFile, workspaceLayout.briefContextFile, workspaceLayout.briefMemoryFile, workspaceLayout.briefIndexFile, workspaceLayout.runStateFile];
+  const stale = skills.flatMap(({ file, text }) => retired.filter((legacy) => text.includes(legacy)).map((legacy) => `${file}: ${legacy}`));
+  assert.deepEqual(stale, [], `skills naming a file the platform no longer refreshes:\n  ${stale.join("\n  ")}`);
+
+  // And the one skill that does send a run to its task names the file the control plane writes now, in every copy of it.
+  const sessionBrief = briefFileForSession("SESSION").replace("SESSION", "<session id>");
+  const clinical = skills.filter(({ file }) => file.split(path.sep).includes("clinical-evidence-synthesis"));
+  assert.equal(clinical.length, 3, `the clinical skill is kept in ${clinical.length} places: ${clinical.map(({ file }) => file).join(", ")}`);
+  for (const { file, text } of clinical) assert.ok(text.includes(sessionBrief), `${file} does not name ${sessionBrief}`);
 });

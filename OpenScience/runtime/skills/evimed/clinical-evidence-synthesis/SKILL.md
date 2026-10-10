@@ -165,10 +165,12 @@ workspace — the report's own lines, the claim anchors in them, and
 `clinical-evidence-search.json` — and the task itself. Write it last, out of the
 finished package.
 
-The task you were given is on disk at `.evimed-brief/research-brief.md`, written
-by the server before this run began. Read it whenever you need the exact wording
-of a question rather than your recollection of it; after an hour of retrieval the
-fifth question is a recollection. **Do not edit it.** The gate checks its own
+The task you were given is on disk at `.evimed-brief/sessions/<session id>/research-brief.md`,
+written by the server before this run began: the 「工作区」 section of your task
+message names the exact file, and `<session id>` is the conversation the task was
+given in. Read it whenever you need the exact wording of a question rather than
+your recollection of it; after an hour of retrieval the fifth question is a
+recollection. **Do not edit it.** The gate checks its own
 copy, not this one, and reports any difference between them — editing it changes
 nothing except that the difference is on the record. If the file is not there,
 the gate is checking without the task too, and says so on the delivery.

@@ -77,6 +77,7 @@ import {
   transitionEvents,
   validateDeliveryReceipt,
   briefFileForSession,
+  receiptFilesFor,
   runStateFileFor,
   runStateFileForSession,
   workspaceLayout,
@@ -1521,12 +1522,6 @@ const evidenceSourceToolSuffixes = Object.freeze([
   "clinical_trial_search",
   "patent_search",
 ]);
-// Where the run finds the brief it was given. Written by the server at dispatch
-// and read by the run and by its preflight; the delivery gate reads the
-// server's own in-memory copy instead, so this file is a convenience for the
-// run and never evidence about it.
-export const workspaceBriefPath = ".evimed-brief/research-brief.md";
-
 function evidenceSourceTool(tool) {
   if (typeof tool !== "string") return false;
   return evidenceSourceToolSuffixes.some((suffix) => tool === suffix || tool.endsWith(`_${suffix}`));
@@ -3184,9 +3179,54 @@ async function specialistCompletionOutcome(
  * @returns {Promise<import('@evimed/domain').DeliveryReceipt|null>}
  */
 export async function readDeliveryReceipt(project, run = null) {
-  let text;
+  const validated = await readValidatedReceipt(project, receiptRunIds(run));
+  if (!validated) return null;
+  // Another run's receipt is no receipt. Only native turns were ever checked
+  // against their run; every other run trusted the workspace's one receipt file
+  // whole, and that file was shared by every run of the project — so a run could
+  // be credited, or snapshotted, with a package a previous run had delivered.
+  // A dispatched run's receipt carries the control plane's own run id, which is
+  // what this compares. Each run has a file of its own now, but the check stays:
+  // the project-wide file older runs wrote is still read for a run without one.
+  if (run && !run.nativeTurn && run.id && validated.runId !== run.id) return null;
+  const receipt = run?.nativeTurn ? scopeNativeReceipt(validated, run) : validated;
+  return receipt ? (await verifiedReceiptArtifacts(project, receipt)).receipt : null;
+}
+
+/**
+ * The ids a run's receipt may be filed under. A dispatched run is filed under
+ * its own id, the one the run side was told in the brief index; a conversation
+ * turn under the id the run side gave its workflow, which the transcript's plan
+ * results carry (`nativeWorkflow.kernelRunId`). No run, no id: only the
+ * project-wide file older runs wrote is left to look in.
+ * @param {Record<string, any> | null | undefined} run @returns {string[]}
+ */
+function receiptRunIds(run) {
+  if (!run) return [];
+  /** @type {string[]} */
+  const ids = [];
+  const kernelRunId = run.nativeWorkflow?.kernelRunId;
+  if (typeof kernelRunId === "string" && kernelRunId) ids.push(kernelRunId);
+  if (!run.nativeTurn && run.id) ids.push(String(run.id));
+  return ids;
+}
+
+/**
+ * The receipt of the first of these runs that has one — each run's own file,
+ * then the project-wide file older runs wrote — parsed and validated, and not
+ * yet scoped to any run. Validated, not trusted: the receipt is written inside
+ * the sandbox, and a malformed one must read as "no receipt" rather than as an
+ * accepted run.
+ * @param {Record<string, any>} project @param {readonly string[]} runIds
+ * @returns {Promise<import('@evimed/domain').DeliveryReceipt|null>}
+ */
+async function readValidatedReceipt(project, runIds) {
+  let text = "";
   try {
-    text = await readTextFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, workspaceLayout.receiptFile), "");
+    for (const relative of receiptFilesFor(runIds)) {
+      text = await readTextFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), "");
+      if (text) break;
+    }
   } catch {
     return null;
   }
@@ -3197,19 +3237,8 @@ export async function readDeliveryReceipt(project, run = null) {
   } catch {
     return null;
   }
-  // Validated, not trusted: the receipt is written inside the sandbox, and a
-  // malformed one must read as "no receipt" rather than as an accepted run.
   const validated = validateDeliveryReceipt(parsed);
-  if (!validated.ok) return null;
-  // Another run's receipt is no receipt. Only native turns were ever checked
-  // against their run; every other run trusted the workspace's one receipt file
-  // whole, and that file is shared by every run of the project — so a run could
-  // be credited, or snapshotted, with a package a previous run had delivered.
-  // A dispatched run's receipt carries the control plane's own run id, which is
-  // what this compares.
-  if (run && !run.nativeTurn && run.id && validated.receipt.runId !== run.id) return null;
-  const receipt = run?.nativeTurn ? scopeNativeReceipt(validated.receipt, run) : validated.receipt;
-  return receipt ? (await verifiedReceiptArtifacts(project, receipt)).receipt : null;
+  return validated.ok ? validated.receipt : null;
 }
 
 /**
@@ -3732,18 +3761,10 @@ async function receiptAcceptedDeliverables(project, kernelRunId) {
   /** @type {Set<string>} */
   const accepted = new Set();
   if (!kernelRunId) return accepted;
-  let parsed;
-  try {
-    const text = await readTextFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, workspaceLayout.receiptFile), "");
-    if (!text) return accepted;
-    parsed = JSON.parse(text);
-  } catch {
-    return accepted;
-  }
-  const validated = validateDeliveryReceipt(parsed);
-  if (!validated.ok || validated.receipt.runId !== kernelRunId) return accepted;
-  for (const entry of validated.receipt.entries ?? []) {
-    const verified = await verifiedReceiptArtifacts(project, { ...validated.receipt, entries: [entry] });
+  const receipt = await readValidatedReceipt(project, [kernelRunId]);
+  if (!receipt || receipt.runId !== kernelRunId) return accepted;
+  for (const entry of receipt.entries ?? []) {
+    const verified = await verifiedReceiptArtifacts(project, { ...receipt, entries: [entry] });
     if (verified.artifacts.length > 0 && verified.mismatched.length === 0) accepted.add(String(entry.deliverableId));
   }
   return accepted;
@@ -7337,7 +7358,14 @@ export class AgentRunStore {
     const scoped = projection.state === "read" ? projection.projection : null;
     if (scoped) evidence.kernelRunId = scoped.runId;
     else {
-      const receipt = await readDeliveryReceipt(project);
+      // The projection could not be scoped to this input, so the workflow's id
+      // is looked for in a receipt. Receipts are filed by run: the run the
+      // session's projection names is where this session's would be (read
+      // as the file says, not as this input's proof scopes it), and a run that
+      // predates per-run receipts left the project-wide one.
+      const named = await readRunStateProjection(project, project.workspaceDir, { ...candidate, nativeTurn: null, id: "" });
+      const hint = named.state === "read" && named.projection?.sessionId === run.sessionId ? named.projection.runId : null;
+      const receipt = await readValidatedReceipt(project, typeof hint === "string" && hint ? [hint] : []);
       const current = receipt ? scopeNativeReceipt(receipt, candidate) : null;
       if (current && !(await verifiedReceiptArtifacts(project, current)).mismatched.length) evidence.kernelRunId = current.runId;
     }
