@@ -8,7 +8,7 @@
 # own tool list by `display.listed: false` — `visibility: internal` would make
 # that binding answer 403.
 id: geo-insight
-version: 1.2.0
+version: 1.3.0
 title: GEO Insight
 category: Content Production
 description: Steps 1–3 of an evidence-based GEO project — establish drug value and its limits from available
@@ -49,12 +49,15 @@ produces:
   - path: geo-insight.md
     role: report
     required: true
+  # The claim library and the question map are what a full run writes, and the gate still reads them when they are there (a claim with no
+  # quote, a "real" question with no source, a file that does not parse). Neither is required (2026-10-10): the programme accepts a run that
+  # delivered a value profile alone as a partial result, and a package is not asked for a library or a map of any size.
   - path: claims.json
     role: data
-    required: true
+    required: false
   - path: question-map.json
     role: data
-    required: true
+    required: false
   - path: journey.md
     role: document
     required: false

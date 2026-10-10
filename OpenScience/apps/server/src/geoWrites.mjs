@@ -1258,7 +1258,7 @@ async function writeToProject({ store, project, what, body, renameProject = null
       const missing = GEO_JOURNEY_EXPECTED.filter((part) => !journey[part]?.length);
       if (missing.length) {
         issues.push({ field: missing.join(","), code: "notice",
-          message: `A full journey also carries ${missing.join(", ")}: the patient subtypes with their size, 3–5 personas, and the full stage × column matrix saved as a file and listed in files.` });
+          message: `A full journey also carries ${missing.join(", ")}: the patient subtypes with their size, the personas the decisions need, and the full stage × column matrix saved as a file and listed in files.` });
       }
       return done([String(written.version)], { version: written.version });
     }

@@ -12,9 +12,6 @@ import { GEO_METRICS, GEO_PROBE_SANITY, geoConstant } from "@evimed/domain";
 import { GEO_SCHEDULE } from "../src/geoOrchestrator.mjs";
 import { GEO_CONTROL_RANGE, GEO_MEASURED_RANGE } from "../src/geoWrites.mjs";
 
-// The contract's bounds are not part of the domain's public surface: the module is read by its file.
-const { GEO_QUESTION_SET_BOUNDS } = await import(new URL("../../../packages/domain/src/geoContracts.mjs", import.meta.url).href);
-
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const SOURCE_ROOTS = [path.join(root, "apps", "server", "src"), path.join(root, "packages", "domain", "src")];
 
@@ -85,11 +82,7 @@ test("the rules the code restated by hand are read from the table: the control g
   const share = [Number(geoConstant("CONTROL_CLUSTER_SHARE_MIN")), Number(geoConstant("CONTROL_CLUSTER_SHARE_MAX"))];
   const groups = [GEO_METRICS.net_effect.control_group_count_min, GEO_METRICS.net_effect.control_group_count_max];
   const minimal = Number(geoConstant("SINGLE_STEP_MIN_QUESTIONS"));
-  // The contract's bounds are the table's, exactly.
-  assert.deepEqual([GEO_QUESTION_SET_BOUNDS.controlShare.min, GEO_QUESTION_SET_BOUNDS.controlShare.max], share);
-  assert.deepEqual([GEO_QUESTION_SET_BOUNDS.controlGroups.min, GEO_QUESTION_SET_BOUNDS.controlGroups.max], groups);
-  assert.equal(GEO_QUESTION_SET_BOUNDS.minimal, minimal);
-  // The lock check's are the table's with the five points of tolerance it has always given the share.
+  // The delivery contract holds no bounds of its own any more (G10f); the lock check's are the table's with the five points of tolerance it has always given the share.
   assert.deepEqual([...GEO_CONTROL_RANGE.groups], groups);
   assert.deepEqual([...GEO_CONTROL_RANGE.share], [Math.round((share[0] - 0.05) * 100) / 100, Math.round((share[1] + 0.05) * 100) / 100]);
   assert.equal(GEO_MEASURED_RANGE.minimal[0], minimal);

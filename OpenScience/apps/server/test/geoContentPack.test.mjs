@@ -128,7 +128,6 @@ const NOTICES = [
   ["an article bound to no claim", (pack) => editIndex(pack, (index) => { index.articles[0].claimKeys = []; }), /binds no claim/],
   ["no safety status", (pack) => editIndex(pack, (index) => { delete index.articles[0].safety; }), /safety status/],
   ["a work record named and absent", (pack) => { delete pack.files["records/a1.md"]; }, /work record/],
-  ["a Q&A outside 300–600 characters", (pack) => editIndex(pack, (index) => { index.articles[0].layer = "qa"; }), /characters, where a 问答/],
 ];
 
 for (const [name, mutate, message] of NOTICES) {
@@ -144,6 +143,18 @@ for (const [name, mutate, message] of NOTICES) {
     assert.match(raised[0].message, message);
   });
 }
+
+test("a 问答 is not asked for a length: three hundred to six hundred characters went in the owner's ruling of 2026-10-10 (G10f)", () => {
+  // A one-line answer and a long one are the run's judgement of the question; the pack says nothing of either.
+  for (const body of [CARD, `${CARD}${"这是一个很长的回答，".repeat(200)}`]) {
+    const pack = goodPack();
+    editIndex(pack, (index) => { index.articles[0].layer = "qa"; });
+    pack.files["articles/a1.md"] = body;
+    const verdict = gate(pack);
+    assert.equal(verdict.ok, true, JSON.stringify(verdict.issues));
+    assert.equal(verdict.issues.some((entry) => entry.code === "geo_article_notice"), false, JSON.stringify(verdict.issues));
+  }
+});
 
 test("naming the machinery in an article is advice here, not a rejection", () => {
   // The shared leakage rule still speaks, with the matched term; in a GEO pack

@@ -158,11 +158,6 @@ test("geo-insight: a question filed as real with no source must be fixed", async
 });
 
 const INSIGHT_NOTICES = [
-  ["a full library of fewer than 30 claims", (pack) => {
-    const library = JSON.parse(pack["claims.json"]);
-    library.claims = library.claims.slice(0, 12);
-    pack["claims.json"] = JSON.stringify(library);
-  }, "geo_claim_library_notice", /holds 12 claim/],
   ["claims missing their evidence elements", (pack) => {
     const library = JSON.parse(pack["claims.json"]);
     delete library.claims[0].elements;
@@ -173,16 +168,6 @@ const INSIGHT_NOTICES = [
     map.groups = map.groups.filter((entry) => entry.pool !== "P4");
     pack["question-map.json"] = JSON.stringify(map);
   }, "geo_question_map_notice", /no group in P4/],
-  ["too few measured questions for a full set", (pack) => {
-    const map = JSON.parse(pack["question-map.json"]);
-    for (const entry of map.groups) entry.questions = entry.questions.slice(0, 2);
-    pack["question-map.json"] = JSON.stringify(map);
-  }, "geo_question_map_notice", /20 measured question/],
-  ["no control group", (pack) => {
-    const map = JSON.parse(pack["question-map.json"]);
-    for (const entry of map.groups) entry.isControl = false;
-    pack["question-map.json"] = JSON.stringify(map);
-  }, "geo_question_map_notice", /0 control group/],
 ];
 
 for (const [name, mutate, code, message] of INSIGHT_NOTICES) {
@@ -198,24 +183,36 @@ for (const [name, mutate, code, message] of INSIGHT_NOTICES) {
   });
 }
 
-test("geo-insight: a minimal set of 30 is judged as minimal, and says nothing about control groups", async () => {
-  const pack = insightPack();
-  const map = JSON.parse(pack["question-map.json"]);
-  map.minimal = true;
-  map.groups = map.groups.slice(0, 6).map((entry) => ({ ...entry, isControl: false }));
-  pack["question-map.json"] = JSON.stringify(map);
-  const library = JSON.parse(pack["claims.json"]);
-  library.minimal = true;
-  library.claims = library.claims.slice(0, 8);
-  pack["claims.json"] = JSON.stringify(library);
-  const verdict = gate("geo-insight-pack", pack, await declaredOutputs("geo-insight"), { sourceArtifacts: INSIGHT_SOURCES });
-  assert.deepEqual(verdict.issues, [], "30 measured questions is the minimal set, and a minimal library is not held to 30 claims");
+test("geo-insight: no size is asked of a library or a map: thirty claims, forty to a hundred and twenty questions and three to five control groups went in the ruling of 2026-10-10 (G10f)", async () => {
+  const outputs = await declaredOutputs("geo-insight");
+  // Twelve claims, twenty measured questions and no control group: what the run chose, and not a word about it.
+  const small = insightPack();
+  const library = JSON.parse(small["claims.json"]);
+  library.claims = library.claims.slice(0, 12);
+  small["claims.json"] = JSON.stringify(library);
+  const map = JSON.parse(small["question-map.json"]);
+  for (const entry of map.groups) { entry.questions = entry.questions.slice(0, 2); entry.isControl = false; }
+  small["question-map.json"] = JSON.stringify(map);
+  const verdict = gate("geo-insight-pack", small, outputs, { sourceArtifacts: INSIGHT_SOURCES });
+  assert.deepEqual(verdict.issues, [], "a small package is not a defective one");
+  assert.deepEqual([verdict.metrics.geoClaims, verdict.metrics.geoMeasuredQuestions, verdict.metrics.geoControlGroups], [12, 20, 0], "the counts are still observed");
+  // And as many as the run chose.
+  const large = insightPack();
+  const wide = JSON.parse(large["question-map.json"]);
+  wide.groups = [...wide.groups, ...wide.groups, ...wide.groups, ...wide.groups];
+  large["question-map.json"] = JSON.stringify(wide);
+  assert.deepEqual(gate("geo-insight-pack", large, outputs, { sourceArtifacts: INSIGHT_SOURCES }).issues, [], "200 measured questions");
+  // The library files are not required: a run that delivered its report (and a value profile) alone is accepted.
+  const valueOnly = { "geo-insight.md": insightPack()["geo-insight.md"] };
+  const alone = gate("geo-insight-pack", valueOnly, outputs, { sourceArtifacts: INSIGHT_SOURCES });
+  assert.deepEqual(alone.issues, [], "no claims.json and no question-map.json is not a missing output");
+  assert.equal(outputs.filter((output) => ["claims.json", "question-map.json"].includes(output.path) && output.required).length, 0);
 });
 
 test("geo-insight: a missing or unreadable required file is the unreadable package", async () => {
   const outputs = await declaredOutputs("geo-insight");
   const missing = insightPack();
-  delete missing["question-map.json"];
+  delete missing["geo-insight.md"];
   assert.equal(required(gate("geo-insight-pack", missing, outputs), "required_output_missing").length, 1);
   const broken = insightPack();
   broken["claims.json"] = "{\"claims\": [";
