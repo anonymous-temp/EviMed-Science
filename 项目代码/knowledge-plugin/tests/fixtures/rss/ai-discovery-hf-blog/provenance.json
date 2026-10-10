@@ -1,0 +1,63 @@
+{
+ "case": "rss/ai-discovery-hf-blog",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-10T18:08:53+00:00",
+ "note": "relay row recorded directly",
+ "source": {
+  "id": "ai-discovery-hf-blog",
+  "name": "Hugging Face · blog",
+  "homepage": "https://huggingface.co/blog",
+  "lane": "ai",
+  "source_type": "company",
+  "access": "rss",
+  "egress": "relay",
+  "authority": 2,
+  "safety_feed": false,
+  "owner_entity": "Hugging Face",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 129600,
+  "config": {
+   "url": "https://huggingface.co/blog/feed.xml",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "huggingface.co"
+   ],
+   "discovery_only": true
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-10-10T18:08:51+00:00",
+ "request_budget": 1,
+ "parse_notes": [
+  "feed_capped=876>500"
+ ],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://huggingface.co/blog/feed.xml",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://huggingface.co/blog/feed.xml",
+   "headers": {
+    "content-type": "application/rss+xml; charset=utf-8",
+    "etag": "W/\"3f214-58Oa8IozMhSGbpB8wvo6bTIbU2E\""
+   },
+   "fetched_at": "2026-10-10T18:08:53+00:00",
+   "file": "01.xml.gz",
+   "gzip": true,
+   "bytes": 258580,
+   "sha256": "aaa2beda2cef4dcb9252fb7f788e6a0f24fc53f61af4f45a449eeee46ce8e359"
+  }
+ ]
+}

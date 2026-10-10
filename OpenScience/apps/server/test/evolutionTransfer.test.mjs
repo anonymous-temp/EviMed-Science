@@ -62,3 +62,24 @@ test('an improving audit remains held out, and sole independently confirmed fami
  for(let i=0;i<4;i++)await f.service.save('candidate-verdict',`prune-v${i}`,{candidateId:'source',mechanismContributions:{m:0},at:`2026-10-0${i+1}`});
  await transfer.monthlyPrune({month:'2026-10'});assert.equal(created.filter(row=>row.kind==='prune').length,0);
 });
+// A model-scored held-out audit counts for the third module when its scorer was calibrated and its deterministic checks were no worse than the incumbent's
+// (the verdict says so); a verdict written before the verdict carried the flag keeps counting on the measurement's own (review D-E19).
+test('a model-scored third-module audit counts on the verdict\'s deterministic-check flag, or on the measurement\'s for an older verdict',async()=>{
+ const share=async(auditPatch)=>{
+  const f=evolutionServiceFixture(),transfer=createEvolutionTransfer(dependencies(f));
+  await f.service.save('archive','source',{moduleId:'tools',candidate:{proposal:{mechanisms:['m']}},status:'promoted',verdictId:'source-v'});
+  await f.service.save('archive','other',{moduleId:'frontier',status:'promoted',verdictId:'other-v'});
+  for(const [id,moduleId] of [['source-v','tools'],['other-v','frontier']]){
+   if(id!=='source-v')await f.service.save('mission',id+'-mission',{sourceCandidateIds:['source'],moduleId});
+   await f.service.save('candidate-verdict',id,{candidateId:id==='source-v'?'source':'other',missionId:id+'-mission',moduleId,promote:true,confirmatory:true,receiptValid:true,evidenceTier:'exact',score:0.9,baseline:0.8,delta:0.02});
+  }
+  await f.service.save('mission','audit-m',{sourceCandidateIds:['source'],moduleId:'runtime'});
+  await f.service.save('candidate-verdict','audit-v',{missionId:'audit-m',moduleId:'runtime',promote:false,auditOnly:true,evidenceTier:'model',confirmatory:true,receiptValid:true,score:0.8,baseline:0.8,delta:0.02,...auditPatch});
+  return(await transfer.assess({candidateId:'source'})).payload.shared;
+ };
+ assert.equal(await share({measured:{anchorCalibrated:true},deterministicChecksPassed:true}),true);
+ assert.equal(await share({measured:{anchorCalibrated:true},deterministicChecksPassed:false}),false,'the candidate checked out worse on its numbers');
+ assert.equal(await share({measured:{anchorCalibrated:false},deterministicChecksPassed:true}),false,'the scorer was not calibrated');
+ assert.equal(await share({measured:{anchorCalibrated:true,deterministicChecksPassed:true}}),true,'an older verdict carries the flag on its measurement');
+ assert.equal(await share({measured:{anchorCalibrated:true}}),false,'and with no flag anywhere nothing was shown');
+});

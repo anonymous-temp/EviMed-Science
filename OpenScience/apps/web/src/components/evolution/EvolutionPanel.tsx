@@ -15,6 +15,8 @@ const DATA: Record<string, string> = { D0: '等待数据来源', D1: '模拟数�
 const DOSSIER_STATUS: Record<string, string> = {
   planned: '待开始', building: '研发中', repair: '修复中', review: '复核中', waiting_resource: '等待资料', waiting_confirmation: '等待确认',
   waiting_budget: '等待额度', published: '已上线', impossible: '无法推进', rejected: '已否决',
+  // A proposal for the platform's own code, after the operator's answer: adopted work waits to be implemented; a declined one is closed.
+  adopted: '待实现', declined: '已否决',
 };
 
 export function EvolutionPanel({ projectId, dataset }: { projectId?: string; dataset?: Record<string, unknown> }) {

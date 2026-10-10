@@ -1,4 +1,4 @@
-import {policyPriority} from './evolutionPolicy.mjs';
+import {policyPriority,EVOLUTION_STAGNANT_ROUNDS} from './evolutionPolicy.mjs';
 import {evolutionOpportunitySource} from './evolutionGrowth.mjs';
 import { createHash } from 'node:crypto';
 import { canonicalJson, selectEvolutionCandidate, evolutionNoiseBand, evolutionProposalIssues, selectEvolutionParent } from '@evimed/domain';
@@ -6,6 +6,7 @@ import { evolutionKey, evolutionToolArchiveId } from './evolutionService.mjs';
 import { evolutionPriorityBreakdown } from './evolutionScout.mjs';
 import { EVOLUTION_MODULE_IDS } from './evolutionUsage.mjs';
 import { validateModuleEvolutionPolicy } from './moduleEvolutionPolicies.mjs';
+import { evolutionAccountFloors } from './evolutionAccountClasses.mjs';
 
 export const EVOLUTION_OPPORTUNITY_SOURCES = Object.freeze(['demand', 'method', 'data', 'success', 'combination', 'contradiction', 'self-research', 'repair']);
 /** `deferred`: parked on a resource that did not come within its window. Terminal, so the module goes on; the opportunity keeps its
@@ -16,6 +17,9 @@ const TERMINAL = new Set(['complete', 'rejected', 'impossible', 'cancelled', 'de
 const WAKE_EVENT_TYPES = Object.freeze({ 'new-data': 'dataset-ready', 'new-tool': 'tool-ready', 'new-method': 'method-ready', 'new-model': 'environment-changed' });
 const DEFERRED_WAKE_CONDITIONS = Object.freeze(['new-data', 'new-method', 'new-tool', 'new-model']);
 const metBy = (/** @type {string[]|undefined} */ conditions, /** @type {any} */ event) => (conditions ?? []).some(type => type === event.type || WAKE_EVENT_TYPES[type] === event.type);
+/** The states of an engine proposal's opportunity that new evidence does not reopen: the proposal waits for an operator's answer (`review`), or the operator
+ * adopted it and it is work to implement (`adopted`). A declined one is closed, and reopens like any other when what it rests on changes. */
+const ENGINE_REVIEW_KEPT = new Set(['review', 'adopted']);
 const digest = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const localDay = date => new Date(date.getTime() + 8 * 3600000).toISOString().slice(0, 10);
 export const evolutionReplayHeldOut = id => parseInt(digest(`heldout:${id}`).slice(0,8),16)%5===0;
@@ -28,6 +32,37 @@ export const evolutionPriorityFeatures = (row) => {
 };
 const sameFamily=(left,right)=>digest(left??null)===digest(right??null);
 const average = values => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+/** One unit's deterministic check (a number, a unit, a quotation checked by code), or null when the unit carries none. A unit recorded before the evaluators
+ * named the check kept it in its slices. @param {any} unit */
+const deterministicFlag = unit => typeof unit?.deterministicPassed === 'boolean' ? unit.deterministicPassed
+  : typeof unit?.slices?.numbers === 'boolean' ? unit.slices.numbers
+  : Number.isFinite(unit?.slices?.unsupportedNumbers) ? unit.slices.unsupportedNumbers === 0 : null;
+/**
+ * Whether a candidate is no worse than the version it replaces on the deterministic checks, within the noise of that version's own repeats: the share of
+ * units whose check passed, per preserved source group, against the three baseline runs and their noise band. A model-scored promotion rests on it. It
+ * used to ask that every unit of the candidate's one run pass, which a measurement of sixty first-attempt units seldom does whoever wrote the candidate, and
+ * which counted a failure the incumbent has too against the candidate; the unit's score already carries the failure (review D-E19).
+ * `ran` is false when a run carries no check on some unit: then nothing was measured, and the promotion is refused as missing evidence, not as a regression.
+ * @param {any} candidate @param {any[]} baselines
+ */
+export function evolutionDeterministicChecks(candidate, baselines) {
+  const shares = measurement => {
+    const groups = new Map();
+    for (const unit of measurement?.units ?? []) {
+      const flag = deterministicFlag(unit);
+      if (flag === null) return null;
+      const key = unit.groupId ?? unit.id;
+      groups.set(key, [...(groups.get(key) ?? []), Number(flag)]);
+    }
+    return groups.size ? new Map([...groups].map(([key, values]) => [key, average(values)])) : null;
+  };
+  const mine = shares(candidate), theirs = baselines.map(shares), ids = mine ? [...mine.keys()].sort() : [];
+  if (!mine || theirs.length !== 3 || theirs.some(groups => !groups || groups.size !== ids.length || ids.some(id => !groups.has(id)))) return { ran: false, nonInferior: false, regressed: false };
+  const runs = theirs.map(groups => ids.map(id => groups.get(id)));
+  const delta = evolutionNoiseBand(runs), candidateShare = average(ids.map(id => mine.get(id))), baselineShare = average(runs.flat());
+  const regressed = candidateShare < baselineShare - delta;
+  return { ran: true, candidate: candidateShare, baseline: baselineShare, delta, nonInferior: !regressed, regressed };
+}
 
 /** Only a trusted execution receipt can establish a repair's observed baseline failure. @param {any} payload */
 export function evolutionFailureReproductionHash(payload){
@@ -70,11 +105,11 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const breakdown = evolutionPriorityBreakdown(features, P.weights);
       const signature = digest([input.evidenceRoots ?? [], input.prerequisites ?? [], features]);
       if (previous?.payload.resourceSignature === signature) return previous;
-      // A new signature reopens a dossier, and ends a deferral (`defer`); a review input waiting for a person is not made void by new evidence.
+      // A new signature reopens a dossier, and ends a deferral (`defer`); a review input waiting for a person, or work a person adopted, is not made void by new evidence.
       return service.save('dossier', id, { ...previous?.payload, ...input, resourceSignature: signature, opportunity: true,
         priorityBreakdown: breakdown, score: Object.values(breakdown).reduce((sum, x) => sum + x, 0),
         ...(previous?.payload.deferred ? { deferred: false, deferredAt: null, wakeConditions: [] } : {}),
-        createdAt: previous?.payload.createdAt ?? service.now().toISOString(), status: previous?.payload.status === 'review' ? 'review' : input.prerequisites?.length ? 'waiting_resource' : 'planned',
+        createdAt: previous?.payload.createdAt ?? service.now().toISOString(), status: ENGINE_REVIEW_KEPT.has(previous?.payload.status) ? previous.payload.status : input.prerequisites?.length ? 'waiting_resource' : 'planned',
         cheapestNextStep: input.cheapestNextStep ?? 'measure-current-version', failureHypotheses: input.failureHypotheses ?? [],
         evidenceRoots: [...new Set(input.evidenceRoots ?? [])] }, previous);
     });
@@ -117,9 +152,9 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       if (amount <= 0) return { id: null, payload: { status: 'waiting_budget', moduleId: input.moduleId } };
       return service.save('mission', id, { ...input, moduleId: input.moduleId, status: input.wakeConditions?.length ? 'waiting_resource' : 'ready',
         budget: { category, day, reservedCny: amount, tranches:[{day,reservedCny:amount,spentBefore:0,fundedAt:service.now().toISOString()}] }, policyId: P.id, policyVersion: P.policy.version, policySnapshot:structuredClone(P.policy), replayIndependent:evolutionReplayHeldOut(id), usedForProposal:false,
-        mechanismSchedule:P.policy.mechanismSchedule??[3,2,1],stagnationRounds:P.policy.stagnationRounds??3,resourceStop:P.policy.resourceStop??{attempts:3,days:14},epoch: environment.id, modelReleasedAt: environment.modelReleasedAt, month: service.now().toISOString().slice(0, 7),
+        resourceStop:P.policy.resourceStop??{attempts:3,days:14},epoch: environment.id, modelReleasedAt: environment.modelReleasedAt, month: service.now().toISOString().slice(0, 7),
         regressions:0,regressionBasis:'no-activated-candidate-or-observed-regression',regressionObservations:[],round: 1, maxRounds: 10, consecutiveStalls: 0, baseline: input.baseline ?? null, successConditions: input.successConditions ?? { selectionVersion: 'evolution-selection-2' },
-        dependencies: input.dependencies ?? [], wakeConditions: input.wakeConditions ?? [], results: [], decisions: [...(input.decisions ?? []),...['budgetShares','mechanismSchedule','stagnationRounds','resourceStop'].map(field=>({id:`${id}:${field}`,policyField:field,choice:JSON.stringify(P.policy[field]),at:service.now().toISOString()}))], components: [],
+        dependencies: input.dependencies ?? [], wakeConditions: input.wakeConditions ?? [], results: [], decisions: [...(input.decisions ?? []),...['budgetShares','resourceStop'].map(field=>({id:`${id}:${field}`,policyField:field,choice:JSON.stringify(P.policy[field]),at:service.now().toISOString()}))], components: [],
         createdAt: service.now().toISOString() });
     });
   }
@@ -160,6 +195,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const p = signal.payload;
       await opportunity({ moduleId: p.moduleId, sources: [evolutionOpportunitySource(p.kind)],
         taskFamily: p.codes, mechanismFamily: p.kind, evidenceRoots: [signal.id], features: { distinctAccounts: p.distinctAccounts, runtimeFailures: p.occurrences,
+          ...(p.accountClass === 'operator' ? { accountClass: 'operator', demandFloor: (signals.floors ?? evolutionAccountFloors(config)).operator } : {}),
           coverageGap: p.kind === 'unmet-demand' }, cheapestNextStep: 'reproduce-on-public-analogue', failureHypotheses: ['private-demand-may-not-transfer'] });
     }
     const capabilityMap = await map.rebuild();
@@ -167,19 +203,18 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     await deferExpired();
     const all = await service.list('mission');
     const thisWeek = all.filter(row => row.payload.week === week);
-    const current = (await policy.current()).policy;
-    // Published, impossible and answered-by-a-review-input (`run`) opportunities are done; a deferred one waits for its wake conditions.
+    // Published, impossible and answered-by-a-review-input (`run`) opportunities are done, whether the operator has answered the input or not
+    // (`adopted` is work to implement, `declined` is closed until what it rests on changes); a deferred one waits for its wake conditions.
     const dossiers = (await service.dossiers())
-      .filter(row => row.payload.opportunity === true && !['published', 'impossible', 'review'].includes(row.payload.status) && !row.payload.deferred);
+      .filter(row => row.payload.opportunity === true && !['published', 'impossible', 'review', 'adopted', 'declined'].includes(row.payload.status) && !row.payload.deferred);
     const created = [];
     const busy = new Set(all.filter(row => !TERMINAL.has(row.payload.status)).map(row => `${row.payload.moduleId}:${row.payload.opportunityId}`));
     // Modules missing their weekly allocation go first; measured priority orders opportunities inside a module.
     enabled.sort((a,b) => Number(thisWeek.some(row => row.payload.moduleId === a)) - Number(thisWeek.some(row => row.payload.moduleId === b)));
     for (const moduleId of enabled) {
-      const othersReady = enabled.some(id => id !== moduleId && dossiers.some(row => row.payload.moduleId === id && row.payload.status === 'planned'));
-      const spent = thisWeek.filter(row => row.payload.moduleId === moduleId && row.payload.budget.category === 'research').reduce((sum,row) => sum + Number(row.payload.researchCostCny ?? row.payload.budget.reservedCny),0);
-      if (othersReady && spent >= config.evolutionDailyBudgetCny * 7 * current.budgetShares.research * current.moduleMaximumShare) continue;
-      // The mission id below is the module's and the week's: a module that has had its mission this week waits for the next.
+      // The mission id below is the module's and the week's: a module that has had its mission this week waits for the next. That is a tighter bound than
+      // the share cap this loop used to apply first (`moduleMaximumShare`, half of the week's research share while another module had work ready): any
+      // spend this week is a mission this week, so the cap could not change an outcome and was removed with its policy field (review D-E6).
       if (thisWeek.some(row => row.payload.moduleId === moduleId)) continue;
       const missionId=`evolution-mission-${evolutionKey(['weekly',moduleId,week])}`;
       const assigned=await policy.assignedPolicy(missionId);
@@ -260,7 +295,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     }
     const newSupportedFamilies=await service.callbacks.recordConfirmedFamilies?.({mission,candidate,verdict}) ?? 0;
     const stalls=Number(mission.payload.consecutiveStalls??0)+Number(!p.promote);
-    const continueSearch=!auditOnly&&!p.promote&&Number(mission.payload.round??1)<Math.min(10,mission.payload.maxRounds??10)&&stalls<Math.min(3,mission.payload.stagnationRounds??3);
+    const continueSearch=!auditOnly&&!p.promote&&Number(mission.payload.round??1)<Math.min(10,mission.payload.maxRounds??10)&&stalls<EVOLUTION_STAGNANT_ROUNDS;
     const row=await update(await service.get(mission.id),{status:continueSearch?'ready':auditOnly||p.promote?'complete':'rejected',completed:!continueSearch,completedAt:continueSearch?null:service.now().toISOString(),result:selection,verdictId:verdict.id,publication,researchCostCny:await cost(mission.id),components:p.confirmatory&&p.receiptValid&&!auditOnly ? [...(mission.payload.components??[]),{...(mission.payload.decisions?.[0]?.opportunities??[]).find(item=>item.id===mission.payload.opportunityId),id:candidate.id,opportunityId:mission.payload.opportunityId,candidateId:candidate.id,verdictId:verdict.id,confirmedGain:p.score-p.baseline,costCny:await cost(mission.id)}] : mission.payload.components??[],confirmedOnNewTasks:true,confirmedPromotions:Number(p.promote&&!auditOnly),newSupportedFamilies,regressions:Number(mission.payload.regressions??0)+Number(p.outcome==='regressed'&&!(mission.payload.regressionObservations??[]).some(item=>item.verdictId===verdict.id)),regressionBasis:'independent-confirmation-verdicts',regressionObservations:[...(mission.payload.regressionObservations??[]).filter(item=>item.verdictId!==verdict.id),{verdictId:verdict.id,outcome:p.outcome,regressed:p.outcome==='regressed',at:p.at}],consecutiveStalls:stalls,
       ...(continueSearch?{round:Number(mission.payload.round??1)+1,candidate:null,candidateHash:null,proposalAttempts:0,results:[...(mission.payload.results??[]),{verdictId:verdict.id,outcome:p.outcome,round:mission.payload.round??1}]}:{})});
     if(continueSearch)await queue(row);
@@ -325,7 +360,11 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
         const reviewId=result.review?.identity??null;
         const done=await update(await service.get(mission.id),{status:'complete',completed:true,result:{outcome:'review-prepared',reviewId},reason:'reviewed-release-pr-required',engineReview:result.review??null,lastResult:status,researchCostCny:await cost(missionId),confirmedPromotions:0});
         const dossier=mission.payload.opportunityId?await service.get(mission.payload.opportunityId):null;
-        if(dossier?.payload.opportunity===true)await service.save('dossier',dossier.id,{...dossier.payload,status:'review',review:{missionId,reviewId,at:service.now().toISOString()}},dossier);
+        // A proposal an operator has already answered (this mission ran again after its end was lost) keeps its answer.
+        if(dossier?.payload.opportunity===true&&!['adopted','declined'].includes(dossier.payload.status))await service.save('dossier',dossier.id,{...dossier.payload,status:'review',review:{missionId,reviewId,at:service.now().toISOString()}},dossier);
+        // The operators are told of the proposal. The mission is over either way: a pass that fails here is made up by the worker's next
+        // housekeeping, which announces every prepared proposal nobody has been told of.
+        if(dossier?.payload.opportunity===true)await service.callbacks.engineReviewPrepared?.(dossier.id);
         return done;
       }
       return update(await service.get(mission.id),{status:status==='impossible'?'impossible':'waiting_resource',completed:status==='impossible',reason:result?.reason??'module-engine-resource',engineReview:result?.review??null,lastResult:status,researchCostCny:await cost(missionId),confirmedPromotions:0});
@@ -341,9 +380,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const parent = selectEvolutionParent(archive.filter(row=>row.payload.moduleId===mission.payload.moduleId&&sameFamily(row.payload.taskFamily,mission.payload.taskFamily)).map(row => ({ id: row.id, ...row.payload })));
       candidate = await adapter.propose({ ...mission.payload, id: mission.id, history: history.map(row => row.payload), parent });
       if (candidate?.status === 'unavailable') return update(mission, { status: 'waiting_resource', reason: candidate.reason });
-      const schedule=mission.payload.mechanismSchedule??[3,2,1],stage=mission.payload.round<=Math.ceil(mission.payload.maxRounds/3)?0:mission.payload.round<=Math.ceil(2*mission.payload.maxRounds/3)?1:2;
       const issues = evolutionProposalIssues({ ...candidate.proposal, round: mission.payload.round, rounds: mission.payload.maxRounds });
-      if(candidate.proposal?.mechanisms?.length>Math.min([3,2,1][stage],schedule[stage]??1))issues.push('assigned-policy-mechanism-limit');
       if(issues.length)return retryProposal(mission,candidate,'proposal-metadata',issues);
       const previous = (await service.list('archive')).find(row => row.payload.candidateHash === digest(candidate.policy ?? candidate.files));
       if (previous) return update(mission, { status: 'rejected', completed: true, result: { outcome: 'insufficient-evidence', reason: 'duplicate-candidate', previousId: previous.id } });
@@ -440,9 +477,10 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     const delta = evolutionNoiseBand(scores);
     const historical = (await service.list('candidate-verdict')).filter(row => row.payload.moduleId === mission.payload.moduleId && row.payload.evaluatorCompatibility === evaluatorCompatibility && row.payload.promote);
     const historicalBest = Math.max(baseline, ...historical.map(row => Number(row.payload.score ?? baseline)));
+    const deterministic = evolutionDeterministicChecks(measured, baselines);
     let selection = selectEvolutionCandidate({ receiptValid: true, confirmatory: true, firstAttempt: true,
       evidenceTier: measured.evidenceTier ?? 'model', anchorCalibrated: measured.anchorCalibrated === true,
-      deterministicChecksPassed: measured.deterministicChecksPassed === true, modelScoredLabel: true,
+      deterministicChecksPassed: deterministic.nonInferior, deterministicChecksRegressed: deterministic.regressed, modelScoredLabel: true,
       baseline, score, historicalBest, delta, baselineCost: average(baselines.map(measurement => measurement.costCny)), cost: measured.costCny,
       baselineContext: average(baselines.map(measurement => measurement.contextBytes)), context: measured.contextBytes,
       removedMechanisms: candidate.proposal.removedMechanisms ?? 0 });
@@ -454,7 +492,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     const verdictId = `evolution-verdict-${evolutionKey([candidate.id,batch.id])}`;
     await service.save('candidate-verdict', verdictId, { ...selection, moduleId: mission.payload.moduleId, candidateId: candidate.id, candidateHash: digest(candidate), missionId,
       evaluatorCompatibility,taskFamily:mission.payload.taskFamily??null,auditOnly,parentId:candidate.parentId??mission.payload.sourceCandidateIds?.[0]??null,sourceCandidateIds:mission.payload.sourceCandidateIds??[],epoch: mission.payload.epoch, score, baseline, delta, historicalBest, evidenceTier: measured.evidenceTier ?? 'model', batchId: batch.id,
-      evaluationReceiptHash,modelScoredLabel:measured.evidenceTier==='model',receiptValid: true, confirmatory: true, firstAttempt: true, mechanismContributions:candidate.proposal.mechanisms?.length===1?{[candidate.proposal.mechanisms[0]]:score-baseline}:{},equivalentScore,equivalentBaseline,passed: selection.promote, measured, baselines, at: service.now().toISOString() });
+      evaluationReceiptHash,modelScoredLabel:measured.evidenceTier==='model',deterministicChecksPassed:deterministic.nonInferior,deterministic,receiptValid: true, confirmatory: true, firstAttempt: true, mechanismContributions:candidate.proposal.mechanisms?.length===1?{[candidate.proposal.mechanisms[0]]:score-baseline}:{},equivalentScore,equivalentBaseline,passed: selection.promote, measured, baselines, at: service.now().toISOString() });
     await taskPool.finish(batch, { verdictId, ...selection });
     return finalizeMission(mission,candidate,await service.get(verdictId),adapter);
   }

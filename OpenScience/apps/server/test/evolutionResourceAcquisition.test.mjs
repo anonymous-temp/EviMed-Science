@@ -10,8 +10,8 @@ test('tool acquisition requires evaluator references and measured persisted elig
 });
 test('development smoke cannot clear unknown or confirmation prerequisites',async()=>{
  const observed=[];
- const service={get:async()=>({id:'dossier',payload:{prerequisites:['fresh-confirmation-tasks','missing-numeric-truth']}}),list:async()=>[]};
+ const service={get:async()=>({id:'dossier',payload:{prerequisites:['fresh-confirmation-tasks','missing-numeric-truth']}}),list:async type=>type==='source-request'?[{payload:{public:true,status:'requested',source:{id:'ai-discovery-req-0123456789ab'}}}]:[]};
  const acquire=createEvolutionResourceAcquisition({service,scout:{},candidateEvaluator:{},loops:{prepareModuleTasks:async input=>{observed.push(input.phase);return {status:'ready'};},missions:{opportunity:async()=>assert.fail('No evidence allows clearing prerequisites.')}}});
  const result=await acquire({id:'mission',moduleId:'geo',opportunityId:'dossier'});
- assert.equal(result.ready,false);assert.deepEqual(result.remainingPrerequisites,['fresh-confirmation-tasks','missing-numeric-truth']);assert.deepEqual(observed,['development']);assert.ok(result.sourceRequestIds.includes('arxiv-agent-self-improvement'));
+ assert.equal(result.ready,false);assert.deepEqual(result.remainingPrerequisites,['fresh-confirmation-tasks','missing-numeric-truth']);assert.deepEqual(observed,['development']);assert.deepEqual(result.sourceRequestIds,['ai-discovery-req-0123456789ab'],'the wish list is what the platform filed; the single arXiv query it began with is the registry\'s set now');
 });
