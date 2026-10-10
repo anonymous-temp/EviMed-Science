@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import WebSocket, { WebSocketServer } from "ws";
+import { withoutPlatformBlocks } from "@evimed/harness-port/runtime-ui-transcript";
 import { loadConfig } from "../src/config.mjs";
 import { InMemoryStore } from "../src/store.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
@@ -122,6 +123,10 @@ for (const wire of ["http", "mux"]) {
     assert.equal(forwarded.content.length, 2);
     const context = JSON.parse(/<evimed_result_selection>\n([\s\S]*?)\n<\/evimed_result_selection>/.exec(forwarded.content[1].text)[1]);
     assert.equal(context.versionId, selected.versionId); assert.equal(context.digest, selected.digest);
+    // The block is for the model: the frame's researcher view draws the message without it (owner ruling 2026-10-10), so the bubble
+    // holds only what the researcher wrote. The tag the server writes and the tag the frame removes are one and the same.
+    assert.deepEqual(withoutPlatformBlocks(forwarded.content), [forwarded.content[0]]);
+    assert.equal(forwarded.content[0].text, `${reference.draft}Clarify the supported conclusion.`);
     assert.equal(await readFile(path.join(f.project.workspaceDir, context.inputPath), "utf8"), "Original supported finding.");
     assert.equal(await readFile(path.join(f.project.workspaceDir, "report.md"), "utf8"), "Later changed report.");
   });

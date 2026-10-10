@@ -47,6 +47,16 @@
  *    `entries()` view is the documented inspection surface — so it looks
  *    exactly as it would without this body.
  *
+ *  - The researcher's own message is drawn by `UserMessageNodeView` (keys `user`
+ *    and `steering`): `UserStyleBubble` joins EVERY text part of the message into
+ *    the one bubble and draws any other part as a JSON block, so a second text
+ *    part the platform appended for the model is read by the researcher under
+ *    their own words. A result revision does exactly that (`resultRevision.bind`
+ *    appends its frozen selection as `<evimed_result_selection>…`), which stood
+ *    in the bubble as raw JSON until 2026-10-10. The takeover below draws the
+ *    kernel's own row over the same message with that block removed; the model
+ *    still receives it, the transcript on the wire still holds it.
+ *
  * What this does not buy, stated plainly: the prompt and the injected context
  * still reach the browser over the session socket, and devtools still show
  * them. This removes the affordance, not the data (the same argument as the
@@ -70,6 +80,34 @@ export const inject = ['slots', 'sessions'];
 export function historyWanted(snapshot) {
   return Boolean(snapshot) && snapshot.openState === 'open' && snapshot.hasMore === true
     && snapshot.loadingOlder !== true && snapshot.running !== true;
+}
+
+/**
+ * A researcher's own message without the blocks the platform appended for the
+ * model: `<evimed_result_selection>…</evimed_result_selection>` (a result
+ * revision's frozen selection, `resultRevision.bind`). A closed tag, not a
+ * pattern over prose; a block whose closing tag is missing is taken to the end of
+ * its part. A part left empty is dropped, and a message without the block comes
+ * back as the same array, so an ordinary message is never copied.
+ * @param {any} content a message's content parts
+ * @returns {any}
+ */
+export function withoutPlatformBlocks(content) {
+  if (!Array.isArray(content)) return content;
+  const block = /\s*<evimed_result_selection>[\s\S]*?(?:<\/evimed_result_selection>|$)/g;
+  let changed = false;
+  /** @type {any[]} */
+  const kept = [];
+  for (const part of content) {
+    if (part && part.type === 'text' && typeof part.text === 'string' && part.text.includes('<evimed_result_selection>')) {
+      changed = true;
+      const text = part.text.replace(block, '');
+      if (text.trim() !== '') kept.push({ ...part, text });
+      continue;
+    }
+    kept.push(part);
+  }
+  return changed ? kept : content;
 }
 
 /**
@@ -146,12 +184,31 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     return Shipped ? h(Shipped, props) : null;
   }
 
+  /**
+   * The kernel's own row for the researcher's message, over the same message
+   * with the platform's model-only block taken out. Registered for both keys
+   * the kernel draws it with, and drawn through the entry it shadows, so the
+   * row, its actions and its references are the kernel's.
+   * @param {any} props
+   */
+  function UserRow(props) {
+    const kind = props?.node?.kind === 'steering' ? 'steering' : 'user';
+    const Shipped = kit.shadowed(slot, kind, UserRow);
+    if (!Shipped) return null;
+    const data = props?.node?.data;
+    const content = withoutPlatformBlocks(data?.content);
+    return h(Shipped, content === data?.content ? props : { ...props, node: { ...props.node, data: { ...data, content } } });
+  }
+
   // `locale: 'chat'` hands these the chat namespace's translator, which the
   // kernel's context row is drawn with when a recall passes through.
   kit.guarded('system prompt row', () => kit.occupy({ slot, key: 'system-prompt', priority: -1, locale: 'chat' }, HiddenRow));
   kit.guarded('context row', () => kit.occupy({ slot, key: 'context', priority: -1, locale: 'chat' }, ContextRow));
   kit.guarded('unknown event row', () => kit.occupy({ slot, key: 'unknown', priority: -1, locale: 'chat' }, HiddenRow));
+  // The shipped user rows carry no `inject` today; `occupyOver` inherits one if a later kernel adds it (E-11).
+  kit.guarded('user message row', () => kit.occupyOver({ slot, key: 'user', priority: -1, locale: 'chat' }, UserRow));
+  kit.guarded('steering message row', () => kit.occupyOver({ slot, key: 'steering', priority: -1, locale: 'chat' }, UserRow));
 }
 
 /** The body as the socket's build composes it. */
-export const BODY = Object.freeze({ name: 'transcript', inject, parts: Object.freeze([mainViewSession, historyWanted, apply]) });
+export const BODY = Object.freeze({ name: 'transcript', inject, parts: Object.freeze([mainViewSession, historyWanted, withoutPlatformBlocks, apply]) });
