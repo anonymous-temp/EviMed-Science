@@ -58,6 +58,8 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["没有记录生成过程", "same"],
   ["没有可读取的核对意见", "a version with nothing to show is not a version that 「was not verified」"],
   ["已保存此版本", "whether the platform kept a copy of an input is not a line in the lineage"],
+  ["引用均为来源原文片段", "a coding file's quotes are spans of its source by construction; the viewer does not vouch for them"],
+  ["不由模型生成", "same"],
   // The two modules' names (R10 plan §1, the owner's rulings of 2026-10-07): 「循证 GEO」 again —
   // 「循证传播」 was its name from 2026-10-06 — and 「虚拟临床研究」 for what was 「虚拟临研」. A search
   // still reads the old names as the new ones until 2027-01-07 — `@evimed/domain`'s
