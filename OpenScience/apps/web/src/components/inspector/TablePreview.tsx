@@ -1,3 +1,5 @@
+import { ScrollRegion } from "@/components/ui/ScrollRegion";
+
 // Shared tabular preview: first row of data is the header (csv and xlsx alike).
 export interface TableData {
   columns: string[];
@@ -8,7 +10,8 @@ export interface TableData {
 export function TablePreview({ table }: { table: TableData }) {
   return (
     <div className="p-3">
-      <div className="overflow-x-auto rounded-input border border-border bg-surface">
+      {/* A table wider than the inspector scrolls in its own box, which a keyboard reaches (axe scrollable-region-focusable). */}
+      <ScrollRegion label="表格预览" className="rounded-input border border-border bg-surface">
         <table className="w-full border-collapse text-ui">
           <thead>
             <tr className="border-b border-border text-left text-muted">
@@ -31,7 +34,7 @@ export function TablePreview({ table }: { table: TableData }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
       {table.truncated && (
         <div className="py-2 text-center text-caption text-muted">只显示前 {table.rows.length.toLocaleString("zh-CN")} 行</div>
       )}

@@ -6,6 +6,7 @@ import hljs from "highlight.js/lib/common";
 // it went dark (2026-09-16 walk, V4). The shared theme inherits the surface and
 // draws its colours from the design tokens, so it follows `data-theme`.
 import "@/components/markdown-viewer/hljs-theme.css";
+import { ScrollRegion } from "@/components/ui/ScrollRegion";
 
 interface Props {
   code: string;
@@ -29,7 +30,8 @@ export function CodeViewer({ code, language, startLine = 1 }: Props) {
   const lineCount = code.replace(/\n$/, "").split("\n").length;
 
   return (
-    <div className="flex overflow-x-auto rounded-input border border-border bg-surface font-mono text-ui leading-[1.55]">
+    // A line wider than the panel scrolls in a box a keyboard reaches (axe scrollable-region-focusable).
+    <ScrollRegion label="代码" className="flex rounded-input border border-border bg-surface font-mono text-ui leading-[1.55]">
       <div
         aria-hidden
         className="select-none border-r border-border bg-surface-2 px-3 py-3 text-right text-muted"
@@ -41,7 +43,7 @@ export function CodeViewer({ code, language, startLine = 1 }: Props) {
       <pre className="flex-1 overflow-visible px-4 py-3">
         <code className="hljs bg-transparent" dangerouslySetInnerHTML={{ __html: html }} />
       </pre>
-    </div>
+    </ScrollRegion>
   );
 }
 
