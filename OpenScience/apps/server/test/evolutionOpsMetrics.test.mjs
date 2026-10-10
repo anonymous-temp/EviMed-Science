@@ -155,6 +155,7 @@ test("the loops' own limits reach the scrape: the account floors by class", asyn
   assert.equal(families.find((family) => family.name === "open_science_evolution_signal_groups").series.length, 4);
   const reviews = evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ engineReviews: { announced: 3, announceFailed: 1, adopted: 2, declined: 1 } }) } }));
   for (const [outcome, value] of [["announced", 3], ["announce_failed", 1], ["adopted", 2], ["declined", 1]]) assert.equal(sample(reviews, "open_science_evolution_engine_reviews_total", { outcome }), value, outcome);
+  assert.equal(sample(evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ policy: { ignoredFields: 5 } }) } })), "open_science_evolution_policy_ignored_fields_total"), 5);
   // A module that composed no counters says nothing rather than zeros.
   assert.equal(evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: {} })).some((family) => family.name === "open_science_evolution_signal_groups"), false);
 });

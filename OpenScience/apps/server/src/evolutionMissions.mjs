@@ -1,4 +1,4 @@
-import {policyPriority} from './evolutionPolicy.mjs';
+import {policyPriority,EVOLUTION_STAGNANT_ROUNDS} from './evolutionPolicy.mjs';
 import {evolutionOpportunitySource} from './evolutionGrowth.mjs';
 import { createHash } from 'node:crypto';
 import { canonicalJson, selectEvolutionCandidate, evolutionNoiseBand, evolutionProposalIssues, selectEvolutionParent } from '@evimed/domain';
@@ -121,9 +121,9 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       if (amount <= 0) return { id: null, payload: { status: 'waiting_budget', moduleId: input.moduleId } };
       return service.save('mission', id, { ...input, moduleId: input.moduleId, status: input.wakeConditions?.length ? 'waiting_resource' : 'ready',
         budget: { category, day, reservedCny: amount, tranches:[{day,reservedCny:amount,spentBefore:0,fundedAt:service.now().toISOString()}] }, policyId: P.id, policyVersion: P.policy.version, policySnapshot:structuredClone(P.policy), replayIndependent:evolutionReplayHeldOut(id), usedForProposal:false,
-        mechanismSchedule:P.policy.mechanismSchedule??[3,2,1],stagnationRounds:P.policy.stagnationRounds??3,resourceStop:P.policy.resourceStop??{attempts:3,days:14},epoch: environment.id, modelReleasedAt: environment.modelReleasedAt, month: service.now().toISOString().slice(0, 7),
+        resourceStop:P.policy.resourceStop??{attempts:3,days:14},epoch: environment.id, modelReleasedAt: environment.modelReleasedAt, month: service.now().toISOString().slice(0, 7),
         regressions:0,regressionBasis:'no-activated-candidate-or-observed-regression',regressionObservations:[],round: 1, maxRounds: 10, consecutiveStalls: 0, baseline: input.baseline ?? null, successConditions: input.successConditions ?? { selectionVersion: 'evolution-selection-2' },
-        dependencies: input.dependencies ?? [], wakeConditions: input.wakeConditions ?? [], results: [], decisions: [...(input.decisions ?? []),...['budgetShares','mechanismSchedule','stagnationRounds','resourceStop'].map(field=>({id:`${id}:${field}`,policyField:field,choice:JSON.stringify(P.policy[field]),at:service.now().toISOString()}))], components: [],
+        dependencies: input.dependencies ?? [], wakeConditions: input.wakeConditions ?? [], results: [], decisions: [...(input.decisions ?? []),...['budgetShares','resourceStop'].map(field=>({id:`${id}:${field}`,policyField:field,choice:JSON.stringify(P.policy[field]),at:service.now().toISOString()}))], components: [],
         createdAt: service.now().toISOString() });
     });
   }
@@ -172,7 +172,6 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     await deferExpired();
     const all = await service.list('mission');
     const thisWeek = all.filter(row => row.payload.week === week);
-    const current = (await policy.current()).policy;
     // Published, impossible and answered-by-a-review-input (`run`) opportunities are done, whether the operator has answered the input or not
     // (`adopted` is work to implement, `declined` is closed until what it rests on changes); a deferred one waits for its wake conditions.
     const dossiers = (await service.dossiers())
@@ -182,10 +181,9 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     // Modules missing their weekly allocation go first; measured priority orders opportunities inside a module.
     enabled.sort((a,b) => Number(thisWeek.some(row => row.payload.moduleId === a)) - Number(thisWeek.some(row => row.payload.moduleId === b)));
     for (const moduleId of enabled) {
-      const othersReady = enabled.some(id => id !== moduleId && dossiers.some(row => row.payload.moduleId === id && row.payload.status === 'planned'));
-      const spent = thisWeek.filter(row => row.payload.moduleId === moduleId && row.payload.budget.category === 'research').reduce((sum,row) => sum + Number(row.payload.researchCostCny ?? row.payload.budget.reservedCny),0);
-      if (othersReady && spent >= config.evolutionDailyBudgetCny * 7 * current.budgetShares.research * current.moduleMaximumShare) continue;
-      // The mission id below is the module's and the week's: a module that has had its mission this week waits for the next.
+      // The mission id below is the module's and the week's: a module that has had its mission this week waits for the next. That is a tighter bound than
+      // the share cap this loop used to apply first (`moduleMaximumShare`, half of the week's research share while another module had work ready): any
+      // spend this week is a mission this week, so the cap could not change an outcome and was removed with its policy field (review D-E6).
       if (thisWeek.some(row => row.payload.moduleId === moduleId)) continue;
       const missionId=`evolution-mission-${evolutionKey(['weekly',moduleId,week])}`;
       const assigned=await policy.assignedPolicy(missionId);
@@ -266,7 +264,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     }
     const newSupportedFamilies=await service.callbacks.recordConfirmedFamilies?.({mission,candidate,verdict}) ?? 0;
     const stalls=Number(mission.payload.consecutiveStalls??0)+Number(!p.promote);
-    const continueSearch=!auditOnly&&!p.promote&&Number(mission.payload.round??1)<Math.min(10,mission.payload.maxRounds??10)&&stalls<Math.min(3,mission.payload.stagnationRounds??3);
+    const continueSearch=!auditOnly&&!p.promote&&Number(mission.payload.round??1)<Math.min(10,mission.payload.maxRounds??10)&&stalls<EVOLUTION_STAGNANT_ROUNDS;
     const row=await update(await service.get(mission.id),{status:continueSearch?'ready':auditOnly||p.promote?'complete':'rejected',completed:!continueSearch,completedAt:continueSearch?null:service.now().toISOString(),result:selection,verdictId:verdict.id,publication,researchCostCny:await cost(mission.id),components:p.confirmatory&&p.receiptValid&&!auditOnly ? [...(mission.payload.components??[]),{...(mission.payload.decisions?.[0]?.opportunities??[]).find(item=>item.id===mission.payload.opportunityId),id:candidate.id,opportunityId:mission.payload.opportunityId,candidateId:candidate.id,verdictId:verdict.id,confirmedGain:p.score-p.baseline,costCny:await cost(mission.id)}] : mission.payload.components??[],confirmedOnNewTasks:true,confirmedPromotions:Number(p.promote&&!auditOnly),newSupportedFamilies,regressions:Number(mission.payload.regressions??0)+Number(p.outcome==='regressed'&&!(mission.payload.regressionObservations??[]).some(item=>item.verdictId===verdict.id)),regressionBasis:'independent-confirmation-verdicts',regressionObservations:[...(mission.payload.regressionObservations??[]).filter(item=>item.verdictId!==verdict.id),{verdictId:verdict.id,outcome:p.outcome,regressed:p.outcome==='regressed',at:p.at}],consecutiveStalls:stalls,
       ...(continueSearch?{round:Number(mission.payload.round??1)+1,candidate:null,candidateHash:null,proposalAttempts:0,results:[...(mission.payload.results??[]),{verdictId:verdict.id,outcome:p.outcome,round:mission.payload.round??1}]}:{})});
     if(continueSearch)await queue(row);
@@ -351,9 +349,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const parent = selectEvolutionParent(archive.filter(row=>row.payload.moduleId===mission.payload.moduleId&&sameFamily(row.payload.taskFamily,mission.payload.taskFamily)).map(row => ({ id: row.id, ...row.payload })));
       candidate = await adapter.propose({ ...mission.payload, id: mission.id, history: history.map(row => row.payload), parent });
       if (candidate?.status === 'unavailable') return update(mission, { status: 'waiting_resource', reason: candidate.reason });
-      const schedule=mission.payload.mechanismSchedule??[3,2,1],stage=mission.payload.round<=Math.ceil(mission.payload.maxRounds/3)?0:mission.payload.round<=Math.ceil(2*mission.payload.maxRounds/3)?1:2;
       const issues = evolutionProposalIssues({ ...candidate.proposal, round: mission.payload.round, rounds: mission.payload.maxRounds });
-      if(candidate.proposal?.mechanisms?.length>Math.min([3,2,1][stage],schedule[stage]??1))issues.push('assigned-policy-mechanism-limit');
       if(issues.length)return retryProposal(mission,candidate,'proposal-metadata',issues);
       const previous = (await service.list('archive')).find(row => row.payload.candidateHash === digest(candidate.policy ?? candidate.files));
       if (previous) return update(mission, { status: 'rejected', completed: true, result: { outcome: 'insufficient-evidence', reason: 'duplicate-candidate', previousId: previous.id } });

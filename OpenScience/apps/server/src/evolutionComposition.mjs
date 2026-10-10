@@ -615,7 +615,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   // What the candidate executor has done and refused, read from the runtime controller where it acts (`evolutionOpsMetrics.mjs`).
   const executorCounters = async () => (await controller.evolutionAdmissionAvailable())?.executor ?? null;
   // The counters of the limits that act inside the loops, scraped through `evolutionOpsMetrics.mjs`.
-  const limitCounters = () => ({ signals: loops.signals.counters, engineReviews: engineReviews.counters });
+  const limitCounters = () => ({ signals: loops.signals.counters, engineReviews: engineReviews.counters, policy: loops.policy.counters });
   return { service, loops, engineBuilder, engineReviews, model, budgeted, runtimeSession, limitCounters, observeVerifiedRun: feedback.observeVerifiedRun, decisions, maintenance, worker, integration, routes, gateway, toolAdmission, executorCounters, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
     observeFeedback: feedback.observeFeedback };
 }
