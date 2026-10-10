@@ -770,7 +770,11 @@ export async function tickParse(deps) {
       questionsByProject.set(snapshot.geoProjectId, new Map(questions.map((question) => [question.id, question])));
     }
     const question = questionsByProject.get(snapshot.geoProjectId)?.get(String(snapshot.questionId)) ?? null;
-    const registry = brandRegistry(context.project.product, context.project.competitors);
+    // One basis for the row (Q-9): the names the judge was told are the names the answer is counted by, and what was ours when the
+    // round started is what its citations are counted against. Counting again (`recountRegistryFacts`) is what moves the count to the
+    // current registry afterwards.
+    const registry = brandRegistry(context.judgeProduct ?? context.project.product, context.judgeCompetitors ?? context.project.competitors);
+    const countedOwned = context.judgeOwned ?? context.owned;
     /** @type {(GeoJudgement & { truncated?: boolean }) | null} */
     let judged = null;
     const stops = state.judgeStops.get(snapshot.id);
@@ -826,7 +830,7 @@ export async function tickParse(deps) {
       answer: snapshot.answerText,
       citations: snapshot.citations,
       registry,
-      owned: context.owned,
+      owned: countedOwned,
       ...extract,
     });
     const status = snapshot.status === "valid" && judged?.refusal ? "refusal" : snapshot.status;
@@ -845,7 +849,7 @@ export async function tickParse(deps) {
       checks: judged?.checks ?? {},
       // What it was counted under, and the judge's two lists it was counted
       // with: a later registry change counts it again from these, asking no model.
-      registryKey: registryKey(registry, context.owned),
+      registryKey: registryKey(registry, countedOwned),
       judgeExtract: judged ? extract : null,
     };
     const written = await store.writeFacts(snapshot, facts, { status: status !== snapshot.status ? status : null, at: now() });

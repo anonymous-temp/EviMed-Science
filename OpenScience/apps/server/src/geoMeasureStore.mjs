@@ -245,7 +245,10 @@ export class GeoMeasureStore {
   /**
    * Everything the parser and the judge read about a project: the product and
    * competitors, the active claims (latest version of each), the care red
-   * flags of the latest journey, and what counts as our source.
+   * flags of the latest journey, and what counts as our source. With a
+   * `roundId` the judge's part (`judgeProduct`, `judgeCompetitors`, `judgeOwned`,
+   * `value`, `claims`, `careFlags`) is the basis the round froze when it
+   * started, when it has one.
    * @param {string} geoProjectId @param {string | null} [roundId]
    */
   async projectContext(geoProjectId, roundId = null) {
@@ -292,19 +295,36 @@ export class GeoMeasureStore {
     const withdrawn = frozen?.claims ? new Set() : await this.#withdrawnCards(claimRows.map((claim) => claim.cardId).filter(Boolean));
     const standing = claimRows.filter((claim) => !claim.cardId || !withdrawn.has(claim.cardId));
     const carded = standing.filter((claim) => claim.cardId);
+    const liveOwned = {
+      domains: owned.rows.map((row) => String(row.domain).toLowerCase()).filter(Boolean),
+      urls: [...published.rows.map((row) => String(row.published_url)),
+        ...ownedLinks.rows.map((row) => String(row.url)).filter((url) => !geoOwnedLinkKey(url).named)].filter(Boolean),
+    };
     return {
       project,
+      // The round's basis (Q-9): what a verdict is judged against and what a count is made of, as they stood when the round started.
+      // `owned` and `project` stay the current ones (error tracing, the metrics and counting again read those).
       judgeProduct: frozen?.product ?? project.product, judgeCompetitors: frozen?.competitors ?? project.competitors,
+      judgeOwned: frozen?.owned ?? liveOwned,
       // What the judge reads of the profile (scope, summary, findings) and nothing it does not: the round freezes this, row by row.
       value: frozen?.value ?? { version: Number(profile.rows[0]?.version ?? 0), data: geoValueJudged(profile.rows[0]?.data) },
       claims: frozen?.claims ?? (carded.length ? carded : standing),
       careFlags: frozen?.careFlags ?? careFlags,
-      owned: {
-        domains: owned.rows.map((row) => String(row.domain).toLowerCase()).filter(Boolean),
-        urls: [...published.rows.map((row) => String(row.published_url)),
-          ...ownedLinks.rows.map((row) => String(row.url)).filter((url) => !geoOwnedLinkKey(url).named)].filter(Boolean),
-      },
+      owned: liveOwned,
     };
+  }
+
+  /**
+   * What a round that starts now is judged and counted against, whole: the product and competitors the judge is told and the brands
+   * are counted by, the sites that are ours, the value profile's scope, summary and findings, the claims, the care red flags. A round
+   * freezes this when it starts (`startRound`), so every answer of the round is held to one basis.
+   * @param {string} geoProjectId
+   */
+  async evaluationBasis(geoProjectId) {
+    const context = await this.projectContext(geoProjectId);
+    if (!context) return null;
+    return { product: context.project.product, competitors: context.project.competitors, owned: context.owned, value: context.value,
+      claims: context.claims, careFlags: context.careFlags };
   }
 
   /**
@@ -530,12 +550,20 @@ export class GeoMeasureStore {
   }
 
   /**
-   * A round's first job was leased: running, started now, sampled today.
-   * @param {string} roundId @param {Date} now @param {string} sampleDate
+   * A round's first job was leased: running, started now, sampled today, and its evaluation basis frozen (Q-9). A round waits for the
+   * night window, the weekly cap or a busy probe, so a basis frozen when it was queued is hours or days old when its first answer is
+   * judged: a claim corrected in between kept producing `wrong` verdicts and notices. Only the first lease of a round pays for the
+   * basis; the later ones find the round running. Returns whether this call started it.
+   * @param {string} roundId @param {Date} now @param {string} sampleDate @returns {Promise<boolean>}
    */
   async startRound(roundId, now, sampleDate) {
-    await this.query(`UPDATE evimed_geo.rounds SET status = 'running', started_at = coalesce(started_at, $2), sample_date = coalesce(sample_date, $3::date)
-      WHERE id = $1 AND status = 'queued'`, [roundId, now.toISOString(), sampleDate]);
+    const queued = (await this.query(`SELECT geo_project_id FROM evimed_geo.rounds WHERE id = $1 AND status = 'queued'`, [roundId])).rows[0];
+    if (!queued) return false;
+    const basis = await this.evaluationBasis(String(queued.geo_project_id));
+    const started = await this.query(`UPDATE evimed_geo.rounds SET status = 'running', started_at = coalesce(started_at, $2), sample_date = coalesce(sample_date, $3::date),
+        ref = CASE WHEN $4::jsonb IS NULL THEN ref ELSE coalesce(ref, '{}'::jsonb) || jsonb_build_object('evaluationBasis', $4::jsonb) END
+      WHERE id = $1 AND status = 'queued' RETURNING id`, [roundId, now.toISOString(), sampleDate, basis ? JSON.stringify(basis) : null]);
+    return started.rows.length > 0;
   }
 
   /**

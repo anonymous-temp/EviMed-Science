@@ -16,7 +16,7 @@ import { GeoJudge, tickParse } from "../src/geoJudge.mjs";
 import { netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
 import { noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
-import { GEO_TABLES_FOR_TESTS, fakeModel, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
+import { GEO_TABLES_FOR_TESTS, fakeModel, judgeCallParts, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -1174,6 +1174,79 @@ test("a changed registry counts the stored answers again in code: no judge call,
     assert.equal((await tickMetrics(h.deps)).rounds, 0, "and once");
     h.clock.advance(60_000);
     assert.equal((await tickParse({ ...h.deps, maxParse: 20 })).recounted, 0, "a second pass has nothing left to count");
+  } finally {
+    await h.probe.close();
+  }
+});
+
+// ---------------------------------------------------------------- the basis a round is judged on (Q-9)
+
+test("a round is judged against the claims in force when it starts, not when it was queued (Q-9)", options, async () => {
+  await reset();
+  await seed("geo_f");
+  const plain = { answers: () => ({ answer: A_RIGHT }) };
+  const h = await harness(plain);
+  try {
+    // Two rounds queued together; the second waits (the night window, a weekly cap, a busy probe) and its claim is corrected meanwhile.
+    const first = await enqueueRound(h.deps, { geoProjectId: "geo_f", kind: "baseline" });
+    h.clock.advance(60_000);
+    const second = await enqueueRound(h.deps, { geoProjectId: "geo_f", kind: "weekly" });
+    await tickProbe({ ...h.deps, maxAsks: 6 });
+    const states = Object.fromEntries((await rows(`SELECT id, status FROM evimed_geo.rounds`)).map((row) => [row.id, row.status]));
+    assert.deepEqual([states[first.roundId], states[second.roundId]], ["done", "queued"], "the first round ran; the second is still waiting");
+    await database.query(`INSERT INTO evimed_geo.claims (id, user_id, geo_project_id, claim_key, version, statement, quote, source_ref, source_kind, in_label)
+      VALUES ('geo_f_claim_v2', 'user_geo_f', 'geo_f', 'dosing', 2, '每周一次皮下注射，起始剂量为1 mg', '本品每周一次皮下注射给药，起始剂量为1 mg。', 'label:2026-10', 'label', true)`);
+    h.clock.advance(60 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 6 });
+    await tickParse({ ...h.deps, maxParse: 20 });
+
+    // The first round started under version 1 and is judged against it; the second started after the correction and is judged against version 2.
+    const dosing = h.model.calls.map((call) => judgeCallParts(call).project.claims.find((/** @type {any} */ claim) => claim.quote.includes("每周一次皮下注射给药")).quote);
+    assert.equal(dosing.length, 12);
+    assert.deepEqual([dosing.filter((quote) => quote.includes("起始剂量为2 mg")).length, dosing.filter((quote) => quote.includes("起始剂量为1 mg")).length], [6, 6]);
+    assert.ok(dosing.slice(0, 6).every((quote) => quote.includes("2 mg")) && dosing.slice(6).every((quote) => quote.includes("1 mg")), "oldest answers first");
+    const basis = async (/** @type {string} */ id) => (await rows(`SELECT ref -> 'evaluationBasis' -> 'claims' AS claims FROM evimed_geo.rounds WHERE id = $1`, [id]))[0].claims;
+    assert.deepEqual((await basis(first.roundId)).map((/** @type {any} */ claim) => claim.version), [1, 1]);
+    assert.deepEqual((await basis(second.roundId)).filter((/** @type {any} */ claim) => claim.key === "dosing").map((/** @type {any} */ claim) => claim.version), [2]);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an answer is counted on the basis it was judged on, and the count follows the registry afterwards (Q-9)", options, async () => {
+  await reset();
+  await seed("geo_g");
+  const answer = "玛仕度肽每周注射一次；新竞品也常被提到，用药请遵医嘱，如有不适请及时就医，具体方案请咨询医生或药师。";
+  const h = await harness({ answers: () => ({ answer, searchResults: [{ title: "晚到的自有页", url: "https://late.example.com/a" }] }) });
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_g", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    // Registered after the round started: a rival, and a site that is ours. The judge was shown neither.
+    await database.query(`UPDATE evimed_geo.projects SET competitors = $1::jsonb WHERE id = 'geo_g'`,
+      [JSON.stringify([{ brandName: "诺和泰", genericName: "司美格鲁肽" }, { brandName: "新竞品" }])]);
+    await database.query(`INSERT INTO evimed_geo.sources (id, user_id, geo_project_id, domain, name, layer) VALUES ('geo_g_late', 'user_geo_g', 'geo_g', 'late.example.com', 'late', 'owned')`);
+    h.state.recountAt = h.clock.now().getTime();
+    const facts = async () => rows(`SELECT f.brands, f.cites_ours, f.registry_key FROM evimed_geo.facts f ORDER BY f.snapshot_id`);
+
+    // As written: the row is on the round's basis whole, the judge's and the count's.
+    assert.equal((await tickParse({ ...h.deps, maxParse: 20 })).parsed, 6);
+    const written = await facts();
+    assert.equal(written.length, 6);
+    assert.ok(written.every((row) => row.brands.some((/** @type {any} */ brand) => brand.ours)), "our own product is counted");
+    assert.ok(written.every((row) => !row.brands.some((/** @type {any} */ brand) => brand.name === "新竞品")), "a rival the judge was not told of is not counted beside its verdicts");
+    assert.ok(written.every((row) => row.cites_ours === false), "nor is a site that was not ours when the round started");
+    assert.equal(new Set(written.map((row) => row.registry_key)).size, 1);
+
+    // The recount is the designed way for the count to follow the registry: the verdicts are not touched, the count moves.
+    const verdicts = (await rows(`SELECT statements FROM evimed_geo.facts ORDER BY snapshot_id`)).map((row) => row.statements);
+    h.clock.advance(61_000);
+    const again = await tickParse({ ...h.deps, maxParse: 20 });
+    assert.equal(again.recounted, 6);
+    const moved = await facts();
+    assert.ok(moved.every((row) => row.brands.some((/** @type {any} */ brand) => brand.name === "新竞品" && brand.competitor)));
+    assert.ok(moved.every((row) => row.cites_ours === true));
+    assert.notEqual(moved[0].registry_key, written[0].registry_key);
+    assert.deepEqual((await rows(`SELECT statements FROM evimed_geo.facts ORDER BY snapshot_id`)).map((row) => row.statements), verdicts);
   } finally {
     await h.probe.close();
   }

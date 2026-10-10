@@ -1691,7 +1691,7 @@ export class GeoService {
       ? await this.store.valueCoverage(project.id, { engine: filter.engine ?? null, groupId: filter.groupId ?? null, audience: filter.audience ?? null })
       : { counts: [], sample: [] };
     // One value basis at a time, never two mixed. A round freezes the profile it was judged against
-    // (geoProbeQueue's evaluationBasis), so a profile written after the round — a new finding, an
+    // (the evaluation basis `GeoMeasureStore.startRound` freezes), so a profile written after the round — a new finding, an
     // imported research result, a source change — must not hide what that round measured until the
     // next one: without a version asked for, the observations are read against the newest basis the
     // round used, and the reply names it so the page can say the current profile is newer.
