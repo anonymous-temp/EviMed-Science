@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { lazy, useEffect } from "react";
+import { lazy, useEffect, type ReactElement } from "react";
 import { createMemoryRouter, Link, RouterProvider } from "react-router";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PageShell } from "@/components/layout/PageShell";
@@ -68,8 +68,8 @@ describe("a page whose chunk is still loading", () => {
 
   it("replaces the previous page with the loading state instead of leaving it on screen, then shows the new page", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
-    let arrive: (module: { default: () => JSX.Element }) => void = () => {};
-    const SlowStudies = lazy(() => new Promise<{ default: () => JSX.Element }>((resolve) => { arrive = resolve; }));
+    let arrive: (module: { default: () => ReactElement }) => void = () => {};
+    const SlowStudies = lazy(() => new Promise<{ default: () => ReactElement }>((resolve) => { arrive = resolve; }));
     const router = createMemoryRouter([{
       path: "/app",
       element: <AppShell />,
