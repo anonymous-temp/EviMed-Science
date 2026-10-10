@@ -126,6 +126,10 @@ burden. Innovation means a meaningful clinical difference, not merely novelty.
    versions retain material conditions before attributing performance to them.
 7. Diagnose visibility and semantic value uptake separately. Read value.coverage
    and observations alongside metrics, snapshots, control/noise results. Consider
+   unassessed coverage unknown: it proves neither answer omissions, weak
+   competition nor an easy visibility gain. Those explanations need observed
+   answers or must remain hypotheses.
+   Consider
    missing or distorted conditions, source retrieval, ambiguous product identity,
    topic mismatch, genuine evidence limitations and reasonable non-recommendation.
    Never equate more brand mentions with clinical quality or health benefit.
