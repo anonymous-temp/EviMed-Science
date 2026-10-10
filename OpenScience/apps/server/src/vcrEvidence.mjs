@@ -99,7 +99,7 @@ import {
 } from "@evimed/domain";
 import { quoteIsPresent } from "@evimed/domain/clinical-evidence";
 
-import { REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS } from "./trialRegistryClient.mjs";
+import { REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS, confidenceLevelOf } from "./trialRegistryClient.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 
 /** The two-sided 95% normal quantile every interval here is read with. */
@@ -560,7 +560,8 @@ export function analysisScaleInput(item, { scale }) {
   const low = finite(item?.ci_low ?? item?.ciLow);
   const high = finite(item?.ci_high ?? item?.ciHigh);
   const n = finite(item?.sample_size ?? item?.sampleSize);
-  const level = finite(item?.detail?.confidenceLevel ?? item?.applicability?.confidenceLevel) ?? 0.95;
+  // A row extracted while the registry client stored an analysis's level as a percent holds 95, not 0.95.
+  const level = confidenceLevelOf(item?.detail?.confidenceLevel ?? item?.applicability?.confidenceLevel) ?? 0.95;
   /** @param {number | null} raw */
   const on = (raw) => {
     if (raw === null) return null;
