@@ -1688,12 +1688,19 @@ export class GeoService {
         (SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'weekly', 'single_step')
           AND status IN ('done', 'partial') ORDER BY created_at DESC LIMIT 1)`,
     [project.id, filter.engine ?? null, filter.groupId ?? null, filter.audience ?? null])).rows : [];
-    const observations = rows.flatMap((row) => (Array.isArray(row.judge_extract?.valueCoverage) ? row.judge_extract.valueCoverage : [])
+    const observed = rows.flatMap((row) => (Array.isArray(row.judge_extract?.valueCoverage) ? row.judge_extract.valueCoverage : [])
       .map((/** @type {any} */ observation) => ({ ...observation, engine: row.engine, roundId: row.round_id,
-        basisVersion: row.judge_extract?.valueBasisVersion ?? null, rubricVersion: row.judge_extract?.rubricVersion ?? null, askedAt: iso(row.asked_at) })))
-      .filter((observation) => observation.basisVersion === profile.version);
+        basisVersion: row.judge_extract?.valueBasisVersion ?? null, rubricVersion: row.judge_extract?.rubricVersion ?? null, askedAt: iso(row.asked_at) })));
+    // One value basis at a time, never two mixed. A round freezes the profile it was judged against
+    // (geoProbeQueue's evaluationBasis), so a profile written after the round — a new finding, an
+    // imported research result, a source change — must not hide what that round measured until the
+    // next one: without a version asked for, the observations are read against the newest basis the
+    // round used, and the reply names it so the page can say the current profile is newer.
+    const bases = observed.map((observation) => Number(observation.basisVersion)).filter((version) => Number.isInteger(version) && version > 0);
+    const basisVersion = filter.version != null ? profile.version : (bases.length ? Math.max(...bases) : null);
+    const observations = basisVersion == null ? [] : observed.filter((observation) => observation.basisVersion === basisVersion);
     return { ...profile, data: { ...profile.data, ...geoValueContext(profile.data, filter) }, research,
-      impacts: geoValueImpacts(profile.data, articles), coverage: summarizeGeoValueCoverage(observations), observations };
+      impacts: geoValueImpacts(profile.data, articles), coverage: { ...summarizeGeoValueCoverage(observations), basisVersion }, observations };
   }
 
   /** Counts for `/api/ops/metrics`, one query. */

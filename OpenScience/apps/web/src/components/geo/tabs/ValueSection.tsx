@@ -42,6 +42,7 @@ export function ValueSection({ geoId, project, mode = "profile" }: { geoId: stri
           ? `${value?.coverage.represented} / ${value?.coverage.assessed} 次相关结论被完整表达，${value?.coverage.partial} 次不完整，${value?.coverage.contradicted} 次存在冲突。`
           : "还没有足够的回答判断药品价值是否被准确表达。"}</p>
         {Boolean(value?.coverage?.uncertain || value?.coverage?.notApplicable) && <p className="mt-2 text-caption text-text-3">尚不能判断 {value?.coverage.uncertain} 条，不适用 {value?.coverage.notApplicable} 条。</p>}
+        {Boolean(value?.coverage?.assessed && value?.coverage?.basisVersion && value.coverage.basisVersion !== value.version) && <p className="mt-2 text-caption text-text-3">以上按第 {value?.coverage.basisVersion} 版药品价值分析测得；分析已更新到第 {value?.version} 版，下一轮测量后按新版本判断。</p>}
         {!!value?.observations?.length && <Disclosure summary="查看回答中的表达" className="mt-3">
           <ul className="divide-y divide-border">
             {value?.observations.slice(0, 20).map((observation, index) => <li key={`${observation.findingId}:${index}`} className="py-3 text-ui">

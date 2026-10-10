@@ -229,9 +229,13 @@ export interface GeoEvidence {
   claims: GeoClaim[];
 }
 
+/** The server keeps each subtype and persona as an object (`geoWrites.mjs`); a list field may be a string or a list of strings. */
+export interface GeoJourneySubtype { name: string; definition?: string | string[]; size?: string | string[]; sizeQuality?: string | string[]; note?: string | string[] }
+export interface GeoJourneyPersona { name: string; age?: string | string[]; situation?: string | string[]; voice?: string | string[]; note?: string | string[] }
+
 export interface GeoJourney {
-  subtypes: string[];
-  personas: string[];
+  subtypes: Array<string | GeoJourneySubtype>;
+  personas: Array<string | GeoJourneyPersona>;
   stages: Array<{ stage: string; emotion: string; thinking: string; questions: string[]; infoSources: string[] }>;
   careNodes: Array<{ node: string; redFlags: string[] }>;
   files: Array<{ path: string; title: string }>;
@@ -767,7 +771,8 @@ export interface GeoValue {
   data: Record<string, unknown>;
   research: Array<{ id: string; question: string | null; status: string; runId: string | null }>;
   impacts: Array<{ change: Record<string, unknown>; findingIds: string[]; groupIds: string[]; articleIds: string[] }>;
-  coverage: { assessed: number; represented: number; partial: number; contradicted: number; uncertain: number; notApplicable: number; value: number | null };
+  /** `basisVersion`: the value-profile version the latest round was judged against (null before any judged round). */
+  coverage: { assessed: number; represented: number; partial: number; contradicted: number; uncertain: number; notApplicable: number; value: number | null; basisVersion?: number | null };
   observations: Array<{ findingId: string; status: string; quote: string; reason: string; engine: string; basisVersion: number | null; rubricVersion: string | null; askedAt: string | null }>;
 }
 

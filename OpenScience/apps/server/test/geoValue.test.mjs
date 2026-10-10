@@ -108,8 +108,26 @@ test("coverage never combines different value bases and passes audience/group/en
   const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
   const value = await service.valueOf({ id: "g" }, { groupId: "group", audience: "caregiver", engine: "deepseek" });
   assert.equal(value.coverage.assessed, 1);
+  assert.equal(value.coverage.basisVersion, 2);
   assert.ok(value.observations.every(observation => observation.basisVersion === 2));
   assert.deepEqual(parameters, ["g", "deepseek", "group", "caregiver"]);
+});
+
+test("a profile written after the round keeps that round's coverage, read against the basis it was judged on", async () => {
+  // The round froze value version 2; a research import then wrote version 3. Before the fix the page
+  // filtered on the latest version and showed nothing until the next round.
+  const store = { latestValue: async (_id, version) => ({ version: version ?? 3, data: { findings: [] } }), researchRequests: async () => [], listArticles: async () => [],
+    query: async () => ({ rows: [{ engine: "kimi", round_id: "r1", judge_extract: { valueBasisVersion: 2,
+      valueCoverage: [{ findingId: "f1", status: "represented" }, { findingId: "f2", status: "partial" }] } }] }) };
+  const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
+  const current = await service.valueOf({ id: "g" });
+  assert.equal(current.version, 3);
+  assert.equal(current.coverage.basisVersion, 2, "the coverage says which profile version it measured");
+  assert.equal(current.coverage.assessed, 2);
+  assert.equal(current.observations.length, 2);
+  const asked = await service.valueOf({ id: "g" }, { version: 3 });
+  assert.equal(asked.coverage.assessed, 0, "a version asked for is read only against itself");
+  assert.equal(asked.coverage.basisVersion, 3);
 });
 
 

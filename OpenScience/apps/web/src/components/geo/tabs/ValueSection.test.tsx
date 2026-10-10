@@ -46,6 +46,24 @@ it("shows unjudged and inapplicable answers as unknown instead of zero performan
   expect(screen.queryByText(/0%/)).not.toBeInTheDocument();
 });
 
+it("keeps the last round's coverage after the profile moves on, and says which version it measured", async () => {
+  const value = { ...empty(), version: 4 };
+  value.coverage = { ...value.coverage, assessed: 3, represented: 2, partial: 1, basisVersion: 3 };
+  client.getGeoValue.mockResolvedValue(value);
+  show("coverage");
+  expect(await screen.findByText("2 / 3 次相关结论被完整表达，1 次不完整，0 次存在冲突。")).toBeInTheDocument();
+  expect(screen.getByText("以上按第 3 版药品价值分析测得；分析已更新到第 4 版，下一轮测量后按新版本判断。")).toBeInTheDocument();
+});
+
+it("says nothing about versions when the coverage was measured on the current profile", async () => {
+  const value = { ...empty(), version: 3 };
+  value.coverage = { ...value.coverage, assessed: 1, represented: 1, basisVersion: 3 };
+  client.getGeoValue.mockResolvedValue(value);
+  show("coverage");
+  expect(await screen.findByText("1 / 1 次相关结论被完整表达，0 次不完整，0 次存在冲突。")).toBeInTheDocument();
+  expect(screen.queryByText(/下一轮测量后按新版本判断/)).not.toBeInTheDocument();
+});
+
 it("a failed specialist keeps the route to existing research and next work available", async () => {
   client.getGeoValue.mockResolvedValue({ ...empty(), research: [{ id: "r1", question: "这个安全信号说明什么？", status: "failed", runId: "run_1" }] });
   show("actions");
