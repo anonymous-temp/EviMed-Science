@@ -5737,7 +5737,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
+        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, capsuleService);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -5751,6 +5751,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           runtimeManager,
           researchMemory,
           memorySubstrate,
+          capsuleService,
           memoryIndexWorker,
           usageLedger,
           notificationService,
@@ -8736,8 +8737,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ webVitals = null, judgeService = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
+async function operatorMetricsText({ webVitals = null, judgeService = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null, capsuleService = null }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, capsuleService);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -8789,11 +8790,14 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, conf
       "The most times one owed withdrawal has been tried and refused.", "gauge", { value: withdrawals.mostAttempts });
   }
   addMetric(lines, "open_science_memory_recall_degraded",
-    "Whether a recall last had to fall back to the term matcher because the index could not answer.",
-    "gauge", {
-      value: memoryIndex.recall?.lastError ? 1 : 0,
-      labels: { code: String(memoryIndex.recall?.lastError ?? "none") },
-    });
+    "Whether a recall last had to fall back to the term matcher because the index could not answer; the capsule half of a recall is the series with arm=\"capsule\".",
+    "gauge", [
+      { value: memoryIndex.recall?.lastError ? 1 : 0, labels: { code: String(memoryIndex.recall?.lastError ?? "none") } },
+      // Only where the capsule half has an index to lose: the index provider is the one in use.
+      ...(memoryIndex.provider === "openviking"
+        ? [{ value: memoryIndex.capsuleRecall?.lastError ? 1 : 0, labels: { arm: "capsule", code: String(memoryIndex.capsuleRecall?.lastError ?? "none") } }]
+        : []),
+    ]);
   // OpenList degraded is a green check (nothing mounted is the operator's
   // provisioning, not an outage), so the readiness gauge reads `ok` for it and
   // this is where the state is scraped. The counter is what the probe cache
@@ -9401,7 +9405,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null, vcr = null, credits = null) {
+async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null, vcr = null, credits = null, capsules = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -9415,7 +9419,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     auth: await readinessCheck(async () => readinessAuth(config, store)),
     stateStore: await readinessCheck(async () => readinessStateStore(config, store)),
     memory: await readinessCheck(async () => readinessMemory(researchMemory, config)),
-    memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memorySubstrate, memoryIndexWorker)),
+    memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memorySubstrate, memoryIndexWorker, capsules)),
     usageLedger: await readinessCheck(async () => readinessUsageLedger(config, usageLedger)),
     inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
     documentParser: await readinessCheck(async () => readinessDocumentParser(config, documentParser)),
@@ -9584,7 +9588,7 @@ async function readinessMemory(researchMemory, config) {
  * over a degraded one. `OPEN_SCIENCE_MEMORY_INDEX_STRICT` is the operator's
  * statement that they would rather see the failure, and it is the same switch
  * that makes those recalls fail instead of degrade. */
-async function readinessMemoryIndex(config, substrate, worker) {
+async function readinessMemoryIndex(config, substrate, worker, capsules = null) {
   const required = Boolean(config.memoryIndexStrict);
   const status = substrate
     ? await substrate.status()
@@ -9630,6 +9634,9 @@ async function readinessMemoryIndex(config, substrate, worker) {
       ...(substrate.lastError ? { lastError: substrate.lastError } : {}),
       ...(substrate.lastLinksError ? { linksError: substrate.lastLinksError } : {}),
     } } : {}),
+    // The same for the capsule half of a recall, which falls back to lexical search when the index cannot answer and said so
+    // to nobody (2026-10-10 review M-7: `lastIndexError` was read only by a test). It clears when the index answers.
+    ...(capsules?.lastIndexError ? { capsuleRecall: { lastError: capsules.lastIndexError } } : {}),
   };
   if (required && !(status.configured && status.connected)) {
     throw readinessFailure(status.code ?? "memory_index_unavailable", details);

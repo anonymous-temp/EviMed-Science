@@ -590,3 +590,39 @@ test("undoing a replacement puts the fact it replaced back in force", options, a
     [[old.id, "active", null, null]]);
   assert.match(undone.restored[0].revisions.at(-1).reason, /^back in force: project\.dose\.new/);
 });
+
+// 2026-10-10 review M-7: the capsule half of recall falls back to lexical search when the index cannot answer, and said so
+// to nobody: `CapsuleService.lastIndexError` was read only by a test. The research-memory arm reports the same state in
+// readiness and in the degraded gauge (whose alert covers both); the capsule arm now does too.
+test("an index that cannot answer a capsule recall is visible in readiness and in the degraded gauge, and clears when it answers", options, async (t) => {
+  const index = slowIndex();
+  const { app, base, user } = await fixture(t, { memoryIndexProvider: "openviking", openVikingClient: index, operatorMetricsToken: "metrics-secret" });
+  const capsule = await app.capsuleService.create(user.id, { title: "Index outage" });
+  await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "preference", layer: "profile", content: "Prefer forest plots." });
+  await app.capsuleService.activate(user.id, capsule.id, { mode: "own" });
+  const account = (await app.store.userById(user.id)).accountCreatedAt;
+  const readiness = async () => (await (await fetch(`${base}/api/ready`)).json()).data.checks.memoryIndex;
+  const gauge = async () => (await (await fetch(`${base}/api/ops/metrics`, { headers: { authorization: "Bearer metrics-secret" } })).text())
+    .split("\n").filter((line) => line.startsWith("open_science_memory_recall_degraded"));
+
+  assert.equal((await readiness()).capsuleRecall, undefined, "nothing has failed yet");
+  assert.deepEqual(await gauge(), [
+    'open_science_memory_recall_degraded{code="none"} 0',
+    'open_science_memory_recall_degraded{arm="capsule",code="none"} 0',
+  ]);
+
+  index.find = async () => { throw Object.assign(new Error("index down"), { code: "memory_index_timeout", status: 503 }); };
+  const answered = await app.capsuleService.recall(user.id, { query: "forest", projectId: "default", accountCreatedAt: account });
+  assert.equal(answered.mode, "lexical", "the answer still comes, from PostgreSQL");
+  assert.deepEqual((await readiness()).capsuleRecall, { lastError: "memory_index_timeout" });
+  assert.equal((await readiness()).recall, undefined, "the research-memory arm is a separate state");
+  assert.deepEqual(await gauge(), [
+    'open_science_memory_recall_degraded{code="none"} 0',
+    'open_science_memory_recall_degraded{arm="capsule",code="memory_index_timeout"} 1',
+  ]);
+
+  index.find = async () => [];
+  await app.capsuleService.recall(user.id, { query: "forest", projectId: "default", accountCreatedAt: account });
+  assert.equal((await readiness()).capsuleRecall, undefined, "the index answered: no longer degraded");
+  assert.equal((await gauge())[1], 'open_science_memory_recall_degraded{arm="capsule",code="none"} 0');
+});
