@@ -421,10 +421,6 @@ export function evaluateRequirement(node, context) {
 
 /** @param {any} node @param {any} context @returns {RequirementVerdict} */
 function evaluateNode(node, context) {
-  if (['present', 'absent', 'compare', 'elapsed_since'].includes(node.op)) {
-    const competing = factsFor(context, String(node.variable)).filter(fact => fact.conflicts?.length);
-    if (competing.length) return unknownBecause(String(node.variable), 'conflicting_evidence', competing.map(citation));
-  }
   switch (node.op) {
     case "all": case "any": {
       const parts = (Array.isArray(node.operands) ? node.operands : []).map((child) => evaluateNode(child, context));
@@ -451,6 +447,18 @@ function evaluateNode(node, context) {
 /** @param {any} context @param {string} variable */
 function factsFor(context, variable) {
   return (context.facts ?? []).filter((fact) => String(fact?.variable ?? "") === String(variable ?? "")).map(fact => ({ ...fact, polarity: clinicalFactPolarity(fact) }));
+}
+
+/**
+ * A conflict between facts bears on a verdict only through a fact the verdict rests on. A disagreement about a reading
+ * or an event the criterion no longer looks at — a 2020 pair, an event outside the window, a value an aggregate does
+ * not select — must not block a clean recent fact that decides it (E-21); it stays on the record in `clinicalHistory`.
+ * @param {string} variable @param {readonly any[]} decisive the facts the verdict is about to rest on
+ * @returns {RequirementVerdict | null} `unknown / conflicting_evidence`, or null when none of them is in conflict
+ */
+function conflictingEvidence(variable, decisive) {
+  const competing = decisive.filter((fact) => fact.conflicts?.length);
+  return competing.length ? unknownBecause(variable, "conflicting_evidence", competing.map(citation)) : null;
 }
 
 /**
@@ -490,11 +498,13 @@ function evaluatePresence(node, context) {
 
   const wantPresent = node.op === "present";
   if (inside.length) {
-    return verdict(wantPresent ? SATISFIED : NOT_SATISFIED, { evidence: inside.map(citation) });
+    return conflictingEvidence(variable, inside)
+      ?? verdict(wantPresent ? SATISFIED : NOT_SATISFIED, { evidence: inside.map(citation) });
   }
-  if (undated.length) return unknownBecause(variable, "undated", undated.map(citation));
+  if (undated.length) return conflictingEvidence(variable, undated) ?? unknownBecause(variable, "undated", undated.map(citation));
   if (negated.length || outside.length) {
-    return verdict(wantPresent ? NOT_SATISFIED : SATISFIED, { evidence: [...negated, ...outside].map(citation) });
+    return conflictingEvidence(variable, [...negated, ...outside])
+      ?? verdict(wantPresent ? NOT_SATISFIED : SATISFIED, { evidence: [...negated, ...outside].map(citation) });
   }
   return unknownBecause(variable, "not_recorded");
 }
@@ -562,15 +572,21 @@ function evaluateCompare(node, context) {
   const candidates = placed.filter((item) => item.inside === true).map((item) => item.fact);
   if (!candidates.length) {
     const undated = placed.filter((item) => item.inside === null).map((item) => item.fact);
-    return undated.length ? unknownBecause(variable, "undated", undated.map(citation)) : unknownBecause(variable, "not_measured");
+    return undated.length ? conflictingEvidence(variable, undated) ?? unknownBecause(variable, "undated", undated.map(citation)) : unknownBecause(variable, "not_measured");
   }
   const aggregate = String(node.aggregate ?? "latest");
   const dated = candidates.filter((fact) => instant(fact?.occurredAt) !== null);
   const ordered = [...dated].sort((a, b) => (instant(b?.occurredAt) ?? 0) - (instant(a?.occurredAt) ?? 0));
   if (aggregate === "latest" && !ordered.length && candidates.length > 1) {
     // Several values and none of them dated: which is the latest cannot be said.
-    return unknownBecause(variable, "undated", candidates.map(citation));
+    return conflictingEvidence(variable, candidates) ?? unknownBecause(variable, "undated", candidates.map(citation));
   }
+  // The verdict rests on the latest reading (and any other at the same instant), or on every reading in the window when
+  // the aggregate is all or any; a disagreement among older readings is not asked about.
+  const decisive = aggregate !== "latest" ? candidates
+    : ordered.length ? ordered.filter((fact) => instant(fact.occurredAt) === instant(ordered[0].occurredAt)) : candidates.slice(0, 1);
+  const blocked = conflictingEvidence(variable, decisive);
+  if (blocked) return blocked;
   if (aggregate === 'latest' && ordered.length > 1) {
     const tied = ordered.filter(fact => instant(fact.occurredAt) === instant(ordered[0].occurredAt));
     const compared = tied.map(fact => compareFact(node,fact,context));
@@ -690,13 +706,16 @@ function evaluateElapsed(node, context) {
   });
   if (!dated.length) {
     // 「从未接受过」 is a complete answer to 「距上次治疗已满 N 天」.
-    if (denied.length && node.deniedSatisfies !== false) return verdict(SATISFIED, { evidence: denied.map(citation) });
+    if (denied.length && node.deniedSatisfies !== false) return conflictingEvidence(variable, denied) ?? verdict(SATISFIED, { evidence: denied.map(citation) });
     const undated = affirmed.filter((fact) => instant(fact?.occurredAt) === null);
-    if (undated.length) return unknownBecause(variable, "undated", undated.map(citation));
+    if (undated.length) return conflictingEvidence(variable, undated) ?? unknownBecause(variable, "undated", undated.map(citation));
     return unknownBecause(variable, "not_recorded");
   }
   const latest = [...dated].sort((a, b) => (instant(b.occurredAt) ?? 0) - (instant(a.occurredAt) ?? 0))[0];
   const at = /** @type {number} */ (instant(latest.occurredAt));
+  // The verdict rests on the last exposure (and any other at that instant); an older disagreement is not asked about.
+  const blocked = conflictingEvidence(variable, dated.filter((fact) => instant(fact.occurredAt) === at));
+  if (blocked) return blocked;
   const needed = Number(node.days ?? 0);
   const elapsed = daysBetween(at, context.asOf);
   const strict = String(node.comparator ?? "gte") === "gt";

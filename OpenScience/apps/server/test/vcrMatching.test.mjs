@@ -902,6 +902,49 @@ test('an explicit as-of replay uses a clinical fact the platform wrote later but
   assert.equal(assess(source.fact('血肌酐 1.1 mg/dL', { ...base, clinical, createdAt: '2026-10-05T00:00:00Z', visibleAt: '2026-09-20T00:00:00Z' })).factsWithheldAsFuture, 1);
 });
 
+test('an old same-event conflict does not block a criterion that a clean recent value decides; a conflict in the facts it rests on still does (E-21)', () => {
+  const clinical = { schema: 1, assertion: 'affirmed', experiencer: 'patient' };
+  /** @param {string} id @param {any} extra */
+  const fact = (id, extra) => ({ id, subjectKey: 'p1', extractedBy: 'snapshot', unit: 'mg/dL', variable: 'creatinine', polarity: 'affirmed', visibleAt: '2026-09-01T00:00:00Z',
+    createdAt: '2026-09-02T00:00:00Z', ...extra, clinical: { ...clinical, ...(extra.clinical ?? {}) } });
+  const oldPair = [
+    fact('old-a', { value: 1.0, occurredAt: '2020-03-01T00:00:00Z', clinical: { eventId: 'sample_2020' } }),
+    fact('old-b', { value: 2.4, occurredAt: '2020-03-01T00:00:00Z', clinical: { eventId: 'sample_2020' } }),
+  ];
+  const recent = fact('recent', { value: 1.1, occurredAt: '2026-09-01T00:00:00Z' });
+  const recentPair = [
+    fact('new-a', { value: 1.0, occurredAt: '2026-09-01T00:00:00Z', clinical: { eventId: 'sample_2026' } }),
+    fact('new-b', { value: 2.4, occurredAt: '2026-09-01T00:00:00Z', clinical: { eventId: 'sample_2026' } }),
+  ];
+  const lab = (/** @type {any} */ extra = {}) => ({ id: 'lab', kind: 'inclusion', requirement: { op: 'compare', variable: 'creatinine', comparator: 'lte', value: 1.5, unit: 'mg/dL', ...extra } });
+  const assess = (/** @type {any} */ criterion, /** @type {any[]} */ facts) => assessSubject({ criteria: [criterion], facts, asOf: AS_OF });
+
+  assert.equal(assess(lab(), [recent]).summary, 'eligible', 'the control: the recent value alone decides it');
+  const withOld = assess(lab(), [...oldPair, recent]);
+  assert.equal(withOld.summary, 'eligible', 'the 2020 disagreement is about a reading the criterion does not look at');
+  assert.deepEqual(withOld.clinicalHistory.conflicts.map(entry => entry.factId).sort(), ['old-a', 'old-b'], 'and it is still on the record');
+  assert.equal(assess(lab({ window: { months: 6 } }), [...oldPair, recent]).summary, 'eligible', 'outside the window it is not a party to the verdict either');
+  assert.equal(assess(lab({ aggregate: 'all' }), [...oldPair, recent]).judgments[0].missing[0]?.reason, 'conflicting_evidence', 'aggregate all rests on every reading in the window, the 2020 pair included');
+  // A conflict among the readings the verdict does rest on blocks as before.
+  for (const [label, facts] of /** @type {[string, any[]][]} */ ([['the latest readings disagree', [...recentPair, fact('older', { value: 0.9, occurredAt: '2025-01-01T00:00:00Z' })]], ['only conflicting readings', oldPair]])) {
+    const blocked = assess(lab(), facts);
+    assert.equal(blocked.summary, 'insufficient_evidence', label);
+    assert.deepEqual(blocked.evidenceGaps.map(gap => gap.reason), ['conflicting_evidence'], label);
+  }
+  // The same for a window of presence and for a washout: the recent clean fact decides, the old disagreement is not asked about.
+  /** @param {string} id @param {any} extra */
+  const exposure = (id, extra) => fact(id, { variable: 'docetaxel', unit: null, value: 'docetaxel', ...extra, clinical: { medication: { state: 'administered' }, ...(extra.clinical ?? {}) } });
+  const washout = { id: 'washout', kind: 'exclusion', requirement: { op: 'elapsed_since', variable: 'docetaxel', days: 28 } };
+  const oldExposures = [exposure('x-a', { occurredAt: '2020-03-01T00:00:00Z', clinical: { eventId: 'cycle1' } }), exposure('x-b', { occurredAt: '2020-03-01T00:00:00Z', polarity: 'negated', clinical: { eventId: 'cycle1', assertion: 'negated' } })];
+  assert.equal(assess(washout, [...oldExposures, exposure('x-recent', { occurredAt: '2026-06-01T00:00:00Z' })]).summary, 'eligible', 'decided by the last exposure, 119 days ago');
+  assert.equal(assess(washout, oldExposures).summary, 'insufficient_evidence', 'with nothing else the disagreement is all there is');
+  const noInfarction = { id: 'mi', kind: 'exclusion', requirement: { op: 'absent', variable: 'myocardial_infarction', window: { months: 6 } } };
+  const event = (/** @type {string} */ id, /** @type {any} */ extra) => fact(id, { variable: 'myocardial_infarction', unit: null, value: 'yes', ...extra });
+  const infarctions = [event('mi-a', { occurredAt: '2020-03-01T00:00:00Z', clinical: { eventId: 'mi2020' } }),
+    event('mi-b', { occurredAt: '2020-03-01T00:00:00Z', polarity: 'negated', clinical: { eventId: 'mi2020', assertion: 'negated' } })];
+  assert.equal(assess(noInfarction, [...infarctions, event('mi-new', { occurredAt: '2026-08-01T00:00:00Z' })]).summary, 'ineligible', 'the infarction inside the window decides it');
+});
+
 test('units that differ only in case compare as one unit, and units whose case changes the magnitude do not (E-09)', () => {
   const asOf = Date.parse(AS_OF);
   /** @param {string} wanted @param {string} observed */
