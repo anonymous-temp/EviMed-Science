@@ -277,7 +277,6 @@ export function buildProgrammeCard(input) {
   const comparisons = programmeComparisons({ candidates: input.comparisonCandidates, machineValues: input.machineValues, sourceCount: sourcesOut.length });
   const reviewed = candidates.some((entry) => entry.agendaClaim?.verification?.status === "recorded");
   const at = input.at.toISOString();
-  const context = `本卡由平台议程完成：${claims.length} 条结论的引文已逐字核对${independent ? `，其中 ${independent} 条经独立复核未被推翻` : ""}。`;
   const card = {
     title,
     subtype: "academic",
@@ -286,10 +285,9 @@ export function buildProgrammeCard(input) {
     sources: sourcesOut,
     limitations: [
       ...uncertainty.slice(0, 5),
-      excludedCount ? `另有 ${excludedCount} 条结论没有通过引文核对或复核，没有放进这张卡，留在平台的内部研究记录里。` : "",
     ].filter(Boolean).join("\n").slice(0, 12_000),
     provenance: programmeCardProvenance(input.agenda.id, input.taskType),
-    content: { question: input.question, answer, context, ...(comparisons.length ? { comparisons } : {}) },
+    content: { question: input.question, answer, ...(comparisons.length ? { comparisons } : {}) },
     claims,
     producer: { kind: "platform", name: EVIDENCE_PLATFORM_PRODUCER_NAME, relation: "none" },
     originality: "synthesis",
@@ -458,7 +456,7 @@ export function buildOriginalAnalysisCard(input) {
     .flatMap((claim) => [claim.calculation.valuePath, ...(claim.calculation.alsoValues ?? []).map((/** @type {any} */ also) => also.valuePath)]))));
   const lead = claims[0];
   const answer = `${finding ? "" : `${label}：`}${lead.claim}`.slice(0, 600);
-  const lines = claims.map((claim, position) => `${position + 1}. ${claim.claim}（${EVIDENCE_CALCULATION_LABEL_ZH}：${claim.calculation.method}，回执 ${claim.calculation.receiptId}）`);
+  const lines = claims.map((claim, position) => `${position + 1}. ${claim.claim}`);
   const body = [
     "## 平台计算的结论", ...lines,
     "", "## 报告规范", `按 ${standard} 报告规范写成。`,
@@ -473,12 +471,11 @@ export function buildOriginalAnalysisCard(input) {
     body,
     sources,
     limitations: [
-      multiplicity.status === "not_reported" ? `${ORIGINAL_ANALYSIS_LABELS.multiplicityNotReported}：这次分析检验了多个假设，引擎的回执没有说明是否做过校正。` : "",
+      multiplicity.status === "not_reported" ? `${ORIGINAL_ANALYSIS_LABELS.multiplicityNotReported}：这次分析检验了多个假设，结果里没有说明是否做过校正。` : "",
       finding ? "" : "这是一项尚未在第二个独立数据集中复现的信号，不能当作发现。",
-      "数字由平台的分析引擎计算，每个数字都可以在引用的回执里按路径读回。",
     ].filter(Boolean).join("\n").slice(0, 12_000),
     provenance: programmeCardProvenance(input.agenda.id, input.taskType),
-    content: { question: input.question, answer, context: `本卡由平台议程完成：${claims.length} 条结论的数字来自分析引擎的回执。按 ${standard} 报告规范写成。` },
+    content: { question: input.question, answer, context: `按 ${standard} 报告规范写成。` },
     claims,
     producer: { kind: "platform", name: EVIDENCE_PLATFORM_PRODUCER_NAME, relation: "none" },
     originality: "original_analysis",

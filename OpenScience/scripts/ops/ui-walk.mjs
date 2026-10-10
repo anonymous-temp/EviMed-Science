@@ -220,6 +220,7 @@ export const BACK_OFFICE = [
   // Why a request was routed as it was is the ledger's, not a sentence for the researcher.
   /按问题内容交给/, /这个问题不需要交付报告/, /路由判断没有给出结论/,
   // An evidence card: whether an AI reviewed it, and what the upkeep rounds kept from the last reading.
+  /引擎\s+\S+\s*·\s*方法\s+\S+\s*·\s*回执/, /\S+\s*·\s*\S+@\S+\s*·\s*回执/, /没有对上引擎回执/, /平台保存的回执/, /本卡由平台议程完成/, /证明哈希/, /留在平台的内部研究记录/,
   /AI 已评议/, /AI 待评议/, /当前内容(?:已完成 AI 评议|待重新评议)/, /沿用上次保留内容/, /上次成功读取于/, /本轮(?:未能重新读取|尚未核查)/, /部分来源(?:本轮尚未完成复核|待复核)/,
 ];
 

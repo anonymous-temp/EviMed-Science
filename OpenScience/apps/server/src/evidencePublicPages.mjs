@@ -31,7 +31,7 @@ const CLAIM_STATUS_LABELS = {
   derived: "分析者自己的推算，没有引文可核对；它的方法和假设写在下面",
   // Added when a ✓ came to mean the platform read the source (author_excerpt_only) and when the platform began to compute (calculation_unverified).
   author_excerpt_only: "引文只在作者自己提供的摘录里找到，平台没有读到来源原文，所以不标 ✓",
-  calculation_unverified: "这个数由平台的计算引擎给出，这里没有读到它的计算回执，所以不标 ✓",
+  calculation_unverified: "这个数是平台计算的，没有核对上，所以不标 ✓",
   unknown: "核对状态未知",
 };
 const COVERAGE_LABELS = { "full-text": "全文", abstract: "摘要", excerpt: "摘录" };

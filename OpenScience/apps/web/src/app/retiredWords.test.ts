@@ -76,6 +76,15 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["缺少原文链接", "same"],
   ["部分来源待复核", "same"],
   ["部分来源本轮尚未完成复核", "same"],
+  // An evidence card's engine, method and receipt id (R30), and the notices about a receipt that did not hold, are the back office's; the claim
+  // type 平台计算, the claim's mark and the card's own content are not.
+  ["没有对上引擎回执", "a receipt that did not hold is a claim that did not check out (未核对上), not a sentence about the engine"],
+  ["引擎回执没有对上", "same"],
+  ["回执没有对上这些数字", "same"],
+  ["平台保存的回执", "same"],
+  ["本卡由平台议程完成", "a card does not say that the platform's agenda made it"],
+  ["证明哈希", "a card does not carry the evaluator's proof hash"],
+  ["内部研究记录", "a card does not tell its reader what the platform keeps in its internal project"],
   // Why the platform routed a request as it did (R28) is the ledger's machine reason, for operations; no sentence for the reader.
   ["按问题内容交给", "a run's route is not explained to the researcher"],
   ["不需要交付报告", "same"],

@@ -90,6 +90,13 @@ test("a card page shows the producer first, the marks, the quotations, the sourc
   assert.equal(/style=/.test(body), false, "no inline style");
 });
 
+test("a calculated claim that did not check out says so in the words of the check, with no engine and no receipt (R30, 2026-10-10)", () => {
+  const body = String(cardPage({ card: card({ claimList: [{ claimId: "CALC-1", claimType: "calculated", text: "报告比值比为 2.40。", mark: "⚠", status: "calculation_unverified", quotes: [], applicability: null, uncertainty: null, confidence: null, valueSource: "calculated" }] }), links, view: "clinical" }).body);
+  assert.ok(body.includes("这个数是平台计算的，没有核对上，所以不标 ✓"));
+  assert.match(body, /平台计算/, "the claim's type stays");
+  assert.doesNotMatch(body, /计算引擎给出|计算回执/);
+});
+
 test("renderPage writes noindex, the canonical address, lang, the AI-content metadata and no structured markup for machines that read answers", () => {
   const page = cardPage({ card: card(), links, view: "clinical" });
   const aigc = aigcMetadata({ producerName: "EviMed 证据中心", produceId: "ec_0123456789ab@2", propagateId: "ec_0123456789ab@2" });

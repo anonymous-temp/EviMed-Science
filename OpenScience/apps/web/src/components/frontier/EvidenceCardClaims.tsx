@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { EVIDENCE_AI_STEP_LABELS_ZH, EVIDENCE_CALCULATION_LABEL_ZH, EVIDENCE_CALCULATION_REASON_LABELS_ZH } from "@evimed/domain";
+import { EVIDENCE_AI_STEP_LABELS_ZH, EVIDENCE_CALCULATION_LABEL_ZH } from "@evimed/domain";
 import { Tag } from "@/components/ui/Tag";
 import type { EvidenceCard, EvidenceClaim, EvidenceClaimMark } from "@/lib/evidenceZoneClient";
 import type { EvidenceChallengeView } from "@/lib/evidenceUpkeepClient";
@@ -16,18 +16,6 @@ const STATUS_TEXT: Record<string, string> = {
   author_excerpt_only: "摘录由作者提供，平台未读取原文",
 };
 const CONFIDENCE: Record<string, string> = { high: "高", moderate: "中", low: "低" };
-
-/** Where a number the platform computed can be read back from, and why a ⚠ is one: engine, method and receipt, and the sentence for the reason. */
-function Calculation({ claim }: { claim: EvidenceClaim }) {
-  const basis = claim.calculation;
-  const reason = claim.verification?.status === "calculation_unverified" ? (EVIDENCE_CALCULATION_REASON_LABELS_ZH as Record<string, string>)[claim.verification.reason ?? ""] ?? "没有核对" : null;
-  return (
-    <div className="mt-1 text-caption text-text-3">
-      {basis && <p>引擎 {basis.engine} · 方法 {basis.method} · 回执 {basis.receiptId}</p>}
-      {reason && <p className="text-verify-pending">{reason}</p>}
-    </div>
-  );
-}
 
 function Mark({ mark }: { mark: EvidenceClaimMark | undefined }) {
   if (mark === "✓") return <span className="mr-1 text-verify-ok" aria-label="引文已核对">✓</span>;
@@ -73,7 +61,6 @@ function ClaimItem({ evidence, claim, challenges }: { evidence: EvidenceCard; cl
       {type === "synthesized" && claim.supportingSources?.map((bond) => (
         <Quote key={bond.sourceIndex} evidence={evidence} index={bond.sourceIndex} quote={bond.supportQuote} mark={statusOf(bond.sourceIndex)?.mark} status={statusOf(bond.sourceIndex)?.status} showMark />
       ))}
-      {type === "calculated" && <Calculation claim={claim} />}
       {type === "derived" && (
         <div className="mt-1 space-y-1 text-caption text-text-3">
           {claim.method && <p>方法：{claim.method}</p>}

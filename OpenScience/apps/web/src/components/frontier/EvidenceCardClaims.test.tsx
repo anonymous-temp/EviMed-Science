@@ -36,18 +36,20 @@ describe("the claims of a card", () => {
     expect(screen.getByText("“q2”")).toBeInTheDocument();
     expect(screen.getByLabelText("未核对上")).toBeInTheDocument();
   });
-  it("shows a calculated claim as 平台计算 with its engine, method and receipt, and a ⚠ with the sentence for why its receipt did not hold", () => {
+  // R30, 2026-10-10: the claim-type tag 平台计算 is content (how the number came about); the engine, the method and the receipt id behind it, and the
+  // sentence for why a receipt did not hold, are the back office's. A ⚠ is the mark the product fixed for a claim that did not check out.
+  it("shows a calculated claim as 平台计算 with its mark, and neither its engine, method and receipt nor why a receipt did not hold", () => {
     const basis = { engine: "drug_safety_analysis", method: "faers.signals@1.1.0", receiptId: `rv_${"a".repeat(64)}`, valuePath: "values[0].ror.value", machineValue: 2.4012, format: "f2" };
-    render(<EvidenceClaims evidence={{ ...card, claims: [
+    const { container } = render(<EvidenceClaims evidence={{ ...card, claims: [
       { text: "报告比值比为 2.40。", claimId: "CALC-1", claimType: "calculated", calculation: basis, verification: { claimId: "CALC-1", claimType: "calculated", status: "verified", mark: "✓", sources: [] } },
       { text: "报告数为 1,234。", claimId: "CALC-2", claimType: "calculated", calculation: basis, verification: { claimId: "CALC-2", claimType: "calculated", status: "calculation_unverified", reason: "value_mismatch", mark: "⚠", sources: [] } },
     ] }} />);
     const [held, lost] = screen.getAllByRole("listitem");
     expect(within(held).getByText("平台计算")).toBeInTheDocument();
-    expect(within(held).getByText(`引擎 drug_safety_analysis · 方法 faers.signals@1.1.0 · 回执 rv_${"a".repeat(64)}`)).toBeInTheDocument();
+    expect(within(lost).getByText("平台计算")).toBeInTheDocument();
     expect(within(held).getByLabelText("引文已核对")).toHaveTextContent("✓");
     expect(within(lost).getByLabelText("未核对上")).toHaveTextContent("⚠");
-    expect(within(lost).getByText("回执里的数值与结论记录的机器值不一致")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/引擎|方法 faers|回执|drug_safety_analysis|faers\.signals|机器值|不一致/);
     expect(within(held).queryByText(/来源 \d/)).not.toBeInTheDocument();
   });
   it("shows a claim of an older card as a plain line, and draws nothing for a card with none", () => {
