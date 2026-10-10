@@ -118,6 +118,11 @@ const operatorLevers = {
   OPEN_SCIENCE_MEMORY_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES: ["open-science-web"],
+  // The standing profile a conversation is handed up front and the recall tool's answer size (review M6, 2026-10-10): limits on what
+  // reaches the model, which an operator tunes and which must not fall back to the default unseen.
+  OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS: ["open-science-web"],
+  OPEN_SCIENCE_MEMORY_RECALL_TOOL_LIMIT: ["open-science-web"],
+  OPEN_SCIENCE_MEMORY_RECALL_TOOL_MAX_LIMIT: ["open-science-web"],
   // The two delegation limits that replaced `maxParallelChildren` (2026-09-18).
   // The controller builds the hosted launch plan and so is the service that
   // actually writes them into a runtime container; the web API builds it when

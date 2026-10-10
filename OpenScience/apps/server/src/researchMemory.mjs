@@ -1817,6 +1817,57 @@ export class ResearchMemoryStore {
   }
 
   /**
+   * What this conversation was last handed of the resident profile, and when the kernel last compacted it (review M6): the
+   * digest of the block it was given, when, and the compaction that came after — a compaction takes the block out of the
+   * history it was written into, so the next dispatch hands it over again.
+   * @param {string} userId @param {string} projectId @param {string} sessionId
+   *
+   * `compactedSince` is whether the compaction came after the hand-over, decided by the database at its own precision: the two
+   * instants below are milliseconds, and a compaction in the millisecond of a hand-over is later than it.
+   * @returns {Promise<{ digest: string | null, deliveredAt: string | null, compactedAt: string | null, compactedSince: boolean }>}
+   */
+  async residentState(userId, projectId, sessionId) {
+    const result = await this.#query(`SELECT resident_digest, resident_delivered_at, compacted_at,
+        (compacted_at IS NOT NULL AND (resident_delivered_at IS NULL OR compacted_at > resident_delivered_at)) AS compacted_since
+      FROM evimed_memory.sessions WHERE user_id=$1 AND project_id=$2 AND session_id=$3`,
+    [assertUserId(userId), assertProjectId(projectId), assertSessionId(sessionId)]);
+    const row = result.rows[0];
+    return {
+      digest: typeof row?.resident_digest === "string" ? row.resident_digest : null,
+      deliveredAt: row?.resident_delivered_at ? new Date(row.resident_delivered_at).toISOString() : null,
+      compactedAt: row?.compacted_at ? new Date(row.compacted_at).toISOString() : null,
+      compactedSince: row?.compacted_since === true,
+    };
+  }
+
+  /**
+   * The conversation was handed the profile whose digest this is, now. Called after the prompt that carried it was accepted,
+   * so a dispatch that failed leaves the next one to hand it over.
+   * @param {string} userId @param {string} projectId @param {string} sessionId @param {string} digest
+   */
+  async noteResidentDelivered(userId, projectId, sessionId, digest) {
+    if (!/^[a-f0-9]{64}$/.test(String(digest))) throw invalid("digest");
+    await this.#query(`INSERT INTO evimed_memory.sessions AS s (user_id, project_id, session_id, resident_digest, resident_delivered_at)
+      VALUES ($1, $2, $3, $4, clock_timestamp())
+      ON CONFLICT (user_id, project_id, session_id) DO UPDATE SET resident_digest = $4, resident_delivered_at = clock_timestamp(),
+        updated_at = date_trunc('second', clock_timestamp())`,
+    [assertUserId(userId), assertProjectId(projectId), assertSessionId(sessionId), digest]);
+  }
+
+  /**
+   * The kernel compacted this conversation, now. A conversation that was never handed the profile has nothing to lose, and
+   * the row this writes says nothing until one is.
+   * @param {string} userId @param {string} projectId @param {string} sessionId
+   */
+  async noteCompaction(userId, projectId, sessionId) {
+    await this.#query(`INSERT INTO evimed_memory.sessions AS s (user_id, project_id, session_id, compacted_at)
+      VALUES ($1, $2, $3, clock_timestamp())
+      ON CONFLICT (user_id, project_id, session_id) DO UPDATE SET compacted_at = clock_timestamp(),
+        updated_at = date_trunc('second', clock_timestamp())`,
+    [assertUserId(userId), assertProjectId(projectId), assertSessionId(sessionId)]);
+  }
+
+  /**
    * The rows a recall can use, selected by what it needs: the records its reader may be handed (the researcher's own, this
    * project's, this conversation's; never a run summary or a sensitive one), in a status it can use, and either of a durable kind
    * (the long-term profile applies to every question) or mentioning a word of the question. Validity at the time asked, the
@@ -1887,13 +1938,71 @@ export class ResearchMemoryStore {
    * index: the index holds what is in force now and nothing else, and the
    * versions that held then are in the authority.
    *
+   * `standing: false` is the recall tool's reading (review M6, 2026-10-10): only what the question's own words match. The
+   * researcher's standing profile is handed to a conversation up front (`residentRecords`), so the tool that looks things
+   * up must not pad its answer with it — an empty answer has to be able to be empty.
+   *
    * @param {string} userId @param {string} query
-   * @param {{ projectId?: string|null, sessionId?: string|null, asOf?: number|null, now?: number }} scope
+   * @param {{ projectId?: string|null, sessionId?: string|null, asOf?: number|null, now?: number, standing?: boolean }} scope
    *   `asOf`/`now` in epoch milliseconds; `now` is injectable so the time a
    *   recall is made in is never read behind a test's back.
    */
-  async relevant(userId, query, { projectId = null, sessionId = null, asOf = null, now = Date.now() } = {}) {
+  async relevant(userId, query, { projectId = null, sessionId = null, asOf = null, now = Date.now(), standing = true } = {}) {
     if (!this.configured || this.contextLimit === 0 || this.contextMaxChars === 0) return [];
+    const ranked = await this.#ranked(userId, query, { projectId, sessionId, asOf, now, standing });
+    return selectWithinBudget(ranked, {
+      contextLimit: this.contextLimit,
+      contextMaxChars: this.contextMaxChars,
+    });
+  }
+
+  /**
+   * The researcher's standing profile: the records of the durable kinds (profile, preference, behavior, correction) in force
+   * for this conversation, most important first, at most `limit` — what a conversation is handed up front
+   * (`ResidentProfiles`) and the only memory that is pushed. Everything else is looked up by the recall tool.
+   *
+   * The same decision as a recall makes (`#ranked`), asked with no question: scope, expiry, validity, one version of each
+   * fact, and the labels a reader must see (a disagreement, a retracted source). Each memo's text is cut to `entryChars`, so
+   * one long record cannot take the whole block.
+   * @param {string} userId
+   * @param {{ projectId?: string|null, sessionId?: string|null, now?: number, limit?: number, entryChars?: number }} [scope]
+   */
+  async residentRecords(userId, { projectId = null, sessionId = null, now = Date.now(), limit = 24, entryChars = 400 } = {}) {
+    if (!this.configured) return [];
+    const bound = Math.max(0, Math.min(100, Math.trunc(Number(limit)) || 0));
+    if (bound === 0) return [];
+    const ranked = await this.#ranked(userId, "", { projectId, sessionId, asOf: null, now, standing: true });
+    return ranked.filter((row) => DURABLE_RECALL_KINDS.has(row.memo.kind)).slice(0, bound)
+      .map((row) => ({ ...row.memo, content: Array.from(row.memo.content).slice(0, entryChars).join("") }));
+  }
+
+  /**
+   * How many memories there are to look up that the profile does not carry, by scope: what the line beside the profile says
+   * (review M6). Active, in force, not sensitive, not a run summary (the timeline's), not of a durable kind (those are the
+   * profile's), and readable from this conversation.
+   * @param {string} userId
+   * @param {{ projectId?: string|null, sessionId?: string|null }} [scope]
+   * @returns {Promise<{ user: number, project: number, session: number }>}
+   */
+  async lookupCounts(userId, { projectId = null, sessionId = null } = {}) {
+    const counts = { user: 0, project: 0, session: 0 };
+    if (!this.configured) return counts;
+    const result = await this.#query(`SELECT scope, count(*)::integer AS n FROM evimed_memory.records
+      WHERE user_id=$1 AND status='active' AND NOT sensitive AND kind<>'run_summary' AND kind<>ALL($4::text[])
+        AND (expires_at IS NULL OR expires_at > clock_timestamp())
+        AND (invalid_since IS NULL OR invalid_since > clock_timestamp())
+        AND (scope='user' OR (scope='project' AND scope_id=$2) OR (scope='session' AND scope_id=$3))
+      GROUP BY scope`, [assertUserId(userId), projectId == null ? null : String(projectId), sessionId == null ? null : String(sessionId), [...DURABLE_RECALL_KINDS]]);
+    for (const row of result.rows) if (row.scope in counts) counts[/** @type {keyof typeof counts} */ (row.scope)] = Number(row.n) || 0;
+    return counts;
+  }
+
+  /**
+   * The candidates a recall can use, scored and ordered, before any budget.
+   * @param {string} userId @param {string} query
+   * @param {{ projectId: string|null, sessionId: string|null, asOf: number|null, now: number, standing: boolean }} scope
+   */
+  async #ranked(userId, query, { projectId, sessionId, asOf, now, standing }) {
     const terms = searchTokens(query);
     const past = asOf != null && asOf < now;
     // History is recallable only for a question about the time before it was
@@ -1935,7 +2044,7 @@ export class ResearchMemoryStore {
           // else has to earn recall with a query-term match: importance and
           // confidence alone put the score above zero, so without this a
           // greeting would pull every stored run summary into the prompt.
-          recallable: durable || matches > 0,
+          recallable: (standing && durable) || matches > 0,
           score,
         };
       })
@@ -1960,11 +2069,7 @@ export class ResearchMemoryStore {
     }));
     const byScore = (left, right) =>
       right.score - left.score || String(right.memo.updatedAt).localeCompare(String(left.memo.updatedAt));
-    const ranked = [...structured].sort(byScore);
-    return selectWithinBudget(ranked, {
-      contextLimit: this.contextLimit,
-      contextMaxChars: this.contextMaxChars,
-    });
+    return [...structured].sort(byScore);
   }
 
   /**

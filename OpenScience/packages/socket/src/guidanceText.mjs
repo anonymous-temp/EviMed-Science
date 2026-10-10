@@ -132,7 +132,7 @@ function sharedGuidanceLines(capsuleActive, capsuleTool = true) {
     '- 文献与指南是证据的来源（`mcp__evimed__literature_search`、`mcp__evimed__guideline_search`、`mcp__evimed__clinical_trial_search`）。',
     '- 网页只作线索，不作证据（`mcp__evimed__web_search`）。',
     ...(capsuleActive && capsuleTool
-      ? ['- 需要用户既往的资料、口径或偏好时再查记忆与胶囊（`evimed_capsule_recall`）；与本次题面相关的记忆平台已经注入在上下文里，不必每次开场都查一遍。']
+      ? ['- 用户长期的画像与偏好已在上下文里；既往的决定、项目资料与胶囊里的事实在需要时用 `evimed_capsule_recall` 查，自成一体的问题不必查。']
       : []),
     '',
     // The one thing the runtime never said about its own memory.

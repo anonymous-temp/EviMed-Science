@@ -2494,6 +2494,22 @@ export function loadConfig(overrides = {}) {
     memoryContextMaxChars: Number(
       overrides.memoryContextMaxChars ?? process.env.OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS ?? 20_000,
     ),
+    // The standing profile a conversation is handed up front (review M6, 2026-10-10): the most entries it carries, research
+    // records and capsule entries together, inside the 1,500 tokens the block is held to. What is always present is paid for on
+    // every request and takes attention from the question, so it is capped; the rest is the recall tool's, and the line beside
+    // the profile says how many there are.
+    memoryProfileMaxRecords: Number(
+      overrides.memoryProfileMaxRecords ?? process.env.OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS ?? 24,
+    ),
+    // How many items the recall tool answers with when the model does not say, and the most it may ask for. The tool is the
+    // one path to episodic and project memory, and an answer is read by the model whole: five, eight at most, each above the
+    // relevance floor below.
+    memoryRecallToolLimit: Number(
+      overrides.memoryRecallToolLimit ?? process.env.OPEN_SCIENCE_MEMORY_RECALL_TOOL_LIMIT ?? 5,
+    ),
+    memoryRecallToolMaxLimit: Number(
+      overrides.memoryRecallToolMaxLimit ?? process.env.OPEN_SCIENCE_MEMORY_RECALL_TOOL_MAX_LIMIT ?? 8,
+    ),
     // The similarity below which an index hit is not offered: by the memory
     // page's search (2026-09-26 audit, M-4: 「信尔美」 also listed five unrelated
     // memories of another project) and, since 2026-10-10 (review M-3), by the
@@ -2501,7 +2517,8 @@ export function loadConfig(overrides = {}) {
     // neighbours. Measured on the pinned embedder (qwen3.7-text-embedding,
     // 2026-09-14): relevant hits score 0.71–0.87, unrelated ones fall to about
     // 0.21. The durable kinds (profile, preference, behavior, correction) are
-    // recalled whatever they score; recall keeps its own budget.
+    // not looked up under it: they are the standing profile, handed to a
+    // conversation up front whatever they would score (`memoryProfileMaxRecords`).
     memorySearchMinScore: Number(
       overrides.memorySearchMinScore ?? process.env.OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE ?? 0.5,
     ),

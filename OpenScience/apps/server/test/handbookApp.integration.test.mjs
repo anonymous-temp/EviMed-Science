@@ -8,6 +8,7 @@ import { issueEviMedWorkloadToken } from "../src/runtimeManager.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { frontmatter, BODY } from "./helpers/handbookFixture.mjs";
+import { noProfile } from "./helpers/residentProfileDouble.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 test("actual application consumes a reviewed lesson and sends its exact receipt through authenticated dispatch", { skip: !databaseUrl }, async () => {
@@ -45,7 +46,7 @@ test("actual application consumes a reviewed lesson and sends its exact receipt 
     const bind = await fetch(`${base}/api/research-sessions/next-session`, { method: "PUT", headers,
       body: JSON.stringify({ mode: "specialist", agentId: selected.id, agentVersion: selected.version }) });
     assert.equal(bind.status, 200);
-    app.memorySubstrate.recall = async () => [];
+    app.residentProfiles.forDispatch = noProfile;
     await app.runtimeManager.start(project);
     let prompt;
     app.runtimeManager.dispatchPrompt = async (_project, _session, input) => { prompt = input; return { accepted: true }; };

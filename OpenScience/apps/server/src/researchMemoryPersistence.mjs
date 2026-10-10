@@ -250,6 +250,13 @@ CREATE TABLE IF NOT EXISTS evimed_memory.sessions (
 );
 ALTER TABLE evimed_memory.sessions DROP COLUMN IF EXISTS incognito;
 ALTER TABLE evimed_memory.sessions DROP COLUMN IF EXISTS excluded;
+-- What a conversation was last handed of the resident profile (2026-10-10, review M6): the digest of the block and when it
+-- was handed over, and when the kernel last compacted the conversation. The profile is given to a conversation at its first
+-- dispatch and again only when it changed or the conversation was compacted since; this is how a dispatch knows which.
+ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS resident_digest text
+  CHECK (resident_digest IS NULL OR resident_digest ~ '^[a-f0-9]{64}$');
+ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS resident_delivered_at timestamptz(3);
+ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS compacted_at timestamptz(3);
 -- A conversation that tries a capsule someone shared (「试用一次」): the pack
 -- it is handed as context. It writes nothing into the researcher's own
 -- memory (memoryPausedFor) while the trial lasts.
