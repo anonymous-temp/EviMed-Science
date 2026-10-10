@@ -204,6 +204,8 @@ export interface GeoProject {
   producer?: GeoProducer | null;
   /** The one product zone the project's cards are in, once there is one. */
   productZoneId?: string | null;
+  /** What the evidence cards wait for: the project's producer, or a reviewing doctor; null when nothing holds them back. */
+  cards?: { blockedBy: "producer" | "reviewer" | null } | null;
   /** Who is reading, and what their roles in the project allow (the owner has every ability). */
   access?: { roles: string[]; abilities: string[]; owner: boolean };
 }

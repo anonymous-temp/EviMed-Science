@@ -34,6 +34,13 @@ const LAYERS: readonly GeoArticleLayer[] = ["deep", "card", "popular", "qa", "co
 
 type Pending = { kind: "withdraw" | "release"; article: GeoArticle } | null;
 
+/** What the evidence cards wait for, said where the articles that cite them are: the server refuses to write them until
+ *  the project names its producer and a reviewing doctor, and the page said nothing (review 2026-10-10 D-28). */
+const CARDS_WAIT: Record<"producer" | "reviewer", string> = {
+  producer: "设置出品方后，已核实的结论会成为证据卡片。",
+  reviewer: "添加审核医生后，已核实的结论会成为证据卡片。",
+};
+
 /**
  * 内容 (plan §3.6, mockup g09): the articles, by layer, with where each one
  * stands. The row's one action opens the article in the report reader, in the
@@ -101,6 +108,7 @@ function Articles({ geoId, project, articles, notice, onChanged }: { geoId: stri
       <div>
         <Pipeline articles={articles} />
         {notice}
+        {project.cards?.blockedBy && <p className="mt-3 max-w-measure text-ui text-text-2">{CARDS_WAIT[project.cards.blockedBy]}</p>}
       </div>
       <div>
         <FilterRow summary={`${needle ? "匹配 " : ""}${matching.length} 篇`}>

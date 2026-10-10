@@ -103,6 +103,24 @@ beforeEach(() => {
   client.runGeoStep.mockResolvedValue({ sessionId: "ses_geo_1" });
 });
 
+describe("内容: what the evidence cards wait for", () => {
+  it.each([
+    ["producer", "设置出品方后，已核实的结论会成为证据卡片。"],
+    ["reviewer", "添加审核医生后，已核实的结论会成为证据卡片。"],
+  ] as const)("says what to set when the cards wait for the %s", async (blockedBy, sentence) => {
+    client.getGeoArticles.mockResolvedValue(articlesFilled);
+    renderTab(<ContentTab {...props({ ...geoProject(), cards: { blockedBy } })} />);
+    expect(await screen.findByText(sentence)).toBeInTheDocument();
+  });
+
+  it("says nothing about cards once nothing holds them back", async () => {
+    client.getGeoArticles.mockResolvedValue(articlesFilled);
+    renderTab(<ContentTab {...props({ ...geoProject(), cards: { blockedBy: null } })} />);
+    expect(await screen.findByLabelText("搜索稿件")).toBeInTheDocument();
+    expect(screen.queryByText(/会成为证据卡片/)).not.toBeInTheDocument();
+  });
+});
+
 describe("a tab with nothing yet", () => {
   it("says one quiet line while the step is being worked on", async () => {
     client.getGeoEvidence.mockResolvedValue({ product: {}, competitors: [], claims: [] });
