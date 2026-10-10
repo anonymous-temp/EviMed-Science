@@ -229,7 +229,9 @@ the null; none estimable is `negative_controls_not_estimable`. Only a 0/1 column
 analysed in the engine; a time-to-event control comes in as an estimate. A result
 computed only from estimates, or from tipping-point counts, that a caller typed
 labels its measures `aggregate` (a summary, not patients); one that analysed a column
-says `calculated`.
+says `calculated`, or `imputed` when a column it used is (`diagnostics.valueSourcesUsed` lists the
+columns it used and the weakest of their sources, as the weighting jobs do; the tipping-point and
+prognostic-adjustment results do the same, N32e).
 
 **Tipping point.** Binary: the reference cell is how the primary analysis treated the
 missing (`non_responders`, the corner (0, 0), or `complete_cases`, the missing
