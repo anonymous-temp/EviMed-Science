@@ -1825,6 +1825,7 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
   sc <- job$scenario
   sites <- sc$sites
   if (!is.list(sites) || !length(sites)) vcr_abort("scenario_field_missing", "scenario.sites", "An accrual forecast lists its sites, each with its rate posterior.")
+  ids <- vapply(sites, function(s) as.character(s[["id"]] %||% ""), character(1))
   alpha <- vapply(sites, function(s) vcr_scalar(s$alpha, NA_real_), numeric(1))
   beta <- vapply(sites, function(s) vcr_scalar(s$beta, NA_real_), numeric(1))
   start <- vapply(sites, function(s) vcr_scalar(s$startTime, 0), numeric(1))
@@ -1842,6 +1843,9 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
   # a site that is already open contributes from now on; the process is
   # memoryless, so a negative start time is a zero
   model <- vcr_accrual_model(length(sites), alpha, beta, pmax(start, 0), screen)
+  # a site's id is its name in the scenario and in the result: what each site brought to the forecast, under that name
+  site_rows <- lapply(seq_along(sites), function(i) list(id = ids[i], meanRate = alpha[i] / beta[i], startTime = start[i],
+                                                         enrolled = enrolled[i], exposureTime = exposure[i]))
   ev_target <- vcr_scalar(sc$eventTarget, NULL); ev_h <- vcr_scalar(sc$eventHazard, NULL)
   if (!is.null(ev_target)) {
     if (is.null(ev_h) || !(ev_h > 0)) vcr_abort("scenario_field_missing", "scenario.eventHazard", "A target event count needs the per-patient event hazard (per month).")
@@ -1863,7 +1867,8 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
     return(list(status = "succeeded",
                 measures = list(vcr_measure("last_patient_in_months", 0, source = "calculated",
                                             note = "The enrolment target is already met.")),
-                counts = vcr_counts(), diagnostics = list(remaining = 0, quantiles = as.list(stats::setNames(rep(0, length(probs)), paste0("p", probs * 100))))))
+                counts = vcr_counts(), diagnostics = list(remaining = 0, quantiles = as.list(stats::setNames(rep(0, length(probs)), paste0("p", probs * 100))),
+                                                          sites = site_rows)))
   }
   measures <- list(); tables <- list(); diag <- list()
   if (closed) {
@@ -1914,7 +1919,7 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
     }
   }
   list(status = "succeeded", measures = measures, counts = vcr_counts(),
-       diagnostics = c(diag, list(model = list(nSites = model$nSites, meanRatePerSite = model$meanRatePerSite),
+       diagnostics = c(diag, list(model = list(nSites = model$nSites, meanRatePerSite = model$meanRatePerSite), sites = site_rows,
                                   unavailable = list(screenFailureRate = is.null(screen)))),
        tables = .vcr_tables_of(tables))
 }

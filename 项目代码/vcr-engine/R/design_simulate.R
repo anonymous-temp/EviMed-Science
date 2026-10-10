@@ -149,7 +149,7 @@ VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk
     }))
   }
   n1<-vcr_scalar(d$n1);r1<-vcr_scalar(d$r1);r<-vcr_scalar(d$r)
-  list(estimand=p-p0,run=function(i){
+  list(estimand=p-p0,frozenDesign=.vcr_simon_frozen_design(sc,n1,r1,n,r,p0),run=function(i){
     x1<-stats::rbinom(1,n1,p);stop_early<-x1<=r1
     size<-if(stop_early)n1 else n
     x<-x1+if(stop_early)0 else stats::rbinom(1,n-n1,p)
@@ -160,6 +160,24 @@ VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk
   })
 }
 
+#' What a frozen Simon two-stage design is, exactly, at the two rates it was built around: its rejection probability, probability of
+#' stopping early and expected sample size at the null rate and at the alternative rate (exact enumeration, no simulation), and, when the
+#' scenario states `analysis.alpha`, whether the type I error at the null rate is within it. The boundaries are given, so nothing here
+#' changes what the simulation does; it is where `truth.alternativeRate` and `analysis.alpha`, which no frozen rule needs, take effect.
+.vcr_simon_frozen_design <- function(sc, n1, r1, n, r, p0) {
+  at <- function(rate) {
+    pet <- stats::pbinom(r1, n1, rate)
+    list(rate = rate, rejectionProbability = .vcr_simon_prob(rate, n1, n, r1, r), earlyStopProbability = pet, expectedSampleSize = n1 + (1 - pet) * (n - n1))
+  }
+  p1 <- vcr_scalar(sc$truth[["alternativeRate"]], NULL)
+  alpha <- vcr_scalar(sc[["analysis"]][["alpha"]], NULL)
+  null_at <- at(p0)
+  list(boundaries = list(n1 = n1, r1 = r1, n = n, r = r), atNullRate = null_at,
+       atAlternativeRate = if (is.null(p1)) NULL else at(p1),
+       alpha = alpha, typeOneErrorWithinAlpha = if (is.null(alpha)) NULL else null_at$rejectionProbability <= alpha + 1e-12,
+       basis = "exact_binomial_enumeration")
+}
+
 #' A synthetic external-control operating-characteristic model, not observed
 #' controls: fixed target covariate mixture, selected historical mixture, two
 #' stratum response laws and finite beta parameter information. Standardizing
@@ -167,6 +185,7 @@ VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk
 #' uncorrected by the analysis and its resulting bias is deliberately measured.
 .vcr_external_binary_runner <- function(sc,alpha,sided) {
   ex<-sc$external;n<-vcr_scalar(sc$design$n);ne<-vcr_scalar(ex$n)
+  declared<-as.character(sc[["analysis"]][["estimand"]]%||%"ATT")   # the standardisation below is to the treatment target, the ATT; the schema admits no other
   q<-vcr_scalar(ex$targetPrevalence);qs<-vcr_scalar(ex$sourcePrevalence);w<-c(1-q,q)
   p0<-vcr_num(sc$truth$controlRates);p1<-vcr_num(sc$truth$treatmentRates)
   info<-vcr_scalar(ex$parameterInformation);drift<-vcr_scalar(ex$logOddsDrift)
@@ -174,7 +193,7 @@ VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk
   nt<-c(n-round(n*q),round(n*q));active<-w>0
   unsupported<-any(active & (nt<2 | c(1-qs,qs)==0))
   if(unsupported)return(list(estimand=estimand,notEstimableRule="outside_common_support",externalControl=list(
-    targetPrevalence=q,sourcePrevalence=qs,estimand="ATT",reason="A target stratum has no historical support or fewer than two trial draws.")))
+    targetPrevalence=q,sourcePrevalence=qs,estimand=declared,reason="A target stratum has no historical support or fewer than two trial draws.")))
   shift<-function(p,delta)ifelse(p<=0,0,ifelse(p>=1,1,stats::plogis(stats::qlogis(p)+delta)))
   compare<-function(yt,nc,up,uc,delta){
     mu<-shift(p0,delta)
@@ -197,7 +216,7 @@ VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk
     c(estimate=estimate,se=se,p=pval,reject=as.numeric(if(sided==1)z>critical else abs(z)>critical),
       ci_low=estimate-critical*se,ci_high=estimate+critical*se,externalEss=ess,externalParameterVariance=parameter_variance)
   }
-  list(estimand=estimand,externalControl=list(kind=ex$kind,estimand="ATT",targetPrevalence=q,sourcePrevalence=qs,
+  list(estimand=estimand,externalControl=list(kind=ex$kind,estimand=declared,targetPrevalence=q,sourcePrevalence=qs,
     parameterInformation=info,logOddsDrift=drift,analysis="stratified risk difference with beta-binomial variance; asymptotic Wald inference",
     limitation="Synthetic binary two-stratum scenario only. Unmeasured confounding, finite-sample calibration and drift are not certified away.",sensitivityDrifts=sensitivity),
     run=function(i){
@@ -448,6 +467,7 @@ vcr_run_simulation <- function(scenario, seed, replicates = NULL, cores = 1L,
   }
 
   summary <- vcr_summarize_replicates(values, runner$estimand, scenario, done)
+  if (!is.null(runner$frozenDesign)) summary$diagnostics$frozenDesign <- runner$frozenDesign
   if(!is.null(runner$externalControl) && !is.null(values) && nrow(values)>0) {
     ec<-runner$externalControl;ec$sensitivity<-list()
     for(k in seq_along(ec$sensitivityDrifts)){

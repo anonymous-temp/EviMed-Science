@@ -382,6 +382,7 @@ function designNotes(method) {
     notes.push(`analysis.method for a two-arm design follows the endpoint: ${Object.entries(VCR_TWO_ARM_ANALYSIS_METHODS).map(([endpoint, methods]) => `${endpoint} ${methods.join('|')}`).join('; ')}.`)
     notes.push(`A single-arm design runs the analysis of its endpoint: ${Object.entries(VCR_SINGLE_ARM_ANALYSIS_METHODS).map(([design, byEndpoint]) => `${design} ${Object.entries(byEndpoint).map(([endpoint, analyses]) => `${endpoint} ${analyses.join('|')}`).join(', ')}`).join('; ')}.`)
     notes.push('A single-arm trial of a mean or a survival time is compared with a fixed benchmark: truth.benchmark is the historical mean (continuous), truth.controlMedian or truth.controlDistribution the benchmark survival, and truth.effect (the true mean minus the benchmark) or truth.hazardRatio (the trial\'s hazard over the benchmark\'s) is the effect, 0 or 1 for the null. analysis.alternative describes that parameter: for a time-to-event endpoint less is a benefit (a hazard below the benchmark\'s) and greater is harm.')
+    notes.push('A frozen Simon two-stage design (simon_two_stage) is simulated at truth.responseRate with its given boundaries n1, r1, n, r. truth.alternativeRate and analysis.alpha do not change that; they are what the result reports the frozen design against: diagnostics.frozenDesign holds its exact rejection probability, early-stop probability and expected sample size at truth.nullRate and at truth.alternativeRate, and, when analysis.alpha is written, whether its type I error is within it.')
   }
   return notes
 }

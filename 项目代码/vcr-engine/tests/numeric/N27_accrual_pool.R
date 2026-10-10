@@ -210,6 +210,31 @@ vcr_case("N27f", c("AC-30", "AC-28", "AC-04"), function() {
                         m_b$value, m_b$mcse, stats::median(t_ev), z_b, stats::median(t_old)))
 })
 
+vcr_case("N27g", c("AC-30", "AC-04"), function() {
+  # A site's `id` is its name in the scenario; the result now carries it back with what the site brought to the forecast (the posterior
+  # mean rate alpha / beta, when it opens, how many it enrolled and over how long), in the order the scenario listed them. The id
+  # was required and never read, so a result could not be attributed to a site. A forecast that needs no simulation (the target
+  # already met) and one that does carry the same rows.
+  mk <- function(id, alpha, beta, start, n = NULL, tau = NULL) { s <- list(id = id, alpha = alpha, beta = beta, startTime = start); if (!is.null(n)) { s$enrolled <- n; s$exposureTime <- tau }; s }
+  sites <- list(mk("site_b", 3, 5, 3, 4L, 5), mk("site_a", 2, 4, 0), mk("site_c", 6, 8, 1.5))
+  want <- list(list(id = "site_b", meanRate = 3 / 5, startTime = 3, enrolled = 4, exposureTime = 5),
+               list(id = "site_a", meanRate = 2 / 4, startTime = 0, enrolled = 0, exposureTime = 0),
+               list(id = "site_c", meanRate = 6 / 8, startTime = 1.5, enrolled = 0, exposureTime = 0))
+  same <- function(got) length(got) == 3L && all(vapply(seq_along(want), function(i) {
+    g <- got[[i]]; w <- want[[i]]
+    identical(g$id, w$id) && all(vapply(c("meanRate", "startTime", "enrolled", "exposureTime"), function(k) abs(g[[k]] - w[[k]]) < 1e-12, logical(1)))
+  }, logical(1)))
+  closed <- vcr_test_run(vcr_test_job("accrual.poisson_gamma", list(sites = sites[c(2, 3)], target = 60L), job_id = "job_n27g_closed"))
+  simulated <- vcr_test_run(vcr_test_job("accrual.poisson_gamma", list(sites = sites, target = 60L), seed = 11L, replicates = 400L, job_id = "job_n27g_sim"))
+  met <- vcr_test_run(vcr_test_job("accrual.poisson_gamma", list(sites = sites, target = 4L), job_id = "job_n27g_met"))
+  ok <- identical(simulated$status, "succeeded") && same(simulated$diagnostics$sites) && identical(met$status, "succeeded") && same(met$diagnostics$sites) &&
+    identical(closed$status, "succeeded") && length(closed$diagnostics$sites) == 2L && identical(closed$diagnostics$sites[[1]]$id, "site_a") && identical(closed$diagnostics$sites[[2]]$id, "site_c")
+  list(pass = ok,
+       detail = sprintf("three sites named %s come back in the result in that order with their mean rates (%s), start times, enrolled counts and exposures; the same for a forecast with the target already met and for a closed-form one (%d rows)",
+                        paste(vapply(simulated$diagnostics$sites %||% list(), function(x) x$id, character(1)), collapse = "/"),
+                        paste(vapply(simulated$diagnostics$sites %||% list(), function(x) format(x$meanRate, digits = 4), character(1)), collapse = "/"), length(closed$diagnostics$sites)))
+})
+
 vcr_case("N27d", c("AC-30", "AC-04"), function() {
   # Evidence pooling through the job, in the shape the contract fixes: studies are
   # `{ studyId, estimate, se }` on the analysis scale, `method` and `level` are
