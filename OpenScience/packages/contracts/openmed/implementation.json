@@ -1975,5 +1975,32 @@
   "productionEnabled": false,
   "independentClinicalValidation": false,
   "scientificPromotion": false,
-  "note": "All tasks have an explicit disposition, not all original scientific/partner acceptance criteria are met. No conditional task is relabeled verified."
+  "note": "All tasks have an explicit disposition, not all original scientific/partner acceptance criteria are met. No conditional task is relabeled verified.",
+  "localReview20261010": {
+    "coverageCountsUnchanged": {
+      "implemented": 38,
+      "external_validation_required": 1,
+      "native_reused": 6,
+      "conditional_not_activated": 7
+    },
+    "independentChineseDataset": "missing; authored development fixtures are not independent validation",
+    "implementedWithRemaining": [
+      "B06",
+      "C02",
+      "C04",
+      "C05",
+      "C09",
+      "D03",
+      "G03"
+    ],
+    "verifiedEngineeringFixes": [
+      "Scoped medication absence cannot decide an uncovered historical window.",
+      "Unlisted clinical laboratory units require literal source support.",
+      "Public extraction uses grounded exact source surfaces and rejects unresolvable mentions.",
+      "Integrated table-only candidates are included before pagination; changed table bytes or definitions cannot mutate a frozen match."
+    ],
+    "scorecard": "evals/vcr-matching/openmed-scorecard.json#/localReview20261010",
+    "clinicalAcceptance": "Not established; default-off study allow-list preserved. 38 engineering implementations plus 6 native reuse decisions are not 44 independently validated clinical functions.",
+    "sourceTimingLimitation": "Model-interpreted assertions, occurredAt and declared intervals remain subject to clinical validation; quote checking alone does not verify their semantic truth."
+  }
 }
