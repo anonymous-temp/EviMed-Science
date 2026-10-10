@@ -124,6 +124,23 @@ test("a gate refusal says the files are still there", () => {
   }
 });
 
+test("no sentence says the gate sends work back, that unchecked files are not deliverables, asks the reader to re-check by hand, or explains a signing key", () => {
+  // R27, 2026-10-10. A gate verdict never withholds a delivery (ruling of 2026-09-17), so a sentence that says it does is a sentence nothing
+  // makes true; 「请自行复核」 hands the reader a chore; and what a receipt key signs is not the reader's to know (owner decision 2026-09-29).
+  const retired = [/退回修复/, /未经校验的文件不会被当作交付物/, /不能当作已核验的成果发布/, /没有经过质量门判定/, /按退回意见修好后/, /请自行复核/, /用密钥验回执/];
+  const found = Object.entries(ERROR_CODE_MESSAGES).filter(([, sentence]) => retired.some((pattern) => pattern.test(sentence))).map(([code]) => code);
+  assert.deepEqual(found, []);
+  assert.deepEqual(ERROR_CODE_FAMILIES.filter(([, sentence]) => retired.some((pattern) => pattern.test(sentence))).map(([pattern]) => String(pattern)), []);
+  // The sentences keep what the reader acts on: the work is still there.
+  for (const code of ["runtime_deliverable_never_submitted", "specialist_deliverable_not_accepted", "specialist_receipt_digest_mismatch", "specialist_delegated_evidence_read"]) {
+    assert.ok(hasChinese(sentenceFor(code) ?? ""), code);
+  }
+  assert.match(sentenceFor("runtime_deliverable_never_submitted") ?? "", /工作区/);
+  assert.match(sentenceFor("specialist_receipt_digest_mismatch") ?? "", /工作区/);
+  assert.match(sentenceFor("vcr_engine_receipt_key_unusable") ?? "", /计算照常进行/);
+  assert.match(sentenceFor("vcr_engine_receipt_key_file_unavailable") ?? "", /计算照常进行/);
+});
+
 test("an unrecognized code gets an honest sentence that still carries the code", () => {
   // The vocabulary is open by construction: `sanitizeErrorCode` admits any
   // well-formed identifier and the run monitor forwards whatever the runtime

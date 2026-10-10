@@ -58,6 +58,11 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["没有记录生成过程", "same"],
   ["没有可读取的核对意见", "a version with nothing to show is not a version that 「was not verified」"],
   ["已保存此版本", "whether the platform kept a copy of an input is not a line in the lineage"],
+  // The error registry (R27): sentences from when the gate withheld a delivery, and a chore handed to the reader.
+  ["退回修复", "a gate verdict never withholds a delivery (ruling of 2026-09-17), so no run is sent back for repair"],
+  ["未经校验的文件不会被当作交付物", "same: what a run wrote is delivered"],
+  ["请自行复核", "a chore the platform hands its reader; the per-claim marks say what was checked"],
+  ["用密钥验回执", "what a receipt key signs is not the reader's to know (owner decision 2026-09-29)"],
   ["引用均为来源原文片段", "a coding file's quotes are spans of its source by construction; the viewer does not vouch for them"],
   ["不由模型生成", "same"],
   // The two modules' names (R10 plan §1, the owner's rulings of 2026-10-07): 「循证 GEO」 again —

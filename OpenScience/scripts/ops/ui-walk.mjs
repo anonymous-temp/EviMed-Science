@@ -215,6 +215,8 @@ export const BACK_OFFICE = [
   /引文核对中/, /引文暂时无法核对/,
   // The result inspector: no digest, no image, no list of what the platform did not record or observe about a version.
   /文件摘要/, /摘要未记录/, /记录不完整：/, /运行镜像/, /未被观察的部分/, /生成过程未被观察/, /没有可读取的核对意见/, /(?:已|未)保存此版本/, /引用均为来源原文片段/, /不由模型生成/,
+  // A run's verdict sentences: no gate sending work back, no chore for the reader, no word of a signing key.
+  /退回修复/, /未经校验的文件不会被当作交付物/, /请自行复核/, /用密钥验回执/,
 ];
 
 /**
