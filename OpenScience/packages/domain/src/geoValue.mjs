@@ -41,9 +41,23 @@ function recordKey(item) {
 }
 
 /**
+ * An item that names itself by `key` alone is known by that key as its id: the judge is shown findings by id, a source change
+ * reaches them by id, and the page keys them by it, so a keyed finding without one was written and never seen (D-10). An item with an
+ * id, or with neither, is as it was written.
+ * @param {any} item
+ */
+function identified(item) {
+  return geoValueObject(item) && !item.id && item.key ? { ...item, id: String(item.key) } : item
+}
+
+/**
  * Collections merge by optional id/key; unkeyed observations deduplicate by
  * content. Omission and an empty collection preserve earlier work. Explicit
  * null clears a field; an item can be retired without deleting its history.
+ * Any other list is replaced by a list, but never by an empty one: an empty
+ * list preserves prior work wherever it is written (a finding's groupIds, a
+ * scope's regions), and where there is nothing to preserve it adds nothing
+ * (D-09; the skill tells the run so).
  * @param {unknown} before @param {unknown} patch @returns {Record<string, any>}
  */
 export function mergeGeoValue(before, patch) {
@@ -53,12 +67,15 @@ export function mergeGeoValue(before, patch) {
     if (['__proto__', 'constructor', 'prototype'].includes(key)) continue
     if (GEO_VALUE_COLLECTIONS.includes(key) && Array.isArray(value)) {
       const items = Array.isArray(result[key]) ? [...result[key]] : []
-      for (const item of value) {
+      for (const raw of value) {
+        const item = identified(raw)
         const index = items.findIndex((old) => recordKey(old) === recordKey(item))
         if (index < 0) items.push(item)
         else items[index] = geoValueObject(item) ? mergeGeoValue(items[index], item) : item
       }
       result[key] = items
+    } else if (Array.isArray(value) && value.length === 0) {
+      // preserved: the earlier value stands, and where there was none there is still none
     } else if (geoValueObject(value)) result[key] = mergeGeoValue(result[key], value)
     else result[key] = value
   }
@@ -88,7 +105,8 @@ export function geoValueContext(profile, filter = {}) {
   const data = profile ?? {}
   const relevant = (/** @type {any} */ entry) => geoValueActive(entry)
     && (!filter.groupId || !geoValueList(entry?.groupIds).length || entry.groupIds.includes(filter.groupId))
-    && (!filter.audience || !entry?.audience || entry.audience === filter.audience)
+    // An audience is a word or a list of them; a finding for none is for all.
+    && (!filter.audience || !entry?.audience || [entry.audience].flat().includes(filter.audience))
   return {
     scope: data.scope ?? null, summary: geoValueText(data.summary),
     findings: geoValueList(data.findings).filter(relevant),

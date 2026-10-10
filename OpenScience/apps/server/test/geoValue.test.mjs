@@ -4,7 +4,7 @@ import path from "node:path";
 import { openScopedFileNoFollow, resolveScopedPath } from "../src/security.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mergeGeoValue, geoValueImpacts, summarizeGeoValueCoverage } from "@evimed/domain";
+import { geoValueContext, geoValueJudged, mergeGeoValue, geoValueImpacts, summarizeGeoValueCoverage } from "@evimed/domain";
 import { buildJudgeInput, verifyJudgement, GEO_JUDGE_INSTRUCTIONS } from "../src/geoJudge.mjs";
 import { importGeoValue } from "../src/geoValueImport.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
@@ -25,6 +25,50 @@ test("partial, conflicting and negative findings survive an incremental update w
   assert.equal(updated.score, undefined);
   assert.equal(updated.findings[1].incidence, undefined);
   assert.deepEqual(mergeGeoValue(updated, { findings: [] }).findings, updated.findings);
+});
+
+test("an empty list in an amendment keeps what the finding had; a list replaces it and null clears it (D-09)", () => {
+  // The skill tells the run an empty list preserves prior work. Only the profile's own collections did: a finding's groupIds, a scope's
+  // regions or any other list was replaced by the empty one, and the links to the questions were gone.
+  const before = { scope: { regions: ["CN"] }, tags: ["a"],
+    findings: [{ id: "f1", statement: "x", groupIds: ["g1"], sourceRefs: ["a"], scope: { regions: ["CN"] } }] };
+  const kept = mergeGeoValue(before, { findings: [{ id: "f1", groupIds: [], scope: { regions: [] } }], scope: { regions: [] }, tags: [] });
+  assert.deepEqual(kept, before, "nothing changed");
+  // A list replaces the earlier one, null clears the field, and the other fields of the finding stay.
+  const replaced = mergeGeoValue(before, { findings: [{ id: "f1", groupIds: ["g2"] }] });
+  assert.deepEqual(replaced.findings[0], { ...before.findings[0], groupIds: ["g2"] });
+  assert.equal(mergeGeoValue(before, { findings: [{ id: "f1", groupIds: null }] }).findings[0].groupIds, null);
+  // An empty list where there was nothing says nothing: the finding is as it was, and the write is no change.
+  const bare = { findings: [{ id: "f2", statement: "y" }] };
+  assert.deepEqual(mergeGeoValue(bare, { findings: [{ id: "f2", groupIds: [] }], tags: [] }), bare);
+  // The collections keep behaving as before: an empty one is kept, and an item is amended by its id.
+  assert.deepEqual(mergeGeoValue({}, { findings: [] }), { findings: [] });
+});
+
+test("a finding written with a key and no id is known by its key as its id, and the judge, the impacts and an amendment find it (D-10)", () => {
+  const first = mergeGeoValue({}, { findings: [{ key: "eff-adults", statement: "keyed only" }, { id: "f2", key: "other", statement: "both" }, { statement: "neither" }] });
+  assert.deepEqual(first.findings.slice(0, 2).map((finding) => [finding.id, finding.key]), [["eff-adults", "eff-adults"], ["f2", "other"]], "a given id is not replaced");
+  assert.equal(first.findings[2].id, undefined, "an item with neither stays as written: the server names it by its content");
+  assert.deepEqual(geoValueJudged(first).findings.map((finding) => finding.id), ["eff-adults", "f2"], "the judge is shown it");
+  const impacts = geoValueImpacts({ ...first, sourceChanges: [{ id: "c", findingIds: ["eff-adults"] }] });
+  assert.deepEqual(impacts[0].findingIds, ["eff-adults"], "a source change that names it by its id reaches it");
+  // An amendment by key lands on the same finding, and by id as well.
+  const amended = mergeGeoValue(first, { findings: [{ key: "eff-adults", limitations: "adults only" }] });
+  assert.equal(amended.findings.length, 3);
+  assert.deepEqual(amended.findings[0], { key: "eff-adults", id: "eff-adults", statement: "keyed only", limitations: "adults only" });
+  assert.equal(mergeGeoValue(first, { findings: [{ id: "eff-adults", certainty: "low" }] }).findings.length, 3);
+  // A finding stored before, with a key and no id, gets its id when it is next amended.
+  const legacy = { findings: [{ key: "old", statement: "s" }] };
+  assert.deepEqual(mergeGeoValue(legacy, { findings: [{ key: "old", limitations: "l" }] }).findings, [{ key: "old", statement: "s", limitations: "l", id: "old" }]);
+});
+
+test("an audience written as a list is matched by any member of it (D-10)", () => {
+  const profile = { findings: [{ id: "f", statement: "s", audience: ["caregiver", "pharmacist"] }, { id: "g", statement: "t", audience: "physician" }, { id: "h", statement: "u" }] };
+  const ids = (/** @type {string} */ audience) => geoValueContext(profile, { audience }).findings.map((finding) => finding.id);
+  assert.deepEqual(ids("caregiver"), ["f", "h"]);
+  assert.deepEqual(ids("pharmacist"), ["f", "h"]);
+  assert.deepEqual(ids("physician"), ["g", "h"]);
+  assert.deepEqual(ids("patient"), ["h"], "a finding for no audience is for all of them");
 });
 
 test("source impact follows exact links and tolerates malformed optional observations", () => {
