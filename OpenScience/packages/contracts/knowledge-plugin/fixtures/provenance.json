@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.3.0",
+  "contractVersion": "1.4.0",
   "plugin": {
     "name": "evimed-knowledge-plugin",
     "version": "0.1.0",
@@ -32,11 +32,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "430",
+        "content-length": "1062",
         "content-type": "application/json",
-        "date": "Mon, 05 Oct 2026 16:31:01 GMT"
+        "date": "Sat, 10 Oct 2026 11:53:23 GMT"
       },
-      "recordedAt": "2026-10-05T16:31:02.171Z"
+      "recordedAt": "2026-10-10T11:53:23.548Z"
     },
     "manifest.json": {
       "request": {
@@ -49,11 +49,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "1197",
+        "content-length": "1205",
         "content-type": "application/json",
-        "date": "Mon, 05 Oct 2026 16:31:01 GMT"
+        "date": "Sat, 10 Oct 2026 11:53:23 GMT"
       },
-      "recordedAt": "2026-10-05T16:31:02.183Z"
+      "recordedAt": "2026-10-10T11:53:23.605Z"
     },
     "sources-page-1.json": {
       "request": {
@@ -400,6 +400,23 @@
       ],
       "reason": "Contract 1.3.0 adds Source.platform_produced: the manifest and health name the new contract and one source row carries the field. The stream's recordings are the 1.2.0 plugin's, still valid, since a minor only adds.",
       "serverRole": "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off, the whole registry synced, EVIMED_EVIDENCE_FEED_URL set), not a production plugin"
+    },
+    {
+      "recordedAt": "2026-10-10T11:53:23.613Z",
+      "server": "http://127.0.0.1:18082",
+      "plugin": {
+        "name": "evimed-knowledge-plugin",
+        "version": "0.1.0",
+        "build": "fx-misc-host-budget-20261010",
+        "started_at": "2026-10-10T11:53:09.449110Z"
+      },
+      "contractVersion": "1.4.0",
+      "fixtures": [
+        "health.json",
+        "manifest.json"
+      ],
+      "reason": "Contract 1.4.0 adds Health.host_budget (today's use against each host's daily cap): the health answer carries the table and, with the manifest, names the new contract. The stream's recordings and the source row are the earlier plugins', still valid, since a minor only adds.",
+      "serverRole": "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off: nothing was fetched from anyone; the whole registry synced), against a scratch database whose host_counters for the day were seeded with api.crossref.org 1850, eutils.ncbi.nlm.nih.gov 420 and api.fda.gov 300 (a spent cap) so the table shows use; not a production plugin and not real traffic"
     }
   ]
 }

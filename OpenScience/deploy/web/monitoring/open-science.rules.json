@@ -293,6 +293,18 @@
           }
         },
         {
+          "alert": "FrontierHostBudgetNearCap",
+          "expr": "open_science_frontier_plugin_host_budget_used / open_science_frontier_plugin_host_budget_cap > 0.9",
+          "for": "30m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The knowledge plugin has spent more than 90% of today's cap for {{ $labels.host }}",
+            "description": "The plugin counts every request to a host against that host's own daily cap and, once it is spent, refuses the host's polls until 00:00 UTC as its own decision. That outcome is neutral, so no source turns unhealthy: the sources that read through {{ $labels.host }} go quiet while every health state stays healthy, and the platform sees only fewer entries a day later (review 2026-10-10, D-10)."
+          }
+        },
+        {
           "alert": "FrontierBacklogOld",
           "expr": "(open_science_frontier_oldest_owed_timestamp_seconds > 0 and time() - open_science_frontier_oldest_owed_timestamp_seconds > 21600) or open_science_frontier_plugin_backlog_oldest_due_seconds > 21600",
           "for": "15m",

@@ -21,6 +21,8 @@ from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
 from knowledge_plugin.api import create_app
+from knowledge_plugin.budget import HostBudget, PgCounterStore, host_rules
+from knowledge_plugin.fetch import ProtectedFetcher
 from knowledge_plugin.model import EntryTextResult, NormalizedEntry
 from knowledge_plugin.normalize import prepare
 from knowledge_plugin.registry import load_registry, source_from_row, sync_registry
@@ -125,6 +127,35 @@ async def test_health_needs_no_token(client):
     assert body["sources"]["disabled"] > 0 and body["egress"]["relay"] == "unconfigured"
     assert body["rate_limited_1h"] == {"max": 0, "host": None}             # contract 1.2.0
     assert "last_ok_fetch_at" in body
+
+
+async def test_health_reports_the_days_use_of_every_host_cap(settings, seeded):
+    """Review 2026-10-10, D-10 (contract 1.4.0): the per-host daily caps were counted and never reported, so a host whose cap
+    was spent mid-day went quiet until 00:00 UTC with every source healthy. Today's (UTC) use is on /v1/health."""
+    day = NOW.date()
+    async with seeded.connection() as conn:
+        await conn.execute(
+            """INSERT INTO evimed_knowledge.host_counters (host, day, requests) VALUES
+                 ('api.crossref.org', %(day)s, 2750), ('api.fda.gov', %(day)s, 300), ('www.example.org', %(day)s, 40),
+                 ('eutils.ncbi.nlm.nih.gov', %(yesterday)s, 1999)""",
+            {"day": day, "yesterday": day - timedelta(days=1)})
+    fetcher = ProtectedFetcher(settings, HostBudget(PgCounterStore(seeded), host_rules(ncbi_key=False, openfda_key=False), clock=lambda: NOW))
+    app = create_app(settings, pool=seeded, clock=lambda: NOW)
+    app.state.plugin["fetcher"] = fetcher
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://plugin") as http:
+            response = await http.get("/v1/health")
+    finally:
+        await fetcher.aclose()
+    body = response.json()
+    assert_schema(body, "Health")
+    budget = body["host_budget"]
+    assert budget["api.crossref.org"] == {"used": 2750, "cap": 3000}
+    assert budget["api.fda.gov"] == {"used": 300, "cap": 300}, "a spent cap reads as spent"
+    assert budget["eutils.ncbi.nlm.nih.gov"] == {"used": 0, "cap": 2000}, "yesterday's count is not today's"
+    assert "www.example.org" not in budget, "a host with no cap has nothing to be spent against"
+    assert set(budget) == {host for host, rule in host_rules(ncbi_key=False, openfda_key=False).items() if rule.daily_cap is not None}
+    assert all(set(entry) == {"used", "cap"} and entry["used"] >= 0 and entry["cap"] > 0 for entry in budget.values())
 
 
 async def test_every_other_path_needs_the_token(client):
@@ -279,7 +310,11 @@ def test_the_schema_check_is_not_vacuous():
     with pytest.raises(AssertionError):
         assert_schema({**bad, "facts": good_facts, "first_seen_at": "2026-09-22 08:00"}, "Entry")   # no offset
     assert_schema({**bad, "facts": good_facts}, "Entry")
-
+    health = {"status": "ok", "contract": "1.4.0", "sources": {}, "egress": {}}
+    assert_schema({**health, "host_budget": {"api.fda.gov": {"used": 12, "cap": 300}}}, "Health")
+    for broken in ({"api.fda.gov": {"used": -1, "cap": 300}}, {"api.fda.gov": {"used": 1}}, {"api.fda.gov": {"used": "3", "cap": 300}}):
+        with pytest.raises(AssertionError):
+            assert_schema({**health, "host_budget": broken}, "Health")               # used and cap are non-negative integers, both there
 
 
 def test_egress_health_prefers_live_counts_then_the_log():

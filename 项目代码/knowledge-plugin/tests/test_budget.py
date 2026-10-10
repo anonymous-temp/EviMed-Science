@@ -52,6 +52,29 @@ async def test_daily_cap_refuses_with_time_to_midnight():
     assert refused.value.retry_after_s == pytest.approx(16 * 3600)
 
 
+async def test_the_days_use_is_reported_against_each_cap_and_a_spent_cap_reads_as_spent():
+    """Review 2026-10-10, D-10: the counters were kept and never read, so a host whose cap was spent mid-day went quiet until
+    00:00 UTC, every source healthy, with nothing to say so. `usage()` is what /v1/health reports (contract 1.4.0)."""
+    time = FakeTime()
+    now = [NOW]
+    store = MemoryCounterStore()
+    budget = HostBudget(store, {"api.fda.gov": HostRule(0.0, 2), "api.crossref.org": HostRule(0.0, 3000), "open.example.org": HostRule(0.0, None)},
+                        clock=lambda: now[0], monotonic=time.monotonic, sleep=time.sleep)
+    assert await budget.usage() == {"api.crossref.org": {"used": 0, "cap": 3000}, "api.fda.gov": {"used": 0, "cap": 2}}, \
+        "every capped host is listed from the first request of the day, the uncapped one never"
+    async with budget.slot("open.example.org"):
+        pass
+    for _ in range(2):
+        async with budget.slot("api.fda.gov"):
+            pass
+    with pytest.raises(FetchError):                                   # the refusal is neutral: no source is marked for it
+        async with budget.slot("api.fda.gov"):
+            pass
+    assert await budget.usage() == {"api.crossref.org": {"used": 0, "cap": 3000}, "api.fda.gov": {"used": 2, "cap": 2}}
+    now[0] = NOW + timedelta(days=1)                                  # a new UTC day starts at zero
+    assert (await budget.usage())["api.fda.gov"] == {"used": 0, "cap": 2}
+
+
 async def test_pause_refuses_the_whole_host():
     time = FakeTime()
     store = MemoryCounterStore()

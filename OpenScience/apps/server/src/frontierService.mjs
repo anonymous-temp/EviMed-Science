@@ -1674,6 +1674,16 @@ export function frontierMetricFamilies(enabled, snapshot) {
       [{ value: Number(pluginHealth.backlog?.oldest_due_s ?? 0) }]);
     add("plugin_rate_limited_1h", "429 answers from the plugin's worst host in the last hour.", "gauge",
       [{ labels: { host: String(pluginHealth.rateLimited?.host ?? "none") }, value: Number(pluginHealth.rateLimited?.max ?? 0) }]);
+    // Contract 1.4.0: today's (UTC) use against each host's daily cap. A spent cap is the plugin's own refusal until 00:00 UTC, which
+    // counts against no source's health, so these two are where it shows (review 2026-10-10, D-10); `FrontierHostBudgetNearCap`
+    // reads their ratio. A plugin that does not report the table has no series.
+    if (pluginHealth.hostBudget) {
+      const hosts = Object.entries(pluginHealth.hostBudget);
+      add("plugin_host_budget_used", "Requests the plugin has made today (UTC) to each host that has a daily cap, as it counts them.", "gauge",
+        hosts.map(([host, row]) => ({ labels: { host }, value: Number(row.used) })));
+      add("plugin_host_budget_cap", "Each host's daily request cap in the plugin.", "gauge",
+        hosts.map(([host, row]) => ({ labels: { host }, value: Number(row.cap) })));
+    }
     // Reserved: the plugin has no model client (a drifted list page is recovered by its vetted selector fallbacks, not by a proposal), so
     // this is always 0 and nothing alerts on it (review 2026-10-10, D-12). The gauge stays so a dashboard that draws it does not break;
     // a plugin that does not report it has no series.

@@ -46,7 +46,8 @@
  *   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE=/tmp/frontier-dev/knowledge-plugin.token \
  *   node packages/contracts/knowledge-plugin/fixtures/record.mjs [--url http://127.0.0.1:18080]
  *
- * `--platform-source` records only what a contract minor changes (`recordPlatformSource` below) and keeps the rest.
+ * `--platform-source` records only what contract 1.3.0 changed (`recordPlatformSource` below) and keeps the rest; `--host-budget`
+ * does the same for 1.4.0 (`recordHostBudget`).
  */
 
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -347,6 +348,55 @@ export async function recordPlatformSource({ baseUrl, token, outDir = here, sour
   return recordings.map(({ name, status }) => ({ name, status }));
 }
 
+/**
+ * Re-record the two fixtures contract 1.4.0 changes, off a live plugin speaking it, and leave every other recording as it was made.
+ *
+ * Hidden knowledge: 1.4.0 added `Health.host_budget`, today's (UTC) use against each host's daily cap. The health answer carries a
+ * field no earlier recording has and, with the manifest, names the new contract; the stream, the registry rows and the source row
+ * are untouched, and a minor only adds, so those recordings stay valid. The plugin may serve an empty stream (crawler off):
+ * nothing here reads one, and a crawler that is off fetches nothing from anyone. What the table shows is whatever the instance's
+ * own `host_counters` hold for the day, so `serverRole` says whether that was real traffic or counts put there for the recording;
+ * the answer is the plugin's own either way.
+ *
+ * @param {{ baseUrl: string, token: string, outDir?: string, serverRole?: string }} options
+ */
+export async function recordHostBudget({ baseUrl, token, outDir = here, serverRole = "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off), not a production plugin" }) {
+  const base = String(baseUrl).replace(/\/+$/, "");
+  const signed = { token, credential: "the deployment token" };
+  const recordings = [
+    await exchange(base, { name: "health.json", path: "/v1/health" }),
+    await exchange(base, { name: "manifest.json", path: "/v1/manifest", ...signed }),
+  ];
+  for (const recorded of recordings) expectStatus(recorded, 200);
+  const [health, manifest] = recordings.map(json);
+  const table = health.host_budget;
+  if (!table || typeof table !== "object" || !Object.keys(table).length) throw new Error("the health answer has no host_budget: this is not a plugin of contract 1.4.0");
+  for (const [host, row] of Object.entries(table)) {
+    if (!Number.isInteger(row?.used) || !Number.isInteger(row?.cap) || row.used < 0 || row.cap < 1) throw new Error(`host_budget.${host} is not {used, cap}`);
+  }
+  if (health.contract !== manifest.contract?.version) throw new Error("the plugin's health and manifest name different contracts");
+  for (const recorded of recordings) {
+    assertNoSecret(token, recorded.bytes);
+    assertNoSecret(token, JSON.stringify(recorded.headers));
+    assertNoSecret(token, JSON.stringify(recorded.request));
+  }
+  const provenance = JSON.parse(await readFile(path.join(outDir, "provenance.json"), "utf8"));
+  const recordedAt = new Date().toISOString();
+  // As in `recordPlatformSource`: `plugin`, `server` and `recordedAt` stay the stream's; the contract the set speaks is the new one.
+  provenance.contractVersion = manifest.contract.version;
+  provenance.partialRecordings = [...(provenance.partialRecordings ?? []), {
+    recordedAt, server: base, plugin: manifest.plugin, contractVersion: manifest.contract.version, fixtures: recordings.map((recorded) => recorded.name),
+    reason: "Contract 1.4.0 adds Health.host_budget (today's use against each host's daily cap): the health answer carries the table and, with the manifest, names the new contract. The stream's recordings and the source row are the earlier plugins', still valid, since a minor only adds.",
+    serverRole,
+  }];
+  for (const recorded of recordings) {
+    provenance.fixtures[recorded.name] = { request: recorded.request, status: recorded.status, headers: recorded.headers, recordedAt: recorded.recordedAt };
+    await writeFile(path.join(outDir, recorded.name), recorded.bytes);
+  }
+  await writeFile(path.join(outDir, "provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
+  return recordings.map(({ name, status }) => ({ name, status }));
+}
+
 function argument(/** @type {string} */ name) {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 ? process.argv[index + 1] : undefined;
@@ -360,9 +410,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.stderr.write(`the token file is unusable (${loaded.error}); set OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE or --token-file\n`);
     process.exitCode = 1;
   } else {
+    const serverRole = argument("server-role");
     const recorded = process.argv.includes("--platform-source")
       ? await recordPlatformSource({ baseUrl, token: loaded.value })
-      : await recordKnowledgePluginContract({ baseUrl, token: loaded.value });
+      : process.argv.includes("--host-budget")
+        ? await recordHostBudget({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}) })
+        : await recordKnowledgePluginContract({ baseUrl, token: loaded.value });
     process.stdout.write(`${JSON.stringify(recorded, null, 2)}\n`);
   }
 }

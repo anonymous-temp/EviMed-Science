@@ -36,6 +36,7 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import YAML from "yaml";
 
 import {
   FRONTIER_ACCESSES, FRONTIER_DATE_PRECISIONS, FRONTIER_EGRESSES, FRONTIER_ENRICHMENT_KEYS, FRONTIER_ENTRY_DEFECTS,
@@ -158,12 +159,23 @@ test("the fixtures were recorded off a live plugin speaking the pinned contract"
 test("a contract minor is recorded again only where it changed, and provenance says so", async () => {
   // 1.3.0 added `Source.platform_produced`: the manifest, the health answer and one source row were recorded again off a
   // live plugin of that contract, and the stream's recordings are the 1.2.0 plugin's, still valid because a minor only adds.
-  const [partial] = provenance.partialRecordings ?? [];
-  assert.ok(partial, "provenance.json names the partial recording");
-  assert.equal(partial.contractVersion, pin.version);
-  assert.deepEqual(partial.fixtures.slice().sort(), ["health.json", "manifest.json", "source-platform-produced.json"]);
-  assert.ok(Number.isFinite(Date.parse(partial.recordedAt)) && String(partial.plugin?.build ?? "").length > 0);
-  for (const name of partial.fixtures) assert.ok(provenance.fixtures[name], `${name} is a listed recording`);
+  // 1.4.0 added `Health.host_budget`: the manifest and the health answer (the two that name the contract, one of them the field's
+  // home) were recorded again off a live plugin of 1.4.0; the source row and the stream stand as they were.
+  const partials = provenance.partialRecordings ?? [];
+  assert.deepEqual(partials.map((entry) => entry.contractVersion), ["1.3.0", "1.4.0"], "every minor since the stream was recorded names its partial recording, in order");
+  const [platformProduced, hostBudget] = partials;
+  assert.equal(hostBudget.contractVersion, pin.version, "the last partial recording is the pin's");
+  assert.equal(provenance.contractVersion, pin.version);
+  assert.deepEqual(platformProduced.fixtures.slice().sort(), ["health.json", "manifest.json", "source-platform-produced.json"]);
+  assert.deepEqual(hostBudget.fixtures.slice().sort(), ["health.json", "manifest.json"]);
+  for (const partial of partials) {
+    assert.ok(Number.isFinite(Date.parse(partial.recordedAt)) && String(partial.plugin?.build ?? "").length > 0);
+    assert.ok(String(partial.reason ?? "").length > 40 && String(partial.serverRole ?? "").length > 0, "a partial recording says why it was made and off what");
+    for (const name of partial.fixtures) assert.ok(provenance.fixtures[name], `${name} is a listed recording`);
+  }
+  assert.ok(Date.parse(hostBudget.recordedAt) >= Date.parse(platformProduced.recordedAt));
+  // The files the later recording replaced were recorded at its time, not the earlier one's.
+  for (const name of hostBudget.fixtures) assert.ok(Date.parse(provenance.fixtures[name].recordedAt) >= Date.parse(hostBudget.recordedAt) - 60_000, `${name} is the 1.4.0 recording`);
   // The recorded source row, read the way the platform reads one: the attribute is on the wire and survives validation.
   const recorded = await fixture("source-platform-produced.json");
   assert.equal(recorded.id, "evimed-evidence");
@@ -176,6 +188,27 @@ test("a contract minor is recorded again only where it changed, and provenance s
       assert.equal(validateSource(row).source.platform_produced, false);
     }
   }
+});
+
+test("health carries today's use against each host's daily cap, the contract names the field, and the platform reads it as recorded", async () => {
+  // A spent cap is the plugin's own refusal until 00:00 UTC and counts against no source's health, so this table is the only
+  // place the spend shows (review 2026-10-10, D-10). The recording is a 1.4.0 plugin's own answer.
+  const body = await fixture("health.json");
+  assert.ok(body.host_budget && typeof body.host_budget === "object", "the recorded health answer has the table");
+  const hosts = Object.keys(body.host_budget);
+  assert.ok(hosts.length >= 4, "every capped host is listed, whether or not it was used that day");
+  assert.ok(hosts.includes("api.crossref.org") && hosts.includes("api.fda.gov"), "the hosts whose caps are the tight ones");
+  assert.ok(hosts.some((host) => body.host_budget[host].used > 0), "the recording shows a host with some use");
+  const schema = YAML.parse(await readFile(new URL(pin.contractFile, root), "utf8")).components.schemas.Health.properties.host_budget;
+  assert.deepEqual(schema.additionalProperties.required, ["used", "cap"]);
+  assert.match(schema.description, /Added in 1\.4\.0/);
+  await withPlugin({ "GET /v1/health": await recorded("health.json") }, async ({ client }) => {
+    const health = await client.health();
+    assert.deepEqual(health.host_budget, body.host_budget, "every recorded host survives the client's shape check");
+    for (const [host, row] of Object.entries(health.host_budget)) {
+      assert.ok(Number.isInteger(row.used) && row.used >= 0 && Number.isInteger(row.cap) && row.cap > 0 && row.used <= row.cap, `${host}: ${JSON.stringify(row)}`);
+    }
+  });
 });
 
 test("the platform's minimum contract accepts the pin, and a plugin of another major is refused", async () => {

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: EviMed Knowledge Source Plugin
-  version: "1.3.0"
+  version: "1.4.0"
   summary: The one interface through which the EviMed platform reads knowledge sources.
   description: |
     The plugin owns everything between the outside world and the platform for *knowledge*
@@ -402,7 +402,7 @@ components:
           description: Per egress, whether the last attempt through it succeeded.
           additionalProperties: { type: string, enum: [ok, degraded, down, unconfigured] }
         last_fetch_at: { type: [string, "null"], format: date-time }
-        last_ok_fetch_at: { type: [string, "null"], format: date-time, description: "The last fetch that read something (ok, not-modified or empty). Added in 1.2.0: 'no success for 60 minutes' is an alert line (plan 10.5.8)." }
+        last_ok_fetch_at: { type: [string, "null"], format: date-time, description: "The last fetch that read something (ok, not-modified or empty: a page that parsed to no entries is a read). A 204, or a body with nothing in it, is a failure and does not move it (stated in 1.4.0). Added in 1.2.0: 'no success for 60 minutes' is an alert line (plan 10.5.8)." }
         last_new_entry_at: { type: [string, "null"], format: date-time }
         rate_limited_1h:
           type: object
@@ -417,6 +417,15 @@ components:
             pending_texts: { type: integer }
             oldest_due_s: { type: integer }
         model_calls_24h: { type: integer, description: "Selector self-heal proposals in the last 24 h; the only model use the plugin makes." }
+        host_budget:
+          type: object
+          description: "Today's (UTC) requests against each host's own daily cap, for the hosts that have one: `{host: {used, cap}}`, every capped host listed from the first request of the day. When a cap is spent the plugin refuses that host's polls until 00:00 UTC as its own decision, which counts against no source's health, so this is the only place the spend is visible; the platform alerts when `used / cap` stays above 0.9 for thirty minutes. Added in 1.4.0."
+          additionalProperties:
+            type: object
+            required: [used, cap]
+            properties:
+              used: { type: integer, minimum: 0 }
+              cap: { type: integer, minimum: 1 }
         latest_seq: { type: integer, format: int64 }
 
     Source:

@@ -410,6 +410,10 @@ class ProtectedFetcher:
         """The host with the most 429 answers in the last hour, and the count."""
         return self._budget.rate_limited_last_hour()
 
+    async def host_budget_usage(self) -> dict[str, dict[str, int]]:
+        """Today's use against each host's daily cap (``Health.host_budget``, contract 1.4.0)."""
+        return await self._budget.usage()
+
     def evimed_status(self) -> str:
         """The team's EviMed API: unconfigured without a key; else by the last answer it gave."""
         if not self._settings.secret("evimed_api_key"):
