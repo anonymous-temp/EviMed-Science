@@ -155,7 +155,14 @@ function statedIdentifierKeys(identifiers) {
  * entity key, with the keys asked about — identifier matches first, newest
  * first, then entity matches by how many keys they share, then newest. Items
  * the feed withdrew, never published, or whose source is switched off are not
- * there. An identifier is read from `item_keys` (the table the pipeline writes
+ * there. Nor are the platform's own: an item of a `platform_produced` source
+ * (contract 1.3.0, flywheel F09 — EviMed's evidence cards echoed back through
+ * the plugin) is the platform's output, not a new report of anything, and it
+ * carries its study's registry numbers and DOIs, so it would name itself — an
+ * official card told 「new evidence」 by its own echo, a study's by another
+ * card's (review 2026-10-10, D-05). Every caller asks for what happened in
+ * the world: evidence currency, the editorial's discovery, the programme's
+ * signals, the planner and the VCR events. An identifier is read from `item_keys` (the table the pipeline writes
  * every DOI, PMID and registry key into) and, for a registry number and a
  * DOI, from the item's own columns: a registry key already given to an
  * earlier item of the same trial is not written again.
@@ -186,14 +193,14 @@ export async function frontierItemsMatching(database, { entityKeys = [], identif
       ) SELECT ${ITEM_COLUMNS},
         (SELECT coalesce(array_agg(k.key), '{}') FROM evimed_frontier.item_keys k WHERE k.item_id = i.id AND k.key = ANY($1::text[])) AS matched_keys
       FROM hits JOIN evimed_frontier.items i ON i.id = hits.id JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
-      WHERE i.state = 'published' AND s.enabled AND ($4::timestamptz IS NULL OR i.timeline_at >= $4::timestamptz)
+      WHERE i.state = 'published' AND s.enabled AND NOT s.platform_produced AND ($4::timestamptz IS NULL OR i.timeline_at >= $4::timestamptz)
       ORDER BY i.timeline_at DESC, i.id DESC LIMIT ${size}`, [wanted, registered, dois, sinceIso])).rows ?? [];
     for (const row of rows) matches.push(matchOf(row, "identifier", wanted, entities, listOf(row.matched_keys).map(String)));
   }
   if (entities.length && matches.length < size) {
     const rows = (await database.query(`SELECT ${ITEM_COLUMNS}
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
-      WHERE i.state = 'published' AND s.enabled AND i.entity_keys && $1::text[] AND ($2::timestamptz IS NULL OR i.timeline_at >= $2::timestamptz)
+      WHERE i.state = 'published' AND s.enabled AND NOT s.platform_produced AND i.entity_keys && $1::text[] AND ($2::timestamptz IS NULL OR i.timeline_at >= $2::timestamptz)
         AND i.id <> ALL($3::bigint[])
       ORDER BY (SELECT count(*) FROM unnest(i.entity_keys) shared WHERE shared = ANY($1::text[])) DESC, i.timeline_at DESC, i.id DESC
       LIMIT ${size - matches.length}`, [entities, sinceIso, matches.map((match) => match.id)])).rows ?? [];

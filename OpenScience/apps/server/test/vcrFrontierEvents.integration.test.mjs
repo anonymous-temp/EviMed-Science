@@ -254,6 +254,21 @@ test("trial events become candidates that are never precedents; a record the lib
   assert.equal((await consumer.candidatesFor(USER, { studyId: study.id })).length, 3, "NCT02296125 was never one; the three still wait for the evidence write");
 });
 
+test("D-05: the platform's own echo of a trial is no trial event: it is not raised as a candidate, and a report from the world still is", skipWithoutDatabase, async () => {
+  const { vcr, database } = fixture;
+  await insertSource(database, "evimed-evidence-echo");
+  await database.query("UPDATE evimed_frontier.sources SET platform_produced = true WHERE id = 'evimed-evidence-echo'");
+  const study = await vcr.store.createStudy({ userId: USER, projectId: "prj-echo", name: "echo", question: "q", dataTier: "T0" });
+  await vcr.store.query("UPDATE evimed_vcr.studies SET entity_keys = $2::text[] WHERE id = $1", [study.id, ["drug:echoumab"]]);
+  const keys = ["drug:echoumab"];
+  // The plugin gives the echo of a card the card's registry numbers, so a registry-numbered `rct` item reads as a results event.
+  await feedItem({ registryIds: ["NCT05550101"], entityKeys: keys, row: { sourceId: "evimed-evidence-echo", title: "EviMed card on NCT05550101", evidenceType: "rct" } });
+  const report = await feedItem({ registryIds: ["NCT05550102"], entityKeys: keys, row: { title: "Results of NCT05550102", evidenceType: "rct", doi: "10.1000/echo.results" } });
+  await consumer.tick();
+  const candidates = await consumer.candidatesFor(USER, { studyId: study.id });
+  assert.deepEqual(candidates.map((entry) => entry.frontierItemId), [report]);
+});
+
 test("the trial event of an item is decided by its own fields, and a registry number by the form its registry writes it in", () => {
   assert.equal(trialEventOf({ registryIds: ["NCT1"], flags: ["registry-unpublished"] }), "registration");
   assert.equal(trialEventOf({ registryIds: ["NCT1"], evidenceType: "rct", flags: [] }), "results");

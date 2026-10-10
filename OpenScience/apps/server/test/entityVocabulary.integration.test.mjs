@@ -204,6 +204,39 @@ test("frontierItemsMatching: identifier matches first, then entity matches by sh
   assert.deepEqual(await createEntityVocabulary({ database, enabled: false }).frontierItemsMatching({ identifierKeys: ["pmid:42"] }), []);
 });
 
+test("D-05: frontierItemsMatching never returns the platform's own echoed card, by identifier, by registry number or by entity", options, async () => {
+  // The review's echo_probe: a NEJM item and the item the platform's own evidence feed (`platform_produced`) made of the same
+  // study share NCT01234567 and an entity; the matcher returned both, so an official card was told "new evidence" by its own
+  // echo (evidence currency), a study's card by another card's echo (VCR events), and the planner by the platform's output.
+  await database.query("TRUNCATE evimed_frontier.item_keys, evimed_frontier.items RESTART IDENTITY CASCADE");
+  for (const [id, platform] of [["s-report", false], ["s-echo", true]]) {
+    await database.query(`INSERT INTO evimed_frontier.sources (id, name, lane, source_type, access, egress, authority, safety_feed, owner_entity, launch_tier, region, platform_produced)
+      VALUES ($1,$1,'evidence','journal','rss','direct',4,false,$1,'P0','US',$2) ON CONFLICT (id) DO UPDATE SET platform_produced = EXCLUDED.platform_produced, enabled = true`, [id, platform]);
+  }
+  /** @param {string} name @param {string} source */
+  const insert = async (name, source) => {
+    const result = await database.query(`INSERT INTO evimed_frontier.items (public_id, primary_source_id, canonical_url, identity_key, doi, registry_ids, title_raw,
+        lang, lane, source_type, entity_keys, state, published_at, first_seen_at, timeline_at, visible_at)
+      VALUES ($1,$2,$3,$4,$5,'{NCT01234567}',$6,'en','evidence','journal','{drug:foo}','published',now(),now(),now(),now()) RETURNING id`,
+    [`${name}xxxxxxxxxxxx`.slice(0, 16), source, `https://example.org/${name}`, `url:${createHash("sha256").update(name).digest("hex")}`,
+      `10.1000/${name}`, name]);
+    await database.query("INSERT INTO evimed_frontier.item_keys (key, item_id) VALUES ($1,$2), ($3,$2)", [`reg:NCT01234567:${name}`, result.rows[0].id, `doi:10.1000/${name}`]);
+  };
+  await insert("report", "s-report");
+  await insert("echo", "s-echo");
+  const titles = async (/** @type {any} */ query) => (await frontierItemsMatching(database, query)).map((match) => [match.titleRaw, match.matchedBy]);
+  assert.deepEqual(await titles({ identifierKeys: ["reg:NCT01234567", "doi:10.1000/report", "doi:10.1000/echo"], entityKeys: ["drug:foo"] }),
+    [["report", "identifier"]], "an identifier the echo shares with its report names the report only");
+  assert.deepEqual(await titles({ identifierKeys: ["doi:10.1000/echo"] }), [], "the echo's own DOI finds nothing");
+  assert.deepEqual(await titles({ identifierKeys: ["reg:NCT01234567"] }), [["report", "identifier"]], "a registry number is read from the item's own column too");
+  assert.deepEqual(await titles({ entityKeys: ["drug:foo"] }), [["report", "entity"]], "an entity both carry finds the report only");
+  // With nothing but the echo in the feed there is nothing to be told.
+  await database.query("DELETE FROM evimed_frontier.items WHERE primary_source_id = 's-report'");
+  assert.deepEqual(await titles({ identifierKeys: ["reg:NCT01234567"], entityKeys: ["drug:foo"] }), []);
+  // The vocabulary's own method, which the programme, the planner and the VCR events call, is the same lookup.
+  assert.deepEqual(await vocabulary().frontierItemsMatching({ entityKeys: ["drug:foo"], identifierKeys: ["reg:NCT01234567"] }), []);
+});
+
 // --- autopilot agendas -------------------------------------------------------------------------
 
 const agendaInput = { title: "Question", topics: ["research"], taskTypes: ["evidence-update"], dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 8, scheduleHour: 1, timeZone: "UTC" };
