@@ -87,6 +87,15 @@ export function budgetStopped(project) {
 }
 
 /**
+ * Whether a project's budget lets the market place anything: one is set and it is not a stop. What a reader is told about placing reads this,
+ * so a budget of nothing is never said to place "within budget".
+ * @param {{ budget?: { totalCny?: unknown } | null } | null | undefined} project
+ */
+export function budgetOpen(project) {
+  return Boolean(project?.budget) && !budgetStopped(project);
+}
+
+/**
  * The day's new commitments from ledger sums since the day began: per order,
  * what was reserved today less what came back today — a reserve released the
  * same day (a refused send, a settlement's remainder) is not the day's spend,

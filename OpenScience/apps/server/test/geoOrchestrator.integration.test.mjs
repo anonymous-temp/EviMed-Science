@@ -423,6 +423,26 @@ test("a locked set with no control group is a diagnosis only: content and distri
   await q(`UPDATE evimed_geo.projects SET status = 'paused' WHERE id = $1`, [project.id]);
 });
 
+test("the first-publishable notice promises placing within a budget only when the budget can place: not for a budget of nothing, nor for none (G10h)", options, async () => {
+  const sent = /** @type {any[]} */ ([]);
+  const notifier = createGeoNotifier({ store, config: { operatorUsers: ["ops"], mediaMarketUrl: "https://market.example", mediaMarketApiKey: "test-only-market-key-0123456789" },
+    notifications: { async create(/** @type {string} */ userId, /** @type {any} */ input) { sent.push({ userId, ...input }); return { id: `n${sent.length}` }; } } });
+  const orchestrator = new GeoOrchestrator({ store, config: { geoTimeZone: "Asia/Shanghai" }, notifier });
+  for (const [budget, said] of /** @type {Array<[any, string]>} */ ([
+    [{ totalCny: 5000, dailyCny: 500 }, "会在预算内自动投放。"], [{ totalCny: 0, dailyCny: 0 }, "设置投放预算后会自动投放。"], [null, "设置投放预算后会自动投放。"],
+  ])) {
+    const { project, userId } = await newProject();
+    if (budget) await store.updateProject(userId, project.id, { budget });
+    await q(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, status, safety) VALUES ($1, $2, $3, 'publishable', 'clear')`, [`ga_${randomUUID()}`, userId, project.id]);
+    await orchestrator.advance(project.id);
+    const notice = sent.find((entry) => entry.idempotencyKey === `geo:${project.id}:first-publishable`);
+    assert.ok(notice, `a first-publishable notice for ${JSON.stringify(budget)}`);
+    assert.match(notice.body, new RegExp(said), JSON.stringify(budget));
+    // The suite's database is shared by every test's tick: this project does not take part in the others'.
+    await q(`UPDATE evimed_geo.projects SET status = 'paused' WHERE id = $1`, [project.id]);
+  }
+});
+
 test("a single step (信源分析与预期) builds only its minimal upstream: identity, 30 questions, one round, the strategy", options, async () => {
   const world = harness();
   const { project, control, user, userId } = await newProject("诺和盈");

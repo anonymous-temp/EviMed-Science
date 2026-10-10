@@ -1,6 +1,7 @@
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoValueActive, geoValueList, geoValueText, stepWaitingFor } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
+import { budgetOpen } from "./geoMarketStore.mjs";
 import { HttpError, randomId } from "./security.mjs";
 
 /**
@@ -1508,7 +1509,7 @@ export class GeoOrchestrator {
       const ready = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.articles WHERE geo_project_id = $1
         AND status IN ('publishable', 'placed', 'published')`, [project.id])).rows[0]?.n ?? 0);
       if (ready > 0) {
-        await this.#notice(project, "notice:first-publishable", () => this.notifier?.firstPublishable(project, { count: ready, budgetSet: Boolean(project.budget) }));
+        await this.#notice(project, "notice:first-publishable", () => this.notifier?.firstPublishable(project, { count: ready, budgetSet: budgetOpen(project) }));
       }
     }
     await this.#citations(project);
