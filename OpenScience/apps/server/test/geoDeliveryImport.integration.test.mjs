@@ -123,10 +123,12 @@ test("an article registered before its deliverable was submitted takes the gate'
     [`gg-${run}`, USER, created.id]);
   const [articleId] = await store.registerArticles(USER, created.id, [{ path: "deliverables/geo-content/articles/a.md", layer: "card", title: "t",
     groupId: `gg-${run}`, claimIds: [], gate: "unverified", safety: "clear", contentSha256: "a".repeat(64), runId: "run_c", deliverableId: "geo-content" }]);
+  const asked = /** @type {any[]} */ ([]);
   const importDelivery = createGeoDeliveryImport({ store, readFile: async () => { throw new Error("none"); }, listInsightFolders: async () => [],
-    articleGate: async (_project, ref) => (ref.deliverableId === "geo-content" ? "passed" : "unverified") });
+    articleGate: async (_project, ref) => { asked.push(ref); return ref.deliverableId === "geo-content" ? "passed" : "unverified"; } });
   const result = await importDelivery({ id: `s-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "run_c", status: "succeeded", deliverables: [] });
   assert.equal(result?.gated, 1);
+  assert.equal(asked[0].contentSha256, "a".repeat(64), "the gate is asked for the bytes the run declared, so a pass can be held to them (M-10)");
   const article = await store.getArticle(created.id, articleId);
   assert.deepEqual([article?.gate, article?.status], ["passed", "publishable"]);
 });

@@ -11,7 +11,7 @@ import { GEO_AUDIENCES } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { brandRegistry } from "../src/geoParse.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
-import { GEO_MEASURED_RANGE, geoArticleGateOf, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "../src/geoWrites.mjs";
+import { GEO_MEASURED_RANGE, geoArticleGateBound, geoArticleGateOf, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -420,14 +420,14 @@ test("an article's gate is the run ledger's verdict, never the run's own claim",
   const unasked = await write(project, "articles", { items: [item("one")] });
   assert.deepEqual(unasked.articles.map((/** @type {any} */ entry) => entry.gate), ["unverified"]);
   assert.deepEqual((await store.listArticles(project.id)).map((row) => [row.gate, row.status]), [["unverified", "draft"]]);
-  // The ledger is asked with the deliverable the article was written in.
+  // The ledger is asked with the deliverable the article was written in, and the bytes the run declares for it (M-10).
   const asked = /** @type {any[]} */ ([]);
   const ledger = async (/** @type {any} */ _project, /** @type {any} */ ref) => { asked.push(ref); return ref.path.endsWith("two.md") ? "passed" : "failed"; };
   const answered = await write(project, "articles", { items: [item("two", { runId: "run_1" }), item("three", { deliverableId: "geo-content" })] }, null, ledger);
   assert.deepEqual(answered.articles.map((/** @type {any} */ entry) => entry.gate), ["passed", "failed"]);
   assert.deepEqual(asked, [
-    { runId: "run_1", deliverableId: "geo-content", path: "deliverables/geo-content/two.md" },
-    { runId: null, deliverableId: "geo-content", path: "deliverables/geo-content/three.md" },
+    { runId: "run_1", deliverableId: "geo-content", path: "deliverables/geo-content/two.md", contentSha256: "b".repeat(64) },
+    { runId: null, deliverableId: "geo-content", path: "deliverables/geo-content/three.md", contentSha256: "b".repeat(64) },
   ]);
   assert.deepEqual((await store.listArticles(project.id)).map((row) => [row.path.split("/").pop(), row.gate, row.status]),
     [["one.md", "unverified", "draft"], ["two.md", "passed", "publishable"], ["three.md", "failed", "draft"]]);
@@ -445,6 +445,14 @@ test("the ledger's verdict: passed only for a deliverable accepted clean", () =>
   assert.equal(geoArticleGateOf(run({ status: "delivered", lastVerdict: "pass" }, "canceled"), "geo-content"), "failed");
   assert.equal(geoArticleGateOf(run({ status: "delivered", lastVerdict: "pass" }), "other"), "unverified", "a deliverable the run does not hold");
   assert.equal(geoArticleGateOf(null, "geo-content"), "unverified");
+  // A pass counts only for the bytes the receipt graded, which must be the bytes the run declares (M-10); no other verdict is bound to anything.
+  const graded = "a".repeat(64);
+  assert.equal(geoArticleGateBound("passed", { gradedSha256: graded, contentSha256: graded }), "passed");
+  assert.equal(geoArticleGateBound("passed", { gradedSha256: graded, contentSha256: "b".repeat(64) }), "unverified");
+  assert.equal(geoArticleGateBound("passed", { gradedSha256: null, contentSha256: graded }), "unverified", "a file the receipt does not name");
+  assert.equal(geoArticleGateBound("passed", { gradedSha256: graded, contentSha256: null }), "unverified", "bytes nobody declared");
+  assert.equal(geoArticleGateBound("failed", { gradedSha256: null, contentSha256: null }), "failed");
+  assert.equal(geoArticleGateBound("unverified", { gradedSha256: graded, contentSha256: graded }), "unverified");
 });
 
 test("a run reports its thinking steps; the platform's steps and the questions' done are not its to write", options, async () => {

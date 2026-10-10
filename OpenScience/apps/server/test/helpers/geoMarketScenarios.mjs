@@ -778,6 +778,28 @@ export function defineGeoMarketMoneyPathScenarios(test, makeFixture, options = {
     } finally { await w.close(); }
   });
 
+  test("a file other than the one the gate graded is not sent, though it is the one the run declared (M-10)", options, async () => {
+    // The file's hash is the declared one (so the review check passes), but the receipt graded other bytes: those were never judged.
+    const w = await world(makeFixture);
+    try {
+      const p = await w.project();
+      const asked = /** @type {any[]} */ ([]);
+      let graded = "c".repeat(64);
+      const deps = { ...w.deps, gradedSha256: async (/** @type {any} */ article) => { asked.push(article.id); return graded; } };
+      const refused = await tickOrders(deps);
+      assert.equal(refused.skipped.article_not_graded_as_sent, 1, "the graded bytes are other bytes");
+      assert.equal(refused.submitted, 0);
+      assert.equal(w.fake.requestsTo("/api/media/send").length, 0, "nothing reached the vendor");
+      assert.deepEqual([(await moneyOf(w.fixture.store, p.id)).reservedCny, (await orders(w.fixture.store, p.id))[0].state], [0, "planned"], "no money held; the plan waits");
+      // Graded bytes that are the file's: sent. Graded bytes unknown (no receipt to read): the declaration stands, as it did.
+      graded = sha256Hex(ARTICLE_MARKDOWN);
+      assert.equal((await tickOrders(deps)).submitted, 1);
+      assert.ok(asked.length >= 2);
+      await w.project({ id: "geo_p2", userId: "u2" });
+      assert.equal((await tickOrders({ ...deps, gradedSha256: async () => null })).submitted, 1, "an unknown verdict is not a refusal");
+    } finally { await w.close(); }
+  });
+
   test("race (M-1): a project paused after the tick listed it is not sent for", options, async () => {
     const w = await world(makeFixture);
     try {

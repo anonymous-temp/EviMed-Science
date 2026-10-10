@@ -138,7 +138,7 @@ export const readWorkspaceFile = async (workspaceDir, relative) => readFileNoFol
  *   listInsightFolders?: (workspaceDir: string) => Promise<string[]>,
  *   listDeliverableFolders?: (workspaceDir: string) => Promise<string[]>,
  *   capabilityOutputs?: (id: string) => Promise<string[]>,
- *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>) | null,
+ *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string, contentSha256?: string | null }) => Promise<string>) | null,
  *   articleRunId?: ((project: any, deliverableId: string) => Promise<string | null>) | null,
  *   refreshCards?: ((geoProject: any, controlProject: any) => Promise<{ cards: unknown[], held: unknown[], failed: unknown[] } | null>) | null,
  *   checkReferences?: ((geoProject: any, article: any, text: string) => Promise<unknown>) | null }} deps
@@ -290,7 +290,8 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       for (const article of await store.listArticles(geoProject.id)) {
         if (article.gate === "passed" || !["draft", "publishable"].includes(String(article.status))) continue;
         try {
-          const gate = await articleGate(geoProject, { runId: article.runId ?? null, deliverableId: article.deliverableId ?? null, path: article.path });
+          const gate = await articleGate(geoProject, { runId: article.runId ?? null, deliverableId: article.deliverableId ?? null, path: article.path,
+            contentSha256: article.contentSha256 ?? null });
           if (["passed", "unverified", "failed"].includes(String(gate)) && await store.refreshArticleGate(geoProject.id, article.id, /** @type {any} */ (gate))) gated += 1;
         } catch (error) {
           report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_article_gate_failed");

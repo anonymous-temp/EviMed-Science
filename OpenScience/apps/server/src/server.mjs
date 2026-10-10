@@ -120,7 +120,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import { preservedConversationHistory } from "./conversationHistory.mjs";
@@ -318,7 +318,7 @@ import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
 import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
 import { createGeoQuestionBank, questionBankSummary } from "./geoQuestionBank.mjs";
-import { geoArticleGateOf } from "./geoWrites.mjs";
+import { geoArticleGateBound, geoArticleGateOf } from "./geoWrites.mjs";
 import { GeoService, geoAudienceAllows, isGeoPlaceholderName, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } from "./geoGateway.mjs";
@@ -2092,7 +2092,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // each route or loop that needs one reads it at the moment it is needed.
   /** @type {{ store: GeoStore, service: GeoService, social: ReturnType<typeof createSocialCrawlClient>, worker: any, orchestrator: any,
    *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown>,
-   *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>,
+   *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string, contentSha256?: string | null }) => Promise<string>,
    *   articleExists: (project: any, articlePath: string) => Promise<boolean>,
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
    *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
@@ -2145,11 +2145,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       },
       // An article's gate is the run ledger's verdict on the deliverable it
       // was written in — the newest run of the project holding that
-      // deliverable (or the run named) — never the run's own claim.
-      articleGate: async (project, { runId, deliverableId, path: articlePath }) => {
+      // deliverable (or the run named) — never the run's own claim. A pass
+      // counts for the article only when the receipt graded the bytes the run
+      // declares for it (`geoArticleGateBound`, M-10).
+      articleGate: async (project, { runId, deliverableId, path: articlePath, contentSha256 = null }) => {
         const id = deliverableId ?? deliverableIdOfPath(articlePath);
         const run = id ? await geoDeliverableRun(project, id, runId) : null;
-        return run ? geoArticleGateOf(run, id) : "unverified";
+        const gate = run ? geoArticleGateOf(run, id) : "unverified";
+        return gate === "passed" ? geoArticleGateBound(gate, { contentSha256, gradedSha256: await geoGradedSha(project, run, id, articlePath) }) : gate;
       },
       articleExists: async (project, articlePath) => {
         const controlProject = await sourceProject({ userId: project.userId, projectId: project.projectId });
@@ -2215,6 +2218,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       .filter((run) => (!runId || run.id === runId) && (run.deliverables ?? []).some((/** @type {any} */ item) => item?.id === deliverableId))
       .sort((left, right) => String(right.startedAt ?? "").localeCompare(String(left.startedAt ?? "")));
     return runs[0] ?? null;
+  }
+  /**
+   * The sha256 a run's delivery receipt graded the file at `articlePath` at, in its entry for `deliverableId`: the bytes the gate judged,
+   * as it recorded them. Null when the receipt cannot be read or names no such file.
+   * @param {any} project @param {any} run @param {string} deliverableId @param {string} articlePath
+   */
+  async function geoGradedSha(project, run, deliverableId, articlePath) {
+    const owner = await store.userById(project.userId);
+    if (!owner) return null;
+    const receipt = await readDeliveryReceipt(await store.requireProject(owner, project.projectId), run).catch(() => null);
+    const wanted = articlePath.startsWith(`${deliverableDir(deliverableId)}/`) ? articlePath : `${deliverableDir(deliverableId)}/${articlePath}`;
+    const entry = receipt?.entries?.find((/** @type {any} */ item) => item?.deliverableId === deliverableId);
+    return entry?.files?.find((/** @type {any} */ file) => file?.path === wanted)?.sha256 ?? null;
   }
   const geoRoutes = createGeoRoutes({
     store, service: geo?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
@@ -4767,6 +4783,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       judgeService,
       catalogueJudgeContext: () => ensureEvidenceProject(store),
       store: new GeoMarketStore(productDatabase), market: marketClient, webReader, articleBody, config, timeZone: geoTimeZone,
+      // The bytes the delivery gate graded for an article's file, to hold a send to them (M-10); null where the receipt cannot say.
+      gradedSha256: async (/** @type {any} */ article, /** @type {any} */ geoProject) => {
+        const id = article?.deliverableId ?? deliverableIdOfPath(article?.path ?? "");
+        const run = id && article?.path ? await geoDeliverableRun(geoProject, id, article.runId ?? null) : null;
+        return run ? geoGradedSha(geoProject, run, id, article.path) : null;
+      },
       notify: (/** @type {any} */ event) => notifier.textChanged(event),
       alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
     };
