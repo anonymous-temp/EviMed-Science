@@ -693,18 +693,25 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
   if (!is.null(syn$interrupted)) return(.vcr_interrupted_result(syn$interrupted, sprintf("%d of %d synthetic copies were made", length(syn$data), as.integer(m))))
   copies <- do.call(rbind, lapply(seq_along(syn$data), function(k) cbind(copy = k, syn$data[[k]])))
   analyses <- .vcr_analyses_from_scenario(sc$analyses)
+  # The table that ships holds every copy, so the hard constraints and the leakage check read all of them stacked (`copies`); the
+  # fidelity and utility axes describe the first copy and the others are scored one by one below.
   report <- vcr_quality_report(train, syn$data[[1]], holdout,
                                constraints = sc$constraints, analyses = analyses,
                                criteria = sc$criteria,
                                generator = list(family = "synthpop_cart", m = syn$m,
                                                 smoothing = syn$smoothing, seed = job$seed),
-                               tstr_outcome = sc$tstrOutcome)
+                               tstr_outcome = sc$tstrOutcome, copies = syn$data)
   by_copy <- do.call(rbind, lapply(seq_along(syn$data), function(k) {
     uni <- vcr_fidelity_univariate(train, syn$data[[k]])
     pr <- tryCatch(vcr_utility_propensity(train, syn$data[[k]]), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_))
+    viol <- vcr_constraint_violations(syn$data[[k]], sc$constraints)
+    dis <- tryCatch(vcr_disclosure_report(train, syn$data[[k]], holdout), error = function(e) list(available = FALSE))
+    got <- function(key) if (isTRUE(dis$available) && !is.na(dis[[key]])) dis[[key]] else NA_real_
     data.frame(copy = k, worstKsD = suppressWarnings(max(uni$value[uni$statistic == "ks_d"], -Inf)),
                worstTvd = suppressWarnings(max(uni$value[uni$statistic == "tvd"], -Inf)),
-               sPMSE = pr$sPMSE, propensityAuc = pr$propensityAuc)
+               sPMSE = pr$sPMSE, propensityAuc = pr$propensityAuc,
+               constraintViolations = if (nrow(viol)) sum(viol$violations) else 0,
+               replicationRatio = got("replicationRatio"), nearestNeighbourInTrainShare = got("nearestNeighbourInTrainShare"), membershipAuc = got("membershipAuc"))
   }))
   worst <- which.max(ifelse(is.finite(by_copy$sPMSE), by_copy$sPMSE, -Inf))
   list(status = "succeeded",

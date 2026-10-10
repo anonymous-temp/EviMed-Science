@@ -237,6 +237,62 @@ vcr_case("C2-05", c("AC-09"), function() {
   out_r
 })
 
+vcr_case("C2-05c", c("AC-09", "AC-26"), function() {
+  # The quality and leakage report is about the table that ships. The synthesis writes every copy (up to 50) into one table, and the
+  # hard-constraint check and the disclosure axis -- the report the records download is gated on -- were run on copy 1 alone. A
+  # constraint broken only by the later copies read "pass", and the leakage of the union of copies, which holds more near neighbours of
+  # a training record than one copy does, was the leakage of one. Now both are measured on the copies stacked, as released; the other
+  # copies are scored one by one next to it (`qualityByCopy`: violations, replication ratio, nearest-neighbour share, membership AUC),
+  # and the report says which copy the fidelity and utility axes describe. The references are written here: the violations are counted
+  # on the table that was written, and the membership AUC is the Mann-Whitney AUC of the negated Gower distance of each training and
+  # holdout record to its nearest released record, by a plain-R double loop over the stacked rows.
+  set.seed(515L, kind = VCR_RNG_KIND)
+  n <- 300L
+  real <- data.frame(USUBJID = sprintf("S%03d", seq_len(n)), age = stats::rnorm(n, 62, 9), sex = stats::rbinom(n, 1L, 0.5),
+                     event = stats::rbinom(n, 1L, 0.3), site = sample(c("north", "south", "east"), n, TRUE), stringsAsFactors = FALSE)
+  inp <- vcr_test_input(real, "snp_c205c:subject", shape = "subject", source = "observed")
+  cap <- 70
+  sc <- list(m = 5L, holdoutShare = 0.2, constraints = list(list(name = "age_cap", rule = list(op = "compare", column = "age", comparator = "lte", value = cap))))
+  out <- tempfile("c2c"); dir.create(out); on.exit(unlink(out, recursive = TRUE), add = TRUE)
+  r <- vcr_test_run(vcr_test_job("population.synthpop", sc, list(inp), seed = 515L, job_id = "job_c205c"), output_dir = out)
+  tb <- vcr_test_table(r, "synthetic-population", out)
+  q <- r$diagnostics$quality; by <- r$diagnostics$qualityByCopy
+  # --- the constraint, counted on the table that was written
+  per_copy <- vapply(seq_len(5L), function(k) sum(tb$age[tb$copy == k] > cap), numeric(1))
+  pooled <- q$constraints$violations[q$constraints$rule == "age_cap"]
+  ok_con <- sum(per_copy) > per_copy[1] && identical(as.numeric(pooled), sum(per_copy)) && identical(as.numeric(by$constraintViolations), per_copy) &&
+    identical(q$constraintsPass, sum(per_copy) == 0)
+  # --- the leakage, by an independent construction: the split the job made, then the nearest released record of each real one
+  df_learn <- real[, setdiff(names(real), "USUBJID")]
+  set.seed(515L, kind = VCR_RNG_KIND); idx <- sample.int(n); n_hold <- floor(n * 0.2)
+  holdout <- df_learn[idx[seq_len(n_hold)], , drop = FALSE]; train <- df_learn[idx[-seq_len(n_hold)], , drop = FALSE]
+  vars <- names(train); rng <- lapply(train[vapply(train, is.numeric, logical(1))], function(v) diff(range(v, na.rm = TRUE)))
+  nearest <- function(x, ref) vapply(seq_len(nrow(x)), function(i) {
+    d <- Reduce(`+`, lapply(vars, function(v) if (is.numeric(ref[[v]])) abs(x[[v]][i] - ref[[v]]) / rng[[v]] else as.numeric(as.character(x[[v]][i]) != as.character(ref[[v]])))) / length(vars)
+    min(d)
+  }, numeric(1))
+  auc <- function(release) {
+    s_train <- -nearest(train, release); s_hold <- -nearest(holdout, release)
+    mean(outer(s_train, s_hold, ">")) + 0.5 * mean(outer(s_train, s_hold, "=="))
+  }
+  copies <- lapply(seq_len(5L), function(k) tb[tb$copy == k, vars, drop = FALSE])
+  auc_all <- auc(do.call(rbind, copies)); auc_each <- vapply(copies, auc, numeric(1))
+  ok_leak <- isTRUE(q$disclosure$available) && abs(q$disclosure$membershipAuc - auc_all) < 1e-12 && max(abs(by$membershipAuc - auc_each)) < 1e-12 &&
+    abs(q$disclosure$membershipAuc - auc_each[1]) > 1e-4
+  # the full-training replication rate is exact: the share of released rows that equal a training row, over all five copies
+  key <- function(d) do.call(paste, c(lapply(d[vars], as.character), sep = "\u001f"))
+  repl_all <- mean(key(do.call(rbind, copies)) %in% key(train))
+  ok_repl <- abs(q$disclosure$exactReplicationRateFullTraining - repl_all) < 1e-12
+  ok_label <- identical(q$release$copies, 5L) && q$release$rows == nrow(tb) && grepl("copy 1", q$release$fidelityAndUtilityOn, fixed = TRUE) && grepl("stacked", q$release$constraintsAndDisclosureOn, fixed = TRUE)
+  one <- function(x, f = "%s") if (length(x) == 1L) sprintf(f, x) else "NA"
+  many <- function(x, f = "%.4f") if (length(x)) paste(sprintf(f, x), collapse = "/") else "NA"
+  list(pass = identical(r$status, "succeeded") && nrow(tb) == 5L * (n - n_hold) && ok_con && ok_leak && ok_repl && ok_label,
+       detail = sprintf("5 copies of %d rows, rule age <= %d: violations per copy %s (reported %s), pooled %s (copy 1 alone: %d), constraintsPass %s; membership AUC of the release %s (independent %.6f; copy 1 alone %.6f), per copy %s (independent %s); exact replication over the release %s (independent %.6f); report says %s",
+                        nrow(tb) / 5L, cap, many(per_copy, "%d"), many(by$constraintViolations, "%d"), one(pooled, "%d"), as.integer(per_copy[1]), one(q$constraintsPass),
+                        one(q$disclosure$membershipAuc, "%.6f"), auc_all, auc_each[1], many(by$membershipAuc), many(auc_each),
+                        one(q$disclosure$exactReplicationRateFullTraining, "%.6f"), repl_all, one(q$release$constraintsAndDisclosureOn, "%s")))
+})
+
 vcr_case("C2-05b", c("AC-09", "AC-26"), function() {
   # What the rare-level merge reports. The merge folds every level held by fewer than the small-cell floor of rows into
   # "other" before synthesis, and its report named the levels it folded. A level below the floor is a small cell, and the

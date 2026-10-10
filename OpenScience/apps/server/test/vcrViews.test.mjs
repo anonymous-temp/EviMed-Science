@@ -851,6 +851,16 @@ test("the quality report reports numbers and never a verdict", () => {
   assert.ok(report.groups.flatMap((group) => group.rows).every((row) => row.value.source === "synthetic"));
   assert.doesNotMatch(JSON.stringify(report), /安全|匿名|合格|通过|风险低/, "a report is values, not a verdict");
   assert.equal(qualityReportView({}), null);
+  // a release of several copies says which table each group of numbers describes; a single table says nothing of the kind
+  assert.equal(report.scope, null);
+  const several = qualityReportView({
+    fidelity: { global: { sPMSE: 1.4 } }, disclosure: { available: true, membershipAuc: 0.6 }, constraints: [{ rule: "age_cap", violations: 192 }],
+    generator: { trainingObservations: 240, syntheticCopies: 5 }, release: { copies: 5, rows: 1200 },
+  });
+  assert.match(String(several.scope), /全部 5 份合成记录/);
+  assert.match(String(several.scope), /第 1 份/);
+  assert.doesNotMatch(JSON.stringify(several), /安全|匿名|合格|通过|风险低/);
+  assert.equal(several.groups.find((group) => group.key === "utility").rows.find((row) => row.key === "violations").value.value, 192, "the violations are the release's count");
 });
 
 test("a patient set's model card says what the model is, where it may be used, and what label it has earned", () => {
