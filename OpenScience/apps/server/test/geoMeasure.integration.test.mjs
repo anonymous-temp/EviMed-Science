@@ -468,6 +468,93 @@ test("an answer asked before an error moved, in the same millisecond, is not a l
 
 // ---------------------------------------------------------------- the breaker
 
+/** An inclusion channel double: the vendor's answer to a request is whatever `answer(requestId, polls)` says. */
+function inclusionDouble(/** @type {(requestId: string, polls: number) => "pending" | "valid" | "throw"} */ answer) {
+  /** @type {Map<string, number>} */
+  const polls = new Map();
+  return {
+    engines: () => ["baidu"],
+    submit: async (/** @type {any} */ task) => ({ requestId: `req_${task.thirdId}`, engine: task.engine }),
+    poll: async (/** @type {string} */ engine, /** @type {string} */ requestId) => {
+      const n = (polls.get(requestId) ?? 0) + 1;
+      polls.set(requestId, n);
+      const outcome = answer(requestId, n);
+      if (outcome === "throw") throw new Error("the vendor is not answering");
+      return outcome === "pending"
+        ? { engine, surface: { mode: "inclusion" }, status: "pending", hit: null, requestId }
+        : { engine, surface: { mode: "inclusion" }, status: "valid", hit: true, keywordRes: "玛仕度肽", requestId, shareUrl: null, screenshotUrl: null };
+    },
+  };
+}
+
+test("an inclusion check still pending past its age limit fails its job so the round closes; an answer inside or beyond it is kept (Q-7)", options, async () => {
+  await reset();
+  await seed("geo_q7", { engines: ["baidu"] });
+  /** @type {string | null} */
+  let answered = null;
+  const inclusion = inclusionDouble((requestId) => (requestId === answered ? "valid" : "pending"));
+  const h = await harness({ answers: () => ({ answer: A_RIGHT }), inclusion, config: { geoInclusionMaxHoldHours: 2 } });
+  try {
+    const round = await enqueueRound(h.deps, { geoProjectId: "geo_q7", kind: "baseline" });
+    assert.equal(round.planned, 3);
+    assert.equal((await tickProbe(h.deps)).inclusion.submitted, 3);
+    const held = await rows(`SELECT id, external_ref, submitted_at FROM evimed_geo.probe_jobs ORDER BY id`);
+    assert.ok(held.every((job) => job.external_ref && job.submitted_at), "each job holds the vendor's request and says since when");
+
+    // Pending for two minutes short of the limit: held again, not failed, and the round stays open.
+    h.clock.advance(61_000);
+    assert.equal((await tickProbe(h.deps)).inclusion.expired, 0);
+    h.clock.advance(117 * 60_000);
+    const inside = await tickProbe(h.deps);
+    assert.deepEqual([inside.inclusion.polled, inside.inclusion.expired, inside.roundsFinished], [3, 0, 0]);
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.probe_jobs WHERE status = 'leased'`))[0].n, 3);
+    const stamps = await rows(`SELECT submitted_at FROM evimed_geo.probe_jobs`);
+    assert.deepEqual(stamps.map((row) => row.submitted_at.toISOString()), held.map((job) => job.submitted_at.toISOString()), "the time is when the request was taken, not the last poll");
+
+    // Past the limit: one request the vendor has answered by now is kept, the two still pending are given up on.
+    answered = held[0].external_ref;
+    h.clock.advance(3 * 60_000);
+    const past = await tickProbe(h.deps);
+    assert.deepEqual([past.inclusion.done, past.inclusion.expired, past.roundsFinished], [1, 2, 1]);
+    const jobs = await rows(`SELECT status, error_code FROM evimed_geo.probe_jobs ORDER BY id`);
+    assert.deepEqual(jobs.map((job) => [job.status, job.error_code]).sort(), [["done", null], ["failed", "inclusion_hold_expired"], ["failed", "inclusion_hold_expired"]]);
+    const [closed] = await rows(`SELECT status FROM evimed_geo.rounds WHERE id = $1`, [round.roundId]);
+    assert.equal(closed.status, "partial", "the round is closed, with the two questions unmeasured on that engine");
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.snapshots`))[0].n, 1, "no answer is made up for them");
+    assert.equal(h.state.inclusionTotals.expired, 2, "and the expiries are counted for the operator's metrics");
+    assert.equal(h.state.inclusionTotals.done, 1);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an inclusion poll that keeps failing is given up on at the same limit, and a job held before the time was kept starts counting at its next hold (Q-7)", options, async () => {
+  await reset();
+  await seed("geo_q7b", { engines: ["baidu"] });
+  const inclusion = inclusionDouble(() => "throw");
+  const h = await harness({ answers: () => ({ answer: A_RIGHT }), inclusion, config: { geoInclusionMaxHoldHours: 1 } });
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_q7b", kind: "baseline", questionIds: ["geo_q7b_q1"] });
+    await tickProbe(h.deps);
+    // A job held by the build before this one has a request and no time. Its first hold here starts the clock; it is not failed by it.
+    await database.query(`UPDATE evimed_geo.probe_jobs SET submitted_at = NULL`);
+    h.clock.advance(6 * 60_000);
+    const first = await tickProbe(h.deps);
+    assert.deepEqual([first.inclusion.expired, first.roundsFinished], [0, 0]);
+    const [stamped] = await rows(`SELECT submitted_at FROM evimed_geo.probe_jobs`);
+    assert.ok(stamped.submitted_at && Math.abs(stamped.submitted_at.getTime() - h.clock.now().getTime()) < 5_000, "the clock started at that hold");
+    // The vendor never answers a poll: 53 minutes on it is still held, an hour and five on it is not.
+    h.clock.advance(53 * 60_000);
+    assert.equal((await tickProbe(h.deps)).inclusion.expired, 0);
+    h.clock.advance(12 * 60_000);
+    const last = await tickProbe(h.deps);
+    assert.deepEqual([last.inclusion.expired, last.roundsFinished], [1, 1]);
+    assert.deepEqual((await rows(`SELECT status, error_code FROM evimed_geo.probe_jobs`)).map((job) => [job.status, job.error_code]), [["failed", "inclusion_hold_expired"]]);
+  } finally {
+    await h.probe.close();
+  }
+});
+
 test("an engine that keeps returning a login page is paused, holds its round until a re-check fails, then the round finishes without it, and it resumes when its tab is back", options, async () => {
   await reset();
   await seed("geo_c");

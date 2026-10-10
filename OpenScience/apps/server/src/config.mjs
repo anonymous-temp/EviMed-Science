@@ -728,6 +728,10 @@ function geoSettings(overrides) {
     // Engines measured through the marketplace's inclusion check instead of the
     // probe (spec §7.4) — only `baidu` (文心) is meant to be here.
     geoInclusionEngines: inclusionEngines,
+    // How long the vendor's inclusion check may stay pending (or its poll keep failing) before the job is failed, counted from the request
+    // being taken. A leased job keeps its round open, and a vendor that never answers held it for ever; a failed job lets the round close
+    // without that question on that engine (「未测」). Counted as `open_science_geo_inclusion_total{event="expired"}`.
+    geoInclusionMaxHoldHours: integer("geoInclusionMaxHoldHours", "OPEN_SCIENCE_GEO_INCLUSION_MAX_HOLD_HOURS", 6, 1, 168),
     // Whether the parse loop follows the links an answer cites (flywheel F21, 2026-10-06): each is a public page read through the web
     // reader (robots honoured, paced per site) and a small judge call under the module's daily budget, at most three links per
     // answer. Off by default: the cited sentences are recorded and called neither good nor bad. Counted as

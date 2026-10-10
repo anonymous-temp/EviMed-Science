@@ -119,6 +119,7 @@ export function jobRow(row) {
     snapshotId: row.snapshot_id ?? null,
     errorCode: row.error_code ?? null,
     externalRef: row.external_ref ?? null,
+    submittedAt: iso(row.submitted_at),
   };
 }
 
@@ -490,10 +491,16 @@ export class GeoMeasureStore {
     return result.rows.map(jobRow);
   }
 
-  /** @param {string} jobId @param {string} externalRef @param {{ now: Date, leaseUntil: Date, runAfter: Date }} at */
+  /**
+   * Hold the job on the vendor's request. `submitted_at` is when the request was first held: a hold of the same request keeps it
+   * (a job held before the column existed starts counting at its next hold).
+   * @param {string} jobId @param {string} externalRef @param {{ now: Date, leaseUntil: Date, runAfter: Date }} at
+   */
   async holdInclusionJob(jobId, externalRef, { now, leaseUntil, runAfter }) {
-    await this.query(`UPDATE evimed_geo.probe_jobs SET external_ref = $2, lease_until = $3, run_after = $4, updated_at = $5 WHERE id = $1`,
-      [jobId, externalRef, leaseUntil.toISOString(), runAfter.toISOString(), now.toISOString()]);
+    await this.query(`UPDATE evimed_geo.probe_jobs SET external_ref = $2, lease_until = $3, run_after = $4, updated_at = $5,
+        submitted_at = CASE WHEN external_ref IS DISTINCT FROM $2 OR submitted_at IS NULL THEN $5::timestamptz ELSE submitted_at END
+      WHERE id = $1`,
+    [jobId, externalRef, leaseUntil.toISOString(), runAfter.toISOString(), now.toISOString()]);
   }
 
   /**
@@ -502,7 +509,7 @@ export class GeoMeasureStore {
    * @param {string} jobId @param {{ now: Date, runAfter?: Date | null, refundAttempt?: boolean, errorCode?: string | null }} options
    */
   async requeueJob(jobId, { now, runAfter = null, refundAttempt = false, errorCode = null }) {
-    await this.query(`UPDATE evimed_geo.probe_jobs SET status = 'queued', lease_owner = NULL, lease_until = NULL, external_ref = NULL,
+    await this.query(`UPDATE evimed_geo.probe_jobs SET status = 'queued', lease_owner = NULL, lease_until = NULL, external_ref = NULL, submitted_at = NULL,
         run_after = $2, attempts = CASE WHEN $3::boolean THEN greatest(attempts - 1, 0) ELSE attempts END,
         error_code = coalesce($4, error_code), updated_at = $5
       WHERE id = $1`, [jobId, runAfter ? runAfter.toISOString() : null, refundAttempt, errorCode, now.toISOString()]);
