@@ -1,5 +1,5 @@
 {
- "about": "Incidents of the frontier feed's editing calls, each a real item from production (2026-09-22). Screen and edit: which lane a mixed source's item goes to. Same event: whether two reports are one event (acceptance record 2026-09-22T1405Z, F1, F3, F9). Run with run_eval.mjs; it calls the live model. Three explicitly synthetic regression controls were added on 2026-09-29; their text is authored evaluation input, not an upstream publication. Three evidence-type cases were added on 2026-10-10 (D-04 of the frontier review): each is authored evaluation input modelled on a production incident, not an upstream publication, and expects the evidence type `other` for a design the vocabulary has no key for (run them with --kind evidence-type).",
+ "about": "Incidents of the frontier feed's editing calls, each a real item from production (2026-09-22). Screen and edit: which lane a mixed source's item goes to. Same event: whether two reports are one event (acceptance record 2026-09-22T1405Z, F1, F3, F9). Run with run_eval.mjs; it calls the live model. Three explicitly synthetic regression controls were added on 2026-09-29; their text is authored evaluation input, not an upstream publication. Three evidence-type cases were added on 2026-10-10 (D-04 of the frontier review): each is authored evaluation input modelled on a production incident, not an upstream publication, and expects the evidence type `other` for a design the vocabulary has no key for (run them with --kind evidence-type). Six more were added the same day (F12a, the owner's ruling that an economic evaluation or a decision analysis is `other`, never the nearest design): a budget impact analysis, a discrete-event simulation and two models built on a trial's curves and a registry's rates expect `other`, and two controls, a prospective cohort and a randomised trial, must keep `observational` and `rct` (also --kind evidence-type).",
  "lane": [
   {
    "id": "food-recall-flour",
@@ -162,6 +162,90 @@
    }
   },
   {
+   "id": "synthetic-budget-impact-analysis",
+   "expect": [
+    "other"
+   ],
+   "why": "a budget impact analysis projects what a payer would spend with and without a listing; the claims records it counts the eligible population from are its inputs, not its design - it follows no patients and compares no exposed with unexposed groups, so it is neither a cohort study nor real-world evidence (F12a, the owner's ruling of 2026-10-10 that an economic evaluation or a decision analysis is `other`, never the nearest design). The text here is authored",
+   "edit": {
+    "titleRaw": "Budget impact of reimbursing a PCSK9 inhibitor for familial hypercholesterolaemia in the national health insurance fund: a payer perspective analysis",
+    "sourceName": "PubMed 药物经济学与卫生技术评估",
+    "sourceTypeLabel": "期刊",
+    "publishedAt": "2026-10-09T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "journal": "Synthetic Journal of Health Economics",
+    "publicationTypes": [
+     "Journal Article"
+    ],
+    "abstract": "Synthetic fixture. Objective: To estimate the budget impact of reimbursing a PCSK9 inhibitor for adults with familial hypercholesterolaemia from the perspective of the national health insurance fund. Methods: A budget impact model compared a world with reimbursement and a world without it over a three-year horizon. The eligible population was counted from the claims records of 18.2 million insured adults, and uptake was assumed to rise from 10% to 30% over the three years. Drug, administration and cardiovascular event costs came from the national price list and published sources. Results: Reimbursement would add CNY 412 million in year 1, CNY 698 million in year 2 and CNY 951 million in year 3 to fund expenditure, offset in part by CNY 87 million of avoided event costs over the three years. The result was most sensitive to the price per dose and the uptake rate. Conclusions: Under the model's assumptions, reimbursement would raise annual fund expenditure by 0.4% to 0.7%.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "synthetic-discrete-event-simulation",
+   "expect": [
+    "other"
+   ],
+   "why": "a discrete-event simulation is a model of how patients and resources flow through a system; the appointment records it is calibrated on are its inputs, not its design, so it is not an observational study of patients' outcomes (F12a, the owner's ruling of 2026-10-10 that an economic evaluation or a decision analysis is `other`, never the nearest design). The text here is authored",
+   "edit": {
+    "titleRaw": "Discrete-event simulation of chair capacity and waiting times in a hospital oncology infusion centre under extended opening hours",
+    "sourceName": "PubMed 药物经济学与卫生技术评估",
+    "sourceTypeLabel": "期刊",
+    "publishedAt": "2026-10-08T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "journal": "Synthetic Journal of Health Services Research",
+    "publicationTypes": [
+     "Journal Article"
+    ],
+    "abstract": "Synthetic fixture. Objective: To estimate how extended opening hours and added pharmacy staffing would change patient waiting times and chair use in a hospital oncology infusion centre. Methods: A discrete-event simulation model of patient arrival, nurse assessment, pharmacy preparation and chair occupancy was built and calibrated on one year of appointment records from three hospitals (41,260 infusion visits). The current schedule of 8 opening hours was compared with 10 and 12 hours, with and without one additional pharmacy technician. Each scenario was run 1,000 times. Results: Extending opening hours from 8 to 10 reduced the median waiting time from 62 to 34 minutes, and chair utilisation fell from 91% to 78%. Adding a pharmacy technician reduced the median waiting time by a further 9 minutes. Conclusions: In the simulation, longer opening hours and added pharmacy staffing both shortened waiting times; costs and staff workload were not modelled.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "synthetic-partitioned-survival-cost-utility",
+   "expect": [
+    "other"
+   ],
+   "why": "a cost-utility analysis built on a randomised trial's published curves is a health-economic evaluation: the trial supplies its inputs, but the study randomised no one and reports no trial result, so `rct` is the nearest design and the wrong one (F12a, the owner's ruling of 2026-10-10 that an economic evaluation or a decision analysis is `other`, never the nearest design). The text here is authored",
+   "edit": {
+    "titleRaw": "Cost-utility of adding an anti-PD-1 antibody to first-line chemotherapy in advanced gastric cancer: a partitioned survival analysis based on a phase 3 trial",
+    "sourceName": "PubMed 药物经济学与卫生技术评估",
+    "sourceTypeLabel": "期刊",
+    "publishedAt": "2026-10-07T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "journal": "Synthetic Journal of Pharmacoeconomics",
+    "publicationTypes": [
+     "Journal Article"
+    ],
+    "abstract": "Synthetic fixture. Objective: To compare the cost-utility of adding an anti-PD-1 antibody to chemotherapy as first-line treatment of advanced gastric cancer from the Chinese health-system perspective. Methods: A partitioned survival model with progression-free, progressed-disease and death states and a 10-year horizon was built. Survival curves were extrapolated from the published Kaplan-Meier curves of one phase 3 randomised trial; costs came from national tender prices and utilities from published studies. Results: The combination gained 0.46 quality-adjusted life years (QALYs) at an incremental cost of CNY 218,000, an incremental cost-utility ratio of CNY 474,000 per QALY, above the willingness-to-pay threshold of CNY 257,000 per QALY. A price reduction of 63% brought the ratio below the threshold. Conclusions: At the current price the combination is unlikely to be cost-effective.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "synthetic-screening-microsimulation",
+   "expect": [
+    "other"
+   ],
+   "why": "a microsimulation of screening strategies is a decision-analytic model: the cancer registry data it is calibrated to are its inputs, so it is not an observational cohort and its outcomes are projections, not observed events (F12a, the owner's ruling of 2026-10-10 that an economic evaluation or a decision analysis is `other`, never the nearest design). The text here is authored",
+   "edit": {
+    "titleRaw": "Microsimulation modelling of lung cancer screening strategies by low-dose computed tomography in a high-risk Chinese population",
+    "sourceName": "PubMed 药物经济学与卫生技术评估",
+    "sourceTypeLabel": "期刊",
+    "publishedAt": "2026-10-06T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "journal": "Synthetic Journal of Health Technology Assessment",
+    "publicationTypes": [
+     "Journal Article"
+    ],
+    "abstract": "Synthetic fixture. Objective: To compare the projected health outcomes and costs of annual and biennial low-dose computed tomography screening in high-risk adults aged 50 to 74 years. Methods: A microsimulation model of lung cancer natural history was calibrated to cancer registry incidence and stage distribution data from six cities. A simulated cohort of 100,000 adults was followed for life under three strategies: no screening, annual screening and biennial screening. Results: Compared with no screening, annual screening averted 11.6 lung cancer deaths per 1,000 people screened and biennial screening averted 8.9, at costs of CNY 41,000 and CNY 27,000 per life-year gained. Overdiagnosis accounted for 9% of screen-detected cancers. Conclusions: In the model, both strategies reduced lung cancer mortality; annual screening averted more deaths at a higher cost per life-year gained.",
+    "glossary": []
+   }
+  },
+  {
    "id": "synthetic-pharmacist-survey",
    "expect": [
     "other"
@@ -179,6 +263,48 @@
      "Journal Article"
     ],
     "abstract": "Synthetic fixture. Objective: To describe hospital pharmacists' attitudes toward deprescribing in older adults and the barriers they report. Methods: An online questionnaire was sent to 2,400 hospital pharmacists in 31 provinces between March and May 2026. Results: 1,126 pharmacists responded (46.9%). Of these, 71% agreed that deprescribing should be part of routine medication review, and 58% named lack of time as the main barrier. Pharmacists with clinical training were more likely to report having recommended deprescribing in the past year. Conclusions: Most responding pharmacists support deprescribing, but time and workflow barriers are common.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "synthetic-control-prospective-cohort",
+   "expect": [
+    "observational"
+   ],
+   "why": "a control, not an economic evaluation: a prospective cohort follows exposed and unexposed people over time and is what `observational` means, so the line that sends a design the vocabulary lacks to `other` must leave it where it was (F12a). The text here is authored",
+   "edit": {
+    "titleRaw": "Habitual coffee intake and incident atrial fibrillation in middle-aged adults: a prospective cohort study",
+    "sourceName": "PubMed 心血管病学",
+    "sourceTypeLabel": "期刊",
+    "publishedAt": "2026-10-05T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "journal": "Synthetic Journal of Cardiology",
+    "publicationTypes": [
+     "Journal Article"
+    ],
+    "abstract": "Synthetic fixture. Objective: To examine the association of habitual coffee intake with incident atrial fibrillation. Methods: This prospective cohort study followed 24,318 adults aged 40 to 65 years who were free of atrial fibrillation at enrolment; intake was assessed by a validated questionnaire. Results: During a median follow-up of 9.1 years, 1,204 participants developed atrial fibrillation. Compared with participants who drank no coffee, those who drank 2 to 3 cups a day had an adjusted hazard ratio of 0.88 (95% confidence interval 0.76 to 1.02). Conclusions: Habitual coffee intake was not associated with a higher risk of incident atrial fibrillation in this cohort.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "synthetic-control-randomised-trial",
+   "expect": [
+    "rct"
+   ],
+   "why": "a control, not an economic evaluation: a randomised, double-blind, placebo-controlled trial is `rct`, and the line that sends a design the vocabulary lacks to `other` must not pull it away (F12a). The text here is authored",
+   "edit": {
+    "titleRaw": "A once-weekly oral agent versus placebo in adults with type 2 diabetes inadequately controlled on metformin: a randomised, double-blind, placebo-controlled phase 3 trial",
+    "sourceName": "PubMed 内分泌与代谢",
+    "sourceTypeLabel": "期刊",
+    "publishedAt": "2026-10-04T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "journal": "Synthetic Journal of Endocrinology",
+    "publicationTypes": [
+     "Journal Article"
+    ],
+    "abstract": "Synthetic fixture. Background: Adults with type 2 diabetes often remain above their glycaemic target on metformin alone. Methods: In this randomised, double-blind, placebo-controlled phase 3 trial, 612 adults were randomly assigned 1:1 to the once-weekly oral agent or placebo for 26 weeks, both added to metformin. The primary endpoint was the change in glycated haemoglobin (HbA1c) from baseline at week 26. Results: The mean change in HbA1c was -1.1 percentage points with the agent and -0.2 with placebo (difference -0.9, 95% confidence interval -1.1 to -0.7). Adverse events occurred in 61% of the agent group and 58% of the placebo group. Conclusions: Added to metformin, the agent lowered HbA1c more than placebo over 26 weeks.",
     "glossary": []
    }
   }

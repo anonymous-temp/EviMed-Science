@@ -224,12 +224,11 @@ test("D-04: the edit prompt says a design the vocabulary has no key for is `othe
   assert.equal(FRONTIER_EDIT_INSTRUCTIONS.split("\n").filter((line) => line.includes("一律填 other")).length, 1, "one line, not a second rule");
 
   const cases = JSON.parse(await readFile(new URL("../../../evals/frontier-editing/cases.json", import.meta.url), "utf8"));
-  assert.deepEqual([cases.lane.length, cases.same_event.length, cases.evidence_type.length], [5, 11, 3], "the sections the other readers use are as they were");
-  assert.deepEqual(cases.evidence_type.map((entry) => entry.id), ["synthetic-mcda-genomic-testing", "synthetic-cost-effectiveness-model", "synthetic-pharmacist-survey"]);
+  assert.deepEqual([cases.lane.length, cases.same_event.length], [5, 11], "the sections the other readers use are as they were");
+  assert.equal(cases.evidence_type[0].id, "synthetic-mcda-genomic-testing");
   assert.equal(cases.evidence_type[0].public_id, "5a5fed19cd8ee71f", "the incident's own item");
   for (const entry of cases.evidence_type) {
-    assert.deepEqual(entry.expect, ["other"], entry.id);
-    assert.ok(entry.expect.every((type) => FRONTIER_EVIDENCE_TYPES.includes(type)), entry.id);
+    assert.ok(entry.expect.length > 0 && entry.expect.every((type) => FRONTIER_EVIDENCE_TYPES.includes(type)), entry.id);
     assert.ok(entry.why.length > 20, entry.id);
     // The case goes through the editor's own input builder, and an answer typed `other` is a verified edit of it.
     const input = buildModelInput({ ...entry.edit, allowedLanes: ["evidence"] });
@@ -239,6 +238,31 @@ test("D-04: the edit prompt says a design the vocabulary has no key for is `othe
     assert.equal(verified.output.evidenceType, "other", entry.id);
     assert.ok(!verified.failed.has("evidence_type"), entry.id);
   }
+});
+
+test("F12a: every economic evaluation and decision analysis the owner named has an eval case that expects `other`, and two controls hold the real designs", async () => {
+  // The owner's ruling of 2026-10-10 (review B, D-04): a multi-criteria decision analysis, a Markov cost-effectiveness model, a budget
+  // impact analysis and a discrete-event simulation are economic evaluation or decision analysis, never a cohort or a trial. The first
+  // two cases came with the prompt line; the rest are what the line is held by, and the two that follow tempt the nearest design with
+  // the data the model was built on (a trial's curves, a registry's rates). The controls make the line unable to pass by sending
+  // everything to `other`.
+  const cases = JSON.parse(await readFile(new URL("../../../evals/frontier-editing/cases.json", import.meta.url), "utf8"));
+  const byId = new Map(cases.evidence_type.map((/** @type {any} */ entry) => [entry.id, entry]));
+  assert.equal(byId.size, cases.evidence_type.length, "no case id twice");
+  const economic = ["synthetic-mcda-genomic-testing", "synthetic-cost-effectiveness-model", "synthetic-budget-impact-analysis", "synthetic-discrete-event-simulation",
+    "synthetic-partitioned-survival-cost-utility", "synthetic-screening-microsimulation"];
+  for (const id of economic) {
+    assert.ok(byId.has(id), `${id} is an eval case`);
+    assert.deepEqual(byId.get(id).expect, ["other"], id);
+  }
+  assert.deepEqual(cases.evidence_type.map((/** @type {any} */ entry) => entry.id), [...economic, "synthetic-pharmacist-survey",
+    "synthetic-control-prospective-cohort", "synthetic-control-randomised-trial"], "the section, in the order it is read");
+  assert.deepEqual(byId.get("synthetic-pharmacist-survey").expect, ["other"]);
+  assert.deepEqual(byId.get("synthetic-control-prospective-cohort").expect, ["observational"]);
+  assert.deepEqual(byId.get("synthetic-control-randomised-trial").expect, ["rct"]);
+  // Each case is a distinct abstract: a second copy of one text would count one answer twice.
+  assert.equal(new Set(cases.evidence_type.map((/** @type {any} */ entry) => entry.edit.abstract)).size, cases.evidence_type.length);
+  for (const id of economic.slice(2)) assert.match(byId.get(id).why, /F12a/, `${id} says which ruling it holds`);
 });
 
 test("an edit that passes every check is published as written, with what the model was shown and its hash", async () => {
