@@ -43,6 +43,7 @@ import {
   METHOD_RELATION_TYPES,
   RUNTIME_ROOM_REFUSAL_CODES,
   cleanMethodDisplay,
+  methodHarmTest,
   parseSkillFrontmatter,
   preservedSectionsIntact,
   retirementProposal,
@@ -257,12 +258,16 @@ export function relevantPlatformTools(tools, members) {
   omitted: Math.max(0, relevant.length - 30), irrelevant: tools.length - relevant.length, selectionBasis: "declared-capability" } };
 }
 
-/** Current, already-recorded paired evidence may complete a pending merge; default approval alone cannot.
+/**
+ * Whether a merged (canonical) method has cleared the harm test on its own runs, which is what lets the originals it replaces go (owner ruling of
+ * 2026-10-10, review L-1): it is in force, and the sequential test over the runs that invoked the body it holds now (`methodHarmTest`, the detector that
+ * retires an inferred method) has read clear. Being approved at birth is not that, a run that merely had it mounted is not that, and neither is a verdict
+ * about another body. It used to wait for a paired evaluation, which no deployment runs (no paid method on/off study), so no merge ever retired anything.
  * @param {any} method */
-function mergeValidated(method) {
-  const evaluation = (method.payload.learning?.evaluations ?? []).filter((/** @type {any} */ item) => item.candidateDigest === method.payload.contentDigest).at(-1);
-  return method.payload.status === "approved" && evaluation && ["better", "non_inferior"].includes(evaluation.verdict)
-    && Boolean(evaluation.report) && Boolean(evaluation.baselineDigest);
+function mergeCleared(method) {
+  const learning = method.payload?.learning;
+  return method.payload?.status === "approved" && Boolean(learning) && learning.digest === method.payload.contentDigest
+    && methodHarmTest(learning).state === "clear";
 }
 
 export class MethodConsolidation {
@@ -647,20 +652,20 @@ export class MethodConsolidation {
     return count;
   }
 
-  /** Retire pinned originals only after the canonical method passes the existing independent lifecycle.
+  /** Retire pinned originals once the canonical method has cleared the harm test on its own runs (`mergeCleared`); until then they stay in force beside it.
    * @param {any} job */
   async completePendingMerges(job) {
     const retired = [];
     const methods = (await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods })).items ?? [];
     for (const canonical of methods) {
-      if (!mergeValidated(canonical) || !String(canonical.payload.provenance?.consolidatedBy ?? "").startsWith("consolidate:")) continue;
+      if (!mergeCleared(canonical) || !String(canonical.payload.provenance?.consolidatedBy ?? "").startsWith("consolidate:")) continue;
       for (const pending of canonical.payload.provenance?.pendingRetirements ?? []) {
         if (pending.methodId === canonical.id) continue;
         const original = await this.learning.getMethod(job.userId, pending.methodId).catch(() => null);
         if (!original || original.payload.status === "retired" || original.payload.contentDigest !== pending.baseDigest
           || !preservedSectionsIntact(original.payload.body, canonical.payload.body).ok) continue;
         const result = await this.learning.retire(job.userId, original.id, { expectedRevision: original.revision,
-          reason: "合并方法已完成独立验证，原方法保留历史并转向合并版本。",
+          reason: "合并后的做法在你的研究里用过，没有变差；原做法保留历史并转向合并版本。",
           link: { supersededBy: canonical.id, proposedBy: canonical.payload.provenance.consolidatedBy } }).catch(() => null);
         if (result) retired.push(original.id);
       }
@@ -808,7 +813,7 @@ export class MethodConsolidation {
         const replacement = created.get(rewrite.supersededBy);
         if (assignment.RELATION_TYPE !== "merge" || !replacement || rewrite.skill != null
           || !revisions.some((/** @type {any} */ item) => item.methodId === rewrite.supersededBy && item.assignment === rewrite.assignment && item.operation === "create")) continue;
-        if (!mergeValidated(replacement)) {
+        if (!mergeCleared(replacement)) {
           pendingRetirements.push({ methodId: target.id, baseDigest: rewrite.baseDigest, supersededBy: replacement.id, assignment: rewrite.assignment });
           continue;
         }

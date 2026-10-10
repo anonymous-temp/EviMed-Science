@@ -610,7 +610,7 @@ test("J1 preserves the unjudged tail and falls back without dispatching a runtim
   assert.deepEqual((await service.screenPairs({ userId: "u" }, pairs, [])).pairs, pairs);
 });
 
-test("canonical creation keeps approved originals usable until already-recorded independent evidence passes", async () => {
+test("a merge retires its originals when the canonical method has cleared the harm test on its own runs, and not before (review L-1)", async () => {
   const source = doc("source", "source-method", { status: "approved" });
   const canonicalId = "method:learned:canonical-method";
   const assignments = [{ ASSIGNMENT: "A1", SKILLS: ["source", "other"], RELATION_TYPE: "merge", REASON: "Identical methods" }];
@@ -630,14 +630,44 @@ test("canonical creation keeps approved originals usable until already-recorded 
   const result = await service.buildGroup({ id: "job", userId: "user", projectId: "project" }, members, { assignments });
   assert.equal(result.applied, 1);
   assert.equal(retirements.length, 0);
-  assert.equal(rows.get("source").payload.status, "approved");
+  assert.equal(rows.get("source").payload.status, "approved", "the original stays in force beside a canonical that has not been used yet");
   assert.equal(rows.get(canonicalId).payload.provenance.pendingRetirements.length, 1);
   assert.deepEqual(await service.completePendingMerges({ userId: "user" }), []);
+
   const canonical = rows.get(canonicalId);
-  canonical.payload.learning.evaluations = [{ verdict: "better", candidateDigest: "different", baselineDigest: "baseline", report: {} }];
-  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), []);
-  canonical.payload.learning.evaluations.push({ verdict: "non_inferior", candidateDigest: canonical.payload.contentDigest, baselineDigest: "baseline", report: { independentlyRecorded: true } });
+  const run = (index, outcome, extra = {}) => ({ runId: `run-${index}`, family: `family-${index}`, outcome, invoked: true, at: `2026-09-0${index}T00:00:00.000Z`, ...extra });
+  const clean = (count, extra = {}) => Array.from({ length: count }, (_, index) => run(index + 1, "accepted", extra));
+  /** @param {any[]} observations @param {any} [more] */
+  const holds = (observations, more = {}) => { canonical.payload.learning = { ...canonical.payload.learning, digest: canonical.payload.contentDigest, observations, ...more }; };
+
+  // A record of paired evidence is not what clears it any more: no study is run, so no merge could ever have retired anything by it.
+  holds([], { evaluations: [{ verdict: "non_inferior", candidateDigest: canonical.payload.contentDigest, baselineDigest: "baseline", report: "report.json" }] });
+  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "an evaluation verdict alone retires nothing");
+  // Mounted and never opened says nothing about it (the harm test reads only runs that invoked the method).
+  holds(clean(6, { invoked: false }));
+  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "runs that did not open the method are not evidence");
+  // Three clean runs are not yet a clear test; the sequential test needs four.
+  holds(clean(3));
+  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "three clean runs still leave the test open");
+  // A rejected delivery among them keeps it open, and a method the test reads as harmful is never cleared.
+  holds([run(1, "rejected"), ...clean(4).slice(1)]);
+  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "a rejected run among four leaves the test open");
+  holds([run(1, "rejected"), run(2, "rejected"), run(3, "rejected")]);
+  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "a canonical the test reads as harmful retires nobody");
+  // Four clean runs of another body (the counters describe text the method no longer holds) count for nothing.
+  holds(clean(4), { digest: "sha256:another-body" });
+  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "runs of another body do not clear this one");
+  // A canonical that is not in force is not cleared whatever its runs say (it is held back by a conflict, for one).
+  canonical.payload.status = "candidate";
+  holds(clean(4));
+  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "a candidate canonical retires nobody");
+  canonical.payload.status = "approved";
+
+  // Four clean runs that invoked the body it holds: the test reads clear, and the original is retired, once.
+  holds(clean(4));
   assert.deepEqual(await service.completePendingMerges({ userId: "user" }), ["source"]);
   assert.equal(retirements[0].input.link.supersededBy, canonicalId);
+  assert.match(retirements[0].input.reason, /合并/);
+  assert.equal(rows.get("source").payload.status, "retired");
   assert.deepEqual(await service.completePendingMerges({ userId: "user" }), []);
 });
