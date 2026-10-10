@@ -180,6 +180,21 @@ describe("行动: the drug-value analysis", () => {
     expect(document.querySelector("[data-geo-tab='actions']")?.lastElementChild).toBe(heading.closest("section"));
     expect(document.querySelector("[data-geo-ask-ai]")).toBeNull();
   });
+
+  it("shows three of a dozen next steps with the total and 显示更多 — the page does not grow by a dozen rows", async () => {
+    const opportunities = Array.from({ length: 12 }, (_, index) => ({ id: `o${index + 1}`, statement: `第 ${index + 1} 项下一步` }));
+    client.getGeoValue.mockResolvedValue({ ...valueFilled, data: { ...valueFilled.data, opportunities } });
+    client.getGeoArticles.mockResolvedValue({ articles: [article(1)] });
+    client.getGeoDistribution.mockResolvedValue({ ...distributionFilled, budget: null, orders: [], ownedLinks: [], market: { configured: false } });
+    renderTab(<ActionsTab {...props()} />);
+    const heading = await screen.findByRole("heading", { name: "下一步研究与内容" });
+    const section = heading.closest("section") as HTMLElement;
+    expect(heading.parentElement).toHaveTextContent("共 12 条");
+    expect(within(section).getAllByRole("listitem").filter((row) => /^第 \d+ 项下一步/.test(row.textContent ?? ""))).toHaveLength(3);
+    expect(within(section).getByRole("button", { name: "显示更多 · 还有 9 条" })).toBeInTheDocument();
+    // The sentence under the counts is still ahead of all of it.
+    expect((document.querySelector("[data-geo-market-off]") as HTMLElement).compareDocumentPosition(section) & FOLLOWS).toBeTruthy();
+  });
 });
 
 describe("行动: the articles", () => {

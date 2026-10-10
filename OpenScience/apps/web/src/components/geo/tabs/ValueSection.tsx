@@ -20,8 +20,11 @@ const record = (value: unknown): Record<string, unknown> => value && typeof valu
 const STATUS: Record<string, string> = { represented: "表达完整", partial: "表达不完整", contradicted: "与依据冲突", not_addressed: "未涉及", not_applicable: "不适用", uncertain: "尚不能判断" };
 const TASK: Record<string, string> = { pending: "等待研究", claimed: "正在研究", running: "正在研究", done: "可查看研究结果", failed: "查看已有结果与待补问题" };
 
-/** Rows listed before 「显示更多」: three in the excerpt on 总览, which links to the whole list on 方案, twelve anywhere else. */
-const firstOf = (mode: ValueMode): number => (mode === "summary" ? 3 : 12);
+/**
+ * Rows listed before 「显示更多」: three in the excerpt on 总览, which links to the whole list on 方案, and three on 行动, where the
+ * next work is a footnote to the articles and the placements and not a page of its own; twelve anywhere else.
+ */
+const firstOf = (mode: ValueMode): number => (mode === "summary" || mode === "actions" ? 3 : 12);
 /** How many each press of 「显示更多」 adds, and how many of the answers a round was judged on 可见度 lists to begin with. */
 const STEP = 20;
 const OBSERVATIONS_SHOWN = 20;

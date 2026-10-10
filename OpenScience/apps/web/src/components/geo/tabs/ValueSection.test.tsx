@@ -203,6 +203,19 @@ describe("a long list is not cut without a word", () => {
     expect(screen.queryByRole("button", { name: /显示更多/ })).not.toBeInTheDocument();
   });
 
+  it("行动 lists three of twelve next steps, says there are twelve, and 显示更多 brings the rest", async () => {
+    const opportunities = Array.from({ length: 12 }, (_, index) => ({ id: `o${index + 1}`, statement: `第 ${index + 1} 项下一步` }));
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { opportunities } });
+    show("actions");
+    const heading = await screen.findByRole("heading", { name: "下一步研究与内容" });
+    expect(heading.parentElement).toHaveTextContent("共 12 条");
+    expect(rowsIn(heading)).toHaveLength(3);
+    expect(screen.queryByText("第 4 项下一步")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 9 条" }));
+    expect(rowsIn(heading)).toHaveLength(12);
+    expect(screen.getByText("第 12 项下一步")).toBeInTheDocument();
+  });
+
   it("an excerpt of three or fewer needs no link", async () => {
     client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { findings: findings(3) } });
     show("summary");
