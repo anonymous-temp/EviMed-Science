@@ -1795,7 +1795,7 @@ export function frontierMetricFamilies(enabled, snapshot) {
     const events = composer.events?.counters ?? {};
     add("events_total", "What clustering, the hot list and the digests did since this process started.", "counter",
       ["clustered", "created", "joined", "merged", "relatedLinks", "identifierLinks", "adjudicated", "adjudicationSkipped", "adjudicationFailures",
-        "hotRuns", "hotChanges", "digestsWritten", "digestsDropped"].map((kind) => ({ labels: { kind }, value: Number(events[kind] ?? 0) })));
+        "deferred", "hotRuns", "hotChanges", "digestsWritten", "digestsDropped"].map((kind) => ({ labels: { kind }, value: Number(events[kind] ?? 0) })));
     const profiles = composer.profiles ?? null;
     add("personalization_state", "「与你相关」 as /status reports it (1 = current).", "gauge",
       ["available", "unavailable", "off"].map((state) => ({ labels: { state }, value: (profiles?.state ?? "off") === state ? 1 : 0 })));

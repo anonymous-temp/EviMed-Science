@@ -142,6 +142,14 @@ test("D-17: the stream pages asked for again with half the limit are a counter",
   assert.deepEqual(family(frontierMetricFamilies(true, snapshot(null)), "open_science_frontier_page_shrinks_total")?.series, [{ value: 0 }]);
 });
 
+test("D-16: the items left unplaced because the model could not be asked are a counter among the events", () => {
+  const view = snapshot(null);
+  view.composer = { events: { counters: { clustered: 4, deferred: 3 } } };
+  const kinds = Object.fromEntries(family(frontierMetricFamilies(true, view), "open_science_frontier_events_total").series.map((row) => [row.labels.kind, row.value]));
+  assert.equal(kinds.deferred, 3);
+  assert.equal(kinds.clustered, 4);
+});
+
 test("the edit failures are exported by kind as well as by field, and the trimmed summaries are counted", () => {
   const view = snapshot(null);
   view.editor = { counters: {
