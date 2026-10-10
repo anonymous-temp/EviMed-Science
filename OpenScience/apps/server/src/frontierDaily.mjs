@@ -56,7 +56,7 @@
  * @module frontierDaily
  */
 
-import { FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, frontierSourceDisplayName } from "@evimed/domain";
+import { DISPLAY_TIME_ZONE, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, frontierSourceDisplayName } from "@evimed/domain";
 import { FrontierJobRearm } from "./frontierJobRearm.mjs";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
@@ -261,6 +261,15 @@ export function dayLabel(day) {
   return `${year}年${month}月${date}日`;
 }
 
+/**
+ * What a reader calls the zone clock times are written in: 「北京时间」 for the platform's display zone, the configured zone's
+ * own name otherwise (the Markdown used to say 「北京时间」 whatever `OPEN_SCIENCE_FRONTIER_TIMEZONE` was).
+ * @param {string} timeZone
+ */
+export function zoneNameZh(timeZone) {
+  return timeZone === DISPLAY_TIME_ZONE ? "北京时间" : `${timeZone} 时间`;
+}
+
 /** An instant as 「9月21日 07:00」 in the zone. @param {Date} at @param {string} timeZone */
 function momentLabel(at, timeZone) {
   const { day, clock } = zonedClock(at, timeZone);
@@ -282,7 +291,7 @@ export function frontierDailyMarkdown({ day, window, timeZone, lead, leadText, s
   const parts = [
     `# EviMed 医学前沿日报 · ${dayLabel(day)}`,
     "",
-    `覆盖 ${momentLabel(window.start, timeZone)} 至 ${momentLabel(window.end, timeZone)}（北京时间），共 ${count} 条。`,
+    `覆盖 ${momentLabel(window.start, timeZone)} 至 ${momentLabel(window.end, timeZone)}（${zoneNameZh(timeZone)}），共 ${count} 条。`,
   ];
   if (lead) {
     parts.push("", "## 头条", "", `**${markdownText(titleOf(lead))}**（${markdownText(lead.source_name)}）`);

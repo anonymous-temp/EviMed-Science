@@ -89,6 +89,18 @@ test("the Markdown: the window in Beijing time, each item with its source and a 
   assert.doesNotMatch(markdown, /逐字核对|由模型/);
 });
 
+test("D-11: the Markdown names the zone its window was cut in — 「北京时间」 for Beijing, the configured zone otherwise", () => {
+  // The line said 「（北京时间）」 whatever OPEN_SCIENCE_FRONTIER_TIMEZONE was, so a deployment in another zone printed clock times
+  // of that zone under Beijing's name.
+  const inputs = (/** @type {string} */ timeZone) => ({ day: "2026-09-22", window: frontierDailyWindow("2026-09-22", { timeZone, dailyTime: "07:30" }), timeZone,
+    lead: row(1, { source_name: "NEJM" }), leadText: null, safety: [], sections: [], aiMinute: null });
+  assert.match(frontierDailyMarkdown(inputs("Asia/Shanghai")), /覆盖 9月21日 07:00 至 9月22日 07:00（北京时间），共 1 条。/);
+  const utc = frontierDailyMarkdown(inputs("UTC"));
+  assert.match(utc, /覆盖 9月21日 07:00 至 9月22日 07:00（UTC 时间），共 1 条。/);
+  assert.doesNotMatch(utc, /北京/);
+  assert.match(frontierDailyMarkdown(inputs("America/New_York")), /覆盖 9月21日 07:00 至 9月22日 07:00（America\/New_York 时间），共 1 条。/);
+});
+
 test("reading time: the characters shown, whitespace aside, at 400 a minute — at least a minute", () => {
   assert.equal(FRONTIER_READING_CHARS_PER_MINUTE, 400);
   assert.equal(frontierReadingMinutes(["司".repeat(3_600)]), 9, "「约 9 分钟」");
