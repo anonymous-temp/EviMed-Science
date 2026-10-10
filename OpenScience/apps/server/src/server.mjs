@@ -64,7 +64,7 @@ import { moduleState } from "./deploymentComposition.mjs";
 import { PersonalSkillRepositoryImport } from "./personalSkillRepositoryImport.mjs";
 import { PersonalSkillTransfer } from "./personalSkillTransfer.mjs";
 import { createPersonalSkillTransferRoutes } from "./personalSkillTransferRoutes.mjs";
-import { sessionListItems } from "./dshRuntimeAdapter.mjs";
+import { sessionListItems, transcriptToLedgerMessages } from "./dshRuntimeAdapter.mjs";
 import { decodeSkillArchive } from "./skillArchive.mjs";
 import { ExtensionConnections } from "./extensionConnections.mjs";
 import { PersonalSkillGenerationService } from "./personalSkillGenerationService.mjs";
@@ -3517,6 +3517,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // caught by `finishInternal` and then caught again, so a step that does
       // not report for itself fails invisibly.
       const reusableClinicalContext = await canReuseRun(project, run).catch(() => false);
+      // What the transcript branch below collected, kept for the memory branch after it: the conversation is read once, while the
+      // container answers, and both consume that read (2026-10-10 review M-15).
+      /** @type {import("./runTranscripts.mjs").CollectedSession[] | null} */
+      let collectedSessions = null;
       await trackLearningWrite((async () => {
         try {
           // A stop already read this one while its container was alive. That
@@ -3528,6 +3532,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const children = await agentRuns.childSessionsOf(project, run).catch(() => []);
           const sessions = preStopTranscripts.take(run.id)
             ?? await collectRunTranscripts(runtimeManager, project, run, { children });
+          collectedSessions = sessions;
           const receipt = await persistRunTranscript({ project, run, sessions });
           await agentRuns.recordLearning(project, run.id, { transcript: receipt });
           if (evolution && reusableClinicalContext) await evolution.finishRun(project, run).catch(error => securityAudit(config, "evolution.outcome", "failed", { code: error?.code ?? "evolution_outcome_unavailable" }));
@@ -3657,16 +3662,28 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
       let messages = [];
       let historyError = null;
-      try {
-        messages = await runtimeManager.sessionMessages(project, run.sessionId, { wake: false });
-      } catch (error) {
-        // A structured run summary stays durable without the transcript, so this
-        // is not fatal — but it was swallowed whole, and no transcript means no
-        // memory sources, which means recordRun extracts nothing and reports
-        // `source: "none"` as if the conversation simply held nothing worth
-        // keeping. The two are indistinguishable in the audit line unless the
-        // reason travels with it.
-        historyError = error?.code ?? error?.name ?? "runtime_history_unavailable";
+      // The conversation the transcript branch already holds, not a second read of the runtime. The container answers
+      // `runtime_not_running` shortly after a run ends (and at once when a stop, an eviction or a crash ended it), which is why the
+      // transcript above is read while it is alive; this branch read the live runtime again, so a run whose container was gone
+      // got no messages, no run summary and no extraction, and only the audit line said why (2026-10-10 review M-15). The live
+      // read stays as the fallback for a run whose own session the hook could not collect.
+      const collectedRoot = (collectedSessions ?? []).find((session) => session.sessionId === run.sessionId)?.transcript ?? null;
+      let messagesRead = "live";
+      if (collectedRoot && collectedRoot.messages.length > 0) {
+        messages = transcriptToLedgerMessages(collectedRoot);
+        messagesRead = "collected";
+      } else {
+        try {
+          messages = await runtimeManager.sessionMessages(project, run.sessionId, { wake: false });
+        } catch (error) {
+          // A structured run summary stays durable without the transcript, so this
+          // is not fatal — but it was swallowed whole, and no transcript means no
+          // memory sources, which means recordRun extracts nothing and reports
+          // `source: "none"` as if the conversation simply held nothing worth
+          // keeping. The two are indistinguishable in the audit line unless the
+          // reason travels with it.
+          historyError = error?.code ?? error?.name ?? "runtime_history_unavailable";
+        }
       }
       const memoryResult = await memoryIntelligence.recordRun(project, run, messages);
       // A run that extracted nothing, said so on the run itself.
@@ -3752,6 +3769,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // indistinguishable.
         detail: [
           `messages=${messages.length}`,
+          `read=${messagesRead}`,
           `source=${memoryResult.source}`,
           `proposed=${memoryResult.proposed}`,
           `extracted=${memoryResult.extracted}`,
