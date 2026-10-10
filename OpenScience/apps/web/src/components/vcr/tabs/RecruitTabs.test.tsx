@@ -377,6 +377,32 @@ describe("匹配与招募 — before anything has been judged", () => {
   });
 });
 
+describe("匹配与招募 — the switch of direction is always the way back", () => {
+  // Review V-M3: a study with candidates and no protocol version drew the tab with its toolbar; choosing 给患者找试验 (which comes back
+  // empty) replaced the whole tab with the one-line step ask, toolbar and all, and the only way back was to reload the page.
+  it("keeps the direction and view switches where the reader chose a direction that came back empty, and goes back from there", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => {
+        if (query.get("direction") === "patient_to_trial") {
+          return { view: "matching", available: true, direction: "patient_to_trial", funnel: [], candidates: [], selected: null, gaps: [], counts: null,
+            forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null };
+        }
+        const page = fixture("ev201/matching.json");
+        Object.assign(page, { protocols: [], protocolVersionId: null, comparisons: [], timeline: [], candidateRoster: [] });
+        return page;
+      },
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("radio", { name: "给患者找试验" }));
+    await screen.findByRole("button", { name: "让 AI 做" });
+    expect(screen.getByRole("radiogroup", { name: "匹配方向" })).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "匹配与招募的视图" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "给试验找患者" }));
+    expect(await screen.findByRole("heading", { name: "P-0201" })).toBeInTheDocument();
+  });
+});
+
 /** The page contract's two ids: the assessment the panel is about, and each rule's own id. */
 function addressed(payload: any) {
   payload.selected.assessmentId = "asm_192";

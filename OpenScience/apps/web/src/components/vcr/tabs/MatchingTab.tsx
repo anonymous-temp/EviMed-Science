@@ -145,7 +145,11 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const nothing = data.candidates.length === 0 && !data.forecast && !data.pendingReview
     && (data.ledger ?? []).length === 0 && (data.sites ?? []).length === 0 && (data.followup ?? []).length === 0
     && !(data.timeline?.length || data.comparisons?.length);
-  if (nothing && view === "matching" && !data.protocols?.length) {
+  // The tab as it opens, before the reader has chosen a view, a direction, a protocol or a person: nothing to switch between yet, so
+  // an empty one is the step's one sentence and its button. Once the reader has chosen, they got there by the switches, and an
+  // answer that comes back empty keeps them — the way back must not vanish with the page (review V-M3).
+  const asOpened = view === "matching" && direction === "trial_to_patient" && protocolVersionId === null && candidate === null;
+  if (nothing && asOpened && !data.protocols?.length) {
     return <VcrStepPending studyId={studyId} study={study} step="matching" hint={study.tier === "T0" ? VCR_MATCHING_EMPTY_T0 : undefined} />;
   }
   if (nothing) {
