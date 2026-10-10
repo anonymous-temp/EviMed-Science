@@ -27,6 +27,19 @@ retired, 0700, the archive 0600). Output is names and counts; never a row.
     sudo python3 scripts/ops/retire-usememos-tables.py            # what would change
     sudo python3 scripts/ops/retire-usememos-tables.py --apply    # archive and drop
 
+The archive is a dump, and a dump cannot have one account's rows cut out of it in
+place. An account that is erased after the archive was written is therefore
+recorded by the platform (`evimed_memory.retired_erasures`: the two digests the
+retired store knew the account by, never the account), and
+
+    sudo python3 scripts/ops/retire-usememos-tables.py --forget-erased
+
+re-seals every archive against that ledger (review M-11, 2026-10-10): each is
+decrypted into a scratch database of the same server, the erased accounts' rows
+are deleted there, and the dump is taken again, encrypted, decrypted back to prove
+it opens, and put in the old one's place. An archive with nothing to forget is
+left as it is. The scratch database is dropped whatever happens.
+
 Environment, as the platform backup reads it: EVIMED_POSTGRES_CONTAINER
 (web-evimed-postgres-1), EVIMED_POSTGRES_DATABASE (evimed),
 EVIMED_POSTGRES_USER (evimed), EVIMED_POSTGRES_PASSPHRASE_FILE
@@ -61,6 +74,9 @@ RETIRED_USEMEMOS_TABLES = frozenset({
     "tag", "user", "user_identity", "user_setting", "webhook",
 })
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,62}")
+# The two digests the erasure ledger holds (`evimed_memory.retired_erasures`), checked before either is put in a statement.
+NAMESPACE = re.compile(r"evimed-science-[a-f0-9]{24}")
+TAG = re.compile(r"[a-f0-9]{24}")
 CRYPTO = ["openssl", "enc", "-aes-256-cbc", "-pbkdf2", "-iter", "250000", "-md", "sha256"]
 
 
@@ -121,8 +137,8 @@ class Retirement:
         self.run = runner
         self.clock = clock
 
-    def sql(self, statement: str) -> list[str]:
-        out = self.run(self.base + ["psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "-U", self.role, "-d", self.database,
+    def sql(self, statement: str, database: str | None = None) -> list[str]:
+        out = self.run(self.base + ["psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "-U", self.role, "-d", database or self.database,
                                     "-c", statement], capture=True)
         return [line for line in out.splitlines() if line.strip()]
 
@@ -183,16 +199,86 @@ class Retirement:
         return {"archived": {"file": str(archive), "sha256": archived}, "dropped": names}
 
 
+    def erased(self) -> list[tuple[str, str]]:
+        """The accounts erased since the retired store was left, by the two digests it knew them by."""
+        rows = self.sql("SELECT namespace || ' ' || tag FROM evimed_memory.retired_erasures ORDER BY erased_at, namespace")
+        found = []
+        for row in rows:
+            namespace, _, tag = row.partition(" ")
+            if not NAMESPACE.fullmatch(namespace) or not TAG.fullmatch(tag):
+                raise RetireError("ledger_invalid")
+            found.append((namespace, tag))
+        return found
+
+    def forget_erased(self) -> dict:
+        """Re-seal every archive against the erasure ledger. Counts only; never a row."""
+        accounts = self.erased()
+        if not accounts or not self.archive_dir.is_dir():
+            return {"accounts": len(accounts), "archives": []}
+        if not self.passphrase.is_file():
+            raise RetireError("passphrase_unavailable", str(self.passphrase))
+        namespaces = ", ".join("'" + namespace + "'" for namespace, _ in accounts)
+        tags = "|".join(tag for _, tag in accounts)
+        crypto = CRYPTO + ["-pass", "file:" + str(self.passphrase)]
+        report = []
+        for archive in sorted(self.archive_dir.glob("usememos-retired-*.dump.enc")):
+            scratch = "usememos_forget_" + self.clock().strftime("%Y%m%d%H%M%S") + "_" + hashlib.sha256(archive.name.encode()).hexdigest()[:8]
+            entry = {"archive": archive.name, "removed": {}, "resealed": False}
+            with tempfile.TemporaryDirectory(prefix="evimed-usememos-forget-") as temporary:
+                plain = Path(temporary) / "tables.dump"
+                sealed = Path(temporary) / "resealed.dump"
+                checked = Path(temporary) / "check.dump"
+                new = archive.with_name(archive.name + ".new")
+                self.run(crypto + ["-d", "-in", str(archive), "-out", str(plain)])
+                self.sql(f'CREATE DATABASE {quoted(scratch)}')
+                try:
+                    with plain.open("rb") as source:
+                        self.run(self.base + ["pg_restore", "--no-owner", "--no-acl", "-U", self.role, "-d", scratch], stdin=source)
+                    present = set(self.sql(f"SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = '{self.schema}'", scratch))
+                    if "memory_record" in present:
+                        rows = self.sql(f"WITH gone AS (DELETE FROM {quoted(self.schema)}.memory_record WHERE namespace IN ({namespaces}) RETURNING 1) SELECT count(*) FROM gone", scratch)
+                        entry["removed"]["memory_record"] = int(rows[0]) if rows and rows[0].isdigit() else 0
+                    if "memo" in present:
+                        pattern = "(^|\\n)#evimed-user-(" + tags + ")[[:space:]]*$"
+                        rows = self.sql(f"WITH gone AS (DELETE FROM {quoted(self.schema)}.memo WHERE content ~ '{pattern}' RETURNING 1) SELECT count(*) FROM gone", scratch)
+                        entry["removed"]["memo"] = int(rows[0]) if rows and rows[0].isdigit() else 0
+                    if sum(entry["removed"].values()) > 0:
+                        tables = [argument for name in sorted(present) for argument in ("--table", f"{quoted(self.schema)}.{quoted(name)}")]
+                        with sealed.open("xb") as output:
+                            self.run(self.base + ["pg_dump", "--format=custom", "--compress=9", "--no-owner", "--no-acl",
+                                                  "--lock-wait-timeout=30000", *tables, "-U", self.role, "-d", scratch], stdout=output)
+                        new.unlink(missing_ok=True)
+                        self.run(crypto + ["-salt", "-in", str(sealed), "-out", str(new)])
+                        os.chmod(new, 0o600)
+                        self.run(crypto + ["-d", "-in", str(new), "-out", str(checked)])
+                        if digest(checked) != digest(sealed):
+                            new.unlink(missing_ok=True)
+                            raise RetireError("archive_unverified", archive.name)
+                        # In the old one's place, whole or not at all.
+                        os.replace(new, archive)
+                        archived = digest(archive)
+                        checksum = archive.with_name(archive.name + ".sha256")
+                        checksum.write_text(f"{archived}  {archive.name}\n", encoding="utf-8")
+                        os.chmod(checksum, 0o600)
+                        entry["resealed"] = True
+                finally:
+                    # The scratch database held the rows being forgotten: it goes whatever happened.
+                    self.sql(f'DROP DATABASE IF EXISTS {quoted(scratch)}')
+            report.append(entry)
+        return {"accounts": len(accounts), "archives": report}
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     apply = "--apply" in args
+    forget = "--forget-erased" in args
     schema = "public"
     also: list[str] = []
     archive_dir = DEFAULT_ROOT / "backups/usememos-retired"
     index = 0
     while index < len(args):
         argument = args[index]
-        if argument == "--apply":
+        if argument in ("--apply", "--forget-erased"):
             pass
         elif argument in ("--schema", "--also", "--archive-dir") and index + 1 < len(args):
             value = args[index + 1]
@@ -204,7 +290,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 archive_dir = Path(value).absolute()
         else:
-            print("usage: retire-usememos-tables.py [--apply] [--schema public] [--also TABLE]... [--archive-dir DIR]", file=sys.stderr)
+            print("usage: retire-usememos-tables.py [--apply | --forget-erased] [--schema public] [--also TABLE]... [--archive-dir DIR]", file=sys.stderr)
             return 2
         index += 1
     try:
@@ -215,6 +301,12 @@ def main(argv: list[str] | None = None) -> int:
             role=os.environ.get("EVIMED_POSTGRES_USER", "evimed"),
             passphrase=Path(os.environ.get("EVIMED_POSTGRES_PASSPHRASE_FILE", str(DEFAULT_ROOT / "secrets/backup-passphrase.txt"))),
         )
+        if forget:
+            if apply:
+                print("--apply and --forget-erased ask for different things; run them one at a time", file=sys.stderr)
+                return 2
+            print(json.dumps({"ok": True, **retirement.forget_erased()}, ensure_ascii=False))
+            return 0
         inventory = retirement.inventory()
         result = {"ok": not inventory["unknown"], "dryRun": not apply, **inventory}
         if apply:

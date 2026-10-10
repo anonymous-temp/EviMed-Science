@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 1,
+  "site": "J15",
+  "recordedAt": "2026-10-10",
+  "rule": {
+    "id": "jev-benefit-2026-10-10",
+    "qualificationBar": 0.95,
+    "marginPoints": 0.02,
+    "statement": "On when, in every pass: (1) Jev's settled-correct lower95 is at least 0.95, or, where the plan names launch conditions that stand in for it (J3), those hold, and J4's added condition of no false notice on real non-clinical sentences holds as well; (2) the accuracy of the site with Jev on is not below the incumbent's on the same cases by more than 0.02; (3) the site with Jev on is faster (median per decision), or cheaper, or more accurate; (4) no constraint the site's record adds is broken (J3: not slower than Flash). Otherwise the original path stays.",
+    "siteConditions": "none named by the plan: the generic bar applies"
+  },
+  "model": "jev-1.13.0",
+  "corpus": {
+    "files": [
+      {
+        "file": "evals/judge-sites/J15/cases.json",
+        "sha256": "06588f83b9b4b9d13dafdc254551402cda132ef35920d2a76bef25ca35e7d753"
+      }
+    ],
+    "cases": 90
+  },
+  "measuredOn": "A development host in Taipei, where both providers answer a bare request in about 0.16 s. The production host is in Beijing: TypeSafe is reached there in 0.5 to 0.6 s (plan 2026-10-06 section 0), and a 325-token Jev request took 0.33 to 1.24 s on 2026-10-07 (4 requests, privateEvidence latency-production-host.json). Latency here compares the two paths on one network; it is not the production figure.",
+  "incumbentCostBasis": "List prices (peak) from the reference price list on the tokens the provider reported. A repeated run of identical prompts is partly served from DeepSeek's prompt cache and costs less than a first call; production questions are new, so the first pass of a site is the representative one.",
+  "passes": [
+    {
+      "id": "pass-1",
+      "at": "2026-10-10T18:09:59.524Z",
+      "mode": "live-calibration",
+      "model": "jev-1.13.0",
+      "catalogCount": 25,
+      "catalogDigest": "3d46621a6a94733d812bcfe05862f3123a8914caa1652dfd92dff7b67ab16636",
+      "summary": {
+        "cases": 90,
+        "jev": {
+          "measured": 90,
+          "settled": 66,
+          "settledShare": 0.7333333333333333,
+          "correctSettled": 64,
+          "settledAccuracy": 0.9696969696969697,
+          "lower95": 0.9076667002997112,
+          "bar": 0.95,
+          "rawAccuracy": 0.8888888888888888,
+          "failures": 0,
+          "ms": {
+            "n": 90,
+            "p50": 193,
+            "p95": 234
+          },
+          "costCnyPerCall": 0.00023233766666666672
+        },
+        "incumbent": {
+          "measured": 90,
+          "correct": 23,
+          "accuracy": 0.25555555555555554,
+          "failures": 0,
+          "ms": {
+            "n": 90,
+            "p50": 0,
+            "p95": 0
+          },
+          "costCnyPerCall": 0
+        },
+        "hybrid": {
+          "measured": 90,
+          "correct": 72,
+          "accuracy": 0.8,
+          "ms": {
+            "n": 90,
+            "p50": 193,
+            "p95": 234
+          },
+          "costCnyPerCall": 0.00023233766666666672,
+          "originalPathAsked": 24
+        },
+        "paired": {
+          "n": 90,
+          "hybridOnly": 49,
+          "incumbentOnly": 0,
+          "bothRight": 23,
+          "bothWrong": 18
+        }
+      },
+      "checks": [
+        {
+          "id": "qualification",
+          "ok": false,
+          "detail": "settled-correct 64/66, lower95 0.9077 against the bar 0.95"
+        },
+        {
+          "id": "non-inferiority",
+          "ok": true,
+          "detail": "site with Jev on 0.8000 against incumbent 0.2556 less the margin 0.02"
+        },
+        {
+          "id": "benefit",
+          "ok": true,
+          "detail": "with the site on: faster false (p50 193 against 0 ms), cheaper false (0.000232 against 0.000000 CNY per decision), more accurate true"
+        }
+      ],
+      "decision": "original-path",
+      "reasons": [
+        "qualification: settled-correct 64/66, lower95 0.9077 against the bar 0.95"
+      ],
+      "spend": {
+        "jevUsd": 0.0031,
+        "deepseekBilledCny": 0
+      },
+      "rowsSha256": "21664680ede8cf71b51bc005deede9010c063f1e4659cf939cf5f30c140602c1",
+      "rows": [
+        {"id":"fx00","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.78,"jev":{"relation":"related"},"correct":false,"hybridCorrect":false,"ms":259,"costCny":0.0002302,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx01","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.96,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":210,"costCny":0.0001993,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx02","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.26,"jev":{"relation":"related"},"correct":false,"hybridCorrect":false,"ms":233,"costCny":0.0002024,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx03","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.08,"jev":{"relation":"related"},"correct":false,"hybridCorrect":false,"ms":234,"costCny":0.0002239,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx04","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.5,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":false,"ms":199,"costCny":0.0002279,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx05","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.94,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":187,"costCny":0.0002375,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx06","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.96,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":190,"costCny":0.0002052,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx07","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.8,"jev":{"relation":"related"},"correct":false,"hybridCorrect":false,"ms":180,"costCny":0.0001967,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx08","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.98,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":196,"costCny":0.0001984,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx09","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.96,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":199,"costCny":0.0002316,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx10","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.82,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":193,"costCny":0.0002177,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx11","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"escalated","code":"judge_uncertain","confidence":0.46,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":192,"costCny":0.0002358,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx12","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.92,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":189,"costCny":0.0002285,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx13","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"escalated","code":"judge_uncertain","confidence":0.52,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":189,"costCny":0.0002109,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx14","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.94,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":186,"costCny":0.0001817,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx15","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.92,"jev":{"relation":"related"},"correct":false,"hybridCorrect":false,"ms":180,"costCny":0.0001848,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx16","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.24,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":false,"ms":174,"costCny":0.0002052,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx17","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.98,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":225,"costCny":0.0002866,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx18","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"escalated","code":"judge_uncertain","confidence":0.06,"jev":{"relation":"unrelated"},"correct":false,"hybridCorrect":true,"ms":195,"costCny":0.0002248,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx19","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.9,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":188,"costCny":0.0002276,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx20","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.98,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":185,"costCny":0.0002069,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx21","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.92,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":193,"costCny":0.0002356,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx22","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.96,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":190,"costCny":0.0002024,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx23","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"escalated","code":"judge_uncertain","confidence":0.72,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":181,"costCny":0.0002341,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx24","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.84,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":187,"costCny":0.0002347,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx25","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":0.96,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":194,"costCny":0.0002217,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx26","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"settled","confidence":1,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":226,"costCny":0.0002568,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx27","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"escalated","code":"judge_uncertain","confidence":0.28,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":183,"costCny":0.0002214,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx28","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"escalated","code":"judge_uncertain","confidence":0.72,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":204,"costCny":0.0002605,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx29","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.7,"jev":{"relation":"related"},"correct":false,"hybridCorrect":false,"ms":212,"costCny":0.0002149,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx30","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"escalated","code":"judge_uncertain","confidence":0.72,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":186,"costCny":0.0002475,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx31","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"related"},"outcome":"escalated","code":"judge_uncertain","confidence":0.22,"jev":{"relation":"related"},"correct":true,"hybridCorrect":true,"ms":198,"costCny":0.0002744,"incumbent":{"value":{"relation":"related"},"correct":true,"ms":0,"costCny":0}},
+        {"id":"fx32","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.34,"jev":{"relation":"related"},"correct":false,"hybridCorrect":false,"ms":180,"costCny":0.000178,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx33","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":214,"costCny":0.0002395,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx34","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.38,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":false,"ms":179,"costCny":0.0002327,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx35","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.82,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":244,"costCny":0.0002497,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx36","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.86,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":192,"costCny":0.0002316,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx37","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":257,"costCny":0.0002018,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx38","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.9,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":212,"costCny":0.0002245,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx39","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.96,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":181,"costCny":0.0002299,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx40","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.68,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":false,"ms":209,"costCny":0.0002364,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx41","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.92,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":231,"costCny":0.000235,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx42","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.96,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":188,"costCny":0.0002137,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx43","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.68,"jev":{"relation":"related"},"correct":false,"hybridCorrect":false,"ms":186,"costCny":0.0002673,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx44","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.84,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":207,"costCny":0.0001905,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx45","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.9,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":196,"costCny":0.000254,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx46","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":194,"costCny":0.0002735,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"fx47","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; missed_dialysis_retrieval_2026_","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.18,"jev":{"relation":"related"},"correct":false,"hybridCorrect":false,"ms":175,"costCny":0.0002049,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg000","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":1,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":184,"costCny":0.0002338,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg005","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.86,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":187,"costCny":0.0002191,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg010","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.94,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":196,"costCny":0.0002387,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg015","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.86,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":176,"costCny":0.0001964,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg020","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":191,"costCny":0.0002058,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg025","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.94,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":178,"costCny":0.0002004,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg030","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":173,"costCny":0.0002302,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg035","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.94,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":224,"costCny":0.000244,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg040","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.92,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":228,"costCny":0.0002086,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg045","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":186,"costCny":0.0001236,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg050","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":210,"costCny":0.0003648,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg055","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.94,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":199,"costCny":0.0002061,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg060","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.96,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":188,"costCny":0.0002248,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg065","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.88,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":236,"costCny":0.0001774,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg070","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.92,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":202,"costCny":0.0002503,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg075","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.66,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":false,"ms":175,"costCny":0.0002081,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg085","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.94,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":185,"costCny":0.0003016,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg090","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.96,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":186,"costCny":0.0002146,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg095","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.92,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":208,"costCny":0.0001959,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg100","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":201,"costCny":0.0002886,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg105","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.92,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":185,"costCny":0.0003376,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg110","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.96,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":197,"costCny":0.0001794,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg115","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.76,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":false,"ms":216,"costCny":0.0002781,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg120","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":171,"costCny":0.0002747,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg125","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":192,"costCny":0.0001446,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg130","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.94,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":190,"costCny":0.0002024,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg135","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.6,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":false,"ms":182,"costCny":0.0002877,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg140","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.9,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":196,"costCny":0.0002469,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg145","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.96,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":182,"costCny":0.0001298,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg150","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.96,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":195,"costCny":0.0002083,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg155","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":180,"costCny":0.0002511,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg160","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.86,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":222,"costCny":0.0003523,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg165","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.96,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":216,"costCny":0.0002631,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg170","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":193,"costCny":0.0002701,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg175","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.96,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":226,"costCny":0.0002602,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg180","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.98,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":201,"costCny":0.0002956,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg185","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":1,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":197,"costCny":0.0002863,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg190","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":1,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":182,"costCny":0.0002823,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg195","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":1,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":201,"costCny":0.0002092,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg174","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.72,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":false,"ms":186,"costCny":0.0002052,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg093","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"escalated","code":"judge_uncertain","confidence":0.74,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":false,"ms":218,"costCny":0.0002755,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}},
+        {"id":"sg159","source":"preserved:2026-10-06-jev-batch3/corpora/e1.json; capability-audit meta-analysis ","label":{"relation":"unrelated"},"outcome":"settled","confidence":0.94,"jev":{"relation":"unrelated"},"correct":true,"hybridCorrect":true,"ms":192,"costCny":0.0003067,"incumbent":{"value":{"relation":"related"},"correct":false,"ms":0,"costCny":0}}
+      ]
+    }
+  ],
+  "decision": {
+    "value": "original-path",
+    "heldBy": [
+      "qualification: settled-correct 64/66, lower95 0.9077 against the bar 0.95"
+    ],
+    "resultsSha256": "bc96748e91534ff7f2f95dcb6bacd9e03920a5b9e07bbce1dcbefcd76c10364a",
+    "summary": "Original path. Qualification is short of the bar (settled lower95 0.908) on weak labels, and the per-record blocking call would make the site slower, not faster."
+  },
+  "notes": {
+    "labels": "90 authored-weak labels (a reading of title and abstract against the fixture's direction, not an independent adjudication): 23 related, 67 unrelated.",
+    "jev": "Jev settles 66 and is right on 64 (lower95 0.908): it dropped 49 unrelated records and no related one (the plan's recall condition holds), and kept 2 unrelated records it was sure about.",
+    "incumbent": "Without Jev every record that passed the literal gate is kept (the second pass does not exist), scored as the verdict 'related'.",
+    "blocked": "Not switched on, although the quality gain is real, because the caller makes one synchronous HTTP request per record inside the async retrieval (task_service.py _filter_relevant_records, review J-13): a few hundred records at about a second a request from the production host is minutes of a blocked event loop on the topic-selection engine. That has to be threaded or batched first, and it needs an engine release."
+  }
+}

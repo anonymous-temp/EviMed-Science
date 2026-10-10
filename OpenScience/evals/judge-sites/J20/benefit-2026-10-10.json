@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "site": "J20",
+  "recordedAt": "2026-10-10",
+  "rule": {
+    "id": "jev-benefit-2026-10-10",
+    "qualificationBar": 0.95,
+    "marginPoints": 0.02,
+    "statement": "On when, in every pass: (1) Jev's settled-correct lower95 is at least 0.95, or, where the plan names launch conditions that stand in for it (J3), those hold, and J4's added condition of no false notice on real non-clinical sentences holds as well; (2) the accuracy of the site with Jev on is not below the incumbent's on the same cases by more than 0.02; (3) the site with Jev on is faster (median per decision), or cheaper, or more accurate; (4) no constraint the site's record adds is broken (J3: not slower than Flash). Otherwise the original path stays.",
+    "siteConditions": "none named by the plan: the generic bar applies"
+  },
+  "model": "jev-1.13.0",
+  "corpus": {
+    "files": [
+      {
+        "file": "evals/judge-sites/J20/cases.json",
+        "sha256": "702ce5e6f067a4044722e47938666a8652174fb87865d6f8311084939f4d9ae0"
+      }
+    ],
+    "cases": 20
+  },
+  "measuredOn": "A development host in Taipei, where both providers answer a bare request in about 0.16 s. The production host is in Beijing: TypeSafe is reached there in 0.5 to 0.6 s (plan 2026-10-06 section 0), and a 325-token Jev request took 0.33 to 1.24 s on 2026-10-07 (4 requests, privateEvidence latency-production-host.json). Latency here compares the two paths on one network; it is not the production figure.",
+  "incumbentCostBasis": "List prices (peak) from the reference price list on the tokens the provider reported. A repeated run of identical prompts is partly served from DeepSeek's prompt cache and costs less than a first call; production questions are new, so the first pass of a site is the representative one.",
+  "passes": [
+    {
+      "id": "pass-1",
+      "at": "2026-10-10T17:49:03.464Z",
+      "mode": "live-calibration",
+      "model": "jev-1.13.0",
+      "catalogCount": 25,
+      "catalogDigest": "3d46621a6a94733d812bcfe05862f3123a8914caa1652dfd92dff7b67ab16636",
+      "summary": {
+        "cases": 20,
+        "jev": {
+          "measured": 20,
+          "settled": 20,
+          "settledShare": 1,
+          "correctSettled": 20,
+          "settledAccuracy": 1,
+          "lower95": 0.8608916593317348,
+          "bar": 0.95,
+          "rawAccuracy": 1,
+          "failures": 0,
+          "ms": {
+            "n": 20,
+            "p50": 196,
+            "p95": 238
+          },
+          "costCnyPerCall": 0.00026549650000000006
+        },
+        "incumbent": {
+          "measured": 0,
+          "correct": 0,
+          "accuracy": null,
+          "failures": 0,
+          "ms": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "costCnyPerCall": null
+        },
+        "hybrid": {
+          "measured": 0,
+          "correct": 0,
+          "accuracy": null,
+          "ms": {
+            "n": 20,
+            "p50": 196,
+            "p95": 238
+          },
+          "costCnyPerCall": 0.00026549650000000006,
+          "originalPathAsked": 0
+        },
+        "paired": {
+          "n": 0,
+          "hybridOnly": 0,
+          "incumbentOnly": 0,
+          "bothRight": 0,
+          "bothWrong": 0
+        }
+      },
+      "checks": [
+        {
+          "id": "qualification",
+          "ok": false,
+          "detail": "settled-correct 20/20, lower95 0.8609 against the bar 0.95"
+        },
+        {
+          "id": "non-inferiority",
+          "ok": false,
+          "detail": "the incumbent or the site with Jev on was not measured on these cases"
+        },
+        {
+          "id": "benefit",
+          "ok": false,
+          "detail": "with the site on: faster false (p50 196 against null ms), cheaper false (0.000265 against n/a CNY per decision), more accurate false"
+        }
+      ],
+      "decision": "original-path",
+      "reasons": [
+        "qualification: settled-correct 20/20, lower95 0.8609 against the bar 0.95",
+        "non-inferiority: the incumbent or the site with Jev on was not measured on these cases",
+        "benefit: with the site on: faster false (p50 196 against null ms), cheaper false (0.000265 against n/a CNY per decision), more accurate false"
+      ],
+      "spend": {
+        "jevUsd": 0.0008,
+        "deepseekBilledCny": 0
+      },
+      "rowsSha256": "0216eaa3c4d98dedb000cea9d1a156e4917277f7c82a4ef556e3798660de791c",
+      "rows": [
+        {"id":"explicit-adr-01","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"tinnitus"},"outcome":"settled","confidence":1,"jev":{"termId":"tinnitus"},"correct":true,"ms":254,"costCny":0.0002684},
+        {"id":"explicit-adr-02","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"haematuria"},"outcome":"settled","confidence":1,"jev":{"termId":"haematuria"},"correct":true,"ms":207,"costCny":0.0002679},
+        {"id":"explicit-adr-03","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"dyspnoea"},"outcome":"settled","confidence":1,"jev":{"termId":"dyspnoea"},"correct":true,"ms":204,"costCny":0.0002673},
+        {"id":"explicit-adr-04","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"tremor"},"outcome":"settled","confidence":1,"jev":{"termId":"tremor"},"correct":true,"ms":238,"costCny":0.0002699},
+        {"id":"explicit-adr-05","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"constipation"},"outcome":"settled","confidence":0.989,"jev":{"termId":"constipation"},"correct":true,"ms":182,"costCny":0.0002679},
+        {"id":"explicit-adr-06","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"diarrhoea"},"outcome":"settled","confidence":1,"jev":{"termId":"diarrhoea"},"correct":true,"ms":188,"costCny":0.0002681},
+        {"id":"explicit-adr-07","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"tachycardia"},"outcome":"settled","confidence":1,"jev":{"termId":"tachycardia"},"correct":true,"ms":225,"costCny":0.0002684},
+        {"id":"explicit-adr-08","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"bradycardia"},"outcome":"settled","confidence":1,"jev":{"termId":"bradycardia"},"correct":true,"ms":195,"costCny":0.0002684},
+        {"id":"explicit-adr-09","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"anosmia"},"outcome":"settled","confidence":1,"jev":{"termId":"anosmia"},"correct":true,"ms":191,"costCny":0.0002687},
+        {"id":"explicit-adr-10","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"ageusia"},"outcome":"settled","confidence":1,"jev":{"termId":"ageusia"},"correct":true,"ms":188,"costCny":0.0002687},
+        {"id":"explicit-adr-11","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"hyperhidrosis"},"outcome":"settled","confidence":1,"jev":{"termId":"hyperhidrosis"},"correct":true,"ms":220,"costCny":0.0002679},
+        {"id":"explicit-adr-12","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"hyperglycaemia"},"outcome":"settled","confidence":1,"jev":{"termId":"hyperglycaemia"},"correct":true,"ms":179,"costCny":0.0002684},
+        {"id":"explicit-adr-13","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"hypoglycaemia"},"outcome":"settled","confidence":1,"jev":{"termId":"hypoglycaemia"},"correct":true,"ms":199,"costCny":0.0002684},
+        {"id":"explicit-adr-14","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"diplopia"},"outcome":"settled","confidence":1,"jev":{"termId":"diplopia"},"correct":true,"ms":217,"costCny":0.0002673},
+        {"id":"explicit-adr-15","source":"authored:independent explicit symptom definition, 2026-10-06","label":{"termId":"epistaxis"},"outcome":"settled","confidence":1,"jev":{"termId":"epistaxis"},"correct":true,"ms":196,"costCny":0.000269},
+        {"id":"absent-candidate-01","source":"authored:negative candidate membership control, 2026-10-06","label":{"termId":null},"outcome":"settled","confidence":1,"jev":{"termId":null},"correct":true,"ms":222,"costCny":0.0002577},
+        {"id":"absent-candidate-02","source":"authored:negative candidate membership control, 2026-10-06","label":{"termId":null},"outcome":"settled","confidence":0.989,"jev":{"termId":null},"correct":true,"ms":169,"costCny":0.000256},
+        {"id":"absent-candidate-03","source":"authored:negative candidate membership control, 2026-10-06","label":{"termId":null},"outcome":"settled","confidence":1,"jev":{"termId":null},"correct":true,"ms":182,"costCny":0.0002554},
+        {"id":"absent-candidate-04","source":"authored:negative candidate membership control, 2026-10-06","label":{"termId":null},"outcome":"settled","confidence":0.925,"jev":{"termId":null},"correct":true,"ms":174,"costCny":0.0002591},
+        {"id":"absent-candidate-05","source":"authored:negative candidate membership control, 2026-10-06","label":{"termId":null},"outcome":"settled","confidence":0.968,"jev":{"termId":null},"correct":true,"ms":236,"costCny":0.0002571}
+      ]
+    }
+  ],
+  "decision": {
+    "value": "original-path",
+    "heldBy": [
+      "qualification: settled-correct 20/20, lower95 0.8609 against the bar 0.95",
+      "non-inferiority: the incumbent or the site with Jev on was not measured on these cases",
+      "benefit: with the site on: faster false (p50 196 against null ms), cheaper false (0.000265 against n/a CNY per decision), more accurate false"
+    ],
+    "resultsSha256": "73ff0cf0ac65d324b64f60a4802852e78a505c76dcea84bfce009f412f8b7487",
+    "summary": "Original path. Twenty synthetic cases cannot qualify a site, and the incumbent was not run."
+  },
+  "notes": {
+    "labels": "15 human-authored, explicit symptom definitions and 5 controls whose term is absent from the candidates (20 in all); the corpus says it does not validate openFDA availability or the engine's fallback eligibility.",
+    "jev": "Jev settled all 20, all right (lower95 0.861).",
+    "incumbent": "Not run. The original path is the engine's LLM fallback (suggest_adr_pt), which then has to pass openFDA's count anyway."
+  }
+}

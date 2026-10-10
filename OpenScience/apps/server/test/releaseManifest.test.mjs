@@ -156,6 +156,8 @@ test("release manifest generator records exact images, tools, skills, and source
         // never ran: the manifest could not say which code the image held.
         "packages/socket",
         "packages/domain",
+        // The web image COPYs the longitudinal forecast candidates the server reads (deploy/web/Dockerfile).
+        "packages/contracts/healthflux/candidates.json",
         "packages/design-tokens",
         "packages/harness-port",
         "deploy/runtime-dsh",

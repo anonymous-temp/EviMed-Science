@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import {
   carriesPlatformContext,
   mcpToolBaseName,
-  medicationSafetyIn,
   platformIdentifiersIn,
   runBookkeepingIn,
   unwrapUserWrappers,
@@ -10,7 +9,8 @@ import {
 import { HttpError } from "./security.mjs";
 import { searchTokens } from "./memoryRecallPolicy.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
-import { memoryPausedFor, sourceLinkOf } from "./researchMemory.mjs";
+import { recordInferenceUpgraded, recordSkippedBeforeReset } from "./memoryMetrics.mjs";
+import { endedBeforeReset, memoryPausedFor, sourceLinkOf } from "./researchMemory.mjs";
 
 /**
  * What extraction may write.
@@ -72,40 +72,27 @@ const ORIGIN_CONFIDENCE = Object.freeze({ manual: 1, explicit: 1, inferred: 0.6,
 const ORIGIN_RANK = Object.freeze({ manual: 4, explicit: 3, inferred: 2, system: 1 });
 
 /**
- * Why a record waits for its owner before it is used, or null — the only human
- * checkpoint the memory has.
+ * Why a record waits for its owner before it is used. There is one reason left, and it is not the model's.
  *
- * Owner ruling, 2026-09-19: memory is fully automatic. There is no "pending
- * until you confirm" for an inference any more — it takes effect labelled 推断,
- * keeps that label for good (principle 18: an inference never becomes "you
- * said"), goes into the record's revision history and can be undone in one
- * click. The one exception is the one the ruling names: content that hits the
- * pharmacist-maintained clinical safety vocabulary (`clinical-safety-rules.json`)
- * in a memory that would ride into every later prompt. A remembered habit about
- * a high-alert medicine that the researcher never saw is the one write whose
- * cost is not a worse answer but a harmful one. Closed vocabulary, matched by
- * the domain's own functions — not a pattern over prose.
+ * Owner ruling, 2026-09-19: memory is fully automatic. There is no "pending until you confirm" for an inference — it takes
+ * effect at once, is labelled as what it is for the model (`origin`), goes into the record's revision history and can be undone
+ * in one click. The one exception to that was a lasting memory that named a high-alert medicine, a toxic herb or an over-dose
+ * (`clinical-safety-rules.json`), parked until its owner looked: a check on what the model had written, shown to the
+ * researcher as 「待确认（用药安全）」. The owner's ruling of 2026-10-10 retires it (review R12): a safety rule for medicines
+ * belongs where a medicine is advised — the report and the answer, which `clinical-safety-rules.json` already guards — not
+ * on a preference the researcher stated in their own words, and a hold the researcher is asked to release is a
+ * confirmation step by another name. Such a memory takes effect like any other. A record parked under the old rule is put in
+ * force the next time it is observed (`continuedFrom`), or when its owner confirms it on the memory page.
  *
- * Sensitive text is not a checkpoint. It is stored, flagged and never recalled
- * by either recall path (`memorySubstrate`), which is what the page now says
- * about it; parking it as "pending" only ever implied that a confirmation would
- * make it recallable, and none did.
+ * What remains is the other hold: an outside agent's proposals (`recordRun(..., { holdForOwner: true })`), which the account
+ * owner accepts or not because the agent, not the owner, wrote them.
  *
- * @param {string} kind @param {string} text @returns {"clinical_safety" | null}
+ * Sensitive text is not a checkpoint either. It is stored, flagged and never recalled by either recall path
+ * (`memorySubstrate`).
+ *
+ * The reason in words, for the integrator whose proposal was held.
  */
-function checkpointReason(kind, text) {
-  if (!DURABLE_PERSON_KINDS.has(kind)) return null;
-  // One reading with the capsule import scan (`medicationSafetyIn`): the
-  // high-alert medicines, the toxic Chinese herbs, and a herb dose above its
-  // Pharmacopoeia bound. The herbs joined on 2026-09-27: a TCM clinician's
-  // standing 「附子常用 60 g」 met no checkpoint before (audit M-13).
-  const safety = medicationSafetyIn(text);
-  return safety.medicines.length || safety.overDose.length ? "clinical_safety" : null;
-}
-
-/** What the checkpoint means, for the person reading the run. */
 const checkpointReasonText = Object.freeze({
-  clinical_safety: "涉及高警示药品、毒性中药或临床安全规则中的药物，这类长期偏好在你看过之前不会用于回答",
   // `recordRun(..., { holdForOwner: true })`: the conversation came from an
   // agent that is not ours (`/api/agent-memory/v1/episodes`).
   external_source: "来自外部接入的对话，你确认之前不会用于回答",
@@ -113,7 +100,6 @@ const checkpointReasonText = Object.freeze({
 
 /** The audit ledger reads English, like every other revision reason here. */
 const checkpointReasonAudit = Object.freeze({
-  clinical_safety: "held for its owner: a lasting memory that names a clinical-safety medicine",
   external_source: "held for its owner: proposed by an agent outside the platform",
 });
 
@@ -603,7 +589,6 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
     return reject(`"${key}" is a ${kind} about the catch-all project, which has no single subject`);
   }
   const sensitive = Boolean(candidate.sensitive) || sensitivePattern.test(`${value}\n${summary}\n${quote}`);
-  const checkpoint = checkpointReason(kind, `${value}\n${summary}`);
   return {
     scope,
     scopeId: candidateScopeId({ scope }, project, run),
@@ -612,11 +597,12 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
     value,
     summary,
     origin,
-    status: checkpoint ? "pending" : "active",
+    status: "active",
     // Carried on the candidate, not sent as a record field: the store has a
-    // fixed record schema and would drop it. It travels to the audit
-    // ledger as the upsert reason, and to the user as a run notice.
-    statusReason: checkpoint,
+    // fixed record schema and would drop it. It travels to the audit ledger as
+    // the upsert reason. Null here: only an outside agent's proposal is held,
+    // and `recordRun` says so when it is.
+    statusReason: null,
     // The key of a stored fact this one replaces — the model's judgement,
     // resolved and checked against what is stored in recordRun.
     supersedesKey: memoryKeyPattern.test(supersedesKey) ? supersedesKey : "",
@@ -755,6 +741,26 @@ function excerpt(value) {
 }
 
 /**
+ * Whether the record already rests on the very message the candidate quotes. An inference that cites a message and the same
+ * message read again as 「stated outright」 is the model changing its mind about one utterance, which is no new word of the
+ * researcher's.
+ * @param {any} previous @param {any} candidate
+ */
+function restsOnSameMessage(previous, candidate) {
+  const ref = String(candidate?.evidence?.sourceRef ?? "");
+  return Boolean(ref) && (previous?.evidence ?? []).some((/** @type {any} */ item) => item?.sourceRef === ref);
+}
+
+/**
+ * Whether this write turned an inference into the researcher's own statement: what was stored was inferred, what is stored now
+ * is explicit. Read from the two records, so it is what happened and not what was intended.
+ * @param {any} previous @param {any} written
+ */
+function upgradedFromInference(previous, written) {
+  return Boolean(previous) && previous.origin === "inferred" && written?.origin === "explicit";
+}
+
+/**
  * The record a candidate writes, given the one it lands on.
  *
  * A re-observation of the same fact is evidence, not a new statement of it, so
@@ -773,11 +779,20 @@ function excerpt(value) {
  *
  * A different value is a new statement, and is written as the candidate says.
  *
+ * The stronger origin stays, and that is how a stored inference becomes the researcher's own word (owner ruling of
+ * 2026-10-10, review M-5): when the researcher later states outright what an earlier conversation only inferred, the model
+ * records it again as `explicit` under the same key, and the record is theirs from then on. Nobody is asked, and nothing but
+ * their own message can do it — the model judges that the message says the same thing; code checks the rest, in
+ * `validateCandidate` (a user message, the quote verbatim in it) and here (a message the record did not already rest on: the
+ * same words read again are not a new utterance). Never by how often the inference was seen, by an assistant's paraphrase, or
+ * by a tool result (principle 18).
+ *
  * @param {any} previous @param {any} candidate
  */
 function continuedFrom(previous, candidate) {
   if (!previous || normalizedValue(previous.value) !== normalizedValue(candidate.value)) return candidate;
-  const origin = (ORIGIN_RANK[previous.origin] ?? 0) >= (ORIGIN_RANK[candidate.origin] ?? 0) ? previous.origin : candidate.origin;
+  const stronger = (ORIGIN_RANK[previous.origin] ?? 0) >= (ORIGIN_RANK[candidate.origin] ?? 0) ? previous.origin : candidate.origin;
+  const origin = stronger === "explicit" && previous.origin === "inferred" && restsOnSameMessage(previous, candidate) ? previous.origin : stronger;
   const held = previous.status === "pending";
   return {
     ...candidate,
@@ -866,10 +881,13 @@ function writeChange(previous, stored) {
   return stored.version !== previous.version ? "observed" : "unchanged";
 }
 
-/** @param {string} action @param {any} contradiction @param {string | null | undefined} statusReason */
-function writeReason(action, contradiction, statusReason) {
+/** @param {string} action @param {any} contradiction @param {string | null | undefined} statusReason @param {boolean} [upgrade] */
+function writeReason(action, contradiction, statusReason, upgrade = false) {
   return [
     action,
+    // The one change of origin extraction makes, in the record's own history: what the model had inferred, the researcher
+    // then said themselves (`continuedFrom`).
+    ...(upgrade ? ["stated by the researcher in a later message: upgraded from an inference"] : []),
     // The value this write replaced, in the one place that outlives the
     // write: the record's own revision history. It is what makes the change
     // reversible, which is what lets it land at all.
@@ -884,7 +902,7 @@ function writeReason(action, contradiction, statusReason) {
  */
 function skippedResult(source, excluded, runSummary = null) {
   return {
-    runSummary, extracted: 0, activated: 0, source, proposed: 0, rejected: 0, rejectionReasons: [],
+    runSummary, extracted: 0, activated: 0, upgraded: 0, source, proposed: 0, rejected: 0, rejectionReasons: [],
     pending: 0, pendingReasons: [], sensitive: 0, conflicts: [], disagreements: [], written: [], corrections: [], forgotten: [],
     extractionError: null, excluded,
   };
@@ -906,9 +924,23 @@ function skippedResult(source, excluded, runSummary = null) {
  * here, or it will do the same. `unconfigured` is a deployment with no model to
  * extract with — a setting, and one that would otherwise put the notice on
  * every run it makes. `trial` is a conversation trying someone else's capsule.
- * `automated` is a run a script dispatched (see `recordRun`).
+ * `automated` is a run a script dispatched (see `recordRun`). `before_reset` is a
+ * conversation that was over before the account's last memory reset.
  */
-export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "automated", "paused", "unconfigured", "trial", "clinical_context"]));
+export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "automated", "paused", "unconfigured", "trial", "clinical_context", "before_reset"]));
+
+/**
+ * Why a run that was extracted from wrote nothing, as the closed word the operator's counter carries
+ * (`EXTRACTION_EMPTY_CAUSES`): the extractor failed, it proposed nothing, every proposal was refused, or none of the transcript
+ * was readable to it. Empty is a legitimate outcome and a broken extractor looks the same, which is what the counter tells apart.
+ * @param {{ extractionError?: string | null, proposed?: number, excluded?: readonly unknown[] }} result
+ * @returns {"error" | "all_rejected" | "unread" | "none_proposed"}
+ */
+export function extractionEmptyCause(result) {
+  if (result.extractionError) return "error";
+  if ((result.proposed ?? 0) > 0) return "all_rejected";
+  return result.excluded?.length ? "unread" : "none_proposed";
+}
 
 export class MemoryIntelligence {
   /** @param {any} config @param {any} memoryStore
@@ -1007,6 +1039,13 @@ export class MemoryIntelligence {
     // per run rather than cached: "pause" has to hold from the next run on.
     const pause = await memoryPausedFor(this.memoryStore, project.userId, project.id, run.sessionId ?? null);
     if (pause.learning) return skippedResult(pause.trial ? "trial" : "paused", excluded);
+    // A conversation that was already over when the researcher reset their memory is not learned from again — nor
+    // summarised: the reset asked to start from nothing, and an extraction that ran late (a retry, a run finished a
+    // moment before) would write back what was just deleted. Counted, so a reset that is still being honoured shows.
+    if (typeof this.memoryStore.resetInstant === "function" && endedBeforeReset(run, await this.memoryStore.resetInstant(project.userId))) {
+      recordSkippedBeforeReset("extraction");
+      return skippedResult("before_reset", excluded);
+    }
     const runSummary = await this.#recordRunSummary(project, run, sources, holdForOwner);
     if (sources.length === 0) return skippedResult("none", excluded, runSummary);
     // No model, no extraction. There used to be a fallback here: a keyword wall
@@ -1065,6 +1104,7 @@ export class MemoryIntelligence {
     const rejectedKeys = await this.#rejectedKeys(project.userId, candidates.slice(0, 12));
     let extracted = 0;
     let activated = 0;
+    let upgrades = 0;
     let sensitive = 0;
     /** Reason -> how many records this run held for their owner. */
     const pendingReasons = new Map();
@@ -1103,6 +1143,7 @@ export class MemoryIntelligence {
       const contradiction = contradictedValue(previous, candidate);
       let next = continuedFrom(previous, candidate);
       let stored;
+      let upgraded = false;
       /** The record this write retired, when the candidate replaces one. */
       let superseded = null;
       // Only a new key can replace another: a candidate that reuses its own
@@ -1118,9 +1159,10 @@ export class MemoryIntelligence {
         }));
         known.set(canonicalKey(superseded), superseded);
       } else {
-        ({ stored, next } = await this.#upsertCandidate(project, run, candidate, previous, next, contradiction));
+        ({ stored, next, upgraded } = await this.#upsertCandidate(project, run, candidate, previous, next, contradiction));
       }
       extracted += 1;
+      if (upgraded) { upgrades += 1; recordInferenceUpgraded(); }
       if (previous?.status === "pending" && stored.status === "active") activated += 1;
       if (next.statusReason && stored.status === "pending") {
         pendingReasons.set(next.statusReason, (pendingReasons.get(next.statusReason) ?? 0) + 1);
@@ -1161,6 +1203,8 @@ export class MemoryIntelligence {
     return {
       runSummary, extracted, activated, source: "model", proposed,
       rejected: proposed - candidates.length,
+      // How many stored inferences the researcher's own words made theirs in this run (`continuedFrom`).
+      upgraded: upgrades,
       rejectionReasons: rejections.slice(0, 12),
       // A record held for its owner is neither "extracted and working" nor
       // "rejected", and says so with a count of its own.
@@ -1312,10 +1356,12 @@ export class MemoryIntelligence {
    * Write one candidate onto the record it lands on, retrying once on a
    * concurrent update with the record as it now stands.
    * @param {any} project @param {any} run @param {any} candidate @param {any} previous @param {any} next @param {any} contradiction
-   * @returns {Promise<{ stored: any, next: any }>}
+   * @returns {Promise<{ stored: any, next: any, upgraded: boolean }>}
+   *   `upgraded`: this write made the researcher's own word of what had been an inference (`continuedFrom`).
    */
   async #upsertCandidate(project, run, candidate, previous, next, contradiction) {
     try {
+      const upgraded = upgradedFromInference(previous, next);
       const stored = await this.memoryStore.upsertRecord(project.userId, {
         ...next,
         ...(previous ? { id: previous.id } : {}),
@@ -1325,10 +1371,10 @@ export class MemoryIntelligence {
         // store keeps as this record's audit trail and what `publicRecord`
         // hands back on `revisions[].reason`.
         reason: writeReason(previous ? "conversation evidence updated the current memory" : "conversation evidence created the memory",
-          contradiction, next.statusReason),
+          contradiction, next.statusReason, upgraded),
         by: "extraction", runId: run.id ?? null, sourceLinks: candidate.sourceLinks,
       });
-      return { stored, next };
+      return { stored, next, upgraded };
     } catch (error) {
       if (!(error instanceof HttpError) || error.code !== "memory_conflict") throw error;
       const refreshed = typeof this.memoryStore.comparableRecords === "function"
@@ -1337,13 +1383,14 @@ export class MemoryIntelligence {
       const current = refreshed.find((record) => canonicalKey(record) === canonicalKey(candidate));
       if (!current) throw error;
       const retried = continuedFrom(current, candidate);
+      const upgraded = upgradedFromInference(current, retried);
       const stored = await this.memoryStore.upsertRecord(project.userId, { ...retried, id: current.id }, candidate.evidence, {
         expectedVersion: current.version,
         // The retry writes the same record, so it carries the same reason.
-        reason: writeReason("conversation evidence retried after a concurrent memory update", contradiction, retried.statusReason),
+        reason: writeReason("conversation evidence retried after a concurrent memory update", contradiction, retried.statusReason, upgraded),
         by: "extraction", runId: run.id ?? null, sourceLinks: candidate.sourceLinks,
       });
-      return { stored, next: retried };
+      return { stored, next: retried, upgraded };
     }
   }
 
@@ -1357,11 +1404,12 @@ export class MemoryIntelligence {
    * reads it — so the one thing the researcher could click did nothing at all.
    * Both values are in the body instead, because the way back is for the person
    * to say so in memory management, and they cannot say so about text they
-   * cannot see — and nothing else (plan 2026-09-23 §5.8): 「「旧」已改为「新」」,
-   * with 「（推断）」 when the new value is EviMed's inference rather than the
-   * researcher's own words, the one provenance mark the memory page keeps too
-   * (principle 18). The revision history and the way to change it back are on
-   * the page the notice opens.
+   * cannot see — and nothing else (plan 2026-09-23 §5.8): 「「旧」已改为「新」」.
+   * It used to add 「（推断）」 when the new value was EviMed's inference rather
+   * than the researcher's own words; whose words a memory is, is for the model
+   * and the operator and not a mark on the researcher's screen (owner ruling of
+   * 2026-10-10, review R13). The revision history and the way to change it back
+   * are on the page the notice opens.
    *
    * The identity is the contradiction, not the run. The first version keyed on
    * the record and the parked key while sending `source: {type:"run"}` and the
@@ -1383,7 +1431,7 @@ export class MemoryIntelligence {
       return await this.notifications.create(project.userId, {
         noticeType: "notify",
         title: "一条记忆已改写",
-        body: `「${conflict.previousValue}」已改为「${conflict.nextValue}」${conflict.origin === "inferred" ? "（推断）" : ""}`,
+        body: `「${conflict.previousValue}」已改为「${conflict.nextValue}」`,
         // A user-scoped memory belongs to no project, and naming the project
         // the run happened in would make the same contradiction look like
         // different content each time it is observed from somewhere else. A

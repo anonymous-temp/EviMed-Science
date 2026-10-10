@@ -14,7 +14,8 @@ import { maxQualityNotices, runNotice } from "./runNotices.mjs";
 export const REGISTER_JUDGE_MAX_LINES = 600;
 
 // Frozen pre-Jev comparator. It records drift only and never controls a finding.
-const legacyRegisterPattern = /(?:clinical-evidence-synthesis|\bmcp__evimed__[a-z_]+\b|\bevimed_[a-z_]+\b|EviMed.{0,24}(?:引擎|网关|工具)|证据追溯契约|\.evimed-sources\/|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单抓取|工具调用|(?<!加)工件|访问层级|(?<![基日样标根成])本环境|本轮检索|检索环境|(?:未触及|未读取|未检索).{0,16}(?:完整|全文|文件|页面))/i;
+// Exported for the judge-site benefit evaluation (`evals/judge-sites`), which scores it as the incumbent beside J4.
+export const legacyRegisterPattern = /(?:clinical-evidence-synthesis|\bmcp__evimed__[a-z_]+\b|\bevimed_[a-z_]+\b|EviMed.{0,24}(?:引擎|网关|工具)|证据追溯契约|\.evimed-sources\/|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单抓取|工具调用|(?<!加)工件|访问层级|(?<![基日样标根成])本环境|本轮检索|检索环境|(?:未触及|未读取|未检索).{0,16}(?:完整|全文|文件|页面))/i;
 
 /** Delivered Markdown prose only; code blocks and revision notes are not prose.
  * @param {string} text */

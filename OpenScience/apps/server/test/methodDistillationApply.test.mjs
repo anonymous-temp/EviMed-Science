@@ -454,3 +454,29 @@ test("a message typed into the running turn is the researcher's correction; noth
   assert.equal(input.signal, "researcher");
   assert.deepEqual(input.corrections.map((entry) => entry.source), ["steered", "steered"]);
 });
+
+test("a lesson drawn from a conversation that ended before the account's memory reset is not written, though it was already under way", async () => {
+  // 2026-10-10 review M-11: a reset cancels the queued lessons and takes the lease of the one running, but the worker only
+  // finds out after the write. The write itself refuses what the reset asked to forget.
+  const learning = fakeLearning();
+  const distillation = new MethodDistillationRuns({
+    learning, dispatch: async () => { throw new Error("no run"); }, readResult: async () => { throw new Error("no result"); },
+    jobs: { async enqueue() { return { id: "job_3" }; } },
+    resetInstant: async () => "2026-10-10T12:00:00.000Z",
+  });
+  const applied = await distillation.applyCandidate(job, { id: "run_old", finishedAt: "2026-10-10T11:59:00.000Z" }, { candidate: { operation: "create" }, skill: SKILL });
+  assert.deepEqual(applied, { operation: "no_change", methodId: undefined, skipped: "before_reset" });
+  assert.equal(learning.created.length, 0, "nothing of it is written back");
+
+  await distillation.applyCandidate(job, { id: "run_new", finishedAt: "2026-10-10T12:00:01.000Z" }, { candidate: { operation: "create" }, skill: SKILL });
+  assert.equal(learning.created.length, 1, "a conversation after the reset is learned from as before");
+
+  // A store that cannot say when the account reset is not a reset.
+  const unreadable = new MethodDistillationRuns({
+    learning, dispatch: async () => { throw new Error("no run"); }, readResult: async () => { throw new Error("no result"); },
+    jobs: { async enqueue() { return { id: "job_4" }; } },
+    resetInstant: async () => { throw new Error("memory store unreachable"); },
+  });
+  await unreadable.applyCandidate(job, { id: "run_old", finishedAt: "2026-10-10T11:59:00.000Z" }, { candidate: { operation: "create" }, skill: SKILL });
+  assert.equal(learning.created.length, 2);
+});

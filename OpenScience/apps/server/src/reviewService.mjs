@@ -365,9 +365,9 @@ export class ReviewService {
     return Boolean(reviewModelApiKey(this.config));
   }
 
-  /** Whether the reply check asks Jev first: its lever on and its key present. */
+  /** Whether the reply check asks Jev first: the master switch and its own lever on, and its key present. */
   get jevEnabled() {
-    return Boolean(this.config.reviewJevEnabled && String(this.config.typesafeApiKey ?? ""));
+    return Boolean(this.config.jevEnabled !== false && this.config.reviewJevEnabled && String(this.config.typesafeApiKey ?? ""));
   }
 
   /** The schema, and runs a restart interrupted marked as such. */

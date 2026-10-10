@@ -8,6 +8,7 @@
   "merged": false,
   "newQualifiedSites": [
     "J2",
+    "J3",
     "J4"
   ],
   "model": "jev-1.13.0",
@@ -33,7 +34,12 @@
       "missing": [
         "Only 9 confident deletions, exact lower95 precision 0.7169; insufficient deletion precision evidence.",
         "Original thinking-enabled Flash baseline completed 8 of 120 pairs; larger batches exceeded the 15 second deadline."
-      ]
+      ],
+      "benefit": {
+        "record": "evals/judge-sites/J1/benefit-2026-10-10.json",
+        "decision": "original-path",
+        "reason": "Stays inert by decision (not a consolidation gate). Measured for the record: 10 pairs deleted of 120, none of the 60 related ones."
+      }
     },
     "J2": {
       "implementation": "wired",
@@ -47,43 +53,62 @@
       "lower95": 0.9581066559331114,
       "resultSha256": "7e93ba14d6e43dad03cd83c467e9e7df17f1f28361ff2626f28acdc858e97a4f",
       "observations": "100 authored scenarios, 51 project choices; 99 returned valid judgements, 70 settled with no incorrect settlement. One provider failure preserved safe behavior. Original Flash was correct on 89/100; settled-answer agreement66 / 70.",
-      "baselineAgreement": 0.9428571428571428
+      "baselineAgreement": 0.9428571428571428,
+      "benefit": {
+        "record": "evals/judge-sites/J2/benefit-2026-10-10.json",
+        "decision": "on",
+        "reason": "Two passes: settled answers 67 of 67 and 72 of 72 right; the site with Jev on is 91 and 95 right of 100 against the original classifier's 89 (it was 85 and 88 while an unsettled message took the safe default; it now goes to the original classifier)."
+      }
     },
     "J3": {
       "implementation": "wired",
-      "qualification": "uncalibrated",
+      "qualification": "calibrated",
       "threshold": 0.8,
-      "measurement": {
-        "cases": 135,
-        "measured": 135,
-        "settled": 84,
-        "correct": 76,
-        "lower95": 0.8347164210516738,
-        "agreement": 0.9047619047619048,
-        "falseSpecialists": 0,
-        "baselineFalseSpecialists": 0,
-        "titleToPaperFalseSpecialists": 0,
-        "recommendation": null,
-        "independentGroups": 135,
-        "finalCorrect": 126,
-        "baselineAgreement": null,
-        "missingReleaseEvidence": [],
-        "status": "measured-not-release-certified",
-        "finalTotal": 135,
-        "finalLower95": 0.8865503814412181,
-        "baselineFinalCorrect": 123,
-        "baselineFinalAccuracy": 0.9111111111111111,
-        "noninferiorityTarget": 0.8911111111111111,
-        "titleToPaper": {
-          "cases": 50,
-          "falseSpecialists": 0,
-          "baselineFalseSpecialists": 0
-        }
+      "promptFingerprint": "100472095ab4239afb73e0b20ebf86cbc754f040f550700b8c3fb2d4c52c9e02",
+      "calibratedAt": "2026-10-10T17:54:37.864Z",
+      "measured": 135,
+      "settled": 85,
+      "correct": 81,
+      "lower95": 0.8955440972244286,
+      "resultSha256": "874eb5549f0735c6c906cfaa9650be245a8ccacbcaf85ab56c59e2bc467c6a40",
+      "observations": "Pinned on the plan's launch conditions (2026-10-06 section 4.1), which hold in two passes: 0 of 50 title-to-paper questions routed to a specialist, and no more ordinary questions sent to a specialist than Flash (0 and 0). The site with Jev on routes 130 and 129 of 135 as labelled against Flash's 127; the settled answers alone are 80 of 83 and 81 of 85 (lower95 0.909 and 0.896, the weaker pass pinned), which is under the settled-subset bar the plan's conditions stand in for. Four legacy labels were corrected first (routing-78, -81, -83, -85; reasons in cases.json); the pass scored on the uncorrected labels also meets the conditions. Measured p50 213 and 216 ms against Flash's 724 and 784 on a Taipei host; the production host reaches Jev in 0.33 to 1.24 s and the routing doc puts a thinking-off Flash classification at one to two seconds. The pin binds the wording of the prompt, not the capability catalogue.",
+      "baselineAgreement": 0.9879518072289156,
+      "benefit": {
+        "record": "evals/judge-sites/J3/benefit-2026-10-10.json",
+        "decision": "on",
+        "reason": "The plan's two launch conditions, accuracy parity (+2 to +3 points) and 3 to 4 times faster on the measuring host."
       },
-      "missing": [
-        "Critical false-specialist checks pass, but final accuracy lower95 does not meet the observed original-classifier accuracy minus 0.02.",
-        "Legacy labels from an 11-capability catalog conflict with current named meta/bibliometric/off-label deliverables; labels were preserved, not retargeted to improve scores."
-      ]
+      "previousMeasurement": {
+        "recordedAt": "2026-10-07",
+        "note": "Before the label corrections, with the original Flash baseline: final route 126 of 135 against 123, final lower95 0.887 against the recorded 0.891 (the observed original-classifier accuracy less 0.02), which is why the site was left uncalibrated then.",
+        "measurement": {
+          "cases": 135,
+          "measured": 135,
+          "settled": 84,
+          "correct": 76,
+          "lower95": 0.8347164210516738,
+          "agreement": 0.9047619047619048,
+          "falseSpecialists": 0,
+          "baselineFalseSpecialists": 0,
+          "titleToPaperFalseSpecialists": 0,
+          "recommendation": null,
+          "independentGroups": 135,
+          "finalCorrect": 126,
+          "baselineAgreement": null,
+          "missingReleaseEvidence": [],
+          "status": "measured-not-release-certified",
+          "finalTotal": 135,
+          "finalLower95": 0.8865503814412181,
+          "baselineFinalCorrect": 123,
+          "baselineFinalAccuracy": 0.9111111111111111,
+          "noninferiorityTarget": 0.8911111111111111,
+          "titleToPaper": {
+            "cases": 50,
+            "falseSpecialists": 0,
+            "baselineFalseSpecialists": 0
+          }
+        }
+      }
     },
     "J4": {
       "implementation": "wired",
@@ -96,7 +121,14 @@
       "correct": 127,
       "lower95": 0.9766875895717869,
       "resultSha256": "9a9c44523254c93d7952d1dcaedb93c7fecb65f97cd9f9a68b21afe20abae6bd",
-      "observations": "140 labelled lines, including 35 preserved lines from real statistical and bibliometric reports; 127 settled / 127 correct. Sentences share report groups, so line-level confidence bounds are not independent-report generalization."
+      "observations": "140 labelled lines, including 35 preserved lines from real statistical and bibliometric reports; 127 settled / 127 correct. Sentences share report groups, so line-level confidence bounds are not independent-report generalization.",
+      "baselineAgreement": 0.8,
+      "baselineObservations": "Drift baseline recorded 2026-10-10 from production: 2,855 comparisons against the frozen regex, 2026-10-07 09:54Z to 2026-10-09 01:18Z. Daily agreement 0.501 on 10-07 (a partial day that ran before the site settled), then 0.811 and 0.804; the settled level is about 0.80. J4 was enabled and its prompt fingerprint matched this pin.",
+      "benefit": {
+        "record": "evals/judge-sites/J4/benefit-2026-10-10.json",
+        "decision": "on",
+        "reason": "Re-measured in two passes: settled answers 127 of 127 and 126 of 126 right (lower95 0.977), no false notice among 75 non-clinical sentences, more accurate than the frozen regex it replaced (140 of 140 against 111 of 140 with unsettled lines left as no notice)."
+      }
     },
     "J5": {
       "implementation": "wired",
@@ -122,8 +154,13 @@
         "status": "measured-not-release-certified"
       },
       "missing": [
-        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
-      ]
+        "Independent item-level labels for the frontier screen: the snapshot's labels are the editor's own production decisions, and the calibrated agreement value the plan's condition names was never recorded."
+      ],
+      "benefit": {
+        "record": "evals/judge-sites/J5/benefit-2026-10-10.json",
+        "decision": "original-path",
+        "reason": "Jev is sure of 4 of 105 items, so the site adds a call to almost every batch and takes over almost nothing; slower and dearer than the editor alone."
+      }
     },
     "J6": {
       "implementation": "wired",
@@ -149,8 +186,13 @@
         "status": "measured-not-release-certified"
       },
       "missing": [
-        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
-      ]
+        "Independent labels beyond the 11 incident and control cases (89 of the 100 are the editor's own production decisions)."
+      ],
+      "benefit": {
+        "record": "evals/judge-sites/J6/benefit-2026-10-10.json",
+        "decision": "original-path",
+        "reason": "The plan's launch condition fails: Jev passes 6 of the 11 incident cases, the editor's prompt 11 of 11; Jev settles 21 of 100 pairs."
+      }
     },
     "J7": {
       "implementation": "wired",
@@ -158,7 +200,12 @@
       "threshold": 0.8,
       "missing": [
         "Researcher-confirmed document-type labels over the whole document-type list have not been collected."
-      ]
+      ],
+      "benefit": {
+        "record": null,
+        "decision": "original-path",
+        "reason": "No researcher-confirmed document-type labels exist in the repository; none were invented."
+      }
     },
     "J8": {
       "implementation": "wired",
@@ -166,7 +213,12 @@
       "threshold": 0.9,
       "missing": [
         "CONSORT-TM Methods annotations do not establish a full-manuscript criterion pass; no full-manuscript false-pass comparison against thinking-enabled Flash."
-      ]
+      ],
+      "benefit": {
+        "record": "evals/judge-sites/J8/benefit-2026-10-10.json",
+        "decision": "original-path",
+        "reason": "No scorable labels (CONSORT-TM annotations do not establish a criterion pass), so none was invented; the thinking-on Flash comparison the plan requires needs full-manuscript labels that do not exist in the repository."
+      }
     },
     "J9": {
       "implementation": "wired",
@@ -192,8 +244,14 @@
         "status": "measured-not-release-certified"
       },
       "missing": [
-        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
-      ]
+        "The incumbent comparison on the 50-candidate shape (the MR engine's own structured call).",
+        "A decode that keeps a request with one tied candidate, as J1 and J8 do."
+      ],
+      "benefit": {
+        "record": "evals/judge-sites/J9/benefit-2026-10-10.json",
+        "decision": "original-path",
+        "reason": "Settled 9 of 14 traits, all right; the other 5 requests fail because one tied candidate of 50 voids the whole request. The comparison with the engine's own structured call, required by the plan, was not run; the site also selects one id where the original selects up to three. Switching it on also needs an engine change (the engine keeps one id where the original keeps up to three fallbacks)."
+      }
     },
     "J10": {
       "implementation": "implemented-through-J17-ranking-only-per-plan-4.6",
@@ -201,7 +259,12 @@
       "threshold": 0.8,
       "missing": [
         "Shared J17 ranking calibration remains unqualified; no independent capability assignment is introduced."
-      ]
+      ],
+      "benefit": {
+        "record": null,
+        "decision": "original-path",
+        "reason": "Registry-only alias of J17 (no caller of its own), and no labelled scout outcomes exist in the repository."
+      }
     },
     "J11": {
       "implementation": "wired",
@@ -209,7 +272,12 @@
       "threshold": 0.8,
       "missing": [
         "A reviewed live method/tool-pair corpus and current incumbent comparison are required."
-      ]
+      ],
+      "benefit": {
+        "record": null,
+        "decision": "original-path",
+        "reason": "No reviewed method corpus exists in the repository. Advisory until calibrated: its answer feeds no eligibility gate (evolutionScout.mjs)."
+      }
     },
     "J12": {
       "implementation": "wired",
@@ -217,7 +285,12 @@
       "threshold": 0.8,
       "missing": [
         "A reviewed live method/tool-pair corpus and current incumbent comparison are required."
-      ]
+      ],
+      "benefit": {
+        "record": null,
+        "decision": "original-path",
+        "reason": "No reviewed tool-pair corpus exists in the repository. Advisory until calibrated: its answer decides no merge review (evolutionMaintenance.mjs)."
+      }
     },
     "J13": {
       "implementation": "wired",
@@ -225,7 +298,12 @@
       "threshold": 0.8,
       "missing": [
         "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
-      ]
+      ],
+      "benefit": {
+        "record": null,
+        "decision": "original-path",
+        "reason": "The card open, save and hide records the plan names as labels exist only in production."
+      }
     },
     "J14": {
       "implementation": "wired",
@@ -233,7 +311,12 @@
       "threshold": 0.8,
       "missing": [
         "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
-      ]
+      ],
+      "benefit": {
+        "record": null,
+        "decision": "original-path",
+        "reason": "The operator merge records the plan names as labels do not exist (0 in the frontier snapshot)."
+      }
     },
     "J15": {
       "implementation": "wired",
@@ -260,7 +343,12 @@
       },
       "missing": [
         "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
-      ]
+      ],
+      "benefit": {
+        "record": "evals/judge-sites/J15/benefit-2026-10-10.json",
+        "decision": "original-path",
+        "reason": "Quality gain is real on weak labels (49 unrelated records dropped, no related one) but settled lower95 is 0.908, and the caller's per-record synchronous request (review J-13) would block the engine's event loop."
+      }
     },
     "J16": {
       "implementation": "wired",
@@ -268,7 +356,12 @@
       "threshold": 0.8,
       "missing": [
         "A reviewed live method/tool-pair corpus and current incumbent comparison are required."
-      ]
+      ],
+      "benefit": {
+        "record": null,
+        "decision": "original-path",
+        "reason": "Registry-only, no caller, and no reviewed method-pair corpus in the repository."
+      }
     },
     "J17": {
       "implementation": "wired",
@@ -276,7 +369,12 @@
       "threshold": 0.8,
       "missing": [
         "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
-      ]
+      ],
+      "benefit": {
+        "record": null,
+        "decision": "original-path",
+        "reason": "No labelled scout-lead corpus exists in the repository; ranking-only and labelled as the judge's."
+      }
     },
     "J18": {
       "implementation": "wired",
@@ -303,7 +401,12 @@
       },
       "missing": [
         "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
-      ]
+      ],
+      "benefit": {
+        "record": "evals/judge-sites/J18/benefit-2026-10-10.json",
+        "decision": "original-path",
+        "reason": "31 of 31 settled on pairs the corpus calls easy (lower95 0.908); the plan's harder pairs without trial acronyms are not in the corpus."
+      }
     },
     "J19": {
       "implementation": "wired",
@@ -330,7 +433,12 @@
       },
       "missing": [
         "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
-      ]
+      ],
+      "benefit": {
+        "record": "evals/judge-sites/J19/benefit-2026-10-10.json",
+        "decision": "original-path",
+        "reason": "Thirteen synthetic cases (12 of 12 settled right, lower95 0.779) cannot qualify a site; the incumbent's cue rules were not run."
+      }
     },
     "J20": {
       "implementation": "wired",
@@ -357,7 +465,12 @@
       },
       "missing": [
         "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
-      ]
+      ],
+      "benefit": {
+        "record": "evals/judge-sites/J20/benefit-2026-10-10.json",
+        "decision": "original-path",
+        "reason": "Twenty synthetic cases (all settled right, lower95 0.861) cannot qualify a site; the engine's LLM fallback was not run."
+      }
     },
     "J21": {
       "implementation": "wired",
@@ -365,7 +478,12 @@
       "threshold": 0.8,
       "missing": [
         "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
-      ]
+      ],
+      "benefit": {
+        "record": null,
+        "decision": "original-path",
+        "reason": "No independent labels exist: the probe-response states the repository holds are the markers' own definition, the incumbent itself."
+      }
     },
     "J22": {
       "implementation": "wired",
@@ -373,7 +491,12 @@
       "threshold": 0.8,
       "missing": [
         "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
-      ]
+      ],
+      "benefit": {
+        "record": null,
+        "decision": "original-path",
+        "reason": "No independent labels exist: the media-remark flags the repository holds are the regexes' own definition, the incumbent itself."
+      }
     },
     "meta-evidence-role": {
       "implementation": "wired",
@@ -381,7 +504,12 @@
       "threshold": 0.8,
       "missing": [
         "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
-      ]
+      ],
+      "benefit": {
+        "record": null,
+        "decision": "original-path",
+        "reason": "No labelled corpus exists in the repository."
+      }
     },
     "peer-review-checklist": {
       "implementation": "wired",
@@ -389,7 +517,12 @@
       "threshold": 0.8,
       "missing": [
         "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
-      ]
+      ],
+      "benefit": {
+        "record": null,
+        "decision": "original-path",
+        "reason": "No labelled corpus exists in the repository."
+      }
     }
   },
   "privateEvidence": {
@@ -760,5 +893,7 @@
       ],
       "note": "Retains both initial failures/setup errors and their final corrected reruns; a green summary never overwrites an initial failed attempt."
     }
-  }
+  },
+  "benefitRecordedAt": "2026-10-10",
+  "benefitRule": "evals/judge-sites/benefit.mjs (BENEFIT_RULE): on when the plan's launch conditions hold where it names any (J3), else the settled-correct lower95 reaches 0.95; the site with Jev on is not below the incumbent by more than 0.02; it is faster, cheaper or more accurate; and no constraint of its record is broken, in every pass."
 }

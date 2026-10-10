@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "site": "J5",
+  "recordedAt": "2026-10-10",
+  "rule": {
+    "id": "jev-benefit-2026-10-10",
+    "qualificationBar": 0.95,
+    "marginPoints": 0.02,
+    "statement": "On when, in every pass: (1) Jev's settled-correct lower95 is at least 0.95, or, where the plan names launch conditions that stand in for it (J3), those hold, and J4's added condition of no false notice on real non-clinical sentences holds as well; (2) the accuracy of the site with Jev on is not below the incumbent's on the same cases by more than 0.02; (3) the site with Jev on is faster (median per decision), or cheaper, or more accurate; (4) no constraint the site's record adds is broken (J3: not slower than Flash). Otherwise the original path stays.",
+    "siteConditions": "plan 2026-10-06 section 4.2, J5: the 5 lane incident cases pass, and agreement with the published items is not below the calibrated value"
+  },
+  "model": "jev-1.13.0",
+  "corpus": {
+    "files": [
+      {
+        "file": "evals/judge-sites/J5/cases.json",
+        "sha256": "eb6176ca0e9dfdaff6c410674a18825646ec7754b8fa714dc41bd2f7d735e16f"
+      }
+    ],
+    "cases": 10
+  },
+  "measuredOn": "A development host in Taipei, where both providers answer a bare request in about 0.16 s. The production host is in Beijing: TypeSafe is reached there in 0.5 to 0.6 s (plan 2026-10-06 section 0), and a 325-token Jev request took 0.33 to 1.24 s on 2026-10-07 (4 requests, privateEvidence latency-production-host.json). Latency here compares the two paths on one network; it is not the production figure.",
+  "incumbentCostBasis": "List prices (peak) from the reference price list on the tokens the provider reported. A repeated run of identical prompts is partly served from DeepSeek's prompt cache and costs less than a first call; production questions are new, so the first pass of a site is the representative one.",
+  "passes": [
+    {
+      "id": "pass-1",
+      "at": "2026-10-10T17:59:42.682Z",
+      "mode": "live-calibration",
+      "model": "jev-1.13.0",
+      "catalogCount": 25,
+      "catalogDigest": "3d46621a6a94733d812bcfe05862f3123a8914caa1652dfd92dff7b67ab16636",
+      "summary": {
+        "cases": 10,
+        "jev": {
+          "measured": 10,
+          "settled": 0,
+          "settledShare": 0,
+          "correctSettled": 0,
+          "settledAccuracy": null,
+          "lower95": 0,
+          "bar": 0.95,
+          "rawAccuracy": 0.2,
+          "failures": 0,
+          "ms": {
+            "n": 10,
+            "p50": 246,
+            "p95": 397
+          },
+          "costCnyPerCall": 0.003282198
+        },
+        "incumbent": {
+          "measured": 10,
+          "correct": 5,
+          "accuracy": 0.5,
+          "failures": 0,
+          "ms": {
+            "n": 10,
+            "p50": 949,
+            "p95": 3542
+          },
+          "costCnyPerCall": 0.0051692000000000005
+        },
+        "hybrid": {
+          "measured": 10,
+          "correct": 5,
+          "accuracy": 0.5,
+          "ms": {
+            "n": 10,
+            "p50": 1195,
+            "p95": 3842
+          },
+          "costCnyPerCall": 0.008451398,
+          "originalPathAsked": 10
+        },
+        "paired": {
+          "n": 10,
+          "hybridOnly": 0,
+          "incumbentOnly": 0,
+          "bothRight": 5,
+          "bothWrong": 5
+        }
+      },
+      "checks": [
+        {
+          "id": "plan-launch-conditions",
+          "ok": false,
+          "detail": "5 of 5 lane incident cases pass with the site on; the calibrated agreement value the second condition names was never recorded, so that condition cannot be shown"
+        },
+        {
+          "id": "non-inferiority",
+          "ok": true,
+          "detail": "site with Jev on 0.5000 against incumbent 0.5000 less the margin 0.02"
+        },
+        {
+          "id": "benefit",
+          "ok": false,
+          "detail": "with the site on: faster false (p50 1195 against 949 ms), cheaper false (0.008451 against 0.005169 CNY per decision), more accurate false"
+        }
+      ],
+      "decision": "original-path",
+      "reasons": [
+        "plan-launch-conditions: 5 of 5 lane incident cases pass with the site on; the calibrated agreement value the second condition names was never recorded, so that condition cannot be shown",
+        "benefit: with the site on: faster false (p50 1195 against 949 ms), cheaper false (0.008451 against 0.005169 CNY per decision), more accurate false"
+      ],
+      "spend": {
+        "jevUsd": 0.0049,
+        "deepseekBilledCny": 0.0258
+      },
+      "rowsSha256": "690607dac2adb131aa66b3c2f3a224b8f62c041c4dabcdbceacddb79e3bd3d06",
+      "rows": [
+        {"id":"snapshot-screen-batch-1","label":{"sha256":"51138bb886822467109ba3a836a6f4a44bff9fd2a8e416fd91a6958d1aba5f5e","bytes":610},"outcome":"escalated","code":"judge_uncertain","confidence":0.02,"jev":{"sha256":"0ac307a44bb21cce762718df240ae538d40382fc38df8f5f962403cee6e22a27","bytes":1986},"correct":true,"hybridCorrect":false,"ms":397,"costCny":0.0061359,"incumbent":{"value":{"sha256":"e35351909dc3fb0b0e2cd7c2340283d94be876374df62c114b5ee613be3ee2fd","bytes":2015},"correct":false,"ms":2018,"costCny":0.0084916}},
+        {"id":"snapshot-screen-batch-2","label":{"sha256":"99ce3958e2ac2962c50b31047f762adae81beb12f3f35e4be2e2ec53438c6329","bytes":579},"outcome":"escalated","code":"judge_uncertain","confidence":0.26,"jev":{"sha256":"a36a0e121721b756c2fbc3301876c866b43b54e379412809d6c5d114f280207c","bytes":2251},"correct":false,"hybridCorrect":false,"ms":353,"costCny":0.0064744,"incumbent":{"value":{"sha256":"968fa221847b589f6dbf8c87cc8bb0da27232c7789338dcf2a8096a0d281406d","bytes":2254},"correct":false,"ms":2109,"costCny":0.0096896}},
+        {"id":"snapshot-screen-batch-3","label":{"sha256":"5bb1eae9a944be0a041822769a94d290dd34bd24eeed76bf9373c36cf13cfecd","bytes":993},"outcome":"escalated","code":"judge_uncertain","confidence":0.02,"jev":{"sha256":"6217ced5ca8bc16ebda25f816a9a302c6f09534cc57a7f973623ec0ff3f020b6","bytes":2133},"correct":false,"hybridCorrect":false,"ms":316,"costCny":0.0061158,"incumbent":{"value":{"sha256":"5f9a576118a8108e8085c0438bfd4bff8c347c246d3fcad2b05c0d78b6eb7546","bytes":2249},"correct":false,"ms":1996,"costCny":0.0090236}},
+        {"id":"snapshot-screen-batch-4","label":{"sha256":"ef9ce75a2eb7dee94ca0552b532fbd90fc85c72dd318a6d94f8540a3b368bd6c","bytes":1729},"outcome":"escalated","code":"judge_uncertain","confidence":0.22,"jev":{"sha256":"2087553bdc833e520d98432eac29772e87e70aeb7d3f8bc2844f95b0a5df54e4","bytes":2270},"correct":false,"hybridCorrect":false,"ms":313,"costCny":0.0059075,"incumbent":{"value":{"sha256":"6b3269f633f9b867bd540ed6e7aafbd13fb69900747b93f3e47edc20770aecab","bytes":2432},"correct":false,"ms":2061,"costCny":0.0080096}},
+        {"id":"snapshot-screen-batch-5","label":{"sha256":"72da95349fd42fd19281109d130c618f2120373cabe083d70d4b63823aef95ff","bytes":1489},"outcome":"escalated","code":"judge_uncertain","confidence":0.06,"jev":{"sha256":"223530fb072c9e13f8d35202cecc107c0ac8acc69ad9199189b79ec3a89016a2","bytes":2314},"correct":false,"hybridCorrect":false,"ms":300,"costCny":0.0062445,"incumbent":{"value":{"sha256":"a8633d553ea9fcc93a81d25e320259ccd1cde6cfe3f75c7cb9713cfa9083a6e2","bytes":2424},"correct":false,"ms":3542,"costCny":0.0128976}},
+        {"id":"incident-food-recall-flour","label":{"items":[{"id":"1","category":["safety"]}]},"outcome":"escalated","code":"judge_uncertain","confidence":0.4,"jev":{"items":[{"id":"1","isMedical":true,"isNews":true,"category":"safety","roundup":false,"specialties":["gastroenterology","public-health"]}]},"correct":false,"hybridCorrect":true,"ms":213,"costCny":0.0003895,"incumbent":{"value":{"items":[{"id":"1","isMedical":true,"isNews":true,"category":"public-health","specialties":["public-health","gastroenterology"],"roundup":false}]},"correct":true,"ms":861,"costCny":0.0007556}},
+        {"id":"incident-food-recall-chips","label":{"items":[{"id":"1","category":["safety"]}]},"outcome":"escalated","code":"judge_uncertain","confidence":0.14,"jev":{"items":[{"id":"1","isMedical":true,"isNews":true,"category":"safety","roundup":false,"specialties":["public-health"]}]},"correct":false,"hybridCorrect":true,"ms":192,"costCny":0.0003881,"incumbent":{"value":{"items":[{"id":"1","isMedical":true,"isNews":true,"category":"public-health","specialties":["public-health"],"roundup":false}]},"correct":true,"ms":912,"costCny":0.0007076}},
+        {"id":"incident-food-recall-dessert","label":{"items":[{"id":"1","category":["safety"]}]},"outcome":"escalated","code":"judge_uncertain","confidence":0.48,"jev":{"items":[{"id":"1","isMedical":false,"isNews":true,"category":"safety","roundup":false,"specialties":["public-health"]}]},"correct":false,"hybridCorrect":true,"ms":187,"costCny":0.0003923,"incumbent":{"value":{"items":[{"id":"1","isMedical":true,"isNews":true,"category":"public-health","specialties":["public-health"],"roundup":false}]},"correct":true,"ms":658,"costCny":0.0007176}},
+        {"id":"incident-food-recall-pasta","label":{"items":[{"id":"1","category":["safety"]}]},"outcome":"escalated","code":"judge_uncertain","confidence":0.415,"jev":{"items":[{"id":"1","isMedical":true,"isNews":true,"category":"safety","roundup":false,"specialties":["infectious-disease","public-health","pediatrics"]}]},"correct":false,"hybridCorrect":true,"ms":246,"costCny":0.0003855,"incumbent":{"value":{"items":[{"id":"1","isMedical":true,"isNews":true,"category":"public-health","specialties":["public-health"],"roundup":false}]},"correct":true,"ms":949,"costCny":0.0006756}},
+        {"id":"incident-toxic-supplement-recall","label":{"items":[{"id":"1"}]},"outcome":"escalated","code":"judge_uncertain","confidence":0.476,"jev":{"items":[{"id":"1","isMedical":true,"isNews":true,"category":"safety","roundup":false,"specialties":["public-health","cardiology","pharmacy"]}]},"correct":true,"hybridCorrect":true,"ms":222,"costCny":0.0003886,"incumbent":{"value":{"items":[{"id":"1","isMedical":true,"isNews":true,"category":"safety","specialties":["public-health","pharmacy"],"roundup":false}]},"correct":true,"ms":553,"costCny":0.0007236}}
+      ]
+    }
+  ],
+  "decision": {
+    "value": "original-path",
+    "heldBy": [
+      "plan-launch-conditions: 5 of 5 lane incident cases pass with the site on; the calibrated agreement value the second condition names was never recorded, so that condition cannot be shown",
+      "benefit: with the site on: faster false (p50 1195 against 949 ms), cheaper false (0.008451 against 0.005169 CNY per decision), more accurate false"
+    ],
+    "resultsSha256": "6a0b1022d8eb57f4db7777b553e0f0891ab4584e8c812fef6797b04aaf341013",
+    "summary": "Original path. Jev is sure of 4 of 105 items, so the site adds a call to almost every batch and takes over almost nothing."
+  },
+  "notes": {
+    "jev": "Jev settles nothing here. Of the 10 batches none settled, and of the 105 items only 4 had all five of their questions (medical, news, lane, roundup, specialties) at or above 0.8, which is what the per-item rule needs before it takes Jev's verdict for an item and leaves the rest to Flash. In an earlier Jev-only run 3 of the 5 snapshot batches also failed at the provider (judge_provider_failure); none failed in this one.",
+    "incumbent": "The frontier editor's own screen (FrontierEditor.screen, thinking off) run on the same batches. The cases keep what Jev is shown, not the source name the editor's prompt adds, so the editor here reads a little less than in the feed: against the 25 'not medical' decisions the feed itself made it agrees on 12, where Jev's top choice agrees on all 25. Its accuracy here is therefore a floor.",
+    "planConditions": "The plan's conditions (section 4.2: the 5 lane incident cases pass; agreement with the published items not below the calibrated value) cannot be met in a way that matters: the 5 incident cases pass only because Jev is unsure on every one and the editor decides them, and the calibrated agreement value was never recorded.",
+    "benefit": "None. With Jev on, every batch pays for Jev and, for the 96 per cent of items Jev is not sure of, for the editor as well: slower and dearer than the editor alone, with no accuracy gained (summary.hybrid against summary.incumbent)."
+  }
+}

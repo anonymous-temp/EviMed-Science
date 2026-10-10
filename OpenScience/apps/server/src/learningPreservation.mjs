@@ -10,6 +10,12 @@
  * level (`LearningService.createCandidate`, and the migration of 2026-09-27
  * for the ones already written). This module does the same for the jobs.
  *
+ * Since 2026-10-10 (review M-10/M-11) a method learnt only in the project is
+ * stopped when the project is deleted (`LearningService.retireProjectMethods`,
+ * in the same transaction): deleting a project asks for what it held to go. The
+ * lessons still waiting move as before (L-G1); whether a lesson that waits on a
+ * deleted project should still be learnt is a separate question, not taken here.
+ *
  * Inside the deletion's own transaction, before the project row goes:
  *
  *  - every `distill` and `consolidate` job filed under the project moves to
