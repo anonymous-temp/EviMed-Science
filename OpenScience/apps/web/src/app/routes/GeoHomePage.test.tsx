@@ -140,10 +140,34 @@ describe("循证 GEO home", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
-  it("says there is nothing yet when there is no project, with the one button in the header", async () => {
+  it("says what the module is for in one sentence when there is no project, and offers 新建项目 once — in the empty state, not in the header", async () => {
     client.listGeoProjects.mockResolvedValue([]);
     renderHome();
     expect(await screen.findByText("还没有循证 GEO 项目")).toBeInTheDocument();
+    const sentence = screen.getByText("药企和医生在这里研究并传播自己产品的循证依据，也能看到各家 AI 是怎么表达的。");
+    const buttons = screen.getAllByRole("button", { name: "新建项目" });
+    expect(buttons).toHaveLength(1);
+    expect(sentence.parentElement).toContainElement(buttons[0]);
+    expect(buttons[0]).toBeEnabled();
+    // The header is the title alone: the page has one solid button, and it is the one in the empty state.
+    expect(within(screen.getByRole("banner")).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("creates the first project from the empty state and lands in its conversation", async () => {
+    client.listGeoProjects.mockResolvedValue([]);
+    client.createGeoProject.mockResolvedValue({ id: "geo_new", projectId: "p-new", sessionId: "ses_new" });
+    renderHome();
+    await screen.findByText("还没有循证 GEO 项目");
+    await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
+    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ projectId: "p-new", sessionId: "ses_new" }));
+    expect(client.createGeoProject).toHaveBeenCalledWith({});
+  });
+
+  it("keeps the header's 新建项目, not yet pressable, while the list is read — and has no second one in the page", async () => {
+    client.listGeoProjects.mockReturnValue(new Promise(() => undefined));
+    renderHome();
+    const header = within(screen.getByRole("banner")).getByRole("button", { name: "新建项目" });
+    expect(header).toBeDisabled();
     expect(screen.getAllByRole("button", { name: "新建项目" })).toHaveLength(1);
   });
 

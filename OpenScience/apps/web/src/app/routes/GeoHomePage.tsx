@@ -15,6 +15,9 @@ import { GeoListSkeleton, GeoOffPage } from "@/components/geo/GeoStates";
 import { coverageText, GEO_STEP_WORK, weekOf, withStartDate } from "@/components/geo/geoText";
 import { useOpenGeoConversation } from "@/components/geo/useOpenGeoConversation";
 
+/** What the module is for, said to a pharma company or a doctor who has not started: the work, and what they get to see. */
+const EMPTY_SENTENCE = "药企和医生在这里研究并传播自己产品的循证依据，也能看到各家 AI 是怎么表达的。";
+
 type Listing =
   | { kind: "loading" }
   | { kind: "off" }
@@ -31,7 +34,9 @@ type Listing =
  * all the same. A paused project's row carries 继续.
  *
  * “新建项目” creates the project and lands in its conversation, where the
- * composer already carries the “循证 GEO” chip: no form.
+ * composer already carries the “循证 GEO” chip: no form. With no project yet the
+ * page says in one sentence what the module is for and offers that one button in
+ * the empty state; the header has none then, so the page has one solid button.
  */
 export function GeoHomePage() {
   const feature = useGeoFeature();
@@ -75,19 +80,20 @@ export function GeoHomePage() {
     ? { kind: "ready", projects: previous.projects.map((project) => (project.id === id ? { ...project, status: "active" } : project)) }
     : previous));
 
+  const none = feature !== "loading" && listing.kind === "ready" && listing.projects.length === 0;
+  const newProject = (
+    <Button onClick={create} loading={creating} disabled={listing.kind !== "ready"}>
+      <Plus size={16} aria-hidden="true" />
+      新建项目
+    </Button>
+  );
+
   return (
-    <PageShell
-      title="循证 GEO"
-      actions={(
-        <Button onClick={create} loading={creating} disabled={listing.kind !== "ready"}>
-          <Plus size={16} aria-hidden="true" />
-          新建项目
-        </Button>
-      )}
-    >
+    <PageShell title="循证 GEO" actions={none ? undefined : newProject}>
       {feature === "loading" || listing.kind === "loading" ? <GeoListSkeleton />
         : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
-          : listing.projects.length === 0 ? <EmptyState icon={Radar} title="还没有循证 GEO 项目" />
+          : listing.projects.length === 0
+            ? <EmptyState icon={Radar} title="还没有循证 GEO 项目" description={EMPTY_SENTENCE} action={newProject} />
             : <ProjectList projects={listing.projects} onResumed={resumed} />}
     </PageShell>
   );
