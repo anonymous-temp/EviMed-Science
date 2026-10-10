@@ -239,6 +239,12 @@ test("a pass counts for an article only when the receipt graded the very bytes t
     assert.equal(await gate("edited", sha(text.edited)), "unverified", "the file was changed after grading and declared again: those bytes were never graded");
     assert.equal(await gate("unnamed", sha("x")), "unverified", "a file the receipt does not name was not graded");
     assert.equal(await gate("good", null), "unverified", "no declared bytes, nothing for the pass to be about");
+    // What a send is held to is the same record: the receipt's hash for the file, or null where it names none.
+    const graded = (/** @type {string} */ name) => geo.gradedSha256(project, { runId: "run_graded", deliverableId: "geo-content", path: `deliverables/geo-content/articles/${name}.md` });
+    assert.equal(await graded("good"), sha(text.good));
+    assert.equal(await graded("edited"), sha("# 评审时的稿\n每周一次。\n"), "the bytes the gate saw, not the ones at rest now");
+    assert.equal(await graded("unnamed"), null);
+    assert.equal(await geo.gradedSha256(project, { runId: null, deliverableId: "geo-other", path: "deliverables/geo-other/articles/x.md" }), null, "a deliverable no run holds");
     // Through the registration the run makes: the stored verdict is the bound one.
     const map = await geoRuntimeWrite({ store: geo.store, project, what: "questions",
       body: { data: { groups: [{ pool: "P1", name: "g", questions: [{ text: "q", isMeasured: true }] }] } } });

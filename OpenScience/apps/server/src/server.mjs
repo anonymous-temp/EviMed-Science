@@ -2095,6 +2095,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string, contentSha256?: string | null }) => Promise<string>,
    *   articleExists: (project: any, articlePath: string) => Promise<boolean>,
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
+   *   gradedSha256: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string | null>,
    *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
@@ -2167,6 +2168,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
       },
       articleRunId: async (project, deliverableId) => (await geoDeliverableRun(project, deliverableId, null))?.id ?? null,
+      // The sha256 the delivery gate graded an article's file at (its run's receipt), or null where the receipt cannot say: what a send is held to (M-10).
+      gradedSha256: async (project, { runId, deliverableId, path: articlePath }) => {
+        const id = deliverableId ?? deliverableIdOfPath(articlePath);
+        const run = id && articlePath ? await geoDeliverableRun(project, id, runId) : null;
+        return run ? geoGradedSha(project, run, id, articlePath) : null;
+      },
     };
   }
   // 「虚拟临床研究」: one call, seven packages (vcrComposition.mjs). Null when the
@@ -4784,11 +4791,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       catalogueJudgeContext: () => ensureEvidenceProject(store),
       store: new GeoMarketStore(productDatabase), market: marketClient, webReader, articleBody, config, timeZone: geoTimeZone,
       // The bytes the delivery gate graded for an article's file, to hold a send to them (M-10); null where the receipt cannot say.
-      gradedSha256: async (/** @type {any} */ article, /** @type {any} */ geoProject) => {
-        const id = article?.deliverableId ?? deliverableIdOfPath(article?.path ?? "");
-        const run = id && article?.path ? await geoDeliverableRun(geoProject, id, article.runId ?? null) : null;
-        return run ? geoGradedSha(geoProject, run, id, article.path) : null;
-      },
+      gradedSha256: (/** @type {any} */ article, /** @type {any} */ geoProject) => geoParts.gradedSha256(geoProject,
+        { runId: article?.runId ?? null, deliverableId: article?.deliverableId ?? null, path: article?.path ?? "" }),
       notify: (/** @type {any} */ event) => notifier.textChanged(event),
       alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
     };
