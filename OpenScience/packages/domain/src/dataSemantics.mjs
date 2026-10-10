@@ -70,8 +70,13 @@ export const DATA_SEMANTICS_KIND = 'dataset-semantics'
 
 /** Who vouches for a fact, strongest first. */
 export const SEMANTIC_BASES = frozen(['researcher_confirmed', 'dictionary_stated', 'model_inferred'])
+/**
+ * What a fact rests on, in the words a researcher reads on the fact's own line (「依据：数据字典」). Not a tag beside every fact and not
+ * a count: the page says where a fact stands in its detail, plainly (owner ruling 2026-10-10); the order of the bases above is the
+ * contract, and a weaker one never overwrites a stronger one.
+ */
 export const SEMANTIC_BASIS_LABELS_ZH = Object.freeze({
-  researcher_confirmed: '你已确认', dictionary_stated: '数据字典所述', model_inferred: '模型推断',
+  researcher_confirmed: '你的说明', dictionary_stated: '数据字典', model_inferred: 'AI 判断',
 })
 /** @type {Readonly<Record<string, number>>} */
 const BASIS_RANK = Object.freeze({ model_inferred: 1, dictionary_stated: 2, researcher_confirmed: 3 })

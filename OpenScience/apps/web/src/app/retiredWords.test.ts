@@ -85,6 +85,12 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["本卡由平台议程完成", "a card does not say that the platform's agenda made it"],
   ["证明哈希", "a card does not carry the evaluator's proof hash"],
   ["内部研究记录", "a card does not tell its reader what the platform keeps in its internal project"],
+  // 数据含义 (R34): who vouches for a meaning is the contract; on the page it is a fact's own line (「依据：AI 判断」), not a count and not a tag.
+  ["模型推断", "the page says 「依据：AI 判断」 on a fact's own line; there is no count of inferred facts and no tag"],
+  ["你已确认", "same"],
+  ["数据字典所述", "same"],
+  ["确认以上推断", "the button confirms the meanings shown (确认这些含义); it does not name an inference"],
+  ["来源未登记", "same"],
   // Disclaimers and "not verified" notes the platform wrote about itself (R31).
   ["不为它们背书", "the platform does not disclaim the cards of other users on the page that lists them"],
   ["是平台还没核对这一项", "a condition the platform has not checked is not listed, and nothing says so"],

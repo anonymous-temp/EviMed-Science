@@ -16,6 +16,7 @@ import {
   DATA_SEMANTICS_LIMITS,
   DATA_VALUE_SOURCES,
   SEMANTIC_BASES,
+  SEMANTIC_BASIS_LABELS_ZH,
   VCR_COLUMN_SOURCES,
   VCR_COLUMN_SOURCE_EXPORT,
   VCR_MISSING_REASONS,
@@ -65,6 +66,13 @@ test("every check outcome belongs to a family, and every not-checked reason is s
   // Each of the named failure classes of the plan has an outcome of its own.
   for (const id of ["duplicate_exact", "duplicate_conflicting", "join_cardinality_violation", "denominator_changed", "temporal_leakage",
     "type_changed", "unit_changed", "column_renamed_candidate", "new_codes"]) assert.ok(id in DATA_CHECK_OUTCOMES, id);
+});
+
+test("the words a page uses for who vouches for a fact are plain, one to a basis, and say what it rests on (owner ruling 2026-10-10)", () => {
+  // The contract is the order of SEMANTIC_BASES and the test below; the words are only what the fact's own line says after 「依据：」.
+  assert.deepEqual(Object.keys(SEMANTIC_BASIS_LABELS_ZH), [...SEMANTIC_BASES]);
+  assert.deepEqual({ ...SEMANTIC_BASIS_LABELS_ZH }, { researcher_confirmed: "你的说明", dictionary_stated: "数据字典", model_inferred: "AI 判断" });
+  assert.equal(new Set(Object.values(SEMANTIC_BASIS_LABELS_ZH)).size, SEMANTIC_BASES.length);
 });
 
 test("a stronger basis is never overwritten by a weaker one, and the disagreement stays visible", () => {
