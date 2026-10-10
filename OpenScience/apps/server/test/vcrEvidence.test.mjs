@@ -737,6 +737,26 @@ test("an unreachable registry is reported and writes nothing", async () => {
   assert.deepEqual(candidates.registries.map((entry) => entry.status), ["registry_unavailable", "registry_unavailable"]);
 });
 
+test("a candidate trial's record is read like any registry read: identity out of the record, nothing written, a registry that cannot answer named", async () => {
+  const store = storeDouble();
+  const pipeline = createVcrEvidencePipeline({ store, registry: registryDouble(), now: () => new Date(AT) });
+  const answer = await pipeline.candidateRecord({ userId: "u1", registryId: "NCT02296125" });
+  assert.equal(answer.status, "ok");
+  assert.equal(answer.trial.registryId, "NCT02296125");
+  assert.equal(answer.trial.status, "COMPLETED");
+  assert.match(answer.trial.recordHash, /^[a-f0-9]{64}$/);
+  assert.match(answer.trial.eligibilityText, /^Inclusion Criteria:/);
+  assert.equal(store.precedents.length, 0, "a candidate is a lead for one patient, not evidence a card may cite: the library is not written");
+  assert.equal(store.evidence.length, 0);
+
+  const offline = createVcrEvidencePipeline({ store, registry: registryDouble({ outage: "ENOTFOUND" }) });
+  assert.deepEqual(await offline.candidateRecord({ userId: "u1", registryId: "NCT02296125" }), { status: "registry_unavailable", reason: "ENOTFOUND", registryId: "NCT02296125" });
+  const missing = createVcrEvidencePipeline({ store, registry: { ...registryDouble(), async record() { return { status: "registry_not_found", reason: "registry_not_found" }; } } });
+  assert.equal((await missing.candidateRecord({ userId: "u1", registryId: "NCT00000000" })).status, "registry_not_found");
+  const unconfigured = createVcrEvidencePipeline({ store, registry: null });
+  assert.equal((await unconfigured.candidateRecord({ userId: "u1", registryId: "NCT02296125" })).reason, "registry_not_configured");
+});
+
 test("the runtime's registry read answers structure, never throws, and never writes", async () => {
   const store = storeDouble();
   const pipeline = createVcrEvidencePipeline({ store, registry: registryDouble(), now: () => new Date(AT) });

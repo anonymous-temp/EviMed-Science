@@ -67,7 +67,7 @@ export const VCR_READ_MAX_ITEMS = 50;
 export const VCR_READ_WHATS = Object.freeze([
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
   "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
-  "trial_registry_record", "pack", "library", "model_assessments", "longitudinal",
+  "trial_registry_record", "pack", "library", "model_assessments", "longitudinal", "candidate_trials",
 ]);
 
 /**
@@ -124,6 +124,7 @@ export const VCR_WRITE_WHATS = Object.freeze([
   "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
   "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
+  "candidate_trial",
 ]);
 
 /** @param {unknown} value */
@@ -441,11 +442,11 @@ export class VcrService {
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config: Record<string, any>, engine?: any, now?: () => Date,
    *   metricName?: ((id: string) => string | null) | null,
    *   access?: any, dataPlane?: any, evidence?: any, matching?: any, jobs?: any, seal?: any,
-   *   matchStore?: any, evidenceStore?: any, documents?: any, knowledge?: any }} options
+   *   matchStore?: any, evidenceStore?: any, documents?: any, knowledge?: any, patientTrials?: any }} options
    */
   constructor({ store, config, engine = null, now = () => new Date(), metricName = null,
     access = null, dataPlane = null, evidence = null, matching = null, jobs = null, seal = null,
-    matchStore = null, evidenceStore = null, documents = null, knowledge = null }) {
+    matchStore = null, evidenceStore = null, documents = null, knowledge = null, patientTrials = null }) {
     if (!store || !config) throw new TypeError("The VCR service needs its store and the config.");
     this.store = store;
     this.config = config;
@@ -459,7 +460,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null) };
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, patientTrials, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null) };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -1431,6 +1432,13 @@ export class VcrService {
           return { available: false, code: "vcr_unavailable", message: "人群定义库未接入本部署：这一步暂不可用，其余步骤照常。" };
         }
         return knowledge.runtimeReadLibrary(study, filter);
+      }
+      case "candidate_trials": {
+        const trials = this.packages.patientTrials;
+        if (!trials?.runtimeRead) {
+          return { available: false, code: "vcr_matching_unavailable", message: "给患者找试验在本部署尚未接入：这一步暂不可用，其余步骤照常。" };
+        }
+        return trials.runtimeRead(study, { ...filter, limit });
       }
       case "precedents": {
         const evidence = this.packages.evidence;

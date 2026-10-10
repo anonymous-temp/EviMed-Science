@@ -897,6 +897,10 @@ function vcrSettings(overrides) {
     // (vcrComposition, vcrGateway); the client clamps it to 5–60 s. Read since the registry client existed, defined
     // here only on 2026-10-10 — until then the variable reached nothing and the deadline was always 20 s.
     vcrRegistryTimeoutMs: integer("vcrRegistryTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS", 20_000, 5_000, 60_000),
+    // The most candidate trials one study holds (「给患者找试验」, vcrPatientTrials): each one costs an evaluation for every patient the
+    // study judges against it, so the count is bounded; a trial the study already holds can always be updated. Counter:
+    // `open_science_vcr_patient_trials_total{kind="capReached"}`.
+    vcrCandidateTrialsMax: integer("vcrCandidateTrialsMax", "OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX", 60, 1, 500),
     // The smallest cell a model is shown (vcrService.minCell): a deployment may raise the domain's floor, never lower it.
     vcrMinCellSize: integer("vcrMinCellSize", "OPEN_SCIENCE_VCR_MIN_CELL_SIZE", VCR_MIN_CELL_SIZE, VCR_MIN_CELL_SIZE, 1_000),
     // The largest derived table — reconstructed pseudo-patients, a forecast's probabilities — the control plane stores from an engine job (vcrJobs).
