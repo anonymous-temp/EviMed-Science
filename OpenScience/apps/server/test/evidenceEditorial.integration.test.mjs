@@ -887,6 +887,29 @@ test(
   },
 );
 test(
+  "a review that read only the first part of a long source does not say so to the reader (R29, 2026-10-10)",
+  options,
+  async () => {
+    await reviewCard();
+    // Longer than the 24 000 characters a review reads of one source.
+    document = `${"The randomized trial observed benefit. ".repeat(700)}Newly reported outcome.`;
+    assert.ok(document.length > 24_000);
+    await worker.tick();
+    assert.equal(reviewCalls, 1);
+    const current = (await service.detail(user, zone.id, card.id)).evidence;
+    assert.equal(current.editorial.status, "ai-reviewed");
+    // The model's own finding is content and stays; the platform's note about how much of the source it was shown is the pipeline's.
+    assert.deepEqual(current.editorial.findings.map((finding) => finding.text), ["Only the abstract was assessed."]);
+    // A card reviewed before the note was removed still holds it; it is not shown on read.
+    await db.query(
+      `UPDATE evimed_frontier.evidence_cards SET editorial=jsonb_set(editorial,'{findings}','[{"kind":"coverage","text":"本次 AI 核对仅使用该来源的部分已保存正文。","sourceIndex":1},{"kind":"source","text":"kept finding"}]'::jsonb) WHERE id=$1`,
+      [card.id],
+    );
+    const stored = (await service.detail(user, zone.id, card.id)).evidence;
+    assert.deepEqual(stored.editorial.findings.map((finding) => finding.text), ["kept finding"]);
+  },
+);
+test(
   "review outage preserves produced card and retry reviews without reauthoring unchanged sources",
   options,
   async () => {

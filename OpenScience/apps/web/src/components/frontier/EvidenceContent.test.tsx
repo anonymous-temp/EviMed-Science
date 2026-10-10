@@ -130,32 +130,20 @@ describe("question-based evidence content", () => {
     expect(screen.getByText("1.27 次 / 100 人年")).toBeInTheDocument();
     expect(screen.queryByText(/NNT/)).not.toBeInTheDocument();
   });
-  it("keeps pending and stale AI review distinct from user peer review", () => {
+  // R29, 2026-10-10: whether the AI has reviewed a card, and whether that review is current, is the pipeline's bookkeeping; the card's
+  // findings are its content. The user peer review line stays: it is about what readers have said.
+  it("does not say whether the AI has reviewed the card, current or stale, and keeps the line about readers' reviews", () => {
     const editorial: NonNullable<EvidenceCard["editorial"]> = {
       author: { kind: "ai", name: "EviMed writer" },
       reviewer: null,
       status: "review-pending",
       reviewRevision: 2,
     };
+    const gone = [/当前内容待重新评议/, /当前内容已完成 AI 评议/, /AI 待评议/, /AI 已评议/];
     const view = render(<Full evidence={{ ...card, editorial }} />);
     expect(screen.getByText("AI 编写 · EviMed writer")).toBeInTheDocument();
-    expect(screen.getByText("当前内容待重新评议")).toBeInTheDocument();
     expect(screen.getByText("尚无当前内容的用户评议")).toBeInTheDocument();
-    view.rerender(
-      <Full
-        evidence={{
-          ...card,
-          editorial: {
-            ...editorial,
-            status: "ai-reviewed",
-            reviewer: { kind: "ai", name: "AI reviewer" },
-          },
-        }}
-      />,
-    );
-    expect(
-      screen.queryByText("当前内容已完成 AI 评议"),
-    ).not.toBeInTheDocument();
+    for (const pattern of gone) expect(screen.queryByText(pattern)).not.toBeInTheDocument();
     view.rerender(
       <Full
         evidence={{
@@ -169,9 +157,10 @@ describe("question-based evidence content", () => {
         }}
       />,
     );
-    expect(screen.getByText("当前内容已完成 AI 评议")).toBeInTheDocument();
+    for (const pattern of gone) expect(screen.queryByText(pattern)).not.toBeInTheDocument();
+    expect(screen.queryByText("AI reviewer")).not.toBeInTheDocument();
   });
-  it("separates unsuccessful source refresh from the retained reading date and current AI review", () => {
+  it("says nothing of a source refresh that did not happen, keeps the card's own reading date, and keeps the AI's findings", () => {
     const checkedAt = "2026-10-01T00:00:00Z";
     const attemptedAt = "2026-10-02T06:00:00Z";
     const editorial: NonNullable<EvidenceCard["editorial"]> = {
@@ -192,22 +181,19 @@ describe("question-based evidence content", () => {
       sources: [...card.sources, { title: "Second source", url: "https://example.org/second", excerpt: "New reading", checkedAt: attemptedAt }],
     }} />);
     const retained = view.container.querySelector(`#${evidenceSourceId(card.id, 1)}`)!;
-    expect(retained).toHaveTextContent(`上次成功读取于 ${evidenceDay(checkedAt)}`);
-    expect(retained).toHaveTextContent(`尝试于 ${evidenceDay(attemptedAt)}`);
-    expect(within(retained as HTMLElement).getByText(/本轮未能重新读取/)).toBeInTheDocument();
-    expect(view.container.querySelector(`#${evidenceSourceId(card.id, 2)}`)).not.toHaveTextContent("未能重新读取");
+    // The maintenance pipeline's bookkeeping (what it read when, what it kept from last time) is not on the page.
+    for (const pattern of [/上次成功读取于/, /尝试于/, /本轮未能重新读取/, /沿用上次保留内容/, /部分来源本轮尚未完成复核/, /当前内容已完成 AI 评议/])
+      expect(view.container.textContent).not.toMatch(pattern);
+    expect(view.container.querySelector(`#${evidenceSourceId(card.id, 2)}`)).not.toHaveTextContent("读取于");
     expect(screen.getByText(/全部来源上次核查于/)).toHaveTextContent(evidenceDay(checkedAt));
-    expect(screen.getByText(/部分来源本轮尚未完成复核/)).toBeInTheDocument();
-    expect(screen.getByText("当前内容已完成 AI 评议")).toBeInTheDocument();
     expect(screen.getByText("AI review remains about the scientific content")).toBeInTheDocument();
     expect(screen.queryByText(/web_read_unreadable/)).not.toBeInTheDocument();
     for (const link of screen.getAllByRole("link", { name: "查看来源 1" }))
       expect(view.container.querySelector(link.getAttribute("href")!)).toBe(retained);
     view.rerender(<Full evidence={{ ...card, editorial: { ...editorial, sourceChecks: [{ sourceIndex: 1, status: "checked", attemptedAt }] } }} />);
-    expect(screen.queryByText(/未能重新读取/)).not.toBeInTheDocument();
-    expect(screen.getByText("当前内容已完成 AI 评议")).toBeInTheDocument();
+    expect(screen.queryByText(/未能重新读取|当前内容已完成 AI 评议/)).not.toBeInTheDocument();
   });
-  it("does not describe deferred or missing-link source checks as attempted reads", () => {
+  it("draws nothing for a deferred or missing-link source check", () => {
     const attemptedAt = "2026-10-02T06:00:00Z";
     const editorial: NonNullable<EvidenceCard["editorial"]> = {
       author: { kind: "ai", name: "Writer" },
@@ -217,14 +203,12 @@ describe("question-based evidence content", () => {
       sourceChecks: [{ sourceIndex: 1, status: "retained", attemptedAt, code: "evidence_source_check_deferred" }],
     };
     const view = render(<EvidenceReading evidence={{ ...card, editorial }} />);
-    expect(screen.getByText(/本轮尚未核查/)).toHaveTextContent(`记录于 ${evidenceDay(attemptedAt)}`);
-    expect(screen.queryByText(/尝试于|未能重新读取/)).not.toBeInTheDocument();
+    expect(view.container.textContent).not.toMatch(/本轮尚未核查|缺少原文链接|记录于|尝试于|未能重新读取|沿用上次保留内容/);
     view.rerender(<EvidenceReading evidence={{ ...card, editorial: {
       ...editorial,
       sourceChecks: [{ sourceIndex: 1, status: "retained", attemptedAt, code: "evidence_source_url_missing" }],
     } }} />);
-    expect(screen.getByText(/缺少原文链接/)).toHaveTextContent(`记录于 ${evidenceDay(attemptedAt)}`);
-    expect(screen.queryByText(/尝试于|未能重新读取/)).not.toBeInTheDocument();
+    expect(view.container.textContent).not.toMatch(/本轮尚未核查|缺少原文链接|记录于|尝试于|未能重新读取|沿用上次保留内容/);
   });
   it("omits exact answer duplication and preserves supplementary and legacy prose", () => {
     const content = {
@@ -278,7 +262,7 @@ it('publication notices warn readers and cannot display a current AI review endo
   expect(screen.getByText('Synthetic journal retraction notice')).toBeInTheDocument();
   expect(screen.queryByText('AI 已评议')).not.toBeInTheDocument();
   expect(screen.queryByText('当前内容已完成 AI 评议')).not.toBeInTheDocument();
-  expect(screen.getByText('当前内容待重新评议')).toBeInTheDocument();
+  expect(screen.queryByText(/当前内容待重新评议|AI 待评议/)).not.toBeInTheDocument();
 });
 
 
@@ -291,6 +275,5 @@ it("shows an account revision history alongside the original AI author without c
   }}}/>);
   expect(screen.getByText(/AI 编写 · Original evidence AI/)).toBeInTheDocument();
   expect(screen.getByText(`用户修订记录 · Alice · ${evidenceDay(editedAt)}`)).toBeInTheDocument();
-  expect(screen.getByText("AI 待评议")).toBeInTheDocument();
-  expect(screen.queryByText(/人工评议|医生|已完成 AI 评议/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/人工评议|医生|已完成 AI 评议|AI 待评议/)).not.toBeInTheDocument();
 });

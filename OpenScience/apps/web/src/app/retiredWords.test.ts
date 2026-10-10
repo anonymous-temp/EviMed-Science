@@ -63,6 +63,19 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["未经校验的文件不会被当作交付物", "same: what a run wrote is delivered"],
   ["请自行复核", "a chore the platform hands its reader; the per-claim marks say what was checked"],
   ["用密钥验回执", "what a receipt key signs is not the reader's to know (owner decision 2026-09-29)"],
+  // The evidence cards and their upkeep (R29): whether an AI has reviewed a card and what the maintenance rounds kept from the last
+  // reading are the pipeline's bookkeeping. The card's findings, its source status and its claim marks are its content.
+  ["AI 已评议", "whether an AI reviewed the card is not a label on it"],
+  ["AI 待评议", "same"],
+  ["当前内容已完成 AI 评议", "same"],
+  ["当前内容待重新评议", "same"],
+  ["沿用上次保留内容", "what the upkeep kept from the last reading is not said"],
+  ["上次成功读取于", "when the pipeline last read a source is not said"],
+  ["本轮未能重新读取", "same"],
+  ["本轮尚未核查", "same"],
+  ["缺少原文链接", "same"],
+  ["部分来源待复核", "same"],
+  ["部分来源本轮尚未完成复核", "same"],
   // Why the platform routed a request as it did (R28) is the ledger's machine reason, for operations; no sentence for the reader.
   ["按问题内容交给", "a run's route is not explained to the researcher"],
   ["不需要交付报告", "same"],

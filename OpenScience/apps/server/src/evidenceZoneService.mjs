@@ -104,6 +104,17 @@ function editorialForOtherReader(editorial) {
   const { userId: _account, ...editor } = editorial.lastEditor;
   return { ...editorial, lastEditor: editor };
 }
+/**
+ * The sentence a review once added beside its findings when a source was longer than the model read (removed 2026-10-10: how much of a
+ * source the model was shown is the pipeline's bookkeeping). A card reviewed before still holds it in storage; a reader is not shown it.
+ */
+const FORMER_PARTIAL_READ_FINDING = "本次 AI 核对仅使用该来源的部分已保存正文。";
+/** @param {any} editorial */
+function withoutFormerNotes(editorial) {
+  if (!Array.isArray(editorial?.findings)) return editorial ?? null;
+  const findings = editorial.findings.filter((/** @type {any} */ finding) => finding?.text !== FORMER_PARTIAL_READ_FINDING);
+  return findings.length === editorial.findings.length ? editorial : { ...editorial, findings };
+}
 /** @param {string} prefix @param {string} userId @param {any} body */
 function identity(prefix, userId, body) {
   if (body.requestId == null)
@@ -491,7 +502,7 @@ export class EvidenceZoneService {
       views: contract && verification ? { clinical: evidenceCardClinicalView(contract, { verification }), public: evidenceCardPublicView(contract, { verification }) } : null,
       sources: detail ? (row.sources ?? []).map((/** @type {any} */ source) => { const { documentText: _documentText, ...visible } = source; return visible; }) : [],
       content: row.content ?? null,
-      editorial: row.user_id === user.id ? row.editorial ?? null : editorialForOtherReader(row.editorial),
+      editorial: withoutFormerNotes(row.user_id === user.id ? row.editorial ?? null : editorialForOtherReader(row.editorial)),
       revisions: detail ? (await client.query(`SELECT revision,recorded_at AS "recordedAt",snapshot->>'title' AS title,
         snapshot->'editorial'->>'sourceFingerprint' AS "sourceFingerprint",snapshot->'editorial'->>'status' AS "reviewStatus"
         FROM evimed_frontier.evidence_card_revisions WHERE card_id=$1 ORDER BY revision DESC LIMIT 30`,[row.id])).rows : [],

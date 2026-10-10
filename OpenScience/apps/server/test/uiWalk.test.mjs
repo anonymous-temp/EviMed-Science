@@ -205,7 +205,9 @@ test("the back-office list still catches a ledger count, and lets the evidence c
   assert.equal(caught("已核对 41/72"), true);
   assert.equal(caught("核对 37 条"), true);
   assert.equal(caught("引文已核对 1/2"), false);
-  assert.equal(caught("解读 · 综合 · 引文已核对 1/2 · AI 已评议"), false);
+  assert.equal(caught("解读 · 综合 · 引文已核对 1/2"), false);
+  // The AI's review status was a label on the card beside it until 2026-10-10 (R29); the ruling took it off.
+  assert.equal(caught("解读 · 综合 · 引文已核对 1/2 · AI 已评议"), true);
 });
 
 test("the back-office list catches what the 2026-10-10 ruling took off the screens, and not a researcher's own sentence", () => {
@@ -216,7 +218,7 @@ test("the back-office list catches what the 2026-10-10 ruling took off the scree
   }
   assert.equal(caught("他出门时没有带上伞，所以不会带上那本书"), false);
   // A share panel and a zone page: no assurance of what the file or the reference holds.
-  for (const text of ["按问题内容交给「临床证据深度分析」", "直接回答：这个问题不需要交付报告", "交付物的证据链有缺口，运行会被退回修复。", "成果可以正常查看，引用前请自行复核这部分。", "回执密钥文件读不到；只是没有用密钥验回执。", "文件摘要：" + "b".repeat(64), "输入：input.json · 摘要未记录 · 未保存此版本", "记录不完整：文件内容未经核对", "运行环境：Python 3.12 · 运行镜像 777777777777", "生成过程未被观察", "此版本没有可读取的核对意见，尚未核实。"]) {
+  for (const text of ["当前内容已完成 AI 评议", "部分来源本轮尚未完成复核，沿用上次保留内容。", "依据全文 · 上次成功读取于 10月1日", "本轮未能重新读取，沿用上次保留内容", "按问题内容交给「临床证据深度分析」", "直接回答：这个问题不需要交付报告", "交付物的证据链有缺口，运行会被退回修复。", "成果可以正常查看，引用前请自行复核这部分。", "回执密钥文件读不到；只是没有用密钥验回执。", "文件摘要：" + "b".repeat(64), "输入：input.json · 摘要未记录 · 未保存此版本", "记录不完整：文件内容未经核对", "运行环境：Python 3.12 · 运行镜像 777777777777", "生成过程未被观察", "此版本没有可读取的核对意见，尚未核实。"]) {
     assert.equal(caught(text), true, text);
   }
   for (const text of ["引文核对中", "引文暂时无法核对", "对方会在收件箱里收到一条通知。只分享文字，不含脚本。", "已学到的做法按通用的技能格式导出；脚本不会随它分享。", "会把专区里的卡片当作线索，引用时只引用原始来源。"]) {

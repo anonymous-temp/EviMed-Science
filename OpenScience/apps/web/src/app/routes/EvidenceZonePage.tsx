@@ -5,7 +5,6 @@ import {
   useEvidenceRequestId,
 } from "@/components/frontier/useEvidenceScope";
 import { fetchFrontierItem, type FrontierItem } from "@/lib/frontierClient";
-import { evidenceReviewLabel } from "@/components/frontier/EvidenceReading";
 import { evidenceDay } from "@/components/frontier/evidenceDate";
 import {
   evidenceNatureLabel,
@@ -424,7 +423,6 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                         card.state === "draft" ? "草稿" : null,
                         evidenceNatureLabel(card),
                         tally ? `引文已核对 ${tally.verified}/${tally.checkable}` : null,
-                        evidenceReviewLabel(card) === "AI 已评议" ? "AI 已评议" : null,
                       ].filter(Boolean);
                       return (
                         <li key={card.id} className="py-3">

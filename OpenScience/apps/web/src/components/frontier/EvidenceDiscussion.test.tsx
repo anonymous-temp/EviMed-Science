@@ -26,7 +26,7 @@ describe("what readers made of a card", () => {
     expect(screen.getByText("暂无讨论")).toBeInTheDocument();
   });
 
-  it("states the AI review, its findings and whether a reader has reviewed the current content, without naming a model", () => {
+  it("states the AI's findings and whether a reader has reviewed the current content, without a reviewer's name, a review status or a model", () => {
     render(<EvidenceReviews evidence={{
       ...card,
       editorial: { author: { kind: "ai", name: "写作 AI", model: "synthetic-writer" }, reviewer: { kind: "ai", name: "核对 AI", model: "synthetic-reviewer" }, status: "ai-reviewed", reviewRevision: card.revision, reviewedAt: "2026-10-04T12:00:00Z", findings: [{ kind: "coverage", text: "结论 2 的引文没有找到" }] },
@@ -34,8 +34,8 @@ describe("what readers made of a card", () => {
       reviews: [{ author: "王医生", score: 5, text: "引文都对", createdAt: "2026-10-04T12:00:00Z", revision: 2, current: true }, { author: "李药师", score: 2, text: "旧版有问题", createdAt: "2026-10-02T12:00:00Z", revision: 1, current: false }],
     }} />);
     expect(screen.getByText("AI 证据评议")).toBeInTheDocument();
-    expect(screen.getByText("当前内容已完成 AI 评议")).toBeInTheDocument();
     expect(screen.getByText("结论 2 的引文没有找到")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/核对 AI|当前内容已完成 AI 评议|当前内容待重新评议|2026/);
     expect(screen.getByText("学术评议")).toBeInTheDocument();
     expect(screen.getByText(/王医生 · 5 \/ 5/)).toBeInTheDocument();
     expect(screen.getByText(/李药师 · 2 \/ 5 · 历史版本/)).toBeInTheDocument();
@@ -43,10 +43,9 @@ describe("what readers made of a card", () => {
     expect(document.body).not.toHaveTextContent(/synthetic-|模型/);
   });
 
-  it("says a review is pending, and nothing is drawn for a card with no review at all", () => {
+  it("does not announce that a review is pending, says no reader has reviewed yet, and draws nothing for a card with no review at all", () => {
     const { container, rerender } = render(<EvidenceReviews evidence={{ ...card, editorial: { author: { kind: "ai", name: "写作 AI" }, reviewer: null, status: "review-pending", reviewRevision: null } }} />);
-    expect(screen.getByText("待评议")).toBeInTheDocument();
-    expect(screen.getByText("当前内容待重新评议")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/待评议|当前内容待重新评议|AI 证据评议/);
     expect(screen.getByText("尚无当前内容的用户评议")).toBeInTheDocument();
     rerender(<EvidenceReviews evidence={{ ...card, editorial: null, review: null, reviews: [] }} />);
     expect(container).toBeEmptyDOMElement();
