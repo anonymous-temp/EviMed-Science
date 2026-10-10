@@ -139,3 +139,26 @@ test("an engine is told the judge's code, never the Jev client's own failure cod
   assert.equal("cause" in body, false);
   assert.equal("answers" in body, false);
 });
+
+test("the privacy hook is asked on the way to Jev, and a cloud permission withdrawn is the request's refusal, not a provider failure", async () => {
+  /** @type {any[]} */
+  const asked = [];
+  const service = createJudgeService({ calibrationMode: true, config,
+    // The real client asks the hook it is handed before it reserves anything or reaches Jev.
+    callImpl: async (deps, call) => { await deps.assertModelAccess?.(call, { state: call.state, questions: call.questions }); return answering(deps, call); },
+    assertModelAccess: async (caller) => { asked.push(caller); throw new HttpError(403, "vcr_cloud_processing_not_authorized", "withdrawn"); } });
+  for (let i = 0; i < 4; i += 1) {
+    const result = await service.judge("J4", { line: "x" }, { userId: "alice", projectId: "paper-1", runId: "run-7" });
+    assert.equal(result.outcome, "fallback");
+    assert.equal(result.code, "judge_cloud_refused");
+  }
+  assert.deepEqual([asked[0].userId, asked[0].projectId, asked[0].runId, asked.length], ["alice", "paper-1", "run-7", 4], "asked as the project and the run the request is for");
+  assert.equal(requestCount(service, "J4", "refused"), 4);
+  assert.equal(requestCount(service, "J4", "failed"), 0, "the series JevFailing reads stays clear");
+  // The circuit never opened: with the permission back, the same site answers at once.
+  const open = createJudgeService({ calibrationMode: true, config, callImpl: answering, assertModelAccess: async () => {} });
+  assert.equal((await open.judge("J4", { line: "x" }, { userId: "alice", projectId: "paper-1" })).outcome, "settled");
+  assert.equal(jevModel.requestRefusalCode(new HttpError(403, "vcr_projection_permission_changed", "changed")), "judge_cloud_refused");
+  await service.close();
+  await open.close();
+});

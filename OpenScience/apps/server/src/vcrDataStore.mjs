@@ -361,10 +361,10 @@ export class VcrDataStore extends VcrStoreBase {
   async setCloudPermission({ studyId, sourceId, actor, permission }) {
     return this.transaction(async client => {
       const row = (await client.query(`UPDATE ${this.schema}.sources SET cloud_permission=$3::jsonb, updated_at=now()
-        WHERE study_id=$1 AND id=$2 RETURNING *`, [studyId, sourceId, JSON.stringify(permission)])).rows[0];
+        WHERE study_id=$1 AND id=$2 RETURNING *`, [studyId, sourceId, permission == null ? null : JSON.stringify(permission)])).rows[0];
       if (!row) return null;
       await this.audit({ client, studyId, userId: actor, actor, action: 'source.cloud_permission', object: sourceId,
-        detail: { status: permission.status, destinations: permission.destinations ?? [] } });
+        detail: { status: permission?.status ?? 'default', destinations: permission?.destinations ?? [] } });
       return vcrSourceFromRow(row);
     });
   }
@@ -383,10 +383,13 @@ export class VcrDataStore extends VcrStoreBase {
     });
   }
 
-  /** @param {string} studyId @param {string} documentId @param {string|null} [permissionHash] */
-  async documentProjection(studyId, documentId, permissionHash = null) {
+  /** The newest reviewed projection of a document, or the one a projection id names. A projection is bound to the permission it
+   * was reviewed under when `permissionHashes` lists them (one hash or several); null takes any.
+   * @param {string} studyId @param {string} documentId @param {string|string[]|null} [permissionHashes] */
+  async documentProjection(studyId, documentId, permissionHashes = null) {
+    const hashes = permissionHashes == null ? null : [permissionHashes].flat().map(String);
     return this.one(`SELECT * FROM ${this.schema}.document_projections WHERE study_id=$1 AND (id=$2 OR document_id=$2)
-      AND ($3::text IS NULL OR permission_hash=$3) ORDER BY created_at DESC,id DESC LIMIT 1`, [studyId, documentId, permissionHash]);
+      AND ($3::text[] IS NULL OR permission_hash=ANY($3::text[])) ORDER BY created_at DESC,id DESC LIMIT 1`, [studyId, documentId, hashes]);
   }
 
   /** Only pseudonyms cross the data-plane boundary; never patient table values.

@@ -425,20 +425,22 @@ export class VcrStore extends VcrStoreBase {
     [String(projectId), String(userId)])).rows[0]?.held === true;
   }
 
-  /** A hidden study still owns cached clinical conversations. No text is returned.
-   * @param {string} userId @param {string} projectId @param {string|null} sessionId @param {string[]} [projectionIds] */
-  async cloudDependencies(userId, projectId, sessionId, projectionIds = []) {
+  /** A hidden study still owns cached clinical conversations. No text is returned. A dependency is what a conversation read: a
+   * projection, or a document read as it is (its own id, `sfl_...`). `source_id` is null when that source is gone.
+   * @param {string} userId @param {string} projectId @param {string|null} sessionId @param {string[]} [readIds] */
+  async cloudDependencies(userId, projectId, sessionId, readIds = []) {
     return this.clinicalHistoryRows(`WITH studies AS (SELECT s.id,s.deleted_at FROM ${VCR_SCHEMA}.studies s
       WHERE s.project_id=$1 AND (s.user_id=$2 OR EXISTS
         (SELECT 1 FROM ${VCR_SCHEMA}.members m WHERE m.study_id=s.id AND m.user_id=$2))),
       dependencies AS (SELECT r.study_id,r.projection_id AS id FROM ${VCR_SCHEMA}.cloud_reads r
         JOIN studies s ON s.id=r.study_id WHERE r.session_id=$3
         UNION SELECT s.id,unnest($4::text[]) FROM studies s)
-      SELECT d.id,d.study_id,s.deleted_at,p.permission_hash,src.cloud_permission FROM dependencies d
+      SELECT d.id,d.study_id,s.deleted_at,p.permission_hash,src.id AS source_id,src.cloud_permission FROM dependencies d
       JOIN studies s ON s.id=d.study_id
       LEFT JOIN ${VCR_SCHEMA}.document_projections p ON p.study_id=d.study_id AND p.id=d.id
-      LEFT JOIN ${VCR_SCHEMA}.sources src ON src.id=p.source_id AND src.study_id=d.study_id`,
-    [projectId,userId,sessionId,projectionIds]);
+      LEFT JOIN ${VCR_SCHEMA}.source_files f ON f.study_id=d.study_id AND f.id=d.id
+      LEFT JOIN ${VCR_SCHEMA}.sources src ON src.id=COALESCE(p.source_id,f.source_id) AND src.study_id=d.study_id`,
+    [projectId,userId,sessionId,readIds]);
   }
 
   /** Clinical source dependencies are a copy boundary, not a medical text detector.

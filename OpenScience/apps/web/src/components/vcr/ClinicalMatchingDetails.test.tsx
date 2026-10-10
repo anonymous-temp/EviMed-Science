@@ -131,6 +131,50 @@ describe('the redaction a reviewer attests to',()=>{
   });
 });
 
+describe('where a source stands for the cloud models',()=>{
+  const placed=(cloud:Record<string,unknown>|undefined,extra:Record<string,unknown>={})=>({id:'src',files:[{id:'doc1',name:'病历.txt',role:'document'}],
+    upload:{cloudDestinations:['https://api.example.org']},cloud,...extra}) as unknown as VcrIntakeSource;
+  // The deployment holds the agreements with its model providers (2026-10-10): a source needs no attestation, says so in a word, and can be restricted.
+  it('is open under the deployment, with nothing to attest and a way to restrict it',async()=>{
+    api.permission.mockResolvedValue({});
+    const changed=vi.fn();
+    render(<CloudDocuments studyId="s1" source={placed({state:'allowed',basis:'deployment_agreements'})} onChanged={changed}/>);
+    fireEvent.click(screen.getByText('病历云端处理 · 已开放'));
+    expect(screen.queryByRole('button',{name:'保存云端处理授权'})).toBeNull();
+    expect(screen.queryByLabelText('授权依据')).toBeNull();
+    expect(screen.getByLabelText('准备脱敏文本')).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'限制云端处理'}));
+    await waitFor(()=>expect(api.permission).toHaveBeenCalledWith('s1','src',{status:'revoked'}));
+    await waitFor(()=>expect(changed).toHaveBeenCalled());
+    expect(await screen.findByText('已限制这个数据源的云端处理。')).toBeVisible();
+  });
+  it('is restricted when an operator revoked it: no text is prepared, and one press brings it back to the deployment',async()=>{
+    api.permission.mockResolvedValue({});
+    render(<CloudDocuments studyId="s1" source={placed({state:'restricted',basis:null},{cloudPermission:{status:'revoked'}})} onChanged={()=>{}}/>);
+    fireEvent.click(screen.getByText('病历云端处理 · 已限制'));
+    expect(screen.queryByLabelText('准备脱敏文本')).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'恢复云端处理'}));
+    await waitFor(()=>expect(api.permission).toHaveBeenCalledWith('s1','src',{status:'default'}));
+  });
+  it('asks for a recorded permission only where nothing else stands, and takes identifiable records as a class of it',async()=>{
+    api.permission.mockResolvedValue({});
+    render(<CloudDocuments studyId="s1" source={placed({state:'closed',basis:null})} onChanged={()=>{}}/>);
+    fireEvent.click(screen.getByText('病历云端处理 · 未授权'));
+    fireEvent.change(screen.getByLabelText('文本来源'),{target:{value:'clinical'}});
+    fireEvent.change(screen.getByLabelText('授权依据'),{target:{value:'合作协议 7'}});
+    const save=screen.getByRole('button',{name:'保存云端处理授权'});
+    expect(save).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox',{name:/已核实服务不保留文本/}));
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    await waitFor(()=>expect(api.permission).toHaveBeenCalledWith('s1','src',expect.objectContaining({status:'approved',dataClass:'clinical',retention:'none',training:'disabled',humanReview:'disabled'})));
+  });
+  it('reads a recorded permission when the server did not say where the source stands',()=>{
+    render(<CloudDocuments studyId="s1" source={placed(undefined,{cloudPermission:{status:'revoked'}})} onChanged={()=>{}}/>);
+    expect(screen.getByText('病历云端处理 · 已限制')).toBeInTheDocument();
+  });
+});
+
 describe('the clinical timeline',()=>{
   const fact=(id:string,extra:Record<string,unknown>={})=>({id,variable:'creatinine',value:2.4,unit:'mg/dL',at:null,assertion:'affirmed',experiencer:'patient',medicationState:null,correctionOf:null,quote:null,superseded:false,conflictFactIds:[],correctionReason:null,locator:null,...extra});
   const timeline=(entries:unknown[],mayReadOriginal=true)=>{

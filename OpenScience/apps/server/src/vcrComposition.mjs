@@ -412,7 +412,8 @@ export function vcrDocumentsSeam({ dataPlane }) {
       if (!document || document.subjectKey !== subjectKey) return null;
       return document;
     },
-    /** A quote or fact written under a revoked/legacy permission is not sent back out.
+    /** A quote or fact is sent back out only from a document the cloud may have now: one read under a permission since revoked,
+     * or from a document that now has a reviewed projection (its own text is what a run reads), is not.
      * @param {any} study @param {any[]} entries @param {string} subjectKey */
     async runtimeEvidence(study, entries, subjectKey) {
       const decisions = new Map();
@@ -420,7 +421,7 @@ export function vcrDocumentsSeam({ dataPlane }) {
       for (const entry of entries) {
         const source = entry.source ?? entry.locator ?? entry;
         const id = String(source.documentId ?? '');
-        if (!id.startsWith('prj_')) continue;
+        if (!id) continue;
         if (!decisions.has(id)) decisions.set(id, await this.runtimeRead(study, { subjectKey, documentId: id }).catch(() => null));
         const document = decisions.get(id);
         const quote = source.quote ?? entry.quote;
@@ -443,7 +444,7 @@ export function vcrDocumentsSeam({ dataPlane }) {
         let document;
         try { document = await this.runtimeRead(study, { subjectKey, documentId: String(filter.documentId) }); }
         catch (error) { return { available: false, code: String(/** @type {any} */ (error)?.code ?? 'vcr_projection_unavailable'),
-          message: '这份病历尚无适用的云端处理授权或已审阅的脱敏文本；其他工作可以继续。' }; }
+          message: '这份病历现在不能交给云端模型读取（云端处理被限制或尚未授权，或它已不在这项研究里）；其他工作可以继续。' }; }
         if (!document) return { available: false, code: "vcr_document_not_found", message: "这位受试者没有这份文档。" };
         const offset = Math.max(0, Number(filter?.offset ?? 0));
         const window = clinicalDocumentWindow(document.text, offset, this.windowChars);
@@ -1302,6 +1303,7 @@ export async function vcrMetricsSnapshot(vcr) {
     worker: vcr.worker?.status?.() ?? null,
     engine: vcr.engineStatus ?? null,
     intake: vcr.intake ? { counters: { ...vcr.intake.counters } } : null,
+    cloud: vcr.dataPlane?.counters ? { ...vcr.dataPlane.counters } : null,
     evidence: vcr.evidence?.counters ? { ...vcr.evidence.counters } : null,
     publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
     predictions: vcr.predictions ? { ...vcr.predictions.counters } : null,
@@ -1348,6 +1350,12 @@ export function vcrMetricFamilies(enabled, snapshot) {
   if (snapshot.intake?.counters) {
     add("intake_total", "What the intake conversions did since this process started: record documents converted or refused (needsText, unreadable, tooLong, tooLarge), conversions that timed out, failed or had no converter, and figures digitized or refused.", "counter",
       Object.entries(snapshot.intake.counters).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.cloud) {
+    add("cloud_reads_total", "Study documents authorized for a cloud model since this process started, by the basis they stood on (the deployment's provider agreements, or a permission recorded for the source), and the ones refused.", "counter",
+      [{ labels: { basis: "deployment_agreements" }, value: Number(snapshot.cloud.cloudReadsDeploymentAgreements ?? 0) },
+        { labels: { basis: "source_permission" }, value: Number(snapshot.cloud.cloudReadsSourcePermission ?? 0) },
+        { labels: { basis: "refused" }, value: Number(snapshot.cloud.cloudReadsRefused ?? 0) }]);
   }
   if (snapshot.evidence) {
     add("card_candidates_total", "Evidence items a run wrote as candidates it found through an evidence card (flywheel F23): written, and the ones that passed the quote and number check.", "counter",

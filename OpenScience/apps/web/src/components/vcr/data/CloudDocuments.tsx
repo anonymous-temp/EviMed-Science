@@ -3,7 +3,7 @@ import { TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { Input, Select, Textarea } from '@/components/ui/Input';
-import { createVcrProjection, getVcrProtectedDocument, setVcrCloudPermission, type VcrCloudPermission, type VcrIntakeSource } from '@/lib/vcrClient';
+import { createVcrProjection, getVcrProtectedDocument, setVcrCloudPermission, type VcrCloudPermission, type VcrCloudState, type VcrIntakeSource } from '@/lib/vcrClient';
 import { webErrorMessage } from '@/lib/apiClient';
 import { cn } from '@/lib/cn';
 
@@ -56,6 +56,16 @@ export function reviewedSpans(text: string, identifiers: string) {
   return merged;
 }
 
+/** Where a source stands for the cloud models: the server says so; an older answer is read from the recorded permission. */
+export function cloudStateOf(source: Pick<VcrIntakeSource, 'cloud' | 'cloudPermission'>, now = Date.now()): VcrCloudState & { expired: boolean } {
+  const recorded = source.cloudPermission;
+  const expired = Boolean(recorded?.status === 'approved' && recorded.expiresAt && Date.parse(recorded.expiresAt) <= now);
+  if (source.cloud) return { ...source.cloud, expired };
+  if (recorded?.status === 'revoked') return { state: 'restricted', basis: null, expired };
+  if (recorded?.status === 'approved' && !expired) return { state: 'allowed', basis: 'source_permission', expired };
+  return { state: 'closed', basis: null, expired };
+}
+
 export function CloudDocuments({ studyId, source, onChanged }: { studyId: string; source: VcrIntakeSource; onChanged: () => void }) {
   const [dataClass, setDataClass] = useState<NonNullable<VcrCloudPermission['dataClass']>>('deidentified');
   const [reference, setReference] = useState('');
@@ -69,8 +79,10 @@ export function CloudDocuments({ studyId, source, onChanged }: { studyId: string
   const [reviewed, setReviewed] = useState(false);
   const documents = source.files.filter(file => file.role === 'document');
   const destinations = source.upload.cloudDestinations ?? [];
-  const expired = Boolean(source.cloudPermission?.expiresAt && Date.parse(source.cloudPermission.expiresAt) <= Date.now());
-  const approved = source.cloudPermission?.status === 'approved' && !expired;
+  const cloud = cloudStateOf(source);
+  const summary = cloud.state === 'restricted' ? '已限制'
+    : cloud.state === 'allowed' ? (cloud.basis === 'source_permission' ? '已授权' : '已开放')
+      : cloud.expired ? '授权已到期' : '未授权';
   // The record and the names typed beside it are the most sensitive text on the page: they live only while the reviewer is working on
   // them, and go when the text is saved, when another record is chosen, or when the fold is closed.
   const forget = () => { setDocument(null); setIdentifiers(''); setReviewed(false); };
@@ -81,25 +93,32 @@ export function CloudDocuments({ studyId, source, onChanged }: { studyId: string
     catch (error) { setFailed(true); setMessage(webErrorMessage(error, { fallback: '暂时无法保存，请重试。' })); }
     finally { setBusy(false); }
   };
-  return <Disclosure summary={`病历云端处理 · ${approved ? '已授权' : expired ? '授权已到期' : '未授权'}`} onToggle={open => { if (!open) forget(); }}>
+  return <Disclosure summary={`病历云端处理 · ${summary}`} onToggle={open => { if (!open) forget(); }}>
     <div className="flex flex-col gap-4">
-      {!approved && <form className="flex flex-col gap-3" onSubmit={event => {
+      {cloud.state === 'closed' && <form className="flex flex-col gap-3" onSubmit={event => {
         event.preventDefault();
         void run(() => setVcrCloudPermission(studyId, source.id, { status: 'approved', dataClass, purpose: 'vcr', destinations,
           reference, retention: terms ? 'none' : 'unknown', training: terms ? 'disabled' : 'unknown', humanReview: terms ? 'disabled' : 'unknown' }), '已保存授权，可以准备脱敏文本。');
       }}>
         <Select label="文本来源" value={dataClass} onChange={event => setDataClass(event.target.value as typeof dataClass)}>
-          <option value="deidentified">已获合作方授权的脱敏病历</option><option value="synthetic">人工编写的模拟病历</option><option value="public">允许此用途的公开文本</option>
+          <option value="deidentified">已获合作方授权的脱敏病历</option><option value="clinical">已获合作方授权的含身份信息病历</option>
+          <option value="synthetic">人工编写的模拟病历</option><option value="public">允许此用途的公开文本</option>
         </Select>
         <p className="break-words text-caption text-text-3">{destinations.length ? `处理服务：${destinations.join('、')}` : '本部署尚未登记云端处理服务。'}</p>
         <Input label="授权依据" value={reference} onChange={event => setReference(event.target.value)} required maxLength={500} placeholder="合作协议、公开许可或模拟数据说明" />
         <label className="flex items-start gap-2 text-caption text-text-2"><input type="checkbox" checked={terms} onChange={event => setTerms(event.target.checked)} />
           已核实服务不保留文本、不用于训练、无人工查看，且包含日志与缓存约定</label>
-        <Button type="submit" loading={busy} disabled={busy || !destinations.length || !reference.trim() || dataClass === 'deidentified' && !terms}>保存云端处理授权</Button>
+        <Button type="submit" loading={busy} disabled={busy || !destinations.length || !reference.trim() || (dataClass === 'deidentified' || dataClass === 'clinical') && !terms}>保存云端处理授权</Button>
       </form>}
-      {approved && <>
-        <p className="text-caption text-text-3">{source.cloudPermission?.reference}</p>
-        <Button variant="secondary" disabled={busy} onClick={() => void run(() => setVcrCloudPermission(studyId, source.id, { status: 'revoked' }), '已停止后续云端读取。')}>撤销云端处理授权</Button>
+      {cloud.state === 'restricted' && <>
+        <p className="text-caption text-text-3">这个数据源的病历不会交给云端模型。</p>
+        <Button variant="secondary" disabled={busy} onClick={() => void run(() => setVcrCloudPermission(studyId, source.id, { status: 'default' }), '已恢复云端处理。')}>恢复云端处理</Button>
+      </>}
+      {cloud.state === 'allowed' && <>
+        {cloud.basis === 'source_permission' && <p className="text-caption text-text-3">{source.cloudPermission?.reference}</p>}
+        <Button variant="secondary" disabled={busy} onClick={() => void run(() => setVcrCloudPermission(studyId, source.id, { status: 'revoked' }),
+          cloud.basis === 'source_permission' ? '已停止后续云端读取。' : '已限制这个数据源的云端处理。')}>
+          {cloud.basis === 'source_permission' ? '撤销云端处理授权' : '限制云端处理'}</Button>
         {documents.length ? <div className="flex flex-col gap-3">
           <Select label="准备脱敏文本" value={documentId} onChange={event => { setDocumentId(event.target.value); forget(); }}>
             <option value="">选择病历</option>{documents.map(file => <option key={file.id} value={file.id}>{file.name}</option>)}
@@ -111,7 +130,8 @@ export function CloudDocuments({ studyId, source, onChanged }: { studyId: string
             onIdentifiers={value => { setIdentifiers(value); setReviewed(false); }} onReviewed={setReviewed}
             onSave={() => void run(async () => {
               await createVcrProjection(studyId, document.id, {
-                sourceHash: document.sourceHash, spans: reviewedSpans(document.text, identifiers), attestation: source.cloudPermission?.reference ?? reference,
+                sourceHash: document.sourceHash, spans: reviewedSpans(document.text, identifiers),
+                attestation: source.cloudPermission?.reference || reference || '病历审阅人已核对脱敏文本',
               });
               forget();
             }, '已准备脱敏文本，匹配可读取这份副本。')} />}

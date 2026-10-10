@@ -84,7 +84,12 @@ export function decodeJudgeAnswers(
   };
 }
 
-/** @param {{config:any,usageLedger?:any,fetchImpl?:typeof fetch,callImpl?:any,database?:any,random?:()=>number,now?:()=>number,calibrationMode?:boolean}} deps */
+/**
+ * `assertModelAccess` is the privacy hook every other provider path asks (the model gateway, the reviewer, a direct Jev call): a
+ * request made for a project that holds a 虚拟临床研究 study is held to the cloud permission of what its conversation read,
+ * and refused alone when that has been withdrawn. A site's own fallback answers; the refusal is the request's, not the provider's.
+ * @param {{config:any,usageLedger?:any,fetchImpl?:typeof fetch,callImpl?:any,database?:any,random?:()=>number,now?:()=>number,calibrationMode?:boolean,assertModelAccess?:((caller:any,body:any)=>Promise<void>)|null}} deps
+ */
 export function createJudgeService({
   config,
   usageLedger = null,
@@ -94,6 +99,7 @@ export function createJudgeService({
   random = Math.random,
   now = Date.now,
   calibrationMode = false,
+  assertModelAccess = null,
 }) {
   const requests = new Map(),
     counters = new Map(),
@@ -504,6 +510,7 @@ export function createJudgeService({
                 config,
                 usageLedger,
                 ...(fetchImpl ? { fetchImpl } : {}),
+                ...(assertModelAccess ? { assertModelAccess } : {}),
                 retryDelayMs: Math.min(200, timeout / 4),
               },
               {

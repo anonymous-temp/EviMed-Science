@@ -362,6 +362,11 @@ const operatorLevers = {
   // writes it into a runtime is built by the controller as well as the web API, and
   // a lever that reached only one would be a wait the other never applied.
   OPEN_SCIENCE_VCR_STATUS_WAIT_SECONDS: ["open-science-web", "open-science-runtime-controller"],
+  // The deployment's agreements with its model providers (2026-10-10): on by default, which is what makes the off switch load-bearing,
+  // and the reference is what each cloud read's audit row names as its basis. A lever that never arrived would leave every
+  // study document readable by the providers, or none, whatever the operator set.
+  OPEN_SCIENCE_VCR_PROVIDER_AGREEMENTS: ["open-science-web"],
+  OPEN_SCIENCE_VCR_PROVIDER_AGREEMENT_REFERENCE: ["open-science-web"],
   // The largest table the API takes from an upload is the largest one an import
   // may produce: the controller hands it to the converter as its table ceiling.
   OPEN_SCIENCE_VCR_DATA_MAX_BYTES: ["open-science-web", "open-science-runtime-controller"],

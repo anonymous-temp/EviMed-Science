@@ -8,7 +8,7 @@ import { createJudgeService } from './judgeService.mjs';
 import { createJudgeGatewayHandler, JUDGE_GATEWAY_PATH } from './judgeGateway.mjs';
 import { createVcrCloudEgress, createVcrSessionResolver } from './vcrCloudEgress.mjs';
 import { VcrStore } from './vcrStore.mjs';
-import { vcrCloudDestinations } from './vcrCloudProjection.mjs';
+import { deploymentCloudPermission, vcrCloudDestinations } from './vcrCloudProjection.mjs';
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
 import { ResultProvenanceService } from "./resultProvenanceService.mjs";
 import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
@@ -1218,7 +1218,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // `overrides.usageLedger` is for tests that need the ledger's interface
   // without a database, as `researchMemory` and `connectorCredentials` are.
   const usageLedger = overrides.usageLedger ?? (productDatabase ? new UsageLedger(productDatabase) : null);
-  const judgeService = overrides.judgeService ?? createJudgeService({config,usageLedger,database:productDatabase,fetchImpl:overrides.jevFetch});
+  // Every judge site asks the privacy hook before Jev sees a state, as the reviewer and the model gateway do: the hook is defined
+  // further down, so it is reached through a closure (it is only ever called while a request is being served).
+  const judgeService = overrides.judgeService ?? createJudgeService({config,usageLedger,database:productDatabase,fetchImpl:overrides.jevFetch,
+    assertModelAccess:(caller,body)=>assertVcrCloudAccess?.(caller,body)??Promise.resolve()});
   const judgeGatewayHandler = createJudgeGatewayHandler({config,judgeService,runtimeManager:{assertActiveModelGatewayToken: token => runtimeManager.assertActiveModelGatewayToken(token)}});
   const notificationService = productDatabase ? new NotificationService(productDatabase) : null;
   const notificationRoutes = createNotificationRoutes({ store, service: notificationService, maxJsonBytes: config.maxJsonBytes });
@@ -4551,6 +4554,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const autopilotRunScope = autopilotService ? createAutopilotRunScope({ store, agentRuns, service: autopilotService }) : null;
   const assertVcrCloudAccess = vcrPrivacyStore ? createVcrCloudEgress({ store: vcrPrivacyStore, destinations: () => vcrCloudDestinations(config),
     resolveSession: createVcrSessionResolver({ sourceProject, agentRuns }),
+    deployment: () => deploymentCloudPermission(config),
   }) : null;
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,

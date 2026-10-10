@@ -2370,12 +2370,17 @@ export interface VcrIntakeGrant {
 }
 
 export interface VcrCloudPermission {
-  status: 'approved' | 'revoked'; dataClass?: 'public' | 'synthetic' | 'deidentified'; destinations?: string[];
+  /** `default` clears the record: the source then follows the deployment's agreements with its model providers. */
+  status: 'approved' | 'revoked' | 'default'; dataClass?: 'public' | 'synthetic' | 'deidentified' | 'clinical'; destinations?: string[];
   purpose?: 'vcr'; reference?: string; retention?: 'none' | 'limited' | 'unknown'; training?: 'disabled' | 'unknown';
   humanReview?: 'disabled' | 'unknown'; expiresAt?: string | null;
 }
+/** Where a source stands for the cloud models: open on a basis, restricted by an operator, or closed (nothing recorded, no agreements). */
+export interface VcrCloudState { state: 'allowed' | 'restricted' | 'closed'; basis: 'deployment_agreements' | 'source_permission' | null }
 export interface VcrIntakeSource {
   cloudPermission?: VcrCloudPermission | null;
+  /** Absent from an older server; the page then reads the recorded permission. */
+  cloud?: VcrCloudState | null;
   id: string;
   name: string;
   ownerParty: string | null;
@@ -2490,6 +2495,14 @@ function readIntakeFile(raw: Loose): VcrIntakeFile {
   };
 }
 
+function readCloudState(raw: unknown): VcrCloudState | null {
+  const cloud = obj(raw);
+  const state = text(cloud.state);
+  if (state !== 'allowed' && state !== 'restricted' && state !== 'closed') return null;
+  const basis = text(cloud.basis);
+  return { state, basis: basis === 'deployment_agreements' || basis === 'source_permission' ? basis : null };
+}
+
 function readIntakeSource(raw: Loose): VcrIntakeSource {
   const map = obj(raw.fieldMap);
   const upload = obj(raw.upload);
@@ -2499,6 +2512,7 @@ function readIntakeSource(raw: Loose): VcrIntakeSource {
     canGrant: raw.canGrant === true, status: text(raw.status) ?? "registered", statusLabel: text(raw.statusLabel) ?? "",
     valueSource: text(raw.valueSource) ?? "observed", valueSourceLabel: text(raw.valueSourceLabel) ?? "",
     cloudPermission: raw.cloudPermission as VcrCloudPermission | null ?? null,
+    cloud: readCloudState(raw.cloud),
     allowedUses: strings(raw.allowedUses), window: text(raw.window), retention: text(raw.retention),
     upload: {
       cloudDestinations: strings(upload.cloudDestinations),

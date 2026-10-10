@@ -93,6 +93,8 @@ export function requestRefusalCode(error) {
   if (code === "jev_request_too_large") return "judge_request_too_large";
   if (code === "jev_unconfigured") return "judge_unconfigured";
   if (code === "usage_budget_exceeded" || code === "usage_module_budget_exceeded") return "judge_budget_exceeded";
+  // The cloud permission of what the conversation read was withdrawn: this request is refused, the provider did not fail.
+  if (code === "vcr_cloud_processing_not_authorized" || code === "vcr_projection_permission_changed") return "judge_cloud_refused";
   return code.startsWith("usage_") ? "judge_ledger_refused" : null;
 }
 

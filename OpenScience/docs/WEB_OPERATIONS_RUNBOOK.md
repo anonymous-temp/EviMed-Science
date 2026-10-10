@@ -1528,23 +1528,40 @@ list does not remove clinical facts, corrections, frozen inputs, registry versio
 or prior reports. Disabling the VCR module also leaves historical cloud permission
 checks active. No production study was activated by this implementation batch.
 
-A patient document first stays in the protected data plane. In its source panel,
-record the processing purpose, approved HTTPS origins, terms, authorization
-reference and optional expiry. A deidentified source needs recorded no-retention,
-no-training and no-human-review terms. These fields are the operator's attestation;
-the application does not independently certify a provider's actual practices.
-Original text is shown only through the authenticated protected view. Explicitly
-reviewed identifier spans produce a study-scoped text projection with an exact
-UTF-16 mapping back to the original. This is not an automatic PII detector. Images,
-scanned records, unsupported geometry and date shifting are not added by this
-projection feature. Missing source permission affects that source operation.
+A patient document stays in the protected data plane; only the control plane reads
+it. Since 2026-10-10 the deployment's own record of its agreements with the model
+providers it calls is the cloud permission (`OPEN_SCIENCE_VCR_PROVIDER_AGREEMENTS`,
+on by default): no retention, no training and no human review, for the destinations the
+model gateway and the configured reviewers reach, for identifiable records as well as
+de-identified ones. With it every study document may be read by those providers, as
+the document stands or as a reviewed projection when one exists (a projection is used
+when there is one and is no longer required), with no per-document attestation. The
+basis of each read (`deployment_agreements` or `source_permission`, with the agreement
+reference `OPEN_SCIENCE_VCR_PROVIDER_AGREEMENT_REFERENCE` when the deployment's stood)
+is in the `document.cloud_read` audit row, never in a notice to a researcher, and
+`open_science_vcr_cloud_reads_total{basis}` counts the reads. The application does not
+independently certify a provider's actual practices: the record is the deployment's
+declaration. An operator restricts one source by revoking its cloud permission in its
+panel (`{ status: "revoked" }`), and nothing overrides that; `{ status: "default" }`
+brings the source back to the deployment. With the switch off, each source needs a
+permission recorded in its panel as before: processing purpose, approved HTTPS origins,
+terms (`public`, `synthetic`, `deidentified` or `clinical` text; the last two need
+recorded no-retention, no-training and no-human-review terms), authorization reference
+and optional expiry. A recorded approved permission still stands beside the agreements,
+and a projection reviewed under it stays bound to it. Original text is shown only
+through the authenticated protected view. Explicitly reviewed identifier spans produce
+a study-scoped text projection with an exact UTF-16 mapping back to the original. This
+is not an automatic PII detector. Images, scanned records, unsupported geometry and
+date shifting are not added by this projection feature. A refusal affects that source
+operation only.
 
 Cloud reads record source/projection hashes, served windows and the run/session
 that received them, without putting text in audit rows. A served window is not
 proof of complete extraction; its extraction coverage remains unknown unless
 supported by another receipt. Provider requests are associated with their actual
 observed model and configuration fingerprint, not an invented model version.
-The ordinary gateway and configured reviewers recheck permission before sending.
+The ordinary gateway, the configured reviewers (the editor pass, the cited-sentence
+and reply-number checks) and every Jev judge site recheck permission before sending.
 Revocation, expiry and changed terms also prevent resending an affected cached
 conversation. Start a fresh conversation for unrelated work or a newly reviewed
 projection. Clinical sessions do not seed general research memory, capsule notes,

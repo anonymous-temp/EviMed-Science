@@ -133,12 +133,12 @@ function reviewerAnswer(value) {
 
 const FACTS = { studyId: "std_1", results: [{ measures: [{ name: "required_events", value: 845 }, { name: "power", value: 0.915, mcse: 0.004 }], counts: {}, diagnostics: {} }], inputs: [], executions: [{ replicates: 5000 }] };
 
-/** @param {(body: any) => Response} reviewer @param {any} [facts] */
-function service(reviewer, facts = FACTS) {
+/** @param {(body: any) => Response} reviewer @param {any} [facts] @param {Record<string, any>} [extra] */
+function service(reviewer, facts = FACTS, extra = {}) {
   /** @type {any[]} */
   const calls = [];
   const review = new ReviewService({
-    config, database, usageLedger: new UsageLedger(database), retryDelayMs: 0,
+    config, database, usageLedger: new UsageLedger(database), retryDelayMs: 0, ...extra,
     store: { userById: async () => ({ id: userId }), requireProject: async () => ({ id: projectId, userId }) },
     vcrFacts: async (identity) => { calls.push(identity); return facts; },
     fetchImpl: /** @type {any} */ (async (/** @type {string} */ _url, /** @type {any} */ init) => reviewer(JSON.parse(init.body))),
@@ -197,4 +197,25 @@ test("a reviewer that fails fails the check, which is tried again — the reply 
   const [check] = await review.replyChecksForSession(identity, "chat-vcr-6");
   assert.equal(check.status, "done");
   assert.equal(check.verdicts.length, 1);
+});
+
+test("the number check asks the privacy hook before the reviewer sees the reply, as every other provider path does", options, async () => {
+  /** @type {any[]} */
+  const asked = [];
+  let reached = 0;
+  const { review } = service(() => { reached += 1; return reviewerAnswer({ claims: [{ sentence: 0, numbers: ["850"] }] }); }, FACTS, {
+    assertModelAccess: async (/** @type {any} */ caller, /** @type {any} */ body) => {
+      asked.push({ caller, sent: JSON.stringify(body).includes("850") });
+      throw Object.assign(new Error("withdrawn"), { code: "vcr_cloud_processing_not_authorized" });
+    },
+  });
+  const identity = { userId, projectId };
+  assert.ok(await review.considerReply(identity, { id: "run_vcr_7", sessionId: "chat-vcr-7" }, { replyText: "需要 850 例事件。", turnSeq: 1 }, { studyId: "std_1" }));
+  await review.processReplyChecks("worker-vcr");
+  assert.equal(reached, 0, "the reviewer model never saw a reply whose source the conversation may no longer send");
+  assert.equal(asked.length, 1);
+  assert.deepEqual([asked[0].caller.userId, asked[0].caller.projectId, asked[0].caller.runId, asked[0].sent], [userId, projectId, "run_vcr_7", true],
+    "the hook is asked as the run, about the request it would have sent");
+  const [check] = await review.replyChecksForSession(identity, "chat-vcr-7");
+  assert.equal(check.status, "queued", "the check is tried again; it never held the reply");
 });

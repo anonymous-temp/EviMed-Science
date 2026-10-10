@@ -116,7 +116,7 @@ import {
 } from "@evimed/domain";
 
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
-import { buildCloudProjection, cloudPermission, originalProjectionSpan, projectionHash, requireCloudPermission, vcrCloudDestinations } from "./vcrCloudProjection.mjs";
+import { DEPLOYMENT_PERMISSION_HASH, buildCloudProjection, cloudAuthorization, cloudPermission, cloudState, deploymentCloudPermission, originalProjectionSpan, projectionHash, vcrCloudDestinations } from "./vcrCloudProjection.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
 import { VCR_IMPORT_FORMATS, VCR_INTAKE_SCRATCH, VCR_TABLE_LIMITS, isVcrIntakeScratchLocation } from "./vcrIntakeLayout.mjs";
 import { VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES } from "./vcrPersistence.mjs";
@@ -1873,6 +1873,8 @@ export class VcrDataPlane {
     this.seal = seal;
     this.extractor = extractor;
     this.importer = importer;
+    /** What the plane did for the cloud since this process started: reads by the basis they stood on, and reads it refused. */
+    this.counters = { cloudReadsDeploymentAgreements: 0, cloudReadsSourcePermission: 0, cloudReadsRefused: 0 };
   }
 
   /** Attach a package composed after the plane (the seal). @param {{ seal?: any }} packages */
@@ -3097,6 +3099,27 @@ export class VcrDataPlane {
     return this.store.setCloudPermission({ ...entry, permission });
   }
 
+  /** Whether a source's documents may go to the configured model providers, and on which basis: the operator's record of that
+   * source, or the deployment's agreements. A refusal is `vcr_cloud_processing_not_authorized`.
+   * @param {any} source */
+  #cloudBasis(source) {
+    try {
+      const authorization = cloudAuthorization(source?.cloudPermission, vcrCloudDestinations(this.config), this.now().toISOString(), deploymentCloudPermission(this.config));
+      if (authorization.basis === 'deployment_agreements') this.counters.cloudReadsDeploymentAgreements += 1;
+      else this.counters.cloudReadsSourcePermission += 1;
+      return authorization;
+    } catch (error) {
+      this.counters.cloudReadsRefused += 1;
+      throw error;
+    }
+  }
+
+  /** What a read is filed under in the audit: the basis, and the agreement's reference when the deployment's stood.
+   * @param {{basis: string, permission: any}} authorization */
+  #basisDetail({ basis, permission }) {
+    return { basis, dataClass: permission?.dataClass ?? null, ...(basis === 'deployment_agreements' ? { reference: permission.reference } : {}) };
+  }
+
   /** The operator reviews spans in the protected original; no cloud model sees that original.
    * @param {{studyId:string,documentId:string,actor:string,sourceHash:string,spans:any[],attestation:string}} entry */
   async createDocumentProjection(entry) {
@@ -3104,12 +3127,14 @@ export class VcrDataPlane {
     const file = await this.store.getSourceFile(entry.studyId, entry.documentId);
     if (!file || file.role !== 'document') throw refuse(404, VCR_DATA_PLANE_CODES.documentNotFound, 'Document not found.');
     const source = await this.store.sourceInStudy(entry.studyId, file.sourceId);
-    requireCloudPermission(source?.cloudPermission, vcrCloudDestinations(this.config), this.now().toISOString());
+    const { basis } = this.#cloudBasis(source);
     const original = await this.documentText({ studyId: entry.studyId, documentId: entry.documentId, principal: entry.actor, purpose: 'vcr' });
     if (projectionHash(original.text) !== entry.sourceHash) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, 'Review refers to another document version.');
     const projection = buildCloudProjection({ text: original.text, spans: entry.spans, attestation: entry.attestation,
       key: await studyPseudonymKey(this.root(), entry.studyId) });
-    const permissionHash = projectionHash(canonicalScenarioJson(source.cloudPermission));
+    // A projection reviewed under a permission an operator recorded is bound to that record; one reviewed under the deployment's
+    // agreements is bound to nothing, so a change of the list of destinations does not retire every reviewed text.
+    const permissionHash = basis === 'source_permission' ? projectionHash(canonicalScenarioJson(source.cloudPermission)) : DEPLOYMENT_PERMISSION_HASH;
     const id = `prj_${projectionHash(`${entry.studyId}:${entry.documentId}:${permissionHash}:${projection.projectionHash}`).slice(0, 48)}`;
     const existing = await this.store.documentProjection(entry.studyId, id, permissionHash);
     if (existing) return { id, sourceHash: existing.source_hash, projectionHash: existing.projection_hash, chars: projection.text.length, offsetUnit: projection.offsetUnit };
@@ -3122,18 +3147,26 @@ export class VcrDataPlane {
     return { id, sourceHash: projection.sourceHash, projectionHash: projection.projectionHash, chars: projection.text.length, offsetUnit: projection.offsetUnit };
   }
 
-  /** Protected replay may use an older projection; external reads always check current permission.
+  /** Protected replay may use an older projection; external reads always check current permission. A document with no reviewed
+   * projection goes out as it is when its source may go to the cloud (`#cloudDocument`): a projection is used when there is one,
+   * and no longer required.
    * @param {{studyId:string,documentId:string,principal:string,purpose?:string|null,cloudContext?:any}} entry
    * @param {boolean} [external] @returns {Promise<any>} */
   async projectionText(entry, external = false) {
     let row = await this.store.documentProjection(entry.studyId, entry.documentId);
-    if (!row) throw refuse(404, 'vcr_projection_unavailable', 'No reviewed cloud projection is available for this document.');
+    if (!row) {
+      const asItIs = external ? await this.#cloudDocument(entry) : null;
+      if (asItIs) return asItIs;
+      throw refuse(404, 'vcr_projection_unavailable', 'No reviewed cloud projection is available for this document.');
+    }
     await this.access.require({ actor: entry.principal, studyId: entry.studyId, sourceId: row.source_id,
       ability: 'read_patient_level', purpose: entry.purpose ?? 'vcr', note: external ? 'cloud projection' : 'projection replay' });
     const source = await this.store.sourceInStudy(entry.studyId, row.source_id);
+    let authorization = null;
     if (external) {
-      requireCloudPermission(source?.cloudPermission, vcrCloudDestinations(this.config), this.now().toISOString());
-      row = await this.store.documentProjection(entry.studyId, entry.documentId, projectionHash(canonicalScenarioJson(source.cloudPermission)));
+      authorization = this.#cloudBasis(source);
+      row = await this.store.documentProjection(entry.studyId, entry.documentId,
+        authorization.basis === 'source_permission' ? [projectionHash(canonicalScenarioJson(source.cloudPermission)), DEPLOYMENT_PERMISSION_HASH] : null);
       if (!row) throw refuse(403, 'vcr_projection_permission_changed', 'A new permission needs a newly reviewed projection.');
     }
     const opened = await openScopedFileNoFollow(this.root(), assertDataPlaneLocation(this.root(), row.location));
@@ -3147,12 +3180,35 @@ export class VcrDataPlane {
     const original = await this.documentText({ ...entry, documentId: row.document_id });
     if (projectionHash(original.text) !== row.source_hash) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, 'The original document changed.');
     if (external) await this.store.audit({ studyId: entry.studyId, userId: entry.principal, actor: entry.principal,
-      action: 'document.cloud_read', object: row.id, detail: { projectionHash: row.projection_hash, permissionHash: row.permission_hash } });
+      action: 'document.cloud_read', object: row.id, detail: { projectionHash: row.projection_hash, permissionHash: row.permission_hash,
+        ...(authorization ? this.#basisDetail(authorization) : {}) } });
     if (external && entry.cloudContext) await this.store.recordCloudRead(entry.studyId, row.id, entry.cloudContext);
     return { id: row.id, text: projection.text, subjectKey: projection.subjectKey, visibleAt: projection.visibleAt,
       projectionHash: row.projection_hash, sourceHash: row.source_hash, offsetUnit: 'utf16',
       // Never return the segment map or original to a runtime caller.
     };
+  }
+
+  /**
+   * A document of the study read for a cloud model as it stands, because no reviewed projection exists for it. Judged like every
+   * patient-level read, held to the source's cloud permission (the operator's record or the deployment's agreements; a revoked
+   * source is refused), audited with its basis and filed as a dependency of the conversation exactly as a projection read is.
+   * Null where the name is not a document of this study.
+   * @param {{studyId:string,documentId:string,principal:string,purpose?:string|null,cloudContext?:any}} entry
+   */
+  async #cloudDocument(entry) {
+    const named = String(entry.documentId ?? '');
+    const file = ID_PATTERN.test(named) && !named.startsWith('prj_') ? await this.store.getSourceFile(entry.studyId, named) : null;
+    if (!file || file.role !== 'document') return null;
+    const source = await this.store.sourceInStudy(entry.studyId, file.sourceId);
+    const authorization = this.#cloudBasis(source);
+    const document = await this.documentText({ studyId: entry.studyId, documentId: file.id, principal: entry.principal, purpose: entry.purpose ?? 'vcr' });
+    const sourceHash = projectionHash(document.text);
+    await this.store.audit({ studyId: entry.studyId, userId: entry.principal, actor: entry.principal, action: 'document.cloud_read', object: file.id,
+      detail: { sourceHash, ...this.#basisDetail(authorization) } });
+    if (entry.cloudContext) await this.store.recordCloudRead(entry.studyId, file.id, entry.cloudContext);
+    return { id: file.id, text: document.text, subjectKey: document.subjectKey, visibleAt: document.visibleAt,
+      projectionHash: null, sourceHash, offsetUnit: 'utf16' };
   }
 
   /** Record served geometry, never a clinical completeness assertion or patient text.
@@ -3166,7 +3222,18 @@ export class VcrDataPlane {
   /** @param {{studyId:string,documentId:string,principal:string,span:{start:number,end:number,quote:string}}} entry */
   async resolveProjectionQuote(entry) {
     const row = await this.store.documentProjection(entry.studyId, entry.documentId);
-    if (!row) throw refuse(404, 'vcr_projection_unavailable', 'Projection not found.');
+    if (!row) {
+      // A fact read from a document as it is (no reviewed projection) quotes the original itself: the span is checked against it.
+      const file = ID_PATTERN.test(String(entry.documentId ?? '')) && !String(entry.documentId).startsWith('prj_')
+        ? await this.store.getSourceFile(entry.studyId, entry.documentId) : null;
+      if (!file || file.role !== 'document') throw refuse(404, 'vcr_projection_unavailable', 'Projection not found.');
+      const original = await this.documentText({ ...entry, documentId: file.id });
+      const { start, end, quote } = entry.span ?? {};
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start || original.text.slice(start, end) !== quote) {
+        throw refuse(400, 'vcr_projection_quote_invalid', 'The quote is not at that place in the document.');
+      }
+      return { documentId: file.id, start, end, quote, sourceHash: projectionHash(original.text), offsetUnit: 'utf16' };
+    }
     await this.projectionText(entry);
     const opened = await openScopedFileNoFollow(this.root(), assertDataPlaneLocation(this.root(), row.location));
     let body;
@@ -3348,7 +3415,8 @@ export class VcrDataPlane {
         const whole = validateFieldMap(source.fieldMap.columns, tablesOf);
         return {
           id: source.id, name: source.name, ownerParty: source.ownerParty, registeredBy: source.userId, mine: source.userId === String(viewer.id),
-          readable, cloudPermission: source.cloudPermission ?? null, allowedUses: source.allowedUses, visibleWindow: source.visibleWindow, retention: source.retention,
+          readable, cloudPermission: source.cloudPermission ?? null, cloud: cloudState(source.cloudPermission, vcrCloudDestinations(this.config), this.now().toISOString(), deploymentCloudPermission(this.config)),
+          allowedUses: source.allowedUses, visibleWindow: source.visibleWindow, retention: source.retention,
           valueSource: source.valueSource, status: source.status, createdAt: source.createdAt,
           upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes, documents: this.documentUpload(), cloudDestinations: vcrCloudDestinations(this.config), imports: this.importUpload() },
           // A source the viewer holds no grant on is a name and a state: its files' names, its map and who may read it are not theirs to see.

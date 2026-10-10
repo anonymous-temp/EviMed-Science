@@ -1567,6 +1567,7 @@ export function presentIntake(bundle) {
       readable: source.readable === true,
       canGrant: source.mine === true,
       cloudPermission: source.cloudPermission ?? null,
+      cloud: source.cloud ?? null,
       status: String(source.status ?? "registered"),
       statusLabel: INTAKE_STATUS_ZH[String(source.status)] ?? String(source.status ?? ""),
       valueSource: String(source.valueSource ?? "observed"),

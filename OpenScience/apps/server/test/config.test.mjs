@@ -69,6 +69,28 @@ test("the three VCR limits the code reads have keys, defaults and bounds", () =>
   assert.throws(() => loadConfig({ rootDir: repoRoot, vcrRegistryTimeoutMs: "1000" }), /OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS/);
 });
 
+test("the deployment's provider agreements are on unless the deployment says otherwise, and name their reference", () => {
+  // 2026-10-10 owner ruling: the agreements with the model providers are the cloud permission. On by default;
+  // the off switch and the reference an audit row names must be reachable from the environment.
+  const base = loadConfig({ rootDir: repoRoot });
+  assert.equal(base.vcrProviderAgreements, true);
+  assert.equal(base.vcrProviderAgreementReference, "");
+  assert.equal(loadConfig({ rootDir: repoRoot, vcrProviderAgreements: false }).vcrProviderAgreements, false);
+  const previous = { agreements: process.env.OPEN_SCIENCE_VCR_PROVIDER_AGREEMENTS, reference: process.env.OPEN_SCIENCE_VCR_PROVIDER_AGREEMENT_REFERENCE };
+  try {
+    process.env.OPEN_SCIENCE_VCR_PROVIDER_AGREEMENTS = "false";
+    process.env.OPEN_SCIENCE_VCR_PROVIDER_AGREEMENT_REFERENCE = `  Agreement 2026-017 ${"x".repeat(600)}`;
+    const set = loadConfig({ rootDir: repoRoot });
+    assert.equal(set.vcrProviderAgreements, false);
+    assert.equal(set.vcrProviderAgreementReference.length, 500, "bounded like every reference the record holds");
+    assert.ok(set.vcrProviderAgreementReference.startsWith("Agreement 2026-017"));
+  } finally {
+    for (const [key, value] of [["OPEN_SCIENCE_VCR_PROVIDER_AGREEMENTS", previous.agreements], ["OPEN_SCIENCE_VCR_PROVIDER_AGREEMENT_REFERENCE", previous.reference]]) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
 test("memory extraction is given longer than one extraction actually takes", () => {
   // Measured against deepseek-v4-pro, one extraction request takes 40-46s. At
   // the previous 30s budget every request aborted, so the store only ever held
