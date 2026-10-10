@@ -1008,6 +1008,9 @@ export class GeoService {
       round: round ? {
         id: String(round.id), kind: String(round.kind), sampleDate: round.sample_date ? rowDay(round, this.timeZone) : null,
         surface: round.surface ?? null, planned: Number(round.planned), done: Number(round.done), engines, ...coverage,
+        // Valid answers the round left out for want of a judgement (Q-11): neither counted nor read as saying nothing. Null for a round
+        // measured before the count was kept.
+        unparsed: Number.isInteger(round.ref?.balance?.denominators?.unparsed) ? Number(round.ref.balance.denominators.unparsed) : null,
       } : null,
       rounds: rounds.map((/** @type {any} */ row) => ({ id: String(row.id), kind: String(row.kind), sampleDate: row.sample_date ? rowDay(row, this.timeZone) : null })),
       byEngine,

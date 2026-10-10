@@ -186,6 +186,33 @@ export function commonArms(memberships) {
   return { pilot: common("pilot"), control: common("control") };
 }
 
+const ACROSS_SCOPES = /** @type {const} */ (["project", "pool", "group", "arm"]);
+
+/**
+ * Every cell of one round, from its answers (the engines the queue skipped already left out), and the round's denominators.
+ *
+ * The rates across engines are read over the balanced rows, the questions answered on every engine, and the per-engine ones over
+ * every answer. The valid share (M-20) is neither a rate of an answer nor an opinion about a question: it is how many of the asks came
+ * back as answers, so it is read over every ask at every scope (Q-11). Over the balanced rows the questions an engine failed on had
+ * left it, and with 140 asks, thirty of them suspect, the project read 100 % while the engine read 57 %. The denominators — and the
+ * count of valid answers left out for want of a judgement (`unparsed`) — are those of every ask too.
+ * @param {BalanceRow[]} kept
+ * @param {ReturnType<typeof metricOptions> & { arms: { pilot: string[], control: string[] } }} options
+ */
+export function computeRoundCells(kept, options) {
+  const balance = balanceRows(kept);
+  const perEngine = computeGeoMetrics(/** @type {any[]} */ (balance.deduped), { ...options, scopes: ["engine", "pool_engine"] });
+  const across = computeGeoMetrics(/** @type {any[]} */ (balance.rows), { ...options, scopes: [...ACROSS_SCOPES] });
+  const everyAsk = balance.rows.length === balance.deduped.length ? across
+    : computeGeoMetrics(/** @type {any[]} */ (balance.deduped), { ...options, scopes: [...ACROSS_SCOPES] });
+  const validShare = (/** @type {{ metricId: string }} */ cell) => cell.metricId === "M-20";
+  return {
+    cells: [...across.cells.filter((cell) => !validShare(cell)), ...everyAsk.cells.filter(validShare), ...perEngine.cells],
+    balance,
+    denominators: everyAsk.denominators,
+  };
+}
+
 /**
  * Compute one round and write its rows.
  * @param {GeoMetricsDeps} deps @param {string} roundId
@@ -217,17 +244,14 @@ export async function measureRound(deps, roundId) {
   // arm) only questions answered on every engine: one failed ask would
   // otherwise give its question fewer valid answers than the rest, and the
   // domain withdraws the whole pool's rates as uneven_denominators.
-  const balance = balanceRows(kept);
-  const perEngine = computeGeoMetrics(/** @type {any[]} */ (balance.deduped), { ...options, scopes: ["engine", "pool_engine"] });
-  const across = computeGeoMetrics(/** @type {any[]} */ (balance.rows), { ...options, scopes: ["project", "pool", "group", "arm"] });
-  const cells = [...across.cells, ...perEngine.cells];
+  const { cells, balance, denominators } = computeRoundCells(kept, options);
   const communication = deps.evolution?.communication;
   if (communication && kept.some((row) => row.statements?.some((statement) => statement.verdict === "wrong"))) {
     try { await communication.offer({ sourceEventId: `geo-round:${round.id}`, userId: project.userId, projectId: project.projectId, entityKeys: project.entityKeys ?? [] }); } catch { /* Module intake must not affect measurement. */ }
   }
   await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: cells });
   await store.noteRoundBalance(roundId, { questions: balance.questions, kept: balance.kept, dropped: balance.dropped.length,
-    droppedQuestionIds: balance.dropped.slice(0, 50), engines: balance.engines, arms: options.arms });
+    droppedQuestionIds: balance.dropped.slice(0, 50), engines: balance.engines, arms: options.arms, denominators });
   out.cells = cells.length;
   out.balanceDropped = balance.dropped.length;
   const arms = options.arms;

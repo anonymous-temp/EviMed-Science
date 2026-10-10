@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { geoConstant } from "@evimed/domain";
 import { GEO_JUDGE_INSTRUCTIONS, GeoJudge, judgeFailureIsTheAnswers } from "../src/geoJudge.mjs";
-import { armsOf, balanceRows, commonArms, netEffectRows, sameEngines } from "../src/geoMetricsJob.mjs";
+import { armsOf, balanceRows, commonArms, computeRoundCells, netEffectRows, sameEngines } from "../src/geoMetricsJob.mjs";
 import { GEO_PROBE_BREAK_AFTER, GeoProbeBreaker, engineAnswers } from "../src/geoProbeQueue.mjs";
 
 test("the circuit breaker's threshold is the owner's five, read from the domain's table", () => {
@@ -212,4 +212,46 @@ test("a net effect counts the control groups every compared round had, not the o
   // A round measured before arms were recorded, with no answers on file, is left as stored and does not narrow what is shared.
   const legacy = await netEffectRows(storeWith([{ ...rounds[0], arms: null }, rounds[1]]), { ...input, arms: narrow });
   assert.ok(legacy.every((row) => row.status === "ok"), JSON.stringify(legacy[0]));
+});
+
+test("the valid share (M-20) counts every ask at every scope; a question dropped from the rates is not dropped from it (Q-11)", () => {
+  // 70 questions on two engines, 140 asks: doubao gave nothing usable (a login page) for questions 41 to 70, so those thirty leave the
+  // cross-engine rates (a question answered on one engine only would make every pool rate uneven), but they were asked.
+  /** @type {any[]} */
+  const rows = [];
+  const base = { roundKind: "weekly", repeatIndex: 0, surface: { mode: "web" }, citations: [], pool: "P2", isControl: false };
+  for (let q = 1; q <= 70; q += 1) {
+    const group = q <= 40 ? "g1" : "g2";
+    for (const engine of ["deepseek", "doubao"]) {
+      const suspect = engine === "doubao" && q > 40;
+      rows.push({ ...base, snapshotId: `s-${q}-${engine}`, questionId: `q${q}`, engine, groupId: group, status: suspect ? "suspect" : "valid", askedAt: `2026-10-01T00:${String(q % 60).padStart(2, "0")}:00Z`,
+        facts: suspect ? null : { brands: [], firstOurs: false, positionOurs: null, recommendedOurs: false, retrievalTriggered: false, statements: [], redFlagExpected: [], redFlagHits: [], safetyTermsHit: [] } });
+    }
+  }
+  const { cells, balance, denominators } = computeRoundCells(rows, { engines: ["deepseek", "doubao"], competitors: [], owned: {}, arms: { pilot: ["g1", "g2"], control: [] } });
+  const share = (/** @type {Record<string, any>} */ where) => {
+    const found = cells.filter((cell) => cell.metricId === "M-20" && cell.variant === null && Object.entries(where).every(([key, value]) => /** @type {any} */ (cell)[key] === value));
+    assert.equal(found.length, 1, JSON.stringify(where));
+    return [found[0].numerator, found[0].denominator, found[0].value, found[0].status];
+  };
+  assert.deepEqual([balance.questions, balance.kept, balance.dropped.length], [70, 40, 30]);
+  assert.deepEqual(share({ scope: "engine", engine: "doubao" }), [40, 70, 57.14, "ok"], "the engine reads every ask");
+  assert.deepEqual(share({ scope: "project" }), [110, 140, 78.57, "ok"], "and so does the project: 110 answers of 140 asks, not 80 of 80");
+  assert.deepEqual(share({ scope: "pool", pool: "P2" }), [110, 140, 78.57, "ok"]);
+  assert.deepEqual(share({ scope: "group", groupId: "g1" }), [80, 80, 100, "ok"]);
+  assert.deepEqual(share({ scope: "group", groupId: "g2" }), [30, 60, 50, "ok"], "a group whose questions all left the rates still has its share");
+  assert.deepEqual(share({ scope: "arm", arm: "pilot", pool: "P2" }), [110, 140, 78.57, "ok"]);
+  // The rates are what they were: over the questions answered on every engine.
+  const mention = cells.find((cell) => cell.metricId === "M-01" && cell.scope === "project" && cell.variant === null);
+  assert.equal(mention?.denominator, 80);
+  assert.equal(cells.some((cell) => cell.scope === "group" && cell.groupId === "g2" && cell.metricId === "M-01"), false, "no rate for a group nothing was answered on every engine in");
+  assert.deepEqual([denominators.valid, denominators.suspect, denominators.unparsed], [110, 30, 0]);
+
+  // Nothing dropped: the cells are those of one computation, and the denominators count what was left out unjudged.
+  const whole = rows.filter((row) => row.questionId <= "q4" && !(row.status === "suspect"));
+  const same = computeRoundCells(whole, { engines: ["deepseek", "doubao"], competitors: [], owned: {}, arms: { pilot: ["g1"], control: [] } });
+  assert.equal(same.balance.dropped.length, 0);
+  const unjudged = rows.slice(0, 4).map((row, index) => (index < 2 ? { ...row, facts: null } : row));
+  assert.equal(computeRoundCells(unjudged, { engines: ["deepseek", "doubao"], competitors: [], owned: {}, arms: { pilot: [], control: [] } }).denominators.unparsed, 2,
+    "a valid answer the judge gave up on is counted as left out, not as an answer that said nothing");
 });

@@ -266,3 +266,11 @@ test("the diagnosis says whether the two hard lines are met: accuracy only from 
   await accuracy("insufficient", 3, 3, 100);
   assert.equal((await lines()).met, false);
 });
+
+test("the diagnosis says how many valid answers the round left out unjudged, and null for a round measured before that was kept (Q-11)", options, async () => {
+  const { project } = await seededProject();
+  await insertRound(`ru-${project.id}`, project.id, "baseline", { finishedAt: "2026-09-24T10:00:00Z" });
+  assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, null);
+  await database.query(`UPDATE evimed_geo.rounds SET ref = $2::jsonb WHERE id = $1`, [`ru-${project.id}`, JSON.stringify({ balance: { engines: ["doubao"], denominators: { unparsed: 7 } } })]);
+  assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, 7);
+});

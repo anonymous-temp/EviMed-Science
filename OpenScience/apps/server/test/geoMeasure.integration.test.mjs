@@ -932,6 +932,24 @@ test("the net effect compares the groups both windows measured: a control group 
   assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_week' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [35]);
 });
 
+test("a round records what it left out: the valid answers nobody judged, beside the counts of every ask (Q-11)", options, async () => {
+  await reset();
+  const ids = Array.from({ length: 12 }, (_, index) => `u_q${index + 1}`);
+  await seedGeoProject(database, {
+    id: "geo_un", userId: "user_geo_un", projectId: "proj_geo_un", engines: ["deepseek"], groups: [{ id: "ug", pool: "P2" }],
+    questions: ids.map((id) => ({ id, groupId: "ug", text: `question ${id}` })), claims: [DOSING],
+  });
+  await seededRound({ project: "geo_un", id: "r_un", kind: "baseline", date: "2026-08-01", factsAt: "2026-08-01T10:00:00Z", groups: { ug: ids }, mentions: { ug: 6 } });
+  // The judge gave up on three of the answers: their facts rows carry no judgement.
+  await database.query(`UPDATE evimed_geo.facts SET judged_at = NULL WHERE snapshot_id = ANY($1::text[])`, [ids.slice(0, 3).map((id) => `r_un_${id}`)]);
+  assert.equal((await tickMetrics({ store, now: () => new Date("2026-08-02T00:00:00Z") })).rounds, 1);
+  const [round] = await rows(`SELECT ref -> 'balance' -> 'denominators' AS denominators FROM evimed_geo.rounds WHERE id = 'r_un'`);
+  assert.deepEqual({ ...round.denominators }, { snapshots: 9, inDenominator: 9, valid: 9, refusal: 0, suspect: 0, failed: 0, noiseExcluded: 0, repeatExcluded: 0, unparsed: 3 },
+    "twelve asks: nine counted answers, three left out unjudged");
+  const [share] = await rows(`SELECT numerator::float8 AS numerator, denominator::float8 AS denominator FROM evimed_geo.metrics WHERE round_id = 'r_un' AND scope = 'project' AND metric_id = 'M-20' AND variant IS NULL`);
+  assert.deepEqual({ ...share }, { numerator: 9, denominator: 9 }, "the three are left out of the share, as of every rate: they are neither answers nor refusals to answer");
+});
+
 // ---------------------------------------------------------------- a probe that is not there
 
 test("an unconfigured probe is a wait, not an absence; an unreachable one fails its asks, is retried, and pauses", options, async () => {
