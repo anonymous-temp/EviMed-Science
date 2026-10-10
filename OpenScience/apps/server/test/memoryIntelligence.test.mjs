@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
 import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, conversationMemorySources } from "../src/memoryIntelligence.mjs";
 
 class MemoryStoreDouble {
@@ -1695,3 +1697,99 @@ test("the extraction instructions say how a request to forget is returned", asyn
   assert.match(instructions, /Only an explicit request from the user counts/);
   assert.deepEqual(result.forgotten, [], "an answer with no forget list forgets nothing");
 });
+
+// 2026-10-10 review M-16 (gates G6/G7): the extractor sees at most twenty sources, the last twenty. A run that did its work
+// in many steps (an assistant message and a tool result each count) pushed the researcher's own request out of the window,
+// and then there was no run summary (it needs a question) and no person-kind memory could quote the researcher. Measured on
+// the 30 real normalized transcripts of the 2026-10-10 local integration: one (104 ledger messages) lost its request.
+describe_window();
+
+function describe_window() {
+  /** @param {string} id @param {string} text @param {number | null} turn @param {string} [source] */
+  const asked = (id, text, turn, source = "user") => ({
+    info: { id, role: "user", source, ...(turn == null ? {} : { turnStartSeq: turn }) }, parts: [{ type: "text", text }],
+  });
+  /** @param {string} id @param {string} text @param {number | null} turn */
+  const answered = (id, text, turn) => ({
+    info: { id, role: "assistant", ...(turn == null ? {} : { turnStartSeq: turn }) }, parts: [{ type: "text", text }],
+  });
+  /** @param {number} count @param {number | null} turn @param {string} [prefix] */
+  const steps = (count, turn, prefix = "a") => Array.from({ length: count }, (_, index) => answered(`${prefix}${index}`, `第 ${index} 步`, turn));
+  const REQUEST = "请评估利伐沙班在老年房颤患者中的出血风险，并给出剂量调整依据。";
+
+  test("a long run keeps the researcher's request in the window, and the window is no larger than it was", () => {
+    const ledger = [asked("u1", REQUEST, 4), ...steps(40, 4)];
+    const { sources } = conversationMemorySources(ledger, "s");
+    assert.equal(sources.length, 20, "the size bound is unchanged");
+    assert.deepEqual([sources[0].role, sources[0].text], ["user", REQUEST], "the request opens what the extractor reads");
+    assert.deepEqual(sources.slice(1).map((source) => source.text), Array.from({ length: 19 }, (_, index) => `第 ${21 + index} 步`),
+      "and the rest is the most recent of the run, in order");
+    assert.match(sources[0].sourceRef, /^sessions\/s\/messages\/u1$/, "it can still be quoted by its own reference");
+  });
+
+  test("only the final turn's requests are put back: an earlier turn's are not read again, and a correction in the window is not duplicated", () => {
+    const earlier = [asked("u1", "先看看抗凝药物的分类。", 1), ...steps(3, 1, "e")];
+    const ledger = [...earlier, asked("u2", REQUEST, 7), ...steps(40, 7)];
+    const { sources } = conversationMemorySources(ledger, "s");
+    assert.equal(sources.length, 20);
+    assert.deepEqual(sources.filter((source) => source.role === "user").map((source) => source.text), [REQUEST],
+      "the run's own request, and not the earlier conversation's");
+
+    // A correction typed mid-run is part of the same turn; one already inside the window is left where it is.
+    const corrected = [asked("u1", REQUEST, 4), ...steps(5, 4, "x"), asked("c1", "改为只看近五年。", 4), ...steps(40, 4)];
+    const both = conversationMemorySources(corrected, "s").sources;
+    assert.equal(both.length, 20);
+    assert.deepEqual(both.filter((source) => source.role === "user").map((source) => source.text), [REQUEST, "改为只看近五年。"]);
+    const inside = [...steps(30, 4, "y"), asked("u9", REQUEST, 4), ...steps(5, 4, "z")];
+    const once = conversationMemorySources(inside, "s").sources;
+    assert.equal(once.filter((source) => source.role === "user").length, 1, "a request the window kept is not added a second time");
+    assert.equal(once.length, 20);
+  });
+
+  test("however many requests a turn holds, at most four are kept for it, the opening one first and the latest after it", () => {
+    const requests = Array.from({ length: 8 }, (_, index) => asked(`u${index}`, `请求 ${index}`, 4));
+    const { sources } = conversationMemorySources([...requests, ...steps(40, 4)], "s");
+    assert.equal(sources.length, 20, "the bound holds");
+    assert.deepEqual(sources.filter((source) => source.role === "user").map((source) => source.text), ["请求 0", "请求 5", "请求 6", "请求 7"]);
+  });
+
+  test("a transcript with no turn markers keeps only its last request, and a short one is read whole", () => {
+    const old = [asked("u1", "第一问", null), ...steps(3, null, "m"), asked("u2", REQUEST, null), ...steps(40, null)];
+    const { sources } = conversationMemorySources(old, "s");
+    assert.equal(sources.length, 20);
+    assert.deepEqual(sources.filter((source) => source.role === "user").map((source) => source.text), [REQUEST]);
+    const short = [asked("u1", REQUEST, 4), ...steps(10, 4)];
+    assert.equal(conversationMemorySources(short, "s").sources.length, 11, "nothing is cut, so nothing is put back");
+    assert.deepEqual(conversationMemorySources([...steps(30, 4)], "s").sources.length, 20, "no request at all is no request to keep");
+  });
+
+  test("the run summary and the extractor still have the question when the run was long", async () => {
+    const store = new MemoryStoreDouble();
+    /** @type {any[]} */ let shown = [];
+    const intelligence = new MemoryIntelligence(config, store, {
+      fetchImpl: modelFetch((sources) => { shown = sources; return []; }),
+    });
+    const ledger = [asked("u1", REQUEST, 4), ...steps(40, 4), { ...answered("a-final", "结论：出血风险升高。", 4), info: { id: "a-final", role: "assistant", turnStartSeq: 4, turnEnd: { kind: "completed" } } }];
+    await intelligence.recordRun(project(), run(), ledger);
+    const summary = [...store.records.values()].find((record) => record.kind === "run_summary");
+    assert.ok(summary, "a long run is still an episode of work");
+    assert.equal(JSON.parse(summary.value).question, REQUEST);
+    assert.equal(JSON.parse(summary.value).answer, "结论：出血风险升高。");
+    assert.ok(shown.some((source) => source.role === "user" && source.text === REQUEST), "and the model that extracts is shown the researcher's words");
+    assert.ok(shown.length <= 20);
+  });
+
+  // The case the review measured, as it is on disk: a real run of 104 ledger messages whose twenty most recent sources
+  // were all the assistant's and tools'. Skipped where the acceptance artifact is not present.
+  const artifact = new URL("../../../evals/acceptance/local-integration-20261010/skills-native/humanizers/transcript.json", import.meta.url);
+  test("a real 104-message run keeps its request", { skip: !existsSync(artifact) && "the acceptance transcript is not in this tree" }, async () => {
+    const transcript = JSON.parse(await readFile(artifact, "utf8"));
+    const ledger = transcriptToLedgerMessages(transcript);
+    assert.equal(ledger.length, 104);
+    const { sources } = conversationMemorySources(ledger, transcript.sessionId ?? "s");
+    assert.ok(sources.length <= 20);
+    const users = sources.filter((source) => source.role === "user");
+    assert.equal(users.length, 1, "the researcher's request, which the window used to cut");
+    assert.match(users[0].text, /^Execute this authorized bounded local verification task/);
+  });
+}
