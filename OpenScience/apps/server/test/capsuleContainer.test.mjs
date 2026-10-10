@@ -608,6 +608,23 @@ test("import supports only explicit UTF-8 text formats and matching MIME types",
   }
 });
 
+test("an extension that is also a property of every object is a file name like any other, not a crash (review C-12)", async () => {
+  // The format table was looked up with `formats[extension]`, which for `.constructor` answers Object itself.
+  for (const name of ["constructor", "toString", "hasOwnProperty", "__proto__", "valueOf", "prototype"]) {
+    const path = `exemplars/note.${name}`;
+    const manifest = signedPlainContainer({ scope: ["workstyle"], entries: [{ path, mime: "text/plain", layer: "methods", content: "Synthetic text." }] }).manifest;
+    let safety;
+    assert.doesNotThrow(() => { safety = checkImportSafety(manifest); }, path);
+    assert.equal(safety.ok, false, path);
+    assert.equal(safety.issues[0].code, "capsule_executable_content", path);
+  }
+  // Opening it is the same answer: a refusal that names the entry.
+  const hostile = signedPlainContainer({ scope: ["workstyle"], entries: [{ path: "exemplars/note.constructor", mime: "text/plain", layer: "methods", content: "Synthetic text." }] });
+  const opened = await openCapsule(hostile, { issuer: { signingPublicKey: alice.signing.publicKey } });
+  assert.equal(opened.ok, false);
+  assert.ok(opened.issues.some((issue) => issue.code === "capsule_executable_content"));
+});
+
 // 2026-09-26 audit (M-6): a pack had no card — the recipient named it and could
 // not see who sent it. The card rides inside the signed manifest.
 test("a pack's card is signed with it: what the recipient reads first is what the sender signed", async () => {

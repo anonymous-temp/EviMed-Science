@@ -618,6 +618,15 @@ export const REFUSED_IMPORT_PATHS = Object.freeze([
 ]);
 
 /**
+ * What an imported entry may be: a UTF-8 text format with its MIME type. This container stores and returns UTF-8 strings.
+ * Binary document formats need a separate, explicitly validated reader; a filename never makes code safe.
+ */
+const IMPORT_TEXT_FORMATS = Object.freeze({
+  md: ["text/markdown"], txt: ["text/plain"], csv: ["text/csv"], tsv: ["text/tab-separated-values"],
+  json: ["application/json"], jsonl: ["application/x-ndjson", "application/jsonl"],
+});
+
+/**
  * @param {import("@evimed/domain").CapsuleManifest} manifest
  * @returns {{ ok: boolean, issues: { code: string, message: string }[] }}
  */
@@ -625,14 +634,9 @@ export function checkImportSafety(manifest) {
   /** @type {{ code: string, message: string }[]} */
   const issues = [];
   for (const entry of manifest.entries) {
-    // This container stores and returns UTF-8 strings. Binary document formats
-    // need a separate, explicitly validated reader; a filename never makes code safe.
-    const formats = {
-      md: ["text/markdown"], txt: ["text/plain"], csv: ["text/csv"], tsv: ["text/tab-separated-values"],
-      json: ["application/json"], jsonl: ["application/x-ndjson", "application/jsonl"],
-    };
     const extension = entry.path.split(".").at(-1);
-    const allowedMime = formats[extension];
+    // An own property only: the extension is the sender's, and `.constructor` is a property of every object (review C-12).
+    const allowedMime = Object.hasOwn(IMPORT_TEXT_FORMATS, extension) ? IMPORT_TEXT_FORMATS[/** @type {keyof typeof IMPORT_TEXT_FORMATS} */ (extension)] : undefined;
     if (REFUSED_IMPORT_PATHS.includes(entry.path) || !allowedMime?.includes(entry.mime)) {
       issues.push({ code: "capsule_executable_content", message: `payload/${entry.path} is not a supported UTF-8 text format with a matching MIME type.` });
     }
