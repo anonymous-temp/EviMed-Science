@@ -687,7 +687,7 @@ function checkedCriterion(deps, candidate, index, where, issues) {
  * The writers, one per kind. Each takes the item's kit and the deps, validates
  * every field it uses first, and returns the id it wrote — or nothing, having
  * recorded why.
- * @type {Record<string, (item: Item, deps: WriteDeps, extra: { changed: string[], results: any[] }) => Promise<string | null | undefined>>}
+ * @type {Record<string, (item: Item, deps: WriteDeps, extra: { changed: string[], results: any[], reevaluate?: Set<string> }) => Promise<string | null | undefined>>}
  */
 const WRITERS = {
   async definition(item, { store, study }) {
@@ -1458,18 +1458,24 @@ const WRITERS = {
     return saved.id;
   },
 
-  async language_judgment(item, { matchStore, matching, documents, study, caller }, extra) {
-    if (!item.only(["subjectKey", "criterionKey", "protocolVersionId", "state", "evidence"])) return null;
+  async language_judgment(item, { matchStore, matching, patientTrials, documents, study, caller }, extra) {
+    if (!item.only(["subjectKey", "criterionKey", "protocolVersionId", "candidateTrialId", "state", "evidence"])) return null;
     const subjectKey = item.token("subjectKey", TOKEN, "受试者的假名编号", { required: true });
     const protocolVersionId = item.token("protocolVersionId", ID, "本研究方案版本的 id");
+    // The answer is about one trial's criterion: the study's own protocol version, or a candidate trial found for a patient.
+    const candidateTrialId = item.token("candidateTrialId", ID, "候选试验的 id（vcr_read what:candidate_trials 给出）");
+    if (protocolVersionId && candidateTrialId) item.bad("candidateTrialId", "protocolVersionId 和 candidateTrialId 二选一：答案属于本研究的方案，或属于一个候选试验。");
     const criterionKey = item.token("criterionKey", TOKEN, "入排条件里 language 节点的 key（没写 key 时用条件的 id）", { required: true });
     const state = item.choice("state", ["satisfied", "not_satisfied", "unknown"], { required: true });
     const evidence = item.arr("evidence", { max: 10 }) ?? [];
     if (!item.ok) return null;
-    if (!matching?.languageKeys) return void item.bad("criterionKey", "匹配未接入本部署。", "vcr_write_refused");
-    const known = await matching.languageKeys(study, protocolVersionId ?? null);
+    if (candidateTrialId ? !patientTrials?.languageKeys : !matching?.languageKeys) return void item.bad("criterionKey", "匹配未接入本部署。", "vcr_write_refused");
+    const known = candidateTrialId ? await patientTrials.languageKeys(study, candidateTrialId) : await matching.languageKeys(study, protocolVersionId ?? null);
+    if (candidateTrialId && !known.length && !(await patientTrials.holds?.(study, { id: candidateTrialId }))) {
+      return void item.bad("candidateTrialId", "本研究里没有这个候选试验：id 取自 vcr_read what:candidate_trials。");
+    }
     if (!known.includes(String(criterionKey))) {
-      return void item.bad("criterionKey", `最新方案版本里没有 key 为「${String(criterionKey).slice(0, 60)}」的 language 条件${known.length ? `（有：${known.slice(0, 8).join("、")}）` : ""}。`);
+      return void item.bad("criterionKey", `${candidateTrialId ? "这个候选试验" : "最新方案版本"}里没有 key 为「${String(criterionKey).slice(0, 60)}」的 language 条件${known.length ? `（有：${known.slice(0, 8).join("、")}）` : ""}。`);
     }
     if (state !== "unknown" && !evidence.length) {
       return void item.bad("evidence", "判为满足或不满足必须带原句证据；判断不了就写 unknown。");
@@ -1494,7 +1500,15 @@ const WRITERS = {
       if (!verified) return null;
       anchored.push({ documentId: span.documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, visibleAt: verified.document.visibleAt ?? null });
     }
-    const saved = await matchStore.saveLanguageJudgment({ studyId: study.id, userId: study.userId, subjectKey, criterionKey, protocolVersionId, state, evidence: anchored, provenance: caller?.provenance ?? { schema: 1, status: "unknown", runId: caller?.runtimeRunId ?? null } });
+    const provenance = caller?.provenance ?? { schema: 1, status: "unknown", runId: caller?.runtimeRunId ?? null };
+    if (candidateTrialId) {
+      const saved = await patientTrials.saveLanguageJudgment(study, { subjectKey, candidateTrialId, criterionKey, state, evidence: anchored, provenance });
+      // The verdict about this patient and this trial rests on the answer just written: it is judged again once the batch is in.
+      (extra.reevaluate ??= new Set()).add(`${subjectKey}\u0000${candidateTrialId}`);
+      extra.results.push({ index: item.index, id: saved.id });
+      return saved.id;
+    }
+    const saved = await matchStore.saveLanguageJudgment({ studyId: study.id, userId: study.userId, subjectKey, criterionKey, protocolVersionId, state, evidence: anchored, provenance });
     extra.results.push({ index: item.index, id: saved.id });
     return saved.id;
   },
@@ -1674,6 +1688,8 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
   if (!rows.length) {
     return { ok: false, ids, issues: [issue(null, "", "vcr_write_empty", "这次写入没有任何内容。")] };
   }
+  /** What the writers of one request share: the changed nodes, the answers beside the ids, and the pairs to judge again. @type {{ changed: string[], results: any[], reevaluate?: Set<string> }} */
+  const scratch = { changed, results };
   /** @type {WriteDeps} */
   const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, patientTrials, seal, dataPlane, documents, report, caller, knowledge };
   // The run the platform sent to take new evidence into a study's cards (flywheel F24) writes its versions beside the frozen one when
@@ -1723,7 +1739,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
       }
       const item = new Item({ row: /** @type {Record<string, any>} */ (raw), index, issues, study, store });
       try {
-        const written = await writer(item, deps, { changed, results });
+        const written = await writer(item, deps, scratch);
         if (written && item.ok) ids.push(written);
       } catch (error) {
         if (error instanceof HttpError) issues.push(issue(index, "", "vcr_write_refused", error.message));
@@ -1737,6 +1753,15 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
     }
   }
 
+  // An answer to a candidate trial's language criterion changes what is known about that patient and that trial: the verdict is made
+  // again, once for each pair the batch touched, and what it now says comes back beside the write.
+  if (scratch?.reevaluate?.size && patientTrials?.evaluate) {
+    for (const pair of scratch.reevaluate) {
+      const [subjectKey, candidateTrialId] = pair.split("\u0000");
+      const done = await patientTrials.evaluate(study, { subjectKeys: [subjectKey], trialIds: [candidateTrialId] }).catch(() => null);
+      if (done) results.push({ candidateTrialId, subjectKey, evaluated: done.evaluated.map((/** @type {any} */ row) => ({ subjectKey: row.subjectKey, summary: row.summary, counts: row.counts })) });
+    }
+  }
   if (changed.length && orchestrator?.recomputeAfterChange) {
     await orchestrator.recomputeAfterChange({
       studyId: study.id, changed, reason: what === "criteria" || what === "protocol" ? "criterion_changed" : "assumption_changed",

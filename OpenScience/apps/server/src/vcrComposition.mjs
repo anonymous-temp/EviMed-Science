@@ -1146,7 +1146,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   jobs.addFinishHook((done) => matching.onJobFinished(done));
   const dataPlaneSeam = dataPlane ? vcrDataPlaneSeam({ dataPlane, dataStore, access }) : null;
 
-  const patientTrials = createPatientTrials({ candidateStore, config, report });
+  const patientTrials = createPatientTrials({ candidateStore, matchStore, documents, subjectTable, config, report });
   const service = new VcrService({
     store, config, engine, access, dataPlane: dataPlaneSeam, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, patientTrials,
   });

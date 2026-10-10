@@ -188,7 +188,8 @@ def tool_definitions():
                 "and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's "
                 "judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema, and the language criteria still "
                 "waiting for the run's answer. what: candidate_trials lists the registry trials found for patients "
-                "(filter.id or filter.registryId reads one with its criteria)."
+                "(filter.id or filter.registryId reads one with its criteria; filter.subjectKey returns that patient's trials in order "
+                "with the verdict about each and the language answers still owed)."
             ),
             "inputSchema": {
                 "type": "object",
@@ -238,7 +239,9 @@ def tool_definitions():
                 "population; the comparator kind for a comparator) and write those keys and no others. Items are checked "
                 "one by one; refused items come back in issues and the rest are written."
                 " what: candidate_trial writes a registry trial found for a patient: items [{registryId, criteria, subjectKeys}] -- the platform "
-                "reads the trial's title, phase, status and sites from the registry, and criteria are its eligibility lines in the same shape as a protocol's."
+                "reads the trial's title, phase, status and sites from the registry, judges the named patients against the criteria (its eligibility "
+                "lines, in the same shape as a protocol's) and ranks the trials; a language criterion of a trial is answered with what: language_judgment "
+                "and candidateTrialId."
                 " what: trial_benchmark imports an existing external trial-effect JSON via data {predictionsFile: workspace-relative path}; "
                 "actual effects are read from preserved evidence. Never generate the file's predictions yourself."
             ),

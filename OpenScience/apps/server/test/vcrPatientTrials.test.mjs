@@ -7,7 +7,8 @@ import test from "node:test";
 
 import { ctgovPrecedent } from "../src/trialRegistryClient.mjs";
 import {
-  CANDIDATE_TRIAL_LOCATIONS_MAX, candidateTrialFromRecord, candidateTrialUrl, locateSourceText,
+  CANDIDATE_TRIAL_LOCATIONS_MAX, candidateTrialFromRecord, candidateTrialUrl, locateSourceText, phaseLabel, rankPatientTrials,
+  registryStatusLabel, registryStatusRank,
 } from "../src/vcrPatientTrials.mjs";
 import { FLAURA } from "./vcrEvidenceFixtures.mjs";
 
@@ -82,4 +83,86 @@ test("the platform finds where a criterion's original wording stands in the reco
   assert.equal(locateSourceText("Prior treatment with paclitaxel.", ELIGIBILITY), null);
   assert.equal(locateSourceText("", ELIGIBILITY), null);
   assert.equal(locateSourceText("anything", ""), null);
+});
+
+// ---------------------------------------------------------------------------
+// The ranking: arithmetic over the evaluator's counts, and nothing a model said
+// ---------------------------------------------------------------------------
+
+/** One trial of a patient's list, as the evaluator's verdict makes it. */
+const entry = (id, summary, counts = {}, extra = {}) => ({
+  id, title: extra.title ?? id, status: extra.status ?? "RECRUITING",
+  summary, counts: summary === null ? null : { satisfied: 0, not_satisfied: 0, unknown: 0, pending_recheck: 0, ...counts }, ...extra,
+});
+
+test("all criteria met comes first, then the fewest unknown or pending, then the excluded; a trial not yet evaluated is last", () => {
+  const ranked = rankPatientTrials([
+    entry("excluded", "ineligible", { not_satisfied: 1, satisfied: 6 }),
+    entry("two-open", "insufficient_evidence", { unknown: 2 }),
+    entry("none", null),
+    entry("met", "eligible", { satisfied: 8 }),
+    entry("one-open", "insufficient_evidence", { unknown: 1 }),
+    entry("waiting", "pending", { pending_recheck: 1 }),
+  ]);
+  assert.deepEqual(ranked.map((row) => row.id), ["met", "one-open", "waiting", "two-open", "excluded", "none"]);
+  assert.deepEqual(ranked.map((row) => row.rank), [1, 2, 3, 4, 5, 6]);
+});
+
+test("an unknown and a date to wait for are both a criterion still to settle: they are counted together", () => {
+  const ranked = rankPatientTrials([
+    entry("one-unknown-one-pending", "insufficient_evidence", { unknown: 1, pending_recheck: 1 }),
+    entry("two-pending", "pending", { pending_recheck: 2 }),
+    entry("one-unknown", "insufficient_evidence", { unknown: 1 }),
+  ]);
+  assert.deepEqual(ranked.map((row) => row.id), ["one-unknown", "one-unknown-one-pending", "two-pending"]);
+});
+
+test("ties go to the registry's status (recruiting first), then the title, then the id", () => {
+  const ranked = rankPatientTrials([
+    entry("c", "eligible", {}, { status: "COMPLETED", title: "Alpha" }),
+    entry("d", "eligible", {}, { status: "NOT_YET_RECRUITING", title: "Zeta" }),
+    entry("b", "eligible", {}, { status: "RECRUITING", title: "beta" }),
+    entry("a", "eligible", {}, { status: "RECRUITING", title: "Alpha" }),
+    entry("e", "eligible", {}, { status: "RECRUITING", title: "Alpha" }),
+    entry("own", "eligible", {}, { status: "", title: "本研究方案" }),
+  ]);
+  assert.deepEqual(ranked.map((row) => row.id), ["a", "e", "b", "d", "own", "c"],
+    "a trial with no registry status is the study's own, ranked after what is open and before what is closed");
+});
+
+test("the ranking is a function of the verdicts alone: the same list in any order is the same list", () => {
+  const rows = [
+    entry("1", "eligible", {}, { title: "B" }), entry("2", "insufficient_evidence", { unknown: 3 }, { title: "A" }),
+    entry("3", "ineligible", { not_satisfied: 2 }, { title: "C" }), entry("4", "eligible", {}, { title: "A", status: "COMPLETED" }),
+  ];
+  const expected = rankPatientTrials(rows).map((row) => row.id);
+  for (const shuffled of [[...rows].reverse(), [rows[2], rows[0], rows[3], rows[1]], [rows[1], rows[3], rows[0], rows[2]]]) {
+    assert.deepEqual(rankPatientTrials(shuffled).map((row) => row.id), expected);
+  }
+  assert.deepEqual(rankPatientTrials([]), []);
+});
+
+test("a registry's words for where a trial stands are read through a closed table: recruiting first, closed last, anything else after the open ones", () => {
+  const order = ["RECRUITING", "Recruiting", "recruiting", "NOT_YET_RECRUITING", "Not yet recruiting", "ENROLLING_BY_INVITATION", "ACTIVE_NOT_RECRUITING", "Ongoing, recruiting",
+    "COMPLETED", "TERMINATED", "WITHDRAWN"].map(registryStatusRank);
+  assert.equal(order[0], order[1]);
+  assert.equal(order[1], order[2]);
+  assert.ok(registryStatusRank("RECRUITING") < registryStatusRank("NOT_YET_RECRUITING"));
+  assert.ok(registryStatusRank("NOT_YET_RECRUITING") < registryStatusRank("ENROLLING_BY_INVITATION"));
+  assert.ok(registryStatusRank("ENROLLING_BY_INVITATION") < registryStatusRank("ACTIVE_NOT_RECRUITING"));
+  assert.ok(registryStatusRank("ACTIVE_NOT_RECRUITING") < registryStatusRank("") && registryStatusRank("") < registryStatusRank("COMPLETED"));
+  assert.ok(registryStatusRank("some word the registry made up") < registryStatusRank("COMPLETED"), "a status this table does not know is not read as closed");
+  assert.ok(registryStatusRank("COMPLETED") <= registryStatusRank("TERMINATED"));
+  assert.equal(registryStatusRank("Authorised, recruiting"), registryStatusRank("RECRUITING"));
+  assert.equal(registryStatusLabel("RECRUITING"), "招募中");
+  assert.equal(registryStatusLabel("NOT_YET_RECRUITING"), "尚未开始招募");
+  assert.equal(registryStatusLabel("COMPLETED"), "已完成");
+  assert.equal(registryStatusLabel("some word the registry made up"), "some word the registry made up", "an unknown word is shown as the registry wrote it");
+  assert.equal(registryStatusLabel(""), "");
+  assert.equal(phaseLabel("PHASE2"), "II 期");
+  assert.equal(phaseLabel("PHASE1/PHASE2"), "I/II 期");
+  assert.equal(phaseLabel("EARLY_PHASE1"), "早期 I 期");
+  assert.equal(phaseLabel("NA"), "不适用");
+  assert.equal(phaseLabel("Ⅲ期"), "Ⅲ期", "a ChiCTR phase is shown as it was registered");
+  assert.equal(phaseLabel(""), "");
 });

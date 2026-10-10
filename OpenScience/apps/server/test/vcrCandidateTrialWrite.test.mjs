@@ -168,3 +168,80 @@ test("a deployment that has not composed the trials says so by item, not by fail
   const outcome = await write(seam, [{ registryId: "NCT05000001", criteria: [AGE] }]);
   assert.deepEqual(outcome.issues.map((entry) => entry.code), ["vcr_write_refused"]);
 });
+
+// ---------------------------------------------------------------------------
+// The answer to a criterion only language can decide, about a candidate trial
+// ---------------------------------------------------------------------------
+
+const CHART = "患者本人可理解研究内容并签署知情同意。";
+
+/** The seams a language answer meets. @param {Record<string, any>} [options] */
+function languageSeams(options = {}) {
+  /** @type {any[]} */
+  const saved = [];
+  /** @type {any[]} */
+  const evaluated = [];
+  const patientTrials = {
+    async holds(_study, { id }) { return id === "ctr_1"; },
+    async languageKeys(_study, id) { return id === "ctr_1" ? ["consent"] : []; },
+    async saveLanguageJudgment(_study, input) { saved.push(input); return { id: "jdg_1" }; },
+    async evaluate(_study, input) {
+      evaluated.push(input);
+      return { evaluated: [{ trialId: "ctr_1", registryId: "NCT05000001", subjectKey: input.subjectKeys[0], summary: options.summary ?? "eligible", counts: { satisfied: 2 } }], unavailable: [], notes: [] };
+    },
+  };
+  const matchStore = { async holdsSubject() { return true; }, async saveLanguageJudgment() { throw new Error("a trial's answer is not a protocol's"); } };
+  // The cloud-approved reader the writers verify a quotation through (`vcrDocumentsSeam.runtimeRead`).
+  const documents = { async runtimeRead(_study, { documentId }) { return documentId === "doc_1" ? { id: "doc_1", text: CHART, visibleAt: "2026-09-01T00:00:00.000Z" } : null; } };
+  const matching = { async languageKeys() { throw new Error("a trial's key is not a protocol's"); } };
+  return { saved, evaluated, deps: { store: {}, service: {}, orchestrator: null, study, matchStore, matching, patientTrials, documents } };
+}
+
+const answer = (extra = {}) => ({
+  subjectKey: "P-0192", candidateTrialId: "ctr_1", criterionKey: "consent", state: "satisfied",
+  evidence: [{ documentId: "doc_1", quote: CHART }], ...extra,
+});
+
+test("an answer about a candidate trial's language criterion is checked against the patient's own words, kept for that trial, and the verdict is made again once", async () => {
+  const seam = languageSeams();
+  const outcome = await vcrRuntimeWrite({ ...seam.deps, what: "language_judgment", items: [answer(), answer({ criterionKey: "consent", state: "unknown", evidence: [] })], data: null });
+  assert.deepEqual(outcome.issues, []);
+  assert.deepEqual(outcome.ids, ["jdg_1", "jdg_1"]);
+  assert.equal(seam.saved.length, 2);
+  assert.deepEqual([seam.saved[0].candidateTrialId, seam.saved[0].subjectKey, seam.saved[0].criterionKey, seam.saved[0].state], ["ctr_1", "P-0192", "consent", "satisfied"]);
+  assert.deepEqual(seam.saved[0].evidence, [{ documentId: "doc_1", start: 0, end: CHART.length, quote: CHART, visibleAt: "2026-09-01T00:00:00.000Z" }],
+    "the platform found where the sentence stands, in the patient's own document");
+  assert.deepEqual(seam.evaluated, [{ subjectKeys: ["P-0192"], trialIds: ["ctr_1"] }], "two answers about one pair are one new verdict");
+  const verdict = outcome.results.find((row) => row.candidateTrialId === "ctr_1");
+  assert.deepEqual(verdict, { candidateTrialId: "ctr_1", subjectKey: "P-0192", evaluated: [{ subjectKey: "P-0192", summary: "eligible", counts: { satisfied: 2 } }] });
+});
+
+test("a language answer names a protocol version or a candidate trial, not both; a trial or a key the study does not have is refused with the keys it has", async () => {
+  const seam = languageSeams();
+  const both = await vcrRuntimeWrite({ ...seam.deps, what: "language_judgment", items: [answer({ protocolVersionId: "prt_1" })], data: null });
+  assert.deepEqual(both.issues.map((entry) => [entry.field, entry.code]), [["candidateTrialId", "vcr_write_value_invalid"]]);
+  const noTrial = await vcrRuntimeWrite({ ...seam.deps, what: "language_judgment", items: [answer({ candidateTrialId: "ctr_9" })], data: null });
+  assert.equal(noTrial.issues[0].field, "candidateTrialId");
+  assert.match(noTrial.issues[0].message, /候选试验/);
+  const noKey = await vcrRuntimeWrite({ ...seam.deps, what: "language_judgment", items: [answer({ criterionKey: "pregnancy" })], data: null });
+  assert.equal(noKey.issues[0].field, "criterionKey");
+  assert.match(noKey.issues[0].message, /候选试验.*consent/);
+  assert.equal(seam.saved.length + seam.evaluated.length, 0, "nothing was kept, and nothing was judged again");
+
+  const forged = await vcrRuntimeWrite({ ...seam.deps, what: "language_judgment", items: [answer({ evidence: [{ documentId: "doc_1", quote: "患者拒绝签署知情同意" }] })], data: null });
+  assert.equal(forged.ok, false, "a quotation that is not in the patient's chart is not evidence");
+  assert.equal(seam.saved.length, 0);
+});
+
+test("a language answer about the study's own protocol is written exactly as it was, and judges no candidate", async () => {
+  const seam = languageSeams();
+  /** @type {any[]} */
+  const kept = [];
+  seam.deps.matching = { async languageKeys() { return ["consent"]; } };
+  seam.deps.matchStore = { async holdsSubject() { return true; }, async saveLanguageJudgment(input) { kept.push(input); return { id: "jdg_9" }; } };
+  const outcome = await vcrRuntimeWrite({ ...seam.deps, what: "language_judgment", items: [{ ...answer({ protocolVersionId: "prt_1" }), candidateTrialId: undefined }], data: null });
+  assert.deepEqual(outcome.issues, []);
+  assert.deepEqual(outcome.ids, ["jdg_9"]);
+  assert.equal(kept[0].protocolVersionId, "prt_1");
+  assert.equal(seam.saved.length + seam.evaluated.length, 0);
+});

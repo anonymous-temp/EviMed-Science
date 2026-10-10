@@ -26,7 +26,8 @@
 import { HttpError } from "./security.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
-import { matchingInputDigest } from "./vcrMatching.mjs";
+import { languageKeysOf, matchingInputDigest, publicMatchingProvenance } from "./vcrMatching.mjs";
+import { languageCriterionHash, languageInput } from "./vcrMatchingSnapshot.mjs";
 
 /** @param {unknown} value @returns {string | null} */
 const iso = (value) => (value ? new Date(/** @type {any} */ (value)).toISOString() : null);
@@ -67,6 +68,32 @@ const criterionOf = (row) => (row ? {
   evidenceNeeded: Array.isArray(row.evidence_needed) ? row.evidence_needed : [],
   reviewState: String(row.review_state ?? "ai_set"),
   createdAt: iso(row.created_at),
+} : null);
+
+/** One patient judged against one candidate trial. The references the verdict was rebuilt from are the platform's own and are not read out. @param {any} row */
+const assessmentOf = (row) => (row ? {
+  id: String(row.id),
+  studyId: String(row.study_id),
+  candidateTrialId: String(row.candidate_trial_id),
+  subjectKey: String(row.subject_key),
+  asOf: iso(row.as_of),
+  summary: String(row.summary),
+  counts: row.counts ?? {},
+  evidenceGaps: Array.isArray(row.evidence_gaps) ? row.evidence_gaps : [],
+  provenance: publicMatchingProvenance(row.provenance ?? {}),
+  createdAt: iso(row.created_at),
+} : null);
+
+/** @param {any} row */
+const judgmentOf = (row) => (row ? {
+  id: String(row.id),
+  assessmentId: String(row.assessment_id),
+  criterionId: String(row.criterion_id),
+  state: String(row.state),
+  applicable: row.applicable !== false,
+  decidedBy: String(row.decided_by ?? "code"),
+  evidence: Array.isArray(row.evidence) ? row.evidence : [],
+  recheckAt: iso(row.recheck_at),
 } : null);
 
 /**
@@ -200,5 +227,128 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
       [studyId, [...ids]]);
     for (const row of rows) byTrial.get(String(row.candidate_trial_id))?.push(criterionOf(row));
     return byTrial;
+  }
+  // ------------------------------------------------------- assessments
+
+  /**
+   * One patient's verdict against one candidate trial, with its per-criterion judgments, in one transaction: a judgment that failed to
+   * land would read as a finished evaluation with fewer criteria and the same summary. Writing the same instant and inputs again replaces
+   * the set. A trial of another study is not found.
+   * @param {{ assessment: any, userId: string }} input
+   */
+  async saveAssessment({ assessment, userId }) {
+    return this.transaction(async (client) => {
+      const owned = await client.query(
+        `SELECT 1 FROM ${VCR_SCHEMA}.candidate_trials WHERE id = $1 AND study_id = $2`, [assessment.candidateTrialId, assessment.studyId]);
+      if (!owned.rowCount) throw new HttpError(404, "vcr_write_refused", "This candidate trial is not the study's.");
+      const row = (await client.query(
+        `INSERT INTO ${VCR_SCHEMA}.candidate_trial_assessments
+           (id, study_id, candidate_trial_id, user_id, subject_key, as_of, summary, counts, evidence_gaps, provenance, input_snapshot_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11)
+         ON CONFLICT (candidate_trial_id, subject_key, as_of, input_snapshot_id) DO UPDATE SET
+           summary = EXCLUDED.summary, counts = EXCLUDED.counts, evidence_gaps = EXCLUDED.evidence_gaps, provenance = EXCLUDED.provenance
+         RETURNING *`,
+        [vcrId("candidateAssessment"), assessment.studyId, assessment.candidateTrialId, userId, assessment.subjectKey, assessment.asOf, assessment.summary,
+          JSON.stringify(assessment.counts ?? {}), JSON.stringify(assessment.evidenceGaps ?? []), JSON.stringify(assessment.provenance ?? {}),
+          String(assessment.provenance?.inputSnapshotId ?? "")])).rows[0];
+      const kept = (assessment.judgments ?? []).map((/** @type {any} */ judgment) => String(judgment.criterionId));
+      await client.query(`DELETE FROM ${VCR_SCHEMA}.candidate_trial_judgments WHERE assessment_id = $1 AND NOT (criterion_id = ANY($2::text[]))`, [row.id, kept]);
+      for (const judgment of assessment.judgments ?? []) {
+        await client.query(
+          `INSERT INTO ${VCR_SCHEMA}.candidate_trial_judgments (id, assessment_id, criterion_id, user_id, state, applicable, decided_by, evidence, recheck_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
+           ON CONFLICT (assessment_id, criterion_id) DO UPDATE SET
+             state = EXCLUDED.state, applicable = EXCLUDED.applicable, decided_by = EXCLUDED.decided_by, evidence = EXCLUDED.evidence, recheck_at = EXCLUDED.recheck_at`,
+          [vcrId("candidateJudgment"), row.id, judgment.criterionId, userId, judgment.state, judgment.applicable !== false, judgment.decidedBy ?? "code",
+            JSON.stringify(judgment.evidence ?? []), judgment.recheckAt ?? null]);
+      }
+      await this.audit({
+        client, studyId: assessment.studyId, userId, actor: "control-plane", action: "vcr.candidate_assessment.save", object: row.id,
+        detail: { candidateTrialId: assessment.candidateTrialId, subjectKey: assessment.subjectKey, summary: assessment.summary, asOf: assessment.asOf },
+      });
+      return { ...assessmentOf(row), judgments: (assessment.judgments ?? []).map((/** @type {any} */ judgment) => ({ ...judgment })) };
+    });
+  }
+
+  /**
+   * One assessment with its judgments. With a `studyId`, an assessment of another study is not found, whoever asks.
+   * @param {string} id @param {string | null} [studyId]
+   */
+  async getAssessment(id, studyId = null) {
+    const row = await this.one(`SELECT * FROM ${VCR_SCHEMA}.candidate_trial_assessments WHERE id = $1 AND ($2::text IS NULL OR study_id = $2)`, [id, studyId]);
+    if (!row) return null;
+    const judgments = await this.rows(`SELECT * FROM ${VCR_SCHEMA}.candidate_trial_judgments WHERE assessment_id = $1 ORDER BY created_at, id`, [id]);
+    return { ...assessmentOf(row), judgments: judgments.map(judgmentOf) };
+  }
+
+  /**
+   * The newest verdict about this patient against each trial of the study that has judged them, by trial id: what a page ranks.
+   * @param {{ studyId: string, subjectKey: string }} input
+   * @returns {Promise<Map<string, NonNullable<ReturnType<typeof assessmentOf>>>>}
+   */
+  async latestAssessments({ studyId, subjectKey }) {
+    const rows = await this.rows(
+      `SELECT DISTINCT ON (candidate_trial_id) * FROM ${VCR_SCHEMA}.candidate_trial_assessments
+        WHERE study_id = $1 AND subject_key = $2 ORDER BY candidate_trial_id, as_of DESC, created_at DESC`, [studyId, subjectKey]);
+    return new Map(rows.map((row) => [String(row.candidate_trial_id), /** @type {any} */ (assessmentOf(row))]));
+  }
+
+  // --------------------------------------------- language criteria
+
+  /**
+   * The answer to a criterion of a candidate trial that only language can decide, bound to that trial (and to the wording of the criteria
+   * that carry the key, so an answer to a criterion that has since changed is not read as an answer to the new one). Each answer is its own
+   * row; the newest per (patient, key) is the one evaluated. The quotation's own check is the writer's, and the evaluator re-reads it.
+   * @param {{ studyId: string, userId: string, subjectKey: string, candidateTrialId: string, criterionKey: string, state: string,
+   *   evidence: readonly any[], provenance?: any }} input
+   */
+  async saveLanguageJudgment({ studyId, userId, subjectKey, candidateTrialId, criterionKey, state, evidence, provenance = null }) {
+    return this.transaction(async (client) => {
+      const trial = (await client.query(`SELECT id FROM ${VCR_SCHEMA}.candidate_trials WHERE id = $1 AND study_id = $2`, [candidateTrialId, studyId])).rows[0];
+      if (!trial) throw new HttpError(409, "vcr_write_refused", "This candidate trial is not the study's.");
+      const criteria = (await client.query(
+        `SELECT * FROM ${VCR_SCHEMA}.candidate_trial_criteria WHERE candidate_trial_id = $1 ORDER BY ordinal`, [trial.id])).rows.map(criterionOf)
+        .filter((/** @type {any} */ criterion) => languageKeysOf(criterion.requirement, criterion.id).includes(criterionKey));
+      if (!criteria.length) throw new HttpError(409, "vcr_criterion_malformed", "This language key does not belong to the candidate trial.");
+      const visibleAt = (evidence ?? []).map((/** @type {any} */ item) => Date.parse(item?.visibleAt ?? "")).filter(Number.isFinite);
+      const row = (await client.query(
+        `INSERT INTO ${VCR_SCHEMA}.language_judgments
+           (id, study_id, user_id, subject_key, criterion_key, state, evidence, visible_at, protocol_version_id, candidate_trial_id, criterion_hash, provenance)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NULL, $9, $10, $11::jsonb) RETURNING *`,
+        [vcrId("judgment"), studyId, userId, subjectKey, criterionKey, state, JSON.stringify(evidence ?? []),
+          new Date(visibleAt.length ? Math.max(...visibleAt) : Date.now()).toISOString(), trial.id,
+          languageCriterionHash(/** @type {any} */ (criteria), criterionKey), provenance ? JSON.stringify(provenance) : null])).rows[0];
+      if (provenance) {
+        await client.query(
+          `INSERT INTO ${VCR_SCHEMA}.matching_producers (study_id, target_id, producer_hash, provenance) VALUES ($1, $2, $3, $4::jsonb) ON CONFLICT DO NOTHING`,
+          [studyId, row.id, matchingInputDigest(provenance), JSON.stringify(provenance)]);
+      }
+      await this.audit({ client, studyId, userId, actor: "runtime", action: "vcr.candidate_language_judgment.save", object: row.id,
+        detail: { candidateTrialId, subjectKey, criterionKey, state } });
+      return { id: String(row.id), subjectKey, criterionKey, state };
+    });
+  }
+
+  /**
+   * The newest answer per criterion key about one patient and one candidate trial, visible by `visibleBy`: `{ criterionKey → { id, state,
+   * evidence, … } }`, only those whose key and wording still match the trial's criteria.
+   * @param {{ studyId: string, candidateTrialId: string, subjectKey: string, visibleBy?: string | null }} input
+   * @returns {Promise<Record<string, any>>}
+   */
+  async latestLanguageJudgments({ studyId, candidateTrialId, subjectKey, visibleBy = null }) {
+    const criteria = await this.listCriteria(candidateTrialId);
+    const rows = await this.rows(
+      `SELECT DISTINCT ON (criterion_key) * FROM ${VCR_SCHEMA}.language_judgments
+        WHERE study_id = $1 AND candidate_trial_id = $2 AND subject_key = $3 AND ($4::timestamptz IS NULL OR visible_at <= $4)
+        ORDER BY criterion_key, created_at DESC, id DESC`, [studyId, candidateTrialId, subjectKey, visibleBy]);
+    /** @type {Record<string, any>} */
+    const answers = {};
+    for (const row of rows) {
+      const bound = criteria.filter((/** @type {any} */ criterion) => languageKeysOf(criterion.requirement, criterion.id).includes(row.criterion_key));
+      if (!bound.length || row.criterion_hash !== languageCriterionHash(/** @type {any} */ (bound), row.criterion_key)) continue;
+      answers[String(row.criterion_key)] = languageInput({ id: row.id, state: row.state, evidence: row.evidence, protocolVersionId: null,
+        criterionHash: row.criterion_hash, provenance: row.provenance });
+    }
+    return answers;
   }
 }
