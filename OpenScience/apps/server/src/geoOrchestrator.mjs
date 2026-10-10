@@ -1117,14 +1117,19 @@ export class GeoOrchestrator {
     const value = await this.store.latestValue(project.id);
     return { key: mark.key, purpose: "research", capabilityId: mark.detail.capabilityId, reason: "geo:research", steps: [],
       detail: { ...mark.detail, basisVersion: value.version }, brief: [
-        `Research the following question for this GEO project: ${mark.detail.question}`,
-        `Context: ${JSON.stringify({ product: project.product, ...mark.detail })}`,
-        `Existing analysis (version ${value.version}): ${JSON.stringify(value.data).slice(0, 20000)}`,
-        "Reuse the available analysis and project files. If GEO tools are available, read value and research for additional context before doing new research.",
-        "Use the selected specialist's methods only where the question and available inputs warrant them. Preserve partial, negative and conflicting findings; describe unavailable calculations and continue with usable work.",
-        "Translate the result into decision-relevant benefits, risks, costs, treatment burden or access, with known population/comparator/region/time and source references. Do not infer incidence or causation from reporting signals.",
-        "Use geo_write(value) to append or amend findings and researchResults, linking supplied findingIds/groupIds/opportunityId where known. Alternatively place an optional geo-value.json beside the report; the platform imports it. Missing metadata never requires another research run.",
-        "Do not queue another research task to complete this one. Finish the available work and name any remaining uncertainty.",
+        "“循证 GEO”自动运行 · 专题研究",
+        productLine(project),
+        `这次要研究的问题：${mark.detail.question}`,
+        `背景：${JSON.stringify({ product: project.product, ...mark.detail })}`,
+        `已有的药品价值分析（第 ${value.version} 版）：${JSON.stringify(value.data).slice(0, 20000)}`,
+        // The report is what the researcher reads, and the module's readers read Chinese: the language is stated, not left to be guessed (D-23).
+        "报告用简体中文写。",
+        "先读 geo_read value 与 research，已有的分析和项目文件先复用，缺什么补什么。",
+        "所选专科的方法只在问题和手头的输入需要时才用。不完整的、阴性的和互相矛盾的发现都保留；算不了的计算写明原因，其余能做的照常做完。",
+        "结果落到与决策有关的获益、风险、费用、治疗负担或可及性上，写明人群、比较对象、地区、时间和来源；不要从自发报告信号推出发生率或因果。",
+        "用 geo_write value 追加或修订 findings 与 researchResults，已知的 findingIds、groupIds、opportunityId 一并挂上；也可以把 geo-value.json 放在报告旁边，平台会导入。元数据不全不需要再开一轮研究。",
+        "不要为了做完这一项再排新的研究任务。能做的做完，剩下的不确定写明。",
+        DATA_LINE,
       ].join("\n") };
   }
 

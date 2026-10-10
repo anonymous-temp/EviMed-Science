@@ -257,6 +257,29 @@ test("a research task the allowance refuses does not hold the programme's own st
   assert.equal(outcome.deferred, "credits_insufficient_for_capability");
 });
 
+test("a research task's brief is written like the other briefs, in Chinese, and names the language of the report (D-23)", options, async () => {
+  const project = await store.createProject({ userId: "alice", projectId: randomUUID(), engines: ["deepseek"], coverageDays: 90,
+    product: { brandName: "玛仕度肽", genericName: "mazdutide" } });
+  await store.writeValue("alice", project.id, { findings: [{ id: "f1", statement: "每周一次给药" }] });
+  const requested = await store.requestResearch("alice", project.id, { capabilityId: "adr-analysis", question: "老年人的低血糖风险有多大", findingIds: ["f1"] });
+  assert.ok(requested.request);
+  /** @type {any[]} */
+  const dispatched = [];
+  const orchestrator = new GeoOrchestrator({ store, config: {}, dispatchRun: async (input) => {
+    dispatched.push(input);
+    return { runId: "r1", sessionId: "s1", status: "running" };
+  } });
+  await orchestrator.advance(project.id);
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0].capabilityId, "adr-analysis");
+  const brief = String(dispatched[0].brief);
+  assert.match(brief, /^“循证 GEO”自动运行 · 专题研究\n产品：玛仕度肽（通用名：mazdutide）。\n/, "the heading and the product line every GEO brief starts with");
+  assert.match(brief, /老年人的低血糖风险有多大/, "the question itself, as asked");
+  assert.match(brief, /报告用简体中文写/, "the language of the report is stated");
+  assert.match(brief, /geo_read value 与 research/);
+  assert.doesNotMatch(brief, /Research the following question|Reuse the available analysis|Do not queue another/, "no English instruction is left in it");
+});
+
 test("population change versions a claim; retraction never resurrects an older active claim; frozen rounds keep their basis", options, async () => {
   const project = await fresh();
   const claim = { claimKey: "benefit", statement: "Effect in the studied population", quote: "Adults were enrolled", sourceRef: "trial", population: "Adults" };
