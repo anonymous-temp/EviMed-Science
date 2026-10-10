@@ -34,6 +34,24 @@ describe("分享给平台里的人", () => {
     expect(await screen.findByText("已发给 1 位；其余 2 位没有送达（名字没有对上，或对方不能接收）。")).toBeInTheDocument();
   });
 
+  it("signs a delivery and a link with the card it is given — the sender's 署名 — and sends nothing extra without one", async () => {
+    client.deliverCapsule.mockResolvedValue({ delivered: 1, notDelivered: 0, snapshot: null });
+    client.createShareLink.mockResolvedValue({ token: "t".repeat(32), path: `/app/memory/shared/${"t".repeat(32)}`, link: {}, snapshot: {} });
+    const { rerender } = render(<CapsuleSharePanel capsuleId="cap-1" card={{ author: "心内科 王医生" }} />);
+    await userEvent.type(screen.getByLabelText("发给平台内的账号"), "Alice Reader");
+    await userEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(client.deliverCapsule).toHaveBeenCalledWith("cap-1", { recipients: ["Alice Reader"], card: { author: "心内科 王医生" } }));
+    await userEvent.click(screen.getByRole("button", { name: "创建分享链接" }));
+    await waitFor(() => expect(client.createShareLink).toHaveBeenCalledWith("cap-1", { card: { author: "心内科 王医生" } }));
+    // The signature is the dialog's to change between shares: the next one is made with whatever it holds then.
+    rerender(<CapsuleSharePanel capsuleId="cap-1" card={undefined} />);
+    await userEvent.type(screen.getByLabelText("发给平台内的账号"), "Bob Reader");
+    await userEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(client.deliverCapsule).toHaveBeenLastCalledWith("cap-1", { recipients: ["Bob Reader"] }));
+    await userEvent.click(screen.getByRole("button", { name: "创建分享链接" }));
+    await waitFor(() => expect(client.createShareLink).toHaveBeenLastCalledWith("cap-1"));
+  });
+
   it("says nothing arrived without saying why, and shows what an unsuccessful send said", async () => {
     client.deliverCapsule.mockResolvedValueOnce({ delivered: 0, notDelivered: 1, snapshot: null });
     render(<CapsuleSharePanel capsuleId="cap-1" />);

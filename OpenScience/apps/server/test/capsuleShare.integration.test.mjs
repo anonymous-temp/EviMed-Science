@@ -9,6 +9,7 @@ import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { packCapsule } from "../src/capsuleContainer.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleShareLinks } from "../src/capsuleShareLinks.mjs";
+import { sharedFrom } from "../src/capsuleShareLabel.mjs";
 import { capsuleShareMetricFamilies, resetCapsuleShareMetrics } from "../src/capsuleShareMetrics.mjs";
 import { CapsuleSharing } from "../src/capsuleSharing.mjs";
 import { createGuestInfluence, shareIsCorroborated } from "../src/capsuleShareTrust.mjs";
@@ -185,6 +186,72 @@ test("a recipient is never told a sender's login id or e-mail address, in the li
   } finally {
     await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[plain, mailed]]);
   }
+});
+
+test("a sender may sign each share with a name of their own, and the recipient sees that name wherever the sender would have been named (C4c)", options, async () => {
+  const { capsule } = await authored("按署名分享的做法。");
+  // Without one the share is signed as it always was: the display name.
+  const plain = await transfers.exportPreview(author, capsule.id, { scopes: ["workstyle"] });
+  assert.equal(plain.card.author, "李主任");
+  assert.equal((await transfers.exportPreview(author, capsule.id, { scopes: ["workstyle"], card: { author: "   " } })).card.author, "李主任", "a blank signature is none");
+  // The signature typed for a share is the card's author, and the card's default title follows it.
+  const signed = await transfers.exportPreview(author, capsule.id, { scopes: ["workstyle"], card: { author: "  心内科  王医生 " } });
+  assert.equal(signed.card.author, "心内科 王医生", "whitespace is flattened");
+  assert.equal(signed.card.title, "心内科 王医生的工作方式");
+
+  // An in-app delivery: stored with the snapshot, and the list, the notice, the opened delivery, the copy and recall all say it.
+  const delivered = await sharing.deliver(author, capsule.id, { recipients: [alice, bob], card: { author: "心内科 王医生" } });
+  assert.equal(delivered.snapshot.card.author, "心内科 王医生", "stored with the share");
+  const mine = (await sharing.pending(alice)).find((item) => item.snapshotId === delivered.snapshot.id);
+  assert.equal(mine.sender.name, "心内科 王医生");
+  assert.equal(mine.card.author, "心内科 王医生");
+  assert.match((await shareNotices(alice)).find((item) => item.source.id === `delivery/${mine.id}`).title, /^心内科 王医生 向你分享了/);
+  const opened = await sharing.open(alice, mine.id);
+  assert.equal(opened.delivery.sender.name, "心内科 王医生");
+  assert.equal(opened.preview.card.author, "心内科 王医生");
+  const copy = await sharing.import(alice, mine.id, { expectedDigest: opened.preview.archiveSha256, title: "王医生的做法" });
+  assert.equal(copy.payload.share.authorName, "心内科 王医生");
+  assert.equal(sharedFrom(copy)?.label, "来自 心内科 王医生 的分享", "the label a recall puts under each entry");
+  const fact = (await capsules.entries(alice, copy.id)).items[0];
+  assert.equal(sharedFrom(copy, fact.payload)?.label, "来自 心内科 王医生 的分享");
+  assert.ok(!JSON.stringify([mine, opened, copy]).includes("李主任"), "the account's display name is nowhere in what the recipient was handed");
+  // And when it is taken back before the other recipient opened it.
+  const snapshot = (await transfers.history(author, capsule.id)).items.find((item) => item.id === delivered.snapshot.id);
+  await transfers.revoke(author, capsule.id, snapshot.id, snapshot.revision);
+  await sharing.afterRevoke(author, snapshot.id);
+  assert.ok((await shareNotices(bob)).some((item) => item.title.startsWith("心内科 王医生撤回了发给你的一份分享")), "the withdrawal names the signature too");
+
+  // A link.
+  const link = await sharing.createLink(author, capsule.id, { card: { author: "Dr. Wang (Cardiology)" } });
+  const redeemed = await sharing.openLink(dave, link.token);
+  assert.equal(redeemed.preview.card.author, "Dr. Wang (Cardiology)");
+  const linked = await sharing.importLink(dave, link.token, { expectedDigest: redeemed.preview.archiveSha256, title: "x" });
+  assert.equal(linked.payload.share.authorName, "Dr. Wang (Cardiology)");
+
+  // A file: the snapshot's card, and what a recipient of the file reads.
+  const file = await transfers.export(author, capsule.id, { password: "test-only-signature-password", scopes: ["workstyle"], card: { author: "王医生" } });
+  assert.equal(file.snapshot.card.author, "王医生");
+  assert.equal((await transfers.preview(carol, { archive: file.archive, password: "test-only-signature-password" })).card.author, "王医生");
+  // The next share is signed as the sender chooses again: nothing was remembered.
+  assert.equal((await transfers.exportPreview(author, capsule.id, { scopes: ["workstyle"] })).card.author, "李主任");
+});
+
+test("a signature is bounded, and one that is the login name or holds an address becomes the neutral label instead of an error (C4c)", options, async () => {
+  const { capsule } = await authored("署名的边界。");
+  /** @param {unknown} typed */
+  const signedAs = async (typed) => (await transfers.exportPreview(author, capsule.id, { scopes: ["workstyle"], card: { author: typed } })).card.author;
+  for (const typed of ["wang@example.invalid", "王医生 <wang@example.invalid>", author, author.toUpperCase()]) assert.equal(await signedAs(typed), "一位研究者", typed);
+  assert.equal(await signedAs("名".repeat(60)), "名".repeat(60), "the bound itself is allowed");
+  for (const tooLong of ["名".repeat(61), "x".repeat(151)]) {
+    await assert.rejects(signedAs(tooLong), { code: "capsule_transfer_invalid" }, `${tooLong.length} characters`);
+    await assert.rejects(sharing.deliver(author, capsule.id, { recipients: [alice], card: { author: tooLong } }), { code: "capsule_transfer_invalid" });
+  }
+  await assert.rejects(signedAs(42), { code: "capsule_transfer_invalid" });
+  // A delivery signed with an address says the neutral label to its recipient, and no address anywhere.
+  const delivered = await sharing.deliver(author, capsule.id, { recipients: [carol], card: { author: "wang@example.invalid" } });
+  const mine = (await sharing.pending(carol)).find((item) => item.snapshotId === delivered.snapshot.id);
+  assert.equal(mine.sender.name, "一位研究者");
+  assert.ok(!JSON.stringify([mine, delivered.snapshot]).includes("example.invalid"));
 });
 
 test("a share link is redeemed by an account until its expiry, its cap or its revocation, and stores no plaintext token", options, async () => {

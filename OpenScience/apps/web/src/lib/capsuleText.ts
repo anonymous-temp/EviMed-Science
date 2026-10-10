@@ -39,3 +39,9 @@ export const CAPSULE_SCAN_MODEL_STATUS: Record<string, string> = {
 export function fromSender(author: string): string {
   return /^[A-Za-z0-9]/.test(author) ? `来自 ${author}` : `来自${author}`;
 }
+
+/**
+ * The longest signature (署名) the share dialog takes, in characters: the bound the control plane enforces
+ * (`SIGNATURE_MAX_CHARS` in `capsuleShareLabel.mjs`; a server test holds the two equal).
+ */
+export const CAPSULE_SIGNATURE_MAX_CHARS = 60;

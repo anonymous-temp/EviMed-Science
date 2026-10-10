@@ -50,14 +50,19 @@ function deliveryView(row) {
 }
 
 /**
- * The sender as a recipient is told of them: the account's display name, never its login id and never an e-mail address
- * (`senderDisplayName`). Read from the account row each time, so it holds for a delivery made before the rule as well as after
- * it (2026-10-10 review M-9: the name defaults to the login id, and an external identity's was its address).
- * @param {{ sender_name?: unknown, owner_id?: unknown }} row
+ * The sender as a recipient is told of them: the name the share was signed with (署名: its snapshot's card author, 2026-10-10
+ * review C4c) or, for a share signed with none, the account's display name — in either case never the login id and never an
+ * e-mail address (`senderDisplayName`). Read from the rows each time, so it holds for a delivery made before the rules as well as
+ * after them (review M-9: the display name defaults to the login id, and an external identity's was its address).
+ * @param {{ sender_name?: unknown, owner_id?: unknown, signed_as?: unknown, card?: { author?: unknown } | null }} row
  */
 function senderOf(row) {
-  return { name: senderDisplayName(row.sender_name, row.owner_id) };
+  const signed = typeof row.signed_as === "string" ? row.signed_as : row.card?.author;
+  return { name: senderDisplayName(typeof signed === "string" && signed.trim() ? signed : row.sender_name, row.owner_id) };
 }
+
+/** What a delivery's snapshot was signed with: the author of its card. Spliced into the queries that name a delivery's sender. */
+const SIGNED_AS = "(SELECT s.payload->'card'->>'author' FROM evimed_product.documents s WHERE s.user_id=d.owner_id AND s.kind='preferences' AND s.id=d.snapshot_id)";
 
 export class CapsuleSharing {
   /**
@@ -174,7 +179,7 @@ export class CapsuleSharing {
    */
   async #mine(userId, deliveryId) {
     await migrateCapsuleShare(this.database);
-    const row = (await this.database.query(`SELECT d.*, u.name AS sender_name FROM evimed_share.deliveries d JOIN evimed_control.users u ON u.id=d.owner_id
+    const row = (await this.database.query(`SELECT d.*, u.name AS sender_name, ${SIGNED_AS} AS signed_as FROM evimed_share.deliveries d JOIN evimed_control.users u ON u.id=d.owner_id
       WHERE d.id=$1 AND d.recipient_id=$2`, [productId(deliveryId, "delivery"), userId])).rows[0];
     if (!row) throw new HttpError(404, "capsule_share_not_found", "The share is unavailable.");
     return row;
@@ -191,7 +196,7 @@ export class CapsuleSharing {
     if (["withdrawn", "taken_down", "declined"].includes(row.state)) return { delivery: view(), preview: null };
     if (row.state === "delivered") {
       const opened = (await this.database.query("UPDATE evimed_share.deliveries SET state='opened', opened_at=clock_timestamp() WHERE id=$1 AND state='delivered' RETURNING *", [row.id])).rows[0];
-      if (opened) row = { ...opened, sender_name: row.sender_name };
+      if (opened) row = { ...opened, sender_name: row.sender_name, signed_as: row.signed_as };
     }
     let preview = null;
     try {
@@ -366,7 +371,11 @@ export class CapsuleSharing {
 
   /** The withdrawal notice of one delivery: said once, as withdrawn, to a recipient who has not taken the pack in. @param {any} delivery */
   async #tellWithdrawn(delivery) {
-    const named = String((await this.database.query("SELECT name FROM evimed_control.users WHERE id=$1", [delivery.owner_id])).rows[0]?.name ?? "").trim();
+    // The name the share was signed with, as the recipient has always known the sender by; else the account's display name.
+    const found = (await this.database.query(`SELECT u.name, (SELECT s.payload->'card'->>'author' FROM evimed_product.documents s
+      WHERE s.user_id=u.id AND s.kind='preferences' AND s.id=$2) AS signed_as FROM evimed_control.users u WHERE u.id=$1`, [delivery.owner_id, delivery.snapshot_id])).rows[0];
+    const signed = String(found?.signed_as ?? "").trim();
+    const named = signed || String(found?.name ?? "").trim();
     const sender = named ? senderDisplayName(named, delivery.owner_id) : "";
     await this.#notify(delivery.recipient_id, `withdrawn/${delivery.id}`, `share-withdrawn:${delivery.id}`,
       clip(`${sender || "分享的人"}撤回了发给你的一份分享`, 150), "这份分享已被撤回，不能再收下。已经收下的副本不受影响。");

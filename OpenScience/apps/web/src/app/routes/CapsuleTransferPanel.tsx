@@ -7,7 +7,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { Tabs } from "@/components/ui/Tabs";
-import { CAPSULE_SCAN_REASONS, capsuleEntryLabel, fromSender } from "@/lib/capsuleText";
+import { CAPSULE_SCAN_REASONS, CAPSULE_SIGNATURE_MAX_CHARS, capsuleEntryLabel, fromSender } from "@/lib/capsuleText";
 import { takeDownSnapshot } from "@/lib/capsuleShareClient";
 import { useCapsuleShareFeature } from "@/lib/capsuleShareFeature";
 import { formatDateTime } from "@/lib/format";
@@ -57,6 +57,11 @@ function useAction() {
  * two red buttons, 撤销 and 下架并停用副本, side by side, that did different
  * irreversible things. What cannot be taken back is said in that confirmation,
  * and nowhere else.
+ *
+ * 署名 (2026-10-10 review C4c) is the one optional field above the three ways of
+ * sharing: the name this share is signed with, which every recipient sees. It
+ * arrives filled in with the name the account already has, and a share is made
+ * with a signature of its own only when the field holds a different one.
  */
 export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
   const [password, setPassword] = useState("");
@@ -74,11 +79,19 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
   // Sharing between accounts has its own switch: its panel, and the copies a withdrawal also stops, exist only where the server says so.
   const sharing = useCapsuleShareFeature() === "on";
   const [loading, setLoading] = useState(false);
+  /** 署名: filled in with the name the account has once the preview says it, and the sender's own after that. */
+  const [signature, setSignature] = useState("");
+  const signatureTyped = useRef(false);
   const { busy, error, notice, setError, setNotice, perform, mounted } = useAction();
   const capsuleId = capsule?.deletedAt ? null : capsule?.id;
   const currentCapsuleId = useRef(capsuleId);
   currentCapsuleId.current = capsuleId;
   const scopes = ["workstyle", ...(profile ? ["+profile"] : []), ...(knowledge ? ["+knowledge"] : [])];
+  const accountSignature = outgoing?.card?.author ?? "";
+  useEffect(() => { if (!signatureTyped.current && accountSignature) setSignature(accountSignature); }, [accountSignature]);
+  /** The card a share is signed with: the signature typed, unless it is the name the account has (or nothing), which the server fills in itself. */
+  const typedSignature = signature.trim();
+  const signedCard = typedSignature && typedSignature !== accountSignature ? { author: typedSignature } : undefined;
 
   useEffect(() => {
     let active = true; setHistory([]); setHistoryCursor(null);
@@ -106,7 +119,7 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
 
   const createExport = (secret: string, supersedes?: string, savedScopes?: string[]) => perform(async () => {
     if (!capsuleId || !secret) return;
-    const result = await exportCapsule(capsuleId, { password: secret, scopes: savedScopes ?? scopes, ...(supersedes ? { supersedes } : {}) });
+    const result = await exportCapsule(capsuleId, { password: secret, scopes: savedScopes ?? scopes, ...(supersedes ? { supersedes } : {}), ...(signedCard ? { card: signedCard } : {}) });
     saveCapsuleDownload(result.archive, result.filename);
     if (mounted.current) { setPassword(""); setUpdating(null); setRefresh(value => value + 1); setNotice("已下载"); }
   });
@@ -142,6 +155,11 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
     </div>}
     {notice && <p role="status" className="text-ui text-text-2">{notice}</p>}
 
+    <div className="max-w-measure">
+      <Input label="署名" value={signature} disabled={busy || !capsuleId} maxLength={CAPSULE_SIGNATURE_MAX_CHARS}
+        onChange={event => { signatureTyped.current = true; setSignature(event.target.value); }} />
+    </div>
+
     <section className="space-y-3" aria-label="加密导出">
       <h3 className="text-ui font-semibold text-text">导出为加密文件</h3>
       <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-ui text-text">
@@ -173,7 +191,7 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
       </div>
     </section>
 
-    {sharing && <CapsuleSharePanel capsuleId={capsuleId ?? null} />}
+    {sharing && <CapsuleSharePanel capsuleId={capsuleId ?? null} card={signedCard} />}
 
     {capsuleId && <section className="space-y-2" aria-label="导出的版本">
       <h3 className="text-ui font-semibold text-text">导出的版本</h3>

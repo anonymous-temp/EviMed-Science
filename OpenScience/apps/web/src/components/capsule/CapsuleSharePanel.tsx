@@ -8,7 +8,7 @@ import {
   type DeliveryState, type SentDelivery, type ShareLink,
 } from "@/lib/capsuleShareClient";
 import { formatDateTime } from "@/lib/format";
-import { productErrorMessage } from "@/lib/productClient";
+import { productErrorMessage, type CapsuleCard } from "@/lib/productClient";
 
 export const DELIVERY_STATE_LABELS: Record<DeliveryState, string> = {
   delivered: "已送达", opened: "已打开", imported: "已收下", declined: "已拒收", withdrawn: "已撤回", taken_down: "已下架",
@@ -28,9 +28,10 @@ export function recipientsOf(text: string): string[] {
  * 「分享给平台里的人」, inside 分享与导入 (evidence-flywheel F17, 2026-10-05): hand the capsule to named accounts of this platform in
  * one step, make a link only signed-in accounts can open, and take the approved methods out as a folder each, in the open Agent Skills format. What
  * travels between people is text only. Nothing here lists accounts: a name is typed in full, and the answer to a delivery is how many
- * arrived, the same whatever kept the others from arriving.
+ * arrived, the same whatever kept the others from arriving. `card` is what the sender signs these shares with (the 署名 of the dialog it
+ * sits in); without one the shares are signed as the account always was.
  */
-export function CapsuleSharePanel({ capsuleId }: { capsuleId: string | null }) {
+export function CapsuleSharePanel({ capsuleId, card }: { capsuleId: string | null; card?: CapsuleCard }) {
   const [names, setNames] = useState("");
   const [sent, setSent] = useState<SentDelivery[]>([]);
   const [links, setLinks] = useState<ShareLink[]>([]);
@@ -85,7 +86,7 @@ export function CapsuleSharePanel({ capsuleId }: { capsuleId: string | null }) {
       <p className="text-caption text-text-3">对方会在收件箱里收到一条通知，可以先预览、试用一次，再决定收不收下。只分享文字，不含脚本。</p>
       <Button disabled={busy || !capsuleId || recipients.length === 0} onClick={() => void perform(async () => {
         if (!capsuleId) return;
-        const result = await deliverCapsule(capsuleId, { recipients });
+        const result = await deliverCapsule(capsuleId, { recipients, ...(card ? { card } : {}) });
         if (!mounted.current) return;
         setNames(""); setRefresh((value) => value + 1);
         setNotice(result.delivered === 0 ? "没有送达任何人：名字没有对上，或对方现在不能接收。"
@@ -105,7 +106,7 @@ export function CapsuleSharePanel({ capsuleId }: { capsuleId: string | null }) {
     <div className="space-y-2">
       <Button variant="secondary" disabled={busy || !capsuleId} onClick={() => void perform(async () => {
         if (!capsuleId) return;
-        const made = await createShareLink(capsuleId);
+        const made = await (card ? createShareLink(capsuleId, { card }) : createShareLink(capsuleId));
         if (mounted.current) { setCreated(`${window.location.origin}${made.path}`); setRefresh((value) => value + 1); }
       })}>创建分享链接</Button>
       <p className="text-caption text-text-3">只有登录的平台账号能打开；默认 30 天有效、最多 20 人用，随时可以撤回。</p>
