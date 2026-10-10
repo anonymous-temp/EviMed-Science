@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { SIDEBAR_DRAWER_QUERY } from "@/lib/sidebarLayout";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -7,6 +8,15 @@ const SIDEBAR_WIDTH_KEY = "ai4s.sidebar.width";
 const SIDEBAR_COLLAPSED_KEY = "ai4s.sidebar.collapsed";
 const INSPECTOR_WIDTH_KEY = "ai4s.inspector.width";
 const SINGLE_KEY_SHORTCUTS_KEY = "ai4s.shortcuts.single";
+
+function sidebarIsDrawer(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(SIDEBAR_DRAWER_QUERY).matches;
+}
+
+/** Whether the reader left the sidebar column closed (an absent key is the default: open). */
+function storedSidebarCollapsed(): boolean {
+  return typeof window !== "undefined" && window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+}
 
 export const SIDEBAR_MIN = 184;
 export const SIDEBAR_MAX = 340;
@@ -72,6 +82,8 @@ interface UiState {
   setInspectorMaximized: (maximized: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebar: () => void;
+  /** The sidebar as the layout wants it: a drawer is closed, a column is as the reader last left it. */
+  settleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
   setSingleKeyShortcuts: (on: boolean) => void;
 }
@@ -79,8 +91,7 @@ interface UiState {
 export const useUiStore = create<UiState>((set, get) => ({
   theme: initialTheme(),
   inspectorOpen: true,
-  sidebarCollapsed:
-    typeof window !== "undefined" && window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1",
+  sidebarCollapsed: storedSidebarCollapsed(),
   sidebarWidth: initialSidebarWidth(),
   singleKeyShortcuts: initialSingleKeyShortcuts(),
   setSingleKeyShortcuts: (singleKeyShortcuts) => {
@@ -107,12 +118,16 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ inspectorWidth });
   },
   setInspectorMaximized: (inspectorMaximized) => set({ inspectorMaximized }),
+  // From `lg` up the sidebar is a column and its state is the reader's preference, kept for the next visit. Below it, it is a drawer
+  // over the page — closed on every visit and opened and shut as the page needs — and writing that down handed a phone's closed
+  // drawer to the same browser at desktop width as a closed column (live walk 2026-10-10, L-13).
   setSidebarCollapsed: (sidebarCollapsed) => {
-    if (typeof window !== "undefined")
+    if (typeof window !== "undefined" && !sidebarIsDrawer())
       window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? "1" : "0");
     set({ sidebarCollapsed });
   },
   toggleSidebar: () => get().setSidebarCollapsed(!get().sidebarCollapsed),
+  settleSidebar: () => set({ sidebarCollapsed: sidebarIsDrawer() || storedSidebarCollapsed() }),
   setSidebarWidth: (width) => {
     const sidebarWidth = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(width)));
     if (typeof window !== "undefined")

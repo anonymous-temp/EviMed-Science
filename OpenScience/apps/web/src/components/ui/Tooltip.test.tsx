@@ -62,6 +62,23 @@ describe("Tooltip", () => {
     expect(shown()).toBe(false);
   });
 
+  // L-13 (live walk 2026-10-10): a tap on the drawer's scrim removed the scrim, the shell moved focus to the expand button, and the browser
+  // read that as the keyboard's (focus from code with nothing focused before it): 「展开侧边栏 (Ctrl+B)」 opened over the page's title on a phone.
+  it("is not opened by focus that code gives after a press or a tap, and the next key hands focus back to the keyboard", () => {
+    render(<Tooltip content="展开侧边栏 (Ctrl+B)"><button type="button">展开</button></Tooltip>);
+    const trigger = screen.getByRole("button");
+    // A tap elsewhere — the scrim. jsdom has no PointerEvent, so the pointer's type is set on the event.
+    const tap = createEvent.pointerDown(document.body);
+    Object.defineProperty(tap, "pointerType", { value: "touch" });
+    fireEvent(document.body, tap);
+    act(() => { trigger.focus(); });
+    expect(shown()).toBe(false);
+    act(() => { trigger.blur(); });
+    fireEvent.keyDown(document.body, { key: "Tab" });
+    act(() => { trigger.focus(); });
+    expect(shown()).toBe(true);
+  });
+
   it("is not opened by a click, and a click closes one that is open", () => {
     render(<Tooltip content="全文"><button type="button">截断</button></Tooltip>);
     const trigger = screen.getByRole("button");
