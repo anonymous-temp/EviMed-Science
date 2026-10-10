@@ -92,8 +92,14 @@ export class VcrErasureStore extends VcrStoreBase {
    * @param {any} client @param {string} studyId
    */
   async #frozenReferences(client, studyId) {
-    const facts = await client.query(`SELECT DISTINCT ref->>'id' AS id FROM ${VCR_SCHEMA}.matching_inputs m, jsonb_array_elements(m.manifest->'facts') ref WHERE m.study_id=$1`, [studyId]);
-    const languages = await client.query(`SELECT DISTINCT ref->>'id' AS id FROM ${VCR_SCHEMA}.matching_inputs m, jsonb_array_elements(m.manifest->'languages') ref WHERE m.study_id=$1`, [studyId]);
+    // A frozen matching input names its facts and judgments by id and hash, and so does a correction case captured from an
+    // evaluation: both are verified later against the digest they were frozen under, so neither may be deleted.
+    const facts = await client.query(`SELECT ref->>'id' AS id FROM ${VCR_SCHEMA}.matching_inputs m, jsonb_array_elements(m.manifest->'facts') ref WHERE m.study_id=$1
+      UNION SELECT ref->>'id' FROM ${VCR_SCHEMA}.audit a, jsonb_array_elements(COALESCE(a.detail->'evaluationCase'->'facts','[]'::jsonb)) ref
+        WHERE a.study_id=$1 AND a.action='vcr.judgment.override'`, [studyId]);
+    const languages = await client.query(`SELECT ref->>'id' AS id FROM ${VCR_SCHEMA}.matching_inputs m, jsonb_array_elements(m.manifest->'languages') ref WHERE m.study_id=$1
+      UNION SELECT ref->>'id' FROM ${VCR_SCHEMA}.audit a, jsonb_array_elements(COALESCE(a.detail->'evaluationCase'->'language','[]'::jsonb)) ref
+        WHERE a.study_id=$1 AND a.action='vcr.judgment.override'`, [studyId]);
     return { facts: new Set(facts.rows.map((/** @type {any} */ row) => String(row.id))), languages: new Set(languages.rows.map((/** @type {any} */ row) => String(row.id))) };
   }
 

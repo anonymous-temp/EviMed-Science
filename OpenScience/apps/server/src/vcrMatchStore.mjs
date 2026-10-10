@@ -574,8 +574,12 @@ export class VcrMatchStore extends VcrStoreBase {
   }
   /** @param {any} item */
   async correctionInputs(item) {
-    const facts = (await this.rows('SELECT * FROM evimed_vcr.matching_facts WHERE study_id=$1 AND id=ANY($2::text[]) ORDER BY array_position($2::text[],id)', [item.studyId,item.facts.map(row=>row.id)])).map(factOf);
-    const language = (await this.rows('SELECT * FROM evimed_vcr.language_judgments WHERE study_id=$1 AND id=ANY($2::text[]) ORDER BY array_position($2::text[],id)', [item.studyId,item.language.map(row=>row.id)])).map(row=>this.correctionLanguage(row));
+    const factRows = await this.rows('SELECT * FROM evimed_vcr.matching_facts WHERE study_id=$1 AND id=ANY($2::text[]) ORDER BY array_position($2::text[],id)', [item.studyId,item.facts.map(row=>row.id)]);
+    const languageRows = await this.rows('SELECT * FROM evimed_vcr.language_judgments WHERE study_id=$1 AND id=ANY($2::text[]) ORDER BY array_position($2::text[],id)', [item.studyId,item.language.map(row=>row.id)]);
+    // A case whose source was withdrawn has no text to replay: it reads as withdrawn, which is not a changed input.
+    if (factRows.some(row => row.withdrawn) || languageRows.some(row => row.withdrawn)) throw new HttpError(410,'vcr_document_withdrawn','This case rests on a source that was withdrawn.');
+    const facts = factRows.map(factOf);
+    const language = languageRows.map(row=>this.correctionLanguage(row));
     if (facts.length!==item.facts.length || language.length!==item.language.length || facts.some((row,index)=>correctionHash(row)!==item.facts[index].hash)
       || language.some((row,index)=>correctionHash(row)!==item.language[index].hash)) throw new HttpError(409,'vcr_evaluation_input_changed','A frozen case input changed.');
     return { facts, modelJudgments: Object.fromEntries(language.map(row=>[row.criterionKey,{state:row.state,evidence:row.evidence}])) };

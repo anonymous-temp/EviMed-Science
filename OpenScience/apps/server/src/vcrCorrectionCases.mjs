@@ -69,8 +69,24 @@ export function createVcrCorrectionCases({ store, matchStore, dataPlane, access 
     return { subjectKey: assessment.subjectKey, asOf: item.asOf, criteria: [item.criterion], ...loaded, documents,
       provenance: { vocabularyVersion: item.vocabularyVersion } };
   }
-  /** @param {any[]} items @param {string} principal */
-  async function verifyAll(items, principal) { for (const item of items) await hydrate(item, principal); }
+  /**
+   * Hydrate every case; a case whose source was withdrawn can no longer be replayed, so it is left out and counted while the
+   * others go on. Any other problem with a case is still a problem with the dataset.
+   * @param {any[]} items @param {string} principal
+   */
+  async function settle(items, principal) {
+    /** @type {any[]} */
+    const ready = [];
+    let withdrawn = 0;
+    for (const item of items) {
+      try { await hydrate(item, principal); ready.push(item); }
+      catch (error) {
+        if (/** @type {any} */ (error)?.code !== 'vcr_document_withdrawn') throw error;
+        withdrawn += 1;
+      }
+    }
+    return { ready, withdrawn };
+  }
   /** @param {string} studyId @param {string} datasetId */
   async function stored(studyId, datasetId) {
     if (!/^eds_[a-f0-9]{64}$/.test(datasetId ?? '')) throw new HttpError(404, 'vcr_evaluation_dataset_not_found', 'Dataset not found.');
@@ -88,10 +104,10 @@ export function createVcrCorrectionCases({ store, matchStore, dataPlane, access 
       const study = await authorize(studyId, principal);
       if (typeof after !== 'string' || !/^\d{1,19}$/.test(after) || BigInt(after) > 9223372036854775807n || !Number.isInteger(limit) || limit < 1 || limit > 200) throw new HttpError(400, 'vcr_evaluation_request_invalid', 'A bounded case page is required.');
       const page = await matchStore.correctionCases({ studyId, after, limit });
-      await verifyAll(page.items, principal);
+      const { ready, withdrawn } = await settle(page.items, principal);
       const core = { schemaVersion: VCR_CORRECTION_SCHEMA, studyId, vocabularyVersion: VCR_MATCHING_VOCABULARY_VERSION,
-        scope: 'document-anchored deterministic correction replay', cases: page.items.map(publicCorrectionCase),
-        selection: { after, limit, more: page.more, nextCursor: page.nextCursor, legacyUnfrozen: page.legacyUnfrozen } };
+        scope: 'document-anchored deterministic correction replay', cases: ready.map(publicCorrectionCase),
+        selection: { after, limit, more: page.more, nextCursor: page.nextCursor, legacyUnfrozen: page.legacyUnfrozen, ...(withdrawn ? { withdrawn } : {}) } };
       const datasetId = `eds_${correctionHash(core)}`;
       const prior = await matchStore.evaluationDataset(studyId, datasetId);
       if (prior) return prior;
@@ -103,15 +119,15 @@ export function createVcrCorrectionCases({ store, matchStore, dataPlane, access 
     async readDataset({ studyId, principal, datasetId }) {
       await authorize(studyId, principal);
       const { manifest, items } = await stored(studyId, datasetId);
-      await verifyAll(items, principal); return manifest;
+      await settle(items, principal); return manifest;
     },
     /** Gold stays outside assessSubject. Only counts/states/reference ids are retained.
      * @param {{studyId:string,principal:string,datasetId:string}} request */
     async replay({ studyId, principal, datasetId }) {
       const study = await authorize(studyId, principal);
       const { manifest, items } = await stored(studyId, datasetId);
-      await verifyAll(items, principal);
-      const selected = items.filter(item => item.partition === 'held_out');
+      const { ready, withdrawn } = await settle(items, principal);
+      const selected = ready.filter(item => item.partition === 'held_out');
       if (!selected.length) throw refused('vcr_evaluation_holdout_unavailable', 'No held-out correction case is available in this dataset page.');
       const cases = []; const pairs = [];
       for (const item of selected) {
@@ -123,7 +139,7 @@ export function createVcrCorrectionCases({ store, matchStore, dataPlane, access 
       }
       const metrics = matchingEvaluationReport({ label: 'Held-out correction cases', criterionPairs: pairs, subjectPairs: [], synthetic: false });
       const report = { schemaVersion: VCR_CORRECTION_SCHEMA, datasetId, partition: 'held_out', vocabularyVersion: VCR_MATCHING_VOCABULARY_VERSION,
-        evaluated: cases.length, matched: cases.filter(row => row.matched).length, criterion: metrics.criterion, cases,
+        evaluated: cases.length, matched: cases.filter(row => row.matched).length, criterion: metrics.criterion, cases, ...(withdrawn ? { withdrawn } : {}),
         inputDigest: correctionHash(manifest.cases), extractionRerun: false,
         note: 'Deterministic replay of frozen facts and language judgments; no clinical accuracy or independent rater agreement is inferred.' };
       await matchStore.audit({ studyId, userId: study.userId, actor: principal, action: 'vcr.evaluation.replay', object: datasetId, detail: { report } });

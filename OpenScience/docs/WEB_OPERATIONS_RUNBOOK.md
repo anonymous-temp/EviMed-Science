@@ -1600,7 +1600,9 @@ unavailable in a batch frozen before the withdrawal, and their open referrals cl
 (`POST .../data/projections/:projection/retire`, the source panel's 「停用并清除」): no
 read serves it, what was quoted from it is deleted or redacted, and the newest live
 projection (or, with none, the document under the deployment's agreements) is read
-instead. Structured data files in a snapshot are the snapshot's own record and are not
+instead. A correction case (study-local evaluation export) that rests on an erased source
+cannot be replayed: it is left out of an export and a replay and counted (`selection.
+withdrawn`, `withdrawn`), and the other cases go on. Structured data files in a snapshot are the snapshot's own record and are not
 rewritten; text already copied into the project's conversations, and into backups made
 before the erasure, follows those stores' retention. Full project/account deletion
 removes the study tables, protected study directory and project conversations through
