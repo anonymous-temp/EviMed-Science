@@ -153,6 +153,24 @@ test("an issue names every source by its institution — the safety block, the M
   assert.deepEqual(editor.calls[0].items.map((item) => item.sourceName), ["STAT"], "the AI minute is written from institution names");
 });
 
+test("F12b: a section that is full still carries the item the preprint lane selected, after the eight best", options, async () => {
+  await insertSource(database, "medrxiv", { name: "medRxiv", source_type: "preprint", authority: 2, owner_entity: "medRxiv" });
+  const summary = { summaryZh: "导读。", verification: "passed", selected: true };
+  const at = (/** @type {number} */ minute) => new Date(Date.UTC(2026, 8, 21, 1, minute)).toISOString();
+  const journal = [];
+  for (let index = 0; index < 11; index += 1) {
+    journal.push(await insertComposedItem(database, { ...summary, sourceId: "nejm", title: `Journal paper ${index}`, scoreTotal: 95 - index, visibleAt: at(index) }));
+  }
+  const preprint = await insertComposedItem(database, { ...summary, sourceId: "medrxiv", sourceType: "preprint", flags: ["preprint"], selectedRule: "preprint-lane",
+    title: "A preprint worth reading", scoreTotal: 62, visibleAt: at(30) });
+  const issue = await daily().compose(DAY);
+  assert.equal(issue.lead.itemId, journal[0].publicId);
+  assert.deepEqual(issue.sections.map((section) => section.lane), ["evidence"]);
+  assert.deepEqual(issue.sections[0].itemIds, [...journal.slice(1, 9).map((item) => item.publicId), preprint.publicId],
+    "the eight best of the rest, then the lane's; the two journal papers below the eight are cut as ever");
+  assert.equal(issue.itemIds.length, 10);
+});
+
 test("an issue knows the issues on either side of it: the nearest, since a quiet day has none", options, async () => {
   for (const day of ["2026-09-18", "2026-09-20", "2026-09-22"]) {
     await database.query(`INSERT INTO evimed_frontier.dailies (day, window_start, window_end, lead, sections, safety, markdown, item_ids, model)

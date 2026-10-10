@@ -7,6 +7,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FRONTIER_EDITOR_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
+import { FrontierDaily } from "../src/frontierDaily.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FRONTIER_TEXT_AFTER_ATTEMPT_MS, FrontierPipeline } from "../src/frontierPipeline.mjs";
@@ -87,6 +88,8 @@ const SOURCES = [
   { id: "r-medwatch", name: "FDA MedWatch", lane: "safety", source_type: "regulator", access: "rss", egress: "direct", authority: 5, safety_feed: true, owner_entity: "FDA", region: "US" },
   { id: "r-ema", name: "EMA news", lane: "regulatory", source_type: "regulator", access: "rss", egress: "direct", authority: 5, safety_feed: false, owner_entity: "EMA", region: "EU" },
   { id: "c-novo", name: "Novo Nordisk newsroom", lane: "pipeline", source_type: "company", access: "rss", egress: "direct", authority: 2, safety_feed: false, owner_entity: "Novo", region: "DK" },
+  { id: "p-medrxiv", name: "medRxiv", lane: "evidence", source_type: "preprint", access: "rss", egress: "direct", authority: 2, safety_feed: false, owner_entity: "medRxiv", region: "US" },
+  { id: "p-biorxiv", name: "bioRxiv", lane: "evidence", source_type: "preprint", access: "rss", egress: "direct", authority: 2, safety_feed: false, owner_entity: "bioRxiv", region: "US" },
   { id: "t-ctgov", name: "ClinicalTrials.gov", lane: "pipeline", source_type: "evidence-body", access: "json-api", egress: "api", authority: 4, safety_feed: false, owner_entity: "NLM", region: "US" },
 ];
 
@@ -165,8 +168,9 @@ const marker = (title, name) => new RegExp(`\\[${name}:([a-z0-9-]+)\\]`).exec(ti
 
 /**
  * An editor whose judgement is written into the titles: [offtopic], [notnews],
- * [lane:x], [score:n] (the model's share of the total), [pending],
- * [edit-throws], [screen-error], [digest] (a piece covering several stories).
+ * [lane:x], [score:n] (the model's share of the total), [flag:x] (a flag it
+ * proposes), [pending], [edit-throws], [screen-error], [digest] (a piece
+ * covering several stories).
  */
 function fakeEditor(provider = { balanceSpent: false }) {
   /** @type {{ screen: string[][], edit: string[] }} */
@@ -211,7 +215,7 @@ function fakeEditor(provider = { balanceSpent: false }) {
         lane: lane && item.allowedLanes.includes(lane) ? lane : item.allowedLanes[0],
         specialties: ["cardiology"], evidenceType: item.evidenceFixed?.type ?? "observational",
         entities: { drugs: ["司美格鲁肽"], trials: [], orgs: [], diseases: [] },
-        scores: { impact, novelty, relevance }, flags: [],
+        scores: { impact, novelty, relevance }, flags: marker(item.titleRaw, "flag") ? [marker(item.titleRaw, "flag")] : [],
       } };
     },
   };
@@ -546,6 +550,184 @@ test("selection: three a day per source, the lane floor for a lane with nothing 
   const health = selected.filter((row) => row.lane === "public-health");
   assert.deepEqual(health.map((row) => [row.score_total, row.selected, row.selected_rule]), [[65, true, "lane-floor"], [55, false, null]],
     "below the threshold, but the lane's best at or above 60");
+});
+
+/**
+ * Deliver named entries whose text the plugin has none of, so each proceeds with its feed summary; the name is for reading the
+ * verdicts back.
+ * @param {any} plugin @param {Record<string, Record<string, any>>} entries
+ */
+async function deliverNamed(plugin, entries) {
+  /** @type {Record<string, { id: number, pluginEntryId: string }>} */
+  const named = {};
+  for (const [name, values] of Object.entries(entries)) {
+    named[name] = await deliver({ summary: "S".repeat(200), ...values });
+    plugin.texts.set(named[name].pluginEntryId, { entry_id: named[name].pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  }
+  return named;
+}
+
+/** Each named entry's item: its selection and the rule that selected it. @param {Record<string, { id: number }>} named */
+async function selections(named) {
+  /** @type {Record<string, [boolean, string | null]>} */
+  const verdicts = {};
+  for (const [name, delivered] of Object.entries(named)) {
+    const row = await item(Number((await entry(delivered.id)).item_id));
+    verdicts[name] = [row.selected, row.selected_rule];
+  }
+  return verdicts;
+}
+
+/**
+ * The preprint lane's first day (2026-09-22): the lanes of the journal and the registry result have a selected item already, so the
+ * lane floor leaves them alone and what is measured is the preprint lane. A preprint's total is the editor's share plus 6 (authority 2,
+ * discounted), and so is a newsroom's (a press release): the line is 82, and none of them can reach it.
+ * @param {Record<string, any>} [config]
+ */
+async function laneDay(config = {}) {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock, config: { frontierSelectThreshold: 82, ...config } });
+  const named = await deliverNamed(plugin, {
+    journal: { source_id: "j-nejm", doi: "10.1000/lane.journal", title: `${DISTINCT_TOPICS[0]} [score:60]` }, // 24 + 60 = 84
+    trial: { source_id: "t-ctgov", title: `${DISTINCT_TOPICS[1]} [score:70]` }, // 19 + 70 = 89
+    a: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[2]} [score:62]` }, // 68
+    b: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[3]} [score:58]` }, // 64
+    c: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[4]} [score:52]` }, // 58: under the floor
+    d: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[5]} [score:66]` }, // 72
+    e: { source_id: "c-novo", title: `${DISTINCT_TOPICS[6]} [score:60]` }, // 66, a newsroom
+  });
+  const summary = await pipeline.processBatch();
+  return { pipeline, plugin, named, summary, clock };
+}
+
+test("F12b: the preprint lane selects the day's best two preprints and company items above the floor, by its own rule, and the daily carries them", options, async () => {
+  const { pipeline, plugin, named, summary } = await laneDay();
+  assert.deepEqual(await selections(named), {
+    journal: [true, "threshold"], trial: [true, "threshold"],
+    d: [true, "preprint-lane"], a: [true, "preprint-lane"], // the two highest totals (72, 68)
+    e: [false, null], b: [false, null], // 66 and 64 clear the floor and find the places taken
+    c: [false, null], // 58 is under it
+  });
+  assert.equal(summary.preprintLane, 2, "counted in the round's summary...");
+  assert.equal(pipeline.counters.preprintLane, 2, "...and in the pipeline's counters");
+  // Selected, and still what they are: a preprint with its source class and its unreviewed flag, never an upgraded one.
+  const taken = (await database.query(`SELECT source_type, flags, evidence_type, verification, lane, state, score_total FROM evimed_frontier.items
+    WHERE selected_rule = 'preprint-lane' ORDER BY score_total DESC`)).rows;
+  assert.deepEqual(taken.map((row) => [row.source_type, row.flags.includes("preprint"), row.state, row.verification, row.score_total]),
+    [["preprint", true, "published", "passed", 72], ["preprint", true, "published", "passed", 68]]);
+  const lanePick = await item(Number((await entry(named.d.id)).item_id));
+  assert.deepEqual(await changes(Number(lanePick.id)), ["published", "selected"]);
+  assert.equal(lanePick.selected_at.toISOString(), "2026-09-22T12:00:00.000Z");
+
+  // The daily of the next morning carries the lane's two with the other two: 精选 and the daily are one selection.
+  const daily = await new FrontierDaily({ database, config: { frontierTimeZone: "Asia/Shanghai", frontierDailyTime: "07:30" } }).compose("2026-09-23");
+  const issued = new Set([daily.lead?.itemId, ...daily.sections.flatMap((section) => section.itemIds)]);
+  const publicIds = async (/** @type {string[]} */ names) => Promise.all(names.map(async (name) => (await item(Number((await entry(named[name].id)).item_id))).public_id));
+  assert.deepEqual([...issued].sort(), (await publicIds(["journal", "trial", "a", "d"])).sort());
+
+  // The same day, a better preprint arrives: the places are taken, and selection is sticky.
+  const later = await deliverNamed(plugin, { f: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[7]} [score:68]` } }); // 74
+  await pipeline.processBatch();
+  assert.deepEqual(await selections(later), { f: [false, null] });
+  assert.equal((await selections(named)).d[1], "preprint-lane");
+});
+
+test("F12b: a new day has its own places, and what the lane floor took of the lane's classes counts against them", options, async () => {
+  const { plugin, named } = await laneDay();
+  assert.equal(Object.values(await selections(named)).filter(([, rule]) => rule === "preprint-lane").length, 2);
+  // 2026-09-23: nothing is selected in the evidence lane yet, so the lane floor takes its best (a preprint, 66) first; that is one of the
+  // day's two places, and the lane fills the other with the next best above the floor (61), leaving 60 out.
+  const { pipeline: next } = pipelineWith({ now: () => new Date("2026-09-23T12:00:00Z"), plugin, config: { frontierSelectThreshold: 82 } });
+  const day = await deliverNamed(plugin, {
+    g: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[8]} [score:54]` }, // 60
+    i: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[9]} [score:60]` }, // 66
+    j: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[10]} [score:55]` }, // 61
+  });
+  const summary = await next.processBatch();
+  assert.deepEqual(await selections(day), { g: [false, null], i: [true, "lane-floor"], j: [true, "preprint-lane"] });
+  assert.equal(summary.preprintLane, 1);
+  // Yesterday's two stand: a new day takes nothing back.
+  assert.equal(Object.values(await selections(named)).filter(([, rule]) => rule === "preprint-lane").length, 2);
+});
+
+test("F12b: the floor and the number are the operator's: a floor of 70 takes the one that reaches it, 0 a day is no lane, 3 a day is three", options, async () => {
+  for (const [config, expected] of /** @type {Array<[Record<string, number>, string[]]>} */ ([
+    [{ frontierPreprintLaneMinScore: 70 }, ["d"]],
+    [{ frontierPreprintLanePerDay: 0 }, []],
+    [{ frontierPreprintLanePerDay: 3 }, ["a", "d", "e"]],
+  ])) {
+    const { named, pipeline } = await laneDay(config);
+    const taken = Object.entries(await selections(named)).filter(([, [, rule]]) => rule === "preprint-lane").map(([name]) => name).sort();
+    assert.deepEqual(taken, expected, JSON.stringify(config));
+    assert.equal(pipeline.counters.preprintLane, expected.length, JSON.stringify(config));
+  }
+});
+
+test("F12b: only a verified, unretracted, summarised article of an enabled source that is not correspondence is taken", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  // First with the lane off, so the items are published and none is taken...
+  const off = pipelineWith({ now: () => clock, config: { frontierSelectThreshold: 82, frontierPreprintLanePerDay: 0 } });
+  const named = await deliverNamed(off.plugin, {
+    journal: { source_id: "j-nejm", doi: "10.1000/lane.journal", title: `${DISTINCT_TOPICS[0]} [score:60]` }, // 84: the evidence lane has its selection
+    trial: { source_id: "t-ctgov", title: `${DISTINCT_TOPICS[1]} [score:70]` }, // 89: and so has the pipeline lane
+    retracted: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[11]} [score:70]` }, // 76
+    letter: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[12]} [score:68]` }, // 74
+    hidden: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[13]} [score:66]` }, // 72
+    silent: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[14]} [score:64]` }, // 70
+    waiting: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[15]} [pending] [score:62]` }, // published as it came, edit still owed
+    good1: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[16]} [score:60]` }, // 66
+    good2: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[17]} [score:59]` }, // 65
+    good3: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[18]} [score:58]` }, // 64
+    newsroom: { source_id: "c-novo", title: `${DISTINCT_TOPICS[19]} [score:57]` }, // 63
+  });
+  await off.pipeline.processBatch();
+  assert.deepEqual(Object.entries(await selections(named)).filter(([, [selected]]) => selected).map(([name]) => name), ["journal", "trial"], "no lane, no place");
+  const row = async (/** @type {string} */ name) => Number((await entry(named[name].id)).item_id);
+  await database.query("UPDATE evimed_frontier.items SET flags = array_append(flags, 'retracted') WHERE id = $1", [await row("retracted")]);
+  await database.query("UPDATE evimed_frontier.item_texts SET publication_types = ARRAY['Letter', 'Comment'] WHERE item_id = $1", [await row("letter")]);
+  await database.query("UPDATE evimed_frontier.sources SET enabled = false WHERE id = 'p-biorxiv'");
+  await database.query("UPDATE evimed_frontier.items SET summary_zh = NULL WHERE id = $1", [await row("silent")]);
+  // ...then with it on, and something published to start a round.
+  const on = pipelineWith({ now: () => clock, plugin: off.plugin, config: { frontierSelectThreshold: 82 } });
+  await deliverNamed(off.plugin, { starter: { source_id: "m-stat", title: `${DISTINCT_TOPICS[20]} [score:20]` } });
+  await on.pipeline.processBatch();
+  const verdicts = await selections(named);
+  assert.deepEqual(Object.entries(verdicts).filter(([, [, rule]]) => rule === "preprint-lane").map(([name]) => name),
+    ["good1", "good2"], "the best two that are eligible: 66 and 65, then the lane is full");
+  assert.deepEqual(verdicts.waiting, [false, null], "a title-only item has no total to be taken by");
+});
+
+test("F12c: a published Class I recall carries class-i-recall, a safety notice the editor found to add a boxed warning carries boxed-warning, and nothing else does", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const named = await deliverNamed(plugin, {
+    classOne: { source_id: "r-medwatch", title: `${DISTINCT_TOPICS[0]} [score:50]`, facts: { recall_class: "Class I" } },
+    classTwo: { source_id: "r-medwatch", title: `${DISTINCT_TOPICS[1]} [score:50]`, facts: { recall_class: "Class II" } },
+    boxed: { source_id: "r-medwatch", title: `${DISTINCT_TOPICS[2]} [flag:boxed-warning] [score:50]` },
+    plain: { source_id: "r-medwatch", title: `${DISTINCT_TOPICS[3]} [score:50]` },
+    classOneBoxed: { source_id: "r-medwatch", title: `${DISTINCT_TOPICS[4]} [flag:boxed-warning] [score:50]`, facts: { recall_class: "Class I" } },
+    paper: { source_id: "j-nejm", doi: "10.1000/boxed.paper", title: `${DISTINCT_TOPICS[5]} [flag:boxed-warning] [score:50]` },
+    news: { source_id: "m-stat", title: `${DISTINCT_TOPICS[6]} [flag:class-i-recall] [score:50]`, facts: { recall_class: "Class I" } },
+  });
+  await pipeline.processBatch();
+  /** @type {Record<string, [boolean, string[]]>} */
+  const marks = {};
+  for (const [name, delivered] of Object.entries(named)) {
+    const row = await item(Number((await entry(delivered.id)).item_id));
+    marks[name] = [row.safety_alert, row.flags.filter((/** @type {string} */ flag) => ["class-i-recall", "boxed-warning"].includes(flag))];
+  }
+  assert.deepEqual(marks, {
+    classOne: [true, ["class-i-recall"]], // the record's own class
+    classTwo: [false, []], // Class II is scored like any decision, and carries nothing
+    boxed: [true, ["boxed-warning"]], // the editor proposed it on a safety feed's notice
+    plain: [true, []], // an alert that adds no boxed warning keeps the follow-based reach
+    classOneBoxed: [true, ["class-i-recall", "boxed-warning"]],
+    paper: [false, []], // a journal article that talks of boxed warnings is no alert
+    news: [false, []], // a medium's story is no alert, and a recall's class is never the editor's to say
+  });
 });
 
 test("a title near duplicate among a lane's published items is merged; a revision replaces the earlier one", options, async () => {

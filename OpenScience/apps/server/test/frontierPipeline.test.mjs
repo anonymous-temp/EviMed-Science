@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
+import { FRONTIER_PREPRINT_LANE_SOURCE_TYPES, FRONTIER_SCORE_MAXIMA, frontierAuthorityScore } from "@evimed/domain";
 import {
+  FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT,
+  FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT,
+  FRONTIER_SELECT_THRESHOLD_DEFAULT,
   FRONTIER_TEXT_GIVE_UP_MS,
   FRONTIER_TEXT_AFTER_ATTEMPT_MS,
   FRONTIER_TEXT_HOLD_MS,
@@ -11,17 +15,21 @@ import {
   allowedLanes,
   entryKeys,
   frontierBudgetState,
+  frontierClassIRecall,
   frontierDayWindow,
   frontierDropReason,
   frontierEditDecision,
   frontierEvidenceDecision,
   frontierItemFlags,
+  frontierKeptModelFlags,
   frontierSafetyAlert,
   frontierSelectionDecision,
   frontierTextDecision,
   frontierTextPendingHold,
   frontierTimelineAt,
   frontierNoticeKind,
+  frontierPreprintLaneMinScore,
+  frontierPreprintLanePerDay,
   frontierUpdateLinks,
   isCorrectionNotice,
   isUrgentSource,
@@ -244,6 +252,37 @@ test("flags are code's: registry facts, defects, identifiers, affiliations and l
   assert.deepEqual(flags({ linkFlags: ["corrected", "retracted"] }), ["retracted", "corrected"], "in the vocabulary's order");
 });
 
+test("F12c: a Class I recall is marked by its class, a boxed warning by the editor's proposal, and each only on a safety alert", () => {
+  const recalls = { id: "openfda-enforcement", source_type: "regulator", authority: 5, lane: "safety", safety_feed: true };
+  const entry = { defects: [], facts: {}, identity_key: "url:x", summary_raw: "A notice." };
+  const text = { abstract_raw: "A notice.", body_excerpt: null, enrichment: {} };
+  const flags = (/** @type {Record<string, any>} */ input) => frontierItemFlags({ source: recalls, entry, item: { doi: null, pmid: null, date_precision: "instant" }, text,
+    safetyAlert: true, ...input });
+  const classOne = { ...entry, facts: { recall_class: "Class I" } };
+  assert.deepEqual(flags({ entry: classOne }), ["class-i-recall"]);
+  assert.equal(frontierClassIRecall({ source: recalls, facts: { recall_class: " class i " } }), true, "the regulator's own spelling, trimmed");
+  for (const recallClass of ["Class II", "Class III", "Not Yet Classified", "Class I; Class II", ""]) {
+    assert.deepEqual(flags({ entry: { ...entry, facts: { recall_class: recallClass } } }), [], recallClass);
+  }
+  assert.deepEqual(flags({ entry: classOne, source: { ...recalls, safety_feed: false, source_type: "media" }, safetyAlert: false }), [], "a medium's story of a recall is no alert");
+  assert.equal(frontierClassIRecall({ source: { ...recalls, safety_feed: false, source_type: "media" }, facts: { recall_class: "Class I" } }), false);
+  assert.deepEqual(flags({ entry: classOne, safetyAlert: false }), [], "only an alert carries it");
+  assert.deepEqual(flags({ modelFlags: ["class-i-recall"] }), [], "a recall's class is not the model's to say");
+  assert.deepEqual(flags({ modelFlags: ["boxed-warning"] }), ["boxed-warning"]);
+  assert.deepEqual(flags({ modelFlags: ["boxed-warning"], safetyAlert: false }), [], "a paper about boxed warnings is no alert and carries no mark");
+  assert.deepEqual(flags({ entry: classOne, modelFlags: ["boxed-warning", "press-release"] }), ["press-release", "class-i-recall", "boxed-warning"], "in the vocabulary's order");
+  // The decision about the alert itself is unchanged by the marks.
+  assert.equal(frontierSafetyAlert({ source: recalls, evidenceType: "safety-notice", facts: { recall_class: "Class I" } }), true);
+  assert.equal(frontierSafetyAlert({ source: recalls, evidenceType: "safety-notice", facts: { recall_class: "Class II" } }), false);
+});
+
+test("F12c: what the editor proposed stays on an item when its labels are decided again, as it did for a release a medium republished", () => {
+  assert.deepEqual(frontierKeptModelFlags({ flags: ["press-release", "china", "boxed-warning", "class-i-recall"], source: media }), ["press-release", "boxed-warning"]);
+  assert.deepEqual(frontierKeptModelFlags({ flags: ["press-release"], source: company }), [], "a newsroom's release is its source's flag, not the editor's");
+  assert.deepEqual(frontierKeptModelFlags({ flags: ["boxed-warning"], source: company }), ["boxed-warning"]);
+  assert.deepEqual(frontierKeptModelFlags({ flags: null, source: media }), []);
+});
+
 test("timeline_at: the publication instant, or the source's date when that is more than 72 hours older", () => {
   const now = new Date("2026-09-22T12:00:00Z");
   assert.equal(frontierTimelineAt(now, null).toISOString(), now.toISOString());
@@ -267,6 +306,41 @@ test("selection: safety alerts always; verified items at the threshold while the
   assert.deepEqual(decide({ source: journal, selectedToday: 5 }), { selected: false, rule: null, capped: true });
   assert.deepEqual(decide({ demoted: true }), { selected: false, rule: null });
   assert.deepEqual(decide({ flags: ["retracted"] }), { selected: false, rule: null });
+});
+
+test("F12b: the lane's classes cannot reach the selection line by arithmetic, which is why they have a lane", () => {
+  // The editor gives at most 30 + 20 + 20; the rest of a total is the authority term, which a preprint discounts (x0.6) and a newsroom
+  // fixes to a press release (x0.5). The registry gives all 52 such sources authority 2 (review B, D-08: ceilings 77 and 76); even a
+  // grade more, and the best design for a preprint, leaves them under the line - and the selection rule agrees.
+  assert.deepEqual([...FRONTIER_PREPRINT_LANE_SOURCE_TYPES], ["preprint", "company"]);
+  const editorial = FRONTIER_SCORE_MAXIMA.impact + FRONTIER_SCORE_MAXIMA.novelty + FRONTIER_SCORE_MAXIMA.relevance;
+  const ceilings = {
+    preprint: [2, 3].map((authority) => frontierAuthorityScore({ authority, evidenceType: "rct", preprint: true }) + editorial),
+    company: [2, 3].map((authority) => frontierAuthorityScore({ authority, evidenceType: "press-release" }) + editorial),
+  };
+  assert.deepEqual(ceilings, { preprint: [77, 81], company: [76, 79] });
+  for (const ceiling of Object.values(ceilings).flat()) assert.ok(ceiling < FRONTIER_SELECT_THRESHOLD_DEFAULT, `${ceiling} is under the line`);
+  for (const [source, scoreTotal] of [[preprint, 81], [company, 79]]) {
+    const decided = frontierSelectionDecision({ safetyAlert: false, verification: "passed", scoreTotal, demoted: false, flags: [], source, selectedToday: 0,
+      threshold: FRONTIER_SELECT_THRESHOLD_DEFAULT });
+    assert.deepEqual(decided, { selected: false, rule: null }, `${source.source_type}: the best it can score is not selected`);
+  }
+  // And a journal of the same grade does reach it, so the lane is for the classes, not for a grade.
+  assert.ok(frontierAuthorityScore({ authority: 3, evidenceType: "rct" }) + editorial >= FRONTIER_SELECT_THRESHOLD_DEFAULT);
+});
+
+test("F12b: the lane's two numbers are read from the config, and the defaults are two a day from a total of 60", () => {
+  assert.equal(FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT, 2);
+  assert.equal(FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT, 60);
+  assert.equal(frontierPreprintLanePerDay({}), 2);
+  assert.equal(frontierPreprintLanePerDay(null), 2);
+  assert.equal(frontierPreprintLaneMinScore({}), 60);
+  assert.equal(frontierPreprintLanePerDay({ frontierPreprintLanePerDay: 5 }), 5);
+  assert.equal(frontierPreprintLanePerDay({ frontierPreprintLanePerDay: 0 }), 0, "0 is no lane, not the default");
+  assert.equal(frontierPreprintLaneMinScore({ frontierPreprintLaneMinScore: 70 }), 70);
+  assert.equal(frontierPreprintLaneMinScore({ frontierPreprintLaneMinScore: 0 }), 0);
+  for (const bad of ["", null, undefined, "x", -1, 1.5]) assert.equal(frontierPreprintLanePerDay({ frontierPreprintLanePerDay: bad }), 2, `per day ${String(bad)}`);
+  for (const bad of ["", null, undefined, "x"]) assert.equal(frontierPreprintLaneMinScore({ frontierPreprintLaneMinScore: bad }), 60, `floor ${String(bad)}`);
 });
 
 test("near-duplicate titles compare without case, spacing or punctuation", () => {

@@ -201,7 +201,7 @@ export async function followedZoneCards(database, { userId, from, to, limit = FR
 
 /**
  * @typedef {{ id: string | number, public_id: string, title_raw: string, title_zh?: string | null, summary_zh?: string | null,
- *             lane: string, selected: boolean, safety_alert: boolean, score_total?: number | null, visible_at: string | Date,
+ *             lane: string, selected: boolean, selected_rule?: string | null, safety_alert: boolean, score_total?: number | null, visible_at: string | Date,
  *             canonical_url: string, source_name: string, event_id?: string | number | null, event_public_id?: string | null,
  *             event_title?: string | null, event_reports?: number | null, event_digest?: string | null }} FrontierDailyRow
  */
@@ -227,8 +227,11 @@ function byWeight(left, right) {
  * What one day's issue holds, from the window's verified items: the lead —
  * the selected item whose event ranks highest on the hot list, else the
  * highest scored — the safety alerts, one section per lane with selected
- * items (at most eight each, none empty), and the AI-lane items the AI minute
- * is written from. Null when there is nothing to publish.
+ * items (the best eight each, none empty, and after them the items the
+ * preprint lane selected: its places are a ruling of the owner's, and their
+ * totals sort below every item that reached the line, so a cap by score would
+ * cut them on the days the section is full), and the AI-lane items the AI
+ * minute is written from. Null when there is nothing to publish.
  * @param {{ rows: FrontierDailyRow[], hotEventIds?: string[] }} input
  */
 export function frontierDailyIssue({ rows, hotEventIds = [] }) {
@@ -241,7 +244,9 @@ export function frontierDailyIssue({ rows, hotEventIds = [] }) {
   /** @type {Array<{ lane: string, rows: FrontierDailyRow[] }>} */
   const sections = [];
   for (const lane of FRONTIER_LANES) {
-    const members = selected.filter((row) => row.lane === lane && row !== lead).sort(byWeight).slice(0, FRONTIER_DAILY_SECTION_MAX);
+    const ranked = selected.filter((row) => row.lane === lane && row !== lead).sort(byWeight);
+    const members = [...ranked.slice(0, FRONTIER_DAILY_SECTION_MAX),
+      ...ranked.slice(FRONTIER_DAILY_SECTION_MAX).filter((row) => row.selected_rule === "preprint-lane")];
     if (members.length) sections.push({ lane, rows: members });
   }
   if (!lead && !safety.length && !sections.length) return null;
@@ -485,7 +490,7 @@ export class FrontierDaily {
     // the feed (plan 2026-09-23 §6.5 #5): the safety block used to append
     // 「（openFDA 药品召回（enforcement）API）」 to every recall.
     /** @type {FrontierDailyRow[]} */
-    const rows = ((await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.selected, i.safety_alert,
+    const rows = ((await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.selected, i.selected_rule, i.safety_alert,
         i.score_total, i.visible_at, i.canonical_url, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS source_owner,
         e.public_id AS event_public_id, e.title_zh AS event_title, e.report_count AS event_reports, e.digest_zh AS event_digest
       FROM evimed_frontier.items i

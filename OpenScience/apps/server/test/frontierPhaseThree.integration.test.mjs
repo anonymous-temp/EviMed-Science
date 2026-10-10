@@ -402,3 +402,135 @@ test('D-02: an infrastructural failure gives its attempt back, so an outage does
     assert.deepEqual(await sender.deliverDue(), { delivered: 1 });
     assert.deepEqual(await jobRow('frontier-notify'), [{ status: 'succeeded', attempts: 1 }]);
 });
+
+/** Every reader's safety notices in the inbox: user → titles, alphabetically (they are made in the same instant). */
+async function safetyInbox() {
+    const rows = (await db.query("SELECT user_id,title FROM evimed_inbox.notifications WHERE source->>'id' LIKE 'frontier-safety:%' ORDER BY user_id,title")).rows;
+    const byUser = {};
+    for (const row of rows)
+        (byUser[row.user_id] ??= []).push(row.title);
+    return byUser;
+}
+/** Bootstrap the scan's cursor, then record each change and scan until the fan-out is done. @param {FrontierNotifications} scanner @param {Array<{id:string}>} alerts */
+async function scanAlerts(scanner, alerts) {
+    await scanner.scanSafety();
+    for (const alert of alerts)
+        await changed(alert.id);
+    for (let n = 0; n < alerts.length * 3; n++)
+        await scanner.scanSafety();
+}
+test('F12c: a Class I recall or a boxed-warning alert reaches every reader whose switches allow it, and any other alert still reaches the followers of what it names', options, async () => {
+    // The platform's own publisher account exists wherever the frontier is migrated; it is no reader.
+    await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ('carol','Carol','development'),('dave','Dave','development')");
+    await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ('evimed-evidence-center','Evidence centre','platform') ON CONFLICT (id) DO NOTHING");
+    try {
+        await db.query("UPDATE evimed_control.users SET created_at='2026-09-01T00:00:00Z'");
+        for (const id of ['carol', 'dave'])
+            await notices.preferences(id);
+        await db.query("UPDATE evimed_inbox.preferences SET switches=$1::jsonb WHERE user_id='carol'", [JSON.stringify({ notify: true, review: true, question: true, frontier: true, frontierSafety: false })]);
+        await follow('alice');
+        await service.createFollow({ id: 'dave' }, { kind: 'source', key: 'fda', muted: true });
+        const wide = new FrontierNotifications({ database: db, jobs, notifications: notices, weekly, config: { ...config, frontierNotifyBatch: 20 }, now });
+        // None of the four names the drug alice follows, but the last.
+        const recall = await item({ title: 'Class I recall', titleZh: 'Class I recall', flags: ['class-i-recall'], entityKeys: ['drug:dapagliflozin'] });
+        const boxed = await item({ title: 'Boxed warning added', titleZh: 'Boxed warning added', flags: ['boxed-warning'], entityKeys: ['drug:dapagliflozin'] });
+        const ordinary = await item({ title: 'Ordinary alert', titleZh: 'Ordinary alert', entityKeys: ['drug:dapagliflozin'] });
+        const followed = await item({ title: 'Alert on a followed drug', titleZh: 'Alert on a followed drug', entityKeys: ['drug:semaglutide'] });
+        await scanAlerts(wide, [recall, boxed, ordinary, followed]);
+        await wide.deliverDue();
+        assert.deepEqual(await safetyInbox(), {
+            alice: ['Alert on a followed drug', 'Boxed warning added', 'Class I recall'],
+            bob: ['Boxed warning added', 'Class I recall'],
+            operator: ['Boxed warning added', 'Class I recall'],
+        }, 'everyone with the push on gets the two; the ordinary alert and the followed one reach alice alone for what she follows; carol turned the switch off, dave muted the source, the platform account is no reader');
+        assert.equal(await wide.eligible('bob', { kind: 'safety', key: ordinary.publicId }), false, 'no follow, no mark: no push');
+        assert.equal(await wide.eligible('bob', { kind: 'safety', key: recall.publicId }), true);
+        assert.equal(await wide.eligible('carol', { kind: 'safety', key: recall.publicId }), false);
+        assert.equal(await wide.eligible('dave', { kind: 'safety', key: boxed.publicId }), false, 'a source a reader muted stays muted');
+        // The IM channel asks the same question before it sends, and answers the same.
+        assert.equal(await wide.deliveryAllowed({ userId: 'bob', source: { type: 'system', id: `frontier-safety:${boxed.publicId}` } }), true);
+        assert.equal(await wide.deliveryAllowed({ userId: 'bob', source: { type: 'system', id: `frontier-safety:${ordinary.publicId}` } }), false);
+        // A reader who hides the item is not pushed it either, and a mark on a media story is no alert.
+        await service.setItemState({ id: 'bob' }, recall.publicId, 'hide');
+        assert.equal(await wide.eligible('bob', { kind: 'safety', key: recall.publicId }), false);
+        const story = await item({ sourceId: 'news', sourceType: 'media', flags: ['class-i-recall'] });
+        assert.equal(await wide.eligible('alice', { kind: 'safety', key: story.publicId }), false);
+    }
+    finally {
+        await db.query("DELETE FROM evimed_control.users WHERE id=ANY($1)", [['carol', 'dave']]);
+    }
+});
+test('F12c: a reader receives at most three safety pushes a day, from either reach; the fourth is counted and dropped, and the next day starts again', options, async () => {
+    await db.query("UPDATE evimed_control.users SET created_at='2026-09-01T00:00:00Z'");
+    await follow('alice');
+    const wide = new FrontierNotifications({ database: db, jobs, notifications: notices, weekly, config: { ...config, frontierNotifyBatch: 20 }, now });
+    const alerts = [
+        await item({ title: 'Recall 1', titleZh: 'Recall 1', flags: ['class-i-recall'] }),
+        await item({ title: 'Recall 2', titleZh: 'Recall 2', flags: ['class-i-recall'] }),
+        await item({ title: 'Followed 1', titleZh: 'Followed 1', entityKeys: ['drug:semaglutide'] }),
+        await item({ title: 'Followed 2', titleZh: 'Followed 2', entityKeys: ['drug:semaglutide'] }),
+    ];
+    await scanAlerts(wide, alerts);
+    assert.equal((await db.query("SELECT count(*)::int n FROM evimed_product.jobs WHERE kind='frontier-notify'")).rows[0].n, 2 * 3 + 2, 'three readers for each recall, alice alone for her two');
+    for (let n = 0; n < 3; n++)
+        await wide.deliverDue();
+    const inbox = await safetyInbox();
+    assert.deepEqual(Object.fromEntries(Object.entries(inbox).map(([user, titles]) => [user, titles.length])), { alice: 3, bob: 2, operator: 2 },
+        'alice has her three; the fourth push of the day is not made');
+    assert.equal(wide.status().counters.safetyCapped, 1, 'and it is counted');
+    const results = (await db.query("SELECT result FROM evimed_product.jobs WHERE kind='frontier-notify' AND user_id='alice' ORDER BY id")).rows.map(row => row.result);
+    assert.equal(results.filter(result => result?.skipped === 'daily-cap').length, 1);
+    assert.equal(results.filter(result => result?.delivered === true).length, 3);
+    // A fifth the same day is dropped for alice and delivered to those below the cap.
+    const fifth = await item({ title: 'Recall 3', titleZh: 'Recall 3', flags: ['class-i-recall'] });
+    await scanAlerts(wide, [fifth]);
+    await wide.deliverDue();
+    assert.deepEqual(Object.fromEntries(Object.entries(await safetyInbox()).map(([user, titles]) => [user, titles.length])), { alice: 3, bob: 3, operator: 3 });
+    assert.equal(wide.status().counters.safetyCapped, 2);
+    // The next day, in the feed's own zone, is a new count.
+    const tomorrow = new FrontierNotifications({ database: db, jobs, notifications: notices, weekly, config: { ...config, frontierNotifyBatch: 20 }, now: () => new Date('2026-09-29T01:00:00Z') });
+    const next = await item({ title: 'Recall 4', titleZh: 'Recall 4', flags: ['class-i-recall'], publishedAt: '2026-09-28T10:00:00Z', visibleAt: '2026-09-28T10:00:00Z' });
+    await scanAlerts(tomorrow, [next]);
+    await tomorrow.deliverDue();
+    assert.deepEqual((await safetyInbox()).alice.length, 4, 'alice is pushed again');
+    assert.equal(tomorrow.status().counters.safetyCapped, 0);
+});
+test('F12c: the day the cap counts is the feed zone\'s: a push at 23:30 Beijing time and one at 00:30 are two days', options, async () => {
+    await db.query("UPDATE evimed_control.users SET created_at='2026-09-01T00:00:00Z'");
+    const at = (iso) => new FrontierNotifications({ database: db, jobs, notifications: notices, weekly, config: { ...config, frontierNotifyBatch: 20, frontierSafetyPushDailyCap: 1 }, now: () => new Date(iso) });
+    const first = await item({ title: 'Recall A', titleZh: 'Recall A', flags: ['class-i-recall'], publishedAt: '2026-09-27T10:00:00Z', visibleAt: '2026-09-27T10:00:00Z' });
+    const evening = at('2026-09-27T15:30:00Z');
+    await scanAlerts(evening, [first]);
+    await evening.deliverDue();
+    assert.equal((await safetyInbox()).alice.length, 1);
+    const second = await item({ title: 'Recall B', titleZh: 'Recall B', flags: ['class-i-recall'], publishedAt: '2026-09-27T10:00:00Z', visibleAt: '2026-09-27T10:00:00Z' });
+    const sameDay = at('2026-09-27T15:50:00Z');
+    await scanAlerts(sameDay, [second]);
+    await sameDay.deliverDue();
+    assert.equal((await safetyInbox()).alice.length, 1, '23:50 Beijing time: the same day, over a cap of one');
+    assert.equal(sameDay.status().counters.safetyCapped >= 1, true);
+    const third = await item({ title: 'Recall C', titleZh: 'Recall C', flags: ['class-i-recall'], publishedAt: '2026-09-27T10:00:00Z', visibleAt: '2026-09-27T10:00:00Z' });
+    const morning = at('2026-09-27T16:30:00Z');
+    await scanAlerts(morning, [third]);
+    await morning.deliverDue();
+    assert.equal((await safetyInbox()).alice.length, 2, '00:30 Beijing time: the next day');
+});
+test('F12c: a push made whose job then failed to finish is still the one push when the job comes back, even at the ceiling', options, async () => {
+    await db.query("UPDATE evimed_control.users SET created_at='2026-09-01T00:00:00Z'");
+    const one = new FrontierNotifications({ database: db, jobs, notifications: notices, weekly, config: { ...config, frontierNotifyBatch: 20, frontierSafetyPushDailyCap: 1 }, now });
+    const alert = await item({ title: 'Recall once', titleZh: 'Recall once', flags: ['boxed-warning'] });
+    await scanAlerts(one, [alert]);
+    const finish = jobs.finish.bind(jobs);
+    let failures = 0;
+    jobs.finish = async (user, ...args) => {
+        if (user === 'alice' && failures++ === 0)
+            throw new Error('simulated crash after the notice was made');
+        return finish(user, ...args);
+    };
+    await one.deliverDue();
+    await db.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp() WHERE status='queued'");
+    await one.deliverDue();
+    assert.deepEqual((await safetyInbox()).alice, ['Recall once']);
+    assert.equal(one.status().counters.safetyCapped, 0, 'the retry found its own row and was not counted against the ceiling');
+    assert.equal((await db.query("SELECT status FROM evimed_product.jobs WHERE user_id='alice' AND kind='frontier-notify'")).rows[0].status, 'succeeded');
+});

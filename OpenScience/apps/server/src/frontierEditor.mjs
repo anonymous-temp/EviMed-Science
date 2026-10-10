@@ -141,7 +141,7 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "- evidence_type：证据类型键。条目已注明证据类型的，照填。研究设计不在词表里的（卫生经济学评价、决策分析、建模、方法学研究、问卷调查、病例报告）一律填 other，不要套用最接近的设计。",
   "- entities：drugs（药物，中文通用名）、trials（试验名称，保留原文）、orgs（机构，中文简称）、diseases（疾病，中文规范名），每类最多 5 个，没有就给空数组。",
   "- scores：impact 实践或科研影响（0–30：会不会改变处方、指南、课题设计或必须执行的政策）；novelty 新颖性（0–20：首次报告或重要更新，还是重复已知）；relevance 与国内读者的相关性（0–20：药物在国内已上市或在审、国内疾病负担、国内政策与指南、国内研究者常用的方法）。都给整数。",
-  "- flags：只有来源明确是一篇企业新闻稿、且明确说明顶线结果尚未发表时给 [\"press-release\"]，否则给 []；注册记录或没有论文链接不触发该标记。",
+  "- flags：只有两种情况才填。来源明确是一篇企业新闻稿、且明确说明顶线结果尚未发表时含 \"press-release\"（注册记录或没有论文链接不触发）；监管机构的安全公告明确说某药品新增、加强或要求加框警告（黑框警告，boxed warning）时含 \"boxed-warning\"（已有的、放宽或取消的黑框警告不算）。都不是就给 []。",
   "",
   `栏目词表：${LANE_LINE}。`,
   "栏目说明：safety 药物安全只收药品、疫苗、生物制品、医疗器械和膳食补充剂的安全信息（不良反应、警示、召回、说明书安全性修订）；普通食品的召回和过敏原未标注属于 public-health 公共卫生。",
@@ -693,7 +693,7 @@ export function verifyEdit(answer, item, modelInput) {
   /** @type {string[]} */
   let flags = [];
   if (value.flags !== undefined && (!Array.isArray(value.flags) || value.flags.some((flag) => !FRONTIER_ITEM_FLAGS.includes(flag)))) {
-    fail("flags", "flags 只能是 [] 或 [\"press-release\"]。");
+    fail("flags", `flags 只能含 ${FRONTIER_MODEL_FLAGS.map((flag) => `"${flag}"`).join("、")}，没有就给 []。`);
   } else {
     // A flag code decides (preprint, no-abstract, …) proposed by the model is
     // not the model's to set; it is dropped, not failed.
