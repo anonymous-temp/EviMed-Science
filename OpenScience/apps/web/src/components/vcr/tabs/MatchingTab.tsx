@@ -39,6 +39,18 @@ import { criterionStateLabel, intervalLabel, NO_VALUE, numberText, referralState
 type View = "matching" | "referral" | "sites" | "followup";
 type Direction = NonNullable<MatchingData["direction"]>;
 
+/**
+ * A page of the tab with what it was asked for. Its timeline is the facts of the person named in the request (`?candidate=`), or of
+ * the server's own default when nobody was — and the panel above it is the first candidate's whenever the person asked for has no
+ * assessment (a registered person nobody has evaluated yet), so the two can be two people.
+ */
+type MatchingPage = MatchingData & { askedFor: string | null };
+
+/** Whose facts the page's timeline holds, or null when it cannot be told: nobody was asked for and there is no panel to say. */
+function timelineOwner(page: MatchingPage): string | null {
+  return page.askedFor ?? page.selected?.candidate.id ?? null;
+}
+
 const VIEWS: ReadonlyArray<{ value: View; label: string }> = Object.freeze([
   { value: "matching", label: "匹配" },
   { value: "referral", label: "转诊" },
@@ -102,9 +114,12 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const [direction, setDirection] = useState<Direction>("trial_to_patient");
   const [candidate, setCandidate] = useState<string | null>(null);
   const [protocolVersionId, setProtocolVersionId] = useState<string | null>(null);
-  const { state, reload, last } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}`, () => getVcrMatching(studyId, {
-    view, direction, ...(protocolVersionId ? { protocolVersionId } : {}), ...(view === "matching" && candidate ? { candidate } : {}),
-  }));
+  const { state, reload, last } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}`, () => {
+    const askedFor = view === "matching" && candidate ? candidate : null;
+    return getVcrMatching(studyId, {
+      view, direction, ...(protocolVersionId ? { protocolVersionId } : {}), ...(askedFor ? { candidate: askedFor } : {}),
+    }).then((page): MatchingPage => ({ ...page, askedFor }));
+  });
   const pick = (id: string) => {
     setCandidate(id);
     // Same key, a new round: the tab stays on screen while the person loads.
@@ -187,7 +202,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       {view === "referral" && <ReferralView studyId={studyId} data={data} abilities={study.abilities} />}
       {view === "sites" && <SitesView data={data} />}
       {view === "followup" && <FollowupView data={data} />}
-      {view === "matching" && <ClinicalTimeline studyId={studyId} data={data} subject={data.selected?.candidate.id ?? candidate} mayReadOriginal={study.abilities.includes("read_patient_level")} />}
+      {view === "matching" && <ClinicalTimeline studyId={studyId} data={data} subject={timelineOwner(data)} mayReadOriginal={study.abilities.includes("read_patient_level")} />}
     </div>
   );
 }
@@ -232,7 +247,7 @@ function evidenceNeeds(criteria: readonly VcrCriterionJudgement[]): VcrCriterion
 
 function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
   studyId: string;
-  data: MatchingData;
+  data: MatchingPage;
   abilities: readonly string[];
   /** The candidate asked for; the detail may still be the previous one while it loads. */
   picked: string | null;
@@ -244,6 +259,8 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
   const [busy, setBusy] = useState<"contact" | "evidence" | "review" | null>(null);
   const selected = data.selected;
   const current = picked ?? selected?.candidate.id ?? null;
+  // The rules of the panel are tagged from the facts of the panel's person: with another person's timeline under it, from none.
+  const caveatFacts = selected && timelineOwner(data) === selected.candidate.id ? data.timeline : undefined;
   const needs = selected ? evidenceNeeds(selected.criteria) : [];
   const referralId = selected?.referralId ?? null;
   const referralState = selected?.referralState ?? null;
@@ -410,7 +427,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
               columns={[
                 { key: "code", header: "编号", rowHeader: true, width: "w-16", cell: (row) => <span className="tabular-nums text-text-3">{row.code}</span> },
                 { key: "text", header: "方案原文", cell: (row) => <span className="text-text">{row.text}</span> },
-                { key: "state", header: "状态", width: "w-24", cell: (row) => <CriterionState row={row} caveats={evidenceCaveats(row.evidence, data.timeline)} /> },
+                { key: "state", header: "状态", width: "w-24", cell: (row) => <CriterionState row={row} caveats={evidenceCaveats(row.evidence, caveatFacts)} /> },
                 {
                   key: "evidence",
                   header: "患者证据",

@@ -691,6 +691,84 @@ describe("匹配与招募 — what the evidence of a rule has been through", () 
   });
 });
 
+describe("匹配与招募 — whose records the timeline holds", () => {
+  // The timeline under the panel is the facts of the person the page was asked for (`?candidate=`). An unevaluated person has no
+  // assessment, so the server answers with their facts under the first candidate's panel: the two are different people, and the
+  // fold must say whose facts it holds, and the rows of the panel must not be tagged from another person's facts.
+  const AT = { documentId: "doc_shared", start: 10, end: 18 };
+  const fact = (id: string, extra: Record<string, unknown> = {}) => ({ id, variable: "brain_mets", value: null, unit: null, at: null, assertion: "affirmed",
+    experiencer: "patient", medicationState: null, correctionOf: null, quote: "否认脑转移", superseded: false, conflictFactIds: [], correctionReason: null,
+    locator: AT, ...extra });
+  /** The first candidate's page; the panel's first rule cites a span of a document, and `facts` are the page's timeline. */
+  const page = (facts: unknown[]) => {
+    const raw = fixture("ev201/matching.json");
+    raw.candidateRoster = ["P-0300"];
+    raw.selected.criteria[0].evidence = { quote: "否认脑转移", locator: AT, source: "病历原文", at: "9 月 1 日" };
+    raw.timeline = facts;
+    return raw;
+  };
+  const NEGATED = fact("f_neg", { assertion: "negated" });
+
+  it("names the person the page was asked for, not the person of the panel above it, when they are two", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => page(query.get("candidate") === "P-0300"
+        ? [fact("f_300", { quote: "P-0300 的既往史", locator: { documentId: "doc_300", start: 0, end: 8 } })]
+        : [fact("f_201", { quote: "P-0201 的既往史", locator: { documentId: "doc_201", start: 0, end: 8 } })]),
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    // Nobody was asked for: the page's own person.
+    expect(screen.getByText("P-0201 的临床记录与更正")).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("患者"), "P-0300");
+    expect(await screen.findByText("P-0300 的临床记录与更正")).toBeInTheDocument();
+    expect(screen.queryByText("P-0201 的临床记录与更正")).toBeNull();
+    // The server has no assessment of P-0300, so the panel is still the first candidate's.
+    expect(screen.getByRole("heading", { name: "P-0201" })).toBeInTheDocument();
+  });
+
+  it("keeps naming the person whose facts are on screen while the next person's page is read", async () => {
+    let arrive: (value: unknown) => void = () => undefined;
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => (query.get("candidate") === "P-0192"
+        ? new Promise((resolve) => { arrive = resolve; })
+        : page([fact("f_201", { quote: "P-0201 的既往史", locator: { documentId: "doc_201", start: 0, end: 8 } })])),
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await waitFor(() => expect(matchingReads(server).some((query) => query.get("candidate") === "P-0192")).toBe(true));
+    // P-0192's page has not come: the facts are still P-0201's, and so is the name over them.
+    expect(screen.getByText("P-0201 的临床记录与更正")).toBeInTheDocument();
+    expect(screen.queryByText("P-0192 的临床记录与更正")).toBeNull();
+    // It comes — the server's own page for P-0192, with that person's facts — and the name follows the facts.
+    const arrived = fixture("ev201/matching-p0192.json");
+    arrived.timeline = [fact("f_192", { quote: "P-0192 的既往史", locator: { documentId: "doc_192", start: 0, end: 8 } })];
+    await act(async () => { arrive(arrived); });
+    expect(await screen.findByText("P-0192 的临床记录与更正")).toBeInTheDocument();
+    expect(screen.queryByText("P-0201 的临床记录与更正")).toBeNull();
+  });
+
+  it("tags the rules of the panel from the panel's person's facts, and from nobody else's", async () => {
+    server = installVcrServer(network.productRequest, {
+      // Whoever the facts are, one of them is a denial of the span the first rule of the panel cites: a shared document.
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => {
+        const raw = page([NEGATED]);
+        // The page asked for P-0300 is told apart by its list: the second candidate is not in it.
+        if (query.get("candidate") === "P-0300") raw.candidates = raw.candidates.slice(0, 1);
+        return raw;
+      },
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    expect(within(criterionRow("I1")).getByText("已否认")).toBeInTheDocument();
+    // Asked for another person, the panel is still P-0201's but the facts are not: the rule is not tagged by them.
+    await userEvent.selectOptions(screen.getByLabelText("患者"), "P-0300");
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^P-0207/ })).toBeNull());
+    expect(screen.getByRole("heading", { name: "P-0201" })).toBeInTheDocument();
+    expect(document.querySelectorAll("[data-vcr-caveats]")).toHaveLength(0);
+  });
+});
+
 describe("匹配与招募 — one word for the person", () => {
   // Review V-M9: the direction switch said 患者 and the select beside it 受试者. The product's own word in the recruiting tab
   // is 患者 (给试验找患者, 患者证据, 匹配患者, 联系真实患者).
