@@ -57,6 +57,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 import {
   VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
@@ -1221,6 +1222,13 @@ export function vcrBuildStages(item, context) {
     }
     const candidate = { ...baseConfig, endpoint: { ...object(baseConfig.endpoint), type }, design: { ...object(baseConfig.design), ...designs[0] },
       truth: { ...object(baseConfig.truth), ...truths[0] }, designs, truths };
+    const inherited = gridInheritedKey(designs, "design", baseConfig, candidate) ?? gridInheritedKey(truths, "truth", baseConfig, candidate);
+    if (inherited) {
+      const where = inherited.section === "design" ? `dimensions.designs[${inherited.index}]` : `truthScenarios[${inherited.index}]`;
+      const what = inherited.section === "design" ? "设计" : "真值情景";
+      return { ok: false, refused: { code: "vcr_job_scenario_invalid", paths: [`${where}.${inherited.key}`],
+        message: `设计网格里第 ${inherited.index + 1} 个${what}没有写 ${inherited.key}，而第 1 个写了：引擎把第 1 个${what}当作各格共同的底，第 ${inherited.index + 1} 格会带着第 1 个的 ${inherited.key} 去算，格子的标签和算出来的数字就对不上。每个${what}都写全它用到的键，或者把各格共用的键放进 dimensions.base。` } };
+    }
     return finish([stage("design_grid", candidate, { endpoint: type, snapshot: false })]);
   }
 
@@ -1231,6 +1239,38 @@ export function vcrBuildStages(item, context) {
 function stripLabels(entry) {
   const { label: _label, name: _name, ...rest } = object(entry);
   return rest;
+}
+
+/**
+ * What the base of a grid would hand a cell that did not ask for it. The engine lays every cell over one base scenario, and the schema
+ * wants that base complete, so the plan makes the first design and the first truth the base. A key the first entry states and a later one
+ * leaves out would then reach the later cell from there: a design that says 200 treated would run against the 50 controls design 1 named,
+ * and an effect of 0.5 would be filed as a null scenario because truth 1 said `null: true` — the label a cell carries is its own entry's,
+ * the numbers are the base's. A key that does not apply to the later cell (the looks of a group-sequential design, on a fixed one) reaches
+ * nothing, and neither does one the base states with the same value. Anything else is named, so the entry can state it.
+ * @param {Array<Record<string, any>>} entries the grid's designs, or its truths, without their labels
+ * @param {"design" | "truth"} section
+ * @param {Record<string, any>} baseConfig what the grid was written over
+ * @param {Record<string, any>} candidate the scenario the grid is sent as: the base, the first entries folded in, and the lists
+ * @returns {{ section: "design" | "truth", index: number, key: string } | null}
+ */
+function gridInheritedKey(entries, section, baseConfig, candidate) {
+  const fields = object(object(object(VCR_SCENARIO_SCHEMAS["design.grid"]).fields[section]).fields);
+  const stated = object(baseConfig[section]);
+  // The designs a cell of this entry may run under. A truth key can be gated by the design (`design.kind`), so a truth is judged under all of them.
+  const designsUnder = (/** @type {number} */ index) => section === "design"
+    ? [{ ...object(candidate.design), ...entries[index] }]
+    : list(candidate.designs).map((design) => ({ ...object(candidate.design), ...object(design) }));
+  for (let index = 1; index < entries.length; index += 1) {
+    for (const key of Object.keys(entries[0])) {
+      if (Object.hasOwn(entries[index], key) || (Object.hasOwn(stated, key) && isDeepStrictEqual(stated[key], entries[0][key]))) continue;
+      const field = fields[key];
+      if (!field) continue;
+      const truth = section === "truth" ? { ...object(candidate.truth), ...entries[index] } : candidate.truth;
+      if (designsUnder(index).some((design) => whenHolds(field.when, { ...candidate, design, truth }))) return { section, index, key };
+    }
+  }
+  return null;
 }
 
 /** The value of one measure of a stored result, or undefined. @param {Record<string, any> | null | undefined} result @param {string} name */

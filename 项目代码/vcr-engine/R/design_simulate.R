@@ -671,6 +671,24 @@ vcr_analytic_check <- function(scenario, measures) {
                                     else "three Monte-Carlo standard errors"))
 }
 
+#' The scenario one cell of a grid runs: the base with the cell's `design` and
+#' `truth` keys laid over it, key by key. A key the cell states REPLACES the
+#' base's whole value, an array and an object included -- the way the domain's
+#' `checkGrid` and the validator's `.vcrp_merge` (the very function used here)
+#' read a cell, so the cell that was validated is the cell that runs. The first
+#' version used `utils::modifyList`, which keeps the base when both sides are
+#' unnamed lists, i.e. JSON arrays: a cell's `informationRates`, `controlRates`,
+#' `treatmentRates` or a piecewise `controlDistribution`'s `breaks` / `rates` were
+#' dropped while the cell record still showed them (N06e). `[[` never matches a
+#' key by prefix: `design` is not `designs`.
+vcr_grid_cell_scenario <- function(base_scenario, design_override, truth_override) {
+  sc <- base_scenario
+  sc[["designs"]] <- NULL; sc[["truths"]] <- NULL
+  sc[["design"]] <- .vcrp_merge(base_scenario[["design"]], design_override)
+  sc[["truth"]] <- .vcrp_merge(base_scenario[["truth"]], truth_override)
+  sc
+}
+
 #' A design grid: designs x truth scenarios, every cell one immutable run.
 #'
 #' The cell seed is `(seed + k * 7919) mod (2^31 - 1)` in *double* arithmetic:
@@ -684,11 +702,7 @@ vcr_design_grid <- function(base_scenario, designs, truths, seed, replicates = N
   cpu0 <- vcr_cpu_seconds()
   for (di in seq_along(designs)) for (ti in seq_along(truths)) {
     k <- k + 1L
-    override <- list(design = designs[[di]], truth = truths[[ti]])
-    sc <- base_scenario
-    sc$designs <- NULL; sc$truths <- NULL
-    sc$design <- utils::modifyList(sc$design %||% list(), override$design)
-    sc$truth <- utils::modifyList(sc$truth %||% list(), override$truth)
+    sc <- vcr_grid_cell_scenario(base_scenario, designs[[di]], truths[[ti]])
     # Each cell gets its own seed derived from the job seed and the cell index,
     # so adding a cell never changes another cell's numbers.
     cell_seed <- as.integer((as.numeric(seed) + k * 7919) %% 2147483647)

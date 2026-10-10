@@ -347,6 +347,72 @@ vcr_case("N06d", c("AC-28", "AC-31", "AC-04"), function() {
                         !no_rds, cell_seed, same, null_row$value, null_row$mcse, tight$status))
 })
 
+vcr_case("N06e", c("AC-04", "AC-28", "AC-31"), function() {
+  # An ARRAY in a cell's override reaches the cell. `vcr_design_grid` used to lay a cell's design and
+  # truth over the base with utils::modifyList, which keeps the base when both sides are unnamed lists
+  # (JSON arrays): informationRates, controlRates / treatmentRates and a piecewise controlDistribution's
+  # breaks / rates were dropped while the cell record kept the override, so the label said one design and
+  # the numbers were another's. N06d overrides scalars only. Three families, each run as a grid job and
+  # held two ways: the scenario hash a cell reports equals the hash of the scenario written out by hand
+  # with that cell's arrays (so the cell simulated exactly that scenario), and a number only that array
+  # can produce -- the looks of a group-sequential cell, the null label an array pair decides, the
+  # events a piecewise hazard makes.
+  hash_of <- function(sc) vcr_scenario_hash(vcr_test_json(sc))
+  cell_of <- function(r, d, t) Filter(function(c_) c_$designIndex == d && c_$truthIndex == t, r$diagnostics$cells)[[1]]
+  value <- function(cell, name) { m <- Filter(function(x) identical(x$name, name), cell$measures); if (length(m)) m[[1]]$value else NA_real_ }
+  mcse <- function(cell, name) { m <- Filter(function(x) identical(x$name, name), cell$measures); if (length(m)) m[[1]]$mcse else NA_real_ }
+  grid <- function(sc, designs, truths, seed, id) vcr_test_run(vcr_test_job("design.grid", c(sc, list(designs = designs, truths = truths)),
+    seed = seed, replicates = 5000L, cores = VCR_TEST_CORES, job_id = id))
+
+  # (a) group-sequential: informationRates is an array of the DESIGN. Two looks in the base and the first cell, three in the second.
+  gs <- list(design = list(kind = "group_sequential", nTreat = 40, nControl = 40, informationRates = list(0.5, 1), spending = "obrien_fleming"),
+             endpoint = list(type = "time_to_event"), truth = list(controlMedian = 12, hazardRatio = 0.6),
+             analysis = list(method = "logrank", alpha = 0.025, sided = 1), accrual = list(kind = "uniform", duration = 6, followup = 6),
+             performance = list("power"))
+  three <- list(0.3333, 0.6667, 1)
+  r_gs <- grid(gs, list(list(informationRates = list(0.5, 1)), list(informationRates = three)), list(list(hazardRatio = 0.6)), 6061L, "job_n06e_gs")
+  gs_two <- gs; gs_two$design$informationRates <- list(0.5, 1)
+  gs_three <- gs; gs_three$design$informationRates <- three
+  c1 <- cell_of(r_gs, 1, 1); c2 <- cell_of(r_gs, 2, 1)
+  looks1 <- value(c1, "expected_analyses"); looks2 <- value(c2, "expected_analyses")
+  ok_gs <- identical(c1$scenarioHash, hash_of(gs_two)) && identical(c2$scenarioHash, hash_of(gs_three)) &&
+    is.finite(looks1) && looks1 <= 2 && is.finite(looks2) && looks2 > 2.5
+
+  # (b) external control: the two stratum rates of each arm are arrays of the TRUTH, and they decide whether the cell is a null one.
+  ext <- list(design = list(kind = "single_arm_external", n = 100), endpoint = list(type = "binary"),
+              truth = list(controlRates = list(0.2, 0.4), treatmentRates = list(0.2, 0.4)),
+              external = list(kind = "stratified_beta_binomial", n = 200, targetPrevalence = 0.5, sourcePrevalence = 0.3, parameterInformation = 100,
+                              logOddsDrift = 0, sensitivityDrifts = list(-0.3, 0, 0.3)),
+              analysis = list(method = "stratified_risk_difference", estimand = "ATT", alpha = 0.025, sided = 1), performance = list("power"))
+  null_truth <- list(controlRates = list(0.2, 0.4), treatmentRates = list(0.2, 0.4))
+  alt_truth <- list(controlRates = list(0.2, 0.4), treatmentRates = list(0.5, 0.7))
+  r_ex <- grid(ext, list(list(n = 100)), list(null_truth, alt_truth), 6062L, "job_n06e_ext")
+  ext_alt <- ext; ext_alt$truth <- alt_truth
+  e1 <- cell_of(r_ex, 1, 1); e2 <- cell_of(r_ex, 1, 2)
+  ok_ext <- identical(e1$scenarioHash, hash_of(ext)) && identical(e2$scenarioHash, hash_of(ext_alt)) &&
+    is.finite(value(e1, "type_one_error")) && is.na(value(e1, "power")) && is.finite(value(e2, "power")) && is.na(value(e2, "type_one_error")) && value(e2, "power") > 0.5
+
+  # (c) a piecewise control distribution: breaks and rates are arrays inside an object of the TRUTH. The second cell's control hazard is
+  # high early and low late (a cumulative hazard of 0.93 by month 18 against the first cell's 1.5), so it has fewer events.
+  slow <- list(kind = "piecewise", breaks = list(6), rates = list(0.05, 0.1))
+  fast <- list(kind = "piecewise", breaks = list(3, 9), rates = list(0.2, 0.04, 0.01))
+  pw <- list(design = list(kind = "two_arm_fixed", nTreat = 60, nControl = 60), endpoint = list(type = "time_to_event"),
+             truth = list(hazardRatio = 0.6, controlDistribution = slow), analysis = list(method = "logrank", alpha = 0.025, sided = 1),
+             accrual = list(kind = "uniform", duration = 6, followup = 12), performance = list("power"))
+  r_pw <- grid(pw, list(list(nTreat = 60)), list(list(controlDistribution = slow), list(controlDistribution = fast)), 6063L, "job_n06e_pw")
+  pw_fast <- pw; pw_fast$truth$controlDistribution <- fast
+  p1 <- cell_of(r_pw, 1, 1); p2 <- cell_of(r_pw, 1, 2)
+  ev1 <- value(p1, "expected_events"); ev2 <- value(p2, "expected_events")
+  ok_pw <- identical(p1$scenarioHash, hash_of(pw)) && identical(p2$scenarioHash, hash_of(pw_fast)) &&
+    is.finite(ev1) && is.finite(ev2) && ev1 - ev2 > 10 * sqrt(mcse(p1, "expected_events")^2 + mcse(p2, "expected_events")^2)
+
+  list(pass = all(vapply(list(r_gs, r_ex, r_pw), function(r) identical(r$status, "succeeded"), logical(1))) && ok_gs && ok_ext && ok_pw,
+       detail = sprintf("group-sequential: cell 1 hash is the 2-look scenario %s, cell 2 the 3-look scenario %s, expected analyses %.3f (<= 2) and %.3f (> 2.5); external control: null cell hash %s with type-I %.4f, alternative cell hash %s with power %.4f (no type-I error); piecewise: hashes %s / %s, expected events %.2f and %.2f",
+                        identical(c1$scenarioHash, hash_of(gs_two)), identical(c2$scenarioHash, hash_of(gs_three)), looks1, looks2,
+                        identical(e1$scenarioHash, hash_of(ext)), value(e1, "type_one_error"), identical(e2$scenarioHash, hash_of(ext_alt)), value(e2, "power"),
+                        identical(p1$scenarioHash, hash_of(pw)), identical(p2$scenarioHash, hash_of(pw_fast)), ev1, ev2))
+})
+
 vcr_case("N04d", c("AC-29", "AC-30"), function() {
   # The analytic cross-check at a high replicate count. The log-rank power is a
   # first-order approximation, documented to sit within about a percentage point
