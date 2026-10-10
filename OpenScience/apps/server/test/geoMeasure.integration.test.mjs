@@ -1052,7 +1052,7 @@ test("an answer the judge gave up on is judged again after a wait; a judgement c
   await reset();
   const { h, mode, deps, round } = await unjudgedRound("geo_rj");
   try {
-    const facts = async () => rows(`SELECT f.judged_at, f.parser_version, f.rejudge_attempts, f.reparsed_at, f.failure_mode, f.statements, f.brands, f.cites_ours FROM evimed_geo.facts f
+    const facts = async () => rows(`SELECT f.judged_at, f.parser_version, f.reparsed_at, f.failure_mode, f.statements, f.brands, f.cites_ours FROM evimed_geo.facts f
       JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id JOIN evimed_geo.questions q ON q.id = s.question_id ORDER BY q.text`);
     assert.ok((await facts()).every((row) => row.judged_at === null && row.parser_version.endsWith("+unjudged")), "given up on after three tries");
     await tickMetrics(deps);
@@ -1068,7 +1068,8 @@ test("an answer the judge gave up on is judged again after a wait; a judgement c
     const again = await tickParse({ ...deps, maxParse: 20 });
     assert.deepEqual([again.rejudged, again.rejudgeFailed, again.errorsCreated, again.notified], [3, 0, 1, 1]);
     const judged = await facts();
-    assert.ok(judged.every((row) => row.judged_at !== null && row.parser_version.endsWith(GEO_JUDGE_VERSION) && row.reparsed_at !== null && row.rejudge_attempts === 0));
+    assert.ok(judged.every((row) => row.judged_at !== null && row.parser_version.endsWith(GEO_JUDGE_VERSION) && row.reparsed_at !== null));
+    assert.deepEqual((await rows(`SELECT rejudge_attempts AS n FROM evimed_geo.facts`)).map((row) => row.n), [0, 0, 0], "no try was spent");
     const wrong = judged.find((row) => row.failure_mode === "wrong_ours");
     assert.deepEqual(wrong.statements.map((/** @type {any} */ statement) => [statement.text, statement.verdict]), [[WRONG, "wrong"]]);
     assert.equal(wrong.cites_ours, true, "what code counts is counted again from the answer");
