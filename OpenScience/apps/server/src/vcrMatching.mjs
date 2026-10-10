@@ -48,7 +48,7 @@
  * @module vcrMatching
  */
 
-import { clinicalFactPolarity, clinicalFactView, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit } from "@evimed/domain";
+import { CLINICAL_ASSERTIVE_POLARITIES, clinicalFactPolarity, clinicalFactView, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit } from "@evimed/domain";
 import { createHash } from 'node:crypto';
 import {
   canonicalScenarioJson, VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ELIGIBILITY_SUMMARIES, VCR_MISSING_REASONS, validateRequirement,
@@ -96,7 +96,7 @@ export const VCR_FACT_VOID_REASONS = Object.freeze([
 ]);
 
 /** Polarities that may be reasoned from. A family history or a plan is not a finding. */
-export const VCR_ASSERTIVE_POLARITIES = Object.freeze(["affirmed", "negated"]);
+export const VCR_ASSERTIVE_POLARITIES = CLINICAL_ASSERTIVE_POLARITIES;
 
 /** The layers a criterion-level error is stratified by (plan §7.1, attachment C2 failure modes). */
 export const VCR_ERROR_LAYERS = Object.freeze(["time", "number", "negation", "logic", "applicability", "other"]);
@@ -246,13 +246,16 @@ function numeralsIn(text) {
  * chart says 2.4 fails the last of those three and nothing else would have
  * caught it.
  *
+ * `anyPolarity` skips the polarity check and nothing else: the caller is asking whether the evidence stands, not
+ * whether the fact may be reasoned from (`assessSubject` settles corrections among such facts first).
+ *
  * @param {any} fact
- * @param {{ documents?: Map<string, any> | Record<string, any>, asOf?: number|string|Date }} context
+ * @param {{ documents?: Map<string, any> | Record<string, any>, asOf?: number|string|Date, anyPolarity?: boolean }} context
  * @returns {{ ok: boolean, reason: string|null }}
  */
 export function verifyFactEvidence(fact, context = {}) {
   const asOf = instant(context.asOf) ?? Number.POSITIVE_INFINITY;
-  if (!VCR_ASSERTIVE_POLARITIES.includes(String(fact?.polarity ?? "affirmed"))) {
+  if (context.anyPolarity !== true && !VCR_ASSERTIVE_POLARITIES.includes(String(fact?.polarity ?? "affirmed"))) {
     return { ok: false, reason: "polarity_not_assertive" };
   }
   const visibleAt = instant(fact?.visibleAt);
@@ -977,11 +980,30 @@ export function assessSubject(input) {
   const asOf = instant(input?.asOf);
   if (asOf === null) throw new TypeError("An assessment is made as of an instant; pass asOf.");
   const visible = factsVisibleAt(input.facts ?? [], asOf);
-  const { facts, voided } = admissibleFacts(visible, { documents: input.documents, asOf });
+  // Every visible fact has its evidence checked whatever its polarity, and corrections are settled among all of the
+  // ones that stand: a correction that re-labels a fact as a family history or a hypothesis replaces the original
+  // exactly as one that negates it does, and the page already says so. Only then are the survivors that may not be
+  // reasoned from set aside. Voiding them first kept the original, and the false exclusion with it (E-02).
+  /** @type {any[]} */
+  const verified = [];
+  /** @type {Map<any, string>} */
+  const unverified = new Map();
+  for (const fact of visible) {
+    const checked = verifyFactEvidence(fact, { documents: input.documents, asOf, anyPolarity: true });
+    if (checked.ok) verified.push(fact); else unverified.set(fact, String(checked.reason));
+  }
+  const longitudinal = clinicalFactView(verified, asOf, { assertiveOnly: true });
+  const setAside = new Set(longitudinal.setAside);
   // A fact that was thrown away here is the reason a criterion downstream reads
   // `unknown`; carrying the list on the assessment is what makes that traceable
-  // instead of mysterious.
-  const longitudinal = clinicalFactView(facts, asOf);
+  // instead of mysterious. A fact that may not be reasoned from says so first, whatever else is wrong with it.
+  /** @type {{ factId: string, variable: string, reason: string }[]} */
+  const voided = [];
+  for (const fact of visible) {
+    const reason = !unverified.has(fact) && !setAside.has(fact) ? null
+      : !VCR_ASSERTIVE_POLARITIES.includes(clinicalFactPolarity(fact)) ? "polarity_not_assertive" : unverified.get(fact) ?? null;
+    if (reason) voided.push({ factId: String(fact?.id ?? ""), variable: String(fact?.variable ?? ""), reason });
+  }
   const context = {
     facts: longitudinal.facts, asOf, documents: input.documents,
     modelJudgments: input.modelJudgments ?? {},

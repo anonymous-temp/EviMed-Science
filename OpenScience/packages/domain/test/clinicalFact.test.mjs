@@ -44,6 +44,31 @@ test('a fact the platform wrote after the view time is still in the view; only a
   assert.deepEqual(clinicalFactView([fact('f3', 3)], '2020-01-01').facts.map(f => f.value), [3]);
 });
 
+test('assertiveOnly: a correction that re-labels a fact still supersedes it, and the facts that may not be reasoned from are set aside', () => {
+  const original = fact('f1', 1, { createdAt: '2026-01-01' });
+  const relabelled = fact('f2', 1, { createdAt: '2026-03-01', clinical: { experiencer: 'family', correctionOf: 'f1', correctionReason: 'It is the father' } });
+  const all = clinicalFactView([original, relabelled], '2026-04-01');
+  assert.deepEqual(all.superseded, ['f1'], 'a correction supersedes whatever polarity it carries');
+  assert.deepEqual(all.facts.map(f => f.id), ['f2'], 'without the option the page-style view lists the re-labelled fact');
+  assert.deepEqual(all.setAside, []);
+  const reasoned = clinicalFactView([original, relabelled], '2026-04-01', { assertiveOnly: true });
+  assert.deepEqual(reasoned.superseded, ['f1']);
+  assert.deepEqual(reasoned.facts, []);
+  assert.deepEqual(reasoned.setAside, [relabelled], 'the fact as given, so a caller can match it by identity even without an id');
+  // A fact nothing corrected and that is not assertive is set aside too; an assertive one is kept.
+  const plan = fact('f3', 4, { clinical: { temporality: 'planned' } });
+  const view = clinicalFactView([fact('f4', 5), plan], '2026-04-01', { assertiveOnly: true });
+  assert.deepEqual(view.facts.map(f => f.id), ['f4']);
+  assert.deepEqual(view.setAside, [plan]);
+  // A fact set aside is not a party to a conflict, by relation or by episode.
+  const kept = fact('k', 1, { clinical: { eventId: 'visit1' } });
+  const hypothesis = fact('h', 2, { clinical: { eventId: 'visit1', assertion: 'possible', relations: [{ type: 'contradicts', state: 'supported', targetFactId: 'k', quote: 'q' }] } });
+  assert.equal(clinicalFactView([kept, hypothesis], '2026-04-01').conflicts.length, 2, 'the page view still shows the relation');
+  const settled = clinicalFactView([kept, hypothesis], '2026-04-01', { assertiveOnly: true });
+  assert.deepEqual(settled.conflicts, []);
+  assert.equal(settled.facts[0].conflicts, undefined);
+});
+
 test('conflicts are explicit within an episode, never resolved by recency or across subjects', () => {
   const a = fact('a', 1, { clinical: { eventId: 'visit1' } });
   const b = fact('b', 2, { clinical: { eventId: 'visit1' } });

@@ -21,7 +21,7 @@ import {
   pendingReviewExclusions, requiresLanguageJudgment, runMatchingEvaluation, separateLedgers,
   summarizeEligibility, verifyFactEvidence, windowStart, withinWindow,
 } from "../src/vcrMatching.mjs";
-import { validateCapabilityManifest, vcrMatchingFindings } from "@evimed/domain";
+import { clinicalFactView, validateCapabilityManifest, vcrMatchingFindings } from "@evimed/domain";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const AS_OF = "2026-09-28T00:00:00Z";
@@ -854,6 +854,35 @@ test('same-event conflicting lab results stay unknown; a visible sourced correct
   const correction={...second,createdAt:'2026-10-02',clinical:{...clinical,correctionOf:'first',correctionReason:'Confirmed corrected report'}};
   assert.equal(assess([first,correction],'2026-10-01').summary,'eligible');
   assert.equal(assess([first,correction]).summary,'ineligible');
+});
+
+test('a correction that re-labels a fact as a family history or a hypothesis replaces it, and the verdict follows the page (E-02)', () => {
+  const source = chart('2026-08-01 患者诊断心肌梗死。2026-09-01 更正：心肌梗死为其父亲病史。2026-09-02 更正：心肌梗死仅为可疑诊断。');
+  const patient = { schema: 1, assertion: 'affirmed', experiencer: 'patient' };
+  const original = source.fact('患者诊断心肌梗死', { id: 'original', subjectKey: 'p1', variable: 'myocardial_infarction', occurredAt: '2026-08-01T00:00:00Z',
+    createdAt: '2026-09-10T00:00:00Z', clinical: patient });
+  /** @param {string} id @param {string} surface @param {string} polarity @param {any} clinical */
+  const correction = (id, surface, polarity, clinical) => source.fact(surface, { id, subjectKey: 'p1', variable: 'myocardial_infarction', polarity,
+    occurredAt: '2026-08-01T00:00:00Z', createdAt: '2026-09-11T00:00:00Z', clinical: { schema: 1, ...clinical, correctionOf: 'original', correctionReason: 'The note itself corrects the entry' } });
+  const assess = (/** @type {any[]} */ facts) => assessSubject({ criteria: [CRITERION_MI], facts, asOf: AS_OF, documents: source.documents });
+
+  assert.equal(assess([original]).summary, 'ineligible', 'the control: an affirmed infarction inside the window excludes');
+  for (const [label, fact] of /** @type {[string, any][]} */ ([
+    ['family', correction('relabelled', '更正：心肌梗死为其父亲病史', 'family', { assertion: 'affirmed', experiencer: 'family' })],
+    ['hypothetical', correction('relabelled', '更正：心肌梗死仅为可疑诊断', 'hypothetical', { assertion: 'possible', experiencer: 'patient' })],
+  ])) {
+    const assessed = assess([original, fact]);
+    assert.deepEqual(assessed.clinicalHistory.superseded, ['original'], `${label}: the original is replaced, as the page says`);
+    assert.equal(assessed.summary, 'insufficient_evidence', `${label}: the false exclusion the correction exists to remove is gone, and silence is unknown`);
+    assert.deepEqual(assessed.voidedFacts, [{ factId: 'relabelled', variable: 'myocardial_infarction', reason: 'polarity_not_assertive' }], `${label}: the re-labelled fact is set aside, not reasoned from`);
+    assert.deepEqual(clinicalFactView([original, fact], AS_OF).superseded, ['original'], `${label}: page and verdict agree`);
+  }
+  // A re-label whose own quote is not in the chart replaces nothing.
+  const forged = { ...correction('forged', '更正：心肌梗死为其父亲病史', 'family', { assertion: 'affirmed', experiencer: 'family' }), source: { documentId: 'doc-1', start: 0, end: 4, quote: '2026' } };
+  assert.equal(assess([original, forged]).summary, 'ineligible');
+  // A re-label that is not yet visible at the instant replaces nothing either.
+  const later = { ...correction('later', '更正：心肌梗死为其父亲病史', 'family', { assertion: 'affirmed', experiencer: 'family' }), visibleAt: '2026-10-01T00:00:00Z' };
+  assert.equal(assess([original, later]).summary, 'ineligible');
 });
 
 test('an explicit as-of replay uses a clinical fact the platform wrote later but could read by then (E-03)', () => {
