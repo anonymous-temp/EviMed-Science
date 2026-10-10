@@ -33,7 +33,7 @@ export function TablePreview({ table }: { table: TableData }) {
         </table>
       </div>
       {table.truncated && (
-        <div className="py-2 text-center text-caption text-muted">Showing the first {table.rows.length} rows</div>
+        <div className="py-2 text-center text-caption text-muted">只显示前 {table.rows.length.toLocaleString("zh-CN")} 行</div>
       )}
     </div>
   );

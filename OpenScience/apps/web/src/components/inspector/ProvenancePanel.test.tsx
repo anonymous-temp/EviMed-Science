@@ -75,6 +75,20 @@ describe("ProvenancePanel", () => {
     expect(screen.getByText("打开对话")).toBeInTheDocument();
   });
 
+  it("writes a version's time the Chinese way, whatever language the browser is set to", async () => {
+    listProvenance.mockResolvedValue(records);
+    const formatted = vi.spyOn(Date.prototype, "toLocaleString");
+    try {
+      renderPanel();
+      await screen.findByText("v2");
+      expect(formatted).toHaveBeenCalled();
+      for (const [locale] of formatted.mock.calls) expect(locale).toBe("zh-CN");
+      expect(screen.getAllByText(/^\d+月\d+日/)).toHaveLength(2);
+    } finally {
+      formatted.mockRestore();
+    }
+  });
+
   it("expands an older version to reveal its code", async () => {
     listProvenance.mockResolvedValue(records);
     renderPanel();

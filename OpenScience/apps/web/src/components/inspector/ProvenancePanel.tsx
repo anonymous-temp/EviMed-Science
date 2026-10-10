@@ -227,7 +227,7 @@ export function LegacyProvenancePanel({ path, language }: { path: string; langua
 
 function formatTs(ts: number): string {
   const d = new Date(ts * 1000);
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString("zh-CN", {
     month: "short",
     day: "numeric",
     hour: "2-digit",

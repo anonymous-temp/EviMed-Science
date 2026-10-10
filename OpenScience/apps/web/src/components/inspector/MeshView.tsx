@@ -209,7 +209,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
         for (let i = 0; i < px.length; i += 4)
           if (!(px[i] > 250 && px[i + 1] < 5 && px[i + 2] > 250)) drawn++;
         if (drawn < width * height * 0.0008)
-          setNotice("This 3D file has no visible geometry — the export looks incomplete or corrupt.");
+          setNotice("这个三维文件没有可显示的几何体，导出可能不完整或已损坏。");
 
         if (!cancelled) {
           setRendering(false);
@@ -258,7 +258,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
 
   return (
     <div className="relative h-full min-h-[420px] w-full touch-none select-none overflow-hidden">
-      <div ref={mountRef} className="absolute inset-0" aria-label={`${filename} 3D model viewer`} />
+      <div ref={mountRef} className="absolute inset-0" aria-label={`${filename} 的三维模型预览`} />
 
       <div className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border bg-surface p-1 shadow-e2 backdrop-blur">
         <div className="flex items-center gap-1 px-1.5 text-caption font-medium text-muted">
@@ -266,8 +266,8 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
         </div>
         <div className="flex rounded bg-surface-2 p-0.5">
           {[
-            { v: true, label: "Shaded" },
-            { v: false, label: "Wireframe" },
+            { v: true, label: "着色" },
+            { v: false, label: "线框" },
           ].map((o) => (
             <button
               key={o.label}
@@ -290,7 +290,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
 
       <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-e2 backdrop-blur">
         <span className="font-medium text-text">{ext.toUpperCase()}</span>
-        {meta && <span className="ml-2">{meta.tris.toLocaleString()} triangles</span>}
+        {meta && <span className="ml-2">{meta.tris.toLocaleString("zh-CN")} 个三角面</span>}
       </div>
 
       {(rendering || error) && (
@@ -302,7 +302,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
       {notice && !rendering && !error && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 max-w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-input border border-warn bg-surface px-4 py-3 text-center text-ui text-text shadow-e2 backdrop-blur">
           <div className="mb-1 flex items-center justify-center gap-1.5 font-medium text-warn">
-            <AlertTriangle size={16} aria-hidden="true" /> File problem
+            <AlertTriangle size={16} aria-hidden="true" /> 文件有问题
           </div>
           {notice}
         </div>
