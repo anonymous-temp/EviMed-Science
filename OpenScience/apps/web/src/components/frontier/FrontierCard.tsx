@@ -157,11 +157,11 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
           {flags.map((flag) => (flag.key === "retracted"
             ? <Tag key={flag.key} tone="safety">{flag.label}</Tag>
             : <span key={flag.key} className="shrink-0">· {flag.label}</span>))}
+          {/* The dot and the number are one picture with a name of its own (review L-9); the number stays a bare grey number. */}
           {band && (
             <Tooltip content="编辑评分 · 满分 100">
-              <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-caption font-semibold tabular-nums text-text-3">
+              <span role="img" aria-label={`编辑评分 ${item.score}`} className="ml-auto inline-flex shrink-0 items-center gap-1 text-caption font-semibold tabular-nums text-text-3">
                 <span aria-hidden="true" data-band={band} className={cn("h-1.5 w-1.5 rounded-full", BAND_DOT[band])} />
-                <span className="sr-only">编辑评分</span>
                 {item.score}
               </span>
             </Tooltip>

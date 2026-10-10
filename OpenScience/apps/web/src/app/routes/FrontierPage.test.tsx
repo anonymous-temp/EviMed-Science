@@ -620,7 +620,7 @@ describe("the actions on a card", () => {
   it("shows the editorial total and never a dimension's number", async () => {
     renderPage();
     const card = await screen.findByRole("article", { name: "今天的一条 RCT" });
-    expect(within(card).getByText("编辑评分").parentElement).toHaveTextContent("86");
+    expect(within(card).getByRole("img", { name: "编辑评分 86" })).toHaveTextContent("86");
     // The fixture carries scoreTotal 87 and scores 29 / 17 / 13, which the contract never sends.
     for (const number of ["87", "29", "17", "13"]) expect(card.textContent).not.toContain(number);
   });
