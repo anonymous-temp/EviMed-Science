@@ -37,9 +37,19 @@ export { SOURCE_SCOPE_UNAVAILABLE_CONTEXT, sourceCitationProse, sourceCitationRe
 /** @typedef {import('./src/agenda.mjs').AgendaResultKind} AgendaResultKind */
 
 export {
-  GEO_VALUE_DOMAINS, GEO_RESEARCH_CAPABILITIES, GEO_VALUE_COLLECTIONS, GEO_VALUE_COVERAGE_STATUSES,
-  geoValueObject, geoValueCanonical, mergeGeoValue, geoValueList, geoValueText, geoValueActive,
-  geoValueContext, geoValueImpacts, summarizeGeoValueCoverage,
+  GEO_VALUE_DOMAINS,
+  GEO_RESEARCH_CAPABILITIES,
+  GEO_VALUE_COLLECTIONS,
+  GEO_VALUE_COVERAGE_STATUSES,
+  geoValueObject,
+  geoValueCanonical,
+  mergeGeoValue,
+  geoValueList,
+  geoValueText,
+  geoValueActive,
+  geoValueContext,
+  geoValueImpacts,
+  summarizeGeoValueCoverage,
 } from './src/geoValue.mjs'
 
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityEntry} AvailabilityEntry */
@@ -2095,6 +2105,23 @@ export {
   selectEvolutionParent,
   evolutionPruningCandidates,
 } from './src/evolutionSelection.mjs';
-export { CLINICAL_FACT_SCHEMA, CLINICAL_FACT_CONTRACT, CLINICAL_ASSERTIONS, CLINICAL_EXPERIENCERS, CLINICAL_RELATIONS, clinicalLocatorIssues, clinicalFactIssues, clinicalFactPolarity, clinicalSemanticFields, clinicalTerminologyContext, clinicalFactView } from './src/clinicalFact.mjs'
+export {
+  CLINICAL_FACT_SCHEMA,
+  CLINICAL_FACT_CONTRACT,
+  CLINICAL_ASSERTIONS,
+  CLINICAL_EXPERIENCERS,
+  CLINICAL_RELATIONS,
+  clinicalLocatorIssues,
+  clinicalFactIssues,
+  clinicalFactPolarity,
+  clinicalSemanticFields,
+  clinicalTerminologyContext,
+  clinicalFactView,
+} from './src/clinicalFact.mjs'
 
-export { CLINICAL_UNIT_VERSION, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit } from './src/clinicalUnits.mjs';
+export {
+  CLINICAL_UNIT_VERSION,
+  clinicalUnitToken,
+  clinicalUnitInQuote,
+  convertClinicalUnit,
+} from './src/clinicalUnits.mjs'

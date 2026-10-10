@@ -286,7 +286,7 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
       ? subjectTableFacts({ ...tableRead, variables: matchingVariablesOf(criteria), limit: Number.POSITIVE_INFINITY })
       : null;
     /** @type {Set<string>} candidates that exist only as a row of the table */
-    const tableOnly = new Set();
+    const tableOnly = new Set((snapshot.subjectTable?.subjects ?? []).filter(subjectKey => !factsBySubject.has(subjectKey) && !languageBySubject.has(subjectKey)));
     for (const { subjectKey, facts } of snapshot.subjectTable ? tableFacts?.subjects ?? [] : []) {
       if (!factsBySubject.has(subjectKey) && !languageBySubject.has(subjectKey)) tableOnly.add(subjectKey);
       factsBySubject.set(subjectKey, [...(factsBySubject.get(subjectKey) ?? []), ...facts]);
