@@ -644,7 +644,6 @@ test("the account's own methods take the budget first; what a received pack brou
     });
     const learning = {
       async approvedMethods() { return [{ id: "method:learned:alpha", payload: learnedPayload("alpha") }, { id: "method:learned:beta", payload: learnedPayload("beta") }]; },
-      async methodTrial() { return { methodIds: [] }; },
     };
     const result = await materializeCapsuleMethods({ capsules, learning, project, directory });
     assert.equal(result.count, MAX_MOUNTED_CAPSULE_METHODS);
@@ -688,7 +687,7 @@ test("a learned method costs the budget its card, not its text, so long ones sti
       { id: "method:learned:pre-submission-freeze-check", payload: learnedPayload("pre-submission-freeze-check", 27) },
       { id: "method:learned:quote-anchor", payload: learnedPayload("quote-anchor", 25) },
     ];
-    const learning = { async approvedMethods() { return documents; }, async methodTrial() { return { methodIds: [] }; } };
+    const learning = { async approvedMethods() { return documents; } };
     const capsules = fakeCapsules({ projectItems: [{ capsuleId: "capsule-a", mode: "own" }], byCapsule: { "capsule-a": own } });
     // What a run is handed for each learned method: the card the socket writes
     // (the same `learnedMethodCardEntry`), naming the file under the mount.

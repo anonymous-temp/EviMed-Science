@@ -239,7 +239,6 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_BUILD_CREATED: ["deployment", "release"],
   OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_ID: ["deployment", "release"],
   OPEN_SCIENCE_DEEPSEEK_CONFIG_REVISION: ["deployment", "release"],
-  OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND: ["deployment", "command"],
   OPEN_SCIENCE_OPERATOR_METRICS_TOKEN: ["deployment", "credential"],
   OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE: ["deployment", "credential"],
   OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE: ["deployment", "credential"],

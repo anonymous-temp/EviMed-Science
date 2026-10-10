@@ -44,12 +44,11 @@ test("supplements share remaining mounted-method bytes and never assume an unkno
   assert.equal(receipts.length, 0);
 }));
 
-test("paused learning, foreign owners and evaluation work get no supplement", () => setup(async ({ project, deps, run }) => {
+test("paused learning and foreign owners get no supplement", () => setup(async ({ project, deps, run }) => {
   let prepare = createOwnedResearchContext({ ...deps, paused: async () => ({ learning: true }) });
   assert.equal((await prepare(project, { mode: "specialist", agentId: "geo-content" }, {}, run)).handbooks.length, 0);
   prepare = createOwnedResearchContext(deps);
   assert.equal((await prepare({ ...project, userId: "bob" }, { mode: "specialist", agentId: "geo-content" }, {}, run)).handbooks.length, 0);
-  assert.equal((await prepare(project, { mode: "specialist", agentId: "geo-content" }, {}, { ...run, learningEvaluation: {} })).handbooks.length, 0);
 }));
 
 test("supplement IO failure is audited without vetoing ordinary research", () => setup(async ({ project, deps, audits, run }) => {

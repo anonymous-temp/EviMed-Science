@@ -27,8 +27,8 @@ function method(overrides: Record<string, unknown> = {}) {
     name: "pre-submission-freeze-check", title: "定稿前的冻结检查", summary: "提交前先固定每个附件的副本。",
     description: "Runs the last guards on a finished, source-grounded deliverable before its bytes are frozen.",
     whenToUse: "When a finished deliverable is one step away from submission.",
-    status: "approved", statusReason: null, origin: "inferred", counts: { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 },
-    evaluations: [], promotion: { status: "approved", reasons: [], missing: [] }, body: "## Purpose\nA deliverable that reports a study…", steps: "1. 固定每个附件的副本。",
+    status: "approved", statusReason: null, origin: "inferred", counts: { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, read: 0 },
+    promotion: { status: "approved", reasons: [], missing: [] }, body: "## Purpose\nA deliverable that reports a study…", steps: "1. 固定每个附件的副本。",
     bodyUpdatedAt: "2026-09-26T03:52:00Z", statusChangedAt: "2026-09-22T06:00:00Z", createdAt: "2026-09-21T06:00:00Z", updatedAt: "2026-09-23T06:00:00Z",
     ...overrides,
   } as never;

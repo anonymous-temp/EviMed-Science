@@ -24,16 +24,6 @@ import test from "node:test";
 
 const serverSource = await readFile(new URL("../src/server.mjs", import.meta.url), "utf8");
 
-test("approval receives a live baseline reader checked against the stored owner's project", () => {
-  const service = serverSource.slice(serverSource.indexOf("const learningService ="), serverSource.indexOf("const learningRoutes ="));
-  assert.match(service, /resolveBaselineDigest: async \(userId, projectId\)/);
-  assert.match(service, /store\.userById\(userId\)/);
-  assert.match(service, /await store\.requireProject\(user, projectId\)/);
-  // With the launch's own byte budget, so the approval compares against what a
-  // launch would mount.
-  assert.match(service, /freezeLearningBaseline\(\{\s*learning: learningService, capsules: capsuleService, userId, projectId, maxPromptBytes: config\.mountedMethodPromptBytes,\s*\}\)/);
-});
-
 test("every learning module the loop needs is imported by the composition root", () => {
   for (const module of [
     "./runTranscripts.mjs",
@@ -105,9 +95,9 @@ test("the lessons are queued from the terminal hook by themselves, after the mem
   const noMemory = hook.indexOf("if (!researchMemory.configured) {");
   assert.ok(hook.indexOf("await queueLessons(null);", noMemory) > noMemory,
     "a deployment without a memory store still learns from its runs");
-  const evaluationGuard = hook.indexOf("if (evaluationRun || internalFor(project.userId, project.id)) return;");
-  assert.ok(evaluationGuard > 0 && evaluationGuard < noMemory,
-    "an evaluation cell, or any run in an internal project, never queues a lesson or seeds memory");
+  const internalGuard = hook.indexOf("if (internalFor(project.userId, project.id) || !reusableClinicalContext) return;");
+  assert.ok(internalGuard > 0 && internalGuard < noMemory,
+    "any run in an internal project (an evaluation harness's among them) never queues a lesson or seeds memory");
 });
 
 test("background work in an internal project never reaches the inbox as a person's research", () => {
@@ -118,34 +108,31 @@ test("background work in an internal project never reaches the inbox as a person
   // `runFinishedReachesInbox`, tested in runFinishedNotice.test.mjs, and this
   // asserts the hook hands it every one of its inputs from where they live.
   const hook = /onRunFinished: async \(project, run\) => \{[\s\S]*?\n    \},/.exec(serverSource)[0];
-  assert.match(hook, /if \(notificationService && runFinishedReachesInbox\(run, \{\s*internalProject: internalFor\(project\.userId, project\.id\), evaluation: evaluationRun,\s*automated: automatedRun\(run\), autopilotOwned: autopilotOwned === true,\s*\}\)\) \{/);
+  assert.match(hook, /if \(notificationService && runFinishedReachesInbox\(run, \{\s*internalProject: internalFor\(project\.userId, project\.id\),\s*automated: automatedRun\(run\), autopilotOwned: autopilotOwned === true,\s*\}\)\) \{/);
   assert.doesNotMatch(hook, /silent/, "nothing is recorded quietly any more");
 });
 
-test("a shutdown tells the learning worker before it aborts the evaluations", () => {
-  // Otherwise the abort reads as the evaluation's own failure and costs one of
-  // its three attempts — one per release.
+test("a shutdown tells the learning worker first, before it closes anything a job is waiting on", () => {
+  // Otherwise what the shutdown ends reads as the job's own failure and costs one
+  // of its three attempts — one per release.
   const close = /async close\(\) \{[\s\S]*?\n    \},/.exec(serverSource.slice(serverSource.indexOf("runtimeUi.listen();")))?.[0] ?? "";
   const interrupt = close.indexOf("learningWorker?.interrupt();");
-  const abort = close.indexOf("for (const controller of evaluationAbortControllers) controller.abort();");
-  assert.ok(interrupt > 0 && abort > interrupt, "interrupt() must come before the evaluation abort in close()");
+  const closed = close.indexOf("await learningWorker?.close();");
+  assert.ok(interrupt > 0 && closed > interrupt, "interrupt() must come before the worker is closed in close()");
+  assert.equal(close.indexOf("evaluationAbortControllers"), -1, "there is no paired evaluation left to abort");
 });
 
 test("the counters have a producer, which is the whole difference between wired and working", () => {
   // Each of these names is a counter movement no other code path can make.
-  // Without the first two, `learning.counts` never leaves zero,
-  // `evaluationEligible` is false forever, and a distillation loop that runs
-  // every night can never promote anything it writes.
+  // Without the first two, `learning.counts` never leaves zero and the harm
+  // test has no run to read, so a distillation loop that runs every night can
+  // never retire anything it writes, however badly it goes.
   assert.match(serverSource, /const recordMethodUse = async \(\{ project, run, sessions \}\) => \{/);
   assert.match(serverSource, /learningService\.recordObservation\(/, "no producer for the success counters");
   assert.match(serverSource, /learningService\.recordEligible\(/, "no producer for the denominator");
   assert.match(serverSource, /const observedSessions = methodObservationSessionsForRun\(\{ run, projection, sessions \}\);\s*const derived = runMethodObservations\(\{ run, projection, methods, sessions: observedSessions \}\);/,
     "the counter producer must receive only the sessions attributed to the current run");
-  // `mark` stamps `trial: true` on the entries whose method was on trial, so
-  // the ledger can tell a measured arm from an ordinary run; the receipt it
-  // writes is still derived, which is what this asserts.
-  assert.match(serverSource, /methodsLoaded: mark\(derived\.methodsLoaded\)/, "the ledger's mounted-method receipt has no writer");
-  assert.match(serverSource, /const trialNames = new Set\(methods\.filter\(\(method\) => method\.trial\)/, "nothing marks a trialled mount");
+  assert.match(serverSource, /methodsLoaded: derived\.methodsLoaded/, "the ledger's mounted-method receipt has no writer");
   // The read-without-delegation signal is derived and then fed to the audit
   // ledger. Derived and unfed would be the open-domain line looking unused
   // again, which is the state this signal was added to end.

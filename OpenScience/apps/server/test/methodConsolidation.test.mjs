@@ -48,7 +48,7 @@ const doc = (id, name, overrides = {}) => ({
     frontmatter: frontmatter(name),
     body: SECTIONS(),
     contentDigest: `sha256:${id.padEnd(64, "0").slice(0, 64)}`,
-    learning: { digest: `sha256:${id.padEnd(64, "0").slice(0, 64)}`, counts: {}, observations: [], relations: [], evaluations: [], level: 0 },
+    learning: { digest: `sha256:${id.padEnd(64, "0").slice(0, 64)}`, counts: {}, observations: [], relations: [], level: 0 },
     provenance: { origin: "inferred" },
     ...overrides,
   },
@@ -71,7 +71,6 @@ function fakeLearning(items) {
       throw error;
     },
     async retire() { return null; },
-    async recordEvaluation() { return null; },
     async retirementProposals() { return []; },
   };
 }
@@ -96,7 +95,7 @@ function consolidation(options) {
 }
 
 test("the action vocabulary is closed and an unknown one is refused before any model call", async () => {
-  assert.deepEqual([...CONSOLIDATE_ACTIONS], ["sleep", "integrate", "evaluate", "optimize"]);
+  assert.deepEqual([...CONSOLIDATE_ACTIONS], ["sleep", "integrate", "optimize"], "there is no evaluate action: no paired evaluation of a method is run");
   const { instance, dispatched } = consolidation({ learning: fakeLearning([]) });
   await assert.rejects(
     () => instance.run({ job: { payload: { action: "improvise" } } }),
@@ -250,7 +249,7 @@ test("the nightly pass queues no paired evaluation, whatever a method has earned
     digest: passing.payload.contentDigest,
     counts: {},
     observations: [1, 2, 3].map((index) => ({ runId: `r${index}`, family: `f${index}`, outcome: "accepted", at: "2026-09-06T00:00:00.000Z" })),
-    relations: [], evaluations: [], level: 0,
+    relations: [], level: 0,
   };
   const learning = fakeLearning([passing, doc("m2", "resolve-claim-anchor")]);
   /** @type {any[]} */
@@ -266,13 +265,14 @@ test("the nightly pass queues no paired evaluation, whatever a method has earned
   assert.deepEqual(enqueued.filter((entry) => entry.payload?.action === "evaluate"), []);
 });
 
-test("an evaluate job without a runner fails by name rather than quietly succeeding", async () => {
+test("an evaluate job is refused by name: the action went with the paired evaluation (2026-10-10), and a method is never measured by being switched on and off", async () => {
   const learning = fakeLearning([doc("m1", "resolve-claim-span")]);
-  const { instance } = consolidation({ learning });
+  const { instance, dispatched } = consolidation({ learning });
   await assert.rejects(
     () => instance.run({ job: { id: "j", userId: "u1", payload: { action: "evaluate", methodId: "m1" } } }),
-    (error) => error.code === "method_evaluation_unavailable",
+    (error) => error.code === "consolidate_action_invalid",
   );
+  assert.deepEqual(dispatched, [], "no run was started for it");
 });
 
 test("integrate looks at a bounded neighbourhood, never the whole library", async () => {
@@ -640,7 +640,7 @@ test("a merge retires its originals when the canonical method has cleared the ha
   /** @param {any[]} observations @param {any} [more] */
   const holds = (observations, more = {}) => { canonical.payload.learning = { ...canonical.payload.learning, digest: canonical.payload.contentDigest, observations, ...more }; };
 
-  // A record of paired evidence is not what clears it any more: no study is run, so no merge could ever have retired anything by it.
+  // A verdict an earlier release stored is not what clears it: no study is run any more, and none ever was in production.
   holds([], { evaluations: [{ verdict: "non_inferior", candidateDigest: canonical.payload.contentDigest, baselineDigest: "baseline", report: "report.json" }] });
   assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "an evaluation verdict alone retires nothing");
   // Mounted and never opened says nothing about it (the harm test reads only runs that invoked the method).

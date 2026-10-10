@@ -27,12 +27,11 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
  *  - **Say it.** Write a method themselves, which takes effect at once.
  *
  * That last one is not an approval in disguise; it is the reason the absence of
- * an approval is not a gap. Everything the loop infers has to survive a paired
- * evaluation, and until this route existed the only authors were distillation
- * runs — so the one source of methods the research says actually works, a
- * person writing down how they work, had no way in at all. It is a POST that
- * carries a session, and `createCandidate` decides what it is worth by the same
- * rule the nightly job uses; nothing here asserts a status.
+ * an approval is not a gap. Until this route existed the only authors were
+ * distillation runs — so the one source of methods the research says actually
+ * works, a person writing down how they work, had no way in at all. It is a
+ * POST that carries a session, and `createCandidate` decides what it is worth
+ * by the same rule the nightly job uses; nothing here asserts a status.
  *
  * @module learningRoutes
  */
@@ -114,7 +113,6 @@ export function methodView(document) {
     links: payload.links ?? [],
     level: payload.learning?.level ?? 0,
     relations: payload.learning?.relations ?? [],
-    evaluations: payload.learning?.evaluations ?? [],
     // The two lists a person actually needs: why it is effective, or what it is
     // still waiting for. Never a bare "pending".
     promotion: { status: verdict.status, reasons: verdict.reasons, missing: verdict.missing, missingDetails: verdict.missingDetails },
@@ -130,11 +128,10 @@ export function methodView(document) {
  * error when it cannot be read — the list is what the page needs.
  * `resolveRun` finds the run a lesson was learnt from, live or preserved (`resolveLessonSourceRun`): what 「从哪里学到的」 lists is
  * read through it and absent when it is not given.
- * @param {{store: any, service: any, maxJsonBytes: number, evaluationUsers?: readonly string[], trialTtlMs?: number,
+ * @param {{store: any, service: any, maxJsonBytes: number,
  *   summary?: ((userId: string) => Promise<any>) | null,
  *   resolveRun?: ((userId: string, projectId: string, runId: string) => Promise<any>) | null}} dependencies */
-export function createLearningRoutes({ store, service, maxJsonBytes, evaluationUsers = [], trialTtlMs = 6 * 60 * 60 * 1000, summary = null, resolveRun = null }) {
-  const evaluators = new Set((evaluationUsers ?? []).map((value) => String(value)));
+export function createLearningRoutes({ store, service, maxJsonBytes, summary = null, resolveRun = null }) {
   /** @param {any} req @param {any} res */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -161,38 +158,6 @@ export function createLearningRoutes({ store, service, maxJsonBytes, evaluationU
       // read beside the list, on the first page only.
       const counts = summary && !url.searchParams.get("cursor") ? await summary(user.id).catch(() => null) : null;
       return reply({ items: (page.items ?? []).map(methodView), nextCursor: page.nextCursor ?? null, ...(counts ? { summary: counts } : {}) });
-    }
-    // Before the by-id branch: a method id is authored text, so `trial` has to
-    // be claimed as a literal here or `GET /api/methods/trial` reads as a
-    // lookup of a method named "trial" and answers 404 forever.
-    if (parts.length === 1 && parts[0] === "trial") {
-      const projectId = url.searchParams.get("projectId") ?? (method === "PUT" ? undefined : "");
-      if (method === "GET") {
-        return reply(await service.methodTrial(user.id, String(projectId ?? "")));
-      }
-      // Writing a trial mounts text no gate has admitted into a real container.
-      // The allowlist is the whole access rule -- no new role, no approval
-      // queue -- and it is empty by default, so a deployment that has not
-      // opted in answers 403 to everyone including its own operator.
-      if (!evaluators.has(String(user.id))) {
-        throw new HttpError(403, "method_trial_forbidden", "Only an evaluation identity may put a method on trial.");
-      }
-      if (method === "PUT") {
-        const body = await bodyOf(req, maxJsonBytes, ["projectId", "methodIds", "ttlMs"]);
-        if (!Array.isArray(body.methodIds)) {
-          throw new HttpError(400, "method_trial_invalid", "methodIds must be an array of method ids.");
-        }
-        return reply(await service.setMethodTrial(user.id, {
-          projectId: String(body.projectId ?? ""),
-          methodIds: body.methodIds,
-          requestedBy: String(user.id),
-          ttlMs: Number.isSafeInteger(body.ttlMs) && Number(body.ttlMs) > 0 ? Number(body.ttlMs) : trialTtlMs,
-        }));
-      }
-      if (method === "DELETE") {
-        return reply({ cleared: await service.clearMethodTrial(user.id, String(projectId ?? "")) });
-      }
-      throw new HttpError(405, "method_not_allowed", "Trial supports GET, PUT and DELETE.");
     }
     if (parts.length === 1 && method === "GET") {
       return reply(methodView(await service.getMethod(user.id, parts[0])));

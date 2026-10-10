@@ -3467,8 +3467,6 @@ export class RuntimeManager {
      *  last health call (`{ ok, code? }`), or null before one / without a
      *  controller. Read by `readinessRuntime`; it decides nothing else. */
     this.controllerReleaseManifest = null;
-    /** Frozen methods for private evaluation projects only; never a user-controlled override. */
-    this.evaluationMethodSnapshots = new Map();
     this.pluginOverrides = new Map();
     this.agentRegistry = agentRegistry;
     this.runtimeControllerMode = config.runtimeControllerMode ?? "direct";
@@ -3503,10 +3501,7 @@ export class RuntimeManager {
     this.cleanupRetries = new Map();
     /** What the retries came to (`open_science_runtime_cleanup_retries_total`). */
     this.cleanupRetryStats = { recovered: 0, failed: 0, confirmedGone: 0 };
-    // Which learned methods the last launch of each project mounted, by
-    // project key. Read by the observation producer, which otherwise knows only
-    // about approved methods and would record nothing for a candidate on trial
-    // -- the exact gap that makes a candidate unpromotable forever.
+    // Which learned methods the last launch of each project mounted, by project key.
     this.lastMountedLearnedMethods = new Map();
     // And which capsule methods, by project key: what the conversation panel
     // lists as mounted, instead of selecting every capsule again per read.
@@ -3655,10 +3650,6 @@ export class RuntimeManager {
    * Reads `this.capsuleService` and `this.learningService`, which only the
    * composition root assigns; either being null simply drops that source.
    *
-   * A trial is read per launch rather than cached: the evaluation harness sets
-   * it immediately before it dispatches, and a cached answer would measure the
-   * previous arm.
-   *
    * The researcher's recall pause (the account's, or 「本项目不使用记忆」) is read
    * here too, because methods are 记忆 as the memory page defines it: while it
    * holds, nothing is mounted and the directory an earlier launch wrote is
@@ -3675,27 +3666,15 @@ export class RuntimeManager {
    *
    * @param {any} project
    * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number,
-   *   learned: {id: string, name: string, digest: string, trial?: boolean}[],
+   *   learned: {id: string, name: string, digest: string}[],
    *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
    */
   async syncCapsuleMethods(project) {
     const paused = await this.recallPausedFor(project);
-    let trialMethodIds = [];
-    if (this.learningService && !paused) {
-      // A trial that cannot be read is not a reason to refuse a launch: the
-      // researcher's own run does not depend on it, and failing here would
-      // make an evaluation-only feature able to take the product down.
-      try {
-        const trial = await this.learningService.methodTrial(String(project.userId), String(project.id));
-        trialMethodIds = trial?.methodIds ?? [];
-      } catch { trialMethodIds = []; }
-    }
     const mounted = await materializeCapsuleMethods({
       // Under a pause every source is dropped, which is also what clears the directory.
       capsules: paused ? null : this.capsuleService,
       learning: paused ? null : this.learningService ?? null,
-      frozenMethods: paused ? null : this.evaluationMethodSnapshots.get(this.key(project)) ?? null,
-      trialMethodIds,
       // Which learned methods this runtime may carry: none in the platform's
       // own learning, sources and frontier projects, GEO methods in a runtime
       // reserved for a GEO run, research methods everywhere else (L-G7).

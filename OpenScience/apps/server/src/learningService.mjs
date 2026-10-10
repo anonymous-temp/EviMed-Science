@@ -21,15 +21,16 @@
  * What that answer is changed on 2026-09-20. It used to be: an inferred method
  * waits for three trajectories, two independent runs and a passing paired
  * evaluation against a live baseline. In production it never once cleared that
- * bar — `learningEvaluationCommand` defaults to empty, so the evaluate job
- * failed terminally by name and `evimed_product.documents` held zero effective
+ * bar — the evaluation command defaulted to empty, so the evaluate job failed
+ * terminally by name and `evimed_product.documents` held zero effective
  * methods while the product told researchers it learned their way of working.
  * The evidence bar moved to demotion: a method takes effect the night it is
- * learned, wears 「新」, and the same paired evaluation runs afterwards and
- * retires it if it measures worse (`retirementProposal`). The only thing that
- * still blocks effect is an unresolved conflict with another method, which no
- * measurement repairs. The safety net is unchanged: every change is a revision
- * and every revision can be restored.
+ * learned, wears 「新」, and its own runs retire it if they show it making
+ * results worse (`retirementProposal`; the paired evaluation that was to
+ * do so as well was deleted on 2026-10-10 — no paid method on/off study). The
+ * only thing that still blocks effect is an unresolved conflict with another
+ * method, which no measurement repairs. The safety net is unchanged: every
+ * change is a revision and every revision can be restored.
  *
  * Two things a method is not, since 2026-09-27 (audit 2026-09-26, L-G1/L-G4):
  *
@@ -57,7 +58,6 @@ import {
   cleanMethodSteps,
   emptyLearning,
   foldEligible,
-  foldEvaluation,
   foldMethodFeedback,
   foldObservation,
   foldRead,
@@ -221,14 +221,6 @@ export function methodRecordFrom(document, { revisions = undefined } = {}) {
   };
 }
 
-/**
- * How many candidates one trial may name.
- *
- * A paired evaluation measures one change at a time; a trial naming a dozen
- * candidates would produce a verdict nobody could attribute to any of them.
- */
-export const MAX_TRIAL_METHODS = 4;
-
 export class LearningService {
   /**
    * No inbox: the method library's own changes — a method put in force or
@@ -236,15 +228,13 @@ export class LearningService {
    * history, and used to arrive as quiet inbox records nobody read, under the
    * 「自动运行」 fold (plan 2026-09-23 §5.8).
    *
-   * @param {{documents: any, jobs?: any, now?: () => Date,
-   * resolveBaselineDigest?: (userId: string, projectId: string) => Promise<string>}} dependencies
+   * @param {{documents: any, jobs?: any, now?: () => Date}} dependencies
    */
-  constructor({ documents, jobs = null, now = () => new Date(), resolveBaselineDigest }) {
+  constructor({ documents, jobs = null, now = () => new Date() }) {
     if (!documents) throw new TypeError("The learning service needs the product document store.");
     this.documents = documents;
     this.jobs = jobs;
     this.now = now;
-    this.resolveBaselineDigest = resolveBaselineDigest;
   }
 
   /**
@@ -526,98 +516,6 @@ export class LearningService {
   }
 
   /**
-   * The candidates this project is mounting under trial, or an empty list.
-   *
-   * A trial is the one way a method the loop has not approved reaches a
-   * container, and it exists because without it the loop cannot close:
-   * promotion needs observed trajectories, trajectories need the method to have
-   * been mounted, and only approved methods are mounted. The paired evaluation
-   * breaks that circle by naming the candidate it is measuring.
-   *
-   * Expiry is applied on read rather than by a sweeper. A row nobody cleared is
-   * then harmless by the time it matters, and there is no job whose failure
-   * would leave an unproven method mounted indefinitely.
-   *
-   * @param {string} userId @param {string} projectId
-   * @returns {Promise<{methodIds: string[], digestById: Record<string, string>, expiresAt: string|null, requestedBy: string|null}>}
-   */
-  async methodTrial(userId, projectId) {
-    const empty = { methodIds: [], digestById: {}, expiresAt: null, requestedBy: null };
-    let document = null;
-    try { document = await this.documents.get(userId, "method-trial", productId(String(projectId), "project id")); }
-    catch { return empty; }
-    const payload = document?.payload;
-    if (!payload || document.deletedAt) return empty;
-    const expiresAt = typeof payload.expiresAt === "string" ? payload.expiresAt : null;
-    if (expiresAt && Date.parse(expiresAt) <= this.now().getTime()) return empty;
-    const methodIds = Array.isArray(payload.methodIds)
-      ? payload.methodIds.filter((value) => typeof value === "string" && value.trim()).map(String)
-      : [];
-    const digestById = payload.digestById && typeof payload.digestById === "object" && !Array.isArray(payload.digestById)
-      ? payload.digestById
-      : {};
-    return { methodIds, digestById, expiresAt, requestedBy: payload.requestedBy ?? null };
-  }
-
-  /**
-   * Put candidates on trial for one project.
-   *
-   * The digest of each method as it stands now is recorded beside its id, so
-   * the arm that asked can read back what it actually got. An evaluation that
-   * measured a method which was amended between the request and the launch
-   * would otherwise report a verdict about text nobody chose.
-   *
-   * Only `candidate` methods may be named: putting an approved method "on
-   * trial" would be a no-op that reads as a control, and putting a retired one
-   * on trial would resurrect it by a route with no promotion rule behind it.
-   *
-   * @param {string} userId
-   * @param {{projectId: string, methodIds: readonly string[], requestedBy: string, ttlMs: number}} input
-   */
-  async setMethodTrial(userId, input) {
-    const projectId = productId(String(input.projectId ?? ""), "project id");
-    const ids = [...new Set((input.methodIds ?? []).map((value) => String(value)))].filter(Boolean);
-    if (ids.length === 0) throw new HttpError(400, "method_trial_empty", "A trial must name at least one method.");
-    if (ids.length > MAX_TRIAL_METHODS) {
-      throw new HttpError(400, "method_trial_too_many", `A trial may name at most ${MAX_TRIAL_METHODS} methods.`);
-    }
-    /** @type {Record<string, string>} */
-    const digestById = {};
-    for (const methodId of ids) {
-      const document = await this.getMethod(userId, methodId);
-      const status = document.payload?.status;
-      // Anything but retired. It read `!== "candidate"` until 2026-09-20, when
-      // a distilled method started taking effect the night it is learned:
-      // every method the evaluation account would want to pin is `approved`
-      // from birth, and a trial that only accepted candidates could pin none
-      // of them.
-      if (status === "retired" || !status) {
-        throw new HttpError(409, "method_trial_not_candidate", `A retired method cannot be put on trial; ${methodId} is ${status}.`);
-      }
-      digestById[methodId] = String(document.payload?.contentDigest ?? "");
-    }
-    const expiresAt = new Date(this.now().getTime() + Math.max(60_000, Number(input.ttlMs) || 0)).toISOString();
-    const payload = { methodIds: ids, digestById, expiresAt, requestedBy: String(input.requestedBy ?? ""), setAt: this.now().toISOString() };
-    // One row per project, replaced in place. A deleted row is restored rather
-    // than inserted over, because the store keeps the revision of a removed
-    // document and an insert at revision 0 would conflict with it forever.
-    const current = await this.documents.get(userId, "method-trial", projectId, { includeDeleted: true });
-    if (current?.deletedAt) await this.documents.restore(userId, "method-trial", projectId, current.revision);
-    const revision = current ? (current.deletedAt ? current.revision + 1 : current.revision) : 0;
-    await this.documents.put(userId, "method-trial", projectId, payload, { expectedRevision: revision, projectId });
-    return payload;
-  }
-
-  /** @param {string} userId @param {string} projectId @returns {Promise<boolean>} */
-  async clearMethodTrial(userId, projectId) {
-    const id = productId(String(projectId ?? ""), "project id");
-    const current = await this.documents.get(userId, "method-trial", id);
-    if (!current) return false;
-    await this.documents.remove(userId, "method-trial", id, current.revision);
-    return true;
-  }
-
-  /**
    * The researcher's library, one page of it.
    *
    * `projectId` narrows it to the methods learnt in that project
@@ -650,15 +548,6 @@ export class LearningService {
     return page.items ?? [];
   }
 
-  /** Read the current owner/project mount, never a digest asserted by a caller.
-   * An unscoped inferred method has no project baseline it can safely claim.
-   * @param {string} userId @param {string|null} projectId
-   */
-  async currentBaselineDigest(userId, projectId) {
-    if (!projectId || !this.resolveBaselineDigest) return "";
-    return this.resolveBaselineDigest(userId, projectId);
-  }
-
   /**
    * Promote a candidate, if the record says it may be promoted.
    *
@@ -667,17 +556,13 @@ export class LearningService {
    * exactly the caller most likely to believe its own conclusion, and this is
    * the one place where believing it would put unvalidated text into every
    * later run of a project.
-   * The current baseline is read here, immediately before the revision write;
-   * a caller-supplied digest cannot make an old evaluation current again.
    * @param {string} userId
    * @param {string} methodId
    * @param {{expectedRevision: number}} input
    */
   async approve(userId, methodId, input) {
     const document = await this.getMethod(userId, methodId);
-    // No baseline read: since 2026-09-20 the verdict reads the method's own
-    // conflicts and nothing else, so fetching a digest it will not look at
-    // would be one more thing to be down at the moment of a write.
+    // The verdict reads the method's own conflicts and nothing else (since 2026-09-20).
     const verdict = promotionVerdict(methodRecordFrom(document), { isApproved: await this.#inForce(userId, document.payload) });
     if (verdict.status !== "approved") {
       throw new HttpError(409, "method_not_promotable", `The method is not eligible: ${verdict.missing.join("; ")}`);
@@ -962,24 +847,6 @@ export class LearningService {
   async recordRead(userId, methodId, at = new Date().toISOString()) {
     const document = await this.getMethod(userId, methodId);
     return this.#saveLearning(userId, methodId, document, foldRead(document.payload.learning, at));
-  }
-
-  /** @param {string} userId @param {string} methodId @param {any} evaluation */
-  async recordEvaluation(userId, methodId, evaluation) {
-    const document = await this.getMethod(userId, methodId);
-    // The verdict names the text it measured, and this is where that claim is
-    // checked against the text the method holds now. An evaluation runs for
-    // hours; the method can be amended while it is in flight, and the amend
-    // resets the record, so an unchecked write made the old text's score the
-    // new text's first vote. Refused loudly rather than folded quietly: a
-    // measurement of something that no longer exists is not a smaller fact, it
-    // is a different one.
-    const measured = typeof evaluation?.candidateDigest === "string" ? evaluation.candidateDigest : null;
-    if (measured !== null && measured !== document.payload.contentDigest) {
-      throw new HttpError(409, "method_evaluation_stale",
-        "The evaluation measured a revision this method no longer holds; it was not recorded.");
-    }
-    return this.#saveLearning(userId, methodId, document, foldEvaluation(document.payload.learning, evaluation));
   }
 
   /**

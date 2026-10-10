@@ -27,8 +27,8 @@
  *
  * The validator here decides only what is decidable: shape, closed
  * vocabularies, digests, acyclicity, byte budgets, and leakage. Whether a
- * method is *good* is a question for the paired evaluation in `evals/`, never
- * for a regex (development principle #1, and #5's ban on open-vocabulary prose
+ * method is *good* is a question for the method's own runs (`methodHarmTest`)
+ * and the offline evals in `evals/`, never for a regex (development principle #1, and #5's ban on open-vocabulary prose
  * patterns). Every issue it can raise is in `METHOD_SKILL_ISSUE_CODES`, and a
  * test walks that list, because an issue code that no test constructs is a
  * rule nobody has ever seen fire.

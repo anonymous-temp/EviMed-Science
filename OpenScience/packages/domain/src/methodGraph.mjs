@@ -9,7 +9,7 @@
  * the API that shows a researcher why a candidate is still a candidate, and the
  * test that says the promotion rule cannot be widened by accident.
  *
- * Three decisions are worth stating out loud, because all three differ from the
+ * Two decisions are worth stating out loud, because both differ from the
  * papers this loop is built from:
  *
  * 1. **A digest change resets the counters.** EvoDS counts uses by function
@@ -20,26 +20,25 @@
  * 2. **A failed use is not a use.** EvoDS's `execute_tool` swallows exceptions
  *    into a string and the caller still counts the call, so a tool that throws
  *    every time can cross its threshold. Here only an outcome the run actually
- *    accepted counts toward the threshold.
- * 3. **The threshold is a budget gate, not a proof.** Crossing tau means the
- *    method has earned a paired evaluation, not that it works. Promotion of an
- *    *inferred* method additionally requires that evaluation to have come back
- *    better or non-inferior against the current baseline (spec line 1812).
+ *    accepted counts as a success.
+ *
+ * What a method has to show is its own runs: it takes effect at once and the
+ * sequential harm test over the runs that used it retires it (`methodHarmTest`).
+ * There is no paired on/off evaluation of a method — the owner's ruling of
+ * 2026-10-10, after it had never once run — so nothing here depends on one.
  *
  * A method whose origin is explicit — the researcher said "always do it this
- * way" — skips all of that and is effective immediately, with a rollback. That
- * is not a loophole; it is the rule that keeps the loop from becoming an
- * approval queue (§16 #22, §29.2 #1).
+ * way" — is effective immediately, with a rollback. That is not a loophole; it
+ * is the rule that keeps the loop from becoming an approval queue (§16 #22,
+ * §29.2 #1).
  */
 import {
   MAX_ACTIVE_LEARNED_METHODS,
-  MEMORY_PROMOTION_MIN_RUNS,
   MEMORY_REFLECTION_IMPORTANCE_THRESHOLD,
   MEMORY_STRENGTH_TAU_DAYS,
   METHOD_CONTRIBUTION_MIN_TRIALS,
   METHOD_CONTRIBUTION_RETIRE_AT,
   METHOD_HARM_TEST,
-  METHOD_INDUCTION_MIN_TRAJECTORIES,
   METHOD_SCIENTIFIC_HARM_TEST,
 } from './constants.mjs'
 import { isMethodDigest } from './methodSkill.mjs'
@@ -57,12 +56,6 @@ export const METHOD_RELATION_TYPES = Object.freeze([
   'shared_part', 'subset', 'merge', 'abstract_pattern', 'conflicts_with', 'supersedes',
 ])
 
-/** What the paired evaluation can conclude. */
-export const METHOD_EVALUATION_VERDICTS = Object.freeze(['better', 'non_inferior', 'inconclusive', 'worse'])
-
-/** Verdicts that let an inferred method through. */
-export const METHOD_PASSING_VERDICTS = Object.freeze(['better', 'non_inferior'])
-
 /** How a run ended, from the point of view of a method that was loaded for it. */
 export const METHOD_OBSERVATION_OUTCOMES = Object.freeze(['accepted', 'repaired', 'rejected'])
 
@@ -73,10 +66,10 @@ export const METHOD_SUCCESS_OUTCOMES = Object.freeze(['accepted', 'repaired'])
 /** Where a method came from, which is what decides whether it needs a gate. */
 export const METHOD_ORIGINS = Object.freeze(['explicit', 'inferred'])
 
-/** The six counters, kept apart on purpose: "was available", "was mounted",
- *  "was actually invoked", "was in a run that succeeded", "beat a baseline" and
- *  "was read with nothing to attribute it to" are six different claims and
- *  collapsing them is how a library of unused methods looks busy.
+/** The five counters, kept apart on purpose: "was available", "was mounted",
+ *  "was actually invoked", "was in a run that succeeded" and "was read with
+ *  nothing to attribute it to" are five different claims and collapsing them is
+ *  how a library of unused methods looks busy.
  *
  *  `read` is the one that carries no outcome. A run that delegates nothing —
  *  the whole open-domain answer line — can still call the `skill` tool and read
@@ -86,7 +79,7 @@ export const METHOD_ORIGINS = Object.freeze(['explicit', 'inferred'])
  *  verdict entering a success rate would move the rate without evidence, in
  *  whichever direction the arithmetic happened to fall. What it does support is
  *  the one claim it is: the method was not passed over. */
-export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked', 'succeeded', 'validated', 'read'])
+export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked', 'succeeded', 'read'])
 
 /**
  * @typedef {object} MethodObservation
@@ -107,21 +100,11 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
  */
 
 /**
- * @typedef {object} MethodEvaluation
- * @property {string} report        path of the paired-evaluation report
- * @property {string} baselineDigest
- * @property {string} verdict
- * @property {string} [at]
- * @property {string} [candidateDigest]  the content this verdict was measured on
- */
-
-/**
  * @typedef {object} MethodLearning
  * @property {string} digest
- * @property {{eligible: number, loaded: number, invoked: number, succeeded: number, validated: number, read: number}} counts
+ * @property {{eligible: number, loaded: number, invoked: number, succeeded: number, read: number}} counts
  * @property {MethodObservation[]} observations
  * @property {MethodRelation[]} relations
- * @property {MethodEvaluation[]} evaluations
  * @property {number} level
  * @property {string|null} [lastReadAt]  when a run last read the body with nothing to attribute it to
  */
@@ -154,10 +137,9 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
 export function emptyLearning(digest) {
   return {
     digest,
-    counts: { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 },
+    counts: { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, read: 0 },
     observations: [],
     relations: [],
-    evaluations: [],
     level: 0,
     lastReadAt: null,
   }
@@ -167,8 +149,7 @@ export function emptyLearning(digest) {
  * Bring a learning payload onto a digest.
  *
  * Everything measured against the previous body is discarded, deliberately and
- * loudly: counters, observations and evaluations all describe text that no
- * longer exists. Relations survive because they are about the method's place in
+ * loudly: counters and observations both describe text that no longer exists. Relations survive because they are about the method's place in
  * the library, not about a particular wording.
  * @param {MethodLearning} learning
  * @param {string} digest
@@ -268,31 +249,6 @@ export function foldRead(learning, at) {
 
 /**
  * @param {MethodLearning} learning
- * @param {MethodEvaluation} evaluation
- * @returns {MethodLearning}
- */
-export function foldEvaluation(learning, evaluation) {
-  const current = learning ?? emptyLearning('')
-  if (!METHOD_EVALUATION_VERDICTS.includes(evaluation?.verdict)) return current
-  const evaluations = [...(current.evaluations ?? []), evaluation]
-  const counts = { ...current.counts }
-  // A verdict counts for the text it measured and for nothing else.
-  //
-  // An evaluation takes hours of real runs; a method can be amended while one
-  // is in flight, and an amendment resets this record to a fresh one for the
-  // new digest. Folding the arriving verdict in unconditionally therefore made
-  // the old text's score the new text's first vote — the score was real, the
-  // text it described no longer existed, and nothing said so. Recorded either
-  // way, because "we measured something else" is a fact about this method
-  // worth keeping; counted only when the digests agree.
-  const measured = typeof evaluation.candidateDigest === 'string' ? evaluation.candidateDigest : null
-  const onCurrentText = measured !== null && measured === current.digest
-  if (onCurrentText && METHOD_PASSING_VERDICTS.includes(evaluation.verdict)) counts.validated += 1
-  return { ...current, counts, evaluations }
-}
-
-/**
- * @param {MethodLearning} learning
  * @param {MethodRelation} relation
  * @returns {MethodLearning}
  */
@@ -313,24 +269,6 @@ export function successfulFamilies(learning) {
     if (METHOD_SUCCESS_OUTCOMES.includes(observation.outcome)) families.add(observation.family)
   }
   return [...families]
-}
-
-/**
- * Distinct *runs* a successful trajectory came from.
- *
- * A family is one deliverable's trajectory, and one run can produce several —
- * so three successes inside a single run are three correlated readings of one
- * brief, one researcher and one set of sources, not three independent ones.
- * Counting runs separately is what stops a method being promoted on the
- * strength of a single afternoon.
- * @param {MethodLearning} learning @returns {string[]}
- */
-export function successfulRuns(learning) {
-  const runs = new Set()
-  for (const observation of learning?.observations ?? []) {
-    if (METHOD_SUCCESS_OUTCOMES.includes(observation.outcome) && observation.runId) runs.add(observation.runId)
-  }
-  return [...runs]
 }
 
 /**
@@ -557,47 +495,8 @@ export function reflectionDue(accumulatedImportance, threshold = MEMORY_REFLECTI
 
 /**
  * @typedef {object} PromotionOptions
- * @property {number} [minTrajectories]
- * @property {number} [minRuns]
- * @property {string} [currentBaselineDigest]  the digest the evaluation had to beat
  * @property {(id: string) => boolean} [isApproved]  whether a method is in force; a conflict with one that is not does not count (`unresolvedConflicts`)
  */
-
-/**
- * Whether the method has earned the cost of a paired evaluation.
- *
- * This is EvoDS's tau, moved to the only place it is defensible: deciding how
- * to spend a budget. It is not evidence of anything.
- * @param {MethodRecord} method
- * @param {PromotionOptions} [options]
- * @returns {{eligible: boolean, reason: string, detail: PromotionDetail}}
- */
-export function evaluationEligible(method, options = {}) {
-  const minTrajectories = options.minTrajectories ?? METHOD_INDUCTION_MIN_TRAJECTORIES
-  const minRuns = options.minRuns ?? MEMORY_PROMOTION_MIN_RUNS
-  if (method?.provenance?.origin === 'explicit') return { eligible: true, reason: 'explicit origin', detail: { code: 'explicit_origin' } }
-  const learning = method?.learning
-  if (learning?.digest !== method?.digest) {
-    return { eligible: false, reason: 'the body changed since these observations, so the counters were reset', detail: { code: 'counters_reset' } }
-  }
-  // Two thresholds that had collapsed into one. Observations are deduplicated by
-  // family, so `successfulFamilies().length` *is* the successful-trajectory
-  // count, and comparing it against both constants asked the same question
-  // twice — leaving `MEMORY_PROMOTION_MIN_RUNS` looking enforced while nothing
-  // enforced it. The independence that constant is about is between runs.
-  const trajectories = successfulFamilies(learning)
-  if (trajectories.length < minTrajectories) {
-    return { eligible: false, reason: `${trajectories.length} successful trajectories; ${minTrajectories} are needed`,
-      detail: { code: 'trajectories_needed', have: trajectories.length, need: minTrajectories } }
-  }
-  const runs = successfulRuns(learning)
-  if (runs.length < minRuns) {
-    return { eligible: false, reason: `those trajectories all came from ${runs.length} run(s); ${minRuns} are needed`,
-      detail: { code: 'runs_needed', have: runs.length, need: minRuns } }
-  }
-  return { eligible: true, reason: `${trajectories.length} successful trajectories across ${runs.length} runs`,
-    detail: { code: 'evidence_sufficient', trajectories: trajectories.length, runs: runs.length } }
-}
 
 /**
  * One line of a promotion verdict as a code and its numbers, beside the
@@ -615,25 +514,24 @@ export function evaluationEligible(method, options = {}) {
  *
  * Hidden knowledge: until 2026-09-20 an inferred method also had to clear three
  * trajectories, two independent runs and a passing paired evaluation against a
- * live baseline before it took effect. In production it never once did:
- * `OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND` defaults to empty, so the evaluate
- * job failed terminally by name and every distilled method stayed `candidate`
- * for good — `evimed_product.documents` held zero effective methods. A page
- * that says "EviMed learns your way of working" and a gate that can never open
- * are not a cautious product, they are a false claim, and the cost of being
- * wrong here is one line in 最近变化 and one click to undo.
+ * live baseline before it took effect. In production it never once did: the
+ * evaluation command defaulted to empty, so the evaluate job failed terminally
+ * by name and every distilled method stayed `candidate` for good —
+ * `evimed_product.documents` held zero effective methods. A page that says
+ * "EviMed learns your way of working" and a gate that can never open are not a
+ * cautious product, they are a false claim, and the cost of being wrong here
+ * is one line in 最近变化 and one click to undo.
  *
  * So the evidence bar moved from promotion to demotion (owner ruling
- * 2026-09-20): a distilled method takes effect at once, marked new, and the
- * paired evaluation keeps running in the background as the thing that can take
- * it away — see `retirementProposal`'s evaluation clause. What still blocks
- * effect is the one thing no measurement can repair: an unresolved conflict
- * with another method that is itself in force, where the library would be
- * telling the run two incompatible things (`options.isApproved`; see
- * `unresolvedConflicts` for a conflict with a method that is not).
- *
- * `evaluationEligible` is untouched and still decides who is *worth* measuring;
- * it is a budget, not a gate.
+ * 2026-09-20): a distilled method takes effect at once, marked new, and its own
+ * runs are the thing that can take it away (`methodHarmTest`, read by
+ * `retirementProposal`). The paired evaluation that was to keep running behind
+ * it never did, and was deleted on 2026-10-10 (no paid method on/off study).
+ * What still blocks effect is the one thing no measurement can repair: an
+ * unresolved conflict with another method that is itself in force, where the
+ * library would be telling the run two incompatible things
+ * (`options.isApproved`; see `unresolvedConflicts` for a conflict with a method
+ * that is not).
  * @param {MethodRecord} method
  * @param {PromotionOptions} [options]
  * @returns {{status: string, reasons: string[], missing: string[], missingDetails: PromotionDetail[]}}
@@ -659,12 +557,6 @@ export function promotionVerdict(method, options = {}) {
     ? 'explicit origin: the researcher stated this, so it takes effect immediately and is rolled back by restoring the previous revision'
     : 'learned from the researcher’s own work: it takes effect immediately, is marked new, and is retired when its own runs show it making results worse, or by one click')
 
-  // Said for the reader, never as a condition. A method already carrying a
-  // measurement should show it on its row.
-  const evaluations = learning.evaluations ?? []
-  const latest = evaluations.length ? evaluations[evaluations.length - 1] : null
-  if (latest && latest.candidateDigest === learning.digest) reasons.push(`evaluation ${latest.verdict} against ${latest.baselineDigest}`)
-
   return { status: missing.length ? 'candidate' : 'approved', reasons, missing, missingDetails }
 }
 
@@ -689,7 +581,7 @@ export function promotionVerdict(method, options = {}) {
  *    disuse. Rarely needed is what a safety check looks like when it is working.
  *    That is the whole exemption (build spec §8.7: 「标了安全相关 — 永不因闲置
  *    提议」). It used to be checked first and returned early, which also
- *    exempted the method from a measured `worse`, from the harm test and from
+ *    exempted the method from the harm test and from
  *    contribution — and `safetyRelated` is raised by the distillation run about
  *    its own output, so one self-declared word bought immunity from every
  *    outcome the library can observe (audit 2026-09-26, L-G2). Outcome clauses
@@ -713,30 +605,6 @@ export function retirementProposal(method, options) {
     return { propose: true, immediate: true, code: 'incident', reason: 'implicated in a confirmed incident', strength }
   }
   if (method?.status === 'retired') return { propose: false, immediate: false, code: 'already_retired', reason: 'already retired', strength }
-  // The measurement, now that it no longer gates effect (see `promotionVerdict`).
-  //
-  // A distilled method takes effect the night it is learned; the paired
-  // evaluation runs afterwards and this is what it is for. `worse` is the only
-  // verdict that acts: `inconclusive` means the comparison could not tell, and
-  // retiring on "we could not tell" would make the loop unable to keep
-  // anything. Immediate, because unlike disuse this is a measured harm and
-  // there is nothing to gain by carrying it another night.
-  //
-  // Bound to the text that was measured. A verdict about a revision this
-  // method no longer holds says nothing about what would be mounted — the same
-  // rule the promotion side used to apply to the passing verdicts, kept on the
-  // side that now decides something.
-  const evaluations = learning.evaluations ?? []
-  const measured = evaluations.length ? evaluations[evaluations.length - 1] : null
-  if (measured && measured.verdict === 'worse' && measured.candidateDigest && measured.candidateDigest === learning.digest) {
-    return {
-      propose: true,
-      immediate: true,
-      code: 'evaluated_worse',
-      reason: `a paired evaluation against ${measured.baselineDigest} measured this revision as worse than working without it`,
-      strength,
-    }
-  }
   // The scientific axis. The results produced while this revision was read were found wrong at a rate the sequential
   // test reads as worse than working without it (`scientificRegression`): not reproduced by a trusted recalculation, or
   // corrected by the researcher. The answer is to the revision: the exact earlier body that is not itself harmful, and a
@@ -759,9 +627,9 @@ export function retirementProposal(method, options) {
     }
   }
   // The production detector (`methodHarmTest`). An inferred method whose own
-  // runs cross the harm boundary is retired now, like a measured `worse`: it
-  // is effective from the moment it was learned, and each further run is
-  // another deliverable carrying the harm. A method the researcher stated
+  // runs cross the harm boundary is retired now: it is effective from the
+  // moment it was learned, and each further run is another deliverable
+  // carrying the harm. A method the researcher stated
   // themselves is an instruction, so it is only proposed.
   const harm = learning.digest === method?.digest ? methodHarmTest(learning) : null
   if (harm?.state === 'harm') {

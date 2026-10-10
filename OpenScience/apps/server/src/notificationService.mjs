@@ -311,14 +311,14 @@ const WATCHED_TURN_MS = 120_000;
  * ordinary notice (`AutopilotService.createDigest`).
  *
  * @param {Record<string, any>} run
- * @param {{ internalProject?: boolean, evaluation?: boolean, automated?: boolean, autopilotOwned?: boolean }} [origin]
+ * @param {{ internalProject?: boolean, automated?: boolean, autopilotOwned?: boolean }} [origin]
  *   `internalProject` — the run is in one of the account's own background
- *   projects (`isInternalProject`); `evaluation` — its runtime is an
- *   evaluation cell's; `automated` — a harness or autopilot dispatched it
- *   (`automatedRun`); `autopilotOwned` — an autopilot episode owns it.
+ *   projects (`isInternalProject`); `automated` — a harness or autopilot
+ *   dispatched it (`automatedRun`); `autopilotOwned` — an autopilot episode
+ *   owns it.
  */
-export function runFinishedReachesInbox(run, { internalProject = false, evaluation = false, automated = false, autopilotOwned = false } = {}) {
-  if (internalProject || evaluation || automated || autopilotOwned) return false;
+export function runFinishedReachesInbox(run, { internalProject = false, automated = false, autopilotOwned = false } = {}) {
+  if (internalProject || automated || autopilotOwned) return false;
   return runFinishedNotifies(run);
 }
 

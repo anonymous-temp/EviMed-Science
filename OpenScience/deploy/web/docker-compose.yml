@@ -437,7 +437,6 @@ services:
       # PostgreSQL pool.
       OPEN_SCIENCE_LEARNING_POLL_MS:
       OPEN_SCIENCE_LEARNING_LEASE_MS:
-      OPEN_SCIENCE_LEARNING_TRIAL_TTL_MS:
       OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES:
       OPEN_SCIENCE_MEMORY_INDEX_POLL_MS:
       OPEN_SCIENCE_MEMORY_INDEX_LEASE_MS:
@@ -851,14 +850,10 @@ services:
       # clock — Beijing daytime. Value-less: unset is config.mjs's Asia/Shanghai.
       OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE:
       OPEN_SCIENCE_LEARNING_CONCURRENCY:
-      OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND:
-      # Who may put a method on trial, and who sees the operations page. Both
-      # are id allowlists that `config.mjs` reads and that no compose file
-      # passed, so both were empty in every deployment however the operator set
-      # them: the trial route answered 403 to everyone and the ops tab could not
-      # appear at all. Compose passes environment item by item — a lever that is
-      # not on the list does nothing and says nothing.
-      OPEN_SCIENCE_LEARNING_EVALUATION_USERS:
+      # Who sees the operations page: an id allowlist that `config.mjs` reads and that no compose file
+      # passed, so it was empty in every deployment however the operator set it and the ops tab could not
+      # appear at all. Compose passes environment item by item — a lever that is not on the list does
+      # nothing and says nothing.
       OPEN_SCIENCE_OPERATOR_USERS:
       # The account the smoke and the capability battery sign in as. With the operators it is the only one whose
       # acceptance-*/audit-*/eval-method-* projects are the platform's own (not charged, outside the project

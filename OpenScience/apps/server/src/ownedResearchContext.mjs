@@ -20,7 +20,7 @@ export function createOwnedHandbookSelector({ learning, registry, config, runtim
   return async (project, session, options, run) => {
     const capabilityId = run.effectiveAgentId ?? options.routedSpecialist?.agentId ?? session.agentId ?? OPEN_DOMAIN_ANSWER_AGENT_ID;
     let handbooks = null;
-    if (learning && config.learningEnabled && !isInternalProject(project.id) && !run.learningEvaluation
+    if (learning && config.learningEnabled && !isInternalProject(project.id)
       && usagePurposeOfRun(run) === "kernel") {
       try {
         const state = await paused(project.userId, project.id, session.sessionId);

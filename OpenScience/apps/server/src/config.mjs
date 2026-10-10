@@ -2797,37 +2797,9 @@ export function loadConfig(overrides = {}) {
     // ran at all.
     learningConsolidationIntervalMs: Number(overrides.learningConsolidationIntervalMs
       ?? process.env.OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS ?? 3_600_000),
-    // How the nightly job runs a paired evaluation, if a deployment wants it to.
-    //
-    // Empty by default, and an `evaluate` job then fails by name rather than
-    // succeeding without evaluating. That default is deliberate: the harness
-    // dispatches hundreds of real runs (100 briefs x 2 arms x 3 repeats), and a
-    // timer on a shared box is the wrong place to start that.
-    //
-    // The whole command, including the template that carries the brief set,
-    // budget and judge. `--json`, `--method`, `--candidate-digest` and
-    // `--baseline-digest` are appended by `runLearningEvaluationProcess`; everything
-    // else is the operator's. For example:
-    //
-    //   python3 evals/method-quality/run_paired.py --template evals/method-quality/configs/nightly.json
-    learningEvaluationCommand: String(overrides.learningEvaluationCommand
-      ?? process.env.OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND ?? ""),
-    // Who may put a method on trial — that is, mount a candidate the loop has
-    // not approved into a real container.
-    //
-    // Empty by default, which means nobody, and the route answers 403. That is
-    // the whole access rule: an allowlist of user ids, no new role, no approval
-    // flow. The paired evaluation is the only component whose job is
-    // measurement, so it is the only one that may name the candidate it is
-    // measuring; a researcher's own account can never receive an unproven
-    // method by any path, which is what makes the mount safe to have at all.
-    learningEvaluationUsers: String(overrides.learningEvaluationUsers
-      ?? process.env.OPEN_SCIENCE_LEARNING_EVALUATION_USERS ?? "")
-      .split(",").map((value) => value.trim()).filter(Boolean),
     // Who sees the operations page.
     //
-    // Same shape and same reason as the allowlist above: an id list, empty by
-    // default, no new role and no approval flow. It gates one surface — the
+    // An id list, empty by default, no new role and no approval flow. It gates one surface — the
     // readiness board, the audit, error and security ledgers, the hosted task
     // list and the runtime controls — which a researcher was shown in full
     // until 2026-09-15 because the settings page was the deployment's console
@@ -2844,12 +2816,6 @@ export function loadConfig(overrides = {}) {
     // so AND its owner is one of these accounts: a name a client chose is never a waiver
     // (`isInternalProjectOf`). The account is an id, as `operatorUsers` are.
     acceptanceUsername: String(overrides.acceptanceUsername ?? process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "").trim(),
-    // How long a trial lasts if the caller does not say. A trial that outlives
-    // the evaluation that set it would keep an unproven method in front of
-    // every later run of that project, which is the failure the allowlist above
-    // exists to prevent; an expiry makes forgetting to clear it harmless.
-    learningTrialTtlMs: Number(overrides.learningTrialTtlMs
-      ?? process.env.OPEN_SCIENCE_LEARNING_TRIAL_TTL_MS ?? 6 * 60 * 60 * 1000),
     mountedMethodPromptBytes: mountedMethodPromptBytes(overrides),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),
