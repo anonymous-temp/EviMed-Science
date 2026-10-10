@@ -123,6 +123,21 @@ describe("immutable result inspection", () => {
     expect(await screen.findByText(/⚠ 阿司匹林一级预防：出血风险：老年人应由医生评估。/)).toBeInTheDocument();
     expect(screen.queryByText(/尚未核实/)).toBeNull();
   });
+  // R23, 2026-10-10: a claim's finding is its mark. The platform's English sentence under each claim is gone; the line says the two words
+  // the product fixed for a quotation check, and the sources it rests on follow.
+  it("draws a claim's finding as its mark and the fixed words of the quotation check, with its sources", async () => {
+    const source = { kind: "source" as const, id: "10.9999/paper", path: ".evimed-sources/paper/fulltext.md", digest: "e".repeat(64), versionId: "rv_source", availability: "captured" as const };
+    const marked: ResultVersion = { ...latest, findings: [
+      { id: "claim-CLM-001", kind: "claim_source_binding", status: "verified", message: "", elementId: "CLM-001", sourceRefs: [source] },
+      { id: "claim-CLM-002", kind: "claim_source_binding", status: "quote_not_found", message: "", elementId: "CLM-002", sourceRefs: [] },
+    ] };
+    api.list.mockResolvedValue({ items: [marked], nextCursor: null }); api.get.mockResolvedValue(marked);
+    mount(marked.versionId);
+    expect(await screen.findByText("✓ 引文已核对")).toBeInTheDocument();
+    expect(screen.getByText("⚠ 未核对上")).toBeInTheDocument();
+    expect(screen.getByText(/\.evimed-sources\/paper\/fulltext\.md/)).toBeInTheDocument();
+    expect(screen.queryByText(/Recorded claim-to-source|remains separately assessed/)).toBeNull();
+  });
   // R22, 2026-10-10: the run's own notices are no longer copied into a version, so most versions carry no finding at all. Such a version
   // is not a version that was "not verified": there is nothing to say, and an empty section says nothing too.
   it("says nothing of verification, and draws no empty section, for a version with no findings, sources or numbers", async () => {

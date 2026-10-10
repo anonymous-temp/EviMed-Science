@@ -284,7 +284,8 @@ test("every version of a run carries the run's clinical-safety findings and its 
   assert.equal(graded.items.length, 2);
   for (const item of graded.items) {
     assert.deepEqual(runFindings(item).map(finding => [finding.id, finding.status]), [["run-finding-0", "safety"]], item.path);
-    assert.ok(item.findings.every(finding => typeof finding.message === "string" && finding.message), item.path);
+    assert.ok(runFindings(item).every(finding => finding.message), "a run's finding is described in the reader's words");
+    assert.ok(item.findings.filter(finding => finding.kind === "claim_source_binding").every(finding => finding.message === ""), "a claim's finding is its mark, with no sentence");
   }
   // The matrix's own claim findings keep to the report, beside the run's.
   const report = graded.items.find(item => item.path === f.reportPath);

@@ -265,7 +265,7 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
       {replay?.comparison && <ReplayOutcome comparison={replay.comparison} />}
       {/* Nothing to show is no section: a version with no finding, source or number is not one that "was not verified" (owner ruling 2026-10-10). */}
       {(version.findings.length > 0 || version.inputs.length > 0 || version.coverage.gaps.length > 0 || version.machineValues.length > 0) && <Disclosure summary="依据与核对意见" defaultOpen>
-        <ul className="space-y-3 py-2">{version.findings.map((finding) => <li key={finding.id}><p className={finding.status === "verified" ? "text-verify-ok" : "text-verify-pending"}>{finding.status === "verified" ? "✓ " : "⚠ "}{finding.message}</p>{finding.sourceRefs?.map((source) => <SourceReference key={source.id} source={source} onOpen={(id) => navigate(`/app/runs/${version.producer.runId ?? version.producer.sessionId ?? "result"}/files/${(source.path ?? path).split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(id)}`)} />)}</li>)}</ul>
+        <ul className="space-y-3 py-2">{version.findings.map((finding) => <li key={finding.id}><p className={finding.status === "verified" ? "text-verify-ok" : "text-verify-pending"}>{finding.status === "verified" ? "✓ " : "⚠ "}{findingText(finding)}</p>{finding.sourceRefs?.map((source) => <SourceReference key={source.id} source={source} onOpen={(id) => navigate(`/app/runs/${version.producer.runId ?? version.producer.sessionId ?? "result"}/files/${(source.path ?? path).split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(id)}`)} />)}</li>)}</ul>
         {version.inputs.length > 0 && <ul className="space-y-2">{version.inputs.map((source) => <li key={`${source.id}:${source.versionId ?? source.digest}`}><SourceReference source={source} onOpen={(id) => navigate(`/app/runs/${version.producer.runId ?? version.producer.sessionId ?? "result"}/files/${(source.path ?? path).split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(id)}`)} /></li>)}</ul>}
         {version.coverage.gaps.length > 0 && <p className="py-2 text-verify-pending">记录不完整：{version.coverage.gaps.map(resultGapLabel).join("；")}</p>}
         {version.machineValues.length > 0 && <MachineValues version={version} />}
@@ -312,6 +312,11 @@ function versionLabels(items: ResultVersion[], path: string, complete: boolean):
     const number = complete && item.path === path ? numbers.get(item.versionId) : undefined;
     return number ? `第 ${number} 版 · ${when}` : when;
   };
+}
+/** What a finding says: its own words, or for a claim's mark the two words the product fixed for a quotation check (design reference appendix B, E-12). */
+function findingText(finding: ResultVersion["findings"][number]): string {
+  if (finding.message) return finding.message;
+  return finding.kind === "claim_source_binding" ? (finding.status === "verified" ? "引文已核对" : "未核对上") : "";
 }
 function isText(version: ResultVersion) { return version.mimeType.startsWith("text/") || /\.(md|txt|json|csv|tsv|py|r|js|mjs)$/i.test(version.path); }
 function canCompareResults(left: ResultVersion, right: ResultVersion) { return left.projectId === right.projectId && ((left.path === right.path && left.artifactId === right.artifactId) || directlyRelatedResults(left, right)); }

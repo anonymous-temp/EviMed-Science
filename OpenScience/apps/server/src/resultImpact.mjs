@@ -57,6 +57,10 @@ function statusProjection(status) {
 /**
  * Canonical matrix links, with byte digests supplied by the existing stable capture reader.
  * No digest is derived from clipped/decoded prose. Missing capture facts stay references.
+ *
+ * Each claim's finding is its mark: the status the quotation check reached and the sources it rests on, with no sentence of the
+ * platform's own (the English line once printed under every claim was removed 2026-10-10; the inspector says the two words the
+ * product fixed for a quotation check, `引文已核对` / `未核对上`).
  * @param {any} matrix @param {{verdict?:any,capturedSources?:Map<string,{digest?:string,versionId?:string}>}} options
  */
 export function clinicalResultLinks(matrix, { verdict = null, capturedSources = new Map() } = {}) {
@@ -93,7 +97,7 @@ export function clinicalResultLinks(matrix, { verdict = null, capturedSources = 
   for (const claim of claims.values()) {
     const sourceRefs = references(claim);
     if (sourceRefs.length) findings.push({ id: `claim-${claim.claimId}`, kind: "claim_source_binding",
-      status: verified.get(claim.claimId)?.status ?? "not_run", message: "Recorded claim-to-source links; source support remains separately assessed.",
+      status: verified.get(claim.claimId)?.status ?? "not_run", message: "",
       elementId: claim.claimId, sourceRefs });
   }
   return { inputs: [...inputs.values()], findings };
