@@ -116,6 +116,32 @@ it("keeps scope, certainty, applicability dates and the source's title with the 
   expect(view.container.textContent).not.toMatch(/src_|SHA-256|abc123/);
 });
 
+it("shows what a finding records in its own shape: a list as its items, an object as its labelled fields, a number as a number, the basis as its label", async () => {
+  client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { findings: [{
+    statement: "疗效优于安慰剂", dimension: "effectiveness", basis: "synthesized", certainty: 3,
+    population: { indication: "成人肥胖", setting: "门诊", age: "18 岁以上" }, comparator: "安慰剂", outcomes: ["体重变化", "停药率"],
+    limitations: ["随访仅 12 周", "样本量偏小"],
+  }] } });
+  const view = show();
+  await userEvent.click(await screen.findByText("依据与适用条件"));
+  expect(screen.getByText("综合结论")).toBeVisible();
+  expect(screen.getByText("3")).toBeVisible();
+  expect(screen.getByText("适应证：成人肥胖")).toBeVisible();
+  expect(screen.getByText("使用场景：门诊")).toBeVisible();
+  // A key with no Chinese label is not printed as a code; its value still is.
+  expect(screen.getByText("18 岁以上")).toBeVisible();
+  for (const item of ["安慰剂", "体重变化", "停药率", "随访仅 12 周", "样本量偏小"]) expect(screen.getByText(item)).toBeVisible();
+  expect(view.container.textContent).not.toMatch(/\[object Object\]|[{}]|age/);
+});
+
+it("a zero is a number, and a basis the claim lists do not name is not printed as a machine word", async () => {
+  client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { findings: [{ statement: "疗效优于安慰剂", certainty: 0, basis: "indirect", sourceVersion: 0 }] } });
+  const view = show();
+  await userEvent.click(await screen.findByText("依据与适用条件"));
+  expect(screen.getByText("确定性").closest("div")).toHaveTextContent(/^确定性0$/);
+  expect(view.container.textContent).not.toContain("indirect");
+});
+
 describe("a finding's sources", () => {
   const SOURCE_ID = `src_${"a1b2c3d4".repeat(8)}`;
   const withSources = (sources: unknown[]) => ({ ...empty(), version: 2, data: { findings: [{ id: "f1", statement: "疗效优于安慰剂", sources }] } });

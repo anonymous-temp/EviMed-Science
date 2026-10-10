@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { geoValueText, GEO_VALUE_DOMAINS } from "@evimed/domain";
 import { getGeoValue, type GeoProject, type GeoValue } from "@/lib/geoClient";
+import { CLAIM_TYPE_LABEL } from "@/lib/claimCitations";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { safeWebHref } from "@/lib/readPages";
 import { AskAi } from "../AskAi";
@@ -142,12 +143,15 @@ function StartAnalysis({ project, className }: { project: GeoProject; className?
 }
 
 function FindingDetail({ entry }: { entry: Record<string, unknown> }) {
-  const known = [
-    ["评价维度", GEO_VALUE_DOMAINS[String(entry.dimension) as keyof typeof GEO_VALUE_DOMAINS]], ["适用人群", entry.population],
-    ["比较对象", entry.comparator], ["确定性", entry.certainty], ["适用地区", entry.region],
-    ["评价日期", entry.asOf], ["观察时间", entry.timeframe ?? entry.time], ["适用起始日期", entry.validFrom],
-    ["适用截止日期", entry.validUntil], ["依据版本", typeof entry.sourceVersion === "number" ? String(entry.sourceVersion) : entry.sourceVersion], ["局限", entry.limitations], ["判断理由", entry.rationale], ["下一步", entry.nextAction],
-  ].filter((pair): pair is [string, string] => typeof pair[1] === "string" && Boolean(pair[1]));
+  // Each field keeps the shape it was written in (`fieldLines`): a list, an object, a number and a basis all reach the reader.
+  const fields: Array<[string, unknown]> = [
+    ["评价维度", GEO_VALUE_DOMAINS[String(entry.dimension) as keyof typeof GEO_VALUE_DOMAINS]], ["类型", basisLabel(entry.basis)],
+    ["适用人群", entry.population], ["比较对象", entry.comparator], ["结局指标", entry.outcomes], ["确定性", entry.certainty], ["适用地区", entry.region],
+    ["评价日期", entry.asOf], ["观察时间", entry.timeframe || entry.time], ["适用起始日期", entry.validFrom],
+    ["适用截止日期", entry.validUntil], ["依据版本", entry.sourceVersion], ["研究方法", entry.methods], ["假设条件", entry.assumptions],
+    ["局限", entry.limitations], ["判断理由", entry.rationale], ["下一步", entry.nextAction],
+  ];
+  const known = fields.map(([label, value]): [string, string[]] => [label, fieldLines(value)]).filter(([, lines]) => lines.length > 0);
   // A source is named by its title; failing that by a reference a reader can use (a PMID, a DOI, a name someone wrote). A
   // content-addressed id and a digest say nothing to a reader, so a source with neither is left out, as 方案's claims leave them out.
   const sources = rows(entry.sources ?? entry.sourceRefs).map(source => ({
@@ -159,7 +163,7 @@ function FindingDetail({ entry }: { entry: Record<string, unknown> }) {
   if (!known.length && !sources.length && !hasScope(entry.scope)) return null;
   return <Disclosure summary="依据与适用条件" className="mt-2">
     <ScopeDetail scope={entry.scope} />
-    <dl className="space-y-2 text-caption text-text-2">{known.map(([label, content], index) => <div key={`${label}:${index}`}><dt>{label}</dt><dd className="max-w-measure break-words">{content}</dd></div>)}</dl>
+    <dl className="space-y-2 text-caption text-text-2">{known.map(([label, lines]) => <div key={label}><dt>{label}</dt><dd className="max-w-measure break-words">{lines.length === 1 ? lines[0] : <ul className="space-y-1">{lines.map((line, index) => <li key={index}>{line}</li>)}</ul>}</dd></div>)}</dl>
     {!!sources.length && <ul className="mt-2 space-y-1 text-caption">{sources.map((source, index) => <li key={index} className="break-words">{source.href ? <a href={source.href} target="_blank" rel="noreferrer" className="text-accent underline">{source.label}</a> : source.label}{source.version && <span className="ml-2 text-text-3">版本 {source.version}</span>}</li>)}</ul>}
   </Disclosure>;
 }
@@ -184,4 +188,38 @@ function ScopeDetail({ scope }: { scope: unknown }) {
     {text(scope) && <p className="max-w-measure break-words text-caption text-text-2">{text(scope)}</p>}
     <dl className="space-y-2 text-caption text-text-2">{known.map(([label, content], index) => <div key={`${label}:${index}`}><dt>{label}</dt><dd className="max-w-measure break-words">{content}</dd></div>)}</dl>
   </Disclosure>;
+}
+
+/**
+ * A key's label: its SCOPE_LABELS name, else the key itself when the key is written in Chinese. An English key with no name is a code
+ * (DESIGN: no enum codes in the body), so it has no label; an inherited name such as `constructor` is not a label either.
+ */
+const labelOf = (key: string): string | null => {
+  if (Object.prototype.hasOwnProperty.call(SCOPE_LABELS, key)) return SCOPE_LABELS[key];
+  return /[\u4e00-\u9fff]/.test(key) ? key : null;
+};
+
+/**
+ * A finding's field as the lines a reader sees: text and numbers as they are, yes and no as 是 and 否, a list as its items, and an
+ * object as its fields, each under its label where it has one (`labelOf`). Nothing is printed as `[object Object]` or as JSON.
+ */
+function fieldLines(value: unknown): string[] {
+  if (typeof value === "string") return value.trim() ? [value.trim()] : [];
+  if (typeof value === "number") return Number.isFinite(value) ? [String(value)] : [];
+  if (typeof value === "boolean") return [value ? "是" : "否"];
+  if (Array.isArray(value)) return value.flatMap((item) => fieldLines(item));
+  if (value && typeof value === "object") {
+    return Object.entries(value).flatMap(([key, item]) => {
+      const lines = fieldLines(item);
+      if (!lines.length) return [];
+      const label = labelOf(key);
+      return [label ? `${label}：${lines.join("、")}` : lines.join("、")];
+    });
+  }
+  return [];
+}
+
+/** A finding's basis under the label the claim lists use (`CLAIM_TYPE_LABEL`); a value that is none of the three is not shown. */
+function basisLabel(value: unknown): string | undefined {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(CLAIM_TYPE_LABEL, value) ? CLAIM_TYPE_LABEL[value] : undefined;
 }
