@@ -5,7 +5,7 @@ instance, role ``evimed_knowledge``; the platform never connects to it — plan 
 is ``schema.sql``: the normative design draft byte for byte, then this build's additions. It is
 applied at every start in ONE transaction behind ``pg_advisory_xact_lock(hashtext(
 'evimed-knowledge-v1'))``, so two instances starting together serialise, and a second run is a
-no-op (every statement is ``IF NOT EXISTS``).
+no-op (every statement is ``IF NOT EXISTS``, or a guarded block that finds its work done).
 
 Two advisory locks exist, and only these two:
 

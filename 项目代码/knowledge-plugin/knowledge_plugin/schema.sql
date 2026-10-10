@@ -176,6 +176,22 @@ CREATE INDEX IF NOT EXISTS knowledge_sources_claim_idx
 ALTER TABLE evimed_knowledge.fetches ADD COLUMN IF NOT EXISTS host text;
 ALTER TABLE evimed_knowledge.fetches ADD COLUMN IF NOT EXISTS requests integer NOT NULL DEFAULT 1;
 
+-- fetches.outcome gains 'empty-body' (review 2026-10-10, D-07): a 204 or a body with nothing in it, the source's failure, where
+-- 'empty' stays the name of a page that parsed to no entries. The list is a CHECK made with the table and a table that exists
+-- keeps the one it was made with, so the constraint is replaced once, when it does not name the outcome yet; a second run
+-- finds it there and changes nothing. (Without this, the first such poll after an upgrade is refused by the database.)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conrelid = 'evimed_knowledge.fetches'::regclass AND conname = 'fetches_outcome_check'
+                    AND pg_get_constraintdef(oid) LIKE '%''empty-body''%') THEN
+    ALTER TABLE evimed_knowledge.fetches DROP CONSTRAINT IF EXISTS fetches_outcome_check;
+    ALTER TABLE evimed_knowledge.fetches ADD CONSTRAINT fetches_outcome_check CHECK (outcome IN
+      ('ok', 'not-modified', 'empty', 'empty-body', 'challenge', 'blocked', 'timeout', 'http-error', 'parse-error',
+       'robots-denied', 'host-budget', 'too-large'));
+  END IF;
+END $$;
+
 -- entries: the operator/test filter by source reads (source_id, seq).
 CREATE INDEX IF NOT EXISTS knowledge_entries_source_seq_idx ON evimed_knowledge.entries (source_id, seq);
 

@@ -71,7 +71,10 @@ ERROR_CODES = (
 # The fetches.outcome vocabulary (plugin schema CHECK constraint). What each one means:
 #   ok            200 with a body the adapter parsed (zero entries is 'empty', recorded by the scheduler)
 #   not-modified  304, or a 200 whose body hash equals the last one (not parsed again)
-#   empty         a 200/204 without a body, or a body that parsed to zero entries
+#   empty         a body the adapter parsed to zero entries: a quiet day, a successful read
+#   empty-body    a 204, or a 200 with nothing in it (zero bytes, or whitespace only): a broken edge, the source's failure.
+#                 It was also called 'empty' until 2026-10-10 (review D-07), so the scheduler failed the source for a poll
+#                 that the success list, the reliability count and the health stats took for a read.
 #   challenge     a bot wall: Cloudflare / Ruishu 412-202 script page / WAF marker / empty shell page
 #   blocked       refused before or by the server: 401/403/451, a private address, an egress this
 #                 build does not have, a host outside the source's allowed_hosts
@@ -82,11 +85,13 @@ ERROR_CODES = (
 #   host-budget   the plugin's own budget refused to send: daily cap spent or the host is paused
 #   too-large     the body passed the 16 MiB cap and the transfer was aborted
 FETCH_OUTCOMES = (
-    "ok", "not-modified", "empty", "challenge", "blocked", "timeout", "http-error", "parse-error",
+    "ok", "not-modified", "empty", "empty-body", "challenge", "blocked", "timeout", "http-error", "parse-error",
     "robots-denied", "host-budget", "too-large",
 )
 # Outcomes that say nothing about the source itself: the plugin chose not to send the request.
 NEUTRAL_OUTCOMES = frozenset({"host-budget"})
+# The polls that read the source: health, the reliability count and /v1/health's stats take their successes from here.
+# 'empty' is a page that parsed to no entries; 'empty-body' (a 204, a body with nothing in it) is not in it.
 SUCCESS_OUTCOMES = frozenset({"ok", "not-modified", "empty"})
 
 # Batch 1 (plan 14.6): the read methods and exits the first release implemented.
