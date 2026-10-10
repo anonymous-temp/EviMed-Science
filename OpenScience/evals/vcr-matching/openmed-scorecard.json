@@ -8,10 +8,10 @@
   "publicLeaderboardSubmission": false,
   "taskDispositions": {
     "implemented": 38,
-    "external_validation_required": 1,
-    "native_reused": 6,
-    "conditional_not_activated": 7
+    "ready_waiting_for_data": 8,
+    "native_reused": 6
   },
+  "taskDispositionsNote": "B03 and E01, F01-F06 read ready_waiting_for_data (2026-10-10 owner ruling): neither open work nor closed. packages/contracts/openmed/implementation.json says per task what it waits for and what its input turns on.",
   "syntheticPaired": {
     "archive": "results/openmed-v3-20261009/native-predictions.json",
     "scorer": "../method-quality/score_native_clinical.py",
@@ -24,25 +24,25 @@
           {
             "task": "eligibility",
             "dataClass": "synthetic",
-            "cases": 24,
+            "cases": 48,
             "sourceGroups": 12,
             "missing": 0,
             "invalid": 0,
-            "n": 24,
-            "correct": 21,
-            "unknown": 9,
-            "accuracy": 0.875,
+            "n": 48,
+            "correct": 41,
+            "unknown": 17,
+            "accuracy": 0.8541666666666666,
             "byState": {
               "eligible": {
-                "tp": 8,
-                "fp": 3,
+                "tp": 16,
+                "fp": 7,
                 "fn": 0,
-                "precision": 0.7272727272727273,
+                "precision": 0.6956521739130435,
                 "recall": 1.0,
-                "f1": 0.8421052631578947
+                "f1": 0.8205128205128205
               },
               "ineligible": {
-                "tp": 4,
+                "tp": 8,
                 "fp": 0,
                 "fn": 0,
                 "precision": 1.0,
@@ -50,23 +50,23 @@
                 "f1": 1.0
               },
               "insufficient_evidence": {
-                "tp": 9,
+                "tp": 17,
                 "fp": 0,
-                "fn": 3,
+                "fn": 7,
                 "precision": 1.0,
-                "recall": 0.75,
-                "f1": 0.8571428571428571
+                "recall": 0.7083333333333334,
+                "f1": 0.8292682926829268
               }
             },
-            "macroF1": 0.899749373433584,
+            "macroF1": 0.8832603710652491,
             "accuracyInterval": {
-              "low": 0.7083333333333334,
+              "low": 0.6458333333333334,
               "high": 1.0,
               "groups": 12,
               "seed": 20261009,
               "repeats": 2000
             },
-            "eligibleReference": 8,
+            "eligibleReference": 16,
             "falseExclusions": 0,
             "falseExclusionRate": 0.0,
             "falseExclusionInterval": {
@@ -77,7 +77,7 @@
               "repeats": 2000
             },
             "eligibleRecall": 1.0,
-            "falseInclusions": 3,
+            "falseInclusions": 7,
             "anyFalseExclusionPerGroupWilson95": {
               "groups": 4,
               "observed": 0,
@@ -87,13 +87,13 @@
             "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
           }
         ],
-        "completed": 24,
-        "attempted": 24,
+        "completed": 48,
+        "attempted": 48,
         "writesWithIssues": 2,
         "writeIssues": 3,
-        "medianLatencyMs": 2007.0,
-        "requests": 25,
-        "settledCostCny": 0.03031712,
+        "medianLatencyMs": 1920.5,
+        "requests": 49,
+        "settledCostCny": 0.058254,
         "unpricedRequests": 0,
         "observedModels": [
           "deepseek-flash"
@@ -178,86 +178,6 @@
         "observedModels": [
           "deepseek-flash"
         ]
-      },
-      "off": {
-        "scorecard": [
-          {
-            "task": "eligibility",
-            "dataClass": "synthetic",
-            "cases": 24,
-            "sourceGroups": 12,
-            "missing": 0,
-            "invalid": 0,
-            "n": 24,
-            "correct": 20,
-            "unknown": 8,
-            "accuracy": 0.8333333333333334,
-            "byState": {
-              "eligible": {
-                "tp": 8,
-                "fp": 4,
-                "fn": 0,
-                "precision": 0.6666666666666666,
-                "recall": 1.0,
-                "f1": 0.8
-              },
-              "ineligible": {
-                "tp": 4,
-                "fp": 0,
-                "fn": 0,
-                "precision": 1.0,
-                "recall": 1.0,
-                "f1": 1.0
-              },
-              "insufficient_evidence": {
-                "tp": 8,
-                "fp": 0,
-                "fn": 4,
-                "precision": 1.0,
-                "recall": 0.6666666666666666,
-                "f1": 0.8
-              }
-            },
-            "macroF1": 0.8666666666666667,
-            "accuracyInterval": {
-              "low": 0.5833333333333334,
-              "high": 1.0,
-              "groups": 12,
-              "seed": 20261009,
-              "repeats": 2000
-            },
-            "eligibleReference": 8,
-            "falseExclusions": 0,
-            "falseExclusionRate": 0.0,
-            "falseExclusionInterval": {
-              "low": 0.0,
-              "high": 0.0,
-              "groups": 12,
-              "seed": 20261009,
-              "repeats": 2000
-            },
-            "eligibleRecall": 1.0,
-            "falseInclusions": 4,
-            "anyFalseExclusionPerGroupWilson95": {
-              "groups": 4,
-              "observed": 0,
-              "low": 0,
-              "high": 0.48990002040399916
-            },
-            "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
-          }
-        ],
-        "completed": 24,
-        "attempted": 24,
-        "writesWithIssues": 0,
-        "writeIssues": 0,
-        "medianLatencyMs": 1879.5,
-        "requests": 24,
-        "settledCostCny": 0.02793688,
-        "unpricedRequests": 0,
-        "observedModels": [
-          "deepseek-flash"
-        ]
       }
     },
     "limitations": [
@@ -280,13 +200,13 @@
           {
             "task": "eligibility",
             "dataClass": "synthetic",
-            "cases": 2,
+            "cases": 4,
             "sourceGroups": 1,
             "missing": 0,
             "invalid": 0,
-            "n": 2,
-            "correct": 2,
-            "unknown": 2,
+            "n": 4,
+            "correct": 4,
+            "unknown": 4,
             "accuracy": 1.0,
             "byState": {
               "eligible": {
@@ -306,7 +226,7 @@
                 "f1": null
               },
               "insufficient_evidence": {
-                "tp": 2,
+                "tp": 4,
                 "fp": 0,
                 "fn": 0,
                 "precision": 1.0,
@@ -335,13 +255,13 @@
             "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
           }
         ],
-        "completed": 2,
-        "attempted": 2,
+        "completed": 4,
+        "attempted": 4,
         "writesWithIssues": 0,
         "writeIssues": 0,
-        "medianLatencyMs": 2032.0,
-        "requests": 2,
-        "settledCostCny": 0.00214012,
+        "medianLatencyMs": 1964.5,
+        "requests": 4,
+        "settledCostCny": 0.00401436,
         "unpricedRequests": 0,
         "observedModels": [
           "deepseek-flash"
@@ -418,81 +338,9 @@
         "observedModels": [
           "deepseek-flash"
         ]
-      },
-      "off": {
-        "scorecard": [
-          {
-            "task": "eligibility",
-            "dataClass": "synthetic",
-            "cases": 2,
-            "sourceGroups": 1,
-            "missing": 0,
-            "invalid": 0,
-            "n": 2,
-            "correct": 2,
-            "unknown": 2,
-            "accuracy": 1.0,
-            "byState": {
-              "eligible": {
-                "tp": 0,
-                "fp": 0,
-                "fn": 0,
-                "precision": null,
-                "recall": null,
-                "f1": null
-              },
-              "ineligible": {
-                "tp": 0,
-                "fp": 0,
-                "fn": 0,
-                "precision": null,
-                "recall": null,
-                "f1": null
-              },
-              "insufficient_evidence": {
-                "tp": 2,
-                "fp": 0,
-                "fn": 0,
-                "precision": 1.0,
-                "recall": 1.0,
-                "f1": 1.0
-              }
-            },
-            "macroF1": 1.0,
-            "accuracyInterval": {
-              "low": null,
-              "high": null,
-              "groups": 1,
-              "reason": "fewer_than_two_source_groups"
-            },
-            "eligibleReference": 0,
-            "falseExclusions": 0,
-            "falseExclusionRate": null,
-            "falseExclusionInterval": {
-              "low": null,
-              "high": null,
-              "groups": 1,
-              "reason": "fewer_than_two_source_groups"
-            },
-            "eligibleRecall": null,
-            "falseInclusions": 0,
-            "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
-          }
-        ],
-        "completed": 2,
-        "attempted": 2,
-        "writesWithIssues": 0,
-        "writeIssues": 0,
-        "medianLatencyMs": 1907.0,
-        "requests": 2,
-        "settledCostCny": 0.00187424,
-        "unpricedRequests": 0,
-        "observedModels": [
-          "deepseek-flash"
-        ]
       }
     },
-    "limitation": "Six new native/on/off calls after the final unit check; a targeted retest, not a full new 72-call batch."
+    "limitation": "Six new calls after the final unit check, two with the enhanced guidance and four without (the control and its former identical off arm, pooled as native); a targeted retest, not a full new 72-call batch."
   },
   "publicCorpusPilot": {
     "resourceId": "drugprot-5119892-pilot",
@@ -609,7 +457,7 @@
     "dataFirst": "Short machine-readable tool contracts and existing knowledge packs supply the schema and selected terminology.",
     "effectOnResearch": "Unknown or unavailable evidence affects its fact/judgment or authorized source operation; unrelated research remains available.",
     "measuredReproduction": "The archived unknown-unit case fabricated mg/dL; the source span did not contain it. The exact-unit replay checked 31 of 118 extracted facts, identified that one unsupported unit and preserved 30 stated units. Remaining facts used units outside the bounded check or had no unit.",
-    "controls": "Repeated native/on/off calls and real multi-turn MCP observations are retained, with independent clinical validation explicitly absent."
+    "controls": "Repeated native and on calls (the former identical off arm is pooled into native) and real multi-turn MCP observations are retained, with independent clinical validation explicitly absent."
   },
   "reproduceOffline": [
     "python3 evals/method-quality/score_native_clinical.py --reference evals/vcr-matching/corpora/chinese-synthetic/reference.json --predictions evals/vcr-matching/results/openmed-v3-20261009/native-predictions.json --output /tmp/openmed-native-scorecard.json",
@@ -1011,25 +859,25 @@
             {
               "task": "eligibility",
               "dataClass": "synthetic",
-              "cases": 24,
+              "cases": 48,
               "sourceGroups": 12,
               "missing": 0,
               "invalid": 0,
-              "n": 24,
-              "correct": 21,
-              "unknown": 11,
+              "n": 48,
+              "correct": 42,
+              "unknown": 22,
               "accuracy": 0.875,
               "byState": {
                 "eligible": {
-                  "tp": 7,
-                  "fp": 2,
-                  "fn": 1,
+                  "tp": 14,
+                  "fp": 4,
+                  "fn": 2,
                   "precision": 0.7777777777777778,
                   "recall": 0.875,
                   "f1": 0.8235294117647058
                 },
                 "ineligible": {
-                  "tp": 4,
+                  "tp": 8,
                   "fp": 0,
                   "fn": 0,
                   "precision": 1.0,
@@ -1037,54 +885,197 @@
                   "f1": 1.0
                 },
                 "insufficient_evidence": {
-                  "tp": 10,
-                  "fp": 1,
-                  "fn": 2,
+                  "tp": 20,
+                  "fp": 2,
+                  "fn": 4,
                   "precision": 0.9090909090909091,
                   "recall": 0.8333333333333334,
                   "f1": 0.8695652173913043
                 }
               },
               "macroF1": 0.8976982097186701,
-              "accuracyInterval": {
-                "low": 0.6666666666666666,
-                "high": 1.0,
-                "groups": 12,
-                "seed": 20261009,
-                "repeats": 2000
-              },
-              "eligibleReference": 8,
+              "eligibleReference": 16,
               "falseExclusions": 0,
               "falseExclusionRate": 0.0,
-              "falseExclusionInterval": {
-                "low": 0.0,
-                "high": 0.0,
-                "groups": 12,
-                "seed": 20261009,
-                "repeats": 2000
-              },
               "eligibleRecall": 0.875,
-              "falseInclusions": 2,
-              "anyFalseExclusionPerGroupWilson95": {
-                "groups": 4,
-                "observed": 0,
-                "low": 0,
-                "high": 0.48990002040399916
-              },
+              "falseInclusions": 4,
               "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
             }
           ],
-          "completed": 24,
-          "attempted": 24,
+          "completed": 48,
+          "attempted": 48,
           "writesWithIssues": 2,
           "writeIssues": 2,
-          "medianLatencyMs": 2678.5,
-          "requests": 24,
-          "settledCostCny": 0.02954876,
+          "medianLatencyMs": null,
+          "requests": 48,
+          "settledCostCny": 0.05884464,
           "unpricedRequests": 0,
           "observedModels": [
             "deepseek-flash"
-          ]
+          ],
+          "pooledNote": "native + off ran the same prompt (the guidance only ever went to on), so they are one arm. The counts are summed; the intervals and the median latency are not recomputed, because the case-level archive of this batch is not in the repository. The two arms as first recorded are kept in pooledFrom.",
+          "pooledFrom": {
+            "native": {
+              "scorecard": [
+                {
+                  "task": "eligibility",
+                  "dataClass": "synthetic",
+                  "cases": 24,
+                  "sourceGroups": 12,
+                  "missing": 0,
+                  "invalid": 0,
+                  "n": 24,
+                  "correct": 21,
+                  "unknown": 11,
+                  "accuracy": 0.875,
+                  "byState": {
+                    "eligible": {
+                      "tp": 7,
+                      "fp": 2,
+                      "fn": 1,
+                      "precision": 0.7777777777777778,
+                      "recall": 0.875,
+                      "f1": 0.8235294117647058
+                    },
+                    "ineligible": {
+                      "tp": 4,
+                      "fp": 0,
+                      "fn": 0,
+                      "precision": 1.0,
+                      "recall": 1.0,
+                      "f1": 1.0
+                    },
+                    "insufficient_evidence": {
+                      "tp": 10,
+                      "fp": 1,
+                      "fn": 2,
+                      "precision": 0.9090909090909091,
+                      "recall": 0.8333333333333334,
+                      "f1": 0.8695652173913043
+                    }
+                  },
+                  "macroF1": 0.8976982097186701,
+                  "accuracyInterval": {
+                    "low": 0.6666666666666666,
+                    "high": 1.0,
+                    "groups": 12,
+                    "seed": 20261009,
+                    "repeats": 2000
+                  },
+                  "eligibleReference": 8,
+                  "falseExclusions": 0,
+                  "falseExclusionRate": 0.0,
+                  "falseExclusionInterval": {
+                    "low": 0.0,
+                    "high": 0.0,
+                    "groups": 12,
+                    "seed": 20261009,
+                    "repeats": 2000
+                  },
+                  "eligibleRecall": 0.875,
+                  "falseInclusions": 2,
+                  "anyFalseExclusionPerGroupWilson95": {
+                    "groups": 4,
+                    "observed": 0,
+                    "low": 0,
+                    "high": 0.48990002040399916
+                  },
+                  "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+                }
+              ],
+              "completed": 24,
+              "attempted": 24,
+              "writesWithIssues": 2,
+              "writeIssues": 2,
+              "medianLatencyMs": 2678.5,
+              "requests": 24,
+              "settledCostCny": 0.02954876,
+              "unpricedRequests": 0,
+              "observedModels": [
+                "deepseek-flash"
+              ]
+            },
+            "off": {
+              "scorecard": [
+                {
+                  "task": "eligibility",
+                  "dataClass": "synthetic",
+                  "cases": 24,
+                  "sourceGroups": 12,
+                  "missing": 0,
+                  "invalid": 0,
+                  "n": 24,
+                  "correct": 21,
+                  "unknown": 11,
+                  "accuracy": 0.875,
+                  "byState": {
+                    "eligible": {
+                      "tp": 7,
+                      "fp": 2,
+                      "fn": 1,
+                      "precision": 0.7777777777777778,
+                      "recall": 0.875,
+                      "f1": 0.8235294117647058
+                    },
+                    "ineligible": {
+                      "tp": 4,
+                      "fp": 0,
+                      "fn": 0,
+                      "precision": 1.0,
+                      "recall": 1.0,
+                      "f1": 1.0
+                    },
+                    "insufficient_evidence": {
+                      "tp": 10,
+                      "fp": 1,
+                      "fn": 2,
+                      "precision": 0.9090909090909091,
+                      "recall": 0.8333333333333334,
+                      "f1": 0.8695652173913043
+                    }
+                  },
+                  "macroF1": 0.8976982097186701,
+                  "accuracyInterval": {
+                    "low": 0.6666666666666666,
+                    "high": 1.0,
+                    "groups": 12,
+                    "seed": 20261009,
+                    "repeats": 2000
+                  },
+                  "eligibleReference": 8,
+                  "falseExclusions": 0,
+                  "falseExclusionRate": 0.0,
+                  "falseExclusionInterval": {
+                    "low": 0.0,
+                    "high": 0.0,
+                    "groups": 12,
+                    "seed": 20261009,
+                    "repeats": 2000
+                  },
+                  "eligibleRecall": 0.875,
+                  "falseInclusions": 2,
+                  "anyFalseExclusionPerGroupWilson95": {
+                    "groups": 4,
+                    "observed": 0,
+                    "low": 0,
+                    "high": 0.48990002040399916
+                  },
+                  "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+                }
+              ],
+              "completed": 24,
+              "attempted": 24,
+              "writesWithIssues": 0,
+              "writeIssues": 0,
+              "medianLatencyMs": 2808.5,
+              "requests": 24,
+              "settledCostCny": 0.02929588,
+              "unpricedRequests": 0,
+              "observedModels": [
+                "deepseek-flash"
+              ]
+            }
+          }
         },
         "on": {
           "scorecard": [
@@ -1165,86 +1156,6 @@
           "observedModels": [
             "deepseek-flash"
           ]
-        },
-        "off": {
-          "scorecard": [
-            {
-              "task": "eligibility",
-              "dataClass": "synthetic",
-              "cases": 24,
-              "sourceGroups": 12,
-              "missing": 0,
-              "invalid": 0,
-              "n": 24,
-              "correct": 21,
-              "unknown": 11,
-              "accuracy": 0.875,
-              "byState": {
-                "eligible": {
-                  "tp": 7,
-                  "fp": 2,
-                  "fn": 1,
-                  "precision": 0.7777777777777778,
-                  "recall": 0.875,
-                  "f1": 0.8235294117647058
-                },
-                "ineligible": {
-                  "tp": 4,
-                  "fp": 0,
-                  "fn": 0,
-                  "precision": 1.0,
-                  "recall": 1.0,
-                  "f1": 1.0
-                },
-                "insufficient_evidence": {
-                  "tp": 10,
-                  "fp": 1,
-                  "fn": 2,
-                  "precision": 0.9090909090909091,
-                  "recall": 0.8333333333333334,
-                  "f1": 0.8695652173913043
-                }
-              },
-              "macroF1": 0.8976982097186701,
-              "accuracyInterval": {
-                "low": 0.6666666666666666,
-                "high": 1.0,
-                "groups": 12,
-                "seed": 20261009,
-                "repeats": 2000
-              },
-              "eligibleReference": 8,
-              "falseExclusions": 0,
-              "falseExclusionRate": 0.0,
-              "falseExclusionInterval": {
-                "low": 0.0,
-                "high": 0.0,
-                "groups": 12,
-                "seed": 20261009,
-                "repeats": 2000
-              },
-              "eligibleRecall": 0.875,
-              "falseInclusions": 2,
-              "anyFalseExclusionPerGroupWilson95": {
-                "groups": 4,
-                "observed": 0,
-                "low": 0,
-                "high": 0.48990002040399916
-              },
-              "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
-            }
-          ],
-          "completed": 24,
-          "attempted": 24,
-          "writesWithIssues": 0,
-          "writeIssues": 0,
-          "medianLatencyMs": 2808.5,
-          "requests": 24,
-          "settledCostCny": 0.02929588,
-          "unpricedRequests": 0,
-          "observedModels": [
-            "deepseek-flash"
-          ]
         }
       },
       "limitations": [
@@ -1253,8 +1164,8 @@
         "An unknown judgment caused by a refused fact is not evidence of better clinical understanding. Write failures are reported separately.",
         "Repeated prompts share the patient/source cluster; the reported interval does not treat repetitions as independent patients.",
         "No automatic production promotion or clinical qualification follows this scorecard.",
-        "Native and off are the same prompt control, with independently ordered repetitions.",
-        "Enhanced guidance reduced false inclusions from 2/24 in each control to 0/24, but eligible recall declined from 7/8 to 6/8; its one malformed response remains invalid.",
+        "Native and the former off arm are one prompt control, pooled as native, with independently ordered repetitions.",
+        "Enhanced guidance reduced false inclusions from 4/48 in the pooled control (2/24 in each of its two replicates) to 0/24, but eligible recall declined from 14/16 to 6/8; its one malformed response remains invalid.",
         "The clinical batch ran at a0ba7eb66; the later unlisted-unit fix has deterministic source-evidence regression coverage, not a new full model batch."
       ]
     },
@@ -1475,7 +1386,7 @@
       "Source dates are checked only through optional dateSurface; occurredAt and declared clinical intervals can still be model interpretations.",
       "Public DrugProt ten-abstract pilot is not a clinical cohort, causal dataset, official leaderboard or clinical qualification.",
       "Two privacy canaries cannot establish universal PII detection.",
-      "Native/off prompts are the same extraction control except labels/order; only on adds enhanced guidance.",
+      "Native and the former off arm were the same extraction control except labels/order, and are pooled as native; only on adds enhanced guidance.",
       "No production deployment or production tests performed."
     ]
   },
@@ -1489,33 +1400,33 @@
       "repeats": 2,
       "arms": {
         "native": {
-          "completed": 24,
-          "writeIssues": 1,
-          "requests": 24,
-          "settledCostCny": 0.02909576,
+          "completed": 48,
+          "writeIssues": 4,
+          "requests": 48,
+          "settledCostCny": 0.05826664,
           "scorecard": [
             {
               "task": "eligibility",
               "dataClass": "synthetic",
-              "cases": 24,
+              "cases": 48,
               "sourceGroups": 12,
               "missing": 0,
               "invalid": 0,
-              "n": 24,
-              "correct": 21,
-              "unknown": 9,
+              "n": 48,
+              "correct": 42,
+              "unknown": 20,
               "accuracy": 0.875,
               "byState": {
                 "eligible": {
-                  "tp": 8,
-                  "fp": 3,
-                  "fn": 0,
-                  "precision": 0.7272727272727273,
-                  "recall": 1.0,
-                  "f1": 0.8421052631578947
+                  "tp": 15,
+                  "fp": 5,
+                  "fn": 1,
+                  "precision": 0.75,
+                  "recall": 0.9375,
+                  "f1": 0.8333333333333334
                 },
                 "ineligible": {
-                  "tp": 4,
+                  "tp": 8,
                   "fp": 0,
                   "fn": 0,
                   "precision": 1.0,
@@ -1523,43 +1434,172 @@
                   "f1": 1.0
                 },
                 "insufficient_evidence": {
-                  "tp": 9,
-                  "fp": 0,
-                  "fn": 3,
-                  "precision": 1.0,
-                  "recall": 0.75,
-                  "f1": 0.8571428571428571
+                  "tp": 19,
+                  "fp": 1,
+                  "fn": 5,
+                  "precision": 0.95,
+                  "recall": 0.7916666666666666,
+                  "f1": 0.8636363636363636
                 }
               },
-              "macroF1": 0.899749373433584,
-              "accuracyInterval": {
-                "low": 0.6666666666666666,
-                "high": 1.0,
-                "groups": 12,
-                "seed": 20261009,
-                "repeats": 2000
-              },
-              "eligibleReference": 8,
+              "macroF1": 0.8989898989898991,
+              "eligibleReference": 16,
               "falseExclusions": 0,
               "falseExclusionRate": 0.0,
-              "falseExclusionInterval": {
-                "low": 0.0,
-                "high": 0.0,
-                "groups": 12,
-                "seed": 20261009,
-                "repeats": 2000
-              },
-              "eligibleRecall": 1.0,
-              "falseInclusions": 3,
-              "anyFalseExclusionPerGroupWilson95": {
-                "groups": 4,
-                "observed": 0,
-                "low": 0,
-                "high": 0.48990002040399916
-              },
+              "eligibleRecall": 0.9375,
+              "falseInclusions": 5,
               "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
             }
-          ]
+          ],
+          "pooledNote": "native + off ran the same prompt (the guidance only ever went to on), so they are one arm. The counts are summed; the intervals and the median latency are not recomputed, because the case-level archive of this batch is not in the repository. The two arms as first recorded are kept in pooledFrom.",
+          "pooledFrom": {
+            "native": {
+              "completed": 24,
+              "writeIssues": 1,
+              "requests": 24,
+              "settledCostCny": 0.02909576,
+              "scorecard": [
+                {
+                  "task": "eligibility",
+                  "dataClass": "synthetic",
+                  "cases": 24,
+                  "sourceGroups": 12,
+                  "missing": 0,
+                  "invalid": 0,
+                  "n": 24,
+                  "correct": 21,
+                  "unknown": 9,
+                  "accuracy": 0.875,
+                  "byState": {
+                    "eligible": {
+                      "tp": 8,
+                      "fp": 3,
+                      "fn": 0,
+                      "precision": 0.7272727272727273,
+                      "recall": 1.0,
+                      "f1": 0.8421052631578947
+                    },
+                    "ineligible": {
+                      "tp": 4,
+                      "fp": 0,
+                      "fn": 0,
+                      "precision": 1.0,
+                      "recall": 1.0,
+                      "f1": 1.0
+                    },
+                    "insufficient_evidence": {
+                      "tp": 9,
+                      "fp": 0,
+                      "fn": 3,
+                      "precision": 1.0,
+                      "recall": 0.75,
+                      "f1": 0.8571428571428571
+                    }
+                  },
+                  "macroF1": 0.899749373433584,
+                  "accuracyInterval": {
+                    "low": 0.6666666666666666,
+                    "high": 1.0,
+                    "groups": 12,
+                    "seed": 20261009,
+                    "repeats": 2000
+                  },
+                  "eligibleReference": 8,
+                  "falseExclusions": 0,
+                  "falseExclusionRate": 0.0,
+                  "falseExclusionInterval": {
+                    "low": 0.0,
+                    "high": 0.0,
+                    "groups": 12,
+                    "seed": 20261009,
+                    "repeats": 2000
+                  },
+                  "eligibleRecall": 1.0,
+                  "falseInclusions": 3,
+                  "anyFalseExclusionPerGroupWilson95": {
+                    "groups": 4,
+                    "observed": 0,
+                    "low": 0,
+                    "high": 0.48990002040399916
+                  },
+                  "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+                }
+              ]
+            },
+            "off": {
+              "completed": 24,
+              "writeIssues": 3,
+              "requests": 24,
+              "settledCostCny": 0.02917088,
+              "scorecard": [
+                {
+                  "task": "eligibility",
+                  "dataClass": "synthetic",
+                  "cases": 24,
+                  "sourceGroups": 12,
+                  "missing": 0,
+                  "invalid": 0,
+                  "n": 24,
+                  "correct": 21,
+                  "unknown": 11,
+                  "accuracy": 0.875,
+                  "byState": {
+                    "eligible": {
+                      "tp": 7,
+                      "fp": 2,
+                      "fn": 1,
+                      "precision": 0.7777777777777778,
+                      "recall": 0.875,
+                      "f1": 0.8235294117647058
+                    },
+                    "ineligible": {
+                      "tp": 4,
+                      "fp": 0,
+                      "fn": 0,
+                      "precision": 1.0,
+                      "recall": 1.0,
+                      "f1": 1.0
+                    },
+                    "insufficient_evidence": {
+                      "tp": 10,
+                      "fp": 1,
+                      "fn": 2,
+                      "precision": 0.9090909090909091,
+                      "recall": 0.8333333333333334,
+                      "f1": 0.8695652173913043
+                    }
+                  },
+                  "macroF1": 0.8976982097186701,
+                  "accuracyInterval": {
+                    "low": 0.75,
+                    "high": 1.0,
+                    "groups": 12,
+                    "seed": 20261009,
+                    "repeats": 2000
+                  },
+                  "eligibleReference": 8,
+                  "falseExclusions": 0,
+                  "falseExclusionRate": 0.0,
+                  "falseExclusionInterval": {
+                    "low": 0.0,
+                    "high": 0.0,
+                    "groups": 12,
+                    "seed": 20261009,
+                    "repeats": 2000
+                  },
+                  "eligibleRecall": 0.875,
+                  "falseInclusions": 2,
+                  "anyFalseExclusionPerGroupWilson95": {
+                    "groups": 4,
+                    "observed": 0,
+                    "low": 0,
+                    "high": 0.48990002040399916
+                  },
+                  "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+                }
+              ]
+            }
+          }
         },
         "on": {
           "completed": 24,
@@ -1624,79 +1664,6 @@
               },
               "eligibleRecall": 1.0,
               "falseInclusions": 0,
-              "anyFalseExclusionPerGroupWilson95": {
-                "groups": 4,
-                "observed": 0,
-                "low": 0,
-                "high": 0.48990002040399916
-              },
-              "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
-            }
-          ]
-        },
-        "off": {
-          "completed": 24,
-          "writeIssues": 3,
-          "requests": 24,
-          "settledCostCny": 0.02917088,
-          "scorecard": [
-            {
-              "task": "eligibility",
-              "dataClass": "synthetic",
-              "cases": 24,
-              "sourceGroups": 12,
-              "missing": 0,
-              "invalid": 0,
-              "n": 24,
-              "correct": 21,
-              "unknown": 11,
-              "accuracy": 0.875,
-              "byState": {
-                "eligible": {
-                  "tp": 7,
-                  "fp": 2,
-                  "fn": 1,
-                  "precision": 0.7777777777777778,
-                  "recall": 0.875,
-                  "f1": 0.8235294117647058
-                },
-                "ineligible": {
-                  "tp": 4,
-                  "fp": 0,
-                  "fn": 0,
-                  "precision": 1.0,
-                  "recall": 1.0,
-                  "f1": 1.0
-                },
-                "insufficient_evidence": {
-                  "tp": 10,
-                  "fp": 1,
-                  "fn": 2,
-                  "precision": 0.9090909090909091,
-                  "recall": 0.8333333333333334,
-                  "f1": 0.8695652173913043
-                }
-              },
-              "macroF1": 0.8976982097186701,
-              "accuracyInterval": {
-                "low": 0.75,
-                "high": 1.0,
-                "groups": 12,
-                "seed": 20261009,
-                "repeats": 2000
-              },
-              "eligibleReference": 8,
-              "falseExclusions": 0,
-              "falseExclusionRate": 0.0,
-              "falseExclusionInterval": {
-                "low": 0.0,
-                "high": 0.0,
-                "groups": 12,
-                "seed": 20261009,
-                "repeats": 2000
-              },
-              "eligibleRecall": 0.875,
-              "falseInclusions": 2,
               "anyFalseExclusionPerGroupWilson95": {
                 "groups": 4,
                 "observed": 0,
@@ -1887,7 +1854,7 @@
       "researchMode": "Existing research mode can preserve qualified partial findings; no clinical quality guarantee.",
       "enhancementDefaultOff": true,
       "independentClinicalValidation": false,
-      "partnerConditionalIntegrations": "Seven retain conditional_not_activated: FHIR partner export, licensed interaction source, dose rules, authorized adverse-event dataset, concrete measure, approved clinical OCR, named partner format/language. No credentials or deferred materials were re-requested.",
+      "partnerConditionalIntegrations": "Seven (E01, F01-F06) read ready_waiting_for_data, as does B03: FHIR partner export, licensed interaction source, dose rules, authorized adverse-event dataset, concrete measure, approved clinical OCR, named partner format/language. No credentials or deferred materials were re-requested.",
       "relationEvidence": "Located clinical links require a single preserved quote instance covering both exact fact spans; unsupported links remain unresolved while preserving the facts. See ../acceptance/local-release-closure-20261010/relation-evidence-summary.json."
     },
     "evidenceRoot": "/tmp/evimed-release-closure-20261010/models",

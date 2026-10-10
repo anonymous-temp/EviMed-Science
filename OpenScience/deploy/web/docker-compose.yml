@@ -672,6 +672,9 @@ services:
       # rule: unset keeps config.mjs's defaults — the module off, open to
       # operators once on, no engine composed and no data plane, which is
       # the state in which every tier above T0 says so rather than guessing.
+      # The public 「模拟研究」 column is on with the module (publishing is the
+      # study lead's own act); OPEN_SCIENCE_VCR_PUBLIC_SIMULATIONS_ENABLED=false
+      # turns it off.
       OPEN_SCIENCE_VCR_ENABLED:
       OPEN_SCIENCE_VCR_AUDIENCE:
       OPEN_SCIENCE_VCR_PREVIEW_USERS:

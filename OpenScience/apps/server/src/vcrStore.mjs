@@ -49,6 +49,8 @@ import { DISPLAY_TIME_ZONE, VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME,
 import { HttpError } from "./security.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
+import { addRegulatoryContact, regulatoryContacts } from "./vcrRegulatory.mjs";
+import { carryScheduleForward, saveScheduleVisits, visitsFromRows } from "./vcrSchedule.mjs";
 import { withReviewState } from "./vcrViewsKit.mjs";
 import { longitudinalIndex } from './vcrLongitudinalStore.mjs';
 
@@ -827,8 +829,10 @@ export class VcrStore extends VcrStoreBase {
           String(item.criterionType ?? "other"), JSON.stringify(item.requirement ?? {}), String(item.sourceText ?? ""),
           JSON.stringify(item.sourceLocator ?? {}), JSON.stringify(item.evidenceNeeded ?? []), item.reviewState ?? "ai_set"])).rows[0]);
       }
+      // The version starts with the visit schedule the one before it had.
+      const carried = await carryScheduleForward(client, { studyId: input.studyId, userId: String(input.userId), protocolVersionId: id });
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.protocol.save", object: id,
-        detail: { version, criteria: criteria.length } });
+        detail: { version, criteria: criteria.length, schedule: carried } });
       return { id, studyId: input.studyId, version, title: String(row.title ?? ""), sourceRef: text(row.source_ref),
         usdm: object(row.usdm), frozenAt: iso(row.frozen_at), createdAt: iso(row.created_at),
         criteria: criteria.map(criterionFromRow) };
@@ -847,6 +851,27 @@ export class VcrStore extends VcrStoreBase {
   async criteria(protocolVersionId) {
     const rows = await this.rows(`SELECT * FROM ${VCR_SCHEMA}.criteria WHERE protocol_version_id = $1 ORDER BY ordinal`, [protocolVersionId]);
     return rows.map(criterionFromRow);
+  }
+
+  /** The schedule of activities of one protocol version, as visits (`vcrSchedule.mjs`). @param {string} protocolVersionId */
+  async schedule(protocolVersionId) {
+    return visitsFromRows(await this.rows(
+      `SELECT * FROM ${VCR_SCHEMA}.soa_items WHERE protocol_version_id = $1 ORDER BY ordinal, position, id`, [protocolVersionId]));
+  }
+
+  /**
+   * The schedule of the study's current protocol version, with the version it belongs to; null while the study has no protocol.
+   * @param {string} studyId
+   */
+  async latestSchedule(studyId) {
+    const protocol = await this.latestProtocolVersion(studyId);
+    if (!protocol) return null;
+    return { protocol: { id: protocol.id, version: protocol.version, title: protocol.title }, visits: await this.schedule(protocol.id) };
+  }
+
+  /** Visits written into one protocol version's schedule: by visit, replacing, `remove` takes one out (`vcrSchedule.mjs`). @param {Parameters<typeof saveScheduleVisits>[1]} input */
+  saveScheduleVisits(input) {
+    return saveScheduleVisits(this, input);
   }
 
   /** @param {string} protocolVersionId @param {string} actor */
@@ -1448,6 +1473,16 @@ export class VcrStore extends VcrStoreBase {
   async decisions(studyId) {
     return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.decisions WHERE study_id = $1 ORDER BY created_at DESC LIMIT 200`, [studyId]))
       .map((row) => this.#decisionFromRow(row));
+  }
+
+  /** A regulatory contact added to the study's log, or the identical one already in it (`vcrRegulatory.mjs`). @param {Parameters<typeof addRegulatoryContact>[1]} input */
+  addRegulatoryContact(input) {
+    return addRegulatoryContact(this, input);
+  }
+
+  /** The study's regulatory contacts, the latest first. @param {string} studyId @param {number} [limit] */
+  regulatoryContacts(studyId, limit = 200) {
+    return regulatoryContacts(this, studyId, limit);
   }
 
   // --- model assessments and frozen model analysis plans (ICH M15) ---------------------------

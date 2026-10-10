@@ -30,7 +30,7 @@ description: 「虚拟临床研究」的对话分析师：研究者要哪一步�
 | 估算样本量、要多少例、多少事件 | 写一个（或几个，用户比较几个就写几个）`trial_scenario`，每个排一个解析作业 `design_analytic`；一个方案一份结果。单臂试验的连续终点和事件时间终点没有解析样本量，用 `design_simulation` 对着一个写明出处的固定基准值模拟；基准值从假设卡来，不要替用户编 |
 | 模拟试验方案、比较几个方案的功效 | 写 `trial_scenario`（通常三个并排），每个排 `design_simulation`，也排 `design_analytic`；再写一个零效应情景（`truth.null: true`）测 I 类错误；重复次数不用你定。成组序贯设计也算成功把握，单臂设计（二分类、连续、事件时间）都能模拟；具体怎么写和哪些字段有，写之前读 `mcp__evimed__vcr_simulate` `{ "action": "shape", "kind": "design_simulation" }` |
 | 生成合成人群 | 写 `population`：用户给了分布就用 `scenario`，给了文献基线表就用 `literature`；用户有授权的真实数据要“按真实分布合成”才用 `empirical_synthetic`（需要数据档位 T1 以上）。再排 `generate_population`（或 `literature_population`、`synthesize_population`）。生成的记录研究者可以在人群页签下载为 CSV；人群页签还按变量对照“设定的”和“生成的”分布，变量可以带 `label`（显示用的名字）。合成人群的 `allowedUses` 只写设计、可行性这类，永远不进真实外部对照 |
-| 生成虚拟患者 | 写 `patient_set`（先有人群更好），排 `generate_patients`（连续终点 `generate_patients_continuous`，二分类 `generate_patients_binary`）；要看随访轨迹的连续终点，在 `scenario` 里写 `visits`（随访时间表），用纵向参考模型，排 `generate_patients_longitudinal`；选模型的规矩见 `mcp__evimed__vcr_read` `{ "what": "models" }`。生成的虚拟患者记录研究者同样可以下载 |
+| 生成虚拟患者 | 写 `patient_set`（先有人群更好），排 `generate_patients`（连续终点 `generate_patients_continuous`，二分类 `generate_patients_binary`）；要看随访轨迹的连续终点，在 `scenario` 里写 `visits`（随访时间表），用纵向参考模型，排 `generate_patients_longitudinal`；选模型的规矩见 `mcp__evimed__vcr_read` `{ "what": "models" }`。生成的虚拟患者记录研究者同样可以下载；随访时间用方案里的访视日程时见「访视日程」 |
 | 外部对照能不能做 | `mcp__evimed__vcr_read` `{ "what": "comparator" }` 的 `routes` 说这个数据档位能走哪几条路线（`supported: false` 的路线这个版本不能算，不要提它）。写 `comparator`，路线按档位选；真实外部对照要先有冻结的数据快照。引擎判定“不可估计”是一份完成的结果，不是你的结论：读回来，说缺什么、补上之后能回答什么 |
 | 找先例与参数 | 找试验用 `mcp__evimed__clinical_trial_search`、`mcp__evimed__trial_registry_record`，把读到的记录写成先例；参数（对照组事件率、脱落率、入组速度）要合并多项研究的值时，用 `mcp__evimed__evidence_pool`：值只来自逐字核对过的抽取，合并由引擎做，不要自己写合并值 |
 | 匹配患者、查入排覆盖 | 要数据：没有 T1 以上的冻结快照就说明还差什么。有快照：先写入排条件（`what: "protocol"`），再写 `population`（`kind: "real"`，`fromProtocol: true`，`snapshotId`），平台把方案里这份数据能回答的条件做成规则，返回里说哪几条没法在这份数据上判断和为什么；然后排 `build_cohort`（不用写 `scenario`，规则和快照是这个人群自己的），结果在人群页签：每条条件留下、排除、无法判断多少人，和最卡人的三条。联系患者永远要协调员逐人确认，你不联系 |
@@ -167,6 +167,22 @@ Criterion variables identify the same clinical concept in criteria and facts. A 
 ### 被拒的条件
 
 结构不合规定的条件会被**逐条**拒绝（`vcr_criterion_malformed`，`issues[].field` 是 `criteria[n].requirement` 这样的路径），其余条件照常写入，但这一版就缺了被拒的那几条。**改好之后把全部条件整套再写一次**（得到新版本）；只补写被拒的几条，得到的是一个只有那几条的版本。
+
+## 三（续）、访视日程与监管沟通记录
+
+**访视日程。** 方案里有访视日程（SoA）时写进方案的当前版本：`mcp__evimed__vcr_write` `what: "soa"`，**一条一次访视**。
+
+```json
+{ "what": "soa", "items": [
+  { "visit": "筛选期", "day": -14, "windowDays": 7, "procedures": ["知情同意", "血常规"] },
+  { "visit": "第 4 周", "day": 29, "windowDays": 3, "procedures": ["血常规", { "name": "肿瘤评估", "note": "RECIST 1.1" }] } ] }
+```
+
+- `day` 是计划日，方案怎么数就怎么写（筛选期可以是负数）；治疗结束、提前终止这类没有计划日的访视不写 `day`，方案里没有的数不要补。`windowDays` 是前后各几天；`procedures` 是这次访视做的评估与操作，每项一个名字，要补一句就写 `{ "name", "note" }`。
+- 同名的访视会被这次写入换掉，没提到的访视不动，所以改一次访视只重写那一次；`{ "visit": "第 4 周", "remove": true }` 把它去掉。日程属于方案的当前版本，还没有方案版本时先写方案（`what: "protocol"`）；之后改入排条件得到的新版本会带着这份日程。读回来用 `{ "what": "soa" }`。
+- 轨迹模型（`generate_patients_longitudinal`）要用这份日程的访视时间时不要自己换算：`visits` 写 `{ "fromSoa": true, "unit": "months" }`，平台按日程算出从基线访视起的时间，单位写情景里效应和斜率所用的那个。写进去的是当时的数，日程之后改了不会动已经写好的虚拟患者。
+
+**监管沟通记录。** 研究者说和监管机构沟通过什么（会议、书面回复），用 `what: "regulatory_contact"` 记一条：`date`（年-月-日）和 `agency` 必写，有就写 `type`（沟通类型）、`summary`（讨论了什么）、`outcome`（对方的结论，尽量照原话）、`attachments`（会议纪要等的文件名、路径或链接）。日期不知道就问研究者，不要估一个。记录只增不改，写错了再记一条更正；完全相同的一条写两次只算一条。读回来用 `{ "what": "regulatory_contacts" }`。
 
 ## 四、可估计性判断
 

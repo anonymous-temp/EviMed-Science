@@ -909,9 +909,11 @@ function vcrSettings(overrides) {
     // Accounts that see the module under `operators` without being operators.
     vcrPreviewUsers: overrides.vcrPreviewUsers ?? listEnv("OPEN_SCIENCE_VCR_PREVIEW_USERS"),
     // The public 「模拟研究」 column (flywheel plan §5.6, 2026-10-06): a study lead may publish a report there and the public pages
-    // package reads it. Off, the publication routes answer 404 `vcr_publications_not_enabled` and no table is read. Counter:
-    // `open_science_vcr_publications_total`.
-    vcrPublicSimulationsEnabled: overrides.vcrPublicSimulationsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_PUBLIC_SIMULATIONS_ENABLED", false),
+    // package reads it. On wherever the module is on (owner, 2026-10-10: a working feature is not off by default; production already
+    // ran it on) — nothing becomes public by itself, since the one caller of the publish step is the lead's own route
+    // (`manage_study`). `=false` turns it off: the publication routes then answer 404 `vcr_publications_not_enabled` and no table is
+    // read. Counter: `open_science_vcr_publications_total`.
+    vcrPublicSimulationsEnabled: overrides.vcrPublicSimulationsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_PUBLIC_SIMULATIONS_ENABLED", true),
     // The frontier feed's trial events for a study's subject (flywheel F24, 2026-10-06): precedent candidates, 「有新证据」 on a card
     // and the request for a new version, ticked by the module's worker. Off, no consumer is composed and nothing is read. Each tick
     // looks at this many studies, the one looked at longest ago first (a resource limit: every study is one query set), and reads

@@ -75,13 +75,13 @@ from immutable_capture import managed_workspace, ImmutableCaptureError
 READ_WHATS = (
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
     "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
-    "trial_registry_record", "pack", "library", "model_assessments", "longitudinal", "candidate_trials",
+    "trial_registry_record", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
 )
 WRITE_WHATS = (
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
     "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
     "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
-    "candidate_trial",
+    "candidate_trial", "soa", "regulatory_contact",
 )
 # The engine's job kinds, in the domain's order (`VCR_JOB_KINDS` in
 # `packages/domain/src/vcrVocabulary.mjs`): the 24 of the first release, then the
@@ -224,7 +224,8 @@ def tool_definitions():
             "description": (
                 "Write this 虚拟临床研究 study's definitions and designs: the research definition, a protocol version and "
                 "its structured eligibility criteria, assumption cards and their evidence items, precedents, population, "
-                "patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, "
+                "patient-set, comparator and trial designs, a design grid, a decision record, a regulatory contact, the protocol's visit schedule "
+                "(soa, one visit per item), a fitted literature model, "
                 "a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, "
                 "data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population "
                 "item may carry fromLibrary {definitionId, version?} instead of a definition, or, for a real cohort, fromProtocol: true with a "

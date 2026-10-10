@@ -17,7 +17,7 @@ import test from "node:test";
 import { createVcrRoutes } from "../src/vcrRoutes.mjs";
 import {
   assessmentBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody, definitionUseBody, exportBody,
-  jobBody, memberBody, packBindBody, reviewBody, runBody, studyCreateBody, studyPatchBody,
+  jobBody, memberBody, packBindBody, regulatoryContactBody, reviewBody, runBody, studyCreateBody, studyPatchBody,
 } from "../../web/src/lib/vcrBodies.ts";
 
 /** @param {string} method @param {string} url @param {unknown} [body] */
@@ -49,6 +49,7 @@ function harness() {
     async saveModelAssessment(/** @type {any} */ input) { return { id: "mia_1", key: input.record.key, version: 2, risk: null, riskRule: null }; },
     async addReview(/** @type {any} */ input) { return { id: "rvw_1", ...input }; },
     async addDecision(/** @type {any} */ input) { return { id: "dec_1", ...input }; },
+    async addRegulatoryContact(/** @type {any} */ input) { return { id: "reg_1", existing: false, ...input }; },
     async exportRow() { return { id: "exp_1" }; },
   };
   const service = {
@@ -133,6 +134,9 @@ const CASES = /** @type {Array<[string, string, string, unknown]>} */ ([
     decisionBody({ question: "成功把握尽量高、样本量尽量少", chosen: { id: "scn_2", code: "B", label: "方案 B" }, alternatives: [{ code: "A" }], rationale: "折中" })],
   ["request evidence through the decision route", "POST", "/api/vcr/studies/std_1/decisions",
     decisionBody({ question: "请求补证 P-0192：申请近 4 周头颅 MRI", chosen: { kind: "evidence_request", subject: "P-0192", criteria: ["E1"] }, rationale: "申请近 4 周头颅 MRI" })],
+  ["add a regulatory contact with everything the form has", "POST", "/api/vcr/studies/std_1/regulatory-contacts",
+    regulatoryContactBody({ date: "2026-08-14", agency: " 药审中心（CDE） ", type: "Pre-IND 沟通交流", summary: "讨论外部对照", outcome: "同意作支持性证据", attachments: ["minutes.pdf", " ", "briefing.zip"] })],
+  ["add a regulatory contact with only the day and the agency", "POST", "/api/vcr/studies/std_1/regulatory-contacts", regulatoryContactBody({ date: "2026-08-14", agency: "FDA", type: "", summary: "  ", attachments: [] })],
   ["export a package", "POST", "/api/vcr/studies/std_1/export", exportBody("study_package")],
   ["add a member", "POST", "/api/vcr/studies/std_1/members", memberBody({ userId: "u_stat", role: "statistical_reviewer" })],
   ["confirm one contact", "POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", contactBody({ note: "已电话确认", reason: "符合入组" })],
@@ -183,6 +187,12 @@ test("a decision body carries the goal as `question`, trimmed, and nothing the r
   const body = decisionBody({ question: "  目标  ", rationale: "理由" });
   assert.deepEqual(Object.keys(body).sort(), ["question", "rationale"]);
   assert.equal(body.question, "目标");
+});
+
+test("a regulatory contact body trims what was typed and leaves out what the form left empty, so an empty field is the absence of a word", () => {
+  assert.deepEqual(regulatoryContactBody({ date: "2026-08-14", agency: "  FDA ", type: " ", summary: "", outcome: " 无异议 ", attachments: ["a.pdf", "  ", "b.pdf "] }),
+    { date: "2026-08-14", agency: "FDA", outcome: "无异议", attachments: ["a.pdf", "b.pdf"] });
+  assert.deepEqual(regulatoryContactBody({ date: "2026-08-14", agency: "FDA" }), { date: "2026-08-14", agency: "FDA" });
 });
 
 test("the settings body cannot carry the compute budget", () => {

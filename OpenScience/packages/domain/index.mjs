@@ -1590,6 +1590,19 @@ export {
   vcrTimeUnitPeriodsPerYear,
 } from './src/vcrTimeUnits.mjs'
 
+// vcrSchedule — a protocol's schedule of activities and a study's regulatory-contact log: the limits of both, what a schedule adds
+// up to, the visit times a virtual-patient trajectory may take from it and how a day and a window read
+export {
+  VCR_REGULATORY_LIMITS,
+  VCR_SOA_LIMITS,
+  VCR_SOA_TIME_UNITS,
+  VCR_SOA_TRAJECTORY_MAX_VISITS,
+  soaDayText,
+  soaSummary,
+  soaVisitTimes,
+  soaWindowText,
+} from './src/vcrSchedule.mjs'
+
 // vcrSuppression — 2 exports: small-cell suppression for everything a model may read: every people-count
 // below the floor, in any shape the stores produce
 export {

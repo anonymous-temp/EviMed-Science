@@ -56,6 +56,7 @@ import {
 } from "./vcrViewsTabs.mjs";
 import { dominatedScenarioMap, numeric, withReviewState } from "./vcrViewsKit.mjs";
 import { vcrReportModel } from "./vcrRender.mjs";
+import { readSchedule } from "./vcrScheduleView.mjs";
 import { buildModelAnalysis, isModelDocumentKind, readModelAnalysisInputs } from "./vcrModelDocuments.mjs";
 
 export { VCR_DEFAULT_STUDY_NAME };
@@ -67,7 +68,7 @@ export const VCR_READ_MAX_ITEMS = 50;
 export const VCR_READ_WHATS = Object.freeze([
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
   "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
-  "trial_registry_record", "pack", "library", "model_assessments", "longitudinal", "candidate_trials",
+  "trial_registry_record", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
 ]);
 
 /**
@@ -124,7 +125,7 @@ export const VCR_WRITE_WHATS = Object.freeze([
   "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
   "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
-  "candidate_trial",
+  "candidate_trial", "soa", "regulatory_contact",
 ]);
 
 /** @param {unknown} value */
@@ -874,6 +875,8 @@ export class VcrService {
     const row = await this.store.exportRow(study.id, exportId);
     if (!row) throw failure(404, "vcr_export_not_found", "Export not found.");
     const bundle = await this.#bundle(study, user, "overview");
+    // What the package prints beside the decision record: the visit schedule and the regulatory contacts.
+    [bundle.schedule, bundle.regulatory] = await Promise.all([this.store.latestSchedule?.(study.id) ?? null, this.store.regulatoryContacts?.(study.id) ?? []]);
     // The page compares a model document with the records as they stand, so it reads the same inputs the document was built from.
     if (isModelDocumentKind(row.kind)) {
       bundle.modelAnalysis = buildModelAnalysis({ inputs: await readModelAnalysisInputs(this.store, study), results: bundle.results,
@@ -915,6 +918,9 @@ export class VcrService {
       // Why an object is not being computed (a refusal recorded before any job was queued).
       this.store.rows(`SELECT key, state, detail FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1 AND kind = 'job' AND state = 'failed'`, [study.id]),
     ]);
+    // The protocol's visit schedule and the study's regulatory contacts: read for the trial tab and the package, which print them.
+    const [schedule, regulatory] = tab === "trial"
+      ? await Promise.all([this.store.latestSchedule?.(study.id) ?? null, this.store.regulatoryContacts?.(study.id) ?? []]) : [null, []];
     // What the countersignatures say about each version the pages show (assumption cards carry
     // theirs from the store): a result or an object whose exact version somebody signed reads
     // 已复核, one whose earlier version was signed reads 复核后有变更, the rest is what it was stored as.
@@ -928,7 +934,7 @@ export class VcrService {
     const bundle = {
       now: this.now(), study, definition, results: reviewedResults, allResults: reviewedAll, stale, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current: currentNodes, exports }) })), jobs, budget, assumptions, members, exports, decisions,
       roles, scenarios, comparators: reviewedComparators, comparator: reviewedComparators[0] ?? null, populations: reviewedPopulations, patientSets, grid, forecasts, models,
-      executions, protocol, seal: vcrSealState(study),
+      executions, protocol, seal: vcrSealState(study), schedule, regulatory,
       forecastResults: reviewedAll.filter((result) => result.kind === "accrual_forecast"),
       criteria: protocol ? await this.store.criteria(protocol.id) : [], jobMarks,
       currentNodes,
@@ -1308,17 +1314,18 @@ export class VcrService {
    */
   async reportModelFromStore(study, store, options = {}) {
     if (!study) throw failure(404, "vcr_study_not_found", "Study not found.");
-    const [definition, assumptions, results, reviews, stale, population, comparator, scenarios, models, populations, patientSets, comparators, grid, protocol, exports] = await Promise.all([
+    const [definition, assumptions, results, reviews, stale, population, comparator, scenarios, models, populations, patientSets, comparators, grid, protocol, exports, schedule, contacts] = await Promise.all([
       store.latestDefinition(study.id), store.assumptions(study.id), store.results(study.id),
       store.reviews(study.id), store.staleMarks(study.id), store.latestPopulation(study.id),
       store.latestComparatorDesign(study.id), store.trialScenarios(study.id, 60), store.models(study.userId),
       store.populations(study.id, 20), store.patientSets(study.id, 20), store.comparatorDesigns(study.id, 20), store.latestDesignGrid(study.id), store.latestProtocolVersion(study.id), store.exports(study.id),
+      store.latestSchedule?.(study.id) ?? null, store.regulatoryContacts?.(study.id) ?? [],
     ]);
     const current = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
     const modelAnalysis = isModelDocumentKind(String(options.kind ?? ""))
       ? buildModelAnalysis({ inputs: await readModelAnalysisInputs(store, study), results, versions: await store.modelPlanVersions(study.id) }) : null;
     const report = vcrReportModel({ study, definition, assumptions, results, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current, exports }) })), staleMarks: stale, population, comparator,
-      scenarios, models, seal: vcrSealState(study), modelAnalysis });
+      scenarios, models, seal: vcrSealState(study), modelAnalysis, schedule, contacts });
     return this.packages.longitudinal ? {...report,longitudinal:await this.packages.longitudinal.view(study,{all:true},store)} : report;
   }
 
@@ -1368,6 +1375,18 @@ export class VcrService {
           ? (this.packages.matchStore ? await this.packages.matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }) : await this.store.criteria(protocol.id))
           : [];
         return { protocol, criteria, protocols: this.packages.matchStore ? await this.packages.matchStore.protocols(study.id) : [] };
+      }
+      case "soa": {
+        // The schedule of activities of the current protocol version, or of the one named; none until a protocol is written.
+        const protocol = filter.protocolVersionId
+          ? await this.store.one(`SELECT id, version, title FROM ${VCR_SCHEMA}.protocol_versions WHERE id = $1 AND study_id = $2`, [String(filter.protocolVersionId), study.id])
+          : await this.store.latestProtocolVersion(study.id);
+        return readSchedule({ protocol: protocol ? { id: String(protocol.id), version: Number(protocol.version), title: String(protocol.title ?? "") } : null,
+          visits: protocol ? await this.store.schedule(protocol.id) : [] });
+      }
+      case "regulatory_contacts": {
+        const contacts = await this.store.regulatoryContacts(study.id, limit + 1);
+        return { contacts: contacts.slice(0, limit), more: contacts.length > limit };
       }
       case "assumptions": {
         const assumptions = await this.store.assumptions(study.id);

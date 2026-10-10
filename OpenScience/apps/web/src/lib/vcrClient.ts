@@ -38,17 +38,17 @@ import { fetchWebMe, fetchWithWebAuth, WebApiError, webApiBase, type WebMe } fro
 import { productRequest } from "./productClient";
 import {
   assessmentBody, assessmentReviewBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody,
-  definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, reviewBody, runBody, studyCreateBody,
+  definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, regulatoryContactBody, reviewBody, runBody, studyCreateBody,
   studyPatchBody, transitionBody, trialSearchBody,
   type VcrAssessmentBody, type VcrAssumptionBody, type VcrBudgetBody, type VcrContactBody, type VcrCreateBody, type VcrDecisionBody, type VcrDefinitionCompareBody,
   type VcrDefinitionSaveBody, type VcrDefinitionUseBody, type VcrJobBody,
-  type VcrJudgmentBody, type VcrMemberBody, type VcrModelBody, type VcrPatchBody, type VcrReviewBody, type VcrTransitionBody,
+  type VcrJudgmentBody, type VcrMemberBody, type VcrModelBody, type VcrPatchBody, type VcrRegulatoryContactBody, type VcrReviewBody, type VcrTransitionBody,
 } from "./vcrBodies";
 
 export type {
   VcrAssessmentBody, VcrAssumptionBody, VcrBudgetBody, VcrContactBody, VcrCreateBody, VcrDecisionBody, VcrDefinitionCompareBody, VcrDefinitionSaveBody,
   VcrDefinitionUseBody, VcrJobBody, VcrJudgmentBody, VcrMemberBody, VcrModelBody,
-  VcrPatchBody, VcrReviewBody, VcrTransitionBody,
+  VcrPatchBody, VcrRegulatoryContactBody, VcrReviewBody, VcrTransitionBody,
 } from "./vcrBodies";
 
 /* ---------------------------------------------------------------- vocabulary */
@@ -838,6 +838,37 @@ export interface VcrForecast {
   lines: Array<{ key: string; label: string; predicted: string; actual: string | null }>;
 }
 
+/** One visit of a protocol's schedule of activities: the day it falls on, the window around it and what is done at it. */
+export interface VcrScheduleVisit {
+  visit: string;
+  /** Null for a visit with no planned day (an end-of-treatment visit). */
+  day: number | null;
+  windowDays: number | null;
+  note: string;
+  procedures: Array<{ name: string; note: string }>;
+}
+
+/** The protocol's schedule of activities, by day; null while the study has none. */
+export interface VcrSchedule {
+  protocolVersion: number | null;
+  visits: VcrScheduleVisit[];
+  totals: { visits: number; activities: number; entries: number; firstDay: number | null; lastDay: number | null };
+}
+
+/** One entry of the study's log of regulatory contacts. */
+export interface VcrRegulatoryContact {
+  id: string;
+  date: string | null;
+  agency: string;
+  type: string;
+  summary: string;
+  outcome: string;
+  attachments: string[];
+  /** A run's own entry carries the label AI-written objects carry. */
+  source: "ai_set" | "researcher";
+  recordedAt: string | null;
+}
+
 export interface VcrTrialTab {
   headline?: string | null;
   /** ADEMP, one line each. */
@@ -876,6 +907,10 @@ export interface VcrTrialTab {
   forecasts: VcrForecast[];
   /** The milestone timeline: when each design would reach its landmarks. */
   milestones: Array<{ design: string; name: string; items: Array<{ key: string; label: string; value: VcrValue }> }>;
+  /** 「访视日程」: records of the protocol, not results of a computation. */
+  schedule: VcrSchedule | null;
+  /** 「监管沟通记录」, the latest first. */
+  regulatory: VcrRegulatoryContact[];
   counts: VcrCounts | null;
   stale: VcrStaleNote | null;
   partial: VcrPartial | null;
@@ -1714,9 +1749,50 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
       design: text(row.design) ?? "", name: text(row.name) ?? "",
       items: arr(row.items).map((item) => ({ key: text(item.key) ?? "", label: text(item.label) ?? "", value: readVcrValue(item.value) })),
     })),
+    schedule: readVcrSchedule(value.schedule),
+    regulatory: arr(value.regulatory).map(readVcrRegulatoryContact),
     counts: readVcrCounts(value.counts),
     stale: readStale(value.stale),
     partial: readPartial(value.partial),
+  };
+}
+
+/** The protocol's schedule, or nothing: a schedule with no visit is not drawn. */
+export function readVcrSchedule(raw: unknown): VcrSchedule | null {
+  const value = obj(raw);
+  const visits = arr(value.visits).map((visit): VcrScheduleVisit => ({
+    visit: text(visit.visit) ?? "",
+    day: finite(visit.day),
+    windowDays: finite(visit.windowDays),
+    note: text(visit.note) ?? "",
+    procedures: arr(visit.procedures).map((entry) => ({ name: text(entry.name) ?? "", note: text(entry.note) ?? "" })).filter((entry) => entry.name),
+  })).filter((visit) => visit.visit);
+  if (visits.length === 0) return null;
+  const totals = obj(value.totals);
+  return {
+    protocolVersion: finite(value.protocolVersion),
+    visits,
+    totals: {
+      visits: finite(totals.visits) ?? visits.length,
+      activities: finite(totals.activities) ?? 0,
+      entries: finite(totals.entries) ?? visits.reduce((sum, visit) => sum + visit.procedures.length, 0),
+      firstDay: finite(totals.firstDay),
+      lastDay: finite(totals.lastDay),
+    },
+  };
+}
+
+export function readVcrRegulatoryContact(raw: Loose): VcrRegulatoryContact {
+  return {
+    id: text(raw.id) ?? "",
+    date: text(raw.date),
+    agency: text(raw.agency) ?? "",
+    type: text(raw.type) ?? "",
+    summary: text(raw.summary) ?? "",
+    outcome: text(raw.outcome) ?? "",
+    attachments: strings(raw.attachments),
+    source: raw.source === "ai_set" ? "ai_set" : "researcher",
+    recordedAt: text(raw.recordedAt),
   };
 }
 
@@ -2128,6 +2204,11 @@ export function signVcrReview(studyId: string, input: VcrReviewBody) {
 /** 「写入决策记录」: the reader's comparison goal and the design they chose. */
 export function recordVcrDecision(studyId: string, input: VcrDecisionBody) {
   return productRequest<unknown>(`${study(studyId)}/decisions`, "POST", decisionBody(input));
+}
+
+/** 「添加」 on the regulatory log: the contact is added to the study's record, never edited; the identical one already there answers 200. */
+export function addVcrRegulatoryContact(studyId: string, input: VcrRegulatoryContactBody) {
+  return productRequest<VcrRegulatoryContact>(`${study(studyId)}/regulatory-contacts`, "POST", regulatoryContactBody(input));
 }
 
 /** 「导出」: the package is a run in the study's conversation; a deferred run answers `runId: null`. */
