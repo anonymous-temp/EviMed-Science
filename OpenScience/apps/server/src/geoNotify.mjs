@@ -1,4 +1,4 @@
-import { GEO_ENGINE_LABELS_ZH, GEO_URGENT_SEVERITIES } from "@evimed/domain";
+import { GEO_ENGINE_LABELS_ZH, GEO_URGENT_SEVERITIES, geoAbilitiesOf } from "@evimed/domain";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 
 /**
@@ -29,6 +29,12 @@ import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
  *   alone and at once; lower severities of one project and one day fold into
  *   one item whose title is the most severe of them (the inbox's `groupKey`).
  *   A baseline finding twenty errors is one line, not twenty.
+ * - **A notice reaches the owner and the members it is for** (D-29). The owner is told every one; a member is told the ones whose
+ *   work is theirs, by the abilities their roles hold (`geoAbilitiesOf`, the domain's one table): the programme's progress
+ *   by those who run it (`run`, the editors), a wrong statement or an article held by a safety finding by those who look at it and
+ *   those who revise it (`review` — the medical reviewer, the only member who can clear a stop — and `edit`), a published text an
+ *   outlet changed by those who review (`review`). A viewer hears none. A person holding two roles is told once, and a member whose
+ *   inbox refuses (or a member list that cannot be read) never takes the owner's notice with it.
  * - **Operators hear about money and machinery, users never do** (plan §3.8:
  *   「余额、对账、熔断只发管理员」). `alertOperator` writes to every operator
  *   account's inbox with severity `attention`, keyed by the event's own key;
@@ -106,6 +112,19 @@ export function wrongOursTitle(project, error) {
   return `${engine}${gap}讲错${geoProductName(project)}：${statement}`;
 }
 
+/**
+ * The abilities that make a notice a member's business: the member is told when the abilities of their roles include one of these.
+ * The owner holds them all.
+ */
+const FOR = Object.freeze({
+  /** The programme's progress: those who run it. */
+  progress: Object.freeze(["run"]),
+  /** A wrong statement about the product, or an article a safety finding holds: those who look at it, and those who revise it. */
+  correction: Object.freeze(["review", "edit"]),
+  /** An outlet changed a published clinical text: those who review. */
+  publishedText: Object.freeze(["review"]),
+});
+
 /** The inbox refuses a replay whose content moved; that event was sent. @param {unknown} error */
 const alreadySent = (error) => /** @type {any} */ (error)?.code === "notification_idempotency_conflict";
 
@@ -145,16 +164,20 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
   if (!store) throw new TypeError("The GEO notifier needs the GEO store.");
   const timeZone = String(config.geoTimeZone || "Asia/Shanghai");
   /** @type {Record<string, number>} */
-  const counts = Object.fromEntries([...GEO_NOTICE_KINDS, "operator", "skipped", "failed"].map((kind) => [kind, 0]));
+  const counts = Object.fromEntries([...GEO_NOTICE_KINDS, "operator", "members", "skipped", "failed"].map((kind) => [kind, 0]));
 
-  /** @param {any} project @param {string} kind @param {Record<string, any>} input */
-  async function send(project, kind, input) {
-    if (!notifications) { counts.skipped += 1; return null; }
+  /**
+   * One person's inbox item. Their own refusal is their own loss: it is counted and audited, and the next person is still told. The
+   * item is filed under the control-plane project only for the owner: the inbox holds an item's project to the recipient's own
+   * (a foreign key on user and project), and a member's project is the owner's. The item opens the GEO page by its source either way.
+   * @param {any} project @param {string} kind @param {Record<string, any>} input @param {string} userId
+   */
+  async function deliver(project, kind, input, userId) {
     try {
-      const item = await notifications.create(String(project.userId), {
+      const item = await /** @type {NonNullable<typeof notifications>} */ (notifications).create(userId, {
         noticeType: "notify",
         actions: [{ id: "open", label: "打开", style: "primary" }],
-        projectId: project.projectId,
+        projectId: userId === String(project.userId) ? project.projectId : null,
         ...input,
       });
       counts[kind] = (counts[kind] ?? 0) + 1;
@@ -162,10 +185,45 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
     } catch (error) {
       if (alreadySent(error)) return true;
       counts.failed += 1;
-      await audit("geo.notice", "failed", { userId: project.userId, projectId: project.projectId,
+      await audit("geo.notice", "failed", { userId, projectId: project.projectId,
         code: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "notification_unavailable", detail: kind });
       return null;
     }
+  }
+
+  /**
+   * The members of a project, other than its owner, whose roles hold one of the abilities a notice is for, each once however many
+   * roles they hold. A member list that cannot be read is audited and means no member: the owner's notice does not wait for it.
+   * @param {any} project @param {readonly string[]} abilities
+   * @returns {Promise<string[]>}
+   */
+  async function membersFor(project, abilities) {
+    if (typeof /** @type {any} */ (store).memberRows !== "function") return [];
+    try {
+      /** @type {Map<string, string[]>} */
+      const held = new Map();
+      for (const row of await /** @type {any} */ (store).memberRows(project.id)) held.set(String(row.userId), [...(held.get(String(row.userId)) ?? []), String(row.role)]);
+      return [...held].filter(([userId, roles]) => userId !== String(project.userId) && geoAbilitiesOf(roles).some((ability) => abilities.includes(ability)))
+        .map(([userId]) => userId);
+    } catch (error) {
+      counts.failed += 1;
+      await audit("geo.notice", "failed", { userId: project.userId, projectId: project.projectId,
+        code: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_members_unreadable", detail: "members" });
+      return [];
+    }
+  }
+
+  /**
+   * A notice to the owner and to the members it is for (`FOR`). The answer is the owner's.
+   * @param {any} project @param {string} kind @param {Record<string, any>} input @param {readonly string[]} abilities the abilities that make it a member's business
+   */
+  async function send(project, kind, input, abilities) {
+    if (!notifications) { counts.skipped += 1; return null; }
+    const owner = await deliver(project, kind, input, String(project.userId));
+    for (const userId of await membersFor(project, abilities)) {
+      if (await deliver(project, kind, input, userId)) counts.members += 1;
+    }
+    return owner;
   }
 
   /** @param {string} geoId @param {string} tab @param {string} [item] */
@@ -181,7 +239,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         title: `${geoProductName(project)}：诊断完成`,
         body: `${engines} 家 AI 引擎、${answers} 次回答已经测完${wrong}。`,
         severity: "info", source: source(project.id, "diagnosis"), idempotencyKey: `geo:${project.id}:diagnosis:${roundId}`,
-      });
+      }, FOR.progress);
     },
 
     /**
@@ -194,7 +252,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         title: `${geoProductName(project)}：诊断没有测到回答`,
         body: "这一轮没有从任何 AI 引擎拿到有效回答，已通知管理员检查探测通道。处理好后，在诊断页点“让 AI 做”重新测。",
         severity: "attention", source: source(project.id, "diagnosis"), idempotencyKey: `geo:${project.id}:diagnosis-empty:${roundId}`,
-      });
+      }, FOR.progress);
     },
 
     /** 2. 三档目标出来了. @param {any} project @param {{ version: number, suggestedBudgetCny: number | null }} facts */
@@ -204,7 +262,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         title: `${geoProductName(project)}：三档目标出来了`,
         body: `信源分析、每个引擎的预期和三档目标已经写好${budget}。`,
         severity: "info", source: source(project.id, "sources"), idempotencyKey: `geo:${project.id}:targets:${version}`,
-      });
+      }, FOR.progress);
     },
 
     /** 3. 首批稿件可发布. @param {any} project @param {{ count: number, budgetSet: boolean }} facts */
@@ -217,7 +275,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         title: `${geoProductName(project)}：首批稿件可发布`,
         body: `${count} 篇稿件可以发布了，${next}`,
         severity: "info", source: source(project.id, market && !budgetSet ? "distribution" : "content"), idempotencyKey: `geo:${project.id}:first-publishable`,
-      });
+      }, FOR.progress);
     },
 
     /** 4. 第一次被 AI 引用. @param {any} project @param {{ engine: string, title: string | null }} facts */
@@ -226,7 +284,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         title: `${spacedEngine(engine)}第一次引用了${title ? `《${clip(title, 40)}》` : "投放的稿件"}`,
         body: `${geoProductName(project)}：投放的稿件出现在 AI 回答的引用里。`,
         severity: "info", source: source(project.id, "monitoring"), idempotencyKey: `geo:${project.id}:first-cited`,
-      });
+      }, FOR.progress);
     },
 
     /**
@@ -247,7 +305,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
       if (GEO_URGENT_SEVERITIES.includes(String(row.severity))) {
         return send(project, "wrong_or_safety", {
           title: wrongOursTitle(project, row), body, severity: "safety", source: target, idempotencyKey,
-        });
+        }, FOR.correction);
       }
       const day = dayIn(row.createdAt ? new Date(row.createdAt) : now(), timeZone);
       const same = await store.query(`SELECT id, engine, statement, severity FROM evimed_geo.errors
@@ -261,7 +319,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         title: `${wrongOursTitle(project, normalizedError(lead))}${others ? `（另有 ${others} 处）` : ""}`,
         body, severity: "safety", source: others ? source(project.id, "diagnosis") : target,
         groupKey: `geo-wrong:${project.id}:${day}`, idempotencyKey,
-      });
+      }, FOR.correction);
     },
 
     /** 5b. An article held by a clinical-safety finding (the second human stop). @param {any} project @param {{ id: string, title?: string | null }} article */
@@ -270,7 +328,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         title: `${article.title ? `《${clip(article.title, 40)}》` : "一篇稿件"}有临床安全问题，暂不投放`,
         body: "看过之后，改稿或在内容页放行。",
         severity: "safety", source: source(project.id, "content"), idempotencyKey: `geo:article-safety:${article.id}`,
-      });
+      }, FOR.correction);
     },
 
     /**
@@ -289,7 +347,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         body: changed.length ? `和交稿不一致：${changed.join("、")}。已要求媒体改回。` : "和交稿不一致，已要求媒体改回。",
         severity: "safety", source: source(project.id, "distribution"),
         idempotencyKey: String(event.idempotencyKey || `geo:order:${event.orderId}:text_changed`),
-      });
+      }, FOR.publishedText);
     },
 
     /**

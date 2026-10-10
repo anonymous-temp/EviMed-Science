@@ -262,6 +262,61 @@ test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severit
   assert.equal(replay.counts.failed, 0);
 });
 
+test("a notice reaches the owner and the members whose roles need it, one inbox item to a person (D-29)", async () => {
+  // The owner (u1), a medical reviewer (the only member who can clear a safety stop), an editor, a viewer, and a person holding two roles.
+  const members = [
+    { userId: "doc", role: "medical_reviewer" }, { userId: "agency", role: "editor" }, { userId: "viewer", role: "viewer" },
+    { userId: "both", role: "editor" }, { userId: "both", role: "medical_reviewer" },
+  ];
+  /** @type {Array<{ userId: string, input: Record<string, any> }>} */
+  const sent = [];
+  const notifications = { async create(/** @type {string} */ userId, /** @type {Record<string, any>} */ input) { sent.push({ userId, input }); return { id: String(sent.length) }; } };
+  const store = {
+    async query(/** @type {string} */ sql) {
+      if (sql.includes("FROM evimed_geo.projects")) return { rows: [{ id: "geo_1", user_id: "u1", project_id: "mashidu", product: project.product, tier: "2" }] };
+      if (sql.includes("FROM evimed_geo.articles")) return { rows: [{ title: "减重科普" }] };
+      return { rows: [] };
+    },
+    async memberRows() { return members; },
+  };
+  const notifier = createGeoNotifier({ notifications, store, config: { operatorUsers: [] } });
+  /** @param {() => Promise<unknown>} send */
+  const heard = async (send) => { sent.length = 0; await send(); return sent.map((entry) => entry.userId); };
+
+  // The stop only a medical reviewer can clear is told to the reviewers, and to the editors who revise the article; not to a viewer.
+  assert.deepEqual(await heard(() => notifier.articleSafety(project, { id: "a1", title: "减重科普" })), ["u1", "doc", "agency", "both"]);
+  // A statement an engine got wrong about the product: the same people.
+  assert.deepEqual(await heard(() => notifier.wrongOurs(project, { id: "e1", engine: "deepseek", statement: "每天注射一次", severity: "S3" })), ["u1", "doc", "agency", "both"]);
+  // An outlet changed a published clinical text: the reviewers (the money is the owner's).
+  assert.deepEqual(await heard(() => notifier.textChanged({ geoProjectId: "geo_1", userId: "u1", orderId: "o1", articleId: "a1", mediaName: "某媒体", changed: ["剂量"] })), ["u1", "doc", "both"]);
+  // The programme's progress is for the people who run it.
+  assert.deepEqual(await heard(() => notifier.diagnosisDone(project, { roundId: "r1", engines: 3, answers: 30, wrongOurs: 0 })), ["u1", "agency", "both"]);
+  assert.deepEqual(await heard(() => notifier.targetsReady(project, { version: 1, suggestedBudgetCny: 1000 })), ["u1", "agency", "both"]);
+  assert.deepEqual(await heard(() => notifier.firstPublishable(project, { count: 2, budgetSet: false })), ["u1", "agency", "both"]);
+  assert.deepEqual(await heard(() => notifier.firstCited(project, { engine: "deepseek", title: null })), ["u1", "agency", "both"]);
+  // Each person's item has the notice's own key and page: the inbox keeps one per person and key.
+  await heard(() => notifier.articleSafety(project, { id: "a2", title: "x" }));
+  assert.deepEqual([...new Set(sent.map((entry) => entry.input.idempotencyKey))], ["geo:article-safety:a2"]);
+  assert.ok(sent.every((entry) => entry.input.source.id === "geo_1/content" && entry.input.severity === "safety"));
+  // The inbox files an item under the recipient's own project: a member has none of the owner's, so theirs carry none.
+  assert.deepEqual(sent.map((entry) => [entry.userId, entry.input.projectId]), [["u1", "mashidu"], ["doc", null], ["agency", null], ["both", null]]);
+  assert.equal(notifier.counts.members, 19, "what went to members rather than the owner is counted");
+
+  // A member whose inbox refuses is that member's loss: the owner is told, and the notice's answer is the owner's.
+  const refusing = createGeoNotifier({ store, config: { operatorUsers: [] }, notifications: { async create(/** @type {string} */ userId) {
+    if (userId === "doc") throw Object.assign(new Error("inbox"), { code: "notification_unavailable" });
+    return { id: userId };
+  } } });
+  assert.deepEqual(await refusing.articleSafety(project, { id: "a3", title: "x" }), { id: "u1" });
+  assert.equal(refusing.counts.failed, 1);
+  // A member list that cannot be read leaves the owner's notice as it was, and is audited.
+  const audits = /** @type {any[]} */ ([]);
+  const unreadable = createGeoNotifier({ notifications, config: { operatorUsers: [] }, audit: (event, status, details) => { audits.push([event, status, details.detail]); },
+    store: { query: store.query, async memberRows() { throw new Error("down"); } } });
+  assert.deepEqual(await heard(() => unreadable.articleSafety(project, { id: "a4", title: "x" })), ["u1"]);
+  assert.deepEqual(audits, [["geo.notice", "failed", "members"]]);
+});
+
 test("an operator is told where each alert is handled: the probe host, the probe config, the measurement or the placement account", () => {
   assert.match(operatorBody({ type: "geo_probe_engine_paused", engine: "deepseek" }), /探测机上重新登录这家 AI/);
   assert.match(operatorBody({ kind: "geo_probe_suspect" }), /探测机上重新登录/);

@@ -228,6 +228,24 @@ test("saving the producer and naming the reviewing doctor write the cards by the
   assert.deepEqual(byDoctor.body.data.cards, { blockedBy: null, written: 1 });
 });
 
+test("an article a safety finding holds is told to the reviewing doctor who can clear it, and to the editor, as well as to the owner (D-29)", options, async () => {
+  const id = await made();
+  for (const [account, role] of /** @type {const} */ ([["reviewer", "medical_reviewer"], ["editor", "editor"], ["viewer", "viewer"]])) {
+    assert.equal((await call("owner", "POST", `/api/geo/projects/${id}/members`, { userId: accounts[account], role })).status, 201);
+  }
+  const geo = context.app.geo;
+  const project = await geo.store.getProject(accounts.owner, id);
+  const title = `减重科普${suffix}`;
+  await geo.orchestrator.notifier.articleSafety(project, { id: `art-${suffix}`, title });
+  const told = (await context.app.store.database.query("SELECT user_id, source FROM evimed_inbox.notifications WHERE title LIKE $1 ORDER BY user_id", [`%${title}%`])).rows;
+  assert.deepEqual(told.map((/** @type {any} */ row) => row.user_id).sort(), [accounts.editor, accounts.owner, accounts.reviewer].sort(),
+    "the owner, the reviewing doctor and the editor; a viewer reads the project and is not asked to act");
+  assert.ok(told.every((/** @type {any} */ row) => row.source.id === `${id}/content`), "each opens the project's content page");
+  // The reviewing doctor can in fact clear it from there: the notice goes to the one member the stop waits for.
+  const abilities = (await call("reviewer", "GET", `/api/geo/projects/${id}/members`)).body.data.you.abilities;
+  assert.ok(abilities.includes("review"));
+});
+
 test("the audience all end to end: a project's readiness and metrics count the module, the forbidden are counted", options, async () => {
   const text = await (await fetch(`${context.base}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text();
   assert.match(text, /^open_science_geo_enabled 1$/m);
