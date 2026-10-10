@@ -857,6 +857,28 @@ def _method_of(kind: str):
     return (entry, method_id, method) if isinstance(method, dict) else (None, None, None)
 
 
+def _control_plane_shape(kind: str):
+    """A forecast kind runs in the control plane, not the engine: its scenario names stored histories, forecasts and outcomes by id,
+    plus options. The keys come from the generated help's ``longitudinal`` section (the validator's own lists)."""
+    help_ = scenario_help()
+    entry = help_["kinds"].get(kind)
+    method_id = entry.get("method") if isinstance(entry, dict) else None
+    schema = help_.get("longitudinal", {}).get(method_id) if method_id else None
+    if not isinstance(schema, dict):
+        return None
+    required, optional = list(schema.get("required", [])), list(schema.get("optional", []))
+    keys = ["%s: %s; required" % (key, "id of a stored record" if key.endswith("Id") else "value") for key in required]
+    keys += ["%s: %s; optional" % (key, "id of a stored record" if key.endswith("Id") else "value") for key in optional]
+    return {
+        "status": "success",
+        "summary": "The scenario of %s (method %s) reads %d keys; the platform computes it from the stored records they name." % (kind, method_id, len(keys)),
+        "data": {"kind": kind, "method": method_id, "controlPlane": True, "keys": keys,
+                 "notes": ["Ids name records already stored for this study (vcr_read what: longitudinal); the platform computes every metric."]},
+        "warnings": [],
+        "next_actions": ["Write exactly these keys and no others, then queue it with vcr_simulate action start."],
+    }
+
+
 def shape(arguments: dict) -> dict:
     """``vcr_simulate`` action shape: what a job kind's scenario reads, rendered from the generated help. Asks the
     platform nothing, so it answers with the module off too."""
@@ -877,6 +899,9 @@ def shape(arguments: dict) -> dict:
         }
     if kind not in JOB_KINDS:
         raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
+    control = _control_plane_shape(kind)
+    if control is not None:
+        return control
     entry, method_id, method = _method_of(kind)
     if method is None:
         raise VcrPlatformError("vcr_scenario_help_unavailable", "This build's scenario help has no entry for %s." % kind)
