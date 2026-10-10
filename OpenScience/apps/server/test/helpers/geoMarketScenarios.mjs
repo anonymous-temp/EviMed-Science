@@ -792,6 +792,76 @@ export function defineGeoMarketMoneyPathScenarios(test, makeFixture, options = {
     } finally { await w.close(); }
   });
 
+  /**
+   * An order sent, published, and about to be verified at +1 h, with a store that fails the first call of one method (M-2).
+   * @param {any} w @param {(method: string, args: any[]) => boolean} failing
+   */
+  const publishedWithFlakyStore = async (w, failing) => {
+    const store = w.fixture.store;
+    const p = await w.project();
+    await tickOrders(w.deps);
+    let [order] = await orders(store, p.id);
+    w.fake.setOrder(order.vendorOrderNid, { status: 1 });
+    await tickPoll(w.deps);
+    const url = "https://www.jksb.com.cn/p/2026/0925/9.html";
+    w.fake.setOrder(order.vendorOrderNid, { status: 2, order_url: url });
+    w.reader.pages.set(url, { html: publishedHtml(ARTICLE_MARKDOWN) });
+    await tickPoll(w.deps);
+    let failed = false;
+    const flaky = new Proxy(store, {
+      get(target, key) {
+        const value = Reflect.get(target, key, target);
+        if (typeof value !== "function") return value;
+        return async (/** @type {any[]} */ ...args) => {
+          if (!failed && failing(String(key), args)) { failed = true; throw new Error("transient store failure"); }
+          return value.apply(target, args);
+        };
+      },
+    });
+    w.clock.advance(HOUR + 60_000);
+    [order] = await orders(store, p.id);
+    return { p, store, flaky, order };
+  };
+
+  test("a fault in the bookkeeping beside a settlement no longer strands the verified order with its reserve held (M-2)", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const { p, store, flaky, order } = await publishedWithFlakyStore(w, (method) => method === "incrementMediaOutcome");
+      const first = await tickVerify({ ...w.deps, store: flaky });
+      assert.equal(first.errors, 1, "the fault is counted");
+      const settled = await store.getOrder(order.id);
+      assert.equal(settled.state, "settled", "the money was settled before the bookkeeping");
+      assert.equal(settled.settledCny, 100);
+      const money = await moneyOf(store, p.id);
+      assert.deepEqual([money.reservedCny, money.settledCny], [0, 100], "the reserve is released and the spend recorded");
+      assert.deepEqual(projectIdentityBreaks(await orders(store, p.id), await store.ledgerSums({ geoProjectId: p.id })), []);
+      const [article] = await store.getArticles([p.articleIds[0]]);
+      assert.equal(article.status, "published", "the article's own move ran although the tally before it failed");
+    } finally { await w.close(); }
+  });
+
+  test("a settlement that failed is finished by a later tick, however late (M-2)", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const { p, store, flaky, order } = await publishedWithFlakyStore(w, (method, args) => method === "transitionOrder" && args[1]?.to === "settled");
+      const first = await tickVerify({ ...w.deps, store: flaky });
+      assert.equal(first.errors >= 1, true);
+      let current = await store.getOrder(order.id);
+      assert.deepEqual([current.state, current.settledCny], ["verified", null], "stranded between the two writes");
+      assert.equal((await moneyOf(store, p.id)).reservedCny, 110, "the reserve is still held");
+      // Nine days on, past the week the verify list reaches back: the order is settled all the same.
+      w.clock.advance(9 * DAY);
+      const later = await tickVerify(w.deps);
+      assert.deepEqual([later.recovered, later.settled], [1, 1]);
+      current = await store.getOrder(order.id);
+      assert.deepEqual([current.state, current.settledCny], ["settled", 100]);
+      const money = await moneyOf(store, p.id);
+      assert.deepEqual([money.reservedCny, money.settledCny], [0, 100]);
+      assert.deepEqual(projectIdentityBreaks(await orders(store, p.id), await store.ledgerSums({ geoProjectId: p.id })), []);
+      assert.equal((await tickVerify(w.deps)).recovered, 0, "and only once");
+    } finally { await w.close(); }
+  });
+
   test("race: a send in flight is not declared unknown before its timeout and margin have passed", options, async () => {
     const w = await world(makeFixture);
     try {
