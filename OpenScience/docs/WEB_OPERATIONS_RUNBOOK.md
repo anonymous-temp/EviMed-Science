@@ -1571,8 +1571,12 @@ and reply-number checks) and every Jev judge site recheck permission before send
 Revocation, expiry and changed terms also prevent resending an affected cached
 conversation. Start a fresh conversation for unrelated work or a newly reviewed
 projection. Clinical sessions do not seed general research memory, capsule notes,
-shared evaluation traces or account-wide method learning. Study-local corrections
-and deterministic historical replay remain available.
+shared evaluation traces or account-wide method learning. The reply check (the
+citation check and, in a study's conversation, the check of the numbers a reply
+reports against the engine's results) runs for them like for every conversation: it
+is a notice that never holds a reply back, and its reviewer calls ask the same
+permission check. Study-local corrections and deterministic historical replay remain
+available.
 
 The study delete operation hides a study; it has never meant erasing its project.
 Cloud dependencies continue to refuse its cached clinical content after hiding.
