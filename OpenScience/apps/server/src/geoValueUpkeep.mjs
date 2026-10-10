@@ -288,26 +288,30 @@ export function createGeoValueUpkeep({ store, sourceChanges = null, entityVocabu
     const existing = new Map(geoValueList(data.sourceChanges).filter(geoValueObject).map((entry) => [String(entry.id), entry]));
     /** @type {Array<Record<string, any>>} */
     const patch = [];
+    let added = 0;
+    let extended = 0;
     for (const heard of (await heardAbout([...resting.keys()], frontier)).values()) {
       const findingIds = [.../** @type {Set<string>} */ (resting.get(heard.identifier))].sort();
       const entry = sourceChangeEntry({ identifier: heard.identifier, kind: heard.kind, findingIds, at: heard.at ?? now().toISOString(), notice: heard.notice, detectedBy: heard.by });
       const known = existing.get(entry.id);
       if (!known) {
         patch.push(entry);
-        counters.changesFlagged += 1;
+        added += 1;
       } else if (geoValueActive(known)) {
         // A change the researcher has dealt with is theirs; one that still asks for a look reaches a finding written since.
         const linked = new Set(geoValueList(known.findingIds).map(String));
         if (findingIds.some((id) => !linked.has(id))) {
           patch.push({ id: entry.id, findingIds: [...new Set([...linked, ...findingIds])].sort() });
-          counters.changesExtended += 1;
+          extended += 1;
         }
       }
     }
-    if (patch.length) {
-      await store.writeValue(String(project.user_id), project.id, { sourceChanges: patch });
-      counters.projectsFlagged += 1;
-    }
+    if (!patch.length) return;
+    await store.writeValue(String(project.user_id), project.id, { sourceChanges: patch });
+    // Counted once it is in the profile: a write that failed added nothing.
+    counters.changesFlagged += added;
+    counters.changesExtended += extended;
+    counters.projectsFlagged += 1;
   }
 
   /** The watch over the projects whose turn it is, within the tick's bound. */

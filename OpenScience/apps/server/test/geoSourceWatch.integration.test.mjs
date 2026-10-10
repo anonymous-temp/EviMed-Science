@@ -177,6 +177,27 @@ test("the watch reads a bounded number of projects a tick, the one looked at lon
   assert.ok(result.watchProjects >= 1, "the projects had their turn all the same");
 });
 
+test("a write that fails counts nothing as flagged, is reported, and the next tick writes the entry", options, async () => {
+  const project = await alone();
+  await store.writeValue("alice", project.id, { findings: [{ id: "w1", statement: "A finding", sources: [{ doi: "10.1000/write.fails" }] }] });
+  await sourceChanges.record("10.1000/write.fails", retraction(), { assertedBy: "crossref" });
+  let failing = true;
+  const flaky = new Proxy(store, { get(target, key) {
+    if (key !== "writeValue") return Reflect.get(target, key, target);
+    return async (/** @type {any[]} */ ...args) => { if (failing) throw Object.assign(new Error("down"), { code: "57P01" }); return target.writeValue(...args); };
+  } });
+  const reported = [];
+  const watch = createGeoValueUpkeep({ store: flaky, sourceChanges, entityVocabulary: null, config: { geoSourceWatchProjectsPerTick: 50 }, report: (code) => reported.push(code) });
+  await watch.tick();
+  assert.deepEqual([watch.metrics().changesFlagged, watch.metrics().projectsFlagged, watch.metrics().failures >= 1], [0, 0, true], "nothing was added, and nothing is claimed");
+  assert.ok(reported.includes("watch:57P01"));
+  assert.deepEqual(await entries(project.id), {}, "the profile has no entry");
+  failing = false;
+  await watch.tick();
+  assert.equal(watch.metrics().changesFlagged, 1);
+  assert.deepEqual(Object.keys(await entries(project.id)), ["change:doi:10.1000/write.fails:retraction"]);
+});
+
 test("a deployment whose frontier tables are not there reads the record alone, and without both stores the watch does not run", options, async () => {
   const project = await alone();
   await store.writeValue("alice", project.id, { findings: [{ id: "m1", statement: "A finding", sources: [{ doi: "10.1000/no.frontier" }] }] });
