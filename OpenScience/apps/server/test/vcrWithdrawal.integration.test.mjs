@@ -32,7 +32,7 @@ after(async () => { await database?.close(); await isolated?.drop(); if (directo
 
 const consent = '患者本人可理解研究内容并签署知情同意';
 const CHART_1 = `患者王小明，电话 13812345678。年龄 62 岁，肌酐 1.2 mg/dL。${consent}。`;
-const CHART_2 = '复查：肌酐 1.4 mg/dL；否认心梗史。BMI 22。';
+const CHART_2 = '复查：肌酐 1.4 mg/dL；否认心梗史。BMI 22 kg/m2。';
 const CHART_S2 = `年龄 44 岁。${consent}。`;
 const criteria = [
   { kind: 'inclusion', criterionType: 'demographic', sourceText: 'Age >= 18', requirement: { op: 'compare', variable: 'age', comparator: 'gte', value: 18 } },
@@ -77,7 +77,7 @@ async function fixture() {
   assert.deepEqual(result.assessments.map(row => [row.subjectKey, row.summary]).sort(), [[s1, 'eligible'], [s2, 'eligible']].sort());
   await vcr.matching.onJobFinished({ action: 'finished', state: 'succeeded', job: { id: job.id, studyId: target.id, kind: 'match_criteria', state: 'succeeded' }, engineResult: result });
   // A fact written after the evaluation froze its inputs: no evaluation used it.
-  const late = await write(target, 'fact', [{ subjectKey: s1, variable: 'bmi', value: 22, unit: 'kg/m2', documentId: doc2.id, ...spanOf(CHART_2, 'BMI 22'), surface: '22' }]);
+  const late = await write(target, 'fact', [{ subjectKey: s1, variable: 'bmi', value: 22, unit: 'kg/m2', documentId: doc2.id, ...spanOf(CHART_2, 'BMI 22 kg/m2'), surface: '22' }]);
   assert.equal(late.ids.length, 1, JSON.stringify(late.issues));
   return { target, source, doc1, doc2, docS2, s1, s2, projection, job, built, factIds: facts.ids, lateId: late.ids[0] };
 }
