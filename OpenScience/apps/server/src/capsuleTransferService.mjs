@@ -13,7 +13,7 @@ import { boundedText } from "./researchMemory.mjs";
 import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
-import { recordKdfRefused, recordShareImported, recordShareRefused, recordShared, recordSnapshotFile } from "./capsuleShareMetrics.mjs";
+import { recordAccountCleanup, recordKdfRefused, recordShareImported, recordShareRefused, recordShared, recordSnapshotFile } from "./capsuleShareMetrics.mjs";
 
 export const CAPSULE_TRANSFER_MAX_BYTES = 2 * 1024 * 1024;
 const MAX_ENTRIES = 100;
@@ -72,6 +72,13 @@ const SNAPSHOT_FILE_GRACE_MS = 60 * 60_000;
 const SNAPSHOT_SWEEP_FILES = 20_000;
 /** The file names a sweep may touch: `<account hash>-<snapshot id>.evimedcap`, the flat `<snapshot id>.evimedcap` older builds wrote, and a write's temporary copy. */
 const SNAPSHOT_FILE = /^(?:([a-f0-9]{64})-)?([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\.evimedcap(\.[a-f0-9-]{36}\.tmp)?$/;
+
+/** What went wrong, as a short code an audit line and a counter can carry: the error's own code, else its name. @param {any} error */
+function causeCode(error) {
+  const cause = error?.cause ?? error;
+  const code = typeof cause?.code === "string" && cause.code ? cause.code : typeof cause?.name === "string" && cause.name ? cause.name : "unknown";
+  return code.replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 80);
+}
 
 /**
  * What a refused or unrunnable password derivation is to the person who asked: a named answer instead of a failure that reads
@@ -240,13 +247,15 @@ async function exportableMethods(client, userId, rows) {
 export class CapsuleTransferService {
   /** @param {{documents: import('./productStore.mjs').ProductDocuments, capsules: import('./capsuleService.mjs').CapsuleService, identities: import('./capsuleIdentityStore.mjs').CapsuleIdentityStore, dataDir: string,
    *   scanner?: import('./capsuleScan.mjs').CapsuleScanner | null, privateAccountCleanup?: ((userId:string)=>Promise<void>) | null,
-   *   maxLiveSnapshots?: number, now?: () => number}} options */
-  constructor({ documents, capsules, identities, dataDir, scanner = null, privateAccountCleanup = null, maxLiveSnapshots = MAX_LIVE_SNAPSHOTS, now = Date.now }) {
+   *   maxLiveSnapshots?: number, now?: () => number, report?: (event: "rolled_back" | "cleanup_failed", details: { userId: string, code?: string }) => void}} options */
+  constructor({ documents, capsules, identities, dataDir, scanner = null, privateAccountCleanup = null, maxLiveSnapshots = MAX_LIVE_SNAPSHOTS, now = Date.now, report = () => {} }) {
     this.documents = documents; this.capsules = capsules; this.identities = identities; this.dataDir = dataDir;
     this.scanner = scanner;
     this.privateAccountCleanup = privateAccountCleanup;
     this.maxLiveSnapshots = maxLiveSnapshots;
     this.now = now;
+    /** Where an account's capsule cleanup says what became of it, for the operator's audit line; never for the account. */
+    this.report = report;
     /** One scan per pack and account while a preview turns into an import. @type {Map<string, { at: number, result: any }>} */
     this.scans = new Map();
   }
@@ -968,9 +977,24 @@ export class CapsuleTransferService {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-user:${productId(userId)}`]);
       const row = (await client.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId])).rows[0];
       if (!row || (expectedCreatedAt !== null && row.generation !== expectedCreatedAt)) throw new HttpError(409, "product_account_changed", "The account changed before this operation completed.");
+      // With the account's lock held no deletion is mid-flight, so a pending state for the generation that is still live is a
+      // deletion that rolled back: it is released here rather than answered 409 for good (review C-11).
+      const pending = await this.identities.deletionState(userId);
+      if (pending?.phase === "pending" && pending.accountCreatedAt === row.generation) await this.#releaseRolledBackDeletion(userId, pending);
       await this.identities.assertAccountActive(userId, row.generation);
       return operation ? operation() : row.generation;
     });
+  }
+
+  /**
+   * Put the capsule side of an account back as it was before a deletion that rolled back, and say so: a counter and the
+   * operator's audit line. The cause of the rollback is the deletion's own error, which the route has already answered; what is
+   * recorded here is that the state had to be released and for which account. @param {string} userId @param {any} state
+   */
+  async #releaseRolledBackDeletion(userId, state) {
+    await this.identities.restoreAfterRolledBackDeletion(userId, state);
+    recordAccountCleanup("rolled_back");
+    this.report("rolled_back", { userId });
   }
 
   /** Runs inside PostgresStore.deleteUser's account lock before its DELETE commits. */
@@ -995,8 +1019,11 @@ export class CapsuleTransferService {
         const state = await this.identities.deletionState(userId);
         if (!state || state.phase === "completed") return { completed: true };
         const live = (await client.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId])).rows[0];
-        // DB rollback leaves the original live account and its private keys intact.
-        if (live?.generation === state.accountCreatedAt) return { completed: false, awaitingAccountDeletion: true };
+        // DB rollback leaves the original live account and its private keys intact, and nothing else will clear the state.
+        if (live?.generation === state.accountCreatedAt) {
+          await this.#releaseRolledBackDeletion(userId, state);
+          return { completed: false, rolledBack: true };
+        }
         // Private extension roots are account-owned, so a recreated account
         // must not have its new files erased by an older pending deletion.
         if (live && this.privateAccountCleanup) return { completed: false, awaitingAccountDeletion: true };
@@ -1008,18 +1035,34 @@ export class CapsuleTransferService {
         await syncCapsuleDirectory(directory);
         await this.privateAccountCleanup?.(userId);
         await this.identities.finishDeletion(userId, state);
+        recordAccountCleanup("completed");
         return { completed: true };
       });
-    } catch { throw new HttpError(503, "capsule_cleanup_pending", "The account is removed, but protected capsule cleanup must be retried."); }
+    } catch (error) {
+      // The cleanup stays pending and is retried; what stopped it is kept as a code (it used to be thrown away).
+      recordAccountCleanup("failed");
+      this.report("cleanup_failed", { userId, code: causeCode(error) });
+      throw Object.assign(new HttpError(503, "capsule_cleanup_pending", "The account is removed, but protected capsule cleanup must be retried."), { cause: error });
+    }
   }
 
-  /** Durable post-commit cleanup resumes after restart; failures remain pending for the next attempt. */
+  /**
+   * Durable post-commit cleanup resumes after restart; failures remain pending for the next attempt. `rolledBack` counts the
+   * states of accounts that are still here (their deletion did not commit), released; `causes` is the codes that kept a cleanup
+   * from finishing.
+   * @returns {Promise<{ completed: number, pending: number, rolledBack: number, causes: string[] }>}
+   */
   async recoverPendingDeletions() {
-    const results = { completed: 0, pending: 0 };
+    /** @type {{ completed: number, pending: number, rolledBack: number, causes: string[] }} */
+    const results = { completed: 0, pending: 0, rolledBack: 0, causes: [] };
     for (const userId of await this.identities.pendingDeletions()) {
-      try { const result = await this.finishAccountDeletion(userId); results[result.completed ? "completed" : "pending"]++; }
-      catch { results.pending++; }
+      try {
+        const result = await this.finishAccountDeletion(userId);
+        if (result.rolledBack) results.rolledBack++;
+        else results[result.completed ? "completed" : "pending"]++;
+      } catch (error) { results.pending++; results.causes.push(causeCode(error)); }
     }
+    results.causes = [...new Set(results.causes)];
     return results;
   }
 

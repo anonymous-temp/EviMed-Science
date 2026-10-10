@@ -1550,6 +1550,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     : null;
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
     privateAccountCleanup: userId => removePrivateExtensionFiles(config.dataDir, userId),
+    // What became of an account's capsule cleanup: a deletion that rolled back and was released, or a cleanup that stopped on a code.
+    report: (event, details) => { void securityAudit(config, "capsule.account-cleanup", event === "rolled_back" ? "released" : "failed", { userId: details.userId, code: details.code ?? event }).catch(() => {}); },
   }) : null;
   // Sharing a capsule with other accounts of this deployment, in the app (plan §7, F17): share links, deliveries to named accounts, and
   // taking either back. Off with its own switch (`OPEN_SCIENCE_CAPSULE_SHARE_ENABLED`): not composed, so no table of it is read and its routes
@@ -2612,7 +2614,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
       return result;
     })
-      .then(async result => { if (result.pending) await securityAudit(config, "capsule.cleanup", "pending", result); })
+      .then(async result => {
+        if (result.pending) await securityAudit(config, "capsule.cleanup", "pending", { code: result.causes[0] ?? null, detail: `completed=${result.completed} pending=${result.pending} rolledBack=${result.rolledBack}` });
+      })
       .catch((error) => {
         if (error?.code !== "maintenance_active") console.error("Capsule cleanup retry failed; protected pending state was retained.");
       })
