@@ -15,7 +15,7 @@ import { validateEngineResult, validateEngineJob } from "@evimed/domain";
 
 import { freezeMatchingInputs, MATCHING_SNAPSHOT_PREFIX } from "../src/vcrMatchingSnapshot.mjs";
 import { loadConfig } from "../src/config.mjs";
-import { vcrReadiness } from "../src/vcrService.mjs";
+import { VcrService, vcrReadiness } from "../src/vcrService.mjs";
 import { removeVcrArtifacts } from "../src/vcrStoreBase.mjs";
 import { createIntakeCounters } from "../src/vcrRecordExtract.mjs";
 import {
@@ -166,6 +166,32 @@ test("CW-22 a run reads criterion-level aggregates and pseudonymous subject keys
   assert.equal(empty.protocol, null);
 });
 
+test("a run reading a frozen matching batch gets the roster size through the small-cell boundary and the progress counts as sibling cells (E-19)", async () => {
+  const boundary = new VcrService({ store: /** @type {any} */ ({}), config: {} });
+  /** @param {number} count @param {string} state */
+  const rows = (count, state) => Array.from({ length: count }, (_, at) => ({ subjectKey: `${state}-${at}`, state, jobId: "job_1" }));
+  const read = async (/** @type {any[]} */ progress) => boundary.forModel(await vcrMatchingSeam({
+    matchStore: matchStoreDouble({ async matchingSnapshot() { return { protocolVersionId: "prt_1", asOf: AS_OF }; }, async matchingProgress() { return progress; } }),
+    store: storeDouble }).runtimeRead({ id: "std_1" }, { snapshotId: "snap_1" }));
+  const cells = (/** @type {any} */ view) => view.coverageCells.map((/** @type {any} */ cell) => [cell.key, cell.n]);
+
+  // Three people: neither the roster size nor any state's count leaves.
+  const small = await read([...rows(2, "evaluated"), ...rows(1, "pending")]);
+  assert.equal(small.requestedSubjects, null);
+  assert.deepEqual(cells(small), [["evaluated", null], ["pending", null], ["unavailable", null]]);
+  assert.deepEqual(small.suppressed, ["requestedSubjects"]);
+  // A nearly finished roster of 240: the one pending person is hidden together with the neighbours that would reproduce it.
+  const nearly = await read([...rows(239, "evaluated"), ...rows(1, "pending")]);
+  assert.equal(nearly.requestedSubjects, 240);
+  assert.deepEqual(cells(nearly), [["evaluated", null], ["pending", null], ["unavailable", null]]);
+  // A roster whose every state is over the floor shows all of them.
+  const wide = await read([...rows(120, "evaluated"), ...rows(100, "pending"), ...rows(20, "unavailable")]);
+  assert.deepEqual([wide.requestedSubjects, ...cells(wide).map((/** @type {any} */ cell) => cell[1])], [240, 120, 100, 20]);
+  assert.equal(wide.subjects.length, 20, "the page of rows is as it was, and more says so");
+  assert.equal(wide.more, true);
+  assert.equal(JSON.stringify(wide).includes('"requested"'), false, "the old key is gone, not shown twice");
+});
+
 /** The frozen inputs a matching job carries. */
 const matchingInputs = (asOf = AS_OF, protocol = "prt_1") => [
   { kind: "evidence", id: `matching:asof:${asOf}` }, { kind: "evidence", id: `matching:protocol:${protocol}` }, { kind: "evidence", id: "matching:facts:0123456789abcdef" },
@@ -217,6 +243,12 @@ test("AC-14 CS-31 the local executor loads what it evaluates by study, decides i
   assert.ok(progress.length >= 1, "progress is reported even for a short job");
   assert.equal(result.manifest.engineVersion, "control-plane");
   assert.deepEqual(asked, [{ studyId: "std_1", visibleBy: AS_OF }, { studyId: "std_1", ids: ["f1"] }], "execution loads only the references frozen when queued");
+  // Whatever it counts of one person leaves through the one boundary, under whatever name it wrote it (E-19, D16).
+  const shown = new VcrService({ store: /** @type {any} */ ({}), config: {} }).forModel({ result: { counts: result.counts, measures: result.measures, diagnostics: result.diagnostics } });
+  assert.equal(shown.result.counts.realPatients, null);
+  assert.deepEqual(shown.result.measures.filter((/** @type {any} */ measure) => measure.value !== null && measure.value !== 0), [], "one person under an eligibility summary is one person");
+  for (const key of ["subjects", "requestedSubjects", "batchSubjects", "batchEvaluated"]) assert.equal(shown.result.diagnostics[key], null, key);
+  assert.equal(shown.result.diagnostics.nextOffset, null, "an offset is not a count, and there was no next batch");
 });
 
 test("CS-34 one subject that cannot be evaluated is counted and never stops the others; a fact with no document is void", async () => {

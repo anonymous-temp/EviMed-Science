@@ -578,11 +578,13 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       if (filter.snapshotId) {
         const snapshot = await matchStore.matchingSnapshot(study.id, String(filter.snapshotId));
         const progress = await matchStore.matchingProgress(study.id, String(filter.snapshotId));
+        // Counts of people leave through the one boundary like every other: the roster size under a name it knows, the
+        // states as sibling cells so a small one is hidden together with the neighbour that would reproduce it.
         return { inputSnapshotId: String(filter.snapshotId), protocolVersionId: snapshot.protocolVersionId,
-          asOf: snapshot.asOf, requested: progress.length,
+          asOf: snapshot.asOf, requestedSubjects: progress.length,
           subjects: progress.slice(Number(filter.offset ?? 0), Number(filter.offset ?? 0) + Number(filter.limit ?? 20)),
           more: Number(filter.offset ?? 0) + Number(filter.limit ?? 20) < progress.length,
-          coverage: Object.fromEntries(['evaluated','pending','unavailable'].map(state => [state, progress.filter(row => row.state === state).length])) };
+          coverageCells: ['evaluated', 'pending', 'unavailable'].map(state => ({ key: state, n: progress.filter(row => row.state === state).length })) };
       }
       const protocol = filter.protocolVersionId ? (await matchStore.protocols(study.id, String(filter.protocolVersionId)))[0] ?? null
         : await matchStore.latestProtocol(study.id).catch(() => null);
