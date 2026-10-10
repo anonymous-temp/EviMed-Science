@@ -348,6 +348,9 @@ function frontierSettings(overrides) {
     // FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT and FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT (frontierPipeline.mjs, with the reasoning).
     frontierPreprintLanePerDay: integer("frontierPreprintLanePerDay", "OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY", 2, 0, 10),
     frontierPreprintLaneMinScore: integer("frontierPreprintLaneMinScore", "OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE", 60, 0, 100),
+    // The most safety pushes one reader receives in a day (owner ruling 2026-10-10: a Class I recall and a boxed-warning alert now go to
+    // every reader with the push on). FRONTIER_SAFETY_PUSH_DAILY_CAP_DEFAULT (frontierNotifications.mjs, with the reasoning).
+    frontierSafetyPushDailyCap: integer("frontierSafetyPushDailyCap", "OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP", 3, 1, 50),
     knowledgePluginUrl: pluginUrl,
     knowledgePluginTokenFile: tokenFile,
     knowledgePluginPollMs: integer("knowledgePluginPollMs", "OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS", 60_000, 5_000, 3_600_000),

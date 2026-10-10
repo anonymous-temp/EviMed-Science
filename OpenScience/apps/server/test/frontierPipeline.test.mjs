@@ -15,11 +15,13 @@ import {
   allowedLanes,
   entryKeys,
   frontierBudgetState,
+  frontierClassIRecall,
   frontierDayWindow,
   frontierDropReason,
   frontierEditDecision,
   frontierEvidenceDecision,
   frontierItemFlags,
+  frontierKeptModelFlags,
   frontierSafetyAlert,
   frontierSelectionDecision,
   frontierTextDecision,
@@ -248,6 +250,37 @@ test("flags are code's: registry facts, defects, identifiers, affiliations and l
   assert.deepEqual(flags({ entry: { ...entry, identity_key: "reg:NCT1:results-posted:2026-09-20", facts: { trial_event: "results-posted" } } }), []);
   assert.deepEqual(flags({ entry: { ...entry, identity_key: "reg:NCT1:updated:2026-09-20", facts: { trial_event: "updated" } } }), ["registry-unpublished", "data-updated"]);
   assert.deepEqual(flags({ linkFlags: ["corrected", "retracted"] }), ["retracted", "corrected"], "in the vocabulary's order");
+});
+
+test("F12c: a Class I recall is marked by its class, a boxed warning by the editor's proposal, and each only on a safety alert", () => {
+  const recalls = { id: "openfda-enforcement", source_type: "regulator", authority: 5, lane: "safety", safety_feed: true };
+  const entry = { defects: [], facts: {}, identity_key: "url:x", summary_raw: "A notice." };
+  const text = { abstract_raw: "A notice.", body_excerpt: null, enrichment: {} };
+  const flags = (/** @type {Record<string, any>} */ input) => frontierItemFlags({ source: recalls, entry, item: { doi: null, pmid: null, date_precision: "instant" }, text,
+    safetyAlert: true, ...input });
+  const classOne = { ...entry, facts: { recall_class: "Class I" } };
+  assert.deepEqual(flags({ entry: classOne }), ["class-i-recall"]);
+  assert.equal(frontierClassIRecall({ source: recalls, facts: { recall_class: " class i " } }), true, "the regulator's own spelling, trimmed");
+  for (const recallClass of ["Class II", "Class III", "Not Yet Classified", "Class I; Class II", ""]) {
+    assert.deepEqual(flags({ entry: { ...entry, facts: { recall_class: recallClass } } }), [], recallClass);
+  }
+  assert.deepEqual(flags({ entry: classOne, source: { ...recalls, safety_feed: false, source_type: "media" }, safetyAlert: false }), [], "a medium's story of a recall is no alert");
+  assert.equal(frontierClassIRecall({ source: { ...recalls, safety_feed: false, source_type: "media" }, facts: { recall_class: "Class I" } }), false);
+  assert.deepEqual(flags({ entry: classOne, safetyAlert: false }), [], "only an alert carries it");
+  assert.deepEqual(flags({ modelFlags: ["class-i-recall"] }), [], "a recall's class is not the model's to say");
+  assert.deepEqual(flags({ modelFlags: ["boxed-warning"] }), ["boxed-warning"]);
+  assert.deepEqual(flags({ modelFlags: ["boxed-warning"], safetyAlert: false }), [], "a paper about boxed warnings is no alert and carries no mark");
+  assert.deepEqual(flags({ entry: classOne, modelFlags: ["boxed-warning", "press-release"] }), ["press-release", "class-i-recall", "boxed-warning"], "in the vocabulary's order");
+  // The decision about the alert itself is unchanged by the marks.
+  assert.equal(frontierSafetyAlert({ source: recalls, evidenceType: "safety-notice", facts: { recall_class: "Class I" } }), true);
+  assert.equal(frontierSafetyAlert({ source: recalls, evidenceType: "safety-notice", facts: { recall_class: "Class II" } }), false);
+});
+
+test("F12c: what the editor proposed stays on an item when its labels are decided again, as it did for a release a medium republished", () => {
+  assert.deepEqual(frontierKeptModelFlags({ flags: ["press-release", "china", "boxed-warning", "class-i-recall"], source: media }), ["press-release", "boxed-warning"]);
+  assert.deepEqual(frontierKeptModelFlags({ flags: ["press-release"], source: company }), [], "a newsroom's release is its source's flag, not the editor's");
+  assert.deepEqual(frontierKeptModelFlags({ flags: ["boxed-warning"], source: company }), ["boxed-warning"]);
+  assert.deepEqual(frontierKeptModelFlags({ flags: null, source: media }), []);
 });
 
 test("timeline_at: the publication instant, or the source's date when that is more than 72 hours older", () => {

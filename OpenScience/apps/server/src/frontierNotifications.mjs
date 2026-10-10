@@ -1,4 +1,4 @@
-import { DISPLAY_TIME_ZONE, agendaLocalDate, frontierNoticeTarget, frontierSourceDisplayName } from '@evimed/domain';
+import { DISPLAY_TIME_ZONE, FRONTIER_BROAD_SAFETY_FLAGS, agendaLocalDate, frontierNoticeTarget, frontierSourceDisplayName } from '@evimed/domain';
 import { migrateFrontier } from './frontierPersistence.mjs';
 import { migrateProductStore } from './productPersistence.mjs';
 import { migrateNotifications } from './notificationPersistence.mjs';
@@ -30,6 +30,14 @@ export function frontierDeliveryInfrastructureError(error) {
     const code = String(/** @type {any} */ (error)?.code ?? '');
     return INFRASTRUCTURE_CODES.has(code) || (code.length === 5 && (code.startsWith('08') || code.startsWith('53')));
 }
+/**
+ * Safety pushes one reader receives in a day (`OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP`; config.mjs holds the same number and
+ * frontierConfig.test.mjs holds them equal). Owner ruling 2026-10-10 (review B §7.3): a Class I recall and a boxed-warning alert go
+ * to every reader with the push on, which is what makes a ceiling necessary - a day with several of them must not turn the inbox,
+ * and the IM channel behind it, into a stream of alerts. Three is the owner's number; the alerts past it stay in the feed's safety
+ * block, pinned, as before, and are counted (`safetyCapped`). The ceiling is on every safety push, followed or not.
+ */
+export const FRONTIER_SAFETY_PUSH_DAILY_CAP_DEFAULT = 3;
 /** Followers one publication reaches at most: a zone nobody has followed this far would be a second scheduler's work. */
 export const FRONTIER_ZONE_FANOUT_MAX = 2000;
 // 'corrected' and 'withdrawn' come from the upkeep of a card (a reader's challenge upheld, a source withdrawn): the same follower notice, worded as what happened.
@@ -83,7 +91,8 @@ export class FrontierNotifications {
         this.batch = Math.min(200, Math.max(1, Math.floor(Number(config.frontierNotifyBatch)) || 50));
         this.scanBatch = Math.min(500, Math.max(1, Math.floor(Number(config.frontierSafetyScanBatch)) || 100));
         this.timeZone = String(config.frontierTimeZone || 'Asia/Shanghai');
-        this.counters = { queued: 0, delivered: 0, skipped: 0, failed: 0, refunded: 0, rearmed: 0, scanGaps: 0, zoneQueued: 0, zoneCapped: 0 };
+        this.safetyDailyCap = Math.min(50, Math.max(1, Math.floor(Number(config.frontierSafetyPushDailyCap)) || FRONTIER_SAFETY_PUSH_DAILY_CAP_DEFAULT));
+        this.counters = { queued: 0, delivered: 0, skipped: 0, failed: 0, refunded: 0, rearmed: 0, scanGaps: 0, zoneQueued: 0, zoneCapped: 0, safetyCapped: 0 };
         // A notice job that used its attempts is put back once an hour for as long as its notice can still be told (D-02).
         this.rearm = new FrontierJobRearm({ jobs, kind: KIND, limit: this.batch, withinMs: REARM_WITHIN_MS });
     }
@@ -119,9 +128,11 @@ export class FrontierNotifications {
         let wanted;
         if (target.kind === 'safety') {
             const matches = positive.filter(f => ['drug', 'specialty', 'event'].includes(f.kind)).map(f => `(least(i.visible_at,i.published_at) >= ${param(f.createdAt)}::timestamptz AND (${frontierFollowPredicate(f, param)}))`);
-            if (!matches.length)
-                return false;
-            wanted = `i.public_id=${param(target.key)} AND i.safety_alert AND (s.source_type='regulator' OR s.safety_feed) AND ${safetyPublicationPredicate(this.now(), param)} AND (${matches.join(' OR ')})`;
+            // A Class I recall or a boxed warning is a mark on the alert and needs no follow (owner, 2026-10-10); every other alert
+            // reaches the readers who follow a drug, specialty or event it names, as before. The hidden item and the muted entity
+            // below apply to both.
+            const reach = [`i.flags && ${param([...FRONTIER_BROAD_SAFETY_FLAGS])}::text[]`, ...matches];
+            wanted = `i.public_id=${param(target.key)} AND i.safety_alert AND (s.source_type='regulator' OR s.safety_feed) AND ${safetyPublicationPredicate(this.now(), param)} AND (${reach.join(' OR ')})`;
         }
         else {
             if (!positive.length && !(account.last_seen_at && new Date(account.last_seen_at).getTime() >= this.now().getTime() - FRONTIER_PUSH_ACTIVE_MS))
@@ -253,7 +264,14 @@ export class FrontierNotifications {
                     checkpoint = { seq: change.seq, afterUserId: '' };
                     continue;
                 }
-                const readers = (await client.query(`SELECT DISTINCT u.id FROM evimed_control.users u JOIN evimed_frontier.user_follows f ON f.user_id=u.id
+                // Every account that existed when the alert appeared if it carries a mark that sends it to everyone (the platform's own
+                // publisher account is no reader); otherwise the accounts that follow a drug, specialty or event. `eligible` decides each.
+                const everyone = row.flags.some((/** @type {string} */ flag) => FRONTIER_BROAD_SAFETY_FLAGS.includes(/** @type {any} */ (flag)));
+                const readers = (await client.query(everyone
+                    ? `SELECT u.id FROM evimed_control.users u WHERE u.id>$1 AND u.auth_type<>'platform' AND u.created_at<=$2
+                  AND NOT EXISTS(SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=u.id AND j.idempotency_key=$4)
+                ORDER BY u.id LIMIT $3`
+                    : `SELECT DISTINCT u.id FROM evimed_control.users u JOIN evimed_frontier.user_follows f ON f.user_id=u.id
                 WHERE u.id>$1 AND NOT f.muted AND f.kind IN ('drug','specialty','event') AND f.created_at<=$2
                   AND NOT EXISTS(SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=u.id AND j.idempotency_key=$4)
                 ORDER BY u.id LIMIT $3`, [checkpoint.afterUserId ?? '', row.visible_at, this.batch, `frontier-notify:safety:${row.public_id}`])).rows;
@@ -273,6 +291,21 @@ export class FrontierNotifications {
             return { queued: 0 };
         });
     }
+    /**
+     * How many safety pushes a reader has in the inbox for the day `now` falls in, the day of the feed's zone (a push made at 23:30 in
+     * Beijing and one at 00:30 are two days, wherever the server's clock is). The inbox row is the push: it is what the reader got.
+     * The alert being delivered is not counted against itself: a delivery whose notice was made and whose job then failed to finish
+     * comes back to find its own row, and is still the same one push.
+     * @param {string} userId @param {string} [exceptKey] the alert's public id @returns {Promise<number>}
+     */
+    async safetyPushesToday(userId, exceptKey = '') {
+        const row = (await this.database.query(`SELECT count(*)::integer AS pushes FROM evimed_inbox.notifications
+      WHERE user_id=$1 AND severity='safety' AND source->>'id' LIKE 'frontier-safety:%' AND source->>'id' <> $4
+        AND created_at >= (date_trunc('day', $2::timestamptz AT TIME ZONE $3) AT TIME ZONE $3)
+        AND created_at < ((date_trunc('day', $2::timestamptz AT TIME ZONE $3) + interval '1 day') AT TIME ZONE $3)`,
+        [userId, this.now(), this.timeZone, `frontier-safety:${exceptKey}`])).rows[0];
+        return Number(row?.pushes ?? 0);
+    }
     /** Leased inbox creation; an interrupted finish retries the exact immutable notice. */
     async deliverDue() {
         if (!this.jobs || !this.notifications)
@@ -288,6 +321,12 @@ export class FrontierNotifications {
                 if (!await this.eligible(job.userId, job.payload.target)) {
                     await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: 'recipient-no-longer-eligible' });
                     this.counters.skipped++;
+                    continue;
+                }
+                if (job.payload.target.kind === 'safety' && await this.safetyPushesToday(job.userId, job.payload.target.key) >= this.safetyDailyCap) {
+                    // The reader has had the day's number of safety pushes: this one is not made (the alert stays in the feed), and counted.
+                    await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: 'daily-cap' });
+                    this.counters.safetyCapped++;
                     continue;
                 }
                 if (job.payload.target.kind === 'weekly') {

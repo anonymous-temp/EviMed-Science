@@ -228,6 +228,9 @@ const operatorLevers = {
   // total they must reach. A limit that never arrived would leave the default in force while the operator believes theirs applies.
   OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE: ["open-science-web"],
+  // The safety push ceiling (2026-10-10, F12c): a Class I recall and a boxed-warning alert reach every reader with the push on, and this is
+  // what keeps a day of them from being a stream. A limit that never arrived would leave 3 in force while the operator believes theirs applies.
+  OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP: ["open-science-web"],
   // The platform's evidence programme and its public pages (evidence-flywheel B7, 2026-10-05): the programme's switch, its
   // day's model money and its slot, and the two public-page switches. A lever that does not arrive leaves the programme off, or
   // on and spending, or the public pages indexable, with the operator believing otherwise.

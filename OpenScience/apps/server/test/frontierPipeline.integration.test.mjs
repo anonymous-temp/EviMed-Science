@@ -168,8 +168,9 @@ const marker = (title, name) => new RegExp(`\\[${name}:([a-z0-9-]+)\\]`).exec(ti
 
 /**
  * An editor whose judgement is written into the titles: [offtopic], [notnews],
- * [lane:x], [score:n] (the model's share of the total), [pending],
- * [edit-throws], [screen-error], [digest] (a piece covering several stories).
+ * [lane:x], [score:n] (the model's share of the total), [flag:x] (a flag it
+ * proposes), [pending], [edit-throws], [screen-error], [digest] (a piece
+ * covering several stories).
  */
 function fakeEditor(provider = { balanceSpent: false }) {
   /** @type {{ screen: string[][], edit: string[] }} */
@@ -214,7 +215,7 @@ function fakeEditor(provider = { balanceSpent: false }) {
         lane: lane && item.allowedLanes.includes(lane) ? lane : item.allowedLanes[0],
         specialties: ["cardiology"], evidenceType: item.evidenceFixed?.type ?? "observational",
         entities: { drugs: ["司美格鲁肽"], trials: [], orgs: [], diseases: [] },
-        scores: { impact, novelty, relevance }, flags: [],
+        scores: { impact, novelty, relevance }, flags: marker(item.titleRaw, "flag") ? [marker(item.titleRaw, "flag")] : [],
       } };
     },
   };
@@ -696,6 +697,37 @@ test("F12b: only a verified, unretracted, summarised article of an enabled sourc
   assert.deepEqual(Object.entries(verdicts).filter(([, [, rule]]) => rule === "preprint-lane").map(([name]) => name),
     ["good1", "good2"], "the best two that are eligible: 66 and 65, then the lane is full");
   assert.deepEqual(verdicts.waiting, [false, null], "a title-only item has no total to be taken by");
+});
+
+test("F12c: a published Class I recall carries class-i-recall, a safety notice the editor found to add a boxed warning carries boxed-warning, and nothing else does", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const named = await deliverNamed(plugin, {
+    classOne: { source_id: "r-medwatch", title: `${DISTINCT_TOPICS[0]} [score:50]`, facts: { recall_class: "Class I" } },
+    classTwo: { source_id: "r-medwatch", title: `${DISTINCT_TOPICS[1]} [score:50]`, facts: { recall_class: "Class II" } },
+    boxed: { source_id: "r-medwatch", title: `${DISTINCT_TOPICS[2]} [flag:boxed-warning] [score:50]` },
+    plain: { source_id: "r-medwatch", title: `${DISTINCT_TOPICS[3]} [score:50]` },
+    classOneBoxed: { source_id: "r-medwatch", title: `${DISTINCT_TOPICS[4]} [flag:boxed-warning] [score:50]`, facts: { recall_class: "Class I" } },
+    paper: { source_id: "j-nejm", doi: "10.1000/boxed.paper", title: `${DISTINCT_TOPICS[5]} [flag:boxed-warning] [score:50]` },
+    news: { source_id: "m-stat", title: `${DISTINCT_TOPICS[6]} [flag:class-i-recall] [score:50]`, facts: { recall_class: "Class I" } },
+  });
+  await pipeline.processBatch();
+  /** @type {Record<string, [boolean, string[]]>} */
+  const marks = {};
+  for (const [name, delivered] of Object.entries(named)) {
+    const row = await item(Number((await entry(delivered.id)).item_id));
+    marks[name] = [row.safety_alert, row.flags.filter((/** @type {string} */ flag) => ["class-i-recall", "boxed-warning"].includes(flag))];
+  }
+  assert.deepEqual(marks, {
+    classOne: [true, ["class-i-recall"]], // the record's own class
+    classTwo: [false, []], // Class II is scored like any decision, and carries nothing
+    boxed: [true, ["boxed-warning"]], // the editor proposed it on a safety feed's notice
+    plain: [true, []], // an alert that adds no boxed warning keeps the follow-based reach
+    classOneBoxed: [true, ["class-i-recall", "boxed-warning"]],
+    paper: [false, []], // a journal article that talks of boxed warnings is no alert
+    news: [false, []], // a medium's story is no alert, and a recall's class is never the editor's to say
+  });
 });
 
 test("a title near duplicate among a lane's published items is merged; a revision replaces the earlier one", options, async () => {

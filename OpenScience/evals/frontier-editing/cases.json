@@ -1,5 +1,5 @@
 {
- "about": "Incidents of the frontier feed's editing calls, each a real item from production (2026-09-22). Screen and edit: which lane a mixed source's item goes to. Same event: whether two reports are one event (acceptance record 2026-09-22T1405Z, F1, F3, F9). Run with run_eval.mjs; it calls the live model. Three explicitly synthetic regression controls were added on 2026-09-29; their text is authored evaluation input, not an upstream publication. Three evidence-type cases were added on 2026-10-10 (D-04 of the frontier review): each is authored evaluation input modelled on a production incident, not an upstream publication, and expects the evidence type `other` for a design the vocabulary has no key for (run them with --kind evidence-type). Six more were added the same day (F12a, the owner's ruling that an economic evaluation or a decision analysis is `other`, never the nearest design): a budget impact analysis, a discrete-event simulation and two models built on a trial's curves and a registry's rates expect `other`, and two controls, a prospective cohort and a randomised trial, must keep `observational` and `rct` (also --kind evidence-type).",
+ "about": "Incidents of the frontier feed's editing calls, each a real item from production (2026-09-22). Screen and edit: which lane a mixed source's item goes to. Same event: whether two reports are one event (acceptance record 2026-09-22T1405Z, F1, F3, F9). Run with run_eval.mjs; it calls the live model. Three explicitly synthetic regression controls were added on 2026-09-29; their text is authored evaluation input, not an upstream publication. Three evidence-type cases were added on 2026-10-10 (D-04 of the frontier review): each is authored evaluation input modelled on a production incident, not an upstream publication, and expects the evidence type `other` for a design the vocabulary has no key for (run them with --kind evidence-type). Six more were added the same day (F12a, the owner's ruling that an economic evaluation or a decision analysis is `other`, never the nearest design): a budget impact analysis, a discrete-event simulation and two models built on a trial's curves and a registry's rates expect `other`, and two controls, a prospective cohort and a randomised trial, must keep `observational` and `rct` (also --kind evidence-type). Six flag cases were added on 2026-10-10 (F12c): the editor may propose the flag `boxed-warning` on a safety notice that adds or strengthens a Boxed Warning, and these hold the judgement both ways (run them with --kind flags).",
  "lane": [
   {
    "id": "food-recall-flour",
@@ -305,6 +305,140 @@
      "Journal Article"
     ],
     "abstract": "Synthetic fixture. Background: Adults with type 2 diabetes often remain above their glycaemic target on metformin alone. Methods: In this randomised, double-blind, placebo-controlled phase 3 trial, 612 adults were randomly assigned 1:1 to the once-weekly oral agent or placebo for 26 weeks, both added to metformin. The primary endpoint was the change in glycated haemoglobin (HbA1c) from baseline at week 26. Results: The mean change in HbA1c was -1.1 percentage points with the agent and -0.2 with placebo (difference -0.9, 95% confidence interval -1.1 to -0.7). Adverse events occurred in 61% of the agent group and 58% of the placebo group. Conclusions: Added to metformin, the agent lowered HbA1c more than placebo over 26 weeks.",
+    "glossary": []
+   }
+  }
+ ],
+ "flags": [
+  {
+   "id": "synthetic-fda-adds-boxed-warning",
+   "expect": [
+    "boxed-warning"
+   ],
+   "expect_not": [],
+   "why": "a safety communication that adds a Boxed Warning to a label is the case the flag exists for (F12c, the owner's ruling of 2026-10-10 that a Class I recall or a boxed-warning alert is pushed to every reader with the push on: the editor proposes the flag, so the judgement is held both ways). The text here is authored",
+   "edit": {
+    "titleRaw": "FDA adds Boxed Warning about serious liver injury to a once-daily oral kinase inhibitor",
+    "sourceName": "美国FDA 药物安全通讯 Drug Safety Communications",
+    "sourceTypeLabel": "监管机构",
+    "publishedAt": "2026-10-08T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "summary": "Synthetic fixture. FDA is adding a Boxed Warning, its most prominent warning, to the prescribing information of a once-daily oral kinase inhibitor about the risk of serious liver injury, including liver failure and death. The labeling change follows review of 112 postmarketing reports of serious liver injury. Health care professionals should check liver tests before and during treatment.",
+    "evidenceFixed": {
+     "type": "safety-notice",
+     "basis": "registry"
+    },
+    "glossary": []
+   }
+  },
+  {
+   "id": "synthetic-nmpa-adds-boxed-warning-zh",
+   "expect": [
+    "boxed-warning"
+   ],
+   "expect_not": [],
+   "why": "the same judgement on a Chinese regulator's own wording, 增加黑框警告, in a source whose titles are not translated (F12c, the owner's ruling of 2026-10-10 that a Class I recall or a boxed-warning alert is pushed to every reader with the push on: the editor proposes the flag, so the judgement is held both ways). The text here is authored",
+   "edit": {
+    "titleRaw": "国家药监局关于修订口服抗凝药说明书的公告",
+    "sourceName": "国家药监局 药品说明书修订公告",
+    "sourceTypeLabel": "监管机构",
+    "publishedAt": "2026-10-07T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": true,
+    "summary": "合成测试文本。根据药品不良反应评估结果，国家药品监督管理局决定对口服抗凝药的说明书增加黑框警告，内容为：提前停药会增加血栓事件风险；椎管内麻醉或腰椎穿刺时可能发生硬膜外或脊髓血肿。同时修订【不良反应】【注意事项】等项。",
+    "evidenceFixed": {
+     "type": "safety-notice",
+     "basis": "registry"
+    },
+    "glossary": []
+   }
+  },
+  {
+   "id": "synthetic-boxed-warning-removed",
+   "expect": [],
+   "expect_not": [
+    "boxed-warning"
+   ],
+   "why": "a Boxed Warning taken away is not an alert that one was added: the line says 取消的黑框警告不算 (F12c, the owner's ruling of 2026-10-10 that a Class I recall or a boxed-warning alert is pushed to every reader with the push on: the editor proposes the flag, so the judgement is held both ways). The text here is authored",
+   "edit": {
+    "titleRaw": "FDA requests removal of the Boxed Warning from a class of oral antidiabetic medicines",
+    "sourceName": "美国FDA 药物安全通讯 Drug Safety Communications",
+    "sourceTypeLabel": "监管机构",
+    "publishedAt": "2026-10-06T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "summary": "Synthetic fixture. After review of 12 years of safety data, FDA is requesting that the Boxed Warning be removed from the labels of a class of oral antidiabetic medicines. The agency concluded that the risk described in the warning was not confirmed. The Warnings and Precautions section is unchanged.",
+    "evidenceFixed": {
+     "type": "safety-notice",
+     "basis": "registry"
+    },
+    "glossary": []
+   }
+  },
+  {
+   "id": "synthetic-label-revision-without-boxed-warning",
+   "expect": [],
+   "expect_not": [
+    "boxed-warning"
+   ],
+   "why": "a safety labeling change in Warnings and Precautions is a safety notice and not a boxed warning, and the text never says the words (F12c, the owner's ruling of 2026-10-10 that a Class I recall or a boxed-warning alert is pushed to every reader with the push on: the editor proposes the flag, so the judgement is held both ways). The text here is authored",
+   "edit": {
+    "titleRaw": "FDA approves safety labeling changes adding dizziness and falls to a sleep medicine's Warnings and Precautions",
+    "sourceName": "美国FDA 说明书安全性修订数据库 SrLC",
+    "sourceTypeLabel": "监管机构",
+    "publishedAt": "2026-10-05T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "summary": "Synthetic fixture. FDA approved safety labeling changes for a sleep medicine that add a statement about dizziness and falls in adults older than 65 years to the Warnings and Precautions section and to the patient information.",
+    "evidenceFixed": {
+     "type": "safety-notice",
+     "basis": "registry"
+    },
+    "glossary": []
+   }
+  },
+  {
+   "id": "synthetic-existing-boxed-warning-mentioned",
+   "expect": [],
+   "expect_not": [
+    "boxed-warning"
+   ],
+   "why": "a notice that only mentions the Boxed Warning a drug already carries adds none: the line says 已有的黑框警告不算 (F12c, the owner's ruling of 2026-10-10 that a Class I recall or a boxed-warning alert is pushed to every reader with the push on: the editor proposes the flag, so the judgement is held both ways). The text here is authored",
+   "edit": {
+    "titleRaw": "FDA warns about misuse of a prescription stimulant by people without a prescription",
+    "sourceName": "美国FDA MedWatch 安全警示 MedWatch Safety Alerts",
+    "sourceTypeLabel": "监管机构",
+    "publishedAt": "2026-10-04T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "summary": "Synthetic fixture. FDA is reminding health care professionals and patients that a prescription stimulant, which already carries a Boxed Warning for abuse and dependence, is being diverted and misused. The agency asks prescribers to confirm the indication and to counsel patients on safe storage.",
+    "evidenceFixed": {
+     "type": "safety-notice",
+     "basis": "registry"
+    },
+    "glossary": []
+   }
+  },
+  {
+   "id": "synthetic-class-ii-recall",
+   "expect": [],
+   "expect_not": [
+    "boxed-warning"
+   ],
+   "why": "a recall is graded by its class, which code reads from the record; the editor is not asked about it, and a Class II recall carries no boxed-warning flag (F12c, the owner's ruling of 2026-10-10 that a Class I recall or a boxed-warning alert is pushed to every reader with the push on: the editor proposes the flag, so the judgement is held both ways). The text here is authored",
+   "edit": {
+    "titleRaw": "Recall of one lot of an antihypertensive tablet because of failed dissolution",
+    "sourceName": "openFDA 药品召回（enforcement）API",
+    "sourceTypeLabel": "监管机构",
+    "publishedAt": "2026-10-03T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "summary": "Synthetic fixture. A manufacturer is recalling one lot of 10 mg tablets of an antihypertensive medicine because of failed dissolution at the 12-month stability time point. Classification: Class II. Voluntary: firm initiated. Product quantity: 18,400 bottles.",
+    "evidenceFixed": {
+     "type": "safety-notice",
+     "basis": "registry"
+    },
     "glossary": []
    }
   }

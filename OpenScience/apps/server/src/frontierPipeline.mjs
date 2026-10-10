@@ -62,6 +62,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   FRONTIER_ITEM_FLAGS,
   FRONTIER_LANES,
+  FRONTIER_MODEL_FLAGS,
   FRONTIER_NOTICE_KINDS,
   FRONTIER_PREPRINT_LANE_SOURCE_TYPES,
   FRONTIER_SOURCE_TYPE_LABELS_ZH,
@@ -451,11 +452,12 @@ export function frontierEvidenceDecision({ source, identityKey, publicationTypes
 
 /**
  * An item's flags, every one decided by code (plan §10.3.8), in the
- * vocabulary's order.
- * @param {{ source: any, entry: any, item: any, text: any, modelFlags?: string[], linkFlags?: string[] }} input
+ * vocabulary's order. The editor proposes two of them (`FRONTIER_MODEL_FLAGS`) and code keeps what it may: a boxed warning only on a
+ * safety alert (`safetyAlert`, decided by `frontierSafetyAlert`), and a Class I recall is never the editor's to say.
+ * @param {{ source: any, entry: any, item: any, text: any, modelFlags?: string[], linkFlags?: string[], safetyAlert?: boolean }} input
  * @returns {string[]}
  */
-export function frontierItemFlags({ source, entry, item, text, modelFlags = [], linkFlags = [] }) {
+export function frontierItemFlags({ source, entry, item, text, modelFlags = [], linkFlags = [], safetyAlert = false }) {
   const flags = new Set(linkFlags);
   // What screening decided about the item itself stays on it.
   if ((Array.isArray(item?.flags) ? item.flags : []).includes("digest")) flags.add("digest");
@@ -480,6 +482,10 @@ export function frontierItemFlags({ source, entry, item, text, modelFlags = [], 
   if (event && event !== "results-posted" && /^reg:/.test(String(entry?.identity_key ?? item?.identity_key ?? ""))) flags.add("registry-unpublished");
   if (event === "updated") flags.add("data-updated");
   if (preprint && text?.enrichment?.published_version_doi) flags.add("published-version");
+  // The two marks that send a safety alert to every reader with the push on (owner, 2026-10-10; FRONTIER_BROAD_SAFETY_FLAGS): the
+  // recall's own class, read from the record, and a boxed warning the editor found the notice to add or strengthen.
+  if (safetyAlert && frontierClassIRecall({ source, facts: entry?.facts })) flags.add("class-i-recall");
+  if (safetyAlert && modelFlags.includes("boxed-warning")) flags.add("boxed-warning");
   return FRONTIER_ITEM_FLAGS.filter((flag) => flags.has(flag));
 }
 
@@ -512,11 +518,33 @@ export function frontierTimelineAt(visibleAt, publishedAt) {
  * @param {{ source: any, evidenceType: string | null | undefined, lane?: string | null, facts?: any }} input
  */
 export function frontierSafetyAlert({ source, evidenceType, lane = null, facts = null }) {
-  const regulatorOrFeed = source?.safety_feed === true || source?.source_type === "regulator";
   const recallClass = typeof facts?.recall_class === "string" ? facts.recall_class.trim() : "";
-  if (recallClass) return regulatorOrFeed && /^class\s+i$/i.test(recallClass);
+  if (recallClass) return frontierClassIRecall({ source, facts });
   if (source?.safety_feed === true) return true;
   return source?.source_type === "regulator" && evidenceType === "safety-notice" && lane === "safety";
+}
+
+/**
+ * The flags the editor proposed that an item already carries, to be handed back to `frontierItemFlags` when its labels are decided
+ * again without a new edit (the text of a published item arrived): a release republished by a medium, a boxed warning a safety notice
+ * adds. A company's own newsroom is a `press-release` by its source, not by the editor, so that one is not kept as the editor's.
+ * @param {{ flags: string[] | null | undefined, source: any }} input @returns {string[]}
+ */
+export function frontierKeptModelFlags({ flags, source }) {
+  return (flags ?? []).filter((flag) => FRONTIER_MODEL_FLAGS.includes(/** @type {any} */ (flag)) && !(flag === "press-release" && source?.source_type === "company"));
+}
+
+/**
+ * Whether a recall is Class I - the regulator's own grade for a reasonable probability of serious harm or death - by the class its
+ * record carries, and from a regulator or a safety feed only. Read by code from the field, never judged: it is the half of "Class I
+ * recall or boxed-warning alert" that is a fact of the record, and the half that decides how far a safety alert is pushed with
+ * `class-i-recall`.
+ * @param {{ source: any, facts?: any }} input
+ */
+export function frontierClassIRecall({ source, facts = null }) {
+  const regulatorOrFeed = source?.safety_feed === true || source?.source_type === "regulator";
+  const recallClass = typeof facts?.recall_class === "string" ? facts.recall_class.trim() : "";
+  return regulatorOrFeed && /^class\s+i$/i.test(recallClass);
 }
 
 /**
@@ -1339,7 +1367,8 @@ export class FrontierPipeline {
         const evidence = frontierEvidenceDecision({ source, identityKey: item.identity_key, publicationTypes: texts.publication_types,
           modelType: item.evidence_type });
         const linkFlags = await this.#linkFlags(client, item);
-        const flags = frontierItemFlags({ source, entry, item, text: texts, modelFlags: item.flags.includes("press-release") && source?.source_type !== "company" ? ["press-release"] : [], linkFlags });
+        const flags = frontierItemFlags({ source, entry, item, text: texts, modelFlags: frontierKeptModelFlags({ flags: item.flags, source }), linkFlags,
+          safetyAlert: item.safety_alert === true });
         const evidenceType = evidence.fixed?.type ?? item.evidence_type;
         await client.query(`UPDATE evimed_frontier.items SET flags = $2, evidence_type = $3, evidence_basis = $4, score_authority = $5,
             score_total = CASE WHEN score_impact IS NULL THEN NULL ELSE $5 + score_impact + score_novelty + score_relevance END,
@@ -1621,6 +1650,7 @@ export class FrontierPipeline {
     const isChinese = isChineseTitle(item.title_raw);
     const scoreAuthority = frontierAuthorityScore({ authority: source?.authority, evidenceType, preprint: source?.source_type === "preprint" });
     const scores = output?.scores ?? null;
+    const safetyAlert = frontierSafetyAlert({ source, evidenceType, lane: output?.lane ?? item.lane, facts: entry?.facts });
     const entities = output?.entities ?? item.entities ?? {};
     const glossary = context.glossary;
     const fields = {
@@ -1639,7 +1669,7 @@ export class FrontierPipeline {
     };
     await this.database.transaction(async (/** @type {any} */ client) => {
       const linkFlags = await this.#linkFlags(client, item);
-      const flags = frontierItemFlags({ source, entry, item, text: texts, modelFlags: output?.flags ?? [], linkFlags });
+      const flags = frontierItemFlags({ source, entry, item, text: texts, modelFlags: output?.flags ?? [], linkFlags, safetyAlert });
       await client.query(`UPDATE evimed_frontier.items SET title_zh = $2, summary_zh = $3, reason_zh = $4, lane = $5, specialties = $6,
           evidence_type = $7, evidence_basis = $8, entities = $9::jsonb, entity_keys = $10, flags = $11,
           score_authority = $12, score_impact = $13, score_novelty = $14, score_relevance = $15, score_total = $16,
@@ -1654,7 +1684,7 @@ export class FrontierPipeline {
         evidenceType, evidenceBasis, JSON.stringify(fields.entities), fields.entityKeys, flags,
         scoreAuthority, scores?.impact ?? null, scores?.novelty ?? null, scores?.relevance ?? null,
         scores ? scoreAuthority + scores.impact + scores.novelty + scores.relevance : null,
-        frontierSafetyAlert({ source, evidenceType, lane: fields.lane, facts: entry?.facts }), fields.verification, fields.editorVersion,
+        safetyAlert, fields.verification, fields.editorVersion,
         fields.editorModel, context.now]);
       if (output) {
         await client.query("UPDATE evimed_frontier.item_texts SET model_input = $2, model_input_sha256 = $3 WHERE item_id = $1",

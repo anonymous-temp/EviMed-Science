@@ -41,7 +41,7 @@
 /** @typedef {FrontierLane|'mixed'} FrontierSourceLane */
 /** @typedef {'journal'|'regulator'|'evidence-body'|'preprint'|'company'|'media'} FrontierSourceType */
 /** @typedef {'rct'|'systematic-review'|'observational'|'real-world'|'guideline'|'regulatory-decision'|'safety-notice'|'press-release'|'review-opinion'|'other'} FrontierEvidenceType */
-/** @typedef {'preprint'|'press-release'|'no-abstract'|'date-inferred'|'retracted'|'corrected'|'expression-of-concern'|'published-version'|'china'|'registry-unpublished'|'data-updated'} FrontierItemFlag */
+/** @typedef {'preprint'|'press-release'|'no-abstract'|'date-inferred'|'retracted'|'corrected'|'expression-of-concern'|'published-version'|'china'|'registry-unpublished'|'data-updated'|'digest'|'class-i-recall'|'boxed-warning'} FrontierItemFlag */
 /** @typedef {'new'|'healthy'|'degraded'|'unreadable'|'drifted'|'disabled'} FrontierHealthState */
 
 /** The eight lanes a reader filters by, in display order. */
@@ -298,8 +298,9 @@ export const FRONTIER_TEXT_STATUSES = Object.freeze(['available', 'pending', 'un
 export const FRONTIER_OPEN_ACCESS_STATUSES = Object.freeze(['gold', 'green', 'bronze', 'closed', 'unknown'])
 
 /** The marks an item card carries. Every one is decided by code (registry,
- *  defects, identifiers, links); only `press-release` may also come from the
- *  editor model, for a company release republished by a media source. */
+ *  defects, identifiers, links); only `press-release` (a company release
+ *  republished by a media source) and `boxed-warning` (a safety notice that
+ *  adds or strengthens one) may also come from the editor model. */
 export const FRONTIER_ITEM_FLAGS = /** @type {readonly FrontierItemFlag[]} */ (Object.freeze([
   'preprint',
   'press-release',
@@ -313,6 +314,8 @@ export const FRONTIER_ITEM_FLAGS = /** @type {readonly FrontierItemFlag[]} */ (O
   'registry-unpublished',
   'data-updated',
   'digest',
+  'class-i-recall',
+  'boxed-warning',
 ]))
 
 /**
@@ -338,10 +341,20 @@ export const FRONTIER_ITEM_FLAG_LABELS_ZH = /** @type {Readonly<Record<FrontierI
   'registry-unpublished': '注册，未发表结果',
   'data-updated': '数据已更新',
   digest: '多事汇总',
+  'class-i-recall': 'I 类召回',
+  'boxed-warning': '黑框警告',
 }))
 
 /** The flags the editor model may propose; every other flag is code's. */
-export const FRONTIER_MODEL_FLAGS = /** @type {readonly FrontierItemFlag[]} */ (Object.freeze(['press-release']))
+export const FRONTIER_MODEL_FLAGS = /** @type {readonly FrontierItemFlag[]} */ (Object.freeze(['press-release', 'boxed-warning']))
+
+/**
+ * The marks that send a safety alert to every reader whose notification switches allow it, not only to the readers who follow a
+ * matching drug, specialty or event (the owner's ruling of 2026-10-10, review B §7.3): a Class I recall - the regulator's own
+ * scale for a reasonable probability of serious harm or death, read by code from the recall's class - and a boxed warning added or
+ * strengthened, which the editor proposes and code keeps only on a safety alert. Every other safety alert keeps the follow-based reach.
+ */
+export const FRONTIER_BROAD_SAFETY_FLAGS = /** @type {readonly FrontierItemFlag[]} */ (Object.freeze(['class-i-recall', 'boxed-warning']))
 
 /** Why an item is selected (`items.selected_rule`). */
 export const FRONTIER_SELECTED_RULES = Object.freeze(['threshold', 'lane-floor', 'preprint-lane', 'safety-bypass', 'operator-pin'])

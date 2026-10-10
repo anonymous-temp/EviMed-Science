@@ -23,14 +23,15 @@ test("the defaults are the build spec's: off, open to all once on, and no plugin
     frontierDailyTime: config.frontierDailyTime, frontierTimeZone: config.frontierTimeZone, frontierDailyBudgetCny: config.frontierDailyBudgetCny,
     frontierProcessConcurrency: config.frontierProcessConcurrency, frontierOffpeak: config.frontierOffpeak,
     frontierSelectThreshold: config.frontierSelectThreshold, frontierPreprintLanePerDay: config.frontierPreprintLanePerDay,
-    frontierPreprintLaneMinScore: config.frontierPreprintLaneMinScore, knowledgePluginUrl: config.knowledgePluginUrl,
+    frontierPreprintLaneMinScore: config.frontierPreprintLaneMinScore, frontierSafetyPushDailyCap: config.frontierSafetyPushDailyCap,
+    knowledgePluginUrl: config.knowledgePluginUrl,
     knowledgePluginTokenFile: config.knowledgePluginTokenFile, knowledgePluginPollMs: config.knowledgePluginPollMs,
     knowledgePluginTimeoutMs: config.knowledgePluginTimeoutMs, knowledgePluginMinContract: config.knowledgePluginMinContract,
   }, {
     frontierEnabled: false, frontierAudience: "all", frontierPreviewUsers: [], frontierPollMs: 5_000, frontierLeaseMs: 600_000,
     frontierModel: "deepseek-flash", frontierDailyTime: "07:30", frontierTimeZone: "Asia/Shanghai", frontierDailyBudgetCny: 10,
     frontierProcessConcurrency: 2, frontierOffpeak: true, frontierSelectThreshold: 82, frontierPreprintLanePerDay: 2, frontierPreprintLaneMinScore: 60,
-    knowledgePluginUrl: "",
+    frontierSafetyPushDailyCap: 3, knowledgePluginUrl: "",
     knowledgePluginTokenFile: "/run/secrets/knowledge-plugin-token", knowledgePluginPollMs: 60_000, knowledgePluginTimeoutMs: 8_000,
     knowledgePluginMinContract: "1.0",
   });
@@ -65,13 +66,30 @@ test("the preprint lane has one default for each number: the config's, the pipel
   assert.equal(FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT, FRONTIER_LANE_FLOOR_SCORE);
 });
 
+test("the safety push ceiling has one default: the config's, the notifier's fallback and the example .env agree, and it is the owner's three", async () => {
+  const { FRONTIER_SAFETY_PUSH_DAILY_CAP_DEFAULT, FrontierNotifications } = await import("../src/frontierNotifications.mjs");
+  const { readFile } = await import("node:fs/promises");
+  assert.equal(FRONTIER_SAFETY_PUSH_DAILY_CAP_DEFAULT, 3);
+  assert.equal(configUnder({}).frontierSafetyPushDailyCap, FRONTIER_SAFETY_PUSH_DAILY_CAP_DEFAULT);
+  const notifier = (/** @type {Record<string, any>} */ config) => new FrontierNotifications({ database: {}, config }).safetyDailyCap;
+  assert.equal(notifier({}), FRONTIER_SAFETY_PUSH_DAILY_CAP_DEFAULT);
+  assert.equal(notifier({ frontierSafetyPushDailyCap: 5 }), 5);
+  assert.equal(notifier({ frontierSafetyPushDailyCap: "x" }), 3);
+  assert.equal(notifier({ frontierSafetyPushDailyCap: 0 }), 3, "a ceiling of none is not a setting: the lowest is one");
+  assert.equal(notifier({ frontierSafetyPushDailyCap: 500 }), 50);
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  assert.equal([...example.matchAll(/^OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP=(\d+)$/gm)].map((match) => Number(match[1])).join(), "3");
+  assert.match(compose, /^\s+OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP:\s*$/m);
+});
+
 test("every lever is read from the environment, and an empty value reads as unset", () => {
   const config = configUnder({
     OPEN_SCIENCE_FRONTIER_ENABLED: "true", OPEN_SCIENCE_FRONTIER_AUDIENCE: "operators", OPEN_SCIENCE_FRONTIER_PREVIEW_USERS: "acceptance, qa",
     OPEN_SCIENCE_FRONTIER_POLL_MS: "2000", OPEN_SCIENCE_FRONTIER_LEASE_MS: "", OPEN_SCIENCE_FRONTIER_MODEL: "deepseek-v4-flash",
     OPEN_SCIENCE_FRONTIER_DAILY_TIME: "08:05", OPEN_SCIENCE_FRONTIER_TIMEZONE: "UTC", OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY: "0",
     OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY: "4", OPEN_SCIENCE_FRONTIER_OFFPEAK: "false", OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD: "65",
-    OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY: "3", OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE: "",
+    OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY: "3", OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE: "", OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP: "5",
     OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL: "http://evimed-knowledge-plugin:8080/", OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE: "/tmp/token",
     OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS: "30000", OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TIMEOUT_MS: "5000", OPEN_SCIENCE_KNOWLEDGE_PLUGIN_MIN_CONTRACT: "1.1",
   });
@@ -85,6 +103,7 @@ test("every lever is read from the environment, and an empty value reads as unse
   assert.equal(config.frontierOffpeak, false);
   assert.equal(config.frontierPreprintLanePerDay, 3);
   assert.equal(config.frontierPreprintLaneMinScore, 60, "an empty value is the default, not 0");
+  assert.equal(config.frontierSafetyPushDailyCap, 5);
   assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY: "0" }).frontierPreprintLanePerDay, 0, "0 is no lane");
   assert.equal(config.knowledgePluginUrl, "http://evimed-knowledge-plugin:8080", "the trailing slash is not part of the origin");
   assert.equal(config.knowledgePluginMinContract, "1.1");
@@ -108,6 +127,9 @@ test("a value outside its range stops the start by the variable's name", () => {
     ["OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY", "1.5"],
     ["OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE", "101"],
     ["OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE", "high"],
+    ["OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP", "0"],
+    ["OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP", "51"],
+    ["OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP", "2.5"],
     ["OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL", "ftp://plugin"],
     ["OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL", "http://someone:test-only@plugin:8080"],
     ["OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE", "relative/token"],
