@@ -5,7 +5,7 @@ import { kindTitle } from "@/lib/memoryGroups";
 import {
   announceMemoryChanged, archiveMemoryRecord, retireCapsuleEntry, settleMemoryConflict, undoCapsuleEntry, undoMemoryRecord, type OwnCapsuleEntry,
 } from "@/lib/memoryClient";
-import { memoryExcerpt, memoryOrigin } from "@/lib/memoryText";
+import { memoryExcerpt } from "@/lib/memoryText";
 import { productErrorMessage, updateCapsuleEntry } from "@/lib/productClient";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
@@ -17,13 +17,6 @@ import { Textarea } from "@/components/ui/Input";
 import { ConversationLink } from "./ConversationLink";
 import { DrawerSection } from "./DrawerSection";
 import { heldFrom, type FactItem } from "./memoryItems";
-
-/** Who made a change, in the researcher's words. */
-const REVISION_BY: Record<string, string> = {
-  extraction: "从对话中学到",
-  user: "你改的",
-  system: "系统整理",
-};
 
 /** Why a memory in force is uncertain, as a few small words. 「有冲突」 comes first, as it does in the control plane. */
 const CAVEAT_BADGE: Record<WebMemoryCaveat, string> = {
@@ -65,17 +58,19 @@ export function memorySource(record: WebStructuredMemory): { sessionId: string; 
  * where it came from, the versions it has had, and what the researcher can do
  * with it — 编辑 in place and 忘记.
  *
- * The origin is one phrase under the title, not a tag on the row (principle
- * 18): whose words it is, and since when. A project's fact names its project.
- * 「来源对话」 is a link in here and nowhere else, because opening a conversation
- * can start that project's runtime and a click on a row must never do that.
+ * Under the title: since when, and the project when it is a project's fact. Whose
+ * words a memory is, is not said anywhere on the page (owner ruling of
+ * 2026-10-10): the platform keeps it for the model and the operator, and the
+ * researcher sees the memory, its date and what they can do with it. 「来源对话」
+ * is a link in here and nowhere else, because opening a conversation can start
+ * that project's runtime and a click on a row must never do that.
  *
- * Everything the old row did is here: a memory held for a medicine-safety check
- * says so and asks to be confirmed, and a sensitive one says what confirming
- * does before it does it; two memories that disagree each offer 「以这条为准」;
- * the undo of the last change and 「这不对」 on an inference are in the 「⋯」. 忘记 archives, as a revision the toast takes back and
- * 已忘记的内容 restores; 这不对 deletes and stops the extractor inferring it again,
- * so it is the one that asks first.
+ * Everything the old row did is here: a proposal an outside agent made waits to
+ * be confirmed, and a sensitive one says what confirming does before it does it;
+ * two memories that disagree each offer 「以这条为准」; the undo of the last change
+ * and 「不再记这条」 are in the 「⋯」. 忘记 archives, as a revision the toast takes
+ * back and 已忘记的内容 restores; 不再记这条 deletes and stops the extractor
+ * inferring it again, so it is the one that asks first.
  */
 export function FactDrawer({ item, projectName, onClose, onChanged }: {
   item: FactItem;
@@ -190,7 +185,6 @@ export function FactDrawer({ item, projectName, onClose, onChanged }: {
     if (result.undone === "removed") onClose();
   }, productErrorMessage);
 
-  const origin = record ? memoryOrigin(record) : entry?.payload.origin === "explicit" ? "你说的" : "从对话中学到";
   const since = formatDay(record?.createdAt ?? entry?.createdAt ?? null);
   const former = record?.status === "superseded";
   const pending = record?.status === "pending";
@@ -207,8 +201,8 @@ export function FactDrawer({ item, projectName, onClose, onChanged }: {
 
   const menu: MenuEntry[] = [
     ...(undoable ? [{ label: "撤销上次改动", disabled: busy, onSelect: () => void (record ? undoRecord() : undoEntry()) }] : []),
-    // Only an inference can be wrong in this way: the researcher's own words are theirs to edit.
-    ...(record && memoryOrigin(record) === "从对话中学到" ? [{ label: "这不对", destructive: true, disabled: busy, onSelect: () => setRejecting(true) }] : []),
+    // On every memory, so that having the item says nothing about where the memory came from.
+    ...(record ? [{ label: "不再记这条", destructive: true, disabled: busy, onSelect: () => setRejecting(true) }] : []),
   ];
 
   const sentence = record ? memoryExcerpt(record.summary || record.value, 4_000) : memoryExcerpt(text, 4_000);
@@ -218,7 +212,7 @@ export function FactDrawer({ item, projectName, onClose, onChanged }: {
     <>
       <Drawer
         title={record ? kindTitle(record.kind) : kindTitle(entry?.payload.factKind ?? "")}
-        description={[projectName, origin, since].filter(Boolean).join(" · ")}
+        description={[projectName, since].filter(Boolean).join(" · ")}
         onClose={onClose}
         actions={menu.length > 0 ? <Menu label="更多" items={menu} /> : undefined}
       >
@@ -240,7 +234,7 @@ export function FactDrawer({ item, projectName, onClose, onChanged }: {
 
           {(pending || badges.length > 0) && (
             <div className="flex flex-wrap items-center gap-2">
-              {pending && <Tag tone="safety">待确认（用药安全）</Tag>}
+              {pending && <Tag>待确认</Tag>}
               {badges.map((badge) => <Tag key={badge}>{badge}</Tag>)}
               {pending && <Button size="sm" variant="secondary" loading={busy} onClick={() => confirmOrSave({ status: "active" })}>确认</Button>}
             </div>
@@ -292,8 +286,8 @@ export function FactDrawer({ item, projectName, onClose, onChanged }: {
                 ))}
                 {revisions.map((revision) => (
                   <li key={revision.version}>
-                    {[when(revision.changedAt), revision.by ? REVISION_BY[revision.by] : ""].filter(Boolean).join(" · ")}
-                    {revision.changedAt || revision.by ? "：" : ""}{memoryExcerpt(revision.summary || revision.value, 120)}
+                    {when(revision.changedAt)}
+                    {revision.changedAt ? "：" : ""}{memoryExcerpt(revision.summary || revision.value, 120)}
                   </li>
                 ))}
               </ul>
@@ -312,7 +306,7 @@ export function FactDrawer({ item, projectName, onClose, onChanged }: {
       {confirmingSensitive && (
         <ConfirmDialog
           title="确认这条敏感记忆？"
-          body={`确认后它保留为已生效；出于隐私保护，敏感记忆不会被自动调取到后续研究中：${memoryExcerpt(confirmingSensitive.value || text, 120)}`}
+          body={`确认后它保留为已生效，但敏感记忆不会被自动用于后续研究：${memoryExcerpt(confirmingSensitive.value || text, 120)}`}
           confirmLabel="确认保留"
           tone="primary"
           onConfirm={() => { const next = confirmingSensitive; setConfirmingSensitive(null); void saveRecord(next); }}
@@ -321,8 +315,8 @@ export function FactDrawer({ item, projectName, onClose, onChanged }: {
       )}
       {rejecting && (
         <ConfirmDialog
-          title="这条推断不对？"
-          body="删除这条推断，之后也不再推断出来；只想暂时不用，请选“忘记”。"
+          title="不再记这条？"
+          body="删除后也不会再记下类似的内容；只想暂时不用，请选“忘记”。"
           confirmLabel="删除"
           onConfirm={() => void reject()}
           onCancel={() => setRejecting(false)}

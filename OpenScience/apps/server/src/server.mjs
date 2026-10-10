@@ -100,7 +100,7 @@ import { assertNotPlatformAccount } from "./platformAccount.mjs";
 import { completeEvolutionRuntime } from './evolutionRuntimeCompletion.mjs';
 import { evolutionRunGap } from './evolutionIntegration.mjs';
 import { loadAgentRegistry } from "./agentRegistry.mjs";
-import { AgentRunStore, readRunStateProjection, readDeliveryReceipt, runNotice } from "./agentRuns.mjs";
+import { AgentRunStore, readRunStateProjection, readDeliveryReceipt } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
@@ -153,7 +153,7 @@ import { createLearningRoutes } from "./learningRoutes.mjs";
 import { HandbookLibrary } from "./handbookLibrary.mjs";
 import { createHandbookRoutes } from "./handbookRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
-import { memoryMetricFamilies, recordMethodsRetired } from "./memoryMetrics.mjs";
+import { memoryMetricFamilies, recordExtractionEmpty, recordMethodsRetired } from "./memoryMetrics.mjs";
 import { resetLearnedMemory } from "./memoryReset.mjs";
 import { ResidentProfiles } from "./residentProfile.mjs";
 import { eraseRetiredMemos } from "./retiredMemos.mjs";
@@ -176,7 +176,7 @@ import { geneExpressionMetricFamilies } from "./geneExpressionMetrics.mjs";
 import { TOOL_UNIVERSE_GATEWAY_PATH, createToolUniverseGateway } from "./toolUniverseGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { ResearchMemoryStore, memoryPausedFor } from "./researchMemory.mjs";
-import { MEMORY_KIND_LABELS_ZH, migrateResearchMemory } from "./researchMemoryPersistence.mjs";
+import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
 import { MemorySubstrate, selectedMemoryIndexProvider } from "./memorySubstrate.mjs";
 import { MemoryRerank } from "./memoryRerank.mjs";
 import { OpenVikingClient } from "./openVikingClient.mjs";
@@ -367,7 +367,7 @@ import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget
 import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
-import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence } from "./memoryIntelligence.mjs";
+import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, extractionEmptyCause } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
 // The `evimed` login mode (fusion plan 2026-09-26 §9.2): the EviMed shell's
 // signed-in user becomes a Science session without signing in twice.
@@ -3751,76 +3751,23 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
       }
       const memoryResult = await memoryIntelligence.recordRun(project, run, messages);
-      // A run that extracted nothing, said so on the run itself.
+      // A run that extracted nothing is counted, by why, and says nothing to the researcher.
       //
-      // Extracting nothing is a legitimate outcome — twenty-three messages can
-      // hold no durable fact — and it is also what a broken extractor looks
-      // like. The counts separate them, and they were only in the security
-      // ledger, which no API exposes. Appended only when the count is zero, so
-      // an ordinary run gains no notice, and readable through /api/agent-runs
-      // where the batch can collect the distribution.
-      // A skipped write is not "extracted nothing": the deployment asked for no
-      // memory writes here and got none, which is a setting rather than an
-      // outcome worth a notice on every single run — and the notice marks the
-      // run unchecked. `MEMORY_WRITE_SKIPPED_SOURCES` names every skip source;
-      // testing for one of them is how every run of an excluded evaluation
-      // project came to be stamped with it.
+      // Extracting nothing is a legitimate outcome — twenty-three messages can hold no durable fact — and it is also what a
+      // broken extractor looks like. The counts separate them. They were a notice on the run, a sentence of message, candidate
+      // and refusal counts, that the result inspector printed as a warning to the person reading their result; it is operator
+      // bookkeeping, so it is a metric now (review R14, 2026-10-10), and the audit line below keeps the counts per run.
+      //
+      // A skipped write is not "extracted nothing": the deployment asked for no memory writes here and got none, which is a
+      // setting rather than an outcome. `MEMORY_WRITE_SKIPPED_SOURCES` names every skip source; testing for one of them is how
+      // every run of an excluded evaluation project came to be stamped with it.
       if (memoryResult.extracted === 0 && !MEMORY_WRITE_SKIPPED_SOURCES.has(memoryResult.source)) {
-        const sentence = `记忆抽取未产出记录：消息 ${messages.length} 条、候选 ${memoryResult.proposed} 条、`
-          + `采纳 ${memoryResult.extracted} 条、驳回 ${memoryResult.rejected} 条`
-          // A third cause of the same zero: the transcript was mostly our own
-          // injected context, which the extractor refuses to read back as if
-          // the user had said it.
-          + `${memoryResult.excluded?.length ? `、未读取 ${memoryResult.excluded.map((item) => `${item.count} 条（${item.reason === "injected" ? "系统注入" : "回合未完成"}）`).join("")}` : ""}`
-          + `${memoryResult.extractionError ? `（抽取报错：${memoryResult.extractionError}）` : ""}`
-          + "。空对话与抽取失效在结果上一样，这行区分它们。";
-        await agentRuns.appendQualityNotices(project, run.id, [
-          runNotice("memory_extraction_empty", sentence, { detail: sentence }),
-        // A notice, not a verification downgrade. `unchecked` means a layer of
-        // the delivery gate did not run, and the researcher's inbox renders it
-        // as 「有质量检查没有运行，无法确认是否达标」. Memory extraction is not a
-        // gate layer, and extracting nothing is — in this block's own words — a
-        // legitimate outcome, so every clean, fully-gated run whose conversation
-        // held no durable fact was being told its checks had not run. It also
-        // zeroed evidenceCompleteness in paired evaluations that score "accepted
-        // and not unchecked".
-        ]).catch(() => {});
+        recordExtractionEmpty(extractionEmptyCause(memoryResult));
       }
-      // The one kind of record held for its owner (checkpointReason in
-      // memoryIntelligence.mjs): a lasting memory naming a clinical-safety
-      // medicine. Everything else takes effect at once, labelled. Said on the
-      // run because a held record is not recalled, and silence would read as
-      // memory not learning. No `unchecked` flag: holding a memory says nothing
-      // about whether the run's own deliverables were checked.
-      if (memoryResult.pending > 0) {
-        const sentence = `有 ${memoryResult.pending} 条长期记忆等你看过再用：`
-          + memoryResult.pendingReasons.map((item) => `${item.count} 条${item.text}`).join("；")
-          + "。记录与证据都已保存，可在记忆胶囊中确认或删除。";
-        await agentRuns.appendQualityNotices(project, run.id, [
-          runNotice("memory_pending", sentence, { detail: sentence }),
-        ]).catch(() => {});
-      }
-      // A memory the researcher had confirmed, changed by this conversation.
-      // The change is in force — holding it back would refuse the researcher
-      // their own restatement — so this is a notice, not a gate: it is how the
-      // person finds out, and it is the distribution any later decision to hold
-      // such a write back would have to be argued from. The inbox says the same
-      // thing, and this says it where a deployment without a product database
-      // can still read it.
-      if ((memoryResult.conflicts?.length ?? 0) > 0) {
-        // Two changes named and the rest counted, with short excerpts: a run
-        // notice is truncated at 300 characters, and a line that is cut off
-        // mid-sentence loses the part that says the old value is recoverable.
-        // The inbox notice carries the full excerpts.
-        const changed = memoryResult.conflicts.slice(0, 2).map((item) =>
-          `一条「${MEMORY_KIND_LABELS_ZH[item.kind] ?? "记忆"}」由「${item.previousValue.slice(0, 30)}」改为「${item.nextValue.slice(0, 30)}」`);
-        const sentence = `本次对话改写了 ${memoryResult.conflicts.length} 条你确认过的记忆：${changed.join("；")}`
-          + `${memoryResult.conflicts.length > changed.length ? "等" : ""}`
-          + "。新值已生效，原值保留在该记忆的修订记录中，可在记忆管理中改回。";
-        await agentRuns.appendQualityNotices(project, run.id, [
-          runNotice("memory_conflicts", sentence, { detail: sentence }),
-        ]).catch(() => {});
-      }
+      // No notice for the other two memory events of a run either. A lasting memory is never held for its owner on a run any more
+      // (the medicine-safety hold is retired, review R12), and a memory the researcher had confirmed that this conversation
+      // changed is told once, in the inbox (`MemoryIntelligence.#reportReplacedValue`): that notice is the one that offers the
+      // way to the memory, and the run's own copy of it was a second line of the same sentence in the result inspector.
       securityAudit(config, "memory.agent_run.record", "completed", {
         userId: project.userId,
         projectId: project.id,
@@ -3841,6 +3788,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           `rejected=${memoryResult.rejected}`,
           `pending=${memoryResult.pending ?? 0}`,
           `conflicts=${memoryResult.conflicts?.length ?? 0}`,
+          `upgraded=${memoryResult.upgraded ?? 0}`,
           ...(memoryResult.pendingReasons?.length
             ? [`parked=${memoryResult.pendingReasons.map((item) => `${item.reason}:${item.count}`).join("|")}`]
             : []),

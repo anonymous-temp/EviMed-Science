@@ -690,3 +690,38 @@ test("the growth line's read counts, per day in the researcher's zone, what bega
   await store.purgeUserMemory(alpha);
   await store.purgeUserMemory(beta);
 });
+
+// Owner ruling of 2026-10-10 (review M-5 / R1): an inference the researcher then says themselves is theirs, with no one asked.
+// Extraction records it again as explicit (`MemoryIntelligence`); what the store owes is that the change of origin is a change
+// of the record: a revision that says so, a basis that follows, and the fading that belongs to an inference gone with it.
+test("an inference recorded again as the researcher's own statement keeps what it was in its history and reads as stated", options, async () => {
+  const written = await store.upsertRecord(alpha, record({
+    key: "preference.upgrade_by_statement", value: "回答请用中文", summary: "中文回答", origin: "inferred", status: "active",
+    confidence: 0.6, expiresAt: "2099-01-01T00:00:00Z",
+  }), { sourceType: "conversation_message", sourceRef: "sessions/ses_up/messages/m_old", quote: "这份先看中文版。", observedAt: "2026-08-01T00:00:00Z" });
+  assert.equal(written.provenance.basis, "inferred");
+  assert.equal(written.revisions.length, 0);
+
+  const stated = await store.upsertRecord(alpha, record({
+    key: "preference.upgrade_by_statement", value: "回答请用中文", summary: "中文回答", origin: "explicit", status: "active",
+    confidence: 1, expiresAt: null, lastConfirmedAt: "2026-08-05T00:00:00Z",
+  }), { sourceType: "conversation_message", sourceRef: "sessions/ses_up/messages/m_new", quote: "以后回答请用中文。", observedAt: "2026-08-05T00:00:00Z" }, {
+    expectedVersion: written.version, by: "extraction", reason: "stated by the researcher in a later message: upgraded from an inference",
+  });
+  assert.equal(stated.origin, "explicit");
+  assert.equal(stated.provenance.basis, "stated", "from then on it reads as the researcher's own word");
+  assert.equal(stated.expiresAt, null, "and does not fade");
+  assert.equal(stated.revisions.length, 1, "the change of origin is a revision although the sentence did not change");
+  assert.equal(stated.revisions[0].reason, "stated by the researcher in a later message: upgraded from an inference");
+  assert.equal(stated.revisions[0].by, "extraction");
+  assert.equal(stated.evidenceCount, 2, "both messages are evidence");
+
+  // Seen again as the same statement: evidence, no new revision.
+  const again = await store.upsertRecord(alpha, record({
+    key: "preference.upgrade_by_statement", value: "回答请用中文", summary: "中文回答", origin: "explicit", status: "active",
+    confidence: 1, expiresAt: null, lastConfirmedAt: "2026-08-05T00:00:00Z",
+  }), { sourceType: "conversation_message", sourceRef: "sessions/ses_up/messages/m_third", quote: "继续用中文。", observedAt: "2026-08-06T00:00:00Z" }, {
+    expectedVersion: stated.version, by: "extraction", reason: "conversation evidence updated the current memory",
+  });
+  assert.equal(again.revisions.length, 1);
+});

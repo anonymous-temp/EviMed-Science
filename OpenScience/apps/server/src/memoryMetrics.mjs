@@ -26,6 +26,12 @@ const RETIRED_TABLES = Object.freeze(["memory_record", "memo"]);
 export const RESIDENT_PROFILE_OUTCOMES = Object.freeze(["first", "changed", "compacted", "unchanged", "empty", "paused"]);
 /** What the recall tool answered: items found, nothing above the relevance floor, or why it read nothing (a pause, a trial, the deployment switch). */
 export const RECALL_TOOL_OUTCOMES = Object.freeze(["hit", "empty", "paused", "trial", "disabled"]);
+/**
+ * Why a run's memory extraction wrote nothing (review R14, 2026-10-10: this was a notice on the run, and the researcher's result
+ * inspector printed it): the extractor failed, it proposed nothing, every proposal was refused, or nothing of the transcript was
+ * readable to it (injected context, an unfinished turn).
+ */
+export const EXTRACTION_EMPTY_CAUSES = Object.freeze(["error", "none_proposed", "all_rejected", "unread"]);
 
 /** @param {readonly string[]} labels */
 const table = (labels) => new Map(labels.map((label) => [label, 0]));
@@ -40,6 +46,8 @@ const residentProfile = table(RESIDENT_PROFILE_OUTCOMES);
 const residentOmitted = table(["records"]);
 const recallTool = table(RECALL_TOOL_OUTCOMES);
 const recallToolItems = table(["items"]);
+const extractionEmpty = table(EXTRACTION_EMPTY_CAUSES);
+const inferenceUpgraded = table(["records"]);
 
 /** A conversation that ended before the account's reset was not learned from. @param {string} stage */
 export function recordSkippedBeforeReset(stage) { bump(beforeReset, stage); }
@@ -59,10 +67,14 @@ export function recordResidentProfile(outcome) { bump(residentProfile, outcome);
 export function recordResidentOmitted(count) { bump(residentOmitted, "records", count); }
 /** One answer of the recall tool, and the items it carried. @param {string} outcome @param {number} [items] */
 export function recordRecallTool(outcome, items = 0) { bump(recallTool, outcome); bump(recallToolItems, "items", items); }
+/** A run whose memory extraction wrote nothing, by why. @param {string} cause */
+export function recordExtractionEmpty(cause) { bump(extractionEmpty, cause); }
+/** A stored inference that the researcher's own later statement made theirs. */
+export function recordInferenceUpgraded() { bump(inferenceUpgraded, "records"); }
 
 /** The test hook: counters are process state. */
 export function resetMemoryMetrics() {
-  for (const map of [beforeReset, resetRemoved, methodRetirements, retiredTables, residentProfile, residentOmitted, recallTool, recallToolItems]) {
+  for (const map of [beforeReset, resetRemoved, methodRetirements, retiredTables, residentProfile, residentOmitted, recallTool, recallToolItems, extractionEmpty, inferenceUpgraded]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -91,5 +103,9 @@ export function memoryMetricFamilies() {
       help: "Answers of the recall tool: hit (items above the relevance floor), empty (nothing above it), or why it read nothing (paused, trial, disabled)." },
     { name: "open_science_memory_recall_tool_items_total", type: "counter", series: series(recallToolItems, "what"),
       help: "Items the recall tool returned in all." },
+    { name: "open_science_memory_extraction_empty_total", type: "counter", series: series(extractionEmpty, "cause"),
+      help: "Runs whose memory extraction wrote nothing, by why: the extractor failed (error), proposed nothing (none_proposed), had every proposal refused (all_rejected), or could read none of the transcript (unread). An empty run is legitimate; a broken extractor looks the same, and this is how the two are told apart." },
+    { name: "open_science_memory_inference_upgraded_total", type: "counter", series: series(inferenceUpgraded, "what"),
+      help: "Stored inferences that the researcher's own later statement made their own word: the same fact recorded again as explicit, quoting a message of theirs the record did not already rest on." },
   ];
 }

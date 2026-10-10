@@ -531,8 +531,12 @@ function publicSessionState(row) {
  * account, 2026-09-19). What a reader can rely on is countable: who it came
  * from, how many times it was seen, in how many separate runs and
  * conversations. `basis` is the provenance label that stays with the record
- * for good (principle 18): an inference is `inferred` however often it is
- * observed, and becomes `confirmed` only by its owner's own act.
+ * (principle 18): an inference is `inferred` however often it is observed, and
+ * stops being one only by the researcher's own word — a later message of theirs
+ * that states it (`stated`, the extraction recording it again as `explicit`
+ * against a message the record did not rest on; the owner's ruling of
+ * 2026-10-10, review M-5), or an act of theirs on the memory page (`confirmed`,
+ * `edited`).
  *
  * @param {any} row @param {any[]} evidence @param {any[]} revisions
  */
@@ -1054,7 +1058,10 @@ export class ResearchMemoryStore {
     // the text may still be the first to name the source it came from.
     await this.#linkSources(client, owner, stored.id, sourceLinks, now);
     const { evidence: merged, added } = mergeEvidence(stored.evidence, proof);
-    const stateChanged = stored.value !== next.value || stored.summary !== next.summary || stored.status !== next.status;
+    // A change of origin is a change of the record: an inference that the researcher then said themselves keeps what it was in
+    // its history (review R1/M-5, 2026-10-10), the way a change of text does.
+    const stateChanged = stored.value !== next.value || stored.summary !== next.summary || stored.status !== next.status
+      || stored.origin !== next.origin;
     const revisions = stateChanged
       ? appendRevision(stored.revisions, {
         version: stored.version,
