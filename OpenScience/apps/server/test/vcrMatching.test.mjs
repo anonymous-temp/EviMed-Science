@@ -869,3 +869,19 @@ test('a model cannot attach a guessed unit to a quote that omits it, or bypass u
   assert.equal(evaluateCriterion(equal,{facts:[{variable:'creatinine',value:1,unit:'mg/dL'}],asOf:Date.parse(AS_OF)}).state,SATISFIED);
   assert.equal(evaluateCriterion(equal,{facts:[{variable:'creatinine',value:88.4}],asOf:Date.parse(AS_OF)}).state,UNKNOWN);
 });
+
+
+test('a current medication denial does not establish absence throughout a lookback window',()=>{
+  const criterion={id:'history',kind:'inclusion',requirement:{op:'absent',variable:'docetaxel',window:{days:30}}};
+  const asOf=Date.parse('2026-10-09T00:00:00Z');
+  const clinical={schema:1,assertion:'negated',experiencer:'patient',medication:{state:'unknown',absenceScope:'current'}};
+  const fact={id:'denial',variable:'docetaxel',polarity:'negated',clinical};
+  const evaluate=clinical=>evaluateCriterion(criterion,{facts:[{...fact,clinical}],asOf}).state;
+  assert.equal(evaluate(clinical),UNKNOWN);
+  assert.equal(evaluate({...clinical,medication:{state:'unknown',absenceScope:'never'}}),SATISFIED);
+  const scoped={...clinical,medication:{state:'unknown',absenceScope:'interval'},occurredInterval:{start:'2026-09-09',end:'2026-10-09'}};
+  assert.equal(evaluate(scoped),SATISFIED);
+  assert.equal(evaluate({...scoped,occurredInterval:{start:'2026-09-10',end:'2026-10-09'}}),UNKNOWN);
+  assert.equal(evaluate({...scoped,occurredInterval:{start:'2026-09-09',end:'2026-10-08'}}),UNKNOWN);
+  assert.equal(evaluateCriterion(criterion,{facts:[{...fact,clinical:null}],asOf}).state,SATISFIED);
+});

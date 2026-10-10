@@ -466,7 +466,20 @@ function evaluatePresence(node, context) {
   const all = factsFor(context, variable);
   if (!all.length) return unknownBecause(variable, "not_recorded");
   const affirmed = all.filter((fact) => String(fact?.polarity ?? "affirmed") === "affirmed");
-  const negated = all.filter((fact) => fact?.polarity === "negated");
+  const negated = all.filter((fact) => {
+    if (fact?.polarity !== "negated") return false;
+    // A current medication denial cannot establish a historical washout.
+    // Preserve legacy chart interpretations; new scoped medication assertions
+    // must cover the entire requested interval before deciding absence.
+    if (!node.window || !fact.clinical?.medication) return true;
+    if (fact.clinical.medication.absenceScope === 'never') return true;
+    const interval = fact.clinical.occurredInterval;
+    const anchor = instant(node.window.anchorDate) ?? context.asOf;
+    const start = windowStart(node.window, anchor);
+    return fact.clinical.medication.absenceScope === 'interval' && interval
+      && start !== null && instant(interval.start) !== null && instant(interval.end) !== null
+      && instant(interval.start) <= start && instant(interval.end) >= anchor;
+  });
   const placed = affirmed.map((fact) => ({ fact, inside: withinWindow(fact, node.window, context.asOf) }));
   const inside = placed.filter((item) => item.inside === true).map((item) => item.fact);
   const undated = placed.filter((item) => item.inside === null).map((item) => item.fact);
