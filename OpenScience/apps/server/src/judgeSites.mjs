@@ -14,7 +14,10 @@ const fields = {
  J14:['left','right'],J15:['topic','title','abstract'],J16:['left','right'],J17:['title','abstract'],J18:['left','right'],
  J19:['title','abstract','publicationTypes'],J20:['term','candidates'],J21:['text'],J22:['remark'],'reply-check':['items'],'meta-evidence-role':['title','abstract','text','targetOutcome'],'peer-review-checklist':['studyType','checklists'],
 };
-const policies = Object.fromEntries(JUDGE_SITE_IDS.map(id=>[id,Object.freeze({id,purpose:id==='reply-check'?'review':['J1','J11','J12','J14','J16'].includes(id)?'learning':['J10','J17'].includes(id)?'evolution':id==='J5'||id==='J6'?'frontier':id==='J2'?'channel-intent':id==='J3'?'routing':id==='J7'?'source-understanding':['J21','J22'].includes(id)?'geo':id==='J4'?'review':'engine',interactive:['J2','J3','J13'].includes(id),pairwise:pairSites.has(id),threshold:id==='J4'?0.7:id==='J8'?0.9:0.8,calibration:id==='reply-check'?'calibrated':'uncalibrated'})]));
+// A site's spend books to its module's usage purpose (plan 2026-10-06 §3). J10-J12 and J17 are the evolution module's (§4.4, self-iteration);
+// J11 and J12 sat under `learning` and drew on the per-account learning cap. J13 (`engine`), J14 and J16 (`learning`) are left as they were:
+// the plan names no purpose for them, and whose budget pays for an evidence card's recall or a reader's topic request is an owner decision.
+const policies = Object.fromEntries(JUDGE_SITE_IDS.map(id=>[id,Object.freeze({id,purpose:id==='reply-check'?'review':['J1','J14','J16'].includes(id)?'learning':['J10','J11','J12','J17'].includes(id)?'evolution':id==='J5'||id==='J6'?'frontier':id==='J2'?'channel-intent':id==='J3'?'routing':id==='J7'?'source-understanding':['J21','J22'].includes(id)?'geo':id==='J4'?'review':'engine',interactive:['J2','J3','J13'].includes(id),pairwise:pairSites.has(id),threshold:id==='J4'?0.7:id==='J8'?0.9:0.8,calibration:id==='reply-check'?'calibrated':'uncalibrated'})]));
 export const JUDGE_SITES = Object.freeze(policies);
 const list = (value,max) => {if(!Array.isArray(value)||value.length>max)throw new Error('judge_invalid_input');return value;};
 const bounded = value => {const encoded=JSON.stringify(value);if(!encoded||encoded.length>256_000)throw new Error('judge_input_too_large');return JSON.parse(encoded);};
