@@ -65,6 +65,29 @@ test("selected export preserves original bytes, hashes every bundled file, and n
   await assert.rejects(new ResultExportService({ results: f.results }).export("owner", "project", selected.versionId), { status: 403 });
 });
 
+// R26, 2026-10-10: an exported package is read by whoever the researcher hands it to. It carries the result, its claim marks and the
+// clinical-safety findings; not the run's own machinery notices (an older version still holds them in storage), and a README that says
+// what is in it, not what the platform does or does not sign.
+test("an exported package carries the claim marks and the clinical-safety findings, not the run's machinery notices, and a README of what is in it", async t => {
+  const f = await fixture(t);
+  const selected = await f.capture("report.md", "Original result", { findings: [
+    { id: "run-finding-0", kind: "run_compaction_forced", status: "advice", message: "请求过大，已先压缩上下文" },
+    { id: "run-finding-1", kind: "legacy_notice", status: "must-fix", message: "有一处依据需要核对：证据矩阵第 1 条结论" },
+    { id: "run-finding-2", kind: "clinical_safety_caution", status: "safety", message: "阿司匹林一级预防：出血风险" },
+    { id: "claim-CLM-001", kind: "claim_source_binding", status: "verified", message: "", elementId: "CLM-001", sourceRefs: [] },
+  ] });
+  const files = unzipSync((await new ResultExportService({ results: f.results }).export("owner", "project", selected.versionId)).bytes);
+  const text = name => Buffer.from(files[name]).toString();
+  const verification = JSON.parse(text("verification.json"));
+  assert.deepEqual(verification.versions[0].findings.map(finding => finding.id), ["run-finding-2", "claim-CLM-001"]);
+  assert.doesNotMatch(text("verification.json"), /请求过大|证据矩阵第 1 条结论/);
+  const readme = text("README.txt");
+  assert.match(readme, /manifest\.json/);
+  assert.match(readme, /verify\.py/);
+  assert.doesNotMatch(readme, /signed|Nothing in it|identity|label|not assessed|trust|sender/i, "no word about what the platform signs, or whom to trust");
+  assert.doesNotMatch(readme, /^[\x00-\x7f]+$/, "written in the product's language, not in English");
+});
+
 test("native revisions bind only the selected frozen bytes, actor, session, request and submitted instruction", async t => {
   const f = await fixture(t); const selected = await f.capture("report.md", "Original finding.");
   const service = new ResultRevisionService({ results: f.results, documents: f.documents });
