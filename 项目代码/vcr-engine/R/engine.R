@@ -663,7 +663,14 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
   sc <- job$scenario
   df <- .vcr_main_table(vcr_job_tables(job))
   vcr_require_individual(df, "Empirical synthesis", method = "population.synthpop")
-  used_train <- vcr_used_sources(list(list(df = df, columns = names(df))), "observed")   # synthesis reads every column
+  # Synthesis learns from every column, and a person's key is not a variable: left in, the pseudonym of every row was a level
+  # held by one row, so the merge listed all of them by name in the result, and the propensity model fitted to a 240-level
+  # factor took minutes. The key is dropped before the table is split, so neither the training rows, the holdout nor the
+  # synthetic copies carry it.
+  key <- intersect(VCR_SUBJECT_KEY_COLUMNS, names(df))
+  learn <- setdiff(names(df), key)
+  if (!length(learn)) vcr_abort("input_shape_invalid", "inputs", "The table holds only a person key; there is nothing to synthesise.")
+  used_train <- vcr_used_sources(list(list(df = df, columns = learn)), "observed")   # synthesis reads every column but the key
   m <- vcr_scalar(sc$m, 5L)
   if (!(m >= 5 && m == round(m) && m <= 50)) {
     vcr_abort("scenario_value_invalid", "scenario.m", "Inference on synthetic data needs at least 5 copies (and at most 50).")
@@ -676,8 +683,8 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
   if (nrow(df) - n_hold < 2L) vcr_abort("scenario_value_invalid", "scenario.holdoutShare", "The training table would have fewer than two records.")
   # `idx[-seq_len(0)]` is `idx[-integer(0)]`, which is EMPTY: a holdout share
   # of zero used to hand synthpop an empty training table (CE-31).
-  holdout <- if (n_hold > 0L) df[idx[seq_len(n_hold)], , drop = FALSE] else NULL
-  train <- if (n_hold > 0L) df[idx[-seq_len(n_hold)], , drop = FALSE] else df
+  holdout <- if (n_hold > 0L) df[idx[seq_len(n_hold)], learn, drop = FALSE] else NULL
+  train <- if (n_hold > 0L) df[idx[-seq_len(n_hold)], learn, drop = FALSE] else df[, learn, drop = FALSE]
   syn <- vcr_population_synthpop(train, m = as.integer(m), seed = job$seed)
   if (!is.null(syn$interrupted)) return(.vcr_interrupted_result(syn$interrupted, sprintf("%d of %d synthetic copies were made", length(syn$data), as.integer(m))))
   copies <- do.call(rbind, lapply(seq_along(syn$data), function(k) cbind(copy = k, syn$data[[k]])))
@@ -704,7 +711,9 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
        diagnostics = list(quality = report, qualityByCopy = by_copy, worstCopy = if (length(worst)) worst else NA_integer_,
                           lowSampleWarning = syn$lowSampleWarning,
                           inferenceLabel = syn$inferenceLabel, holdoutRows = if (is.null(holdout)) 0L else nrow(holdout),
+                          # which columns had levels merged into "other" and how many; never a level's name
                           rareLevelsMerged = syn$rareLevelsMerged, rareLevelFloor = syn$rareLevelFloor,
+                          subjectKeyDropped = as.list(key),
                           valueSource = "synthetic",
                           # the first copy described, with the small-cell rule: this table is made from real people's rows
                           profile = tryCatch(vcr_population_profile(syn$data[[1]], empirical = TRUE), error = function(e) NULL), profileCopy = 1L,

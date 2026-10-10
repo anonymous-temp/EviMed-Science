@@ -400,6 +400,11 @@ vcr_table_counts <- function(df, events = NULL) {
 VCR_SHAPE_REQUIRED <- list(
   subject = "USUBJID", long = c("USUBJID", "PARAMCD", "AVAL"), event = c("USUBJID", "AVAL", "CNSR"))
 
+#' The column that names a person in every analysis-table shape: the data plane writes it as the study's own pseudonym
+#' (`P` + an HMAC of the source id), the first column each shape requires. It is an identifier and never a variable: a method
+#' that learns from every column, or that reports the levels of a column, leaves it out.
+VCR_SUBJECT_KEY_COLUMNS <- unique(vapply(VCR_SHAPE_REQUIRED, function(cols) cols[[1L]], character(1)))
+
 #' The tables a job carries, by shape. A `snapshot_file` is a raw table of no
 #' declared shape; it is returned under `file`.
 vcr_job_tables <- function(job) {

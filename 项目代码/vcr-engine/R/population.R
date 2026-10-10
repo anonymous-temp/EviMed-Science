@@ -465,7 +465,11 @@ vcr_population_synthpop <- function(data, m = 5L, seed = 1L, visit_sequence = NU
 
 #' Merge the levels of every character/factor column that have fewer than
 #' `floor` rows into one level called "other". Returns the data and a report of
-#' what was merged (level names only, never counts of a merged level).
+#' what was merged: the column and how many levels were merged, never a level's
+#' name and never a count of its rows. A level below the small-cell floor is a
+#' small cell, and the engine's rule for a merged cell is that nothing of it is
+#' kept but that it was merged (`vcr_suppress_cells`); a rare genotype is a name
+#' that points at a person, and so is a pseudonym (a level held by one row).
 .vcr_merge_rare_levels <- function(data, floor) {
   report <- list()
   for (v in names(data)) {
@@ -477,7 +481,7 @@ vcr_population_synthpop <- function(data, m = 5L, seed = 1L, visit_sequence = NU
     if (!length(rare)) next
     x[x %in% rare] <- "other"
     data[[v]] <- x
-    report[[v]] <- list(column = v, mergedLevels = rare)
+    report[[v]] <- list(column = v, mergedLevelCount = length(rare))
   }
   list(data = data, report = unname(report))
 }
