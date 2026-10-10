@@ -87,13 +87,23 @@ test('a subject withdraws consent: their text is overwritten, the rows and hashe
   const { target, doc1, doc2, docS2, s1, s2, projection } = f;
   const textLocation = (await vcr.dataStore.getSourceFile(target.id, doc1.id)).location;
   const aliasInPlane = path.join(directory, 'alias-of-chart-1');
-  await fs.link(path.join(directory, textLocation), aliasInPlane);
   const referralBefore = (await vcr.matchStore.listReferrals({ studyId: target.id })).find(row => row.subjectKey === s1);
   assert.ok(referralBefore && !['withdrawn', 'screen_failed'].includes(referralBefore.state));
   const manifest = await vcr.store.one('SELECT location, projection_hash, manifest_hash FROM evimed_vcr.document_projections WHERE id=$1', [projection.id]);
   const assessmentBefore = (await vcr.matchStore.listAssessments({ studyId: target.id, subjectKey: s1 }))[0];
   const judgmentsBefore = (await vcr.matchStore.getAssessment(assessmentBefore.id, target.id)).judgments;
   assert.ok(judgmentsBefore.some(judgment => judgment.evidence.some(item => item.quote === consent)), 'the evaluation quoted the chart');
+
+  // The trials the patient was judged against (「给患者找试验」) quote the chart as well.
+  const trial = await vcr.patientTrials.writeTrial(target, { subjectKeys: [s1], trial: { registry: 'clinicaltrials.gov', registryId: 'NCT06000099', title: 'Synthetic trial', phase: 'PHASE2',
+    status: 'RECRUITING', conditions: ['NSCLC'], locations: { total: 1, countries: ['China'], sites: [] }, url: 'https://clinicaltrials.gov/study/NCT06000099', recordHash: 'd'.repeat(64),
+    retrievedAt: '2026-10-10T07:00:00.000Z', eligibilityText: '' }, criteria: [{ kind: 'inclusion', criterionType: 'demographic', sourceText: 'Age >= 18',
+    requirement: { op: 'compare', variable: 'age', comparator: 'gte', value: 18, unit: 'year' }, applicability: null, sourceLocator: {}, evidenceNeeded: [], reviewState: 'ai_set' }] });
+  assert.equal(trial.evaluation.evaluated.length, 1, JSON.stringify(trial.evaluation));
+  const candidateEvidence = async () => (await vcr.store.rows('SELECT evidence FROM evimed_vcr.candidate_trial_judgments')).flatMap(row => row.evidence);
+  assert.ok((await candidateEvidence()).some(item => item.quote === '年龄 62 岁'), 'the trial verdict quoted the chart');
+  // A second name for the text file proves the overwrite happens in place (the plane itself refuses to read a file with two names, so it is made last).
+  await fs.link(path.join(directory, textLocation), aliasInPlane);
 
   const report = await vcr.dataPlane.withdrawSubject({ studyId: target.id, subjectKey: s1, actor: 'owner', reason: 'patient request' });
   assert.deepEqual([report.files, report.projections, report.referralsClosed], [2, 1, 1]);
@@ -164,6 +174,10 @@ test('a subject withdraws consent: their text is overwritten, the rows and hashe
   assert.equal(tab.candidates.find(candidate => candidate.id === s2).basis, undefined);
   assert.equal(tab.candidates.at(-1).id, s1, 'listed after the people who can still be asked');
   assert.equal((await vcr.matchStore.assessmentTallies(target.id)).eligible, 1, 'and not counted among the candidates');
+
+  const quoted = await candidateEvidence();
+  assert.ok(quoted.length > 0 && quoted.every(item => item.quote === '' && item.withdrawn === true && /^[a-f0-9]{64}$/.test(item.quoteHash)), 'and its quotes are the hash of what they said');
+  assert.ok(!JSON.stringify(quoted).includes('年龄 62 岁'));
 
   // A batch frozen before the withdrawal still verifies: the withdrawn subject is unavailable, the other is evaluated.
   const continued = await vcr.matching.matchScenario(target, { snapshotId: f.built.inputs.find(input => input.id.startsWith('matching:snapshot:')).id.slice('matching:snapshot:'.length), offset: 0 });

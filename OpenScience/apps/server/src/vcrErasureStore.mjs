@@ -225,6 +225,22 @@ export class VcrErasureStore extends VcrStoreBase {
       }
       if (changed || subjectKey != null) touched.set(String(row.assessment_id), String(row.subject_key));
     }
+    // The trials a patient was judged against (「给患者找试验」) store quotes of the same kind: their judgments are redacted the same way,
+    // for a withdrawn subject and for whatever cites what was erased.
+    const candidateRows = (await client.query(
+      `SELECT cj.id, cj.evidence FROM ${VCR_SCHEMA}.candidate_trial_judgments cj
+         JOIN ${VCR_SCHEMA}.candidate_trial_assessments a ON a.id = cj.assessment_id
+        WHERE a.study_id=$1 AND (($3::text IS NOT NULL AND a.subject_key=$3)
+          OR EXISTS (SELECT 1 FROM jsonb_array_elements(cj.evidence) e WHERE e->'locator'->>'documentId' = ANY($2::text[]) OR e->>'factId' = ANY($4::text[])))
+        FOR UPDATE OF cj`, [studyId, documentIds, subjectKey, factIds])).rows;
+    let candidateQuotes = 0;
+    for (const row of candidateRows) {
+      const { evidence, changed } = redactedEvidence(row.evidence, (/** @type {any} */ item) => documentIds.includes(String(item.locator?.documentId ?? "")) || factIds.includes(String(item.factId ?? ""))
+        || (subjectKey != null && item.quoteKind === "verbatim"));
+      if (!changed) continue;
+      await client.query(`UPDATE ${VCR_SCHEMA}.candidate_trial_judgments SET evidence=$2::jsonb WHERE id=$1`, [row.id, JSON.stringify(evidence)]);
+      candidateQuotes += 1;
+    }
     // A withdrawn subject's assessments are all marked, with or without a quote in them; any other assessment that rests on what
     // was erased is marked too.
     if (subjectKey != null) {
@@ -253,7 +269,7 @@ export class VcrErasureStore extends VcrStoreBase {
       files: files.map((/** @type {any} */ file) => ({ id: String(file.id), location: String(file.location), originalLocation: file.detail?.original?.location ? String(file.detail.original.location) : null })),
       projections: projections.map((/** @type {any} */ row) => ({ id: String(row.id), location: String(row.location) })),
       counts: { files: files.length, projections: projections.length, factsRemoved, factsRedacted: redactedFacts.length,
-        judgmentsRemoved, judgmentsRedacted: redactedJudgments.length, assessmentQuotesRedacted: judgmentQuotes, assessmentsMarked: assessments.length },
+        judgmentsRemoved, judgmentsRedacted: redactedJudgments.length, assessmentQuotesRedacted: judgmentQuotes + candidateQuotes, assessmentsMarked: assessments.length },
     };
   }
 
