@@ -103,7 +103,7 @@ const EXTRA_CONTEXTS = /** @type {Array<[string, any]>} */ ([
   ["design.analytic", { design: { kind: "simon_two_stage", maxN: 60 }, endpoint: { type: "binary" }, truth: { nullRate: 0.2, alternativeRate: 0.4 } }],
   ["design.analytic", { design: { kind: "single_arm", n: 40 }, endpoint: { type: "binary" }, truth: { nullRate: 0.2, responseRate: 0.4 }, analysis: { method: "exact_binomial", alternative: "greater" } }],
   ["design.assurance", { design: { nTreat: 100 }, endpoint: { type: "binary" }, designPrior: { mean: 0.1, sd: 0.05 }, truth: { controlRate: 0.3 } }],
-  ["patients.time_to_event", { design: { nTreat: 100 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 12 }, accrual: { kind: "piecewise", breaks: [3], rates: [1, 2] } }],
+  ["patients.time_to_event", { design: { nTreat: 100 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 12 }, accrual: { kind: "piecewise", breaks: [3], rates: [1, 2], tail: 2 } }],
   ["comparator.weighted_cox", { covariates: ["age"], tau: 24, weighting: "propensity", estimand: "ATE" }],
   ["comparator.weighted_cox", { covariates: ["age"], tau: 24, moments: 2 }],
   ["comparator.maic_time_to_event", { covariates: ["age"], targets: { age: 60 }, anchored: true, treatmentColumn: "arm", aggregateEstimate: -0.2, aggregateSe: 0.1 }],
@@ -224,10 +224,10 @@ test("the cross-field rules are the schema's, counted independently", () => {
   /** @param {any} node @returns {number} */
   const count = (node) => {
     if (!node || typeof node !== "object") return 0;
-    let total = (node.exactlyOne?.length ?? 0) + (node.atLeastOne?.length ?? 0) + Object.keys(node.requires ?? {}).length;
+    let total = (node.exactlyOne?.length ?? 0) + (node.atLeastOne?.length ?? 0) + (node.lengthRules?.length ?? 0) + Object.keys(node.requires ?? {}).length;
     if (node.t === "object") for (const field of Object.values(node.fields)) total += count(field);
     if (node.t === "variant") for (const [name, fields] of Object.entries(node.variants)) {
-      total += Object.keys(node.variantGroups?.[name] ?? {}).length ? (node.variantGroups[name].exactlyOne?.length ?? 0) : 0;
+      total += Object.keys(node.variantGroups?.[name] ?? {}).length ? (node.variantGroups[name].exactlyOne?.length ?? 0) + (node.variantGroups[name].lengthRules?.length ?? 0) : 0;
       for (const field of Object.values(/** @type {any} */ (fields))) total += count(field);
     }
     if (node.t === "array") total += count(node.items);

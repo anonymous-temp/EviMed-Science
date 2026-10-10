@@ -319,6 +319,11 @@ vcr_dist_normalize <- function(d) {
   out <- d
   for (k in c("rate", "shape", "scale")) if (!is.null(d[[k]])) out[[k]] <- vcr_scalar(d[[k]])
   for (k in c("breaks", "rates")) if (!is.null(d[[k]])) out[[k]] <- vcr_num(d[[k]])
+  # one rate per interval: a shorter list gave every patient an NA event time (the validator refuses it first)
+  if (identical(out[["kind"]], "piecewise") && length(out[["rates"]]) != length(out[["breaks"]]) + 1L) {
+    vcr_abort("scenario_value_invalid", "scenario.truth.controlDistribution.rates",
+              "A piecewise distribution has one rate per interval: one more than it has breaks.")
+  }
   out
 }
 

@@ -23,7 +23,7 @@
  *   for, and the variant it belongs to. Nothing is invented: a unit, a range or a
  *   default that the schema does not state is not in the row.
  * - **The coupled rules the walker applies are in the help too**: `exactlyOne`,
- *   `atLeastOne` and `requires` from the schema, the design × endpoint table
+ *   `atLeastOne`, `requires` and `lengthRules` from the schema, the design × endpoint table
  *   (`VCR_DESIGN_SUPPORT`) and which analysis a design may run, read from the
  *   tables the validator reads.
  * - **The examples are checked, not trusted.** Each is run through
@@ -63,7 +63,7 @@ export const VCR_RUN_SCENARIO_FIELDS = Object.freeze({
  *   values?: string[], valuesBy?: { path: string, map: Record<string, string[]> }, minLength?: number, maxLength?: number, role?: string,
  *   count?: { min?: number, max?: number }, items?: Record<string, any>, of?: Record<string, any>, keysFrom?: string,
  *   increasing?: boolean, last?: number, unique?: boolean, size?: string }} VcrHelpRow
- * @typedef {{ kind: 'exactlyOne' | 'atLeastOne' | 'requires', keys?: string[], key?: string, needs?: string[], when?: VcrHelpWhen[], variant?: VcrHelpVariant }} VcrHelpRule
+ * @typedef {{ kind: 'exactlyOne' | 'atLeastOne' | 'requires' | 'lengthRule', keys?: string[], key?: string, needs?: string[], of?: string, plus?: number, when?: VcrHelpWhen[], variant?: VcrHelpVariant }} VcrHelpRule
  */
 
 // ---------------------------------------------------------------------------
@@ -161,6 +161,9 @@ function emitRules(state, node, path, context) {
   }
   for (const [key, needs] of Object.entries(node.requires ?? {})) {
     state.rules.push(/** @type {VcrHelpRule} */ ({ kind: 'requires', key: at(path, key), needs: /** @type {string[]} */ (needs).map((need) => at(path, need)), ...base }))
+  }
+  for (const rule of node.lengthRules ?? []) {
+    state.rules.push(/** @type {VcrHelpRule} */ ({ kind: 'lengthRule', key: at(path, rule.key), of: at(path, rule.of), plus: rule.plus ?? 0, ...base }))
   }
 }
 

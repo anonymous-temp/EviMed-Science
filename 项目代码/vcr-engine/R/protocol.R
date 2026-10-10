@@ -718,6 +718,14 @@ vcr_pattern_match <- function(pattern, x) {
       if (!.vcrp_present(value, need)) raise("scenario_field_missing", .vcrp_at(path, need), "This key is required when another is given.")
     }
   }
+  # A list that has one entry per interval of another (a piecewise profile: one rate more than there are breaks). A missing or
+  # malformed list is reported by its own field, not twice.
+  for (rule in node$lengthRules %||% list()) {
+    items <- .vcrp_items(value[[rule$key]])
+    of <- .vcrp_items(value[[rule$of]])
+    if (is.null(items) || is.null(of)) next
+    if (length(items) != length(of) + (rule$plus %||% 0)) raise("scenario_value_invalid", .vcrp_at(path, rule$key), "The list does not have one value per interval of the other.")
+  }
   invisible(NULL)
 }
 

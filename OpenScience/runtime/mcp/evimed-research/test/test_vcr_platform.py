@@ -234,6 +234,11 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertIn("one of uniform|piecewise; optional; default \"uniform\"", simulated["accrual.kind"])
         self.assertIn("read only when accrual.kind is piecewise", simulated["accrual.breaks"])
         self.assertNotIn("accrual.kind is", simulated["accrual.followup"], "shared by both variants")
+        # A piecewise profile states its tail and has one rate per interval, and the shape says both.
+        self.assertIn("accrual.tail: number >0 (time units); required once accrual is given", simulated["accrual.tail"])
+        rules = " ".join(vcr_platform.shape({"kind": "design_simulation"})["data"]["rules"])
+        self.assertIn("accrual.rates lists 1 more value than accrual.breaks (when endpoint.type is time_to_event and accrual.kind is piecewise", rules)
+        self.assertIn("truth.controlDistribution.rates lists 1 more value than truth.controlDistribution.breaks", rules)
 
     def test_shape_with_no_kind_lists_the_kinds_and_where_each_object_looks_its_shape_up(self):
         answer = vcr_platform.shape({})

@@ -759,6 +759,9 @@ def _rule_line(rule: dict) -> str:
         text = "exactly one of %s" % ", ".join(rule.get("keys", []))
     elif kind == "atLeastOne":
         text = "at least one of %s" % ", ".join(rule.get("keys", []))
+    elif kind == "lengthRule":
+        plus = int(rule.get("plus") or 0)
+        text = "%s lists %s than %s" % (rule.get("key"), "%d more value%s" % (plus, "" if plus == 1 else "s") if plus > 0 else "as many values", rule.get("of"))
     else:
         text = "when %s is given, %s must be given too" % (rule.get("key"), ", ".join(rule.get("needs", [])))
     gates = [_condition(item) for item in rule.get("when", [])]

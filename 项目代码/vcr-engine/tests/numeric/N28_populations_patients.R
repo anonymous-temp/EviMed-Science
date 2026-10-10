@@ -131,3 +131,77 @@ vcr_case("N28c", c("AC-11", "AC-09", "AC-02"), function() {
   unlink(dir, recursive = TRUE)
   out
 })
+
+vcr_case("N28d", c("AC-11", "AC-30"), function() {
+  # Piecewise accrual, against its closed form. Patients enter at the rate of the interval they are in: rates 2, 4 and 6 per
+  # time unit on [0, 3), [3, 6) and [6, 6 + tail) with tail 6 put 6, 12 and 36 of the 54 expected patients in the three
+  # intervals, so the entry time is a mixture of three uniforms: mean 7.1667 and the variance written below. The last
+  # interval is open in the profile ("rate 6 from month 6 on"), so its length, `tail`, is what the stated enrolment period
+  # means; it used to default to 1,000,000 time units, and a profile without one had a mean entry of 499,858 (administrative
+  # censoring is measured from the entry, so follow-up was effectively complete and power overstated). Through the job:
+  # the output table's `entry` column, 20,000 patients, held to the mean and to each interval's share, and the arms' entry
+  # times equal (they once were not, CE-1).
+  accrual <- list(kind = "piecewise", breaks = list(3, 6), rates = list(2, 4, 6), tail = 6, followup = 12)
+  n <- 20000L
+  dir <- tempfile("n28d"); dir.create(dir)
+  r <- vcr_test_run(vcr_test_job("patients.time_to_event", list(design = list(nTreat = n / 2, nControl = n / 2), endpoint = list(type = "time_to_event"),
+                                                               truth = list(controlMedian = 12, hazardRatio = 0.7), accrual = accrual), seed = 2828L, job_id = "job_n28d"), output_dir = dir)
+  d <- vcr_test_table(r, "virtual-patients", dir)
+  lo <- c(0, 3, 6); hi <- c(3, 6, 12); p <- c(2, 4, 6) * (hi - lo); p <- p / sum(p)
+  want_mean <- sum(p * (lo + hi) / 2)
+  want_var <- sum(p * ((hi - lo)^2 / 12 + ((lo + hi) / 2)^2)) - want_mean^2
+  z_mean <- (mean(d$entry) - want_mean) / sqrt(want_var / n)
+  share <- vapply(seq_along(p), function(k) mean(d$entry >= lo[k] & d$entry < hi[k]), numeric(1))
+  z_share <- (share - p) / sqrt(p * (1 - p) / n)
+  z_arm <- (mean(d$entry[d$arm == 1]) - mean(d$entry[d$arm == 0])) / sqrt(2 * want_var / (n / 2))
+  unlink(dir, recursive = TRUE)
+  list(pass = identical(r$status, "succeeded") && nrow(d) == n && abs(z_mean) <= 4 && all(abs(z_share) <= 4) && abs(z_arm) <= 4 && min(d$entry) >= 0 && max(d$entry) <= 12,
+       detail = sprintf("%s: mean entry %.4f against %.4f (%.2f SE), shares of the three intervals %s against %s (worst %.2f SE), arms differ by %.2f SE, entries in [%.3f, %.3f]",
+                        r$status, mean(d$entry), want_mean, z_mean, paste(sprintf("%.4f", share), collapse = "/"), paste(sprintf("%.4f", p), collapse = "/"), max(abs(z_share)), z_arm,
+                        if (nrow(d)) min(d$entry) else NA_real_, if (nrow(d)) max(d$entry) else NA_real_))
+})
+
+vcr_case("N28e", c("AC-04", "AC-26"), function() {
+  # A piecewise profile states every number it runs on: `tail` (the length of the open last interval) is required, there is
+  # one rate per interval -- as many as the breaks plus one -- for an accrual profile and for a piecewise control
+  # distribution, and anything else is refused by name before a patient is drawn. A mismatch used to recycle the shorter list with
+  # a warning (accrual) or give every patient an NA event time (distribution). The validator is the first line, the
+  # simulators the second: the profile functions called directly refuse too.
+  base <- function(accrual = NULL, truth = list(controlMedian = 12, hazardRatio = 0.7)) {
+    sc <- list(design = list(nTreat = 40, nControl = 40), endpoint = list(type = "time_to_event"), truth = truth)
+    if (!is.null(accrual)) sc$accrual <- accrual
+    sc
+  }
+  issues <- function(method, sc) {
+    if (method == "design.simulate") sc$design$kind <- "two_arm_fixed"
+    vapply(vcr_validate_scenario(method, vcr_test_json(sc)), function(i) paste0(i$code, "@", i$field), character(1))
+  }
+  # (not utils::modifyList: it keeps the base's list when both sides are JSON arrays, which is what N06e is about)
+  pw <- function(rates = list(2, 4, 6)) list(kind = "piecewise", breaks = list(3, 6), rates = rates, tail = 6, followup = 12)
+  no_tail <- pw(); no_tail$tail <- NULL
+  want_tail <- "scenario_field_missing@scenario.accrual.tail"
+  want_rates <- "scenario_value_invalid@scenario.accrual.rates"
+  found <- list(
+    tail_generator = issues("patients.time_to_event", base(no_tail)), tail_simulate = issues("design.simulate", base(no_tail)),
+    short_generator = issues("patients.time_to_event", base(pw(rates = list(2, 4)))), long_simulate = issues("design.simulate", base(pw(rates = list(2, 4, 6, 8)))),
+    distribution = issues("patients.time_to_event", base(truth = list(hazardRatio = 0.7, controlDistribution = list(kind = "piecewise", breaks = list(6, 12), rates = list(0.1, 0.05))))),
+    distribution_simulate = issues("design.simulate", base(truth = list(hazardRatio = 0.7, controlDistribution = list(kind = "piecewise", breaks = list(6), rates = list(0.1, 0.05, 0.02))))),
+    fine = issues("patients.time_to_event", base(pw(), truth = list(hazardRatio = 0.7, controlDistribution = list(kind = "piecewise", breaks = list(6), rates = list(0.1, 0.05))))))
+  # the job, end to end: refused by the validator, nothing drawn
+  job <- vcr_test_run(vcr_test_job("patients.time_to_event", base(no_tail), seed = 1L, job_id = "job_n28e"))
+  # the simulators called directly (the second line): a profile without a tail, with a rate too many, and a distribution with a rate too few
+  refusal <- function(expr) tryCatch({ force(expr); "ran" }, vcr_refusal = function(e) paste0(e$issue$code, "@", e$issue$field))
+  direct <- c(refusal(vcr_accrual_times(5L, list(kind = "piecewise", breaks = list(3, 6), rates = list(2, 4, 6)))),
+              refusal(vcr_accrual_times(5L, list(kind = "piecewise", breaks = list(3, 6), rates = list(2, 4, 6, 8), tail = 6))),
+              refusal(vcr_control_distribution(list(controlDistribution = list(kind = "piecewise", breaks = list(6, 12), rates = list(0.1, 0.05))))))
+  ok <- identical(found$tail_generator, want_tail) && identical(found$tail_simulate, want_tail) && identical(found$short_generator, want_rates) &&
+    identical(found$long_simulate, want_rates) && identical(found$distribution, "scenario_value_invalid@scenario.truth.controlDistribution.rates") &&
+    identical(found$distribution_simulate, "scenario_value_invalid@scenario.truth.controlDistribution.rates") && length(found$fine) == 0L &&
+    identical(job$status, "failed") && identical(vcr_test_issue_codes(job), "scenario_field_missing") &&
+    identical(direct, c(want_tail, want_rates, "scenario_value_invalid@scenario.truth.controlDistribution.rates"))
+  list(pass = ok,
+       detail = sprintf("no tail -> %s / %s; two rates for two breaks -> %s; four rates -> %s; a piecewise distribution with two breaks and two rates -> %s, with one break and three rates -> %s; a complete profile and distribution -> %d issues; the job -> %s (%s); direct calls -> %s",
+                        paste(found$tail_generator, collapse = "+"), paste(found$tail_simulate, collapse = "+"), paste(found$short_generator, collapse = "+"), paste(found$long_simulate, collapse = "+"),
+                        paste(found$distribution, collapse = "+"), paste(found$distribution_simulate, collapse = "+"), length(found$fine), job$status, paste(vcr_test_issue_codes(job), collapse = ","),
+                        paste(direct, collapse = " / ")))
+})

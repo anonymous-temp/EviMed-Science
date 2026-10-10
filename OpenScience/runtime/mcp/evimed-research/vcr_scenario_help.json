@@ -431,14 +431,32 @@
           "path": "accrual.tail",
           "type": "number",
           "gt": 0,
+          "unit": "time units",
+          "required": true,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
         }
       ],
       "rules": [
+        {
+          "kind": "lengthRule",
+          "key": "truth.controlDistribution.rates",
+          "of": "truth.controlDistribution.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        },
         {"kind":"exactlyOne","keys":["truth.treatmentRate","truth.riskDifference","truth.oddsRatio"],"when":[{"path":"endpoint.type","in":["binary"]}]},
-        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]}
+        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
+        {
+          "kind": "lengthRule",
+          "key": "accrual.rates",
+          "of": "accrual.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
+        }
       ],
       "examples": [{"label":"a continuous endpoint","scenario":{"design":{"nTreat":60,"nControl":60},"endpoint":{"type":"continuous"},"truth":{"effect":-0.5,"sd":1.2}}}]
     },
@@ -584,14 +602,32 @@
           "path": "accrual.tail",
           "type": "number",
           "gt": 0,
+          "unit": "time units",
+          "required": true,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
         }
       ],
       "rules": [
+        {
+          "kind": "lengthRule",
+          "key": "truth.controlDistribution.rates",
+          "of": "truth.controlDistribution.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        },
         {"kind":"exactlyOne","keys":["truth.treatmentRate","truth.riskDifference","truth.oddsRatio"],"when":[{"path":"endpoint.type","in":["binary"]}]},
-        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]}
+        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
+        {
+          "kind": "lengthRule",
+          "key": "accrual.rates",
+          "of": "accrual.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
+        }
       ],
       "examples": [{"label":"a binary endpoint","scenario":{"design":{"nTreat":60,"nControl":60},"endpoint":{"type":"binary"},"truth":{"controlRate":0.3,"oddsRatio":1.5}}}]
     },
@@ -737,14 +773,32 @@
           "path": "accrual.tail",
           "type": "number",
           "gt": 0,
+          "unit": "time units",
+          "required": true,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
         }
       ],
       "rules": [
+        {
+          "kind": "lengthRule",
+          "key": "truth.controlDistribution.rates",
+          "of": "truth.controlDistribution.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        },
         {"kind":"exactlyOne","keys":["truth.treatmentRate","truth.riskDifference","truth.oddsRatio"],"when":[{"path":"endpoint.type","in":["binary"]}]},
-        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]}
+        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
+        {
+          "kind": "lengthRule",
+          "key": "accrual.rates",
+          "of": "accrual.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
+        }
       ],
       "examples": [
         {
@@ -1140,6 +1194,14 @@
       ],
       "rules": [
         {
+          "kind": "lengthRule",
+          "key": "truth.controlDistribution.rates",
+          "of": "truth.controlDistribution.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        },
+        {
           "kind": "exactlyOne",
           "keys": ["truth.treatmentRate","truth.riskDifference","truth.oddsRatio"],
           "when": [{"path":"endpoint.type","in":["binary"]},{"path":"design.kind","notIn":["single_arm","single_arm_external","simon_two_stage"]}]
@@ -1474,6 +1536,8 @@
           "path": "accrual.tail",
           "type": "number",
           "gt": 0,
+          "unit": "time units",
+          "required": true,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
@@ -1494,11 +1558,27 @@
       ],
       "rules": [
         {
+          "kind": "lengthRule",
+          "key": "truth.controlDistribution.rates",
+          "of": "truth.controlDistribution.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        },
+        {
           "kind": "exactlyOne",
           "keys": ["truth.treatmentRate","truth.riskDifference","truth.oddsRatio"],
           "when": [{"path":"endpoint.type","in":["binary"]},{"path":"design.kind","notIn":["single_arm","single_arm_external","simon_two_stage"]}]
         },
-        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]}
+        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
+        {
+          "kind": "lengthRule",
+          "key": "accrual.rates",
+          "of": "accrual.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
+        }
       ],
       "examples": [
         {
@@ -1857,6 +1937,8 @@
           "path": "accrual.tail",
           "type": "number",
           "gt": 0,
+          "unit": "time units",
+          "required": true,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
@@ -1957,11 +2039,34 @@
       ],
       "rules": [
         {
+          "kind": "lengthRule",
+          "key": "truth.controlDistribution.rates",
+          "of": "truth.controlDistribution.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        },
+        {
           "kind": "exactlyOne",
           "keys": ["truth.treatmentRate","truth.riskDifference","truth.oddsRatio"],
           "when": [{"path":"endpoint.type","in":["binary"]},{"path":"design.kind","notIn":["single_arm","single_arm_external","simon_two_stage"]}]
         },
-        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]}
+        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
+        {
+          "kind": "lengthRule",
+          "key": "accrual.rates",
+          "of": "accrual.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
+        },
+        {
+          "kind": "lengthRule",
+          "key": "truths[].controlDistribution.rates",
+          "of": "truths[].controlDistribution.breaks",
+          "plus": 1,
+          "variant": {"on":"truths[].controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        }
       ],
       "examples": [
         {

@@ -1671,6 +1671,17 @@
                   }
                 }
               },
+              "variantGroups": {
+                "piecewise": {
+                  "lengthRules": [
+                    {
+                      "key": "rates",
+                      "of": "breaks",
+                      "plus": 1
+                    }
+                  ]
+                }
+              },
               "when": {
                 "path": "endpoint.type",
                 "in": [
@@ -1770,7 +1781,9 @@
               },
               "tail": {
                 "t": "number",
-                "gt": 0
+                "gt": 0,
+                "unit": "time units",
+                "req": true
               },
               "followup": {
                 "t": "number",
@@ -1789,6 +1802,17 @@
                 "gt": 0,
                 "unit": "time units"
               }
+            }
+          },
+          "variantGroups": {
+            "piecewise": {
+              "lengthRules": [
+                {
+                  "key": "rates",
+                  "of": "breaks",
+                  "plus": 1
+                }
+              ]
             }
           },
           "when": {
@@ -2008,6 +2032,17 @@
                   }
                 }
               },
+              "variantGroups": {
+                "piecewise": {
+                  "lengthRules": [
+                    {
+                      "key": "rates",
+                      "of": "breaks",
+                      "plus": 1
+                    }
+                  ]
+                }
+              },
               "when": {
                 "path": "endpoint.type",
                 "in": [
@@ -2107,7 +2142,9 @@
               },
               "tail": {
                 "t": "number",
-                "gt": 0
+                "gt": 0,
+                "unit": "time units",
+                "req": true
               },
               "followup": {
                 "t": "number",
@@ -2126,6 +2163,17 @@
                 "gt": 0,
                 "unit": "time units"
               }
+            }
+          },
+          "variantGroups": {
+            "piecewise": {
+              "lengthRules": [
+                {
+                  "key": "rates",
+                  "of": "breaks",
+                  "plus": 1
+                }
+              ]
             }
           },
           "when": {
@@ -2345,6 +2393,17 @@
                   }
                 }
               },
+              "variantGroups": {
+                "piecewise": {
+                  "lengthRules": [
+                    {
+                      "key": "rates",
+                      "of": "breaks",
+                      "plus": 1
+                    }
+                  ]
+                }
+              },
               "when": {
                 "path": "endpoint.type",
                 "in": [
@@ -2444,7 +2503,9 @@
               },
               "tail": {
                 "t": "number",
-                "gt": 0
+                "gt": 0,
+                "unit": "time units",
+                "req": true
               },
               "followup": {
                 "t": "number",
@@ -2463,6 +2524,17 @@
                 "gt": 0,
                 "unit": "time units"
               }
+            }
+          },
+          "variantGroups": {
+            "piecewise": {
+              "lengthRules": [
+                {
+                  "key": "rates",
+                  "of": "breaks",
+                  "plus": 1
+                }
+              ]
             }
           },
           "when": {
@@ -4294,6 +4366,17 @@
                   }
                 }
               },
+              "variantGroups": {
+                "piecewise": {
+                  "lengthRules": [
+                    {
+                      "key": "rates",
+                      "of": "breaks",
+                      "plus": 1
+                    }
+                  ]
+                }
+              },
               "when": {
                 "path": "endpoint.type",
                 "in": [
@@ -4843,6 +4926,17 @@
                   }
                 }
               },
+              "variantGroups": {
+                "piecewise": {
+                  "lengthRules": [
+                    {
+                      "key": "rates",
+                      "of": "breaks",
+                      "plus": 1
+                    }
+                  ]
+                }
+              },
               "when": {
                 "path": "endpoint.type",
                 "in": [
@@ -5214,7 +5308,9 @@
               },
               "tail": {
                 "t": "number",
-                "gt": 0
+                "gt": 0,
+                "unit": "time units",
+                "req": true
               },
               "followup": {
                 "t": "number",
@@ -5233,6 +5329,17 @@
                 "gt": 0,
                 "unit": "time units"
               }
+            }
+          },
+          "variantGroups": {
+            "piecewise": {
+              "lengthRules": [
+                {
+                  "key": "rates",
+                  "of": "breaks",
+                  "plus": 1
+                }
+              ]
             }
           },
           "when": {
@@ -5659,6 +5766,17 @@
                   }
                 }
               },
+              "variantGroups": {
+                "piecewise": {
+                  "lengthRules": [
+                    {
+                      "key": "rates",
+                      "of": "breaks",
+                      "plus": 1
+                    }
+                  ]
+                }
+              },
               "when": {
                 "path": "endpoint.type",
                 "in": [
@@ -6030,7 +6148,9 @@
               },
               "tail": {
                 "t": "number",
-                "gt": 0
+                "gt": 0,
+                "unit": "time units",
+                "req": true
               },
               "followup": {
                 "t": "number",
@@ -6049,6 +6169,17 @@
                 "gt": 0,
                 "unit": "time units"
               }
+            }
+          },
+          "variantGroups": {
+            "piecewise": {
+              "lengthRules": [
+                {
+                  "key": "rates",
+                  "of": "breaks",
+                  "plus": 1
+                }
+              ]
             }
           },
           "when": {
@@ -6307,6 +6438,17 @@
                       "max": 51,
                       "req": true
                     }
+                  }
+                },
+                "variantGroups": {
+                  "piecewise": {
+                    "lengthRules": [
+                      {
+                        "key": "rates",
+                        "of": "breaks",
+                        "plus": 1
+                      }
+                    ]
                   }
                 }
               }
