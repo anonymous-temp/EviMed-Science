@@ -213,7 +213,8 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
     }
     if (imported || issues) report(`claims imported ${imported}, refused ${issues}`);
     // The claims a card's own ruler verifies become cards of the project's product zone (flywheel F21). The claim table stays as
-    // it is; a refusal here — nobody named as producer, no reviewing doctor — is one named code and changes nothing else.
+    // it is; a refusal here — nobody named as producer, no reviewing doctor — is one named code and changes nothing else. The
+    // project's page says the same thing (`cards.blockedBy`), and saving the producer or the reviewing doctor writes the cards (D-28).
     let carded = 0;
     if (refreshCards && (imported > 0 || ids.size > 0)) {
       try {

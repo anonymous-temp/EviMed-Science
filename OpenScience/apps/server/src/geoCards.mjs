@@ -174,6 +174,31 @@ export class GeoCards {
   }
 
   /**
+   * What a card of this project needs before it can be written: someone who speaks for the product, and a named author and
+   * reviewing doctor. The one place both checks are made, for the write and for the question of why nothing was written.
+   * @param {any} project @param {{ id: string, name?: string }} actor
+   * @returns {Promise<{ blockedBy: "producer" | "reviewer" | null, producer: any, people: any }>}
+   */
+  async #readiness(project, actor) {
+    const producer = geoCardProducer(project.producer, project.product);
+    if (!producer) return { blockedBy: "producer", producer: null, people: null };
+    const people = await this.#peopleOf(project, actor);
+    if (!people.authors.length || !people.reviewers.length) return { blockedBy: "reviewer", producer, people };
+    return { blockedBy: null, producer, people };
+  }
+
+  /**
+   * Why this project's cards cannot be written now, or null when they can: `producer` (nobody is named as speaking for the product)
+   * or `reviewer` (no named author and reviewing doctor). Asked without writing and without counting a refusal — the project's page
+   * reads it to say what is left to set up, where the run-end import used to leave it in a log (D-28).
+   * @param {any} project @param {{ id: string, name?: string }} [actor]
+   * @returns {Promise<"producer" | "reviewer" | null>}
+   */
+  async blockedBy(project, actor = { id: project.userId }) {
+    return (await this.#readiness(project, actor)).blockedBy;
+  }
+
+  /**
    * Write the project's verified claims into its product zone as cards, one per key clinical question on the patient journey.
    *
    * @param {any} project the GEO project
@@ -185,16 +210,16 @@ export class GeoCards {
    *   failed: Array<{ title: string, code: string }>, skipped: Array<{ title: string, reason: string }> }>}
    */
   async refresh(project, { readSource, actor = { id: project.userId } }) {
-    const producer = geoCardProducer(project.producer, project.product);
-    if (!producer) {
+    const ready = await this.#readiness(project, actor);
+    if (ready.blockedBy === "producer") {
       this.counters.refused += 1;
       throw failure(409, "geo_card_producer_required", "The project does not say who speaks for the product (an enterprise or a doctor).");
     }
-    const people = await this.#peopleOf(project, actor);
-    if (!people.authors.length || !people.reviewers.length) {
+    if (ready.blockedBy === "reviewer") {
       this.counters.refused += 1;
       throw failure(409, "geo_card_reviewer_required", "A product card names its author and a reviewing doctor.");
     }
+    const { producer, people } = ready;
     const claims = await this.store.listClaims(project.id);
     /** @type {Map<string, Promise<string | null>>} */
     const reads = new Map();

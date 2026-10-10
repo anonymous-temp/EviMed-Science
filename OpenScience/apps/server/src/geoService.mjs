@@ -306,7 +306,7 @@ const PLAIN_ROW = "m.variant IS NULL AND m.rival IS NULL AND m.group_id IS NULL"
 export class GeoService {
   /**
    * @param {{ store: import("./geoStore.mjs").GeoStore, config: Record<string, any>, social?: any, now?: () => Date,
-   *   metricName?: ((metricId: string) => string | null) | null, cards?: { staleReferences?: Function, list?: Function } | null }} options
+   *   metricName?: ((metricId: string) => string | null) | null, cards?: { staleReferences?: Function, list?: Function, blockedBy?: Function } | null }} options
    *   `metricName` names a metric id for 「更多指标」; the metrics package can
    *   hand in its catalogue's names, and without it the domain's labels answer
    *   for the ids the platform reads and every other id is its own name.
@@ -607,13 +607,14 @@ export class GeoService {
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
   async projectViewOf(project) {
     const metricIds = GEO_OVERVIEW_METRICS.map((entry) => entry.metricId);
-    const [latest, series, targets, week, names, started] = await Promise.all([
+    const [latest, series, targets, week, names, started, cardsBlockedBy] = await Promise.all([
       this.#latestProjectMetrics([project.id], metricIds),
       this.#series([project.id], metricIds, "project", "", { coverage: true }),
       this.store.latestTargets(project.id),
       this.#week(project),
       this.#controlProjectNames([{ userId: project.userId, projectId: project.projectId }]),
       this.#startedAt([project]),
+      this.#cardsBlockedBy(project),
     ]);
     const rows = latest.get(project.id) ?? new Map();
     const points = series.get(project.id) ?? new Map();
@@ -634,12 +635,24 @@ export class GeoService {
       // Whether step 7 can run at all on this deployment: without a market a
       // page never asks for a budget or says the reader owes one (G20).
       market: { configured: geoMarketConfigured(this.config) },
+      // Why the verified claims are not becoming evidence cards: `producer` (nobody named as speaking for the product) or `reviewer`
+      // (no reviewing doctor), null when nothing is in the way. The run-end import used to refuse in a log and the page said nothing (D-28).
+      cards: { blockedBy: cardsBlockedBy },
       overview: {
         metrics,
         week,
         steps: project.steps,
       },
     };
+  }
+
+  /**
+   * Why the project's cards cannot be written now (geoCards.mjs `blockedBy`), or null. It decorates the page: a failure to ask is not a
+   * failure to show the project.
+   * @param {any} project @returns {Promise<"producer" | "reviewer" | null>}
+   */
+  async #cardsBlockedBy(project) {
+    try { return (await this.cards?.blockedBy?.(project)) ?? null; } catch { return null; }
   }
 
   /**

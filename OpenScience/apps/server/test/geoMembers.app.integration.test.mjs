@@ -4,7 +4,7 @@
 // one that does not exist; and the people a product card discloses are the real named members.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
@@ -189,6 +189,43 @@ test("a product card's author and reviewer are the real named members, and witho
   assert.deepEqual(card.disclosure.authors.map((/** @type {any} */ person) => person.name), ["王负责人", "李编辑"], "the owner and the editors write it; a viewer is no author");
   assert.deepEqual(card.disclosure.reviewers, [{ name: "张医生", affiliation: "某某医院 内分泌科", title: "主任医师" }]);
   assert.equal(card.producer.name, "某某制药有限公司");
+});
+
+test("saving the producer and naming the reviewing doctor write the cards by themselves; until then the project says what is missing (D-28)", options, async () => {
+  const id = await made();
+  const geo = context.app.geo;
+  const owner = await geo.store.getProject(accounts.owner, id);
+  await geo.store.upsertClaims(accounts.owner, owner.id, [{ claimKey: "dose", statement: "每周一次皮下注射。", quote: "本品每周一次皮下注射给药", sourceRef: "说明书",
+    sourceKind: "label", inLabel: true, artifactPath: ".evimed-sources/label.txt" }]);
+  const control = await context.app.store.requireProject(await context.app.store.userById(accounts.owner), owner.projectId);
+  await mkdir(path.join(control.workspaceDir, ".evimed-sources"), { recursive: true });
+  await writeFile(path.join(control.workspaceDir, ".evimed-sources", "label.txt"), "【用法用量】本品每周一次皮下注射给药，起始剂量为 2.5 mg。");
+  const cardCount = async () => (await geo.cards.list(await geo.store.getProject(accounts.owner, id))).cards.length;
+  const blockedBy = async () => (await call("owner", "GET", `/api/geo/projects/${id}`)).body.data.cards.blockedBy;
+  // Nobody speaks for the product yet, and the project says so.
+  assert.equal(await blockedBy(), "producer");
+  // The company named: still nobody to review, so no card, and the project says what is next.
+  const saved = await call("owner", "PATCH", `/api/geo/projects/${id}`, { producer: { kind: "enterprise", name: "某某制药有限公司", relation: "own_product" } });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.deepEqual(saved.body.data.cards, { blockedBy: "reviewer", written: 0 });
+  assert.equal(await blockedBy(), "reviewer");
+  assert.equal(await cardCount(), 0);
+  // The reviewing doctor named: the cards that waited for one are written the same moment.
+  const added = await call("owner", "POST", `/api/geo/projects/${id}/members`, { userId: accounts.reviewer, role: "medical_reviewer" });
+  assert.equal(added.status, 201, JSON.stringify(added.body));
+  assert.deepEqual(added.body.data.cards, { blockedBy: null, written: 1 });
+  assert.equal(await cardCount(), 1);
+  assert.equal(await blockedBy(), null);
+  // A doctor who speaks for their own product needs no one else: the save writes the cards.
+  const doctorId = await made();
+  const doctor = await geo.store.getProject(accounts.owner, doctorId);
+  await geo.store.upsertClaims(accounts.owner, doctor.id, [{ claimKey: "dose", statement: "每周一次皮下注射。", quote: "本品每周一次皮下注射给药", sourceRef: "说明书",
+    sourceKind: "label", inLabel: true, artifactPath: ".evimed-sources/label.txt" }]);
+  const doctorControl = await context.app.store.requireProject(await context.app.store.userById(accounts.owner), doctor.projectId);
+  await mkdir(path.join(doctorControl.workspaceDir, ".evimed-sources"), { recursive: true });
+  await writeFile(path.join(doctorControl.workspaceDir, ".evimed-sources", "label.txt"), "【用法用量】本品每周一次皮下注射给药，起始剂量为 2.5 mg。");
+  const byDoctor = await call("owner", "PATCH", `/api/geo/projects/${doctorId}`, { producer: { kind: "doctor", name: "张医生", relation: "user_of_therapy" } });
+  assert.deepEqual(byDoctor.body.data.cards, { blockedBy: null, written: 1 });
 });
 
 test("the audience all end to end: a project's readiness and metrics count the module, the forbidden are counted", options, async () => {

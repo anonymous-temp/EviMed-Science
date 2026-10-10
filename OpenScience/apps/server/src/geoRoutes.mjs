@@ -117,6 +117,29 @@ function producerSettings(value) {
  */
 const asOwner = (user, project) => ({ ...user, id: project.userId });
 
+/**
+ * The product zone's cards, written once now that who speaks for the product, or who reviews it, has just been saved (D-28). The
+ * run-end import refuses the cards until both are named and nothing wrote them afterwards, so a project that set them up after its
+ * run waited for the next run's end. The save has stood: what the cards could not do is the answer's `cards`, never the save's failure.
+ * @param {{ cards?: { refresh?: (user: any, project: any) => Promise<any> } | null }} hooks
+ * @param {{ id?: string }} user @param {{ id: string, userId: string }} project the project as it now is
+ * @param {(event: string, status: string, details: Record<string, any>) => Promise<unknown>} audit
+ * @returns {Promise<{ blockedBy: "producer" | "reviewer" | null, written: number, failed?: string } | null>} null without the card hook
+ */
+async function writeCardsAfterSave(hooks, user, project, audit) {
+  if (!hooks.cards?.refresh) return null;
+  try {
+    const result = await hooks.cards.refresh(asOwner(user, project), project);
+    return { blockedBy: null, written: Array.isArray(result?.cards) ? result.cards.length : 0 };
+  } catch (error) {
+    const code = typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_cards_refresh_failed";
+    if (code === "geo_card_producer_required") return { blockedBy: "producer", written: 0 };
+    if (code === "geo_card_reviewer_required") return { blockedBy: "reviewer", written: 0 };
+    await audit("geo.cards.refresh", "failed", { userId: user.id, code: project.id, detail: code });
+    return { blockedBy: null, written: 0, failed: code };
+  }
+}
+
 /** @param {unknown} value */
 function brandName(value) {
   if (value == null) return null;
@@ -300,7 +323,9 @@ export function createGeoRoutes(dependencies) {
         }
         const updated = await service.updateProject(user, id, patch, { renameControlProject: dependencies.projects?.rename });
         if (patch.name !== undefined) await audit("geo.project.rename", "completed", { userId: user.id, code: id });
-        return reply(updated);
+        // Who speaks for the product is what the cards were waiting for: write them now, from the project as it now stands.
+        const cards = patch.producer ? await writeCardsAfterSave(hooks, user, updated, audit) : null;
+        return reply(cards ? { ...updated, cards } : updated);
       }
       if (method === "DELETE") {
         await bodyOf(req, maxJsonBytes, []);
@@ -322,7 +347,9 @@ export function createGeoRoutes(dependencies) {
         const project = await service.requireProject(user, id, "manage_members");
         const added = await hooks.members.add({ project, actorId: String(user.id), userId: body.userId, role: body.role, detail: body.detail });
         await audit("geo.member.add", "completed", { userId: user.id, code: id, detail: String(body.role) });
-        return reply(added, 201);
+        // A reviewing doctor is the other thing the cards were waiting for; no other role changes who reviews them.
+        const cards = added.role === "medical_reviewer" ? await writeCardsAfterSave(hooks, user, project, audit) : null;
+        return reply(cards ? { ...added, cards } : added, 201);
       }
       if (parts.length === 4 && method === "DELETE") {
         await bodyOf(req, maxJsonBytes, []);
