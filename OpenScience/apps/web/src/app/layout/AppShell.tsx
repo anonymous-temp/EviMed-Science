@@ -221,12 +221,6 @@ export function AppShell() {
           </div>
         )}
         <div className="relative min-h-0 flex-1">
-          {/* The conversation surface, above the router and hidden rather than
-            * unmounted off it (`SessionFrameHost`). This is the one page that
-            * costs a container document, a websocket and a kernel handshake to
-            * mount, and putting it inside the router made every visit to any
-            * other page pay for all three again on the way back. */}
-          <SessionFrameHost />
           {/* Keyed by the project — but never on the conversation surface,
             * whose frame must survive a project switch. A switch remounts the
             * page under the new one: every other page reads the project when
@@ -247,6 +241,17 @@ export function AppShell() {
               <Outlet key={onChat ? "chat" : currentProjectId} />
             </Suspense>
           </div>
+          {/* The conversation surface, mounted once for the whole shell and hidden rather than unmounted off the
+            * conversation (`SessionFrameHost`). This is the one page that costs a container document, a websocket
+            * and a kernel handshake to mount, and putting it inside the router made every visit to any other page
+            * pay for all three again on the way back.
+            * It follows the routed page in the document, not precedes it: on the scheduled-task page the frame is
+            * placed over a pane that sits under the task bar and beside the list, and a document order that puts the
+            * iframe first makes keyboard and screen-reader readers meet the conversation before the list and the
+            * bar it is drawn under (WCAG 2.4.3; review §3.4). Positioned and later in the tree, it also paints over
+            * the empty pane it is placed on. On the chat surface the route renders a title only and its overlay
+            * layer keeps its own tier (`z-sticky`), so nothing changes there. */}
+          <SessionFrameHost />
         </div>
       </main>
       {/* The shortcut sheet lists the sidebar's keys; an embedded shell has no
