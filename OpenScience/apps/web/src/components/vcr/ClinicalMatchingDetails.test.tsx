@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClinicalTimeline, MatchingPanelControls } from './ClinicalMatchingDetails';
 import { CloudDocuments, reviewedSpans } from './data/CloudDocuments';
 import type { VcrIntakeSource, VcrMatchingTab } from '@/lib/vcrClient';
+import { WebApiError } from '@/lib/apiClient';
 const api = vi.hoisted(() => ({ enqueue:vi.fn(),quote:vi.fn(),permission:vi.fn(),document:vi.fn(),projection:vi.fn() }));
 vi.mock('@/lib/vcrClient',()=>({enqueueVcrMatching:api.enqueue,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection}));
 beforeEach(()=>vi.clearAllMocks());
@@ -50,6 +51,87 @@ describe('evaluating from the controls',()=>{
     controls(page(),{canRun:false});
     expect(screen.queryByRole('button',{name:'开始评估'})).toBeNull();
     expect(screen.getByRole('button',{name:'刷新结果'})).toBeVisible();
+  });
+});
+
+describe('the clinical timeline',()=>{
+  const fact=(id:string,extra:Record<string,unknown>={})=>({id,variable:'creatinine',value:2.4,unit:'mg/dL',at:null,assertion:'affirmed',experiencer:'patient',medicationState:null,correctionOf:null,quote:null,superseded:false,conflictFactIds:[],correctionReason:null,locator:null,...extra});
+  const timeline=(entries:unknown[],mayReadOriginal=true)=>{
+    render(<ClinicalTimeline studyId="s1" data={{timeline:entries} as unknown as VcrMatchingTab} mayReadOriginal={mayReadOriginal} subject="P-001"/>);
+    fireEvent.click(screen.getByText('P-001 的临床记录与更正'));
+  };
+  const rows=()=>screen.getAllByRole('listitem');
+  beforeEach(()=>{vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-10-10T08:00:00Z'));});
+  afterEach(()=>vi.useRealTimers());
+
+  // Review V-M6: a patient's facts could run to hundreds of rows, drawn at once.
+  it('shows the first twenty and lets the reader ask for the rest',()=>{
+    timeline(Array.from({length:45},(_,index)=>fact(`f${index+1}`,{variable:`v${index+1}`})));
+    expect(rows()).toHaveLength(20);
+    fireEvent.click(screen.getByRole('button',{name:'显示更多 · 还有 25 条'}));
+    expect(rows()).toHaveLength(40);
+    fireEvent.click(screen.getByRole('button',{name:'显示更多 · 还有 5 条'}));
+    expect(rows()).toHaveLength(45);
+    expect(screen.queryByRole('button',{name:/显示更多/})).toBeNull();
+  });
+  // ...a structured value printed as [object Object]...
+  it('writes a recorded value a reader can read — a record, a list, a yes or no — never [object Object]',()=>{
+    timeline([
+      fact('f1',{variable:'blood_pressure',value:{systolic:120,diastolic:80},unit:'mmHg'}),
+      fact('f2',{variable:'allergies',value:['青霉素','磺胺'],unit:null}),
+      fact('f3',{variable:'smoker',value:false,unit:null}),
+      fact('f4',{variable:'ecog',value:null,unit:null}),
+    ]);
+    const text=rows().map(row=>row.textContent).join('|');
+    expect(text).not.toContain('[object Object]');
+    expect(rows()[0]).toHaveTextContent('blood_pressure：systolic：120；diastolic：80 mmHg');
+    expect(rows()[1]).toHaveTextContent('allergies：青霉素、磺胺');
+    expect(rows()[2]).toHaveTextContent('smoker：否');
+    expect(rows()[3]).toHaveTextContent('ecog：未知');
+  });
+  // ...an ISO date prefix where the app writes 9月29日...
+  it('dates a fact the way the rest of the app does: 9月29日 within this year, the full date before it',()=>{
+    timeline([fact('f1',{at:'2026-09-29'}),fact('f2',{at:'2025-03-02'}),fact('f3',{at:null})]);
+    expect(rows()[0]).toHaveTextContent('9月29日');
+    expect(rows()[0]).not.toHaveTextContent('2026-09-29');
+    expect(rows()[1]).toHaveTextContent('2025-03-02');
+    expect(rows()[2]).toHaveTextContent('日期未记载');
+  });
+  // ...the original offered only to an id that starts with prj_...
+  it('offers the original for any fact that cites a span it can be read from, whatever the document is called',async()=>{
+    api.quote.mockResolvedValue({evidence:{quote:'原文片段'}});
+    timeline([fact('f1',{quote:'肌酐 2.4 mg/dL',locator:{documentId:'doc_any_name',start:3,end:12}}),fact('f2'),fact('f3',{quote:'无定位',locator:null})]);
+    expect(screen.getAllByRole('button',{name:'查看对应原文'})).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button',{name:'查看对应原文'}));
+    expect(await screen.findByText('原文片段')).toBeVisible();
+    expect(api.quote).toHaveBeenCalledWith('s1','doc_any_name',{start:3,end:12,quote:'肌酐 2.4 mg/dL'});
+  });
+  it('offers no original to a reader who may not read patient-level records',()=>{
+    timeline([fact('f1',{quote:'肌酐 2.4 mg/dL',locator:{documentId:'prj_x',start:3,end:12}})],false);
+    expect(screen.queryByRole('button',{name:'查看对应原文'})).toBeNull();
+  });
+  // ...and the refusal under the whole list rather than under the fact it belongs to.
+  it('says a refusal on the fact whose original was asked for, and nowhere else',async()=>{
+    api.quote.mockRejectedValue(new WebApiError('no',{status:404,code:'vcr_projection_unavailable'}));
+    timeline([
+      fact('f1',{quote:'第一条',locator:{documentId:'prj_a',start:0,end:3}}),
+      fact('f2',{quote:'第二条',locator:{documentId:'prj_b',start:0,end:3}}),
+    ]);
+    const [first,second]=rows();
+    fireEvent.click(within(second).getByRole('button',{name:'查看对应原文'}));
+    const alert=await within(second).findByRole('alert');
+    expect(alert).toHaveTextContent('这份病历尚未准备好经审阅的脱敏文本。');
+    expect(within(first).queryByRole('alert')).toBeNull();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    // Asking again for the other one clears nothing of this one's, and a success clears its own.
+    api.quote.mockResolvedValue({evidence:{quote:'第一条的原文'}});
+    fireEvent.click(within(first).getByRole('button',{name:'查看对应原文'}));
+    expect(await within(first).findByText('第一条的原文')).toBeVisible();
+    expect(within(second).getByRole('alert')).toBeVisible();
+    api.quote.mockResolvedValue({evidence:{quote:'第二条的原文'}});
+    fireEvent.click(within(second).getByRole('button',{name:'查看对应原文'}));
+    expect(await within(second).findByText('第二条的原文')).toBeVisible();
+    expect(within(second).queryByRole('alert')).toBeNull();
   });
 });
 

@@ -6,7 +6,10 @@ import { Select } from '@/components/ui/Input';
 import { enqueueVcrMatching, resolveVcrQuote, type VcrMatchingTab, type VcrProtocolChoice } from '@/lib/vcrClient';
 import { webErrorMessage } from '@/lib/apiClient';
 import { cn } from '@/lib/cn';
+import { formatDay } from '@/lib/format';
+import { ShowMore, useShowMore } from '@/components/ui/ShowMore';
 import { ASSERTION_WORDS as assertions } from './evidenceCaveats';
+import { factValueText } from './vcrText';
 
 const summaries: Record<string, string> = { eligible: '全部满足', ineligible: '有不满足条件', insufficient_evidence: '证据不足', pending: '待复评' };
 const experiencers: Record<string, string> = { patient: '本人', family: '家属', other: '他人', unknown: '主体不明' };
@@ -140,6 +143,9 @@ export function MatchingPanelControls({ studyId, data, direction, protocolId, se
   </div>;
 }
 
+/** How many facts the timeline draws before the reader asks for more: a patient's chart can run to hundreds. */
+const FACTS_SHOWN = 20;
+
 export function ClinicalTimeline({ studyId, data, mayReadOriginal, subject }: {
   studyId: string; data: VcrMatchingTab; mayReadOriginal: boolean;
   /** Whose records these are: the person the page is about. The fold names them, so a reader never wonders whose facts they are reading. */
@@ -147,30 +153,34 @@ export function ClinicalTimeline({ studyId, data, mayReadOriginal, subject }: {
 }) {
   const [originals, setOriginals] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
-  const [problem, setProblem] = useState('');
+  // A refusal is said on the fact whose original was asked for, not under the whole list.
+  const [problems, setProblems] = useState<Record<string, string>>({});
   const entries = data.timeline ?? [];
+  const shown = useShowMore(entries, { first: FACTS_SHOWN, step: FACTS_SHOWN, resetKey: subject ?? '' });
   if (!entries.length) return null;
   const reveal = async (entry: typeof entries[number]) => {
     if (!entry.locator || !entry.quote) return;
-    setBusy(entry.id); setProblem('');
+    setBusy(entry.id); setProblems(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => id !== entry.id)));
     try {
       const answer = await resolveVcrQuote(studyId, entry.locator.documentId, { start: entry.locator.start, end: entry.locator.end, quote: entry.quote });
       setOriginals(previous => ({ ...previous, [entry.id]: answer.evidence.quote }));
-    } catch (error) { setProblem(webErrorMessage(error, { fallback: '原文暂时无法打开，请重试。' })); }
+    } catch (error) { setProblems(previous => ({ ...previous, [entry.id]: webErrorMessage(error, { fallback: '原文暂时无法打开，请重试。' }) })); }
     finally { setBusy(null); }
   };
   return <Disclosure summary={subject ? `${subject} 的临床记录与更正` : '临床记录与更正'}>
     <ol className="divide-y divide-faint">
-      {entries.map(entry => <li key={entry.id} className="flex flex-col gap-2 py-3">
-        <p className="text-caption text-text-3">{[entry.at?.slice(0, 10) ?? '日期未记载', assertions[entry.assertion] ?? '未知',
+      {shown.visible.map(entry => <li key={entry.id} className="flex flex-col gap-2 py-3">
+        <p className="text-caption text-text-3">{[formatDay(entry.at) || '日期未记载', assertions[entry.assertion] ?? '未知',
           entry.experiencer ? experiencers[entry.experiencer] : null, entry.medicationState ? medicationStates[entry.medicationState] : null,
           entry.correctionOf ? '更正记录' : null, entry.superseded ? '已有更正' : null, entry.conflictFactIds?.length ? '记录有冲突' : null].filter(Boolean).join(' · ')}</p>
-        <p className="text-ui text-text">{entry.quote ?? `${entry.variable}：${String(entry.value ?? '未知')}${entry.unit ? ` ${entry.unit}` : ''}`}</p>
+        <p className="text-ui text-text">{entry.quote ?? `${entry.variable}：${factValueText(entry.value)}${entry.unit ? ` ${entry.unit}` : ''}`}</p>
         {entry.correctionReason && <p className="text-caption text-text-2">{entry.correctionReason}</p>}
-        {mayReadOriginal && entry.locator?.documentId.startsWith('prj_') && <Button variant="text" size="sm" loading={busy === entry.id} disabled={busy !== null} onClick={() => void reveal(entry)}>查看对应原文</Button>}
+        {/* The original can be read wherever the fact cites a span of it; whether the server can open that span is the server's answer, said right here. */}
+        {mayReadOriginal && entry.locator && entry.quote && <Button variant="text" size="sm" loading={busy === entry.id} disabled={busy !== null} onClick={() => void reveal(entry)}>查看对应原文</Button>}
         {originals[entry.id] && <blockquote className="whitespace-pre-wrap text-ui text-text-2">{originals[entry.id]}</blockquote>}
+        {problems[entry.id] && <p role="alert" className="text-caption text-error">{problems[entry.id]}</p>}
       </li>)}
     </ol>
-    {problem && <p role="alert" className="text-caption text-error">{problem}</p>}
+    <ShowMore remaining={shown.remaining} unit="条" onMore={shown.more} />
   </Disclosure>;
 }
