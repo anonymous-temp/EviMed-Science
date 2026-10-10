@@ -731,9 +731,11 @@ export class VcrMatchStore extends VcrStoreBase {
    * @param {string} studyId @param {string} subjectKey @returns {Promise<boolean>}
    */
   async holdsSubject(studyId, subjectKey) {
+    // A subject whose consent was withdrawn is nobody the study holds: nothing more is written about them.
     const rows = await this.rows(
-      `SELECT (EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1 AND subject_key = $2)
-            OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_facts WHERE study_id = $1 AND subject_key = $2)) AS held`, [studyId, subjectKey]);
+      `SELECT ((EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1 AND subject_key = $2)
+            OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_facts WHERE study_id = $1 AND subject_key = $2))
+            AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals WHERE study_id = $1 AND subject_key = $2)) AS held`, [studyId, subjectKey]);
     return rows[0]?.held === true;
   }
 

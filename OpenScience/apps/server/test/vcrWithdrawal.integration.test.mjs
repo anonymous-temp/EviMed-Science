@@ -127,6 +127,16 @@ test('a subject withdraws consent: their text is overwritten, the rows and hashe
   assert.deepEqual(await vcr.matchStore.candidateSubjects({ studyId: target.id }), [s2], 'they are on no roster');
   await assert.rejects(vcr.matching.matchScenario(target, { subjectKeys: [s1] }), { code: 'vcr_subject_not_found' });
 
+  // A run is told so and given nothing to work on; the study holds nobody of that name any more, so nothing more is written about them.
+  const closed = await vcr.documents.subjectDocuments(target, { subjectKey: s1, documentId: doc1.id });
+  assert.deepEqual([closed.available, closed.code, closed.message], [false, 'vcr_document_withdrawn', '这份病历已撤回，文本已清除；其他工作可以继续。']);
+  const seen = await vcr.matching.runtimeRead(target, { subjectKey: s1 });
+  assert.deepEqual([seen.withdrawn, seen.assessment, seen.facts, seen.requests], [true, null, [], []]);
+  assert.deepEqual((await vcr.matching.runtimeRead(target, {})).subjects.map(row => row.subjectKey), [s2], 'and the run is not handed them to work on');
+  assert.equal(await vcr.matchStore.holdsSubject(target.id, s1), false);
+  const refused = await write(target, 'fact', [{ subjectKey: s1, variable: 'age', value: 62, unit: 'year', documentId: doc1.id, quote: '年龄 62 岁', surface: '62' }]);
+  assert.equal(refused.ids.length, 0);
+
   // The facts and judgments a frozen evaluation used keep their ids; their words, and nothing else, are gone.
   const kept = await vcr.matchStore.matchingFactsByIds(target.id, f.factIds);
   const age = kept.find(fact => fact.variable === 'age' && fact.subjectKey === s1);

@@ -452,8 +452,11 @@ export function vcrDocumentsSeam({ dataPlane }) {
         if (!subjectKey) return { available: false, code: "vcr_read_filter_invalid", message: "读取一份文档要同时写 subjectKey 和 documentId。" };
         let document;
         try { document = await this.runtimeRead(study, { subjectKey, documentId: String(filter.documentId) }); }
-        catch (error) { return { available: false, code: String(/** @type {any} */ (error)?.code ?? 'vcr_projection_unavailable'),
-          message: '这份病历现在不能交给云端模型读取（云端处理被限制或尚未授权，或它已不在这项研究里）；其他工作可以继续。' }; }
+        catch (error) {
+          const code = String(/** @type {any} */ (error)?.code ?? 'vcr_projection_unavailable');
+          return { available: false, code, message: code === 'vcr_document_withdrawn' ? '这份病历已撤回，文本已清除；其他工作可以继续。'
+            : '这份病历现在不能交给云端模型读取（云端处理被限制或尚未授权，或它已不在这项研究里）；其他工作可以继续。' };
+        }
         if (!document) return { available: false, code: "vcr_document_not_found", message: "这位受试者没有这份文档。" };
         const offset = Math.max(0, Number(filter?.offset ?? 0));
         const window = clinicalDocumentWindow(document.text, offset, this.windowChars);
@@ -616,6 +619,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       }
       const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id });
       const subjectKey = filter?.subjectKey ? String(filter.subjectKey) : null;
+      const withdrawn = await matchStore.withdrawnSubjects?.(study.id) ?? new Set();
       const view = {
         factContract: clinicalEnabled(study) ? CLINICAL_FACT_CONTRACT : null,
         terminology: clinicalEnabled(study) ? await clinicalContext(study,criteria).catch(() => null) : null,
@@ -627,6 +631,8 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
           languageKeys: languageKeysOf(criterion.requirement, criterion.id),
         })),
       };
+      // A subject whose consent was withdrawn is read as that and nothing else: no assessment, no facts, no work to owe.
+      if (subjectKey && withdrawn.has(subjectKey)) return { ...view, subjectKey, withdrawn: true, assessment: null, semanticFields: [], facts: [], requests: [] };
       if (subjectKey) {
         const [assessment, facts, judgments] = await Promise.all([
           matchStore.latestAssessment({ studyId: study.id, subjectKey, protocolVersionId: protocol.id }),
@@ -674,7 +680,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       const factSubjects = await matchStore.factSubjects(study.id);
       const roster = await matchStore.candidateSubjects({ studyId: study.id });
       const known = new Map(subjects.map((row) => [row.subjectKey, row.summary]));
-      const keys = [...new Set([...roster, ...known.keys(), ...factSubjects.map((entry) => entry.subjectKey)])].sort();
+      const keys = [...new Set([...roster, ...known.keys(), ...factSubjects.map((entry) => entry.subjectKey)])].filter((key) => !withdrawn.has(key)).sort();
       return {
         ...view,
         // Cells of siblings, so the boundary can hide the small ones together with the next-smallest.
