@@ -784,7 +784,9 @@ describe("试验", () => {
     expect(codes).toEqual(["A", "B", "C", "D"]);
     const d = container.querySelector("tr[data-vcr-design='D']") as HTMLElement;
     expect(d).toHaveAttribute("data-vcr-dominated");
-    expect(d.querySelector("[data-vcr-dominated-note]")).toHaveTextContent("在比较目标的全部指标上都不优于 C");
+    // D is dominated by B, not by C: C beats it by less than three combined Monte-Carlo errors on every measure, which the tie rule
+    // (D10) no longer counts (860954be1 regenerated the fixture; this line was left reading C).
+    expect(d.querySelector("[data-vcr-dominated-note]")).toHaveTextContent("在比较目标的全部指标上都不优于 B");
     expect(d.querySelectorAll("[data-vcr-measure]")).toHaveLength(0);
     expect(d.textContent).not.toContain("%");
   });
