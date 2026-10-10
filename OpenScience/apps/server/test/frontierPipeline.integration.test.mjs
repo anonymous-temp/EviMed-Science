@@ -410,6 +410,31 @@ test("a relation is classified by its type: each notice is its own state, and a 
   ]);
 });
 
+test("an entry of the AI-discovery channel is dropped before any screening, whichever of the plugin's discovery rows carried it; a lab feed beside it is screened as before", options, async () => {
+  await reset();
+  for (const [id, name] of [["ai-discovery-arxiv-agents-memory", "arXiv agents and memory"], ["ai-discovery-gh-langchain-ai-langgraph", "langgraph releases"],
+    ["ai-discovery-req-0123456789ab", "A source the platform asked for"], ["arxiv-agent-self-improvement", "The single query it replaced"], ["openai-news", "OpenAI news"]]) {
+    await database.query(`INSERT INTO evimed_frontier.sources (id, name, lane, source_type, access, egress, authority, safety_feed, owner_entity, launch_tier, region)
+      VALUES ($1,$2,'ai','company','rss','direct',2,false,$2,'P0','US')`, [id, name]);
+  }
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, editor } = pipelineWith({ now: () => clock });
+  const channel = [];
+  for (const source_id of ["ai-discovery-arxiv-agents-memory", "ai-discovery-gh-langchain-ai-langgraph", "ai-discovery-req-0123456789ab", "arxiv-agent-self-improvement"]) {
+    channel.push(await deliver({ source_id, title: `A paper about agent memory [${source_id}]`, summary: "S".repeat(200) }));
+  }
+  const lab = await deliver({ source_id: "openai-news", title: "A lab post about a model", summary: "L".repeat(200) });
+  const medical = await deliver({ source_id: "j-nejm", doi: "10.1056/NEJMdiscovery1", title: "A trial of something", summary: "T".repeat(200) });
+  await pipeline.processBatch();
+  for (const delivered of channel) {
+    assert.deepEqual([(await entry(delivered.id)).state, (await entry(delivered.id)).state_reason], ["dropped", "evolution-discovery-only"]);
+  }
+  const screened = editor.calls.screen.flat();
+  assert.equal(screened.length, 2, "only the lab post and the trial reach screening");
+  assert.notEqual((await entry(lab.id)).state_reason, "evolution-discovery-only");
+  assert.notEqual((await entry(medical.id)).state_reason, "evolution-discovery-only");
+});
+
 test("recently generated dailies keep old referenced items eligible for an owed edit without opening all history", options, async () => {
   await reset();
   let clock = new Date("2026-09-22T02:00:00Z");

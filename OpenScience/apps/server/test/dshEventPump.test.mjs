@@ -139,6 +139,23 @@ test("a decoded run/event reaches the run whose session's stream it arrived on",
   pump.detach(project);
 });
 
+test("a compaction is reported with the conversation it happened in, and a delegated child's is marked as one", async () => {
+  // Review M6: a compaction takes the resident profile out of the history it was written into, so the control plane notes it
+  // against the conversation (`onCompaction` -> `ResearchMemoryStore.noteCompaction`). The conversation's own, not its child's.
+  const compactions = [];
+  const { runEvents, pump, muxes } = pumpOnFakeMux();
+  pump.onCompaction = (project, runId, record) => compactions.push({ project: project.id, runId, ...record });
+  const project = { userId: "alice", id: "paper-compact" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "run-c", sessionId: "s-c", status: "running" });
+  await waitFor(() => muxes[0]?.follow("s-c"), "a follow stream for the run's session");
+  muxes[0].follow("s-c").push(sessionEvent({ type: "compaction/end", seq: 9, time: 1, data: { replaced: 14, tokens: 52000 } }));
+  await waitFor(() => compactions.length === 1, "the compaction record");
+  assert.deepEqual(compactions[0], { project: "paper-compact", runId: "run-c", seq: 9, replaced: 14, tokens: 52000, sessionId: "s-c", child: false });
+  assert.equal(eventsOf(runEvents, "run-c").some((event) => event.type === "compaction"), true, "and it is still published to the run's stream");
+  pump.detach(project);
+});
+
 test("two runs on one mux never receive each other's events", async () => {
   // The attribution is the pump's now: the frame does not say which session it
   // came from, only which stream did.

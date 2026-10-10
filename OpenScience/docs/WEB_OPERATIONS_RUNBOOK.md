@@ -721,8 +721,21 @@ not sufficient containment for those events.
   passphrase and decrypts it back before dropping anything; and drops them in
   one statement without CASCADE. The archive stays in
   `shared/backups/usememos-retired/` (0700; archive 0600, with its `.sha256`),
-  outside the thirty-day rotation. Then the credential files, once nothing
-  names them:
+  outside the thirty-day rotation. An account erased from the platform takes its
+  rows out of these tables while they exist; the archive is a dump and cannot be
+  edited in place, so the platform records each erased account by the two digests
+  the retired store knew it by (`evimed_memory.retired_erasures`) and
+
+  ```bash
+  sudo python3 scripts/ops/retire-usememos-tables.py --forget-erased
+  ```
+
+  re-seals every archive against that ledger (restores it into a scratch database
+  of the same server, deletes those rows, dumps, encrypts, decrypts back, replaces
+  the archive and its `.sha256`, drops the scratch database; an archive with
+  nothing to forget is left untouched; the role needs `CREATEDB`). Run it after
+  accounts have been erased, and before an archive is restored anywhere. Then the
+  credential files, once nothing names them:
 
   ```bash
   sudo ls -l /srv/evimed-science/shared/secrets/memos-*
@@ -953,6 +966,24 @@ means the index is down, and deleted data's copies outlive their rows until it i
 back (recall never serves them). Deleting or archiving one memory record and
 deleting a source never called the index: they queue one record job in their own
 transaction, which the worker retries.
+
+### What a conversation is handed of the memory, and the counters that say so (2026-10-10)
+
+A conversation is handed the researcher's standing profile and nothing retrieved for the question: the records of the durable kinds
+(profile, preference, behavior, correction) and the capsule's own profile entries, at most `OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS`
+(24) entries and 1,500 tokens, with one line that counts what else can be looked up. It is handed once, at the conversation's first
+dispatch, and again only when it changed or the kernel compacted the conversation since; a delegated child is handed it at every
+dispatch. Everything else is the recall tool's: `OPEN_SCIENCE_MEMORY_RECALL_TOOL_LIMIT` (5) items by default,
+`OPEN_SCIENCE_MEMORY_RECALL_TOOL_MAX_LIMIT` (8) at most, under the `OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE` floor (0.5) on both halves.
+`open_science_memory_resident_profile_total{outcome}` counts what each dispatch did (`first`, `changed`, `compacted`, `unchanged`,
+`empty`, `paused`; `..._omitted_total` the entries the caps left off) and `open_science_memory_recall_tool_total{outcome}` what the
+tool answered (`hit`, `empty`, `paused`, `trial`, `disabled`; `..._items_total` the items). A run whose extraction wrote nothing is
+`open_science_memory_extraction_empty_total{cause}` (`error`, `none_proposed`, `all_rejected`, `unread`), no longer a notice on the
+run: an empty conversation is legitimate and a broken extractor looks the same, so a `cause="error"` that grows is the one to read
+(the per-run counts are in the `memory.agent_run.record` audit line). `open_science_memory_inference_upgraded_total` counts the
+inferences the researcher's own later message made their own word; nothing asks them to confirm. A memory is not held for a
+medicine it names any more: a record parked under that rule is put in force the next time it is observed, or when its owner
+confirms it on the memory page.
 
 ### The knowledge base's document types after R10
 

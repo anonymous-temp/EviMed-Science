@@ -45,6 +45,17 @@ measured against each on 2026-09-21/22:
     registry numbers of the study it is about to the frontier's event clustering through ``registry_ids``, so
     it is found beside that study as one more report. A card that is first-hand itself (an original analysis, a
     recalculation, original research) carries none, and forms its own event.
+``huggingface-daily-papers``, ``huggingface-models``, ``github-releases``, ``github-commits`` (AI discovery, 2026-10-10)
+    The sources 循证进化's weekly self-research reads, none of them medical (``config.discovery_only``). Daily Papers
+    is the community's list of arXiv preprints a day at a time (``?date=``): a paper is an entry once it has
+    ``config.min_upvotes`` upvotes (20 by default), on the identity the arXiv rows give it (``arxiv:<id>`` and arXiv's
+    DataCite DOI), so the platform sees one paper however many rows carried it; the poll walks back
+    ``lookback_days`` days, and a repository the page links closes the summary as ``Code: <url>``. The Hub's model list
+    is one entry per model, newest first. A repository's releases (and, for the ACL Anthology's volumes, the commits
+    named in ``config.message_contains``) are read through the REST API (``api.github.com``), not ``releases.atom``:
+    github.com's robots.txt disallows ``*.atom`` for every agent that is not named, and the plugin honours robots.txt
+    for feeds; the API is an API, whose rate limit (60 an hour a client, the poll sends ``If-None-Match``) a score of
+    repositories read a few times a day stay far under.
 ``federalregister``, ``arxiv``, ``medhelm``, ``prepare-registry``, ``star-rating``
     See the functions below. PREPARE records carry contact name, e-mail, phone, address and
     WeChat id and include unsubmitted drafts; only whitelisted fields leave, drafts are skipped.
@@ -751,6 +762,161 @@ def parse_arxiv(result: FetchResult, source: SourceConfig, now: datetime) -> Par
     return parse_feed(result, source, now)
 
 
+_ARXIV_ID = re.compile(r"^(?:\d{4}\.\d{4,5}|[a-z\-]+(?:\.[A-Z]{2})?/\d{7})$")
+HF_MODEL_PAGE = "https://huggingface.co/{model_id}"
+DEFAULT_MIN_UPVOTES = 20
+DEFAULT_DAILY_LOOKBACK_DAYS = 2
+GITHUB_FAMILIES = ("github-releases", "github-commits")
+
+
+def _int_or(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def parse_huggingface_daily_papers(result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
+    """Hugging Face Daily Papers for one day (``?date=``): arXiv preprints the community upvoted."""
+    if result.not_modified:
+        return ParseOutput(entries=[], notes=["huggingface_not_modified"])
+    if result.status != 200:
+        raise FetchError("http-error", f"huggingface_http_{result.status}", status=result.status)
+    payload = load_json(result, "huggingface")
+    if not isinstance(payload, list):
+        raise FetchError("parse-error", "huggingface_daily_unexpected_shape", status=result.status)
+    config = source.config or {}
+    minimum = _int_or(config.get("min_upvotes"), DEFAULT_MIN_UPVOTES)
+    entries, below, seen = [], 0, set()
+    for item in payload:
+        paper = item.get("paper") if isinstance(item, dict) and isinstance(item.get("paper"), dict) else None
+        if paper is None:
+            continue
+        arxiv_id = str(paper.get("id") or "").strip()
+        title = clean_markup(paper.get("title") or item.get("title"))
+        if not _ARXIV_ID.match(arxiv_id) or not title or arxiv_id in seen:
+            continue
+        seen.add(arxiv_id)
+        if _int_or(paper.get("upvotes")) < minimum:
+            below += 1
+            continue
+        when, _ = parse_date(paper.get("publishedAt"))
+        repository = str(paper.get("githubRepo") or "").strip()
+        # The repository the page links is part of what a reader weighs, and the entry has no other place for it.
+        code = f"Code: {repository}" if repository.startswith("https://github.com/") else None
+        entries.append(make_entry(
+            external_key=f"arxiv:{arxiv_id}", url=f"https://arxiv.org/abs/{arxiv_id}", title=title,
+            summary=_join(clean_markup(paper.get("summary") or item.get("summary")), code, sep="\n\n") or None, published_at=when,
+            precision="day", language="en", doi=f"10.48550/arxiv.{arxiv_id.lower()}", feed_summary=True))
+    notes = [f"huggingface_below_{minimum}_upvotes={below}"] if below else []
+    # The list is one day's; the poll walks back to the start of its window, one request a day.
+    day = query_param(result.request.url, "date")
+    next_request = None
+    try:
+        previous = datetime.strptime(str(day), "%Y-%m-%d").date() - timedelta(days=1)
+    except ValueError:
+        previous = None
+    lookback = _int_or(config.get("lookback_days"), DEFAULT_DAILY_LOOKBACK_DAYS)
+    if previous is not None and previous >= (now - timedelta(days=lookback)).date():
+        next_request = RequestSpec(url=set_query_param(result.request.url, "date", previous.isoformat()), conditional=False, api=True)
+    return ParseOutput(entries=entries, next=next_request, notes=notes)
+
+
+def parse_huggingface_models(result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
+    """The Hub's model list of one author, newest first: a model is a release, named by its id."""
+    if result.not_modified:
+        return ParseOutput(entries=[], notes=["huggingface_not_modified"])
+    if result.status != 200:
+        raise FetchError("http-error", f"huggingface_http_{result.status}", status=result.status)
+    payload = load_json(result, "huggingface")
+    if not isinstance(payload, list):
+        raise FetchError("parse-error", "huggingface_models_unexpected_shape", status=result.status)
+    entries = []
+    for record in payload:
+        model_id = str((record or {}).get("id") or "").strip() if isinstance(record, dict) else ""
+        if not model_id or "/" not in model_id or record.get("private") is True:
+            continue
+        when, _ = parse_date(record.get("createdAt"))
+        tags = [tag for tag in record.get("tags") or [] if isinstance(tag, str)]
+        licence = next((tag.split(":", 1)[1] for tag in tags if tag.startswith("license:")), None)
+        summary = _join(f"Hugging Face model {model_id}.", _labelled("Task", record.get("pipeline_tag")),
+                        _labelled("Library", record.get("library_name")), _labelled("License", licence))
+        entries.append(make_entry(
+            external_key=f"hf-model:{model_id}", url=HF_MODEL_PAGE.format(model_id=model_id), title=model_id,
+            summary=summary, published_at=when, precision="instant", language="en", defects=["link-derived"]))
+    return ParseOutput(entries=entries)
+
+
+def parse_github_releases(result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
+    """The latest releases of one repository (``/repos/<owner>/<repo>/releases``), drafts left out."""
+    if result.not_modified:
+        return ParseOutput(entries=[], notes=["github_not_modified"])
+    if result.status != 200:
+        raise FetchError("http-error", f"github_http_{result.status}", status=result.status)
+    payload = load_json(result, "github")
+    if not isinstance(payload, list):
+        raise FetchError("parse-error", "github_releases_unexpected_shape", status=result.status)
+    parts = [part for part in urlsplit(result.request.url).path.split("/") if part]
+    repo = "/".join(parts[1:3]) if len(parts) >= 4 and parts[0] == "repos" else ""
+    if not repo:
+        raise FetchError("parse-error", "github_releases_unexpected_url", status=result.status)
+    entries = []
+    for release in payload:
+        if not isinstance(release, dict) or release.get("draft") is True:
+            continue
+        tag = str(release.get("tag_name") or "").strip()
+        link = str(release.get("html_url") or "").strip()
+        if not tag or not link.startswith("https://github.com/"):
+            continue
+        name = clean_markup(release.get("name")) or tag
+        label = name if name == tag or tag in name else f"{name} ({tag})"
+        if release.get("prerelease") is True:
+            label += " (pre-release)"
+        when, _ = parse_date(release.get("published_at") or release.get("created_at"))
+        entries.append(make_entry(
+            external_key=f"github-release:{repo}:{tag}", url=link, title=f"{repo} {label}",
+            summary=clean_markup(release.get("body"), keep_paragraphs=True) or None, published_at=when, precision="instant",
+            language="en"))
+    return ParseOutput(entries=entries)
+
+
+def parse_github_commits(result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
+    """The latest commits of one repository (``/repos/<owner>/<repo>/commits``), those whose message names ``config.message_contains``.
+
+    The ACL Anthology records a proceedings volume by a commit named "Ingest …"; every other commit in its history is
+    dependency bumps and corrections, which this row leaves out.
+    """
+    if result.not_modified:
+        return ParseOutput(entries=[], notes=["github_not_modified"])
+    if result.status != 200:
+        raise FetchError("http-error", f"github_http_{result.status}", status=result.status)
+    payload = load_json(result, "github")
+    if not isinstance(payload, list):
+        raise FetchError("parse-error", "github_commits_unexpected_shape", status=result.status)
+    parts = [part for part in urlsplit(result.request.url).path.split("/") if part]
+    repo = "/".join(parts[1:3]) if len(parts) >= 4 and parts[0] == "repos" else ""
+    if not repo:
+        raise FetchError("parse-error", "github_commits_unexpected_url", status=result.status)
+    needles = [str(item) for item in (source.config or {}).get("message_contains") or [] if str(item)]
+    entries, skipped = [], 0
+    for record in payload:
+        commit = record.get("commit") if isinstance(record, dict) and isinstance(record.get("commit"), dict) else None
+        sha = str((record or {}).get("sha") or "").strip() if commit is not None else ""
+        link = str(record.get("html_url") or "").strip() if commit is not None else ""
+        message = str(commit.get("message") or "").strip() if commit is not None else ""
+        if not sha or not message or not link.startswith("https://github.com/"):
+            continue
+        headline = clean_markup(message.split("\n", 1)[0])
+        if needles and not any(needle in headline for needle in needles):
+            skipped += 1
+            continue
+        when, _ = parse_date(((commit.get("committer") or {}).get("date")) or ((commit.get("author") or {}).get("date")))
+        entries.append(make_entry(
+            external_key=f"github-commit:{repo}:{sha[:12]}", url=link, title=f"{repo}: {headline}",
+            summary=clean_markup(message, keep_paragraphs=True) or None, published_at=when, precision="instant", language="en"))
+    return ParseOutput(entries=entries, notes=[f"github_commits_not_matching={skipped}"] if skipped else [])
+
+
 def parse_crossref_family(result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
     return parse_crossref_works(result, source)
 
@@ -853,6 +1019,10 @@ FAMILIES: dict[str, Callable[[FetchResult, SourceConfig, datetime], ParseOutput]
     "openalex": parse_openalex,
     "quotemedia-headlines": parse_quotemedia_headlines,
     "evimed-evidence": parse_evimed_evidence,
+    "huggingface-daily-papers": parse_huggingface_daily_papers,
+    "huggingface-models": parse_huggingface_models,
+    "github-releases": parse_github_releases,
+    "github-commits": parse_github_commits,
 }
 
 # Rows the registry still labels ``generic`` are recognised by host (the three P0 ones).
@@ -926,8 +1096,11 @@ class JsonApiAdapter:
         if method == "POST":
             body = json.dumps(config.get("body") or {"page": 1, "limit": 40}, ensure_ascii=False).encode("utf-8")
             headers = {"Content-Type": "application/json"}
+        if family in GITHUB_FAMILIES:
+            headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
         # The platform's own feed answers an ETag, and an unchanged page is a 304: the first request keeps its validators.
-        return [RequestSpec(url=url, method=method, body=body, headers=headers, conditional=family == "evimed-evidence", api=True)]
+        # So does a repository's list of releases or commits, whose 304 costs the client nothing against GitHub's rate limit.
+        return [RequestSpec(url=url, method=method, body=body, headers=headers, conditional=family == "evimed-evidence" or family in GITHUB_FAMILIES, api=True)]
 
     def parse(self, result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
         family = family_of(source)

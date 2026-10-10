@@ -6,8 +6,9 @@ import test from "node:test";
 import { RuntimeManager, issueEviMedWorkloadToken } from "../src/runtimeManager.mjs";
 import { createCapsuleGatewayHandler } from "../src/capsuleGateway.mjs";
 import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
+import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
 
-async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null, subscriptions = null, clinicalContext = null, noteInForce = true, noteStatus = "approved" } = {}) {
+async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null, subscriptions = null, clinicalContext = null, noteInForce = true, noteStatus = "approved", recallLimits = {} } = {}) {
   const dir = await mkdtemp("/tmp/evimed-capsule-gateway-");
   const secret = randomBytes(32).toString("hex");
   const project = { userId: "owner", id: "project-one" };
@@ -30,7 +31,7 @@ async function fixture(t, { memorySubstrate = null, sessions = null, recallItems
   const authorized = new Promise((resolve) => { authorize = resolve; });
   const store = { userById: async () => exists ? { id: project.userId } : null,
     requireProject: async (user, id) => { assert.equal(user.id, project.userId); assert.equal(id, project.id); authorize(); return project; } };
-  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, memorySubstrate, sessions, handbooks, subscriptions, clinicalContext });
+  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, memorySubstrate, sessions, handbooks, subscriptions, clinicalContext, ...recallLimits });
   const server = createServer((req, res) => { void handler(req, res); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); await rm(dir, { recursive: true, force: true }); });
@@ -77,6 +78,56 @@ test("a recall may name the time its question is about, and nothing else new", a
   assert.deepEqual([asked[0].userId, asked[0].scope.projectId], ["owner", "project-one"], "the account and the project still come from the credential");
   assert.equal((await f.request("recall", { query: "dose", scope: "conversation", asOf: "last spring" })).status, 400);
   assert.equal((await f.request("recall", { query: "dose", asOf: "2025-06-30", userId: "someone-else" })).status, 400);
+});
+
+// Review M6 (owner ruling of 2026-10-10): the recall tool is the one path to the memory the profile does not carry.
+const toolCounter = (name, label, value) => memoryMetricFamilies().find((family) => family.name === name)?.series.find((item) => item.labels?.[label] === value)?.value;
+
+test("the recall tool answers with five by default and eight at most, asks for what the question reaches and not the standing profile, and counts what it gave", async (t) => {
+  resetMemoryMetrics();
+  const asked = [];
+  const memorySubstrate = { recall: async (userId, query, scope) => { asked.push({ userId, query, scope }); return []; } };
+  const items = Array.from({ length: 12 }, (_, index) => ({ id: `fact_${index}`, capsuleId: "cap", factKind: "preference", content: `偏好 ${index}`, origin: "explicit" }));
+  const f = await fixture(t, { memorySubstrate, recallItems: items });
+  const count = async (body) => (await (await f.request("recall", { query: "偏好", ...body })).json()).items.length;
+  assert.equal(await count({}), 5, "the default");
+  assert.equal(await count({ limit: 8 }), 8, "asked for eight");
+  assert.equal(await count({ limit: 30 }), 8, "asked for more than the most: the most");
+  assert.equal(await count({ limit: 2 }), 2);
+  assert.equal(asked[0].scope.standing, false, "a lookup is not padded with the profile");
+  assert.equal((await f.request("recall", { query: "x", limit: 0 })).status, 400);
+  assert.equal((await f.request("recall", { query: "x", limit: "many" })).status, 400);
+  assert.equal(toolCounter("open_science_memory_recall_tool_total", "outcome", "hit"), 4);
+  assert.equal(toolCounter("open_science_memory_recall_tool_items_total", "what", "items"), 5 + 8 + 8 + 2);
+
+  const narrow = await fixture(t, { recallItems: items, recallLimits: { recallLimit: 3, recallMaxLimit: 4 } });
+  assert.equal((await (await narrow.request("recall", { query: "偏好" })).json()).items.length, 3, "an operator's default");
+  assert.equal((await (await narrow.request("recall", { query: "偏好", limit: 8 })).json()).items.length, 4, "and an operator's most");
+});
+
+test("a recall that reaches nothing above the relevance floor says so, and a paused or disabled one says what it is instead", async (t) => {
+  resetMemoryMetrics();
+  const f = await fixture(t, { recallItems: [] });
+  const empty = await (await f.request("recall", { query: "完全无关的问题" })).json();
+  assert.deepEqual(empty.items, []);
+  assert.equal(empty.notice, "没有达到相关度下限的记忆。可以换个说法再查一次，或不依赖记忆直接回答。");
+  assert.equal(toolCounter("open_science_memory_recall_tool_total", "outcome", "empty"), 1);
+
+  const found = await fixture(t, { recallItems: [{ id: "fact_1", capsuleId: "cap", factKind: "preference", content: "偏好中文", origin: "explicit" }] });
+  assert.equal("notice" in await (await found.request("recall", { query: "偏好" })).json(), false, "an answer with something in it carries no notice");
+
+  const paused = await fixture(t, { recallItems: [], sessions: { running: async () => [], state: async () => ({ trialCapsuleId: null }),
+    paused: async () => ({ learning: false, recall: true, trial: false }), recordRecall: async () => {} } });
+  const pausedAnswer = await (await paused.request("recall", { query: "偏好" })).json();
+  assert.equal(pausedAnswer.mode, "paused");
+  assert.match(pausedAnswer.notice, /用户已暂停记忆/, "the researcher's pause is not mistaken for an empty store");
+  assert.equal(toolCounter("open_science_memory_recall_tool_total", "outcome", "paused"), 1);
+
+  const disabled = await fixture(t, { memorySubstrate: { recallEnabled: false, recall: async () => [] }, recallItems: [] });
+  const disabledAnswer = await (await disabled.request("recall", { query: "偏好" })).json();
+  assert.equal(disabledAnswer.mode, "disabled");
+  assert.equal("notice" in disabledAnswer, false, "a deployment with recall off did not look and find nothing");
+  assert.equal(toolCounter("open_science_memory_recall_tool_total", "outcome", "disabled"), 1);
 });
 
 test("capsule credentials stop working on expiry, rotation, runtime stop or account deletion", async (t) => {

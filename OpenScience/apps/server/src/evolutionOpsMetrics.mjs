@@ -20,7 +20,7 @@
 
 /**
  * @param {{ evolution: any, evaluationIsolation?: any, config?: any }} sources
- * @returns {Promise<{ toolAdmission: any, supply: any, isolation: any, executor: any, integration: any } | null>} null when the module is not composed
+ * @returns {Promise<{ toolAdmission: any, supply: any, isolation: any, executor: any, integration: any, limits: any } | null>} null when the module is not composed
  */
 export async function evolutionOpsSnapshot({ evolution, evaluationIsolation = null }) {
   if (!evolution) return null;
@@ -33,6 +33,8 @@ export async function evolutionOpsSnapshot({ evolution, evaluationIsolation = nu
     supply: evolution.supply?.status?.() ?? null,
     isolation: evaluationIsolation?.counters ?? null,
     integration: evolution.integration?.counters ?? null,
+    // The limits that act inside the loops themselves (the account floors, the proposals sent to the operators, ...), gathered by the composition.
+    limits: typeof evolution.limitCounters === "function" ? evolution.limitCounters() : null,
     executor,
   };
 }
@@ -83,6 +85,75 @@ export function evolutionOpsMetricFamilies(composed, snapshot, refusal = null) {
     name: "open_science_evolution_events_total", type: "counter",
     help: "Observations the other modules published to the evolution queue, by outcome since process start.",
     series: rows(snapshot.integration, { published: "published", failed: "failed" }),
+  });
+  const limits = snapshot.limits ?? {};
+  if (limits.signals) families.push({
+    name: "open_science_evolution_signal_groups", type: "gauge",
+    help: "User-originated signal groups at the platform loop's last aggregation, by account class (researcher or operator) and outcome: written as a summary because enough different accounts of the class showed it, or held back below the class's floor (five researchers; the operator floor for operators).",
+    series: ["user", "operator"].flatMap((accountClass) => [
+      { value: Number(limits.signals.aggregated?.[accountClass]) || 0, labels: { class: accountClass, outcome: "aggregated" } },
+      { value: Number(limits.signals.heldBack?.[accountClass]) || 0, labels: { class: accountClass, outcome: "held_back" } },
+    ]),
+  });
+  if (limits.engineReviews) families.push({
+    name: "open_science_evolution_engine_reviews_total", type: "counter",
+    help: "Proposals for the platform's own code, since process start: inbox items sent to the operators, passes where nobody could be told (retried within the minute), and the answers given: adopted (kept as work to implement) or declined.",
+    series: [["announced", "announced"], ["announceFailed", "announce_failed"], ["adopted", "adopted"], ["declined", "declined"]]
+      .map(([key, outcome]) => ({ value: Number(limits.engineReviews[key]) || 0, labels: { outcome } })),
+  });
+  if (limits.policy) families.push({
+    name: "open_science_evolution_policy_ignored_fields_total", type: "counter",
+    help: "Fields of a stored research policy (or trial candidate) that the policy no longer has and that were ignored on reading it, since process start; each stored policy is counted once, however often it is read.",
+    series: [{ value: Number(limits.policy.ignoredFields) || 0 }],
+  });
+  if (limits.heavyWindow) families.push({
+    name: "open_science_evolution_heavy_window_open", type: "gauge", series: [{ value: limits.heavyWindow.open ? 1 : 0 }],
+    help: "Whether the heavy, model-intensive evolution jobs may be claimed now: 1 inside OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW (22:00-07:00 China time by default) or when there is no window, 0 outside it.",
+  }, {
+    name: "open_science_evolution_heavy_jobs_started_total", type: "counter",
+    help: "Heavy, model-intensive evolution jobs claimed since process start, by whether the window was open: `outside` counts only jobs asked for by kind (an operator's or a test's), never the polling worker's.",
+    series: ["inside", "outside"].map((window) => ({ value: Number(limits.heavyWindow.started?.[window]) || 0, labels: { window } })),
+  });
+  if (limits.selfResearch) {
+    const research = limits.selfResearch;
+    const entries = (/** @type {any} */ map) => Object.entries(map ?? {});
+    families.push({
+      name: "open_science_evolution_self_research_items_total", type: "counter",
+      help: "What the weekly self-research funnel did with the entries the plugin's AI-discovery rows brought, since process start, by stage: collected (entries read), merged (papers and posts left after merging the rows that list the same one), already_screened (left out: screened in the last two weeks), screened, shortlisted, full_texts (papers read whole), cards (mechanism cards written), rejected (cards that failed the quotation and field checks), venue_events (proceedings volumes set apart).",
+      series: [["collected", "collected"], ["merged", "merged"], ["alreadyScreened", "already_screened"], ["screened", "screened"], ["shortlisted", "shortlisted"],
+        ["fullTexts", "full_texts"], ["cards", "cards"], ["rejected", "rejected"], ["venueEvents", "venue_events"]]
+        .map(([key, stage]) => ({ value: Number(research[key]) || 0, labels: { stage } })),
+    }, {
+      name: "open_science_evolution_self_research_cap_hits_total", type: "counter",
+      help: "Weeks, since process start, in which a stage of the self-research funnel had more than its cap let through (OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_*_LIMIT; collect is the week's fixed ceiling on entries read).",
+      series: entries(research.capHits).map(([cap, value]) => ({ value: Number(value) || 0, labels: { cap } })),
+    }, {
+      name: "open_science_evolution_self_research_failures_total", type: "counter",
+      help: "What failed inside the funnel without failing the week, since process start: triage_batch (a screening call that gave no answer), extraction (a card call that gave none), venue_quote (a venue claim whose quoted words were not in the text, so the claim was dropped).",
+      series: [["triageBatchesFailed", "triage_batch"], ["extractFailed", "extraction"], ["venueQuotesRejected", "venue_quote"]]
+        .map(([key, kind]) => ({ value: Number(research[key]) || 0, labels: { kind } })),
+    }, {
+      name: "open_science_evolution_self_research_sources_total", type: "counter",
+      help: "Plugin rows the funnel found readable (read) or that the plugin reports unreadable, drifted or off (skipped), summed over the weeks since process start; a skipped row does not stop the others.",
+      series: [["sourcesRead", "read"], ["sourcesSkipped", "skipped"]].map(([key, state]) => ({ value: Number(research[key]) || 0, labels: { state } })),
+    }, {
+      name: "open_science_evolution_self_research_full_text_fallbacks_total", type: "counter",
+      help: "Papers read from their abstract instead of whole, since process start, by the closed reason (no_reader, not_arxiv, a web-read code, empty, unreachable).",
+      series: entries(research.fullTextFallbacks).map(([reason, value]) => ({ value: Number(value) || 0, labels: { reason } })),
+    }, {
+      name: "open_science_evolution_self_research_enrichment_total", type: "counter",
+      help: "Weeks, since process start, in which a scholarly index was asked about the shortlist, by provider and outcome: ok, no_key (skipped: the deployment has no key), or the closed code of what failed.",
+      series: entries(research.enrichment).flatMap(([provider, outcomes]) => entries(outcomes).map(([outcome, value]) => ({ value: Number(value) || 0, labels: { provider, outcome } }))),
+    });
+  }
+  if (limits.sourceRequests) families.push({
+    name: "open_science_evolution_source_requests_total", type: "counter",
+    help: "What became of the sources the scout suggested for the knowledge-source plugin, since process start: filed (on the list the plugin pulls), duplicate (already filed), invalid (not an https address with a name), unsupported_host (a host the plugin does not admit), not_a_feed (the address is not an RSS or Atom feed with entries), unreachable, cap_reached (the plugin reads twenty-five), and, of the filed ones, admitted (the plugin took it) and lapsed (it had not in OPEN_SCIENCE_EVOLUTION_SOURCE_REQUEST_LAPSE_DAYS).",
+    series: [["filed", "filed"], ["duplicate", "duplicate"], ["invalid", "invalid"], ["unsupportedHost", "unsupported_host"], ["notAFeed", "not_a_feed"], ["unreachable", "unreachable"],
+      ["capReached", "cap_reached"], ["admitted", "admitted"], ["lapsed", "lapsed"]].map(([key, outcome]) => ({ value: Number(limits.sourceRequests[key]) || 0, labels: { outcome } })),
+  }, {
+    name: "open_science_evolution_source_requests_waiting", type: "gauge", series: [{ value: Number(limits.sourceRequests.waiting) || 0 }],
+    help: "Sources on the list the knowledge-source plugin pulls that it has neither taken nor let lapse, at the last look (at most 25).",
   });
   families.push({
     name: "open_science_evolution_executor_reachable", type: "gauge", series: [{ value: snapshot.executor ? 1 : 0 }],

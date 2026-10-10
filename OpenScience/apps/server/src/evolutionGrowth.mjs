@@ -1,6 +1,7 @@
 import {evolutionKey} from './evolutionService.mjs';
 import {evolutionTaskFamily} from './evolutionCapabilityMap.mjs';
 import {EVOLUTION_MODULE_IDS} from './evolutionUsage.mjs';
+import {evolutionAccountClass,evolutionAccountFloors} from './evolutionAccountClasses.mjs';
 
 /** Signal vocabularies identify growth and contradiction opportunities as well as repairs. @param {string} kind */
 export function evolutionOpportunitySource(kind){
@@ -11,15 +12,15 @@ export function evolutionOpportunitySource(kind){
  if(['workflow-success','review-accepted','memory-accepted'].includes(kind))return 'success';
  return 'repair';
 }
-/** @param {{service:any,opportunity:any,database:any}} deps */
-export function createEvolutionGrowth({service,opportunity,database}){
+/** @param {{service:any,opportunity:any,database:any,floors?:{user:number,operator:number},operatorIds?:()=>string[]}} deps */
+export function createEvolutionGrowth({service,opportunity,database,floors=evolutionAccountFloors(),operatorIds=()=>[]}){
  async function resource(id,kinds,payload){const prior=await service.get(id);return service.save('resource-asset',id,{...prior?.payload,...payload,kinds:[...new Set([...(prior?.payload.kinds??[]),...kinds])],scope:'public',at:service.now().toISOString()},prior);}
  async function collect(){
   for(const row of await service.list('signal-summary')){
-   const p=row.payload;if(p.distinctAccounts<5)continue;
+   const p=row.payload,accountClass=evolutionAccountClass(p.accountClass);if(p.distinctAccounts<floors[accountClass])continue;
    const source=evolutionOpportunitySource(p.kind);
    await resource(`evolution-demand-resource-${evolutionKey(row.id)}`,['demand'],{sourceRoot:row.id,use:'opportunity-prioritisation',closedCodes:p.codes,occurrences:p.occurrences,distinctAccounts:p.distinctAccounts});
-   await opportunity({moduleId:p.moduleId,sources:[source],taskFamily:p.codes,mechanismFamily:p.kind,evidenceRoots:[row.id],features:{distinctAccounts:p.distinctAccounts,coverageGap:source==='demand',runtimeFailures:source==='repair'?p.occurrences:0},cheapestNextStep:source==='data'?'test-public-shape-analogue':'reproduce-on-public-analogue',failureHypotheses:['private-shape-may-not-transfer']});
+   await opportunity({moduleId:p.moduleId,sources:[source],taskFamily:p.codes,mechanismFamily:p.kind,evidenceRoots:[row.id],features:{distinctAccounts:p.distinctAccounts,...(accountClass==='operator'?{accountClass,demandFloor:floors.operator}:{}),coverageGap:source==='demand',runtimeFailures:source==='repair'?p.occurrences:0},cheapestNextStep:source==='data'?'test-public-shape-analogue':'reproduce-on-public-analogue',failureHypotheses:['private-shape-may-not-transfer']});
   }
   for(const row of await service.list('module-observation')){
    const p=row.payload;if(!EVOLUTION_MODULE_IDS.includes(p.moduleId))continue;
@@ -61,9 +62,12 @@ export function createEvolutionGrowth({service,opportunity,database}){
    await service.save('waiter',row.id,{...row.payload,completedResearchAt:service.now().toISOString(),completionRunId:runId},row,userId);recorded++;
   }return recorded;
  }
+ /** How many resumed researches finished in the window, or null when too few accounts did to say. Each class of account is counted on its own
+  * against its own floor, and only a class that reaches it adds to the number. */
  async function completedAggregate(from,to){
-  const result=await database.query(`SELECT count(*)::integer AS completed,count(DISTINCT user_id)::integer AS accounts FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-waiter' AND payload->>'status'='resolved' AND payload->>'completedResearchAt'>=$1 AND payload->>'completedResearchAt'<$2 HAVING count(DISTINCT user_id)>=5`,[from,to]);
-  return result.rows[0]?Number(result.rows[0].completed):null;
+  const result=await database.query(`SELECT (user_id=ANY($3::text[])) AS operator_class,count(*)::integer AS completed,count(DISTINCT user_id)::integer AS accounts FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-waiter' AND payload->>'status'='resolved' AND payload->>'completedResearchAt'>=$1 AND payload->>'completedResearchAt'<$2 GROUP BY operator_class`,[from,to,[...new Set(operatorIds().map(String).filter(Boolean))]]);
+  const counted=result.rows.filter(row=>Number(row.accounts)>=floors[row.operator_class===true?'operator':'user']);
+  return counted.length?counted.reduce((sum,row)=>sum+Number(row.completed),0):null;
  }
  return {collect,recordConfirmedFamilies,recordResumedResearchCompleted,completedAggregate};
 }

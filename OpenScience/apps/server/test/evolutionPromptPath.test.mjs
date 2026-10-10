@@ -9,6 +9,7 @@ import path from "node:path";
 import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
+import { noProfile } from "./helpers/residentProfileDouble.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 test("an unrouted prompt that names an installed tool is routed by the classifier alone and never reads the tool list", { skip: !databaseUrl }, async () => {
@@ -29,7 +30,7 @@ test("an unrouted prompt that names an installed tool is routed by the classifie
     const headers = { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0], "x-open-science-csrf": auth.data.csrfToken };
     let toolListReads = 0;
     app.evolution.service.tools = async () => { toolListReads += 1; throw new Error("the tool list is not part of a prompt"); };
-    app.memorySubstrate.recall = async () => [];
+    app.residentProfiles.forDispatch = noProfile;
     await app.runtimeManager.start(project);
     const sent = [];
     app.runtimeManager.dispatchPrompt = async (_project, _session, input) => { sent.push(input); return { accepted: true }; };
@@ -75,7 +76,7 @@ test("with the module off an ordinary prompt touches nothing of it: no scope cal
     const login = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "off-researcher", password: "test-password" }) });
     const auth = await login.json();
     const headers = { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0], "x-open-science-csrf": auth.data.csrfToken };
-    app.memorySubstrate.recall = async () => [];
+    app.residentProfiles.forDispatch = noProfile;
     await app.runtimeManager.start(project);
     const scopeCalls = [];
     const original = app.runtimeManager.setPlatformSkillScope.bind(app.runtimeManager);

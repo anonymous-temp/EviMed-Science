@@ -168,7 +168,7 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
  */
 export class RuntimeEventPump {
   /**
-   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string, summary?: Record<string, any>) => Promise<any>, adoptIntervalMs?: number, onRunActivity?: (project: any, runId: string, activity: { sessionId: string, seq: number, stream?: {attemptId: string, index: number} }) => void, onCompaction?: (project: any, runId: string, record: { seq: number, replaced: number, tokens: number }) => void, onRunEvent?: (project: any, runId: string, observed: { sessionId: string, child: boolean, replay: boolean, parentSessionId:string|null, branchId:string|null, event: import('@evimed/domain').RunEvent }) => void }} options
+   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string, summary?: Record<string, any>) => Promise<any>, adoptIntervalMs?: number, onRunActivity?: (project: any, runId: string, activity: { sessionId: string, seq: number, stream?: {attemptId: string, index: number} }) => void, onCompaction?: (project: any, runId: string, record: { seq: number, replaced: number, tokens: number, sessionId: string, child: boolean }) => void, onRunEvent?: (project: any, runId: string, observed: { sessionId: string, child: boolean, replay: boolean, parentSessionId:string|null, branchId:string|null, event: import('@evimed/domain').RunEvent }) => void }} options
    */
   constructor({
     runEvents,
@@ -1053,7 +1053,7 @@ export class RuntimeEventPump {
     }
     if (event.type === "compaction" && !options.replay) {
       try {
-        this.onCompaction(state.project, runId, { seq: event.seq, replaced: event.replaced, tokens: event.estimatedTokens });
+        this.onCompaction(state.project, runId, { seq: event.seq, replaced: event.replaced, tokens: event.estimatedTokens, sessionId, child: fromChild });
       } catch {
         // isolated: evimed_runtime_event_pump_compaction_record_failed_total
       }

@@ -4,6 +4,7 @@ import { canonicalJson, EVOLUTION_TRACKS, EVOLUTION_TOOL_STATES, EVOLUTION_DATA_
 import { HttpError } from './security.mjs';
 import { EVOLUTION_PROJECT_ID } from './internalProjects.mjs';
 import { MODULE_LEAD_SOURCES, moduleLeadPayload } from './evolutionLeadSources.mjs';
+import { evolutionAccountFloors } from './evolutionAccountClasses.mjs';
 
 /** @param {any} value */
 export function evolutionKey(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 32); }
@@ -95,19 +96,27 @@ export class EvolutionService {
       if (!seen) await this.save('lead-occurrence', occurrenceId, { leadId: id, eventId, projectId: input.projectId ?? EVOLUTION_PROJECT_ID,
         at: this.now().toISOString(), scope: input.userId ? 'owner' : 'platform' }, null, occurrenceOwner);
       let distinctAccounts = prior?.payload.distinctAccounts ?? 0;
+      // Researchers and operators are counted apart, each against its own floor (`evolutionAccountClasses.mjs`).
+      const operators = [...new Set((this.config.operatorUsers ?? []).map(String).filter(Boolean))];
+      let userAccounts = prior?.payload.userAccounts ?? distinctAccounts, operatorAccounts = prior?.payload.operatorAccounts ?? 0;
       if (input.userId && this.documents.database) {
-        const aggregate = await this.documents.database.query("SELECT count(DISTINCT user_id)::integer AS accounts FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-lead-occurrence' AND payload->>'scope'='owner' AND payload->>'leadId'=$1", [id]);
+        const aggregate = await this.documents.database.query("SELECT count(DISTINCT user_id)::integer AS accounts, count(DISTINCT user_id) FILTER (WHERE user_id=ANY($2::text[]))::integer AS operators FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-lead-occurrence' AND payload->>'scope'='owner' AND payload->>'leadId'=$1", [id, operators]);
         distinctAccounts = Number(aggregate.rows[0]?.accounts ?? 0);
+        operatorAccounts = Number(aggregate.rows[0]?.operators ?? 0);
+        userAccounts = distinctAccounts - operatorAccounts;
       } else if (input.userId) {
         // The in-memory test store may supply a metadata-only count reader.
         distinctAccounts = await this.callbacks.leadAccountCount?.(id) ?? Math.max(distinctAccounts, 1);
+        operatorAccounts = operators.includes(String(input.userId)) ? Math.min(1, distinctAccounts) : 0;
+        userAccounts = distinctAccounts - operatorAccounts;
       }
       const occurrences = Number(prior?.payload.occurrences ?? 0) + Number(!seen);
       const queueKey = `${id}:${occurrences}`;
-      const ready = !input.userId || distinctAccounts >= 5;
+      const floors = evolutionAccountFloors(this.config);
+      const ready = !input.userId || userAccounts >= floors.user || operatorAccounts >= floors.operator;
       const saved = await this.save('lead', id, { ...payload, createdAt: prior?.payload.createdAt ?? this.now().toISOString(),
         firstSeenAt: prior?.payload.firstSeenAt ?? this.now().toISOString(), lastSeenAt: this.now().toISOString(),
-        occurrences, distinctAccounts, queueKey, status: ready ? 'queued' : 'accumulating' }, prior);
+        occurrences, distinctAccounts, ...(operatorAccounts ? { operatorAccounts, userAccounts } : {}), queueKey, status: ready ? 'queued' : 'accumulating' }, prior);
       return saved;
     });
     if(result.payload.status==='queued'&&!this.config.evolutionSearchPaused)await this.enqueue('scout',{leadId:id,leadVersion:result.payload.occurrences},result.payload.queueKey??id);

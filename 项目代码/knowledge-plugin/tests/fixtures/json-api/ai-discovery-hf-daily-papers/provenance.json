@@ -1,0 +1,105 @@
+{
+ "case": "json-api/ai-discovery-hf-daily-papers",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-10T18:08:47+00:00",
+ "note": "relay row recorded directly; three days of the Daily Papers list (today and two before)",
+ "source": {
+  "id": "ai-discovery-hf-daily-papers",
+  "name": "Hugging Face · Daily Papers (20 or more upvotes)",
+  "homepage": "https://huggingface.co/papers",
+  "lane": "ai",
+  "source_type": "preprint",
+  "access": "json-api",
+  "egress": "relay",
+  "authority": 2,
+  "safety_feed": false,
+  "owner_entity": "Hugging Face",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 43200,
+  "poll_ceiling_s": 172800,
+  "config": {
+   "url": "https://huggingface.co/api/daily_papers?date={today:%Y-%m-%d}&limit=100",
+   "family": "huggingface-daily-papers",
+   "min_upvotes": 20,
+   "lookback_days": 2,
+   "max_pages": 3,
+   "allowed_hosts": [
+    "huggingface.co"
+   ],
+   "discovery_only": true
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-10-10T18:08:44+00:00",
+ "request_budget": 3,
+ "parse_notes": [
+  "huggingface_below_20_upvotes=52",
+  "huggingface_below_20_upvotes=44"
+ ],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://huggingface.co/api/daily_papers?date=2026-10-10&limit=100",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://huggingface.co/api/daily_papers?date=2026-10-10&limit=100",
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "etag": "W/\"2-l9Fw4VUO7kr8CvBlt4zaMCqXZ0w\""
+   },
+   "fetched_at": "2026-10-10T18:08:44+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 2,
+   "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+   "method": "GET",
+   "url": "https://huggingface.co/api/daily_papers?limit=100&date=2026-10-09",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://huggingface.co/api/daily_papers?limit=100&date=2026-10-09",
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "etag": "W/\"5e832-oufMcZrtwE+SYioi+phebvXU+8g\""
+   },
+   "fetched_at": "2026-10-10T18:08:45+00:00",
+   "file": "02.json.gz",
+   "gzip": true,
+   "bytes": 387122,
+   "sha256": "9de67af6a9f7f24612245979a0d507cf0ffbe6f590325b5cd26c3c604fa30a04"
+  },
+  {
+   "method": "GET",
+   "url": "https://huggingface.co/api/daily_papers?limit=100&date=2026-10-08",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://huggingface.co/api/daily_papers?limit=100&date=2026-10-08",
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "etag": "W/\"5f67a-hsSqDI/V4z2zFldLvinWnxz5SDM\""
+   },
+   "fetched_at": "2026-10-10T18:08:47+00:00",
+   "file": "03.json.gz",
+   "gzip": true,
+   "bytes": 390778,
+   "sha256": "3989fc33427c809c5a4620ecd366e4acc472d3ebbc62336301d0d6a72cb23826"
+  }
+ ]
+}
