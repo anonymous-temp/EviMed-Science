@@ -928,7 +928,7 @@ export async function tickParse(deps) {
     counts.notified += recorded.notified;
   }
   // What is left of the tick goes to the answers the judge gave up on: they were new once, and the new ones come first.
-  if (!counts.skipped) await rejudgeUnjudged(deps, state, judge, counts);
+  if (!counts.skipped) await rejudgeUnjudged(deps, judge, counts);
   // The three checks and the link checks, counted since this process started: `open_science_geo_checks_total{check}`.
   for (const key of ["offLabel", "omittedSafety", "linkExists", "linkMissing", "linkUnreadable", "linkSupports", "linkContradicts", "linkUnclear", "linkJudgeFailed",
     "rejudged", "rejudgeFailed", "rejudgeGivenUp"]) {
@@ -950,10 +950,9 @@ export async function tickParse(deps) {
  * answer's own failures, each after a {@link GEO_REJUDGE_BACKOFF_MS} wait; none once the answer is {@link GEO_REJUDGE_MAX_AGE_MS} old.
  * A provider that fails spends no try (it is not the answer's) and stops the pass. Counted: `rejudged`, `rejudgeFailed` (a try spent) and
  * `rejudgeGivenUp` (the last one), in the tick's counts and `open_science_geo_checks_total{check}`.
- * @param {GeoParseDeps} deps @param {ReturnType<typeof geoMeasureState>} state @param {{ judge: Function, judgeCitation?: Function }} judge
- * @param {Record<string, any>} counts
+ * @param {GeoParseDeps} deps @param {{ judge: Function, judgeCitation?: Function }} judge @param {Record<string, any>} counts
  */
-async function rejudgeUnjudged(deps, state, judge, counts) {
+async function rejudgeUnjudged(deps, judge, counts) {
   const { store, config } = deps;
   const now = deps.now ?? (() => new Date());
   const answers = await store.unjudgedAnswers(GEO_REJUDGE_PER_TICK, { maxAttempts: GEO_REJUDGE_MAX_ATTEMPTS, maxAgeMs: GEO_REJUDGE_MAX_AGE_MS, now: now() });
