@@ -719,6 +719,13 @@ function geoSettings(overrides) {
     // request over the limit is answered with a notice and is not lost (the run keeps the question as a finding or an opportunity),
     // and a finished task frees its place. 0 queues none. Counted as `open_science_geo_service_total{kind="researchCapped"}`.
     geoResearchMaxOpen: integer("geoResearchMaxOpen", "OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN", 5, 0, 100),
+    // Versions of a project's value profile kept besides the milestones (a version another stored object points to, and the first of
+    // each calendar month): every version stores the whole merged profile, so a project worked on for months would hold hundreds of
+    // copies. The latest this many are never pruned; the rest are, by `geoValueUpkeep.mjs`, at most `geoValuePrunePerTick` versions in
+    // all per tick (every ten minutes), so a long backlog is worked off in turns. Counted as
+    // `open_science_geo_value_upkeep_total{event="versionsPruned"}`.
+    geoValueKeepVersions: integer("geoValueKeepVersions", "OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS", 20, 1, 1_000),
+    geoValuePrunePerTick: integer("geoValuePrunePerTick", "OPEN_SCIENCE_GEO_VALUE_PRUNE_PER_TICK", 200, 1, 10_000),
     // Calls one project's runtime may make to the probe host in a minute (`geo_visibility_probe`: providers, ask, screenshot, counted
     // together). The probe answers one request at a time for minutes through the platform's logged-in vendor accounts, and the skills
     // use the tool for the one question a person asks about; this is the ceiling of a loop, not of a run. A call over it is refused

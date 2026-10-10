@@ -206,6 +206,10 @@ const operatorLevers = {
   // project holds open is a spend limit, and one that never arrived would leave the default in force while the operator
   // believes theirs applies.
   OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN: ["open-science-web"],
+  // 「循证 GEO」's value profiles (2026-10-10, G10c): how many versions of a profile a project keeps besides its milestones, and how many
+  // the upkeep deletes a tick. A lever that never arrived leaves the default in force while the operator believes theirs applies.
+  OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS: ["open-science-web"],
+  OPEN_SCIENCE_GEO_VALUE_PRUNE_PER_TICK: ["open-science-web"],
   // The probe gateway's window (2026-10-10, Q-8): a limit that never arrived would leave the default in force while the operator
   // believes theirs applies, on a channel that drives the platform's logged-in vendor accounts.
   OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE: ["open-science-web"],

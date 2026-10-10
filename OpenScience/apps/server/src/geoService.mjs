@@ -1742,10 +1742,14 @@ export class GeoService {
     // standing one made the count only grow (D-19); the total is kept beside it, and every change stays in `data.sourceChanges`.
     const impacts = geoValueImpacts(profile.data, articles);
     const standing = new Set(geoValueList(profile.data.findings).filter((finding) => finding && typeof finding === "object" && geoValueActive(finding)).map((finding) => finding.id));
+    // A version asked for that is not stored — pruned, since the project keeps its latest versions and its milestones, or never written —
+    // is said so, not read as an empty profile (`version: 0` on its own looks like a project with nothing in it).
+    const gone = filter.version != null && !profile.version
+      ? { requestedVersion: filter.version, notice: `Version ${filter.version} of the value profile is not stored: a project keeps its latest versions and its milestone ones.` } : {};
     return { ...profile, data: { ...profile.data, ...geoValueContext(profile.data, filter) }, research,
       impacts: impacts.filter((impact) => impact.findingIds.some((id) => standing.has(id))), impactsTotal: impacts.length,
       coverage: { ...summarizeGeoValueCoverageCounts(byStatus), basisVersion }, observations,
-      observationsTotal: onBasis.reduce((total, entry) => total + entry.n, 0) };
+      observationsTotal: onBasis.reduce((total, entry) => total + entry.n, 0), ...gone };
   }
 
   /** Counts for `/api/ops/metrics`, one query. */
@@ -1805,7 +1809,8 @@ export async function geoReadiness({ config, geo, database }) {
 
 /**
  * Everything the metrics endpoint shows about the module, read once per scrape.
- * @param {{ service: GeoService, social?: any, worker?: any, cards?: any, questionBank?: any, importDelivery?: { counters?: { imported: number, failed: number } } | null,
+ * @param {{ service: GeoService, social?: any, worker?: any, cards?: any, questionBank?: any, valueUpkeep?: { metrics?: () => Record<string, number> } | null,
+ *   importDelivery?: { counters?: { imported: number, failed: number } } | null,
  *   measureState?: { checkTotals?: Record<string, number>, inclusionTotals?: Record<string, number> } | null }} geo
  */
 export async function geoMetricsSnapshot(geo) {
@@ -1813,7 +1818,8 @@ export async function geoMetricsSnapshot(geo) {
   try { tables = await geo.service.metricsSnapshot(); } catch { tables = null; }
   return { tables, service: { ...geo.service.counters }, social: geo.social?.status?.() ?? null, worker: geo.worker?.status?.() ?? null,
     cards: geo.cards?.metrics?.() ?? null, checks: geo.measureState?.checkTotals ?? null, inclusion: geo.measureState?.inclusionTotals ?? null,
-    questionBank: geo.questionBank?.metrics?.() ?? null, imports: geo.importDelivery?.counters ? { ...geo.importDelivery.counters } : null };
+    questionBank: geo.questionBank?.metrics?.() ?? null, valueUpkeep: geo.valueUpkeep?.metrics?.() ?? null,
+    imports: geo.importDelivery?.counters ? { ...geo.importDelivery.counters } : null };
 }
 
 /**
@@ -1857,6 +1863,11 @@ export function geoMetricFamilies(enabled, snapshot) {
   if (snapshot.imports) {
     add("run_import_total", "Finished runs' deliveries imported into their GEO projects since this process started: runs imported whole, and attempts that lost a write or threw.", "counter",
       ["imported", "failed"].map((outcome) => ({ labels: { outcome }, value: Number(/** @type {any} */ (snapshot.imports)[outcome] ?? 0) })));
+  }
+  // The value profiles' upkeep (geoValueUpkeep.mjs): ticks, projects looked at, and the versions pruned (OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS).
+  if (snapshot.valueUpkeep) {
+    add("value_upkeep_total", "The value profiles' upkeep since this process started: ticks, projects over the version limit that were looked at, versions pruned and projects they were pruned from, and passes that failed.", "counter",
+      Object.entries(snapshot.valueUpkeep).map(([event, value]) => ({ labels: { event }, value: Number(value) })));
   }
   // The platform's own medication-question bank (flywheel F22), where the deployment has it on.
   if (snapshot.questionBank) {

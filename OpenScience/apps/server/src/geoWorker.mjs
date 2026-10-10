@@ -63,6 +63,9 @@ export const GEO_WORKER_LOOPS = Object.freeze([
   // The platform's medication-question bank (flywheel F22): one pass a day, which asks each engine once a month and asks again the day
   // an engine that was down answers. `optional`: a deployment with the bank off has no function for it, which is not a missing loop.
   Object.freeze({ name: "questionBank", package: "questionBank", daily: 3, leased: true, optional: true }),
+  // The value profiles' upkeep (G10c): old versions pruned within a bound, counted. `optional`: it is composed with the module, and a
+  // worker built without it (a test's) has nothing missing.
+  Object.freeze({ name: "valueUpkeep", package: "value", every: 10 * MINUTE, leased: true, optional: true }),
 ]);
 
 /** @param {unknown} error */
