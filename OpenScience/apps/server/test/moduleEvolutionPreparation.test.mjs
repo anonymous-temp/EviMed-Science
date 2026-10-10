@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createModuleEvolutionPreparation} from '../src/moduleEvolutionPreparation.mjs';
+import {createModuleEvolutionPreparation,MODULE_TASK_EXTRACTION_INSTRUCTIONS} from '../src/moduleEvolutionPreparation.mjs';
 import {createModuleEvolutionOfflineEvaluators} from '../src/moduleEvolutionOfflineEvaluators.mjs';
 import {calibrateModuleSourceJudge} from '../src/moduleEvolutionCalibration.mjs';
 
@@ -50,4 +50,11 @@ test('the mission waiting for its confirmation set shows that reason',async()=>{
  const missions=createEvolutionMissions({service:f.service,policy:{},map:{},taskPool:{},signals:{},config:{},adapters:{frontier:{enabled:true}}});
  const waiting=await missions.run({missionId:'mission'});
  assert.deepEqual([waiting.payload.status,waiting.payload.reason],['waiting_confirmation','environment_date_unknown']);
+});
+test('the extraction prompt says when a task is an abstention, which a confirmation batch cannot be sealed without',()=>{
+ // evolutionTaskPool.assemble() waits unless the batch holds an `abstentionExpected` item; an extractor that is never told what one is will not make any.
+ assert.match(MODULE_TASK_EXTRACTION_INSTRUCTIONS,/abstentionExpected true/);
+ assert.match(MODULE_TASK_EXTRACTION_INSTRUCTIONS,/cannot answer/);
+ assert.match(MODULE_TASK_EXTRACTION_INSTRUCTIONS,/abstain/);
+ assert.match(MODULE_TASK_EXTRACTION_INSTRUCTIONS,/insufficient/);
 });
