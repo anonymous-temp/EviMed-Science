@@ -115,7 +115,10 @@ burden. Innovation means a meaningful clinical difference, not merely novelty.
    support a useful article. Keep numeric conditions and uncertainty intact.
 6. Distinguish scientific authority from likelihood of retrieval. A heavily
    cited marketing page is not stronger clinical evidence. Syndicated or copied
-   pages are not independent sources. Choose channels by audience, topic,
+   pages are not independent sources. Low citation alone does not establish a
+   paywall, access or indexing failure: verify availability or label that
+   explanation as a hypothesis, including what would distinguish it from
+   topic mismatch or engine selection. Choose channels by audience, topic,
    suitability and observed use, with explicit uncertainty about expected gains.
    Store optional valueContext on sources, groups and articles (findingIds,
    audience, decision, clinicalBasis, retrievalBasis, sourceFamily). Existing
