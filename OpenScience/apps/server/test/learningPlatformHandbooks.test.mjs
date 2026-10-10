@@ -308,7 +308,278 @@ test("the counters are exported as families, and nothing for a path that was not
   try {
     assert.deepEqual(platformHandbookMetricFamilies(f.handbooks.stats()).map((family) => family.name), [
       "open_science_learning_platform_handbooks_total", "open_science_learning_platform_handbooks_rejected_total", "open_science_learning_platform_handbooks_activated_total",
-      "open_science_learning_platform_handbooks_reviewer_configured", "open_science_learning_platform_handbooks_per_day"]);
+      "open_science_learning_platform_handbooks_reviewer_configured", "open_science_learning_platform_handbooks_harm_checks_total",
+      "open_science_learning_platform_handbooks_harm_check_skipped_total", "open_science_learning_platform_handbooks_probation_dispatches_total",
+      "open_science_learning_platform_handbooks_probation_share", "open_science_learning_platform_handbooks_per_day"]);
     assert.deepEqual(platformHandbookMetricFamilies(null), []);
+  } finally { await f.cleanup(); }
+});
+
+/* ---------------------------------------------------- the independent-family harm check (review L14c) */
+
+/** The judge port's answers, as `judgeService.judge` gives them. */
+const settled = (/** @type {boolean} */ harmful) => ({ outcome: "settled", code: "judge_settled", value: { harmful } });
+
+test("a lesson the independent judge settles as harmful is not promoted: it is rejected with its reason, counted and written down by entry, and the author's own handbook is untouched", async () => {
+  /** @type {any[]} */ const asked = [];
+  /** @type {any[]} */ const audited = [];
+  const f = await build({ harm: async (input) => { asked.push(input); return settled(true); }, audit: async (event, detail) => { audited.push({ event, ...detail }); } });
+  try {
+    const handbook = structuredClone({ ...LESSON, files: undefined });
+    const before = JSON.stringify(handbook);
+    const result = await f.handbooks.consider({ ...lesson("senior-1"), handbook });
+    assert.deepEqual([result.state, result.reason], ["rejected", ["harm_flagged"]]);
+    assert.equal(JSON.stringify(handbook), before, "the account's handbook, as the platform path was handed it, is not changed");
+    // What the judge was shown: the lesson and its capability, nothing of an account, a project or a run.
+    assert.equal(asked.length, 1);
+    assert.match(asked[0].text, /Keep every denominator tied to the preserved source/);
+    assert.deepEqual(Object.keys(asked[0]).sort(), ["capabilityId", "text"]);
+    assert.equal(JSON.stringify(asked).includes("senior-1"), false);
+    // Not promoted: no corroboration, no re-check, no tool, nothing in the supply.
+    const [row] = candidates(f);
+    assert.deepEqual([row.payload.status, row.payload.harmChecked.outcome], ["rejected", "flagged"]);
+    assert.deepEqual(await f.handbooks.tick(), { judged: 0, rechecked: 0, retired: 0 });
+    assert.equal(f.reviewed.length, 0, "a flagged lesson never reaches the re-check");
+    assert.equal([...f.rows.values()].some((entry) => entry.payload.recordType === "evolution-tool"), false);
+    assert.deepEqual(await f.service.availableTools({ capabilityId: "meta-analysis" }), []);
+    // Counted, and in the security ledger by the entry: the account is named by neither.
+    assert.deepEqual(f.handbooks.stats().harmChecks, { clear: 0, flagged: 1, uncertain: 0, skipped: 0 });
+    assert.equal(f.handbooks.stats().rejectedBy.harm_flagged, 1);
+    assert.deepEqual(audited, [{ event: "learning.platform_handbook.harm_flagged", code: "harm_flagged", detail: `capability=meta-analysis entry=${row.id}` }]);
+    assert.equal(JSON.stringify(audited).includes("senior-1"), false);
+    assert.deepEqual(f.notices, [], "nothing is shown to anyone");
+  } finally { await f.cleanup(); }
+});
+
+test("a flagged lesson is not a second voice: it does not corroborate another account's lesson of the same class", async () => {
+  let harmful = true;
+  const f = await build({ harm: async () => settled(harmful) });
+  try {
+    assert.equal((await f.handbooks.consider(lesson("new-1"))).state, "rejected");
+    harmful = false;
+    assert.equal((await f.handbooks.consider(lesson("new-2"))).state, "awaiting_corroboration", "the only other voice was refused, so this one waits alone");
+    assert.deepEqual(candidates(f).map((row) => row.payload.status).sort(), ["awaiting_corroboration", "rejected"]);
+  } finally { await f.cleanup(); }
+});
+
+test("a lesson the judge clears goes on exactly as before, and is counted as cleared", async () => {
+  const f = await build({ harm: async () => settled(false) });
+  try {
+    assert.deepEqual(await f.handbooks.consider(lesson("senior-1")), { state: "candidate" });
+    assert.deepEqual(await f.handbooks.tick(), { judged: 0, rechecked: 1, retired: 0 });
+    const [row] = candidates(f);
+    assert.deepEqual([row.payload.status, row.payload.harmChecked.outcome], ["probation", "clear"]);
+    assert.deepEqual(f.handbooks.stats().harmChecks, { clear: 1, flagged: 0, uncertain: 0, skipped: 0 });
+  } finally { await f.cleanup(); }
+});
+
+test("a judge that is not there, not calibrated, off, over budget, broken or unsure flags nothing: promotion goes on as before, and the skipped check is counted by its reason", async () => {
+  const cases = [
+    ["not composed", null, "skipped", "harm_check_not_composed"],
+    ["unconfigured", async () => ({ outcome: "fallback", code: "judge_unconfigured", value: null }), "skipped", "judge_unconfigured"],
+    ["uncalibrated", async () => ({ outcome: "fallback", code: "judge_uncalibrated", value: null }), "skipped", "judge_uncalibrated"],
+    ["disabled", async () => ({ outcome: "fallback", code: "judge_disabled", value: null }), "skipped", "judge_disabled"],
+    ["circuit open", async () => ({ outcome: "fallback", code: "judge_circuit_open", value: null }), "skipped", "judge_circuit_open"],
+    ["a fallback with no code", async () => ({ outcome: "fallback", value: null }), "skipped", "harm_check_unanswered"],
+    ["a settled answer of the wrong shape", async () => ({ outcome: "settled", value: {} }), "skipped", "harm_check_unanswered"],
+    ["over budget", async () => { throw Object.assign(new Error("spent"), { code: "usage_budget_exceeded" }); }, "skipped", "usage_budget_exceeded"],
+    ["a failure with no code", async () => { throw new Error("down"); }, "skipped", "harm_check_failed"],
+    ["a code that is not a code", async () => { throw Object.assign(new Error("down"), { code: "Not A Code!" }); }, "skipped", "harm_check_failed"],
+    ["unsure", async () => ({ outcome: "escalated", code: "judge_uncertain", value: null }), "uncertain", "judge_uncertain"],
+  ];
+  for (const [label, harm, outcome, code] of cases) {
+    const f = await build({ harm });
+    try {
+      assert.deepEqual(await f.handbooks.consider(lesson("senior-1")), { state: "candidate" }, label);
+      const [row] = candidates(f);
+      assert.deepEqual([row.payload.status, row.payload.harmChecked.outcome, row.payload.harmChecked.code], ["candidate", outcome, code], label);
+      const counts = f.handbooks.stats().harmChecks;
+      assert.equal(counts[outcome], 1, label);
+      assert.equal(counts.flagged, 0, label);
+      if (outcome === "skipped") assert.deepEqual(f.handbooks.stats().harmSkippedBy, { [code]: 1 }, label);
+      assert.deepEqual(await f.handbooks.tick(), { judged: 0, rechecked: 1, retired: 0 }, `${label}: the lesson reaches the re-check as it always did`);
+    } finally { await f.cleanup(); }
+  }
+});
+
+test("the harm check is advice about promotion: a ledger that cannot be written, or a judge that throws, does not stop the decision or the loop that told us", async () => {
+  const reported = [];
+  const f = await build({ harm: async () => settled(true), audit: async () => { throw new Error("ledger full"); }, report: (code) => reported.push(code) });
+  try {
+    const result = await f.handbooks.consider(lesson("senior-1"));
+    assert.deepEqual([result.state, result.reason], ["rejected", ["harm_flagged"]], "the refusal stands without its audit line");
+  } finally { await f.cleanup(); }
+  const throwing = await build({ harm: async () => { throw new Error("down"); }, report: (code) => reported.push(code) });
+  try {
+    assert.equal((await throwing.handbooks.consider(lesson("senior-1"))).state, "candidate");
+    assert.deepEqual(reported, ["learning_platform_handbook_harm_check_failed"]);
+  } finally { await throwing.cleanup(); }
+});
+
+test("the harm check counters are exported by outcome and by the reason a check gave no answer", async () => {
+  const f = await build({ harm: async () => ({ outcome: "fallback", code: "judge_uncalibrated", value: null }) });
+  try {
+    await f.handbooks.consider(lesson("senior-1"));
+    const families = new Map(platformHandbookMetricFamilies(f.handbooks.stats()).map((family) => [family.name, family]));
+    assert.deepEqual(families.get("open_science_learning_platform_handbooks_harm_checks_total")?.series,
+      ["clear", "flagged", "uncertain", "skipped"].map((outcome) => ({ value: outcome === "skipped" ? 1 : 0, labels: { outcome } })));
+    assert.deepEqual(families.get("open_science_learning_platform_handbooks_harm_check_skipped_total")?.series, [{ value: 1, labels: { reason: "judge_uncalibrated" } }]);
+  } finally { await f.cleanup(); }
+});
+
+/* ---------------------------------------------------- a lesson on probation is served to a sample of dispatches (review L-6) */
+
+const RUNS = Array.from({ length: 600 }, (_, index) => `run_${index.toString(16).padStart(6, "0")}`);
+const dispatch = (/** @type {any} */ f, /** @type {string} */ runId, /** @type {any} */ extra = {}) => f.handbooks.probationFor({ userId: "reader-1", projectId: "reader-project", runId, capabilityId: "meta-analysis", ...extra });
+
+/** A module with `served` recording what it was told, and `count` lessons of one capability brought to probation. @param {number} count @param {Record<string, any>} [over] */
+async function onProbation(count, over = {}) {
+  /** @type {any[]} */ const exposures = [];
+  const f = await build({ served: async (/** @type {any} */ event) => { exposures.push(event); }, ...over });
+  for (let index = 0; index < count; index += 1) {
+    const author = `senior-${index + 1}`;
+    await f.handbooks.consider(lesson(author, { handbook: { contentDigest: `sha256:v${index}`, body: `${LESSON.body}\nLesson variant ${index} of the same kind.` } }));
+  }
+  await f.handbooks.tick();
+  assert.equal(candidates(f).filter((row) => row.payload.status === "probation").length, count);
+  return { ...f, exposures };
+}
+
+test("a share of the dispatches, chosen by the run id, is handed the entry on probation: the same runs every time, about the share, the exposure recorded for each and for no other", async () => {
+  const f = await onProbation(1, { probationShare: 0.1 });
+  try {
+    const [entry] = candidates(f);
+    const handed = [];
+    for (const runId of RUNS) if (await dispatch(f, runId)) handed.push(runId);
+    assert.ok(Math.abs(handed.length / RUNS.length - 0.1) < 0.04, `${handed.length} of ${RUNS.length}`);
+    // A run is in or out for good: asking again about every run gives the same answer.
+    const again = [];
+    for (const runId of RUNS) if (await dispatch(f, runId)) again.push(runId);
+    assert.deepEqual(again, handed);
+    // What a served run is handed is the lesson, under the capability it is for, and nothing of an account.
+    const first = await dispatch(f, handed[0]);
+    assert.deepEqual(first, { entryId: entry.id, version: 1, capabilityId: "meta-analysis", text: entry.payload.text });
+    for (const secret of ["senior-1", "p-senior-1", "r-senior-1", "h-senior-1", "reader-1"]) assert.equal(JSON.stringify(first).includes(secret), false, secret);
+    // The exposure is recorded for every served dispatch, as a use of the entry's tool by that run, and only for those.
+    const toolId = entry.payload.toolId;
+    assert.equal(f.exposures.length, handed.length * 2 + 1, "recorded each time it was served");
+    assert.deepEqual(f.exposures[0], { userId: "reader-1", projectId: "reader-project", runId: handed[0], toolId, revision: entry.payload.publication.revision, digest: entry.payload.publication.digest, result: { ok: true } });
+    assert.deepEqual([...new Set(f.exposures.map((event) => event.runId))].sort(), [...handed].sort());
+    // Counted by what came of each dispatch.
+    const probation = f.handbooks.stats().probation;
+    assert.equal(probation.served, f.exposures.length);
+    assert.equal(probation.served + probation.sampledOut, RUNS.length * 2 + 1, "every dispatch asked about is one or the other here");
+    assert.deepEqual([probation.noEntry, probation.failed], [0, 0]);
+  } finally { await f.cleanup(); }
+});
+
+test("a share of one hands it to every dispatch, a share of nothing to none and reads nothing, and without a recorder nothing is handed over", async () => {
+  const all = await onProbation(1, { probationShare: 1 });
+  try {
+    for (const runId of RUNS.slice(0, 50)) assert.ok(await dispatch(all, runId), runId);
+    assert.deepEqual(all.handbooks.stats().probation, { served: 50, noEntry: 0, sampledOut: 0, failed: 0 });
+  } finally { await all.cleanup(); }
+  /** @type {string[]} */ const read = [];
+  const none = createPlatformHandbooks({ service: { list: async () => { read.push("list"); return []; }, get: async () => null, save: async () => null }, supply: {}, facts: async () => ({}), judge: async () => ({}),
+    established: async () => new Set(), probationShare: 0, served: async () => { read.push("served"); } });
+  for (const runId of RUNS.slice(0, 50)) assert.equal(await none.probationFor({ userId: "u", projectId: "p", runId, capabilityId: "meta-analysis" }), null);
+  assert.deepEqual(read, [], "a lever at 0 does nothing at all");
+  assert.deepEqual(none.stats().probation, { served: 0, noEntry: 0, sampledOut: 0, failed: 0 });
+  const unrecorded = await onProbation(1, { probationShare: 1, served: null });
+  try {
+    assert.equal(await dispatch(unrecorded, RUNS[0]), null, "an exposure nothing could record is not made");
+    assert.deepEqual(unrecorded.handbooks.stats().probation, { served: 0, noEntry: 0, sampledOut: 0, failed: 0 });
+  } finally { await unrecorded.cleanup(); }
+});
+
+test("only an entry on probation for the dispatch's own capability is handed over: not another capability's, not a waiting, rejected, effective or retired one", async () => {
+  const f = await onProbation(1, { probationShare: 1 });
+  try {
+    assert.equal(await dispatch(f, RUNS[0], { capabilityId: "adr-analysis" }), null, "another capability");
+    assert.equal(await dispatch(f, RUNS[0], { capabilityId: "" }), null);
+    assert.equal(f.handbooks.stats().probation.noEntry, 1);
+    // A lesson that is only a candidate, or still waiting, is not on probation yet.
+    const waiting = await build({ probationShare: 1, served: async () => {} });
+    try {
+      await waiting.handbooks.consider(lesson("new-1"));
+      await waiting.handbooks.consider(lesson("senior-9", { input: { capabilityId: "adr-analysis" } }));
+      assert.deepEqual(candidates(waiting).map((row) => row.payload.status).sort(), ["awaiting_corroboration", "candidate"]);
+      assert.equal(await dispatch(waiting, RUNS[0]), null);
+      assert.equal(await dispatch(waiting, RUNS[0], { capabilityId: "adr-analysis" }), null);
+    } finally { await waiting.cleanup(); }
+    // Once it is effective it is the supply's, and a retired one is nobody's.
+    const [entry] = candidates(f);
+    await f.handbooks.observe({ entryId: entry.id, version: 1, runId: "run-ok", outcome: "useful", evidence: { resultId: "verified-result", attributable: true, independent: true } });
+    assert.equal(candidates(f)[0].payload.status, "effective");
+    assert.equal(await dispatch(f, RUNS[0]), null, "effective entries are served from the supply, not by this path");
+    assert.equal(f.handbooks.stats().probation.noEntry, 2);
+    assert.equal(f.exposures.length, 0);
+  } finally { await f.cleanup(); }
+  const retired = await onProbation(1, { probationShare: 1 });
+  try {
+    const tool = await retired.service.get(candidates(retired)[0].payload.toolId);
+    await retired.service.save("tool", tool.id, { ...tool.payload, status: "retired" }, tool);
+    await retired.handbooks.tick();
+    assert.equal(candidates(retired)[0].payload.status, "retired");
+    assert.equal(await dispatch(retired, RUNS[0]), null);
+    assert.equal(retired.exposures.length, 0);
+  } finally { await retired.cleanup(); }
+});
+
+test("with several entries on probation for a capability the run id picks one: the same one every time, and every entry is reached by some runs", async () => {
+  const f = await onProbation(3, { probationShare: 1 });
+  try {
+    const ids = new Set(candidates(f).map((row) => row.id));
+    const picked = new Map();
+    for (const runId of RUNS) picked.set(runId, (await dispatch(f, runId)).entryId);
+    assert.deepEqual(new Set(picked.values()), ids, "each entry is reached");
+    for (const entryId of ids) assert.ok([...picked.values()].filter((id) => id === entryId).length > RUNS.length / 3 - 80, entryId);
+    for (const runId of RUNS.slice(0, 100)) assert.equal((await dispatch(f, runId)).entryId, picked.get(runId), `${runId} gets the same entry again`);
+    // One entry to a run: each exposure is one run and one tool.
+    const byRun = new Map();
+    for (const event of f.exposures) byRun.set(event.runId, new Set([...(byRun.get(event.runId) ?? []), event.toolId]));
+    assert.ok([...byRun.values()].every((tools) => tools.size === 1));
+  } finally { await f.cleanup(); }
+});
+
+test("an entry whose text does not fit the room the caller has left is not among those picked from; if none fits, the dispatch is counted as having had no entry", async () => {
+  const f = await onProbation(2, { probationShare: 1 });
+  try {
+    const small = candidates(f).find((row) => row.payload.text.body.includes("variant 0"));
+    const fits = (/** @type {{ body: string }} */ text) => text.body.includes("variant 0");
+    for (const runId of RUNS.slice(0, 40)) assert.equal((await dispatch(f, runId, { fits })).entryId, small.id, runId);
+    assert.equal(await dispatch(f, RUNS[0], { fits: () => false }), null);
+    assert.deepEqual(f.handbooks.stats().probation, { served: 40, noEntry: 1, sampledOut: 0, failed: 0 });
+    assert.equal(new Set(f.exposures.map((event) => event.toolId)).size, 1, "no exposure was made of the one that did not fit");
+  } finally { await f.cleanup(); }
+});
+
+test("an exposure that cannot be recorded, or a ledger that cannot be read, hands over nothing, is counted as a failure and is reported - the dispatch is never failed", async () => {
+  /** @type {string[]} */ const reported = [];
+  const f = await onProbation(1, { probationShare: 1, report: (/** @type {string} */ code) => reported.push(code),
+    served: async () => { throw Object.assign(new Error("ledger busy"), { code: "product_revision_conflict" }); } });
+  try {
+    assert.equal(await dispatch(f, RUNS[0]), null);
+    assert.deepEqual(f.handbooks.stats().probation, { served: 0, noEntry: 0, sampledOut: 0, failed: 1 });
+    assert.deepEqual(reported.slice(-1), ["learning_platform_handbook_product_revision_conflict"]);
+  } finally { await f.cleanup(); }
+  const unreadable = createPlatformHandbooks({ service: { list: async () => { throw new Error("down"); } }, supply: {}, facts: async () => ({}), judge: async () => ({}), established: async () => new Set(),
+    probationShare: 1, served: async () => {}, report: (code) => reported.push(code) });
+  assert.equal(await unreadable.probationFor({ userId: "u", projectId: "p", runId: RUNS[0], capabilityId: "meta-analysis" }), null);
+  assert.deepEqual(unreadable.stats().probation, { served: 0, noEntry: 0, sampledOut: 0, failed: 1 });
+  assert.deepEqual(reported.slice(-1), ["learning_platform_handbook_probation_failed"]);
+});
+
+test("the probation counters and the share are exported as families", async () => {
+  const f = await onProbation(1, { probationShare: 0.5 });
+  try {
+    for (const runId of RUNS.slice(0, 100)) await dispatch(f, runId);
+    const families = new Map(platformHandbookMetricFamilies(f.handbooks.stats()).map((family) => [family.name, family]));
+    const { served, noEntry, sampledOut, failed } = f.handbooks.stats().probation;
+    assert.equal(served + sampledOut, 100);
+    assert.ok(served > 20 && sampledOut > 20);
+    assert.deepEqual(families.get("open_science_learning_platform_handbooks_probation_dispatches_total")?.series,
+      [["served", served], ["no_entry", noEntry], ["sampled_out", sampledOut], ["failed", failed]].map(([result, value]) => ({ value, labels: { result } })));
+    assert.deepEqual(families.get("open_science_learning_platform_handbooks_probation_share")?.series, [{ value: 0.5 }]);
   } finally { await f.cleanup(); }
 });

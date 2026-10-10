@@ -131,12 +131,12 @@ export class MethodFeedbackService {
   }
 
   /**
-   * The researcher's own learning is on for this run, and the run is theirs: not the platform's automated work, not a
-   * learning evaluation, not an internal project's.
+   * The researcher's own learning is on for this run, and the run is theirs: not the platform's automated work, not an
+   * internal project's.
    * @param {any} project @param {any} run
    */
   async #learnable(project, run) {
-    if (isInternalProject(project.id) || run?.learningEvaluation || !isResearcherOwnedWork(run)) return false;
+    if (isInternalProject(project.id) || !isResearcherOwnedWork(run)) return false;
     return this.enabled ? Boolean(await this.enabled(project, run).catch(() => false)) : true;
   }
 

@@ -208,6 +208,10 @@
           "threshold": 0.8,
           "calibration": "uncalibrated"
         },
+        "J23": {
+          "threshold": 0.8,
+          "calibration": "uncalibrated"
+        },
         "meta-evidence-role": {
           "threshold": 0.8,
           "calibration": "uncalibrated"

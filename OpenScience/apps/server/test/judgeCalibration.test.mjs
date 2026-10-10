@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { buildJudgeRequest, judgePromptFingerprint } from "../src/judgeSites.mjs";
+import { JUDGE_SITE_IDS, buildJudgeRequest, judgePromptFingerprint } from "../src/judgeSites.mjs";
 
 const root = new URL("../../../", import.meta.url);
 const pins = JSON.parse(await readFile(new URL("deps-version.json", root), "utf8")).typesafe.review;
@@ -30,4 +30,11 @@ test("changing a dynamic candidate criterion invalidates calibration without has
   assert.equal(fingerprint(a.questions), fingerprint(b.questions));
   b.questions.switch_to.criteria["project-b"] = "The message merely mentions this project.";
   assert.notEqual(fingerprint(a.questions), fingerprint(b.questions));
+});
+
+test("every registered site has a pin and every pin names a registered site; the harm check on a lesson (J23) ships uncalibrated, so it is skipped and counted until it is measured", () => {
+  assert.deepEqual(Object.keys(pins.sites).filter((site) => !JUDGE_SITE_IDS.includes(site)), [], "a pin for a site that does not exist");
+  assert.deepEqual(JUDGE_SITE_IDS.filter((site) => site !== "reply-check" && !Object.hasOwn(pins.sites, site)), [], "a registered site with no pin is neither calibrated nor not");
+  assert.equal(pins.sites.J23.calibration, "uncalibrated");
+  assert.equal(pins.sites.J23.threshold, 0.8);
 });

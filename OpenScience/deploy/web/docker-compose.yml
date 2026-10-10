@@ -437,7 +437,6 @@ services:
       # PostgreSQL pool.
       OPEN_SCIENCE_LEARNING_POLL_MS:
       OPEN_SCIENCE_LEARNING_LEASE_MS:
-      OPEN_SCIENCE_LEARNING_TRIAL_TTL_MS:
       OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES:
       OPEN_SCIENCE_MEMORY_INDEX_POLL_MS:
       OPEN_SCIENCE_MEMORY_INDEX_LEASE_MS:
@@ -597,6 +596,8 @@ services:
       # A general lesson of an account's handbook may become a platform skill after an independent re-check (2026-10-06): the switch (off) and the candidates re-checked in a day.
       OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED:
       OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY:
+      # The share (0 to 1) of eligible runs a handbook entry on probation is served to; value-less: unset is the code's 0.1.
+      OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE:
       # What the platform reads for one account that asks it to verify a card's sources, per rolling day.
       OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY:
       # The most the judging of readers' challenges may spend in a day.
@@ -854,23 +855,22 @@ services:
       # clock — Beijing daytime. Value-less: unset is config.mjs's Asia/Shanghai.
       OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE:
       OPEN_SCIENCE_LEARNING_CONCURRENCY:
-      OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND:
-      # Who may put a method on trial, and who sees the operations page. Both
-      # are id allowlists that `config.mjs` reads and that no compose file
-      # passed, so both were empty in every deployment however the operator set
-      # them: the trial route answered 403 to everyone and the ops tab could not
-      # appear at all. Compose passes environment item by item — a lever that is
-      # not on the list does nothing and says nothing.
-      OPEN_SCIENCE_LEARNING_EVALUATION_USERS:
+      # Who sees the operations page: an id allowlist that `config.mjs` reads and that no compose file
+      # passed, so it was empty in every deployment however the operator set it and the ops tab could not
+      # appear at all. Compose passes environment item by item — a lever that is not on the list does
+      # nothing and says nothing.
       OPEN_SCIENCE_OPERATOR_USERS:
       # The account the smoke and the capability battery sign in as. With the operators it is the only one whose
       # acceptance-*/audit-*/eval-method-* projects are the platform's own (not charged, outside the project
       # ceiling and the runtime slots); unset, there is none. Both containers decide it from the same value.
       OPEN_SCIENCE_ACCEPTANCE_USERNAME:
+      # The loop's own spend caps, in CNY. Value-less: unset is zero, which is no cap (owner, 2026-09-21 and 2026-10-10).
       OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS:
+      # The share (0 to 1) of finished deliveries that queue a distillation; value-less: unset is the code's 0.33.
+      OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE:
       OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-key
       OPEN_SCIENCE_EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
       # The remaining public-source credentials the server resolves. Without

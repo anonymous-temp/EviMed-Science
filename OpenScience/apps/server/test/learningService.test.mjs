@@ -9,12 +9,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
-import { METHOD_SKILL_SCHEMA, methodContentDigest, renderMethodSkill, evaluationEligible } from "@evimed/domain";
+import { METHOD_SKILL_SCHEMA, methodContentDigest, renderMethodSkill } from "@evimed/domain";
 
 import {
   HANDBOOK_CANDIDATE_RECORD_TYPE, LearningService, effectiveStatusReason, learnedMethodId, methodRecordFrom, methodStepsOf,
 } from "../src/learningService.mjs";
-import { MethodConsolidation } from "../src/methodConsolidation.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
 /** @param {string} text */
@@ -103,7 +102,7 @@ function service(options = {}) {
   const jobs = { async enqueue(userId, kind, payload, opts) { enqueued.push({ userId, kind, payload, opts }); return { id: "job_1" }; } };
   return {
     documents, notices, enqueued,
-    learning: new LearningService({ documents, jobs, notifications, resolveBaselineDigest: options.resolveBaselineDigest,
+    learning: new LearningService({ documents, jobs, notifications,
       now: () => new Date("2026-09-07T00:00:00.000Z") }),
   };
 }
@@ -128,7 +127,7 @@ test("a created method takes effect at once, and no caller parameter says otherw
   assert.equal(document.payload.statusChangedAt, document.payload.createdAt, "the mount orders on this field");
   assert.equal(document.id, learnedMethodId("do-the-thing"));
   assert.equal(document.payload.contentDigest, methodContentDigest({ frontmatter: frontmatter(), body: BODY }, sha256));
-  assert.deepEqual(document.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 });
+  assert.deepEqual(document.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, read: 0 });
 
   // The API surface itself: nothing accepts a status.
   const created = await create(learning, { frontmatter: frontmatter({ name: "another-thing" }) });
@@ -201,7 +200,7 @@ test("amending the body resets everything measured about the old one", async () 
     provenance: { runId: "run_2" },
   });
   assert.equal(amended.payload.status, "candidate");
-  assert.deepEqual(amended.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 });
+  assert.deepEqual(amended.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, read: 0 });
   assert.notEqual(amended.payload.contentDigest, created.payload.contentDigest);
 
   // A stale revision loses, the way every other optimistic write here does.
@@ -282,7 +281,6 @@ test("concurrent successful bootstrap observations all survive CAS conflicts", a
   await Promise.all(observations.map((observation) => learning.recordObservation("u1", created.id, observation)));
   const stored = await learning.getMethod("u1", created.id);
   assert.equal(stored.payload.learning.observations.length, 3);
-  assert.equal(evaluationEligible(methodRecordFrom(stored)).eligible, true);
   await Promise.all(observations.map((observation) => learning.recordObservation("u1", created.id, observation)));
   assert.equal((await learning.getMethod("u1", created.id)).payload.learning.observations.length, 3);
 });
@@ -314,7 +312,7 @@ test("nothing that generates a method can assert its status, and a conflict is t
   const moved = await learning.amendMethod("u1", created.id, {
     expectedRevision: conflicted.revision, frontmatter: frontmatter(), body: `${BODY}\n\nA later thought.`,
   });
-  assert.deepEqual(moved.payload.learning.evaluations, [], "a changed body keeps no verdict about the old text");
+  assert.deepEqual(moved.payload.learning.observations, [], "a changed body keeps no record of the old text");
 });
 
 test("a conflict withholds a method only while the method it conflicts with is in force (review L-3)", async () => {
@@ -372,51 +370,8 @@ test("a method brought back keeps a conflict with a method in force and loses on
   assert.equal(freed.payload.status, "approved", "the rival is not");
 });
 
-test("the paired evaluation no longer reads a baseline to decide effect", async () => {
-  // Four suites used to live here, one per way a live baseline could differ
-  // from the evaluated one, plus one for a candidate changed during the
-  // baseline read. All of them described a gate that under stock configuration
-  // had never once opened: `learningEvaluationCommand` defaults to empty, the
-  // evaluate job failed terminally by name, and production held zero effective
-  // methods. What the comparison decides now is retirement.
-  let baselineReads = 0;
-  const { learning } = service({ resolveBaselineDigest: async () => { baselineReads += 1; return `sha256:${"b".repeat(64)}`; } });
-  const created = await create(learning);
-  const approved = await learning.approve("u1", created.id, { expectedRevision: created.revision });
-  assert.equal(approved.payload.status, "approved");
-  assert.equal(baselineReads, 0, "no read of a digest the verdict will not look at");
-});
-
-async function evaluatedCandidate(learning) {
-  let document = await create(learning);
-  for (const index of [1, 2, 3]) {
-    document = await learning.recordObservation("u1", document.id, {
-      runId: `r${index}`, family: `f${index}`, outcome: "accepted", invoked: true,
-      at: "2026-09-10T00:00:00.000Z", contentDigest: document.payload.contentDigest,
-    });
-  }
-  return document;
-}
-
-test("an unchanged inconclusive evaluation is not rerun by every nightly pass", async () => {
-  const baselineDigest = `sha256:${"b".repeat(64)}`;
-  const { learning, enqueued } = service({ resolveBaselineDigest: async () => baselineDigest });
-  const candidate = await evaluatedCandidate(learning);
-  await learning.recordEvaluation("u1", candidate.id, {
-    report: "r.json", baselineDigest, candidateDigest: candidate.payload.contentDigest, verdict: "inconclusive",
-  });
-  const consolidation = new MethodConsolidation({ learning,
-    jobs: { enqueue: async (...args) => { enqueued.push(args); return { id: "job" }; } },
-    dispatch: async () => { throw new Error("no model calls"); }, readResult: async () => ({}),
-  });
-  const slept = await consolidation.sleep({ job: { id: "night", userId: "u1", projectId: "p1" } });
-  assert.deepEqual(slept.promoted, []);
-  assert.equal("queuedForEvaluation" in slept, false, "the nightly pass queues no evaluation (ruling of 2026-09-21)");
-  assert.deepEqual(enqueued, []);
-});
-
 test("an explicitly taught method takes effect at once, which is the other half of the bargain", async () => {
-  const { learning, notices } = service({ resolveBaselineDigest: async () => { throw new Error("explicit teaching does not need evaluation"); } });
+  const { learning, notices } = service();
   // At creation, with nothing else called. Before this, `approve` was the only
   // way into `approved` and no production caller ever reached it, so a method a
   // researcher wrote sat as a candidate waiting for evidence it could not
@@ -574,7 +529,7 @@ test("「回到上一版」 goes to the previous body, past every counter write 
   assert.equal(restored.payload.status, "approved");
   assert.equal(restored.payload.statusReason, effectiveStatusReason({ status: "approved", provenance: { origin: "inferred" } }));
   assert.equal(restored.payload.bodyVersion, 3, "a restore is a new version on the record");
-  assert.deepEqual(restored.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 },
+  assert.deepEqual(restored.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, read: 0 },
     "counters about another body are not this body's");
   assert.equal(methodStepsOf(restored.payload), null, "the steps rendered the amended body and are not shown for this one");
   assert.equal(restored.payload.provenance.sourceProjectId, "p1");

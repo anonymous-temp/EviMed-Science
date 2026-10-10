@@ -13,9 +13,7 @@ import {
   METHOD_RELATION_TYPES,
   computeMethodLevels,
   emptyLearning,
-  evaluationEligible,
   foldEligible,
-  foldEvaluation,
   foldObservation,
   foldRead,
   foldRelation,
@@ -77,7 +75,7 @@ test("a use is counted once per run family, and a failed run is not a use", () =
   learning = foldObservation(learning, { runId: "run_1", family: "fam_1", outcome: "accepted", at: daysAgo(1), invoked: true });
   // The retry is the same trajectory seen twice. EvoDS would count two.
   learning = foldObservation(learning, { runId: "run_1_retry", family: "fam_1", outcome: "accepted", at: daysAgo(1), invoked: true });
-  assert.deepEqual(learning.counts, { eligible: 0, loaded: 1, invoked: 1, succeeded: 1, validated: 0, read: 0 });
+  assert.deepEqual(learning.counts, { eligible: 0, loaded: 1, invoked: 1, succeeded: 1, read: 0 });
   assert.deepEqual(successfulFamilies(learning), ["fam_1"]);
 
   learning = foldObservation(learning, { runId: "run_2", family: "fam_2", outcome: "rejected", at: daysAgo(1), invoked: true });
@@ -98,31 +96,10 @@ test("a use is counted once per run family, and a failed run is not a use", () =
 test("changing the body resets what was measured about the old one, but keeps the relations", () => {
   const learning = foldRelation(threeSuccesses(), { type: "subset", target: "m2", evidence: "e", proposedBy: "job_1" });
   const moved = resetLearningForDigest(learning, DIGEST_B);
-  assert.deepEqual(moved.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 });
+  assert.deepEqual(moved.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, read: 0 });
   assert.deepEqual(moved.observations, []);
-  assert.deepEqual(moved.evaluations, []);
   assert.equal(moved.relations.length, 1, "where a method sits in the library did not change because its wording did");
   assert.equal(resetLearningForDigest(learning, DIGEST_A), learning, "an unchanged digest is not a reset");
-});
-
-test("an evaluation counts as validation only when it passed, on the text it measured", () => {
-  const passed = foldEvaluation(emptyLearning(DIGEST_A), { report: "r1.json", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "non_inferior" });
-  assert.equal(passed.counts.validated, 1);
-  const failed = foldEvaluation(emptyLearning(DIGEST_A), { report: "r2.json", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "worse" });
-  assert.equal(failed.counts.validated, 0);
-  assert.equal(failed.evaluations.length, 1, "a failing verdict is still recorded");
-  assert.equal(foldEvaluation(emptyLearning(DIGEST_A), { report: "r", baselineDigest: DIGEST_B, verdict: "vibes" }).evaluations.length, 0);
-
-  // An evaluation takes hours of real runs and the method can be amended while
-  // it is in flight; the amendment resets this record for the new digest. A
-  // verdict folded in unconditionally therefore made the old text's score the
-  // new text's first vote. Recorded either way -- "we measured something else"
-  // is a fact worth keeping -- and counted only when the digests agree.
-  const elsewhere = foldEvaluation(emptyLearning(DIGEST_A), { report: "r3.json", baselineDigest: DIGEST_B, candidateDigest: DIGEST_B, verdict: "better" });
-  assert.equal(elsewhere.counts.validated, 0, "a verdict about other text must not count");
-  assert.equal(elsewhere.evaluations.length, 1, "and must still be on the record");
-  const unnamed = foldEvaluation(emptyLearning(DIGEST_A), { report: "r4.json", baselineDigest: DIGEST_B, verdict: "better" });
-  assert.equal(unnamed.counts.validated, 0, "a verdict that names no text counts for none");
 });
 
 test("a relation is upserted by (type, target) so a nightly re-proposal is not a duplicate", () => {
@@ -131,48 +108,6 @@ test("a relation is upserted by (type, target) so a nightly re-proposal is not a
   assert.equal(learning.relations.length, 1);
   assert.equal(learning.relations[0].evidence, "two");
   assert.equal(foldRelation(learning, { type: "is-vaguely-like", target: "m3", evidence: "e", proposedBy: "j" }).relations.length, 1);
-});
-
-/* ------------------------------------------------------- the budget threshold */
-
-test("tau decides who gets an evaluation, and it is about spending money", () => {
-  assert.equal(evaluationEligible(method({ learning: threeSuccesses() })).eligible, true);
-
-  // Two runs of the same deliverable are one trajectory: the family is the key,
-  // so a retry cannot buy its way past the threshold.
-  const oneRetried = foldObservation(foldObservation(emptyLearning(DIGEST_A),
-    { runId: "r1", family: "f1", outcome: "accepted", at: daysAgo(1) }),
-  { runId: "r2", family: "f1", outcome: "accepted", at: daysAgo(1) });
-  const short = evaluationEligible(method({ learning: oneRetried }));
-  assert.equal(short.eligible, false);
-  assert.match(short.reason, /1 successful trajectories/);
-
-  // Three trajectories, one run. Enough evidence by volume and not enough by
-  // independence: one brief, one researcher, one set of sources, read three
-  // times. This is the check `MEMORY_PROMOTION_MIN_RUNS` was always meant to be
-  // and was not, because both thresholds were reading the same number.
-  let oneAfternoon = emptyLearning(DIGEST_A);
-  for (const item of ["d1", "d2", "d3"]) {
-    oneAfternoon = foldObservation(oneAfternoon, { runId: "run_1", family: `run_1:${item}`, outcome: "accepted", at: daysAgo(1) });
-  }
-  const correlated = evaluationEligible(method({ learning: oneAfternoon }));
-  assert.equal(correlated.eligible, false);
-  assert.match(correlated.reason, /came from 1 run/);
-
-  // The same three trajectories spread over two runs qualify.
-  let twoAfternoons = emptyLearning(DIGEST_A);
-  for (const [runId, item] of [["run_1", "d1"], ["run_1", "d2"], ["run_2", "d1"]]) {
-    twoAfternoons = foldObservation(twoAfternoons, { runId, family: `${runId}:${item}`, outcome: "accepted", at: daysAgo(1) });
-  }
-  assert.equal(evaluationEligible(method({ learning: twoAfternoons })).eligible, true);
-
-  // Counters that describe a body the method no longer has cannot qualify it.
-  const stale = evaluationEligible(method({ digest: DIGEST_B, learning: threeSuccesses() }));
-  assert.equal(stale.eligible, false);
-  assert.match(stale.reason, /counters were reset/);
-
-  // An explicit method never needs the threshold at all.
-  assert.equal(evaluationEligible(method({ provenance: { origin: "explicit" } })).eligible, true);
 });
 
 /* --------------------------------------------------------- the promotion table */
@@ -211,76 +146,41 @@ test("a distilled method takes effect immediately too, whatever its evidence say
   const fresh = promotionVerdict(method({ learning: emptyLearning(DIGEST_A) }));
   assert.equal(fresh.status, "approved", fresh.missing.join("; "));
   assert.match(fresh.reasons.join(" "), /takes effect immediately/);
+  assert.equal(promotionVerdict(method({ learning: threeSuccesses() })).status, "approved", "evidence does not gate it either");
 
-  // None of the old gates moves it, and none of them is read: no evaluation, a
-  // losing one, an inconclusive one, a stale baseline, a verdict about other
-  // text, and no baseline at all are all still effective.
-  const losing = foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "worse" });
-  /** @type {[string, any, any][]} */
-  const cases = [
-    ["no evaluation", threeSuccesses(), {}],
-    ["a losing one", losing, { currentBaselineDigest: DIGEST_B }],
-    ["an inconclusive one", foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "inconclusive" }), {}],
-    ["a moved baseline", foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "better" }), { currentBaselineDigest: DIGEST_C }],
-    ["no baseline at all", foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "better" }), {}],
-  ];
-  for (const [name, learning, options] of cases) {
-    assert.equal(promotionVerdict(method({ learning }), options).status, "approved", `${name} must not withhold a method`);
-  }
-
-  // What a verdict does do is show on the row, when it is about the text that
-  // would be mounted.
-  const measured = promotionVerdict(method({
-    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "better" }),
-  }));
-  assert.match(measured.reasons.join(" "), /evaluation better against/);
-  // A verdict about other text says nothing about what would be mounted.
-  const otherText = promotionVerdict(method({
-    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_C, verdict: "better" }),
-  }));
-  assert.doesNotMatch(otherText.reasons.join(" "), /evaluation better against/);
+  // The paired evaluation that used to sit behind this is gone (2026-10-10), and a verdict one wrote into a stored record
+  // before then is not read: not as a reason to withhold a method, not on its row, and not as a reason to retire it.
+  const legacy = { ...threeSuccesses(), evaluations: [{ report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "worse" }] };
+  const verdict = promotionVerdict(method({ learning: /** @type {any} */ (legacy) }));
+  assert.equal(verdict.status, "approved");
+  assert.doesNotMatch(verdict.reasons.join(" "), /evaluation/);
 });
 
-test("a measured-worse revision is retired at once, and only on the text it measured", () => {
+test("a stored paired-evaluation verdict of worse retires nothing: a method goes by its own runs", () => {
+  // `retirementProposal` used to read the newest verdict first and retire at once on `worse`. The evaluation was never run
+  // in production and is deleted; what retires an inferred method is the sequential harm test over its runs, the scientific
+  // record and the researcher.
   const now = Date.now();
-  const worse = (/** @type {string} */ candidateDigest) => foldEvaluation(threeSuccesses(), {
-    report: "r.json", baselineDigest: DIGEST_B, candidateDigest, verdict: "worse",
-  });
-  const measured = retirementProposal(method({ status: "approved", learning: worse(DIGEST_A) }), { nowMs: now });
-  assert.equal(measured.propose, true);
-  assert.equal(measured.immediate, true, "a measured harm does not wait for the next nightly pass");
-  assert.match(measured.reason, /worse than working without it/);
-
-  // About text this method no longer holds: says nothing about what is mounted.
-  const stale = retirementProposal(method({ status: "approved", learning: worse(DIGEST_C) }), { nowMs: now });
-  assert.equal(stale.propose, false);
-  const unnamed = retirementProposal(method({
-    status: "approved",
-    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, verdict: "worse" }),
-  }), { nowMs: now });
-  assert.equal(unnamed.propose, false, "a verdict that names no text describes nothing in particular");
-
-  // "We could not tell" is not a reason to take something away.
-  const unclear = retirementProposal(method({
-    status: "approved",
-    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "inconclusive" }),
-  }), { nowMs: now });
-  assert.equal(unclear.propose, false);
-
-  // A safety method is retired by a measurement like any other: its flag is
-  // raised by the run that wrote it, and buys no exemption from outcomes
-  // (audit 2026-09-26, L-G2; build spec §8.7 exempts disuse only).
+  const legacy = { ...threeSuccesses(), evaluations: [{ report: "r.json", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "worse" }] };
+  const proposal = retirementProposal(method({ status: "approved", learning: /** @type {any} */ (legacy) }), { nowMs: now });
+  assert.equal(proposal.propose, false);
+  assert.notEqual(proposal.code, "evaluated_worse");
   const safety = retirementProposal(
-    method({ status: "approved", learning: worse(DIGEST_A), provenance: { origin: "inferred", safetyRelated: true } }),
-    { nowMs: now },
-  );
-  assert.deepEqual([safety.propose, safety.immediate, safety.code], [true, true, "evaluated_worse"]);
+    method({ status: "approved", learning: /** @type {any} */ (legacy), provenance: { origin: "inferred", safetyRelated: true } }), { nowMs: now });
+  assert.equal(safety.propose, false, "a safety method is read by its runs like any other");
+
+  // The harm test is what acts on the same method: rejected deliveries among its invoked runs retire it at once.
+  let rejected = emptyLearning(DIGEST_A);
+  for (const index of [1, 2, 3, 4]) {
+    rejected = foldObservation(rejected, { runId: `run_${index}`, family: `fam_${index}`, outcome: "rejected", at: daysAgo(5 - index), invoked: true });
+  }
+  const harmed = retirementProposal(method({ status: "approved", learning: rejected }), { nowMs: now });
+  assert.deepEqual([harmed.propose, harmed.immediate, harmed.code], [true, true, "harm"]);
 });
 
 test("an unresolved conflict blocks promotion from either origin", () => {
   const conflicted = foldRelation(threeSuccesses(), { type: "conflicts_with", target: "m9", evidence: "opposite advice", proposedBy: "job_1" });
-  const withEvaluation = foldEvaluation(conflicted, { report: "r", baselineDigest: DIGEST_B, verdict: "better" });
-  const inferred = promotionVerdict(method({ learning: withEvaluation }), { currentBaselineDigest: DIGEST_B });
+  const inferred = promotionVerdict(method({ learning: conflicted }));
   assert.equal(inferred.status, "candidate");
   assert.match(inferred.missing.join(" "), /unresolved conflict/);
 

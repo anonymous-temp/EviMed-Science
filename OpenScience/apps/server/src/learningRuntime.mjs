@@ -247,12 +247,6 @@ export function createLearningRuntime({
   config, store, agentRuns, runtimeManager, researchSessions, registry, usageLedger, prepareContext,
   cleanup = async () => {},
 }) {
-  /** @param {{userId: string, projectId: string}} identity */
-  const resolveProject = async (identity) => {
-    const user = await store.userById(identity.userId);
-    if (!user) throw new HttpError(404, "learning_account_unavailable", "The learning account is unavailable.");
-    return store.requireProject(user, identity.projectId);
-  };
   /**
    * Where a learning step runs: the account's own learning project, made on
    * first use (`internalProjects.mjs`). Never the researcher's project — a
@@ -271,26 +265,22 @@ export function createLearningRuntime({
       return store.requireProject(user, LEARNING_PROJECT_ID);
     }
   };
-  /** @param {{userId: string, projectId: string, isolatedProject?: boolean}} identity */
-  const runProject = (identity) => (identity.isolatedProject === true
-    ? resolveProject(identity)
-    : learningProject(identity.userId));
+  /** @param {{userId: string}} identity */
+  const runProject = (identity) => learningProject(identity.userId);
   /** @param {any} run @returns {{runId: string, sessionId: string, dispatchId: string}} */
   const identityOf = (run) => ({ runId: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId });
 
   return {
     /**
      * @param {{job: any, dispatchId: string, capabilityId: string, contractKind: string, input: any, question: string,
-     *          userId: string, projectId: string, isolatedProject?: boolean}} request
+     *          userId: string, projectId: string}} request
      */
     async dispatch(request) {
       const { job, capabilityId, input, question } = request;
       const baseDispatchId = request.dispatchId;
-      const project = await runProject({ userId: request.userId ?? job.userId, projectId: request.projectId ?? job.projectId,
-        isolatedProject: request.isolatedProject === true });
+      const project = await runProject({ userId: request.userId ?? job.userId });
       learningArtifactDirectory(capabilityId, baseDispatchId);
-      // The whole project is the run's workspace — the learning project for a
-      // learning step, the cell's own project for an evaluation. The runtime
+      // The whole project is the run's workspace — the learning project. The runtime
       // controller mounts a project's workspace root by identity and ignores a
       // subdirectory: a learning step scoped under `.evimed-learning/…` saw the
       // root as /workspace, went looking for its own input, and the run policy
@@ -312,8 +302,7 @@ export function createLearningRuntime({
         .filter((run) => run.dispatchId === baseDispatchId || String(run.dispatchId ?? "").startsWith(`${baseDispatchId}-a`))
         .sort((left, right) => String(left.startedAt ?? left.createdAt ?? "").localeCompare(String(right.startedAt ?? right.createdAt ?? "")));
       const latest = attempts.at(-1) ?? null;
-      const lost = latest?.status === "succeeded" && request.isolatedProject !== true
-        && !await resultAvailable(project, ledger, latest);
+      const lost = latest?.status === "succeeded" && !await resultAvailable(project, ledger, latest);
       const spent = latest && (lost || ["failed", "cancelled", "canceled"].includes(String(latest.status)));
       const existing = spent ? null : latest;
       const dispatchId = spent ? `${baseDispatchId}-a${attempts.length + 1}` : String(latest?.dispatchId ?? baseDispatchId);
@@ -334,7 +323,7 @@ export function createLearningRuntime({
       // A step starts on an empty workspace: the previous step's input, its
       // deliverables and its receipt are not this step's to read. Only in the
       // learning project, which holds nothing of the researcher's.
-      if (request.isolatedProject !== true) await clearLearningWorkspace(project, ledger);
+      await clearLearningWorkspace(project, ledger);
 
       const bytes = Buffer.from(`${JSON.stringify(input)}\n`, "utf8");
       if (bytes.length > MAX_INPUT_BYTES) {
@@ -363,12 +352,7 @@ export function createLearningRuntime({
           effectiveAgentId: selected.id,
           effectiveAgentVersion: selected.version,
           effectiveRuntimeAgent: selected.runtimeAgent,
-          // A paired-evaluation cell is an ordinary capability run the loop makes
-          // to measure a method (`isolatedProject`), and only this call knows it
-          // is: its spend is the learning loop's, not the account's research.
-          // The dispatch id used to say so, and the dispatch route takes that
-          // from its caller (`usagePurposeOfRun`).
-          effectiveRouteReason: request.isolatedProject === true ? "platform-learning" : capabilityId,
+          effectiveRouteReason: capabilityId,
         }, async (sessionBinding, dispatchedRun, repairText = null) => {
           let promptAttempted = false;
           try {
@@ -438,7 +422,7 @@ export function createLearningRuntime({
 
     /**
      * @param {{userId: string, projectId: string, runId: string, sessionId: string, dispatchId: string,
-     *          capabilityId?: string, contractKind?: string, outputs?: string[], isolatedProject?: boolean}} identity
+     *          capabilityId?: string, contractKind?: string, outputs?: string[]}} identity
      */
     async readResult(identity) {
       const capabilityId = identity.capabilityId
@@ -466,7 +450,7 @@ export function createLearningRuntime({
       // it. A workspace a later step has already taken holds that step's files.
       const archived = resultArchive(project, run.dispatchId);
       const source = await hasReceipt(archived) ? archived
-        : identity.isolatedProject === true || ledger[0]?.id === run.id ? project : null;
+        : ledger[0]?.id === run.id ? project : null;
       const receiptFile = source ? await receiptPath(source, source === archived ? null : run.id) : null;
       if (!source || !receiptFile) {
         throw new HttpError(409, "learning_result_missing", "The learning run's delivered files are gone; its next attempt runs it again.");

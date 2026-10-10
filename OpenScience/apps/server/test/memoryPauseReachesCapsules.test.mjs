@@ -69,7 +69,6 @@ function learnedLibrary() {
   return {
     asked,
     async approvedMethods() { asked.push("approvedMethods"); return [document]; },
-    async methodTrial() { asked.push("methodTrial"); return { methodIds: [] }; },
   };
 }
 

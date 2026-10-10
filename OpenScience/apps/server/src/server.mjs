@@ -108,8 +108,6 @@ import { MethodFeedbackService } from "./methodFeedback.mjs";
 import { LearningTriggers } from "./learningTriggers.mjs";
 import { createClinicalReuse } from "./clinicalContextReuse.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
-import { EVALUATION_JUDGE_LIMITS, evaluateLearnedMethod } from "./learningEvaluation.mjs";
-import { freezeLearningBaseline } from "./learningBaseline.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation, createMethodScreenBaseline } from "./methodConsolidation.mjs";
 import { HandbookConsolidation } from "./handbookConsolidation.mjs";
@@ -140,7 +138,7 @@ import { runEstimate } from "./runRoute.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
-import { callModelForControlPlane, createModelGatewayHandler, isModelGatewayPath, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, modelGatewayFilesRefusals, supportedDeepSeekModels } from "./modelGateway.mjs";
+import { callModelForControlPlane, createModelGatewayHandler, isModelGatewayPath, issueModelGatewayBudgetMarker, modelGatewayFilesRefusals, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { createRuntimeGatewayEntry } from "./runtimeGatewayEntry.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger, usageUncertainMetricFamily } from "./usageLedger.mjs";
@@ -1358,15 +1356,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
 
   const learningService = productDocuments
-    ? new LearningService({ documents: productDocuments, jobs: productJobs,
-      resolveBaselineDigest: async (userId, projectId) => {
-        const user = await store.userById(userId);
-        if (!user) throw new HttpError(404, "learning_account_unavailable", "The evaluation owner is unavailable.");
-        await store.requireProject(user, projectId);
-        return (await freezeLearningBaseline({
-          learning: learningService, capsules: capsuleService, userId, projectId, maxPromptBytes: config.mountedMethodPromptBytes,
-        })).baselineDigest;
-      } })
+    ? new LearningService({ documents: productDocuments, jobs: productJobs })
     : null;
   // The loop's own counters (learningMetrics.mjs): the ones nothing durable
   // records, counted as launches and runs happen; the rest are read from the
@@ -1374,8 +1364,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const learningMetrics = new LearningMetrics();
   const learningRoutes = createLearningRoutes({
     store, service: learningService, maxJsonBytes: config.maxJsonBytes,
-    evaluationUsers: config.learningEvaluationUsers,
-    trialTtlMs: config.learningTrialTtlMs,
     // Whether the loop is turning for this account, beside its list (§13).
     summary: productDatabase && config.learningEnabled ? (userId) => learningSummary(productDatabase, userId) : null,
     // 「从哪里学到的」: a lesson's run, live or kept when its project was deleted (`agentRuns` is composed further down; asked per request).
@@ -1396,7 +1384,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // inbox default pass.
   /** @type {Set<Promise<unknown>>} */
   const learningWrites = new Set();
-  const evaluationAbortControllers = new Set();
   /** @param {Promise<unknown>} work @returns {Promise<unknown>} */
   const trackLearningWrite = (work) => {
     const tracked = work.finally(() => learningWrites.delete(tracked));
@@ -1434,29 +1421,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const family = learnedMethodFamilyForRuntime({ projectId: String(project.id), boundedRunId: run.automated === true ? run.dispatchId ?? null : null });
     const approved = family === null ? [] : (await learningService.approvedMethods(project.userId))
       .filter((/** @type {any} */ document) => methodFamily(document?.payload?.provenance?.capabilityId) === family);
-    /** @type {any[]} */
-    const accountWide = [];
-    // The candidates this project is mounting under trial, which are the whole
-    // reason the trial exists: a candidate is promoted on observed
-    // trajectories, and reading only the approved list meant a mounted
-    // candidate earned none of them. It stays unpromotable forever, and the
-    // symptom is a loop that looks like it is running and never learns.
-    //
-    // A trial that cannot be read costs the approved methods nothing.
-    /** @type {any[]} */
-    let trialled = [];
-    try {
-      const trial = await learningService.methodTrial(project.userId, project.id);
-      for (const methodId of trial.methodIds ?? []) {
-        const document = await learningService.getMethod(project.userId, methodId).catch(() => null);
-        if (document) trialled.push(document);
-      }
-    } catch { trialled = []; }
-    /** @type {{id: string, name: string, digest: string, contentDigest?: string, trial?: boolean}[]} */
+    /** @type {{id: string, name: string, digest: string, contentDigest?: string}[]} */
     const methods = [];
-    const evaluationSnapshot = runtimeManager.evaluationMethodSnapshots.get(runtimeManager.key(project));
-    if (evaluationSnapshot) trialled = evaluationSnapshot.documents.filter((document) => document.payload.status === "candidate");
-    for (const document of evaluationSnapshot?.documents ?? [...trialled, ...approved, ...accountWide]) {
+    for (const document of approved) {
       if (methods.some((method) => method.id === document.id)) continue;
       const name = String(document.payload?.frontmatter?.name ?? "");
       if (!name) continue;
@@ -1465,22 +1432,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         name,
         digest: mountedMethodDigest(document.payload, sha256Hex),
         contentDigest: document.payload.contentDigest,
-        ...(trialled.some((candidate) => candidate.id === document.id) ? { trial: true } : {}),
       });
     }
     const observedSessions = methodObservationSessionsForRun({ run, projection, sessions });
     const derived = runMethodObservations({ run, projection, methods, sessions: observedSessions });
     learningMetrics.observeRun({ loaded: derived.methodsLoaded.length, invoked: derived.methodsInvoked.length });
     if (derived.methodsLoaded.length || derived.methodsInvoked.length) {
-      // A run that carried an unproven method has to say so on its own row.
-      // Without it a reader of the ledger cannot tell a measured arm from an
-      // ordinary run, and every later comparison silently mixes the two.
-      const trialNames = new Set(methods.filter((method) => method.trial).map((method) => method.name));
-      const mark = (/** @type {{name: string, digest: string}[]} */ entries) => entries.map((entry) => (
-        trialNames.has(entry.name) ? { ...entry, trial: true } : entry));
       await agentRuns.recordLearning(project, run.id, {
-        methodsLoaded: mark(derived.methodsLoaded),
-        methodsInvoked: mark(derived.methodsInvoked),
+        methodsLoaded: derived.methodsLoaded,
+        methodsInvoked: derived.methodsInvoked,
       });
     }
     // A method the run read without any delegation to hang it on. It earns no
@@ -3297,8 +3257,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // the platform's own work and an evaluation take none. Never throws: billing failing never
     // stops research.
     onRunReserved: async (project, run) => {
-      if (!credits || internalFor(project.userId, project.id) || runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project))
-        || !isChargeableResearchRun(run)) return;
+      if (!credits || internalFor(project.userId, project.id) || !isChargeableResearchRun(run)) return;
       await credits.service.holdForRun({
         userId: project.userId, runId: run.id, capabilityId: run.effectiveAgentId ?? run.agentId ?? null, startedAt: run.startedAt ?? run.createdAt ?? null,
       });
@@ -3314,12 +3273,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // not leave the run uncharged with its hold frozen for the run's whole timeout (review F7): the `finally`
       // settles whatever has not been, and `settleRun` lets the hold go on every path of its own.
       let chargeAsked = false;
-      const settleCharge = async (/** @type {boolean | undefined} */ evaluation = undefined) => {
+      const settleCharge = async () => {
         if (chargeAsked || !credits) return;
         chargeAsked = true;
-        let evaluationRun = evaluation;
-        try { evaluationRun ??= runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project)); } catch { evaluationRun = false; }
-        if (evaluationRun || internalFor(project.userId, project.id)) return;
+        if (internalFor(project.userId, project.id)) return;
         await credits.service.settleRun({
           userId: project.userId, projectId: project.id, runId: run.id,
           dispatchId: run.dispatchId ?? null,
@@ -3384,7 +3341,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         try { await resultCorrections?.settle(project, run); } catch { /* the revision record stays as it was */ }
       }
       await attributeLateCalls(project, run);
-      const evaluationRun = runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project));
       await step("run.events", () => {
         runEvents.publish(run.id, "run/state", {
           state: run.status,
@@ -3521,7 +3477,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           code: typeof error?.code === "string" ? error.code : "geo_run_completion_failed",
         }));
       }
-      await step("credits.settle", () => settleCharge(evaluationRun));
+      await step("credits.settle", () => settleCharge());
       // Background work is not a person's research: a lesson, a source being
       // read and an evaluation cell run in the account's internal projects,
       // and each reports where it belongs (the knowledge base's own row). On
@@ -3533,7 +3489,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // autopilot episode or its verification is known here — the episode's
       // digest is its result, and that is an ordinary notice.
       if (notificationService && runFinishedReachesInbox(run, {
-        internalProject: internalFor(project.userId, project.id), evaluation: evaluationRun,
+        internalProject: internalFor(project.userId, project.id),
         automated: automatedRun(run), autopilotOwned: autopilotOwned === true,
       })) {
         try {
@@ -3602,7 +3558,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // Which documents of the knowledge base the run used (N-16): a passage `kb_search` returned, or the parsed text read
           // directly — off the same transcript. A write of its own, and not for a background run (a document being read,
           // an evaluation cell): those are the platform working, not a conversation that used the document.
-          await recordSourceUsesOfRun({ sourceUses, project, run, sessions, skip: Boolean(evaluationRun) || internalFor(project.userId, project.id),
+          await recordSourceUsesOfRun({ sourceUses, project, run, sessions, skip: internalFor(project.userId, project.id),
             onError: (error) => securityAudit(config, "run.source_uses.record", "failed", {
               userId: project.userId, projectId: project.id, runId: run.id,
               code: typeof error?.code === "string" ? error.code : "source_uses_unrecorded",
@@ -3653,7 +3609,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // It runs inside the transcript write on purpose: it needs the same
           // sessions, and both must finish before the run's container is let go.
           await recordMethodUse({ project, run, sessions });
-          if (learningService && config.learningEnabled && !evaluationRun && !internalFor(project.userId, project.id)) {
+          if (learningService && config.learningEnabled && !internalFor(project.userId, project.id)) {
             const state = await memoryPausedFor(researchMemory, project.userId, project.id, run.sessionId);
             if (!state.learning && !state.trial) {
               await recordHandbookRunObservations({ learning: learningService, userId: project.userId, projectId: project.id,
@@ -3672,12 +3628,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           });
         }
       })());
-      // Evaluation receipts feed only the measured method. They must not
+      // The platform's own projects (an evaluation harness's among them) must not
       // recursively distil benchmark answers or seed the researcher's memory.
-      // The project says so as well as the runtime: `evaluationRun` is read
-      // from memory the web process loses on every release, and a cell that
-      // finishes after one would otherwise be read as the researcher's own run.
-      if (evaluationRun || internalFor(project.userId, project.id) || !reusableClinicalContext) return;
+      if (internalFor(project.userId, project.id) || !reusableClinicalContext) return;
       // Nor does the platform's own background work: a distillation, a
       // relations pass or a source being understood reads excerpts of the
       // researcher's runs, and extracting memory from it paid a model call to
@@ -3923,6 +3876,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     learning: learningService, registry: agentRegistry, config, runtimeManager, agentRuns, sourceService, researchSessions,
     paused: (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId),
     audit: (event, status, detail) => securityAudit(config, event, status, detail),
+    // The platform's entry on probation for a sampled dispatch (learningPlatformHandbooks.mjs, `probationFor`). The module is composed further down, so it is asked for by name each time.
+    platformTrial: ({ project, run, capabilityId, fits }) => platformHandbooks?.probationFor({ userId: project.userId, projectId: project.id, runId: run.id, capabilityId, fits }) ?? null,
   };
   const prepareOwnedResearchContext = createOwnedResearchContext(ownedContextDependencies);
   const selectOwnedHandbooks = createOwnedHandbookSelector(ownedContextDependencies);
@@ -3997,42 +3952,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       stepWaitMs: config.agentRunMonitorTimeoutMs,
       // The line a researcher reads for a method that came without one.
       describe: (document, owner) => methodDescriber.describe(document, owner),
-      // A paired evaluation dispatches hundreds of real runs, so it is opt-in:
-      // with no command configured an `evaluate` job fails by name rather than
-      // succeeding without having evaluated anything. When an operator does
-      // configure one, it is spawned as its own process with the job's own
-      // budget, and its stdout is expected to be the report the runner writes.
-      evaluate: config.learningEvaluationCommand
-        ? async (request) => {
-          const controller = new AbortController();
-          evaluationAbortControllers.add(controller);
-          try { return await evaluateLearnedMethod({
-          config, store, learning: learningService, capsules: capsuleService, runtimeManager,
-          agentRuns, learningRuntime, commands, usageLedger,
-          judge: async (cell, input) => {
-            if (cell.judgeCalls >= EVALUATION_JUDGE_LIMITS.calls || typeof input?.system !== "string" || typeof input?.user !== "string") {
-              throw new HttpError(400, "method_evaluation_judge_invalid", "Invalid or exhausted evaluation judge request.");
-            }
-            cell.judgeCalls += 1;
-            const runtime = runtimeManager.runtimes.get(runtimeManager.key(cell.project));
-            const address = server.address();
-            if (!runtime?.modelGatewayToken || !runtime.modelGatewayScope || !address || typeof address === "string") {
-              throw new HttpError(503, "method_evaluation_judge_unavailable", "The bounded judge runtime is unavailable.");
-            }
-            const response = await fetch(`http://127.0.0.1:${address.port}${MODEL_GATEWAY_PATH}`, {
-              method: "POST", headers: { authorization: `Bearer ${runtime.modelGatewayToken}`, "content-type": "application/json" },
-              body: JSON.stringify({ model: config.deepseekModel, stream: false, max_tokens: EVALUATION_JUDGE_LIMITS.maxTokens,
-                messages: [{ role: "system", content: input.system }, { role: "user", content: input.user }] }),
-              signal: AbortSignal.timeout(EVALUATION_JUDGE_LIMITS.timeoutMs),
-            });
-            if (!response.ok) throw new HttpError(502, "method_evaluation_judge_failed", "The bounded evaluation judge failed.");
-            const payload = /** @type {any} */ (await response.json());
-            return { content: payload.choices?.[0]?.message?.content ?? "" };
-          },
-        }, request, { signal: controller.signal }); }
-          finally { evaluationAbortControllers.delete(controller); }
-        }
-        : null,
       audit: (job, event, detail) => securityAudit(config, event, "recorded", {
         userId: job.userId, projectId: job.projectId,
         code: typeof detail?.verdict === "string" ? detail.verdict : "unknown",
@@ -4041,6 +3960,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     learningTriggers = new LearningTriggers({
       jobs: productJobs, agentRuns, memory: researchMemory, canReuseRun, canReuseRuns,
+      // A third of the finished deliveries are read for a lesson, by a hash of the run id (`OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE`); counted either way.
+      deliveryShare: config.learningDistillSampleShare, onDeliverySample: (distilled) => learningMetrics.observeDeliverySample(distilled),
       // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
       // every platform-level consumer (capsuleShareTrust.mjs, plan §7).
       guestInfluence: productDatabase ? createGuestInfluence({ database: productDatabase, documents: productDocuments,
@@ -5239,6 +5160,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const evolutionService = evolution.service;
       platformHandbooks = createPlatformHandbooks({
         service: evolutionService, supply: evolution.supply, perDay: config.learningPlatformHandbooksPerDay, report: code => process.stderr.write(`${code}\n`),
+        // A run handed a probation entry is recorded as a use of the entry's tool, which is what the evolution module's feedback and its sequential harm test read.
+        probationShare: config.learningPlatformHandbooksProbationShare, served: event => evolution.onExecution(event),
         facts: projectFactsReader({ store, documents: productDocuments }),
         judge: async ({ text, capabilityId }) => evolution.budgeted("maintenance","memory",`handbook-judge:${capabilityId}:${createHash("sha256").update(text).digest("hex")}`,async () => {
           const response = await callModelForControlPlane({ config, usageLedger, fetchImpl: handbooksFetch }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID,
@@ -5254,6 +5177,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             messages: handbookJudgeMessages({ text, capabilityId }) });
           return { ...result.value, independent: result.modelReported === true && /^qwen/i.test(result.model) };
         }) : null,
+        // A model of an independent family (the Jev judge port, site J23) reads what the lesson tells a reader to do, before it can be promoted. Asked straight
+        // through the judge service like the evolution module's other Jev sites; uncalibrated as shipped, so until it is measured the check is skipped and counted.
+        harm: judgeService ? async ({ text }) => judgeService.judge("J23", { text }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID,
+          taskId: `hb-harm:${createHash("sha256").update(text).digest("hex").slice(0, 32)}`, module: "evolution",
+          limits: { daily: 0, weekly: 0, moduleDaily: config.evolutionDailyBudgetCny ?? 10 } }) : null,
+        audit: (event, detail) => securityAudit(config, event, "recorded", detail),
         established: (userIds) => evidenceEstablishedAuthors(productDatabase, userIds),
         recentGuestRun: async (userId, runId) => (runId ? (await guestMarkedRuns(productDatabase, userId, [runId])).has(runId) : false),
       });
@@ -7988,11 +7917,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return address;
     },
     async close() {
-      // First, so the evaluation the abort below ends is handed back as a
-      // restart and not counted against its three attempts.
+      // First, so a job the shutdown ends is handed back as a restart and not
+      // counted against its three attempts.
       learningWorker?.interrupt();
       evolution?.worker.interrupt();
-      for (const controller of evaluationAbortControllers) controller.abort();
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       if (evidenceLinkTimer) clearInterval(evidenceLinkTimer);
       await capsuleCleanupRun;

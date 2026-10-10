@@ -755,18 +755,14 @@ export {
 // methodGraph — the lifecycle: counters, promotion, retirement, and the graph
 export {
   METHOD_COUNT_KINDS,
-  METHOD_EVALUATION_VERDICTS,
   METHOD_GRAPH_ISSUE_CODES,
   METHOD_OBSERVATION_OUTCOMES,
   METHOD_ORIGINS,
-  METHOD_PASSING_VERDICTS,
   METHOD_RELATION_TYPES,
   METHOD_SUCCESS_OUTCOMES,
   computeMethodLevels,
   emptyLearning,
-  evaluationEligible,
   foldEligible,
-  foldEvaluation,
   foldObservation,
   foldRead,
   foldRelation,
@@ -782,7 +778,6 @@ export {
   methodHarmTest,
   scientificRegression,
   successfulFamilies,
-  successfulRuns,
   unresolvedConflicts,
   validateMethodGraph,
 } from './src/methodGraph.mjs'
@@ -854,7 +849,6 @@ export {
 /** @typedef {import('./src/methodGraph.mjs').MethodLearning} MethodLearning */
 /** @typedef {import('./src/methodGraph.mjs').MethodObservation} MethodObservation */
 /** @typedef {import('./src/methodGraph.mjs').MethodRelation} MethodRelation */
-/** @typedef {import('./src/methodGraph.mjs').MethodEvaluation} MethodEvaluation */
 /** @typedef {import('./src/methodGraph.mjs').MethodProvenance} MethodProvenance */
 /** @typedef {import('./src/toolGraphSampling.mjs').ToolGraph} ToolGraph */
 /** @typedef {import('./src/toolGraphSampling.mjs').ToolGraphNode} ToolGraphNode */
@@ -961,7 +955,6 @@ export {
   isChargeableResearchRun,
   LEARNING_AGENT_IDS,
   PLATFORM_ROUTE_PURPOSES,
-  LEARNING_EVALUATION_DISPATCH_PREFIX,
   EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX,
   EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON,
   evidenceProgrammeRouteReason,

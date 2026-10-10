@@ -105,7 +105,7 @@ const method = {
   id: "method:learned:freeze", projectId: null, revision: 2, version: 2, name: "pre-submission-freeze-check",
   description: "Runs the last guards.", whenToUse: "", title: "提交前给成品做最后把关",
   summary: "先留改动前的副本，再逐项确认每道检查真的能报错。", status: "approved", statusReason: null, origin: "inferred",
-  counts: { eligible: 1, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 }, evaluations: [],
+  counts: { eligible: 1, loaded: 0, invoked: 0, succeeded: 0, read: 0 },
   promotion: { status: "approved", reasons: [], missing: [] }, body: "## Purpose\nRun the last guards before the bytes are frozen.", steps: "1. 先复制一份。\n2. 再逐项检查。",
   scope: { applicability: "报告交付前", counterexamples: [], current: true },
   statusChangedAt: "2026-09-22T02:00:00Z", bodyUpdatedAt: "2026-09-22T02:00:00Z", trajectories: 3, createdAt: "2026-09-21T06:00:00Z", updatedAt: "2026-09-22T06:00:00Z",

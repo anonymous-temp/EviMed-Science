@@ -104,6 +104,21 @@ test("the platform-handbook levers: off and three a day by default, read from th
   assert.match(apiOnly, /OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: \$\{OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED:-false\}/);
 });
 
+test("the probation share: a tenth of the dispatches by default, a fraction read from the environment, one nobody could mean stops the start by its name, carried by .env.example and compose (review L-6)", async () => {
+  const name = "OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE";
+  assert.equal(configUnder({}).learningPlatformHandbooksProbationShare, 0.1);
+  assert.equal(configUnder({ [name]: "0.25" }).learningPlatformHandbooksProbationShare, 0.25);
+  assert.equal(configUnder({ [name]: "1" }).learningPlatformHandbooksProbationShare, 1);
+  assert.equal(configUnder({ [name]: "0" }).learningPlatformHandbooksProbationShare, 0, "none is a choice, not an error");
+  assert.equal(configUnder({ [name]: "" }).learningPlatformHandbooksProbationShare, 0.1, "an empty value is unset, as .env.example and compose leave it");
+  assert.equal(loadConfig({ rootDir: repoRoot, learningPlatformHandbooksProbationShare: 0.5 }).learningPlatformHandbooksProbationShare, 0.5);
+  for (const bad of ["1.5", "-0.1", "some", "NaN"]) assert.throws(() => configUnder({ [name]: bad }), new RegExp(`${name} must be a number from 0 to 1`), bad);
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  assert.match(example, new RegExp(`^# ${name}=0\\.1$`, "m"), "documented at the code's default");
+  assert.match(compose, new RegExp(`^\\s+${name}:\\s*$`, "m"), "handed to the web service value-less");
+});
+
 test("off, the route answers 404 by name once the token is checked and the metrics say 0 with no family; without the token it is refused first", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-flywheel-config-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, operatorMetricsToken: "test-only-metrics-token" });

@@ -37,7 +37,7 @@ function fixture({ provenance = { origin: "inferred", runId: "run_1" } } = {}) {
   const documents = productDocumentsDouble();
   let clock = Date.UTC(2026, 9, 4, 12, 0, 0);
   const now = () => new Date((clock += 60_000));
-  const learning = new LearningService({ documents, now, resolveBaselineDigest: async () => `sha256:${hex("c")}` });
+  const learning = new LearningService({ documents, now });
   /** @type {any[]} */
   const ledger = [];
   const audit = [];
@@ -178,7 +178,7 @@ test("a feedback that cannot be joined is a labelled skip, never a failure", asy
   assert.equal((await f.learning.getMethod(USER, method.id)).payload.scientific, undefined);
 });
 
-test("the researcher's own switch, a capsule trial, an evaluation cell and the platform's own work are not the researcher's learning", async () => {
+test("the researcher's own switch, a capsule trial and the platform's own work are not the researcher's learning", async () => {
   const f = fixture();
   const method = await f.method();
   f.run({ id: "run-1", invoked: [method] });
@@ -187,8 +187,6 @@ test("the researcher's own switch, a capsule trial, an evaluation cell and the p
   f.state = { learning: false, trial: true };
   assert.equal((await f.service.fromCorrection(PROJECT, f.correction())).skipped, "not_learnable");
   f.state = { learning: false, trial: false };
-  f.run({ id: "run-eval", invoked: [method], extra: { learningEvaluation: { cell: "c1" } } });
-  assert.equal((await f.service.fromCorrection(PROJECT, f.correction({ runId: "run-eval" }))).skipped, "not_learnable");
   f.run({ id: "run-auto", invoked: [method], extra: { automated: true } });
   assert.equal((await f.service.fromCorrection(PROJECT, f.correction({ runId: "run-auto" }))).skipped, "not_learnable");
   assert.equal((await f.service.fromCorrection({ id: "evimed-learning", userId: USER }, f.correction())).skipped, "not_learnable");

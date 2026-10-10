@@ -98,6 +98,9 @@ const operatorLevers = {
   OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY: ["open-science-web"],
+  // The share of finished deliveries that queue a distillation (2026-10-10): a lever that never arrived would leave the code's third in force
+  // while the operator believes they asked for every delivery, or for none.
+  OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: ["open-science-web"],
   // The thinking budget was a literal `high` in the gateway until 2026-09-09,
   // so the lever is new and this is what makes it real.
   OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT: ["open-science-web"],
@@ -269,6 +272,8 @@ const operatorLevers = {
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY: ["open-science-web"],
+  // The probation share (2026-10-10): a lever that never arrived would leave the default tenth in force, or none, whatever the operator set.
+  OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY: ["open-science-web"],
   // Sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05): a lever that does not arrive leaves share links

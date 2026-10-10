@@ -166,19 +166,19 @@ test("a busy project, a full runtime pool or a reached cap defers the lesson wit
   }
 });
 
-test("an evaluation the platform's own restart ends is handed back with its attempt refunded", async () => {
-  // Every release stops the web process and aborts the evaluation running in
-  // it; counted as an attempt, three releases failed an evaluation for good
-  // (`product_job_attempts_exhausted`) whatever it had measured.
+test("a job the platform's own restart ends is handed back with its attempt refunded", async () => {
+  // Every release stops the web process and aborts the job running in it;
+  // counted as an attempt, three releases failed a long job for good
+  // (`product_job_attempts_exhausted`) whatever it had finished.
   let abort = null;
-  const evaluating = {
+  const running = {
     async run() {
       await new Promise((_resolve, reject) => { abort = () => reject(new Error("The operation was aborted.")); });
     },
   };
   const { jobs, worker: instance } = worker({
-    consolidation: evaluating,
-    jobs: fakeJobs([{ id: "e1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "evaluate", methodId: "m1" } }]),
+    consolidation: running,
+    jobs: fakeJobs([{ id: "e1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "sleep" } }]),
   });
   const lane = instance.tick();
   await new Promise((resolve) => setImmediate(resolve));
@@ -196,11 +196,25 @@ test("the same failure outside a restart still counts as an attempt", async () =
   const failing = { async run() { throw new Error("The operation was aborted."); } };
   const { jobs, worker: instance } = worker({
     consolidation: failing,
-    jobs: fakeJobs([{ id: "e1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "evaluate", methodId: "m1" } }]),
+    jobs: fakeJobs([{ id: "e1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "sleep" } }]),
   });
   await instance.tick();
   assert.equal(jobs.failed[0].error.code, "learning_job_failed");
   assert.equal(jobs.failed[0].options.refundAttempt, undefined);
+});
+
+test("a queued evaluate job from before the paired evaluation was deleted ends by name: no run, no retry (2026-10-10)", async () => {
+  // The action went with the evaluation. A job already in the queue is not run by a consolidation that no longer knows the
+  // action, and not retried either: another attempt would reach the same refusal.
+  const consolidation = { calls: 0, async run() { this.calls += 1; return { action: "evaluate" }; } };
+  const { jobs, worker: instance } = worker({
+    consolidation,
+    jobs: fakeJobs([{ id: "old", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "evaluate", methodId: "m1" } }]),
+  });
+  await instance.tick();
+  assert.equal(consolidation.calls, 0, "the consolidation was never asked to run it");
+  assert.equal(jobs.failed[0].error.code, "consolidate_action_invalid");
+  assert.equal(jobs.failed[0].options.retry, false, "a refusal that cannot change is not retried");
 });
 
 test("with no window configured the worker claims at any hour", async () => {
@@ -424,13 +438,13 @@ test("one night has one key in the window's zone, and the day before it names th
 });
 
 test("the configured concurrency is real: two lanes work at once, a third waits", async () => {
-  // `learningConcurrency` existed and nothing read it; a paired evaluation that
-  // takes hours held every lesson behind it (2026-09-21).
+  // `learningConcurrency` existed and nothing read it; a job that takes hours
+  // held every lesson behind it (2026-09-21).
   /** @type {Array<() => void>} */
   const releases = [];
   const slow = { async run() { await new Promise((resolve) => releases.push(resolve)); return { action: "sleep" }; } };
   const jobs = fakeJobs([
-    { id: "a", kind: "consolidate", userId: "u1", payload: { action: "evaluate" } },
+    { id: "a", kind: "consolidate", userId: "u1", payload: { action: "sleep" } },
     { id: "b", kind: "consolidate", userId: "u1", payload: { action: "sleep" } },
     { id: "c", kind: "consolidate", userId: "u1", payload: { action: "sleep" } },
   ]);
@@ -449,18 +463,20 @@ test("the configured concurrency is real: two lanes work at once, a third waits"
   assert.throws(() => new LearningWorker({ jobs, distillation: {}, consolidation: {}, concurrency: 0 }), /concurrency/);
 });
 
-test("one paired evaluation at a time: the next waits its turn without spending an attempt", async () => {
+test("one paired evaluation of a handbook at a time: the next waits its turn without spending an attempt", async () => {
   // 2026-09-21: two evaluations held both lanes and half the deployment's
-  // runtimes for hours.
+  // runtimes for hours. Only a handbook arm that is given an `evaluate` hook
+  // evaluates anything now (`HandbookConsolidation`); no deployment composes one.
   /** @type {() => void} */
   let release = () => {};
   const holding = new Promise((resolve) => { release = () => resolve(undefined); });
-  const slow = { calls: [], async run(/** @type {any} */ request) { this.calls.push(request); await holding; return { action: "evaluate" }; } };
+  const slow = { calls: [], handbookConsolidation: { evaluate: async () => ({}) },
+    async run(/** @type {any} */ request) { this.calls.push(request); await holding; return { action: "optimize" }; } };
   const { jobs, worker: instance } = worker({
     consolidation: slow,
     jobs: fakeJobs([
-      { id: "e1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "evaluate", methodId: "m1" } },
-      { id: "e2", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "evaluate", methodId: "m2" } },
+      { id: "e1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "optimize", candidateId: "c1" } },
+      { id: "e2", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "optimize", candidateId: "c2" } },
     ]),
   });
   instance.concurrency = 2;

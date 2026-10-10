@@ -1148,10 +1148,10 @@ function checkMethodCandidate(value) {
   // The proposer is not the judge. Both of these are how a proposal would claim
   // to have been decided by the job that wrote it.
   if (value.status != null && value.status !== 'candidate') {
-    errors.push('status may only be "candidate": promotion is decided after an independent evaluation, never by the run that proposed the method.')
+    errors.push('status may only be "candidate": whether a method takes effect is decided by the method ledger, never by the run that proposed it.')
   }
   if (Array.isArray(value.evaluations) && value.evaluations.length) {
-    errors.push('a candidate may not carry an evaluation verdict of its own; the paired evaluation is run separately against a frozen baseline.')
+    errors.push('a candidate may not carry an evaluation verdict of its own: no evaluation of a method is run, and a verdict written into a proposal is not one.')
   }
   if (operation === 'amend' || operation === 'merge') {
     if (!nonEmptyText(value.targetMethodId)) errors.push(`${operation} must name the method it rewrites in targetMethodId.`)

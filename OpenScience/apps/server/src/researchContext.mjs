@@ -11,7 +11,7 @@ import {
   withProjectStorageMutation,
   writeFileAtomicNoFollow,
 } from "./security.mjs";
-import { handbookContextFor } from "./capabilityHandbooks.mjs";
+import { handbookContextFor, platformTrialContext } from "./capabilityHandbooks.mjs";
 import { userLibraryDir } from "./libraryService.mjs";
 
 export const KNOWLEDGE_BASE_DIR = "knowledge-base";
@@ -237,7 +237,7 @@ export async function prepareResearchContext(
   config,
   // `query` still arrives from every caller and chooses nothing any more: the
   // knowledge base is named here, and searched only when the model asks.
-  { query: _query = "", memories = [], specialists = [], routedSpecialist = null, mountableSkills = [], handbooks = null, sourceContext = null } = {},
+  { query: _query = "", memories = [], specialists = [], routedSpecialist = null, mountableSkills = [], handbooks = null, sourceContext = null, platformTrial = null } = {},
 ) {
   const knowledge = await syncKnowledgeBase(project, config);
   // A pointer, not a retrieval. Until 2026-09-20 every dispatch indexed the
@@ -320,6 +320,8 @@ export async function prepareResearchContext(
       : "本轮未命中确定性专项路由；若后续发现任务与已注册专项实质匹配，仍应加载对应 Skill。";
 
   const attachedHandbooks = handbookContextFor(handbooks, project, routedSpecialist?.agentId ?? session.agentId ?? "");
+  // The platform's entry on probation, for the sampled runs the caller decided it for (`learningPlatformHandbooks.probationFor`): the model's context only.
+  const trialContext = platformTrialContext(platformTrial);
   return {
     // The capability the routing sentence above names, or null when it was not said. A dispatch passes it on to
     // `dispatchPrompt`, which states it in the session's index: that file is where the runtime learns the route. The sentence
@@ -352,6 +354,7 @@ export async function prepareResearchContext(
       specialistInstruction,
       routingInstruction,
       attachedHandbooks.context,
+      ...(trialContext ? [trialContext] : []),
       // Platform text, not retrieved material: the registry read this body from
       // the image and checked its frontmatter name against the manifest, so it
       // carries the same authority as the sentences around it and is not

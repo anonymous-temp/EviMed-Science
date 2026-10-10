@@ -890,10 +890,9 @@ learning loop held it for more than fifteen minutes after each finished run on
 2026-10-03, and every dispatch in that time answered 429
 `runtime_limit_exceeded`. Since 2026-10-04 a researcher's start that finds the
 deployment at its global ceiling retires a background runtime (learning,
-document understanding, evaluation cells, the acceptance battery) instead of
-being refused, and that work resumes when there is room again: the learning job
-and the source job defer without spending an attempt, and a paired evaluation
-excludes the cell it lost rather than scoring it. A researcher's own runtime is
+document understanding, the acceptance battery) instead of being refused, and
+that work resumes when there is room again: the learning job and the source job
+defer without spending an attempt. A researcher's own runtime is
 never retired for background work, so on one slot background work runs only
 while no researcher needs it. `open_science_runtime_background`,
 `open_science_runtime_background_limit` and

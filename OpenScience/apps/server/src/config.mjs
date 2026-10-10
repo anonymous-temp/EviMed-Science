@@ -522,6 +522,18 @@ function evidenceUpkeepSettings(overrides) {
 }
 
 /**
+ * A share from 0 to 1 (a sample of runs, `runSampling.mjs`), from an override or the environment. Unset or empty is the default; a value outside the
+ * range stops the process at start with the variable's name, as the module settings do, because a share nobody chose would decide how much is learned.
+ * @param {Record<string, any>} overrides @param {string} key @param {string} name @param {number} fallback
+ */
+function shareSetting(overrides, key, name, fallback) {
+  const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
+  const value = raw == null || raw === "" ? fallback : Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error(`${name} must be a number from 0 to 1, got ${JSON.stringify(raw)}.`);
+  return value;
+}
+
+/**
  * What the evidence flywheel's learning loop and its figures switch on (evidence-flywheel plan §5.2, §5.5, §11, 2026-10-06), each off by default
  * and each doing nothing at all while off — no table read, no timer, and a route that answers 404 by the module's own "not enabled" code.
  *
@@ -540,6 +552,8 @@ function evidenceUpkeepSettings(overrides) {
  * - `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED` (off): a lesson an account's handbook learned that holds no project fact may go to the platform's skill supply as a
  *   text-only entry, after an independent re-check; needs the evolution module and the learning loop on. `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY` (3, at most 30)
  *   bounds the candidates re-checked and activated in a day, each a model call of the evolution module's own budget.
+ *   `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE` (0.1, from 0 to 1) is the share of eligible runs a handbook entry on probation is served to, by a hash of
+ *   the run id, so that the harm test can observe it; an entry that is never served can never leave probation (review L-6, owner decision 7).
  *
  * @param {Record<string, any>} overrides
  */
@@ -566,6 +580,7 @@ function evidenceFlywheelSettings(overrides) {
     evolutionModuleLeadsPerDay: moduleLeadsPerDay,
     learningPlatformHandbooksEnabled: overrides.learningPlatformHandbooksEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED", false),
     learningPlatformHandbooksPerDay: handbooksPerDay,
+    learningPlatformHandbooksProbationShare: shareSetting(overrides, "learningPlatformHandbooksProbationShare", "OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE", 0.1),
   };
 }
 
@@ -1267,12 +1282,12 @@ function reviewJevSettings(overrides, keyPresent) {
     throw new Error(`OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS must be a whole number from 1000 to 120000, got ${JSON.stringify(timeoutValue)}.`);
   }
   for(const [site,policy] of Object.entries(pin.sites??{})) {
-    if(!/^J([1-9]|1[0-9]|2[0-2])$/.test(site)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(site))throw new Error('Unknown registered Jev policy pin.');
+    if(!/^J([1-9]|1[0-9]|2[0-3])$/.test(site)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(site))throw new Error('Unknown registered Jev policy pin.');
     if(!(Number(policy.threshold)>0&&Number(policy.threshold)<=1)||!['uncalibrated','calibrated'].includes(policy.calibration))throw new Error('Invalid registered Jev threshold or calibration pin.');
     if(policy.calibration==='calibrated'&&!/^[a-f0-9]{64}$/.test(policy.promptFingerprint??''))throw new Error('A calibrated Jev policy needs its measured prompt fingerprint.');
   }
   const disabled = String(overrides.jevDisabledSites ?? process.env.OPEN_SCIENCE_JEV_DISABLED_SITES ?? '').split(',').map(value=>value.trim()).filter(Boolean);
-  if(disabled.some(id=>!/^J([1-9]|1[0-9]|2[0-2])$/.test(id)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(id)))throw new Error('OPEN_SCIENCE_JEV_DISABLED_SITES contains an unknown site.');
+  if(disabled.some(id=>!/^J([1-9]|1[0-9]|2[0-3])$/.test(id)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(id)))throw new Error('OPEN_SCIENCE_JEV_DISABLED_SITES contains an unknown site.');
   // An empty value is "not set" (`NAME=` in .env.example and in a private override), not the number 0.
   const onlineTimeout=Number(overrides.jevOnlineTimeoutMs ?? (process.env.OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS || 3000));
   const concurrency=Number(overrides.jevBackgroundConcurrency ?? (process.env.OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY || 4));
@@ -2785,14 +2800,15 @@ export function loadConfig(overrides = {}) {
     learningWindowTimeZone: String(overrides.learningWindowTimeZone
       ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE ?? "Asia/Shanghai"),
     // The learning loop's own caps, counted over `learning` spend only
-    // (`boundedRunBudget.mjs`). Zero means no cap. The daily cap is 10 CNY
-    // unless set (since 2026-10-07, when the Jev judge sites J1/J11/J12/J14/J16
-    // were booked to this purpose, `judgeSites.mjs`; they draw on it too); the
-    // weekly and per-run caps are off unless set. A step that meets the daily
-    // cap defers its job to the next window (`usage_budget_exceeded`), so a
-    // consolidation pass approves what it can before its model steps.
+    // (`boundedRunBudget.mjs`). Zero means no cap, and none is set by default:
+    // the owner's ruling of 2026-09-21 (nothing is to stop the product from being
+    // exercised while it is tested), restored on 2026-10-10 after the daily cap
+    // had read 10 CNY since 2026-10-07. The Jev sites booked to this purpose (J1,
+    // J14 and J16, `judgeSites.mjs`) draw on a cap that is set as well. A step
+    // that meets one defers its job to the next window (`usage_budget_exceeded`)
+    // rather than failing it.
     learningDailyLimitCny: Number(overrides.learningDailyLimitCny
-      ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 10),
+      ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 0),
     learningWeeklyLimitCny: Number(overrides.learningWeeklyLimitCny
       ?? process.env.OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY ?? 0),
     learningRunLimitCny: Number(overrides.learningRunLimitCny
@@ -2804,37 +2820,13 @@ export function loadConfig(overrides = {}) {
     // ran at all.
     learningConsolidationIntervalMs: Number(overrides.learningConsolidationIntervalMs
       ?? process.env.OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS ?? 3_600_000),
-    // How the nightly job runs a paired evaluation, if a deployment wants it to.
-    //
-    // Empty by default, and an `evaluate` job then fails by name rather than
-    // succeeding without evaluating. That default is deliberate: the harness
-    // dispatches hundreds of real runs (100 briefs x 2 arms x 3 repeats), and a
-    // timer on a shared box is the wrong place to start that.
-    //
-    // The whole command, including the template that carries the brief set,
-    // budget and judge. `--json`, `--method`, `--candidate-digest` and
-    // `--baseline-digest` are appended by `runLearningEvaluationProcess`; everything
-    // else is the operator's. For example:
-    //
-    //   python3 evals/method-quality/run_paired.py --template evals/method-quality/configs/nightly.json
-    learningEvaluationCommand: String(overrides.learningEvaluationCommand
-      ?? process.env.OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND ?? ""),
-    // Who may put a method on trial — that is, mount a candidate the loop has
-    // not approved into a real container.
-    //
-    // Empty by default, which means nobody, and the route answers 403. That is
-    // the whole access rule: an allowlist of user ids, no new role, no approval
-    // flow. The paired evaluation is the only component whose job is
-    // measurement, so it is the only one that may name the candidate it is
-    // measuring; a researcher's own account can never receive an unproven
-    // method by any path, which is what makes the mount safe to have at all.
-    learningEvaluationUsers: String(overrides.learningEvaluationUsers
-      ?? process.env.OPEN_SCIENCE_LEARNING_EVALUATION_USERS ?? "")
-      .split(",").map((value) => value.trim()).filter(Boolean),
+    // The share of finished deliveries that queue a distillation (owner decision 8, 2026-10-10; review L-15). Every successful run with artifacts used to cost a
+    // distillation run, and "no change" is the common answer. The share is chosen by a hash of the run id (`runSampling.mjs`), so a run is in or out for good;
+    // corrections and routines are explicit signals and are not sampled. 1 is every delivery, as before; 0 distils none from a clean delivery.
+    learningDistillSampleShare: shareSetting(overrides, "learningDistillSampleShare", "OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE", 0.33),
     // Who sees the operations page.
     //
-    // Same shape and same reason as the allowlist above: an id list, empty by
-    // default, no new role and no approval flow. It gates one surface — the
+    // An id list, empty by default, no new role and no approval flow. It gates one surface — the
     // readiness board, the audit, error and security ledgers, the hosted task
     // list and the runtime controls — which a researcher was shown in full
     // until 2026-09-15 because the settings page was the deployment's console
@@ -2851,12 +2843,6 @@ export function loadConfig(overrides = {}) {
     // so AND its owner is one of these accounts: a name a client chose is never a waiver
     // (`isInternalProjectOf`). The account is an id, as `operatorUsers` are.
     acceptanceUsername: String(overrides.acceptanceUsername ?? process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "").trim(),
-    // How long a trial lasts if the caller does not say. A trial that outlives
-    // the evaluation that set it would keep an unproven method in front of
-    // every later run of that project, which is the failure the allowlist above
-    // exists to prevent; an expiry makes forgetting to clear it harmless.
-    learningTrialTtlMs: Number(overrides.learningTrialTtlMs
-      ?? process.env.OPEN_SCIENCE_LEARNING_TRIAL_TTL_MS ?? 6 * 60 * 60 * 1000),
     mountedMethodPromptBytes: mountedMethodPromptBytes(overrides),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),

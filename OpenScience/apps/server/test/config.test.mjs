@@ -239,7 +239,6 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_BUILD_CREATED: ["deployment", "release"],
   OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_ID: ["deployment", "release"],
   OPEN_SCIENCE_DEEPSEEK_CONFIG_REVISION: ["deployment", "release"],
-  OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND: ["deployment", "command"],
   OPEN_SCIENCE_OPERATOR_METRICS_TOKEN: ["deployment", "credential"],
   OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE: ["deployment", "credential"],
   OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE: ["deployment", "credential"],
@@ -582,9 +581,22 @@ test("opt-in local auto configuration loads mode-600 EviMed service secrets", as
   }
 });
 
-test("the learning loop's caps default to ten yuan a day and none a week or a run, which is what the config comment says", () => {
+test("the learning loop has no cap by default, a day, a week or a run (owner ruling of 2026-09-21; the daily one read 10 CNY from 2026-10-07 to 2026-10-10)", () => {
   const config = loadConfig({ dataDir: "/tmp/os-config-learning-caps" });
-  assert.deepEqual([config.learningDailyLimitCny, config.learningWeeklyLimitCny, config.learningRunLimitCny], [10, 0, 0]);
+  assert.deepEqual([config.learningDailyLimitCny, config.learningWeeklyLimitCny, config.learningRunLimitCny], [0, 0, 0]);
+  // A deployment that sets one still has it: zero is the default, not a ceiling on what may be set.
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-learning-caps", learningDailyLimitCny: 25 }).learningDailyLimitCny, 25);
+});
+
+test("a third of the finished deliveries queue a distillation by default, the share is a fraction, and a share nobody could mean stops the process by name (review L-15)", () => {
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-share" }).learningDistillSampleShare, 0.33);
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-share", learningDistillSampleShare: 1 }).learningDistillSampleShare, 1, "every delivery, as before");
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-share", learningDistillSampleShare: 0 }).learningDistillSampleShare, 0, "none from a clean delivery is a choice, not an error");
+  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: "0.5" }).learningDistillSampleShare, 0.5);
+  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: "" }).learningDistillSampleShare, 0.33, "an empty value is unset, as .env.example and compose leave it");
+  for (const bad of ["1.5", "-0.1", "most", "NaN"]) {
+    assert.throws(() => configUnder({ OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: bad }), /OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE must be a number from 0 to 1/, bad);
+  }
 });
 
 test("the agent run monitor outlasts a systematic review by default", () => {
@@ -593,11 +605,10 @@ test("the agent run monitor outlasts a systematic review by default", () => {
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-monitor" }).agentRunMonitorTimeoutMs, 24 * 60 * 60_000);
 });
 
-test("learning has a daily budget while source-understanding remains uncapped by default", () => {
+test("learning and source-understanding are uncapped by default", () => {
   const config = loadConfig({ dataDir: "/tmp/os-config-budgets" });
   assert.equal(config.learningWindow, "", "a lesson is distilled whenever its run has finished");
-  assert.equal(config.learningDailyLimitCny, 10, "method consolidation shares the learning daily budget");
-  for (const key of ["learningRunLimitCny", "learningWeeklyLimitCny",
+  for (const key of ["learningDailyLimitCny", "learningRunLimitCny", "learningWeeklyLimitCny",
     "sourceUnderstandingRunLimitCny", "sourceUnderstandingDailyLimitCny", "sourceUnderstandingWeeklyLimitCny",
     "userRunSpendLimit", "userDailySpendLimit", "userWeeklySpendLimit"]) {
     assert.equal(config[key], 0, `${key} is no cap`);

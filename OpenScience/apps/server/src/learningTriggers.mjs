@@ -51,6 +51,11 @@
  * learning to the platform is the handbook-gap scan (`evolutionLearningCoupling.mjs`), which leaves such a run out. The mark is
  * written here, once, when the run finishes.
  *
+ * A finished delivery is read for a lesson in a share of the runs only (owner decision of 2026-10-10, review L-15): a distillation per delivery cost a run
+ * each time and mostly answered `no_change`. The share is `OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE`, chosen by a hash of the run id (`runSampling.mjs`),
+ * so a run is in or out for good however often its completion is replayed; the others are skipped and counted. A correction and a repeated routine are
+ * explicit signals and are never sampled.
+ *
  * What this module still refuses is work that is not the researcher's: an
  * automated run (an evaluation cell, a probe, an audit or acceptance harness —
  * `automated`, set by the dispatch body or the `x-evimed-automated` header),
@@ -68,11 +73,18 @@
 import { METHOD_INDUCTION_MIN_TRAJECTORIES, isResearcherOwnedWork } from "@evimed/domain";
 import { isInternalProject } from "./internalProjects.mjs";
 import { memoryPausedFor } from "./researchMemory.mjs";
+import { sampledByHash } from "./runSampling.mjs";
 import { TRANSCRIPT_RETENTION_DAYS } from "./runTranscripts.mjs";
 
 /** The answer line: a plain question answered is not an operation to learn a
  *  procedure from (principle 12). */
 const ANSWER_LINE_AGENT_ID = "open-domain-answer";
+
+/** The lessons a finished delivery queues by itself, and the only ones a share of runs chooses: a correction and a routine are explicit signals. */
+const DELIVERY_TRIGGERS = Object.freeze(["delivered", "repair_accepted"]);
+
+/** What the delivery sample is hashed with, so it is independent of the platform handbooks' probation sample over the same runs. */
+export const DELIVERY_SAMPLE_PURPOSE = "learning-distill-delivery";
 
 const DAY_MS = 86_400_000;
 
@@ -360,10 +372,14 @@ export class LearningTriggers {
    *   canReuseRuns?: ((project:any,runs:readonly any[])=>Promise<boolean[]>) | null,
    *   projects?: ((userId: string) => Promise<readonly any[]>) | null, routinePeriodDays?: number,
    *   guestInfluence?: { assess: (userId: string, run: any) => Promise<{ guest: any[], uncorroborated: string[] }>,
-   *     mark: (project: any, run: any, assessment: any) => Promise<unknown>, count?: (assessment: any) => void } | null }} dependencies
+   *     mark: (project: any, run: any, assessment: any) => Promise<unknown>, count?: (assessment: any) => void } | null,
+   *   deliveryShare?: number, onDeliverySample?: ((distilled: boolean) => void) | null }} dependencies
+   *   `deliveryShare`: the share (0 to 1) of finished deliveries that queue a lesson; 1, the default, is every one. `onDeliverySample` is told, for
+   *   each delivery that would have queued one, whether the sample took it.
    */
   constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {},
-    projects = null, routinePeriodDays = ROUTINE_PERIOD_DAYS, guestInfluence = null, canReuseRun = null, canReuseRuns = null }) {
+    projects = null, routinePeriodDays = ROUTINE_PERIOD_DAYS, guestInfluence = null, canReuseRun = null, canReuseRuns = null,
+    deliveryShare = 1, onDeliverySample = null }) {
     if (!jobs || !agentRuns) throw new TypeError("Learning triggers need the job queue and the run ledger.");
     this.jobs = jobs;
     this.agentRuns = agentRuns;
@@ -376,6 +392,23 @@ export class LearningTriggers {
     this.canReuseRuns = canReuseRuns;
     this.periodMs = routinePeriodMs(routinePeriodDays);
     this.guestInfluence = guestInfluence;
+    this.deliveryShare = deliveryShare;
+    this.onDeliverySample = onDeliverySample;
+  }
+
+  /**
+   * The lessons that stand once the delivery sample has been applied: the lesson a finished delivery queues (`delivered` or `repair_accepted`) goes only
+   * for the share of runs the hash of the run id selects, and is counted either way; every other lesson is untouched.
+   * @param {any} run @param {readonly { trigger: string }[]} lessons
+   * @returns {{ lessons: readonly any[], sampledOut: string[] }}
+   */
+  #sampled(run, lessons) {
+    const delivery = lessons.filter((lesson) => DELIVERY_TRIGGERS.includes(lesson.trigger));
+    if (!delivery.length) return { lessons, sampledOut: [] };
+    const taken = sampledByHash(run.id, this.deliveryShare, DELIVERY_SAMPLE_PURPOSE);
+    try { this.onDeliverySample?.(taken); } catch { /* a counter never decides what is learned */ }
+    return taken ? { lessons, sampledOut: [] }
+      : { lessons: lessons.filter((lesson) => !DELIVERY_TRIGGERS.includes(lesson.trigger)), sampledOut: delivery.map((lesson) => lesson.trigger) };
   }
 
   /**
@@ -488,9 +521,9 @@ export class LearningTriggers {
       });
     }
     const guestInfluence = await this.#guestInfluenced(project, run);
-    const lessons = learningTriggersFor({
+    const { lessons, sampledOut } = this.#sampled(run, learningTriggersFor({
       run, runs, project, ledgers, periodMs: this.periodMs, projection, memoryResult, internalAgent: () => internal, guestInfluence,
-    });
+    }));
     const queued = [];
     for (const lesson of lessons) {
       try {
@@ -507,7 +540,7 @@ export class LearningTriggers {
         }).catch(() => {});
       }
     }
-    return { queued, skipped: null, ...(guestInfluence ? { guestInfluence: "uncorroborated" } : {}) };
+    return { queued, skipped: null, ...(sampledOut.length ? { sampledOut } : {}), ...(guestInfluence ? { guestInfluence: "uncorroborated" } : {}) };
   }
 
   /**
