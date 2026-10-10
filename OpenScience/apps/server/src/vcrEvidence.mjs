@@ -94,8 +94,8 @@
 import { createHash } from "node:crypto";
 
 import {
-  VCR_ASSUMPTION_KEY, VCR_ASSUMPTION_SOURCE_KINDS, VCR_DISTRIBUTIONS, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION,
-  VCR_JOB_METHODS, VCR_POOLING_METHODS, VCR_VALUE_SOURCES, canonicalScenarioJson, validateEngineJob,
+  VCR_ASSUMPTION_KEY, VCR_ASSUMPTION_SOURCE_KINDS, VCR_DEFAULT_TIME_UNIT, VCR_DISTRIBUTIONS, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION,
+  VCR_JOB_METHODS, VCR_POOLING_METHODS, VCR_VALUE_SOURCES, canonicalScenarioJson, validateEngineJob, vcrConvertTime, vcrTimeUnitOf,
 } from "@evimed/domain";
 import { quoteIsPresent } from "@evimed/domain/clinical-evidence";
 
@@ -543,6 +543,45 @@ function asProportion(value, unit) {
 }
 
 /**
+ * The unit a time item states, and how it knows: its own unit when that is one the table reads, else the unit its parameter's name
+ * carries (`median_survival_months`), else months — which a pool says it assumed. A unit the table does not read (`cycles`) is not
+ * guessed at: it is `null`, and the item is left out of the pool with that reason.
+ * @param {any} item @param {string} parameter
+ * @returns {{ unit: string | null, basis: "stated" | "parameter" | "assumed" | "unrecognised" }}
+ */
+export function timeUnitOfItem(item, parameter) {
+  const own = String(item?.unit ?? "").trim();
+  if (own) {
+    const unit = vcrTimeUnitOf(own);
+    return unit ? { unit, basis: "stated" } : { unit: null, basis: "unrecognised" };
+  }
+  return { unit: VCR_DEFAULT_TIME_UNIT, basis: /_months$/.test(parameter) ? "parameter" : "assumed" };
+}
+
+/**
+ * The unit of a card made from a pool. A time was pooled in months (`poolJob`), so a time card's numbers are months whatever its
+ * writer called the unit: the writer's own spelling of months stands (个月, month), any other unit or none is the table's `months`.
+ * Every other parameter keeps the unit it was given.
+ * @param {string} parameter @param {string} unit
+ */
+export function timeCardUnit(parameter, unit) {
+  if (parameterKindOf(parameter) !== "time") return unit;
+  return vcrTimeUnitOf(unit) === VCR_DEFAULT_TIME_UNIT ? unit : VCR_DEFAULT_TIME_UNIT;
+}
+
+/**
+ * A time item in another unit: its value and both interval bounds, so that the estimate moves and the error (on a ratio scale, the width
+ * of the interval's logarithm) does not, which is what a change of unit does to a time.
+ * @param {any} item @param {string} from @param {string} to
+ */
+function inUnit(item, from, to) {
+  /** @param {unknown} value */
+  const converted = (value) => (finite(value) === null ? value : vcrConvertTime(finite(value), from, to));
+  return { ...item, value: converted(item?.value), ci_low: converted(item?.ci_low), ciLow: converted(item?.ciLow),
+    ci_high: converted(item?.ci_high), ciHigh: converted(item?.ciHigh), unit: to };
+}
+
+/**
  * The estimate and its standard error on the analysis scale, from what the
  * registry gave: the value and its confidence interval, at the interval's own
  * level. Exact arithmetic on the scale the engine pools on — never a natural-scale
@@ -648,9 +687,19 @@ export function poolJob({ studyId, parameter, endpointKey = "", armRole = "", ca
   const evidenceIds = [];
   /** @type {Array<{ kind: string, id: string }>} */
   const inputs = [];
+  // A time is pooled in one unit — months, the platform's — whatever the studies state theirs in: 12 months, 52 weeks and 1 year are
+  // one median, not the estimates 12, 52 and 1 (D1).
+  const timeUnit = kind === "time" ? { unit: VCR_DEFAULT_TIME_UNIT, converted: 0, assumed: 0 } : null;
   for (const item of items ?? []) {
-    const derived = analysisScaleInput(item, { scale: chosenScale });
     const id = String(item?.id ?? "");
+    let candidate = item;
+    if (timeUnit) {
+      const stated = timeUnitOfItem(item, parameter);
+      if (stated.unit === null) { excluded.push({ id, reason: "time_unit_unrecognised" }); continue; }
+      if (stated.basis === "assumed") timeUnit.assumed += 1;
+      if (stated.unit !== timeUnit.unit) { candidate = inUnit(item, stated.unit, timeUnit.unit); timeUnit.converted += 1; }
+    }
+    const derived = analysisScaleInput(candidate, { scale: chosenScale });
     if (derived.ok !== true) { excluded.push({ id, reason: derived.reason }); continue; }
     studies.push({ studyId: id, estimate: derived.estimate, se: derived.se });
     evidenceIds.push(id);
@@ -679,7 +728,7 @@ export function poolJob({ studyId, parameter, endpointKey = "", armRole = "", ca
   return {
     job, issues, valid: issues.length === 0, excluded, evidenceIds,
     // What the pool is about. It rides in the job's own record, not its scenario.
-    about: { parameter, endpointKey, armRole, calibre, scale: chosenScale, method: scenario.method },
+    about: { parameter, endpointKey, armRole, calibre, scale: chosenScale, method: scenario.method, ...(timeUnit ? { timeUnit } : {}) },
   };
 }
 
@@ -844,6 +893,7 @@ export function chooseCalibre(pools) {
  */
 export function assumptionFromPooling({ key, name, parameter, endpoint = "", unit = "", pools, evidenceIdsByCalibre, applicability = {}, note = "" }) {
   const kind = parameterKindOf(parameter);
+  const cardUnit = timeCardUnit(parameter, unit);
   const chosen = chooseCalibre(pools);
   if (!chosen.calibre) return { ok: false, reason: chosen.reason, card: null, nearest: null };
   const pool = pools[chosen.calibre];
@@ -872,7 +922,7 @@ export function assumptionFromPooling({ key, name, parameter, endpoint = "", uni
       key,
       name,
       endpoint,
-      unit,
+      unit: cardUnit,
       pointValue: distribution.pointValue,
       distribution: {
         family: distribution.family,
@@ -894,6 +944,7 @@ export function assumptionFromPooling({ key, name, parameter, endpoint = "", uni
         calibreReason: chosen.reason,
         strataDiffer: chosen.strataDiffer,
         scale: pool.scale,
+        ...(kind === "time" ? { timeUnit: VCR_DEFAULT_TIME_UNIT } : {}),
         k: pool.k ?? null,
         i2: pool.i2 ?? null,
         tau2: pool.tau2 ?? null,
@@ -1575,7 +1626,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           range: pool.confidence ? { low: naturalOf(pool.confidence.low, scale), high: naturalOf(pool.confidence.high, scale) } : null,
         };
         const card = expertSetCard({
-          key, name, parameter, unit, nearest, applicability: { ...applicability, calibre },
+          key, name, parameter, unit: timeCardUnit(parameter, unit), nearest, applicability: { ...applicability, calibre },
           reason: `只有 ${pool.k ?? "少数"} 项研究，合并结果没有预测区间；取合并值并按置信区间加宽`,
           basedOn: { evidenceIds: evidenceIdsByCalibre?.[calibre] ?? [], calibre, k: pool.k ?? null },
         });

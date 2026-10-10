@@ -699,7 +699,8 @@ test("populations, patient sets and grids are built as their own schemas, and a 
   assert.equal(ready.stages[0].jobKind, "generate_patients");
   assert.deepEqual(ready.stages[0].derived, [{ from: "object", table: "population" }]);
   assert.equal(ready.stages[0].scenario.truth.hazardRatio, 0.7, "the cards' truth is laid over the patients too");
-  assert.deepEqual(ready.stages[0].detail, { modelId: "reference-time-to-event", modelVersion: "1.0.0" });
+  assert.deepEqual(ready.stages[0].detail, { modelId: "reference-time-to-event", modelVersion: "1.0.0", timeUnitBasis: { unit: "months", basis: "assumed" } },
+    "and the scenario says the unit its times are in, which here nobody stated");
   const noEndpoint = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...patientRow, scenario: { design: { nTreat: 6 } } } }, { ...context, definition: null, populations: [{ id: "pop_1", resultId: "r" }] }));
   assert.equal(noEndpoint.refused.code, "vcr_scenario_endpoint_missing");
 
@@ -1439,3 +1440,53 @@ test("a robustness declaration the endpoint or the design cannot support is refu
 });
 
 // --- end robustness methods ---
+
+test("a stage states the unit its times are in — the design's own, the one its evidence agrees on, or months — and a card in another unit binds the converted number (E4, OI-1, D1)", () => {
+  const median = (/** @type {Record<string, any>} */ extra = {}) => ({ key: "control_median_pfs", version: 2, pointValue: 26, ...extra });
+  const hazard = { key: "hazard_ratio", version: 1, pointValue: 0.7 };
+  const plan = (/** @type {any[]} */ assumptions, /** @type {Record<string, any>} */ configuration = {}) => /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario",
+    row: trialRow({ design: { nTreat: 120, nControl: 60 }, analysis: { method: "logrank", alpha: 0.025 }, accrual: { kind: "uniform", duration: 12, followup: 12 }, ...configuration }) },
+  { ...context, assumptions }));
+  const simulation = (/** @type {any} */ built) => built.stages.find((/** @type {any} */ entry) => entry.stage === "simulation");
+
+  // Evidence that agrees on weeks: the scenario is in weeks and the card's number is bound as it is.
+  const weeks = simulation(plan([hazard, median({ unit: "Weeks" })]));
+  assert.equal(weeks.scenario.timeUnit, "weeks");
+  assert.equal(weeks.scenario.truth.controlMedian, 26);
+  assert.deepEqual(weeks.detail.timeUnitBasis, { unit: "weeks", basis: "evidence" });
+  assert.deepEqual(validateScenario("design.simulate", weeks.scenario), [], "and the engine reads it");
+
+  // A design that states a unit keeps it, and a card in another one is converted into it: 26 weeks is 5.98 months.
+  const stated = simulation(plan([hazard, median({ unit: "weeks" })], { timeUnit: "months" }));
+  assert.equal(stated.scenario.timeUnit, "months");
+  assert.ok(Math.abs(stated.scenario.truth.controlMedian - 26 * 7 / 30.4375) < 1e-9);
+  assert.deepEqual(stated.detail.timeUnitBasis, { unit: "months", basis: "stated", converted: [{ key: "control_median_pfs", from: "weeks" }] });
+  assert.deepEqual(stated.bound.map((entry) => [entry.key, entry.convertedFrom]), [["hazard_ratio", undefined], ["control_median_pfs", "weeks"]]);
+  // A spelling the table reads is written in its one form.
+  assert.equal(simulation(plan([hazard, median({ unit: "months" })], { timeUnit: "Years" })).scenario.timeUnit, "years");
+
+  // Cards that name no unit, or disagree, leave the scenario in months — and the result says it was assumed. Nothing is refused for it.
+  const none = simulation(plan([hazard, median()]));
+  assert.equal(none.scenario.timeUnit, "months");
+  assert.deepEqual(none.detail.timeUnitBasis, { unit: "months", basis: "assumed" });
+  assert.equal(none.scenario.truth.controlMedian, 26, "a number with no unit is taken as written");
+  const disagree = simulation(plan([hazard, median({ unit: "weeks" }), { key: "median_time_os", version: 1, pointValue: 12, unit: "months" }]));
+  assert.deepEqual(disagree.detail.timeUnitBasis, { unit: "months", basis: "assumed", converted: [{ key: "control_median_pfs", from: "weeks" }] });
+  const unknown = simulation(plan([hazard, median({ unit: "cycles" })]));
+  assert.deepEqual(unknown.detail.timeUnitBasis, { unit: "months", basis: "assumed" }, "a unit outside the table converts nothing");
+  assert.equal(unknown.scenario.truth.controlMedian, 26);
+  // A card that is not a time is never converted, whatever its unit says.
+  assert.equal(simulation(plan([hazard, { key: "dropout_rate", version: 1, pointValue: 0.1, unit: "weeks" }, median({ unit: "weeks" })])).scenario.accrual.dropoutAnnual, 0.1);
+
+  // The analytic stage and the generator read the unit too; a binary design has no time to state the unit of.
+  const analytic = plan([hazard, median({ unit: "years" })]).stages.find((/** @type {any} */ entry) => entry.stage === "analytic");
+  assert.deepEqual([analytic.scenario.timeUnit, analytic.scenario.truth.controlMedian, analytic.detail.timeUnitBasis?.basis], ["years", 26, "evidence"]);
+  const generated = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { id: "pts_1", version: 1, scenario: { design: { nTreat: 60, nControl: 40 }, endpoint: { type: "time_to_event" },
+    truth: { hazardRatio: 0.7, controlMedian: 6 } } } }, { ...context, assumptions: [] }));
+  assert.deepEqual(generated.stages[0].detail.timeUnitBasis, { unit: "months", basis: "assumed" });
+  const binary = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 100, nControl: 100 }, truth: { controlRate: 0.3, riskDifference: 0.1 }, analysis: { method: "risk_difference", alpha: 0.025 } },
+    { endpointType: "binary" }) }, { ...context, definition: { ...definition, endpointType: "binary" }, assumptions: [] }));
+  assert.ok(binary.ok, JSON.stringify(binary));
+  for (const entry of binary.stages) assert.equal(entry.scenario.timeUnit, undefined, `${entry.stage}: no time, no unit`);
+  assert.equal(binary.stages.some((entry) => entry.detail.timeUnitBasis !== undefined), false);
+});

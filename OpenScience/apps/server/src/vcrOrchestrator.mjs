@@ -63,7 +63,8 @@ import {
   VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
   VCR_HOSTED_MODEL_INTERFACES, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH,
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS,
-  allowanceWaitingNote, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, vcrModelInterfaceOf, vcrScenarioChildKeys, vcrScenarioParentOf, whenHolds,
+  VCR_DEFAULT_TIME_UNIT, allowanceWaitingNote, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, vcrCommonTimeUnit, vcrConvertTime,
+  vcrModelInterfaceOf, vcrScenarioChildKeys, vcrScenarioParentOf, vcrTimeUnitOf, whenHolds,
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
@@ -540,11 +541,12 @@ const lastKey = (path) => path.replace(/\[\d+\]$/, "").split(".").pop() ?? path;
  * (principle 1): a card is bound by the name it was saved under, on the endpoint
  * it applies to. A key this table does not know is a lineage input and nothing
  * more; it never changes a scenario by accident.
- * @type {ReadonlyArray<{ match: RegExp, endpoint: string, path: readonly string[], group?: readonly string[] }>}
+ * `time` marks a parameter that is a time: its card states the unit it is in, and the scenario's own unit decides what number it binds.
+ * @type {ReadonlyArray<{ match: RegExp, endpoint: string, path: readonly string[], group?: readonly string[], time?: boolean }>}
  */
 export const VCR_ASSUMPTION_BINDINGS = Object.freeze([
   { match: /^hazard_ratio(?:_|$)/, endpoint: "time_to_event", path: ["truth", "hazardRatio"] },
-  { match: /^(?:control_median|median_time|median_survival)/, endpoint: "time_to_event", path: ["truth", "controlMedian"] },
+  { match: /^(?:control_median|median_time|median_survival)/, endpoint: "time_to_event", path: ["truth", "controlMedian"], time: true },
   { match: /^(?:dropout_rate|dropout_annual|annual_dropout)/, endpoint: "time_to_event", path: ["accrual", "dropoutAnnual"] },
   { match: /^(?:control_event_rate|control_rate|control_response_rate)$/, endpoint: "binary", path: ["truth", "controlRate"] },
   { match: /^(?:treatment_event_rate|treatment_rate|treatment_response_rate)$/, endpoint: "binary", path: ["truth", "treatmentRate"],
@@ -556,14 +558,38 @@ export const VCR_ASSUMPTION_BINDINGS = Object.freeze([
 ]);
 
 /**
+ * The unit a stage states its times in, and where it came from. The scenario's own `timeUnit` when it states one (`stated`); else the
+ * unit the cards of its time parameters agree on (`evidence`: every card that names a unit names the same, a card that names none
+ * disagrees with nobody); else months (`assumed`), which the result says. Never a refusal: a scenario whose cards disagree is
+ * stated in months and each card is converted into them.
+ * @param {Record<string, any>} candidate @param {readonly Record<string, any>[]} cards @param {string | null} endpoint
+ * @returns {{ unit: string, basis: "stated" | "evidence" | "assumed" }}
+ */
+export function vcrResolveTimeUnit(candidate, cards, endpoint) {
+  const stated = vcrTimeUnitOf(candidate?.timeUnit);
+  if (stated) return { unit: stated, basis: "stated" };
+  const timed = cards.filter((card) => {
+    const rule = VCR_ASSUMPTION_BINDINGS.find((entry) => entry.endpoint === endpoint && entry.match.test(String(card?.key)));
+    return rule?.time === true && Number.isFinite(Number(card?.pointValue)) && card?.pointValue !== null;
+  });
+  const common = vcrCommonTimeUnit(timed.map((card) => card?.unit));
+  return common.agree ? { unit: /** @type {string} */ (common.unit), basis: "evidence" } : { unit: VCR_DEFAULT_TIME_UNIT, basis: "assumed" };
+}
+
+/**
  * Lay the assumption cards over a candidate scenario: the card's point value
  * replaces whatever the object stated for the same parameter. Answers what was
  * bound, so the job records which card version each number came from.
+ *
+ * A time (a median) is bound in the scenario's unit: a card that states weeks into a scenario in months binds the months. A card that
+ * states no unit, or one outside the table, binds as written — it cannot be converted, and the result says its unit was assumed
+ * (`vcrResolveTimeUnit`); `convertedFrom` names the unit a bound number was converted from.
  * @param {Record<string, any>} candidate @param {readonly Record<string, any>[]} cards @param {string | null} endpoint
- * @returns {Array<{ key: string, version: number, path: string }>}
+ * @param {{ unit: string }} [timeUnit] the stage's unit, when the caller has resolved it already
+ * @returns {Array<{ key: string, version: number, path: string, convertedFrom?: string }>}
  */
-export function vcrBindAssumptions(candidate, cards, endpoint) {
-  /** @type {Array<{ key: string, version: number, path: string }>} */
+export function vcrBindAssumptions(candidate, cards, endpoint, timeUnit = vcrResolveTimeUnit(candidate, cards, endpoint)) {
+  /** @type {Array<{ key: string, version: number, path: string, convertedFrom?: string }>} */
   const bound = [];
   for (const card of cards) {
     const value = Number(card?.pointValue);
@@ -572,8 +598,10 @@ export function vcrBindAssumptions(candidate, cards, endpoint) {
     const [section, name] = rule.path;
     const target = isObject(candidate[section]) ? candidate[section] : (candidate[section] = {});
     for (const other of rule.group ?? []) if (other !== name) delete target[other];
-    target[name] = value;
-    bound.push({ key: String(card.key), version: Number(card.version), path: rule.path.join(".") });
+    const from = rule.time === true ? vcrTimeUnitOf(card?.unit) : null;
+    const converted = from !== null && from !== timeUnit.unit ? vcrConvertTime(value, from, timeUnit.unit) : null;
+    target[name] = converted ?? value;
+    bound.push({ key: String(card.key), version: Number(card.version), path: rule.path.join("."), ...(converted !== null ? { convertedFrom: /** @type {string} */ (from) } : {}) });
   }
   return bound;
 }
@@ -946,9 +974,18 @@ export function vcrBuildStages(item, context) {
     // when it was ours — a Simon design with a 「对照事件率」 card was refused for
     // 「配置里有引擎不读的字段：truth.controlRate」, a key nobody had written.
     const stated = new Set(VCR_ASSUMPTION_BINDINGS.map((rule) => rule.path.join(".")).filter((path) => hasPath(own, path)));
-    const bound = options.bindAll === false ? [] : vcrBindAssumptions(own, options.cards ?? cards, options.endpoint ?? object(own.endpoint).type ?? null);
+    const stageCards = options.bindAll === false ? [] : (options.cards ?? cards);
+    const stageEndpoint = options.endpoint ?? object(own.endpoint).type ?? null;
+    // The unit this stage's times are in, before anything binds into them: stated by the object, taken from the evidence its time
+    // parameters came from when that agrees, else months. A spelling the table reads is written in its one form.
+    const time = vcrResolveTimeUnit(own, stageCards, stageEndpoint);
+    const unitStated = own.timeUnit !== undefined;
+    own.timeUnit = unitStated && time.basis === "stated" ? time.unit : unitStated ? own.timeUnit : time.unit;
+    const bound = options.bindAll === false ? [] : vcrBindAssumptions(own, stageCards, stageEndpoint, time);
     const { scenario, dropped } = vcrProjectScenario(method, own);
     const injected = new Set(bound.map((entry) => entry.path).filter((path) => !stated.has(path)));
+    // The unit is the platform's to write unless the object stated one: a method that does not read it never sees it, in silence.
+    if (!unitStated) injected.add("timeUnit");
     // What the binder wrote and the method does not read never reached the engine: it
     // is not the run's mistake, and no job used that card's number, so the job does
     // not say it did.
@@ -956,10 +993,15 @@ export function vcrBuildStages(item, context) {
     const used = bound.filter((entry) => !unread.has(entry.path));
     // Bound assumptions were laid over a copy: the object itself is never edited.
     const unknown = dropped.filter((path) => !unread.has(path) && !VCR_NON_ENGINE_KEYS.includes(lastKey(path)));
+    // What the result says of its time unit: the unit, whether the scenario stated it, the evidence agreed on it, or it was assumed,
+    // and the cards that were converted into it. Said only of a scenario whose method reads one.
+    const converted = used.filter((entry) => entry.convertedFrom !== undefined).map((entry) => ({ key: entry.key, from: entry.convertedFrom }));
+    const timeUnitBasis = scenario.timeUnit === undefined ? null
+      : { unit: String(scenario.timeUnit), basis: unitStated ? "stated" : time.basis, ...(converted.length ? { converted } : {}) };
     return { built: /** @type {VcrStage} */ ({
       stage: options.stage ?? null, jobKind, scenario, keepTables: options.keepTables ?? [], derived: options.derived ?? [],
       snapshot: options.snapshot ?? VCR_PATIENT_LEVEL_JOB_KINDS.includes(jobKind), after: options.after ?? null, bound: used,
-      detail: { ...(options.detail ?? {}), ...(curveReceiptId !== undefined ? { curveReceiptId } : {}) },
+      detail: { ...(options.detail ?? {}), ...(curveReceiptId !== undefined ? { curveReceiptId } : {}), ...(timeUnitBasis ? { timeUnitBasis } : {}) },
     }), unknown };
   };
   /** @param {Array<{ built: VcrStage, unknown: string[] }>} built @returns {VcrPlan} */

@@ -20,6 +20,8 @@ const domain = resolve(here, '../../../../OpenScience/packages/domain/src')
 const job = await import(`${domain}/vcrEngineJob.mjs`)
 const vocab = await import(`${domain}/vcrVocabulary.mjs`)
 const rules = await import(`${domain}/vcrRules.mjs`)
+const units = await import(`${domain}/vcrTimeUnits.mjs`)
+const interfaces = await import(`${domain}/vcrModelInterfaces.mjs`)
 
 const snapshot = {
   protocolVersion: job.VCR_ENGINE_PROTOCOL_VERSION,
@@ -57,6 +59,9 @@ const snapshot = {
       limits: { ...rules.VCR_ROW_RULE_LIMITS },
     },
   },
+  // The one closed table of time units (the model cards' horizon table): the days each stands for, and the unit nothing says.
+  // The engine reads a year's length in its unit from here, never from a number of its own.
+  timeUnits: { default: units.VCR_DEFAULT_TIME_UNIT, daysPerUnit: { ...interfaces.VCR_HORIZON_UNIT_DAYS } },
   jobKinds: vocab.VCR_JOB_KINDS.filter(kind => Object.hasOwn(job.VCR_ENGINE_METHODS,job.VCR_JOB_METHODS[kind])),
   endpointTypes: [...vocab.VCR_ENDPOINT_TYPES],
   trialDesigns: [...vocab.VCR_TRIAL_DESIGNS],

@@ -95,7 +95,7 @@ vcr_arm_curves <- function(time, status, arm, weights = NULL, source, tau = NULL
 #' Generated patients by arm: the survival curves of a time-to-event set, and a
 #' panel of the two arms' summary numbers for any endpoint. Every number is
 #' computed from the generated table, and labelled synthetic.
-vcr_patient_summary <- function(d, endpoint) {
+vcr_patient_summary <- function(d, endpoint, unit_zh = "月") {
   arms <- list(list(key = "treated", label = "试验组", z = 1L), list(key = "control", label = "对照组", z = 0L))
   rows <- list(); series <- list()
   for (a in arms) {
@@ -107,7 +107,7 @@ vcr_patient_summary <- function(d, endpoint) {
       s <- vcr_km_series(sub$time, sub$status, NULL, a$key, a$label, "synthetic", ours = a$z == 1L)
       if (!is.null(s)) series[[length(series) + 1L]] <- s
       rows[[length(rows) + 1L]] <- list(label = paste0(a$label, "事件数"), value = list(value = sum(sub$status), unit = "例"))
-      if (is.finite(med)) rows[[length(rows) + 1L]] <- list(label = paste0(a$label, "中位生存"), value = list(value = med, unit = "月"))
+      if (is.finite(med)) rows[[length(rows) + 1L]] <- list(label = paste0(a$label, "中位生存"), value = list(value = med, unit = unit_zh))
     } else if (identical(endpoint, "binary")) {
       rows[[length(rows) + 1L]] <- list(label = paste0(a$label, "事件率"), value = list(value = round(100 * mean(sub$y), 2), unit = "%"))
     } else {
@@ -116,7 +116,7 @@ vcr_patient_summary <- function(d, endpoint) {
     }
   }
   list(
-    trajectories = if (length(series)) list(xLabel = "时间（月）", yLabel = "无事件生存概率", series = series) else NULL,
+    trajectories = if (length(series)) list(xLabel = paste0("时间（", unit_zh, "）"), yLabel = "无事件生存概率", series = series) else NULL,
     panels = list(list(key = "arms", title = "两组的生成结果", kind = if (identical(endpoint, "time_to_event")) "time_to_event" else "binary",
                        note = "情景仿真生成，非观察", rows = rows, series = list()))
   )
@@ -126,7 +126,7 @@ vcr_patient_summary <- function(d, endpoint) {
 #' headline number if each is 20% off: a one-at-a-time table, closed form under
 #' the exponential reference. Empty when the endpoint or the distribution has no
 #' closed form to vary.
-vcr_patient_sensitivity <- function(endpoint, truth) {
+vcr_patient_sensitivity <- function(endpoint, truth, unit_zh = "月") {
   wiggle <- c(0.8, 1.2)
   if (identical(endpoint, "time_to_event") && is.null(truth$controlDistribution)) {
     med <- vcr_scalar(truth$controlMedian, NULL); hr <- vcr_scalar(truth$hazardRatio, NULL)
@@ -135,8 +135,8 @@ vcr_patient_sensitivity <- function(endpoint, truth) {
     base <- gap(med, hr)
     lo_hi <- function(f) { v <- f(wiggle); c(min(v), max(v)) }
     r1 <- lo_hi(function(k) gap(med * k, hr)); r2 <- lo_hi(function(k) gap(med, hr * k))
-    return(list(measure = "试验组比对照组多出的中位生存（月）", base = list(value = base),
-                rows = list(list(label = "对照组中位生存", range = sprintf("%.3g–%.3g 月", med * 0.8, med * 1.2), low = r1[1], high = r1[2]),
+    return(list(measure = paste0("试验组比对照组多出的中位生存（", unit_zh, "）"), base = list(value = base),
+                rows = list(list(label = "对照组中位生存", range = sprintf("%.3g–%.3g %s", med * 0.8, med * 1.2, unit_zh), low = r1[1], high = r1[2]),
                             list(label = "风险比", range = sprintf("%.3g–%.3g", hr * 0.8, hr * 1.2), low = r2[1], high = r2[2]))))
   }
   if (identical(endpoint, "binary")) {
@@ -187,7 +187,7 @@ vcr_power_curve <- function(scenario, alpha, sided) {
     acc <- scenario$accrual %||% list()
     x <- exp(m * log(hr))
     y <- vapply(x, function(h) tryCatch(vcr_logrank_power(h, dist, n1, n0, vcr_scalar(acc$duration, 0), vcr_scalar(acc$followup, Inf),
-                                                         vcr_dropout_hazard(vcr_scalar(acc$dropoutAnnual, 0)), alpha, vcr_scalar(acc$maxFollowup, Inf),
+                                                         vcr_dropout_hazard(vcr_scalar(acc$dropoutAnnual, 0), vcr_time_unit(scenario)$perYear), alpha, vcr_scalar(acc$maxFollowup, Inf),
                                                          sided = sided)$power, error = function(e) NA_real_), numeric(1))
     return(list(xLabel = "真实效应（风险比）", x = x, y = y))
   }

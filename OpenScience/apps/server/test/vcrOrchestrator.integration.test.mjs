@@ -964,6 +964,36 @@ async function computedStudy(module, label) {
   return { study, write };
 }
 
+test("TU-4 a design's result says the unit its times were settled in, and the jobs that ran carry the scenario in it: the evidence's unit when its cards agree, months when nothing says (E4, OI-1)", options, async () => {
+  const module = compose();
+  /** @param {string} label @param {any[]} cards */
+  const run = async (label, cards) => {
+    const study = await makeStudy(label);
+    const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+      study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+    await write("definition", definition);
+    assert.equal((await write("assumption", cards)).ok, true);
+    await write("trial_scenario", trialA);
+    await module.orchestrator.advance(study.id);
+    await drainJobs(module, study);
+    const jobs = await store.rows("SELECT kind, scenario FROM evimed_vcr.jobs WHERE study_id = $1 AND kind IN ('design_analytic', 'design_simulation') ORDER BY created_at", [study.id]);
+    const [result] = await store.results(study.id, "trial_scenario");
+    return { jobs, result };
+  };
+  const hazard = { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" };
+  const dropout = { key: "dropout_rate", name: "脱落率", pointValue: 0.1, sourceKind: "expert_set", valueSource: "assumed" };
+  const median = (/** @type {Record<string, any>} */ extra = {}) => ({ key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 26, sourceKind: "expert_set", valueSource: "assumed", ...extra });
+
+  const inWeeks = await run("tuweeks", [hazard, dropout, median({ unit: "weeks" })]);
+  assert.equal(inWeeks.jobs.length, 2, "both stages of the design ran");
+  for (const job of inWeeks.jobs) assert.deepEqual([job.scenario.timeUnit, job.scenario.truth.controlMedian], ["weeks", 26], `${job.kind}: the scenario is in the unit its evidence is in`);
+  assert.deepEqual(inWeeks.result.diagnostics.timeUnitBasis, { unit: "weeks", basis: "evidence" }, "and the result says where the unit came from");
+
+  const nobody = await run("tumonths", [hazard, dropout, median()]);
+  for (const job of nobody.jobs) assert.deepEqual([job.scenario.timeUnit, job.scenario.truth.controlMedian], ["months", 26]);
+  assert.deepEqual(nobody.result.diagnostics.timeUnitBasis, { unit: "months", basis: "assumed" }, "nothing says: months, and the result says it was assumed — the job still ran");
+});
+
 test("AC-16 a changed assumption marks everything downstream stale, recomputes it under the new version, and deletes nothing", options, async () => {
   const module = compose();
   const { study, write } = await computedStudy(module, "stale");

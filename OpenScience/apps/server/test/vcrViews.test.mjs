@@ -9,7 +9,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
-import { VCR_ENGINE_METHODS, VCR_JOB_KINDS, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_VALUE_SOURCES } from "@evimed/domain";
+import { VCR_ENGINE_METHODS, VCR_JOB_KINDS, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_TIME_UNITS, VCR_VALUE_SOURCES } from "@evimed/domain";
 
 import {
   JOB_KIND_LABELS, assumptionNames, attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, nodeLabel, notEstimableDesign, numberString, presentDeliverable,
@@ -22,8 +22,8 @@ import {
   seriesView, criterionCodes, vcrLocatorText,
 } from "../src/vcrViewsTabs.mjs";
 import {
-  METHOD_LABELS, VCR_FAILED_SENTENCE, VCR_ROBUSTNESS_MEASURES, countsView, decimalsFor, defaultSourceOf, intervalView, measureLabel, measureValue, rangeString, reviewOfNode, staleNote,
-  presentVcrReview, vcrFailureSentence, vcrPageSentence, withReviewState, zhDate, zhTime,
+  METHOD_LABELS, TIME_UNIT_WORDS, VCR_FAILED_SENTENCE, VCR_ROBUSTNESS_MEASURES, countsView, decimalsFor, defaultSourceOf, intervalView, measureLabel, measureValue, rangeString, reviewOfNode, staleNote,
+  presentVcrReview, unitWord, vcrFailureSentence, vcrPageSentence, withReviewState, zhDate, zhTime,
 } from "../src/vcrViewsKit.mjs";
 import { FIXTURE_DIR } from "./vcrViewsFixtures.mjs";
 
@@ -1218,6 +1218,58 @@ test("C2-14 when the latest comparator version has no result, the page keeps the
   const none = presentComparatorTab({ ...bundle, comparators: [latest], results: [], allResults: [] });
   assert.equal(none.rmst, null);
   assert.equal(none.partial, null);
+});
+
+test("TU-1 the comparator page names the unit its RMST window is in — the engine's echo, months when it echoed none, and no unit at all for a spelling the table does not hold", () => {
+  const comparator = { id: "cmp_u", version: 1, route: "literature_control", estimand: "ATT", conclusion: "estimable", gapList: [], resultId: "res_u",
+    targetTrial: {}, configuration: {}, reviewState: "ai_set", createdAt: "2026-09-28T01:00:00.000Z" };
+  const read = (/** @type {Record<string, any>} */ diagnostics) => {
+    const stored = { id: "res_u", version: 1, kind: "comparator", conclusion: "estimable", reviewState: "ai_set", counts: {}, executionId: null,
+      measures: [{ name: "rmst_difference", value: 1.5, source: "calculated" }], diagnostics };
+    return presentComparatorTab({ ...emptyBundle(), comparators: [comparator], results: [stored], allResults: [stored] });
+  };
+  for (const [diagnostics, label, spoken] of /** @type {Array<[Record<string, any>, string, string | null]>} */ ([
+    [{ tau: 18 }, "τ = 18 个月", "18 个月 RMST"],
+    [{ tau: 18, timeUnit: "months" }, "τ = 18 个月", "18 个月 RMST"],
+    [{ tau: 2, timeUnit: "years" }, "τ = 2 年", "2 年 RMST"],
+    [{ tau: 26, timeUnit: "weeks" }, "τ = 26 周", "26 周 RMST"],
+    [{ tau: 540, timeUnit: "days" }, "τ = 540 天", "540 天 RMST"],
+    // A spelling the unit table does not hold is not called months: the window is a bare number, and the headline does not name one.
+    [{ tau: 5, timeUnit: "fortnights" }, "τ = 5", null],
+  ])) {
+    const tab = read(diagnostics);
+    assert.equal(tab.rmst.label, label, JSON.stringify(diagnostics));
+    if (spoken) assert.ok(String(tab.headline).includes(spoken), `${JSON.stringify(diagnostics)}: ${tab.headline}`);
+    else assert.doesNotMatch(String(tab.headline), /个月|周|天|年/);
+  }
+});
+
+test("TU-3 a page names every unit of the domain's one table, and a card's unit is said in Chinese whichever English word the platform or the engine wrote", () => {
+  assert.deepEqual(Object.keys(TIME_UNIT_WORDS).sort(), [...VCR_TIME_UNITS].sort(), "a unit the table gains cannot be left without a word");
+  assert.deepEqual([unitWord("months"), unitWord("weeks"), unitWord("days"), unitWord("years"), unitWord("month")], ["个月", "周", "天", "年", "个月"]);
+  assert.deepEqual([unitWord("个月"), unitWord("例"), unitWord("%"), unitWord(null)], ["个月", "例", "%", null], "a spelling the table does not translate stands as it was written");
+  const card = (unit) => ({ id: "asm_t", key: "median_pfs_control", name: "对照组中位 PFS", version: 1, pointValue: 4.1, unit, sourceKind: "pooled", valueSource: "aggregate", reviewState: "ai_set",
+    pooling: {}, distribution: {}, evidenceIds: [] });
+  const bundle = (unit) => ({ ...emptyBundle(), study: { ...study, dataTier: "T2" }, assumptions: [card(unit)] });
+  for (const [written, shown] of [["months", "个月"], ["个月", "个月"], ["weeks", "周"], [null, null]]) {
+    const [shownCard] = presentDataTab(bundle(written)).assumptions;
+    assert.equal(shownCard.value.unit, shown, `a card written in ${written}`);
+    assert.equal(shownCard.edit.unit, shown, "and the form that edits it starts from the same word");
+  }
+});
+
+test("TU-2 the trial page says which unit a design's times are in when the platform settled it — the researcher's word, the evidence's unit, or the months it assumed — and says nothing for a result that has none", () => {
+  const bundle = conversationTrialBundle({ staged: true });
+  const withBasis = (/** @type {Record<string, any> | null} */ basis) => {
+    const settle = (/** @type {any} */ row) => ({ ...row, diagnostics: { ...row.diagnostics, ...(basis ? { timeUnitBasis: basis } : {}) } });
+    return { ...bundle, results: bundle.results.map(settle), allResults: bundle.allResults.map(settle) };
+  };
+  const line = (/** @type {Record<string, any> | null} */ basis) => presentTrialTab(withBasis(basis)).ademp.find((entry) => entry.key === "timeUnit");
+  assert.deepEqual(line({ unit: "months", basis: "assumed" }), { key: "timeUnit", label: "时间单位", text: "月（没有写明，按月计算）" });
+  assert.equal(line({ unit: "years", basis: "evidence", converted: [{ key: "hazard_ratio", from: "weeks" }] })?.text, "年（取自证据里的单位）", "what was converted stays in the job's own record, not on the page");
+  assert.equal(line({ unit: "weeks", basis: "stated" })?.text, "周（方案里写明）");
+  assert.equal(line(null), undefined, "a method that reads no unit has no line");
+  assert.equal(line({ unit: "fortnights", basis: "stated" }), undefined, "a unit the table does not hold is not named");
 });
 
 test("C3-05 a countersignature moves the node it names to reviewed — who, when, which version — and one on an earlier version says the card changed after it", () => {

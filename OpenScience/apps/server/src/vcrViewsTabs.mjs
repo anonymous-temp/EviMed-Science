@@ -51,7 +51,7 @@ import {
 import {
   allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
   personName, plainText, PARAMETER_LABELS, METHOD_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime, VCR_ROBUSTNESS_MEASURES,
-  vcrFailureSentence, vcrPageSentence,
+  TIME_UNIT_WORDS, unitWord, vcrFailureSentence, vcrPageSentence,
 } from "./vcrViewsKit.mjs";
 
 /** A plain value (a number or `{ value, unit, … }` a row stored) as a page value. @param {unknown} raw @param {Record<string, any>} defaults */
@@ -530,6 +530,11 @@ export function presentPatientsTab(bundle) {
   };
 }
 
+/** How the unit of a result's times was settled, in the words of someone who must be able to check it. */
+const TIME_UNIT_BASIS_ZH = Object.freeze(/** @type {Record<string, string>} */ ({
+  stated: "方案里写明", evidence: "取自证据里的单位", assumed: "没有写明，按月计算",
+}));
+
 // --- 对照 -------------------------------------------------------------------------------------------------------------------------
 
 // --- robustness methods ---
@@ -673,14 +678,17 @@ export function presentComparatorTab(bundle) {
   }).filter((row) => row !== null);
   const estimandLabel = current ? (/** @type {Record<string, string>} */ (VCR_ESTIMAND_LABELS_ZH))[current.estimand] ?? current.estimand : null;
   const rmstValue = rmstMeasure ? value(rmstMeasure) : null;
+  // The unit τ is in is the one the engine echoed (months when it echoed none); a spelling the unit table does not hold is left unnamed, never called months.
+  const echoedUnit = diagnostics.timeUnit === undefined ? TIME_UNIT_WORDS.months : TIME_UNIT_WORDS[String(diagnostics.timeUnit)] ?? null;
+  const tauWords = numeric(diagnostics.tau) !== null && echoedUnit ? `${diagnostics.tau} ${echoedUnit.after} ` : "";
   const conclusion = result?.conclusion ?? shown?.conclusion ?? null;
   return {
     headline: shown && conclusion && conclusion !== "not_estimable"
-      ? `${(/** @type {Record<string, string>} */ (VCR_COMPARATOR_ROUTE_LABELS_ZH))[shown.route] ?? "对照"}：${(/** @type {Record<string, string>} */ ({ estimable: "可估计", limited: "有限制地估计" }))[conclusion] ?? ""}${rmstValue && rmstValue.value !== null ? `，${numeric(diagnostics.tau) !== null ? `${diagnostics.tau} 个月 ` : ""}RMST ${valueString(rmstValue)}` : ""}${diagnostics.inputsAssumed === true ? "，输入为假设" : ""}。`
+      ? `${(/** @type {Record<string, string>} */ (VCR_COMPARATOR_ROUTE_LABELS_ZH))[shown.route] ?? "对照"}：${(/** @type {Record<string, string>} */ ({ estimable: "可估计", limited: "有限制地估计" }))[conclusion] ?? ""}${rmstValue && rmstValue.value !== null ? `，${tauWords}RMST ${valueString(rmstValue)}` : ""}${diagnostics.inputsAssumed === true ? "，输入为假设" : ""}。`
       : null,
     routes,
     curves,
-    rmst: rmstValue ? { value: rmstValue, tau: numeric(diagnostics.tau), label: numeric(diagnostics.tau) !== null ? `τ = ${diagnostics.tau} 个月` : null } : null,
+    rmst: rmstValue ? { value: rmstValue, tau: numeric(diagnostics.tau), label: numeric(diagnostics.tau) !== null ? `τ = ${diagnostics.tau}${echoedUnit ? ` ${echoedUnit.after}` : ""}` : null } : null,
     median: medianMeasure ? value(medianMeasure) : null,
     qc,
     // The method by its Chinese name (`METHOD_LABELS`); an id the table does not hold is shown as a plain word, never as the engine's own.
@@ -765,8 +773,12 @@ function qcRow(key, check) {
 
 // --- 试验 --------------------------------------------------------------------------------------------------------------------------
 
-/** The ADEMP lines, from the study and the headline scenario. @param {Record<string, any>} bundle @param {Record<string, any> | null} scenario */
-function adempOf(bundle, scenario) {
+/**
+ * The ADEMP lines, from the study and the headline scenario; the unit its times are in is one of them where the platform settled it
+ * (`diagnostics.timeUnitBasis`): a result that read an unstated unit as months says so, where the researcher reads the numbers.
+ * @param {Record<string, any>} bundle @param {Record<string, any> | null} scenario @param {Record<string, any>} [diagnostics] the headline result's
+ */
+function adempOf(bundle, scenario, diagnostics = {}) {
   const { study, definition } = bundle;
   const configuration = object(scenario?.configuration);
   const truth = object(configuration.truth);
@@ -792,6 +804,9 @@ function adempOf(bundle, scenario) {
   if (performance.length) {
     lines.push({ key: "measures", label: "看哪些指标", text: performance.map((name) => (/** @type {Record<string, string>} */ (VCR_PERFORMANCE_MEASURE_LABELS_ZH))[name] ?? measureLabel(name)).join("、") });
   }
+  const basis = object(diagnostics.timeUnitBasis);
+  const unit = TIME_UNIT_WORDS[String(basis.unit)];
+  if (unit) lines.push({ key: "timeUnit", label: "时间单位", text: `${unit.bare}（${TIME_UNIT_BASIS_ZH[String(basis.basis)] ?? "按月计算"}）` });
   return lines;
 }
 
@@ -877,7 +892,7 @@ export function presentTrialTab(bundle) {
   const goal = text(decision?.question) ?? text(object(grid?.comparisonGoal).text) ?? null;
   return {
     headline: trialHeadline(designs),
-    ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null),
+    ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null, object(headlineRow?._result?.diagnostics)),
     ademReview: headlineRow?._result?.reviewState ?? null,
     designs,
     columns,
@@ -1371,7 +1386,7 @@ export function presentDataTab(bundle, query = {}) {
       ...(newEvidence ? { newEvidence } : {}),
       // What an edit starts from. A person's value is an expert setting: it keeps the card's endpoint and applicability but not the pooled
       // evidence, which no longer supports the number (AC-25).
-      edit: { pointValue: numeric(card.pointValue), unit: text(card.unit), note: text(card.note), endpoint: text(card.endpoint), applicability: object(card.applicability) },
+      edit: { pointValue: numeric(card.pointValue), unit: unitWord(text(card.unit)), note: text(card.note), endpoint: text(card.endpoint), applicability: object(card.applicability) },
       detail: {
         subtitle: [text(card.endpoint), text(pooling.calibre) ? `汇总口径：${CALIBRE_LABELS[String(pooling.calibre)] ?? pooling.calibre}` : null].filter(Boolean).join(" · ") || null,
         stats: [
