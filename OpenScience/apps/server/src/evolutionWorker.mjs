@@ -1,6 +1,7 @@
 import { withEvolutionUsage } from './evolutionUsage.mjs';
 import { randomUUID } from 'node:crypto';
 import { EVOLUTION_JOB_KINDS } from '@evimed/domain';
+import { evolutionKey } from './evolutionService.mjs';
 const LIGHT_KINDS = ['evolution-event','evolution-decision','evolution-digest','evolution-maintain','evolution-plan','evolution-mission','evolution-meta','evolution-research','evolution-audit'];
 const SEARCH_KINDS = new Set(['evolution-scout','evolution-build','evolution-mission','evolution-mission-heavy','evolution-plan','evolution-meta','evolution-research']);
 /** Durable work with budget and concurrency admission. */
@@ -177,10 +178,21 @@ export class EvolutionWorker {
       await this.service.enqueue('plan', {week}, `platform-plan:${week}:${day}`);
       await this.service.enqueue('research', {week}, `self-research:${week}`);
       await this.service.enqueue('meta', {month}, `meta-loop:${month}`);
+      await this.resumePaused();
     }
     const quarter = `${local.getUTCFullYear()}-Q${Math.floor(local.getUTCMonth()/3)+1}`;
     // Audit composition curates and seals the quarter only after independent tasks exist.
     await this.service.enqueue('audit', {month:previousMonth,quarter}, `heldout-audit:${previousMonth}`);
+  }
+  /**
+   * Missions the pause stopped wait for `search-resumed`, the one event they wake on (`missions.wake`), and nothing else said it, so research
+   * paused once never ran again (review D-E4). Said here, where the pause is read, once it is over: one event for one set of paused missions,
+   * so a later pause is resumed too.
+   */
+  async resumePaused() {
+    const paused = (await this.service.list('mission', null, { status: 'paused' })).filter((/** @type {any} */ row) => row.payload.status === 'paused');
+    if (!paused.length) return null;
+    return this.service.ingestEvent({ id: `search-resumed:${evolutionKey(paused.map((/** @type {any} */ row) => [row.id, row.revision]))}`, type: 'search-resumed', origin: 'platform-inference' });
   }
   /** No private error prose enters shared failures or resource cards. @param {any} job @param {any} error */
   async resourceWait(job, error) {
