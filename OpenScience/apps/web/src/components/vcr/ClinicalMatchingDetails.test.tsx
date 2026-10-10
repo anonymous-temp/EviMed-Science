@@ -7,6 +7,52 @@ const api = vi.hoisted(() => ({ enqueue:vi.fn(),quote:vi.fn(),permission:vi.fn()
 vi.mock('@/lib/vcrClient',()=>({enqueueVcrMatching:api.enqueue,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection}));
 beforeEach(()=>vi.clearAllMocks());
 
+describe('evaluating from the controls',()=>{
+  const page=(extra:Record<string,unknown>={})=>({protocols:[{id:'p1',version:1,title:'方案一'},{id:'p2',version:2,title:'方案二'}],protocolVersionId:'p2',direction:'trial_to_patient',candidateRoster:['P-001'],...extra}) as unknown as VcrMatchingTab;
+  const controls=(data=page(),extra:Record<string,unknown>={})=>render(<MatchingPanelControls studyId="s1" data={data} canRun onProtocol={()=>{}} onCandidate={()=>{}} onReload={()=>{}} {...extra}/>);
+  // Review V-M5: 开始评估所选方案 and 刷新结果 were inside 比较多个方案, so running one protocol meant finding a section named "compare several".
+  it('starts the protocol in view, and refreshes, without opening 比较多个方案',async()=>{
+    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
+    controls();
+    const start=screen.getByRole('button',{name:'开始评估'});
+    expect(start.closest('details')).toBeNull();
+    expect(screen.getByRole('button',{name:'刷新结果'}).closest('details')).toBeNull();
+    fireEvent.click(start);
+    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p2'],direction:'trial_to_patient'}));
+    expect(await screen.findByRole('status')).toHaveTextContent('已提交 1 项评估。');
+  });
+  it('says nothing was submitted, and why, when no job was queued — as a problem, not as a success with a zero in it',async()=>{
+    api.enqueue.mockResolvedValue({jobs:[],unavailable:[{code:'vcr_criteria_missing'}]});
+    controls();
+    fireEvent.click(screen.getByRole('button',{name:'开始评估'}));
+    const alert=await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('没有提交评估。方案还没有结构化的入排条件，无法匹配。');
+    expect(alert).not.toHaveTextContent('已提交');
+  });
+  it('says what was queued and what was not when only some of the protocols could be',async()=>{
+    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[{code:'vcr_criteria_missing'}]});
+    controls();
+    fireEvent.click(screen.getByRole('button',{name:'开始评估'}));
+    expect(await screen.findByRole('status')).toHaveTextContent('已提交 1 项评估，1 项暂不可用。');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+  it('runs the protocol the reader chose, for the patient the reader chose, in the direction the reader chose',async()=>{
+    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
+    controls(page({direction:'trial_to_patient'}),{direction:'patient_to_trial',protocolId:'p1'});
+    const start=screen.getByRole('button',{name:'开始评估'});
+    expect(start).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('受试者'),{target:{value:'P-001'}});
+    expect(start).toBeEnabled();
+    fireEvent.click(start);
+    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1'],subjectKeys:['P-001'],direction:'patient_to_trial'}));
+  });
+  it('offers no run to a reader who may not run it, and keeps the refresh',()=>{
+    controls(page(),{canRun:false});
+    expect(screen.queryByRole('button',{name:'开始评估'})).toBeNull();
+    expect(screen.getByRole('button',{name:'刷新结果'})).toBeVisible();
+  });
+});
+
 describe('clinical matching controls',()=>{
   it('keeps a patient-to-trial request unsubmitted until both patient and protocols are selected',async()=>{
     api.enqueue.mockResolvedValue({jobs:[{id:'job'}],unavailable:[]});

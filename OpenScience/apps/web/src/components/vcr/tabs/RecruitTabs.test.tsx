@@ -377,6 +377,81 @@ describe("匹配与招募 — before anything has been judged", () => {
   });
 });
 
+describe("匹配与招募 — a study with protocol versions and nothing evaluated yet", () => {
+  // Review V-M4/V-M5: with a protocol present the empty tab drew export, four views, two directions, a protocol select and a folded
+  // panel above the empty state, and the action that starts an evaluation was inside the fold.
+  const idle = (raw: any) => { raw.steps.matching = { status: "none", requested: false }; };
+  const unevaluated = (change?: (page: any) => void) => {
+    const page = fixture("ev201/matching.json");
+    Object.assign(page, { candidates: [], selected: null, funnel: [], gaps: [], comparisons: [], timeline: [], forecast: null, pendingReview: null, ledger: [],
+      sites: [], followup: [], headline: null, partner: null, counts: null, candidateRoster: ["P-0300", "P-0301"] });
+    change?.(page);
+    return page;
+  };
+  const JOBS = `POST /vcr/studies/${STUDY_ID}/jobs`;
+
+  it("is the step's sentence and one 开始评估 — no toolbar, no controls over it — and the button queues the protocol in view for the registered people", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: unevaluated(),
+      [JOBS]: { jobs: [{ jobId: "job_1", state: "queued" }], unavailable: [] },
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study(idle)} />);
+    const start = await screen.findByRole("button", { name: "开始评估" });
+    expect(screen.getByText("还没有匹配评估：逐条判定每个人是否符合入排条件，并给出补证建议。")).toBeInTheDocument();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+    expect(screen.queryByLabelText("查看方案")).toBeNull();
+    expect(screen.queryByRole("button", { name: "让 AI 做" })).toBeNull();
+    await userEvent.click(start);
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/jobs`, "POST",
+      { kind: "match_criteria", selection: { protocolVersionIds: ["prt_1"], direction: "trial_to_patient" } }));
+    expect(await screen.findByText("已提交 1 项评估。")).toBeInTheDocument();
+    // The job runs on its own time: the way to read the answer is next to the sentence that says it was asked.
+    const reads = matchingReads(server).length;
+    await userEvent.click(screen.getByRole("button", { name: "刷新结果" }));
+    await waitFor(() => expect(matchingReads(server).length).toBeGreaterThan(reads));
+  });
+
+  it("says nothing was submitted, and why, when the evaluation could not be queued", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: unevaluated(),
+      [JOBS]: { jobs: [], unavailable: [{ code: "vcr_criteria_missing" }] },
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study(idle)} />);
+    await userEvent.click(await screen.findByRole("button", { name: "开始评估" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("没有提交评估。方案还没有结构化的入排条件，无法匹配。");
+  });
+
+  it("keeps the step's own ask when nobody is registered to evaluate — there is nothing for 开始评估 to work on", async () => {
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: unevaluated((page) => { page.candidateRoster = []; }) });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study(idle)} />);
+    expect(await screen.findByRole("button", { name: "让 AI 做" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "开始评估" })).toBeNull();
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+  });
+
+  it("offers no 开始评估 to a reader who may not run it", async () => {
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: unevaluated() });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study((raw) => { idle(raw); raw.tier = "T1"; raw.abilities = ["read", "write"]; })} />);
+    expect(await screen.findByText("还没有匹配评估：逐条判定每个人是否符合入排条件，并给出补证建议。")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("shows the controls, with 开始评估 in plain sight, once the reader has chosen a direction and the answer is empty", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => (query.get("direction") === "patient_to_trial"
+        ? unevaluated()
+        : withProtocols()),
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("radio", { name: "给患者找试验" }));
+    expect(await screen.findByLabelText("查看方案")).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "匹配方向" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始评估" }).closest("details")).toBeNull();
+  });
+});
+
 describe("匹配与招募 — the switch of direction is always the way back", () => {
   // Review V-M3: a study with candidates and no protocol version drew the tab with its toolbar; choosing 给患者找试验 (which comes back
   // empty) replaced the whole tab with the one-line step ask, toolbar and all, and the only way back was to reload the page.

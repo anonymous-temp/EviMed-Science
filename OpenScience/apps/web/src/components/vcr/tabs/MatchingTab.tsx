@@ -1,4 +1,4 @@
-import { ClinicalTimeline, MatchingPanelControls } from "../ClinicalMatchingDetails";
+import { ClinicalTimeline, EvaluationNote, MatchingPanelControls, useMatchingEvaluation } from "../ClinicalMatchingDetails";
 import { VcrCorrectionCasesActions } from "../VcrCorrectionCasesActions";
 import { useState } from "react";
 import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock, TriangleAlert } from "lucide-react";
@@ -124,10 +124,10 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   // this key's page once it has arrived and from the newest one before that — also when this one could not be read — so a change
   // of protocol or direction never unmounts them (focus falls to <body>, a half-made choice is lost; review V-M2).
   const shown = state.kind === "ready" ? state.data : last;
+  const canRun = study.abilities.includes("run") && study.abilities.includes("read_patient_level");
   const controls = view === "matching" && shown && shown.available !== false ? (
     <MatchingPanelControls key="controls" studyId={studyId} data={shown} direction={direction} protocolId={protocolVersionId}
-      settling={state.kind !== "ready"} canRun={study.abilities.includes("run") && study.abilities.includes("read_patient_level")}
-      onProtocol={setProtocolVersionId} onCandidate={pick} onReload={reload} />
+      settling={state.kind !== "ready"} canRun={canRun} onProtocol={setProtocolVersionId} onCandidate={pick} onReload={reload} />
   ) : null;
   if (state.kind === "loading") return <div className="flex flex-col gap-6">{toolbar()}{controls}<VcrTabSkeleton /></div>;
   if (state.kind === "error") return <div className="flex flex-col gap-6">{toolbar()}{controls}<VcrTabError message={state.message} onRetry={reload} /></div>;
@@ -144,13 +144,20 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   // would ask for work that is done.
   const nothing = data.candidates.length === 0 && !data.forecast && !data.pendingReview
     && (data.ledger ?? []).length === 0 && (data.sites ?? []).length === 0 && (data.followup ?? []).length === 0
-    && !(data.timeline?.length || data.comparisons?.length);
+    // A person in view counts once something is known of them: recorded facts, or an assessment. A protocol listed as 尚未评估 is not one.
+    && !(data.timeline?.length || data.comparisons?.some((entry) => entry.summary));
   // The tab as it opens, before the reader has chosen a view, a direction, a protocol or a person: nothing to switch between yet, so
-  // an empty one is the step's one sentence and its button. Once the reader has chosen, they got there by the switches, and an
-  // answer that comes back empty keeps them — the way back must not vanish with the page (review V-M3).
+  // an empty one is the step's one sentence and its one button, with or without protocol versions behind it (R11). Once the reader
+  // has chosen, they got there by the switches, and an answer that comes back empty keeps them — the way back must not vanish with
+  // the page (review V-M3).
   const asOpened = view === "matching" && direction === "trial_to_patient" && protocolVersionId === null && candidate === null;
-  if (nothing && asOpened && !data.protocols?.length) {
-    return <VcrStepPending studyId={studyId} study={study} step="matching" hint={study.tier === "T0" ? VCR_MATCHING_EMPTY_T0 : undefined} />;
+  if (nothing && asOpened) {
+    // 开始评估 where there is something to evaluate — protocol versions to evaluate and people registered to evaluate them for —
+    // and the step's own ask where there is not (no criteria yet, or at T0 nobody): that is what 让 AI 做 fills in.
+    const evaluable = canRun && (data.protocols?.length ?? 0) > 0 && (data.candidateRoster?.length ?? 0) > 0;
+    return evaluable
+      ? <MatchingStart studyId={studyId} study={study} data={data} onQueued={reload} />
+      : <VcrStepPending studyId={studyId} study={study} step="matching" hint={study.tier === "T0" ? VCR_MATCHING_EMPTY_T0 : undefined} />;
   }
   if (nothing) {
     return (
@@ -181,6 +188,30 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       {view === "followup" && <FollowupView data={data} />}
       {view === "matching" && <ClinicalTimeline studyId={studyId} data={data} mayReadOriginal={study.abilities.includes("read_patient_level")} />}
     </div>
+  );
+}
+
+/**
+ * A study with protocol versions and people registered, and nothing evaluated yet: the step's one sentence and the one button that
+ * evaluates the newest protocol for all of them. The job runs on its own time, so once it is queued the way to read the answer stands
+ * beside the line that says it was asked.
+ */
+function MatchingStart({ studyId, study, data, onQueued }: { studyId: string; study: VcrStudy; data: MatchingData; onQueued: () => void }) {
+  const evaluation = useMatchingEvaluation(studyId, onQueued);
+  const protocols = data.protocols ?? [];
+  const newest = data.protocolVersionId ?? [...protocols].sort((a, b) => b.version - a.version)[0]?.id ?? "";
+  return (
+    <VcrStepPending studyId={studyId} study={study} step="matching" start={{
+      label: "开始评估",
+      busy: evaluation.busy,
+      onStart: () => void evaluation.evaluate({ protocolVersionIds: [newest], direction: "trial_to_patient" }),
+      note: evaluation.message ? (
+        <>
+          <EvaluationNote message={evaluation.message} failed={evaluation.failed} />
+          {!evaluation.failed && <Button variant="text" onClick={onQueued}>刷新结果</Button>}
+        </>
+      ) : undefined,
+    }} />
   );
 }
 
