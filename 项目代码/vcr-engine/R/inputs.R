@@ -362,7 +362,7 @@ vcr_estimate_source <- function(used) if (identical(used, "imputed")) "imputed" 
 #' The diagnostics block every table-reading method carries: the weakest source
 #' among the columns it used, and which columns those were.
 vcr_value_sources_used <- function(used) {
-  list(weakest = if (is.na(used$source)) NULL else used$source, basis = used$basis, columns = used$columns)
+  list(weakest = if (is.na(used$source)) NULL else used$source, basis = used[["basis"]], columns = used$columns)
 }
 
 #' Refuse a table that is not a record of real people. The accepted sources

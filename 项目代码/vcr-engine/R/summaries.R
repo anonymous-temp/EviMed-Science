@@ -140,8 +140,8 @@ vcr_patient_sensitivity <- function(endpoint, truth) {
                             list(label = "风险比", range = sprintf("%.3g–%.3g", hr * 0.8, hr * 1.2), low = r2[1], high = r2[2]))))
   }
   if (identical(endpoint, "binary")) {
-    p0 <- vcr_scalar(truth$controlRate, NULL)
-    p1 <- tryCatch(vcr_binary_treatment_rate(p0, vcr_scalar(truth$treatmentRate, NULL), vcr_scalar(truth$riskDifference, NULL),
+    p0 <- vcr_scalar(truth[["controlRate"]], NULL)
+    p1 <- tryCatch(vcr_binary_treatment_rate(p0, vcr_scalar(truth[["treatmentRate"]], NULL), vcr_scalar(truth$riskDifference, NULL),
                                               vcr_scalar(truth$oddsRatio, NULL)), error = function(e) NULL)
     if (is.null(p0) || is.null(p1)) return(NULL)
     clip <- function(p) pmin(pmax(p, 0), 1)
@@ -173,8 +173,8 @@ vcr_power_curve <- function(scenario, alpha, sided) {
     return(list(xLabel = "真实效应（均值差）", x = x, y = y))
   }
   if (identical(e, "binary")) {
-    p0 <- vcr_scalar(tr$controlRate, NULL)
-    p1 <- tryCatch(vcr_binary_treatment_rate(p0, vcr_scalar(tr$treatmentRate, NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL)),
+    p0 <- vcr_scalar(tr[["controlRate"]], NULL)
+    p1 <- tryCatch(vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL)),
                    error = function(e) NULL)
     if (is.null(p0) || is.null(p1) || p1 == p0) return(NULL)
     x <- pmin(pmax(p0 + m * (p1 - p0), 1e-6), 1 - 1e-6)
@@ -204,7 +204,7 @@ vcr_power_curve_summary <- function(scenario, alpha, sided, simulated = NULL) {
     tr <- scenario$truth; e <- as.character(scenario$endpoint$type %||% "")
     at <- if (identical(e, "time_to_event")) vcr_scalar(tr$hazardRatio, NA_real_)
           else if (identical(e, "continuous")) vcr_scalar(tr$effect, NA_real_)
-          else tryCatch(vcr_binary_treatment_rate(vcr_scalar(tr$controlRate, NULL), vcr_scalar(tr$treatmentRate, NULL),
+          else tryCatch(vcr_binary_treatment_rate(vcr_scalar(tr[["controlRate"]], NULL), vcr_scalar(tr[["treatmentRate"]], NULL),
                                                    vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL)), error = function(e) NA_real_)
     if (is.finite(at)) {
       hw <- if (is.finite(simulated$mcse)) 1.96 * simulated$mcse else NULL

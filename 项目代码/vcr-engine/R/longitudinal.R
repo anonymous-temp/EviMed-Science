@@ -164,7 +164,7 @@ vcr_longitudinal_summary <- function(sim, ids, model, max_lines = 12L) {
       lapply(v, function(j) list(x = unname(t[j]), y = unname(sim$y[i, j])))
     })
     series[[length(series) + 1L]] <- s
-    im <- vcr_longitudinal_implied(t, model$intercept, model$slope, model$effect, model$sd, model$sdIntercept, model$sdSlope, model$correlation, a$z)
+    im <- vcr_longitudinal_implied(t, model$intercept, model$slope, model$effect, model$sd, model$sdIntercept, model$sdSlope, model[["correlation"]], a$z)
     implied[[a$key]] <- list(mean = unname(im$mean), sd = unname(im$sd))
     last <- summ[[J]]
     rows[[length(rows) + 1L]] <- list(label = paste0(a$label, "末次随访均值"), value = list(value = .vcr_sig(last$mean)))

@@ -27,7 +27,7 @@
 #' columns, a complete 0/1 arm, numeric complete covariates, two people a group.
 vcr_comparison_frame <- function(job, sc, tabs, what, covs) {
   subj <- .vcr_main_table(tabs)
-  vcr_require_individual(subj, what, method = job$method)
+  vcr_require_individual(subj, what, method = job[["method"]])
   cohort <- vcr_apply_downstream_cohort(subj, sc$cohortRules)
   subj <- cohort$data
   if (!length(covs)) vcr_abort("scenario_field_missing", "scenario.covariates", "A weighting names its covariates.")

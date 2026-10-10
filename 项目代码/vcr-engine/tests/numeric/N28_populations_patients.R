@@ -205,3 +205,24 @@ vcr_case("N28e", c("AC-04", "AC-26"), function() {
                         paste(found$distribution, collapse = "+"), paste(found$distribution_simulate, collapse = "+"), length(found$fine), job$status, paste(vcr_test_issue_codes(job), collapse = ","),
                         paste(direct, collapse = " / ")))
 })
+
+vcr_case("N28f", c("AC-04", "AC-11"), function() {
+  # R's `$` matches a name by its prefix when the name is absent and exactly one name begins with it, so `sc$correlation` was
+  # `sc$correlationSource` for a literature population that states a source and no matrix, and `spec$correlation` was
+  # `spec$correlationScale` for a scenario population that states a scale and no matrix: the string "assumed" or "spearman" went to
+  # the matrix reader, which refused a natural scenario for the wrong reason ("the correlation is a p x p matrix"). Neither
+  # scenario states a correlation, so the variables are independent and the job runs. (The cited route, with a matrix, is N28a.)
+  n <- 4000L
+  d1 <- tempfile("n28fa"); d2 <- tempfile("n28fb")
+  lit <- vcr_test_run(vcr_test_job("population.literature", list(baselineTable = list(list(variable = "age", mean = 61, sd = 9), list(variable = "sbp", mean = 138, sd = 15)),
+                                                                  n = n, correlationSource = "assumed"), seed = 2830L, job_id = "job_n28f_l"), output_dir = d1)
+  scn <- vcr_test_run(vcr_test_job("population.scenario", list(n = n, population = list(correlationScale = "spearman", variables = list(
+    list(name = "age", family = "normal", mean = 60, sd = 9), list(name = "bmi", family = "normal", mean = 27, sd = 4)))), seed = 2831L, job_id = "job_n28f_s"), output_dir = d2)
+  dl <- vcr_test_table(lit, "population", d1); ds <- vcr_test_table(scn, "population", d2)
+  r_l <- if (is.null(dl)) NA_real_ else stats::cor(dl$age, dl$sbp); r_s <- if (is.null(ds)) NA_real_ else stats::cor(ds$age, ds$bmi); band <- 4 / sqrt(n)
+  unlink(c(d1, d2), recursive = TRUE)
+  list(pass = identical(lit$status, "succeeded") && identical(scn$status, "succeeded") && isTRUE(abs(r_l) < band) && isTRUE(abs(r_s) < band) &&
+         identical(lit$diagnostics$correlationSource, "assumed"),
+       detail = sprintf("literature population with correlationSource 'assumed' and no matrix -> %s (%s), cor(age, sbp) %.3f; scenario population with correlationScale 'spearman' and no matrix -> %s (%s), cor(age, bmi) %.3f; independence band +-%.3f",
+                        lit$status, paste(vcr_test_issue_codes(lit), collapse = ","), r_l, scn$status, paste(vcr_test_issue_codes(scn), collapse = ","), r_s, band))
+})

@@ -60,7 +60,7 @@
 #' the 5,000-replicate floor instead of 20,000, and labels its measure `power`
 #' instead of `type_one_error`. Both errors are silent and both survive review.
 vcr_plan_replicates <- function(scenario, requested = NULL, estimand = NULL) {
-  flag <- scenario$truth$null
+  flag <- scenario$truth[["null"]]
   is_null_case <- if (is.logical(flag) && length(flag) == 1L && !is.na(flag)) flag
                   else if (!is.null(estimand) && length(estimand) == 1L && is.finite(estimand)) abs(estimand) < 1e-12
                   else vcr_is_null_scenario(scenario)
@@ -254,8 +254,8 @@ vcr_scenario_runner <- function(scenario) {
   }
 
   if (identical(endpoint, "binary")) {
-    p0 <- vcr_scalar(truth$controlRate, NULL)
-    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth$treatmentRate, NULL),
+    p0 <- vcr_scalar(truth[["controlRate"]], NULL)
+    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth[["treatmentRate"]], NULL),
                                     vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
     cl <- vcr_scalar(truth$covariateLogit, 0)
     estimand <- if (identical(method, "logistic")) log((p1 / (1 - p1)) / (p0 / (1 - p0))) else p1 - p0
@@ -629,8 +629,8 @@ vcr_analytic_check <- function(scenario, measures) {
                              else vcr_power_means(vcr_scalar(truth$effect), vcr_scalar(truth$sd, 1), n1, n0, alpha, sided))
   }
   if (identical(endpoint, "binary") && fixed && !identical(method, "logistic")) {
-    p0 <- vcr_scalar(truth$controlRate)
-    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth$treatmentRate, NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
+    p0 <- vcr_scalar(truth[["controlRate"]])
+    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth[["treatmentRate"]], NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
     analytic <- list(name = if (is_null) "type_one_error" else "power",
                      value = if (is_null) alpha else vcr_power_proportions(p0, p1, n1, n0, alpha, sided))
   }
@@ -665,8 +665,8 @@ vcr_analytic_check <- function(scenario, measures) {
   mcse <- sim[[1]]$mcse
   # An exact closed form is held to the simulation's own error; an approximation is
   # held to that error plus the bias it is documented to carry, and the result says so.
-  bias <- if (identical(analytic$basis, "asymptotic_logrank_score")) VCR_LOGRANK_APPROXIMATION_BIAS
-          else if (isTRUE(analytic$basis %in% c("first_order_one_sample_logrank", "asymptotic_one_sample_logrank"))) VCR_ONE_SAMPLE_LOGRANK_APPROXIMATION_BIAS else 0
+  bias <- if (identical(analytic[["basis"]], "asymptotic_logrank_score")) VCR_LOGRANK_APPROXIMATION_BIAS
+          else if (isTRUE(analytic[["basis"]] %in% c("first_order_one_sample_logrank", "asymptotic_one_sample_logrank"))) VCR_ONE_SAMPLE_LOGRANK_APPROXIMATION_BIAS else 0
   tolerance <- 3 * mcse + bias
   c(analytic, list(simulated = sim[[1]]$value, difference = d, mcse = mcse,
                    differenceInMcse = if (mcse > 0) d / mcse else NA_real_,

@@ -206,7 +206,7 @@ vcr_minimal_failed <- function(job, hash, started, code, detail) {
   safe <- function(x) if (is.character(x) && length(x) == 1L && !is.na(x)) x else NULL
   j <- if (is.list(job)) job else list()
   list(jobId = safe(j$jobId), protocolVersion = 1L, status = "failed",
-       method = safe(j$method), methodVersion = safe(j$methodVersion), scenarioHash = hash, seed = j$seed,
+       method = safe(j[["method"]]), methodVersion = safe(j$methodVersion), scenarioHash = hash, seed = j$seed,
        replicates = NULL, notEstimableRule = NULL, counts = vcr_counts(), measures = list(),
        diagnostics = list(issues = list(vcr_issue(code, "job", detail))), tables = list(),
        manifest = list(engineVersion = vcr_engine_version(), rVersion = paste("R", getRversion()),
@@ -228,8 +228,8 @@ vcr_run_job <- function(job, output_dir = NULL, cancel_file = NULL, progress = N
   finish <- function(status, measures = list(), counts = NULL, diagnostics = list(),
                      tables = list(), rule = NULL, issues = list(), conclusion = NULL) {
     cpu <- vcr_cpu_seconds() - cpu0
-    method_ok <- is.character(job$method) && length(job$method) == 1L && !is.na(job$method)
-    default_src <- vcr_default_measure_source(if (method_ok) job$method else "")
+    method_ok <- is.character(job[["method"]]) && length(job[["method"]]) == 1L && !is.na(job[["method"]])
+    default_src <- vcr_default_measure_source(if (method_ok) job[["method"]] else "")
     measures <- lapply(measures, function(m) { if (is.null(m$source)) m$source <- default_src; m })
     # A run that stopped before it finished (a spent CPU budget, a cancel) and
     # still holds measures from the batches that did finish says `limited`: it is
@@ -240,8 +240,8 @@ vcr_run_job <- function(job, output_dir = NULL, cancel_file = NULL, progress = N
            else if (status %in% c("failed", "canceled") && length(measures)) "limited" else NULL
     result <- list(
       jobId = job$jobId, protocolVersion = 1L, status = status,
-      method = job$method,
-      methodVersion = job$methodVersion %||% (if (method_ok) vcr_domain()$methods[[job$method]]$version),
+      method = job[["method"]],
+      methodVersion = job$methodVersion %||% (if (method_ok) vcr_domain()$methods[[job[["method"]]]]$version),
       scenarioHash = hash, seed = job$seed,
       # The *actual* replicate count, which is the requested one raised to
       # whatever the precision floor demanded (AC-28). Echoing the job's own
@@ -300,9 +300,9 @@ vcr_run_job <- function(job, output_dir = NULL, cancel_file = NULL, progress = N
     self <- vcr_engine_self_check()
     if (length(self)) return(finish("failed", issues = self))
 
-    handler <- vcr_engine_handlers()[[job$method]]
+    handler <- vcr_engine_handlers()[[job[["method"]]]]
     if (is.null(handler)) return(finish("failed", issues = list(vcr_issue(
-      "method_not_implemented", "method", sprintf("no handler for %s", job$method)))))
+      "method_not_implemented", "method", sprintf("no handler for %s", job[["method"]])))))
 
     out <- tryCatch(
       handler(job, output_dir = output_dir, cancel_file = cancel_file, progress = progress),
@@ -627,7 +627,7 @@ vcr_job_population_literature <- function(job, output_dir = NULL, ...) {
     vcr_abort("scenario_value_invalid", "scenario.n", "The population size (times the parameter draws) is a positive number this engine can hold.")
   }
   set.seed(job$seed, kind = VCR_RNG_KIND)
-  pop <- vcr_population_literature(sc$baselineTable, n, sc$correlation,
+  pop <- vcr_population_literature(sc$baselineTable, n, sc[["correlation"]],
                                    as.character(sc$correlationSource %||% "assumed"), K, seed = job$seed)
   list(status = "succeeded",
        measures = list(vcr_measure("generated_records", pop$n, source = "synthetic")),
@@ -761,9 +761,9 @@ vcr_job_population_quality <- function(job, output_dir = NULL, ...) {
 vcr_job_generate_patients <- function(job, output_dir = NULL, ...) {
   sc <- job$scenario
   endpoint <- as.character(sc$endpoint$type %||% "")
-  expected <- switch(job$method, patients.continuous = "continuous", patients.binary = "binary", patients.time_to_event = "time_to_event")
+  expected <- switch(job[["method"]], patients.continuous = "continuous", patients.binary = "binary", patients.time_to_event = "time_to_event")
   if (!identical(endpoint, expected)) {
-    vcr_abort("endpoint_not_supported", "scenario.endpoint.type", sprintf("%s generates %s patients.", job$method, expected))
+    vcr_abort("endpoint_not_supported", "scenario.endpoint.type", sprintf("%s generates %s patients.", job[["method"]], expected))
   }
   tr <- sc$truth
   n1 <- vcr_scalar(sc$design$nTreat, NULL); n0 <- vcr_scalar(sc$design$nControl, NULL)
@@ -797,7 +797,7 @@ vcr_job_generate_patients <- function(job, output_dir = NULL, ...) {
     effect <- .vcr_need(tr$effect, "scenario.truth.effect", "A continuous scenario states the treatment effect (0 for the null).")
     vcr_sim_continuous(n1, n0, effect, vcr_scalar(tr$sd, 1), vcr_scalar(tr$baselineCorrelation, 0), z = z, lp = lp)
   } else if (identical(endpoint, "binary")) {
-    vcr_sim_binary(n1, n0, vcr_scalar(tr$controlRate, NULL), p_treat = vcr_scalar(tr$treatmentRate, NULL),
+    vcr_sim_binary(n1, n0, vcr_scalar(tr[["controlRate"]], NULL), p_treat = vcr_scalar(tr[["treatmentRate"]], NULL),
                    risk_difference = vcr_scalar(tr$riskDifference, NULL), odds_ratio = vcr_scalar(tr$oddsRatio, NULL),
                    covariate_logit = vcr_scalar(tr$covariateLogit, 0), z = z, lp = lp)
   } else {
@@ -1051,8 +1051,8 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
   sc <- job$scenario
   tabs <- vcr_job_tables(job)
   subj <- .vcr_main_table(tabs)
-  vcr_require_individual(subj, "An external-control weighting", method = job$method)
-  method <- if (identical(job$method, "comparator.propensity_weight")) "propensity" else "entropy_balance"
+  vcr_require_individual(subj, "An external-control weighting", method = job[["method"]])
+  method <- if (identical(job[["method"]], "comparator.propensity_weight")) "propensity" else "entropy_balance"
   estimand <- as.character(sc$estimand %||% vcr_domain()$defaultEstimand)
   if (!(estimand %in% vcr_domain()$estimands)) vcr_abort("scenario_value_invalid", "scenario.estimand", "The estimand is ATT, ATE or ATO.")
   if (identical(method, "entropy_balance") && !identical(estimand, "ATT")) {
@@ -1519,8 +1519,8 @@ vcr_job_design_analytic <- function(job, ...) {
     n <- vcr_n_means(eff, vcr_scalar(tr$sd, 1), alpha, power, alloc, sided)
     add("required_total", ceiling(n$total)); add("required_per_arm", ceiling(n$total * alloc))
   } else if (identical(e, "binary") && identical(kind, "two_arm_fixed")) {
-    p0 <- vcr_scalar(tr$controlRate, NULL)
-    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr$treatmentRate, NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
+    p0 <- vcr_scalar(tr[["controlRate"]], NULL)
+    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
     n <- vcr_n_proportions(p0, p1, alpha, power, alloc, sided)
     add("required_total", ceiling(n$total)); add("required_control", ceiling(n$control))
   }
@@ -1548,8 +1548,8 @@ vcr_job_design_analytic <- function(job, ...) {
   if (identical(kind, "two_arm_fixed")) {
     n_total <- if (identical(e, "time_to_event")) NULL else if (identical(e, "continuous")) ceiling(vcr_n_means(
       vcr_scalar(tr$effect, NA_real_), vcr_scalar(tr$sd, 1), alpha, power, alloc, sided)$total) else {
-      p0 <- vcr_scalar(tr$controlRate, NULL)
-      p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr$treatmentRate, NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
+      p0 <- vcr_scalar(tr[["controlRate"]], NULL)
+      p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
       ceiling(vcr_n_proportions(p0, p1, alpha, power, alloc, sided)$total)
     }
     diag$powerCurve <- tryCatch({
@@ -1585,8 +1585,8 @@ vcr_analytic_sensitivity <- function(e, tr, alpha, power, alloc, sided, measures
                 rows = list(list(label = "效应", range = sprintf("%.3g–%.3g", eff * 0.8, eff * 1.2), low = ceiling(min(n)), high = ceiling(max(n))),
                             list(label = "标准差", range = sprintf("%.3g–%.3g", vcr_scalar(tr$sd, 1) * 0.8, vcr_scalar(tr$sd, 1) * 1.2), low = ceiling(min(sdv)), high = ceiling(max(sdv))))))
   }
-  p0 <- vcr_scalar(tr$controlRate, NULL)
-  p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr$treatmentRate, NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
+  p0 <- vcr_scalar(tr[["controlRate"]], NULL)
+  p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
   clip <- function(p) pmin(pmax(p, 0.001), 0.999)
   n <- vapply(wiggle, function(k) vcr_n_proportions(p0, clip(p0 + k * (p1 - p0)), alpha, power, alloc, sided)$total, numeric(1))
   list(measure = "所需总样本量", base = list(value = base_of("required_total")),
@@ -1674,7 +1674,7 @@ vcr_job_assurance <- function(job, ...) {
   sc <- job$scenario
   prior <- sc$designPrior
   if (!is.list(prior)) vcr_abort("scenario_field_missing", "scenario.designPrior", "Assurance needs the design prior.")
-  basis <- as.character(prior$basis %||% "prediction")
+  basis <- as.character(prior[["basis"]] %||% "prediction")
   if (identical(basis, "confidence") && !isTRUE(as.logical(prior$basisOverride))) {
     vcr_abort("scenario_value_invalid", "scenario.designPrior.basis",
               "A design prior built from a confidence interval understates the spread of a new trial; use the prediction distribution, or set basisOverride to say this is deliberate.")
@@ -1697,7 +1697,7 @@ vcr_job_assurance <- function(job, ...) {
   out <- if (identical(e, "time_to_event")) {
     vcr_assurance_loghr(pmean, psd, vcr_scalar(sc$design$events, NULL), alpha, vcr_scalar(sc$design$allocation, 0.5), sided)
   } else if (identical(e, "binary")) {
-    p0 <- vcr_scalar(sc$truth$controlRate, NULL)
+    p0 <- vcr_scalar(sc$truth[["controlRate"]], NULL)
     if (is.null(p0)) vcr_abort("scenario_field_missing", "scenario.truth.controlRate", "A binary assurance states the control rate.")
     vcr_assurance_binary(p0, list(kind = "normal", mean = pmean, sd = psd), n1, n0, alpha, sided)
   } else {

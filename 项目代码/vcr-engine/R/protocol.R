@@ -791,9 +791,10 @@ vcr_pattern_match <- function(pattern, x) {
   if(sided==1 && .vcrp_num(an$alpha) && an$alpha>=.5)bad("analysis.alpha","A one-sided analysis uses alpha below one half.")
   if (kind=="single_arm" && sided!=if(identical(an$alternative,"two.sided"))2 else 1) bad("analysis.sided","Sidedness must agree with the exact binomial alternative.")
   if (kind=="simon_two_stage") {
-    if (.vcrp_num(d$n1) && .vcrp_num(d$n) && d$n1>=d$n) bad("design.n1","Stage one is smaller than the total sample size.")
-    if (.vcrp_num(d$r1) && .vcrp_num(d$n1) && d$r1>=d$n1) bad("design.r1","Stage one continues only above r1 < n1.")
-    if (.vcrp_num(d$r) && .vcrp_num(d$n) && (d$r>=d$n || (!is.null(d$r1) && d$r<d$r1))) bad("design.r","The final threshold satisfies r1 <= r < n.")
+    # `[[`, not `$`: `d$n` is `n1` when `n` is absent (R matches a name by its prefix when exactly one name begins with it)
+    if (.vcrp_num(d[["n1"]]) && .vcrp_num(d[["n"]]) && d[["n1"]]>=d[["n"]]) bad("design.n1","Stage one is smaller than the total sample size.")
+    if (.vcrp_num(d[["r1"]]) && .vcrp_num(d[["n1"]]) && d[["r1"]]>=d[["n1"]]) bad("design.r1","Stage one continues only above r1 < n1.")
+    if (.vcrp_num(d[["r"]]) && .vcrp_num(d[["n"]]) && (d[["r"]]>=d[["n"]] || (!is.null(d[["r1"]]) && d[["r"]]<d[["r1"]]))) bad("design.r","The final threshold satisfies r1 <= r < n.")
     if (sided!=1) bad("analysis.sided","Simon uses the upper one-sided frozen boundary rule.")
     if (.vcrp_num(tr$alternativeRate) && .vcrp_num(tr$nullRate) && tr$alternativeRate<=tr$nullRate) bad("truth.alternativeRate","The alternative rate exceeds the null rate.")
   }
@@ -1012,7 +1013,7 @@ vcr_validate_job <- function(job) {
   sc<-.vcrp_get(job,"scenario");base<-.vcrp_get(.vcrp_get(sc,"design"),"kind")
   if(!.vcrp_chr(base))base<-""
   designs<-.vcrp_get(sc,"designs")
-  kinds<-if(identical(job$method,"design.grid") && is.list(designs))
+  kinds<-if(identical(job[["method"]],"design.grid") && is.list(designs))
     vapply(designs,function(d){k<-.vcrp_get(d,"kind") %||% base;if(.vcrp_chr(k))k else ""},character(1)) else base
   if(!is.null(spec$legacyVersion) && identical(job$methodVersion,spec$legacyVersion)) {
     if(!length(kinds))return(TRUE) # malformed/missing design is refused by its scenario issue

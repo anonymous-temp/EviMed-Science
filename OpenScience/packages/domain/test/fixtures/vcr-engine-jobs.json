@@ -13584,6 +13584,49 @@
       ]
     },
     {
+      "name": "Simon without its total sample size",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "simon_two_stage",
+            "n1": 10,
+            "r1": 1,
+            "r": 5
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3,
+            "responseRate": 0.1
+          },
+          "analysis": {
+            "method": "simon_boundary",
+            "sided": 1,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.design.n"
+      ]
+    },
+    {
       "name": "one-sided rule cannot be called two-sided",
       "job": {
         "jobId": "job_single_arm",
