@@ -10,7 +10,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { GENE_EXPRESSION_LIMITS, workspaceLayout } from "@evimed/domain";
+import { GENE_EXPRESSION_LIMITS, RUN_CONTEXT_PROTOCOL, workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv } from "@evimed/harness-port";
 import {
   dockerRuntimeMount,
@@ -5387,6 +5387,9 @@ export class RuntimeManager {
       const routed = typeof capability === "string" && capability ? safeId(capability, "capability id")
         : capability === undefined ? await keptRoute(project, relative, runId) : "";
       const index = {
+        // The hand-off revision this index was written under; the runtime image reads an index under its own revision and
+        // refuses any other by name (`RUN_CONTEXT_PROTOCOL`).
+        protocol: RUN_CONTEXT_PROTOCOL,
         runId,
         ...(session ? { sessionId: session } : {}),
         ...(typeof contextRevision === "string" && contextRevision ? { contextRevision } : {}),

@@ -56,7 +56,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { SEAMS, __setHarnessModule } from "@evimed/harness-port";
-import { DELEGATION_BASE_TOOLS, deliverySummaryFileFor, planFileFor, receiptFileFor, runStateFileFor, runStateFileForSession, workspaceLayout } from "@evimed/domain";
+import { DELEGATION_BASE_TOOLS, RUN_CONTEXT_PROTOCOL, deliverySummaryFileFor, planFileFor, receiptFileFor, runStateFileFor, runStateFileForSession, workspaceLayout } from "@evimed/domain";
 import { RUN_DOMAIN_NAME } from "../src/runMirror.mjs";
 
 __setHarnessModule("@deepseek-ai/dsh-tools", {
@@ -315,7 +315,9 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
     readText: async (/** @type {string} */ target) => {
-      if (!files.has(target) && target.endsWith(workspaceLayout.briefIndexFile)) return JSON.stringify({ runId: COMBINED_RUN, sessionId: "root-session" });
+      // The dispatch's index as the control plane writes it now: it states the hand-off revision, and an index that does not is
+      // a control plane older than the image, which the run says out loud.
+      if (!files.has(target) && target.endsWith(workspaceLayout.briefIndexFile)) return JSON.stringify({ protocol: RUN_CONTEXT_PROTOCOL, runId: COMBINED_RUN, sessionId: "root-session" });
       for (const [skill, body] of Object.entries(skillBodies)) {
         if (target === `/skills/${skill}/SKILL.md`) return body;
       }

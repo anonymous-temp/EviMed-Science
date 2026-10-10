@@ -97,6 +97,29 @@ export const workspaceLayout = Object.freeze({
   agendaFile: `${BRIEF_DIR}/agenda.md`,
 })
 
+/**
+ * The revision of the hand-off between the control plane and the runtime image: where a dispatch's brief, context, memory and
+ * index are filed (per session), where a run's plan, projection, receipt and summary are filed (per run), and what the index
+ * states (`runId`, `sessionId`, `contextRevision`, `capability`). Each side carries its own copy of this module, so each
+ * states the revision it was built for.
+ *
+ * The control plane writes it into every index as `protocol`. The runtime image reads an index whose `protocol` is this value;
+ * an index without one was written before the field existed (revision 1 filed everything at the workspace root; the
+ * per-session layout came first, without the token) and is still read; any other value is a hand-off this image was not
+ * built for, which it refuses by name rather than read as if it agreed (`RUN_PROTOCOL_SKEW_OPENING`). The two releases ship
+ * together, but a web image has run a release behind its runtime image before, and nothing used to say so: an image that read
+ * a file the control plane no longer wrote read an earlier run's brief as this run's.
+ *
+ * Bump it when the files or the index fields change meaning, and say in this comment what the new number changed.
+ */
+export const RUN_CONTEXT_PROTOCOL = 2
+
+/**
+ * How a runtime image's line about a hand-off it cannot read begins. The control plane names such a line by this opening
+ * (`runSideDegradedNotice`), so the runtime's words and the control plane's table cannot drift apart.
+ */
+export const RUN_PROTOCOL_SKEW_OPENING = 'brief index protocol'
+
 /** One immutable control-plane run's projection. The legacy shared file stays
  * available only as a historical compatibility artifact. New native turns use their session projection.
  * @param {string} runId @returns {string}

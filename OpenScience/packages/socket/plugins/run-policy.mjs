@@ -48,6 +48,8 @@ import {
   sourceTypeSidecarPath,
   withRetrievedSources,
   workspaceLayout,
+  RUN_CONTEXT_PROTOCOL,
+  RUN_PROTOCOL_SKEW_OPENING,
   planFileFor,
   briefFileForSession,
   deliverySummaryFileFor,
@@ -414,6 +416,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         routedCapability: '',
         /** The capability the control plane bound this conversation to when it was opened, or ''. */
         binding: '',
+        /** The hand-off protocol disagreements already said for this session, so each is said once. */
+        protocolSaid: new Set(),
         /** Set when the turn ended: the receipt is written and the bytes are
          *  the delivery. Within a turn a deliverable stays editable. */
         frozen: false,
@@ -2853,6 +2857,18 @@ async function loadBrief(ctx, agent, sessionState, config) {
 }
 
 /**
+ * Say a disagreement about the hand-off protocol, once per session and line: the brief is looked at before every root step,
+ * and the same sentence at each of them would bury the run's other notes.
+ * @param {any} ctx @param {Record<string, any>} entry @param {string} line
+ */
+function sayProtocolSkew(ctx, entry, line) {
+  if (entry.protocolSaid.has(line)) return
+  entry.protocolSaid.add(line)
+  const diagnostics = ctx.get('evimedDiagnostics')
+  ;(diagnostics?.forSession?.(entry.sessionId) ?? diagnostics)?.degrade?.(line)
+}
+
+/**
  * The capability id in a session's binding file, or ''. A closed shape the control plane writes (`{ capability }`); the
  * id is then resolved against the mounted catalogue like any other, and an internal capability still needs its dispatch.
  * @param {string | null} raw @returns {string}
@@ -2900,6 +2916,18 @@ async function loadBriefRevision(ctx, agent, entry, config) {
   if (rawIndex == null) return
   const index = parseJson(rawIndex)
   if (index?.sessionId && index.sessionId !== sessionId) return
+  // The hand-off revision this index was written under (`RUN_CONTEXT_PROTOCOL`). One this image was not built for is refused
+  // by name before anything of it is read: files and fields that moved between revisions read as another run's, and a
+  // run that took them for its own was running on someone else's brief. An index that states none predates the field and is
+  // read as before, with the skew said once.
+  if (index && typeof index === 'object') {
+    if (index.protocol === undefined) {
+      sayProtocolSkew(ctx, entry, `${RUN_PROTOCOL_SKEW_OPENING} missing: the control plane that wrote it is older than this runtime image (${RUN_CONTEXT_PROTOCOL}); the dispatch's routed capability is not read from it`)
+    } else if (index.protocol !== RUN_CONTEXT_PROTOCOL) {
+      sayProtocolSkew(ctx, entry, `${RUN_PROTOCOL_SKEW_OPENING} ${JSON.stringify(index.protocol)?.slice(0, 40)} is not the one this runtime image reads (${RUN_CONTEXT_PROTOCOL}): the dispatch's brief, context, memory and run id were not read`)
+      return
+    }
+  }
   const legacyMatches = legacyIndex?.runId === index?.runId && (!legacyIndex?.sessionId || legacyIndex.sessionId === sessionId) && (legacyOwned || scopedIndex != null)
   const contextRevision = String(index?.contextRevision ?? '')
   // Legacy indexes have no revision and preserve the old inject-once behavior.

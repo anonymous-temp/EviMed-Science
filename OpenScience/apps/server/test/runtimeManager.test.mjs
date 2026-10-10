@@ -32,6 +32,7 @@ import {
 import { expectedPluginTools, pluginProofMismatch, pluginUpstreamHealth, provenPluginSettings, readRuntimeResponseBody } from "../src/runtimeManager.mjs";
 import { renderProfilePatch, runtimeEnvironment } from "../src/dshProfilePatch.mjs";
 import { PLUGIN_ID, PLUGIN_REGISTRY, PLUGIN_SUPPORT_SNAPSHOT, pluginEntry, pluginRegistryFrom } from "../src/pluginService.mjs";
+import { RUN_CONTEXT_PROTOCOL } from "@evimed/domain";
 import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
 
 /**
@@ -2333,6 +2334,7 @@ test("dispatching a DSH prompt writes the run's own id into the workspace brief"
   assert.equal(written.sessionId, "ses_brief");
   assert.equal(written.runId, "run_brief_1");
   assert.match(written.contextRevision, /^req_/);
+  assert.equal(written.protocol, RUN_CONTEXT_PROTOCOL, "the index states the hand-off revision it was written under, for the image to check");
 });
 
 test("dispatching a DSH prompt without a run id leaves the brief index unwritten", async (t) => {
@@ -2390,6 +2392,7 @@ test("a reserved session receives strict context before its first DSH create", a
   });
   const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", session.id);
   assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), {
+    protocol: RUN_CONTEXT_PROTOCOL,
     runId: "run_strict_1",
     sessionId: session.id,
     contextRevision: "req_strict_1",
@@ -2414,6 +2417,7 @@ test("a follow-up and repair commit distinct session context revisions", async (
   });
   const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", sessionId);
   assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), {
+    protocol: RUN_CONTEXT_PROTOCOL,
     runId: "run_same",
     sessionId,
     contextRevision: "req_repair",

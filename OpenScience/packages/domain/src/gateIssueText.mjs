@@ -327,6 +327,7 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   run_capability_catalogue_incomplete: '能力目录不完整',
   run_evidence_ingest_failed: '有检索结果未能记入证据',
   run_turn_end_unknown: '一轮以未知方式结束',
+  run_protocol_skew: '运行时镜像与控制面的交接版本不一致',
   // A research tool that did not give the run what it asked for, and no later
   // call of it did (2026-10-04). Said per tool, never a verdict on the run: the
   // turn is judged by what it produced. The two advisory tools that answer

@@ -21,7 +21,7 @@ import { createServer } from "node:http";
 import test from "node:test";
 
 import { SEAMS, __setHarnessModule, defineTool } from "@evimed/harness-port";
-import { CONTRACT_KINDS, SOCKET_TOOL_NAME_LIST, STUDY_TYPES, deliverySummaryFileFor, receiptFileFor, workspaceLayout } from "@evimed/domain";
+import { CONTRACT_KINDS, RUN_CONTEXT_PROTOCOL, RUN_PROTOCOL_SKEW_OPENING, SOCKET_TOOL_NAME_LIST, STUDY_TYPES, deliverySummaryFileFor, receiptFileFor, workspaceLayout } from "@evimed/domain";
 
 import { GUIDANCE_SECTION_NAME, buildChildGuidanceText, buildGuidanceText } from "../src/guidanceText.mjs";
 import { RUN_DOMAIN_SPEC, projectRunState } from "../src/runMirror.mjs";
@@ -1528,10 +1528,14 @@ const TOPIC_CAPABILITY = Object.freeze({
 /** Write one session-scoped dispatch the way the control plane does before it
  *  creates and prompts the session. A routed dispatch names its capability in the index and nowhere else:
  *  the context carries text a researcher can write (a recalled memory, a note), and is not a place to learn it.
- *  @param {any} f @param {string} context @param {{ capability?: unknown }} [options] */
-function dispatchContext(f, context, { capability } = {}) {
+ *  `protocol` is the hand-off revision the index states, when the dispatch stated one.
+ *  @param {any} f @param {string} context @param {{ capability?: unknown, protocol?: unknown }} [options] */
+function dispatchContext(f, context, { capability, protocol } = {}) {
   const root = "/workspace/.evimed-brief/sessions/native-session";
-  f.files.set(`${root}/index.json`, JSON.stringify({ runId: "run_dispatched", contextRevision: "req_1", ...(capability === undefined ? {} : { capability }) }));
+  f.files.set(`${root}/index.json`, JSON.stringify({
+    runId: "run_dispatched", contextRevision: "req_1",
+    ...(capability === undefined ? {} : { capability }), ...(protocol === undefined ? {} : { protocol }),
+  }));
   f.files.set(`${root}/context.md`, context);
 }
 
@@ -1724,6 +1728,64 @@ test("the next run of a conversation does not inherit the previous run's route",
     deliverables: [{ id: "d1", contractKind: "research-brief", capability: "beta", title: "B", dependsOn: [] }] });
   assert.match(f.injected.slice(before).map((/** @type {any} */ message) => message.content?.[0]?.text ?? "").join("\n"), /<evimed-method capability="beta">/,
     "the follow-up is not routed, so its one-capability plan decides, and alpha's route is not still in force");
+});
+
+test("an index written under a hand-off revision this image does not read is refused by name, once, and nothing of it is read", async () => {
+  // 2026-10-10 review D8: e2eca41c4 moved where the control plane writes and the image reads, with no marker on either side, so a
+  // release a web image behind its runtime image read an earlier run's files as its own. The index states its revision now.
+  const { MCP_TOOL_NAMES: mcpNames } = await import("@evimed/domain");
+  const managed = "mcp__evimed__research_topic_selection";
+  const registered = [...mcpNames, "bash", "read", "skill"];
+  const skills = { "research-topic-selection": "# 科研选题\n先启动专项任务，再补充检索。\n" };
+  for (const protocol of [RUN_CONTEXT_PROTOCOL + 1, 1, "2", 0, null, { revision: 2 }]) {
+    const f = await nativePolicyFixture({ registered, capabilities: [TOPIC_CAPABILITY], skills });
+    /** @type {string[]} */
+    const degraded = [];
+    f.ctx.provide("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line), notice() {} });
+    dispatchContext(f, "本轮的题面与记忆。\n", { capability: "research-topic-selection", protocol });
+    f.start();
+    await f.step(1);
+    await f.step(1);
+    assert.ok(!f.requests[0].tools.includes(managed), `${JSON.stringify(protocol)}: the route in an index it cannot read is not taken`);
+    assert.doesNotMatch(messageText(f.requests[0].messages), /本轮的题面与记忆/, "nor is the context");
+    assert.ok(!f.rows.has("run_dispatched"), "nor the run id: the run is not filed under an identity from a hand-off this image does not know");
+    const said = degraded.filter((line) => line.startsWith(RUN_PROTOCOL_SKEW_OPENING));
+    assert.equal(said.length, 1, `${JSON.stringify(protocol)}: said once however many steps follow: ${JSON.stringify(degraded)}`);
+    assert.ok(said[0].includes(String(JSON.stringify(protocol)).slice(0, 40)) && said[0].includes(String(RUN_CONTEXT_PROTOCOL)),
+      `the line names the revision it found and the one it reads: ${said[0]}`);
+  }
+
+  // The next index, under a revision it does read, is taken as the first one would have been.
+  const f = await nativePolicyFixture({ registered, capabilities: [TOPIC_CAPABILITY], skills });
+  dispatchContext(f, "本轮的题面与记忆。\n", { capability: "research-topic-selection", protocol: RUN_CONTEXT_PROTOCOL + 1 });
+  f.start();
+  await f.step(1);
+  assert.ok(!f.requests[0].tools.includes(managed));
+  dispatchContext(f, "本轮的题面与记忆。\n", { capability: "research-topic-selection", protocol: RUN_CONTEXT_PROTOCOL });
+  await f.step(2);
+  assert.match(messageText(f.requests[1].messages), /本轮的题面与记忆/, "a refusal is not remembered against the next dispatch");
+  assert.ok(f.rows.has("run_dispatched"));
+});
+
+test("an index under the revision this image reads is read in silence, and one with none is read and the skew named once", async () => {
+  const degradedOf = async (/** @type {{ protocol?: unknown }} */ options) => {
+    const f = await nativePolicyFixture();
+    /** @type {string[]} */
+    const degraded = [];
+    f.ctx.provide("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line), notice() {} });
+    dispatchContext(f, "本轮的题面与记忆。\n", options);
+    f.start();
+    await f.step(1);
+    await f.step(1);
+    assert.match(messageText(f.requests[0].messages), /本轮的题面与记忆/, "either way the dispatch is read");
+    assert.ok(f.rows.has("run_dispatched"), "and the run is filed under its own id");
+    return degraded.filter((line) => line.startsWith(RUN_PROTOCOL_SKEW_OPENING));
+  };
+  assert.deepEqual(await degradedOf({ protocol: RUN_CONTEXT_PROTOCOL }), [], "the current revision says nothing");
+  const legacy = await degradedOf({});
+  assert.equal(legacy.length, 1, "a control plane older than the field is named, once");
+  assert.match(legacy[0], /missing/);
+  assert.ok(legacy[0].includes(String(RUN_CONTEXT_PROTOCOL)), "with the revision this image reads");
 });
 
 test("a capability's tools that stay out of reach, a silent assembly seam and a missing agent are each said out loud", async () => {
