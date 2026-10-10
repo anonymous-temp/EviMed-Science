@@ -368,8 +368,8 @@ export class MethodConsolidation {
    * @param {{job: any}} request
    */
   async sleep({ job }) {
-    const page = await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods });
-    const methods = (page.items ?? []).filter((item) => item.payload?.status !== "retired");
+    const notRetired = (/** @type {any} */ page) => (page.items ?? []).filter((/** @type {any} */ item) => item.payload?.status !== "retired");
+    let methods = notRetired(await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods }));
     if (methods.length === 0) {
       return { action: "sleep", methods: 0, groups: 0, relations: 0, builds: 0, screened: false, screenDropped: 0, promoted: [], retirements: [], graphIssues: [] };
     }
@@ -385,6 +385,8 @@ export class MethodConsolidation {
     // the library until some later pass got that far (review L-14). The steps below can change what is approvable (a conflict recorded, a
     // counterpart retired), which is what the second look is for; this one is best effort, and the second is where a real failure surfaces.
     const early = await this.approveCandidates(job, methods, { strict: false });
+    // An approval is a write, so the steps below, which amend and retire against the revisions they hold, read the library again.
+    if (early.length) methods = notRetired(await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods }));
 
     const screen = comparable
       ? await this.screenPairs(job, candidatePairs(methods), methods)

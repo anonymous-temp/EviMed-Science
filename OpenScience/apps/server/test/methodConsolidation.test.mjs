@@ -494,6 +494,38 @@ test("a candidate approved before the model steps is reported once, and the pass
   assert.deepEqual(result.promoted, ["m1", "m2"]);
 });
 
+test("what the steps rewrite is written against the revision the approvals left, not the one the pass began with", async () => {
+  // Approving a candidate is a write, so a method approved before the model steps holds a newer revision when the build step amends it; a build
+  // that used the list read at the start would conflict with it, and the conflict is swallowed per method, so the rewrite would be lost unseen.
+  const items = [doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor")];
+  const learning = fakeLearning(items);
+  /** @type {any} */ (learning).approve = async (_userId, id) => {
+    const index = learning.items.findIndex((entry) => entry.id === id);
+    learning.items[index] = { ...learning.items[index], revision: learning.items[index].revision + 1, payload: { ...learning.items[index].payload, status: "approved" } };
+    return learning.items[index];
+  };
+  /** @type {any} */ (learning).amendMethod = async (_userId, id, input) => {
+    const current = learning.items.find((entry) => entry.id === id);
+    if (input.expectedRevision !== current.revision) throw Object.assign(new Error("conflict"), { code: "product_revision_conflict" });
+    learning.amendments.push({ id, input });
+    return { ...current, revision: current.revision + 1 };
+  };
+  const grown = SECTIONS("- Never invent a span.");
+  const { instance } = consolidation({
+    learning,
+    readResult: async (identity) => ({
+      status: "succeeded",
+      output: identity.dispatchId.includes("build")
+        ? { revisions: [{ methodId: "m1", operation: "amend", assignment: "g1", baseDigest: items[0].payload.contentDigest, skill: renderMethodSkill(frontmatter("resolve-claim-span"), grown) }] }
+        : { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "subset", SKILLS: ["m1", "m2"] }] },
+    }),
+  });
+  const result = await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
+  assert.deepEqual(result.promoted, ["m1", "m2"]);
+  assert.equal(learning.amendments.length, 1, "the rewrite of an approved method was written");
+  assert.equal(learning.amendments[0].input.expectedRevision, 2);
+});
+
 test("a step is keyed on what it reads: an unchanged group reads its answer again, a changed method is a new question", async () => {
   const ids = async (items) => {
     const { instance, dispatched } = consolidation({ learning: fakeLearning(items) });
