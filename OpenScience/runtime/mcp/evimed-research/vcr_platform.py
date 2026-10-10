@@ -543,9 +543,12 @@ def read(arguments: dict) -> dict:
         raise
     warnings = []
     next_actions = []
+    if what == 'report_model':
+        next_actions.append('For longitudinal report numbers, append the exact field inside a record summary to its numberPath, without another .summary segment. For example: longitudinal.byId.<id>.groups[0].requested. Use vcr_read longitudinal filter.id for one full record when this report model is large; only fields actually returned are bindable.')
     if what == 'longitudinal':
         next_actions.append('Records and related are both readable results. filter.id selects that exact record; filter.parentId selects its evaluations. A prediction carries relatedIds for its latest evaluation. Empty filtered pages do not prove no validation exists.')
         next_actions.append('A numeric metrics value marked availability=computed is a computed estimate, including zero and zero-width intervals. Only null/unavailable metrics have missing inputs; read unavailableReason. Predictive samples support CRPS without an sd. With adequate follow-up, zero events still permit Brier, while AUROC/AP need both classes.')
+        next_actions.append('A prediction_set contains independently evaluable endpoint component ids. Compare changed inputs/models with mode input_sensitivity/model_version, or updated origins with mode update; update comparisons pair equal calendar target dates. Every record.numberPath resolves to its summary in report_model.longitudinal.byId, independent of list order. Incident risk evaluations report prevalent exclusions separately; local calibration separation does not verify provider training independence.')
     if data.get("more") is True:
         warnings.append("More items exist than this answer holds.")
         next_actions.append("Call again with filter.offset to read the next page, or narrow the filter.")

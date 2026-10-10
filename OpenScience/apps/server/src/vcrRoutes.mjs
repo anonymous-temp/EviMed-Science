@@ -601,7 +601,7 @@ export function createVcrRoutes(dependencies) {
       if (method === 'POST' && parts.length === 4 && ['histories','predictions','benchmarks'].includes(parts[3])) {
         const fields = parts[3] === 'histories' ? ['snapshotId','asOf','mappings','split','priorHistoryId','includeClinicalFacts','perturbation']
           : parts[3] === 'benchmarks' ? ['model','comparisons','split','trainingOverlap']
-          : ['schema','historyId','origin','endpoint','horizonsDays','rows','model','scenario','priorPredictionId','subjectKeyMode'];
+          : ['schema','historyId','origin','endpoint','horizonsDays','rows','model','scenario','priorPredictionId','subjectKeyMode','predictions'];
         const body = await bodyOf(req,Math.max(maxJsonBytes,8*1024*1024),fields);
         const save = parts[3] === 'histories' ? longitudinal.freezeHistory : parts[3] === 'predictions' ? longitudinal.importPrediction : longitudinal.importBenchmark;
         return reply(presentLongitudinal(await save(study,body,String(user.id)),{minCell:service.minCell}),201);

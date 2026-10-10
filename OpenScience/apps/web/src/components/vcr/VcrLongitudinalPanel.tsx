@@ -7,6 +7,7 @@ import { ChartCard } from '@/components/ui/ChartCard';
 import { webErrorMessage } from '@/lib/apiClient';
 import { getVcrLongitudinal, importVcrPrediction, importVcrBenchmark, type LongitudinalRecord } from '@/lib/vcrLongitudinalClient';
 import { VcrForecastEvaluation, forecastIssue } from './VcrForecastEvaluation';
+import { VcrForecastComparison } from './VcrForecastComparison';
 import type { VcrSeries } from '@/lib/vcrClient';
 import { VcrTrajectoryChart, VcrSeriesLegend } from './VcrCharts';
 import { useVcrLoad, VcrTabError } from './vcrTabKit';
@@ -71,7 +72,10 @@ export function VcrLongitudinalPanel({ studyId, canRun }: { studyId: string; can
       const body = JSON.parse(await file.text());
       const result = trial ? await importVcrBenchmark(studyId, body) : await importVcrPrediction(studyId, { ...body, historyId: history.id });
       if (trial) { setBenchmarkId(result.id); setMessage(`已导入 ${number(result.summary.comparisons)} 条试验预测，其中 ${number(result.summary.matched)} 条已对应到证据。可在研究对话中要求运行基准验证。`); }
-      else { setSelectedId(result.id); setMessage(`已导入 ${number(result.summary.accepted)} 条预测，${number(result.summary.invalidRows)} 条需补充或更正。`); }
+      else if (result.kind === 'prediction_set') {
+        setSelectedId(result.summary.components?.[0]?.id ?? '');
+        setMessage(`已导入 ${number(result.summary.acceptedComponents)} 个终点的 ${number(result.summary.accepted)} 条预测，${number(result.summary.invalidComponents)} 个终点需更正；可用部分已保留。`);
+      } else { setSelectedId(result.id); setMessage(`已导入 ${number(result.summary.accepted)} 条预测，${number(result.summary.invalidRows)} 条需补充或更正。`); }
       setPages({ studyId, records: [...records, result] }); reload();
     } catch (cause) {
       setError(true); setMessage(webErrorMessage(cause, { fallback: '文件未能导入，请检查预测模板后重试。' }));
@@ -84,6 +88,7 @@ export function VcrLongitudinalPanel({ studyId, canRun }: { studyId: string; can
         <Button variant="ghost" size="sm" disabled={busy} onClick={refresh}>刷新结果</Button>
         <Button variant="ghost" size="sm" onClick={() => download('longitudinal-events.csv', [data.templates.events.columns.join(','), data.templates.events.example.join(',')].join('\n'), 'text/csv')}>下载事件模板</Button>
         <Button variant="ghost" size="sm" onClick={() => download('prediction-template.json', JSON.stringify({ ...data.templates.prediction, ...(history ? { historyId: history.id, origin: history.summary.origin } : {}) }, null, 2), 'application/json')}>下载预测模板</Button>
+        {data.templates.predictionSet && <Button variant="ghost" size="sm" onClick={() => download('prediction-set-template.json', JSON.stringify({ ...data.templates.predictionSet, ...(history ? { historyId: history.id, origin: history.summary.origin } : {}) }, null, 2), 'application/json')}>下载多终点模板</Button>}
         {canRun && <Button size="sm" disabled={!history || busy} loading={busy} onClick={() => input.current?.click()}>导入预测文件</Button>}
         <input ref={input} type="file" accept=".json,application/json" className="sr-only" aria-label="选择预测结果文件" onChange={event => { void upload(event.target.files?.[0]); }} />
       </div>
@@ -94,11 +99,12 @@ export function VcrLongitudinalPanel({ studyId, canRun }: { studyId: string; can
         {histories.map(r => <option key={r.id} value={r.id}>{date(r.summary.origin)} · {number(r.summary.subjects)} 人 · {number(r.summary.events)} 条记录</option>)}
       </Select>
       <p className="text-caption text-text-2">{number(history.summary.repeatedSubjects)} 人有重复观测，历史跨度中位数 {number(history.summary.medianHistoryDays)} 天。{history.summary.dataClass === 'synthetic' && '这批是模拟数据，仅用于检验流程。'}</p>
+      {!!history.summary.subjectsWithoutObservations && <p className="text-caption text-text-2">{number(history.summary.subjectsWithoutObservations)} 人在当前输入选择下没有观测，仍保留在研究人群和验证分母中。</p>}
     </>}
     {message && <p role={error ? 'alert' : 'status'} className={error ? 'text-caption text-error' : 'text-caption text-text-2'}>{message}</p>}
     {selected && <>
       <Select label="预测版本" value={selected.id} onChange={event => setSelectedId(event.target.value)}>
-        {historyPredictions.map(r => <option key={r.id} value={r.id}>{date(r.summary.origin)} · {r.summary.model?.name ?? '外部模型'} · {r.summary.model?.version ?? '版本未提供'}</option>)}
+        {historyPredictions.map(r => <option key={r.id} value={r.id}>{r.summary.endpoint?.code} · {date(r.summary.origin)} · {r.summary.model?.name ?? '外部模型'} · {r.summary.model?.version ?? '版本未提供'}</option>)}
       </Select>
       <div className="flex flex-wrap items-center gap-2 text-caption text-text-2">
         <Tag>{selected.summary.originKind === 'cloud_api' ? '云端模型预测' : '外部导入预测'}</Tag>
@@ -118,6 +124,7 @@ export function VcrLongitudinalPanel({ studyId, canRun }: { studyId: string; can
       {records.filter(r => r.kind === 'prediction_interruption' && r.summary.predictionId === selected.id).map(r => <p key={r.id} className="text-caption text-text-2">{forecastIssue(r.summary.code ?? '')}；已完成部分保留。</p>)}
       {evaluations.map(record => <VcrForecastEvaluation key={record.id} record={record} />)}
       {!evaluations.length && <p className="text-caption text-text-3">接入后续观测后，可在对话中要求比较预测与实际结果。</p>}
+      <VcrForecastComparison key={selected.id} studyId={studyId} selected={selected} records={records} canRun={canRun} onComplete={refresh} />
     </>}
     <Disclosure summary="试验效果基准验证">
       <div className="flex flex-col gap-3">

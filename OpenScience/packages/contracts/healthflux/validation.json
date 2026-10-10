@@ -404,7 +404,7 @@
     "Model and parameter uncertainty stay unestimated unless supplied with an appropriate external distribution.",
     "Full hosted deployment and prospective clinical performance are not claimed."
   ],
-  "latestAcceptance": "reviewClosure",
+  "latestAcceptance": "functionalReview",
   "reviewClosure": {
     "recordedAt": "2026-10-10T13:32:14.474490+00:00",
     "reviewedCommit": "4a053f41a",
@@ -920,6 +920,304 @@
       "native-6/observations.json": "721b3e348dfcd4f4c37bd349ae5126d4b2d9bf76391d660c9e17b0f2b38c815e",
       "native-6/real-engine-results.json": "1f72731ed466d4e43cb10063bf522e3e0431fcc6bd061186592bc690a113ff8d",
       "native-6/receipts.json": "c45232c9d62ca91c5b2aa0319dd1cb59e857e94ce802b97b1b340cec5f86639d"
+    }
+  },
+  "functionalReview": {
+    "recordedAt": "2026-10-10T14:29:53.752386+00:00",
+    "reviewedCommit": "b948c0fec",
+    "scope": "Full conversation and supplied HealthFlux v2 functional review; cloud-only OpenMed adoption. Six new functional gaps closed with no new whole-study quality gate or human approval step. No merge or deployment.",
+    "implementation": "packages/contracts/healthflux/implementation.json#/functionalReview",
+    "findings": {
+      "completed": [
+        "HF-F01",
+        "HF-F02",
+        "HF-F03",
+        "HF-F04",
+        "HF-F05",
+        "HF-F06"
+      ],
+      "remainingSelectedScopeCodeFindings": [],
+      "externalScope": "Existing licensed-provider, partner-feed and independent-data prerequisites are not counted as implementations."
+    },
+    "checks": [
+      {
+        "name": "final domain regression",
+        "passed": 871,
+        "failed": 0,
+        "skipped": 0,
+        "log": "vcr-functional-domain-final-all.log"
+      },
+      {
+        "name": "final VCR server regression with isolated PostgreSQL and real R",
+        "passed": 1031,
+        "failed": 0,
+        "skipped": 1,
+        "log": "vcr-functional-server-final.log",
+        "note": "The unchanged real Docker revocation-fence test requires OPEN_SCIENCE_TEST_VCR_DOCKER_CONTEXT. Earlier ephemeral-listener test interference was investigated and fixed in the test fixture; original logs are preserved."
+      },
+      {
+        "name": "VCR web regression",
+        "passed": 275,
+        "failed": 0,
+        "files": 19,
+        "log": "vcr-functional-web-all.log"
+      },
+      {
+        "name": "final longitudinal UI delta",
+        "passed": 10,
+        "failed": 0,
+        "log": "vcr-functional-ui-final.log"
+      },
+      {
+        "name": "final PostgreSQL integration and cloud provider projection",
+        "passed": 21,
+        "failed": 0,
+        "skipped": 0,
+        "log": "vcr-functional-integration-final.log"
+      },
+      {
+        "name": "final VCR MCP regression",
+        "passed": 40,
+        "failed": 0,
+        "log": "vcr-functional-mcp-final.log"
+      },
+      {
+        "name": "capability and skill contracts",
+        "passed": 66,
+        "failed": 0,
+        "log": "vcr-functional-contracts-final.log"
+      },
+      {
+        "name": "lint and domain/server/web types",
+        "status": "passed",
+        "logs": [
+          "vcr-functional-lint-final.log",
+          "vcr-functional-server-types.log",
+          "vcr-functional-domain-types.log",
+          "vcr-functional-web-types.log"
+        ],
+        "note": "Whole-repository lint retains the inherited LoginPage autofocus warning; no lint errors."
+      },
+      {
+        "name": "production web build",
+        "status": "passed",
+        "log": "vcr-functional-build-final.log",
+        "note": "Existing chunk-size advice remains."
+      },
+      {
+        "name": "capability manifests, skill package generation and vocabulary",
+        "status": "passed",
+        "logs": [
+          "vcr-functional-capabilities.log",
+          "vcr-functional-packages-final.log",
+          "vcr-functional-vocabulary.log"
+        ]
+      },
+      {
+        "name": "source credential audit",
+        "status": "passed",
+        "log": "vcr-functional-secrets-final.log"
+      },
+      {
+        "name": "full deployed capability release audit",
+        "status": "not_run",
+        "note": "The previous review records a stale live probe (40 tools versus 54, no sourceIdentity). This branch was not deployed and that historical receipt was not rewritten."
+      }
+    ],
+    "native": {
+      "acceptedAttempt": 2,
+      "executable": "0.1.7-rc.2",
+      "observedModels": [
+        "deepseek-flash"
+      ],
+      "thinking": "enabled",
+      "reasoningEffort": "high",
+      "dataClass": "authored_synthetic",
+      "subjects": 200,
+      "sites": 2,
+      "turns": 12,
+      "providerRequests": 45,
+      "canaryLeaks": 0,
+      "actualCostCny": 0.36509444,
+      "checks": {
+        "historyCreated": true,
+        "evaluationCreated": true,
+        "designCompleted": true,
+        "prognosticCompleted": true,
+        "fallbackComparisonCompleted": true,
+        "zeroEventBrierVisible": true,
+        "partialPeersKept": true,
+        "benchmarkCompleted": true,
+        "ablatedCohortKept": true,
+        "partialEndpointPanelKept": true,
+        "sensitivityCompared": true,
+        "updatedSameCalendarTarget": true,
+        "siteValidationCompleted": true,
+        "reportContainsCoverage": true,
+        "reportContainsBaselines": true,
+        "allTurnsExited": true
+      },
+      "reportWriteIssues": 0,
+      "reportSubmissions": 1,
+      "sourceFilesMatchFinalImplementation": true,
+      "review": "manual-review.json",
+      "manifest": "native-2/manifest.json",
+      "receipt": "native-2/export-receipt.json",
+      "report": "native-2/model-analysis-report.md",
+      "limits": [
+        "Real DeepSeek/DSH control-plane/MCP and R workflow on synthetic data, not a full hosted rollout.",
+        "Forecast API transport is tested with an authored service fixture; no dedicated licensed model endpoint was used.",
+        "Only the requested results prose was authored; other narrative sections remain visibly unauthored.",
+        "Conversational output remains verbose and exposes engineering names. This pilot validates function, not clinical or editorial quality."
+      ]
+    },
+    "iterations": [
+      {
+        "attempt": 1,
+        "checksPassed": 16,
+        "turns": 12,
+        "requests": 46,
+        "actualCostCny": 0.45827068,
+        "result": "Completed; exposed ambiguous no-observation readiness and guessed report paths. The report repaired locally and retained output. Site validation used an unknown-site fixture."
+      },
+      {
+        "attempt": 2,
+        "checksPassed": 16,
+        "turns": 12,
+        "requests": 45,
+        "actualCostCny": 0.36509444,
+        "result": "Final source; no-observation external prediction path remains available, protected cohort context retains two sites, and report references bind on the first submission."
+      }
+    ],
+    "visual": {
+      "kind": "fixture preview of actual React components",
+      "desktopWidth": 1280,
+      "mobileWidth": 390,
+      "themes": [
+        "light",
+        "dark"
+      ],
+      "horizontalPageOverflow": false,
+      "captures": [
+        "vcr-functional-ui-desktop.png",
+        "vcr-functional-ui-mobile.png",
+        "vcr-functional-ui-dark.png"
+      ]
+    },
+    "paper": {
+      "version": "supplied v2",
+      "sha256": "8b6e2b21139c8ae99864bcf36fa6cb4a6ba815c1133c3e7ceb9165093b3f9c3b",
+      "candidateCard": "packages/contracts/healthflux/candidates.json",
+      "note": "Re-read full attached paper. Later v3 abstract was checked separately; inaccessible v3 full text is not treated as v2 evidence. Fig. 4b concordance selection is explicitly distinguished from heldout trial-family/exact-pair evaluations."
+    },
+    "externalPrerequisites": [
+      "Partner endpoint, credentials and incremental cursor contract for a live incremental data feed.",
+      "Actual dedicated forecast service, licensed access and provider-specific probe; generic protocol is implemented and tested.",
+      "Rights-cleared real longitudinal outcomes and independent trial benchmarks for clinical validation."
+    ],
+    "openMed": "packages/contracts/openmed/implementation.json#/functionalRecheck20261010",
+    "artifactDirectory": "/home/coder/workspace/EviMedScience/.evimed-local/acceptance/vcr-functional-review-20261010",
+    "artifactSha256": {
+      "manual-review.json": "1b00e7c19840ba12ebd6bfc76d7392e2efeec7a145e4b5bffe98844308d9613f",
+      "native-1/01-literature.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-1/01-literature.events.jsonl": "94d9f093cf17c77251133eea557a9a80bddd2262912870085e3959ed7b332c4d",
+      "native-1/02-freeze.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-1/02-freeze.events.jsonl": "6faec0086d58685612d390172dc3c975de401d4515a654470d2940b2e81dfd2f",
+      "native-1/03-evaluate.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-1/03-evaluate.events.jsonl": "bddf47baacffbc546ae423cedfc68b1a64525a29d86598a2d87ce06f8432ea93",
+      "native-1/04-read-results.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-1/04-read-results.events.jsonl": "1286a202e917ab56d05e996d2132d40c41204ff57fa6d4e3f3ffe29d205f0975",
+      "native-1/05-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-1/05-design.events.jsonl": "474740355c9a6eee32a7e2dd2a770173828a1f51c293ee52a80635c746a12f03",
+      "native-1/06-prognostic-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-1/06-prognostic-design.events.jsonl": "233f42e6efdb9e2a9ab35db6e2a8ec680a75b1b4716bb8f4cdc75ae9c10ff613",
+      "native-1/07-unavailable-provider.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-1/07-unavailable-provider.events.jsonl": "1c9d702696a96d931f877d5ce3204d7cf619ed74a37cfb7472c453cc692925e1",
+      "native-1/08-partial-and-zero.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-1/08-partial-and-zero.events.jsonl": "1a3e564fbfcdff744959df1902cadaa3cca838d287d5b6e6833a9f82719ed6bc",
+      "native-1/08a-modality-history.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-1/08a-modality-history.events.jsonl": "98d44cf0b4a562ab4bbd7a8dd151838ac4c0dbb131869c30737f3999ae183cb3",
+      "native-1/08b-functional-comparisons.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-1/08b-functional-comparisons.events.jsonl": "b4e044a84138d565a1f4b009cccdad37e3f6506aa7e0549b72f5354064528220",
+      "native-1/09-benchmark.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-1/09-benchmark.events.jsonl": "5e920d276a0b5c1e4d9bbd34ecd9ad7334e4c588ac07691eb96237bd5b9af370",
+      "native-1/10-export.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-1/10-export.events.jsonl": "3fc4390f6afa4c5bd490ac8fa636dadc85e3a0eaa2fbec63839baffc89483e8f",
+      "native-1/export-receipt.json": "186edc71723b8b661d1b47e635565ff6d4095aac1fa618c386337c9cf4339f8e",
+      "native-1/manifest.json": "f5df75840ed3d62dee9e88a9a02b912e247e12fc8fc563dbb666bcb3c399a1b1",
+      "native-1/model-analysis-report.md": "180265f2b2b3d07677d7a220f0d6bea59f954fe78f6ee26ca30237b26b3ccd72",
+      "native-1/observations.json": "cc9b9b2d81380379f5d410117d480ab37ad94ebae90f2e1d532015266c91511c",
+      "native-1/real-engine-results.json": "d3c62f42e947b427e296355cbbe81c22f4bac64d0251b51980f1c8d0bead89b8",
+      "native-1/receipts.json": "0727bbabe990d86a99c292059f20cc6704c4a3b51d517e4de6355e5eab1f61e2",
+      "native-2/01-literature.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-2/01-literature.events.jsonl": "a4f0caaaf852e6672ba49fc04204ac474d92be5b1636694f8e34c009f95292a8",
+      "native-2/02-freeze.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-2/02-freeze.events.jsonl": "e5f7b3def2d4f65cc4c5459fa1617543874834efcae116619a5bcab9c6a0fba9",
+      "native-2/03-evaluate.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-2/03-evaluate.events.jsonl": "de4f55100bfb10ede9b8ddd462ca1127072e208eaf141c420f7b7b1feab6744f",
+      "native-2/04-read-results.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-2/04-read-results.events.jsonl": "a5a0cf0db171796c2732e821e48b2d6910221788f1cb31b2be3a72fd717bd24c",
+      "native-2/05-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-2/05-design.events.jsonl": "16f01ad2906a619a5368e934902fd5e93aac96785f1de118c7225f0b200a35ac",
+      "native-2/06-prognostic-design.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-2/06-prognostic-design.events.jsonl": "ad0eb332b355b66e483bc56df474799376a02c7488c5044600899f3e025afc02",
+      "native-2/07-unavailable-provider.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-2/07-unavailable-provider.events.jsonl": "84f8010525508a0f75dc4e5a6997a0fff843bd7afd340a18c89c67a6200dae97",
+      "native-2/08-partial-and-zero.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-2/08-partial-and-zero.events.jsonl": "7af9bec84b852448d1b5500256d532bd5f69f05cfd3d6d6851cfddd6e0b506d2",
+      "native-2/08a-modality-history.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-2/08a-modality-history.events.jsonl": "8605cce525d58bbbd6532e80e66d436e2346ff7557b888c45129f45ff60571e8",
+      "native-2/08b-functional-comparisons.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-2/08b-functional-comparisons.events.jsonl": "b60f03eb92501127024b35775d42e9090ef03935fed54f82f190fc4a9345a3f1",
+      "native-2/09-benchmark.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-2/09-benchmark.events.jsonl": "a8a4bc90acc942b96fd93bcd26975be15c315f209f5634cc646331bc86417d97",
+      "native-2/10-export.diagnostics.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "native-2/10-export.events.jsonl": "c54a42d432eb0d19dd862d8b3b3ccff33864a3165a2ab32feacf6e3fe69c9b8d",
+      "native-2/export-receipt.json": "734c150b1d5698f3cd9babc5fc33fee2f192fcd85ff63ea009170cf923279466",
+      "native-2/manifest.json": "7c90ccabe518f8c65de18d51c83a0782326149868e05845c68b38e42e36fe2e6",
+      "native-2/model-analysis-report.md": "ec2f738daee2a0ff98da9ad997ff25190358da72ec7d2c7cf7220ee1cc529420",
+      "native-2/observations.json": "0024a226bf1f19d1fe0c40a25f21a1046c0b400d990e4a39dee335d86a1af560",
+      "native-2/real-engine-results.json": "8a9e72b08778b359eab3592241decce3f20505d5066c4acb349c5f5abbbb0ad0",
+      "native-2/receipts.json": "3820bb6ac2f4d0663a995951de49c9c56938412c5a65ad7adf98b5193d52ca6f",
+      "vcr-functional-backup-diagnostic-auth.log": "0fad93f09a29c87c1e589d75527ffb07ca92cdba8f1180beda6d2c8d537615c8",
+      "vcr-functional-backup-diagnostic-full.log": "ddb37045573c0a5c53f4bc657d7236e3e094e3f9918247ec810e379b45e62dc4",
+      "vcr-functional-backup-diagnostic.log": "0e10846c507ecd27b0f7e8e77b2c0b2c48e68a8d7dd55eccd44595c96dab9abb",
+      "vcr-functional-backup-final.log": "0a0d6cab8ae2f292b441e1ae8d6f8adaa59d686a05b8f6d973efbcb4dcd88ddb",
+      "vcr-functional-backup-rerun.log": "7ca43ac53ccf117c5ce40d0a5726a4d0d6e2799191e59540dc0fd80c6e3da98b",
+      "vcr-functional-build-final.log": "e608a5cf0722e646d2e7eb3032cf480764b243542d20a2dd99f4dd9785ca7c15",
+      "vcr-functional-build.log": "db612fd386d88e7274b91f55d6427a7c4b7868efba3ba72ebc1492b48d62a479",
+      "vcr-functional-capabilities.log": "78f94cd7440f0280e71d85e72360d803c165454e552622ba4a028223602af1a6",
+      "vcr-functional-contracts-final.log": "13583c2bab27534be87f42110ac02fcd5a6736d4ced324bc587a126774f8d9e2",
+      "vcr-functional-contracts.log": "fdfa4176ba0b527a793d7d7d81acff1ca7934d75a8e1cc03f5c0936ab9a1988a",
+      "vcr-functional-domain-all.log": "db75c9f532766287642f92ef71412795500852be092da9fc266c9116e7d9526d",
+      "vcr-functional-domain-final-all.log": "d9fc085f253517788d5e79c307ca797f5b8e982fcd7dbd4b450c61f4d820bd7f",
+      "vcr-functional-domain-final.log": "46bdcb37a6f871c04b494ecae73f7f01611b335433c41a44c377b784aef05c36",
+      "vcr-functional-domain-types.log": "a291a4332971850e3fb8e78d2f7008ce10f89fd811b3b8aecde6942572c1d912",
+      "vcr-functional-integration-final.log": "d8a411a15503bee9c696d0c68f97d311c965066543500aecc4077395ae8f0826",
+      "vcr-functional-integration.log": "5e68f690e13a4933575f836744d87035411e7e8369b3d0cbfd6e9cc7436fffbe",
+      "vcr-functional-lint-final.log": "ef743beda938acf27d221bf03630222acc7ee0e09268ed74b5cb35b76595bdfc",
+      "vcr-functional-lint.log": "08bf225176c751328a065277157e9f1ac2c2f260245da9a094b1ea13b8ae0afb",
+      "vcr-functional-mcp-final.log": "48352543227cd41e51e927025dd98dff9d268113dc4aacac3908276cfba241a7",
+      "vcr-functional-mcp.log": "e32d78285db9933c9976375009ea0e8f47145d242c5be29286171e9b5700d8c6",
+      "vcr-functional-native-1.log": "eb340de0e6034a235d5944c73b3638527a19315fea290df3dd265e7868e52d9c",
+      "vcr-functional-native-2.log": "0cb4f7480e2b95a9bcc2bf2eda37c3981796252c7cf5be5a8cadc292a7ce27c8",
+      "vcr-functional-packages-final.log": "4a43cc44e6a51f8c5695607410f3adc9634bb7c7b5aaff3515991667db273907",
+      "vcr-functional-packages.log": "4a43cc44e6a51f8c5695607410f3adc9634bb7c7b5aaff3515991667db273907",
+      "vcr-functional-regenerate.log": "6aee20a74e8543b4dda8414298f0a14c5e975a9376862d35529b091c8b12f528",
+      "vcr-functional-secrets-final.log": "e5feb70c7b06af8d9776628cd8e86d260a3b46760f7725ef307fdd2b8e571c8c",
+      "vcr-functional-server-all.log": "16a5030ee604c8b99a0ec69f5379c65db8b456d4171115374f6b9f5e8b45464d",
+      "vcr-functional-server-final.log": "688c5a43e637156eb01100089dfd714161c2df42ce1dcca4953803559fcbc1d0",
+      "vcr-functional-server-types.log": "8c02525f7e67ea8bd2b7832be6ed0c209f18442e986301ff08cc151cf61bc73a",
+      "vcr-functional-skills.log": "6aee20a74e8543b4dda8414298f0a14c5e975a9376862d35529b091c8b12f528",
+      "vcr-functional-ui-dark.png": "4f83c24d79fcb31732912addf5f3ef174707b650ad03c1aaec5c382e0c7dde7b",
+      "vcr-functional-ui-desktop.png": "4ca75c1c4b80e21fb34e894bd1c96a362467a66cc00f55e4c5bfb796cf90af45",
+      "vcr-functional-ui-final.log": "e24a0d9197de5dbfb81b0baf169856fba309eef21eebc2e097c17d56d6553c36",
+      "vcr-functional-ui-mobile.png": "204a7bc829559f1e25dd4fc8e9878ae567e894dacfdb71d8de2f790a69e65d5e",
+      "vcr-functional-ui-test.log": "a34f8228b2f007b8572b5a974e9ddfc69b0a8c88a1f611796ce29e701501079d",
+      "vcr-functional-unit.log": "2d3376feea47a29d5b06582973a8612b247c144a3642f775e0481e6f0d6ec484",
+      "vcr-functional-vocabulary.log": "77efe399fd437fec2c83224cd089af22fe60e9e262b8aa5370785229ca3b6538",
+      "vcr-functional-web-all.log": "ac2e3e2b6296d4feeeb1cb85bdbdcf025f0e00672f073086a31320dcc9586595",
+      "vcr-functional-web-types.log": "63185193464285693d0d4d1372ce57c8784bf3c101ff5ea3d9eabbef65d29ea6"
     }
   }
 }

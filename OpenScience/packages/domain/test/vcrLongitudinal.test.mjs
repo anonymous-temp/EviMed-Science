@@ -158,3 +158,88 @@ test('an increasing survival horizon is quarantined without discarding other sub
   assert.deepEqual(checked.rejected,[{subjectKey:'a',horizonDays:60,codes:['survival_probability_increases']}])
   assert.equal(checked.issues[0].codes[0],'survival_probability_increases')
 })
+
+test('incident risk excludes confirmed prevalent disease without excluding negation or family history',()=>{
+  const subjects=['prevalent','late_prevalent','negated','family','incident','lost']
+  const history={asOf:origin,events:subjects.map(k=>event(k,1)),dataClass:'patient'}
+  history.events.push(event('prevalent',1,origin,{code:'disease'}),event('negated',1,origin,{code:'disease',assertion:'negated'}),
+    event('family',1,origin,{code:'disease',experiencer:'family'}))
+  const outcomes={events:[...subjects.filter(k=>k!=='lost').map(k=>event(k,1,'2026-02-10T00:00:00.000Z',{code:'followup'})),
+    event('late_prevalent',1,'2025-12-01T00:00:00.000Z',{code:'disease',availableAt:'2026-02-01T00:00:00.000Z'}),
+    event('incident',1,'2026-01-10T00:00:00.000Z',{code:'disease'})]}
+  const pred=prediction(subjects.map(subjectKey=>({subjectKey,horizonDays:30,point:.5})),{endpoint:{code:'disease',type:'risk',unit:'probability'}})
+  const options={eventCodes:['disease'],followupCode:'followup',bootstrap:0}
+  const [group]=evaluateForecast(pred,history,outcomes,options).groups
+  assert.deepEqual([group.candidates,group.prevalentExcluded,group.requested,group.evaluated,group.events,group.missingOutcomes],[6,2,4,3,1,1])
+  assert.equal(group.metrics.brier.value,.25)
+  assert.equal(evaluateForecast(pred,history,outcomes,{...options,riskSet:'all'}).groups[0].requested,6)
+})
+
+test('ablated subjects remain in the forecast and validation denominator with no observations',()=>{
+  const history={asOf:origin,subjects:['a','b','c'],events:[event('a',6)],dataClass:'synthetic'}
+  const pred=prediction([{subjectKey:'a',horizonDays:30,point:7},{subjectKey:'b',horizonDays:30,point:8}])
+  const result=evaluateForecast(pred,history,{dataClass:'synthetic',events:[event('a',7,'2026-01-31T00:00:00.000Z'),event('b',8,'2026-01-31T00:00:00.000Z')]},{bootstrap:0})
+  assert.equal(result.groups[0].requested,3);assert.equal(result.groups[0].evaluated,2);assert.equal(result.groups[0].missingForecasts,1)
+  assert.equal(result.groups[0].baselines.persistence.subjects,1)
+  assert.equal(result.diagnostics.subjectsWithoutObservations,2)
+})
+
+test('input ablation preserves prevalent exclusions and site membership without restoring model observations',()=>{
+  const history={asOf:origin,subjects:['a','b'],events:[],dataClass:'patient',evaluationEvents:[
+    event('a',1,origin,{code:'disease',site:'A'}),event('b',1,origin,{code:'baseline',site:'B'})]}
+  const pred=prediction(['a','b'].map(subjectKey=>({subjectKey,horizonDays:30,point:.2})),{endpoint:{code:'disease',type:'risk',unit:'probability'}})
+  const outcomes={events:['a','b'].map(subjectKey=>event(subjectKey,1,'2026-02-10T00:00:00.000Z',{code:'followup'}))}
+  const result=evaluateForecast(pred,history,outcomes,{eventCodes:['disease'],followupCode:'followup',groupBy:'site',bootstrap:0})
+  assert.equal(result.groups[0].prevalentExcluded,1)
+  assert.equal(result.groups[0].requested,1)
+  assert.deepEqual(result.subgroups.map((/** @type {any} */ s)=>[s.site,s.groups[0].requested]),[['A',0],['B',1]])
+  assert.equal(result.diagnostics.subjectsWithoutObservations,2)
+})
+
+test('modality and event-kind mappings survive mixed input tables and duplicate resolution',()=>{
+  const mapped=eventsFromMappedTable({header:['id','at','code','kind','modality'],rows:[['a','2026-01-01','x','measurement','proteomics'],['a','2026-01-01','x','measurement','laboratory']]},
+    {subjectColumn:'id',occurredColumn:'at',availableColumn:'at',codeColumn:'code',kindColumn:'kind',modalityColumn:'modality'},
+    {inputId:'one',inputHash:'x',valueSource:'observed',ingestedAt:origin})
+  assert.equal(mapped.events[0].modality,'proteomics')
+  assert.equal(mapped.events[0].kind,'measurement')
+  assert.equal(replayClinicalEvents(mapped.events,origin).events.length,2)
+})
+
+test('input sensitivity and model comparisons retain pairing coverage, common horizons and changed factors',()=>{
+  const first=prediction([{subjectKey:'a',horizonDays:30,point:5},{subjectKey:'b',horizonDays:30,point:7},{subjectKey:'a',horizonDays:60,point:9}],
+    {horizonsDays:[30,60],model:{name:'frozen',version:'1'}})
+  const second=prediction([{subjectKey:'a',horizonDays:30,point:6},{subjectKey:'c',horizonDays:30,point:8}],
+    {historyId:'ablated',endpoint:{unit:'%',code:'HbA1c',type:'continuous'},model:{name:'frozen',version:'1'}})
+  const result=compareForecasts(first,second,{mode:'input_sensitivity',bootstrap:0})
+  assert.equal(result.available,true)
+  assert.deepEqual(result.changedFactors,['history'])
+  assert.deepEqual([result.groups[0].subjects,result.groups[0].firstOnly,result.groups[0].secondOnly,result.groups[0].meanDifference],[1,1,1,-1])
+  assert.deepEqual(result.unmatchedHorizons,{first:1,second:0})
+  const mixed=compareForecasts(first,{...second,model:{name:'changed',version:'2'}},{mode:'model_version',bootstrap:0})
+  assert.equal(mixed.attribution,'multiple_factors_changed')
+  assert.equal(compareForecasts(first,{...second,endpoint:{...endpoint,unit:'mmol/mol'}},{mode:'input_sensitivity'}).available,false)
+})
+
+test('updated forecasts align calendar targets, never equal relative horizons at different origins',()=>{
+  const first=prediction([{subjectKey:'a',horizonDays:30,point:7},{subjectKey:'a',horizonDays:60,point:8}],{horizonsDays:[30,60]})
+  const second=prediction([{subjectKey:'a',horizonDays:30,point:9}],{origin:'2026-01-31T00:00:00.000Z',historyId:'new'})
+  const result=compareForecasts(first,second,{mode:'update'})
+  assert.equal(result.groups.length,1)
+  assert.equal(result.groups[0].horizonDays,60)
+  assert.equal(result.groups[0].secondHorizonDays,30)
+  assert.equal(result.groups[0].targetAt,'2026-03-02T00:00:00.000Z')
+  assert.equal(result.groups[0].meanDifference,-1)
+  assert.equal(compareForecasts({...first,horizonsDays:[30]},second,{mode:'update'}).code,'shared_target_missing')
+})
+
+test('site validation uses frozen input membership and carries missing sites instead of outcome-defined groups',()=>{
+  const history={asOf:origin,subjects:['a','b','c'],dataClass:'synthetic',events:[event('a',6,origin,{site:'A'}),event('b',6,origin,{site:'B'})]}
+  const pred=prediction(['a','b','c'].map(subjectKey=>({subjectKey,horizonDays:30,point:7})))
+  const outcomes={dataClass:'synthetic',events:[event('a',8,'2026-01-31T00:00:00.000Z',{site:'WRONG'}),event('b',9,'2026-01-31T00:00:00.000Z')]}
+  const result=evaluateForecast(pred,history,outcomes,{groupBy:'site',bootstrap:0})
+  assert.deepEqual(result.subgroups.map((/** @type {any} */ s)=>s.site),['A','B','site_unknown'])
+  assert.equal(result.subgroups[0].groups[0].metrics.mae.value,1)
+  assert.equal(result.subgroups[1].groups[0].metrics.mae.value,2)
+  assert.equal(result.subgroups[2].groups[0].missingOutcomes,1)
+  assert.equal(result.independence.providerTraining,'unknown')
+})

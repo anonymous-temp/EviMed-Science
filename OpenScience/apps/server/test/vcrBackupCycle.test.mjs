@@ -131,7 +131,10 @@ for (const redirected of [false, true]) test(`container-local operator requests 
   const { config, dependencies } = await fixture(t);
   const requests = []; let requestId;
   const server = createServer(async (req, res) => {
-    requests.push({ path: req.url, authorization: req.headers.authorization });
+    // Workspace port discovery may probe this ephemeral listener. An anonymous
+    // root request is not an operator call; authenticated paths stay asserted.
+    if (req.url === '/' && !req.headers.authorization) { res.writeHead(404); res.end(); return; }
+    requests.push({ path: req.url, method: req.method, authorization: req.headers.authorization });
     if (redirected) { res.writeHead(307, { location: 'http://127.0.0.1:1/never-follow' }); res.end(); return; }
     let body = ''; for await (const chunk of req) body += chunk;
     const parsed = body ? JSON.parse(body) : null;
@@ -164,9 +167,9 @@ for (const redirected of [false, true]) test(`container-local operator requests 
   t.after(() => { if (oldProxy === undefined) delete process.env.HTTP_PROXY; else process.env.HTTP_PROXY = oldProxy; });
   if (redirected) {
     await assert.rejects(runVcrBackupCycle(config, dependencies));
-    assert.ok(requests.length <= 2);
+    assert.ok(requests.length >= 1 && requests.length <= 2, JSON.stringify(requests.map(row => ({path:row.path,method:row.method,authenticated:Boolean(row.authorization)}))));
   } else assert.equal((await runVcrBackupCycle(config, dependencies)).status, 'healthy');
-  assert.ok(requests.every(row => row.path === '/api/ops/maintenance'));
+  assert.ok(requests.every(row => row.path === '/api/ops/maintenance'), JSON.stringify(requests.map(row => ({path:row.path,method:row.method,authenticated:Boolean(row.authorization)}))));
   assert.ok(requests.every(row => row.authorization === 'Bearer fixture-token-for-scoped-operator-api'));
 });
 

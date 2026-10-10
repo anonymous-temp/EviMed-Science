@@ -260,6 +260,48 @@ test('trial benchmark imports through DSH and only aligns the preserved arm, con
   assert.equal(result.diagnostics.longitudinal.summary.excluded,3);
 });
 
+test('multimodal ablation, partial multi-endpoint import and sensitivity comparisons run through the existing queue',options,async()=>{
+  const full=await vcr.longitudinal.freezeHistory(target,{snapshotId:snapshot.id,asOf:'2026-01-01',mappings:mappings.map(m=>({...m,modality:'laboratory'}))},'owner');
+  const ablated=await vcr.longitudinal.freezeHistory(target,{snapshotId:snapshot.id,asOf:'2026-01-01',mappings:mappings.map(m=>({...m,modality:'laboratory'})),perturbation:{omitModalities:['laboratory']}},'owner');
+  assert.equal(ablated.summary.subjects,40);assert.equal(ablated.summary.events,0);assert.equal(ablated.summary.subjectsWithoutObservations,40);
+  assert.equal(ablated.summary.tasks.find(t=>t.task==='history_forecast').available,true,'empty observations do not disable an external missing-input prediction path');
+  assert.equal(full.summary.modalities[0].modality,'laboratory');
+  const protectedHistory=await vcr.longitudinal.artifacts.read(target,ablated.id,'owner');
+  assert.equal(protectedHistory.content.evaluationEvents.length,full.summary.events);
+  assert.equal(protectedHistory.content.events.length,0);
+  const input={historyId:ablated.id,origin:ablated.summary.origin,model:{name:'external-panel',version:'1'},subjectKeyMode:'source_identifier',horizonsDays:[30],
+    predictions:[{endpoint:{code:'HbA1c',type:'continuous',unit:'%'},rows:Array.from({length:40},(_,i)=>({subjectKey:`CANARY-${i}`,horizonDays:30,point:6+i/20+.3}))},
+      {endpoint:{code:'stroke',type:'risk',unit:'probability'},rows:Array.from({length:40},(_,i)=>({subjectKey:`CANARY-${i}`,horizonDays:30,point:.2}))},null,
+      {endpoint:{code:'broken'},rows:[]}]};
+  const set=await vcr.longitudinal.importPrediction(target,input,'owner');
+  assert.equal(set.kind,'prediction_set');assert.equal(set.summary.acceptedComponents,2);assert.equal(set.summary.invalidComponents,2);
+  assert.equal(set.summary.accepted,80);
+  assert.equal((await vcr.longitudinal.importPrediction(target,input,'owner')).id,set.id,'identical external input reuses immutable components');
+  const selected=set.summary.components[0].id;
+  const {predictions,...header}=input;
+  const first=await vcr.longitudinal.importPrediction(target,{...header,...predictions[0],historyId:full.id,rows:predictions[0].rows.map(r=>({...r,point:r.point-.1}))},'owner');
+  const compared=await vcr.longitudinal.prepare(target,{kind:'compare_forecasts',scenario:{predictionId:selected,otherPredictionId:first.id,mode:'input_sensitivity',bootstrap:0}},'owner');
+  const evaluated=await vcr.longitudinal.prepare(target,{kind:'evaluate_forecast',scenario:{predictionId:selected,outcomeHistoryId:outcomes.id,groupBy:'site',bootstrap:0}},'owner');
+  for(let round=0;round<3;round++)for(const job of await vcr.jobs.claim())await vcr.jobs.advance(job);
+  const result=await vcr.jobs.resultOf(target.id,compared.job.id);
+  assert.equal(result.diagnostics.longitudinal.summary.mode,'input_sensitivity');
+  assert.ok(Math.abs(result.diagnostics.longitudinal.summary.groups[0].meanDifference-.1)<1e-12);
+  assert.equal(result.diagnostics.longitudinal.summary.groups[0].subjects,40);
+  assert.equal((await vcr.jobs.resultOf(target.id,evaluated.job.id)).diagnostics.longitudinal.summary.groups[0].requested,40);
+  const view=await vcr.service.runtimeRead(target,'longitudinal',{id:set.id});
+  assert.equal(view.records[0].kind,'prediction_set');
+  assert.ok(view.related.some(r=>r.id===selected));assert.ok(view.related.some(r=>r.kind==='evaluation'));
+  assert.ok(!JSON.stringify(view).includes('CANARY-'));
+  const reverse=await vcr.service.runtimeRead(target,'longitudinal',{id:first.id});
+  assert.ok(reverse.related.some(r=>r.kind==='comparison'),'the second prediction also exposes its comparison');
+  const report=await vcr.service.reportModel(target,{kind:'model_analysis_report'});
+  const number=renderVcrNumbers(`{{n:${view.related.find(r=>r.id===selected).numberPath}.accepted|int}}`,report);
+  assert.equal(number.text,'40');
+  const blocks=modelReportDocumentSections(report,[]).flatMap(section=>section.blocks);
+  assert.ok(blocks.some(b=>b.type==='facts' && b.title==='多终点预测导入'));
+  assert.ok(blocks.some(b=>b.type==='table' && b.title?.includes('分中心验证')));
+});
+
 test('over one hundred versions remain pageable with their input history; batch checkpoints stay addressable',options,async()=>{
   for(let i=0;i<105;i++)await vcr.longitudinal.artifacts.save(target,'prediction',{fixture:i},{historyId:history.id,model:{name:'many',version:String(i)},dataClass:'synthetic'},{parentId:history.id});
   const page=await vcr.service.runtimeRead(target,'longitudinal',{limit:20});

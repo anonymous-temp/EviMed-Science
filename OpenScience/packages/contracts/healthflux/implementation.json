@@ -554,5 +554,136 @@
       "Independent rights-cleared longitudinal outcomes, RCT benchmark and Chinese extraction references."
     ],
     "acceptance": "packages/contracts/healthflux/validation.json#reviewClosure"
+  },
+  "functionalReview": {
+    "reviewedAt": "2026-10-10",
+    "baseCommit": "b948c0fec",
+    "reference": {
+      "version": "v2",
+      "filename": "2026.09.19.26363460v2.full.pdf",
+      "sha256": "8b6e2b21139c8ae99864bcf36fa6cb4a6ba815c1133c3e7ceb9165093b3f9c3b"
+    },
+    "scope": "Revisited the full conversation, supplied paper and OpenMed adoption decisions; cloud APIs and user uploads, DeepSeek + DSH only. No production deployment.",
+    "closedGaps": [
+      {
+        "id": "HF-F01",
+        "title": "Incident event risk sets",
+        "status": "implemented",
+        "paper": "Methods 464-469, 594-607",
+        "result": "Exclude confirmed prevalent patient events from incident validation and the calibration baseline; report original and eligible denominators separately. Explicit all-subject/recurrent-event estimands remain selectable.",
+        "evidence": [
+          "packages/domain/src/vcrForecastEvaluation.mjs",
+          "packages/domain/test/vcrLongitudinal.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-F02",
+        "title": "Multimodal missing-input sensitivity without cohort attrition",
+        "status": "implemented",
+        "paper": "Methods 370-397, 735-752",
+        "result": "Preserve mapped modality and row-level kind, omit modalities explicitly, retain subjects without observations in API batches, imports, validation denominators and lineage. Protected unablated evaluation context retains site membership and prevalent exclusions without sending omitted inputs to the provider.",
+        "evidence": [
+          "packages/domain/src/vcrLongitudinal.mjs",
+          "apps/server/src/vcrLongitudinal.mjs",
+          "apps/server/src/vcrForecastProvider.mjs"
+        ]
+      },
+      {
+        "id": "HF-F03",
+        "title": "Usable sensitivity, model-version and observation-update comparisons",
+        "status": "implemented",
+        "paper": "Main text 39-45, Methods 457-462, 772-784",
+        "result": "Compare paired subjects at common calendar targets across histories, model versions and landmark updates; record unmatched coverage, changed factors and conditional-risk window differences. UI queues the comparison and retrieves completion.",
+        "evidence": [
+          "packages/domain/src/vcrForecastEvaluation.mjs",
+          "apps/web/src/components/vcr/VcrForecastComparison.tsx"
+        ]
+      },
+      {
+        "id": "HF-F04",
+        "title": "Multi-endpoint upload with partial retention",
+        "status": "implemented",
+        "paper": "Results 55-71, 147-175",
+        "result": "One external file can carry up to 32 independently addressable endpoints. Invalid components do not erase valid peers. Templates, patient-tab endpoint selection, evaluation and design use the same existing routes. This is explicitly marginal output, not a jointly sampled generative path.",
+        "evidence": [
+          "apps/server/src/vcrLongitudinal.mjs",
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.tsx"
+        ]
+      },
+      {
+        "id": "HF-F05",
+        "title": "Site-specific validation and explicit independence meaning",
+        "status": "implemented",
+        "paper": "Methods 349-369, 562-580",
+        "result": "Optional validation by recorded input site uses the same frozen split and denominator logic; unknown/multiple sites persist. Local calibration partitioning is explicitly distinct from unknown provider training overlap.",
+        "evidence": [
+          "packages/domain/src/vcrForecastEvaluation.mjs",
+          "apps/web/src/components/vcr/VcrForecastEvaluation.tsx"
+        ]
+      },
+      {
+        "id": "HF-F06",
+        "title": "Stable report references and complete presentation",
+        "status": "implemented",
+        "result": "Every saved record exposes a stable numberPath; report_model has an id-indexed summary map. Multi-endpoint import, incident exclusions, site evaluations and paired version comparisons render automatically with existing suppression semantics and export snapshots.",
+        "evidence": [
+          "apps/server/src/vcrLongitudinalStore.mjs",
+          "apps/server/src/vcrLongitudinalDocuments.mjs",
+          "runtime/mcp/evimed-research/vcr_platform.py"
+        ]
+      }
+    ],
+    "coverage": [
+      {
+        "area": "Patient Journey, extraction, corrections, medication states and matching",
+        "disposition": "existing OpenMed adoption; longitudinal modality and missing-input extensions completed here",
+        "reference": "packages/contracts/openmed/implementation.json"
+      },
+      {
+        "area": "User data upload, FHIR/OMOP/ADaM and iterative histories",
+        "disposition": "implemented; a live partner feed still needs the actual endpoint/cursor/credentials and dataset"
+      },
+      {
+        "area": "Irregular observations, event/availability clocks and leakage replay",
+        "disposition": "implemented; early prefixes remain immutable and perturbations now have a comparison path"
+      },
+      {
+        "area": "Cloud inference, external forecasts, multiple diseases/biomarkers and versioned updates",
+        "disposition": "implemented interface and external marginal panels; no dedicated licensed world-model endpoint is asserted"
+      },
+      {
+        "area": "Forecast error, calibration, censoring, baseline comparison, split and site validation",
+        "disposition": "implemented deterministic research evaluation; no independent clinical performance claim"
+      },
+      {
+        "area": "Paired medication scenarios, trial evidence benchmarking and design/PROCOVA",
+        "disposition": "implemented; model contrasts remain hypotheses and actual trial evidence is independently preserved"
+      },
+      {
+        "area": "Joint stochastic event paths, latent 384-dimensional state and ODE transitions",
+        "disposition": "external-model capability, not reproduced by the chat model; no joint trajectory contract claimed"
+      },
+      {
+        "area": "Learned HSI, strict unseen-disease transfer, test-time adaptation and MRI encoders/gradients",
+        "disposition": "model training/readout/weights experiments outside the explicitly cloud-only adoption; supplied model scores can be represented as versioned external endpoints, not recomputed or relabeled HealthFlux"
+      },
+      {
+        "area": "Prospective Chinese clinical validation and use of restricted biobanks",
+        "disposition": "requires independently labeled authorized data; benchmark interfaces and source/rights manifests cannot supply that evidence"
+      },
+      {
+        "area": "Raw scans, interaction/dose/adverse-event providers, partner-specific SMART/Bulk/FHIR export",
+        "disposition": "original optional OpenMed tasks remain conditional on a concrete provider/data contract, not silently enabled"
+      },
+      {
+        "area": "UI, DSH tools, output documents, run receipts and operational rollback",
+        "disposition": "implemented on this isolated branch; deployment qualification remains separately measured"
+      }
+    ],
+    "notGates": [
+      "Missing modalities and incomplete endpoint panels retain usable results.",
+      "A worse prediction metric does not veto a design or report.",
+      "No new human review or local-model installation flow."
+    ]
   }
 }

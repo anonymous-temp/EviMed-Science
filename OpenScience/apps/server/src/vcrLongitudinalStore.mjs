@@ -11,6 +11,7 @@ export const longitudinalHash = value => createHash('sha256').update(canonicalSc
 /** @param {any} row */
 export function longitudinalArtifactView(row) {
   return { id: row.id, kind: row.kind, hash: row.sha256, parentId: row.parent_id ?? null, createdAt: row.created_at,
+    numberPath:`longitudinal.byId.${row.id}`,
     snapshotIds: row.snapshot_ids, summary: row.summary, ...(row.related_ids ? {relatedIds:row.related_ids} : {}) };
 }
 
@@ -21,7 +22,7 @@ export function longitudinalArtifactView(row) {
 export async function longitudinalIndex(store,studyId,filter = {}) {
   const limit = Math.min(50,Math.max(1,Number(filter.limit) || 30));
   const offset = Math.max(0,Math.floor(Number(filter.offset) || 0));
-  const where = `a.study_id=$1 AND a.kind IN ('history','prediction','evaluation','comparison','trial_benchmark','trial_evaluation','prediction_interruption')
+  const where = `a.study_id=$1 AND a.kind IN ('history','prediction','prediction_set','evaluation','comparison','trial_benchmark','trial_evaluation','prediction_interruption')
     AND ($2::text IS NULL OR a.kind=$2) AND ($3::text IS NULL OR a.id=$3) AND ($6::text IS NULL OR a.parent_id=$6)
     AND ($3::text IS NOT NULL OR a.kind<>'prediction' OR a.summary->>'jobId' IS NULL OR NOT EXISTS
       (SELECT 1 FROM evimed_vcr.longitudinal_artifacts b WHERE b.study_id=a.study_id AND b.kind='prediction'
@@ -31,10 +32,12 @@ export async function longitudinalIndex(store,studyId,filter = {}) {
   const more = !filter.all && rows.length>limit;
   const page = more ? rows.slice(0,limit) : rows;
   const known = new Map(page.map((/** @type {any} */ row) => [row.id,row]));
-  const parents = page.filter((/** @type {any} */ row) => ['prediction','trial_benchmark'].includes(row.kind)).map((/** @type {any} */ row) => row.id);
+  const parents = page.flatMap((/** @type {any} */ row) => ['prediction','trial_benchmark'].includes(row.kind) ? [row.id]
+    : row.kind === 'prediction_set' ? (row.summary.components ?? []).map((/** @type {any} */ c) => c.id) : []);
   if (parents.length) {
     const children = (await store.query(`SELECT DISTINCT ON (parent_id,kind) * FROM evimed_vcr.longitudinal_artifacts
-      WHERE study_id=$1 AND parent_id=ANY($2::text[]) AND kind IN ('evaluation','trial_evaluation','prediction_interruption')
+      WHERE study_id=$1 AND (parent_id=ANY($2::text[]) OR kind='comparison' AND summary->'predictionIds' ?| $2::text[])
+        AND kind IN ('evaluation','comparison','trial_evaluation','prediction_interruption')
       ORDER BY parent_id,kind,created_at DESC,id DESC`,[studyId,parents])).rows;
     for (const child of children) {
       known.set(child.id,child);
@@ -46,12 +49,18 @@ export async function longitudinalIndex(store,studyId,filter = {}) {
   // incremental history does not expand its entire version ancestry here.
   for (let depth=0;depth<3;depth++) {
     const refs = [...new Set([...known.values()].flatMap((/** @type {any} */ row) => [row.summary?.historyId,
+      ...(row.summary?.predictionIds ?? []),...(row.summary?.components ?? []).map((/** @type {any} */ c) => c.id),
       row.kind === 'history' ? null : row.parent_id]).filter(id => id && !known.has(id)))];
     if (!refs.length) break;
     for (const row of (await store.query('SELECT * FROM evimed_vcr.longitudinal_artifacts WHERE study_id=$1 AND id=ANY($2::text[])',[studyId,refs])).rows) known.set(row.id,row);
   }
+  for (const row of known.values()) if (['evaluation','comparison','trial_evaluation','prediction_interruption'].includes(row.kind)) {
+    const parent = known.get(row.parent_id);
+    if (parent) (parent.related_ids ??= {})[row.kind] ??= row.id;
+  }
   const ids = new Set(page.map((/** @type {any} */ row) => row.id));
   return {records:page.map(longitudinalArtifactView),related:[...known.values()].filter((/** @type {any} */ row) => !ids.has(row.id)).map(longitudinalArtifactView),
+    ...(filter.all ? {byId:Object.fromEntries([...known].map(([id,row]) => [id,row.summary]))} : {}),
     more,nextOffset:more ? offset+limit : null,offset,
     digest:longitudinalHash(page.map((/** @type {any} */ row) => ({id:row.id,hash:row.sha256})).sort((a,b) => a.id.localeCompare(b.id)))};
 }

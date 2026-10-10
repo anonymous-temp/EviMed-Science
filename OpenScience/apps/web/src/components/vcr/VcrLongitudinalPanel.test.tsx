@@ -8,7 +8,7 @@ const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
 vi.mock('@/lib/productClient', () => network);
 const empty: VcrLongitudinalData = { available: true, records: [], providers: [], templates: { events: { columns: ['subject_id'], example: ['synthetic'] }, prediction: { schema: 1 } } };
 const history = { id: 'history-1', kind: 'history', createdAt: '2026-01-01', hash: 'hash', summary: { origin: '2026-01-01', subjects: 40, events: 80 } };
-beforeEach(() => network.productRequest.mockReset());
+beforeEach(() => { network.productRequest.mockReset(); });
 
 it('offers templates and the conversation path without requiring a model or history', async () => {
   network.productRequest.mockResolvedValue(empty);
@@ -107,4 +107,42 @@ it('explains a real small-cell display limit without claiming that outcomes are 
   render(<VcrLongitudinalPanel studyId="one" canRun={false} />);
   expect(await screen.findByText(/不代表结局缺失/)).toBeInTheDocument();
   expect(screen.getByText('30 天')).toBeInTheDocument();
+});
+
+it('imports multiple endpoints in one file and keeps partial component results discoverable', async () => {
+  const component = { id: 'panel-one', kind: 'prediction', hash: 'p', createdAt: '2026-03-01', summary: { historyId: history.id, endpoint: { code: 'HbA1c', type: 'continuous', unit: '%' } } };
+  let uploaded = false;
+  network.productRequest.mockImplementation(async (_url: string, method?: string) => {
+    if (method === 'POST') { uploaded = true; return { id: 'set', kind: 'prediction_set', summary: { acceptedComponents: 2, invalidComponents: 1, accepted: 80, components: [{ id: component.id }] } }; }
+    return { ...empty, templates: { ...empty.templates, predictionSet: { predictions: [] } }, records: [history], related: uploaded ? [component] : [] };
+  });
+  const user = userEvent.setup();
+  render(<VcrLongitudinalPanel studyId="one" canRun />);
+  await screen.findByRole('button', { name: '下载多终点模板' });
+  const file = new File(['{}'], 'panel.json', { type: 'application/json' });
+  Object.defineProperty(file, 'text', { value: async () => JSON.stringify({ predictions: [] }) });
+  await user.upload(screen.getByLabelText('选择预测结果文件'), file);
+  expect(await screen.findByRole('status')).toHaveTextContent('2 个终点的 80 条预测，1 个终点需更正');
+  await waitFor(() => expect(screen.getByLabelText('预测版本')).toHaveValue(component.id));
+});
+
+it('compares forecasts from updated histories and automatically displays the completed comparison', async () => {
+  const endpoint = { code: 'HbA1c', type: 'continuous', unit: '%' };
+  const first = { id: 'first', kind: 'prediction', createdAt: '2026-03-01', hash: 'p', summary: { historyId: history.id, origin: '2026-01-31', endpoint } };
+  const second = { id: 'second', kind: 'prediction', createdAt: '2026-02-01', hash: 'q', summary: { historyId: 'older', origin: '2026-01-01', endpoint } };
+  const comparison = { id: 'comparison', kind: 'comparison', parentId: first.id, createdAt: '2026-04-01', summary: { available: true, mode: 'update', predictionIds: ['first', 'second'], origins: ['2026-01-31', '2026-01-01'], groups: [{ horizonDays: 30, secondHorizonDays: 60, targetAt: '2026-03-02', subjects: 40, firstMean: 7, secondMean: 8, meanDifference: -1, lower: -1.2, upper: -.8 }] } };
+  let done = false;
+  network.productRequest.mockImplementation(async (url: string, method?: string) => {
+    if (method === 'POST') return { id: 'job', state: 'queued' };
+    if (url.endsWith('/jobs/job')) { done = true; return { id: 'job', state: 'succeeded' }; }
+    return { ...empty, records: [history, first, second, ...(done ? [comparison] : [])] };
+  });
+  const user = userEvent.setup();
+  render(<VcrLongitudinalPanel studyId="one" canRun />);
+  await user.click(await screen.findByText('预测之间的比较', { exact: true }));
+  expect(screen.getByLabelText('比较目的')).toHaveValue('update');
+  await user.click(screen.getByRole('button', { name: '比较所选预测' }));
+  expect(await screen.findByText('比较已完成。')).toBeInTheDocument();
+  expect(network.productRequest).toHaveBeenCalledWith('/vcr/studies/one/jobs', 'POST', { kind: 'compare_forecasts', scenario: { predictionId: 'first', otherPredictionId: 'second', mode: 'update' } });
+  expect(await screen.findByRole('table', { name: '同一日期、相同受试者的预测差异' })).toHaveTextContent('-1');
 });

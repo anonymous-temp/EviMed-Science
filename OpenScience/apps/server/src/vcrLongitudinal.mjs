@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import {
   vcrResultOutputPayload, eventsFromMappedTable, replayClinicalEvents, longitudinalReadiness,
   validateForecast, validateLongitudinalScenario, VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_LIMITS, VCR_LONGITUDINAL_SCHEMAS,
-  compareForecasts, forecastDesignInputs,
+  compareForecasts, forecastDesignInputs, longitudinalSubjects,
 } from '@evimed/domain';
 import { parseTable, studyPseudonymKey, pseudonymOf } from './vcrDataPlane.mjs';
 import { VcrLongitudinalStore, longitudinalHash, longitudinalArtifactView } from './vcrLongitudinalStore.mjs';
@@ -106,15 +106,21 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
     }
     const prior = input.priorHistoryId ? await artifacts.read(study,input.priorHistoryId,actor) : null;
     if (prior && prior.row.kind !== 'history') throw invalid('vcr_history_required','The preceding record must be a history.');
-    const replay = replayClinicalEvents([...(prior?.content.events ?? []),...events],input.asOf);
+    const replay = replayClinicalEvents([...(prior?.content.evaluationEvents ?? prior?.content.events ?? []),...events],input.asOf);
     const perturbation = input.perturbation ?? null;
-    if (perturbation && (Object.keys(perturbation).some(k => !['omitCodes','historyFrom'].includes(k))
+    if (perturbation && (Object.keys(perturbation).some(k => !['omitCodes','omitModalities','historyFrom'].includes(k))
       || perturbation.omitCodes && !Array.isArray(perturbation.omitCodes)
+      || perturbation.omitModalities && !Array.isArray(perturbation.omitModalities)
       || perturbation.historyFrom && !Number.isFinite(Date.parse(perturbation.historyFrom)))) throw invalid('vcr_history_perturbation_invalid','Use omitted codes or a dated history window.');
     const selectedEvents = replay.events.filter(e => !perturbation?.omitCodes?.includes(e.code)
+      && !perturbation?.omitModalities?.includes(e.modality ?? 'unspecified')
       && (!perturbation?.historyFrom || Date.parse(e.occurredAt) >= Date.parse(perturbation.historyFrom)));
+    const subjects = [...new Set([...(prior ? longitudinalSubjects(prior.content) : []),...replay.events.map(e => e.subjectKey)])].sort();
     const content = {schema:1,snapshotId:input.snapshotId,snapshotHash:profile.sha256,sourceId:profile.sourceId,
-      asOf:replay.asOf,mappings,events:selectedEvents,coverage:replay.coverage,issues:[...issues,...replay.issues],perturbation,
+      asOf:replay.asOf,mappings,events:selectedEvents,subjects,coverage:replay.coverage,issues:[...issues,...replay.issues],perturbation,
+      // Protected evaluation context keeps cohort membership independent of
+      // model input ablation. Provider projection reads only selected events.
+      ...(perturbation ? {evaluationEvents:replay.events} : {}),
       dataClass:source?.valueSource === 'synthetic' && (!prior || prior.content.dataClass === 'synthetic') && !factSources.size
         ? 'synthetic' : 'patient',
       split:frozenHistorySplit(study,prior?.content.split?.rule ?? input.split,replay.events),priorHistoryId:input.priorHistoryId ?? null};
@@ -123,7 +129,8 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       content.split.hash = longitudinalHash(content.split.assignments);
       content.split.counts = Object.fromEntries(['train','calibration','test','unknown'].map(role => [role,Object.values(content.split.assignments).filter(r => r === role).length]));
     }
-    const summary = {...longitudinalReadiness(selectedEvents,replay.coverage),origin:replay.asOf,dataClass:content.dataClass,
+    const summary = {...longitudinalReadiness(selectedEvents,replay.coverage,subjects),origin:replay.asOf,dataClass:content.dataClass,
+      priorHistoryId:input.priorHistoryId ?? null,
       perturbation,excludedByPerturbation:replay.events.length-selectedEvents.length,
       split:content.split ? {mode:content.split.mode,hash:content.split.hash,counts:content.split.counts} : null,issues:content.issues};
     const fields = [...new Set(mappings.flatMap((/** @type {any} */ mapping) => Object.entries(mapping)
@@ -136,18 +143,47 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       bindings:[...(prior?.row.bindings ?? []),{snapshotId:input.snapshotId,fields}]});
     return longitudinalArtifactView(saved);
   }
-  /** @param {any} study @param {any} input @param {string} actor @param {any} [provenance] */
+  /** @param {any} study @param {any} input @param {string} actor @param {any} [provenance] @returns {Promise<any>} */
   async function importPrediction(study,input,actor,provenance = {}) {
     await authorize(study,actor,'run');
     const history = await artifacts.read(study,input.historyId,actor);
     if (history.row.kind !== 'history') throw invalid('vcr_history_required','Select a frozen history.');
+    if (Object.hasOwn(input,'predictions')) {
+      if (!Array.isArray(input.predictions) || !input.predictions.length || input.predictions.length > 32
+        || input.predictions.reduce((n,p) => n+(Array.isArray(p?.rows) ? p.rows.length : 0),0) > VCR_LONGITUDINAL_LIMITS.forecasts) {
+        throw invalid('vcr_prediction_rows_missing','Supply up to 32 endpoint predictions and 100000 total rows.');
+      }
+      const {predictions,...header} = input;
+      /** @type {any[]} */ const components = [], issues = [];
+      for (const [index,part] of predictions.entries()) {
+        if (!part || typeof part !== 'object' || Array.isArray(part) || Object.hasOwn(part,'predictions')) {
+          issues.push({index,code:'forecast_component_invalid'});continue;
+        }
+        try {
+          // All components share the explicitly selected history. Each endpoint
+          // remains independently addressable, evaluable and usable for design.
+          const saved = await importPrediction(study,{...header,...part,historyId:input.historyId},actor,provenance);
+          components.push({index,id:saved.id,endpoint:saved.summary.endpoint,accepted:saved.summary.accepted,invalidRows:saved.summary.invalidRows});
+        } catch (error) {
+          if (!(error instanceof HttpError) || !['vcr_forecast_unavailable','vcr_prediction_rows_missing'].includes(error.code)) throw error;
+          issues.push({index,code:error.code});
+        }
+      }
+      const content = {schema:1,contract:'endpoint_prediction_set',historyId:history.row.id,input,components,issues};
+      return longitudinalArtifactView(await artifacts.save(study,'prediction_set',content,
+        {historyId:history.row.id,origin:history.content.asOf,dataClass:history.content.dataClass,components,issues,
+          requestedComponents:predictions.length,acceptedComponents:components.length,invalidComponents:issues.length,
+          accepted:components.reduce((n,c) => n+c.accepted,0),invalidRows:components.reduce((n,c) => n+c.invalidRows,0),
+          interpretation:'marginal_endpoints_not_joint_event_paths'},
+        {snapshotIds:history.row.snapshot_ids,sourceIds:history.row.source_ids,bindings:history.row.bindings,parentId:history.row.id}));
+    }
     let rows = input.rows;
     if (!Array.isArray(rows)) throw invalid('vcr_prediction_rows_missing','Supply an array of prediction rows.');
     if (input.subjectKeyMode === 'source_identifier') {
       const key = await studyPseudonymKey(dataPlane.root(),study.id);
       rows = rows.map((/** @type {any} */ r) => r && typeof r === 'object' ? ({...r,subjectKey:pseudonymOf(key,String(r.subjectKey))}) : r);
     }
-    const checked = validateForecast({...input,rows},{subjects:new Set(history.content.events.map((/** @type {any} */ e) => e.subjectKey)),origin:history.content.asOf});
+    const checked = validateForecast({...input,rows},{subjects:new Set(longitudinalSubjects(history.content)),origin:history.content.asOf});
     if (checked.issues.some(issue => issue.code === 'forecast_header_invalid')) {
       throw invalid('vcr_forecast_unavailable','The prediction header needs an endpoint with type and unit, the history origin, and an ordered list of positive horizons.');
     }
@@ -161,7 +197,7 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
     content.provenance.importArtifactId = original.id;
     if (input.priorPredictionId) await artifacts.read(study,input.priorPredictionId,actor);
     const summary = {origin:content.origin,endpoint:content.endpoint,horizonsDays:content.horizonsDays,model:content.model,scenario:content.scenario,
-      historyId:content.historyId,jobId:provenance.jobId ?? null,
+      historyId:content.historyId,priorPredictionId:content.priorPredictionId,jobId:provenance.jobId ?? null,
       received:provenance.receipts?.reduce((/** @type {number} */ total,/** @type {any} */ r) => total+(r.receivedRows ?? 0),0) ?? checked.received,
       accepted:checked.rows.length,invalidRows:checked.received-checked.rows.length
         +(provenance.receipts?.reduce((/** @type {number} */ total,/** @type {any} */ r) => total+(r.invalidRows ?? 0),0) ?? 0),
@@ -269,9 +305,10 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
           sourceIds:[...new Set([...prediction.row.source_ids,...outcomes.row.source_ids])],bindings:[...(prediction.row.bindings ?? []),...(outcomes.row.bindings ?? [])],parentId:prediction.row.id}));
     } else if (job.method === 'forecast.compare') {
       const first = await read(scenario.predictionId), second = await read(scenario.otherPredictionId);
-      const comparison = await runForecastCalculation(job.method,[first.content,second.content,{seed:job.seed,bootstrap:scenario.bootstrap}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled});
+      const computed = await runForecastCalculation(job.method,[first.content,second.content,{seed:job.seed,bootstrap:scenario.bootstrap,mode:scenario.mode}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled});
+      const comparison = {...computed,predictionIds:[first.row.id,second.row.id]};
       saved = longitudinalArtifactView(await artifacts.save(study,'comparison',comparison,comparison,
-        {snapshotIds:first.row.snapshot_ids,sourceIds:[...new Set([...first.row.source_ids,...second.row.source_ids])],bindings:[...(first.row.bindings ?? []),...(second.row.bindings ?? [])],parentId:first.row.id}));
+        {snapshotIds:[...new Set([...first.row.snapshot_ids,...second.row.snapshot_ids])],sourceIds:[...new Set([...first.row.source_ids,...second.row.source_ids])],bindings:[...(first.row.bindings ?? []),...(second.row.bindings ?? [])],parentId:first.row.id}));
     } else if (job.method === 'forecast.trial_benchmark') {
       const benchmark = await read(scenario.benchmarkId);
       const evaluation = await runForecastCalculation(job.method,[benchmark.content,{bootstrap:scenario.bootstrap,seed:job.seed}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled});
@@ -391,11 +428,15 @@ export function aggregateForecastCurve(prediction) {
 }
 
 export const LONGITUDINAL_TEMPLATES = Object.freeze({
+  predictionSet:{format:'json',schema:1,historyId:'<history id>',origin:'2026-01-02T00:00:00.000Z',subjectKeyMode:'source_identifier',
+    model:{name:'external-model',version:'unknown'},horizonsDays:[90],predictions:[
+      {endpoint:{code:'HbA1c',type:'continuous',unit:'%'},rows:[{subjectKey:'synthetic-001',horizonDays:90,point:7}]},
+      {endpoint:{code:'LDL',type:'continuous',unit:'mmol/L'},rows:[{subjectKey:'synthetic-001',horizonDays:90,point:2.5}]}]},
   benchmark:{model:{name:'external-trial-model',version:'1'},trainingOverlap:'unknown',comparisons:[
     {evidenceId:'<preserved evidence id>',trialId:'<precedent id>',familyId:'<trial family>',split:'test',
       endpoint:'HbA1c',scale:'mean_difference',unit:'%',arm:'Treatment versus control',armRole:'contrast',horizonDays:84,predicted:-.4}]},
-  events:{format:'csv',columns:['subject_id','event_id','revision','code','value','unit','occurred_at','recorded_at','available_at','kind','assertion','experiencer','medication_state','site'],
-    example:['synthetic-001','lab-001','1','HbA1c','7.2','%','2026-01-01','2026-01-02','2026-01-02','measurement','affirmed','patient','unknown','synthetic-site']},
+  events:{format:'csv',columns:['subject_id','event_id','revision','code','value','unit','occurred_at','recorded_at','available_at','kind','assertion','experiencer','medication_state','site','modality'],
+    example:['synthetic-001','lab-001','1','HbA1c','7.2','%','2026-01-01','2026-01-02','2026-01-02','measurement','affirmed','patient','unknown','synthetic-site','laboratory']},
   prediction:{format:'json',schema:1,historyId:'<history id>',origin:'2026-01-02T00:00:00.000Z',subjectKeyMode:'source_identifier',
     endpoint:{code:'HbA1c',type:'continuous',unit:'%'},horizonsDays:[90],model:{name:'external-model',version:'unknown'},
     rows:[{subjectKey:'synthetic-001',horizonDays:90,point:7,sd:.5,uncertainty:'predictive',quantiles:[{p:.05,value:6.2},{p:.95,value:7.8}]}]},

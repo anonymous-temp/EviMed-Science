@@ -1715,7 +1715,7 @@ export { CLINICAL_UNIT_VERSION, clinicalUnitToken, clinicalUnitInQuote, convertC
 export { VCR_LONGITUDINAL_SCHEMA, VCR_LONGITUDINAL_ERROR_CODES, VCR_LONGITUDINAL_SCHEMAS, VCR_LONGITUDINAL_METHODS, VCR_LONGITUDINAL_JOBS, VCR_PREDICTION_TYPES,
   VCR_FORECAST_UNCERTAINTY, VCR_LONGITUDINAL_LIMITS, longitudinalNumber, longitudinalInstant, longitudinalMean,
   longitudinalVariance, longitudinalQuantile, eventsFromMappedTable, replayClinicalEvents, longitudinalReadiness,
-  validateForecast, validateLongitudinalScenario } from './src/vcrLongitudinal.mjs'
+  validateForecast, validateLongitudinalScenario, longitudinalSubjects } from './src/vcrLongitudinal.mjs'
 export { forecastRandom, empiricalCrps, discrimination, forecastMetrics, metricIntervals, pairForecastOutcomes,
   continuousBaselines, ipcwBrier, evaluateForecast, compareForecasts, forecastDesignInputs, forecastShiftDiagnostics } from './src/vcrForecastEvaluation.mjs'
 

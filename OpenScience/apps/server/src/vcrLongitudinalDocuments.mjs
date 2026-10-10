@@ -21,7 +21,11 @@ export function longitudinalResultBlocks(model) {
   /** @param {string} path @param {string} [format] */
   const n = (path,format = 'f3') => renderVcrNumbers(`{{n:${path}|${format}}}`,model).text;
   for (const [i,record] of records.entries()) {
-    const s = record.summary, base = `modelAnalysis.longitudinal.records[${i}].summary`;
+    const s = record.summary, base = model.longitudinal?.byId?.[record.id] ? `longitudinal.byId.${record.id}` : `modelAnalysis.longitudinal.records[${i}].summary`;
+    if (record.kind === 'prediction_set') {
+      blocks.push({type:'facts',title:'多终点预测导入',rows:[['纳入／需更正的终点',`${n(`${base}.acceptedComponents`,'int')} / ${n(`${base}.invalidComponents`,'int')}`],
+        ['含义','各终点独立保存与验证；不据此假定联合事件轨迹或终点之间的预测相关性。']]});continue;
+    }
     if (record.kind === 'prediction') {
       blocks.push({type:'facts',title:`预测：${s.model?.name ?? '外部模型'} · ${s.model?.version ?? '版本未知'}`,rows:[
         ['记录',record.id],['历史',s.historyId],['终点',`${s.endpoint?.code ?? '未知'} · ${s.endpoint?.unit ?? '未知'}`],
@@ -34,18 +38,21 @@ export function longitudinalResultBlocks(model) {
       blocks.push({type:'text',text:`预测中断：${s.code}；已完成的部分保留。`});continue;
     }
     if (!['evaluation','trial_evaluation','comparison'].includes(record.kind)) continue;
-    blocks.push({type:'facts',title:record.kind === 'trial_evaluation' ? '独立试验基准' : record.kind === 'comparison' ? '配对模型情景比较' : '纵向预测验证',rows:[
+    blocks.push({type:'facts',title:record.kind === 'trial_evaluation' ? '独立试验基准' : record.kind === 'comparison' ? '配对预测比较' : '纵向预测验证',rows:[
       ['记录',record.id],['输入记录',record.parentId ?? '—'],['验证来源',s.dataClass === 'synthetic' ? '合成数据流程检验，不是临床验证' : record.kind === 'trial_evaluation' ? '已保留的试验证据' : '纵向观测'],
       ['划分',typeof s.split === 'string' ? s.split : '—'],['模型训练数据重叠',s.trainingOverlap ?? '未知'] ]});
     if (record.kind === 'trial_evaluation') blocks.push({type:'facts',rows:[['纳入／排除比较',`${n(`${base}.comparisons`,'int')} / ${n(`${base}.excluded`,'int')}`]]});
+    if (record.kind === 'comparison') blocks.push({type:'facts',rows:[['比较目的',{scenario:'治疗情景',input_sensitivity:'输入敏感性',model_version:'模型版本',update:'新增观测后的更新'}[s.mode] ?? '治疗情景'],
+      ['第一／第二预测',s.predictionIds?.join(' / ') ?? '—'],['比较说明','差值为第一预测减第二预测，只配对相同受试者和目标日期；多项条件同时变化时不能归因于单一因素。']]});
     for (const [j,group] of (s.groups ?? []).entries()) {
       const p = `${base}.groups[${j}]`, title = `${n(`${p}.horizonDays`,'int')} 天${group.endpoint ? ` · ${group.endpoint} · ${group.scale} · ${group.unit}` : ''}`;
       if (record.kind === 'comparison') {
-        blocks.push({type:'table',title,columns:['配对受试者','预测均值差','抽样区间'],rows:[[
-          n(`${p}.subjects`,'int'),n(`${p}.meanDifference`),`${n(`${p}.lower`)} – ${n(`${p}.upper`)}`]]});continue;
+        blocks.push({type:'table',title:group.targetAt ?? title,columns:['配对受试者','第一预测均值','第二预测均值','预测均值差','抽样区间'],rows:[[
+          n(`${p}.subjects`,'int'),n(`${p}.firstMean`),n(`${p}.secondMean`),n(`${p}.meanDifference`),`${n(`${p}.lower`)} – ${n(`${p}.upper`)}`]]});continue;
       }
       if (record.kind === 'evaluation') blocks.push({type:'table',title,columns:['应预测','已验证','缺少预测','无效预测','缺少结局'],rows:[[
         n(`${p}.requested`,'int'),n(`${p}.evaluated`,'int'),n(`${p}.missingForecasts`,'int'),n(`${p}.invalidForecasts`,'int'),n(`${p}.missingOutcomes`,'int')]]});
+      if (group.riskSet === 'incident') blocks.push({type:'facts',rows:[['新发事件风险人群',`原始人群 ${n(`${p}.candidates`,'int')}；起点前已患病而排除 ${n(`${p}.prevalentExcluded`,'int')}。`]]});
       const keys = Object.keys(group.metrics ?? {}).filter(key => Object.hasOwn(METRICS,key));
       if (keys.length) blocks.push({type:'table',title:`${title} · 指标`,columns:['指标','估计','95% 抽样区间'],rows:keys.map(key => [
         METRICS[key],n(`${p}.metrics.${key}.value`),`${n(`${p}.metrics.${key}.lower`)} – ${n(`${p}.metrics.${key}.upper`)}`])});
@@ -60,6 +67,12 @@ export function longitudinalResultBlocks(model) {
       if (group.distributionAvailability) blocks.push({type:'facts',rows:[['预测样本／分位区间／标准差可用记录',
         `${n(`${p}.distributionAvailability.sampleRows`,'int')} / ${n(`${p}.distributionAvailability.intervalRows`,'int')} / ${n(`${p}.distributionAvailability.sdRows`,'int')}`]]});
     }
+    for (const [j,subgroup] of (s.subgroups ?? []).entries()) blocks.push({type:'table',title:`分中心验证：${subgroup.site}`,columns:['时间（天）','应预测','已验证','平均绝对误差','Brier','AUROC'],
+      rows:subgroup.groups.map((/** @type {any} */ _,/** @type {number} */ k) => {
+        const p = `${base}.subgroups[${j}].groups[${k}]`;
+        return [n(`${p}.horizonDays`,'int'),n(`${p}.requested`,'int'),n(`${p}.evaluated`,'int'),n(`${p}.metrics.mae.value`),n(`${p}.metrics.brier.value`),n(`${p}.metrics.auroc.value`)];
+      })});
+    if (s.notes?.includes('equal_target_date_different_conditional_risk_windows')) blocks.push({type:'note',text:'更新前后的预测目标日期相同，但条件风险的起算日期不同，不能把差异全部解释为新信息的作用。'});
     if (s.issues?.length) blocks.push({type:'list',title:'未纳入比较的原因',items:[...new Set(s.issues.map((/** @type {any} */ issue) => String(issue.code)))]});
   }
   if (blocks.length) blocks.push({type:'note',text:'基线比较是相同样本的点估计比较，没有进行差异显著性检验。预测区间、患者抽样区间和模型参数不确定性含义不同；模型情景差异不能直接解释为因果治疗效果。CRPS 需要预测样本，覆盖率需要预测分位数，缺少时显示未计算。'});

@@ -4,8 +4,8 @@
 export const VCR_LONGITUDINAL_SCHEMA = 1
 export const VCR_LONGITUDINAL_METHODS = Object.freeze({
   'forecast.trajectories': { version: '1.0.0', modelTier: null },
-  'forecast.evaluate': { version: '1.0.0', modelTier: null },
-  'forecast.compare': { version: '1.0.0', modelTier: null },
+  'forecast.evaluate': { version: '1.1.0', modelTier: null },
+  'forecast.compare': { version: '1.1.0', modelTier: null },
   'forecast.trial_benchmark': { version: '1.0.0', modelTier: null },
 })
 export const VCR_LONGITUDINAL_JOBS = Object.freeze({
@@ -15,6 +15,11 @@ export const VCR_LONGITUDINAL_JOBS = Object.freeze({
 export const VCR_PREDICTION_TYPES = Object.freeze(['continuous', 'risk', 'survival_probability', 'rate'])
 export const VCR_FORECAST_UNCERTAINTY = Object.freeze(['predictive', 'parameter', 'model', 'monte_carlo', 'unknown'])
 export const VCR_LONGITUDINAL_LIMITS = Object.freeze({ events: 500_000, forecasts: 100_000, samples: 1_000, horizons: 100, bootstrap: 500 })
+
+/** The frozen cohort survives a modality ablation, including people with no
+ * remaining observations. Older artifacts derive it from their event stream.
+ * @param {any} history @returns {string[]} */
+export const longitudinalSubjects = history => history.subjects ?? [...new Set(history.events.map((/** @type {any} */ e) => e.subjectKey))]
 
 /** @param {unknown} value @returns {Record<string, any>} */
 const obj = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {}
@@ -58,7 +63,7 @@ export function longitudinalQuantile(values, p) {
 export function eventsFromMappedTable(table, map, source) {
   const at = new Map(table.header.map((key, index) => [key, index]))
   const fields = ['subjectColumn','valueColumn','codeColumn','unitColumn','occurredColumn','recordedColumn','availableColumn',
-    'eventIdColumn','revisionColumn','supersedesColumn','siteColumn','assertionColumn','experiencerColumn','medicationStateColumn']
+    'eventIdColumn','revisionColumn','supersedesColumn','siteColumn','assertionColumn','experiencerColumn','medicationStateColumn','kindColumn','modalityColumn']
   const absent = fields.filter(k => map[k] && !at.has(map[k]))
   if (absent.length || !map.subjectColumn || !map.occurredColumn || (!map.code && !map.codeColumn)) {
     return { events: [], issues: [{ code: 'mapping_columns_missing', inputId: source.inputId, fields: absent }] }
@@ -70,7 +75,8 @@ export function eventsFromMappedTable(table, map, source) {
     const subjectKey = cell(row, 'subjectColumn'), code = cell(row, 'codeColumn') || String(map.code ?? '')
     if (!subjectKey || !code) { issues.push({ code: 'event_identity_missing', row: index + 2, inputId: source.inputId }); continue }
     const originalValue = cell(row, 'valueColumn'), originalUnit = cell(row, 'unitColumn') || String(map.unit ?? '')
-    events.push({ subjectKey, code, kind: map.kind ?? 'measurement', value: longitudinalNumber(originalValue), originalValue,
+    events.push({ subjectKey, code, kind: cell(row, 'kindColumn') || map.kind || 'measurement',
+      modality: cell(row, 'modalityColumn') || map.modality || 'unspecified', value: longitudinalNumber(originalValue), originalValue,
       unit: originalUnit || null, originalUnit: originalUnit || null, valueSource: source.valueSource,
       occurredAt: longitudinalInstant(cell(row, 'occurredColumn')), recordedAt: longitudinalInstant(cell(row, 'recordedColumn')),
       availableAt: longitudinalInstant(cell(row, 'availableColumn')), ingestedAt: source.ingestedAt,
@@ -108,7 +114,7 @@ export function replayClinicalEvents(events, asOf) {
     if (event.occurredAt > cutoff) { excluded.future_occurrence++; continue }
     if (event.availableAt > cutoff) { excluded.not_available++; continue }
     const identity = JSON.stringify([event.subjectKey, event.code, event.occurredAt, event.availableAt, event.originalValue,
-      event.unit, event.sourceEventId, event.revision, event.assertion, event.experiencer, event.medicationState,
+      event.unit, event.sourceEventId, event.revision, event.assertion, event.experiencer, event.medicationState, event.kind, event.modality,
       event.source?.inputNamespace ?? null, ...(event.sourceEventId ? [] : [event.source?.hash,event.source?.row])])
     if (exact.has(identity)) { excluded.duplicate++; continue }
     exact.set(identity, event)
@@ -140,8 +146,8 @@ export function replayClinicalEvents(events, asOf) {
 }
 
 /** A task-specific inventory, without a minimum patient-count admission rule.
- * @param {any[]} events @param {Record<string, any>} [coverage] */
-export function longitudinalReadiness(events, coverage = {}) {
+ * @param {any[]} events @param {Record<string, any>} [coverage] @param {string[]} [cohort] */
+export function longitudinalReadiness(events, coverage = {}, cohort) {
   /** @type {Map<string, any[]>} */ const subjects = new Map()
   /** @type {Map<string, any[]>} */ const codes = new Map()
   for (const event of events) {
@@ -154,14 +160,21 @@ export function longitudinalReadiness(events, coverage = {}) {
     const times = rows.map(e => Date.parse(e.occurredAt)).filter(Number.isFinite)
     return times.length ? (times.reduce((a,b) => Math.max(a,b),-Infinity) - times.reduce((a,b) => Math.min(a,b),Infinity)) / 86400000 : 0
   })
-  return { subjects: subjects.size, events: events.length, repeatedSubjects: [...subjects.values()].filter(rows => new Set(rows.map(e => e.occurredAt)).size > 1).length,
+  const population = cohort?.length ?? subjects.size
+  return { subjects: population, subjectsWithoutObservations: population-subjects.size,
+    events: events.length, repeatedSubjects: [...subjects.values()].filter(rows => new Set(rows.map(e => e.occurredAt)).size > 1).length,
     medianHistoryDays: longitudinalQuantile(followup, .5), maxHistoryDays: followup.length ? followup.reduce((a,b) => Math.max(a,b),0) : null,
+    modalities: [...new Set(events.map(e => e.modality ?? 'unspecified'))].map(modality => {
+      const rows = events.filter(e => (e.modality ?? 'unspecified') === modality)
+      return {modality,events:rows.length,subjects:new Set(rows.map(e => e.subjectKey)).size,concepts:new Set(rows.map(e => e.code)).size}
+    }),
     coverage, concepts: [...codes].map(([code, rows]) => ({ code, events: rows.length,
       subjects: new Set(rows.map(e => e.subjectKey)).size, missingValues: rows.filter(e => e.value == null).length,
       units: [...new Set(rows.map(e => e.unit))], valueSources: [...new Set(rows.map(e => e.valueSource))] })),
     tasks: [
       { task: 'literature_scenario', available: true, needs: [] },
-      { task: 'history_forecast', available: events.length > 0, needs: events.length ? ['callable_model_or_external_predictions'] : ['dated_available_observations'] },
+      { task: 'history_forecast', available: population > 0, needs: events.length ? ['callable_model_or_external_predictions']
+        : population ? ['provider_missing_input_support_or_external_predictions'] : ['dated_available_observations'] },
       { task: 'external_validation', available: false, needs: ['frozen_predictions', 'subsequent_observed_outcomes', 'independent_split'] },
     ] }
 }
@@ -235,8 +248,8 @@ export function validateForecast(input, context = {}) {
   }
 /** @type {Record<string, string[]>} */ const optional = {
     'forecast.trajectories': ['scenario', 'samples', 'modelVersion'],
-    'forecast.evaluate': ['windowDays', 'eventCodes', 'followupCode', 'bootstrap', 'split', 'trainingOverlap'],
-    'forecast.compare': ['bootstrap'], 'forecast.trial_benchmark': ['bootstrap'],
+    'forecast.evaluate': ['windowDays', 'eventCodes', 'followupCode', 'bootstrap', 'split', 'trainingOverlap', 'riskSet', 'groupBy'],
+    'forecast.compare': ['bootstrap', 'mode'], 'forecast.trial_benchmark': ['bootstrap'],
   }
 
 export const VCR_LONGITUDINAL_SCHEMAS = Object.freeze(Object.fromEntries(Object.keys(required).map(method => [method,{required:required[method],optional:optional[method]}])))
@@ -253,6 +266,10 @@ export function validateLongitudinalScenario(method, scenario) {
   if (scenario.windowDays != null && (!Number.isFinite(scenario.windowDays) || scenario.windowDays < 0)) problems.push({ code: 'scenario_field_invalid', field: 'scenario.windowDays', detail: 'A nonnegative observation window is required.' })
   if (scenario.samples != null && (!Number.isInteger(scenario.samples) || scenario.samples < 1 || scenario.samples > VCR_LONGITUDINAL_LIMITS.samples)) problems.push({code:'scenario_field_invalid',field:'scenario.samples',detail:'Samples must be between 1 and 1000.'})
   if (scenario.split != null && !['train','calibration','test'].includes(scenario.split)) problems.push({code:'scenario_field_invalid',field:'scenario.split',detail:'Select a recorded split role.'})
+  if (scenario.riskSet != null && !['incident','all'].includes(scenario.riskSet)) problems.push({code:'scenario_field_invalid',field:'scenario.riskSet',detail:'Use incident disease risk or explicitly all subjects.'})
+  if (scenario.groupBy != null && scenario.groupBy !== 'site') problems.push({code:'scenario_field_invalid',field:'scenario.groupBy',detail:'Use the recorded site for subgroup evaluation.'})
+  if (scenario.mode != null && !['scenario','input_sensitivity','model_version','update'].includes(scenario.mode)) problems.push({code:'scenario_field_invalid',field:'scenario.mode',detail:'Choose scenario, input_sensitivity, model_version or update comparison.'})
+  if (scenario.eventCodes != null && (!Array.isArray(scenario.eventCodes) || !scenario.eventCodes.length || scenario.eventCodes.some(code => typeof code !== 'string' || !code))) problems.push({code:'scenario_field_invalid',field:'scenario.eventCodes',detail:'Supply nonempty observed event codes.'})
   return problems
 }
 

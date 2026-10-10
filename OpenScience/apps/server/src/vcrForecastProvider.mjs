@@ -2,7 +2,7 @@
  * or credentials. Requests are minimally projected, bounded and idempotent by
  * batch where the provider supports it; unknown versions remain unknown. */
 import fs from 'node:fs/promises';
-import { validateForecast } from '@evimed/domain';
+import { validateForecast, longitudinalSubjects } from '@evimed/domain';
 import { longitudinalHash } from './vcrLongitudinalStore.mjs';
 import { requireCloudPermission, cloudOrigin } from './vcrCloudProjection.mjs';
 import { HttpError } from './security.mjs';
@@ -40,7 +40,7 @@ export function createForecastProviders({file = '',fetchImpl = fetch,now = () =>
       const selected = await this.require(input.providerId);
       if (selected.endpoints?.length && !selected.endpoints.includes(input.endpoint.code)) throw new HttpError(422,'vcr_forecast_endpoint_unsupported','This provider does not expose the requested endpoint.');
       if (!input.horizonsDays?.length || input.horizonsDays.some(h => !positive(h) || positive(selected.maxHorizonDays) && h > selected.maxHorizonDays)) throw new HttpError(422,'vcr_forecast_horizon_unsupported','The requested horizon is not supported by this provider.');
-      const subjects = [...new Set(input.history.events.map((/** @type {any} */ e) => e.subjectKey))];
+      const subjects = longitudinalSubjects(input.history);
       const batchSize = Math.min(1000,Math.max(1,Number(selected.batchSize) || 100));
       const timeoutMs = Math.min(60_000,Math.max(1000,Number(selected.timeoutMs) || 30_000));
       /** @type {any[]} */ const rows = [], receipts = [], failures = [], rejected = [];
@@ -60,9 +60,9 @@ export function createForecastProviders({file = '',fetchImpl = fetch,now = () =>
         const events = input.history.events.filter((/** @type {any} */ e) => keys.has(e.subjectKey) && !e.conflict
           && (provider.inputCodes?.length ? provider.inputCodes.includes(e.code) : e.code === input.endpoint.code))
           .map((/** @type {any} */ e) => ({subjectKey:e.subjectKey,code:e.code,value:e.value,unit:e.unit,occurredAt:e.occurredAt,
-            availableAt:e.availableAt,kind:e.kind,assertion:e.assertion,experiencer:e.experiencer,medicationState:e.medicationState}));
+            availableAt:e.availableAt,kind:e.kind,modality:e.modality ?? 'unspecified',assertion:e.assertion,experiencer:e.experiencer,medicationState:e.medicationState}));
         const body = {schema:1,origin:input.history.asOf,model:provider.model,version:provider.version ?? null,
-          endpoint:input.endpoint,horizonsDays:input.horizonsDays,events,scenario:input.scenario ?? null,
+          endpoint:input.endpoint,horizonsDays:input.horizonsDays,subjects:[...keys],events,scenario:input.scenario ?? null,
           ...(provider.seedSupported ? {seed:input.seed} : {}),samples:input.samples ?? null};
         const requestDigest = longitudinalHash(body), started = Date.now();
         if (Buffer.byteLength(JSON.stringify(body)) > 8*1024*1024) {failures.push({offset,code:'provider_request_too_large'});continue;}

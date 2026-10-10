@@ -22,6 +22,24 @@ const input = () => ({providerId:'test',jobId:'job_1',history:{asOf:'2026-01-01T
 function answer(body,version='1') {return new Response(JSON.stringify({schema:1,origin:body.origin,endpoint:body.endpoint,model:'synthetic',version,
   rows:body.events.map(e => ({subjectKey:e.subjectKey,horizonDays:30,point:6.9}))}),{headers:{'content-type':'application/json'}});}
 
+test('a missing modality preserves subjects in cloud batches without inventing observations',async t=>{
+  const bodies=[];
+  const {api}=await fixture(t,async(_url,options)=>{
+    const body=JSON.parse(options.body);bodies.push(body);
+    return new Response(JSON.stringify({schema:1,origin:body.origin,endpoint:body.endpoint,model:'synthetic',version:'1',
+      rows:body.subjects.map(subjectKey=>({subjectKey,horizonDays:30,point:7}))}));
+  });
+  const base=input();base.history.subjects=['a','b','empty'];base.history.events=base.history.events.slice(0,1).map(e=>({...e,modality:'laboratory'}));
+  base.history.evaluationEvents=[{subjectKey:'empty',code:'EVALUATION-CONTEXT-ONLY',site:'LOCAL-SITE'}];
+  const result=await api.predict(base);
+  assert.equal(result.rows.length,3);
+  assert.deepEqual(bodies.map(b=>b.events.length),[1,0,0]);
+  assert.equal(bodies[0].events[0].modality,'laboratory');
+  assert.equal(bodies[2].subjects[0],'empty');
+  assert.ok(!JSON.stringify(bodies).includes('EVALUATION-CONTEXT-ONLY'));
+  assert.ok(!JSON.stringify(bodies).includes('LOCAL-SITE'));
+});
+
 test('batch projection excludes source prose, preserves actual model provenance and completed batches on failure',async t => {
   const sent=[],batches=[];
   const {api} = await fixture(t,async(_url,options)=>{

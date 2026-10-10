@@ -72,17 +72,18 @@ const source=await vcr.dataPlane.registerSource({userId,studyId:study.id,name:'A
 // Keep the heldout synthetic group large enough for the unchanged aggregate
 // display policy, so this pilot exercises metric reading as well as submission.
 const syntheticSubjects=200;
-const lines=['PATIENT,AT,AVAILABLE,HBA1C'];
-for(let i=0;i<syntheticSubjects;i++)for(const [at,inc] of [['2025-12-01',0],['2026-01-01',.2],['2026-01-31',.4]])lines.push(`RAW-SYNTHETIC-${i},${at},${at},${6+i/100+inc}`);
+const lines=['PATIENT,AT,AVAILABLE,HBA1C,SITE'];
+for(let i=0;i<syntheticSubjects;i++)for(const [at,inc] of [['2025-12-01',0],['2026-01-01',.2],['2026-01-31',.4]])lines.push(`RAW-SYNTHETIC-${i},${at},${at},${6+i/100+inc},site-${i%2+1}`);
 await vcr.dataPlane.storeUpload({actor:userId,studyId:study.id,sourceId:source.id,name:'events.csv',stream:Readable.from([lines.join('\n')])});
 const mapped=await vcr.dataPlane.proposeFieldMap({actor:userId,studyId:study.id,sourceId:source.id,columns:[
   {table:'events.csv',column:'PATIENT',role:'subject_key',identifier:true},
   {table:'events.csv',column:'AT',role:'visit_date',timeKind:'occurred_at',type:'date'},
   {table:'events.csv',column:'AVAILABLE',role:'other',timeKind:'visible_at',type:'date'},
-  {table:'events.csv',column:'HBA1C',role:'measurement',parameter:'HBA1C',unit:'%',type:'number'}]});
+  {table:'events.csv',column:'HBA1C',role:'measurement',parameter:'HBA1C',unit:'%',type:'number'},
+  {table:'events.csv',column:'SITE',role:'other',type:'string'}]});
 await vcr.dataPlane.confirmFieldMap({actor:userId,studyId:study.id,sourceId:source.id,hash:mapped.hash});
 const {snapshot}=await vcr.dataPlane.freezeSnapshot({userId,studyId:study.id,sourceId:source.id});
-const mappings=[{inputId:`${snapshot.id}:1`,subjectColumn:'USUBJID',code:'HbA1c',valueColumn:'HBA1C',unit:'%',occurredColumn:'AT',availableColumn:'AVAILABLE',basis:'dictionary_stated'}];
+const mappings=[{inputId:`${snapshot.id}:1`,subjectColumn:'USUBJID',code:'HbA1c',valueColumn:'HBA1C',unit:'%',occurredColumn:'AT',availableColumn:'AVAILABLE',siteColumn:'SITE',basis:'dictionary_stated',modality:'laboratory'}];
 const skill=await fs.readFile(new URL('../../capabilities/vcr-analysis/SKILL.md',import.meta.url),'utf8');
 const guidance=skill.slice(skill.indexOf('## Longitudinal'));
 if(guidance.length<200)throw new Error('Longitudinal guidance not found');
@@ -141,6 +142,18 @@ try{
   const designResults=await Promise.all(designJobs.map(async job=>({job,result:await vcr.jobs.resultOf(study.id,job.id)})));
   await fs.writeFile(path.join(root,'real-engine-results.json'),JSON.stringify(designResults,null,2));
   if(designResults.length<2 || designResults.some(row=>row.job.state!=='succeeded' || !row.result?.measures?.some(m=>Number.isFinite(m.value))))throw new Error('Forecast-to-design and PROCOVA must complete on real R before export.');
+  await turn('08a-modality-history',`请建立缺少化验输入的敏感性版本，实际写入 history。保留同一人群和患者划分，先不要生成任何预测。${JSON.stringify({snapshotId:snapshot.id,asOf:'2026-01-01',mappings,priorHistoryId:history.id,perturbation:{omitModalities:['laboratory']}})}`);
+  const ablated=(await vcr.longitudinal.view(study,{kind:'history'})).records.find(r=>r.summary.perturbation?.omitModalities?.includes('laboratory'));
+  if(!ablated)throw new Error('The native agent did not create a modality sensitivity history.');
+  const {rows,endpoint,...panelHeader}=external;
+  const panel=await vcr.longitudinal.importPrediction(study,{...panelHeader,historyId:ablated.id,predictions:[
+    {endpoint,rows:rows.map(r=>({...r,point:r.point+.1}))},
+    {endpoint:{code:'stroke',type:'risk',unit:'probability'},rows:rows.map(r=>({subjectKey:r.subjectKey,horizonDays:30,point:.2}))},null]},userId);
+  const longForecast=await vcr.longitudinal.importPrediction(study,{...external,horizonsDays:[60],rows:rows.map(r=>({...r,horizonDays:60}))},userId);
+  const updatedForecast=await vcr.longitudinal.importPrediction(study,{...external,historyId:outcome.id,origin:outcome.summary.origin,horizonsDays:[29],rows:rows.map(r=>({...r,horizonDays:29,point:r.point+.1}))},userId);
+  const sensitivityPrediction=panel.summary.components[0].id;
+  await turn('08b-functional-comparisons',`多终点外部结果已经导入，先按 id=${panel.id} 读取，保留可用终点。请实际提交三项作业：compare_forecasts ${JSON.stringify({predictionId:sensitivityPrediction,otherPredictionId:prediction.id,mode:'input_sensitivity',bootstrap:30})}；compare_forecasts ${JSON.stringify({predictionId:updatedForecast.id,otherPredictionId:longForecast.id,mode:'update',bootstrap:30})}；evaluate_forecast ${JSON.stringify({predictionId:sensitivityPrediction,outcomeHistoryId:outcome.id,groupBy:'site',bootstrap:30})}。数值由后台计算，尚在排队时如实说明待完成。`);
+  await drain();
   // Deliberately damaged provider output: the adapter keeps valid peers and
   // records its original exchange. This is an authored transport fixture.
   const providerFile=path.join(root,'synthetic-provider.json');
@@ -159,7 +172,7 @@ try{
   const riskJob=await vcr.longitudinal.prepare(study,{kind:'evaluate_forecast',scenario:{predictionId:risk.id,outcomeHistoryId:riskOutcomes.id,eventCodes:['event'],followupCode:'followup',bootstrap:0}},userId);
   await drain();
   // More than a page of independently versioned inputs, all authored fixtures.
-  for(let i=0;i<102;i++)await vcr.longitudinal.importPrediction(study,{...external,model:{name:'version-fixture',version:String(i)}},userId);
+  for(let i=0;i<31;i++)await vcr.longitudinal.importPrediction(study,{...external,model:{name:'version-fixture',version:String(i)}},userId);
   await turn('08-partial-and-zero',`请按记录 id 读取 ${partialPrediction.id}，说明部分异常预测如何保留。再读取预测 ${risk.id} 的验证记录，必要时按 kind=evaluation 筛选；检查零事件的合成数据结果。最后按 id=${history.id} 读取较早的历史，解释为何最新列表不等于所有版本。请实际读取工具。`);
   const quote='Treatment versus control at 84 days: mean difference -0.4 %.';
   const precedent=await vcr.evidenceStore.savePrecedent({userId,studyId:study.id,precedent:{registry:'clinicaltrials.gov',registryId:'NCT00000001',title:'Authored synthetic trial benchmark'},recordText:quote});
@@ -167,7 +180,7 @@ try{
   await fs.writeFile(path.join(root,'workspace','trial-predictions.json'),JSON.stringify({model:{name:'authored-trial-fixture',version:'1'},comparisons:[{evidenceId:evidence.id,trialId:precedent.id,familyId:'synthetic-family',split:'test',endpoint:'HbA1c',scale:'mean_difference',unit:'%',arm:'Treatment versus control',armRole:'contrast',horizonDays:84,predicted:-.3}]}));
   await turn('09-benchmark','工作区 trial-predictions.json 是预先生成的合成试验预测文件。请通过 vcr_write what=trial_benchmark data={predictionsFile:"trial-predictions.json"} 实际导入，再提交 benchmark_trial_effect，bootstrap=0。不要重新生成预测数值。');
   await drain();
-  await turn('10-export',`现在设计和 PROCOVA 已完成，请读取 results 与 report_model（kind=model_analysis_report），再用 vcr_write what=report kind=model_analysis_report section=results 写入结果解释。需准确解释缺失分母、基线比较和模拟数据的意义。表格由平台生成，只写研究者能直接读的结果解释；数值用报告模型路径引用。请实际保存报告，不增加复核门槛。\n以下是本次报告任务的 vcr-package 技能正文：\n${reportGuidance}`);
+  await turn('10-export',`现在设计、PROCOVA、输入敏感性和新增观察后的预测比较已完成，请读取 results 与 report_model（kind=model_analysis_report），再用 vcr_write what=report kind=model_analysis_report section=results 写入结果解释。需准确解释缺失分母、基线比较、预测更新和模拟数据的意义。表格由平台生成，只写研究者能直接读的结果解释；数值用报告模型路径引用，纵向记录的 numberPath 不随列表顺序变化。请实际保存报告，不增加复核门槛。\n以下是本次报告任务的 vcr-package 技能正文：\n${reportGuidance}`);
   const exportRow=(await vcr.store.exports(study.id)).find(row=>row.kind==='model_analysis_report');
   if(!exportRow)throw new Error('Native agent did not save the model analysis report.');
   const document=canonicalVcrDocument(study,exportRow);
@@ -183,6 +196,11 @@ try{
       zeroEventBrierVisible:(await vcr.service.runtimeRead(study,'longitudinal',{id:(await vcr.jobs.resultOf(study.id,riskJob.job.id)).diagnostics.longitudinal.id})).records[0].summary.groups[0].metrics.brier.value>0,
       partialPeersKept:partial.rows.length===syntheticSubjects && partial.receipts[0].invalidRows===2,
       benchmarkCompleted:records.some(r=>r.kind==='trial_evaluation'&&r.summary.comparisons===1),
+      ablatedCohortKept:ablated.summary.subjects===syntheticSubjects&&ablated.summary.subjectsWithoutObservations===syntheticSubjects&&ablated.summary.tasks.some(t=>t.task==='history_forecast'&&t.available),
+      partialEndpointPanelKept:panel.summary.acceptedComponents===2&&panel.summary.invalidComponents===1,
+      sensitivityCompared:records.some(r=>r.kind==='comparison'&&r.summary.mode==='input_sensitivity'&&r.summary.groups[0]?.subjects===syntheticSubjects-20),
+      updatedSameCalendarTarget:records.some(r=>r.kind==='comparison'&&r.summary.mode==='update'&&r.summary.groups[0]?.targetAt==='2026-03-02T00:00:00.000Z'),
+      siteValidationCompleted:records.some(r=>r.kind==='evaluation'&&r.parentId===sensitivityPrediction&&['site-1','site-2'].every(site=>r.summary.subgroups?.some(s=>s.site===site))),
       reportContainsCoverage:document.canonicalMarkdown.includes('缺少预测'),reportContainsBaselines:document.canonicalMarkdown.includes('点估计'),
       allTurnsExited:receipts.every(r=>r.code===0&&!r.timedOut)},
     limitation:'Native pinned DSH, real DeepSeek API, production gateways, isolated PostgreSQL and authored synthetic fixtures. Dedicated forecast API and clinical performance are not validated.'};

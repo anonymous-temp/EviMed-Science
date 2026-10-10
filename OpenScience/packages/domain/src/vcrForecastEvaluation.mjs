@@ -1,6 +1,6 @@
 /** Forecast evaluation: one patient is one sampling unit. Distributions describe
  * future observations, not additional trial participants or a treatment effect. */
-import { longitudinalMean as mean, longitudinalVariance as variance, longitudinalQuantile as quantile } from './vcrLongitudinal.mjs'
+import { longitudinalMean as mean, longitudinalVariance as variance, longitudinalQuantile as quantile, longitudinalSubjects } from './vcrLongitudinal.mjs'
 
 /** Reproducible bootstrap, isolated from model sampling. @param {number} seed */
 export function forecastRandom(seed) {
@@ -178,13 +178,22 @@ export function ipcwBrier(rows, horizon, type) {
   return sum/survivalRows.length
 }
 
-/** @param {any} prediction @param {any} history @param {any} outcomes @param {any} [options] */
+/** @param {any} prediction @param {any} history @param {any} outcomes @param {any} [options] @returns {any} */
 export function evaluateForecast(prediction, history, outcomes, options = {}) {
   const paired = pairForecastOutcomes(prediction,outcomes.events,{...options,dataClass:history.dataClass === 'synthetic' && outcomes.dataClass === 'synthetic' ? 'synthetic' : 'patient'})
   const role = options.split ?? 'test'
-  const eligible = (/** @type {any} */ row) => !history.split || history.split.assignments[row.subjectKey] === role
+  const probability = ['risk','survival_probability'].includes(prediction.endpoint.type)
+  const riskSet = probability && options.eventCodes?.length ? options.riskSet ?? 'incident' : 'all'
+  const actualSources = history.dataClass === 'synthetic' && outcomes.dataClass === 'synthetic' ? ['observed','extracted','synthetic'] : ['observed','extracted']
+  const evaluationEvents = history.evaluationEvents ?? history.events
+  const prevalent = new Set(riskSet === 'incident' ? [...evaluationEvents,...outcomes.events].filter(e =>
+    options.eventCodes.includes(e.code) && Date.parse(e.occurredAt) <= Date.parse(prediction.origin)
+    && actualSources.includes(e.valueSource) && !e.conflict && e.assertion === 'affirmed' && e.experiencer === 'patient').map(e => e.subjectKey) : [])
+  const inSplit = (/** @type {any} */ row) => !history.split || history.split.assignments[row.subjectKey] === role
+  const eligible = (/** @type {any} */ row) => inSplit(row) && !prevalent.has(row.subjectKey)
   const rows = paired.paired.filter(eligible), missing = paired.missing.filter(eligible)
-  const expectedSubjects = new Set(history.events.filter(eligible).map((/** @type {any} */ row) => row.subjectKey))
+  const candidates = new Set(longitudinalSubjects(history).filter(subjectKey => inSplit({subjectKey})))
+  const expectedSubjects = new Set([...candidates].filter(subjectKey => !prevalent.has(subjectKey)))
   const dataClass = history.dataClass === 'synthetic' && outcomes.dataClass === 'synthetic' ? 'synthetic' : 'patient'
   const bootstrap = options.bootstrap ?? 200, seed = options.seed ?? 1
   const groups = prediction.horizonsDays.map((/** @type {number} */ horizonDays) => {
@@ -194,7 +203,7 @@ export function evaluateForecast(prediction, history, outcomes, options = {}) {
       && expectedSubjects.has(r.subjectKey) && !present.has(r.subjectKey)).map((/** @type {any} */ r) => r.subjectKey))
     /** @type {Record<string,any[]>} */
     const baselines = ['continuous','rate'].includes(prediction.endpoint.type) ? continuousBaselines(cells,history,prediction.endpoint) : {}
-    const calibration = [...paired.paired,...paired.missing].filter(r => r.horizonDays === horizonDays && history.split?.assignments[r.subjectKey] === 'calibration')
+    const calibration = [...paired.paired,...paired.missing].filter(r => r.horizonDays === horizonDays && !prevalent.has(r.subjectKey) && history.split?.assignments[r.subjectKey] === 'calibration')
     if (['risk','survival_probability'].includes(prediction.endpoint.type) && calibration.length) {
       const known = calibration.filter(r => r.actual != null)
       let risk = mean(known.map(r => r.actual))
@@ -211,8 +220,8 @@ export function evaluateForecast(prediction, history, outcomes, options = {}) {
         point:prediction.endpoint.type === 'survival_probability' ? 1-risk : risk,quantiles:[],samples:[]}))
     }
     const metrics = metricIntervals(cells,prediction.endpoint.type,{bootstrap,seed})
-    const probability = ['risk','survival_probability'].includes(prediction.endpoint.type)
-    return { horizonDays, requested: expectedSubjects.size, evaluated: cells.length, missingOutcomes: absent.length,
+    return { horizonDays, candidates: candidates.size, prevalentExcluded: candidates.size-expectedSubjects.size,
+      riskSet, requested: expectedSubjects.size, evaluated: cells.length, missingOutcomes: absent.length,
       acceptedForecasts: present.size, invalidForecasts: invalid.size, missingForecasts: expectedSubjects.size-present.size-invalid.size,
       subjects: new Set(cells.map(r => r.subjectKey)).size, events: probability ? cells.filter(r => r.actual === 1).length : null,
       observedMean: mean(cells.map(r => r.actual)), forecastMean: mean(cells.map(r => r.point)),
@@ -243,34 +252,76 @@ export function evaluateForecast(prediction, history, outcomes, options = {}) {
         return [name,{subjects:values.length,metrics:baselineMetrics,modelOnSameSubjects:modelMetrics,comparisons}]
       })) }
   })
-  return { schema: 1, endpoint: prediction.endpoint, origin: prediction.origin, groups, split: history.split ? role : 'not_declared',
+  // Site membership is fixed by the input history, never inferred from outcomes.
+  // Mixed and missing sites remain explicit groups. No subgroup score blocks use.
+  const sites = new Map()
+  const bySubject = groupBy(evaluationEvents,e => e.subjectKey)
+  if (options.groupBy === 'site') for (const subject of longitudinalSubjects(history)) {
+    const events = bySubject.get(subject) ?? []
+    const values = [...new Set(events.map(e => e.site).filter(Boolean))]
+    const key = values.length > 1 ? 'multiple_sites' : values[0] ?? 'site_unknown'
+    if (!sites.has(key)) sites.set(key,new Set())
+    sites.get(key).add(subject)
+  }
+  const subgroups = [...sites].slice(0,50).map(([site,subjects]) => {
+    const own = (/** @type {any} */ row) => subjects.has(row.subjectKey)
+    const result = evaluateForecast({...prediction,rows:prediction.rows.filter(own),rejected:prediction.rejected?.filter(own)},
+      {...history,subjects:[...subjects],events:history.events.filter(own),evaluationEvents:evaluationEvents.filter(own)},
+      {...outcomes,events:outcomes.events.filter(own)}, {...options,groupBy:undefined})
+    return {site,subjects:result.groups[0]?.requested ?? 0,groups:result.groups}
+  })
+  return { schema: 1, endpoint: prediction.endpoint, origin: prediction.origin, groups, subgroups,
+    subgroupCoverage:{reported:subgroups.length,available:sites.size}, riskSet,
+    split: history.split ? role : 'not_declared',
     diagnostics: forecastShiftDiagnostics(prediction,history),
     trainingOverlap: options.trainingOverlap ?? 'unknown', dataClass,
     validationClass: dataClass === 'synthetic' ? 'engineering_synthetic' : 'longitudinal_outcomes',
     calibrationIndependent: role === 'test' && !!history.split,
+    independence: {localCalibrationSplit: role === 'test' && !!history.split ? 'patient_disjoint' : 'not_established',
+      providerTraining: options.trainingOverlap ?? 'unknown', meaning:'local_partition_does_not_verify_provider_training_independence'},
     forecastFailures: prediction.issues?.length ?? 0, uncertainty: { intervals: 'patient_cluster_bootstrap', trajectoriesArePatients: false,
       predictiveIntervals: 'only_rows_declared_predictive', modelUncertainty: 'not_estimated', monteCarloError: 'separate_from_patient_uncertainty' },
     notes: [...(!history.split ? ['independent_split_not_declared'] : []), ...(options.trainingOverlap ? [] : ['provider_training_overlap_unknown']),
       ...(groups.some((/** @type {any} */ g) => g.missingOutcomes > 0) ? ['outcomes_missing_or_censored'] : [])] }
 }
 
-/** Same-history paired scenarios, always described as model contrasts.
- * @param {any} first @param {any} second @param {{seed?:number,bootstrap?:number}} [options] */
+/** Paired predictions on the same subjects. Updating a landmark compares only
+ * equal calendar targets; it never compares two different future dates or
+ * silently interpolates a missing forecast.
+ * @param {any} first @param {any} second @param {{seed?:number,bootstrap?:number,mode?:string}} [options] */
 export function compareForecasts(first, second, options = {}) {
-  if (first.historyId !== second.historyId || first.origin !== second.origin || JSON.stringify(first.endpoint) !== JSON.stringify(second.endpoint)
-    || JSON.stringify(first.horizonsDays) !== JSON.stringify(second.horizonsDays)) return { available: false, code: 'paired_inputs_differ' }
-  const groups = first.horizonsDays.map((/** @type {number} */ horizonDays) => {
-    const secondBySubject = new Map(second.rows.filter((/** @type {any} */ r) => r.horizonDays === horizonDays).map((/** @type {any} */ r) => [r.subjectKey,r]))
-    const rows = first.rows.filter((/** @type {any} */ r) => r.horizonDays === horizonDays).flatMap((/** @type {any} */ row) => {
+  const mode = options.mode ?? 'scenario', update = mode === 'update'
+  const alignedEndpoint = ['code','unit','type'].every(key => first.endpoint?.[key] === second.endpoint?.[key])
+  if (!alignedEndpoint || !Number.isFinite(Date.parse(first.origin)) || !Number.isFinite(Date.parse(second.origin))
+    || !update && first.origin !== second.origin || mode === 'scenario' && first.historyId !== second.historyId) {
+    return { available: false, code: 'paired_inputs_differ', mode }
+  }
+  const shift = (Date.parse(first.origin)-Date.parse(second.origin))/86400000
+  const shared = first.horizonsDays.filter((/** @type {number} */ h) => second.horizonsDays.includes(h+shift))
+  const groups = shared.map((/** @type {number} */ horizonDays) => {
+    const secondHorizonDays = horizonDays+shift
+    const secondBySubject = new Map(second.rows.filter((/** @type {any} */ r) => r.horizonDays === secondHorizonDays).map((/** @type {any} */ r) => [r.subjectKey,r]))
+    const firstRows = first.rows.filter((/** @type {any} */ r) => r.horizonDays === horizonDays)
+    const rows = firstRows.flatMap((/** @type {any} */ row) => {
       const other = /** @type {any} */ (secondBySubject.get(row.subjectKey))
-      return other ? [{ subjectKey: row.subjectKey, point: row.point-other.point, actual: 0 }] : []
+      return other ? [{ subjectKey: row.subjectKey, point: row.point-other.point, first:row.point,second:other.point }] : []
     })
     const rng = forecastRandom(options.seed ?? 1), values = rows.map((/** @type {any} */ r) => r.point), boot = []
     if (values.length > 1) for (let i=0;i<(options.bootstrap ?? 200);i++) boot.push(Number(mean(values.map(() => values[Math.floor(rng()*values.length)]))))
-    return { horizonDays, subjects: rows.length, meanDifference: mean(values), lower: quantile(boot,.025), upper: quantile(boot,.975),
+    return { horizonDays, secondHorizonDays, targetAt:new Date(Date.parse(first.origin)+horizonDays*86400000).toISOString(),
+      subjects: rows.length, firstOnly:firstRows.length-rows.length, secondOnly:secondBySubject.size-rows.length,
+      firstMean:mean(rows.map((/** @type {any} */ r) => r.first)),secondMean:mean(rows.map((/** @type {any} */ r) => r.second)),
+      meanDifference: mean(values), lower: quantile(boot,.025), upper: quantile(boot,.975),
       intervalMeaning: 'between_subject_sampling', modelUncertainty: 'not_estimated' }
   })
-  return { available: true, groups, interpretation: 'paired_model_scenario_contrast', causalEffectIdentified: false,
+  const changedFactors = [first.historyId !== second.historyId && 'history',first.origin !== second.origin && 'origin',
+    JSON.stringify(first.model) !== JSON.stringify(second.model) && 'model',JSON.stringify(first.scenario) !== JSON.stringify(second.scenario) && 'scenario'].filter(Boolean)
+  return { available: groups.some((/** @type {any} */ g) => g.subjects > 0), code:shared.length ? null : 'shared_target_missing', groups, mode,
+    endpoint:first.endpoint, origins:[first.origin,second.origin], histories:[first.historyId,second.historyId],models:[first.model ?? null,second.model ?? null],
+    changedFactors, attribution:changedFactors.length > 1 ? 'multiple_factors_changed' : 'descriptive_comparison',
+    unmatchedHorizons:{first:first.horizonsDays.length-shared.length,second:second.horizonsDays.length-shared.length},
+    notes:update && ['risk','survival_probability'].includes(first.endpoint.type) ? ['equal_target_date_different_conditional_risk_windows'] : [],
+    interpretation: mode === 'scenario' ? 'paired_model_scenario_contrast' : `paired_forecast_${mode}`, causalEffectIdentified: false,
     dataClass: first.dataClass === 'synthetic' && second.dataClass === 'synthetic' ? 'synthetic' : 'patient',
     scenarios: [first.scenario ?? null,second.scenario ?? null] }
 }
@@ -309,6 +360,7 @@ function groupBy(rows,key) {
  * Unknown model training support remains unknown. @param {any} prediction @param {any} history */
 export function forecastShiftDiagnostics(prediction,history) {
   const own = groupBy(history.events, e => e.subjectKey)
+  const subjectCount = longitudinalSubjects(history).length
   const ages = [...own.values()].map(events => (Date.parse(history.asOf)-Math.max(...events.map(e => Date.parse(e.occurredAt))))/86400000)
   const predictionKeys = new Set(prediction.rows.map((/** @type {any} */ r) => `${r.subjectKey}:${r.horizonDays}`))
   const splitCodes = ['train','calibration','test']
@@ -316,7 +368,8 @@ export function forecastShiftDiagnostics(prediction,history) {
   const reference = endpointRows.filter((/** @type {any} */ e) => history.split?.assignments[e.subjectKey] === 'train').map((/** @type {any} */ e) => e.value)
   const heldout = endpointRows.filter((/** @type {any} */ e) => history.split?.assignments[e.subjectKey] === 'test').map((/** @type {any} */ e) => e.value)
   const low = quantile(reference,0), high = quantile(reference,1)
-  return { expectedCells: own.size * prediction.horizonsDays.length, missingForecasts: own.size * prediction.horizonsDays.length - predictionKeys.size,
+  return { expectedCells: subjectCount * prediction.horizonsDays.length, missingForecasts: subjectCount * prediction.horizonsDays.length - predictionKeys.size,
+    subjectsWithoutObservations:subjectCount-own.size,
     staleHistoryDays: {median:quantile(ages,.5),p90:quantile(ages,.9),maximum:quantile(ages,1)},
     siteCount:new Set(history.events.map((/** @type {any} */ e) => e.site).filter(Boolean)).size,
     splits: Object.fromEntries(splitCodes.map(role => [role,{observations:endpointRows.filter((/** @type {any} */ e) => history.split?.assignments[e.subjectKey] === role).length}])),
