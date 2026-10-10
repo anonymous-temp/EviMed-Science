@@ -1,7 +1,7 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { GeoValue } from "@/lib/geoClient";
 import { geoProject, valueFilled, VALUE_TITLES } from "../__fixtures__/geoTabs";
 import { ValueSection, type ValueMode } from "./ValueSection";
@@ -177,6 +177,45 @@ describe("a finding's sources", () => {
     show();
     await openFold();
     expect(screen.getByRole("link", { name: "给药负担研究" })).toHaveAttribute("href", "https://example.org/study");
+  });
+});
+
+describe("the version the section stands on (G10a)", () => {
+  /** The server's clock is not the test's: "this year" is the year of the day the tests say it is. */
+  const today = (iso: string) => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(iso)); };
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("says it once in every section that draws — the profile's version and the day it was written, in the app's day form", async () => {
+    today("2026-10-10T12:00:00.000Z");
+    client.getGeoValue.mockResolvedValue({ ...valueFilled, version: 3, updatedAt: "2026-10-08T12:00:00.000Z" });
+    const modes: ValueMode[] = ["summary", "profile", "safety", "decisions", "actions", "sources", "coverage"];
+    for (const mode of modes) {
+      const view = show(mode);
+      expect(await screen.findByText("依据版本 3 · 更新于 10月8日"), mode).toBeInTheDocument();
+      expect(screen.getAllByText(/依据版本/), `${mode}: one line, not one per row`).toHaveLength(1);
+      // A line to read, not a control: no picker for an older version.
+      expect(view.container.querySelector("select, input, [role=combobox], [role=listbox]"), mode).toBeNull();
+      expect(screen.queryByRole("button", { name: /版本/ }), mode).not.toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
+  it("dates a profile written in an earlier year in full, and names the version alone when no time came", async () => {
+    today("2026-10-10T12:00:00.000Z");
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, updatedAt: "2025-09-22T12:00:00.000Z", data: { findings: [{ id: "f", statement: "疗效优于安慰剂" }] } });
+    show();
+    expect(await screen.findByText("依据版本 2 · 更新于 2025-09-22")).toBeInTheDocument();
+    cleanup();
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 4, updatedAt: null, data: { findings: [{ id: "f", statement: "疗效优于安慰剂" }] } });
+    show();
+    expect(await screen.findByText("依据版本 4")).toBeInTheDocument();
+  });
+
+  it("names no version for a profile that was never written, though something is on the page", async () => {
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 0, data: { opportunities: [{ id: "o", statement: "补一篇科普稿" }] } });
+    show("actions");
+    expect(await screen.findByText("补一篇科普稿")).toBeInTheDocument();
+    expect(screen.queryByText(/依据版本/)).not.toBeInTheDocument();
   });
 });
 

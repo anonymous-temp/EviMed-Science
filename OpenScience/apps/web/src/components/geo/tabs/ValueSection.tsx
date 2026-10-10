@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { geoValueText, GEO_VALUE_DOMAINS } from "@evimed/domain";
 import { getGeoValue, type GeoProject, type GeoValue } from "@/lib/geoClient";
 import { CLAIM_TYPE_LABEL } from "@/lib/claimCitations";
+import { formatDay } from "@/lib/format";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { safeWebHref } from "@/lib/readPages";
 import { AskAi } from "../AskAi";
@@ -126,8 +127,20 @@ function ValueBody({ geoId, value, mode, className }: { geoId: string; value: Ge
           <Link to={tabPath(geoId, "sources")} className="ml-2 text-link hover:underline">去信源查看</Link>
         </p>}
       </>}
+      <BasisLine version={value.version} updatedAt={value.updatedAt} />
     </TabSection>
   );
+}
+
+/**
+ * The one line that says which analysis the section stands on: the profile's version and the day it was last written (「依据版本 3 · 更新于
+ * 10月8日」). The version is the backend's counter, kept so a reader can tell a section from last week from this week's; there is no picker
+ * for an older one. A profile never written has no version to name, and one whose time did not come says the version alone.
+ */
+function BasisLine({ version, updatedAt }: { version: number; updatedAt: string | null }) {
+  if (!(version > 0)) return null;
+  const day = formatDay(updatedAt);
+  return <p className="mt-3 text-caption text-text-3">{day ? `依据版本 ${version} · 更新于 ${day}` : `依据版本 ${version}`}</p>;
 }
 
 const START_DRAFT = "请结合现有资料开始药品价值分析，说明与本项目决策相关的获益、风险、适用性、费用与可及性；资料不足的部分保留未知。";
