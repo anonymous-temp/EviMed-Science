@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
-import { ALL_ERROR_CODES, GEO_ROUTE_ERROR_CODES } from "@evimed/domain";
+import { ALL_ERROR_CODES, GEO_MEDIA_MARKET_ERROR_CODES, GEO_ROUTE_ERROR_CODES } from "@evimed/domain";
 import { createGeoRoutes, geoRoutePattern } from "../src/geoRoutes.mjs";
 import { GeoService, geoAudienceAllows, geoMetricFamilies, geoReadiness } from "../src/geoService.mjs";
 import { readFile } from "node:fs/promises";
@@ -77,16 +77,21 @@ test("every code the routes and the service answer with is registered", async ()
   // The refusals a request can meet: an HttpError, directly or through the
   // service's `failure` helper. Readiness codes are the readiness board's.
   const emitted = new Set();
-  for (const file of ["../src/geoRoutes.mjs", "../src/geoService.mjs"]) {
+  // The market's refusals are the routes' too (`marketFailure("409", …)`, a status written as a string), and the vendor's codes pass
+  // through them: the scan reads the market as it reads the routes (M-6, which a scan of the routes and the service alone could not see).
+  for (const file of ["../src/geoRoutes.mjs", "../src/geoService.mjs", "../src/geoMarket.mjs", "../src/geoMarketOperations.mjs"]) {
     const text = await readFile(new URL(file, import.meta.url), "utf8");
-    for (const [, code] of text.matchAll(/(?:failure|HttpError)\(\s*\d{3},\s*"(geo_[a-z0-9_]+)"/g)) emitted.add(code);
+    for (const [, code] of text.matchAll(/(?:failure|HttpError|marketFailure)\(\s*"?\d{3}"?,\s*"((?:geo|media_market)_[a-z0-9_]+)"/g)) emitted.add(code);
     for (const [, code] of text.matchAll(/new HttpError\(\d{3}, "(geo_[a-z0-9_]+)"/g)) emitted.add(code);
   }
   assert.ok(emitted.size >= 15, `only ${emitted.size} codes were found; the scan did not run`);
+  for (const code of ["geo_order_in_flight", "geo_order_not_found_at_vendor", "geo_topup_not_pending", "geo_topup_invalid", "media_market_unconfigured"]) {
+    assert.ok(emitted.has(code), `the scan reaches the market: ${code}`);
+  }
   const unregistered = [...emitted].filter((code) => !ALL_ERROR_CODES.includes(code)).sort();
   assert.deepEqual(unregistered, [], `emitted but not registered: ${unregistered.join(", ")}`);
   // A page's refusal is a page's; the one tool code the service throws is the runtime read's own.
-  assert.deepEqual([...emitted].filter((code) => !GEO_ROUTE_ERROR_CODES.includes(code)), ["geo_read_what_invalid"]);
+  assert.deepEqual([...emitted].filter((code) => !GEO_ROUTE_ERROR_CODES.includes(code) && !GEO_MEDIA_MARKET_ERROR_CODES.includes(code)), ["geo_read_what_invalid"]);
 });
 
 test("readiness: off is green and says so; on it is red only for the module's own invariants", async () => {
