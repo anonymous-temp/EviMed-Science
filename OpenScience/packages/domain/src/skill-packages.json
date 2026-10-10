@@ -1142,11 +1142,11 @@
       "id": "capability/vcr-matching",
       "name": "vcr-matching",
       "origin": "capability",
-      "version": "1.1.1",
+      "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:998fa240383a6fd3ebb811eed65e2af2eb70d864e739334f1f24dc3e818dfa08",
+      "digest": "sha256:c3160e7ecf6dcdbda7a2de34a28dfd71953c7cc6bbcfe96c456a5ed039d967e0",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"1ce24ad81268e7032c6fed0ba9f128fa755092d3aaf12048188a4fb570ba59ec"}],
+      "references": [{"path":"capability.yaml","sha256":"665bf7fbae189a669f5279305140513513acc7493c37a8072738d356eb9bac20"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1154,6 +1154,7 @@
         {"kind":"platform-tool","name":"literature_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"locate_quote","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"term_normalize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
+        {"kind":"platform-tool","name":"trial_registry_record","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"vcr_read","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"vcr_simulate","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"vcr_write","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"}
