@@ -89,23 +89,61 @@ it("a failed read can recover without asking for clinical metadata", async () =>
   expect(await screen.findByText("已有结果仍可继续使用")).toBeInTheDocument();
 });
 
-it("keeps scope, certainty, applicability dates and source identity with the finding", async () => {
+it("keeps scope, certainty, applicability dates and the source's title with the finding — and never its id or digest", async () => {
   client.getGeoValue.mockResolvedValue({ ...empty(), data: {
     scope: { genericName: "Synthetic medicine", indication: "Synthetic indication", region: "CN", asOf: "2026-10-10" },
     findings: [{ statement: "Comparative evidence remains uncertain", certainty: "low / conflicting", region: "EU",
       timeframe: "12 weeks", validFrom: "2025-01-01", validUntil: "2027-01-01", sourceVersion: "revision 4",
-      sources: [{ sourceId: "src_preserved", version: "v2", sha256: "abc123" }] }],
+      sources: [{ title: "给药负担研究", sourceId: "src_preserved", version: "v2", sha256: "abc123" }] }],
   } });
   const view = show();
   await userEvent.click(await screen.findByText("分析范围"));
   expect(screen.getByText("Synthetic medicine")).toBeVisible();
   expect(screen.getByText("2026-10-10")).toBeVisible();
   await userEvent.click(screen.getByText("依据与适用条件"));
-  for (const content of ["low / conflicting", "EU", "12 weeks", "2025-01-01", "2027-01-01", "revision 4", "src_preserved", "版本 v2", "SHA-256 abc123"]) {
+  for (const content of ["low / conflicting", "EU", "12 weeks", "2025-01-01", "2027-01-01", "revision 4", "给药负担研究", "版本 v2"]) {
     expect(screen.getByText(content)).toBeVisible();
   }
   expect(view.container.querySelector("input, textarea, select")).toBeNull();
-  expect(screen.queryByRole("link", { name: "src_preserved" })).not.toBeInTheDocument();
+  expect(view.container.textContent).not.toMatch(/src_|SHA-256|abc123/);
+});
+
+describe("a finding's sources", () => {
+  const SOURCE_ID = `src_${"a1b2c3d4".repeat(8)}`;
+  const withSources = (sources: unknown[]) => ({ ...empty(), version: 2, data: { findings: [{ id: "f1", statement: "疗效优于安慰剂", sources }] } });
+  const openFold = async () => userEvent.click(await screen.findByText("依据与适用条件"));
+
+  it("are named by title, else by a reference a reader can use, else left out", async () => {
+    client.getGeoValue.mockResolvedValue(withSources([
+      { title: "给药负担研究", sourceId: SOURCE_ID },
+      { sourceRef: "PMID:40421736" },
+      { sourceId: "doi: 10.1056/NEJMoa2300000" },
+      { sourceId: SOURCE_ID },
+      { sourceRef: "web-page:e1edc04a1ac28750" },
+      "中国成人超重和肥胖症预防控制指南 2024",
+      SOURCE_ID,
+    ]));
+    const view = show();
+    await openFold();
+    const items = within(screen.getByText("依据与适用条件").closest("details") as HTMLElement).getAllByRole("listitem").map((item) => item.textContent);
+    expect(items).toEqual(["给药负担研究", "PMID 40421736", "DOI 10.1056/NEJMoa2300000", "中国成人超重和肥胖症预防控制指南 2024"]);
+    expect(view.container.textContent).not.toMatch(/src_|web-page|e1edc04a/);
+  });
+
+  it("leave no list at all, and no fold, when none of them can be named and nothing else is known", async () => {
+    client.getGeoValue.mockResolvedValue(withSources([{ sourceId: SOURCE_ID, sha256: "abc123" }, SOURCE_ID]));
+    const view = show();
+    expect(await screen.findByText("疗效优于安慰剂")).toBeInTheDocument();
+    expect(screen.queryByText("依据与适用条件")).not.toBeInTheDocument();
+    expect(view.container.textContent).not.toMatch(/src_|abc123/);
+  });
+
+  it("keep a link on a titled source", async () => {
+    client.getGeoValue.mockResolvedValue(withSources([{ title: "给药负担研究", url: "https://example.org/study", sourceId: SOURCE_ID }]));
+    show();
+    await openFold();
+    expect(screen.getByRole("link", { name: "给药负担研究" })).toHaveAttribute("href", "https://example.org/study");
+  });
 });
 
 const OTHER_MODES = ["summary", "safety", "decisions", "actions", "sources", "coverage"] as const;

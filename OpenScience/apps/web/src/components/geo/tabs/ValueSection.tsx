@@ -7,6 +7,7 @@ import { AskAi } from "../AskAi";
 import { engineName } from "../geoText";
 import { TabError, TabSection, useGeoLoad } from "./geoTabKit";
 import { tabPath } from "./geoTabText";
+import { readableSourceRef } from "./EvidenceTab";
 import { ShowMore, useShowMore } from "./showMore";
 
 export type ValueMode = "summary" | "profile" | "safety" | "decisions" | "actions" | "sources" | "coverage";
@@ -147,17 +148,19 @@ function FindingDetail({ entry }: { entry: Record<string, unknown> }) {
     ["评价日期", entry.asOf], ["观察时间", entry.timeframe ?? entry.time], ["适用起始日期", entry.validFrom],
     ["适用截止日期", entry.validUntil], ["依据版本", typeof entry.sourceVersion === "number" ? String(entry.sourceVersion) : entry.sourceVersion], ["局限", entry.limitations], ["判断理由", entry.rationale], ["下一步", entry.nextAction],
   ].filter((pair): pair is [string, string] => typeof pair[1] === "string" && Boolean(pair[1]));
+  // A source is named by its title; failing that by a reference a reader can use (a PMID, a DOI, a name someone wrote). A
+  // content-addressed id and a digest say nothing to a reader, so a source with neither is left out, as 方案's claims leave them out.
   const sources = rows(entry.sources ?? entry.sourceRefs).map(source => ({
-    label: typeof source === "string" ? source : text(source) || String(record(source).sourceId ?? record(source).sourceRef ?? ""),
+    label: typeof source === "string" ? readableSourceRef(source)
+      : text(source) || readableSourceRef(String(record(source).sourceRef ?? "")) || readableSourceRef(String(record(source).sourceId ?? "")),
     version: typeof source === "string" ? "" : String(record(source).version ?? record(source).sourceVersion ?? ""),
-    digest: typeof source === "string" ? "" : String(record(source).sha256 ?? ""),
     href: safeWebHref(typeof source === "string" ? source : String(record(source).url ?? record(source).sourceRef ?? "")),
-  })).filter(source => source.label);
+  })).filter((source): source is typeof source & { label: string } => Boolean(source.label));
   if (!known.length && !sources.length && !hasScope(entry.scope)) return null;
   return <Disclosure summary="依据与适用条件" className="mt-2">
     <ScopeDetail scope={entry.scope} />
     <dl className="space-y-2 text-caption text-text-2">{known.map(([label, content], index) => <div key={`${label}:${index}`}><dt>{label}</dt><dd className="max-w-measure break-words">{content}</dd></div>)}</dl>
-    {!!sources.length && <ul className="mt-2 space-y-1 text-caption">{sources.map((source, index) => <li key={index} className="break-words">{source.href ? <a href={source.href} target="_blank" rel="noreferrer" className="text-accent underline">{source.label}</a> : source.label}{source.version && <span className="ml-2 text-text-3">版本 {source.version}</span>}{source.digest && <span className="block break-all text-text-3">SHA-256 {source.digest}</span>}</li>)}</ul>}
+    {!!sources.length && <ul className="mt-2 space-y-1 text-caption">{sources.map((source, index) => <li key={index} className="break-words">{source.href ? <a href={source.href} target="_blank" rel="noreferrer" className="text-accent underline">{source.label}</a> : source.label}{source.version && <span className="ml-2 text-text-3">版本 {source.version}</span>}</li>)}</ul>}
   </Disclosure>;
 }
 
