@@ -22,7 +22,7 @@ function bytesOf(s: string): ArrayBuffer {
 describe("DosView", () => {
   it("renders a spin-polarized DOS with two filled areas and Fermi marker", () => {
     const { container } = render(<DosView filename="DOSCAR" bytes={bytesOf(SPIN)} />);
-    expect(container.textContent).toContain("spin-polarized");
+    expect(container.textContent).toContain("自旋极化");
     expect(container.textContent).toContain("E_F");
     // spin-up + spin-down areas → at least two filled paths
     const filled = Array.from(container.querySelectorAll("path")).filter((p) =>

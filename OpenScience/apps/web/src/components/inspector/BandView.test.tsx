@@ -26,8 +26,8 @@ function bytesOf(s: string): ArrayBuffer {
 describe("BandView", () => {
   it("renders one polyline per band with axis labels", () => {
     const { container } = render(<BandView filename="EIGENVAL" bytes={bytesOf(EIGENVAL)} />);
-    expect(container.textContent).toContain("2 bands × 2 k-points");
-    expect(container.textContent).toContain("Energy (eV)");
+    expect(container.textContent).toContain("2 条能带 × 2 个 k 点");
+    expect(container.textContent).toContain("能量 (eV)");
     // one <path> per band (2 bands)
     const paths = container.querySelectorAll("path");
     expect(paths.length).toBeGreaterThanOrEqual(2);

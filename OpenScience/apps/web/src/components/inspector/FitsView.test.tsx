@@ -27,7 +27,7 @@ describe("FitsView", () => {
     const { container } = render(
       <FitsView filename="spec.fits" bytes={toBuffer(FITS_SPECTRUM_1D_B64)} />,
     );
-    expect(screen.getByText(/spectrum · 16 samples/)).toBeInTheDocument();
+    expect(screen.getByText(/光谱 · 16 个采样点/)).toBeInTheDocument();
     const path = container.querySelector("path");
     expect(path).not.toBeNull();
     expect(path!.getAttribute("d")!.startsWith("M")).toBe(true);

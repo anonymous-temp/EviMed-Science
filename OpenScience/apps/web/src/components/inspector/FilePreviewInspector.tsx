@@ -59,6 +59,7 @@ function ViewerFallback() {
 }
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { cn } from "@/lib/cn";
+import { formatNumber } from "@/lib/format";
 import { PaneTitlebarInset } from "./RightPane";
 import { toast } from "@/lib/toast";
 import { parseFailureMessage } from "@/lib/errorText";
@@ -650,7 +651,7 @@ export function PreviewError({
 /** Render the probe's memory pointer as a compact, readable fact sheet. */
 function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
   if (p.error) return <div className="mt-3 text-ui text-error">{p.error}</div>;
-  const fmt = (n: number) => n.toLocaleString("en-US");
+  const fmt = (n: number) => formatNumber(n);
   const rows: [string, string][] = [];
   if (p.format) rows.push(["格式", p.format]);
   if (p.size) rows.push(["大小", p.size + (p.gzipped ? "（已压缩）" : "")]);

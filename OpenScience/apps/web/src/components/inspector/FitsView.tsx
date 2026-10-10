@@ -162,7 +162,7 @@ function ImageView({ filename, img }: { filename: string; img: FitsImage }) {
           {hover ? (
             <>
               <div>
-                pixel ({hover.x}, {hover.y}) = {hover.v.toPrecision(5)}
+                像素 ({hover.x}, {hover.y}) = {hover.v.toPrecision(5)}
               </div>
               {world && <div className="text-white/45">{fmtCoord(world.lon, world.lat)}</div>}
             </>
@@ -251,7 +251,7 @@ function SpectrumView({ filename, spec }: { filename: string; spec: import("@/li
       <Toolbar
         left={
           <span className="truncate font-mono text-caption text-muted">
-            {filename} · spectrum · {length} samples
+            {filename} · 光谱 · {length} 个采样点
           </span>
         }
       />
@@ -282,17 +282,17 @@ function SpectrumView({ filename, spec }: { filename: string; spec: import("@/li
             </g>
           )}
           <text x={(W) / 2} y={H - 6} textAnchor="middle" className="fill-muted font-mono text-caption">
-            {ctype1 ?? "sample"} {dx !== 1 ? `(${x0.toPrecision(4)} + ${dx}·i)` : ""}
+            {ctype1 ?? "采样点"} {dx !== 1 ? `(${x0.toPrecision(4)} + ${dx}·i)` : ""}
           </text>
           <text x={14} y={H / 2} textAnchor="middle" transform={`rotate(-90 14 ${H / 2})`} className="fill-muted font-mono text-caption">
-            {bunit ?? "value"}
+            {bunit ?? "数值"}
           </text>
         </svg>
       </div>
       <div className="border-t border-border px-3 py-2 text-right font-mono text-caption text-muted">
         {hover ? (
           <>
-            {ctype1 ?? "x"} = {(x0 + dx * hover.i).toPrecision(6)} · value = {data[hover.i].toPrecision(5)}
+            {ctype1 ?? "x"} = {(x0 + dx * hover.i).toPrecision(6)} · 数值 = {data[hover.i].toPrecision(5)}
           </>
         ) : (
           <span className="text-muted">悬停查看样本</span>

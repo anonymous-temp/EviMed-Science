@@ -111,7 +111,7 @@ function Map({ filename, grid }: { filename: string; grid: AnomalyGrid }) {
     <div className="flex h-full flex-col bg-[#0f1320]">
       <div className="flex items-center gap-2 border-b border-white/10 bg-black/20 px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-caption text-white/50">
-          {filename} · {cols}×{rows} grid{grid.unit ? ` · ${grid.unit}` : ""}
+          {filename} · {cols}×{rows} 网格{grid.unit ? ` · ${grid.unit}` : ""}
         </span>
       </div>
 
@@ -161,7 +161,7 @@ function Map({ filename, grid }: { filename: string; grid: AnomalyGrid }) {
           {hover ? (
             <>
               {fmtLat(hover.lat)}, {fmtLon(hover.lon)} ·{" "}
-              {Number.isFinite(hover.v) ? `${hover.v > 0 ? "+" : ""}${hover.v.toPrecision(3)}` : "no data"}
+              {Number.isFinite(hover.v) ? `${hover.v > 0 ? "+" : ""}${hover.v.toPrecision(3)}` : "无数据"}
             </>
           ) : (
             <span className="text-white/30">悬停查看网格单元</span>

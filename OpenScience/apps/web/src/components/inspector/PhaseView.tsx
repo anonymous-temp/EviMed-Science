@@ -51,8 +51,8 @@ export function PhaseView({ filename, text }: { filename: string; text: string }
     <div className="flex h-full flex-col bg-surface">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-caption text-muted">
-          {filename} · {pd.elements[0]}–{pd.elements[1]} · {pd.entries.length} phases ·{" "}
-          {pd.entries.filter((e) => e.stable).length} stable
+          {filename} · {pd.elements[0]}–{pd.elements[1]} · {pd.entries.length} 个相 ·{" "}
+          {pd.entries.filter((e) => e.stable).length} 个稳定
         </span>
       </div>
 
@@ -113,10 +113,10 @@ export function PhaseView({ filename, text }: { filename: string; text: string }
             {pd.elements[1]}
           </text>
           <text x={W / 2} y={H - 6} textAnchor="middle" className="fill-muted font-mono text-caption">
-            composition (fraction {pd.elements[1]})
+            成分（{pd.elements[1]} 的占比）
           </text>
           <text x={16} y={H / 2} textAnchor="middle" transform={`rotate(-90 16 ${H / 2})`} className="fill-muted font-mono text-caption">
-            formation energy (eV/atom)
+            形成能 (eV/atom)
           </text>
         </svg>
       </div>
@@ -128,7 +128,7 @@ export function PhaseView({ filename, text }: { filename: string; text: string }
             return (
               <span>
                 <span className="text-text">{e.formula}</span> · E_f = {e.y.toFixed(3)} eV/atom ·{" "}
-                {e.stable ? "stable (on hull)" : `+${e.eAboveHull.toFixed(3)} eV/atom above hull`}
+                {e.stable ? "稳定（在凸包上）" : `高于凸包 +${e.eAboveHull.toFixed(3)} eV/atom`}
               </span>
             );
           })()

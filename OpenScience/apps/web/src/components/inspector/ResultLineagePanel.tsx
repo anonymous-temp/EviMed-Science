@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { parseFailureMessage } from "@/lib/errorText";
+import { formatClock, formatDay } from "@/lib/format";
 import { bindingFormatLabel, bindingLocatorLabel, bindingStatusLabel, bindingsForSelection, getResultLineage, lineageChangeLabel, reproductionLabel,
   snapshotKindLabel, snapshotUnknownLabel, unboundReasonLabel, type LineageChangeRow, type ResultLineage, type ResultVersion } from "@/lib/resultProvenance";
 
@@ -86,7 +87,7 @@ export function ResultLineagePanel({ version, selectedText = null, onOpen }: {
         {lineage && lineage.role === "calculation" && lineage.dependents.length === 0 && <p className="text-caption text-muted">目前没有报告、表格或图的数值对应到这次计算。</p>}
         {lineage?.changes.map((change) => <div key={change.successorVersionId} className="space-y-1 rounded-card border border-border p-3">
           <p className={change.summary.affectedValues > 0 ? "text-verify-pending" : undefined}>
-            {change.calculationVersionId === version.versionId ? "这次计算已有新版本" : "所引用的计算已有新版本"}（{new Date(change.successorCapturedAt).toLocaleString("zh-CN")}）：
+            {change.calculationVersionId === version.versionId ? "这次计算已有新版本" : "所引用的计算已有新版本"}（{formatDay(change.successorCapturedAt)} {formatClock(change.successorCapturedAt)}）：
             {change.summary.affectedValues > 0 ? `${change.summary.affectedValues} 处数值会变化` : "已对应的数值都不会变化"}，{change.summary.unaffectedValues} 处保持不变
           </p>
           {change.dependents.filter((row) => row.affected.length > 0).map((row: LineageChangeRow) => <div key={row.versionId} className="text-caption text-muted">

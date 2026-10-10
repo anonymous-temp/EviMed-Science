@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProvenanceRecord } from "@ai4s/shared";
+import { formatClock, formatDay } from "@/lib/format";
 import { LegacyProvenancePanel as ProvenancePanel, reproducePrompt } from "./ProvenancePanel";
 
 const records: ProvenanceRecord[] = [
@@ -75,18 +76,15 @@ describe("ProvenancePanel", () => {
     expect(screen.getByText("打开对话")).toBeInTheDocument();
   });
 
-  it("writes a version's time the Chinese way, whatever language the browser is set to", async () => {
+  it("writes a version's time as the rest of the app does, the day and the clock, with the year once it is not this one", async () => {
     listProvenance.mockResolvedValue(records);
-    const formatted = vi.spyOn(Date.prototype, "toLocaleString");
-    try {
-      renderPanel();
-      await screen.findByText("v2");
-      expect(formatted).toHaveBeenCalled();
-      for (const [locale] of formatted.mock.calls) expect(locale).toBe("zh-CN");
-      expect(screen.getAllByText(/^\d+月\d+日/)).toHaveLength(2);
-    } finally {
-      formatted.mockRestore();
-    }
+    renderPanel();
+    await screen.findByText("v2");
+    // The two records are from mid-2025: the day is dated with its year, 「2025-07-02」, and the clock follows it.
+    const written = (ts: number) => { const when = new Date(ts * 1000).toISOString(); return `${formatDay(when)} ${formatClock(when)}`; };
+    expect(screen.getByText(written(1751500000))).toBeInTheDocument();
+    expect(screen.getByText(written(1751503600))).toBeInTheDocument();
+    expect(written(1751500000)).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   });
 
   it("expands an older version to reveal its code", async () => {

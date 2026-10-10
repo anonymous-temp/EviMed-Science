@@ -16,8 +16,8 @@ describe("PhaseView", () => {
   it("renders the system, phase counts, hull path, and stable labels", () => {
     const { container } = render(<PhaseView filename="LiO.phase" text={DOC} />);
     expect(container.textContent).toContain("Li–O");
-    expect(container.textContent).toContain("stable");
-    expect(container.textContent).toContain("formation energy (eV/atom)");
+    expect(container.textContent).toContain("个稳定");
+    expect(container.textContent).toContain("形成能 (eV/atom)");
     // a hull polyline + a circle per entry
     expect(container.querySelector("path")).not.toBeNull();
     expect(container.querySelectorAll("circle").length).toBe(4);

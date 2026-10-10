@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { parseFailureMessage } from "@/lib/errorText";
+import { formatClock, formatDay } from "@/lib/format";
 import { correctionEffectLines, correctionKindLabel, getResultCorrections, type ResultCorrectionEntry } from "@/lib/resultProvenance";
 
 /**
@@ -33,7 +34,7 @@ export function ResultCorrectionPanel({ versionId, onOpen }: { versionId: string
         const lines = correctionEffectLines(correction);
         const renderings = outcome?.outputs.filter((item) => item.role === "rendering") ?? [];
         return <section key={entry.id} aria-label="一次修改" className="space-y-1 rounded-card border border-border p-3">
-          <p>{entry.role === "original" ? "此版本被修改过" : "此版本由一次修改得到"}：{correctionKindLabel(correction.kind)}（{new Date(entry.occurredAt).toLocaleString("zh-CN")}）</p>
+          <p>{entry.role === "original" ? "此版本被修改过" : "此版本由一次修改得到"}：{correctionKindLabel(correction.kind)}（{formatDay(entry.occurredAt)} {formatClock(entry.occurredAt)}）</p>
           {correction.instruction && <blockquote className="whitespace-pre-wrap text-caption text-muted">你的要求：“{correction.instruction}”</blockquote>}
           {correction.anchor.selectedText && <p className="text-caption text-muted">所选内容：“{correction.anchor.selectedText}”</p>}
           {lines.length > 0 && <ul className="list-disc space-y-1 pl-5 text-caption text-muted">{lines.map((line) => <li key={line}>{line}</li>)}</ul>}

@@ -58,16 +58,16 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
     <div className="flex h-full flex-col bg-surface">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-caption text-muted">
-          {filename} · bands · {d.nbands} bands × {d.nkpts} k-points
-          {d.spin ? " · spin-polarized" : ""}
+          {filename} · 能带结构 · {d.nbands} 条能带 × {d.nkpts} 个 k 点
+          {d.spin ? " · 自旋极化" : ""}
         </span>
         {d.spin && (
           <span className="flex items-center gap-2 text-caption text-muted">
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-3 rounded-sm" style={{ background: "var(--series-1)" }} /> up
+              <span className="h-2 w-3 rounded-sm" style={{ background: "var(--series-1)" }} /> 自旋向上
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-3 rounded-sm" style={{ background: "var(--series-8)" }} /> down
+              <span className="h-2 w-3 rounded-sm" style={{ background: "var(--series-8)" }} /> 自旋向下
             </span>
           </span>
         )}
@@ -104,10 +104,10 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
             <line x1={xAt(hover.k)} y1={pad.t} x2={xAt(hover.k)} y2={H - pad.b} stroke="currentColor" className="text-muted" strokeWidth={0.6} strokeDasharray="2 2" />
           )}
           <text x={W / 2} y={H - 4} textAnchor="middle" className="fill-muted font-mono text-caption">
-            k-point index (0…{d.nkpts - 1})
+            k 点序号 (0…{d.nkpts - 1})
           </text>
           <text x={14} y={H / 2} textAnchor="middle" transform={`rotate(-90 14 ${H / 2})`} className="fill-muted font-mono text-caption">
-            Energy (eV)
+            能量 (eV)
           </text>
         </svg>
       </div>

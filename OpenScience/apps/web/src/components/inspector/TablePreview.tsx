@@ -1,3 +1,5 @@
+import { formatNumber } from "@/lib/format";
+
 // Shared tabular preview: first row of data is the header (csv and xlsx alike).
 export interface TableData {
   columns: string[];
@@ -33,7 +35,7 @@ export function TablePreview({ table }: { table: TableData }) {
         </table>
       </div>
       {table.truncated && (
-        <div className="py-2 text-center text-caption text-muted">只显示前 {table.rows.length.toLocaleString("zh-CN")} 行</div>
+        <div className="py-2 text-center text-caption text-muted">只显示前 {formatNumber(table.rows.length)} 行</div>
       )}
     </div>
   );
