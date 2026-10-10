@@ -10,6 +10,7 @@ import { parseArgs } from 'node:util';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createNativeDsh } from './native_dsh.mjs';
+import { publicExtractionPrompt, groundPublicExtraction } from './public_extraction.mjs';
 import { loadConfig } from '../../apps/server/src/config.mjs';
 import { createModelGatewayHandler } from '../../apps/server/src/modelGateway.mjs';
 import { ControlPlaneDatabase } from '../../apps/server/src/controlPlaneDatabase.mjs';
@@ -29,6 +30,7 @@ await fs.writeFile(path.join(root,'manifest.json'),JSON.stringify({schema:1,crea
   sourceCommit:execFileSync('git',['rev-parse','HEAD'],{cwd:product,encoding:'utf8'}).trim(),sourceFiles,
   executableVersion:execFileSync(values.dsh,['--version'],{encoding:'utf8',env:{PATH:process.env.PATH,DSH_HOME:path.join(root,'version'),DSH_TELEMETRY_MODE:'DISABLED'}}).trim(),
   model:'deepseek-flash',maxTokens:4000,thinking:'disabled',dataClass:'synthetic',
+  publicInputsHash:values['public-inputs']?createHash('sha256').update(await fs.readFile(values['public-inputs'])).digest('hex'):null,
   limitation:'Native DSH with production MCP, VCR and model gateways in an isolated process; not a full hosted deployment test.'},null,2)+'\n',{mode:0o600});
 const config=loadConfig({localAutoConfig:false,dataDir:path.join(root,'control'),deepseekApiKeyFile:path.resolve(values['key-file']),deepseekProviderEnabled:true,
   production:false,modelGatewayTimeoutMs:120000,userDailySpendLimit:3,userWeeklySpendLimit:3,userRunSpendLimit:2,modelGatewayMaxOutputTokens:4000,
@@ -101,14 +103,19 @@ try {
     const publicRoot=path.join(root,'public');await fs.mkdir(publicRoot,{mode:0o700});
     const publicNative=await createNativeDsh({root:publicRoot,executable:values.dsh,dump:await fs.readFile(values.dump,'utf8'),gateway:base+'/internal/model/v1',token});
     const predictions={};
-    const relationTypes=['ACTIVATOR','AGONIST','AGONIST-ACTIVATOR','AGONIST-INHIBITOR','ANTAGONIST','DIRECT-REGULATOR','INDIRECT-DOWNREGULATOR','INDIRECT-UPREGULATOR','INHIBITOR','PART-OF','PRODUCT-OF','SUBSTRATE','SUBSTRATE_PRODUCT-OF'];
     for(const example of batch.cases){
       const admitted=selection.cases.find(row=>row.id===example.id);
       if(admitted?.inputSha256!==projectionHash(example.text))throw new Error('Public text differs from reviewed selection');
-      const prompt=`Extract all CHEMICAL and GENE mentions and supported chemical-to-gene relations from this public abstract. Return only JSON {"entities":[{"id":"e1","documentId":"...","type":"CHEMICAL or GENE","start":0,"end":1}],"relations":[{"type":"...","arg1":"chemical mention id","arg2":"gene mention id"}]}. Offsets are UTF-16, zero-based, end-exclusive in the exact text. Relation types: ${relationTypes.join(', ')}. Include repeated mentions separately. Resolve abbreviations to the text's own referent; do not invent a relation.\n${JSON.stringify(example)}`;
+      const prompt=publicExtractionPrompt(example);
       const result=await publicNative({prompt,filename:example.id});
-      try{predictions[example.id]=JSON.parse(result.text.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));}
-      catch{predictions[example.id]={entities:[],relations:[],parseError:true};}
+      try{
+        if(result.code!==0)throw new Error('native_prediction_failed');
+        predictions[example.id]=groundPublicExtraction(example,result.text);
+      }
+      catch(error){predictions[example.id]={entities:[],relations:[],parseError:true,error:error.message};}
+      predictions[example.id].transport={code:result.code,latencyMs:result.latencyMs,
+        promptHash:createHash('sha256').update(prompt).digest('hex'),
+        predictionHash:createHash('sha256').update(result.text).digest('hex')};
       await fs.writeFile(path.join(publicRoot,'predictions.json'),JSON.stringify(predictions,null,2)+'\n',{mode:0o600});
       console.log(JSON.stringify({publicCase:example.id,code:result.code,parsed:!predictions[example.id].parseError}));
     }
