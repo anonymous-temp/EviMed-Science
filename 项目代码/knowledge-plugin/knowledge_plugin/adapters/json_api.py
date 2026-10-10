@@ -691,9 +691,26 @@ def parse_star_rating(result: FetchResult, source: SourceConfig, now: datetime) 
 
 EVIMED_EVIDENCE_FEED_PREFIX = "evimed-evidence-feed/"
 EVIMED_EVIDENCE_FEED_MAJOR = "1"
+# The platform's own answer, by name, when its public evidence pages (and so the feed) are switched off.
+EVIMED_EVIDENCE_NOT_ENABLED = "evidence_public_not_enabled"
+
+
+def _evimed_evidence_not_enabled(result: FetchResult) -> bool:
+    """Whether this is the platform saying its public evidence pages are off: a 404 whose JSON body carries that code."""
+    if result.status != 404:
+        return False
+    try:
+        body = json.loads(result.body)
+    except ValueError:
+        return False
+    return isinstance(body, dict) and body.get("code") == EVIMED_EVIDENCE_NOT_ENABLED
 
 
 def parse_evimed_evidence(result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
+    # The feed's address is on by default wherever the deployment has a public address (flywheel F12e), and the public pages are off
+    # until the operator switches them on: the platform has no feed to offer, which is its answer and not a failure of the source.
+    if _evimed_evidence_not_enabled(result):
+        return ParseOutput(entries=[], notes=["evimed_evidence_not_enabled"])
     if result.status != 200:
         raise FetchError("http-error", f"evimed_evidence_http_{result.status}", status=result.status)
     payload = load_json(result, "evimed_evidence")
