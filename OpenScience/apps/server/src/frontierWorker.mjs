@@ -11,7 +11,8 @@ import { HttpError } from "./security.mjs";
  *   `OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS`, the registry and manifest mirror
  *   at start and hourly, the processing batches every tick
  *   (`OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY` of them side by side), the
- *   wave-two composer every tick, and the retention cleanup hourly. One timer
+ *   wave-two composer's chains (editorial, issue, notifications, profiles —
+ *   each a loop of its own, every tick), and the retention cleanup hourly. One timer
  *   because the maintenance pause stops recurring work by clearing each
  *   worker's `timer` (`pauseRecurringWork` in `server.mjs`): a second timer
  *   here would be a loop maintenance could not stop.
@@ -34,7 +35,8 @@ import { HttpError } from "./security.mjs";
  *   processing waits, named in the status and in readiness.
  * - Retention is bounded deletes, one statement per table per hour, and what
  *   one pass leaves the next takes (plan §10.4.5): entries that produced
- *   nothing after 30 days, the change log after 90, hot snapshots after 90.
+ *   nothing after 30 days, the change log after 90, hot snapshots and the
+ *   readers' exposure log after 90.
  *   The same hourly pass recounts each source's selected items of the last
  *   thirty days (`sources.selected_30d`, the sources list's 「近 30 天精选」),
  *   here and not in the mirror because it is the platform's own number and
@@ -103,6 +105,11 @@ export class FrontierWorker {
     this.ingest = ingest;
     this.pipeline = pipeline;
     this.composer = composer;
+    // A composer that offers its chains has each of them run as a loop of its own, so the editorial chain's minute holds back
+    // neither the notices nor the safety scan (review 2026-10-10, D-01); one that only ticks is one loop, `compose`.
+    /** @type {Array<{ chain: string, loop: string }>} */
+    this.composeLoops = typeof composer?.tickChain === "function" ? (composer.chains ?? []).map((/** @type {string} */ chain) => ({ chain, loop: `compose-${chain}` })) : [];
+    const loopNames = [...LOOPS.filter((loop) => loop !== "compose" || !this.composeLoops.length), ...this.composeLoops.map(({ loop }) => loop)];
     this.evidence = evidence;
     this.database = database;
     this.ensureOwner = ensureOwner;
@@ -121,14 +128,14 @@ export class FrontierWorker {
     /** @type {{ userId: string, projectId: string } | null} */
     this.owner = null;
     /** @type {Record<string, Promise<unknown> | null>} */
-    this.running = Object.fromEntries(LOOPS.map((loop) => [loop, null]));
+    this.running = Object.fromEntries(loopNames.map((loop) => [loop, null]));
     /** @type {Record<string, { startedAt: number | null, lastRunAt: string | null, lastOkAt: string | null, lastError: string | null, runs: number, failures: number }>} */
-    this.loops = Object.fromEntries(LOOPS.map((loop) => [loop, { startedAt: null, lastRunAt: null, lastOkAt: null, lastError: null, runs: 0, failures: 0 }]));
+    this.loops = Object.fromEntries(loopNames.map((loop) => [loop, { startedAt: null, lastRunAt: null, lastOkAt: null, lastError: null, runs: 0, failures: 0 }]));
     /** When each periodic loop last started (epoch ms); 0 = due now. */
     this.lastStarted = { mirror: 0, pull: 0, cleanup: 0 };
     /** What the pipeline's batches have done since start (plan §10.3.1's outcomes). */
     this.pipelineTotals = Object.fromEntries([["batches", 0], ...PIPELINE_OUTCOMES.map((key) => [key, 0])]);
-    this.retentionTotals = { entries: 0, itemChanges: 0, hotSnapshots: 0 };
+    this.retentionTotals = { entries: 0, itemChanges: 0, hotSnapshots: 0, exposures: 0 };
   }
 
   /** The code of a loop whose last run failed, or null when every loop's last run succeeded. */
@@ -210,7 +217,12 @@ export class FrontierWorker {
     if (this.pipeline && (this.owner || !this.ensureOwner) && !this.running.process) {
       started.push(this.#run("process", () => this.#process()));
     }
-    if (this.composer && !this.running.compose) started.push(this.#run("compose", () => this.composer.tick()));
+    if (this.composer) {
+      for (const { chain, loop } of this.composeLoops) {
+        if (!this.running[loop]) started.push(this.#run(loop, () => this.composer.tickChain(chain)));
+      }
+      if (!this.composeLoops.length && !this.running.compose) started.push(this.#run("compose", () => this.composer.tick()));
+    }
     if (this.evidence && !this.running.evidence) started.push(this.#run("evidence", () => this.evidence.tick()));
     if (!this.running.cleanup && this.#due("cleanup", this.cleanupMs)) {
       started.push(this.#run("cleanup", async () => ({ ...(await this.cleanup()), recounted: await this.recountSelected() })));
@@ -262,7 +274,12 @@ export class FrontierWorker {
     ) SELECT count(*)::integer AS removed FROM removed`, [before(90)]);
     const hotSnapshots = await this.database.query(`DELETE FROM evimed_frontier.hot_snapshots WHERE taken_at IN (
       SELECT taken_at FROM evimed_frontier.hot_snapshots WHERE taken_at < $1::timestamptz ORDER BY taken_at LIMIT ${RETENTION_BATCH})`, [before(90)]);
-    const removed = { entries: entries.rowCount ?? 0, itemChanges: Number(itemChanges.rows?.[0]?.removed ?? 0), hotSnapshots: hotSnapshots.rowCount ?? 0 };
+    // A reader's viewing log: what they scrolled to, per page. Nothing reads it yet (the evolution plan judges a ranking by clicks only
+    // once it has this record), so it is kept as long as the logs beside it and no longer (review 2026-10-10, D-09).
+    const exposures = await this.database.query(`DELETE FROM evimed_frontier.exposures WHERE id IN (
+      SELECT id FROM evimed_frontier.exposures WHERE exposed_at < $1::timestamptz ORDER BY exposed_at LIMIT ${RETENTION_BATCH})`, [before(90)]);
+    const removed = { entries: entries.rowCount ?? 0, itemChanges: Number(itemChanges.rows?.[0]?.removed ?? 0), hotSnapshots: hotSnapshots.rowCount ?? 0,
+      exposures: exposures.rowCount ?? 0 };
     for (const [key, value] of Object.entries(removed)) this.retentionTotals[key] += value;
     return removed;
   }

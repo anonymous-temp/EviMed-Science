@@ -391,6 +391,7 @@ export class EvidenceEditorial {
    *
    * The owner's query stays what they wrote it for: it orders the candidates (an item that also carries their words first) and, for a zone
    * with no keys at all — nothing the vocabulary or a card can say it is about — it is the only thing left to match by, as it always was.
+   * Either way an item of a `platform_produced` source is not a candidate: it is the platform's own card echoed back (D-05).
    * @param {any} client @param {any} settings the zone's `evidence_automation` row
    * @returns {Promise<Array<{public_id:string,identity_key:string,canonical_url:string,title_raw:string}>>}
    */
@@ -403,7 +404,7 @@ export class EvidenceEditorial {
       this.counters.discoveryByQuery++;
       return (await client.query(
         `SELECT i.public_id,i.identity_key,i.canonical_url,i.title_raw FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id=i.primary_source_id
-        WHERE i.state='published' AND s.enabled AND i.source_type=ANY($1::text[]) AND strpos(lower(concat_ws(' ',i.title_raw,i.title_zh,i.summary_zh)),lower($2))>0
+        WHERE i.state='published' AND s.enabled AND NOT s.platform_produced AND i.source_type=ANY($1::text[]) AND strpos(lower(concat_ws(' ',i.title_raw,i.title_zh,i.summary_zh)),lower($2))>0
         AND ${unseen}
         ORDER BY i.timeline_at DESC,i.id DESC LIMIT $4`,
         [settings.source_types, settings.query, settings.zone_id, settings.max_cards_per_run],

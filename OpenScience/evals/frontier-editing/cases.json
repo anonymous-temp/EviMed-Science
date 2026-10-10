@@ -1,5 +1,5 @@
 {
- "about": "Incidents of the frontier feed's editing calls, each a real item from production (2026-09-22). Screen and edit: which lane a mixed source's item goes to. Same event: whether two reports are one event (acceptance record 2026-09-22T1405Z, F1, F3, F9). Run with run_eval.mjs; it calls the live model. Three explicitly synthetic regression controls were added on 2026-09-29; their text is authored evaluation input, not an upstream publication.",
+ "about": "Incidents of the frontier feed's editing calls, each a real item from production (2026-09-22). Screen and edit: which lane a mixed source's item goes to. Same event: whether two reports are one event (acceptance record 2026-09-22T1405Z, F1, F3, F9). Run with run_eval.mjs; it calls the live model. Three explicitly synthetic regression controls were added on 2026-09-29; their text is authored evaluation input, not an upstream publication. Three evidence-type cases were added on 2026-10-10 (D-04 of the frontier review): each is authored evaluation input modelled on a production incident, not an upstream publication, and expects the evidence type `other` for a design the vocabulary has no key for (run them with --kind evidence-type).",
  "lane": [
   {
    "id": "food-recall-flour",
@@ -113,6 +113,72 @@
     "datePrecision": "instant",
     "isChinese": false,
     "summary": "Global Mix Inc. of Middle Village, New York, is recalling niwali Tejocote Capsules (90 capsules, Herbal Supplement) and niwali Tejocote Pieces (90 Day Supply, Herbal Supplement) because FDA analysis has determined that the products appear to be Thevetia peruviana, or yellow oleander. All parts of th",
+    "glossary": []
+   }
+  }
+ ],
+ "evidence_type": [
+  {
+   "id": "synthetic-mcda-genomic-testing",
+   "public_id": "5a5fed19cd8ee71f",
+   "expect": [
+    "other"
+   ],
+   "why": "a multi-criteria decision analysis is a decision-analytic study, not a cohort or case-control study. On production (2026-10-10) the model typed the item 「多准则决策分析评估NSCLC全面基因组检测价值」 as observational (basis model; its PubMed type was only Journal Article), which also raised its authority term and let it be selected. The text here is authored (D-04)",
+   "edit": {
+    "titleRaw": "Multi-criteria decision analysis of the value of comprehensive genomic profiling in non-small cell lung cancer",
+    "sourceName": "PubMed 药物经济学与卫生技术评估",
+    "sourceTypeLabel": "期刊",
+    "publishedAt": "2026-10-08T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "journal": "Synthetic Journal of Health Technology Assessment",
+    "publicationTypes": [
+     "Journal Article"
+    ],
+    "abstract": "Synthetic fixture. Background: Comprehensive genomic profiling (CGP) of non-small cell lung cancer (NSCLC) is offered unevenly across health systems. Methods: We applied multi-criteria decision analysis (MCDA) to compare CGP with single-gene testing. A panel of 15 stakeholders (oncologists, pathologists, payers and patient representatives) weighted and scored 9 criteria, including clinical benefit, budget impact, equity of access and turnaround time, on a scale of 0 to 5. Results: CGP obtained a weighted value score of 3.9 against 2.7 for single-gene testing; the ranking was unchanged in scenario analyses that varied the weights by 20%. Conclusions: Stakeholders valued CGP above single-gene testing on the criteria considered.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "synthetic-cost-effectiveness-model",
+   "expect": [
+    "other"
+   ],
+   "why": "a cost-effectiveness model is a health-economic evaluation: the trials it takes its inputs from are not its design, and neither is an observational one (D-04). The text here is authored",
+   "edit": {
+    "titleRaw": "Cost-effectiveness of adding dapagliflozin to standard care in heart failure with preserved ejection fraction: a Markov model",
+    "sourceName": "PubMed 药物经济学与卫生技术评估",
+    "sourceTypeLabel": "期刊",
+    "publishedAt": "2026-10-07T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "journal": "Synthetic Journal of Pharmacoeconomics",
+    "publicationTypes": [
+     "Journal Article"
+    ],
+    "abstract": "Synthetic fixture. Objective: To estimate the cost-effectiveness of adding dapagliflozin to standard care for adults with heart failure with preserved ejection fraction from the health-system perspective. Methods: A Markov model with a lifetime horizon and annual cycles was built; transition probabilities, utilities and costs were taken from published trials and national price lists. Results: Compared with standard care, dapagliflozin gained 0.31 quality-adjusted life years (QALYs) at an incremental cost of CNY 12,800, an incremental cost-effectiveness ratio of CNY 41,300 per QALY. In probabilistic sensitivity analysis, dapagliflozin was cost-effective in 78% of simulations at a threshold of three times GDP per capita. Conclusions: Under the model's assumptions, adding dapagliflozin is likely to be cost-effective.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "synthetic-pharmacist-survey",
+   "expect": [
+    "other"
+   ],
+   "why": "a questionnaire survey of practitioners' attitudes follows no patients over time and compares no exposed with unexposed groups: it is neither a cohort nor a case-control study (D-04). The text here is authored",
+   "edit": {
+    "titleRaw": "Attitudes of hospital pharmacists toward deprescribing in older adults: a national questionnaire survey",
+    "sourceName": "PubMed 临床药学",
+    "sourceTypeLabel": "期刊",
+    "publishedAt": "2026-10-06T00:00:00+00:00",
+    "datePrecision": "day",
+    "isChinese": false,
+    "journal": "Synthetic Journal of Clinical Pharmacy",
+    "publicationTypes": [
+     "Journal Article"
+    ],
+    "abstract": "Synthetic fixture. Objective: To describe hospital pharmacists' attitudes toward deprescribing in older adults and the barriers they report. Methods: An online questionnaire was sent to 2,400 hospital pharmacists in 31 provinces between March and May 2026. Results: 1,126 pharmacists responded (46.9%). Of these, 71% agreed that deprescribing should be part of routine medication review, and 58% named lack of time as the main barrier. Pharmacists with clinical training were more likely to report having recommended deprescribing in the past year. Conclusions: Most responding pharmacists support deprescribing, but time and workflow barriers are common.",
     "glossary": []
    }
   }

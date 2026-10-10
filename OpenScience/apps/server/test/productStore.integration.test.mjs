@@ -4,6 +4,7 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
+import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -282,6 +283,39 @@ test("an exhausted reconciliation job can be rearmed without creating a duplicat
   assert.equal(rearmed.status, "queued");
   assert.equal(rearmed.attempts, 0);
   assert.equal(rearmed.error, null);
+});
+
+test("rearm puts a kind's failed jobs back, and with createdWithinMs leaves the older ones failed (D-02)", options, async () => {
+  // `rearm` works on a whole kind, whoever owns the jobs, so this test has a database of its own.
+  const isolated = await createGeoTestDatabase(databaseUrl, "rearm");
+  const own = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 2, databaseConnectionTimeoutMs: 2000 });
+  try {
+    await migrateProductStore(own);
+    await own.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Rearm test','development')", [owner]);
+    const ledger = new ProductJobs(own);
+    const failed = async (name, { age = "0 seconds", code = "fixture" } = {}) => {
+      const row = await ledger.enqueue(owner, "frontier-notify", { name }, { idempotencyKey: name });
+      await own.query(`UPDATE evimed_product.jobs SET status='failed',attempts=max_attempts,error=jsonb_build_object('code',$2::text),
+        finished_at=clock_timestamp(),created_at=clock_timestamp()-$3::interval WHERE id=$1`, [row.id, code, age]);
+      return row.id;
+    };
+    const status = async (id) => (await ledger.get(owner, id)).status;
+    const recent = await failed("recent");
+    const old = await failed("old", { age: "3 days" });
+    const terminal = await failed("terminal", { code: "never_again" });
+    assert.equal(await ledger.rearm("frontier-notify", { createdWithinMs: 86_400_000, terminalCodes: ["never_again"] }), 1, "only the recent one that may be asked again");
+    assert.deepEqual([await status(recent), await status(old), await status(terminal)], ["queued", "failed", "failed"]);
+    const back = await ledger.get(owner, recent);
+    assert.equal(back.attempts, 0);
+    assert.equal(back.error, null);
+    // Without the bound a job of any age is put back, as it always was.
+    assert.equal(await ledger.rearm("frontier-notify", { terminalCodes: ["never_again"] }), 1);
+    assert.equal(await status(old), "queued");
+    await assert.rejects(ledger.rearm("frontier-notify", { createdWithinMs: 5 }), { code: "product_parameter_invalid" });
+  } finally {
+    await own.close();
+    await isolated.drop();
+  }
 });
 
 test("a deferral refunds its attempt, so a job that never started its work is never exhausted by waiting", options, async () => {

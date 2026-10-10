@@ -138,7 +138,7 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "- summary_zh：两三句导读，不超过 120 个字，只写标题之外的内容：先说这是什么、结果如何，最后一句说明它对临床实践或科研意味着什么，只依据原文，不夸大。条目注明「正文：无」时给空字符串，不要复述标题。",
   "- lane：从条目的「允许的栏目」里选一个。",
   "- specialties：0 到 3 个专科键，按相关程度排列。",
-  "- evidence_type：证据类型键。条目已注明证据类型的，照填。",
+  "- evidence_type：证据类型键。条目已注明证据类型的，照填。研究设计不在词表里的（卫生经济学评价、决策分析、建模、方法学研究、问卷调查、病例报告）一律填 other，不要套用最接近的设计。",
   "- entities：drugs（药物，中文通用名）、trials（试验名称，保留原文）、orgs（机构，中文简称）、diseases（疾病，中文规范名），每类最多 5 个，没有就给空数组。",
   "- scores：impact 实践或科研影响（0–30：会不会改变处方、指南、课题设计或必须执行的政策）；novelty 新颖性（0–20：首次报告或重要更新，还是重复已知）；relevance 与国内读者的相关性（0–20：药物在国内已上市或在审、国内疾病负担、国内政策与指南、国内研究者常用的方法）。都给整数。",
   "- flags：只有来源明确是一篇企业新闻稿、且明确说明顶线结果尚未发表时给 [\"press-release\"]，否则给 []；注册记录或没有论文链接不触发该标记。",
@@ -420,9 +420,10 @@ function glossaryInputLines(entries) {
 }
 
 /**
- * Exactly what one edit call shows the model after the stable prefix, and so
- * exactly what its numbers are checked against. Plain labelled lines; the
- * source text last and bounded to about 6,000 characters.
+ * Exactly what one edit call shows the model after the stable prefix. Plain
+ * labelled lines; the source text last and bounded to about 6,000 characters.
+ * Its numbers are checked against the lines that state the source
+ * (`editNumberSource`), not against the platform's own lines around them.
  * @param {FrontierEditItem} item
  * @returns {string}
  */
@@ -466,6 +467,62 @@ export function buildModelInput(item, { timeZone = DISPLAY_TIME_ZONE } = {}) {
   // its own title again.
   if (!body.length) body.push("正文：无");
   return [head, ...body].join("\n");
+}
+
+// ───────────────────────── what a number is checked against ─────────────────────────
+//
+// A number of the Chinese text must be a number of the source — and the source is what the source states, not what the
+// platform wrote around it: the publication date, the source's and the journal's names, the allowed lanes, the glossary and
+// the numbering of the reports. The prompts forbid every year and date the source does not state, and a date line that
+// counted as source made an invented 「10」, 「2026」 or 「9」 pass for a number of the article whenever the day happened to
+// carry it (review 2026-10-10, D-06). Each input below is plain labelled lines this file writes, so a label names a line
+// exactly; these pick the lines that state the source, and the number check reads only those.
+
+/**
+ * The lines of a model input that start with one of the labels (every text of the inputs is `clip`ped to one line).
+ * @param {unknown} input @param {readonly string[]} labels
+ */
+function labelledLines(input, labels) {
+  return String(input ?? "").split("\n").filter((line) => labels.some((label) => line.startsWith(label)));
+}
+
+/** The lines of an edit's input that state the source. @param {string} modelInput what `buildModelInput` wrote */
+export function editNumberSource(modelInput) {
+  return labelledLines(modelInput, ["标题：", "试验信息：", "摘要：", "原文摘要：", "正文节选："]).join("\n");
+}
+
+/**
+ * The lines of an event digest's input that state the reports (and the previous digest, whose numbers were checked against
+ * its own reports): not the numbering of the reports, their source names or their dates.
+ * @param {string} input what `buildDigestInput` wrote
+ */
+export function digestNumberSource(input) {
+  return labelledLines(input, ["上一版综述：", "标题：", "中文标题：", "导读：", "原文："]).join("\n");
+}
+
+/**
+ * The lines of an AI minute's input that state the items: each item's title (after its number and source name) and its
+ * summary — not the day.
+ * @param {string} input what `buildAiMinuteInput` wrote
+ */
+export function aiMinuteNumberSource(input) {
+  return String(input ?? "").split("\n").flatMap((line) => {
+    if (line.startsWith("导读：")) return [line];
+    const title = /^\[\d+\] [^｜]*｜(.*)$/u.exec(line);
+    return title ? [title[1]] : [];
+  }).join("\n");
+}
+
+/**
+ * The title and the abstract of a Chinese abstract's input, whole (its paragraphs are its structure): not the glossary
+ * lines between them.
+ * @param {string} input what `buildAbstractInput` wrote
+ */
+export function abstractNumberSource(input) {
+  const text = String(input ?? "");
+  const at = text.indexOf("\n摘要：");
+  const head = at < 0 ? text : text.slice(0, at);
+  return [...labelledLines(head, ["标题："]), ...(at < 0 ? [] : [text.slice(at + 1)])].join("\n");
 }
 
 // ───────────────────────── verification ─────────────────────────
@@ -572,7 +629,7 @@ export function verifyEdit(answer, item, modelInput) {
   const numbers = checkNumbers({
     ...(item.isChinese ? {} : { title_zh: titleZh ?? "" }),
     summary_zh: summaryZh ?? "",
-  }, modelInput);
+  }, editNumberSource(modelInput));
   for (const { field, raw } of numbers.missing) {
     failProse(/** @type {"title_zh" | "summary_zh"} */ (field), "number",
       `${field} 里的数字「${raw}」在原文里找不到相等的数字：只能使用原文出现过的数字，找不到就删去这个数字。`);
@@ -765,10 +822,11 @@ export function buildAiMinuteInput({ day, items }) {
 
 /**
  * The prose checks an event digest or an AI minute gets: present, bounded,
- * Chinese, no links, every number in its input.
- * @param {any} answer @param {Record<string, number>} fields field → limit @param {string} input
+ * Chinese, no links, every number in what its input states (`numberSource`:
+ * `digestNumberSource` or `aiMinuteNumberSource`; the whole input when none).
+ * @param {any} answer @param {Record<string, number>} fields field → limit @param {string} input @param {string} [numberSource]
  */
-export function verifyWriting(answer, fields, input) {
+export function verifyWriting(answer, fields, input, numberSource = input) {
   /** @type {string[]} */
   const issues = [];
   /** @type {Record<string, string | null>} */
@@ -782,7 +840,7 @@ export function verifyWriting(answer, fields, input) {
     if (LINK.test(text)) issues.push(`${field} 里不能出现链接或网址。`);
     if (!isChineseProse(text)) issues.push(`${field} 要用中文写。`);
   }
-  const numbers = checkNumbers(Object.fromEntries(Object.entries(output).map(([field, text]) => [field, text ?? ""])), input);
+  const numbers = checkNumbers(Object.fromEntries(Object.entries(output).map(([field, text]) => [field, text ?? ""])), numberSource);
   for (const { field, raw } of numbers.missing) {
     issues.push(`${field} 里的数字「${raw}」在报道里找不到相等的数字：只能使用报道里出现过的数字，找不到就删去这个数字。`);
   }
@@ -973,7 +1031,7 @@ export function verifyAbstract(answer, input) {
     if (LINK.test(text)) issues.push("abstract_zh 里不能出现链接或网址。");
     if (!isChineseProse(text)) issues.push("abstract_zh 要用中文写。");
   }
-  const numbers = checkNumbers({ abstract_zh: text }, input);
+  const numbers = checkNumbers({ abstract_zh: text }, abstractNumberSource(input));
   for (const { raw: number } of numbers.missing) {
     issues.push(`abstract_zh 里的数字「${number}」在原文里找不到相等的数字：数字只能照原文写，找不到就删去这个数字。`);
   }
@@ -1425,13 +1483,14 @@ export class FrontierEditor {
    * issues named, and nothing if the rewrite fails too — the caller keeps what
    * it had (the previous digest, no AI minute). Never softened.
    * @param {string} instructions @param {string} input @param {Record<string, number>} fields @param {number} maxTokens
-   * @param {{ verify?: (answer: any) => { output: Record<string, string | null>, issues: string[], numbers: any }, timeoutMs?: number }} [options]
-   *   `verify` replaces `verifyWriting` for prose with its own shape (the abstract keeps its paragraphs).
+   * @param {{ verify?: (answer: any) => { output: Record<string, string | null>, issues: string[], numbers: any }, timeoutMs?: number, numberSource?: string }} [options]
+   *   `verify` replaces `verifyWriting` for prose with its own shape (the abstract keeps its paragraphs); `numberSource` is
+   *   the part of `input` the numbers are checked against (the whole input when none).
    * @returns {Promise<{ verification: "passed" | "repaired" | "dropped" | "pending", output: Record<string, string | null> | null,
    *                     modelInput: string, modelInputSha256: string, attempts: number, issues: string[], error: string | null,
    *                     model: string, editorVersion: string }>}
    */
-  async #write(instructions, input, fields, maxTokens, { verify = (answer) => verifyWriting(answer, fields, input), timeoutMs = WRITING_TIMEOUT_MS } = {}) {
+  async #write(instructions, input, fields, maxTokens, { numberSource = input, verify = (answer) => verifyWriting(answer, fields, input, numberSource), timeoutMs = WRITING_TIMEOUT_MS } = {}) {
     const result = { verification: /** @type {"passed" | "repaired" | "dropped" | "pending"} */ ("pending"), output: null,
       modelInput: input, modelInputSha256: sha256(input), attempts: 0, issues: /** @type {string[]} */ ([]),
       error: /** @type {string | null} */ (null), model: this.model, editorVersion: FRONTIER_EDITOR_VERSION };
@@ -1472,7 +1531,8 @@ export class FrontierEditor {
    */
   async writeEventDigest(event) {
     const input = buildDigestInput(event, { timeZone: this.timeZone });
-    const result = await this.#write(FRONTIER_DIGEST_INSTRUCTIONS, input, { digest_zh: FRONTIER_WRITING_LIMITS.digest, latest_zh: FRONTIER_WRITING_LIMITS.latest }, DIGEST_MAX_TOKENS);
+    const result = await this.#write(FRONTIER_DIGEST_INSTRUCTIONS, input, { digest_zh: FRONTIER_WRITING_LIMITS.digest, latest_zh: FRONTIER_WRITING_LIMITS.latest }, DIGEST_MAX_TOKENS,
+      { numberSource: digestNumberSource(input) });
     return { ...result, digestZh: result.output?.digest_zh ?? null, latestZh: result.output?.latest_zh ?? null };
   }
 
@@ -1491,7 +1551,8 @@ export class FrontierEditor {
         issues: [], error: null, model: this.model, editorVersion: FRONTIER_EDITOR_VERSION, aiMinuteZh: null };
     }
     const input = buildAiMinuteInput({ day, items: usable });
-    const result = await this.#write(FRONTIER_AI_MINUTE_INSTRUCTIONS, input, { ai_minute_zh: FRONTIER_WRITING_LIMITS.aiMinute }, AI_MINUTE_MAX_TOKENS);
+    const result = await this.#write(FRONTIER_AI_MINUTE_INSTRUCTIONS, input, { ai_minute_zh: FRONTIER_WRITING_LIMITS.aiMinute }, AI_MINUTE_MAX_TOKENS,
+      { numberSource: aiMinuteNumberSource(input) });
     return { ...result, aiMinuteZh: result.output?.ai_minute_zh ?? null };
   }
 

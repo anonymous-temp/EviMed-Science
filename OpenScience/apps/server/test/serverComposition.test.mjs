@@ -1884,9 +1884,10 @@ test("the frontier composer is composed, ticked by the worker's compose loop, an
   assert.ok(composer, "an enabled module composes its composer");
   assert.equal(app.frontier.worker.composer, composer, "the worker ticks the composer the composition built");
   let ticks = 0;
-  const tick = composer.tick.bind(composer);
-  composer.tick = async () => { ticks += 1; return tick(); };
-  assert.ok(await waitFor(async () => { await app.frontierWorker.tick(); return ticks > 0; }, 5_000), "the compose loop never reached the composer");
+  // The worker runs the composer's chains as loops of their own (`tickChain`), not its `tick()` (which settles them all, for tests).
+  const tickChain = composer.tickChain.bind(composer);
+  composer.tickChain = async (name) => { ticks += 1; return tickChain(name); };
+  assert.ok(await waitFor(async () => { await app.frontierWorker.tick(); return ticks > 0; }, 5_000), "the compose loops never reached the composer");
   for (const module of ["events", "daily", "profiles", "actions"]) assert.ok(app.frontierService[module], `the service lacks its ${module}`);
   assert.equal(composer.events, app.frontierService.events, "the hot list the page reads is the one the composer computes");
   assert.equal(composer.daily.notifications, app.notificationService, "the daily is pushed through the platform's inbox");

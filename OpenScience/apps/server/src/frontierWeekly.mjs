@@ -1,6 +1,7 @@
 import { frontierSourceDisplayName } from '@evimed/domain';
 import { clockMinutes, zonedClock, zonedInstant, frontierDailyIssue, frontierDailyMarkdown, dayLabel, followedZoneCards } from './frontierDaily.mjs';
 import { frontierEventRole } from './frontierEvents.mjs';
+import { FrontierJobRearm } from './frontierJobRearm.mjs';
 import { migrateFrontier } from './frontierPersistence.mjs';
 /** @param {string} day @param {number} offset */
 export function frontierCalendarDay(day, offset) {
@@ -48,7 +49,9 @@ export class FrontierWeekly {
         this.workerId = workerId;
         this.timeZone = String(config.frontierTimeZone || 'Asia/Shanghai');
         this.dailyTime = String(config.frontierDailyTime || '07:30');
-        this.counters = { issues: 0, empty: 0, failures: 0 };
+        this.counters = { issues: 0, empty: 0, failures: 0, rearmed: 0 };
+        // A week's job that used its attempts is put back once an hour for the rest of that week (D-02).
+        this.rearm = new FrontierJobRearm({ jobs, kind: 'frontier-weekly', limit: 3, withinMs: 7 * 86_400_000 });
     }
     async ready() { await migrateFrontier(this.database, { dimension: Number(this.config.kbEmbeddingDimension) || 1024 }); }
     async runDue() {
@@ -57,6 +60,7 @@ export class FrontierWeekly {
         const owner = this.owner();
         if (!this.jobs || !owner)
             return { ran: false, unavailable: true };
+        this.counters.rearmed += await this.rearm.run(this.now());
         await this.jobs.enqueue(owner.userId, 'frontier-weekly', { weekStart }, { idempotencyKey: `frontier-weekly:${weekStart}`, projectId: owner.projectId });
         const job = await this.jobs.claim(['frontier-weekly'], this.workerId, { leaseMs: 300000 });
         if (!job)

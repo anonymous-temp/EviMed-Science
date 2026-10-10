@@ -142,6 +142,26 @@ test("a frontier item that shares a DOI with a card's source marks it as the sam
   assert.equal((await service.detail(alice, zone.id)).zone.currencyCounts.new_evidence_pending, 1, "the zone view counts its cards by label");
 });
 
+test("D-05: the platform's own echo of a study in the feed is neither the same work nor new evidence for a card; a study from the world still is", options, async () => {
+  const { upkeep } = build();
+  await insertSource(db, "upkeep-echo");
+  await db.query("UPDATE evimed_frontier.sources SET platform_produced=true WHERE id='upkeep-echo'");
+  const [mine, doi] = [drug(), `10.1000/${unique("echoed.")}`];
+  const zone = await zoneOf(alice);
+  const card = await cardOf(zone, alice, { entityKeys: [mine], url: `https://doi.org/${doi}` });
+  // The platform's evidence feed puts its own cards back into the frontier, carrying the study's DOI and the card's entities.
+  const echo = await insertItem(db, { sourceId: "upkeep-echo", title: "EviMed evidence card about the cited trial", doi, timelineAt: new Date(clock.at + 5 * 60_000).toISOString() });
+  await db.query("UPDATE evimed_frontier.items SET entity_keys=$2 WHERE id=$1", [echo.id, [mine]]);
+  assert.equal(await upkeep.watchTick(), 1);
+  const quiet = await cardRow(card.id);
+  assert.equal(quiet.currency, "current", "a card is not told it has new evidence by its own echo");
+  assert.deepEqual(quiet.pending_item_ids, []);
+  const report = await itemOf({ entityKeys: [mine], title: "Another study of the drug" });
+  await db.query("UPDATE evimed_frontier.evidence_cards SET last_checked_at=NULL WHERE id=$1", [card.id]);
+  await upkeep.watchTick();
+  assert.deepEqual((await cardRow(card.id)).pending_item_ids, [report.publicId], "a study from the world is news, the echo of the card is not");
+});
+
 test("one shared entity is not evidence for a card about two: an item must carry as many of the card's keys as the card has, up to two", options, async () => {
   const { upkeep } = build();
   const [first, second] = [drug(), `disease:${unique("dz")}`];
@@ -190,6 +210,23 @@ test("a zone whose words share nothing with a matching item still finds it by ke
   await plainWorker.schedule();
   assert.equal((await rows("SELECT count(*)::int AS n FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1", [bare.id]))[0].n, 1);
   assert.equal(plainWorker.counters.discoveryByQuery, 1);
+});
+
+test("D-05: a zone found by its owner's words is not handed the platform's own echo of a card as a candidate", options, async () => {
+  await insertSource(db, "upkeep-echo");
+  await db.query("UPDATE evimed_frontier.sources SET platform_produced=true WHERE id='upkeep-echo'");
+  const phrase = unique("echoprobe");
+  // A zone nothing can say anything about is found by the query it always had: a substring of the item's words.
+  const zone = (await service.save(alice, { title: unique("Unlabelled zone "), state: "published" })).zone;
+  await db.query("INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run) VALUES($1,true,$2,'{journal}',24,5)", [zone.id, phrase]);
+  const echo = await insertItem(db, { sourceId: "upkeep-echo", title: `EviMed evidence card on ${phrase}`, timelineAt: new Date(clock.at + 5 * 60_000).toISOString() });
+  const world = await itemOf({ title: `A study of ${phrase}` });
+  const worker = build().worker;
+  await worker.schedule();
+  assert.deepEqual((await rows("SELECT source_item_id FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1", [zone.id])).map((row) => row.source_item_id), [world.publicId],
+    "the study from the world is a candidate; the platform's own card, echoed back, is not");
+  assert.equal(worker.counters.discoveryByQuery, 1);
+  void echo;
 });
 
 test("an AI-written card gets a follow-up revision from the editor and is current again, with an entry that says whether its conclusion moved", options, async () => {

@@ -3,7 +3,8 @@ import { after, before, beforeEach, test } from 'node:test';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
 import { FrontierWorker } from '../src/frontierWorker.mjs';
 import { FrontierWeekly } from '../src/frontierWeekly.mjs';
-import { FrontierNotifications } from '../src/frontierNotifications.mjs';
+import { FrontierNotifications, frontierDeliveryInfrastructureError } from '../src/frontierNotifications.mjs';
+import { HttpError } from '../src/security.mjs';
 import { FrontierService, frontierVocabularyView } from '../src/frontierService.mjs';
 import { NotificationService } from '../src/notificationService.mjs';
 import { ProductJobs } from '../src/productJobs.mjs';
@@ -297,4 +298,107 @@ test('known publication recency is bounded and inferred flags never establish re
     const inferred = await item({ flags: ['date-inferred'] });
     assert.equal(await delivery.eligible('alice', { kind: 'safety', key: inferred.publicId }), false);
     assert.equal((await service.getItem({ id: 'alice' }, inferred.publicId)).body.item.id, inferred.publicId, 'the item remains browsable');
+});
+
+// D-02 (review 2026-10-10): a weekly or a notice whose job used its three attempts was failed for good; nothing asked again.
+/** A clock the test moves. @param {string} start */
+function clock(start = '2026-09-28T01:00:00Z') {
+    let at = new Date(start);
+    return { now: () => at, advance: (/** @type {number} */ ms) => { at = new Date(at.getTime() + ms); } };
+}
+const jobRow = async (kind) => (await db.query('SELECT status,attempts FROM evimed_product.jobs WHERE kind=$1', [kind])).rows;
+/** The job's own retry pause skipped: it is not what these tests are about. */
+const retryNow = (kind) => db.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp() WHERE kind=$1 AND status='queued'", [kind]);
+async function queuedSafetyNotice() {
+    await follow();
+    const alert = await item();
+    await delivery.scanSafety();
+    await changed(alert.id);
+    await delivery.scanSafety();
+    assert.equal((await jobRow('frontier-notify')).length, 1);
+    return alert;
+}
+test('D-02: a weekly whose job gave up is asked again an hour later, and written once its cause is gone', options, async () => {
+    await item();
+    const time = clock();
+    const issuer = new FrontierWeekly({ database: db, jobs, owner: () => ({ userId: 'operator', projectId: 'frontier' }), config, now: time.now });
+    const compose = issuer.compose.bind(issuer);
+    issuer.compose = async () => { throw Object.assign(new Error('database blip'), { code: 'database_unavailable' }); };
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        await retryNow('frontier-weekly');
+        await assert.rejects(issuer.runDue(), { code: 'database_unavailable' });
+    }
+    assert.deepEqual(await jobRow('frontier-weekly'), [{ status: 'failed', attempts: 3 }], 'three attempts, then the job gives up');
+    issuer.compose = compose; // the cause is gone
+    time.advance(60_000);
+    assert.deepEqual(await issuer.runDue(), { ran: false }, 'a minute after giving up is too soon to ask again');
+    assert.deepEqual(await issuer.list(), []);
+    time.advance(61 * 60_000);
+    assert.equal((await issuer.runDue()).ran, true, 'an hour later the job is put back and run');
+    assert.equal((await issuer.list()).length, 1);
+    assert.deepEqual(await jobRow('frontier-weekly'), [{ status: 'succeeded', attempts: 1 }]);
+    assert.equal(issuer.counters.rearmed, 1);
+});
+test('D-02: a notice job that gave up is asked again an hour later, and delivered once the inbox is back', options, async () => {
+    // The review's probe: a safety notice whose delivery threw three times delivered nothing after recovery.
+    await queuedSafetyNotice();
+    const time = clock();
+    const sender = new FrontierNotifications({ database: db, jobs, notifications: { create: async () => { throw new Error('inbox unavailable'); } }, weekly, config, now: time.now });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        await retryNow('frontier-notify');
+        await sender.deliverDue();
+    }
+    assert.deepEqual(await jobRow('frontier-notify'), [{ status: 'failed', attempts: 3 }]);
+    sender.notifications = notices; // the inbox is back
+    time.advance(60_000);
+    assert.deepEqual(await sender.deliverDue(), { delivered: 0 }, 'a minute after giving up is too soon to ask again');
+    assert.equal((await db.query('SELECT count(*)::int n FROM evimed_inbox.notifications')).rows[0].n, 0);
+    time.advance(61 * 60_000);
+    assert.deepEqual(await sender.deliverDue(), { delivered: 1 }, 'an hour later the job is put back and delivered');
+    assert.deepEqual((await db.query('SELECT user_id FROM evimed_inbox.notifications')).rows, [{ user_id: 'alice' }]);
+    assert.equal(sender.status().counters.rearmed, 1);
+});
+test('D-02: a notice job that keeps failing is asked three times an hour, and not for ever', options, async () => {
+    await queuedSafetyNotice();
+    const time = clock();
+    let calls = 0;
+    const sender = new FrontierNotifications({ database: db, jobs, notifications: { create: async () => { calls++; throw new Error('inbox unavailable'); } }, weekly, config, now: time.now });
+    for (let minute = 0; minute < 150; minute++) {
+        await retryNow('frontier-notify');
+        await sender.deliverDue();
+        time.advance(60_000);
+    }
+    assert.equal(calls, 9, 'the first round, then one more at each hour — a job asked every minute would have run 150 times');
+    // A job older than a week is let be: the notice it carries is no longer one anybody can be told.
+    await db.query("UPDATE evimed_product.jobs SET status='failed',attempts=3,created_at=now()-interval '8 days' WHERE kind='frontier-notify'");
+    time.advance(2 * 60 * 60_000);
+    await sender.deliverDue();
+    assert.equal(calls, 9);
+    assert.deepEqual(await jobRow('frontier-notify'), [{ status: 'failed', attempts: 3 }]);
+});
+test('D-02: only the platform\'s own plumbing failing gives an attempt back; a refusal the notice earned does not', () => {
+    const coded = (/** @type {unknown} */ code) => Object.assign(new Error('x'), { code });
+    for (const code of ['40001', '40P01', '55P03', '57014', '57P01', '57P03', '08006', '08001', '53100', '53300', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE'])
+        assert.equal(frontierDeliveryInfrastructureError(coded(code)), true, String(code));
+    for (const code of ['23505', '23503', '42P01', '22001', '5300', 'notification_invalid', 'frontier_notify_failed', '', undefined])
+        assert.equal(frontierDeliveryInfrastructureError(coded(code)), false, String(code));
+    assert.equal(frontierDeliveryInfrastructureError(new Error('inbox unavailable')), false, 'an error that names nothing counts as an attempt');
+    assert.equal(frontierDeliveryInfrastructureError(new HttpError(409, '40001', 'refused')), false, 'our own refusal is the notice\'s');
+    assert.equal(frontierDeliveryInfrastructureError(null), false);
+});
+test('D-02: an infrastructural failure gives its attempt back, so an outage does not use a notice job up', options, async () => {
+    await queuedSafetyNotice();
+    const deadlock = Object.assign(new Error('deadlock detected'), { code: '40P01' });
+    const sender = new FrontierNotifications({ database: db, jobs, notifications: { create: async () => { throw deadlock; } }, weekly, config, now });
+    for (let round = 1; round <= 6; round++) {
+        await retryNow('frontier-notify');
+        await sender.deliverDue();
+        assert.deepEqual(await jobRow('frontier-notify'), [{ status: 'queued', attempts: 0 }], `after ${round} infrastructural failures the job is still whole`);
+    }
+    assert.equal(sender.status().counters.failed, 6);
+    assert.equal(sender.status().counters.refunded, 6);
+    sender.notifications = notices; // the lock cleared
+    await retryNow('frontier-notify');
+    assert.deepEqual(await sender.deliverDue(), { delivered: 1 });
+    assert.deepEqual(await jobRow('frontier-notify'), [{ status: 'succeeded', attempts: 1 }]);
 });

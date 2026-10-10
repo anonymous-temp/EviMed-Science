@@ -62,6 +62,49 @@ function layer({ editor = stubEditor({ verdict: "yes" }), budget = async () => (
   return new FrontierEvents({ database, editor, embedder, budget, now: () => NOW, config: {} });
 }
 
+test("D-16: items whose band could not be asked wait unplaced and do not hold up the items behind them; a deployment with no editor still makes singletons", options, async () => {
+  const editor = stubEditor({ verdict: "yes" });
+  let state = "throttled";
+  const events = layer({ editor, budget: async () => ({ state }) });
+  const first = await insertComposedItem(database, { sourceId: "nejm", title: "Semaglutide cuts kidney events", entityKeys: ["drug:semaglutide"],
+    vector: vectorAt(1), visibleAt: hoursAgo(20), timelineAt: hoursAgo(20) });
+  await events.clusterPending(); // nothing to ask: its own event, whatever the budget
+  const story = await eventOf(database, first.id);
+  assert.ok(story);
+  const take = (title, axis, hours) => insertComposedItem(database, { sourceId: "stat", sourceType: "media", title, entityKeys: ["drug:semaglutide"],
+    vector: vectorAt(0.78, axis), visibleAt: hoursAgo(hours), timelineAt: hoursAgo(hours) });
+  const [a, b, c] = [await take("Take A", 2, 10), await take("Take B", 3, 9), await take("Take C", 4, 8)];
+  const lone = await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: "Metformin news", entityKeys: ["drug:metformin"],
+    vector: vectorAt(1, 6), visibleAt: hoursAgo(7), timelineAt: hoursAgo(7) });
+
+  // Two a round, oldest first: A and B are asked about and cannot be, so they wait — and C and the item behind it get their turn.
+  assert.deepEqual(await events.clusterPending({ limit: 2 }), { clustered: 0, created: 0, joined: 0, merged: 0, skipped: 2 });
+  assert.equal(await eventOf(database, a.id), null);
+  assert.equal(await eventOf(database, b.id), null);
+  assert.deepEqual(await events.clusterPending({ limit: 2 }), { clustered: 1, created: 1, joined: 0, merged: 0, skipped: 1 });
+  assert.equal(await eventOf(database, c.id), null, "C waits too");
+  assert.ok(await eventOf(database, lone.id), "…and the item with nothing to ask was not starved by the three");
+  assert.equal(events.counters.deferred, 3);
+  assert.equal(editor.calls.judge.length, 0, "the model was never asked while the budget was not ok");
+
+  // The budget comes back: everything that waited is looked at at once, asked, and placed.
+  state = "ok";
+  assert.deepEqual(await events.clusterPending(), { clustered: 3, created: 0, joined: 3, merged: 0, skipped: 0 });
+  for (const waiting of [a, b, c]) assert.equal((await eventOf(database, waiting.id)).id, story.id);
+  assert.equal(editor.calls.judge.length, 3);
+
+  // With no editor at all nothing will ever answer, so waiting would be for nothing: an event of its own, as before.
+  await resetFrontier(database);
+  await insertSource(database, "nejm", { authority: 5, owner_entity: "nejm-group" });
+  await insertSource(database, "stat", { name: "STAT", source_type: "media", authority: 3, owner_entity: "stat" });
+  const bare = layer({ editor: null, embedder: null });
+  const one = await insertComposedItem(database, { sourceId: "nejm", title: "Registry update", registryIds: ["NCT05555555"], visibleAt: hoursAgo(4), timelineAt: hoursAgo(4) });
+  const two = await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: "Trial delayed", registryIds: ["NCT05555555"], visibleAt: hoursAgo(1), timelineAt: hoursAgo(1) });
+  await bare.clusterPending();
+  assert.notEqual((await eventOf(database, one.id)).id, (await eventOf(database, two.id)).id);
+  assert.equal(bare.counters.deferred, 0);
+});
+
 test("identifiers: a trial's later news joins its first item's event; an unrelated item is an event of its own", options, async () => {
   const events = layer({ embedder: null });
   const paper = await insertComposedItem(database, { sourceId: "nejm", title: "FLOW trial", titleZh: "FLOW 试验", registryIds: ["NCT03819153"],
@@ -120,8 +163,12 @@ test("vectors: a shared drug and cosine ≥ 0.82 join; no shared entity never do
     vector: vectorAt(0.78, 4), visibleAt: hoursAgo(6), timelineAt: hoursAgo(6) });
   await throttled.clusterPending();
   assert.equal(editor.calls.judge.length, 2, "past 80% of the budget the band is not asked");
-  assert.notEqual((await eventOf(database, unasked.id)).id, story.id);
+  assert.equal(await eventOf(database, unasked.id), null, "…and the item waits unplaced instead of becoming an event of its own for good (D-16)");
   assert.equal(throttled.counters.adjudicationSkipped, 1);
+  assert.equal(throttled.counters.deferred, 1);
+  await layer({ editor }).clusterPending();
+  assert.equal(editor.calls.judge.length, 3, "once the budget allows, the band is asked");
+  assert.equal((await eventOf(database, unasked.id)).id, story.id, "…and the verdict places it");
 
   const related = layer({ editor: stubEditor({ verdict: "related" }) });
   const follow = await insertComposedItem(database, { sourceId: "reuters", sourceType: "media", title: "Label update follows", entityKeys: ["drug:semaglutide"],

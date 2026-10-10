@@ -28,7 +28,9 @@
  *   the issue idempotent across restarts and instances; the row itself is
  *   inserted in the job's own completion transaction, with
  *   `meta.daily_version`. A failure retries on the job's schedule and leaves
- *   yesterday's issue the latest (plan §10.5.7). From a quarter past the daily
+ *   yesterday's issue the latest (plan §10.5.7); a job that has used its three
+ *   attempts is put back once an hour for the rest of its day, so a cause fixed
+ *   at nine still gets the day its issue (`frontierJobRearm.mjs`, D-02). From a quarter past the daily
  *   time on, a day without its issue is reported (`missing`, a metric and an
  *   alert line) — never shown to a reader as an error.
  * - **The issue's structure is frozen; its items are read live.** The lead,
@@ -54,7 +56,8 @@
  * @module frontierDaily
  */
 
-import { FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, frontierSourceDisplayName } from "@evimed/domain";
+import { DISPLAY_TIME_ZONE, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, frontierSourceDisplayName } from "@evimed/domain";
+import { FrontierJobRearm } from "./frontierJobRearm.mjs";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
 
@@ -258,6 +261,15 @@ export function dayLabel(day) {
   return `${year}年${month}月${date}日`;
 }
 
+/**
+ * What a reader calls the zone clock times are written in: 「北京时间」 for the platform's display zone, the configured zone's
+ * own name otherwise (the Markdown used to say 「北京时间」 whatever `OPEN_SCIENCE_FRONTIER_TIMEZONE` was).
+ * @param {string} timeZone
+ */
+export function zoneNameZh(timeZone) {
+  return timeZone === DISPLAY_TIME_ZONE ? "北京时间" : `${timeZone} 时间`;
+}
+
 /** An instant as 「9月21日 07:00」 in the zone. @param {Date} at @param {string} timeZone */
 function momentLabel(at, timeZone) {
   const { day, clock } = zonedClock(at, timeZone);
@@ -279,7 +291,7 @@ export function frontierDailyMarkdown({ day, window, timeZone, lead, leadText, s
   const parts = [
     `# EviMed 医学前沿日报 · ${dayLabel(day)}`,
     "",
-    `覆盖 ${momentLabel(window.start, timeZone)} 至 ${momentLabel(window.end, timeZone)}（北京时间），共 ${count} 条。`,
+    `覆盖 ${momentLabel(window.start, timeZone)} 至 ${momentLabel(window.end, timeZone)}（${zoneNameZh(timeZone)}），共 ${count} 条。`,
   ];
   if (lead) {
     parts.push("", "## 头条", "", `**${markdownText(titleOf(lead))}**（${markdownText(lead.source_name)}）`);
@@ -369,7 +381,9 @@ export class FrontierDaily {
     this.dailyTime = clockMinutes(this.config.frontierDailyTime) == null ? "07:30" : String(this.config.frontierDailyTime).trim();
     this.dimension = Number(this.config.kbEmbeddingDimension) || dimension;
     /** Observable counters (principle 15). */
-    this.counters = { issues: 0, empty: 0, failures: 0, aiMinutes: 0, aiMinuteDropped: 0, pushed: 0, pushFailures: 0 };
+    this.counters = { issues: 0, empty: 0, failures: 0, rearmed: 0, aiMinutes: 0, aiMinuteDropped: 0, pushed: 0, pushFailures: 0 };
+    // A day's job that used its attempts is put back once an hour for the rest of that day (D-02), not every minute.
+    this.rearm = new FrontierJobRearm({ jobs, kind: JOB_KIND, limit: 3, withinMs: DAY });
     /** @type {{ day: string | null, missing: boolean, lastIssueDay: string | null, lastGeneratedAt: string | null, lastError: string | null }} */
     this.state = { day: null, missing: false, lastIssueDay: null, lastGeneratedAt: null, lastError: null };
   }
@@ -403,6 +417,7 @@ export class FrontierDaily {
       this.state.missing = alert && !done && !(await this.#emptyDay(day, owner));
       return { day, ran: false };
     }
+    this.counters.rearmed += await this.rearm.run(now);
     await this.jobs.enqueue(owner.userId, JOB_KIND, { day }, { idempotencyKey: `${JOB_KIND}:${day}`, projectId: owner.projectId, maxAttempts: 3 });
     const job = await this.jobs.claim([JOB_KIND], this.workerId, { leaseMs: JOB_LEASE_MS });
     if (!job) {

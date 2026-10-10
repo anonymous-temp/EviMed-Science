@@ -42,9 +42,21 @@ import { FRONTIER_META_KEYS, bumpFrontierVersion, metaNumber, migrateFrontier } 
  *   resumes from there and counts the gap, which is the only honest thing left
  *   to do with entries nobody can deliver any more. A fresh platform starting
  *   from 0 is not a gap: it never had those entries to lose.
+ * - A cursor *ahead* of the plugin's latest `seq` means the plugin's numbering
+ *   went back — its database was restored from a backup, or rebuilt (review
+ *   2026-10-10, D-03). Left alone, every entry the plugin numbers up to the old
+ *   cursor sits behind it and is never asked for, and the status reads ok with
+ *   no lag. So the cursor is rewound to the start of what the plugin holds and
+ *   the stream read again; a replay stores nothing twice (the key above), the
+ *   status says `cursorAhead` (degraded, `knowledge_plugin_cursor_ahead`) until
+ *   the cursor has caught up, and `rewinds` counts it.
  * - A contract major the platform does not consume is refused, not guessed at:
  *   the stream is not pulled until the manifest says a compatible version
  *   again, which is re-checked on every pull until it does.
+ * - A page over the client's response cap is asked for again with half the
+ *   limit, down to one entry, and the limit is back once a page is stored
+ *   (review 2026-10-10, D-17): the plugin bounds a page by count, the client
+ *   by bytes, and one fat catch-up page must not block every source.
  * - The plugin being down costs the feed its freshness and nothing else. The
  *   pull backs off exponentially by the code the client named, up to fifteen
  *   minutes, and resumes from the stored cursor — nothing lost, nothing twice.
@@ -68,6 +80,8 @@ const DEFECTS = new Set(FRONTIER_ENTRY_DEFECTS);
 const IDENTITY_KEY = /^(doi|pmid|wx|reg|fda|url):\S/;
 const MAX_BACKOFF_MS = 15 * 60_000;
 const MAX_UNKNOWN_VALUES = 20;
+/** The code `lastError` carries while a rewound cursor is still catching up with the plugin. */
+const CURSOR_AHEAD = "knowledge_plugin_cursor_ahead";
 /** The codes that mean the platform cannot reach the plugin at all, as opposed
  *  to reaching it and getting something wrong back. */
 const UNREACHABLE_CODES = new Set(["knowledge_plugin_unreachable", "knowledge_plugin_unauthorized", "knowledge_plugin_unconfigured"]);
@@ -207,12 +221,16 @@ export class FrontierIngest {
     this.failures = 0;
     this.backoffUntil = 0;
     this.gaps = { count: 0, entries: 0 };
+    /** The cursor found ahead of the plugin and put back (D-03): how often, and the last time's `from` → `to`. @type {{ count: number, from: number | null, to: number | null, at: string | null }} */
+    this.rewinds = { count: 0, from: null, to: null, at: null };
+    /** Whether a rewind's replay has not yet caught up with the plugin's latest seq. */
+    this.cursorAhead = false;
     /** @type {Record<string, number>} */
     this.unknownVocabulary = {};
     /** @type {Record<string, string[]>} a few of the unknown values seen, for whoever reads the status */
     this.unknownValues = {};
     this.counters = { pulls: 0, pullFailures: 0, pages: 0, received: 0, inserted: 0, duplicates: 0, dropped: 0, invalid: 0,
-      placeholders: 0, mirrors: 0, mirrorFailures: 0, factKeysDropped: 0, cursorConflicts: 0 };
+      placeholders: 0, mirrors: 0, mirrorFailures: 0, factKeysDropped: 0, cursorConflicts: 0, pageShrinks: 0 };
   }
 
   /** @param {string} vocabulary @param {unknown} value */
@@ -480,6 +498,57 @@ export class FrontierIngest {
     return resumed;
   }
 
+  /**
+   * A cursor ahead of the plugin's latest seq: the plugin's numbering went back (D-03, see the module header). The cursor
+   * goes back to just below the oldest seq the plugin holds — never lower, since below it there is nothing to read and the
+   * resync would count a purge gap that is not one — and the stream is read again from there. That is a write that
+   * re-reads up to thirty days, so the suspicion is confirmed first: a second health answer (the first may be stale, or
+   * another control plane may have outrun it a moment ago) and a fresh manifest (its oldest seq is the new start). The
+   * move is a compare-and-set on the cursor, like the page store's: a second control plane that rewound first wins.
+   * @param {number} cursor the stored cursor, ahead of the latest seq the plugin just reported
+   * @returns {Promise<{ from: number, to: number } | null>} null when the suspicion did not hold or another puller moved the cursor
+   */
+  async #rewindAhead(cursor) {
+    const confirmed = await this.plugin.health().catch(() => null);
+    if (!confirmed || confirmed.latest_seq == null || cursor <= confirmed.latest_seq) return null;
+    this.latestSeq = confirmed.latest_seq;
+    await this.mirrorManifest();
+    if (this.compatibility.state !== "compatible") return null;
+    const to = Math.max(0, (this.oldestSeqAvailable ?? 1) - 1);
+    if (to >= cursor) return null;
+    const moved = await this.database.transaction(async (/** @type {any} */ client) => {
+      const locked = await client.query("SELECT value FROM evimed_frontier.meta WHERE key=$1 FOR UPDATE", [FRONTIER_META_KEYS.pluginCursor]);
+      if (metaNumber(locked.rows[0]?.value) !== cursor) return false;
+      await client.query(`UPDATE evimed_frontier.meta SET value = to_jsonb($2::bigint), updated_at = clock_timestamp() WHERE key=$1`,
+        [FRONTIER_META_KEYS.pluginCursor, to]);
+      return true;
+    });
+    if (!moved) return null;
+    this.rewinds = { count: this.rewinds.count + 1, from: cursor, to, at: this.now().toISOString() };
+    return { from: cursor, to };
+  }
+
+  /**
+   * One page of the stream. The plugin bounds a page by count and the client by bytes (8 MiB), so a catch-up page of long
+   * full-content feeds can be over the cap however it is asked for the same way: it was, every time, and the whole feed stood
+   * behind it (review 2026-10-10, D-17). On that one code the limit is halved and the page asked for again, down to a single
+   * entry — which the contract's bounds always fit, so the pull still fails by its code if it does not. The caller puts the
+   * limit back once the page is stored, so a stretch of ordinary pages after a fat one is read at full size again.
+   * @param {number} after @param {number} limit @param {(smaller: number) => void} shrunk told the limit the page was read at
+   */
+  async #entriesPage(after, limit, shrunk) {
+    for (;;) {
+      try {
+        return await this.plugin.entries({ after, limit });
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "knowledge_plugin_response_too_large" || limit <= 1) throw error;
+        limit = Math.max(1, Math.floor(limit / 2));
+        this.counters.pageShrinks += 1;
+        shrunk(limit);
+      }
+    }
+  }
+
   /** Whether a pull may run now (not inside a backoff window). */
   due() { return this.now().getTime() >= this.backoffUntil; }
 
@@ -503,9 +572,12 @@ export class FrontierIngest {
       }
       // Liveness and the latest seq ride along; a health failure is not a
       // pull failure — the stream itself answers for that below.
+      /** What the plugin said its latest seq was in this pull; null when it could not be asked (the last answer is then stale). @type {number | null} */
+      let reportedLatest = null;
       try {
         const health = await this.plugin.health();
         this.latestSeq = health.latest_seq;
+        reportedLatest = health.latest_seq;
         this.pluginHealth = health.status;
         this.pluginHealthDetail = { egress: health.egress, backlog: health.backlog, lastOkFetchAt: health.last_ok_fetch_at,
           lastNewEntryAt: health.last_new_entry_at, rateLimited: health.rate_limited_1h, modelCalls24h: health.model_calls_24h ?? null,
@@ -522,10 +594,18 @@ export class FrontierIngest {
         this.pluginHealth = null;
         this.pluginHealthDetail = null;
       }
-      let cursor = await this.#resyncIfPurged(await this.#storedCursor());
+      let cursor = await this.#storedCursor();
+      /** @type {{ from: number, to: number } | null} */
+      let rewound = null;
+      if (reportedLatest != null && cursor > reportedLatest) {
+        rewound = await this.#rewindAhead(cursor);
+        cursor = rewound ? rewound.to : await this.#storedCursor();
+      }
+      cursor = await this.#resyncIfPurged(cursor);
       let remirrored = false;
+      let limit = this.pageLimit;
       for (let page = 0; page < this.maxPagesPerPull; page += 1) {
-        const answer = await this.plugin.entries({ after: cursor, limit: this.pageLimit });
+        const answer = await this.#entriesPage(cursor, limit, (smaller) => { limit = smaller; });
         totals.pages += 1;
         totals.received += answer.entries.length + answer.skipped.length;
         totals.invalid += answer.skipped.length;
@@ -548,6 +628,7 @@ export class FrontierIngest {
         totals.duplicates += rows.length - stored.inserted;
         totals.dropped += rows.filter((row) => row.state === "dropped").length;
         cursor = Math.max(cursor, answer.nextAfter);
+        limit = this.pageLimit;
         if (!answer.hasMore) break;
       }
       this.cursor = cursor;
@@ -559,9 +640,12 @@ export class FrontierIngest {
       this.counters.invalid += totals.invalid;
       this.failures = 0;
       this.backoffUntil = 0;
-      this.lastError = null;
+      // A rewind stays flagged until a pull that did not itself rewind ends with the cursor at the plugin's latest seq.
+      if (rewound) this.cursorAhead = true;
+      else if (this.cursorAhead && reportedLatest != null && cursor >= reportedLatest) this.cursorAhead = false;
+      this.lastError = this.cursorAhead ? CURSOR_AHEAD : null;
       this.lastPullOkAt = this.now().toISOString();
-      return { ...totals, cursor };
+      return { ...totals, cursor, ...(rewound ? { rewound } : {}) };
     } catch (error) {
       this.counters.pullFailures += 1;
       this.failures += 1;
@@ -603,6 +687,8 @@ export class FrontierIngest {
       lastManifestAt: this.lastManifestAt,
       backoffUntil: this.backoffUntil ? new Date(this.backoffUntil).toISOString() : null,
       gaps: { ...this.gaps },
+      cursorAhead: this.cursorAhead,
+      rewinds: { ...this.rewinds },
       unknownVocabulary: { ...this.unknownVocabulary },
       unknownValues: Object.fromEntries(Object.entries(this.unknownValues).map(([key, values]) => [key, [...values]])),
       counters: { ...this.counters },

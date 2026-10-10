@@ -6,9 +6,30 @@ import { notificationSwitches } from './notificationService.mjs';
 import { FrontierSubscriptions, frontierFollowPredicate } from './frontierSubscriptions.mjs';
 import { frontierAudienceAllows } from './frontierService.mjs';
 import { FRONTIER_PUSH_ACTIVE_MS, zonedClock } from './frontierDaily.mjs';
+import { FrontierJobRearm } from './frontierJobRearm.mjs';
 import { latestFrontierWeek } from './frontierWeekly.mjs';
+import { HttpError } from './security.mjs';
 const CURSOR = 'safety_scan_cursor';
 const KIND = 'frontier-notify';
+/** A notice job that gave up is put back for this long after it was made: a safety alert is eligible for a week, and so is a weekly. */
+const REARM_WITHIN_MS = 7 * 86400000;
+/** SQLSTATEs and socket codes that say the platform's own plumbing failed, not the notice: a deadlock, a serialization failure, a lock
+ * that could not be taken, a statement cancelled by its timeout, a server shutting down or not yet accepting connections, a cut connection. */
+const INFRASTRUCTURE_CODES = new Set(['40001', '40P01', '55P03', '57014', '57P01', '57P02', '57P03', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE']);
+/**
+ * Whether a delivery failed for want of the platform's plumbing rather than because of the notice (D-02). Such a failure says
+ * nothing about the job, so it does not use up one of its attempts: an outage of a few minutes must not be the end of a safety
+ * notice. A refusal the notice earned (`HttpError`) and anything the codes do not name count as an attempt, as before. The
+ * codes are a closed list of PostgreSQL's SQLSTATEs (class 08 connection exceptions, class 53 insufficient resources, and the
+ * named ones) and Node's socket codes.
+ * @param {unknown} error
+ */
+export function frontierDeliveryInfrastructureError(error) {
+    if (error instanceof HttpError)
+        return false;
+    const code = String(/** @type {any} */ (error)?.code ?? '');
+    return INFRASTRUCTURE_CODES.has(code) || (code.length === 5 && (code.startsWith('08') || code.startsWith('53')));
+}
 /** Followers one publication reaches at most: a zone nobody has followed this far would be a second scheduler's work. */
 export const FRONTIER_ZONE_FANOUT_MAX = 2000;
 // 'corrected' and 'withdrawn' come from the upkeep of a card (a reader's challenge upheld, a source withdrawn): the same follower notice, worded as what happened.
@@ -62,7 +83,9 @@ export class FrontierNotifications {
         this.batch = Math.min(200, Math.max(1, Math.floor(Number(config.frontierNotifyBatch)) || 50));
         this.scanBatch = Math.min(500, Math.max(1, Math.floor(Number(config.frontierSafetyScanBatch)) || 100));
         this.timeZone = String(config.frontierTimeZone || 'Asia/Shanghai');
-        this.counters = { queued: 0, delivered: 0, skipped: 0, failed: 0, scanGaps: 0, zoneQueued: 0, zoneCapped: 0 };
+        this.counters = { queued: 0, delivered: 0, skipped: 0, failed: 0, refunded: 0, rearmed: 0, scanGaps: 0, zoneQueued: 0, zoneCapped: 0 };
+        // A notice job that used its attempts is put back once an hour for as long as its notice can still be told (D-02).
+        this.rearm = new FrontierJobRearm({ jobs, kind: KIND, limit: this.batch, withinMs: REARM_WITHIN_MS });
     }
     async ready() { await migrateFrontier(this.database, { dimension: Number(this.config.kbEmbeddingDimension) || 1024 }); await migrateProductStore(this.database); await migrateNotifications(this.database); }
     /** Current account, switches, public source and all mutes are read again before every delivery.
@@ -255,6 +278,7 @@ export class FrontierNotifications {
         if (!this.jobs || !this.notifications)
             return { delivered: 0, unavailable: true };
         await this.ready();
+        this.counters.rearmed += await this.rearm.run(this.now());
         let delivered = 0;
         for (let n = 0; n < this.batch; n++) {
             const job = await this.jobs.claim([KIND], this.workerId, { leaseMs: 300000 });
@@ -280,7 +304,10 @@ export class FrontierNotifications {
             }
             catch (error) {
                 this.counters.failed++;
-                await this.jobs.fail(job.userId, job.id, job.leaseToken, { code: 'frontier_notify_failed', message: 'Frontier notification delivery failed.' }, { retry: true, delayMs: 60000 });
+                const infrastructure = frontierDeliveryInfrastructureError(error);
+                if (infrastructure)
+                    this.counters.refunded++;
+                await this.jobs.fail(job.userId, job.id, job.leaseToken, { code: 'frontier_notify_failed', message: 'Frontier notification delivery failed.' }, { retry: true, delayMs: 60000, refundAttempt: infrastructure });
             }
         }
         return { delivered };

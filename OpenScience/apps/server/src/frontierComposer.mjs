@@ -20,13 +20,18 @@
  *
  * - **One timer, the worker's.** The maintenance pause stops recurring work by
  *   clearing each worker's timer; a timer here would be a loop maintenance
- *   could not stop. The worker never overlaps two ticks of this module, and a
- *   maintenance window waits for a running tick (`inspectActivity` reads the
- *   worker's `running`, which includes this).
+ *   could not stop. The worker runs each chain below as a loop of its own
+ *   (`tickChain`), never two of the same chain at once, and a maintenance
+ *   window waits for a running chain (`inspectActivity` reads the worker's
+ *   `running`, which includes them). The chains are independent: the editorial
+ *   one can take a minute (a model judgement per item) and must not hold the
+ *   notices (10 s), the safety scan (30 s) or the daily and its push (1 min)
+ *   back to its pace (review 2026-10-10, D-01). `tick()` runs them all and
+ *   resolves when they have all ended — the settle path of the tests.
  * - **Loops are ordered where one reads another.** The digests read the hot
  *   list, which reads the events clustering just made, so those three run in
- *   that order in one tick; the daily, the push and the profiles run beside
- *   them. The push follows the daily, so the minute an issue is written is
+ *   that order in one chain; the daily, the push and the profiles run beside
+ *   them, each chain on its own. The push follows the daily, so the minute an issue is written is
  *   the minute the first readers are told.
  * - **Each loop is bounded and fails alone.** A loop that fails is recorded
  *   with its named code and tried at its next due time; the others go on. The
@@ -57,6 +62,12 @@ export const FRONTIER_COMPOSER_CADENCES = Object.freeze({
   notices: 10 * SECOND,
 });
 const LOOPS = Object.freeze(Object.keys(FRONTIER_COMPOSER_CADENCES));
+/**
+ * The chains the worker runs as loops of its own. What a chain holds is ordered inside it (clustering before the hot list before the
+ * digests; the daily before its push; the weekly before its recipients, the safety scan, the deliveries) and nothing is ordered
+ * between chains.
+ */
+export const FRONTIER_COMPOSER_CHAINS = Object.freeze(["editorial", "issue", "notifications", "profiles"]);
 
 /** @param {unknown} error */
 function codeOf(error) {
@@ -119,43 +130,82 @@ export class FrontierComposer {
     }
   }
 
+  /** The chains the worker runs as loops of its own (see `FRONTIER_COMPOSER_CHAINS`). */
+  get chains() { return FRONTIER_COMPOSER_CHAINS; }
+
+  /** Clustering, the hot list, the digests — in that order, each when due. @returns {Promise<unknown | null>} the first failure */
+  async #editorial() {
+    /** @type {unknown[]} */
+    const failures = [];
+    if (this.events && this.#due("cluster")) failures.push(await this.#run("cluster", () => this.events.clusterPending()));
+    if (this.events && this.#due("hot")) failures.push(await this.#run("hot", () => this.events.computeHot()));
+    if (this.events && this.#due("digests")) failures.push(await this.#run("digests", () => this.events.writeDigests()));
+    return failures.find(Boolean) ?? null;
+  }
+
+  /** The day's issue, then its push. @returns {Promise<unknown | null>} the first failure */
+  async #issue() {
+    /** @type {unknown[]} */
+    const failures = [];
+    if (this.daily && this.#due("daily")) {
+      failures.push(await this.#run("daily", () => this.daily.runDue()));
+      this.#reportMissing();
+    }
+    if (this.daily && this.#due("push")) failures.push(await this.#run("push", () => this.daily.pushDue()));
+    return failures.find(Boolean) ?? null;
+  }
+
+  /** The weekly, its recipients, the safety scan, the deliveries. @returns {Promise<unknown | null>} the first failure */
+  async #notifications() {
+    /** @type {unknown[]} */
+    const failures = [];
+    if (this.weekly && this.#due("weekly")) failures.push(await this.#run("weekly", () => this.weekly.runDue()));
+    if (this.notifications && this.#due("weeklyPush")) failures.push(await this.#run("weeklyPush", () => this.notifications.queueWeekly()));
+    if (this.notifications && this.#due("safety")) failures.push(await this.#run("safety", () => this.notifications.scanSafety()));
+    if (this.notifications && this.#due("notices")) failures.push(await this.#run("notices", () => this.notifications.deliverDue()));
+    return failures.find(Boolean) ?? null;
+  }
+
+  /** Readers' profiles and rankings. @returns {Promise<unknown | null>} its failure */
+  async #profiles() {
+    return this.profiles && this.#due("profiles") ? this.#run("profiles", () => this.profiles.refreshDue()) : null;
+  }
+
+  /** @param {string} name @returns {Promise<unknown | null>} the chain's first failure */
+  #chain(name) {
+    switch (name) {
+      case "editorial": return this.#editorial();
+      case "issue": return this.#issue();
+      case "notifications": return this.#notifications();
+      case "profiles": return this.#profiles();
+      default: throw new TypeError(`Unknown frontier composer chain: ${name}`);
+    }
+  }
+
   /**
-   * Run every loop that is due. Resolves when they have all ended; rejects
-   * with the first failure after that, so the worker sees it.
+   * Run one chain: the loops of it that are due, in order. Rejects with the
+   * chain's first failure after they have all ended, so the worker's loop for
+   * this chain records it. The worker calls this for each chain on its own
+   * loop, so a chain that takes a minute holds back no other.
+   * @param {string} name one of `FRONTIER_COMPOSER_CHAINS`
+   */
+  async tickChain(name) {
+    if (!FRONTIER_COMPOSER_CHAINS.includes(name)) throw new TypeError(`Unknown frontier composer chain: ${name}`);
+    if (!this.canRun()) return null;
+    const failure = await this.#chain(name);
+    if (failure) throw failure;
+    return null;
+  }
+
+  /**
+   * Run every loop that is due, every chain beside the others. Resolves when
+   * they have all ended; rejects with the first failure after that. This is
+   * the settle path — what a test awaits; the worker runs the chains one by
+   * one (`tickChain`).
    */
   async tick() {
     if (!this.canRun()) return [];
-    /** @type {Promise<unknown | null>[]} */
-    const chains = [];
-    const editorial = async () => {
-      /** @type {unknown[]} */
-      const failures = [];
-      if (this.events && this.#due("cluster")) failures.push(await this.#run("cluster", () => this.events.clusterPending()));
-      if (this.events && this.#due("hot")) failures.push(await this.#run("hot", () => this.events.computeHot()));
-      if (this.events && this.#due("digests")) failures.push(await this.#run("digests", () => this.events.writeDigests()));
-      return failures.find(Boolean) ?? null;
-    };
-    const issue = async () => {
-      /** @type {unknown[]} */
-      const failures = [];
-      if (this.daily && this.#due("daily")) {
-        failures.push(await this.#run("daily", () => this.daily.runDue()));
-        this.#reportMissing();
-      }
-      if (this.daily && this.#due("push")) failures.push(await this.#run("push", () => this.daily.pushDue()));
-      return failures.find(Boolean) ?? null;
-    };
-    const notifications = async () => {
-      const failures = [];
-      if (this.weekly && this.#due("weekly")) failures.push(await this.#run("weekly", () => this.weekly.runDue()));
-      if (this.notifications && this.#due("weeklyPush")) failures.push(await this.#run("weeklyPush", () => this.notifications.queueWeekly()));
-      if (this.notifications && this.#due("safety")) failures.push(await this.#run("safety", () => this.notifications.scanSafety()));
-      if (this.notifications && this.#due("notices")) failures.push(await this.#run("notices", () => this.notifications.deliverDue()));
-      return failures.find(Boolean) ?? null;
-    };
-    chains.push(editorial(), issue(), notifications());
-    if (this.profiles && this.#due("profiles")) chains.push(this.#run("profiles", () => this.profiles.refreshDue()));
-    const failures = await Promise.all(chains);
+    const failures = await Promise.all(FRONTIER_COMPOSER_CHAINS.map((name) => this.#chain(name)));
     const failure = failures.find(Boolean);
     if (failure) throw failure;
     return failures;

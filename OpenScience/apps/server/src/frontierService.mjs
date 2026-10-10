@@ -1674,21 +1674,26 @@ export function frontierMetricFamilies(enabled, snapshot) {
       [{ value: Number(pluginHealth.backlog?.oldest_due_s ?? 0) }]);
     add("plugin_rate_limited_1h", "429 answers from the plugin's worst host in the last hour.", "gauge",
       [{ labels: { host: String(pluginHealth.rateLimited?.host ?? "none") }, value: Number(pluginHealth.rateLimited?.max ?? 0) }]);
-    // The plugin's only model use is selector self-heal (plan §14.2, §14.10:
-    // alert past 50 a day); a plugin that does not report it has no series.
+    // Reserved: the plugin has no model client (a drifted list page is recovered by its vetted selector fallbacks, not by a proposal), so
+    // this is always 0 and nothing alerts on it (review 2026-10-10, D-12). The gauge stays so a dashboard that draws it does not break;
+    // a plugin that does not report it has no series.
     if (Number.isFinite(pluginHealth.modelCalls24h)) {
-      add("plugin_model_calls_24h", "Model calls the knowledge plugin made in the last 24 hours (selector self-heal proposals).", "gauge",
+      add("plugin_model_calls_24h", "Model calls the knowledge plugin made in the last 24 hours: reserved, always 0 until the plugin has a model client.", "gauge",
         [{ value: Number(pluginHealth.modelCalls24h) }]);
     }
   }
   add("cursor_gaps_total", "Times the cursor fell behind what the plugin still holds.", "counter", [{ value: plugin.gaps.count }]);
   add("cursor_gap_entries_total", "Entries skipped because the plugin had purged them before they were pulled.", "counter", [{ value: plugin.gaps.entries }]);
+  add("cursor_rewinds_total", "Times the cursor was found ahead of the plugin's latest seq (its database was restored) and was rewound to the start of its stream.", "counter",
+    [{ value: plugin.rewinds?.count ?? 0 }]);
   add("ingest_entries_total", "Entries received from the plugin by what became of them.", "counter", [
     { labels: { outcome: "inserted" }, value: plugin.counters.inserted },
     { labels: { outcome: "duplicate" }, value: plugin.counters.duplicates },
     { labels: { outcome: "dropped" }, value: plugin.counters.dropped },
     { labels: { outcome: "invalid" }, value: plugin.counters.invalid },
   ]);
+  add("page_shrinks_total", "Times a stream page was over the client's response cap and was asked for again with half the page limit.", "counter",
+    [{ value: plugin.counters.pageShrinks ?? 0 }]);
   add("placeholder_sources_total", "Entries whose source the registry did not list, kept under a placeholder.", "counter", [{ value: plugin.counters.placeholders }]);
   add("unknown_vocabulary_total", "Plugin values this build does not know, by vocabulary (fallback applied, never refused).", "counter",
     Object.entries(plugin.unknownVocabulary).map(([vocabulary, value]) => ({ labels: { vocabulary }, value: Number(value) })));
@@ -1779,6 +1784,7 @@ export function frontierMetricFamilies(enabled, snapshot) {
       { labels: { outcome: "issued" }, value: Number(daily.counters?.issues ?? 0) },
       { labels: { outcome: "empty" }, value: Number(daily.counters?.empty ?? 0) },
       { labels: { outcome: "failed" }, value: Number(daily.counters?.failures ?? 0) },
+      { labels: { outcome: "rearmed" }, value: Number(daily.counters?.rearmed ?? 0) },
       { labels: { outcome: "ai_minute" }, value: Number(daily.counters?.aiMinutes ?? 0) },
       { labels: { outcome: "ai_minute_dropped" }, value: Number(daily.counters?.aiMinuteDropped ?? 0) },
     ]);
@@ -1789,7 +1795,7 @@ export function frontierMetricFamilies(enabled, snapshot) {
     const events = composer.events?.counters ?? {};
     add("events_total", "What clustering, the hot list and the digests did since this process started.", "counter",
       ["clustered", "created", "joined", "merged", "relatedLinks", "identifierLinks", "adjudicated", "adjudicationSkipped", "adjudicationFailures",
-        "hotRuns", "hotChanges", "digestsWritten", "digestsDropped"].map((kind) => ({ labels: { kind }, value: Number(events[kind] ?? 0) })));
+        "deferred", "hotRuns", "hotChanges", "digestsWritten", "digestsDropped"].map((kind) => ({ labels: { kind }, value: Number(events[kind] ?? 0) })));
     const profiles = composer.profiles ?? null;
     add("personalization_state", "「与你相关」 as /status reports it (1 = current).", "gauge",
       ["available", "unavailable", "off"].map((state) => ({ labels: { state }, value: (profiles?.state ?? "off") === state ? 1 : 0 })));

@@ -15,12 +15,15 @@
  *   2. exact cosine proposes additional reports sharing a drug, trial or
  *      organisation; high similarity alone cannot establish the same event;
  *   3. the existing model judges at most three candidate events per item.
- *      `yes` joins, `related` creates an edge, unavailable/unknown stays distinct.
+ *      `yes` joins, `related` creates an edge, an unknown or invalid answer stays
+ *      distinct; a budget that cannot be spent leaves the item unplaced until it can.
  *      Exact DOI/PMID deduplication remains the ingestion layer's responsibility.
  *
  * Hidden knowledge:
  *
- * - **Every item gets an event, and most events are one item.** A singleton is
+ * - **Every item gets an event, and most events are one item.** (One whose
+ *   candidates could not be asked about, for want of budget, gets it when they
+ *   can: it is not an event of its own for good, D-16.) A singleton is
  *   an event like any other: the hot list admits an event with one reporting
  *   entity when that entity is a regulator's primary source (plan §6.4), and a
  *   later report of the same thing joins it. A card links to its event only
@@ -137,6 +140,8 @@ export const FRONTIER_EDIT_GRACE_MS = DAY;
 const DIGEST_REPORTS = 12;
 /** A digest that failed is not asked for again for this long. */
 const DIGEST_RETRY_MS = 6 * HOUR;
+/** An item left unplaced because the model could not be asked is not looked at again for this long (or until the budget is back). */
+const CLUSTER_RETRY_MS = 10 * MINUTE;
 /** Candidates the vector step reads at most, newest first. */
 const VECTOR_CANDIDATES = 500;
 const PUBLIC_ID = /^[a-z0-9]{12,32}$/;
@@ -665,10 +670,12 @@ export class FrontierEvents {
     this.dimension = Number(this.config.kbEmbeddingDimension) || Number(embedder?.dimension) || dimension;
     /** @type {Map<string, number>} event id → when its last digest attempt failed */
     this.digestFailures = new Map();
+    /** @type {Map<string, number>} item id → until when it waits unplaced because the model could not be asked (D-16) */
+    this.clusterDeferred = new Map();
     /** Observable counters (principle 15). */
     this.counters = {
       clustered: 0, created: 0, joined: 0, merged: 0, relatedLinks: 0, identifierLinks: 0, adjudicated: 0, adjudicationSkipped: 0,
-      adjudicationFailures: 0, hotRuns: 0, hotChanges: 0, digestsWritten: 0, digestsDropped: 0, digestsSkipped: 0,
+      adjudicationFailures: 0, deferred: 0, hotRuns: 0, hotChanges: 0, digestsWritten: 0, digestsDropped: 0, digestsSkipped: 0,
     };
     /** @type {{ at: string, ranking: any[] } | null} */
     this.lastHot = null;
@@ -700,12 +707,28 @@ export class FrontierEvents {
    * it made its event a magnet for every story it mentioned: one event held
    * Novo's capital-markets day, an ADHD read-out and a depression trial at
    * once (2026-09-22). It stays a card of its own in the feed.
+   *
+   * An item with candidates to ask the model about, while the model cannot be
+   * asked for want of budget, is left unplaced and looked at again — after
+   * ten minutes, or at once when the budget is back — instead of becoming an
+   * event of its own for good (D-16; `clusterPending` only reads items with
+   * no event). While it waits it is out of the batch, so the items behind it
+   * are not starved. A deployment with no editor at all makes it an event of
+   * its own, as before: nothing will ever answer.
    * @param {{ limit?: number }} [options]
    */
   async clusterPending({ limit = 25 } = {}) {
     const capabilities = await this.ready();
     const now = this.now();
     const summary = { clustered: 0, created: 0, joined: 0, merged: 0, skipped: 0 };
+    const allowModel = await this.#modelAllowed();
+    if (allowModel) this.clusterDeferred.clear();
+    /** @type {string[]} */
+    const waiting = [];
+    for (const [id, until] of this.clusterDeferred) {
+      if (until > now.getTime()) waiting.push(id);
+      else this.clusterDeferred.delete(id);
+    }
     const vectors = Boolean(capabilities.vector && this.embedder?.configured);
     const modelKey = vectors ? String(this.embedder.modelKey) : null;
     /** @type {any[]} */
@@ -720,14 +743,21 @@ export class FrontierEvents {
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE i.state = 'published' AND i.event_id IS NULL AND i.visible_at >= $1::timestamptz
         AND NOT ('digest' = ANY(i.flags)) AND (i.verification <> 'pending' OR i.visible_at < $2::timestamptz) ${vectorWait}
+        AND i.id <> ALL($${values.push(waiting)}::bigint[])
       ORDER BY i.visible_at, i.id LIMIT $3`, values)).rows ?? [];
     if (!rows.length) return summary;
-    const allowModel = await this.#modelAllowed();
     for (const item of rows) {
       try {
         const outcome = await this.#clusterOne(item, { now, modelKey, allowModel });
         // Skipped: another round placed it first; it is not counted twice.
         if (outcome === "skipped") { summary.skipped += 1; continue; }
+        // Deferred: it waits for the model; it is not placed, and it is out of the next rounds' batches until then.
+        if (outcome === "deferred") {
+          this.clusterDeferred.set(String(item.id), now.getTime() + CLUSTER_RETRY_MS);
+          this.counters.deferred += 1;
+          summary.skipped += 1;
+          continue;
+        }
         summary.clustered += 1;
         if (outcome === "created") summary.created += 1;
         else summary.joined += 1;
@@ -745,7 +775,7 @@ export class FrontierEvents {
 
   /**
    * @param {any} item @param {{ now: Date, modelKey: string | null, allowModel: boolean }} context
-   * @returns {Promise<"created" | "joined" | "merged" | "skipped">}
+   * @returns {Promise<"created" | "joined" | "merged" | "skipped" | "deferred">}
    */
   async #clusterOne(item, { now, modelKey, allowModel }) {
     const identifierCandidates = await this.#identifierCandidates(item);
@@ -771,7 +801,11 @@ export class FrontierEvents {
         } catch {
           this.counters.adjudicationFailures += 1;
         }
-      } else this.counters.adjudicationSkipped += asked.length;
+      } else {
+        this.counters.adjudicationSkipped += asked.length;
+        // Out of budget, not out of editor: the item waits to be asked rather than being an event of its own for good.
+        if (this.editor?.available) return "deferred";
+      }
     }
     return this.#apply(item, { identifier: [], strong: [], yes, related }, now);
   }
