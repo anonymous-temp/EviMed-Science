@@ -87,7 +87,9 @@ export function createModuleEvolutionPreparation({service,taskPool,policies,prov
   const pool=input.phase==='audit'?'audit':'confirmation';
   const pooled=async()=>(await service.list('task')).filter(row=>row.payload.moduleId===input.moduleId&&row.payload.pool===pool && (pool!=='audit'||row.payload.quarter===input.quarter)).length;
   const minimum=MODULE_CONFIRMATION_MINIMUM[input.moduleId]??1;
-  await curator.curate({...input,pool,want:Math.max(1,minimum-await pooled()),candidate:{...input.candidate,frozenAt:input.freezeAt??input.candidate?.frozenAt??auditBoundary},exposedSourceRoots:assets.filter(row=>row.payload.exposedToDevelopment).flatMap(row=>[row.payload.sourceRoot,...(row.payload.sourceAliases??[])])});
-  return {status:await pooled()>=minimum?'ready':'waiting',reason:'fresh_confirmation_tasks_pending'};
+  const curated=await curator.curate({...input,pool,want:Math.max(1,minimum-await pooled()),candidate:{...input.candidate,frozenAt:input.freezeAt??input.candidate?.frozenAt??auditBoundary},exposedSourceRoots:assets.filter(row=>row.payload.exposedToDevelopment).flatMap(row=>[row.payload.sourceRoot,...(row.payload.sourceAliases??[])])});
+  // A curator that could not look (the model's release date is unknown, so no paper can be first public after it; the module is not one it serves)
+  // says so: the mission showed `fresh_confirmation_tasks_pending` for it, a wait for papers that no paper could end (review D-E8).
+  return {status:await pooled()>=minimum?'ready':'waiting',reason:curated?.status==='unavailable'?curated.reason:'fresh_confirmation_tasks_pending'};
  };
 }

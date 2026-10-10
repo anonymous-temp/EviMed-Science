@@ -29,3 +29,25 @@ test('fidelity calibration requires measured agreement on both positive and wron
  assert.equal(calibrated.anchorCalibrated,true);assert.equal(calibrated.units.length,2);
  assert.equal((await calibrateModuleSourceJudge({moduleId:'frontier',input:{},judgeFrontier:async()=>({supported:true})})).anchorCalibrated,false);
 });
+test('a confirmation set that cannot be curated says why: an unknown model release date is not reported as papers still to come',async()=>{
+ const prepare=createModuleEvolutionPreparation({service:service(),taskPool:{},policies:{},provenance:{},discovery:null,model:null,
+  dependencies:()=>({verifyTask:async()=>({})}),runners:()=>({frontier:async()=>({}),runtime:async()=>({})})});
+ const input={moduleId:'frontier',phase:'confirmation',epoch:'e',candidate:{frozenAt:'2026-10-05T00:00:00Z'},freezeAt:'2026-10-05T00:00:00Z'};
+ const unknown=await prepare({...input,modelReleasedAt:null});
+ assert.deepEqual([unknown.status,unknown.reason],['waiting','environment_date_unknown']);
+ // With the date known the curator is able to look, and what it is waiting for is the papers.
+ const known=await prepare({...input,modelReleasedAt:'2026-10-01T00:00:00Z'});
+ assert.deepEqual([known.status,known.reason],['waiting','fresh_confirmation_tasks_pending']);
+ const other=await prepare({...input,moduleId:'runtime',modelReleasedAt:'2026-10-01T00:00:00Z'});
+ assert.deepEqual([other.status,other.reason],['waiting','curator_module_unavailable'],'a module the curator does not serve is not waiting for papers either');
+});
+test('the mission waiting for its confirmation set shows that reason',async()=>{
+ const {evolutionServiceFixture}=await import('./helpers/evolutionServiceFixture.mjs');
+ const {createEvolutionMissions}=await import('../src/evolutionMissions.mjs');
+ const f=evolutionServiceFixture();
+ f.service.callbacks.prepareModuleTasks=createModuleEvolutionPreparation({service:f.service,taskPool:{},policies:{},provenance:{},discovery:null,model:null,dependencies:()=>({verifyTask:async()=>({})}),runners:()=>({frontier:async()=>({})})});
+ await f.service.save('mission','mission',{moduleId:'frontier',kind:'research',status:'frozen',dependencies:[],epoch:'e',modelReleasedAt:null,successConditions:{slices:[]},candidate:{id:'candidate',frozenAt:'2026-10-05T00:00:00Z',policy:{},proposal:{mechanisms:['m']}}});
+ const missions=createEvolutionMissions({service:f.service,policy:{},map:{},taskPool:{},signals:{},config:{},adapters:{frontier:{enabled:true}}});
+ const waiting=await missions.run({missionId:'mission'});
+ assert.deepEqual([waiting.payload.status,waiting.payload.reason],['waiting_confirmation','environment_date_unknown']);
+});
