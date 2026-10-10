@@ -81,12 +81,10 @@ def tool_definitions():
         {
             "name": "geo_read",
             "description": (
-                "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, "
-                "answer snapshots, errors, sources, strategy, targets, articles, orders, owned links, monitoring or cards "
-                "(evidence cards: claims with id, quotation, ✓/⚠ and the reference to cite). "
-                "Every number is a cell with numerator, denominator and status; absent or insufficient is not zero."
-                "value includes drug-value findings, opportunities, research outputs and answer coverage; research lists specialist tasks. "
-                "filter.version reads an earlier value basis. Missing or unjudged is unknown, never zero."
+                "Read this 循证 GEO project's product, claims, questions, journey, diagnosis, metrics, answers, errors, "
+                "sources, strategy, targets, articles, orders and monitoring. Cards carry quote-checked evidence and "
+                "citation ids. Value holds scoped findings, research and coverage; research lists specialist tasks. "
+                "filter.version reads a prior value basis. Numeric cells retain denominators and status; unknown is never zero."
             ),
             "inputSchema": {
                 "type": "object",
