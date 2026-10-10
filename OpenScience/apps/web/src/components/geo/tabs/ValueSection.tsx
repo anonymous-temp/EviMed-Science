@@ -35,6 +35,7 @@ export function ValueSection({ geoId, project, mode = "profile" }: { geoId: stri
     : `请结合现有资料完善${TITLES[mode]}，说明与本项目决策相关的获益、风险、适用性、费用与可及性；资料不足的部分保留未知。`;
   return (
     <TabSection title={TITLES[mode]} level={mode === "decisions" ? "compact" : mode === "profile" ? "ui" : "section"} className="mb-6">
+      {["summary", "profile"].includes(mode) && <ScopeDetail scope={data.scope} />}
       {text(data.summary) && ["summary", "profile"].includes(mode) && <p className="mb-3 max-w-body text-ui leading-relaxed text-text-2">{text(data.summary)}</p>}
       {mode === "coverage" ? <>
         <p className="text-ui text-text-2">{value?.coverage?.assessed
@@ -75,15 +76,42 @@ export function ValueSection({ geoId, project, mode = "profile" }: { geoId: stri
 function FindingDetail({ entry }: { entry: Record<string, unknown> }) {
   const known = [
     ["评价维度", GEO_VALUE_DOMAINS[String(entry.dimension) as keyof typeof GEO_VALUE_DOMAINS]], ["适用人群", entry.population],
-    ["比较对象", entry.comparator], ["局限", entry.limitations], ["判断理由", entry.rationale], ["下一步", entry.nextAction],
+    ["比较对象", entry.comparator], ["确定性", entry.certainty], ["适用地区", entry.region],
+    ["评价日期", entry.asOf], ["观察时间", entry.timeframe ?? entry.time], ["适用起始日期", entry.validFrom],
+    ["适用截止日期", entry.validUntil], ["依据版本", typeof entry.sourceVersion === "number" ? String(entry.sourceVersion) : entry.sourceVersion], ["局限", entry.limitations], ["判断理由", entry.rationale], ["下一步", entry.nextAction],
   ].filter((pair): pair is [string, string] => typeof pair[1] === "string" && Boolean(pair[1]));
   const sources = rows(entry.sources ?? entry.sourceRefs).map(source => ({
-    label: typeof source === "string" ? source : text(source),
+    label: typeof source === "string" ? source : text(source) || String(record(source).sourceId ?? record(source).sourceRef ?? ""),
+    version: typeof source === "string" ? "" : String(record(source).version ?? record(source).sourceVersion ?? ""),
+    digest: typeof source === "string" ? "" : String(record(source).sha256 ?? ""),
     href: safeWebHref(typeof source === "string" ? source : String(record(source).url ?? record(source).sourceRef ?? "")),
   })).filter(source => source.label);
-  if (!known.length && !sources.length) return null;
+  if (!known.length && !sources.length && !hasScope(entry.scope)) return null;
   return <Disclosure summary="依据与适用条件" className="mt-2">
-    <dl className="space-y-2 text-caption text-text-2">{known.map(([label, content]) => <div key={label}><dt>{label}</dt><dd className="max-w-body break-words">{content}</dd></div>)}</dl>
-    {!!sources.length && <ul className="mt-2 space-y-1 text-caption">{sources.map((source, index) => <li key={index} className="break-words">{source.href ? <a href={source.href} target="_blank" rel="noreferrer" className="text-accent underline">{source.label}</a> : source.label}</li>)}</ul>}
+    <ScopeDetail scope={entry.scope} />
+    <dl className="space-y-2 text-caption text-text-2">{known.map(([label, content], index) => <div key={`${label}:${index}`}><dt>{label}</dt><dd className="max-w-body break-words">{content}</dd></div>)}</dl>
+    {!!sources.length && <ul className="mt-2 space-y-1 text-caption">{sources.map((source, index) => <li key={index} className="break-words">{source.href ? <a href={source.href} target="_blank" rel="noreferrer" className="text-accent underline">{source.label}</a> : source.label}{source.version && <span className="ml-2 text-text-3">版本 {source.version}</span>}{source.digest && <span className="block break-all text-text-3">SHA-256 {source.digest}</span>}</li>)}</ul>}
+  </Disclosure>;
+}
+
+
+const SCOPE_LABELS: Record<string, string> = {
+  medicine: "药品", brandName: "商品名", genericName: "通用名", form: "剂型", formulation: "剂型",
+  strength: "规格", indication: "适应证", population: "适用人群", comparator: "比较对象", setting: "使用场景",
+  region: "适用地区", asOf: "评价日期", audience: "面向对象", objective: "评价目的", lifecycle: "生命周期",
+  decisionContext: "决策背景",
+};
+function scopeRows(scope: unknown): [string, string][] {
+  const value = record(scope);
+  return Object.entries(SCOPE_LABELS).flatMap(([key, label]) => typeof value[key] === "string" && value[key].trim()
+    ? [[label, value[key]] as [string, string]] : []);
+}
+function hasScope(scope: unknown): boolean { return Boolean(text(scope) || scopeRows(scope).length); }
+function ScopeDetail({ scope }: { scope: unknown }) {
+  const known = scopeRows(scope);
+  if (!known.length && !text(scope)) return null;
+  return <Disclosure summary="分析范围" className="mb-3">
+    {text(scope) && <p className="max-w-body break-words text-caption text-text-2">{text(scope)}</p>}
+    <dl className="space-y-2 text-caption text-text-2">{known.map(([label, content], index) => <div key={`${label}:${index}`}><dt>{label}</dt><dd className="max-w-body break-words">{content}</dd></div>)}</dl>
   </Disclosure>;
 }

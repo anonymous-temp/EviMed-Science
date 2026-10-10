@@ -61,3 +61,22 @@ it("a failed read can recover without asking for clinical metadata", async () =>
   await userEvent.click(await screen.findByRole("button", { name: /重试/ }));
   expect(await screen.findByText("已有结果仍可继续使用")).toBeInTheDocument();
 });
+
+it("keeps scope, certainty, applicability dates and source identity with the finding", async () => {
+  client.getGeoValue.mockResolvedValue({ ...empty(), data: {
+    scope: { genericName: "Synthetic medicine", indication: "Synthetic indication", region: "CN", asOf: "2026-10-10" },
+    findings: [{ statement: "Comparative evidence remains uncertain", certainty: "low / conflicting", region: "EU",
+      timeframe: "12 weeks", validFrom: "2025-01-01", validUntil: "2027-01-01", sourceVersion: "revision 4",
+      sources: [{ sourceId: "src_preserved", version: "v2", sha256: "abc123" }] }],
+  } });
+  const view = show();
+  await userEvent.click(await screen.findByText("分析范围"));
+  expect(screen.getByText("Synthetic medicine")).toBeVisible();
+  expect(screen.getByText("2026-10-10")).toBeVisible();
+  await userEvent.click(screen.getByText("依据与适用条件"));
+  for (const content of ["low / conflicting", "EU", "12 weeks", "2025-01-01", "2027-01-01", "revision 4", "src_preserved", "版本 v2", "SHA-256 abc123"]) {
+    expect(screen.getByText(content)).toBeVisible();
+  }
+  expect(view.container.querySelector("input, textarea, select")).toBeNull();
+  expect(screen.queryByRole("link", { name: "src_preserved" })).not.toBeInTheDocument();
+});
