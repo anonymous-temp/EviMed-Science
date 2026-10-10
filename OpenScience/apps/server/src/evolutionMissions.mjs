@@ -32,6 +32,37 @@ export const evolutionPriorityFeatures = (row) => {
 };
 const sameFamily=(left,right)=>digest(left??null)===digest(right??null);
 const average = values => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+/** One unit's deterministic check (a number, a unit, a quotation checked by code), or null when the unit carries none. A unit recorded before the evaluators
+ * named the check kept it in its slices. @param {any} unit */
+const deterministicFlag = unit => typeof unit?.deterministicPassed === 'boolean' ? unit.deterministicPassed
+  : typeof unit?.slices?.numbers === 'boolean' ? unit.slices.numbers
+  : Number.isFinite(unit?.slices?.unsupportedNumbers) ? unit.slices.unsupportedNumbers === 0 : null;
+/**
+ * Whether a candidate is no worse than the version it replaces on the deterministic checks, within the noise of that version's own repeats: the share of
+ * units whose check passed, per preserved source group, against the three baseline runs and their noise band. A model-scored promotion rests on it. It
+ * used to ask that every unit of the candidate's one run pass, which a measurement of sixty first-attempt units seldom does whoever wrote the candidate, and
+ * which counted a failure the incumbent has too against the candidate; the unit's score already carries the failure (review D-E19).
+ * `ran` is false when a run carries no check on some unit: then nothing was measured, and the promotion is refused as missing evidence, not as a regression.
+ * @param {any} candidate @param {any[]} baselines
+ */
+export function evolutionDeterministicChecks(candidate, baselines) {
+  const shares = measurement => {
+    const groups = new Map();
+    for (const unit of measurement?.units ?? []) {
+      const flag = deterministicFlag(unit);
+      if (flag === null) return null;
+      const key = unit.groupId ?? unit.id;
+      groups.set(key, [...(groups.get(key) ?? []), Number(flag)]);
+    }
+    return groups.size ? new Map([...groups].map(([key, values]) => [key, average(values)])) : null;
+  };
+  const mine = shares(candidate), theirs = baselines.map(shares), ids = mine ? [...mine.keys()].sort() : [];
+  if (!mine || theirs.length !== 3 || theirs.some(groups => !groups || groups.size !== ids.length || ids.some(id => !groups.has(id)))) return { ran: false, nonInferior: false, regressed: false };
+  const runs = theirs.map(groups => ids.map(id => groups.get(id)));
+  const delta = evolutionNoiseBand(runs), candidateShare = average(ids.map(id => mine.get(id))), baselineShare = average(runs.flat());
+  const regressed = candidateShare < baselineShare - delta;
+  return { ran: true, candidate: candidateShare, baseline: baselineShare, delta, nonInferior: !regressed, regressed };
+}
 
 /** Only a trusted execution receipt can establish a repair's observed baseline failure. @param {any} payload */
 export function evolutionFailureReproductionHash(payload){
@@ -446,9 +477,10 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     const delta = evolutionNoiseBand(scores);
     const historical = (await service.list('candidate-verdict')).filter(row => row.payload.moduleId === mission.payload.moduleId && row.payload.evaluatorCompatibility === evaluatorCompatibility && row.payload.promote);
     const historicalBest = Math.max(baseline, ...historical.map(row => Number(row.payload.score ?? baseline)));
+    const deterministic = evolutionDeterministicChecks(measured, baselines);
     let selection = selectEvolutionCandidate({ receiptValid: true, confirmatory: true, firstAttempt: true,
       evidenceTier: measured.evidenceTier ?? 'model', anchorCalibrated: measured.anchorCalibrated === true,
-      deterministicChecksPassed: measured.deterministicChecksPassed === true, modelScoredLabel: true,
+      deterministicChecksPassed: deterministic.nonInferior, deterministicChecksRegressed: deterministic.regressed, modelScoredLabel: true,
       baseline, score, historicalBest, delta, baselineCost: average(baselines.map(measurement => measurement.costCny)), cost: measured.costCny,
       baselineContext: average(baselines.map(measurement => measurement.contextBytes)), context: measured.contextBytes,
       removedMechanisms: candidate.proposal.removedMechanisms ?? 0 });
@@ -460,7 +492,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     const verdictId = `evolution-verdict-${evolutionKey([candidate.id,batch.id])}`;
     await service.save('candidate-verdict', verdictId, { ...selection, moduleId: mission.payload.moduleId, candidateId: candidate.id, candidateHash: digest(candidate), missionId,
       evaluatorCompatibility,taskFamily:mission.payload.taskFamily??null,auditOnly,parentId:candidate.parentId??mission.payload.sourceCandidateIds?.[0]??null,sourceCandidateIds:mission.payload.sourceCandidateIds??[],epoch: mission.payload.epoch, score, baseline, delta, historicalBest, evidenceTier: measured.evidenceTier ?? 'model', batchId: batch.id,
-      evaluationReceiptHash,modelScoredLabel:measured.evidenceTier==='model',receiptValid: true, confirmatory: true, firstAttempt: true, mechanismContributions:candidate.proposal.mechanisms?.length===1?{[candidate.proposal.mechanisms[0]]:score-baseline}:{},equivalentScore,equivalentBaseline,passed: selection.promote, measured, baselines, at: service.now().toISOString() });
+      evaluationReceiptHash,modelScoredLabel:measured.evidenceTier==='model',deterministicChecksPassed:deterministic.nonInferior,deterministic,receiptValid: true, confirmatory: true, firstAttempt: true, mechanismContributions:candidate.proposal.mechanisms?.length===1?{[candidate.proposal.mechanisms[0]]:score-baseline}:{},equivalentScore,equivalentBaseline,passed: selection.promote, measured, baselines, at: service.now().toISOString() });
     await taskPool.finish(batch, { verdictId, ...selection });
     return finalizeMission(mission,candidate,await service.get(verdictId),adapter);
   }
