@@ -51,9 +51,22 @@ test("every open_science_frontier_plugin_* family an alert names is one the modu
   assert.ok(named.size >= 4, `only ${named.size} plugin families were read from the rules; the scan is wrong`);
   const exported = new Set(frontierMetricFamilies(true, snapshot({ ...HEALTH, modelCalls24h: 0 })).map((entry) => entry.name));
   for (const name of named) assert.ok(exported.has(name), `${name} is alerted on but never exported`);
-  const rule = group.rules.find((/** @type {any} */ entry) => entry.alert === "FrontierPluginModelCallsHigh");
-  assert.equal(rule?.expr, "open_science_frontier_plugin_model_calls_24h > 50");
-  assert.equal(rule?.labels?.severity, "warning");
+});
+
+test("D-12: no alert guards the plugin's model calls while the plugin has no model client; the gauge stays, and says it is reserved", async () => {
+  // `model_calls_24h` is a constant 0 in the plugin (no LLM client under knowledge_plugin/: a drifted list page is recovered by
+  // its vetted selector fallbacks), so a rule on it could never fire and read as a guard that did not exist.
+  const rules = JSON.parse(await readFile(path.join(repoRoot, "deploy/web/monitoring/open-science.rules.json"), "utf8"));
+  const alerts = rules.groups.flatMap((/** @type {any} */ group) => group.rules);
+  assert.equal(alerts.some((/** @type {any} */ rule) => rule.alert === "FrontierPluginModelCallsHigh" || String(rule.expr).includes("plugin_model_calls_24h")), false);
+  const runbook = await readFile(path.join(repoRoot, "docs/WEB_OPERATIONS_RUNBOOK.md"), "utf8");
+  assert.doesNotMatch(runbook, /FrontierPluginModelCallsHigh/);
+  // The gauge is kept so a dashboard that draws it does not break, and its help no longer describes a proposer that does not exist.
+  const gauge = family(frontierMetricFamilies(true, snapshot({ ...HEALTH, modelCalls24h: 0 })), "open_science_frontier_plugin_model_calls_24h");
+  assert.deepEqual(gauge?.series, [{ value: 0 }]);
+  assert.match(gauge?.help ?? "", /reserved/);
+  assert.match(gauge?.help ?? "", /always 0 until the plugin has a model client/);
+  assert.doesNotMatch(gauge?.help ?? "", /self-heal proposals/);
 });
 
 test("weekly and notification metrics distinguish unavailable delivery and scan gaps", () => {

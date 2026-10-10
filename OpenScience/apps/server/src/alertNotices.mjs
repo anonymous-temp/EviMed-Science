@@ -46,7 +46,6 @@ export const ALERT_NOTICES = Object.freeze({
   FrontierNoSuccessfulCollection: { title: "前沿动态一小时没有读到新内容", sentence: "知识源插件一小时里没有从任何信源读到内容。" },
   FrontierTierOneHealthLow: { title: "核心信源健康度偏低", sentence: "第一梯队信源的健康率低于 95%，已持续两小时。" },
   FrontierHostRateLimited: { title: "有信源在限制抓取", sentence: "某个站点一小时里拒绝了十次以上，抓取间隔可能过紧。" },
-  FrontierPluginModelCallsHigh: { title: "知识源插件的模型调用偏多", sentence: "知识源插件一天调用模型超过 50 次，可能是很多页面改版了，或者陷入了反复尝试。" },
   FrontierBacklogOld: { title: "前沿动态有任务积压", sentence: "有条目等待处理超过六小时，新内容会晚出现。" },
   FrontierIngestBelowBaseline: { title: "今天收到的内容偏少", sentence: "最近一天新进的条目不到上周同一天的一半。" },
   FrontierFirstPassLow: { title: "前沿动态编辑的一次通过率偏低", sentence: "超过一成半的编辑结果带有信源里没有的数字，被退回重写。" },

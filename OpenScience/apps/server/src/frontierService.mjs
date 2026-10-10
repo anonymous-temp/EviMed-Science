@@ -1674,10 +1674,11 @@ export function frontierMetricFamilies(enabled, snapshot) {
       [{ value: Number(pluginHealth.backlog?.oldest_due_s ?? 0) }]);
     add("plugin_rate_limited_1h", "429 answers from the plugin's worst host in the last hour.", "gauge",
       [{ labels: { host: String(pluginHealth.rateLimited?.host ?? "none") }, value: Number(pluginHealth.rateLimited?.max ?? 0) }]);
-    // The plugin's only model use is selector self-heal (plan §14.2, §14.10:
-    // alert past 50 a day); a plugin that does not report it has no series.
+    // Reserved: the plugin has no model client (a drifted list page is recovered by its vetted selector fallbacks, not by a proposal), so
+    // this is always 0 and nothing alerts on it (review 2026-10-10, D-12). The gauge stays so a dashboard that draws it does not break;
+    // a plugin that does not report it has no series.
     if (Number.isFinite(pluginHealth.modelCalls24h)) {
-      add("plugin_model_calls_24h", "Model calls the knowledge plugin made in the last 24 hours (selector self-heal proposals).", "gauge",
+      add("plugin_model_calls_24h", "Model calls the knowledge plugin made in the last 24 hours: reserved, always 0 until the plugin has a model client.", "gauge",
         [{ value: Number(pluginHealth.modelCalls24h) }]);
     }
   }
