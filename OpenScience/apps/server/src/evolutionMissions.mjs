@@ -8,7 +8,13 @@ import { EVOLUTION_MODULE_IDS } from './evolutionUsage.mjs';
 import { validateModuleEvolutionPolicy } from './moduleEvolutionPolicies.mjs';
 
 export const EVOLUTION_OPPORTUNITY_SOURCES = Object.freeze(['demand', 'method', 'data', 'success', 'combination', 'contradiction', 'self-research', 'repair']);
-const TERMINAL = new Set(['complete', 'rejected', 'impossible', 'cancelled']);
+/** `deferred`: parked on a resource that did not come within its window. Terminal, so the module goes on; the opportunity keeps its
+ * wake conditions (`defer`) and comes back when one of them is met (`wake`). */
+const TERMINAL = new Set(['complete', 'rejected', 'impossible', 'cancelled', 'deferred']);
+/** What a mission waits for, named in the mission's vocabulary, and the event that meets it. */
+const WAKE_EVENT_TYPES = Object.freeze({ 'new-data': 'dataset-ready', 'new-tool': 'tool-ready', 'new-method': 'method-ready', 'new-model': 'environment-changed' });
+const DEFERRED_WAKE_CONDITIONS = Object.freeze(['new-data', 'new-method', 'new-tool', 'new-model']);
+const metBy = (/** @type {string[]|undefined} */ conditions, /** @type {any} */ event) => (conditions ?? []).some(type => type === event.type || WAKE_EVENT_TYPES[type] === event.type);
 const digest = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const localDay = date => new Date(date.getTime() + 8 * 3600000).toISOString().slice(0, 10);
 export const evolutionReplayHeldOut = id => parseInt(digest(`heldout:${id}`).slice(0,8),16)%5===0;
@@ -63,9 +69,11 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const breakdown = evolutionPriorityBreakdown(features, P.weights);
       const signature = digest([input.evidenceRoots ?? [], input.prerequisites ?? [], features]);
       if (previous?.payload.resourceSignature === signature) return previous;
+      // A new signature reopens a dossier, and ends a deferral (`defer`); a review input waiting for a person is not made void by new evidence.
       return service.save('dossier', id, { ...previous?.payload, ...input, resourceSignature: signature, opportunity: true,
         priorityBreakdown: breakdown, score: Object.values(breakdown).reduce((sum, x) => sum + x, 0),
-        createdAt: previous?.payload.createdAt ?? service.now().toISOString(), status: input.prerequisites?.length ? 'waiting_resource' : 'planned',
+        ...(previous?.payload.deferred ? { deferred: false, deferredAt: null, wakeConditions: [] } : {}),
+        createdAt: previous?.payload.createdAt ?? service.now().toISOString(), status: previous?.payload.status === 'review' ? 'review' : input.prerequisites?.length ? 'waiting_resource' : 'planned',
         cheapestNextStep: input.cheapestNextStep ?? 'measure-current-version', failureHypotheses: input.failureHypotheses ?? [],
         evidenceRoots: [...new Set(input.evidenceRoots ?? [])] }, previous);
     });
@@ -119,6 +127,32 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     if (!row?.id || TERMINAL.has(row.payload.status) || config.evolutionSearchPaused) return null;
     return service.enqueue(['tools','runtime'].includes(row.payload.moduleId) ? 'mission-heavy' : 'mission', { missionId: row.id, moduleId: row.payload.moduleId }, `mission:${row.id}:${row.revision}`);
   }
+  /** Whether a mission parked on a resource has had its window: the policy's attempts and days, which can only tighten the bounds the
+   * plan sets (`resourceStop`, three attempts and fourteen days). @param {any} payload */
+  const resourceWindowPassed = payload => {
+    const bounds = payload.resourceStop ?? { attempts: 3, days: 14 };
+    return Number(payload.resourceAttempts ?? 0) >= Math.min(3, bounds.attempts)
+      || service.now().getTime() - Date.parse(payload.resourceWindowStartedAt ?? payload.createdAt) > Math.min(14, bounds.days) * 86400000;
+  };
+  /** The research plan's stop rule (6.3): what cannot be had is written down with what it waits for, and the module goes on to something
+   * else. The mission ends `deferred`, which frees its module; the opportunity keeps the wake conditions and is not offered again until
+   * one is met (`wake`) or what it rests on changes (`opportunity`). @param {any} row */
+  async function defer(row) {
+    const wakeConditions = row.payload.wakeConditions?.length ? row.payload.wakeConditions : [...DEFERRED_WAKE_CONDITIONS];
+    const deferredAt = service.now().toISOString();
+    const deferred = await update(row, { status: 'deferred', deferredAt, wakeConditions });
+    const dossier = row.payload.opportunityId ? await service.get(row.payload.opportunityId) : null;
+    if (dossier?.payload.opportunity === true) await service.save('dossier', dossier.id, { ...dossier.payload, deferred: true, deferredAt, deferredMissionId: row.id, wakeConditions }, dossier);
+    return deferred;
+  }
+  async function deferExpired() {
+    for (const listed of await service.list('mission', null, { status: 'waiting_resource' })) {
+      if (listed.payload.status !== 'waiting_resource' || !(listed.payload.resourceStopped === true || resourceWindowPassed(listed.payload))) continue;
+      // Read again: the list is a moment old and the mission may have moved since.
+      const row = await service.get(listed.id);
+      if (row?.payload.status === 'waiting_resource') await defer(row);
+    }
+  }
   async function plan({ week }) {
     if (config.evolutionSearchPaused) return { paused: true };
     for (const signal of await signals.aggregate()) {
@@ -129,10 +163,13 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     }
     const capabilityMap = await map.rebuild();
     const enabled = Object.entries(adapterRegistry).filter(([,adapter]) => adapter.enabled).map(([id]) => id);
+    await deferExpired();
     const all = await service.list('mission');
     const thisWeek = all.filter(row => row.payload.week === week);
     const current = (await policy.current()).policy;
-    const dossiers = (await service.dossiers()).filter(row => row.payload.opportunity === true && !['published', 'impossible'].includes(row.payload.status));
+    // Published, impossible and answered-by-a-review-input (`run`) opportunities are done; a deferred one waits for its wake conditions.
+    const dossiers = (await service.dossiers())
+      .filter(row => row.payload.opportunity === true && !['published', 'impossible', 'review'].includes(row.payload.status) && !row.payload.deferred);
     const created = [];
     // Modules missing their weekly allocation go first; measured priority orders opportunities inside a module.
     enabled.sort((a,b) => Number(thisWeek.some(row => row.payload.moduleId === a)) - Number(thisWeek.some(row => row.payload.moduleId === b)));
@@ -239,8 +276,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       if (dependencies.some(row => row?.payload.status !== 'complete')) return update(mission, { status: 'waiting_resource', reason: 'mission-dependency' });
     }
     if (mission.payload.kind === 'acquire-resource') {
-      const bounds=mission.payload.resourceStop??{attempts:3,days:14};
-      if(Number(mission.payload.resourceAttempts??0)>=Math.min(3,bounds.attempts)||service.now().getTime()-Date.parse(mission.payload.resourceWindowStartedAt??mission.payload.createdAt)>Math.min(14,bounds.days)*86400000)return update(mission,{status:'waiting_resource',reason:'resource-attempt-window-exhausted',resourceStopped:true,wakeConditions:['new-data','new-method','new-tool','new-model']});
+      if(resourceWindowPassed(mission.payload))return update(mission,{status:'waiting_resource',reason:'resource-attempt-window-exhausted',resourceStopped:true,wakeConditions:['new-data','new-method','new-tool','new-model']});
       mission=await update(mission,{resourceAttempts:Number(mission.payload.resourceAttempts??0)+1});
       const result = await service.callbacks.acquireResource?.(mission.payload, context);
       return update(mission, { status: result?.ready ? 'complete' : 'waiting_resource', resourceResult: result ?? { reason: 'resource-unavailable' },
@@ -270,7 +306,16 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     if(['sources','evidence','memory','runtime'].includes(mission.payload.moduleId)&&service.callbacks.runModuleEngineMission){
       const result=await service.callbacks.runModuleEngineMission({...mission.payload,id:mission.id,missionId},context);
       const status=result?.status??'waiting_resource';
-      return update(await service.get(mission.id),{status:status==='impossible'?'impossible':'waiting_resource',completed:status==='impossible',reason:status==='review'?'reviewed-release-pr-required':result?.reason??'module-engine-resource',engineReview:result?.review??null,lastResult:status,researchCostCny:await cost(missionId),confirmedPromotions:0});
+      if(status==='review'){
+        // The review input is this mission's whole product: a reviewed release PR is a person's step (`open-evolution-pr.mjs`), and a mission that
+        // waited for it never ended, so its module never worked on anything else (review D-E3). The opportunity is answered until what it rests on changes.
+        const reviewId=result.review?.identity??null;
+        const done=await update(await service.get(mission.id),{status:'complete',completed:true,result:{outcome:'review-prepared',reviewId},reason:'reviewed-release-pr-required',engineReview:result.review??null,lastResult:status,researchCostCny:await cost(missionId),confirmedPromotions:0});
+        const dossier=mission.payload.opportunityId?await service.get(mission.payload.opportunityId):null;
+        if(dossier?.payload.opportunity===true)await service.save('dossier',dossier.id,{...dossier.payload,status:'review',review:{missionId,reviewId,at:service.now().toISOString()}},dossier);
+        return done;
+      }
+      return update(await service.get(mission.id),{status:status==='impossible'?'impossible':'waiting_resource',completed:status==='impossible',reason:result?.reason??'module-engine-resource',engineReview:result?.review??null,lastResult:status,researchCostCny:await cost(missionId),confirmedPromotions:0});
     }
     let candidate = mission.payload.candidate;
     if (!candidate) {
@@ -403,14 +448,18 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
 
   async function wake(event) {
     const rows = await service.list('mission'), woken = [];
+    // A dataset counts as a new resource only when its semantics matched: Integration.resolveWaiters decides that, never just an event name.
+    const dataMatched = event.type !== 'dataset-ready' || event.semanticsMatched === true;
+    for (const dossier of await service.list('dossier', null, { deferred: true })) {
+      if (dossier.payload.deferred === true && dataMatched && metBy(dossier.payload.wakeConditions, event)) await service.save('dossier', dossier.id, { ...dossier.payload, deferred: false, deferredAt: null, wakeConditions: [], reopenedBy: event.type, reopenedAt: service.now().toISOString() }, dossier);
+    }
     for (const row of rows) {
       if (!['waiting_resource', 'waiting_confirmation','waiting_budget','paused'].includes(row.payload.status)) continue;
       if (row.payload.ownerId && (event.userId !== row.payload.ownerId || event.projectId !== row.payload.ownerProjectId)) continue;
       const ready = ['waiting_budget','paused'].includes(row.payload.status)?['budget-window','search-resumed'].includes(event.type):row.payload.status === 'waiting_confirmation' ? ['frontier-publication', 'task-ready'].includes(event.type)
-        : row.payload.wakeConditions.some(type => type === event.type || ({ 'new-data':'dataset-ready', 'new-tool':'tool-ready', 'new-method':'method-ready', 'new-model':'environment-changed' })[type] === event.type);
+        : metBy(row.payload.wakeConditions, event);
       if (!ready) continue;
-      // Dataset matching and deterministic semantics checks belong to Integration.resolveWaiters, never just an event name.
-      if (event.type === 'dataset-ready' && event.semanticsMatched !== true) continue;
+      if (!dataMatched) continue;
       const resumed=row.payload.resourceStopped&&['dataset-ready','method-ready','tool-ready','environment-changed'].includes(event.type)?await update(row,{resourceAttempts:0,resourceStopped:false,resourceWindowStartedAt:service.now().toISOString(),status:'ready'}):row;
       await queue(resumed); woken.push(row.id);
     }
