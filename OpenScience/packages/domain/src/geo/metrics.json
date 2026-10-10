@@ -66,7 +66,8 @@
       "error_closed_statuses": "metrics.yaml DX-EC-02 mapped onto errors.status (SPEC §2)",
       "noise_band_sd_multiplier": "EviMed definition: geo-skills leaves the noise threshold to the skill (metrics.json#noise.threshold); net-effect-and-trends.md names 2 x the A/A noise standard deviation",
       "noise_band_metric_ids": "EviMed definition: the answer-denominator rates a noise round can replicate",
-      "insufficient_gvi_below_answers": "EviMed: SPEC §0 ruling 8 applied to the index — an index built on fewer answers is shown as 样本不足"
+      "insufficient_gvi_below_answers": "EviMed: SPEC §0 ruling 8 applied to the index — an index built on fewer answers is shown as 样本不足",
+      "insufficient_ratio_input_statuses": "EviMed: SPEC §0 ruling 8 applied to a derived ratio — a ratio of cells that are 样本不足 is 样本不足 (compute_metrics.py reports it ok; the golden keeps the script's status and the test names the difference)"
     }
   },
   "version": "3.0.0",
@@ -879,6 +880,9 @@
       "M-03",
       "M-10"
     ],
-    "insufficient_gvi_below_answers": "STD_CELL_MIN_SAMPLES"
+    "insufficient_gvi_below_answers": "STD_CELL_MIN_SAMPLES",
+    "insufficient_ratio_input_statuses": [
+      "insufficient"
+    ]
   }
 }

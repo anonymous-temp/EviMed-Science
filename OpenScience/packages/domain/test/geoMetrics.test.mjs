@@ -157,6 +157,29 @@ test("a rate over fewer than 30 answers is insufficient; 30 is enough", () => {
   assert.deepEqual([ok.ciLow, ok.ciHigh], wilsonInterval(15, 30));
 });
 
+test("a ratio derived from cells that are insufficient is insufficient, whatever the ratio's own unit (Q-4)", () => {
+  const m13 = (/** @type {number} */ p1, /** @type {number} */ p2, /** @type {number} */ p1Ours, /** @type {number} */ p2Ours) => {
+    const rows = [
+      ...many(p1, (i) => row({ pool: "P1" }, i < p1Ours ? ours : {})),
+      ...many(p2, (i) => row({ pool: "P2" }, i < p2Ours ? ours : {})),
+    ];
+    return cellOf(computeGeoMetrics(rows, { owned: OWNED }).cells, { metricId: "M-13", scope: "project" });
+  };
+  // Pools of 3 and 4 answers: P1 names us in 3 of 3, P2 in 1 of 4. Both inputs are 样本不足, and the ratio read ok.
+  const thin = m13(3, 4, 3, 1);
+  assert.deepEqual([thin.status, thin.value], ["insufficient", 4], "the ratio is kept for the record, and not shown as a measurement");
+  assert.deepEqual([thin.numerator, thin.denominator], [100, 25]);
+  // One thin input is enough: P1 over thirty answers, P2 over four.
+  assert.equal(m13(30, 4, 15, 1).status, "insufficient", "the denominator pool is thin");
+  assert.equal(m13(4, 30, 1, 15).status, "insufficient", "the numerator pool is thin");
+  // Thirty answers on each side is a measurement.
+  const enough = m13(30, 30, 24, 12);
+  assert.deepEqual([enough.status, enough.value], ["ok", 2]);
+  // What cannot be derived is still not measurable, and is not turned into anything else.
+  const none = m13(4, 30, 1, 0);
+  assert.deepEqual([none.status, none.value, none.reason], ["not_measurable", null, "conversion_not_derivable"]);
+});
+
 test("a suspect answer leaves the denominator; a refusal stays in it", () => {
   const rows = [
     row({}, ours),
@@ -581,6 +604,19 @@ test("golden: every cell equals the owner's compute_metrics.py on the fixture ba
   assert.equal(got.size, result.cells.length, "no duplicate cells");
   assert.ok(want.size > 500, `the golden walked a real batch (${want.size} cells)`);
   assert.deepEqual([...got.keys()].sort(), [...want.keys()].sort(), "the same cells, no more and no fewer");
+  // The one status this port gives that the script does not (Q-4, an EviMed ruling named in metrics.json's `platform`): a derived ratio
+  // of cells that are insufficient is insufficient, where compute_metrics.py reports it ok. Read from the golden's own pool cells.
+  const thinInputs = new Set(GEO_METRICS.platform.insufficient_ratio_input_statuses);
+  let ruled = 0;
+  /** @param {Record<string, any>} wanted */
+  const ruledStatus = (wanted) => {
+    const rule = /** @type {Record<string, any>} */ (GEO_METRICS.computation.derived_metrics)[wanted.metricId];
+    if (rule?.kind !== "ratio" || wanted.status !== "ok") return wanted.status;
+    const input = (/** @type {{ pool: string, metric: string }} */ side) => want.get([side.metric, "pool", side.pool, null, null, null, null, null].join("|"));
+    if (![rule.numerator, rule.denominator].some((side) => thinInputs.has(input(side)?.status))) return wanted.status;
+    ruled += 1;
+    return "insufficient";
+  };
   for (const [cellKey, wanted] of want) {
     const cell = /** @type {Record<string, any>} */ (got.get(cellKey));
     for (const field of ["numerator", "denominator", "value", "ciLow", "ciHigh"]) {
@@ -590,8 +626,10 @@ test("golden: every cell equals the owner's compute_metrics.py on the fixture ba
         assert.equal(cell[field], wanted[field], `${cellKey} ${field}`);
       }
     }
-    for (const field of ["status", "reason", "dataType", "snapshotCount"]) assert.equal(cell[field], wanted[field], `${cellKey} ${field}`);
+    assert.equal(cell.status, ruledStatus(wanted), `${cellKey} status`);
+    for (const field of ["reason", "dataType", "snapshotCount"]) assert.equal(cell[field], wanted[field], `${cellKey} ${field}`);
   }
+  assert.equal(ruled, 1, "the golden batch holds the one ratio the ruling changes: M-13, over a pool of 18 answers");
   // the batch exercises what the rules are about
   const statuses = new Set(expected.cells.map((cell) => cell.status));
   for (const status of ["ok", "insufficient", "not_measurable", "absent"]) assert.ok(statuses.has(status), `golden covers ${status}`);
