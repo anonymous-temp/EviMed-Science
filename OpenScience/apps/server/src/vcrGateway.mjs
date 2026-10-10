@@ -72,7 +72,7 @@ import {
 import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
-import { resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
+import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { VCR_TRIAL_RESTRICTED_FIELDS, deriveFromExit, followupFidelityFindings, postExitEpisode, trialPeriodEpisode } from "./vcrRecruit.mjs";
 import { VCR_MATCHING_VOCABULARY_VERSION } from "./vcrMatching.mjs";
@@ -1256,6 +1256,22 @@ const WRITERS = {
       return protocol.id;
     }
     extra.results.push({ index: item.index, visit, activities: saved.activities, replaced: saved.replaced, protocolVersion: protocol.version });
+    return saved.id;
+  },
+
+  /**
+   * One regulatory contact (「监管沟通记录」): when, with which agency, what kind, what was discussed, what the agency concluded in its
+   * own words and what it left. A record is added, never edited; a contact written twice exactly is one contact.
+   */
+  async regulatory_contact(item, { store, study }, extra) {
+    if (!item.only(["date", "agency", "type", "summary", "outcome", "attachments"])) return null;
+    const checked = checkRegulatoryContact(item.row);
+    if ("issues" in checked) {
+      for (const found of checked.issues) item.bad(found.field, found.message);
+      return null;
+    }
+    const saved = await store.addRegulatoryContact({ studyId: study.id, userId: study.userId, actor: "ai_set", ...checked.value });
+    extra.results.push({ index: item.index, id: saved.id, ...(saved.existing ? { existing: true, note: "已有一条完全相同的记录，没有重复写入。" } : {}) });
     return saved.id;
   },
 

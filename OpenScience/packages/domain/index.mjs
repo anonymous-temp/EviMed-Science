@@ -1578,9 +1578,10 @@ export {
   vcrModelInterfaceOf,
 } from './src/vcrModelInterfaces.mjs'
 
-// vcrSchedule — a protocol's schedule of activities: its limits, what it adds up to, the visit times a virtual-patient
-// trajectory may take from it and how a day and a window read
+// vcrSchedule — a protocol's schedule of activities and a study's regulatory-contact log: the limits of both, what a schedule adds
+// up to, the visit times a virtual-patient trajectory may take from it and how a day and a window read
 export {
+  VCR_REGULATORY_LIMITS,
   VCR_SOA_LIMITS,
   VCR_SOA_TIME_UNITS,
   VCR_SOA_TRAJECTORY_MAX_VISITS,

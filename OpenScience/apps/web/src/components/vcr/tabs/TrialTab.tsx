@@ -18,6 +18,7 @@ import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
 import { VcrMilestoneTimeline, VcrTradeoffScatter, canDrawTradeoff } from "../VcrDiagrams";
 import { ReviewChip } from "../VcrMarks";
 import { VcrPredictionsDrawer } from "../VcrPredictionsDrawer";
+import { RegulatoryContactForm, VcrRegulatoryLog } from "../VcrRegulatoryLog";
 import { VcrScheduleCard } from "../VcrSchedule";
 import { VcrNumber } from "../VcrNumber";
 import { VcrSettingsDrawer } from "../VcrSettingsDrawer";
@@ -77,14 +78,15 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
   const [choosing, setChoosing] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [editing, setEditing] = useState<VcrDesign | null>(null);
+  const [recording, setRecording] = useState(false);
   const openConversation = useOpenVcrConversation();
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const failed = study.steps.trial?.status === "failed";
-  // The protocol's visit schedule is a record of the study, not a result of this step: a study that has one is not empty.
+  // The protocol's visit schedule and the regulatory log are records of the study, not results of this step: a study that has either is not empty.
   const nothing = data.designs.length === 0 && data.ademp.length === 0 && data.forecasts.length === 0 && data.milestones.length === 0
-    && !data.schedule;
+    && !data.schedule && data.regulatory.length === 0;
   if (nothing) {
     return failed
       ? <VcrStepFailed studyId={studyId} study={study} step="trial" partial={data.partial} />
@@ -133,6 +135,8 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
                 {!noneRan && <Button variant={decided ? "secondary" : "primary"} onClick={() => setChoosing(true)}>{decided ? "改选方案" : "选定方案"}</Button>}
                 <Button variant={noneRan ? "secondary" : "text"} onClick={() => draft(VCR_ADD_DESIGN_DRAFT)}>加一个方案</Button>
                 <Button variant="text" onClick={() => draft(VCR_CHANGE_ASSUMPTION_DRAFT)}>改假设</Button>
+                {/* The first entry of the log is added from here; once there is one, the log's own 添加 does it. */}
+                {data.regulatory.length === 0 && <Button variant="text" onClick={() => setRecording(true)}>记录监管沟通</Button>}
               </>
             )}
             {((!noneRan && canFile) || hasForecasts) && <Button variant="secondary" onClick={() => setRegistering(true)}>登记预测</Button>}
@@ -260,6 +264,8 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
 
       {data.schedule && <VcrScheduleCard schedule={data.schedule} />}
 
+      {data.regulatory.length > 0 && <VcrRegulatoryLog contacts={data.regulatory} canWrite={canWrite} onAdd={() => setRecording(true)} />}
+
       {data.runRecord.length > 0 && (
         <Card title="本次运行">
           <ul className="flex flex-col gap-3">
@@ -297,6 +303,12 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
             designs={data.designs}
             onRecorded={() => { setChoosing(false); reload(); }}
           />
+        </Drawer>
+      )}
+
+      {recording && (
+        <Drawer title="添加监管沟通记录" onClose={() => setRecording(false)} widthClassName="max-w-md">
+          <RegulatoryContactForm studyId={studyId} onAdded={() => { setRecording(false); reload(); }} />
         </Drawer>
       )}
 

@@ -168,7 +168,7 @@ Criterion variables identify the same clinical concept in criteria and facts. A 
 
 结构不合规定的条件会被**逐条**拒绝（`vcr_criterion_malformed`，`issues[].field` 是 `criteria[n].requirement` 这样的路径），其余条件照常写入，但这一版就缺了被拒的那几条。**改好之后把全部条件整套再写一次**（得到新版本）；只补写被拒的几条，得到的是一个只有那几条的版本。
 
-## 三（续）、访视日程
+## 三（续）、访视日程与监管沟通记录
 
 **访视日程。** 方案里有访视日程（SoA）时写进方案的当前版本：`mcp__evimed__vcr_write` `what: "soa"`，**一条一次访视**。
 
@@ -181,6 +181,8 @@ Criterion variables identify the same clinical concept in criteria and facts. A 
 - `day` 是计划日，方案怎么数就怎么写（筛选期可以是负数）；治疗结束、提前终止这类没有计划日的访视不写 `day`，方案里没有的数不要补。`windowDays` 是前后各几天；`procedures` 是这次访视做的评估与操作，每项一个名字，要补一句就写 `{ "name", "note" }`。
 - 同名的访视会被这次写入换掉，没提到的访视不动，所以改一次访视只重写那一次；`{ "visit": "第 4 周", "remove": true }` 把它去掉。日程属于方案的当前版本，还没有方案版本时先写方案（`what: "protocol"`）；之后改入排条件得到的新版本会带着这份日程。读回来用 `{ "what": "soa" }`。
 - 轨迹模型（`generate_patients_longitudinal`）要用这份日程的访视时间时不要自己换算：`visits` 写 `{ "fromSoa": true, "unit": "months" }`，平台按日程算出从基线访视起的时间，单位写情景里效应和斜率所用的那个。写进去的是当时的数，日程之后改了不会动已经写好的虚拟患者。
+
+**监管沟通记录。** 研究者说和监管机构沟通过什么（会议、书面回复），用 `what: "regulatory_contact"` 记一条：`date`（年-月-日）和 `agency` 必写，有就写 `type`（沟通类型）、`summary`（讨论了什么）、`outcome`（对方的结论，尽量照原话）、`attachments`（会议纪要等的文件名、路径或链接）。日期不知道就问研究者，不要估一个。记录只增不改，写错了再记一条更正；完全相同的一条写两次只算一条。读回来用 `{ "what": "regulatory_contacts" }`。
 
 ## 四、可估计性判断
 

@@ -1327,6 +1327,14 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.regulatory_contacts (
   source_ref  text,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
+-- A regulatory contact (2026-10-10): meeting is the kind of contact (a pre-IND meeting, a scientific advice), conclusion the outcome in the
+-- agency's own words, summary what was discussed, attachments the references to what the contact left (minutes, a briefing package;
+-- source_ref holds the first of them) and recorded_by who wrote it down: an account, or ai_set for a run. A contact is a record:
+-- it is added, and a correction is another contact.
+ALTER TABLE evimed_vcr.regulatory_contacts ADD COLUMN IF NOT EXISTS summary text NOT NULL DEFAULT '';
+ALTER TABLE evimed_vcr.regulatory_contacts ADD COLUMN IF NOT EXISTS attachments jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_vcr.regulatory_contacts ADD COLUMN IF NOT EXISTS recorded_by text NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS vcr_regulatory_contacts_study_idx ON evimed_vcr.regulatory_contacts (study_id, occurred_on DESC NULLS LAST, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.exports (
   id          text PRIMARY KEY,

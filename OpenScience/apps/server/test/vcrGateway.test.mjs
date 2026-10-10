@@ -953,7 +953,8 @@ test('deferred publication cannot be requested while private forecasts and ordin
   assert.equal(res.json().data.ids.length, 1);
   assert.equal(res.json().data.issues[0].field, 'public');
   assert.equal(saved.length, 1); assert.notEqual(saved[0].public, true);
-  for (const what of ['soa_item', 'regulatory_contact', 'recruitment_material_publication']) {
+  // The schedule of activities and the regulatory log were deferred here until 2026-10-10 (`vcrSchedule.test.mjs` holds them now).
+  for (const what of ['recruitment_material_publication']) {
     const deferred = response(); await handler(request('/internal/vcr/v1/write', { what, items: [{}] }), deferred);
     assert.equal(deferred.status, 400); assert.equal(deferred.json().code, 'vcr_write_what_invalid');
   }

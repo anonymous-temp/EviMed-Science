@@ -1,13 +1,13 @@
 /**
- * What a schedule of activities is to a reader and to the runtime, as pure functions: the rows of a table, the part of a report model
- * it is, the visit times a scenario takes from it. No store, no clock — the store that keeps it is `vcrSchedule.mjs`; this module is what
- * the report model (`vcrRender.mjs`), the package reader (`vcrViews.mjs`), the exported document (`vcrDocumentExport.mjs`) and the
- * gateway share, and it imports only the domain.
+ * What a schedule of activities and a log of regulatory contacts are to a reader and to the runtime, as pure functions: the rows of a
+ * table, the part of a report model they are, the visit times a scenario takes from the schedule. No store, no clock — the stores that
+ * keep them are `vcrSchedule.mjs` and `vcrRegulatory.mjs`; this module is what the report model (`vcrRender.mjs`), the package reader
+ * (`vcrViews.mjs`), the exported document (`vcrDocumentExport.mjs`) and the gateway share, and it imports only the domain.
  *
  * @module vcrScheduleView
  */
 
-import { VCR_SOA_TIME_UNITS, soaDayText, soaSummary, soaVisitTimes, soaWindowText } from "@evimed/domain";
+import { VCR_REGULATORY_LIMITS, VCR_SOA_TIME_UNITS, soaDayText, soaSummary, soaVisitTimes, soaWindowText } from "@evimed/domain";
 
 /** @param {unknown} value */
 const list = (value) => (Array.isArray(value) ? value : []);
@@ -115,6 +115,100 @@ export function readSchedule(schedule) {
     protocol: schedule.protocol, visits, totals: soaSummary(visits),
     visitTimes: baselineDay === null ? null : { baselineDay, ...times },
   };
+}
+
+/** Whether a `YYYY-MM-DD` text is a day that exists (2026-02-30 and 2026-13-01 are not). @param {unknown} text */
+export function isCalendarDate(text) {
+  if (typeof text !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const at = Date.parse(`${text}T00:00:00Z`);
+  return Number.isFinite(at) && new Date(at).toISOString().slice(0, 10) === text;
+}
+
+/**
+ * A regulatory contact as a researcher's form or a run writes it, checked field by field with the field named: a real date, an agency,
+ * bounded words, a short list of references. Never reads what the words say. Shared by the page's route and the runtime's writer, so
+ * the two refuse the same things in the same words.
+ * @param {Record<string, any>} row
+ * @returns {{ ok: true, value: { date: string, agency: string, type: string, summary: string, outcome: string, attachments: string[] } }
+ *   | { ok: false, issues: Array<{ field: string, message: string }> }}
+ */
+export function checkRegulatoryContact(row) {
+  /** @type {Array<{ field: string, message: string }>} */
+  const issues = [];
+  /** @param {string} field @param {number} max @param {boolean} [required] */
+  const words = (field, max, required = false) => {
+    const raw = row[field];
+    if (raw == null || raw === "") {
+      if (required) issues.push({ field, message: `${field} 必填。` });
+      return "";
+    }
+    if (typeof raw !== "string" || [...raw].length > max) {
+      issues.push({ field, message: `${field} 是不超过 ${max} 个字符的文字。` });
+      return "";
+    }
+    return raw.trim();
+  };
+  const date = row.date;
+  if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) issues.push({ field: "date", message: "date 必填，写成 2026-08-14 这样的年-月-日。" });
+  else if (!isCalendarDate(date)) issues.push({ field: "date", message: `${date} 不是一个真实存在的日期。` });
+  const agency = words("agency", VCR_REGULATORY_LIMITS.agency, true);
+  const type = words("type", VCR_REGULATORY_LIMITS.type);
+  const summary = words("summary", VCR_REGULATORY_LIMITS.summary);
+  const outcome = words("outcome", VCR_REGULATORY_LIMITS.outcome);
+  /** @type {string[]} */
+  const attachments = [];
+  if (row.attachments != null) {
+    if (!Array.isArray(row.attachments) || row.attachments.length > VCR_REGULATORY_LIMITS.attachments) {
+      issues.push({ field: "attachments", message: `attachments 是最多 ${VCR_REGULATORY_LIMITS.attachments} 条的列表。` });
+    } else {
+      for (const [at, entry] of row.attachments.entries()) {
+        if (typeof entry !== "string" || !entry.trim() || [...entry].length > VCR_REGULATORY_LIMITS.attachment) {
+          issues.push({ field: `attachments[${at}]`, message: `附件是一条说明它在哪儿的文字（文件名、路径或链接），不超过 ${VCR_REGULATORY_LIMITS.attachment} 个字符。` });
+        } else attachments.push(entry.trim());
+      }
+    }
+  }
+  if (issues.length) return { ok: false, issues };
+  return { ok: true, value: { date, agency, type, summary, outcome, attachments } };
+}
+
+/** What a stored contact row is to a reader. @param {Record<string, any>} row */
+export function contactFromRow(row) {
+  return {
+    id: String(row.id),
+    date: row.occurred_text ?? (row.occurred_on == null ? null : new Date(row.occurred_on).toISOString().slice(0, 10)),
+    agency: String(row.agency),
+    type: String(row.meeting ?? ""),
+    summary: String(row.summary ?? ""),
+    outcome: String(row.conclusion ?? ""),
+    attachments: list(row.attachments).length ? list(row.attachments).map(String) : (row.source_ref ? [String(row.source_ref)] : []),
+    source: row.recorded_by === "ai_set" ? "ai_set" : "researcher",
+    recordedAt: row.created_at == null ? null : new Date(row.created_at).toISOString(),
+  };
+}
+
+/**
+ * The log as a table of strings, for the package reader and the exported document.
+ * @param {ReadonlyArray<ReturnType<typeof contactFromRow>>} contacts
+ * @returns {{ columns: string[], rows: string[][] }}
+ */
+export function contactsTable(contacts) {
+  return {
+    columns: ["日期", "机构", "类型", "讨论摘要", "结论", "附件"],
+    rows: list(contacts).map((contact) => [contact.date ?? "—", contact.agency, contact.type || "—", contact.summary || "—",
+      contact.outcome || "—", contact.attachments.length ? contact.attachments.join("；") : "—"]),
+  };
+}
+
+/**
+ * The part of a report model the log is: every contact as it was recorded, latest first.
+ * @param {ReadonlyArray<ReturnType<typeof contactFromRow>> | null | undefined} contacts
+ */
+export function reportContacts(contacts) {
+  return list(contacts).map((contact) => ({
+    id: contact.id, date: contact.date, agency: contact.agency, type: contact.type, summary: contact.summary,
+    outcome: contact.outcome, attachments: contact.attachments,
+  }));
 }
 
 /**

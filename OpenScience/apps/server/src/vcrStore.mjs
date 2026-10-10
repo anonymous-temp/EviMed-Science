@@ -49,6 +49,7 @@ import { DISPLAY_TIME_ZONE, VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME,
 import { HttpError } from "./security.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
+import { addRegulatoryContact, regulatoryContacts } from "./vcrRegulatory.mjs";
 import { carryScheduleForward, saveScheduleVisits, visitsFromRows } from "./vcrSchedule.mjs";
 import { withReviewState } from "./vcrViewsKit.mjs";
 import { longitudinalIndex } from './vcrLongitudinalStore.mjs';
@@ -1472,6 +1473,16 @@ export class VcrStore extends VcrStoreBase {
   async decisions(studyId) {
     return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.decisions WHERE study_id = $1 ORDER BY created_at DESC LIMIT 200`, [studyId]))
       .map((row) => this.#decisionFromRow(row));
+  }
+
+  /** A regulatory contact added to the study's log, or the identical one already in it (`vcrRegulatory.mjs`). @param {Parameters<typeof addRegulatoryContact>[1]} input */
+  addRegulatoryContact(input) {
+    return addRegulatoryContact(this, input);
+  }
+
+  /** The study's regulatory contacts, the latest first. @param {string} studyId @param {number} [limit] */
+  regulatoryContacts(studyId, limit = 200) {
+    return regulatoryContacts(this, studyId, limit);
   }
 
   // --- model assessments and frozen model analysis plans (ICH M15) ---------------------------

@@ -1,5 +1,5 @@
 /**
- * A protocol's schedule of activities (SoA): the exact operations the platform does on it.
+ * A protocol's schedule of activities (SoA) and a study's log of regulatory contacts: the exact operations the platform does on them.
  *
  * A schedule is the visits a protocol plans — each with the day it falls on, the window around that day and what is done at it.
  * What it adds up to, which of its visits a virtual patient's trajectory may take as times and how a day and a window read are
@@ -24,6 +24,11 @@ export const VCR_SOA_TRAJECTORY_MAX_VISITS = 50
 
 /** The units a schedule's days are converted to when a trajectory asks for its visit times: the platform's horizon units. */
 export const VCR_SOA_TIME_UNITS = Object.freeze(Object.keys(VCR_HORIZON_UNIT_DAYS))
+
+/** How long a regulatory contact's words may run, and how many a study keeps. */
+export const VCR_REGULATORY_LIMITS = Object.freeze({
+  contacts: 500, agency: 120, type: 120, summary: 4_000, outcome: 4_000, attachment: 300, attachments: 10,
+})
 
 /** @typedef {{ name: string, note: string }} SoaActivity */
 /** @typedef {{ visit: string, day: number | null, windowDays: number | null, note: string, procedures: readonly SoaActivity[] }} SoaVisit */

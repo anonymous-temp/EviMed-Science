@@ -901,8 +901,12 @@ export function presentTrialTab(bundle) {
     runRecord,
     forecasts: forecastRows,
     milestones,
-    // The protocol's visit schedule (「访视日程」): a record of the protocol, not a result.
+    // The protocol's visit schedule (「访视日程」) and the study's regulatory contacts (「监管沟通记录」): records, not results.
     schedule: reportSchedule(bundle.schedule),
+    regulatory: list(bundle.regulatory).map((contact) => ({
+      id: contact.id, date: contact.date, agency: contact.agency, type: contact.type, summary: contact.summary, outcome: contact.outcome,
+      attachments: list(contact.attachments), source: contact.source, recordedAt: zhTime(contact.recordedAt, now),
+    })),
     counts: headlineRow ? countsView(headlineRow._result?.counts, { tier: study.dataTier, scope: `方案 ${headlineRow.code}` }) : null,
     stale: staleNote(marks),
     partial: partialOf(bundle, ["trial_scenario", "design_grid"], "这次模拟"),

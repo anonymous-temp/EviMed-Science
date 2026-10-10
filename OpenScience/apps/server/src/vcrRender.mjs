@@ -61,7 +61,7 @@ import {
   formatNumberValue, readNumberPath, renderNumberTemplate, resolveNumberPath, typedNumbersOf,
 } from "@evimed/domain";
 
-import { reportSchedule } from "./vcrScheduleView.mjs";
+import { reportContacts, reportSchedule } from "./vcrScheduleView.mjs";
 
 // The mechanism itself — the grammar, the path reader, the formats, the unit
 // rules and the typed-number detector — lives in `@evimed/domain`'s
@@ -173,12 +173,12 @@ export function renderVcrNumbers(template, results) {
  * `modelAnalysis` is the block the two model documents are rendered from (`vcrModelDocuments.buildModelAnalysis`): present only
  * in the report model of an export of one of those kinds, so no other document carries the plan's content.
  *
- * `schedule` is the protocol's visit schedule (`store.latestSchedule`): the package prints it, and a template may bind numbers to it
- * (`schedule.totals.visits`).
+ * `schedule` is the protocol's visit schedule (`store.latestSchedule`) and `contacts` the study's regulatory contacts: the package
+ * prints both, and a template may bind numbers to the schedule (`schedule.totals.visits`).
  *
  * @param {{ study: any, definition?: any, assumptions?: any[], results?: any[], seal?: any, reviews?: any[],
  *   staleMarks?: any[], models?: any[], population?: any, comparator?: any, scenarios?: any[], counts?: Record<string, any>,
- *   modelAnalysis?: Record<string, any> | null, schedule?: any }} input
+ *   modelAnalysis?: Record<string, any> | null, schedule?: any, contacts?: any[] }} input
  */
 export function vcrReportModel(input) {
   const study = object(input.study);
@@ -293,6 +293,7 @@ export function vcrReportModel(input) {
     }),
     seal: input.seal ?? null,
     schedule: reportSchedule(input.schedule),
+    regulatoryContacts: reportContacts(input.contacts),
     ...(input.modelAnalysis ? { modelAnalysis: input.modelAnalysis } : {}),
   };
 }

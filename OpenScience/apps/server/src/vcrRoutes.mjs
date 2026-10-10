@@ -76,6 +76,7 @@ import { VCR_PUBLICATION_KINDS, VCR_PUBLICATION_LIMITS } from "./vcrPublications
 import { resolveJobSubject } from "./vcrSubjects.mjs";
 import { VCR_CARD_KINDS, createVcrCardEdits } from "./vcrCardEdits.mjs";
 import { zhTime } from "./vcrViewsKit.mjs";
+import { checkRegulatoryContact } from "./vcrScheduleView.mjs";
 
 /**
  * Every code these routes answer with — or that a module behind them answers
@@ -116,6 +117,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_evidence_unverified",
   "vcr_review_kind_invalid",
   "vcr_decision_invalid",
+  "vcr_regulatory_contact_invalid",
   "vcr_export_kind_invalid",
   "vcr_export_not_found",
   "vcr_model_invalid",
@@ -185,6 +187,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/reviews statistical": ["review_statistical", "review_any"],
   "POST /studies/:id/reviews data": ["write", "review_any"],
   "POST /studies/:id/decisions": ["write"],
+  "POST /studies/:id/regulatory-contacts": ["write"],
   "POST /studies/:id/export": ["export"],
   "GET /studies/:id/export/:export": ["read"],
   "GET /studies/:id/records/:result.csv": ["read"],
@@ -1273,6 +1276,17 @@ export function createVcrRoutes(dependencies) {
           rationale: String(body.rationale ?? "").slice(0, 4_000), decidedBy: String(user.id),
         }));
       return reply(saved, 201);
+    }
+
+    // --- a regulatory contact (「监管沟通记录」): added to the study's log, never edited ----------------------------------
+    if (parts.length === 3 && method === "POST" && section === "regulatory-contacts") {
+      const body = await bodyOf(req, maxJsonBytes, ["date", "agency", "type", "summary", "outcome", "attachments"]);
+      const checked = checkRegulatoryContact(body);
+      if ("issues" in checked) throw new HttpError(400, "vcr_regulatory_contact_invalid", checked.issues[0].message);
+      const { study } = await authorize(id, "write");
+      const saved = await audited("vcr.regulatory.add", (contact) => ({ code: contact.id, detail: id }), { code: id },
+        () => data().addRegulatoryContact({ studyId: study.id, userId: study.userId, actor: String(user.id), ...checked.value }));
+      return reply(saved, saved.existing ? 200 : 201);
     }
 
     // --- 模拟研究: the lead publishes one of the study's reports to the public column --------------------

@@ -98,6 +98,20 @@ export interface VcrDecisionBody {
   rationale?: string;
 }
 
+/** 「添加」 on the regulatory log: one contact, as the route's allow-list reads it. */
+export interface VcrRegulatoryContactBody {
+  /** The day it happened, `YYYY-MM-DD`. */
+  date: string;
+  agency: string;
+  /** The kind of contact (a pre-IND meeting, a scientific advice). */
+  type?: string;
+  summary?: string;
+  /** What the agency concluded, in its own words. */
+  outcome?: string;
+  /** References to what the contact left (minutes, a briefing package): one per entry. */
+  attachments?: string[];
+}
+
 export interface VcrMemberBody {
   userId: string;
   role: VcrBodyRole;
@@ -239,6 +253,16 @@ export function reviewBody(input: VcrReviewBody) {
 
 export function decisionBody(input: VcrDecisionBody) {
   return said({ question: input.question.trim(), chosen: input.chosen, alternatives: input.alternatives, rationale: input.rationale });
+}
+
+/** Words the form left empty are not sent: an empty summary is the absence of one, not a summary of nothing. */
+export function regulatoryContactBody(input: VcrRegulatoryContactBody) {
+  const filled = (value: string | undefined) => (value && value.trim() ? value.trim() : undefined);
+  const attachments = (input.attachments ?? []).map((entry) => entry.trim()).filter(Boolean);
+  return said({
+    date: input.date, agency: input.agency.trim(), type: filled(input.type), summary: filled(input.summary), outcome: filled(input.outcome),
+    attachments: attachments.length > 0 ? attachments : undefined,
+  });
 }
 
 export function exportBody(kind: string) {
