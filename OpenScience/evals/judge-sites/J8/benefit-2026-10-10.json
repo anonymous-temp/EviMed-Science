@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "site": "J8",
+  "recordedAt": "2026-10-10",
+  "rule": {
+    "id": "jev-benefit-2026-10-10",
+    "qualificationBar": 0.95,
+    "marginPoints": 0.02,
+    "statement": "On when, in every pass: (1) Jev's settled-correct lower95 is at least 0.95, or, where the plan names launch conditions that stand in for it (J3), those hold, and J4's added condition of no false notice on real non-clinical sentences holds as well; (2) the accuracy of the site with Jev on is not below the incumbent's on the same cases by more than 0.02; (3) the site with Jev on is faster (median per decision), or cheaper, or more accurate; (4) no constraint the site's record adds is broken (J3: not slower than Flash). Otherwise the original path stays.",
+    "siteConditions": "none named by the plan: the generic bar applies"
+  },
+  "model": "jev-1.13.0",
+  "corpus": {
+    "files": [
+      {
+        "file": "evals/judge-sites/J8/cases.json",
+        "sha256": "43d5c45bec64e1fd24a9a76f632c9de5d2448476b0ca251d99e997c34f48c424"
+      }
+    ],
+    "cases": 50
+  },
+  "measuredOn": "A development host in Taipei, where both providers answer a bare request in about 0.16 s. The production host is in Beijing: TypeSafe is reached there in 0.5 to 0.6 s (plan 2026-10-06 section 0), and a 325-token Jev request took 0.33 to 1.24 s on 2026-10-07 (4 requests, privateEvidence latency-production-host.json). Latency here compares the two paths on one network; it is not the production figure.",
+  "incumbentCostBasis": "List prices (peak) from the reference price list on the tokens the provider reported. A repeated run of identical prompts is partly served from DeepSeek's prompt cache and costs less than a first call; production questions are new, so the first pass of a site is the representative one.",
+  "passes": [
+    {
+      "id": "pass-1",
+      "at": "2026-10-10T17:48:11.379Z",
+      "mode": "live-calibration",
+      "model": "jev-1.13.0",
+      "catalogCount": 25,
+      "catalogDigest": "3d46621a6a94733d812bcfe05862f3123a8914caa1652dfd92dff7b67ab16636",
+      "summary": {
+        "cases": 50,
+        "jev": {
+          "measured": 0,
+          "settled": 0,
+          "settledShare": null,
+          "correctSettled": 0,
+          "settledAccuracy": null,
+          "lower95": 0,
+          "bar": 0.95,
+          "rawAccuracy": null,
+          "failures": 0,
+          "ms": {
+            "n": 50,
+            "p50": 221,
+            "p95": 328
+          },
+          "costCnyPerCall": 0.0013137001999999997
+        },
+        "incumbent": {
+          "measured": 0,
+          "correct": 0,
+          "accuracy": null,
+          "failures": 0,
+          "ms": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "costCnyPerCall": null
+        },
+        "hybrid": {
+          "measured": 0,
+          "correct": 0,
+          "accuracy": null,
+          "ms": {
+            "n": 50,
+            "p50": 221,
+            "p95": 328
+          },
+          "costCnyPerCall": 0.0013137001999999997,
+          "originalPathAsked": 43
+        },
+        "paired": {
+          "n": 0,
+          "hybridOnly": 0,
+          "incumbentOnly": 0,
+          "bothRight": 0,
+          "bothWrong": 0
+        }
+      },
+      "checks": [
+        {
+          "id": "qualification",
+          "ok": false,
+          "detail": "settled-correct 0/0, lower95 0.0000 against the bar 0.95"
+        },
+        {
+          "id": "non-inferiority",
+          "ok": false,
+          "detail": "the incumbent or the site with Jev on was not measured on these cases"
+        },
+        {
+          "id": "benefit",
+          "ok": false,
+          "detail": "with the site on: faster false (p50 221 against null ms), cheaper false (0.001314 against n/a CNY per decision), more accurate false"
+        }
+      ],
+      "decision": "original-path",
+      "reasons": [
+        "qualification: settled-correct 0/0, lower95 0.0000 against the bar 0.95",
+        "non-inferiority: the incumbent or the site with Jev on was not measured on these cases",
+        "benefit: with the site on: faster false (p50 221 against null ms), cheaper false (0.001314 against n/a CNY per decision), more accurate false"
+      ],
+      "spend": {
+        "jevUsd": 0.0097,
+        "deepseekBilledCny": 0
+      },
+      "rowsSha256": "6b54d82e0139d62ddf56d2056bcd0abb9eb93a1293b1947e8a2648cc64b16692",
+      "rows": [
+        {"id":"PMC3002766","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3002766","label":{"sha256":"1020339e6374d84ba95fe08b4b747d55d200fee01241dc6e26eac077d6866cd1","bytes":336},"outcome":"settled","confidence":0.92,"jev":{"sha256":"8be877ca9305e4bf991e5835b69be2786c29210b43521fc36d8d7c5b529f9140","bytes":1049},"ms":391,"costCny":0.0011845},
+        {"id":"PMC3002834","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3002834","label":{"sha256":"4177b76581ecf987cde6ab82a690c6517d4cc1b0814b172be27e0f59deded630","bytes":340},"outcome":"settled","confidence":0.96,"jev":{"sha256":"d03ed12c28122687cac3f9d68c131547680b00f57261a480afff84cfc02f1273","bytes":1016},"ms":250,"costCny":0.0012259},
+        {"id":"PMC3016167","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3016167","label":{"sha256":"11bc8dc7038995883bd11c8b3972af9468d7188b9e8cca8c208789663d5c64bc","bytes":333},"outcome":"escalated","code":"judge_uncertain","confidence":0.86,"jev":{"sha256":"6da4967feee4147a18aa793a6a13e0ffa14370543a5e258f0b5d6b7b80d5ee18","bytes":941},"ms":228,"costCny":0.0014374},
+        {"id":"PMC3018567","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3018567","label":{"sha256":"b1abb7cd6c44154886a5200f2a09297de964ee20eae4802e05604469f5096181","bytes":332},"outcome":"escalated","code":"judge_uncertain","confidence":0.8,"jev":{"sha256":"80e047dfaf626045024c5eb0fc913bd5c56e079140049528f1ae35beceedaff5","bytes":1016},"ms":234,"costCny":0.0016137},
+        {"id":"PMC3028347","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3028347","label":{"sha256":"c47c17f7fd5a88ee5dbb5ad68fe48d102ba9add00b2640e5a5416c3b7e7c3c38","bytes":333},"outcome":"escalated","code":"judge_uncertain","confidence":0.7,"jev":{"sha256":"b5674c66cfc515114dbcd8103f40322c18451836ad255cba86fbf4a2d21a4f5e","bytes":1028},"ms":241,"costCny":0.001597},
+        {"id":"PMC3036630","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3036630","label":{"sha256":"10c492e0d48551f7f2a24e743c27c217b8834d79cb95dc30b63af44e99b4c7e1","bytes":338},"outcome":"settled","confidence":0.92,"jev":{"sha256":"ffbef50b1c637abfe6e48a943ed14fcb6f0806d71c0a8a8a50291ec54c27ae24","bytes":995},"ms":207,"costCny":0.0011528},
+        {"id":"PMC3070271","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3070271","label":{"sha256":"165f07c67bedabe86f12dd6396321b2dc5a1803adc6aaf85c36ae081d873afcc","bytes":335},"outcome":"escalated","code":"judge_uncertain","confidence":0.72,"jev":{"sha256":"254883b0cfef4e88458d748e93b41d5b9e196e9f6ecdeb4fab295679417ea92a","bytes":973},"ms":210,"costCny":0.001328},
+        {"id":"PMC3076731","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3076731","label":{"sha256":"4286d21df68a41671cf8b37b0cadaea3c30fc73eb8dbe27f0f88f9eb75ae69f7","bytes":332},"outcome":"escalated","code":"judge_uncertain","confidence":0.58,"jev":{"sha256":"6c0d4a518aa8134642094031cbae8fb8fda4713fff6830433d546a343bbdf795","bytes":963},"ms":226,"costCny":0.0012738},
+        {"id":"PMC3103669","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3103669","label":{"sha256":"8a5be6d4b299af53c2659996dca80d8863197920864c18bf668201bd781fadb4","bytes":334},"outcome":"settled","confidence":0.96,"jev":{"sha256":"31a075ce7c7d85bf5eb6fa1fd92673ac08756179a751a73f594be382da7e7d79","bytes":1020},"ms":249,"costCny":0.0011259},
+        {"id":"PMC3109952","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3109952","label":{"sha256":"b1abb7cd6c44154886a5200f2a09297de964ee20eae4802e05604469f5096181","bytes":332},"outcome":"escalated","code":"judge_uncertain","confidence":0.84,"jev":{"sha256":"612cbbd3d930745261aa9dd25d789d5424ee68198b6e6dd4f5e7cff04a7fff3a","bytes":924},"ms":219,"costCny":0.0012784},
+        {"id":"PMC3128457","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3128457","label":{"sha256":"897493150fa4b8a8dd4c6a7409f84d04cd6eb52beb634049e48211ec9d772afd","bytes":331},"outcome":"escalated","code":"judge_uncertain","confidence":0.68,"jev":{"sha256":"f1093811ed47a7b4860baa509f614c5c58ef20eb367e93bd7a3b3a2c18668e59","bytes":1002},"ms":328,"costCny":0.0014297},
+        {"id":"PMC3242163","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3242163","label":{"sha256":"e8a812535b5925bc81457b86c4665608f87d03f203cef10122a55621e3f69e14","bytes":339},"outcome":"settled","confidence":0.96,"jev":{"sha256":"55cbc74872e816723145ae805431ea2131175801ce3a5a398c30e881b8a46b17","bytes":1040},"ms":226,"costCny":0.0011029},
+        {"id":"PMC3266479","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3266479","label":{"sha256":"dd9da0f75a58c8fe1a2103ca30f496ffcd6f6560b6c369bb84dda236f8801065","bytes":330},"outcome":"escalated","code":"judge_uncertain","confidence":0.86,"jev":{"sha256":"ad103f99f7b50026b1b68d6e1b081d2c48e5070b718b4dca0d82703471059350","bytes":956},"ms":236,"costCny":0.0013155},
+        {"id":"PMC3321505","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3321505","label":{"sha256":"cf1cb5567979ff69bfd8d5f548ab10233cc3e2e3d6f4792a8efaa3c2961dc2b5","bytes":331},"outcome":"escalated","code":"judge_uncertain","confidence":0.76,"jev":{"sha256":"464e09ca2153e10799a420b4885d9723b7fcfb36252a5d2bceb023eded93e242","bytes":988},"ms":230,"costCny":0.0013093},
+        {"id":"PMC3348565","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3348565","label":{"sha256":"f0befb6a58e16e8cdfaabc07deceb396e01380f47bea7c026ad28755c32c5d8d","bytes":332},"outcome":"escalated","code":"judge_uncertain","confidence":0.86,"jev":{"sha256":"d635c5b7f3826da00915f929fd8e19f8ea80b56ba9c4f3ceef5d1a2abd38aa7a","bytes":1016},"ms":230,"costCny":0.001411},
+        {"id":"PMC3386495","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3386495","label":{"sha256":"186f2d0590970a92de0acb89f77712f999595420320652a0a8b7aefa0f82d0f9","bytes":332},"outcome":"escalated","code":"judge_uncertain","confidence":0.62,"jev":{"sha256":"6df9feef655248ed3abec3edfe0d622ad2496f8fca148b91bd2c6e4b786159e5","bytes":974},"ms":210,"costCny":0.0016197},
+        {"id":"PMC3391717","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3391717","label":{"sha256":"2744a67c27d4b9a53c80e3b2bb3d5df162049460ebd2bfb27d821ef754a3cd61","bytes":331},"outcome":"escalated","code":"judge_uncertain","confidence":0.84,"jev":{"sha256":"55e2e28a12324697433b21bbaf8aa8bc985581e2c2597b27ecf857fa1cc07202","bytes":985},"ms":241,"costCny":0.0011848},
+        {"id":"PMC3489506","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3489506","label":{"sha256":"155b5469889e283e74d735cb45af5560b26a1dd6c20d654a10c27da354cac24c","bytes":330},"outcome":"escalated","code":"judge_uncertain","confidence":0.88,"jev":{"sha256":"7a3849820b9cd63c43c82f3617e46f9adc915dd5d72390b72624958572fbdc62","bytes":984},"ms":221,"costCny":0.0013396},
+        {"id":"PMC3502035","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3502035","label":{"sha256":"e8d4a567aa406821fb32fc6d85a27aa0f2b722cbf721919da5179478f375429a","bytes":335},"outcome":"escalated","code":"judge_uncertain","confidence":0.8,"jev":{"sha256":"8595dbeeb1e7de874ed18d82883851be733008a20063dfce3850796528d42c7f","bytes":971},"ms":218,"costCny":0.0013699},
+        {"id":"PMC3551223","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3551223","label":{"sha256":"ee672b250adcec7c7e53f4ad44e9b61b1a6e1144d9eb67fba78c2df712844d0f","bytes":336},"outcome":"escalated","code":"judge_uncertain","confidence":0.78,"jev":{"sha256":"c31fc901653a7659c0c686d5a943ad2c2cd51daf14ca99c1f2117dca05ed7a0a","bytes":974},"ms":229,"costCny":0.0012668},
+        {"id":"PMC3590447","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3590447","label":{"sha256":"30517c2368ae2a085e621512c3bf16f7546642bf9b3e8fcdfe1f80d5fe7b921c","bytes":334},"outcome":"escalated","code":"judge_uncertain","confidence":0.7,"jev":{"sha256":"96888885b0324254da8e4a39292382a46fcf3df939d760182626768a69580c29","bytes":975},"ms":211,"costCny":0.0012427},
+        {"id":"PMC3623038","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3623038","label":{"sha256":"e80f3526e954a42598c6bc46071b4cbf8f0414b079f5f04abed6d674264bdd0c","bytes":333},"outcome":"escalated","code":"judge_uncertain","confidence":0.78,"jev":{"sha256":"9933ab3ea0bcef6ecc48c5ffc00c618ca700deea9098c2555f4e2f8080492876","bytes":1014},"ms":199,"costCny":0.0012361},
+        {"id":"PMC3641608","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3641608","label":{"sha256":"b39fc60069b786c5b95fae90d8b851bc55a783e1cafd3601bca33e8c0eb4301a","bytes":332},"outcome":"escalated","code":"judge_uncertain","confidence":0.88,"jev":{"sha256":"99c9e5db972db70ceab81f0db91cc79191680f149d5ae62616a596a8a324a8dc","bytes":956},"ms":224,"costCny":0.0013328},
+        {"id":"PMC3668094","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3668094","label":{"sha256":"89789c0d5f3d9e711c623e2e1ed9ddfbb9e7b62501998dc5febd2640b30587a4","bytes":334},"outcome":"escalated","code":"judge_uncertain","confidence":0.64,"jev":{"sha256":"6eb540858d48cbc7e6ba69b5a5379ea2f2d1563f798989c5be8295c5940935ff","bytes":992},"ms":204,"costCny":0.001235},
+        {"id":"PMC3686261","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3686261","label":{"sha256":"ec6e4464bf5b6185746316ffc3adb57bfac4859ede4748c00077cff1462634de","bytes":339},"outcome":"settled","confidence":0.96,"jev":{"sha256":"213249d82c347a479be8f3c686bc7cac2f4f03ac11a0c580a996bb2e6dcfe851","bytes":968},"ms":195,"costCny":0.001112},
+        {"id":"PMC3756454","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3756454","label":{"sha256":"703c0ff1d824464b6d5295ebde7ae5108574c334df8fa33ac1d421aaf5a171c1","bytes":336},"outcome":"escalated","code":"judge_uncertain","confidence":0.68,"jev":{"sha256":"3bd384f4a8424ab530772741273635dcbbef778612305497455f539f7bbade07","bytes":1022},"ms":235,"costCny":0.001254},
+        {"id":"PMC4066691","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4066691","label":{"sha256":"f0c84a44dbaf4663b8ddd1acfa1cfc05e56b77539256a0d29ab8257a8b7927a1","bytes":336},"outcome":"escalated","code":"judge_uncertain","confidence":0.82,"jev":{"sha256":"de56ff74b82575fe2fd1ec7dcf8867fed8ad4058d24ed2470ea78c8094f41f28","bytes":972},"ms":200,"costCny":0.0013663},
+        {"id":"PMC4085478","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4085478","label":{"sha256":"745bc308f8c0ece950d76ee48a3a3d6646820d3fbdfeb5bfe7c987e45b76d64a","bytes":332},"outcome":"escalated","code":"judge_uncertain","confidence":0.76,"jev":{"sha256":"7a5a131b2328c361675aaa9dc7d68b52a65683ab1995ae976329b2ead5b6f12b","bytes":997},"ms":231,"costCny":0.0015409},
+        {"id":"PMC4145439","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4145439","label":{"sha256":"5adcc9d143b2553f0ad6f4b067b1e233aa361c23b5fd0a03f86dc94efa830d21","bytes":334},"outcome":"escalated","code":"judge_uncertain","confidence":0.58,"jev":{"sha256":"e88cacbecacdb981f427c04be82aa68e971567bf7f35ec29d49e7ed1fe446362","bytes":976},"ms":215,"costCny":0.0011837},
+        {"id":"PMC4145444","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4145444","label":{"sha256":"551a1eb6cf475dcfdd42b9c03bb040121341dea85983f33afe464ec365543323","bytes":337},"outcome":"escalated","code":"judge_uncertain","confidence":0.78,"jev":{"sha256":"a119bbd43eba5f0c9a4e1689bf506c7d1458bc7d2edab8e2f434e132605efd3d","bytes":1024},"ms":194,"costCny":0.0011287},
+        {"id":"PMC4213545","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4213545","label":{"sha256":"d50e95d0c65647a62b72e84f2c6e61f92e51d94e231421afe48415f04cc8177a","bytes":336},"outcome":"settled","confidence":0.96,"jev":{"sha256":"2633d249f35a67c1120245b2a4cbef9948e6b39cf57d531cc575577903541865","bytes":1009},"ms":216,"costCny":0.0013016},
+        {"id":"PMC4215282","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4215282","label":{"sha256":"c2d6e6604a859aafd0cbeaa2f973b1b5822fcf2d50db37d86de463ae059e1f15","bytes":333},"outcome":"escalated","code":"judge_uncertain","confidence":0.82,"jev":{"sha256":"c1fc83fd844e731594b94178e3f15c84d8ba207b359e71299ec933cbb4c837e0","bytes":1016},"ms":197,"costCny":0.0015448},
+        {"id":"PMC4392313","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4392313","label":{"sha256":"89789c0d5f3d9e711c623e2e1ed9ddfbb9e7b62501998dc5febd2640b30587a4","bytes":334},"outcome":"escalated","code":"judge_uncertain","confidence":0.74,"jev":{"sha256":"9f7eaa4497a75e0590127940cbf6969895685adabd16d7519ff242e0c034251f","bytes":1001},"ms":217,"costCny":0.0012322},
+        {"id":"PMC4431679","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4431679","label":{"sha256":"fd8dadad39f4bc23a509619c872c3775e0c622e6c715640355c239c95566bf01","bytes":333},"outcome":"escalated","code":"judge_uncertain","confidence":0.84,"jev":{"sha256":"acb8fa9fff402b176823b0e63290ce2af41b8e7a0e9fe0ee1daf37c42a3ed3be","bytes":984},"ms":219,"costCny":0.0011848},
+        {"id":"PMC4469977","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4469977","label":{"sha256":"67183b0cf86bba92d40844f520d9f3168524eff52b8a501578a1d17f0b916a9c","bytes":332},"outcome":"escalated","code":"judge_uncertain","confidence":0.9,"jev":{"sha256":"0a03ea2faef3e82a52f87087753beb7732c5c7df5c7dc7626aa9210a42d34a5e","bytes":1040},"ms":203,"costCny":0.0013827},
+        {"id":"PMC4515982","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4515982","label":{"sha256":"5522aa668e276edd3a2d4af9e934d6a84767a257657637ab04bdb0516a8fc63f","bytes":333},"outcome":"escalated","code":"judge_uncertain","confidence":0.86,"jev":{"sha256":"8b56cfac55e529ea14a952cc94704e614387a7e7aa1d005ceb9caa01d0833793","bytes":988},"ms":259,"costCny":0.0014037},
+        {"id":"PMC4621368","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4621368","label":{"sha256":"a8f56389eb72a28df98678fb6d83ebffc886bb36b5541418e8fe7dbe83b0dc8a","bytes":335},"outcome":"escalated","code":"judge_uncertain","confidence":0.64,"jev":{"sha256":"c92d0b6f94d06da39ce60976d4080b65fb978aa3d9d57848723ff8aae5b24050","bytes":1005},"ms":232,"costCny":0.001152},
+        {"id":"PMC4770816","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4770816","label":{"sha256":"c494702129c7694d2dc5c36c8a6b51b3ae94614c329d15011fc93cd6d8fb9247","bytes":333},"outcome":"escalated","code":"judge_uncertain","confidence":0.68,"jev":{"sha256":"9b4a6332fbe3590832966e8169979fbd4cc6abad884f217e52a5c16dff159089","bytes":1028},"ms":188,"costCny":0.0011919},
+        {"id":"PMC3420230","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3420230","label":{"sha256":"155b5469889e283e74d735cb45af5560b26a1dd6c20d654a10c27da354cac24c","bytes":330},"outcome":"escalated","code":"judge_uncertain","confidence":0.82,"jev":{"sha256":"e1973540fc58e8ff513f11380b6fc0b2cc9eac764f9125dbc51b889e2d0db22b","bytes":968},"ms":205,"costCny":0.0016327},
+        {"id":"PMC3944682","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC3944682","label":{"sha256":"ea4800af5136074d742f649371649ccf1d34e262d90beaaf8db6eeb3c3358d6a","bytes":332},"outcome":"escalated","code":"judge_uncertain","confidence":0.6,"jev":{"sha256":"aa2a08e1822098a11983991758b4f1a6ae62a19da6ad8a064fcbb5a0dfa7a3d3","bytes":973},"ms":212,"costCny":0.0013404},
+        {"id":"PMC4797126","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4797126","label":{"sha256":"89789c0d5f3d9e711c623e2e1ed9ddfbb9e7b62501998dc5febd2640b30587a4","bytes":334},"outcome":"escalated","code":"judge_uncertain","confidence":0.64,"jev":{"sha256":"e08889bce06f45ef326f4c7bea10c588bd325120abf6f360c507eb5596da4416","bytes":1035},"ms":328,"costCny":0.0015182},
+        {"id":"PMC4893154","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4893154","label":{"sha256":"83a674dc5257bc7ca10dcbc3df5b0a9914b13f62f87e122f1390255ae31c588d","bytes":336},"outcome":"escalated","code":"judge_uncertain","confidence":0.7,"jev":{"sha256":"ef729c57fe9e780a727c53d589ec809e3ec91d473041daea62fd8b89c6f44171","bytes":973},"ms":213,"costCny":0.0013504},
+        {"id":"PMC4902320","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC4902320","label":{"sha256":"a0a8bc41de071d71037aa6c5e2b35bbd2c29a737251a19fc9a28bdff3647e8b3","bytes":337},"outcome":"escalated","code":"judge_uncertain","confidence":0.64,"jev":{"sha256":"427077ffaa4d66a72f46cc2f4122e95cd1756be57ecab1674ed409f17293cd23","bytes":963},"ms":196,"costCny":0.0010746},
+        {"id":"PMC5009486","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC5009486","label":{"sha256":"9a61668598968376f8a75ae3c27c231bfc90f612bb7f0891ebf5fbbb661b51d5","bytes":334},"outcome":"escalated","code":"judge_uncertain","confidence":0.72,"jev":{"sha256":"cc4cc6465b63d1c4a3659686a529e8a0722084a11b9ea950d2177c87a4e5f6b9","bytes":960},"ms":226,"costCny":0.0013611},
+        {"id":"PMC5033259","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC5033259","label":{"sha256":"faa83491f98501c69a6ebb96ff68301376ba3d51042c1eeb53f6be8371d877bd","bytes":333},"outcome":"escalated","code":"judge_uncertain","confidence":0.68,"jev":{"sha256":"83c5e9f33fb360a93013d0f9d13db7a92a9d9ce920a2c4e76a294fe2f236fd43","bytes":1002},"ms":224,"costCny":0.0012483},
+        {"id":"PMC5064025","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC5064025","label":{"sha256":"39169d04207d78802136377f414fbd8bf5b9ab4919916c52c49fbe0cf1738386","bytes":332},"outcome":"escalated","code":"judge_uncertain","confidence":0.78,"jev":{"sha256":"d0bf216984205a644f3fef175655023f7ccac76b00a61f1ac4bde08c444a6e98","bytes":989},"ms":218,"costCny":0.0012696},
+        {"id":"PMC5099201","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC5099201","label":{"sha256":"a0a8bc41de071d71037aa6c5e2b35bbd2c29a737251a19fc9a28bdff3647e8b3","bytes":337},"outcome":"escalated","code":"judge_uncertain","confidence":0.78,"jev":{"sha256":"fc47619b9e7a5cd957aa76276548a42ba6ff0e7d5476e6f72469c72963a961e6","bytes":1022},"ms":195,"costCny":0.0010168},
+        {"id":"PMC5264229","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC5264229","label":{"sha256":"304d9b159d925d525e722579fdc0bfed94e167536f6720d8116215206a27e22f","bytes":335},"outcome":"escalated","code":"judge_uncertain","confidence":0.86,"jev":{"sha256":"97087c0a0fbb36eee8a0f8f567887af8cb33fb35d718955c95aa28dd3b8f67c6","bytes":973},"ms":234,"costCny":0.0013044},
+        {"id":"PMC5418559","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC5418559","label":{"sha256":"ac88a2ec082a2cf3535db6f438bb5963f4ac0b843a8e74c4df4383956712efc4","bytes":334},"outcome":"escalated","code":"judge_uncertain","confidence":0.8,"jev":{"sha256":"4716eb7ae46f1ea471995a30f79f0fffbab6fa38c59781320f862763c16c2b21","bytes":1044},"ms":223,"costCny":0.0014847},
+        {"id":"PMC5529963","source":"preserved:2026-09-21-jev/corpora/consort-methods.json#PMC5529963","label":{"sha256":"128c3486a51e980a890e7e22ea83a1498c6d4c9d195ec830ae3ebb9d5f89e1fe","bytes":338},"outcome":"escalated","code":"judge_uncertain","confidence":0.8,"jev":{"sha256":"b21085044a93371c935950ea7f78ec0165f2d32cf4540333eaf759aa24089095","bytes":999},"ms":393,"costCny":0.0014912}
+      ]
+    }
+  ],
+  "decision": {
+    "value": "original-path",
+    "heldBy": [
+      "qualification: settled-correct 0/0, lower95 0.0000 against the bar 0.95",
+      "non-inferiority: the incumbent or the site with Jev on was not measured on these cases",
+      "benefit: with the site on: faster false (p50 221 against null ms), cheaper false (0.001314 against n/a CNY per decision), more accurate false"
+    ],
+    "resultsSha256": "7ed9b1cf345db1a2922945cdb7888fd23d89a2f71b54a9ab9e3a163b8c05e3c0",
+    "summary": "Original path. No honest case set exists to qualify the site, so none was invented."
+  },
+  "notes": {
+    "labels": "Not scorable. The 50 cases are CONSORT-TM Methods sentence annotations mapped to CONSORT 2025: an annotation's presence is not proof that the manuscript fully meets the criterion, and its absence is not absence from the manuscript, so the runner leaves every row unscored (unscoredReason) rather than call it right or wrong.",
+    "plan": "The plan's condition (section 4.2) is that the site passes no more missing items than Flash with thinking on, on the same full manuscripts. No such labels exist in the repository, and the incumbent (a thinking-on Flash call per criterion, 16 criteria a manuscript) was not run: without labels it would measure cost and speed only, at about 800 calls.",
+    "jev": "Jev's side was run for its own latency and cost only: p50 about 0.22 s and about 0.0013 CNY a manuscript; 7 of the 50 manuscripts settled at the 0.9 threshold."
+  }
+}
