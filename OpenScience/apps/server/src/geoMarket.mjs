@@ -1055,8 +1055,19 @@ async function placeOrder(ctx, project, order, state) {
     return "unknown";
   }
   state.balance = round2(state.balance - order.priceCny);
-  const submitted = await transition(ctx, current, "submitted", { patch: { vendorOrderNid: answer.orderNid },
-    detail: { vendorOrderNid: answer.orderNid, mappingVersion: VENDOR_STATUS_MAP.version } });
+  /** @type {Awaited<ReturnType<typeof transition>>} */
+  let submitted = null;
+  try {
+    submitted = await transition(ctx, current, "submitted", { patch: { vendorOrderNid: answer.orderNid },
+      detail: { vendorOrderNid: answer.orderNid, mappingVersion: VENDOR_STATUS_MAP.version } });
+  } catch {
+    // The vendor holds the order and our write of it failed. Its number is the one thing that cannot be found again, so it is kept
+    // first, as for a send whose answer came late; the order stays reserved and is declared unknown by the recovery, for an operator
+    // to resolve with the number (M-9). The outlet is not sent to again in the meantime, as for any unknown order.
+    await keepLateOrderNumber(ctx, order, answer.orderNid).catch(() => {});
+    state.blocked.add(mediaKey(order.mediaType, order.resourceId));
+    return "unknown";
+  }
   if (!submitted) await keepLateOrderNumber(ctx, order, answer.orderNid);
   // Paid content says so: the article's record keeps the label (广告 or 商业合作), and the outlet was asked to carry it.
   await ctx.store.advanceArticleStatus(article.id, ["publishable"], "placed", ctx.now().toISOString(), { placementLabel });
@@ -1065,21 +1076,29 @@ async function placeOrder(ctx, project, order, state) {
 
 /**
  * The vendor created an order but ours moved while the send was out (another
- * process declared it unknown). The order number is never lost: it goes into
- * the order's history first; an `unknown` order is settled by it; anything
- * else is an operator's to look at.
+ * process declared it unknown), or the write that records it failed (M-9). The
+ * order number is never lost: it goes into the order's history first; an
+ * `unknown` order is settled by it; anything else is an operator's to look at.
+ * The operator is told with the number whatever became of the history write.
  * @param {ReturnType<typeof context>} ctx @param {any} order @param {string} orderNid
  */
 async function keepLateOrderNumber(ctx, order, orderNid) {
-  await ctx.store.annotateOrder(order.id, { at: ctx.now().toISOString(), detail: { phase: "late_send_result", vendorOrderNid: orderNid } });
-  const now = await ctx.store.getOrder(order.id);
+  /** @type {string | null} */
+  let state = null;
   let resolved = false;
-  if (now?.state === "unknown") {
-    resolved = Boolean(await transition(ctx, now, "submitted", { patch: { vendorOrderNid: orderNid },
-      detail: { vendorOrderNid: orderNid, reason: "late_send_result", mappingVersion: VENDOR_STATUS_MAP.version } }));
+  try {
+    await ctx.store.annotateOrder(order.id, { at: ctx.now().toISOString(), detail: { phase: "late_send_result", vendorOrderNid: orderNid } });
+    const now = await ctx.store.getOrder(order.id);
+    state = now?.state ?? null;
+    if (now?.state === "unknown") {
+      resolved = Boolean(await transition(ctx, now, "submitted", { patch: { vendorOrderNid: orderNid },
+        detail: { vendorOrderNid: orderNid, reason: "late_send_result", mappingVersion: VENDOR_STATUS_MAP.version } }));
+    }
+  } finally {
+    // Told whatever happened above: when the order's history cannot be written either, the alert is where the number is kept.
+    await fire(ctx.alertOperator, { type: "order_late_send_result", orderId: order.id, vendorOrderNid: orderNid, state: resolved ? "submitted" : state,
+      idempotencyKey: `geo:order:${order.id}:late_send_result` });
   }
-  await fire(ctx.alertOperator, { type: "order_late_send_result", orderId: order.id, vendorOrderNid: orderNid, state: resolved ? "submitted" : now?.state ?? null,
-    idempotencyKey: `geo:order:${order.id}:late_send_result` });
 }
 
 /**

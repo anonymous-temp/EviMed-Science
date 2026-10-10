@@ -909,6 +909,67 @@ export function defineGeoMarketMoneyPathScenarios(test, makeFixture, options = {
     } finally { await w.close(); }
   });
 
+  test("failure: the vendor's order number is kept when recording the send fails after the vendor answered (M-9)", options, async () => {
+    // The vendor created the order, and the write that moves ours to `submitted` threw: the number used to be dropped on the floor, and the
+    // order ended `unknown` for an operator to find by hand.
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      const refuse = (/** @type {string[]} */ methods) => new Proxy(store, {
+        get(target, key) {
+          if (typeof key === "string" && methods.includes(key)) {
+            return async (/** @type {any[]} */ ...args) => {
+              if (key === "transitionOrder" && args[1]?.to !== "submitted") return target.transitionOrder(args[0], args[1]);
+              throw new Error("connection lost");
+            };
+          }
+          const value = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const first = await tickOrders({ ...w.deps, store: refuse(["transitionOrder"]) });
+      const nid = [...w.fake.state.orders.values()][0].order_nid;
+      assert.ok(nid, "the vendor created the order");
+      const [order] = await orders(store, p.id);
+      const events = await store.listOrderEvents(order.id, 500);
+      assert.ok(events.some((event) => event.detail?.phase === "late_send_result" && event.detail?.vendorOrderNid === nid), "the order number is in the order's history");
+      assert.ok(w.alerts.some((alert) => alert.type === "order_late_send_result" && alert.orderId === order.id && alert.vendorOrderNid === nid), "and an operator is told with it");
+      assert.equal(first.unknown, 1, "the send counts as one the operator holds, not as an error");
+      assert.equal(first.skipped.error ?? 0, 0);
+      // The outlet is not sent to again meanwhile: the vendor has an order there that ours does not know.
+      const sends = [...w.fake.state.orders.values()].length;
+      await tickOrders(w.deps);
+      assert.equal([...w.fake.state.orders.values()].length, sends, "nothing more is sent to the outlet or for the article");
+    } finally { await w.close(); }
+  });
+
+  test("failure: the number reaches the operator even when the order's history cannot be written either (M-9)", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      const down = new Proxy(store, {
+        get(target, key) {
+          if (key === "annotateOrder") return async () => { throw new Error("connection lost"); };
+          if (key === "transitionOrder") {
+            return async (/** @type {any} */ id, /** @type {any} */ change) => {
+              if (change.to === "submitted") throw new Error("connection lost");
+              return target.transitionOrder(id, change);
+            };
+          }
+          const value = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      await tickOrders({ ...w.deps, store: down });
+      const nid = [...w.fake.state.orders.values()][0].order_nid;
+      const [order] = await orders(store, p.id);
+      assert.ok(w.alerts.some((alert) => alert.type === "order_late_send_result" && alert.orderId === order.id && alert.vendorOrderNid === nid),
+        "the alert is the last place the number is kept");
+    } finally { await w.close(); }
+  });
+
   test("撤单: a plan the user cancelled is not placed again on the same outlet", options, async () => {
     const w = await world(makeFixture, { configured: false });
     try {
