@@ -131,8 +131,10 @@ Do not carry a previous question's domains into this one. If the question is abo
 ### Every asked question is answered, and a declared gap stays a gap
 
 Decomposition is part of the answer. The task you were given is on disk at
-`.evimed-brief/research-brief.md`, written by the server before this run began.
-Read it whenever you need the exact wording of a question rather than your
+`.evimed-brief/sessions/<session id>/research-brief.md`, written by the server
+before this run began: the 「工作区」 section of your task message names the exact
+file, and `<session id>` is the conversation the task was given in. Read it
+whenever you need the exact wording of a question rather than your
 recollection of it; after an hour of retrieval the fifth question is a
 recollection. Do not edit it: it is the question, not your notes.
 

@@ -1522,12 +1522,6 @@ const evidenceSourceToolSuffixes = Object.freeze([
   "clinical_trial_search",
   "patent_search",
 ]);
-// Where the run finds the brief it was given. Written by the server at dispatch
-// and read by the run and by its preflight; the delivery gate reads the
-// server's own in-memory copy instead, so this file is a convenience for the
-// run and never evidence about it.
-export const workspaceBriefPath = ".evimed-brief/research-brief.md";
-
 function evidenceSourceTool(tool) {
   if (typeof tool !== "string") return false;
   return evidenceSourceToolSuffixes.some((suffix) => tool === suffix || tool.endsWith(`_${suffix}`));
