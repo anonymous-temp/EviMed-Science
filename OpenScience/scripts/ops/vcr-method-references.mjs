@@ -58,6 +58,7 @@ export const NUMERIC_REFERENCES = {
   N27a: { methods: ['accrual.poisson_gamma'], anchors: ['10/50/90% = 16.20 / 20.13 / 25.30 months', 'abs(m$value - 20.13) < 0.01'] },
   N27b: { methods: ['accrual.poisson_gamma'], anchors: ['INDEPENDENT constructions that use no accrual code', 'all(abs(z1[c("median")]) <= 3)'] },
   N27c: { methods: ['accrual.poisson_gamma'], anchors: ['an independent gamma construction', 'abs(z_med) <= 3 && abs(z_ev) <= 3.5'] },
+  N27f: { methods: ['accrual.poisson_gamma'], anchors: ["by convolving the sites' binomials", 'abs(z_b) <= 3.5'] },
   N27d: { methods: ['evidence.pool'], anchors: ['Against metafor to 1e-8', 'r$d < r$tol'] },
   N31b: { methods: ['design.simulate'], anchors: ['Independent full joint binomial table', 'abs(m$value-ref[i]) <= 3*m$mcse'] },
 

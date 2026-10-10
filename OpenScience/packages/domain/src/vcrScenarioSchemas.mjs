@@ -1315,21 +1315,21 @@ function checkMaicSemantics(scenario, path, ctx) {
 }
 
 /**
- * A target number of events is counted among the patients still to enrol. The forecast draws the enrolment target less the patients the
- * sites already report (`sites[].enrolled`) and gives each an event time, so a target above that number is never reached, in any replicate:
- * the run found no event time at all and ended as a handler error, after every replicate. It is refused by name instead. With nothing left
- * to enrol the forecast is complete and the event target is not judged here. Mirrored by protocol.R.
+ * A target number of events is counted among every patient the forecast follows: the patients the sites report as enrolled
+ * (`sites[].enrolled`, whose events the engine simulates from the sites' exposure) and the ones still to enrol. A target above their
+ * number (the enrolment target, or the patients already enrolled if there are more) is never reached, in any replicate: the run found no
+ * event time at all and ended as a handler error, after every replicate. It is refused by name instead. Mirrored by protocol.R.
  * @param {any} scenario @param {string} path @param {WalkContext} ctx
  */
 function checkAccrualSemantics(scenario, path, ctx) {
   const { eventTarget, target, sites } = scenario
   if (!isNumber(eventTarget) || !isNumber(target) || !Array.isArray(sites)) return
   const enrolled = sites.reduce((/** @type {number} */ sum, /** @type {any} */ site) => sum + (isObject(site) && isNumber(site.enrolled) && site.enrolled > 0 ? site.enrolled : 0), 0)
-  const remaining = target - enrolled
-  if (remaining > 0 && eventTarget > remaining) {
-    raise(ctx, 'scenario_value_invalid', at(path, 'eventTarget'), enrolled > 0
-      ? `Events are counted among the patients still to enrol: ${remaining} (target ${target} less ${enrolled} already enrolled); an event target of ${eventTarget} is never reached.`
-      : `Events are counted among the ${target} patients to enrol; an event target of ${eventTarget} is never reached.`)
+  const patients = Math.max(target, enrolled)
+  if (eventTarget > patients) {
+    raise(ctx, 'scenario_value_invalid', at(path, 'eventTarget'), enrolled > target
+      ? `Events are counted among the ${patients} patients already enrolled (more than the target of ${target}); an event target of ${eventTarget} is never reached.`
+      : `Events are counted among the ${patients} patients of the enrolment target, enrolled and still to enrol; an event target of ${eventTarget} is never reached.`)
   }
 }
 

@@ -1793,11 +1793,13 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
   beta <- vapply(sites, function(s) vcr_scalar(s$beta, NA_real_), numeric(1))
   start <- vapply(sites, function(s) vcr_scalar(s$startTime, 0), numeric(1))
   enrolled <- vapply(sites, function(s) vcr_scalar(s$enrolled, 0), numeric(1))
+  exposure <- vapply(sites, function(s) vcr_scalar(s$exposureTime, 0), numeric(1))
   if (anyNA(alpha) || anyNA(beta) || any(alpha <= 0) || any(beta <= 0)) vcr_abort("scenario_value_invalid", "scenario.sites", "Every site has a positive rate posterior (alpha, beta).")
   if (any(enrolled < 0)) vcr_abort("scenario_value_invalid", "scenario.sites", "Enrolled counts are not negative.")
   target <- vcr_scalar(sc$target, NULL)
   if (is.null(target) || !(target >= 1) || target != round(target)) vcr_abort("scenario_value_invalid", "scenario.target", "The target is a positive whole number of patients.")
   remaining <- max(0, target - sum(enrolled))
+  everyone <- max(target, sum(enrolled))   # the patients that will have been enrolled
   sf <- sc$screenFailure
   screen <- if (is.null(sf)) NULL else list(alpha = vcr_scalar(sf$alpha, NA_real_), beta = vcr_scalar(sf$beta, NA_real_))
   if (!is.null(screen) && (anyNA(unlist(screen)) || any(unlist(screen) <= 0))) vcr_abort("scenario_value_invalid", "scenario.screenFailure", "The screen-failure prior is a Beta(alpha, beta) with positive parameters.")
@@ -1807,13 +1809,12 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
   ev_target <- vcr_scalar(sc$eventTarget, NULL); ev_h <- vcr_scalar(sc$eventHazard, NULL)
   if (!is.null(ev_target)) {
     if (is.null(ev_h) || !(ev_h > 0)) vcr_abort("scenario_field_missing", "scenario.eventHazard", "A target event count needs the per-patient event hazard (per month).")
-    # The events are counted among the patients still to enrol -- the ones this forecast draws -- so a target above their number is never
-    # reached and the run used to end with no event time at all (N27e). The validator refuses it first; this is the second line. With
-    # nothing left to enrol the early return below answers, and the event target is held to the enrolment target as it always was.
-    if (!(ev_target >= 1 && ev_target <= (if (remaining > 0) remaining else target))) {
+    # The events are counted among every patient, the ones already enrolled (their events are simulated from the sites' exposure,
+    # `.vcr_enrolled_events`) and the ones still to enrol, so the target is reachable up to their number (N27e). The validator refuses
+    # a larger one first; this is the second line.
+    if (!(ev_target >= 1 && ev_target <= everyone)) {
       vcr_abort("scenario_value_invalid", "scenario.eventTarget",
-                if (remaining > 0 && remaining < target) "The event target is between 1 and the patients still to enrol (the target less those already enrolled)."
-                else "The event target is between 1 and the enrolment target.")
+                "The event target is between 1 and the number of patients: the enrolment target, or the patients already enrolled if there are more.")
     }
   }
   reps <- as.integer(job$replicates %||% 20000L)
@@ -1821,7 +1822,8 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
   simultaneous <- length(unique(model$startTimes)) == 1L && length(unique(model$beta)) == 1L
   closed <- simultaneous && is.null(screen) && is.null(ev_target) && remaining > 0
   probs <- c(0.05, 0.1, 0.2, 0.5, 0.8, 0.9, 0.95)
-  if (remaining == 0) {
+  # Nothing left to enrol and no event target: the forecast is complete. An event target is still forecast, from the patients enrolled.
+  if (remaining == 0 && is.null(ev_target)) {
     return(list(status = "succeeded",
                 measures = list(vcr_measure("last_patient_in_months", 0, source = "calculated",
                                             note = "The enrolment target is already met.")),
@@ -1839,7 +1841,8 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
                  meanNote = if (is.na(cf$mean)) "The mean completion time is undefined when the total rate shape N*alpha is 1 or less; the quantiles are unaffected." else NULL)
   } else {
     sim <- vcr_accrual_simulate(model, remaining, reps, job$seed, vcr_cores(job$cores), probs = probs, by_times = NULL,
-                                randomized_target = !is.null(screen), event_target = ev_target, event_hazard = ev_h)
+                                randomized_target = !is.null(screen), event_target = ev_target, event_hazard = ev_h,
+                                enrolled = enrolled, exposure = exposure)
     if (!is.null(sim$interrupted)) {
       return(list(status = if (identical(sim$interrupted, "canceled")) "canceled" else "failed",
                   measures = list(), counts = vcr_counts(),
@@ -1849,11 +1852,16 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
     t_end <- sim$samples[is.finite(sim$samples)]
     if (length(t_end) < 20L) vcr_abort("scenario_value_invalid", "scenario.sites", "Under these rates the enrolment target is almost never reached; no forecast is reported.")
     q <- stats::quantile(t_end, probs, names = FALSE, type = 7); names(q) <- paste0("p", probs * 100)
-    measures[[1]] <- vcr_measure("last_patient_in_months", q[["p50"]], simulated = TRUE, mcse = vcr_quantile_mcse(t_end, 0.5),
-      interval = vcr_interval("prediction", q[["p10"]], q[["p90"]], 0.8), source = "calculated")
-    grid <- if (length(by)) by else seq_len(min(120L, max(1L, ceiling(q[["p95"]]))))
-    pby <- vapply(grid, function(m) mean(t_end <= m), numeric(1))
-    tables[[1]] <- vcr_write_table(data.frame(month = grid, probability = pby, mcse = sqrt(pby * (1 - pby) / length(t_end))), "probability_by_month", output_dir)
+    if (remaining > 0) {
+      measures[[1]] <- vcr_measure("last_patient_in_months", q[["p50"]], simulated = TRUE, mcse = vcr_quantile_mcse(t_end, 0.5),
+        interval = vcr_interval("prediction", q[["p10"]], q[["p90"]], 0.8), source = "calculated")
+      grid <- if (length(by)) by else seq_len(min(120L, max(1L, ceiling(q[["p95"]]))))
+      pby <- vapply(grid, function(m) mean(t_end <= m), numeric(1))
+      tables[[1]] <- vcr_write_table(data.frame(month = grid, probability = pby, mcse = sqrt(pby * (1 - pby) / length(t_end))), "probability_by_month", output_dir)
+    } else {
+      # Everybody is enrolled: the last patient came in before now, and only the events are forecast.
+      measures[[1]] <- vcr_measure("last_patient_in_months", 0, source = "calculated", note = "The enrolment target is already met.")
+    }
     diag <- list(quantiles = as.list(q), mean = mean(t_end), meanMcse = stats::sd(t_end) / sqrt(length(t_end)), closedForm = FALSE,
                  remaining = remaining, replicatesCompleted = sim$replicates, unreachableShare = sim$unreachableShare)
     if (!is.null(ev_target)) {
@@ -1862,6 +1870,11 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
       measures[[2]] <- vcr_measure("target_events_months", qe[["p50"]], simulated = TRUE, mcse = vcr_quantile_mcse(ev, 0.5),
         interval = vcr_interval("prediction", qe[["p10"]], qe[["p90"]], 0.8), source = "calculated")
       diag$eventQuantiles <- as.list(qe)
+      # What the event count rests on, said plainly: the patients already enrolled are followed by the model (their events are drawn from
+      # the sites' exposure), because the engine is given no observed event count.
+      diag$eventForecast <- list(patients = everyone, alreadyEnrolled = sum(enrolled), stillToEnrol = remaining,
+                                 eventsAlreadyHappenedMean = sim$eventsAlreadyMean, eventsAlreadyHappenedBasis = "simulated_from_site_exposure",
+                                 alreadyReachedShare = mean(ev <= 0))
     }
   }
   list(status = "succeeded", measures = measures, counts = vcr_counts(),
