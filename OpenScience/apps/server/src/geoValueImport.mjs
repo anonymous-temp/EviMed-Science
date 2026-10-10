@@ -14,7 +14,7 @@ export async function importGeoValue({ store, project, geoProject, run, readFile
   const deliverables = run.deliverables ?? run.progress?.deliverables ?? [];
   for (const delivery of deliverables) {
     if (!delivery?.id) continue;
-    const capability = delivery.capability ?? run.capabilityId ?? run.agentId;
+    const capability = delivery.capability || run.effectiveAgentId || run.capabilityId || run.agentId;
     if (capability && !String(capability).startsWith("geo-") && !GEO_RESEARCH_CAPABILITIES.includes(capability)) continue;
     const base = deliverableDir(String(delivery.id));
     const optional = await readFile(project.workspaceDir, `${base}/geo-value.json`).catch(() => null);

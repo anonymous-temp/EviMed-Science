@@ -77,8 +77,11 @@ test("declared specialist artifacts are reusable while unsafe paths remain outsi
   const writes = [], reads = [];
   await importGeoValue({ store: { writeValue: async (...args) => writes.push(args) },
     project: { userId: "u", workspaceDir: "/work" }, geoProject: { id: "g" },
-    run: { id: "r2", status: "failed", deliverables: [{ id: "meta", capability: "meta-analysis" }] },
-    capabilityOutputs: async () => ["meta-analysis-report.md", "meta-analysis-run.json", "../secret.txt", "/outside.md", "plot.png"],
+    run: { id: "r2", status: "failed", effectiveAgentId: "meta-analysis", deliverables: [{ id: "meta", capability: "" }] },
+    capabilityOutputs: async (id) => {
+      assert.equal(id, "meta-analysis");
+      return ["meta-analysis-report.md", "meta-analysis-run.json", "../secret.txt", "/outside.md", "plot.png"];
+    },
     readFile: async (_root, path) => {
       reads.push(path);
       if (path.endsWith("meta-analysis-report.md")) return Buffer.from("Usable synthesis; subgroup unavailable.");
