@@ -509,10 +509,12 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
 }
 
 /**
- * Whether a set may be locked (spec §4), as issues; empty when it may.
+ * Whether a set may be locked (spec §4), as issues; empty when it may. `thin` says the set is under what the full programme
+ * measures — fewer measured questions than the suggested low bound, or no control group among them — which is not a reason to
+ * refuse it (a small set is useful) but is one not to treat it as the full programme's set (D-30).
  * @param {Array<{ pool: string | null, isControl: boolean, questions: Array<{ isMeasured: boolean, pool: string | null }> }>} groups
  * @param {boolean} minimal
- * @returns {{ refusals: GeoIssue[], notices: GeoIssue[], measured: number }}
+ * @returns {{ refusals: GeoIssue[], notices: GeoIssue[], measured: number, thin: boolean }}
  */
 export function geoLockCheck(groups, minimal) {
   /** @type {GeoIssue[]} */
@@ -540,7 +542,7 @@ export function geoLockCheck(groups, minimal) {
       ? `Control groups should be about 20–30 % of the groups; here they are ${Math.round(share * 100)} %.`
       : null;
   if (controlIssue) notices.push({ field: "control", code: "notice", message: controlIssue });
-  return { refusals, notices, measured };
+  return { refusals, notices, measured, thin: measured < GEO_MEASURED_RANGE.full[0] || control === 0 };
 }
 
 // --- journey, strategy, placement plan ---------------------------------------------------------
@@ -1188,9 +1190,6 @@ async function writeToProject({ store, project, what, body, renameProject = null
       const declared = read.flag("minimal");
       if (read.refused) return done([]);
       const minimal = geoProgramMinimal(project.steps);
-      if (declared != null && declared !== minimal) {
-        issues.push({ field: "minimal", code: "notice", message: `The program decides this; the set is locked as a ${minimal ? "minimal" : "full"} set.` });
-      }
       const sets = await store.questionSets(project.id);
       const version = requested ?? sets[0]?.version ?? null;
       const set = sets.find((entry) => entry.version === version);
@@ -1204,9 +1203,21 @@ async function writeToProject({ store, project, what, body, renameProject = null
         issues.push(...check.refusals);
         return done([], { version });
       }
+      // A set under what the full programme measures is a diagnosis whatever was asked: the lock is allowed, and the later steps are
+      // not started from it on the platform's own initiative (a project nothing was requested for used to start all eight from three
+      // questions, and so spent model money and, once a budget exists, placement money, on a set that cannot reach the 30-answer
+      // floor or form a control arm).
+      const asMinimal = minimal || check.thin;
+      if (declared != null && declared !== asMinimal) {
+        issues.push({ field: "minimal", code: "notice", message: `The program decides this; the set is locked as a ${asMinimal ? "minimal" : "full"} set.` });
+      }
       issues.push(...check.notices);
+      if (check.thin && !minimal) {
+        issues.push({ field: "program", code: "notice",
+          message: `This set is under what the full programme measures (${GEO_MEASURED_RANGE.full[0]} or more questions and control groups), so it is locked as a minimal set: a diagnosis. The later steps are not started from it unless they are asked for.` });
+      }
       const locked = await store.lockQuestionSet(project.id, version, check.measured);
-      await store.setStep(project.id, "questions", { status: minimal ? "minimal" : "done" });
+      await store.setStep(project.id, "questions", { status: asMinimal ? "minimal" : "done" });
       return done([String(version)], { version, lockedAt: locked?.lockedAt ?? null, measuredCount: check.measured });
     }
     case "journey": {

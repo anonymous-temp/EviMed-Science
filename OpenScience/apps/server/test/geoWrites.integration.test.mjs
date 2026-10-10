@@ -236,24 +236,42 @@ test("locking retains small and incomplete sets with coverage notices, and prote
   const lock = async (/** @type {Record<string, any>} */ data = {}) => write(project, "lock_questions", { data });
   assert.deepEqual((await lock()).issues.map((/** @type {any} */ issue) => issue.code), ["not_found"], "nothing to lock yet");
 
+  const questionsStep = async () => (await store.getProject(USER, project.id))?.steps.questions.status;
   await write(project, "questions", { data: { groups: fullSet({ pools: ["P1", "P2", "P3"] }) } });
   let refused = await lock();
   assert.equal(refused.ok, true);
   assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice"]);
+  assert.equal(await questionsStep(), "done", "48 measured questions and control groups: the full programme's set");
 
   await write(project, "questions", { data: { groups: fullSet({ control: 1 }) } });
   refused = await lock();
   assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice"]);
+  assert.equal(await questionsStep(), "done", "one control group is a notice, not a thin set");
 
   await write(project, "questions", { data: { groups: fullSet({ perGroup: 2 }) } });
   refused = await lock();
-  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice"], "24 measured is usable with a scope notice");
+  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice", "notice"], "24 measured is usable with a scope notice, and says it is a minimal set");
+  assert.match(refused.issues[1].message, /locked as a minimal set/);
+  assert.equal(await questionsStep(), "minimal", "under the suggested low bound: a diagnosis (D-30)");
 
-  // A set of 36 with no control groups: the run saying "minimal" does not make it one.
+  // A set of 36 with no control groups: the run saying "minimal" does not make it the program's, but the set is a minimal one all the same.
   await write(project, "questions", { data: { groups: fullSet({ control: 0, perGroup: 3 }) } });
   refused = await lock({ minimal: true });
   assert.equal(refused.ok, true, "limited measurements remain useful regardless of the program shape");
   assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code).sort(), ["notice", "notice", "notice"]);
+  assert.equal(await questionsStep(), "minimal", "no control group: a diagnosis");
+
+  // Enough questions but no control group is thin as well; a full set with its controls is not.
+  await write(project, "questions", { data: { groups: fullSet({ control: 0 }) } });
+  assert.equal((await lock()).ok, true);
+  assert.equal(await questionsStep(), "minimal", "48 measured questions and no control group");
+  await write(project, "questions", { data: { groups: fullSet() } });
+  assert.equal((await lock()).ok, true);
+  assert.equal(await questionsStep(), "done", "and the upgrade is a full set locked after it");
+
+  // The set of 36 without controls again, as the rest of the test goes on from it.
+  await write(project, "questions", { data: { groups: fullSet({ control: 0, perGroup: 3 }) } });
+  assert.equal((await lock()).ok, true);
   // A single step asked for downstream (信源), the questions only its upstream: a minimal set —
   // 30 or more measured, four pools, control groups only a notice.
   await store.setStep(project.id, "sources", { status: "queued", requested: true });
@@ -261,17 +279,17 @@ test("locking retains small and incomplete sets with coverage notices, and prote
   assert.equal(minimal.ok, true, JSON.stringify(minimal.issues));
   assert.equal(minimal.measuredCount, 36);
   assert.equal(minimal.alreadyLocked, true);
-  assert.equal((await store.getProject(USER, project.id))?.steps.questions.status, "done", "an already locked set keeps its completion state");
+  assert.equal((await store.getProject(USER, project.id))?.steps.questions.status, "minimal", "an already locked set keeps its completion state");
 
   // The full program asked for: the questions step itself is requested.
   await store.setStep(project.id, "questions", { requested: true });
   const program = /** @type {any} */ (await store.getProject(USER, project.id));
-  await write(program, "questions", { data: { groups: fullSet() } });
+  const fullSetWritten = await write(program, "questions", { data: { groups: fullSet() } });
   const full = await write(program, "lock_questions", { data: {} });
   assert.equal(full.ok, true, JSON.stringify(full.issues));
-  assert.deepEqual([full.version, full.measuredCount], [5, 48]);
+  assert.deepEqual([full.version, full.measuredCount], [fullSetWritten.version, 48]);
   assert.equal((await store.getProject(USER, project.id))?.steps.questions.status, "done");
-  const again = await write(program, "lock_questions", { data: { version: 5 } });
+  const again = await write(program, "lock_questions", { data: { version: fullSetWritten.version } });
   assert.equal(again.alreadyLocked, true, "locking twice is a no-op");
 });
 
@@ -295,6 +313,12 @@ test("the lock rule is a pure function of the set", () => {
   assert.deepEqual(geoLockCheck(groups(3, 20, 4), false).refusals, [], "3 of 20 is inside the tolerance");
   assert.equal(geoLockCheck(groups(3, 12, 11), false).notices[0].code, "notice", "132 questions remain usable within the queue resource ceiling");
   assert.deepEqual(geoLockCheck(groups(0, 10, 3), true).refusals, [], "a minimal set of 30 locks without control groups");
+  // A set is thin below the suggested low bound or with no control group; it is never refused for that.
+  assert.equal(geoLockCheck(groups(3, 12, 4), false).thin, false);
+  assert.equal(geoLockCheck(groups(3, 12, 3), false).thin, true, "36 measured under the full programme's 40");
+  assert.equal(geoLockCheck(groups(0, 12, 4), false).thin, true, "48 measured and no control group");
+  assert.equal(geoLockCheck(groups(1, 12, 4), false).thin, false, "a single control group is a notice");
+  assert.deepEqual(geoLockCheck(groups(0, 12, 3), false).refusals, []);
 });
 
 test("targets are forecasts or commercial, three tiers, no duplicates; sources and articles check what they point at", options, async () => {
