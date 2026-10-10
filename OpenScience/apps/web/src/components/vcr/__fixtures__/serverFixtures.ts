@@ -72,6 +72,13 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
         if (section === "referrals") return referralsAnswer();
         if (section === "matching" && set === "ev201") {
           const view = query.get("view");
+          // 「给患者找试验」: nobody asked for, a person the study has found no trial for (P-0201), or P-0192's ranked list — the first trial
+          // judged by default, or the one asked for with `trial=` (ctr_2 has a rule still unknown).
+          if (query.get("direction") === "patient_to_trial" && (view === null || view === "matching")) {
+            if (query.get("candidate") === "P-0201") return fixture("ev201/matching-patient-trials-none.json");
+            if (query.get("candidate") === "P-0192") return fixture(query.get("trial") === "ctr_2" ? "ev201/matching-patient-trials-open.json" : "ev201/matching-patient-trials.json");
+            return fixture("ev201/matching-patient-trials-nobody.json");
+          }
           // Two subjects have a page of their own: P-0201 (eligible, already contacted) and P-0192 (a referral waiting on a coordinator).
           if (query.get("candidate") === "P-0201") return fixture("ev201/matching-p0201.json");
           if (query.get("candidate") === "P-0192") return fixture("ev201/matching-p0192.json");
@@ -83,6 +90,8 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
     }
     // A write answers what the routes answer: the row, an empty object here.
     if (method === "POST" && /\/run$/.test(path)) return { sessionId: "ses_1", runId: "run_1" };
+    // 「为该患者找试验」 answers a run, like 「让 AI 做」, and how many verdicts the trials already held now have about the patient.
+    if (method === "POST" && /\/trial-search$/.test(path)) return { sessionId: "ses_1", runId: "run_3", deferred: null, evaluated: 0 };
     if (method === "POST" && /\/export$/.test(path)) return { export: { id: "exp_9" }, sessionId: "ses_1", runId: "run_2", deferred: null };
     return {};
   });

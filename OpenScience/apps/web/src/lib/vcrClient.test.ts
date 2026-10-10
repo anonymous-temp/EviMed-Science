@@ -5,6 +5,7 @@ import {
   saveVcrAssumption, signVcrReview, getVcrMembers, readVcrMembers, removeVcrMember, setVcrMembers, transitionVcrReferral,
   adoptVcrModel, getVcrReferrals, overrideVcrJudgment, readVcrReferrals, reviewVcrAssessment,
   readVcrComparator, readVcrData, readVcrHome, readVcrMatching, readVcrModels, readVcrPatients, readVcrPopulation, readVcrStudy, readVcrTrial,
+  runVcrTrialSearch,
 } from "./vcrClient";
 import { fixture, installVcrServer, STUDY_ID } from "@/components/vcr/__fixtures__/serverFixtures";
 
@@ -87,6 +88,8 @@ describe("the readers drop nothing the server sends", () => {
     ["trial", readVcrTrial, "ev201/trial.json"],
     ["matching", readVcrMatching, "ev201/matching.json"],
     ["matching for one candidate", readVcrMatching, "ev201/matching-p0192.json"],
+    ["matching of a patient's trials", readVcrMatching, "ev201/matching-patient-trials.json"],
+    ["matching of a patient with no trial found", readVcrMatching, "ev201/matching-patient-trials-none.json"],
     ["data", readVcrData, "ev201/data.json"],
     ["models", readVcrModels, "ev201/models.json"],
     ["home", readVcrHome, "ev201/home.json"],
@@ -119,6 +122,8 @@ describe("a payload the server never sends is still survivable", () => {
       expect(readVcrTrial(junk).forecasts).toEqual([]);
       expect(readVcrMatching(junk).candidates).toEqual([]);
       expect(readVcrMatching(junk).view).toBe("matching");
+      // A page with no patient's trials in it is the other direction's page, not an empty list of trials.
+      expect(readVcrMatching(junk).patientTrials).toBeUndefined();
       expect(readVcrData(junk).assumptions).toEqual([]);
       expect(readVcrModels(junk).models).toEqual([]);
       expect(readVcrStudy(junk).overview.designs).toEqual([]);
@@ -149,6 +154,50 @@ describe("a payload the server never sends is still survivable", () => {
   it("keeps the four counts, with nulls where nothing was counted", () => {
     expect(readVcrCounts(null)).toBeNull();
     expect(readVcrCounts({ realPatients: 0 })).toMatchObject({ realPatients: 0, events: null, effectiveSampleSize: null, generatedRecords: null });
+  });
+});
+
+describe("the patient's trials", () => {
+  it("reads the ranked list with each trial's registry address, phase, status, counts, and the chosen trial's criteria", () => {
+    const sent = fixture("ev201/matching-patient-trials.json");
+    const page = readVcrMatching(sent);
+    expect(page.directions).toEqual(["trial_to_patient", "patient_to_trial"]);
+    expect(page.direction).toBe("patient_to_trial");
+    const trials = page.patientTrials;
+    expect(trials?.available).toBe(true);
+    expect(trials?.subject).toBe("P-0192");
+    expect(trials?.trials.map((trial) => [trial.rank, trial.kind, trial.id])).toEqual([[1, "registry", "ctr_1"], [2, "protocol", "prt_2"], [3, "registry", "ctr_2"], [4, "registry", "ctr_3"]]);
+    expect(trials?.trials[0]).toMatchObject({
+      registry: "clinicaltrials.gov", registryId: "NCT05000001", url: "https://clinicaltrials.gov/study/NCT05000001", phase: "III 期", status: "招募中",
+      eligibility: "eligible", counts: { satisfied: 3, unknown: 0, notSatisfied: 0, pending: 0 }, conditions: ["Non-small Cell Lung Cancer"],
+      sites: { total: 14, countries: ["China"] },
+    });
+    expect(trials?.trials[1].sites).toBeNull();
+    expect(trials?.selected?.id).toBe("ctr_1");
+    expect(trials?.selected?.criteria.map((row) => row.code)).toEqual(["I1", "I2", "E1"]);
+    expect(trials?.selected?.verdict?.text).toBe("符合：全部适用的入排条件都满足");
+  });
+
+  it("reads a patient the study holds no trial for as an empty list and no chosen trial, and a payload that is not a page as nothing", () => {
+    const none = readVcrMatching(fixture("ev201/matching-patient-trials-none.json")).patientTrials;
+    expect(none).toMatchObject({ available: true, subject: "P-0201", trials: [], selected: null });
+    for (const junk of [{}, []]) {
+      expect(readVcrMatching({ patientTrials: junk }).patientTrials).toMatchObject({ available: true, subject: null, trials: [], selected: null });
+    }
+    // What is not an object is no page of trials: the tab reads as the other direction's.
+    for (const junk of ["text", 5, null, true]) expect(readVcrMatching({ patientTrials: junk }).patientTrials).toBeUndefined();
+    expect(readVcrMatching({ patientTrials: { available: false } }).patientTrials?.available).toBe(false);
+    expect(readVcrMatching({ patientTrials: { trials: [{ id: "ctr_9" }] } }).patientTrials?.trials[0]).toMatchObject({
+      id: "ctr_9", conditions: [], sites: null, counts: { satisfied: 0, unknown: 0, notSatisfied: 0, pending: 0 },
+    });
+  });
+
+  it("asks for the patient's page by direction, patient and trial, and posts the search with the patient's key and nothing else", async () => {
+    await getVcrMatching(STUDY_ID, { view: "matching", direction: "patient_to_trial", candidate: "P-0192", trial: "ctr_2" });
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/matching?view=matching&direction=patient_to_trial&candidate=P-0192&trial=ctr_2`);
+    const answer = await runVcrTrialSearch(STUDY_ID, "P-0192");
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/trial-search`, "POST", { subjectKey: "P-0192" });
+    expect(answer.runId).toBe("run_3");
   });
 });
 
