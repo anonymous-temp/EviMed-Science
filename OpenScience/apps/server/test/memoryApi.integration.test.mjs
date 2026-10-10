@@ -328,6 +328,54 @@ test("deleting a project deletes its memory and leaves personal memory alone", o
     "the project's memory went with it and the account's did not");
 });
 
+// 2026-10-10 review M-10: a conversation's own records (scope "session") carry no project, so the project's deletion
+// has to be told which conversations the project had; the route names them from the project's sessions and runs.
+// A pause turned on under a runtime that is already up: its methods were mounted at launch (2026-10-10 review L-5), so the
+// idle ones are let go and the next launch mounts none. Turning learning off, or recall back on, lets go of nothing.
+test("turning recall off asks the runtime manager to let go of the account's idle runtimes that carry methods", options, async (t) => {
+  const { app, base, headers, user } = await fixture(t);
+  /** @type {string[]} */ const asked = [];
+  app.runtimeManager.releasePausedMethodRuntimes = async (/** @type {string} */ userId) => { asked.push(userId); return []; };
+  const put = async (/** @type {any} */ body) => {
+    const response = await fetch(`${base}/api/memory/settings`, { method: "PUT", headers, body: JSON.stringify(body) });
+    assert.equal(response.status, 200, await response.clone().text());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  };
+  await put({ learningPaused: true });
+  assert.deepEqual(asked, [], "pausing learning mounts and unmounts nothing");
+  await put({ recallPaused: true });
+  assert.deepEqual(asked, [user.id]);
+  await put({ recallPaused: false, pausedProjects: ["default"] });
+  assert.deepEqual(asked, [user.id, user.id], "and so does 「本项目不使用记忆」");
+  await put({ recallPaused: false, pausedProjects: [] });
+  assert.deepEqual(asked, [user.id, user.id], "turning it back on asks for nothing");
+});
+
+test("deleting a project deletes what its conversations wrote, and not what another project's did", options, async (t) => {
+  const { app, base, headers, user } = await fixture(t);
+  const projectId = "project-session-delete";
+  const sessionHeaders = (project) => ({ ...headers, "x-open-science-project": project });
+  assert.equal((await fetch(`${base}/api/projects`, {
+    method: "POST", headers, body: JSON.stringify({ id: projectId, name: "Session memory deletion" }),
+  })).status, 200);
+  for (const [project, sessionId] of [[projectId, "ses_deleted_one"], ["default", "ses_kept_one"]]) {
+    const put = await fetch(`${base}/api/research-sessions/${sessionId}`, { method: "PUT", headers: sessionHeaders(project), body: JSON.stringify({ mode: "open-domain" }) });
+    assert.equal(put.status, 200, await put.clone().text());
+  }
+  const base_ = { origin: "inferred", status: "active", confidence: 0.7, importance: 0.5, sensitive: false };
+  await app.researchMemory.upsertRecord(user.id, { ...base_, scope: "session", scopeId: "ses_deleted_one", kind: "follow_up", key: "deleted.followup", value: "Pending.", summary: "p" });
+  await app.researchMemory.upsertRecord(user.id, { ...base_, scope: "session", scopeId: "ses_kept_one", kind: "follow_up", key: "kept.followup", value: "Pending.", summary: "q" });
+  await app.researchMemory.upsertRecord(user.id, { ...base_, scope: "user", scopeId: "", kind: "preference", key: "tone", value: "tables over prose", summary: "" });
+
+  assert.equal((await fetch(`${base}/api/projects/${projectId}`, {
+    method: "DELETE", headers, body: JSON.stringify({ confirm: projectId }),
+  })).status, 200);
+
+  const exported = await app.researchMemory.exportUserMemory(user.id);
+  assert.deepEqual(exported.records.map((record) => record.key).sort(), ["kept.followup", "tone"],
+    "the deleted project's conversation took its record with it; the other project's and the researcher's stayed");
+});
+
 test("deleting an account takes every memory with it, counted for the audit", options, async (t) => {
   const { app, base, headers, user } = await fixture(t);
   await app.researchMemory.upsertRecord(user.id, {
@@ -562,4 +610,40 @@ test("undoing a replacement puts the fact it replaced back in force", options, a
   assert.deepEqual(undone.restored.map((item) => [item.id, item.status, item.supersededBy, item.invalidSince]),
     [[old.id, "active", null, null]]);
   assert.match(undone.restored[0].revisions.at(-1).reason, /^back in force: project\.dose\.new/);
+});
+
+// 2026-10-10 review M-7: the capsule half of recall falls back to lexical search when the index cannot answer, and said so
+// to nobody: `CapsuleService.lastIndexError` was read only by a test. The research-memory arm reports the same state in
+// readiness and in the degraded gauge (whose alert covers both); the capsule arm now does too.
+test("an index that cannot answer a capsule recall is visible in readiness and in the degraded gauge, and clears when it answers", options, async (t) => {
+  const index = slowIndex();
+  const { app, base, user } = await fixture(t, { memoryIndexProvider: "openviking", openVikingClient: index, operatorMetricsToken: "metrics-secret" });
+  const capsule = await app.capsuleService.create(user.id, { title: "Index outage" });
+  await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "preference", layer: "profile", content: "Prefer forest plots." });
+  await app.capsuleService.activate(user.id, capsule.id, { mode: "own" });
+  const account = (await app.store.userById(user.id)).accountCreatedAt;
+  const readiness = async () => (await (await fetch(`${base}/api/ready`)).json()).data.checks.memoryIndex;
+  const gauge = async () => (await (await fetch(`${base}/api/ops/metrics`, { headers: { authorization: "Bearer metrics-secret" } })).text())
+    .split("\n").filter((line) => line.startsWith("open_science_memory_recall_degraded"));
+
+  assert.equal((await readiness()).capsuleRecall, undefined, "nothing has failed yet");
+  assert.deepEqual(await gauge(), [
+    'open_science_memory_recall_degraded{code="none"} 0',
+    'open_science_memory_recall_degraded{arm="capsule",code="none"} 0',
+  ]);
+
+  index.find = async () => { throw Object.assign(new Error("index down"), { code: "memory_index_timeout", status: 503 }); };
+  const answered = await app.capsuleService.recall(user.id, { query: "forest", projectId: "default", accountCreatedAt: account });
+  assert.equal(answered.mode, "lexical", "the answer still comes, from PostgreSQL");
+  assert.deepEqual((await readiness()).capsuleRecall, { lastError: "memory_index_timeout" });
+  assert.equal((await readiness()).recall, undefined, "the research-memory arm is a separate state");
+  assert.deepEqual(await gauge(), [
+    'open_science_memory_recall_degraded{code="none"} 0',
+    'open_science_memory_recall_degraded{arm="capsule",code="memory_index_timeout"} 1',
+  ]);
+
+  index.find = async () => [];
+  await app.capsuleService.recall(user.id, { query: "forest", projectId: "default", accountCreatedAt: account });
+  assert.equal((await readiness()).capsuleRecall, undefined, "the index answered: no longer degraded");
+  assert.equal((await gauge())[1], 'open_science_memory_recall_degraded{arm="capsule",code="none"} 0');
 });

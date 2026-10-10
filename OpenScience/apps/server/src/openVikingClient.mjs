@@ -86,6 +86,11 @@ export function projectMemoryUri(userId, projectId) {
   return `viking://user/${openVikingUserId(userId)}/memories/evimed/project/${openVikingPeerId(projectId)}`;
 }
 
+/** The subtree one conversation's own records occupy (`scope: "session"`), for deletion: a project's conversations are not under the project's. */
+export function sessionMemoryUri(userId, sessionId) {
+  return `viking://user/${openVikingUserId(userId)}/memories/evimed/session/${safeSegment(sessionId)}`;
+}
+
 /** How large a directory this client will read before it refuses, and the level
  *  a leaf file carries. */
 const LIST_MAX_ENTRIES = 100_000;

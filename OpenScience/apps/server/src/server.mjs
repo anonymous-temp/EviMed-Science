@@ -64,7 +64,7 @@ import { moduleState } from "./deploymentComposition.mjs";
 import { PersonalSkillRepositoryImport } from "./personalSkillRepositoryImport.mjs";
 import { PersonalSkillTransfer } from "./personalSkillTransfer.mjs";
 import { createPersonalSkillTransferRoutes } from "./personalSkillTransferRoutes.mjs";
-import { sessionListItems } from "./dshRuntimeAdapter.mjs";
+import { sessionListItems, transcriptToLedgerMessages } from "./dshRuntimeAdapter.mjs";
 import { decodeSkillArchive } from "./skillArchive.mjs";
 import { ExtensionConnections } from "./extensionConnections.mjs";
 import { PersonalSkillGenerationService } from "./personalSkillGenerationService.mjs";
@@ -1579,6 +1579,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     config, researchMemory, memorySubstrate, memoryIndexWorker, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
     // 「重置记忆」 clears what the page shows: the methods, handbooks and capsule notes live in the product ledger.
     resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
+    // A pause for recall turned on under a live runtime: the methods it mounted at launch leave with the idle ones.
+    releasePausedRuntimes: userId => runtimeManager.releasePausedMethodRuntimes(userId),
   });
   const agentApiKeys = productDatabase ? new AgentApiKeyStore(productDatabase) : null;
   /** The accounts an integration key of `ownerId` made for the people behind
@@ -2961,6 +2963,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   runtimeManager.learningService = learningService;
   // And what each launch mounted of it, for the loop's counters.
   runtimeManager.learningMetrics = learningMetrics;
+  // The researcher's own 「记忆」 switches, which the memory page promises over everything a run is handed — the learned and
+  // capsule methods a launch mounts and the resident profile a dispatch writes, not only the records
+  // (`RuntimeManager.recallPausedFor`; 2026-10-10 review M-1, L-5). Unassigned, the manager reads "nothing paused".
+  runtimeManager.memoryPause = (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId);
+  /**
+   * The conversations a project had, from its run ledger and its sessions — what its memory deletion needs to find the records
+   * those conversations wrote (`deleteProjectMemory`, 2026-10-10 review M-10). A ledger that cannot be read names none: the
+   * deletion still finds the conversations the memory store itself knows of, and a project is deleted either way.
+   * @param {any} project @returns {Promise<string[]>}
+   */
+  async function projectConversationIds(project) {
+    const ids = new Set();
+    for (const run of await agentRuns.list(project).catch(() => [])) if (run?.sessionId) ids.add(String(run.sessionId));
+    for (const session of await researchSessions.list(project).catch(() => [])) if (session?.sessionId) ids.add(String(session.sessionId));
+    return [...ids];
+  }
   /** Actual project-owned native inventory, independent of optional research-session metadata.
    * @param {any} user @param {any} project @param {string} sessionId */
   async function authorizeOwnedNativeSession(user, project, sessionId) {
@@ -3277,15 +3295,32 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           subject: run.title ?? run.question ?? null,
         });
       };
+      // A step of this completion that throws costs that step and none of those behind it. About twenty are awaited before
+      // the run's transcript is written, its memory extracted and its lessons queued, and only some of them guarded
+      // themselves: a throw in any other went to `onRunFinishedError`, one audit line, and the run's transcript, memory
+      // and lessons were skipped without a word (2026-10-10 review M-17). Each failure is audited under the step's name;
+      // the credit settlement is still the `finally`'s.
+      const step = async (/** @type {string} */ name, /** @type {() => unknown} */ work) => {
+        try {
+          return await work();
+        } catch (error) {
+          await securityAudit(config, "run.completion.step", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "run_completion_step_failed",
+            detail: `${name}: ${String(/** @type {any} */ (error)?.message ?? "").slice(0, 200)}`,
+          }).catch(() => {});
+          return undefined;
+        }
+      };
       try {
-      await completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork });
+      await step("evolution.runtime", () => completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork }));
       const gapCode = evolution && !internalFor(project.userId, project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
       if (gapCode) {
-        await evolution.integration.publish({ id: `run-gap:${project.id}:${run.id}`, type: "runtime-gap", gapCode, userId:project.userId,projectId:project.id,
-          code: gapCode, track: "M", origin: "platform-inference" });
+        await step("evolution.gap", () => evolution.integration.publish({ id: `run-gap:${project.id}:${run.id}`, type: "runtime-gap", gapCode, userId:project.userId,projectId:project.id,
+          code: gapCode, track: "M", origin: "platform-inference" }));
       }
       if (resultProvenance) {
-        await resultCaptureQueue.drain();
+        await step("results.drain", () => resultCaptureQueue.drain());
         try {
           // Every deliverable file the run left gets a version, receipt or not
           // (2026-10-04): the receipt labels what was graded, and the files a
@@ -3307,17 +3342,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
       await attributeLateCalls(project, run);
       const evaluationRun = runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project));
-      runEvents.publish(run.id, "run/state", {
-        state: run.status,
-        phase: run.phase ?? null,
-        errorCode: run.errorCode ?? null,
-        verification: run.verification ?? null,
-        attempts: run.attempts ?? 0,
+      await step("run.events", () => {
+        runEvents.publish(run.id, "run/state", {
+          state: run.status,
+          phase: run.phase ?? null,
+          errorCode: run.errorCode ?? null,
+          verification: run.verification ?? null,
+          attempts: run.attempts ?? 0,
+        });
+        runtimeEventPump.noteRun(project, run);
       });
-      runtimeEventPump.noteRun(project, run);
       await observeRunMetrics(project, run);
       // Join the run to what it used and produced, off the path: one job per run, never throws.
-      await availability.collector?.enqueueRun(project, run);
+      await step("availability", () => availability.collector?.enqueueRun(project, run));
       if (sourceUnderstandingRuntime) {
         await sourceUnderstandingRuntime.complete(project, run).catch(async error => {
           await securityAudit(config, "source.runtime.release", "failed", {
@@ -3347,7 +3384,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (verifiedEpisodeId) {
         const verificationId = autopilotLogicalDispatchId(run.dispatchId);
         if (isUnsentAutopilotLeaseLoss(run)) {
-          await autopilotService.recordUnsentAttempt(project.userId, verifiedEpisodeId, { projectId: project.id, run, verificationId });
+          await step("autopilot.verification", () => autopilotService.recordUnsentAttempt(project.userId, verifiedEpisodeId, { projectId: project.id, run, verificationId }));
         } else {
           const cleanupTarget = runtimeManager.boundedRuntimeCleanupTarget(project);
           const verdict = await readVerificationVerdict(project, run);
@@ -3376,7 +3413,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           }));
         }
       }
-      const autopilotOwned = await completeOwnedAutopilotRun({
+      const autopilotOwned = await step("autopilot.complete", () => completeOwnedAutopilotRun({
         service: autopilotService, runtimeManager, usageLedger,
         readDelta: async () => {
           let claims = [];
@@ -3399,7 +3436,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           code: typeof error?.code === "string" ? error.code
             : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
         }),
-      }, project, run);
+      }, project, run));
       // The platform's own evidence programme: a finished episode, or a recorded independent check of one of its claims, is the
       // moment a card may be earned (evidenceProgramme.mjs `settleEpisode`, which waits for what is not in yet). Nothing for any run
       // that is not the programme's, and a failure here never touches the run.
@@ -3441,7 +3478,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           code: typeof error?.code === "string" ? error.code : "geo_run_completion_failed",
         }));
       }
-      await settleCharge(evaluationRun);
+      await step("credits.settle", () => settleCharge(evaluationRun));
       // Background work is not a person's research: a lesson, a source being
       // read and an evaluation cell run in the account's internal projects,
       // and each reports where it belongs (the knowledge base's own row). On
@@ -3483,6 +3520,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // caught by `finishInternal` and then caught again, so a step that does
       // not report for itself fails invisibly.
       const reusableClinicalContext = await canReuseRun(project, run).catch(() => false);
+      // What the transcript branch below collected, kept for the memory branch after it: the conversation is read once, while the
+      // container answers, and both consume that read (2026-10-10 review M-15).
+      /** @type {import("./runTranscripts.mjs").CollectedSession[] | null} */
+      let collectedSessions = null;
       await trackLearningWrite((async () => {
         try {
           // A stop already read this one while its container was alive. That
@@ -3494,6 +3535,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const children = await agentRuns.childSessionsOf(project, run).catch(() => []);
           const sessions = preStopTranscripts.take(run.id)
             ?? await collectRunTranscripts(runtimeManager, project, run, { children });
+          collectedSessions = sessions;
           const receipt = await persistRunTranscript({ project, run, sessions });
           await agentRuns.recordLearning(project, run.id, { transcript: receipt });
           if (evolution && reusableClinicalContext) await evolution.finishRun(project, run).catch(error => securityAudit(config, "evolution.outcome", "failed", { code: error?.code ?? "evolution_outcome_unavailable" }));
@@ -3623,16 +3665,28 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
       let messages = [];
       let historyError = null;
-      try {
-        messages = await runtimeManager.sessionMessages(project, run.sessionId, { wake: false });
-      } catch (error) {
-        // A structured run summary stays durable without the transcript, so this
-        // is not fatal — but it was swallowed whole, and no transcript means no
-        // memory sources, which means recordRun extracts nothing and reports
-        // `source: "none"` as if the conversation simply held nothing worth
-        // keeping. The two are indistinguishable in the audit line unless the
-        // reason travels with it.
-        historyError = error?.code ?? error?.name ?? "runtime_history_unavailable";
+      // The conversation the transcript branch already holds, not a second read of the runtime. The container answers
+      // `runtime_not_running` shortly after a run ends (and at once when a stop, an eviction or a crash ended it), which is why the
+      // transcript above is read while it is alive; this branch read the live runtime again, so a run whose container was gone
+      // got no messages, no run summary and no extraction, and only the audit line said why (2026-10-10 review M-15). The live
+      // read stays as the fallback for a run whose own session the hook could not collect.
+      const collectedRoot = (collectedSessions ?? []).find((session) => session.sessionId === run.sessionId)?.transcript ?? null;
+      let messagesRead = "live";
+      if (collectedRoot && collectedRoot.messages.length > 0) {
+        messages = transcriptToLedgerMessages(collectedRoot);
+        messagesRead = "collected";
+      } else {
+        try {
+          messages = await runtimeManager.sessionMessages(project, run.sessionId, { wake: false });
+        } catch (error) {
+          // A structured run summary stays durable without the transcript, so this
+          // is not fatal — but it was swallowed whole, and no transcript means no
+          // memory sources, which means recordRun extracts nothing and reports
+          // `source: "none"` as if the conversation simply held nothing worth
+          // keeping. The two are indistinguishable in the audit line unless the
+          // reason travels with it.
+          historyError = error?.code ?? error?.name ?? "runtime_history_unavailable";
+        }
       }
       const memoryResult = await memoryIntelligence.recordRun(project, run, messages);
       // A run that extracted nothing, said so on the run itself.
@@ -3718,6 +3772,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // indistinguishable.
         detail: [
           `messages=${messages.length}`,
+          `read=${messagesRead}`,
           `source=${memoryResult.source}`,
           `proposed=${memoryResult.proposed}`,
           `extracted=${memoryResult.extracted}`,
@@ -4484,6 +4539,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     sessions: researchMemory.configured ? {
       running: (_user, project) => agentRuns.activeRuns(project),
       state: (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId),
+      // The researcher's own switches, which the capsule half of a recall and a note honour as the records half does.
+      paused: (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId),
       // What a conversation's own state adds at its first step: the capability it is bound to (a conversation typed in the
       // kernel's frame passes through no dispatch, so this is where it learns the binding — `boundConversationNote`), and the
       // pack a 「试用一次」 conversation is trying. An unreadable scope must never
@@ -4864,7 +4921,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (project) {
           if (await taskManager.hasActiveProject(project)) throw Object.assign(new Error("project_busy"), { code: "project_busy" });
           await runtimeManager.stop(project, { by: "platform" });
-          if (researchMemory.configured) await researchMemory.deleteProjectMemory(owner.id, project.id);
+          if (researchMemory.configured) await researchMemory.deleteProjectMemory(owner.id, project.id, { sessionIds: await projectConversationIds(project) });
         }
         await removeStudyProject(owner, study.projectId).catch(async (error) => {
           // A project that is already gone leaves its draft behind: the row is the only thing left to remove.
@@ -5717,7 +5774,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService);
+        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService, capsuleService);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -5731,6 +5788,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           runtimeManager,
           researchMemory,
           memorySubstrate,
+          capsuleService,
           memoryIndexWorker,
           usageLedger,
           notificationService,
@@ -6955,7 +7013,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // 2026-10-05 this asked the index first and failed the deletion when
           // it timed out (live: 503 `memory_index_timeout`, and the same request
           // succeeded two minutes later).
-          if (researchMemory.configured) await researchMemory.deleteProjectMemory(user.id, project.id);
+          if (researchMemory.configured) await researchMemory.deleteProjectMemory(user.id, project.id, { sessionIds: await projectConversationIds(project) });
           // With no ledger to hand the withdrawal to (a test's store, a deployment
           // whose index is not composed) there is nothing durable to keep: one
           // attempt, never waited on.
@@ -8716,8 +8774,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ webVitals = null, judgeService = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService);
+async function operatorMetricsText({ webVitals = null, judgeService = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null, capsuleService = null }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService, capsuleService);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -8769,11 +8827,14 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, conf
       "The most times one owed withdrawal has been tried and refused.", "gauge", { value: withdrawals.mostAttempts });
   }
   addMetric(lines, "open_science_memory_recall_degraded",
-    "Whether a recall last had to fall back to the term matcher because the index could not answer.",
-    "gauge", {
-      value: memoryIndex.recall?.lastError ? 1 : 0,
-      labels: { code: String(memoryIndex.recall?.lastError ?? "none") },
-    });
+    "Whether a recall last had to fall back to the term matcher because the index could not answer; the capsule half of a recall is the series with arm=\"capsule\".",
+    "gauge", [
+      { value: memoryIndex.recall?.lastError ? 1 : 0, labels: { code: String(memoryIndex.recall?.lastError ?? "none") } },
+      // Only where the capsule half has an index to lose: the index provider is the one in use.
+      ...(memoryIndex.provider === "openviking"
+        ? [{ value: memoryIndex.capsuleRecall?.lastError ? 1 : 0, labels: { arm: "capsule", code: String(memoryIndex.capsuleRecall?.lastError ?? "none") } }]
+        : []),
+    ]);
   // OpenList degraded is a green check (nothing mounted is the operator's
   // provisioning, not an outage), so the readiness gauge reads `ok` for it and
   // this is where the state is scraped. The counter is what the probe cache
@@ -9376,7 +9437,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null, vcr = null, credits = null, judgeService = null) {
+async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null, vcr = null, credits = null, judgeService = null, capsules = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -9390,7 +9451,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     auth: await readinessCheck(async () => readinessAuth(config, store)),
     stateStore: await readinessCheck(async () => readinessStateStore(config, store)),
     memory: await readinessCheck(async () => readinessMemory(researchMemory, config)),
-    memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memorySubstrate, memoryIndexWorker)),
+    memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memorySubstrate, memoryIndexWorker, capsules)),
     usageLedger: await readinessCheck(async () => readinessUsageLedger(config, usageLedger)),
     inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
     documentParser: await readinessCheck(async () => readinessDocumentParser(config, documentParser)),
@@ -9560,7 +9621,7 @@ async function readinessMemory(researchMemory, config) {
  * over a degraded one. `OPEN_SCIENCE_MEMORY_INDEX_STRICT` is the operator's
  * statement that they would rather see the failure, and it is the same switch
  * that makes those recalls fail instead of degrade. */
-async function readinessMemoryIndex(config, substrate, worker) {
+async function readinessMemoryIndex(config, substrate, worker, capsules = null) {
   const required = Boolean(config.memoryIndexStrict);
   const status = substrate
     ? await substrate.status()
@@ -9599,8 +9660,16 @@ async function readinessMemoryIndex(config, substrate, worker) {
     ...(rerank ? { rerank } : {}),
     // Whether recall has had to answer without the index. It is the one symptom
     // of "up but refusing" that the reader of a recall can observe, and it was
-    // computed and then kept to itself.
-    ...(substrate?.lastError ? { recall: { lastError: substrate.lastError } } : {}),
+    // computed and then kept to itself. `lastError` is the index's condition
+    // now (it clears when the index answers again; the degraded gauge reads it);
+    // `linksError` is memories served without their labels, which is not.
+    ...(substrate?.lastError || substrate?.lastLinksError ? { recall: {
+      ...(substrate.lastError ? { lastError: substrate.lastError } : {}),
+      ...(substrate.lastLinksError ? { linksError: substrate.lastLinksError } : {}),
+    } } : {}),
+    // The same for the capsule half of a recall, which falls back to lexical search when the index cannot answer and said so
+    // to nobody (2026-10-10 review M-7: `lastIndexError` was read only by a test). It clears when the index answers.
+    ...(capsules?.lastIndexError ? { capsuleRecall: { lastError: capsules.lastIndexError } } : {}),
   };
   if (required && !(status.configured && status.connected)) {
     throw readinessFailure(status.code ?? "memory_index_unavailable", details);

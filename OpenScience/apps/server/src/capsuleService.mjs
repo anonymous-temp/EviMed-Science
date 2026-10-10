@@ -40,6 +40,20 @@ function activationKey(projectId) {
   return projectId == null ? "active-capsules:account" : `active-capsules:project:${productId(projectId, "projectId")}`;
 }
 
+/** How many capsules are in force together: the activation limit, and the window every reader of the lists looks through. */
+const ACTIVE_CAPSULE_LIMIT = 8;
+
+/**
+ * The capsules in force in a project, as every reader sees them: the project's own list first, then the account's,
+ * each capsule once, at most eight.
+ * @param {{ items: any[] }} local @param {{ items: any[] }} global
+ */
+function inForceWindow(local, global) {
+  return [...local.items, ...global.items]
+    .filter((item, index, all) => all.findIndex((other) => other.capsuleId === item.capsuleId) === index)
+    .slice(0, ACTIVE_CAPSULE_LIMIT);
+}
+
 /** The label fields a recalled entry of a received pack carries; nothing for the researcher's own. @param {any} capsule @param {any} payload */
 function labelled(capsule, payload) {
   const origin = sharedFrom(capsule, payload);
@@ -494,7 +508,7 @@ export class CapsuleService {
 
   /**
    * What a trial conversation is handed: the pack's entries in force, as a
-   * block of context, bounded. Empty when the pack is gone.
+   * block of context, bounded. Empty when the pack is gone or was taken down.
    *
    * No bar in the conversation says it is a trial (build spec §9.4 #8): its
    * title carries 「试用 ·」 (`trialTitle`), and the one sentence the reader
@@ -506,6 +520,9 @@ export class CapsuleService {
   async trialContext(userId, capsuleId) {
     const capsule = await this.documents.get(userId, "capsule", capsuleId);
     if (!capsule || capsule.payload.imported !== true) return "";
+    // A pack the author or the operator took down is out of force everywhere (plan §7), also for a trial that began before:
+    // the trial is marked on the conversation and this is read at each of its first steps (2026-10-10 review M-9).
+    if (capsule.payload.takenDown) return "";
     const entries = (await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId, status: "approved" } })).items;
     if (entries.length === 0) return "";
     const lines = [];
@@ -561,11 +578,7 @@ export class CapsuleService {
           { expectedRevision: 0, projectId }); }
         catch (error) { if (error.code !== "product_revision_conflict") throw error; capsule = await this.get(userId, id); }
       }
-      if (current.items.length === 0) {
-        try { await this.documents.put(userId, "preferences", activationKey(projectId), { items: [{ capsuleId: capsule.id, mode: "own" }] },
-          { expectedRevision: current.record?.revision ?? 0, projectId }); }
-        catch (error) { if (error.code !== "product_revision_conflict") throw error; }
-      }
+      await this.#putNotesInForce(userId, projectId, capsule.id);
     }
     // Where the suggestion came from, when the caller knows: a digest decision
     // is the researcher's own act, not a runtime inference about the project,
@@ -588,6 +601,45 @@ export class CapsuleService {
       if (error.code !== "product_revision_conflict") throw error;
       return this.documents.get(userId, "fact", id);
     }
+  }
+
+  /**
+   * Put the project's notes capsule among the capsules in force there, ahead of what is enabled already — the
+   * researcher's own first, a borrowed pack kept — so a note is read by the recall and the profile that follow it.
+   * It was done only when the project's list was empty, which left a note stored, approved, in a capsule nothing read
+   * the moment a received pack was enabled for the project (2026-10-10 review M-8). A list already full (eight)
+   * evicts nothing: the note is kept and `inForce` says it is not read. Returns whether it is in force.
+   * @param {string} userId @param {string} projectId @param {string} capsuleId
+   */
+  async #putNotesInForce(userId, projectId, capsuleId) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const local = await this.active(userId, projectId);
+      const global = projectId ? await this.active(userId, null) : { items: [] };
+      if (inForceWindow(local, global).some((item) => item.capsuleId === capsuleId)) return true;
+      if (local.items.length >= ACTIVE_CAPSULE_LIMIT) return false;
+      try {
+        await this.documents.put(userId, "preferences", activationKey(projectId),
+          { items: [{ capsuleId, mode: "own" }, ...local.items.filter((item) => item.capsuleId !== capsuleId)] },
+          { expectedRevision: local.record?.revision ?? 0, projectId });
+        return true;
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "product_revision_conflict") throw error;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Whether a capsule is read in a project: in its list or the account's, inside the window of eight every reader
+   * looks through, and not taken down. What the gateway tells the model about a note rests on this.
+   * @param {string} userId @param {string | null} projectId @param {string} capsuleId
+   */
+  async inForce(userId, projectId, capsuleId) {
+    const local = projectId ? await this.active(userId, projectId) : { items: [] };
+    const global = await this.active(userId, null);
+    if (!inForceWindow(local, global).some((item) => item.capsuleId === capsuleId)) return false;
+    const capsule = await this.documents.get(userId, "capsule", capsuleId);
+    return Boolean(capsule) && !capsule.payload.takenDown;
   }
 
   /**

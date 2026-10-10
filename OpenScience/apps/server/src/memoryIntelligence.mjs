@@ -299,7 +299,8 @@ function turnEndingsByTurn(messages) {
 export function conversationMemorySources(messages, sessionId, { dispatchedRequestIds = null } = {}) {
   if (!Array.isArray(messages)) return { sources: [], excluded: [] };
   const turnEndings = turnEndingsByTurn(messages);
-  const sources = [];
+  /** Every source in order, with the turn its message belongs to (null where the transcript records none). @type {{ source: { sourceRef: string, role: string, text: string }, turn: unknown }[]} */
+  const entries = [];
   /** @type {Map<string, number>} */
   const excluded = new Map();
   for (let index = 0; index < messages.length; index += 1) {
@@ -316,19 +317,68 @@ export function conversationMemorySources(messages, sessionId, { dispatchedReque
     const rawId = message?.info?.id ?? message?.id ?? String(index + 1);
     const safeId = String(rawId).replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80) || String(index + 1);
     const text = unwrapUserWrappers(messageText(message));
+    const turn = message?.info?.turnStartSeq ?? message?.turnStartSeq ?? null;
     if (text) {
-      sources.push({
-        sourceRef: `sessions/${sessionId}/messages/${safeId}`,
-        role,
-        text: text.slice(0, 12_000),
+      entries.push({
+        source: {
+          sourceRef: `sessions/${sessionId}/messages/${safeId}`,
+          role,
+          text: text.slice(0, 12_000),
+        },
+        turn,
       });
     }
-    sources.push(...toolMemorySources(message, sessionId, safeId));
+    for (const source of toolMemorySources(message, sessionId, safeId)) entries.push({ source, turn });
   }
   return {
-    sources: sources.slice(-20),
+    sources: windowedSources(entries),
     excluded: [...excluded.entries()].map(([reason, count]) => ({ reason, count })),
   };
+}
+
+/** The most sources the extractor is shown. */
+export const MEMORY_SOURCE_WINDOW = 20;
+
+/** The most requests of the run's own turn put back when the window would cut them. */
+const KEPT_REQUESTS = 4;
+
+/**
+ * The sources the extractor reads: the last `MEMORY_SOURCE_WINDOW`, except that the researcher's own request is never what
+ * the window cuts.
+ *
+ * It used to be the last twenty, full stop. A run that worked in many steps — each assistant message and each completed tool
+ * result is a source — pushed the request that started it out of the window, and then there was no run summary (it needs a
+ * question) and no memory about the person could quote them (2026-10-10 review M-16; measured on the 30 real transcripts of
+ * the local integration run, one of 104 messages lost its request and the extractor was shown the assistant talking to itself).
+ *
+ * So the user sources of the final turn — the turn of the last request there is, which is the run that just ended — are kept
+ * first: at most four, the opening one and the latest three, so a turn full of corrections still leaves the window its room.
+ * What remains of the twenty is the most recent of everything else, and the whole is returned in the order it happened. An
+ * earlier turn's requests are not put back (the runs of those turns read them), and a transcript with no turn markers keeps
+ * only its last request. The bound is the same twenty: nothing here makes the extraction input larger.
+ * @param {readonly { source: { sourceRef: string, role: string, text: string }, turn: unknown }[]} entries
+ * @returns {{ sourceRef: string, role: string, text: string }[]}
+ */
+function windowedSources(entries) {
+  if (entries.length <= MEMORY_SOURCE_WINDOW) return entries.map((entry) => entry.source);
+  let lastRequest = -1;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    if (entries[index].source.role === "user") { lastRequest = index; break; }
+  }
+  /** @type {Set<number>} */
+  const kept = new Set();
+  if (lastRequest >= 0) {
+    const turn = entries[lastRequest].turn;
+    const requests = [];
+    for (const [index, entry] of entries.entries()) {
+      if (entry.source.role === "user" && (turn == null ? index === lastRequest : entry.turn === turn)) requests.push(index);
+    }
+    const chosen = requests.length > KEPT_REQUESTS ? [requests[0], ...requests.slice(-(KEPT_REQUESTS - 1))] : requests;
+    for (const index of chosen) kept.add(index);
+  }
+  // A request the window already holds is in `kept` and takes no second place: the rest of the room is the most recent others.
+  for (let index = entries.length - 1; index >= 0 && kept.size < MEMORY_SOURCE_WINDOW; index -= 1) kept.add(index);
+  return [...kept].sort((left, right) => left - right).map((index) => entries[index].source);
 }
 
 function parseModelJson(content) {

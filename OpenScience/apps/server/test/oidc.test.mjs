@@ -291,6 +291,31 @@ test("hosted OIDC code flow validates PKCE and ID token without persisting provi
   }
 });
 
+// 2026-10-10 review M-9 (d): an identity with no name claim was named by its e-mail address, which a shared capsule then
+// printed as its author. The address is still the admission evidence (allowed domains); it is not a display name.
+test("an OIDC account with no name claim is not named by its e-mail address or an address-shaped username", async () => {
+  for (const claims of [{ name: undefined }, { name: undefined, preferred_username: "someone@example.invalid" }]) {
+    const provider = await startMockProvider(claims);
+    const dataDir = await mkdtemp(path.join(tmpdir(), "open-science-oidc-name-"));
+    const app = createWebApiApp({ dataDir, port: 0, publicUrl: "http://127.0.0.1", ...oidcOverrides(provider.issuer) });
+    try {
+      const address = await app.listen(0, "127.0.0.1");
+      const base = `http://127.0.0.1:${address.port}`;
+      app.config.publicUrl = base;
+      const start = await fetch(`${base}/api/auth/oidc/start`, { redirect: "manual" });
+      const authorize = await fetch(start.headers.get("location"), { redirect: "manual" });
+      const callback = await fetch(authorize.headers.get("location"), { headers: { Cookie: cookieValue(start, "os_oidc_flow") }, redirect: "manual" });
+      assert.equal(callback.status, 303, "the e-mail claim still admits the account");
+      const me = await fetch(`${base}/api/me`, { headers: { Cookie: cookieValue(callback, "os_session") } });
+      assert.equal((await me.json()).data.user.name, "EviMed User", JSON.stringify(claims));
+    } finally {
+      await app.close();
+      await provider.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  }
+});
+
 test("the sign-in returns only to a path inside /app on this origin, and anything else lands on the front door", () => {
   assert.equal(OIDC_DEFAULT_RETURN_PATH, "/app/chat");
   for (const address of ["/app/chat", "/app/runs/run_1/files/a.md?quote=x%20y#CLM-001", "/app/memory?record=rec_1"]) assert.equal(safeReturnTo(address), address);

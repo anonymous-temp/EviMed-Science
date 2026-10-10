@@ -7,7 +7,7 @@ import { RuntimeManager, issueEviMedWorkloadToken } from "../src/runtimeManager.
 import { createCapsuleGatewayHandler } from "../src/capsuleGateway.mjs";
 import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
 
-async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null, subscriptions = null, clinicalContext = null } = {}) {
+async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null, subscriptions = null, clinicalContext = null, noteInForce = true, noteStatus = "approved" } = {}) {
   const dir = await mkdtemp("/tmp/evimed-capsule-gateway-");
   const secret = randomBytes(32).toString("hex");
   const project = { userId: "owner", id: "project-one" };
@@ -21,7 +21,9 @@ async function fixture(t, { memorySubstrate = null, sessions = null, recallItems
   const calls = [];
   const service = {
     recall: async (userId, input) => { calls.push({ action: "recall", userId, input }); return { items: structuredClone(recallItems), contextOnly: true }; },
-    note: async (userId, projectId, input) => { calls.push({ action: "note", userId, projectId, input }); return { status: "candidate" }; },
+    note: async (userId, projectId, input) => { calls.push({ action: "note", userId, projectId, input }); return { id: "note-1", payload: { status: noteStatus, capsuleId: "notes-capsule" } }; },
+    // Whether the capsule a note landed in is read by this project (`CapsuleService.inForce`).
+    inForce: async (userId, projectId, capsuleId) => { calls.push({ action: "inForce", userId, projectId, capsuleId }); return noteInForce; },
   };
   let exists = true;
   let authorize;
@@ -318,4 +320,94 @@ test("a recall of subscribed zones asks the frontier's audience first, like ever
   assert.deepEqual(asked, [["owner", "project-one", "房颤"]], "nothing of the zones was read for the others");
   const f = await fixture(t, { recallItems: [{ id: "fact-1", content: "own", mode: "own" }], subscriptions: guarded });
   assert.deepEqual((await (await f.request("recall", { query: "房颤" })).json()).items.map((item) => item.id), ["fact-1", "ec_1"], "through the gateway for the project's own account");
+});
+
+// 2026-10-10 review M-1: the memory page's pause reached the records and not the capsule half. The records half
+// honours it inside the substrate; the gateway is where a runtime's recall and note reach the capsules.
+//   recall paused  -> nothing is read: not the capsules, not the records, and the answer says so.
+//   learning paused -> nothing is written: the note is refused by name, never answered as taken.
+test("a recall under the researcher's pause reads no capsule fact and says paused; learning paused alone leaves the recall", async (t) => {
+  const substrateCalls = [];
+  const memorySubstrate = { async recall(_userId, _query, scope) { substrateCalls.push(scope); return []; } };
+  const asked = [];
+  let state = { learning: true, recall: true, trial: false };
+  const sessions = { ...sessionsDouble([{ id: "run_1", sessionId: "ses_1" }]),
+    paused: async (userId, projectId, sessionId) => { asked.push([userId, projectId, sessionId]); return state; } };
+  const subscriptions = { recall: async () => [{ id: "ec_1", source: "evidence_zone", contextOnly: true }] };
+  const f = await fixture(t, { memorySubstrate, sessions, subscriptions, recallItems: [{ id: "fact_1", content: "先给结论" }] });
+
+  const paused = await (await f.request("recall", { query: "结论" })).json();
+  assert.equal(paused.mode, "paused");
+  assert.match(paused.notice, /暂停/);
+  assert.deepEqual(paused.items.map((item) => item.id), ["ec_1"], "nothing of the researcher's memory; a followed evidence zone is not their memory");
+  assert.deepEqual(paused.sources, { memory: 0, capsule: 0, zone: 1 });
+  assert.equal(paused.contextOnly, true);
+  assert.equal(f.calls.filter((call) => call.action === "recall").length, 0, "capsule facts are memory too");
+  assert.deepEqual(substrateCalls, [], "and the records are not asked either");
+  assert.deepEqual(sessions.recorded, [], "a run is not said to have been handed what it was not");
+  assert.deepEqual(asked, [["owner", "project-one", "ses_1"]], "the account and the project come from the credential; the one running conversation is named");
+
+  // Recall paused is not learning paused, and the reverse.
+  state = { learning: true, recall: false, trial: false };
+  assert.deepEqual((await (await f.request("recall", { query: "结论" })).json()).items.map((item) => item.id), ["fact_1", "ec_1"]);
+  state = { learning: false, recall: false, trial: false };
+  const open = await (await f.request("recall", { query: "结论" })).json();
+  assert.notEqual(open.mode, "paused", "nothing paused: the recall is what it was");
+  assert.deepEqual(open.items.map((item) => item.id), ["fact_1", "ec_1"]);
+});
+
+test("a note under the researcher's pause is refused by name and never answered as taken; recall paused alone still takes notes", async (t) => {
+  let state = { learning: true, recall: true, trial: false };
+  const sessions = { ...sessionsDouble([]), paused: async () => state };
+  const f = await fixture(t, { sessions });
+  const refused = await (await f.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
+  assert.equal(refused.entry, null);
+  assert.equal(refused.takesEffect, false);
+  assert.equal(refused.reviewRequired, false);
+  assert.equal(refused.status, "memory_paused");
+  assert.match(refused.notice, /没有记下/);
+  assert.equal(f.calls.filter((call) => call.action === "note").length, 0, "nothing was written");
+
+  state = { learning: false, recall: true, trial: false };
+  const taken = await (await f.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
+  assert.equal(taken.takesEffect, true, "reading and writing are separate switches");
+  assert.equal(taken.status, undefined);
+  assert.equal(f.calls.filter((call) => call.action === "note").length, 1);
+});
+
+test("with several conversations running the pause asked is the account's and the project's; a pause that cannot be read is unavailable, not off", async (t) => {
+  const asked = [];
+  const running = [{ id: "run_1", sessionId: "ses_1" }, { id: "run_2", sessionId: "ses_2" }];
+  const sessions = { ...sessionsDouble(running), paused: async (_u, _p, sessionId) => { asked.push(sessionId); return { learning: false, recall: false, trial: false }; } };
+  const f = await fixture(t, { sessions, recallItems: [{ id: "fact_1", content: "x" }] });
+  assert.equal((await f.request("recall", { query: "x" })).status, 200);
+  assert.deepEqual(asked, [null], "it cannot tell which conversation is asking, so it asks about none");
+
+  const unreadable = { ...sessionsDouble([]), paused: async () => { throw new Error("settings store down"); } };
+  const g = await fixture(t, { sessions: unreadable, recallItems: [{ id: "fact_1", content: "x" }] });
+  assert.equal((await g.request("recall", { query: "x" })).status, 503, "the tool reports memory unavailable; it does not recall for a researcher who may have asked for nothing");
+  assert.equal((await g.request("note", { factKind: "preference", content: "x" })).status, 503);
+  assert.deepEqual(g.calls, []);
+});
+
+// 2026-10-10 review M-8: the answer to a note was a constant. A note stored in a capsule nothing reads must not be
+// reported as taking effect.
+test("a note answers takesEffect from what the service says is in force, and says when it is not", async (t) => {
+  const f = await fixture(t);
+  const taken = await (await f.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
+  assert.equal(taken.takesEffect, true);
+  assert.equal(taken.notice, undefined);
+  assert.deepEqual(f.calls.filter((call) => call.action === "inForce"), [{ action: "inForce", userId: "owner", projectId: "project-one", capsuleId: "notes-capsule" }],
+    "the account and the project come from the credential; the capsule is the one the note landed in");
+
+  const unread = await fixture(t, { noteInForce: false });
+  const kept = await (await unread.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
+  assert.equal(kept.takesEffect, false);
+  assert.match(kept.notice, /不会被读取/);
+  assert.equal(kept.entry.id, "note-1", "it is kept, and the answer does not pretend otherwise");
+
+  const undone = await fixture(t, { noteStatus: "retired" });
+  assert.equal((await (await undone.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json()).takesEffect, false,
+    "a note the researcher already undid is not in force by being noted again");
+  assert.equal(undone.calls.filter((call) => call.action === "inForce").length, 0, "nothing to ask about a note that is not approved");
 });

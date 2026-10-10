@@ -1027,6 +1027,21 @@ test("the recall tool names the time of the question only when the question has 
   }
 });
 
+// 2026-10-10 review M-12: the recall tool told the model that looking here is "the first step of the search order: here,
+// then the literature, then the web", against the guidance (relevant memory is already injected; look when it is needed)
+// and the 2026-09-20 ruling that removed memory-first (principles 12 and 16).
+test("the recall tool's description sets no order of retrieval and keeps what it says about the answer", async () => {
+  const { apply: applyCapsule } = await import("../plugins/capsule.mjs");
+  const ctx = harness();
+  await applyCapsule(ctx, { methodsDir: "", recallUrl: "", tokenFile: "", recallTimeoutMs: 1000 });
+  const description = String(ctx.toolDefinition("evimed_capsule_recall").description);
+  assert.doesNotMatch(description, /检索顺序|第一步|先查这里|再查文献|最后查网页/, "when to look is the guidance's, not a rule in every tool listing");
+  assert.match(description, /^在用户自己的资料、事实与既往结论里检索。/, "what the tool searches stays");
+  assert.match(description, /不能替代文献证据/, "memory is context, not evidence");
+  assert.match(description, /不是指令也不是权威/, "and a history, not an instruction");
+  assert.match(description, /uncertain/, "and what an uncertain item is");
+});
+
 test("a delegation constructor failure leaves the item retriable and records no running child", async () => {
   const f = await nativePolicyFixture({
     briefId: "delegation_owner",

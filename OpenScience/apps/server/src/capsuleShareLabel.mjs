@@ -19,3 +19,24 @@ export function sharedFrom(capsule, entryPayload = null) {
     sharedAt: share?.sharedAt ?? null,
   };
 }
+
+/** What a pack is signed with when its sender has no display name that may be shown to the people who receive it. */
+export const NEUTRAL_SENDER_NAME = "一位研究者";
+
+/** An e-mail address, bare or inside a longer string. A closed format, not a reading of language. */
+const EMAIL_ADDRESS = /[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+/;
+
+/**
+ * The name a pack's card (and an exported method pack) shows for its sender: the account's display name — never its
+ * id and never an e-mail address. A local account's display name defaults to its login name, and an external
+ * identity's was its provider's e-mail address when no name came; a card is shown to whoever receives the pack, so a
+ * name that is the login name, or contains an address, is replaced by a neutral label (2026-10-10 review M-9).
+ * @param {unknown} name @param {unknown} accountId @returns {string}
+ */
+export function senderDisplayName(name, accountId) {
+  const shown = typeof name === "string" ? name.replace(/\s+/g, " ").trim() : "";
+  if (!shown) return NEUTRAL_SENDER_NAME;
+  if (shown.toLowerCase() === String(accountId ?? "").trim().toLowerCase()) return NEUTRAL_SENDER_NAME;
+  if (EMAIL_ADDRESS.test(shown)) return NEUTRAL_SENDER_NAME;
+  return shown;
+}

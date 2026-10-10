@@ -15,7 +15,10 @@
 // Together these are the long-term profile, so they stay relevant whatever the
 // question is. Every other kind is episodic and must match the query. A
 // correction belongs here because repeating a mistake the user already fixed
-// costs more than carrying it into an unrelated question.
+// costs more than carrying it into an unrelated question. Both arms offer these
+// whatever the question: the builtin arm by listing them, the index arm by
+// joining them to what it nominated (`MemorySubstrate`), whose own gate for
+// every other kind is a similarity floor where the builtin arm's is a term match.
 export const DURABLE_RECALL_KINDS = new Set(["profile", "preference", "behavior", "correction"]);
 
 // The profile must not crowd out memories that are relevant to this particular

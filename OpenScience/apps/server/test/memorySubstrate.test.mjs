@@ -47,7 +47,7 @@ function record(overrides = {}) {
 /** A research-memory store that records what was asked of it. */
 function fakeStore(records, { memos = [] } = {}) {
   const byId = new Map(records.map((row) => [row.id, row]));
-  const calls = { getRecord: [], relevant: 0, list: 0 };
+  const calls = { getRecord: [], relevant: 0, list: 0, listRecords: [] };
   return {
     calls,
     async getRecord(_userId, id) {
@@ -62,6 +62,11 @@ function fakeStore(records, { memos = [] } = {}) {
     },
     async listAllRecords() {
       return records;
+    },
+    // As the store answers it: the filters are the store's, so a caller that forgets one is seen.
+    async listRecords(_userId, { statuses = [], kinds = [] } = {}) {
+      calls.listRecords.push({ statuses, kinds });
+      return records.filter((row) => (!statuses.length || statuses.includes(row.status)) && (!kinds.length || kinds.includes(row.kind)));
     },
     async list() {
       calls.list += 1;
@@ -314,6 +319,58 @@ test("an index that is down degrades the recall instead of failing the run", asy
   assert.equal(substrate.lastError, "memory_index_unavailable", "a silent fallback is an outage nobody can see");
 });
 
+// 2026-10-10 review M-6: `lastError` was assigned on a failure and never cleared, so the readiness field, the
+// open_science_memory_recall_degraded gauge and the alert behind it (which says every recall for fifteen minutes fell
+// back) stayed on after one transient failure, until a restart. It was also set by a failure to read the labels of a
+// memory (conflicts, source states) from the store, which is not an index outage.
+test("the degraded signal clears when the index answers again, and only an index failure sets it", async () => {
+  const records = [record({ id: "rec1" })];
+  const store = fakeStore(records);
+  const flaky = fakeIndex([hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.9)]);
+  const find = flaky.find;
+  let down = true;
+  flaky.find = async (...args) => {
+    if (down) throw Object.assign(new Error("gone"), { code: "memory_index_timeout" });
+    return find(...args);
+  };
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: flaky });
+  assert.equal(substrate.lastError, null);
+
+  assert.deepEqual((await substrate.recall(USER, "tables", {})).map((row) => row.id), ["fallback"]);
+  assert.equal(substrate.lastError, "memory_index_timeout");
+
+  down = false;
+  assert.deepEqual((await substrate.recall(USER, "tables", {})).map((row) => row.id), ["record:rec1"]);
+  assert.equal(substrate.lastError, null, "one transient failure must not alarm until a restart");
+});
+
+test("a failure to read a memory's labels is not an index outage, and clears with the next read that works", async () => {
+  const rec = record({ id: "rec1" });
+  const index = fakeIndex([hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.9)]);
+  let broken = true;
+  const store = { ...fakeStore([rec]), async recallLinks() {
+    if (broken) throw Object.assign(new Error("relations table locked"), { code: "memory_links_unavailable" });
+    return { conflicts: new Map(), sources: new Map() };
+  } };
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: index });
+
+  assert.deepEqual((await substrate.recall(USER, "tables", {})).map((row) => row.id), ["record:rec1"], "served, unlabelled");
+  assert.equal(substrate.lastError, null, "the index answered; this is not what the degraded gauge and its alert are about");
+  assert.equal(substrate.lastLinksError, "memory_links_unavailable", "but it is not claimed clean either");
+
+  broken = false;
+  await substrate.recall(USER, "tables", {});
+  assert.equal(substrate.lastLinksError, null);
+  assert.equal(substrate.lastError, null);
+});
+
+test("a failure of the store behind a ranked recall is not the index's either", async () => {
+  const store = { ...fakeStore([record({ id: "rec1" })]), async listRecords() { throw Object.assign(new Error("db blip"), { code: "memory_store_unavailable" }); } };
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: fakeIndex([]) });
+  assert.deepEqual((await substrate.recall(USER, "tables", {})).map((row) => row.id), ["fallback"], "the term matcher still answers");
+  assert.equal(substrate.lastError, null, "the index answered");
+});
+
 test("an operator who would rather see the failure gets it", async () => {
   const failure = Object.assign(new Error("gone"), { code: "memory_index_unavailable" });
   const substrate = new MemorySubstrate(
@@ -351,6 +408,97 @@ test("the profile keeps at most half the budget, whichever provider ranked it", 
     "the episodic match was crowded out; the budget is not shared");
   assert.equal(recalled.filter((row) => ["preference", "profile", "behavior", "correction"].includes(row.kind)).length, 2);
   assert.equal(recalled.length, 3, "nothing else was available to fill the remaining slot");
+});
+
+// 2026-10-10 review M-3: the index arm asked for the nearest neighbours at any distance and trusted the
+// nominations alone. A greeting therefore received up to eight memories however far they were, and a standing
+// preference outside the nominations never arrived — while the builtin arm always offers the durable kinds and needs
+// a term match for the rest, and memoryRecallPolicy.mjs says both arms must answer "which reach the prompt" alike.
+const uriOf = (row) => memoryUri(USER, { scope: row.scope, scopeId: row.scopeId, kind: row.kind, recordId: row.id });
+
+function standingFixture() {
+  return [
+    record({ id: "pref", kind: "preference", key: "tone", value: "Prefers tables over prose." }),
+    record({ id: "near", kind: "project_fact", scope: "project", scopeId: PROJECT, key: "cohort", value: "The cohort has 500 patients.", summary: "" }),
+    record({ id: "far", kind: "follow_up", scope: "project", scopeId: PROJECT, key: "reagent", value: "Order the reagent.", summary: "" }),
+  ];
+}
+
+test("a question the index finds nothing close to gets the researcher's standing profile and no episodic memory", async () => {
+  const records = standingFixture();
+  const [, near, far] = records;
+  const store = fakeStore(records);
+  // A greeting: only distant neighbours, nominated by an index that was asked for a floor and ignored it.
+  const index = fakeIndex([hit(uriOf(far), 0.31), hit(uriOf(near), 0.38)]);
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: index });
+
+  const recalled = await substrate.recall(USER, "你好", { projectId: PROJECT });
+
+  assert.deepEqual(recalled.map((row) => row.id), ["record:pref"], "the preference is the profile; the project facts were nowhere near the question");
+  assert.equal(index.calls.find[0].options.scoreThreshold, 0.5, "the page's floor is asked of the server as well");
+  assert.equal(store.calls.relevant, 0, "this is the index arm, not the fallback");
+});
+
+test("the standing profile is offered when the index nominated none of it, and each memory arrives once", async () => {
+  const records = standingFixture();
+  const [pref, near, far] = records;
+  const store = fakeStore(records);
+
+  const answered = new MemorySubstrate(openVikingConfig, { store, openViking: fakeIndex([hit(uriOf(near), 0.83), hit(uriOf(far), 0.3)]) });
+  assert.deepEqual((await answered.recall(USER, "how many patients", { projectId: PROJECT })).map((row) => row.id), ["record:near", "record:pref"],
+    "what the question is about first; the profile beside it; the distant fact not at all");
+
+  const empty = new MemorySubstrate(openVikingConfig, { store, openViking: fakeIndex([]) });
+  assert.deepEqual((await empty.recall(USER, "anything", { projectId: PROJECT })).map((row) => row.id), ["record:pref"],
+    "an index that found nothing is not a reason to forget who the researcher is");
+  assert.deepEqual(store.calls.listRecords.at(-1), { statuses: ["active"], kinds: ["profile", "preference", "behavior", "correction"] },
+    "the durable kinds, and in force only");
+
+  // A durable memory the index also nominates, below the floor or above it, is one row.
+  for (const score of [0.2, 0.9]) {
+    const both = new MemorySubstrate(openVikingConfig, { store, openViking: fakeIndex([hit(uriOf(pref), score)]) });
+    assert.deepEqual((await both.recall(USER, "tables", { projectId: PROJECT })).map((row) => row.id), ["record:pref"], String(score));
+  }
+});
+
+test("when more of the profile is offered than fits, the most important of it is what reaches the prompt, as on the term matcher", async () => {
+  // Six standing preferences, listed most important first as the store lists them, and updated in the opposite order: recency
+  // would put the least important first. The durable reservation is half of eight slots, so four reach the prompt.
+  const records = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4].map((importance, index) => record({
+    id: `p${index + 1}`, kind: "preference", key: `pref.${index + 1}`, value: `Preference number ${index + 1}.`, importance,
+    updatedAt: `2026-09-0${index + 1}T00:00:00Z`,
+  }));
+  const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore(records), openViking: fakeIndex([]) });
+  const recalled = await substrate.recall(USER, "你好", { projectId: PROJECT });
+  assert.deepEqual(recalled.map((row) => row.id).sort(), ["record:p1", "record:p2", "record:p3", "record:p4"]);
+
+  // What the question is about still comes first, whatever the profile's own order.
+  const near = record({ id: "near", kind: "preference", key: "pref.near", value: "Prefers forest plots.", importance: 0.1 });
+  const withNear = new MemorySubstrate(openVikingConfig, { store: fakeStore([...records, near]), openViking: fakeIndex([hit(uriOf(near), 0.9)]) });
+  assert.equal((await withNear.recall(USER, "forest plots", { projectId: PROJECT }))[0].id, "record:near");
+});
+
+test("the profile that is offered is the one the decision allows: this project's scope, in force, not sensitive", async () => {
+  const records = [
+    record({ id: "mine", kind: "behavior", key: "habit", value: "Checks the protocol first.", scope: "project", scopeId: PROJECT }),
+    record({ id: "elsewhere", kind: "preference", key: "other", value: "Another project's taste.", scope: "project", scopeId: "prj_other" }),
+    record({ id: "pending", kind: "correction", key: "fix", value: "Not agreed yet.", status: "pending" }),
+    record({ id: "secret", kind: "profile", key: "who", value: "Sensitive.", sensitive: true }),
+    record({ id: "user-wide", kind: "profile", key: "role", value: "Clinical pharmacist." }),
+  ];
+  const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore(records), openViking: fakeIndex([]) });
+  const recalled = await substrate.recall(USER, "anything", { projectId: PROJECT });
+  assert.deepEqual(recalled.map((row) => row.id).sort(), ["record:mine", "record:user-wide"]);
+});
+
+test("the floor is the configured one, and a server that returns what it was asked not to is held to it", async () => {
+  const records = standingFixture();
+  const near = records[1];
+  const hits = [hit(uriOf(near), 0.83)];
+  const strict = new MemorySubstrate({ ...openVikingConfig, memorySearchMinScore: 0.9 }, { store: fakeStore(records), openViking: fakeIndex(hits) });
+  assert.deepEqual((await strict.recall(USER, "how many patients", { projectId: PROJECT })).map((row) => row.id), ["record:pref"]);
+  const lenient = new MemorySubstrate({ ...openVikingConfig, memorySearchMinScore: 0.8 }, { store: fakeStore(records), openViking: fakeIndex(hits) });
+  assert.deepEqual((await lenient.recall(USER, "how many patients", { projectId: PROJECT })).map((row) => row.id), ["record:near", "record:pref"]);
 });
 
 test("forgetting a project deletes its subtree, and says whether it did", async () => {

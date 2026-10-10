@@ -144,6 +144,48 @@ test("revoking a delivered snapshot says so to a recipient who has not taken it 
   await assert.rejects(sharing.import(carol, deliveryId, { expectedDigest: "0".repeat(64) }), { code: "capsule_share_delivery_closed" });
 });
 
+// 2026-10-10 review M-9 (d), the delivery's half: the sender a recipient is shown is read from the account row each time, and
+// that name defaults to the login id (an external identity's was its e-mail address). The card's author was fixed at its source;
+// this is the same label on the in-app path, for deliveries made before as well as after.
+test("a recipient is never told a sender's login id or e-mail address, in the list, the opened delivery or the withdrawal notice", options, async () => {
+  const plain = `sh_plain_${tag}`;
+  const mailed = `sh_mailed_${tag}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,$1,'development'),($2,'someone@example.invalid','development')", [plain, mailed]);
+  try {
+    for (const sender of [plain, mailed]) {
+      const capsule = await capsules.create(sender, { title: "我的记忆胶囊" });
+      await capsules.addEntry(sender, capsule.id, { factKind: "method_preference", layer: "methods", content: `Meta 分析先报 GRADE（${sender === plain ? "甲" : "乙"}）。` });
+      const made = await sharing.deliver(sender, capsule.id, { recipients: [dave] });
+      assert.equal(made.delivered, 1);
+      const waiting = await sharing.pending(dave);
+      const mine = waiting.find((delivery) => delivery.snapshotId === made.snapshot.id);
+      assert.ok(mine, "the delivery is waiting");
+      assert.equal(mine.sender.name, "一位研究者", "the pending list names the sender neutrally");
+      assert.ok(!JSON.stringify(waiting).includes(sender) && !JSON.stringify(waiting).includes("example.invalid"), "neither the id nor the address is in the list");
+
+      const deliveryId = mine.id;
+      const announced = (await shareNotices(dave)).find((item) => item.source.id === `delivery/${deliveryId}`);
+      assert.match(announced.title, /^一位研究者 向你分享了/, "and so does the notice, from the card's author");
+      const opened = await sharing.open(dave, deliveryId);
+      assert.equal(opened.delivery.sender.name, "一位研究者");
+      assert.ok(!JSON.stringify(opened).includes(sender) && !JSON.stringify(opened).includes("example.invalid"));
+      assert.equal((await sharing.decline(dave, deliveryId)).sender.name, "一位研究者");
+
+      // And the withdrawal notice, which names the sender in its title.
+      const again = await sharing.deliver(sender, capsule.id, { recipients: [dave], card: { summary: "第二次" } });
+      const snapshot = (await transfers.history(sender, capsule.id)).items.find((item) => item.id === again.snapshot.id);
+      await transfers.revoke(sender, capsule.id, snapshot.id, snapshot.revision);
+      await sharing.afterRevoke(sender, snapshot.id);
+      const withdrawn = (await shareNotices(dave)).filter((item) => /撤回/.test(item.title));
+      assert.ok(withdrawn.length >= 1);
+      assert.ok(withdrawn.every((item) => !item.title.includes(sender) && !item.title.includes("example.invalid")), withdrawn.map((item) => item.title).join(" | "));
+      assert.ok(withdrawn.some((item) => item.title.startsWith("一位研究者撤回了")));
+    }
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[plain, mailed]]);
+  }
+});
+
 test("a share link is redeemed by an account until its expiry, its cap or its revocation, and stores no plaintext token", options, async () => {
   const { capsule } = await authored("先 PROSPERO 登记。");
   const made = await sharing.createLink(author, capsule.id, { maxUses: 2 });

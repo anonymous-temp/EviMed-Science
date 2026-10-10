@@ -6,7 +6,7 @@ import {
   researchMemoryRoots,
   userMemoryRoot,
 } from "./openVikingClient.mjs";
-import { recallContent, selectWithinBudget } from "./memoryRecallPolicy.mjs";
+import { DURABLE_RECALL_KINDS, recallContent, selectWithinBudget } from "./memoryRecallPolicy.mjs";
 import { annotateVersions, versionFields, versionsInForce } from "./memoryValidity.mjs";
 import { MEMORY_KINDS, memoryPausedFor } from "./researchMemory.mjs";
 import { HttpError } from "./security.mjs";
@@ -76,6 +76,10 @@ export function memoryIndexSelection(config) {
  *  drop a hit whose record has been deleted, is sensitive, or has expired,
  *  without the recall coming back short. */
 const CANDIDATE_OVERFETCH = 3;
+
+/** The distance between two records of the standing profile in the ranking: far below any score the index gives a nominated hit,
+ *  and only an order (the rank fusion keeps the order, not the number). */
+const STANDING_SCORE_STEP = 1e-6;
 
 /** How many accounts one sweep of the index visits (`sweepRecordLeaves`). The
  *  reconcile timer calls it every five minutes, so a deployment of a few
@@ -180,7 +184,20 @@ export class MemorySubstrate {
     // component that holds no original data. An operator who would rather see
     // the failure sets this.
     this.strict = Boolean(config.memoryIndexStrict);
+    /**
+     * The code of the last time the index could not answer a recall, or null
+     * once it did again. It is what readiness, the degraded gauge and its
+     * alert ("every recall for fifteen minutes fell back") read, so it states
+     * the index's condition now and nothing else: it was assigned on a
+     * failure and never cleared, so one transient failure alarmed until a
+     * restart, and a failure of the store (the labels of a memory) set it too
+     * (2026-10-10 review M-6).
+     * @type {string | null}
+     */
     this.lastError = null;
+    /** The same for the labels a recall carries (conflicts, source states): the
+     *  memories were served unlabelled, which is no index outage. @type {string | null} */
+    this.lastLinksError = null;
     /** Where the index sweep resumes: the last account it visited. */
     this.sweepCursor = "";
     /** What the last sweep did, for status and tests. @type {{ accounts: number, removed: number, enqueued: number, code?: string } | null} */
@@ -281,7 +298,8 @@ export class MemorySubstrate {
     try {
       return await this.#rankedRecall(userId, query, { projectId, sessionId, now });
     } catch (error) {
-      this.lastError = error?.code ?? "memory_index_unavailable";
+      // Whether the index failed is `#rankedRecall`'s to say (`lastError`); an
+      // error of the store behind it falls back all the same.
       if (this.strict) throw error;
       // Fall back rather than fail: the term matcher needs no index and reads
       // the same authoritative records.
@@ -291,20 +309,40 @@ export class MemorySubstrate {
 
   async #rankedRecall(userId, query, { projectId, sessionId, now }) {
     if (this.contextLimit === 0 || this.contextMaxChars === 0) return [];
-    const hits = await this.openViking.find(userId, query, {
-      targets: recallTargets(userId, { projectId, sessionId }),
-      limit: this.contextLimit * CANDIDATE_OVERFETCH,
-      peerId: projectId,
-    });
+    /** @type {any[]} */
+    let hits;
+    try {
+      hits = await this.openViking.find(userId, query, {
+        targets: recallTargets(userId, { projectId, sessionId }),
+        limit: this.contextLimit * CANDIDATE_OVERFETCH,
+        peerId: projectId,
+        // The memory page's floor (2026-10-10 review M-3). Without one the index
+        // answers with its nearest neighbours however far they are, and a
+        // greeting was handed eight memories under 「与当前问题相关」. The
+        // builtin arm needs a term match for everything but the durable kinds;
+        // this is the same gate for the index arm, and the durable kinds join
+        // below.
+        scoreThreshold: this.searchMinScore,
+      });
+    } catch (error) {
+      this.lastError = error?.code ?? "memory_index_unavailable";
+      throw error;
+    }
+    // The index answered, whatever the store does with the answer.
+    this.lastError = null;
 
     const nominated = [];
     const seen = new Set();
-    for (const hit of hits) {
+    // Best score first, so a record nominated twice keeps its better one.
+    for (const hit of [...hits].sort((left, right) => right.score - left.score)) {
       const parsed = parseMemoryUri(hit.uri);
       // A hit we did not write — the server's own extraction, or a layout from
       // an older release. It names no record we can hydrate, so it is not a
       // candidate rather than a guess.
       if (!parsed || seen.has(parsed.recordId)) continue;
+      // Checked here as well as asked of the server: the floor is ours, and a
+      // server that treats its threshold differently must not lower it.
+      if (!(hit.score >= this.searchMinScore)) continue;
       seen.add(parsed.recordId);
       nominated.push({ recordId: parsed.recordId, score: hit.score });
     }
@@ -323,6 +361,17 @@ export class MemorySubstrate {
       }),
     ))
       .filter(Boolean);
+    // The researcher's standing profile joins whatever the index found, as it
+    // does on the builtin arm: who they are, how they work and what they have
+    // corrected stay relevant whatever the question is, and the index ranks by
+    // closeness to a question, so a greeting nominates none of it. Records the
+    // index also nominated keep their score; the rest follow every nominated
+    // one in the order the store lists them — most important first, which is
+    // what ranks them on the term matcher when the question names none — and
+    // a profile larger than its half of the budget keeps its most important.
+    const nominatedIds = new Set(hydrated.map(({ record }) => record.id));
+    const standing = (await this.#standingProfile(userId)).filter((record) => !nominatedIds.has(record.id));
+    for (const [index, record] of standing.entries()) hydrated.push({ record, score: (standing.length - index) * STANDING_SCORE_STEP });
 
     // Which of them hold: in force and recallable, inside the validity
     // interval, in this project, one version of each fact. The index is asked
@@ -365,19 +414,39 @@ export class MemorySubstrate {
   }
 
   /**
+   * The records of the durable kinds (`DURABLE_RECALL_KINDS`) in force for
+   * this account: the same fetch, by the same filter, as the builtin arm's.
+   * Scope, expiry and validity are decided afterwards, by the one decision
+   * both arms end in. A store that predates the listing (a test double)
+   * contributes none.
+   * @param {string} userId
+   */
+  async #standingProfile(userId) {
+    if (typeof this.store?.listRecords !== "function") return [];
+    // The store lists most important first; no more than the nominations are
+    // asked for, since the reservation they fill is half the prompt budget and
+    // the reranker reads every candidate.
+    return this.store.listRecords(userId, {
+      statuses: ["active"], kinds: [...DURABLE_RECALL_KINDS], pageSize: Math.min(100, this.contextLimit * CANDIDATE_OVERFETCH),
+    });
+  }
+
+  /**
    * What the hydrated records are to be labelled with: their open disagreements
    * and the sources they rest on that are no longer as they were. Read from the
    * store that holds them. A store that cannot say (a double that predates the
    * relations, a read that failed) leaves the memories unlabelled and says so in
-   * `lastError` — the recall is not failed by it, and it is not claimed clean.
+   * `lastLinksError` — the recall is not failed by it, and it is not claimed clean.
    * @param {string} userId @param {string[]} recordIds
    */
   async #linksOf(userId, recordIds) {
     if (recordIds.length === 0 || typeof this.store?.recallLinks !== "function") return undefined;
     try {
-      return await this.store.recallLinks(userId, recordIds);
+      const links = await this.store.recallLinks(userId, recordIds);
+      this.lastLinksError = null;
+      return links;
     } catch (error) {
-      this.lastError = error?.code ?? "memory_links_unavailable";
+      this.lastLinksError = error?.code ?? "memory_links_unavailable";
       return undefined;
     }
   }

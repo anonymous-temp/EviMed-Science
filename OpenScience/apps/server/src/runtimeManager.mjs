@@ -3423,6 +3423,17 @@ export class RuntimeManager {
     this.learningService = null;
     /** @type {any} the learning loop's counters (`learningMetrics.mjs`), assigned beside `learningService` */
     this.learningMetrics = null;
+    /**
+     * The researcher's 「记忆」 switches as `memoryPausedFor` reads them —
+     * `(userId, projectId, sessionId | null) => Promise<{ learning, recall, trial }>` —
+     * assigned beside `capsuleService` by the composition root, which owns the research-memory
+     * store. What a run is handed out of the capsules (the resident profile) and what a launch
+     * mounts (the learned and capsule method cards) is recalled memory too, and the memory page
+     * promises 「本项目不使用记忆」 over all of it (2026-10-10 review M-1, L-5). Null is a
+     * supported value: a deployment without the store has nothing to pause.
+     * @type {((userId: string, projectId: string, sessionId: string | null) => Promise<{ learning: boolean, recall: boolean, trial: boolean }>) | null}
+     */
+    this.memoryPause = null;
     /** What the mounted-method byte budget did across launches
      *  (`open_science_mounted_method_*`): launches, bytes it spent on what the
      *  methods put in front of the model, and methods it left out. */
@@ -3571,6 +3582,46 @@ export class RuntimeManager {
   }
 
   /**
+   * Whether the researcher has paused recall for this project — for the whole
+   * account, for the project, or (given a conversation) for that conversation
+   * as a 「试用一次」 of someone else's capsule. Without `memoryPause` there is no
+   * store to pause and the answer is no. A store that cannot be read throws:
+   * what to do about that is the caller's (a launch refuses, a profile
+   * withholds).
+   * @param {Record<string, any>} project @param {string | null} [sessionId]
+   * @returns {Promise<boolean>}
+   */
+  async recallPausedFor(project, sessionId = null) {
+    if (typeof this.memoryPause !== "function") return false;
+    return (await this.memoryPause(String(project.userId), String(project.id), sessionId))?.recall === true;
+  }
+
+  /**
+   * Let go of this account's idle runtimes that were launched with methods mounted, for the projects whose recall the
+   * researcher has since paused. The methods are mounted at a launch (`syncCapsuleMethods`) and a live runtime keeps them
+   * in its prompt for as long as it lives, so a pause turned on under one would otherwise wait for that runtime's next
+   * launch — up to its idle timeout — with the researcher's methods still in every conversation (2026-10-10 review L-5).
+   * Only a runtime nothing is using goes (`idleVerdict`: no session mid-turn, no run in the ledger; and no open connection,
+   * which `stopIdleRuntime` keeps); the next dispatch starts one that mounts none. A runtime that is working, or tab-held,
+   * keeps its mount until it stops. Returns the ids of the projects released.
+   * @param {string} userId @returns {Promise<string[]>}
+   */
+  async releasePausedMethodRuntimes(userId) {
+    /** @type {string[]} */
+    const released = [];
+    for (const runtime of [...this.runtimes.values()]) {
+      const project = runtime?.project;
+      if (!project || String(project.userId) !== String(userId) || !(Number(runtime.capsuleMethodsMounted) > 0)) continue;
+      try {
+        if (!(await this.recallPausedFor(project))) continue;
+        if (await this.idleVerdict(project) !== "idle") continue;
+        if (await this.stopIdleRuntime(project, { event: "memory_paused" })) released.push(String(project.id));
+      } catch { /* a runtime that cannot be asked about is left to its idle timer */ }
+    }
+    return released;
+  }
+
+  /**
    * Materialize the methods this project's runs may read: the approved
    * work-style entries of its active capsules, and the learned methods the
    * distillation loop has admitted.
@@ -3588,14 +3639,29 @@ export class RuntimeManager {
    * it immediately before it dispatches, and a cached answer would measure the
    * previous arm.
    *
+   * The researcher's recall pause (the account's, or 「本项目不使用记忆」) is read
+   * here too, because methods are 记忆 as the memory page defines it: while it
+   * holds, nothing is mounted and the directory an earlier launch wrote is
+   * cleared (2026-10-10 review L-5). It is read once per launch, so a pause
+   * set while a runtime is up takes effect at that runtime's next launch — the
+   * same moment a disabled capsule's methods leave (`CapsuleService.disable`)
+   * — and an idle runtime is let go when the pause is turned on
+   * (`releasePausedMethodRuntimes`) so that moment comes at the next dispatch.
+   * One mid-turn, or held open by a tab, keeps its methods until it stops, and
+   * so does a 「试用一次」 conversation inside a runtime that has them: a prompt
+   * section registered at launch cannot be taken from one conversation.
+   * A pause that cannot be read refuses the launch, as every other failure of
+   * the mount does: mounting nothing quietly is what this method exists to end.
+   *
    * @param {any} project
    * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number,
    *   learned: {id: string, name: string, digest: string, trial?: boolean}[],
    *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
    */
   async syncCapsuleMethods(project) {
+    const paused = await this.recallPausedFor(project);
     let trialMethodIds = [];
-    if (this.learningService) {
+    if (this.learningService && !paused) {
       // A trial that cannot be read is not a reason to refuse a launch: the
       // researcher's own run does not depend on it, and failing here would
       // make an evaluation-only feature able to take the product down.
@@ -3605,9 +3671,10 @@ export class RuntimeManager {
       } catch { trialMethodIds = []; }
     }
     const mounted = await materializeCapsuleMethods({
-      capsules: this.capsuleService,
-      learning: this.learningService ?? null,
-      frozenMethods: this.evaluationMethodSnapshots.get(this.key(project)) ?? null,
+      // Under a pause every source is dropped, which is also what clears the directory.
+      capsules: paused ? null : this.capsuleService,
+      learning: paused ? null : this.learningService ?? null,
+      frozenMethods: paused ? null : this.evaluationMethodSnapshots.get(this.key(project)) ?? null,
       trialMethodIds,
       // Which learned methods this runtime may carry: none in the platform's
       // own learning, sources and frontier projects, GEO methods in a runtime
@@ -5129,7 +5196,7 @@ export class RuntimeManager {
     // project's workspace that also recalled memories. A verification, a
     // source reading or a learning run works in a directory of its own and
     // passes no memories on purpose; it does not ask for this either.
-    if (residentProfile) await this.syncCapsuleProfile(project);
+    if (residentProfile) await this.syncCapsuleProfile(project, { sessionId });
     if (typeof runId === "string" && runId) {
       await this.writeRunBriefIndex(project, runId, {
         sessionId,
@@ -5207,23 +5274,38 @@ export class RuntimeManager {
    * Rendered from the researcher's own capsule, and empty when recall is off
    * (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`): a profile left from before the
    * switch was thrown would keep reaching runs the operator meant to run
-   * without memory. Empty with no file on disk writes nothing, so a project
+   * without memory. The same holds for the researcher's own pause — the
+   * account's, 「本项目不使用记忆」, or the conversation's when it is a trial of
+   * someone else's capsule (`sessionId`, which only a dispatch knows; a frame
+   * opened in the kernel's own window brings the account and the project) —
+   * and a pause that cannot be read withholds the block and says so, since the
+   * last one written would otherwise stay in force (2026-10-10 review M-1).
+   * Empty with no file on disk writes nothing, so a project
    * that never had a capsule gains no directory. Isolated like the other
    * context files — a run without the block is degraded, not invalid.
    *
-   * @param {Record<string, any>} project
+   * @param {Record<string, any>} project @param {{ sessionId?: string | null }} [options]
    * @returns {Promise<{ written: boolean, chars: number, error?: string }>}
    */
-  async syncCapsuleProfile(project) {
+  async syncCapsuleProfile(project, { sessionId = null } = {}) {
     try {
-      const profile = this.capsuleService && this.config.memoryRecallEnabled !== false
+      /** @type {string | undefined} */
+      let pauseError;
+      let paused = false;
+      try {
+        paused = await this.recallPausedFor(project, sessionId);
+      } catch (error) {
+        paused = true;
+        pauseError = typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "memory_pause_unreadable";
+      }
+      const profile = this.capsuleService && this.config.memoryRecallEnabled !== false && !paused
         ? renderCapsuleProfile(await this.capsuleService.profileFacts(String(project.userId), String(project.id), CAPSULE_PROFILE_FACT_KINDS))
         : "";
       const file = path.join(project.workspaceDir, workspaceLayout.capsuleProfileFile);
-      if (!profile && !(await fs.lstat(file).catch(() => null))) return { written: false, chars: 0 };
+      if (!profile && !(await fs.lstat(file).catch(() => null))) return { written: false, chars: 0, ...(pauseError ? { error: pauseError } : {}) };
       await writeFileAtomicNoFollow(project.workspaceDir, file, profile, { encoding: "utf8", mode: 0o444 });
       await this.mirrorWorkspaceWrite(project, workspaceLayout.capsuleProfileFile, profile);
-      return { written: true, chars: profile.length };
+      return { written: true, chars: profile.length, ...(pauseError ? { error: pauseError } : {}) };
     } catch (error) {
       // isolated: evimed_capsule_profile_write_failures_total
       return { written: false, chars: 0, error: typeof error?.code === "string" ? error.code : "capsule_profile_write_failed" };

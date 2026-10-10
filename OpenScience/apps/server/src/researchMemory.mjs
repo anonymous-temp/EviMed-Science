@@ -19,7 +19,7 @@ import {
   migrateResearchMemory,
 } from "./researchMemoryPersistence.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
-import { projectMemoryUri, researchMemoryRoots } from "./openVikingClient.mjs";
+import { projectMemoryUri, researchMemoryRoots, sessionMemoryUri } from "./openVikingClient.mjs";
 
 /**
  * Research memory — the structured records — on the control-plane database.
@@ -479,10 +479,13 @@ export async function memoryPausedFor(store, userId, projectId, sessionId = null
   };
 }
 
-/** A session id as the kernel writes one. @param {unknown} value */
+/** A session id as the kernel writes one. */
+const SESSION_ID = /^[A-Za-z0-9_-]{1,160}$/;
+
+/** @param {unknown} value */
 function assertSessionId(value) {
   const id = String(value ?? "");
-  if (!/^[A-Za-z0-9_-]{1,160}$/.test(id)) throw new HttpError(400, "memory_session_invalid", "The session id is invalid.");
+  if (!SESSION_ID.test(id)) throw new HttpError(400, "memory_session_invalid", "The session id is invalid.");
   return id;
 }
 
@@ -1902,25 +1905,42 @@ export class ResearchMemoryStore {
   }
 
   /**
-   * Everything a deleted project leaves behind.
-   * @param {string} userId @param {string} projectId
+   * Everything a deleted project leaves behind: its records, the records its
+   * conversations wrote, and the index's copies of both.
+   *
+   * A conversation's own records (`scope: "session"`, `scope_id` the
+   * conversation) carry no project, so they are found by the conversations the
+   * project had: those the caller names (`sessionIds`: its run ledger and its
+   * sessions), those holding state here, and those its run summaries (one per
+   * conversation, `run.session.<id>`, lower-cased) name. They stayed in the
+   * export and in search after the project was gone, and the index was told to
+   * forget the project's subtree only (2026-10-10 review M-10).
+   * @param {string} userId @param {string} projectId @param {{ sessionIds?: readonly string[] }} [options]
    */
-  async deleteProjectMemory(userId, projectId) {
+  async deleteProjectMemory(userId, projectId, { sessionIds = [] } = {}) {
     const owner = assertUserId(userId);
     const scopeId = String(projectId ?? "").trim();
     if (!scopeId) throw new HttpError(400, "memory_payload_invalid", "projectId is required.");
+    const named = (Array.isArray(sessionIds) ? sessionIds : []).map(String).filter((id) => SESSION_ID.test(id));
     return this.#transaction(async (client) => {
       await this.#lockOwnerForOutbox(client, owner);
       const records = await client.query(`DELETE FROM evimed_memory.records WHERE user_id=$1 AND scope='project' AND scope_id=$2
-        RETURNING id,scope,scope_id,kind`, [owner, scopeId]);
-      await this.#forgetRows(client, owner, records.rows);
-      // The subtree itself, which the per-record jobs above are bounded and
+        RETURNING id,scope,scope_id,kind,key`, [owner, scopeId]);
+      // The project's conversations' own state goes with it, and names them.
+      const states = await client.query("DELETE FROM evimed_memory.sessions WHERE user_id=$1 AND project_id=$2 RETURNING session_id", [owner, scopeId]);
+      const exact = [...new Set([...named, ...states.rows.map((/** @type {any} */ row) => String(row.session_id))])];
+      const summarised = records.rows.map((/** @type {any} */ row) => /^run\.session\.(.+)$/.exec(String(row.key))?.[1]).filter(Boolean);
+      const conversations = await client.query(`DELETE FROM evimed_memory.records WHERE user_id=$1 AND scope='session'
+        AND (scope_id=ANY($2::text[]) OR lower(scope_id)=ANY($3::text[])) RETURNING id,scope,scope_id,kind`, [owner, exact, summarised]);
+      await this.#forgetRows(client, owner, [...records.rows, ...conversations.rows]);
+      // The subtrees themselves, which the per-record jobs above are bounded and
       // cannot promise to empty: owed to the index in this transaction, so the
-      // deletion never waits for the index and the index is still told.
-      await this.withdrawals?.enqueue(client, owner, [projectMemoryUri(owner, scopeId)]);
-      // The project's conversations' own state goes with it.
-      await client.query("DELETE FROM evimed_memory.sessions WHERE user_id=$1 AND project_id=$2", [owner, scopeId]);
-      return { structured: Number(records.rowCount ?? 0) };
+      // deletion never waits for the index and the index is still told. A
+      // conversation whose id could never have been written there has no subtree.
+      const subtrees = new Set([...exact, ...conversations.rows.map((/** @type {any} */ row) => String(row.scope_id))]);
+      await this.withdrawals?.enqueue(client, owner, [projectMemoryUri(owner, scopeId),
+        ...[...subtrees].flatMap((id) => { try { return [sessionMemoryUri(owner, id)]; } catch { return []; } })]);
+      return { structured: Number(records.rowCount ?? 0) + Number(conversations.rowCount ?? 0) };
     });
   }
 
