@@ -75,6 +75,10 @@ export function createJudgeService({
   const requests = new Map(),
     counters = new Map(),
     circuits = new Map(),
+    // Why a decision fell back, by site and code: the outcome counter says that it did.
+    reasons = new Map(),
+    // Calibrated sites whose prompt no longer matches what was measured, since when.
+    blocked = new Map(),
     pending = new Set(),
     controllers = new Set();
   let backgroundActive = 0,
@@ -270,6 +274,9 @@ export function createJudgeService({
             (config.jevSites?.[id]?.calibration === "calibrated" &&
               typeof config.jevSites?.[id]?.promptFingerprint === "string"),
           threshold: config.jevSites?.[id]?.threshold ?? p.threshold,
+          ...(blocked.has(id)
+            ? { blockedBy: "judge_calibration_mismatch", blockedSince: new Date(blocked.get(id)).toISOString() }
+            : {}),
         },
       ]),
     ),
@@ -355,6 +362,10 @@ export function createJudgeService({
     const policy = Object.hasOwn(JUDGE_SITES, site) ? JUDGE_SITES[site] : null;
     const finish = (outcome, code, extra = {}) => {
       count(Object.hasOwn(JUDGE_SITES, site) ? site : "unknown", outcome);
+      if (outcome === "fallback") {
+        const key = `${Object.hasOwn(JUDGE_SITES, site) ? site : "unknown"}:${code}`;
+        reasons.set(key, (reasons.get(key) ?? 0) + 1);
+      }
       return {
         outcome,
         value: null,
@@ -433,10 +444,15 @@ export function createJudgeService({
     if (site !== "reply-check" && !calibrationMode) {
       if (config.jevSites?.[site]?.calibration !== "calibrated")
         return finish("fallback", "judge_uncalibrated");
-      if (config.jevSites?.[site]?.promptFingerprint !== fingerprint)
+      // The calibration is bound to the prompt, capability ids and all (J3's options are the catalogue's), so
+      // a changed prompt stands the site down. That has to be seen: it is marked here and shows in status().
+      if (config.jevSites?.[site]?.promptFingerprint !== fingerprint) {
+        if (!blocked.has(site)) blocked.set(site, now());
         return finish("fallback", "judge_calibration_mismatch", {
           promptFingerprint: fingerprint,
         });
+      }
+      blocked.delete(site);
     }
     const configuredTimeout = policy.interactive
       ? Number(config.jevOnlineTimeoutMs ?? 3000)
@@ -668,6 +684,9 @@ export function createJudgeService({
           series: rows.filter((row) => ["settled", "escalated", "fallback"].includes(row.outcome)).map((row) => ({ value: row.value, labels: { site: row.site, outcome: row.outcome } })) },
         { name: "open_science_jev_requests_total", help: "Registered Jev calls by site.", type: "counter",
           series: [...requests].map(([key, value]) => { const [site, outcome] = key.split(":"); return { value, labels: { site, outcome } }; }) },
+        { name: "open_science_jev_fallback_reasons_total", type: "counter",
+          help: "Why Jev decisions fell back to the original path, by site and the service's own code (judge_calibration_mismatch: a calibrated site's prompt no longer matches what was measured).",
+          series: [...reasons].map(([key, value]) => { const [site, code] = key.split(":"); return { value, labels: { site, code } }; }) },
         { name: "open_science_jev_skipped_total", type: "counter",
           help: "Work a registered Jev site was not asked to do, by reason: run_out_of_scope counts runs; lines_over_cap and lines_after_notice_limit count report lines.",
           series: rows.filter((row) => row.outcome.startsWith("skip_")).map((row) => ({ value: row.value, labels: { site: row.site, reason: row.outcome.slice(5) } })) },

@@ -509,6 +509,22 @@ test("every variable config.mjs reads reaches the web API, or says why it does n
   }
 });
 
+test("every Jev setting config.mjs reads is documented in .env.example and reaches the web API", async () => {
+  // The three keys of the shared judge sites (the sites' off list, the online wait, the background concurrency) were
+  // read by config.mjs and passed by compose from the day they shipped, and documented nowhere an operator looks.
+  const configSource = await readFile(path.join(repoRoot, "apps/server/src/config.mjs"), "utf8");
+  const code = configSource.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
+  const read = [...new Set(code.match(/OPEN_SCIENCE_[A-Z0-9_]*JEV[A-Z0-9_]*/g) ?? [])].sort();
+  assert.ok(read.length >= 5 && read.includes("OPEN_SCIENCE_JEV_DISABLED_SITES") && read.includes("OPEN_SCIENCE_REVIEW_JEV_ENABLED"),
+    `read ${read.length} Jev names from config.mjs; the scan did not walk`);
+  const example = await readFile(path.join(deployDir, ".env.example"), "utf8");
+  const documented = new Set([...example.matchAll(/^#? *(OPEN_SCIENCE_[A-Z0-9_]+)=/gm)].map((match) => match[1]));
+  assert.deepEqual(read.filter((name) => !documented.has(name)), [], "a Jev setting config.mjs reads is not documented in deploy/web/.env.example");
+  const files = await composeFiles();
+  const received = new Set(files.flatMap(({ text }) => Object.keys(YAML.parse(text, { merge: true })?.services?.["open-science-web"]?.environment ?? {})));
+  assert.deepEqual(read.filter((name) => !received.has(name)), [], "a Jev setting config.mjs reads is not passed to open-science-web");
+});
+
 test("no compose file pins an operator lever to a literal", async () => {
   // Two overlays once set the same key to two different literals on the same
   // service, and which one won depended on the order of -f flags. The .env

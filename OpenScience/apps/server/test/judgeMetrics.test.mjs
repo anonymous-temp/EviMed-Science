@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { buildJudgeRequest, judgePromptFingerprint } from "../src/judgeSites.mjs";
 import { createJudgeService } from "../src/judgeService.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 
@@ -76,4 +77,65 @@ test("a site whose pin carries no baseline agreement says so: its drift alert ca
   assert.ok(gauge, "the family is exported");
   assert.deepEqual(gauge.series.map((row) => [row.labels.site, row.value]).sort(), [["J2", 1], ["J4", 0]]);
   await service.close();
+});
+
+const measuredCatalogue = { question: "请做一个 Meta 分析", capabilities: [{ id: "meta-analysis", title: "Meta" }, { id: "adr-analysis", title: "ADR" }] };
+const changedCatalogue = { ...measuredCatalogue, capabilities: [...measuredCatalogue.capabilities, { id: "a-new-capability", title: "New" }] };
+/** A config that pins J3 as calibrated for the catalogue above. */
+function pinnedJ3() {
+  const fingerprint = judgePromptFingerprint("J3", buildJudgeRequest("J3", measuredCatalogue).questions, 0.8, config.reviewJevModel);
+  return { fingerprint, config: { ...config, jevSites: { J3: { calibration: "calibrated", threshold: 0.8, promptFingerprint: fingerprint } } } };
+}
+
+test("a calibrated site that stops judging because its prompt changed says which site and why", async () => {
+  const { fingerprint, config: pinned } = pinnedJ3();
+  const service = createJudgeService({ config: pinned, callImpl: yesLast });
+  assert.equal((await service.judge("J3", measuredCatalogue)).outcome, "settled", "the catalogue that was measured runs");
+  assert.equal(service.status().sites.J3.blockedBy, undefined);
+
+  // A capability is added to the catalogue: the calibration was bound to the old prompt, so the site stands down, as it must.
+  const refused = await service.judge("J3", changedCatalogue);
+  assert.equal(refused.code, "judge_calibration_mismatch");
+  assert.notEqual(judgePromptFingerprint("J3", buildJudgeRequest("J3", changedCatalogue).questions, 0.8, config.reviewJevModel), fingerprint,
+    "the fingerprint still binds the calibration to the prompt, capability ids included");
+  await service.judge("J3", changedCatalogue);
+  const blocked = service.status().sites.J3;
+  assert.equal(blocked.blockedBy, "judge_calibration_mismatch");
+  assert.match(blocked.blockedSince, /^\d{4}-\d\d-\d\dT/);
+
+  const reasons = (await service.metricFamilies()).find((family) => family.name === "open_science_jev_fallback_reasons_total");
+  assert.deepEqual(reasons?.series.filter((row) => row.labels.site === "J3"), [{ value: 2, labels: { site: "J3", code: "judge_calibration_mismatch" } }]);
+
+  // Measured again (the catalogue went back, or the site was re-calibrated): the mark clears.
+  assert.equal((await service.judge("J3", measuredCatalogue)).outcome, "settled");
+  assert.equal(service.status().sites.J3.blockedBy, undefined);
+  await service.close();
+});
+
+test("the fallback reasons of every site are exported, so a site that stopped judging is a number, not a silence", async () => {
+  const service = createJudgeService({ config: { ...config, jevDisabledSites: ["J4"] }, callImpl: yesLast });
+  await service.judge("J4", { line: "x" });
+  await service.judge("J6", { left: "a", right: "b" });
+  await service.judge("J6", { left: "a", right: "b" });
+  const text = await metricsText(service);
+  assert.match(text, /^open_science_jev_fallback_reasons_total\{site="J4",code="judge_disabled"\} 1$/m);
+  assert.match(text, /^open_science_jev_fallback_reasons_total\{site="J6",code="judge_uncalibrated"\} 2$/m);
+  await service.close();
+});
+
+test("/api/ready names a site that is blocked and why", async () => {
+  const { config: pinned } = pinnedJ3();
+  const service = createJudgeService({ config: pinned, callImpl: yesLast });
+  await service.judge("J3", changedCatalogue);
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-judge-ready-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, bootstrapUser: "alice", bootstrapPassword: "correct horse battery staple", judgeService: service });
+  const address = await app.listen(0, "127.0.0.1");
+  try {
+    const ready = await (await fetch(`http://127.0.0.1:${address.port}/api/ready`)).json();
+    assert.equal(ready.data.checks.jev.sites.J3.blockedBy, "judge_calibration_mismatch");
+    assert.equal(ready.data.checks.jev.sites.J4.blockedBy, undefined, "a site that has not been blocked says nothing");
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
 });
