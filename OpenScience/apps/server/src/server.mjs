@@ -3116,6 +3116,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   agentRuns = new AgentRunStore(researchSessions, {
     judgeService,
     agentRegistry,
+    // The register judge leaves the platform's own projects unread, and reads a bounded number of report lines per run.
+    internalProject: (project) => internalFor(project.userId, project.id),
+    registerJudgeMaxLines: config.jevRegisterMaxLines,
     // The evidence card a conversation was started from (「用这张卡继续研究」), recorded on its run and counted as a citation.
     originCardOf: (project, session) => evidencePublish?.origins.originCardOf(project, session) ?? Promise.resolve(null),
     onOriginCardRun: (project, run) => evidencePublish?.origins.runStarted(project, run),
@@ -9272,12 +9275,7 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, conf
       "counter", { value: Number(store.expiredSessionsPurged) || 0 });
   }
 
-  const judgeRows=judgeService?.metrics()??[];
-  addMetric(lines,'open_science_jev_decisions_total','Registered Jev decisions by site.','counter',judgeRows.filter(row=>['settled','escalated','fallback'].includes(row.outcome)).map(row=>({value:row.value,labels:{site:row.site,outcome:row.outcome}})));
-  addMetric(lines,'open_science_jev_requests_total','Registered Jev calls by site.','counter',(judgeService?.requestMetrics()??[]).map(row=>({value:row.value,labels:{site:row.site,outcome:row.outcome}})));
-  const driftRows=await judgeService?.driftMetrics().catch(()=>[])??[];
-  addMetric(lines,'open_science_jev_drift_below_baseline_seven_days','Seven consecutive observed UTC days below calibrated baseline.','gauge',driftRows.map(row=>({value:row.belowBaselineSevenDays?1:0,labels:{site:row.site}})));
-  addMetric(lines,'open_science_jev_baseline_agreement','Observed agreement against trusted baseline; absent samples are omitted.','gauge',driftRows.filter(row=>row.agreement!==null).map(row=>({value:row.agreement,labels:{site:row.site}})));
+  for (const family of await judgeService?.metricFamilies?.().catch(() => []) ?? []) addMetric(lines, family.name, family.help, family.type, family.series);
   return `${lines.join("\n")}\n`;
 }
 

@@ -299,6 +299,8 @@ const operatorLevers = {
   // web API is the only caller — no runtime ever talks to Jev.
   OPEN_SCIENCE_REVIEW_JEV_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS: ["open-science-web"],
+  // The register judge's per-run line cap (J4): without it a run's whole report is one Jev request per line.
+  OPEN_SCIENCE_JEV_REGISTER_MAX_LINES: ["open-science-web"],
   // The `evimed` login mode (fusion plan 2026-09-26 §9.2): the switch is how a
   // deployment lets the EviMed shell sign its researchers in, and the
   // introspection URL is the one setting the mode cannot default. A lever that

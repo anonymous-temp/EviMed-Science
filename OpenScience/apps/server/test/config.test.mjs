@@ -736,6 +736,26 @@ test("Jev's model, gate and ceilings are the pin and nothing else, and it is on 
   }
 });
 
+test("the register judge's per-run line cap has a default, bounds, and reads an empty value as unset", () => {
+  const saved = process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES;
+  try {
+    delete process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES;
+    assert.equal(loadConfig({ rootDir: repoRoot }).jevRegisterMaxLines, 600);
+    process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES = "";
+    assert.equal(loadConfig({ rootDir: repoRoot }).jevRegisterMaxLines, 600, "empty reads as unset");
+    process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES = "1200";
+    assert.equal(loadConfig({ rootDir: repoRoot }).jevRegisterMaxLines, 1200);
+    assert.equal(loadConfig({ rootDir: repoRoot, jevRegisterMaxLines: 5 }).jevRegisterMaxLines, 5);
+    for (const bad of ["0", "5001", "12.5", "many", "-3"]) {
+      process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES = bad;
+      assert.throws(() => loadConfig({ rootDir: repoRoot }), /OPEN_SCIENCE_JEV_REGISTER_MAX_LINES must be a whole number from 1 to 5000/, bad);
+    }
+  } finally {
+    if (saved === undefined) delete process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES;
+    else process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES = saved;
+  }
+});
+
 test("the thinking effort is a closed vocabulary, refused at load rather than upstream", () => {
   assert.equal(loadConfig({ rootDir: repoRoot }).deepseekReasoningEffort, "high");
   assert.equal(loadConfig({ rootDir: repoRoot, deepseekReasoningEffort: "MAX" }).deepseekReasoningEffort, "max");

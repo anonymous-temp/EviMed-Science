@@ -4050,6 +4050,11 @@ export class AgentRunStore {
     // Long-lived monitors must not inherit a dispatch's checked-out database
     // transaction. Their reads retain the normal project/run authorization.
     this.independentWork = options.independentWork ?? (work => work());
+    // The register judge's two facts about a run's home that only the caller holds: whether its project is the
+    // platform's own, and how many report lines one run may have judged (`reportRegisterJudge.mjs`).
+    /** @type {(project: any) => boolean} */
+    this.internalProject = typeof options.internalProject === "function" ? options.internalProject : () => false;
+    this.registerJudgeMaxLines = options.registerJudgeMaxLines;
     this.id = options.id ?? (() => randomId("run_"));
     this.readSessionHistory = options.readSessionHistory ?? (async () => []);
     this.readSessionStatus = options.readSessionStatus ?? (async () => "idle");
@@ -5602,8 +5607,11 @@ export class AgentRunStore {
     }
     if (outcome.transitioned) {
       if (this.judgeService) {
+        const agent = (await this.agentRegistry.catch(() => null))?.get?.(result.effectiveAgentId);
         const pending = this.independentWork(() => reviewDeliveredRegister({
           project, run: result, judgeService: this.judgeService,
+          maxLines: this.registerJudgeMaxLines,
+          internalProject: this.internalProject(project), internalCapability: agent?.visibility === "internal",
           onNotices: notices => this.appendQualityNotices(project, runId, notices),
         })).catch(() => {});
         this.backgroundLabels.add(pending);

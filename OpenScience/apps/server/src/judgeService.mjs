@@ -233,9 +233,9 @@ export function createJudgeService({
     }
   }
 
-  const count = (site, outcome) => {
+  const count = (site, outcome, by = 1) => {
     const key = `${site}:${outcome}`;
-    counters.set(key, (counters.get(key) ?? 0) + 1);
+    counters.set(key, (counters.get(key) ?? 0) + by);
   };
   const canonical = (value) =>
     JSON.stringify(value, (_, item) =>
@@ -279,6 +279,17 @@ export function createJudgeService({
       const [site, outcome] = key.split(":");
       return { site, outcome, value };
     });
+  /**
+   * Work a caller chose not to send to `site`, by reason: a run outside the
+   * site's scope, lines past a per-run bound. The caller owns the bound; this
+   * only makes it visible, so a cap that binds shows as a count instead of as
+   * judgements that quietly never happened.
+   * @param {string} site @param {string} reason @param {number} [by]
+   */
+  const skipped = (site, reason, by = 1) => {
+    if (Object.hasOwn(JUDGE_SITES, site) && /^[a-z_]{1,40}$/.test(reason) && Number.isSafeInteger(by) && by > 0)
+      count(site, `skip_${reason}`, by);
+  };
   const drift = async (site, result, context) => {
     const regex =
       ["J4", "J7"].includes(site) && context.regexBaseline !== undefined;
@@ -636,6 +647,25 @@ export function createJudgeService({
         return { site, outcome, value };
       }),
     driftMetrics: () => judgeDriftSummary(database, config),
+    skipped,
+    /** The families `/api/ops/metrics` serves for the judge sites. */
+    async metricFamilies() {
+      const rows = metrics();
+      const observed = await judgeDriftSummary(database, config).catch(() => []);
+      return [
+        { name: "open_science_jev_decisions_total", help: "Registered Jev decisions by site.", type: "counter",
+          series: rows.filter((row) => ["settled", "escalated", "fallback"].includes(row.outcome)).map((row) => ({ value: row.value, labels: { site: row.site, outcome: row.outcome } })) },
+        { name: "open_science_jev_requests_total", help: "Registered Jev calls by site.", type: "counter",
+          series: [...requests].map(([key, value]) => { const [site, outcome] = key.split(":"); return { value, labels: { site, outcome } }; }) },
+        { name: "open_science_jev_skipped_total", type: "counter",
+          help: "Work a registered Jev site was not asked to do, by reason: run_out_of_scope counts runs; lines_over_cap and lines_after_notice_limit count report lines.",
+          series: rows.filter((row) => row.outcome.startsWith("skip_")).map((row) => ({ value: row.value, labels: { site: row.site, reason: row.outcome.slice(5) } })) },
+        { name: "open_science_jev_drift_below_baseline_seven_days", help: "Seven consecutive observed UTC days below calibrated baseline.", type: "gauge",
+          series: observed.map((row) => ({ value: row.belowBaselineSevenDays ? 1 : 0, labels: { site: row.site } })) },
+        { name: "open_science_jev_baseline_agreement", help: "Observed agreement against trusted baseline; absent samples are omitted.", type: "gauge",
+          series: observed.filter((row) => row.agreement !== null).map((row) => ({ value: row.agreement, labels: { site: row.site } })) },
+      ];
+    },
     async close() {
       closed = true;
       clearInterval(comparisonCleanup);
