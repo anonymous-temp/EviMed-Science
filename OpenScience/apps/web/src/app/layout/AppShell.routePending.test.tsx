@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { lazy, useEffect, type ReactElement } from "react";
 import { createMemoryRouter, Link, RouterProvider } from "react-router";
@@ -101,13 +101,15 @@ describe("a page whose chunk is still loading", () => {
     }], { initialEntries: ["/app/geo/one/overview"] });
     render(<RouterProvider router={router} />);
     expect(await screen.findByText("项目页")).toBeInTheDocument();
+    // The mount is counted in an effect, which can run after the text is found when the machine is busy
+    // (the full suite read 0 here): wait for it rather than for the text alone.
+    await waitFor(() => expect(mounts).toBe(1));
     const before = mounts;
     await userEvent.click(screen.getByRole("link", { name: "信源" }));
     expect(router.state.location.pathname).toBe("/app/geo/one/sources");
     expect(screen.getByText("项目页")).toBeInTheDocument();
     expect(screen.queryByText("正在载入")).toBeNull();
     // A re-render is fine; a remount would mean the boundary was rebuilt.
-    expect(before).toBe(1);
     expect(mounts).toBe(before);
   });
 });
