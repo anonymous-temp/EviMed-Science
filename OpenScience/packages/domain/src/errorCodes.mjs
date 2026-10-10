@@ -608,13 +608,17 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   // And for 「循证 GEO」's tools: a `what` outside the tool's vocabulary, a
   // filter or payload the gateway cannot read, a social query it cannot send.
   // A single invalid item of a write is not one of these — it is refused in the
-  // answer's `issues` while the rest are written (principle 14).
+  // answer's `issues` while the rest are written (principle 14). Nor is an
+  // outage: a write the store's own constraint refused (`geo_write_rejected`)
+  // is a payload that cannot be stored as sent, so the run corrects it rather
+  // than going on without the platform's data.
   "geo_request_invalid",
   "geo_request_too_large",
   "geo_read_what_invalid",
   "geo_read_filter_invalid",
   "geo_write_what_invalid",
   "geo_write_payload_invalid",
+  "geo_write_rejected",
   "social_posts_query_invalid",
   "social_posts_platform_invalid",
   "social_posts_sort_invalid",

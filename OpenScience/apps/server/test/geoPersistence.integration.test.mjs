@@ -145,6 +145,34 @@ test("closed vocabularies are CHECKed where the spec closes them", options, asyn
     VALUES ($2, $3, $4, $1, 'q1', 'kimi')`, [project.id, own("j2"), carol, roundId]), { code: "23505" });
 });
 
+test("a database created before the audience vocabulary grew learns the new words at the next start", options, async () => {
+  // D-01: `GEO_AUDIENCES` went from two words to six, and a CREATE TABLE IF NOT EXISTS keeps the CHECK it
+  // was first created with. The migration compares the CHECK with the vocabulary on every start
+  // (vocabularyChecks.mjs). A new database object is a restart: `migrateGeo` is cached per object.
+  const before = open();
+  await migrateGeo(before);
+  const owner = own("dora");
+  const store = new GeoStore({ database: before });
+  const project = await store.createProject({ userId: owner, projectId: "audiences", engines: ["deepseek"], coverageDays: 90 });
+  const audienceCheck = async (/** @type {any} */ database) => (await database.query(`SELECT pg_get_constraintdef(c.oid) AS def FROM pg_constraint c
+    WHERE c.conrelid = 'evimed_geo.question_groups'::regclass AND c.conname = 'question_groups_audience_check'`)).rows[0]?.def ?? "";
+  await before.query(`ALTER TABLE evimed_geo.question_groups DROP CONSTRAINT question_groups_audience_check`);
+  await before.query(`ALTER TABLE evimed_geo.question_groups ADD CONSTRAINT question_groups_audience_check CHECK (audience IN ('patient', 'physician'))`);
+  const insertGroup = (/** @type {any} */ database, /** @type {string} */ id, /** @type {string} */ audience) => database.query(
+    `INSERT INTO evimed_geo.question_groups (id, user_id, geo_project_id, set_version, pool, name, audience) VALUES ($1, $2, $3, 1, 'P1', 'g', $4)`,
+    [id, owner, project.id, audience]);
+  await insertGroup(before, own("g-old-physician"), "physician");
+  await assert.rejects(insertGroup(before, own("g-old-caregiver"), "caregiver"), { code: "23514" }, "the old CHECK refuses the new word");
+
+  const restarted = open();
+  await migrateGeo(restarted);
+  const definition = await audienceCheck(restarted);
+  for (const word of ["patient", "physician", "caregiver", "pharmacist", "institution", "other"]) assert.ok(definition.includes(`'${word}'`), `${word} in ${definition}`);
+  await insertGroup(restarted, own("g-new-caregiver"), "caregiver");
+  const kept = await restarted.query(`SELECT audience FROM evimed_geo.question_groups WHERE geo_project_id = $1 ORDER BY id`, [project.id]);
+  assert.deepEqual(kept.rows.map((row) => row.audience).sort(), ["caregiver", "physician"], "the rows written before the restart are untouched");
+});
+
 test("deleting a project takes its content and measurements, keeps its money, and touches no one else's", options, async () => {
   const database = open();
   const store = new GeoStore({ database });

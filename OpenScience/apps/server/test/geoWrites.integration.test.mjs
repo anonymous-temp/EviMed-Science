@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
+import { GEO_AUDIENCES } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { brandRegistry } from "../src/geoParse.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
@@ -94,6 +95,38 @@ test("a write's calls it cannot read are refused whole; its items are refused on
     [1, "claimKey", "invalid"], [1, "sourceKind", "unknown_value"], [2, "quote", "missing"], [3, "claimKey", "duplicate"], [4, undefined, "invalid"],
     [5, "secret", "ignored_fields"],
   ]);
+});
+
+test("a question set the database's own CHECK refuses is a named rejection, not an outage, and nothing of it is stored", options, async () => {
+  // D-01: a database whose audience CHECK predates the `caregiver` word refuses the one bulk insert
+  // with a raw 23514; the gateway used to answer that as `geo_gateway_unavailable`, which a run reads
+  // as "give the platform's data up". The set is the run's to correct, so it is a named refusal.
+  const project = await freshProject();
+  const constraint = "question_groups_audience_check";
+  const setAudienceCheck = (/** @type {readonly string[]} */ words) => database.transaction(async (/** @type {any} */ client) => {
+    await client.query(`ALTER TABLE evimed_geo.question_groups DROP CONSTRAINT ${constraint}`);
+    await client.query(`ALTER TABLE evimed_geo.question_groups ADD CONSTRAINT ${constraint} CHECK (audience IN (${words.map((word) => `'${word}'`).join(", ")}))`);
+  });
+  const groups = [
+    { name: "Doctors", pool: "P1", audience: "physician", questions: [{ text: "Which dose?", kind: "typical", isMeasured: true }] },
+    { name: "Caregivers", pool: "P3", audience: "caregiver", questions: [{ text: "Who gives the injection?", kind: "typical", isMeasured: true }] },
+  ];
+  await setAudienceCheck(["patient", "physician"]);
+  try {
+    await assert.rejects(write(project, "questions", { data: { groups } }), (/** @type {any} */ error) => {
+      assert.deepEqual([error.status, error.code], [422, "geo_write_rejected"]);
+      assert.equal(error.cause?.code, "23514", "the database's SQLSTATE stays with the error for the operator");
+      assert.equal(error.message.includes("question_groups"), false, "the run is not told the table");
+      return true;
+    });
+    assert.deepEqual(await store.questionSets(project.id), [], "the write is one transaction: not even the set row is left");
+    // An error that is not an integrity violation is not mapped: it still reaches the gateway as itself.
+    // The set without the new word is accepted by the same database.
+    assert.equal((await write(project, "questions", { data: { groups: [groups[0]] } })).ok, true);
+  } finally {
+    await setAudienceCheck(GEO_AUDIENCES);
+  }
+  assert.equal((await write(project, "questions", { data: { groups } })).ok, true, "once the CHECK knows the word the whole set is written");
 });
 
 test("a claim is versioned by what it says; its bookkeeping changes in place", options, async () => {

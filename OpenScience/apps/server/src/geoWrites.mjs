@@ -1096,7 +1096,24 @@ const BASELINE_MISSING = Object.freeze({ code: "baseline_missing",
   message: "This project has no finished baseline yet. The platform measures the locked questions first and then schedules the strategy on its own; nothing to do in this run." });
 
 /**
- * One `geo_write` call against a resolved GEO project.
+ * Whether the database itself refused a row: SQLSTATE class 23 (a CHECK, a
+ * NOT NULL, a foreign key, a unique key). The write module checks every word
+ * and length before it reaches the store, so one of these is a constraint the
+ * module did not know the table held: a column narrower than today's
+ * vocabulary on a database that predates a word, or a row that moved under the
+ * write. The payload cannot be stored as it stands, and sending it again
+ * changes nothing; that is not the platform being down.
+ * @param {unknown} error
+ */
+const isIntegrityViolation = (error) => typeof /** @type {any} */ (error)?.code === "string" && /^23[0-9A-Z]{3}$/.test(/** @type {any} */ (error).code);
+
+/**
+ * One `geo_write` call against a resolved GEO project. A write the database
+ * refuses by one of its own constraints is `geo_write_rejected` (422), with the
+ * database's error kept as `cause` for the operator: the run hears that this
+ * payload cannot be stored and corrects it, instead of hearing the platform is
+ * unavailable and giving the data up (D-01: one `caregiver` group on a database
+ * whose CHECK predates the word lost a whole question set that way).
  * @param {{ store: import("./geoStore.mjs").GeoStore, project: any, what: string, body: Record<string, any>,
  *   renameProject?: ((userId: string, projectId: string, name: string) => Promise<unknown>) | null,
  *   articleExists?: ((project: any, path: string) => Promise<boolean>) | null,
@@ -1104,7 +1121,21 @@ const BASELINE_MISSING = Object.freeze({ code: "baseline_missing",
  *   `articleGate` reads an article's gate from the run ledger; without it every article is `unverified`
  * @returns {Promise<{ ok: boolean, ids: string[], issues: GeoIssue[], [key: string]: any }>}
  */
-export async function geoRuntimeWrite({ store, project, what, body, renameProject = null, articleGate = null, articleExists = null }) {
+export async function geoRuntimeWrite(input) {
+  try { return await writeToProject(input); }
+  catch (error) {
+    if (!isIntegrityViolation(error)) throw error;
+    const rejected = new HttpError(422, "geo_write_rejected",
+      "The platform's store refused this write: a value in it is outside what this project's data accepts, so the call was not stored as sent. "
+      + "Check the closed words (pool, audience, kind, status, tier) and the lengths against the tool description, then write it again; "
+      + "if it is refused again, leave this write out and say so in the report.");
+    rejected.cause = error;
+    throw rejected;
+  }
+}
+
+/** @param {Parameters<typeof geoRuntimeWrite>[0]} input */
+async function writeToProject({ store, project, what, body, renameProject = null, articleGate = null, articleExists = null }) {
   if (!GEO_WRITE_WHATS.includes(what)) throw failure(400, "geo_write_what_invalid", `what must be one of: ${GEO_WRITE_WHATS.join(", ")}.`);
   if (!withinSize(body, GEO_WRITE_LIMITS.jsonBytes)) throw failure(413, "geo_request_too_large", "The write is larger than 256 KB.");
   /** @type {GeoIssue[]} */

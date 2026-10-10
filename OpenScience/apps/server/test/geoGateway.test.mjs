@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
+import { classifyEvidenceSourceError } from "@evimed/domain";
 import { GEO_GATEWAY_PATH, GEO_GATEWAY_WINDOW_LIMITS, createGeoGatewayHandler, geoGatewayProviderUrl, geoGatewayRoutePattern } from "../src/geoGateway.mjs";
 import { GEO_READ_MAX_ITEMS, geoAudienceAllows } from "../src/geoService.mjs";
 import { HttpError } from "../src/security.mjs";
@@ -21,7 +22,7 @@ const runtimeManager = {
 };
 
 /** A geo module double whose store answers only alice's GEO project, and whose read enforces the real bound. */
-function geoDouble(config, { failRead = null, social = null } = {}) {
+function geoDouble(config, { failRead = null, failStep = null, social = null } = {}) {
   const calls = /** @type {any[]} */ ([]);
   const project = { id: "geo_1", userId: "alice", projectId: "p-geo", product: {}, engines: ["deepseek"] };
   return {
@@ -32,6 +33,7 @@ function geoDouble(config, { failRead = null, social = null } = {}) {
           return userId === project.userId && projectId === project.projectId ? project : null;
         },
         async setStep(/** @type {string} */ id, /** @type {string} */ step, /** @type {any} */ fields) {
+          if (failStep) throw failStep;
           calls.push(["setStep", id, step, fields.status]);
           return { ...project, steps: { [step]: fields } };
         },
@@ -152,6 +154,32 @@ test("a round the project does not have is the filter being wrong; a failure und
   assert.deepEqual([failed.status, failed.body.code], [503, "geo_gateway_unavailable"]);
   assert.equal(JSON.stringify(failed.body).includes("10.0.0.5"), false, "an internal address never reaches the run");
   assert.deepEqual(reports, ["ECONNREFUSED"]);
+});
+
+test("a write the database refuses by a constraint of its own is the payload's fault, not an outage", async (t) => {
+  // D-01: a `caregiver` group on a database whose CHECK predates the word came back as
+  // `geo_gateway_unavailable` (503), the code that tells a run to give the data up.
+  const reports = /** @type {string[]} */ ([]);
+  const refusal = Object.assign(new Error('new row for relation "question_groups" violates check constraint "question_groups_audience_check"'),
+    { code: "23514", table: "question_groups", constraint: "question_groups_audience_check" });
+  const { geo } = geoDouble(on, { failStep: refusal });
+  const { post, failures } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo, report: (code) => reports.push(code) }));
+  const rejected = await post("write", { what: "step", data: { step: "evidence", status: "running" } });
+  assert.deepEqual([rejected.status, rejected.body.code], [422, "geo_write_rejected"]);
+  assert.match(rejected.body.error, /refused this write/);
+  const heard = JSON.stringify(rejected.body);
+  assert.equal(heard.includes("question_groups") || heard.includes("23514"), false, "which constraint refused it is the operator's");
+  assert.deepEqual(reports, ["23514"], "the operator hears the SQLSTATE");
+  assert.deepEqual(failures.map((failure) => [failure.code, failure.status]), [["geo_write_rejected", 422]]);
+  assert.equal(classifyEvidenceSourceError(rejected.body.code), "terminal", "the payload is the run's to correct, not a source to wait for");
+
+  // Any other failure underneath stays an outage: only an integrity violation says the payload is at fault.
+  for (const code of ["57014", "ECONNREFUSED", "40P01", "22P02"]) {
+    const outage = geoDouble(on, { failStep: Object.assign(new Error("boom"), { code }) });
+    const { post: broken } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo: outage.geo, report: (reported) => reports.push(reported) }));
+    const answer = await broken("write", { what: "step", data: { step: "evidence", status: "running" } });
+    assert.deepEqual([answer.status, answer.body.code], [503, "geo_gateway_unavailable"], code);
+  }
 });
 
 test("each project has a per-minute ceiling per operation", async (t) => {
