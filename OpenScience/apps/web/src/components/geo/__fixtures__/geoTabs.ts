@@ -352,8 +352,8 @@ export const monitoringFilled: GeoMonitoring = {
     { engine: "kimi", points: [{ date: "2026-09-22", value: 20, n: 12, k: null }, { date: "2026-10-13", value: 29, n: 12, k: null }] },
   ],
   cited: [
-    { articleId: "art_1", title: "打了减重针一直恶心，要不要停药？", engine: "doubao", firstSeen: "2026-10-13" },
-    { articleId: "art_1", title: "打了减重针一直恶心，要不要停药？", engine: "yuanbao", firstSeen: "2026-10-14" },
+    { articleId: "art_1", title: "打了减重针一直恶心，要不要停药？", engine: "doubao", firstSeen: "2026-10-13T02:11:45.123Z" },
+    { articleId: "art_1", title: "打了减重针一直恶心，要不要停药？", engine: "yuanbao", firstSeen: "2026-10-14T03:40:12.456Z" },
   ],
   newErrors: [diagnosisFilled.errors[0]],
   next: { date: "2026-10-20", kind: "weekly" },

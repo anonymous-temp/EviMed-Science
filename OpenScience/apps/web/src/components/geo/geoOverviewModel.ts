@@ -28,7 +28,7 @@ import {
   type GeoStepKey,
   type GeoWeekItem,
 } from "@/lib/geoClient";
-import { allowanceWaitingSentence, geoCoverageDifference, geoCoverageStatement } from "@evimed/domain";
+import { agendaLocalDate, allowanceWaitingSentence, DISPLAY_TIME_ZONE, geoCoverageDifference, geoCoverageStatement } from "@evimed/domain";
 import { stepAllowanceWait, type AllowanceWaiting } from "@/lib/allowanceWait";
 import type { RailState, RailStep } from "@/components/ui/ProgressRail";
 import type { DeltaPolarity } from "@/components/ui/Delta";
@@ -693,9 +693,12 @@ export function actionMarkers(
   dates: readonly string[],
   monitoring: GeoMonitoring | null,
 ): Array<{ index: number; label: string }> {
+  // The series are days in the GEO module's zone, and a citation is an instant: it is compared as the day it fell on there. Compared as
+  // it stands, the same day reads as earlier than its own instant, and the marker moves to the measurement after it.
   const cited = (Array.isArray(monitoring?.cited) ? monitoring.cited : [])
     .map((row) => row?.firstSeen)
-    .filter((date): date is string => typeof date === "string" && date.length > 0)
+    .filter((seen): seen is string => typeof seen === "string" && !Number.isNaN(Date.parse(seen)))
+    .map((seen) => agendaLocalDate(DISPLAY_TIME_ZONE, seen))
     .sort();
   if (cited.length === 0 || dates.length === 0) return [];
   const at = dates.findIndex((date) => date >= cited[0]);

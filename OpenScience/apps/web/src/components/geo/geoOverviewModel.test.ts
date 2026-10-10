@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { GeoDiagnosis, GeoProject } from "@/lib/geoClient";
+import type { GeoDiagnosis, GeoMonitoring, GeoProject } from "@/lib/geoClient";
 import { cell, diagnosisFilled, diagnosisWith, geoProject } from "./__fixtures__/geoTabs";
 import {
+  actionMarkers,
   changeWord,
   comparableRun,
   coverageMarker,
@@ -451,5 +452,33 @@ describe("a reading is compared only with one measured over the same thing (R14 
     expect(overviewCoverageNotice(moved)).toBe("引擎范围有变化，不与上一轮比较");
     expect(headlineSentence(moved, null)).toContain("综合可见度 44，引擎范围有变化，不与上一轮比较");
     expect(overviewCoverageNotice(project())).toBeNull();
+  });
+});
+
+describe("the first citation on the trend", () => {
+  // The server sends the instant a citation was first seen; the series are days in the GEO module's zone (Asia/Shanghai).
+  const days = ["2026-10-06", "2026-10-13", "2026-10-20"];
+  const cited = (firstSeen: string) => ({ cited: [{ articleId: "art_1", title: "稿件", engine: "doubao", firstSeen }] }) as unknown as GeoMonitoring;
+
+  it("is drawn on the day it was first seen, not on the measurement after it", () => {
+    expect(actionMarkers(days, cited("2026-10-13T02:11:45.123Z"))).toEqual([{ index: 1, label: "首次被 AI 引用" }]);
+  });
+
+  it("reads the instant as the day it fell on in China: 04:00 on the 13th is the 13th, not the 12th in UTC", () => {
+    const dates = ["2026-10-06", "2026-10-12", "2026-10-13", "2026-10-20"];
+    expect(actionMarkers(dates, cited("2026-10-12T20:00:00Z"))).toEqual([{ index: 2, label: "首次被 AI 引用" }]);
+  });
+
+  it("goes to the last measurement when the citation came after all of them", () => {
+    expect(actionMarkers(days, cited("2026-10-21T01:00:00.000Z"))).toEqual([{ index: 2, label: "首次被 AI 引用" }]);
+  });
+
+  it("is not drawn at all when the time it was seen is not a time", () => {
+    expect(actionMarkers(days, cited("not a time"))).toEqual([]);
+  });
+
+  it("is not drawn when nothing has been cited", () => {
+    expect(actionMarkers(days, { cited: [] } as unknown as GeoMonitoring)).toEqual([]);
+    expect(actionMarkers(days, null)).toEqual([]);
   });
 });
