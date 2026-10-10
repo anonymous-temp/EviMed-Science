@@ -38,8 +38,9 @@ test("a tick starts every due loop; the periodic ones wait for their interval", 
   assert.deepEqual(calls.filter((call) => call !== "process").sort(), ["manifest", "pull", "sources"]);
   assert.equal(owners, 1);
   assert.equal(pipeline.batches, 0, "the first tick made the owner; processing starts on the next");
-  assert.equal(database.statements.length, 4, "the retention pass runs at start, one statement per table, and the sources' 30-day recount with it");
-  assert.match(database.statements[3], /SET selected_30d/);
+  assert.equal(database.statements.length, 5, "the retention pass runs at start, one statement per table, and the sources' 30-day recount with it");
+  assert.match(database.statements[3], /DELETE FROM evimed_frontier\.exposures/);
+  assert.match(database.statements[4], /SET selected_30d/);
 
   calls.length = 0;
   time.advance(5_000);

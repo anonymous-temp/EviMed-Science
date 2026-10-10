@@ -128,7 +128,7 @@ export class FrontierWorker {
     this.lastStarted = { mirror: 0, pull: 0, cleanup: 0 };
     /** What the pipeline's batches have done since start (plan §10.3.1's outcomes). */
     this.pipelineTotals = Object.fromEntries([["batches", 0], ...PIPELINE_OUTCOMES.map((key) => [key, 0])]);
-    this.retentionTotals = { entries: 0, itemChanges: 0, hotSnapshots: 0 };
+    this.retentionTotals = { entries: 0, itemChanges: 0, hotSnapshots: 0, exposures: 0 };
   }
 
   /** The code of a loop whose last run failed, or null when every loop's last run succeeded. */
@@ -262,7 +262,12 @@ export class FrontierWorker {
     ) SELECT count(*)::integer AS removed FROM removed`, [before(90)]);
     const hotSnapshots = await this.database.query(`DELETE FROM evimed_frontier.hot_snapshots WHERE taken_at IN (
       SELECT taken_at FROM evimed_frontier.hot_snapshots WHERE taken_at < $1::timestamptz ORDER BY taken_at LIMIT ${RETENTION_BATCH})`, [before(90)]);
-    const removed = { entries: entries.rowCount ?? 0, itemChanges: Number(itemChanges.rows?.[0]?.removed ?? 0), hotSnapshots: hotSnapshots.rowCount ?? 0 };
+    // A reader's viewing log: what they scrolled to, per page. Nothing reads it yet (the evolution plan judges a ranking by clicks only
+    // once it has this record), so it is kept as long as the logs beside it and no longer (review 2026-10-10, D-09).
+    const exposures = await this.database.query(`DELETE FROM evimed_frontier.exposures WHERE id IN (
+      SELECT id FROM evimed_frontier.exposures WHERE exposed_at < $1::timestamptz ORDER BY exposed_at LIMIT ${RETENTION_BATCH})`, [before(90)]);
+    const removed = { entries: entries.rowCount ?? 0, itemChanges: Number(itemChanges.rows?.[0]?.removed ?? 0), hotSnapshots: hotSnapshots.rowCount ?? 0,
+      exposures: exposures.rowCount ?? 0 };
     for (const [key, value] of Object.entries(removed)) this.retentionTotals[key] += value;
     return removed;
   }

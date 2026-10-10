@@ -84,13 +84,24 @@ test("the retention pass removes what produced nothing after 30 days and the log
   await database.query(`INSERT INTO evimed_frontier.item_changes (item_id, op, reason, changed_at) VALUES (1, 'upsert', 'published', $1), (2, 'remove', 'withdrawn', $2)`,
     [daysAgo(91), daysAgo(89)]);
   await database.query(`INSERT INTO evimed_frontier.hot_snapshots (taken_at, ranking) VALUES ($1, '[]'::jsonb), ($2, '[]'::jsonb)`, [daysAgo(91), daysAgo(1)]);
-  const worker = new FrontierWorker({ ingest: { plugin: { configured: false } }, database, now: () => new Date(now) });
-  assert.deepEqual(await worker.cleanup(), { entries: 4, itemChanges: 1, hotSnapshots: 1 });
-  const left = (await database.query("SELECT state, count(*)::integer AS n FROM evimed_frontier.entries GROUP BY state ORDER BY state")).rows;
-  assert.deepEqual(Object.fromEntries(left.map((row) => [row.state, row.n])),
-    { backfill: 1, dropped: 1, failed: 1, held: 1, merged: 1, promoted: 1, received: 1, "screened-out": 1 },
-    "young rows and every row behind an item stay");
-  assert.deepEqual(await worker.cleanup(), { entries: 0, itemChanges: 0, hotSnapshots: 0 }, "a second pass finds nothing left");
+  // D-09: a reader's viewing log was written and never pruned. Ninety days, like the logs beside it.
+  const reader = `exposure_reader_${sha256(String(now)).slice(0, 8)}`;
+  await database.query("INSERT INTO evimed_control.users(id, name, auth_type) VALUES ($1, $1, 'development') ON CONFLICT (id) DO NOTHING", [reader]);
+  try {
+    await database.query(`INSERT INTO evimed_frontier.exposures (user_id, surface, policy_revision_id, items, candidate_ids, exposed_at)
+      VALUES ($1, 'feed', 'default:test', '[]'::jsonb, '[]'::jsonb, $2), ($1, 'feed', 'default:test', '[]'::jsonb, '[]'::jsonb, $3)`, [reader, daysAgo(91), daysAgo(89)]);
+    const worker = new FrontierWorker({ ingest: { plugin: { configured: false } }, database, now: () => new Date(now) });
+    assert.deepEqual(await worker.cleanup(), { entries: 4, itemChanges: 1, hotSnapshots: 1, exposures: 1 });
+    assert.equal((await database.query("SELECT count(*)::integer AS n FROM evimed_frontier.exposures WHERE user_id = $1", [reader])).rows[0].n, 1, "the one within ninety days stays");
+    assert.equal(worker.status().retention.exposures, 1);
+    const left = (await database.query("SELECT state, count(*)::integer AS n FROM evimed_frontier.entries GROUP BY state ORDER BY state")).rows;
+    assert.deepEqual(Object.fromEntries(left.map((row) => [row.state, row.n])),
+      { backfill: 1, dropped: 1, failed: 1, held: 1, merged: 1, promoted: 1, received: 1, "screened-out": 1 },
+      "young rows and every row behind an item stay");
+    assert.deepEqual(await worker.cleanup(), { entries: 0, itemChanges: 0, hotSnapshots: 0, exposures: 0 }, "a second pass finds nothing left");
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id = $1", [reader]);
+  }
 });
 
 test("the hourly pass recounts each source's selected items of the last 30 days, writing only the counts that moved", options, async () => {

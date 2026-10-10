@@ -424,6 +424,8 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.exposures (
   exposed_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
 CREATE INDEX IF NOT EXISTS frontier_exposure_user_time_idx ON evimed_frontier.exposures(user_id, exposed_at);
+-- The retention pass deletes by age across readers (frontierWorker.cleanup).
+CREATE INDEX IF NOT EXISTS frontier_exposure_retention_idx ON evimed_frontier.exposures(exposed_at);
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.user_state (
   user_id    text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
