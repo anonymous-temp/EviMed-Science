@@ -629,6 +629,26 @@ describe("匹配与招募 — 复核这份评估, a reviewer's countersignature"
   });
 });
 
+describe("匹配与招募 — every citation a verdict rests on (E-06)", () => {
+  it("shows each citation with the document it is in and the date of what it records, the first being the rule's evidence", async () => {
+    const payload = addressed(fixture("ev201/matching-p0192.json"));
+    const row = payload.selected.criteria.find((entry: any) => entry.code === "E1");
+    const citation = (quote: string, source: string, at: string, start: number) => ({ quote, source, at, locator: { documentId: "prj_x", start, end: start + 8 } });
+    row.evidence = citation("2026-09-26 处方多西他赛", "document-aaaa1111.txt", "9 月 26 日", 0);
+    row.evidenceItems = [row.evidence, citation("2026-06-01 给予多西他赛", "document-bbbb2222.txt", "6 月 1 日", 40)];
+    server = installVcrServer(network.productRequest, { [P0192]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+    const cell = criterionRow("E1");
+    expect(cell).toHaveTextContent("“2026-09-26 处方多西他赛”");
+    expect(cell).toHaveTextContent("document-aaaa1111.txt · 9 月 26 日");
+    expect(cell).toHaveTextContent("“2026-06-01 给予多西他赛”");
+    expect(cell).toHaveTextContent("document-bbbb2222.txt · 6 月 1 日");
+  });
+});
+
 describe("匹配与招募 — what the evidence of a rule has been through", () => {
   // Review V-M8: negation, a correction and a conflict were told only in the folded timeline at the foot of the tab, so a 满足 or 不满足
   // on a rule's own row said nothing of its evidence having been denied, corrected or contradicted, nor whose records the fold held.

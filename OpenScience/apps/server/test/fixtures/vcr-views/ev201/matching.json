@@ -190,6 +190,17 @@
           "source": "数据快照字段「age」",
           "at": "8 月 14 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "age = 58 year",
+            "locator": {
+              "field": "age",
+              "snapshotId": "snp_partner"
+            },
+            "source": "数据快照字段「age」",
+            "at": "8 月 14 日"
+          }
+        ],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",
@@ -211,6 +222,17 @@
           "source": "数据快照字段「ecog」",
           "at": "9 月 10 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "ecog = 0",
+            "locator": {
+              "field": "ecog",
+              "snapshotId": "snp_partner"
+            },
+            "source": "数据快照字段「ecog」",
+            "at": "9 月 10 日"
+          }
+        ],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",
@@ -232,6 +254,17 @@
           "source": "数据快照字段「first_line_platinum」",
           "at": "1 月 5 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "first_line_platinum = true",
+            "locator": {
+              "field": "first_line_platinum",
+              "snapshotId": "snp_partner"
+            },
+            "source": "数据快照字段「first_line_platinum」",
+            "at": "1 月 5 日"
+          }
+        ],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",
@@ -253,6 +286,17 @@
           "source": "数据快照字段「active_brain_metastasis」",
           "at": "9 月 1 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "active_brain_metastasis = false",
+            "locator": {
+              "field": "active_brain_metastasis",
+              "snapshotId": "snp_partner"
+            },
+            "source": "数据快照字段「active_brain_metastasis」",
+            "at": "9 月 1 日"
+          }
+        ],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",
@@ -274,6 +318,17 @@
           "source": "数据快照字段「last_immunotherapy」",
           "at": "6 月 1 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "last_immunotherapy = 2026-06-01T00:00:00.000Z",
+            "locator": {
+              "field": "last_immunotherapy",
+              "snapshotId": "snp_partner"
+            },
+            "source": "数据快照字段「last_immunotherapy」",
+            "at": "6 月 1 日"
+          }
+        ],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",
@@ -295,6 +350,17 @@
           "source": "数据快照字段「pregnancy」",
           "at": "9 月 1 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "pregnancy = false",
+            "locator": {
+              "field": "pregnancy",
+              "snapshotId": "snp_partner"
+            },
+            "source": "数据快照字段「pregnancy」",
+            "at": "9 月 1 日"
+          }
+        ],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",

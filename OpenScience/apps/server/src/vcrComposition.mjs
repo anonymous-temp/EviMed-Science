@@ -1287,9 +1287,19 @@ export async function vcrMetricsSnapshot(vcr) {
   try {
     matching = await vcr.store.one(`SELECT ${MATCHING_RECORD_COUNTS.map(({ kind, from }) => `(SELECT count(*)::int FROM evimed_vcr.${from}) AS ${kind}`).join(", ")}`);
   } catch { /* Missing metrics never stop research or masquerade as zero. */ }
+  // The receipts behind stored facts and judgments, by the model that answered the producing run's latest call (the run's own
+  // ledger could say nothing for the rest). The operator's view of which model the study's evidence rests on; no run, request or hash.
+  /** @type {Array<{ model: string, receipts: number }> | null} */
+  let matchingProducers = null;
+  try {
+    matchingProducers = (await vcr.store.rows(`SELECT coalesce(NULLIF(provenance->'requests'->0->>'observedModel', ''), 'unrecorded') AS model, count(*)::int AS receipts
+      FROM evimed_vcr.matching_producers GROUP BY 1 ORDER BY receipts DESC, model LIMIT ${MATCHING_PRODUCER_MODELS_SHOWN}`))
+      .map((/** @type {any} */ row) => ({ model: String(row.model), receipts: Number(row.receipts) }));
+  } catch { /* As above. */ }
   return {
     tables,
     matching,
+    matchingProducers,
     service: vcr.service?.counters ?? {},
     jobs: vcr.jobs?.status?.() ?? null,
     orchestrator: vcr.orchestrator?.status?.() ?? null,
@@ -1320,6 +1330,8 @@ const MATCHING_RECORD_COUNTS = Object.freeze([
   { kind: "frozen_batches", counts: "frozen matching inputs", from: "matching_inputs" },
   { kind: "reviewed_projections", counts: "reviewed text projections of documents", from: "document_projections" },
 ]);
+/** The most models the producer split names: the models behind a study's evidence are few, and a label set stays bounded. */
+const MATCHING_PRODUCER_MODELS_SHOWN = 20;
 /** The kinds of `open_science_vcr_matching_records` and what each counts. */
 export const VCR_MATCHING_RECORD_KINDS = Object.freeze(Object.fromEntries(MATCHING_RECORD_COUNTS.map(({ kind, counts }) => [kind, counts])));
 
@@ -1386,6 +1398,10 @@ export function vcrMetricFamilies(enabled, snapshot) {
     add('matching_records', `Stored clinical matching records, counted over every revision, with no patient or study label. By kind: ${
       MATCHING_RECORD_COUNTS.map(({ kind, counts }) => `${kind} = ${counts}`).join('; ')}.`, 'gauge',
     MATCHING_RECORD_COUNTS.filter(({ kind }) => kind in snapshot.matching).map(({ kind }) => ({ labels: { kind }, value: Number(/** @type {any} */ (snapshot.matching)[kind]) })));
+  }
+  if (snapshot.matchingProducers?.length) {
+    add('matching_producers', 'The model-call receipts behind stored matching facts and language judgments, by the model that answered the producing run\'s latest call (unrecorded where the run ledger could not say); no run, request or study label.', 'gauge',
+      snapshot.matchingProducers.map(({ model, receipts }) => ({ labels: { model }, value: receipts })));
   }
   const loops = Object.entries(snapshot.worker?.loops ?? {}).filter(([, loop]) => loop?.wired);
   if (loops.length) {

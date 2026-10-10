@@ -898,6 +898,14 @@ export interface VcrCandidate {
   priority?: { label: string; score: number | null; rationale: string | null } | null;
 }
 
+/** A sentence a verdict rests on, where it is (the document by the name the data tab lists it under, or a cell of the data table) and the date of what it records. */
+export interface VcrCriterionCitation {
+  quote: string;
+  source?: string | null;
+  at?: string | null;
+  locator?: { documentId?: string; start?: number | null; end?: number | null; snapshotId?: string; field?: string } | null;
+}
+
 /** One rule judged against one candidate. */
 export interface VcrCriterionJudgement {
   /**
@@ -915,7 +923,9 @@ export interface VcrCriterionJudgement {
    * The patient's own sentence, and where it is from. `locator` is where the sentence stands: a span of a document
    * (`documentId`, `start`, `end` — the same span a fact of the clinical timeline cites) or a cell of the data table (`snapshotId`, `field`).
    */
-  evidence?: { quote: string; source?: string | null; at?: string | null; locator?: { documentId?: string; start?: number | null; end?: number | null; snapshotId?: string; field?: string } | null } | null;
+  evidence?: VcrCriterionCitation | null;
+  /** Every citation the verdict rests on (at most three), the first of them being `evidence`: an unknown that waits on a prescription also shows the administration it was set against. */
+  evidenceItems?: VcrCriterionCitation[];
   /** What to ask for: 「申请近 4 周头颅 MRI」. */
   request?: string | null;
   requestNote?: string | null;
@@ -927,6 +937,8 @@ export interface VcrProtocolChoice { id: string; title: string; version: number;
 export interface VcrClinicalTimelineEntry {
   id: string; variable: string; value: unknown; unit: string | null; at: string | null; assertion: string; experiencer: string | null;
   medicationState: string | null; correctionOf: string | null; quote: string | null;
+  /** The document the fact is in, by the name the data tab lists it under. */
+  document?: string | null;
   superseded?: boolean; conflictFactIds?: string[]; correctionReason?: string | null;
   locator: { documentId: string; start: number; end: number } | null;
 }
@@ -2354,6 +2366,8 @@ export interface VcrIntakeFile {
   blankPages: number | null;
   /** A table a FHIR, OMOP or ADaM import produced: which standard it came from. */
   importFormat: string | null;
+  /** A reviewed record: how many characters a run was shown of its text and how many it never was (`null` when it is not reviewed). */
+  reading: { chars: number | null; read: number; skipped: number | null; complete: boolean } | null;
 }
 
 export interface VcrIntakeIssue { code: string; message: string; table: string | null; column: string | null }
@@ -2490,6 +2504,8 @@ function readIntakeFile(raw: Loose): VcrIntakeFile {
     })),
     entries: finite(raw.entries), sheets: strings(raw.sheets), sheetUsed: text(raw.sheetUsed), subjectKey: text(raw.subjectKey), visibleAt: text(raw.visibleAt),
     sourceFormat: text(raw.sourceFormat), pages: finite(raw.pages), blankPages: finite(raw.blankPages), importFormat: text(raw.importFormat),
+    reading: finite(obj(raw.reading).read) !== null
+      ? { chars: finite(obj(raw.reading).chars), read: finite(obj(raw.reading).read) ?? 0, skipped: finite(obj(raw.reading).skipped), complete: obj(raw.reading).complete === true } : null,
   };
 }
 

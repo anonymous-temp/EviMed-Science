@@ -333,6 +333,28 @@ describe("数据接入 — what the page sends", () => {
     expect(row.closest("li")?.textContent).toContain("来自 PDF，12 页，其中 1 页没有文字");
   });
 
+  it("says how much of a reviewed record a run was shown and how much it never was, and says nothing for one that is not reviewed (E-06)", async () => {
+    const record = (id: string, name: string, reading: unknown) => ({
+      id, name, role: "document", roleLabel: "患者文档", format: "txt", size: "2 KB", rows: null, columnCount: null, at: "刚刚", latest: null, columns: [], entries: null,
+      sheets: [], sheetUsed: null, subjectKey: "P0123456789abcdef", visibleAt: null, sourceFormat: null, pages: null, blankPages: null, reading,
+    });
+    load("data-sealed.json", (raw) => {
+      raw.intake.sources[0].files.push(
+        record("sfl_part", "document-aaaa1111.txt", { chars: 31042, read: 20000, skipped: 11042, complete: false }),
+        record("sfl_all", "document-bbbb2222.txt", { chars: 900, read: 900, skipped: 0, complete: true }),
+        record("sfl_none", "document-cccc3333.txt", { chars: 900, read: 0, skipped: 900, complete: false }),
+        record("sfl_plain", "document-dddd4444.txt", null),
+      );
+    });
+    drawTab();
+    const line = async (name: string) => (await screen.findByText(name)).closest("li")?.textContent ?? "";
+    expect(await line("document-aaaa1111.txt")).toContain("已读 20,000 / 31,042 字，其余没读到");
+    expect(await line("document-bbbb2222.txt")).toContain("全文已读");
+    expect(await line("document-cccc3333.txt")).toContain("尚未读取");
+    const plain = await line("document-dddd4444.txt");
+    expect(plain).not.toMatch(/已读|尚未读取|全文/);
+  });
+
   it("names the plane's refusal of an upload in words a data manager can act on", async () => {
     drawTab();
     const chooser = (await screen.findAllByLabelText("选择要上传的文件"))[0];

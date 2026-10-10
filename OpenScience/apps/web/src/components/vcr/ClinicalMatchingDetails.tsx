@@ -172,7 +172,7 @@ export function ClinicalTimeline({ studyId, data, mayReadOriginal, subject }: {
       {shown.visible.map(entry => <li key={entry.id} className="flex flex-col gap-2 py-3">
         <p className="text-caption text-text-3">{[formatDay(entry.at) || '日期未记载', assertions[entry.assertion] ?? '未知',
           entry.experiencer ? experiencers[entry.experiencer] : null, entry.medicationState ? medicationStates[entry.medicationState] : null,
-          entry.correctionOf ? '更正记录' : null, entry.superseded ? '已有更正' : null, entry.conflictFactIds?.length ? '记录有冲突' : null].filter(Boolean).join(' · ')}</p>
+          entry.correctionOf ? '更正记录' : null, entry.superseded ? '已有更正' : null, entry.conflictFactIds?.length ? '记录有冲突' : null, entry.document ?? null].filter(Boolean).join(' · ')}</p>
         <p className="text-ui text-text">{entry.quote ?? `${entry.variable}：${factValueText(entry.value)}${entry.unit ? ` ${entry.unit}` : ''}`}</p>
         {entry.correctionReason && <p className="text-caption text-text-2">{entry.correctionReason}</p>}
         {/* The original can be read wherever the fact cites a span of it; whether the server can open that span is the server's answer, said right here. */}

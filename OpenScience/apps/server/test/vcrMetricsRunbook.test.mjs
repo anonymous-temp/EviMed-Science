@@ -27,6 +27,7 @@ function gaugeParagraph() {
 const everything = /** @type {any} */ ({
   tables: { jobs: {}, studies: 1, active: 1 },
   matching: Object.fromEntries(Object.keys(VCR_MATCHING_RECORD_KINDS).map((kind, index) => [kind, index])),
+  matchingProducers: [{ model: "deepseek-v4-flash", receipts: 1 }, { model: "unrecorded", receipts: 1 }],
   service: { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 },
   jobs: { counters: { enqueued: 0, succeeded: 0, failed: 0 } },
   engine: { configured: true },

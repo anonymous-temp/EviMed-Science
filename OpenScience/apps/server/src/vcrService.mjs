@@ -1127,8 +1127,13 @@ export class VcrService {
     const clinicalTimeline = timeline.map(fact => ({ ...fact, superseded: longitudinal.superseded.includes(fact.id),
       conflicts: longitudinal.conflicts.find(entry => entry.factId === fact.id)?.withFacts ?? [] }));
     const candidateCoverage = protocol && matchStore.latestMatchingProgress ? await matchStore.latestMatchingProgress(study.id,protocol.id) : null;
+    // The documents the page cites, by the names the data tab lists them under: a citation carries an id, a reader needs a name.
+    const cited = [...list(selected?.judgments).flatMap((/** @type {any} */ judgment) => list(judgment.evidence).map((/** @type {any} */ item) => item?.locator?.documentId)),
+      ...clinicalTimeline.map(fact => fact.source?.documentId)].filter(Boolean);
+    const documentNames = cited.length && typeof matchStore.documentNames === 'function' ? await matchStore.documentNames(study.id, cited).catch(() => new Map()) : new Map();
     return {
       ...(candidateCoverage ? {candidateCoverage} : {}),
+      documentNames,
       protocols, candidateRoster, comparisons, timeline: clinicalTimeline,
       protocol, criteria, subjects, referrals, sites, siteFunnel, followups, selected, referralEvents, openByAssessment,
       tallies: Object.fromEntries(tallyRows.map((row) => [String(row.summary), Number(row.total)])),

@@ -811,6 +811,46 @@ test("the intake page names whoever confirmed a field map and each account a sou
   }
 });
 
+test("a criterion's evidence shows every citation the verdict rests on, each with the document it is in and its date, and the document's name is the one the data tab shows (E-06)", () => {
+  const citation = (/** @type {string} */ quote, /** @type {string} */ documentId, /** @type {string | null} */ occurredAt) => ({
+    factId: `fac_${documentId}`, variable: "docetaxel", quote, quoteKind: "verbatim", locator: { documentId, start: 3, end: 3 + quote.length }, occurredAt, visibleAt: "2026-09-01T00:00:00.000Z", polarity: "affirmed" });
+  const base = matchingBundle([]);
+  const judged = (/** @type {any[]} */ evidence, /** @type {Map<string, string> | undefined} */ documentNames) => presentMatchingTab({
+    ...base, match: { ...base.match, ...(documentNames ? { documentNames } : {}),
+      selected: { ...base.match.selected, judgments: [{ criterionId: "crit_1", state: "unknown", applicable: true, decidedBy: "code", evidence }] } } }).selected.criteria[0];
+  const later = citation("2026-09-26 处方多西他赛", "prj_new", "2026-09-26T00:00:00.000Z");
+  const earlier = citation("2026-06-01 给予多西他赛", "sfl_old", "2026-06-01T00:00:00.000Z");
+  const names = new Map([["prj_new", "document-aaaa1111.txt"], ["sfl_old", "document-bbbb2222.txt"]]);
+
+  const row = judged([later, earlier], names);
+  assert.deepEqual(row.evidenceItems.map((item) => [item.quote, item.source]), [["2026-09-26 处方多西他赛", "document-aaaa1111.txt"], ["2026-06-01 给予多西他赛", "document-bbbb2222.txt"]],
+    "both the prescription and the administration it is set against, each with its document");
+  assert.deepEqual(row.evidenceItems.map((item) => item.locator.documentId), ["prj_new", "sfl_old"], "and where to open each");
+  assert.ok(row.evidenceItems.every((item) => typeof item.at === "string" && item.at.length > 0), "each with the date of what it records");
+  assert.deepEqual(row.evidence, row.evidenceItems[0], "the first stays the criterion's evidence, as before");
+  // No name resolved (a document the viewer cannot name, or an evidence kind with none): the older label, and nothing invented.
+  assert.equal(judged([later]).evidence.source, "病历原文");
+  // Only what is quoted is shown, and no more than three citations.
+  assert.equal(judged([{ ...later, quote: "" }, earlier], names).evidenceItems.length, 1);
+  assert.equal(judged([later, earlier, later, earlier], names).evidenceItems.length, 3);
+  assert.equal(judged([], names).evidence, null);
+  assert.deepEqual(judged([], names).evidenceItems, []);
+  // Neither the run that wrote the facts nor the model behind them is on the page.
+  assert.equal(/run|model|requestHash|provenance/i.test(JSON.stringify(row)), false);
+});
+
+test("the intake page carries how much of each reviewed document a run was shown, as counts and nothing about who read it (E-06)", () => {
+  const file = (/** @type {Record<string, any>} */ extra) => ({ id: "sfl_1", name: "document-aaaa1111.txt", role: "document", format: "txt", bytes: 70, subjectKey: "P1", visibleAt: null, chars: 70, ...extra });
+  const bundle = (/** @type {any[]} */ files) => ({ study: { dataTier: "T1" }, now: NOW, roles: ["lead"], seal: {}, dataPlane: { available: true, snapshots: [], sources: [{
+    id: "src_1", name: "合作方病历", mine: true, readable: true, status: "frozen", valueSource: "observed", upload: { formats: ["txt"] }, fieldMap: { state: "none", columns: [], issues: [] }, grants: [], files }] } });
+  const [read, untouched, plain] = presentIntake(bundle([
+    file({ reading: { chars: 70, read: 20, skipped: 50, complete: false, windows: 2 } }), file({ id: "sfl_2", reading: null }), file({ id: "sfl_3" })])).sources[0].files;
+  assert.deepEqual(read.reading, { chars: 70, read: 20, skipped: 50, complete: false });
+  assert.equal(untouched.reading, null, "not reviewed: no line");
+  assert.equal(plain.reading, null);
+  assert.equal(JSON.stringify(read).includes("windows"), false, "how many reads it took is not the researcher's");
+});
+
 test("a person with no recorded moves has an empty trail, not a made-up one", () => {
   assert.deepEqual(presentMatchingTab(matchingBundle([])).selected.trace, []);
   assert.deepEqual(presentMatchingTab(matchingBundle(undefined)).selected.trace, []);

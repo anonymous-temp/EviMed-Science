@@ -1572,7 +1572,11 @@ label: `contextual_facts` (facts written with the clinical block), `legacy_facts
 written without it), `producer_receipts` (the model-call receipts behind facts and
 language judgments), `incomplete_assessments` (assessments that ended
 insufficient_evidence), `frozen_batches` (frozen matching inputs) and
-`reviewed_projections` (reviewed text projections of documents). Read the writes a run
+`reviewed_projections` (reviewed text projections of documents).
+`open_science_vcr_matching_producers{model}` splits the producer receipts by the model
+that answered the producing run's latest call (`unrecorded` where the run ledger could
+not say), so a change of model behind the stored evidence is visible; it carries no run,
+request or hash. Read the writes a run
 was refused from `open_science_vcr_service_total{kind="writeIssues"}` and job outcomes
 from `open_science_vcr_jobs_total`. The matching gauge does not measure eligible recall,
 latency or spend, and none of the three is a series of its own: eligible recall needs

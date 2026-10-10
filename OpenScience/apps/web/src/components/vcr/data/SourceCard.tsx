@@ -11,6 +11,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { Tag } from "@/components/ui/Tag";
 import { CloudDocuments } from "./CloudDocuments";
+import { readingText } from "./intakeState";
 import { FieldMapEditor } from "./FieldMapEditor";
 import { IMPORT_FORMATS, documentAccept, importAccept, importProblem, importSummary, intakeErrorMessage, uploadProblem } from "./intakeState";
 
@@ -42,6 +43,7 @@ function FileRow({ file, frozen, canManage, busy, onRemove }: { file: VcrIntakeF
     file.importFormat ? `来自 ${IMPORT_FORMATS.find((entry) => entry.value === file.importFormat)?.label ?? file.importFormat} 导入` : null,
     // A record converted from PDF or Word: what it was, and what part of it had no text to read.
     file.sourceFormat ? `来自 ${file.sourceFormat === "docx" ? "Word" : file.sourceFormat.toUpperCase()}${file.pages ? `，${file.pages} 页` : ""}${file.blankPages ? `，其中 ${file.blankPages} 页没有文字` : ""}` : null,
+    readingText(file.reading),
   ].filter(Boolean).join(" · ");
   return (
     <li data-vcr-file={file.id} className="flex items-center justify-between gap-3 py-2">

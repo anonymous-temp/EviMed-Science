@@ -1033,14 +1033,24 @@ function forecastView(forecast, now) {
 // --- 匹配与招募 ---------------------------------------------------------------------------------------------------------------------
 
 const SUMMARY_ORDER = Object.freeze(["eligible", "insufficient_evidence", "pending", "ineligible"]);
+/** The most citations a criterion row shows under its verdict. */
+const EVIDENCE_SHOWN = 3;
 
 /**
  * The criterion the way a coordinator reads it: the protocol's own words, the
  * patient's own sentence, and what to ask for.
  * @param {Record<string, any>} criterion @param {string} code @param {Record<string, any> | null} judgment @param {Date} now
  */
-function judgementView(criterion, code, judgment, now) {
-  const evidence = list(judgment?.evidence).map(object)[0] ?? null;
+function judgementView(criterion, code, judgment, now, documentNames = new Map()) {
+  // Every citation the verdict rests on, not only the first: an `unknown` that waits on a prescription also shows the administration it
+  // was set against. Each says what it quotes, where (the document by the name the data tab lists it under, never a person's), and
+  // when what it records happened.
+  const cited = list(judgment?.evidence).map(object).filter((item) => text(item.quote)).slice(0, EVIDENCE_SHOWN).map((evidence) => ({
+    quote: String(evidence.quote), locator: evidence.locator ?? null,
+    source: evidence.quoteKind === "snapshot_cell" ? `数据快照字段「${object(evidence.locator).field ?? evidence.variable}」`
+      : evidence.quoteKind === "verbatim" ? (documentNames.get(String(object(evidence.locator).documentId)) ?? "病历原文") : (vcrLocatorText(evidence.locator) ?? text(evidence.source)),
+    at: zhDate(evidence.at ?? evidence.occurredAt ?? object(evidence.locator).at, now),
+  }));
   const state = judgment?.overrideState ?? judgment?.state ?? "unknown";
   const needed = list(criterion.evidenceNeeded).map((item) => (typeof item === "string" ? item : text(object(item).description) ?? text(object(item).text) ?? text(object(item).variable))).filter(Boolean);
   return {
@@ -1051,12 +1061,8 @@ function judgementView(criterion, code, judgment, now) {
     text: text(criterion.sourceText) ?? "",
     state,
     applicable: judgment ? judgment.applicable !== false : true,
-    evidence: evidence && text(evidence.quote) ? {
-      quote: String(evidence.quote), locator: evidence.locator ?? null,
-      source: evidence.quoteKind === "snapshot_cell" ? `数据快照字段「${object(evidence.locator).field ?? evidence.variable}」`
-        : evidence.quoteKind === "verbatim" ? "病历原文" : (vcrLocatorText(evidence.locator) ?? text(evidence.source)),
-      at: zhDate(evidence.at ?? evidence.occurredAt ?? object(evidence.locator).at, now),
-    } : null,
+    evidence: cited[0] ?? null,
+    evidenceItems: cited,
     request: state === "unknown" || state === "pending_recheck" ? (needed[0] ?? null) : null,
     requestNote: state === "pending_recheck" && judgment?.recheckAt ? `${zhDate(judgment.recheckAt, now)} 起可复评` : null,
     decidedBy: judgment?.decidedBy ?? null,
@@ -1092,6 +1098,8 @@ export function presentMatchingTab(bundle, query = {}) {
       funnel: [], candidates: [], selected: null, gaps: [], counts: null };
   }
   const { criteria, referrals, sites, siteFunnel, followups, tallies, openByAssessment, gapsByCriterion, pendingReview, subjects, protocol } = match;
+  /** The names the data tab lists the reviewed documents under, by the id a citation carries (the document's own or its reviewed text's). @type {Map<string, string>} */
+  const documentNames = match.documentNames instanceof Map ? match.documentNames : new Map();
   const codes = criterionCodes(criteria);
   const criterionCode = (/** @type {string} */ id) => codes.get(id) ?? "";
   const referralBySubject = new Map(referrals.map((/** @type {any} */ referral) => [referral.subjectKey, referral]));
@@ -1127,7 +1135,7 @@ export function presentMatchingTab(bundle, query = {}) {
   const selectedAssessment = match.selected ?? null;
   const selected = chosen && selectedAssessment && selectedAssessment.subjectKey === chosen.id ? (() => {
     const judgments = new Map(list(selectedAssessment.judgments).map((/** @type {any} */ row) => [row.criterionId, row]));
-    const rows = criteria.map((/** @type {any} */ criterion) => judgementView(criterion, criterionCode(criterion.id), judgments.get(criterion.id) ?? null, now));
+    const rows = criteria.map((/** @type {any} */ criterion) => judgementView(criterion, criterionCode(criterion.id), judgments.get(criterion.id) ?? null, now, documentNames));
     const verdict = verdictOf(selectedAssessment.summary, rows);
     const referral = referralBySubject.get(chosen.id) ?? null;
     return {
@@ -1237,6 +1245,7 @@ export function presentMatchingTab(bundle, query = {}) {
       at: fact.occurredAt ?? null, assertion: fact.clinical?.assertion ?? fact.polarity, experiencer: fact.clinical?.experiencer ?? null,
       medicationState: fact.clinical?.medication?.state ?? null, correctionOf: fact.clinical?.correctionOf ?? null,
       superseded: fact.superseded === true, conflictFactIds: fact.conflicts ?? [], correctionReason: fact.clinical?.correctionReason ?? null,
+      document: documentNames.get(String(fact.source?.documentId)) ?? null,
       quote: fact.source?.quote ?? null, locator: fact.source ? { documentId: fact.source.documentId, start: fact.source.start, end: fact.source.end } : null })),
     headline: total ? `${total.toLocaleString("en-US")} 人已评估，${(eligible ?? 0).toLocaleString("en-US")} 人全部满足，${insufficient.toLocaleString("en-US")} 人至少有 1 条未知或待复评。` : null,
     partner: total ? { name: null, candidates: total, tier: study.dataTier, snapshotAt: match.snapshotAt ? zhDate(match.snapshotAt, now) : null } : null,
@@ -1606,6 +1615,9 @@ export function presentIntake(bundle) {
         })),
         entries: numeric(file.entries), sheets: list(file.sheets).map(String), sheetUsed: text(file.sheetUsed),
         subjectKey: text(file.subjectKey), visibleAt: text(file.visibleAt),
+        // How much of a reviewed record a run was shown and how much it never was: counts, never who read it or how many reads it took.
+        reading: object(file.reading).read !== undefined
+          ? { chars: numeric(object(file.reading).chars), read: numeric(object(file.reading).read) ?? 0, skipped: numeric(object(file.reading).skipped), complete: object(file.reading).complete === true } : null,
         // A record converted from PDF or Word: what it was, how many pages, how many had no text layer.
         sourceFormat: text(file.sourceFormat), pages: numeric(file.pages), blankPages: numeric(file.blankPages),
         // A table a FHIR, OMOP or ADaM import produced.

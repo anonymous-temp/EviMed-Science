@@ -798,6 +798,26 @@ export class VcrMatchStore extends VcrStoreBase {
   }
 
 
+  /**
+   * The names the data tab lists a study's documents under, by every id a citation can carry: the document's own and its reviewed
+   * text's. A document's stored name is derived from its content (`document-<hash>.txt`), never from the file the person uploaded.
+   * @param {string} studyId @param {readonly string[]} ids @returns {Promise<Map<string, string>>}
+   */
+  async documentNames(studyId, ids) {
+    const wanted = [...new Set(ids.map(String))].slice(0, 200);
+    if (!wanted.length) return new Map();
+    const rows = await this.rows(`SELECT f.id AS file_id, f.name, p.id AS projection_id FROM ${VCR_SCHEMA}.source_files f
+        LEFT JOIN ${VCR_SCHEMA}.document_projections p ON p.document_id=f.id AND p.study_id=f.study_id
+      WHERE f.study_id=$1 AND f.role='document' AND (f.id=ANY($2::text[]) OR p.id=ANY($2::text[]))`, [studyId, wanted]);
+    /** @type {Map<string, string>} */
+    const names = new Map();
+    for (const row of rows) {
+      names.set(String(row.file_id), String(row.name));
+      if (row.projection_id) names.set(String(row.projection_id), String(row.name));
+    }
+    return names;
+  }
+
   /** @param {string} studyId @param {string[]} ids */
   async matchingFactsByIds(studyId, ids) {
     return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.matching_facts WHERE study_id=$1 AND id=ANY($2::text[])`, [studyId, ids])).map(factOf);

@@ -433,9 +433,13 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                   header: "患者证据",
                   isEmpty: (row) => !row.evidence,
                   cell: (row) => row.evidence ? (
-                    <span className="block">
-                      <span className="block text-text">{`“${row.evidence.quote}”`}</span>
-                      <span className="block text-caption text-text-3">{[row.evidence.source, row.evidence.at].filter(Boolean).join(" · ")}</span>
+                    <span className="flex flex-col gap-1.5">
+                      {(row.evidenceItems?.length ? row.evidenceItems : [row.evidence]).map((item, index) => (
+                        <span key={`${item.quote}-${index}`} className="block">
+                          <span className="block text-text">{`“${item.quote}”`}</span>
+                          <span className="block text-caption text-text-3">{[item.source, item.at].filter(Boolean).join(" · ")}</span>
+                        </span>
+                      ))}
                     </span>
                   ) : null,
                 },
