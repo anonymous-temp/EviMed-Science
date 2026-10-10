@@ -92,8 +92,9 @@
     "officialNativeExit": 0,
     "substantiveOutput": true,
     "stateVerified": true,
-    "verdict": "partial",
-    "note": "Preserves partial report/local gap and no retry; residual claim-library prerequisite sentence contradicts partial draft guidance"
+    "verdict": "counterexample_fixed_scoped_retest",
+    "note": "Fresh official DeepSeek + DSH completion delivered an actual uncertain draft from preserved partial research; no claim-library prerequisite, invented verified-card markers, phantom article path or publication orders. Synthetic answer/MCP state only, no Office deliverable or consumer probe acceptance.",
+    "closureEvidenceSha256": "b0e732a8e9e16b6127234cbcb3b954e280e9110d4cfa7432afaf216f4a7c05fe"
   },
   {
     "id": "semantic",

@@ -938,7 +938,7 @@
     }
   ],
   "verificationScope": "These suites overlap and must not be summed as unique tests. No full ci:web or deployed production acceptance is claimed. The last production logic change has focused matching/gateway coverage and the full domain suite; the multi-protocol integration test was added afterward without changing production logic.",
-  "updatedAt": "2026-10-10T02:04:23.747023+00:00",
+  "updatedAt": "2026-10-10",
   "localReview20261010": {
     "reviewDate": "2026-10-10",
     "reviewedCommit": "f8567451a",
@@ -1478,5 +1478,368 @@
       "Native/off prompts are the same extraction control except labels/order; only on adds enhanced guidance.",
       "No production deployment or production tests performed."
     ]
+  },
+  "releaseClosure20261010": {
+    "measuredAt": "2026-10-10",
+    "provider": "official-deepseek",
+    "kernel": "DSH 0.1.7-rc.2",
+    "clinicalSynthetic": {
+      "attempted": 72,
+      "sourceGroups": 12,
+      "repeats": 2,
+      "arms": {
+        "native": {
+          "completed": 24,
+          "writeIssues": 1,
+          "requests": 24,
+          "settledCostCny": 0.02909576,
+          "scorecard": [
+            {
+              "task": "eligibility",
+              "dataClass": "synthetic",
+              "cases": 24,
+              "sourceGroups": 12,
+              "missing": 0,
+              "invalid": 0,
+              "n": 24,
+              "correct": 21,
+              "unknown": 9,
+              "accuracy": 0.875,
+              "byState": {
+                "eligible": {
+                  "tp": 8,
+                  "fp": 3,
+                  "fn": 0,
+                  "precision": 0.7272727272727273,
+                  "recall": 1.0,
+                  "f1": 0.8421052631578947
+                },
+                "ineligible": {
+                  "tp": 4,
+                  "fp": 0,
+                  "fn": 0,
+                  "precision": 1.0,
+                  "recall": 1.0,
+                  "f1": 1.0
+                },
+                "insufficient_evidence": {
+                  "tp": 9,
+                  "fp": 0,
+                  "fn": 3,
+                  "precision": 1.0,
+                  "recall": 0.75,
+                  "f1": 0.8571428571428571
+                }
+              },
+              "macroF1": 0.899749373433584,
+              "accuracyInterval": {
+                "low": 0.6666666666666666,
+                "high": 1.0,
+                "groups": 12,
+                "seed": 20261009,
+                "repeats": 2000
+              },
+              "eligibleReference": 8,
+              "falseExclusions": 0,
+              "falseExclusionRate": 0.0,
+              "falseExclusionInterval": {
+                "low": 0.0,
+                "high": 0.0,
+                "groups": 12,
+                "seed": 20261009,
+                "repeats": 2000
+              },
+              "eligibleRecall": 1.0,
+              "falseInclusions": 3,
+              "anyFalseExclusionPerGroupWilson95": {
+                "groups": 4,
+                "observed": 0,
+                "low": 0,
+                "high": 0.48990002040399916
+              },
+              "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+            }
+          ]
+        },
+        "on": {
+          "completed": 24,
+          "writeIssues": 0,
+          "requests": 24,
+          "settledCostCny": 0.0328508,
+          "scorecard": [
+            {
+              "task": "eligibility",
+              "dataClass": "synthetic",
+              "cases": 24,
+              "sourceGroups": 12,
+              "missing": 0,
+              "invalid": 0,
+              "n": 24,
+              "correct": 24,
+              "unknown": 12,
+              "accuracy": 1.0,
+              "byState": {
+                "eligible": {
+                  "tp": 8,
+                  "fp": 0,
+                  "fn": 0,
+                  "precision": 1.0,
+                  "recall": 1.0,
+                  "f1": 1.0
+                },
+                "ineligible": {
+                  "tp": 4,
+                  "fp": 0,
+                  "fn": 0,
+                  "precision": 1.0,
+                  "recall": 1.0,
+                  "f1": 1.0
+                },
+                "insufficient_evidence": {
+                  "tp": 12,
+                  "fp": 0,
+                  "fn": 0,
+                  "precision": 1.0,
+                  "recall": 1.0,
+                  "f1": 1.0
+                }
+              },
+              "macroF1": 1.0,
+              "accuracyInterval": {
+                "low": 1.0,
+                "high": 1.0,
+                "groups": 12,
+                "seed": 20261009,
+                "repeats": 2000
+              },
+              "eligibleReference": 8,
+              "falseExclusions": 0,
+              "falseExclusionRate": 0.0,
+              "falseExclusionInterval": {
+                "low": 0.0,
+                "high": 0.0,
+                "groups": 12,
+                "seed": 20261009,
+                "repeats": 2000
+              },
+              "eligibleRecall": 1.0,
+              "falseInclusions": 0,
+              "anyFalseExclusionPerGroupWilson95": {
+                "groups": 4,
+                "observed": 0,
+                "low": 0,
+                "high": 0.48990002040399916
+              },
+              "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+            }
+          ]
+        },
+        "off": {
+          "completed": 24,
+          "writeIssues": 3,
+          "requests": 24,
+          "settledCostCny": 0.02917088,
+          "scorecard": [
+            {
+              "task": "eligibility",
+              "dataClass": "synthetic",
+              "cases": 24,
+              "sourceGroups": 12,
+              "missing": 0,
+              "invalid": 0,
+              "n": 24,
+              "correct": 21,
+              "unknown": 11,
+              "accuracy": 0.875,
+              "byState": {
+                "eligible": {
+                  "tp": 7,
+                  "fp": 2,
+                  "fn": 1,
+                  "precision": 0.7777777777777778,
+                  "recall": 0.875,
+                  "f1": 0.8235294117647058
+                },
+                "ineligible": {
+                  "tp": 4,
+                  "fp": 0,
+                  "fn": 0,
+                  "precision": 1.0,
+                  "recall": 1.0,
+                  "f1": 1.0
+                },
+                "insufficient_evidence": {
+                  "tp": 10,
+                  "fp": 1,
+                  "fn": 2,
+                  "precision": 0.9090909090909091,
+                  "recall": 0.8333333333333334,
+                  "f1": 0.8695652173913043
+                }
+              },
+              "macroF1": 0.8976982097186701,
+              "accuracyInterval": {
+                "low": 0.75,
+                "high": 1.0,
+                "groups": 12,
+                "seed": 20261009,
+                "repeats": 2000
+              },
+              "eligibleReference": 8,
+              "falseExclusions": 0,
+              "falseExclusionRate": 0.0,
+              "falseExclusionInterval": {
+                "low": 0.0,
+                "high": 0.0,
+                "groups": 12,
+                "seed": 20261009,
+                "repeats": 2000
+              },
+              "eligibleRecall": 0.875,
+              "falseInclusions": 2,
+              "anyFalseExclusionPerGroupWilson95": {
+                "groups": 4,
+                "observed": 0,
+                "low": 0,
+                "high": 0.48990002040399916
+              },
+              "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+            }
+          ]
+        }
+      },
+      "limitations": [
+        "Authored synthetic regression, not independent clinician validation or a representative cohort.",
+        "Native DSH predictions pass through the real control-plane gateway, located fact writer and matching executor; this is not a deployed browser-to-kernel acceptance test.",
+        "An unknown judgment caused by a refused fact is not evidence of better clinical understanding. Write failures are reported separately.",
+        "Repeated prompts share the patient/source cluster; the reported interval does not treat repetitions as independent patients.",
+        "No automatic production promotion or clinical qualification follows this scorecard."
+      ]
+    },
+    "publicRelation": {
+      "source": "https://zenodo.org/records/5119892",
+      "guideline": "https://doi.org/10.5281/zenodo.4957137",
+      "cases": 4,
+      "selection": "Previously observed frozen upstream-development holdout pilot; no holdout labels inspected for prompt repair, not an untouched external test.",
+      "baseline": [
+        {
+          "task": "ner",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 0,
+          "strict": {
+            "tp": 82,
+            "fp": 24,
+            "fn": 60,
+            "precision": 0.7735849056603774,
+            "recall": 0.5774647887323944,
+            "f1": 0.6612903225806451
+          },
+          "overlap": {
+            "tp": 91,
+            "fp": 15,
+            "fn": 51,
+            "precision": 0.8584905660377359,
+            "recall": 0.6408450704225352,
+            "f1": 0.7338709677419355
+          }
+        },
+        {
+          "task": "relation",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 0,
+          "relations": {
+            "tp": 1,
+            "fp": 13,
+            "fn": 37,
+            "precision": 0.07142857142857142,
+            "recall": 0.02631578947368421,
+            "f1": 0.038461538461538464
+          }
+        }
+      ],
+      "final": [
+        {
+          "task": "ner",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 0,
+          "strict": {
+            "tp": 82,
+            "fp": 23,
+            "fn": 60,
+            "precision": 0.780952380952381,
+            "recall": 0.5774647887323944,
+            "f1": 0.6639676113360324
+          },
+          "overlap": {
+            "tp": 91,
+            "fp": 14,
+            "fn": 51,
+            "precision": 0.8666666666666667,
+            "recall": 0.6408450704225352,
+            "f1": 0.7368421052631579
+          }
+        },
+        {
+          "task": "relation",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 0,
+          "relations": {
+            "tp": 5,
+            "fp": 11,
+            "fn": 33,
+            "precision": 0.3125,
+            "recall": 0.13157894736842105,
+            "f1": 0.18518518518518517
+          }
+        }
+      ],
+      "firstIteration": "public-score.json; relation F1 0.2295 and strict NER 0.5455 retained; final run is not selected by score.",
+      "limitations": [
+        "Relation quality remains poor; exact quotation grounding certifies source bytes, not relation semantics.",
+        "No independent Chinese clinical validation, official leaderboard result or production qualification."
+      ]
+    },
+    "geoPartialResearch": {
+      "exitCode": 0,
+      "latencyMs": 25952,
+      "textLength": 1551,
+      "valueVersion": 2,
+      "actualDraftDelivered": true,
+      "noPhantomFileRegistration": true,
+      "scope": "Synthetic isolated local gateway/MCP state and answer draft; no Office files or actual consumer/publication probes.",
+      "registrationCheck": "No geo_write articles call; geo_read articles is allowed and is not a registration."
+    },
+    "releaseDisposition": {
+      "researchMode": "Existing research mode can preserve qualified partial findings; no clinical quality guarantee.",
+      "enhancementDefaultOff": true,
+      "independentClinicalValidation": false,
+      "partnerConditionalIntegrations": "Seven retain conditional_not_activated: FHIR partner export, licensed interaction source, dose rules, authorized adverse-event dataset, concrete measure, approved clinical OCR, named partner format/language. No credentials or deferred materials were re-requested."
+    },
+    "evidenceRoot": "/tmp/evimed-release-closure-20261010/models",
+    "artifactHashes": {
+      "clinical/manifest.json": "f2c46d247f968f68eeb815c44be32428784741e0e7f5d999277ba9c00c70b1cb",
+      "clinical/predictions.json": "0a6796d3d303011b3507c4f5400ef223022f83757bcab6a2bba09f456fbbf143",
+      "clinical-score.json": "87729ed67066d8db084da5f9dd83eeb52ffa6abd96c1176ce9953a47676cdcc3",
+      "public-final/manifest.json": "7c4eae8618e742fcb107a5002992ca30838433ae19730430f944a1b6f1f9e9d5",
+      "public-final/predictions.json": "c66f34a8cf8ced27577e0f1ac292fb79b65cc8bfcd6df97f6b99b31abc477d2b",
+      "public-final-score.json": "4b24090487ece5e211a4ed2017b81f4f8bca725ac47f9b2d929ecb3b2175c5f7",
+      "public-baseline-score.json": "45d2f36ba1041687624534091d30a54596cc046b17173a102636f3ad322bebf7",
+      "public-score.json": "de56d3fa7ca10a5298b10bce0b6a08b403866fbc54af30106105fec6d33cd692",
+      "geo/receipts.json": "b0e732a8e9e16b6127234cbcb3b954e280e9110d4cfa7432afaf216f4a7c05fe",
+      "focused-tests.log": "925f1ed07ac85a7d6438cc4b29a7cbc0774ec7974057e3f9c1bb9710e643c717",
+      "domain-lint-final.log": "906aa8d97ea06ebcbf5d3bd301632fcd42efa534cbde2c6d2e95e559cdf7ef8d"
+    }
   }
 }
