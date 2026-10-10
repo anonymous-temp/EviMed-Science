@@ -10,6 +10,11 @@ import { Menu } from "@/components/ui/Menu";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Tabs } from "@/components/ui/Tabs";
 import { extensionCatalogue, extensionInstallations, installExtension, pluginInventory, type CatalogueExtension } from "@/lib/extensionsClient";
+import { capabilityListed } from "@evimed/domain";
+import { listWebResearchAgents } from "@/lib/apiClient";
+import { bindConversationCapability } from "@/lib/dispatch";
+import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
+import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
@@ -57,6 +62,10 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
   const [open, setOpen] = useState<Open | null>(null), [importBusy, setImportBusy] = useState(false);
 
   const platform = useLoad(listPlatformSkills);
+  // The curated research tools: the catalogue 科研工具 reads, through the same filter and names — no second source.
+  const tools = useLoad(listWebResearchAgents);
+  const curatedTools = useMemo<CapabilityUi[] | null>(() => tools.state.status === "ready"
+    ? tools.state.data.filter(agent => capabilityListed(agent.id)).map(researchAgentUi) : null, [tools.state]);
   const firstPersonal = useLoad(loadFirstPersonal);
   const [more, setMore] = useState<{ items: PersonalSkill[]; cursor: string | null } | null>(null), [loadingMore, setLoadingMore] = useState(false);
   const personal = firstPersonal.state.status === "ready" ? [...firstPersonal.state.data.items, ...(more?.items ?? [])] : [];
@@ -88,7 +97,7 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
   }, [extensionData.state]);
 
   const inventoryReady = inventory.state.status === "ready" ? inventory.state.data : null;
-  const skillCount = platform.state.status === "ready" ? platform.state.data.items.length + personal.length : null;
+  const skillCount = platform.state.status === "ready" ? platform.state.data.items.length + personal.length + (curatedTools?.length ?? 0) : null;
   const pluginCount = inventoryReady ? countPlugins(inventoryReady, extensions) : null;
 
   // Which drawer is open: the address's own item first, then what a click opened.
@@ -107,6 +116,18 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
     finally { setInstalling(null); }
   };
   const openSkill = (id: string) => { setOpen(null); navigate(`/app/extensions/skills/${encodeURIComponent(id)}`); };
+
+  // A tool is chosen by opening the conversation that runs it, bound before the conversation exists — what the 科研工具 card does.
+  const [opening, setOpening] = useState<string | null>(null);
+  const openTool = (agent: CapabilityUi) => {
+    if (opening) return;
+    setOpening(agent.id);
+    void bindConversationCapability(null, { agentId: agent.id, agentVersion: agent.version })
+      .then((bound) => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(undefined, bound.sessionId), capabilityId: agent.id } }))
+      // A binding the control plane refused must not strand the reader: the conversation opens, and the router decides as it did before there were tools.
+      .catch(() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }))
+      .finally(() => setOpening(null));
+  };
 
   // One save at a time: the server makes a new skill for every request it gets, so a second click while the first is on its
   // way would be a second skill.
@@ -147,8 +168,9 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
         <>
           {platform.state.status === "error" && <LoadError className="mb-4" message={platform.state.message} onRetry={() => platform.reload()} />}
           {firstPersonal.state.status === "error" && <LoadError className="mb-4" message={firstPersonal.state.message} onRetry={() => firstPersonal.reload()} />}
+          {tools.state.status === "error" && <LoadError className="mb-4" message={tools.state.message} onRetry={() => tools.reload()} />}
           {platform.state.status === "loading" && firstPersonal.state.status === "loading" ? <FilesSkeleton /> : (
-            <SkillsList personal={personal} platform={platform.state.status === "ready" ? platform.state.data : null} query={query}
+            <SkillsList personal={personal} platform={platform.state.status === "ready" ? platform.state.data : null} tools={curatedTools} onOpenTool={openTool} query={query}
               hasMore={!!cursor} loadingMore={loadingMore} onMore={() => void loadMore()}
               onOpenPlatform={skill => { if (skillId) navigate(root, { replace: true }); setOpen({ kind: "platform", skill }); }}
               onOpenPersonal={skill => openSkill(skill.id)}
