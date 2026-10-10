@@ -65,6 +65,23 @@ function viewport(drawer: boolean) {
   })) as unknown as typeof window.matchMedia;
 }
 
+/** A window whose width can change while the page is open: the change listeners are kept so a test can cross `lg`. */
+function resizableViewport(narrow: boolean) {
+  let isNarrow = narrow;
+  const listeners = new Set<() => void>();
+  window.matchMedia = ((query: string) => ({
+    get matches() { return isNarrow && query === "(max-width: 1023px)"; },
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: (_type: string, listener: () => void) => { listeners.add(listener); },
+    removeEventListener: (_type: string, listener: () => void) => { listeners.delete(listener); },
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+  return { cross: (next: boolean) => act(() => { isNarrow = next; listeners.forEach((listener) => listener()); }) };
+}
+
 async function renderShell() {
   mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
   const router = createMemoryRouter(
@@ -165,11 +182,61 @@ describe("the sidebar's focus and the page behind it", () => {
       expect(useUiStore.getState().sidebarCollapsed).toBe(false);
     });
 
+    // L-13 (live walk 2026-10-10): a tap closed the drawer, focus went to the expand button, and 「展开侧边栏 (Ctrl+B)」 opened over the title.
+    it("pops no tooltip on the expand button when a tap on the scrim closes the drawer", async () => {
+      await renderShell();
+      await userEvent.click(await screen.findByRole("button", { name: "展开侧边栏" }));
+      const scrim = screen.getByRole("button", { name: "关闭侧边栏" });
+      await userEvent.setup().pointer([{ keys: "[TouchA>]", target: scrim }, { keys: "[/TouchA]", target: scrim }]);
+      const expand = await screen.findByRole("button", { name: "展开侧边栏" });
+      expect(expand).toHaveFocus();
+      expect(document.querySelector("[role='tooltip']:not([hidden])")).toBeNull();
+    });
+    it("still names the expand button's shortcut when the keyboard closed the drawer", async () => {
+      await renderShell();
+      await userEvent.click(await screen.findByRole("button", { name: "展开侧边栏" }));
+      await userEvent.keyboard("{Escape}");
+      expect(await screen.findByRole("button", { name: "展开侧边栏" })).toHaveFocus();
+      expect(document.querySelector("[role='tooltip']:not([hidden])")).toHaveTextContent("展开侧边栏 (Ctrl+B)");
+    });
     it("closes on the scrim and puts focus on the expand button, the scrim having gone", async () => {
       await renderShell();
       await userEvent.click(await screen.findByRole("button", { name: "展开侧边栏" }));
       await userEvent.click(screen.getByRole("button", { name: "关闭侧边栏" }));
       expect(await screen.findByRole("button", { name: "展开侧边栏" })).toHaveFocus();
+    });
+  });
+
+  // L-13 (live walk 2026-10-10): the sidebar a phone had closed stayed closed at desktop width in the same browser.
+  describe("when the window crosses lg", () => {
+    it("keeps the drawer's state out of the column's preference, and settles the sidebar by the layout both ways", async () => {
+      window.localStorage.setItem("ai4s.sidebar.collapsed", "0");
+      const resize = resizableViewport(true);
+      await renderShell();
+      // Narrow: the drawer starts closed, and the reader opens it and shuts it again.
+      expect(useUiStore.getState().sidebarCollapsed).toBe(true);
+      await userEvent.click(await screen.findByRole("button", { name: "展开侧边栏" }));
+      await userEvent.click(screen.getByRole("button", { name: "关闭侧边栏" }));
+      expect(useUiStore.getState().sidebarCollapsed).toBe(true);
+      expect(window.localStorage.getItem("ai4s.sidebar.collapsed")).toBe("0");
+      // Wide again: the column is as the reader left it (open), not the drawer the phone closed.
+      await resize.cross(false);
+      expect(useUiStore.getState().sidebarCollapsed).toBe(false);
+      expect(document.querySelector("[data-sidebar]")).not.toHaveAttribute("inert");
+      expect(screen.queryByRole("button", { name: "展开侧边栏" })).not.toBeInTheDocument();
+      // And back: a column left open is not a drawer standing open over a narrow page.
+      await resize.cross(true);
+      expect(useUiStore.getState().sidebarCollapsed).toBe(true);
+      expect(main()).not.toHaveAttribute("inert");
+    });
+
+    it("gives a reader who closed the column at desktop width a closed column again when the window widens", async () => {
+      window.localStorage.setItem("ai4s.sidebar.collapsed", "1");
+      const resize = resizableViewport(true);
+      await renderShell();
+      await resize.cross(false);
+      expect(useUiStore.getState().sidebarCollapsed).toBe(true);
+      expect(await screen.findByRole("button", { name: "展开侧边栏" })).toBeInTheDocument();
     });
   });
 

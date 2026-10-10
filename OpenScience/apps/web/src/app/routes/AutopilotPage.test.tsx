@@ -282,6 +282,20 @@ describe("scheduled tasks", () => {
       await userEvent.click(create);
       expect(await screen.findByRole("dialog", { name: "新建任务" })).toBeInTheDocument();
     });
+    // Review L-6 (live walk 2026-10-10): where the list is the page it wore the one page column but drew its own 16 px gutter, so from 768 its
+    // title started 8 px left of every other list page's (PageShell: 16 on a phone, 24 from `md`).
+    it("is, where the list is the page, in the one page column with the page gutter on the box that holds its title and its rows", async () => {
+      identity.width = 800; render("/app/autopilot");
+      const heading = await screen.findByRole("heading", { name: "定时任务", level: 1 });
+      const box = list().querySelector<HTMLElement>(".max-w-page");
+      expect(box, "the list has no page column").not.toBeNull();
+      expect(box).toHaveClass("px-4", "md:px-6");
+      expect(box).toContainElement(heading);
+      expect(box).toContainElement(await screen.findByRole("link", { name: "心衰证据追踪" }));
+      // Padding of its own would add to the gutter, and the title would start somewhere else.
+      expect(heading.closest("header")).not.toHaveClass("px-4");
+      expect(screen.getByRole("searchbox", { name: "搜索任务" }).closest("div.shrink-0")).not.toHaveClass("px-4");
+    });
     it("puts the same sentence and button in the list itself where the list is the page", async () => {
       identity.width = 800; mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
       expect(await screen.findByText("按你定的时间，让 EviMed 自己去跟进一个研究问题，比如每天一份文献简报，结果留在这里。")).toBeInTheDocument();

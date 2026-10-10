@@ -83,7 +83,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
     <div className="flex h-full flex-col bg-surface">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-caption text-muted">
-          {filename} · DOS · {dos.nedos} points{dos.spin ? " · spin-polarized" : ""}
+          {filename} · DOS · {dos.nedos} 个点{dos.spin ? " · 自旋极化" : ""}
         </span>
         <button
           onClick={() => setAlignFermi((v) => !v)}
@@ -94,7 +94,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
               : "bg-surface-2 text-muted ring-border hover:text-text",
           )}
         >
-          {alignFermi ? "E − E_F" : "absolute E"}
+          {alignFermi ? "E − E_F" : "绝对能量"}
         </button>
       </div>
 
@@ -132,15 +132,15 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
           })}
           {dos.spin && (
             <>
-              <text x={pad.l + 4} y={pad.t + 10} className="fill-muted font-mono text-caption">↑ spin up</text>
-              <text x={pad.l + 4} y={H - pad.b - 4} className="fill-muted font-mono text-caption">↓ spin down</text>
+              <text x={pad.l + 4} y={pad.t + 10} className="fill-muted font-mono text-caption">↑ 自旋向上</text>
+              <text x={pad.l + 4} y={H - pad.b - 4} className="fill-muted font-mono text-caption">↓ 自旋向下</text>
             </>
           )}
           <text x={W / 2} y={H - 4} textAnchor="middle" className="fill-muted font-mono text-caption">
-            {alignFermi ? "E − E_F (eV)" : "Energy (eV)"}
+            {alignFermi ? "E − E_F (eV)" : "能量 (eV)"}
           </text>
           <text x={14} y={H / 2} textAnchor="middle" transform={`rotate(-90 14 ${H / 2})`} className="fill-muted font-mono text-caption">
-            DOS (states/eV)
+            态密度 (states/eV)
           </text>
         </svg>
       </div>
@@ -148,7 +148,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
       <div className="border-t border-border px-3 py-2 text-right font-mono text-caption text-muted">
         {hover ? (
           <>
-            E = {xs[hover.i].toFixed(3)}{alignFermi ? " (rel. E_F)" : ""} eV · DOS↑ = {dos.up[hover.i].toPrecision(4)}
+            E = {xs[hover.i].toFixed(3)}{alignFermi ? "（相对 E_F）" : ""} eV · DOS↑ = {dos.up[hover.i].toPrecision(4)}
             {dos.down ? ` · DOS↓ = ${dos.down[hover.i].toPrecision(4)}` : ""}
           </>
         ) : (

@@ -31,6 +31,9 @@ import { TOOLTIP_DELAYS } from "@evimed/design-tokens";
  *    only place something essential is said — a dose, a source, a safety
  *    note — because a touch screen never shows it. The pointer events it
  *    listens to are a mouse's and a pen's for that reason.
+ *  - Focus opens it only when the keyboard put it there. Focus that code gives
+ *    after the reader pressed or tapped something is not the keyboard's,
+ *    whatever `:focus-visible` says (see `keyboardFocus`).
  *
  * It is the shell's only tooltip: no element carries the browser's `title`
  * as one (`app/nativeTitles.test.ts`; an iframe's `title` is its name). The
@@ -82,8 +85,35 @@ export function isTruncated(element: Element): boolean {
   return cut(element) || Array.from(element.querySelectorAll("*")).some(cut);
 }
 
-/** Whether focus arrived from the keyboard (or from code after a keyboard action). */
+/**
+ * What the reader did last: pressed a key, or pressed or tapped with a pointer (a finger, a pen, a mouse). Focus that code moves
+ * follows it. A browser reads such a focus as the keyboard's when nothing was focused before it — and a tap on the drawer's scrim
+ * removes the scrim, the shell then focuses the expand button, and `:focus-visible` alone opened 「展开侧边栏 (Ctrl+B)」 over the
+ * page's title on a phone (live walk 2026-10-10, L-13). Heard from the first tooltip on the page; forgotten when the last one goes.
+ */
+let lastInput: "key" | "pointer" = "key";
+let watching = 0;
+let listening = false;
+const noteKey = () => { lastInput = "key"; };
+const notePointer = () => { lastInput = "pointer"; };
+
+function watchInput(): () => void {
+  if (typeof document === "undefined") return () => undefined;
+  if (!listening) {
+    listening = true;
+    document.addEventListener("keydown", noteKey, true);
+    document.addEventListener("pointerdown", notePointer, true);
+  }
+  watching += 1;
+  return () => {
+    watching -= 1;
+    if (watching === 0) lastInput = "key";
+  };
+}
+
+/** Whether focus arrived from the keyboard (or from code after a keyboard action): not after a press or a tap. */
 function keyboardFocus(element: HTMLElement): boolean {
+  if (lastInput === "pointer") return false;
   try {
     return element.matches(":focus-visible");
   } catch {
@@ -147,6 +177,7 @@ export function Tooltip({
     schedule(false, TOOLTIP_DELAYS.hide);
   };
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(() => watchInput(), []);
 
   // Escape closes the top layer, and while it is open the tooltip is the top
   // layer: it is heard first (window, capture phase) and the key goes no

@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ResultCorrectionPanel } from "./ResultCorrectionPanel";
+import { formatClock, formatDay } from "@/lib/format";
 import type { ResultCorrectionEntry } from "@/lib/resultProvenance";
 
 const api = vi.hoisted(() => ({ corrections: vi.fn() }));
@@ -25,6 +26,8 @@ describe("the corrections made to a version", () => {
     mount();
     const section = await screen.findByRole("region", { name: "一次修改" });
     expect(section).toHaveTextContent("此版本被修改过：数值有变化");
+    // The time is written as the rest of the app writes one (the browser's own 「2026/10/4 18:00:00」 is not), review 2.3.
+    expect(section).toHaveTextContent(`（${formatDay("2026-10-04T10:00:00Z")} ${formatClock("2026-10-04T10:00:00Z")}）`);
     expect(section).toHaveTextContent("你的要求：“核对分母并加入新研究”");
     expect(section).toHaveTextContent("所选内容：“合并 OR 为 0.71”");
     expect(section).toHaveTextContent("不再出现的数值：0.71");

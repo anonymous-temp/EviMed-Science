@@ -82,11 +82,12 @@ describe("a card", () => {
     for (const score of ["87", "29", "17", "13"]) expect(card.textContent).not.toContain(score);
   });
 
-  it("puts the editorial score at the top right, a grey number after a dot in its band's colour, and says what it is", () => {
+  it("puts the editorial score at the top right, a grey number after a dot in its band's colour, and names it for assistive technology", () => {
     renderCard(scored());
-    const score = screen.getByText("编辑评分").parentElement as HTMLElement;
+    // Review L-9: a dot and a number with no name of their own. The visible number stays a bare number; what it is is its name.
+    const score = screen.getByRole("img", { name: "编辑评分 86" });
     expect(score).toHaveAccessibleDescription("编辑评分 · 满分 100");
-    expect(score).toHaveTextContent("编辑评分86");
+    expect(score).toHaveTextContent(/^86$/);
     expect(score).toHaveClass("tabular-nums", "text-text-3");
     expect(score.querySelector("[data-band]")).toHaveClass("bg-accent");
   });
@@ -96,14 +97,14 @@ describe("a card", () => {
     ["low", 42, "bg-text-3"],
   ])("dots a %s score in its own grey", (band, value, dot) => {
     renderCard(scored({ score: value, scoreBand: band }));
-    expect(screen.getByText("编辑评分").parentElement?.querySelector("[data-band]")).toHaveClass(dot);
+    expect(screen.getByRole("img", { name: `编辑评分 ${value}` }).querySelector("[data-band]")).toHaveClass(dot);
   });
 
   it("scores no safety notice, and says 安全警示 first", () => {
     renderCard(frontierItem({ score: 90, scoreBand: "high", safetyAlert: true, evidenceType: "safety-notice", evidenceTypeLabel: "安全通告",
       sourceType: "regulator", sourceTypeLabel: "监管", source: { id: "fda-recalls", name: "FDA" } }));
     const card = screen.getByRole("article");
-    expect(screen.queryByText("编辑评分")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /编辑评分/ })).not.toBeInTheDocument();
     expect(card.textContent?.indexOf("安全警示")).toBe(0);
     expect(within(card).getByText("安全警示")).toHaveClass("bg-danger-soft");
     // The safety tag already says what the evidence type would.

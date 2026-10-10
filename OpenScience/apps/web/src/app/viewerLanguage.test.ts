@@ -17,18 +17,17 @@ import { describe, expect, it } from "vitest";
  * This reads what a viewer can put on the screen — JSX text and the expressions inside
  * it, the words of a label, a title or an `aria-label`, and what is passed to
  * `setNotice` / `setError` / `toast` — and fails on any that is English with no Chinese
- * in it. A class list, a comment and an identifier are not read. `PENDING` is the
- * viewers whose figures still carry the English axis and legend words of their field
- * (energy, k-point, spin): remove a file the moment it has none left, and it is
- * reported if it already has none.
+ * in it. A class list, a comment and an identifier are not read. The figures' axis and
+ * legend words are Chinese like the rest (能量, 自旋向上, 态密度); the symbols and units
+ * around them (E_F, eV, k, states/eV) are not English sentences and stay as the field
+ * writes them. Until 2026-10-10 five viewers (band structure, DOS, FITS, phase diagrams,
+ * anomaly maps) were exempt while their field's words were put into Chinese.
  */
 const SRC = fileURLToPath(new URL("..", import.meta.url));
 const VIEWERS = join(SRC, "components/inspector");
 
-const PENDING = new Set(["AnomalyMapView.tsx", "BandView.tsx", "DosView.tsx", "FitsView.tsx", "PhaseView.tsx"]);
-
 /** English that is a command or a unit and not a sentence: it is what the reader types or reads in the field. */
-const NOT_A_SENTENCE = [/^pip freeze\b/];
+const NOT_A_SENTENCE = [/^pip freeze\b/, /^[\s·]*eV\/atom[\s·]*$/];
 
 const PROPS = new Set(["label", "title", "placeholder", "aria-label", "alt", "description", "summary", "message", "emptyText", "hint"]);
 const SAYS = /^(set(Notice|Error|Message)|toast\.(error|success))$/;
@@ -102,13 +101,9 @@ describe("the file viewers speak Chinese", () => {
     expect(viewers.flatMap((name) => visibleStrings(name, readFileSync(join(VIEWERS, name), "utf8"))).length).toBeGreaterThan(300);
   });
 
-  it("prints no English sentence in a viewer that is not waiting for its field's words", () => {
-    const offenders = viewers.filter((name) => !PENDING.has(name)).flatMap((name) => englishIn(name).map((entry) => `${name}:${entry}`));
+  it("prints no English sentence in any viewer, figures included", () => {
+    const offenders = viewers.flatMap((name) => englishIn(name).map((entry) => `${name}:${entry}`));
     expect(offenders).toEqual([]);
-  });
-
-  it("lists only viewers that still have English in them", () => {
-    expect([...PENDING].filter((name) => !viewers.includes(name) || englishIn(name).length === 0)).toEqual([]);
   });
 
   it("would see the English of a table note, a badge, a notice and a label, and nothing else", () => {

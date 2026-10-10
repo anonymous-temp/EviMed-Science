@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ResultLineagePanel } from "./ResultLineagePanel";
+import { formatClock, formatDay } from "@/lib/format";
 import type { ProducerSnapshot, ResultLineage, ResultVersion, ValueBindings } from "@/lib/resultProvenance";
 
 const api = vi.hoisted(() => ({ lineage: vi.fn() }));
@@ -92,6 +93,8 @@ describe("the numerical chain of a version", () => {
     expect(screen.getByText(/report\.md · 4 个数值/)).toBeInTheDocument();
     const section = screen.getByRole("region", { name: "计算与依赖" });
     expect(section).toHaveTextContent("这次计算已有新版本");
+    // The time is written as the rest of the app writes one (the browser's own 「2026/10/5 08:00:00」 is not), review 2.3.
+    expect(section).toHaveTextContent(`（${formatDay("2026-10-05T00:00:00Z")} ${formatClock("2026-10-05T00:00:00Z")}）`);
     expect(section).toHaveTextContent("1 处数值会变化，3 处保持不变");
     expect(section).toHaveTextContent("第 3 行：0.52 → 0.48");
     await userEvent.click(within(section).getByRole("button", { name: "查看新版本" }));

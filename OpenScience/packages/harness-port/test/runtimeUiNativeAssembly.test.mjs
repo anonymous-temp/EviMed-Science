@@ -60,3 +60,27 @@ test('actual pinned browser factory entries are taken over under their published
  let releasePoll;snapshotGate=new Promise(resolve=>{releasePoll=resolve;});const polls=Array.from({length:12},()=>controller.snapshot());await new Promise(resolve=>setTimeout(resolve,0));await React.act(async()=>{back.click();releasePoll();await Promise.all(polls);await new Promise(resolve=>setTimeout(resolve,5));});snapshotGate=null;assert.equal(calls.filter(call=>call.url.endsWith('/snapshot')).length,beforePolls+1);assert(calls.some(call=>call.body.command?.type==='back'));assert.equal(forward.disabled,false);await React.act(async()=>{forward.click();await new Promise(resolve=>setTimeout(resolve,5));reload.click();await new Promise(resolve=>setTimeout(resolve,5));});assert(calls.some(call=>call.body.command?.type==='forward'));assert(calls.some(call=>call.body.command?.type==='reload'));
 
 });
+
+// L-2: the pinned client's own slot registry and renderer, with a stand-in for the kernel's model seat at its own priority 0 — the seat's
+// declaration is the composer bar's children table, as `ui-conversation` makes it (`conversation.input.model`, single, session).
+for (const operator of [false, true]) {
+ test(`the real slot registry draws ${operator ? 'the kernel\'s own model seat for an operator' : 'no model seat for a researcher'}`,async t=>{
+  const moduleId='js'+'dom',{JSDOM}=require(moduleId),dom=new JSDOM('<div id="root"></div>',{url:'https://fixture.invalid'});
+  const {ctx,React}=await nativeUiAssembly(dom),{apply}=await import('../src/runtimeUiShell.mjs'),{createFrameKit}=await import('../src/runtimeUiKit.mjs'),{FRAME_VOCABULARY}=await import('../src/runtimeUiFrame.mjs');
+  const current=/** @type {any} */(globalThis),old=Object.fromEntries(['window','document','IS_REACT_ACT_ENVIRONMENT'].map(name=>[name,Object.getOwnPropertyDescriptor(current,name)]));current.window=dom.window;current.document=dom.window.document;current.IS_REACT_ACT_ENVIRONMENT=true;
+  const source=(/** @type {any} */ value)=>({getSnapshot:()=>value,subscribe:()=>()=>{}});const binding={key:'model-seat-session',ctx,hooks:{},keyedHooks:{},props:{sessionId:'model-seat-session'}};
+  ctx.slots.provideRoot({props:{}});ctx.slots.installScope('session',{current:source(binding),bindingSource:()=>source(binding),renderArea:(/** @type {any} */ _binding,/** @type {any} */ props)=>props.children});ctx.slots.installLocale({...source({revision:0}),bind:()=>(/** @type {string} */ key)=>key});
+  const h=React.createElement;
+  ctx.slots.register({name:'root',children:{'conversation.composer.bar':{kind:'single',scope:'session-maybe'}}},(/** @type {any} */ props)=>h(props.SessionProvider,null,props.renderSlot('conversation.composer.bar',{})));
+  ctx.slots.register({name:'conversation.composer.bar',children:{'conversation.input.model':{kind:'single',scope:'session'}}},(/** @type {any} */ props)=>h('div',null,h('textarea',{defaultValue:'a draft'}),props.renderSlot('conversation.input.model',{locked:false})));
+  ctx.slots.register({name:'conversation.input.model'},()=>h('button',{type:'button','data-native-model-seat':true},'deepseek-flash High'));
+  const target=Object.assign(dom.window,{__EVIMED_FRAME__:{version:1,frameId:'b'.repeat(32),operator}});const kit=createFrameKit(ctx,target,()=>React,FRAME_VOCABULARY);apply(ctx,{},target,undefined,kit);
+  /** @type {any} */ let unmount;t.after(async()=>{await React.act(async()=>unmount?.());await ctx.fiber.dispose();dom.window.close();for(const[name,descriptor]of Object.entries(old)){if(descriptor)Object.defineProperty(current,name,descriptor);else delete current[name];}});
+  await React.act(async()=>{unmount=ctx.uiRenderer.mount(dom.window.document.getElementById('root'));});
+  assert(dom.window.document.querySelector('textarea'),'the composer itself is drawn either way');
+  // The seat's text, not the node: a failed assertion that prints a DOM node walks the whole window.
+  const seat=dom.window.document.querySelector('[data-native-model-seat]')?.textContent??null;
+  if(operator)assert.equal(seat,'deepseek-flash High','an operator keeps the native seat');
+  else{assert.equal(seat,null,'a researcher sees no model seat');assert(!dom.window.document.body.textContent.includes('deepseek-flash'),'and no model id');}
+ });
+}

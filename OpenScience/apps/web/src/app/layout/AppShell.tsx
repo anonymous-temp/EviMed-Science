@@ -12,21 +12,20 @@ import { IconButton } from "@/components/ui/IconButton";
 import { ShortcutHelp } from "@/components/ui/ShortcutHelp";
 import { Toaster } from "@/components/ui/Toaster";
 import { useProjectStore } from "@/lib/projects";
+import { SIDEBAR_DRAWER_QUERY } from "@/lib/sidebarLayout";
 import { useUiStore } from "@/lib/store";
 import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "@/lib/apiClient";
 import { loginAddress } from "@/lib/loginReturn";
 
 /** Below Tailwind's `lg` the sidebar is a drawer over the content; from `lg` up it is a column beside it. */
-const DRAWER_LAYOUT = "(max-width: 1023px)";
-
 function useDrawerLayout(): boolean {
   return useSyncExternalStore(
     (notify) => {
-      const query = window.matchMedia(DRAWER_LAYOUT);
+      const query = window.matchMedia(SIDEBAR_DRAWER_QUERY);
       query.addEventListener("change", notify);
       return () => query.removeEventListener("change", notify);
     },
-    () => window.matchMedia(DRAWER_LAYOUT).matches,
+    () => window.matchMedia(SIDEBAR_DRAWER_QUERY).matches,
     () => false,
   );
 }
@@ -61,13 +60,20 @@ export function AppShell() {
 
   // Below `lg` the sidebar is a drawer over the content, not a column beside
   // it, so it starts closed: at 390 px it kept its full width and left the
-  // content a sliver (2026-09-16 walk, U1). Only on mount, and only when the
-  // viewport is narrow — a desktop browser keeps whatever the person chose.
+  // content a sliver (2026-09-16 walk, U1). From `lg` up it is the column the
+  // person left, and the drawer's closing is not written down as theirs
+  // (`setSidebarCollapsed`). A window that crosses `lg` settles it again, either
+  // way, so a phone's closed drawer is not a closed column at desktop width, and
+  // a column left open is not a drawer standing open over a narrow page (live
+  // walk 2026-10-10, L-13). The first paint at desktop width needs nothing: the
+  // store read what the person left.
+  const drawerSeen = useRef<boolean | null>(null);
   useEffect(() => {
-    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
-      useUiStore.getState().setSidebarCollapsed(true);
-    }
-  }, []);
+    const before = drawerSeen.current;
+    drawerSeen.current = drawerLayout;
+    if (before === null && !drawerLayout) return;
+    useUiStore.getState().settleSidebar();
+  }, [drawerLayout]);
 
   // Cmd/Ctrl+B toggles the sidebar, matching the button's tooltip. An
   // embedded shell has no sidebar to toggle, and the key is the host's.

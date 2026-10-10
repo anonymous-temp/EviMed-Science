@@ -433,7 +433,6 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       )}
       <PageShell
         title="知识库"
-        width="wide"
         meta={<KnowledgeScopeMenu scope={scope} onChange={setScope} />}
         actions={<>
           <SearchInput label="搜索资料和内容" value={query} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-60" />

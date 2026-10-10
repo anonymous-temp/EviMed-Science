@@ -1189,6 +1189,9 @@ async function checkHostedDesktopBoundary() {
   if (
     !/@tauri-apps/.test(frontend) &&
     !/\bisTauri\b/.test(frontend) &&
+    // The desktop window's drag region: a header spacer for the macOS traffic lights was rendered, returning nothing, for five weeks after
+    // the shell was deleted (review 2026-10-10 §3.7).
+    !/data-tauri-drag-region/.test(frontend) &&
     !/jupyterStatus|setupJupyter|ensureJupyter/.test(settings) &&
     /approval_mode_managed/.test(commands) &&
     /remove_config_entry\(\) \{[\s\S]*?Provider and MCP configuration is managed by the server deployment/.test(commands) &&

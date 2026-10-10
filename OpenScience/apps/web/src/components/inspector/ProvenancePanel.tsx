@@ -10,6 +10,7 @@ import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
+import { formatClock, formatDay } from "@/lib/format";
 
 /** The prompt the Reproduce action drafts — prefilled, reviewed, user-sent. */
 export function reproducePrompt(r: ProvenanceRecord): string {
@@ -225,12 +226,8 @@ export function LegacyProvenancePanel({ path, language }: { path: string; langua
   );
 }
 
+/** A version's time as the rest of the app writes one: the day (with its year once it is not this one) and the clock. */
 function formatTs(ts: number): string {
-  const d = new Date(ts * 1000);
-  return d.toLocaleString("zh-CN", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const when = new Date(ts * 1000).toISOString();
+  return `${formatDay(when)} ${formatClock(when)}`;
 }

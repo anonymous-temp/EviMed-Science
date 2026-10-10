@@ -6,6 +6,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import { extOf } from "@/lib/artifacts";
 import { cn } from "@/lib/cn";
 import { parseFailureMessage } from "@/lib/errorText";
+import { formatNumber } from "@/lib/format";
 import { IconButton } from "@/components/ui/IconButton";
 
 /**
@@ -290,7 +291,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
 
       <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-e2 backdrop-blur">
         <span className="font-medium text-text">{ext.toUpperCase()}</span>
-        {meta && <span className="ml-2">{meta.tris.toLocaleString("zh-CN")} 个三角面</span>}
+        {meta && <span className="ml-2">{formatNumber(meta.tris)} 个三角面</span>}
       </div>
 
       {(rendering || error) && (

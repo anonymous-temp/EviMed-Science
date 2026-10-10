@@ -14,7 +14,7 @@ describe("AnomalyMapView", () => {
   it("renders the map with grid dims, unit, a canvas, and graticule labels", () => {
     const { container } = render(<AnomalyMapView filename="temp.anom" text={CSV} />);
     expect(container.textContent).toContain("temp.anom");
-    expect(container.textContent).toContain("2×2 grid");
+    expect(container.textContent).toContain("2×2 网格");
     expect(container.textContent).toContain("anomaly");
     expect(container.querySelector("canvas")).not.toBeNull();
     // graticule labels use hemisphere suffixes

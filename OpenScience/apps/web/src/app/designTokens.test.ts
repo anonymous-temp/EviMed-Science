@@ -232,6 +232,15 @@ describe("the hand-written rules read the tokens (appendix E #1, #6, #12, #31)",
     expect(handWritten).toMatch(/\.font-mono \{\n {2}text-autospace: no-autospace;\n {2}text-spacing-trim: space-all;/);
   });
 
+  // Static review 2026-10-10 §3.2: a tick in a checkbox, the caret in a field and the text a reader selects kept the browser's own
+  // colours in both themes (the craft floor's 「Browser surfaces」). They read the accent role, which the theme layer already switches.
+  it("themes what the browser draws on its own — a tick, the caret, selected text — from the accent role", () => {
+    expect(handWritten).toMatch(/:root \{\n {2}accent-color: var\(--accent\);\n {2}caret-color: var\(--accent\);\n\}/);
+    expect(handWritten).toMatch(/::selection \{\n {2}background: var\(--accent\);\n {2}color: var\(--accent-fg\);\n\}/);
+    // Both themes define the two roles, so one rule serves both and a selection stays readable in each.
+    for (const role of ["accent", "accent-fg"]) expect(designTokensCss().match(new RegExp(`^  --${role}:`, "gm"))?.length, `--${role}`).toBe(2);
+  });
+
   it("names the stacking tiers instead of numbering them", () => {
     const zIndex = (preset.theme?.extend as { zIndex?: Record<string, string> } | undefined)?.zIndex ?? {};
     for (const [tier, value] of Object.entries(Z_INDEX)) expect(zIndex[tier], tier).toBe(String(value));
