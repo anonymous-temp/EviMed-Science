@@ -1128,8 +1128,13 @@ export class VcrService {
     const clinicalTimeline = timeline.map(fact => ({ ...fact, superseded: longitudinal.superseded.includes(fact.id),
       conflicts: longitudinal.conflicts.find(entry => entry.factId === fact.id)?.withFacts ?? [] }));
     const candidateCoverage = protocol && matchStore.latestMatchingProgress ? await matchStore.latestMatchingProgress(study.id,protocol.id) : null;
+    // 「给患者找试验」: the patient the page asks for, and the trials that have judged them (the candidates a run found, and the study's own
+    // protocol) in order. Read only for that direction, and only for a patient the study holds.
+    const patientTrials = query.direction === "patient_to_trial" && (query.view ?? "matching") === "matching"
+      ? await this.#patientTrials(study, candidateRoster, query) : null;
     return {
       ...(candidateCoverage ? {candidateCoverage} : {}),
+      ...(patientTrials ? { patientTrials } : {}),
       protocols, candidateRoster, comparisons, timeline: clinicalTimeline,
       protocol, criteria, subjects, referrals, sites, siteFunnel, followups, selected, referralEvents, openByAssessment,
       tallies: Object.fromEntries(tallyRows.map((row) => [String(row.summary), Number(row.total)])),
@@ -1138,6 +1143,22 @@ export class VcrService {
       forecastResult: null,
       snapshotAt: null,
     };
+  }
+
+  /**
+   * What the matching tab needs of 「给患者找试验」: the patient (one the study holds, else none), the trials that have judged them in order,
+   * and the one chosen — `query.trial` when it is one of theirs, else the first — with the criteria it was judged on.
+   * @param {any} study @param {readonly string[]} roster @param {Record<string, string>} query
+   */
+  async #patientTrials(study, roster, query) {
+    const seam = this.packages.patientTrials;
+    if (!seam?.ranked) return { available: false, subjectKey: null, ranked: [], detail: null };
+    const subjectKey = query.candidate && roster.includes(query.candidate) ? query.candidate : null;
+    if (!subjectKey) return { available: true, subjectKey: null, ranked: [], detail: null };
+    const ranked = await seam.ranked(study, { subjectKey });
+    const chosen = ranked.find((/** @type {any} */ row) => row.id === query.trial) ?? ranked[0] ?? null;
+    const detail = chosen ? await seam.detail(study, { subjectKey, id: chosen.id, ranked }) : null;
+    return { available: true, subjectKey, ranked, detail };
   }
 
   // --- cross-study pages --------------------------------------------------------------

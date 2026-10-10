@@ -190,7 +190,7 @@ test("naming only patients judges them against every trial the study holds, and 
   assert.equal(broken.counters.evaluationFailed, 1);
 });
 
-test("the study's own protocol joins the list: its newest version always, an older one only once it has judged this patient", options, async () => {
+test("the study's own protocol joins the list once it has judged this patient, version by version, and not before", options, async () => {
   const study = await seedStudy();
   await seedPatient(study);
   const trials = seam();
@@ -200,6 +200,8 @@ test("the study's own protocol joins the list: its newest version always, an old
 
   const v1 = await matching.saveProtocolVersion({ studyId: study.id, userId: USER, title: "EV-201 方案 v1", criteria: [AGE_18, ECOG, EGFR] });
   const v2 = await matching.saveProtocolVersion({ studyId: study.id, userId: USER, title: "EV-201 方案 v2", criteria: [AGE_18, ECOG] });
+  // A protocol that has not judged this patient is not a result about them: the list is still the registry trial alone.
+  assert.deepEqual((await trials.ranked(study, { subjectKey: "P-1" })).map((row) => row.kind), ["registry"]);
   const ownCriteria = (await matching.listCriteria({ studyId: study.id, protocolVersionId: v2.id }));
   const facts = await matching.listFacts({ studyId: study.id, subjectKey: "P-1" });
   await matching.saveAssessment({ userId: USER, assessment: assessSubject({
@@ -212,6 +214,7 @@ test("the study's own protocol joins the list: its newest version always, an old
   assert.equal(listed[1].registryId, null);
   assert.equal(listed[1].url, "");
   assert.ok(!listed.some((row) => row.id === v1.id), "an earlier version nobody judged this patient against is not a second copy of the trial");
+  assert.deepEqual(await trials.unjudged(study, { subjectKey: "P-1" }), [], "the registry trial has judged this patient");
 
   // Judged against the earlier version too, it is listed as well.
   await matching.saveAssessment({ userId: USER, assessment: assessSubject({
@@ -288,3 +291,28 @@ test("a table of the study's patients is read for the facts a trial asks about, 
   assert.equal(unread.evaluated[0].summary, "insufficient_evidence", "the table's facts are missing, and the criteria that needed them are unknown");
   assert.deepEqual(unread.notes, [{ code: "vcr_access_denied" }]);
 });
+
+test("a candidate trial that has not judged this patient is named as owed, not listed as a result about them", options, async () => {
+  const study = await seedStudy();
+  await seedPatient(study, "P-1");
+  await fact(study, "P-5", "age", 40, { unit: "year" });
+  const trials = seam();
+  const first = await trials.writeTrial(study, { trial: trialOf("NCT06000081"), criteria: [AGE_18], subjectKeys: ["P-1"] });
+  await trials.writeTrial(study, { trial: trialOf("NCT06000082"), criteria: [AGE_70], subjectKeys: ["P-1"] });
+  assert.deepEqual((await trials.ranked(study, { subjectKey: "P-5" })), [], "nothing has been judged for P-5");
+  assert.deepEqual((await trials.unjudged(study, { subjectKey: "P-5" })).map((row) => row.registryId).sort(), ["NCT06000081", "NCT06000082"]);
+  const read = await trials.runtimeRead(study, { subjectKey: "P-5" });
+  assert.deepEqual([read.ranking.length, read.unjudged.length], [0, 2], "a run is told what it still owes this patient");
+  // A trial with no criteria cannot judge anybody, so it is owed nothing.
+  await candidateStore_clear(first.trial.id);
+  assert.deepEqual((await trials.unjudged(study, { subjectKey: "P-5" })).map((row) => row.registryId), ["NCT06000082"]);
+  // Judging it makes it a result.
+  await trials.evaluate(study, { subjectKeys: ["P-5"] });
+  assert.deepEqual((await trials.ranked(study, { subjectKey: "P-5" })).map((row) => row.registryId), ["NCT06000082"]);
+  assert.deepEqual(await trials.unjudged(study, { subjectKey: "P-5" }), []);
+});
+
+/** @param {string} trialId */
+async function candidateStore_clear(trialId) {
+  await q("DELETE FROM evimed_vcr.candidate_trial_criteria WHERE candidate_trial_id = $1", [trialId]);
+}

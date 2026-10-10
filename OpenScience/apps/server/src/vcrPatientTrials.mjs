@@ -427,8 +427,9 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
     },
 
     /**
-     * A patient's trials in order: every candidate trial of the study and the study's own protocol — its newest version always, an older one
-     * once it has judged this patient — each with the verdict about this patient (or `null`), ranked by `rankPatientTrials`.
+     * A patient's trials in order: every candidate trial of the study and every version of the study's own protocol that has judged this
+     * patient, each with its verdict, ranked by `rankPatientTrials`. A trial that has not judged this patient is not in it — it is not a
+     * result about them — and is named by `unjudged`.
      * @param {any} study @param {{ subjectKey: string }} input
      */
     async ranked(study, { subjectKey }) {
@@ -436,25 +437,40 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
         candidateStore.listCandidateTrials({ studyId: study.id, limit: 1000 }),
         candidateStore.latestAssessments({ studyId: study.id, subjectKey }),
       ]);
-      const entries = trials.map((trial) => listed({
+      const entries = trials.filter((trial) => verdicts.has(trial.id)).map((trial) => listed({
         kind: "registry", id: trial.id, title: trial.title, status: trial.status, phase: trial.phase, registry: trial.registry,
         registryId: trial.registryId, url: trial.url, conditions: trial.conditions, locations: trial.locations,
       }, verdicts.get(trial.id) ?? null));
       const protocols = matchStore ? await matchStore.protocols(study.id) : [];
-      for (const [index, protocol] of protocols.entries()) {
+      for (const protocol of protocols) {
         const verdict = await matchStore.latestAssessment({ studyId: study.id, subjectKey, protocolVersionId: protocol.id });
-        if (index === 0 || verdict) entries.push(listed({ kind: "protocol", id: protocol.id, title: protocolTitle(protocol) }, verdict));
+        if (verdict) entries.push(listed({ kind: "protocol", id: protocol.id, title: protocolTitle(protocol) }, verdict));
       }
       return rankPatientTrials(entries);
     },
 
     /**
-     * One line of a patient's list with the criteria it was judged on and the per-criterion judgments: what a page's criterion table
-     * is made of. `null` when the study has no such trial or protocol version.
-     * @param {any} study @param {{ subjectKey: string, id: string }} input
+     * The candidate trials of the study that have not judged this patient and could: what a run (or the page's next press) still owes
+     * them. A trial with no criteria cannot judge anybody and is not here.
+     * @param {any} study @param {{ subjectKey: string }} input
      */
-    async detail(study, { subjectKey, id }) {
-      const entry = (await self.ranked(study, { subjectKey })).find((row) => row.id === id);
+    async unjudged(study, { subjectKey }) {
+      const [trials, verdicts] = await Promise.all([
+        candidateStore.listCandidateTrials({ studyId: study.id, limit: 1000 }),
+        candidateStore.latestAssessments({ studyId: study.id, subjectKey }),
+      ]);
+      const criteria = await candidateStore.criteriaOfTrials(study.id, trials.filter((trial) => !verdicts.has(trial.id)).map((trial) => trial.id));
+      return trials.filter((trial) => !verdicts.has(trial.id) && (criteria.get(trial.id) ?? []).length > 0)
+        .map((trial) => ({ id: trial.id, registry: trial.registry, registryId: trial.registryId, title: trial.title }));
+    },
+
+    /**
+     * One line of a patient's list with the criteria it was judged on and the per-criterion judgments: what a page's criterion table
+     * is made of. `null` when this patient has no verdict from that trial or protocol version. `ranked` is the list the caller already read.
+     * @param {any} study @param {{ subjectKey: string, id: string, ranked?: any[] | null }} input
+     */
+    async detail(study, { subjectKey, id, ranked = null }) {
+      const entry = (ranked ?? await self.ranked(study, { subjectKey })).find((row) => row.id === id);
       if (!entry) return null;
       if (entry.kind === "registry") {
         const criteria = await candidateStore.listCriteria(entry.id);
@@ -506,6 +522,7 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
         }
         return {
           subjectKey,
+          unjudged: await self.unjudged(study, { subjectKey }),
           ranking: ranking.map((row) => ({
             rank: row.rank, kind: row.kind, id: row.id, registry: row.registry, registryId: row.registryId, title: row.title, phase: row.phase, status: row.status,
             eligibility: row.summary, counts: row.counts, evidenceGaps: row.evidenceGaps, asOf: row.asOf,
