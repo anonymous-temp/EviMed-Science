@@ -618,9 +618,10 @@ function memorySharingSettings(overrides, frontierEnabled) {
  * absent, so the default here applies), and a value outside its range stops
  * the process at start with the variable's name.
  *
- * - Off by default, and open to operators and the preview list only when on:
- *   the module spends model money (parse and judge), probe time and, once the
- *   marketplace is wired, real money.
+ * - Off by default, and open to every account once on (the owner's ruling of
+ *   2026-10-10; `operators` narrows it to operators and the preview list): the
+ *   module spends model money (parse and judge), probe time and, once the
+ *   marketplace is wired, real money, each held by its own budget.
  * - The engines are closed words (`GEO_ENGINES`); an unknown one is a startup
  *   error, not a silently unmeasured engine.
  * - The night window is `HH-HH` in the module's time zone (`22-07` wraps
@@ -668,7 +669,7 @@ function geoSettings(overrides) {
     }
     return value;
   };
-  const audience = String(read("geoAudience", "OPEN_SCIENCE_GEO_AUDIENCE", "operators")).trim().toLowerCase();
+  const audience = String(read("geoAudience", "OPEN_SCIENCE_GEO_AUDIENCE", "all")).trim().toLowerCase();
   if (!["all", "operators"].includes(audience)) {
     throw new Error(`OPEN_SCIENCE_GEO_AUDIENCE must be "all" or "operators", got ${JSON.stringify(audience)}.`);
   }

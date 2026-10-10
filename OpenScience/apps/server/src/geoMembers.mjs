@@ -19,6 +19,9 @@
  *   otherwise). `peopleOf` gives them from the members: the owner and the editors are the authors, the medical reviewers the
  *   reviewers, each named as their account is and, where the member gave it, by hospital, department and specialty. A doctor
  *   project's doctor is the author and the reviewer.
+ * - **An account is named, and it exists.** The owner adds a colleague by account id, with no invitation to accept (the owner's ruling
+ *   of 2026-10-10, when the module was opened to every account): an id no account has is refused by name, as any other input that
+ *   cannot be used is (`geo_member_user_unknown`), so a typo never becomes a member nobody can be.
  * - **Nothing else is judged here.** Who may manage members is the caller's lookup (`manage_members`, the owner); this file adds,
  *   removes and lists.
  *
@@ -32,6 +35,7 @@ import { HttpError } from "./security.mjs";
 export const GEO_MEMBER_CODES = Object.freeze({
   roleInvalid: "geo_member_role_invalid",
   userRequired: "geo_member_user_required",
+  userUnknown: "geo_member_user_unknown",
   ownerFixed: "geo_member_owner_fixed",
   detailInvalid: "geo_member_detail_invalid",
 });
@@ -105,6 +109,7 @@ export class GeoMembers {
     }
     // The owner's abilities are the project row, not a member row: a second place that has to agree with the first.
     if (userId === project.userId) throw new HttpError(409, GEO_MEMBER_CODES.ownerFixed, "The owner's roles are not a member's and cannot be changed.");
+    if (!(await this.store.accountExists(userId))) throw new HttpError(400, GEO_MEMBER_CODES.userUnknown, "No account has that id.");
     const member = await this.store.addMember({ geoId: project.id, userId, role, invitedBy: actorId, detail: memberDetail(detail) });
     this.counters.added += 1;
     return { ...member, roleLabel: /** @type {Record<string, string>} */ (GEO_MEMBER_ROLE_LABELS_ZH)[member.role] ?? member.role };

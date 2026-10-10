@@ -8,6 +8,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
+import { GEO_ROUTE_ERROR_CODES, knownErrorCodeMessage } from "@evimed/domain";
 import { createWebApiApp } from "../src/server.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -169,6 +170,20 @@ test("the owner's roles are not a member's, a role outside the list is refused, 
   await call("owner", "POST", `/api/geo/projects/${id}/members`, { userId: accounts.editor, role: "editor" });
   assert.equal((await call("editor", "DELETE", `/api/geo/projects/${id}/members/${accounts.editor}`)).body.data.removed, 1, "a member leaves on their own");
   assert.equal((await call("editor", "GET", `/api/geo/projects/${id}`)).status, 404);
+});
+
+test("an id no account has is refused by name and stores nothing; a registered account is added with no invitation to accept (G9)", options, async () => {
+  const id = await made();
+  const members = async () => (await call("owner", "GET", `/api/geo/projects/${id}/members`)).body.data.members.map((/** @type {any} */ member) => member.userId);
+  const typo = await call("owner", "POST", `/api/geo/projects/${id}/members`, { userId: `${accounts.editor}x`, role: "editor" });
+  assert.deepEqual([typo.status, typo.body.code], [400, "geo_member_user_unknown"], "a well-formed id that no account has");
+  assert.deepEqual(await members(), [accounts.owner], "the typo is not a member");
+  assert.ok(GEO_ROUTE_ERROR_CODES.includes("geo_member_user_unknown"), "the refusal is registered");
+  assert.match(knownErrorCodeMessage("geo_member_user_unknown") ?? "", /账号/, "and has a sentence the page shows");
+  // The registered account is in at once: it reads the project the moment it is named, with nothing for it to accept.
+  assert.equal((await call("owner", "POST", `/api/geo/projects/${id}/members`, { userId: accounts.editor, role: "editor" })).status, 201);
+  assert.deepEqual((await members()).sort(), [accounts.editor, accounts.owner].sort());
+  assert.equal((await call("editor", "GET", `/api/geo/projects/${id}`)).status, 200);
 });
 
 test("a product card's author and reviewer are the real named members, and without a reviewing doctor no card is written", options, async () => {

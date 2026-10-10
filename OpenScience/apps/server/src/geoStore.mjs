@@ -550,6 +550,12 @@ export class GeoStore {
     return (result.rowCount ?? 0) > 0;
   }
 
+  /** Whether the control plane has an account with this id: what a member is added by. @param {string} userId */
+  async accountExists(userId) {
+    const result = await this.query(`SELECT 1 FROM evimed_control.users WHERE id = $1`, [userId]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
   /** The names of accounts, where the control plane knows them. @param {string[]} userIds @returns {Promise<Map<string, string>>} */
   async personNames(userIds) {
     /** @type {Map<string, string>} */

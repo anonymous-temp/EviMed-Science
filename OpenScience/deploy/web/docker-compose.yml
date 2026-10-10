@@ -615,7 +615,7 @@ services:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS:
       # 「循证 GEO」 (geoService.mjs) and the media marketplace it places orders
       # through. Value-less: unset keeps config.mjs's defaults — the module off,
-      # open to operators once on, no social channel, no marketplace. The
+      # open to every account once on, no social channel, no marketplace. The
       # marketplace key is the host file bound below.
       OPEN_SCIENCE_GEO_ENABLED:
       OPEN_SCIENCE_GEO_AUDIENCE:

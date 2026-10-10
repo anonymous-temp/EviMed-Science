@@ -30,10 +30,11 @@
  *   view reads the market's ledger through its own `projectMoney`; placing,
  *   cancelling and the budget itself are the market's (`geoMarket.mjs`),
  *   handed in as hooks by the routes.
- * - **Off is invisible** (`geoAudienceAllows`): the module off, or on for
- *   operators and the preview list only while this account is neither, reads
- *   as a module that does not exist — the routes answer 404 `geo_not_enabled`
- *   and the runtime is given no tools.
+ * - **Off is invisible** (`geoAudienceAllows`): the module off, or narrowed to
+ *   operators and the preview list (`OPEN_SCIENCE_GEO_AUDIENCE=operators`; the
+ *   default is every account) while this account is neither, reads as a module
+ *   that does not exist — the routes answer 404 `geo_not_enabled` and the
+ *   runtime is given no tools.
  *
  * @module geoService
  */
@@ -114,7 +115,7 @@ const text = (value) => (typeof value === "string" ? value : null);
 /**
  * Whether this account sees the module at all: on, and either open to every
  * account or this one an operator or on the preview list (ids, as the
- * operator list is). The default audience is `operators`.
+ * operator list is). The default audience is every account (`all`).
  * @param {Record<string, any>} config @param {{ id?: string } | null | undefined} user
  */
 export function geoAudienceAllows(config, user) {
