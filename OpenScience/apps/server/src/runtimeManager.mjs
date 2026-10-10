@@ -5262,18 +5262,22 @@ export class RuntimeManager {
   }
 
   /**
-   * Materializes the research context into the workspace.
+   * Materializes the research context into the workspace, under the session it
+   * is for. There is no project-wide context: every session of a project would
+   * read it, and the one that did not write it would read another's.
    *
    * Failure is not a reason to refuse a dispatch: the run still has the brief
    * itself, and losing the knowledge slices degrades the answer rather than
-   * invalidating the run.
+   * invalidating the run. A call that names no session is a mistake and is
+   * refused here, not skipped with the failures.
    * @param {Record<string, any>} project @param {string} context
+   * @param {{ sessionId?: string, required?: boolean }} [options] `sessionId` is not optional in practice: it is refused when absent
    * @returns {Promise<void>}
    */
-  async writeRunContextFile(project, context, { sessionId = null, required = false } = {}) {
+  async writeRunContextFile(project, context, { sessionId, required = false } = {}) {
+    const session = safeId(sessionId, "session id");
     const write = async () => {
-      const session = sessionId == null ? null : safeId(sessionId, "session id");
-      const relative = session ? `.evimed-brief/sessions/${session}/context.md` : ".evimed-brief/context.md";
+      const relative = `.evimed-brief/sessions/${session}/context.md`;
       const file = path.join(project.workspaceDir, relative);
       await writeFileAtomicNoFollow(project.workspaceDir, file, context, { encoding: "utf8", mode: 0o444 });
       await this.mirrorWorkspaceWrite(project, relative, context, required);
@@ -5341,12 +5345,13 @@ export class RuntimeManager {
    * into the brief excerpt. Same isolation rule as the context file — losing
    * it degrades the child's context rather than invalidating the run.
    * @param {Record<string, any>} project @param {string} memoryContext
+   * @param {{ sessionId?: string, required?: boolean }} [options] `sessionId` is not optional in practice: it is refused when absent
    * @returns {Promise<void>}
    */
-  async writeRunMemoryFile(project, memoryContext, { sessionId = null, required = false } = {}) {
+  async writeRunMemoryFile(project, memoryContext, { sessionId, required = false } = {}) {
+    const session = safeId(sessionId, "session id");
     const write = async () => {
-      const session = sessionId == null ? null : safeId(sessionId, "session id");
-      const relative = session ? `.evimed-brief/sessions/${session}/memory.md` : workspaceLayout.briefMemoryFile;
+      const relative = `.evimed-brief/sessions/${session}/memory.md`;
       const file = path.join(project.workspaceDir, relative);
       await writeFileAtomicNoFollow(project.workspaceDir, file, memoryContext, { encoding: "utf8", mode: 0o444 });
       await this.mirrorWorkspaceWrite(project, relative, memoryContext, required);
@@ -5378,12 +5383,13 @@ export class RuntimeManager {
    * says the context was routed nowhere; left out, the index keeps what the
    * run's previous index said, because a steer writes an index and no context.
    * @param {Record<string, any>} project @param {string} runId
+   * @param {{ sessionId?: string, required?: boolean, contextRevision?: string | null, capability?: string | null }} [options] `sessionId` is not optional in practice: it is refused when absent
    * @returns {Promise<void>}
    */
-  async writeRunBriefIndex(project, runId, { sessionId = null, required = false, contextRevision = null, capability = undefined } = {}) {
+  async writeRunBriefIndex(project, runId, { sessionId, required = false, contextRevision = null, capability = undefined } = {}) {
+    const session = safeId(sessionId, "session id");
     const write = async () => {
-      const session = sessionId == null ? null : safeId(sessionId, "session id");
-      const relative = session ? `.evimed-brief/sessions/${session}/index.json` : workspaceLayout.briefIndexFile;
+      const relative = `.evimed-brief/sessions/${session}/index.json`;
       const routed = typeof capability === "string" && capability ? safeId(capability, "capability id")
         : capability === undefined ? await keptRoute(project, relative, runId) : "";
       const index = {
@@ -5391,7 +5397,7 @@ export class RuntimeManager {
         // refuses any other by name (`RUN_CONTEXT_PROTOCOL`).
         protocol: RUN_CONTEXT_PROTOCOL,
         runId,
-        ...(session ? { sessionId: session } : {}),
+        sessionId: session,
         ...(typeof contextRevision === "string" && contextRevision ? { contextRevision } : {}),
         ...(routed ? { capability: routed } : {}),
       };

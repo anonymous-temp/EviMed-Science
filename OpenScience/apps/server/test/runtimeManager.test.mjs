@@ -2474,6 +2474,30 @@ test("the capability a dispatch was routed to is stated in the session's index, 
   }), { code: "invalid_id" });
 });
 
+test("the brief writers file a dispatch under its session and refuse a call without one; nothing is written project-wide any more", async (t) => {
+  // 2026-10-10 review D9: every caller passes a session id since e2eca41c4, and the branches that wrote the project-wide
+  // context, memory and index were left behind. A call that names no session is a mistake, and it is refused where it is made
+  // rather than written to a file every session of the project would read.
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => {
+    await manager.closeAll();
+    await rm(rootDir, { recursive: true, force: true });
+  });
+  for (const call of [
+    () => manager.writeRunContextFile(project, "# Context\n"),
+    () => manager.writeRunMemoryFile(project, "memory"),
+    () => manager.writeRunBriefIndex(project, "run_1"),
+    () => manager.writeRunContextFile(project, "# Context\n", { sessionId: null }),
+  ]) {
+    await assert.rejects(call, { code: "invalid_id" });
+  }
+  await assert.rejects(() => readFile(path.join(project.workspaceDir, ".evimed-brief", "context.md"), "utf8"), { code: "ENOENT" });
+  await assert.rejects(() => readFile(path.join(project.workspaceDir, ".evimed-brief", "memory.md"), "utf8"), { code: "ENOENT" });
+  await assert.rejects(() => readFile(path.join(project.workspaceDir, ".evimed-brief", "index.json"), "utf8"), { code: "ENOENT" });
+  await manager.writeRunContextFile(project, "# Context\n", { sessionId: "ses_own" });
+  assert.equal(await readFile(path.join(project.workspaceDir, ".evimed-brief", "sessions", "ses_own", "context.md"), "utf8"), "# Context\n");
+});
+
 test("a bounded runtime excludes interactive prompts until its episode releases the runtime", async (t) => {
   const { rootDir, project, manager } = await dshDispatchFixture();
   t.after(async () => {
