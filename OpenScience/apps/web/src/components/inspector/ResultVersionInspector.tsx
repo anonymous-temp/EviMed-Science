@@ -12,6 +12,7 @@ import { DocumentExportActions } from "@/components/document/DocumentExportActio
 import { ResultLineagePanel } from "./ResultLineagePanel";
 import { PublishAsEvidenceCard, isClinicalPackage } from "@/components/frontier/PublishAsEvidenceCard";
 import { parseTableFile } from "@/lib/csv";
+import { formatClock, formatDay } from "@/lib/format";
 import { getWebProjectId } from "@/lib/apiClient";
 import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { parseFailureMessage } from "@/lib/errorText";
@@ -233,11 +234,12 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
   if (!items) return <Loading text="正在读取版本记录" />;
   if (!items.length && !initialVersionId) return <div className="space-y-3 p-4 text-ui text-muted"><p>暂无保存的结果版本。</p>{onLegacy && <Button variant="text" onClick={onLegacy}>查看旧版记录</Button>}</div>;
   const filename = path.split("/").pop() ?? path;
+  const versionLabel = versionLabels(items, path, cursor === null);
   return <div className="space-y-4 p-4 text-ui text-text">
     <div className="flex flex-wrap items-end gap-3">
       <label className="min-w-0 flex-1">结果版本<select aria-label="结果版本" className={inputClasses({ className: "mt-2" })} value={selectedId} disabled={action !== null} onChange={(event) => choose(event.target.value)}>
         {initialVersionId && !items.some((item) => item.versionId === initialVersionId) && <option value={initialVersionId}>指定版本</option>}
-        {items.filter(item => item.path === path || (version && directlyRelatedResults(version, item))).map((item) => <option key={item.versionId} value={item.versionId}>{item.path !== path ? `${item.supersedesVersionId === version?.versionId ? "后续结果" : "原始结果"} · ${item.path.split("/").pop()} · ` : ""}{new Date(item.capturedAt).toLocaleString("zh-CN")} · {item.digest.slice(0, 8)}</option>)}
+        {items.filter(item => item.path === path || (version && directlyRelatedResults(version, item))).map((item) => <option key={item.versionId} value={item.versionId}>{item.path !== path ? `${item.supersedesVersionId === version?.versionId ? "后续结果" : "原始结果"} · ${item.path.split("/").pop()} · ` : ""}{versionLabel(item)}</option>)}
       </select></label>
       {cursor && <Button variant="text" loading={action === "more"} onClick={() => void loadMore()}>更多版本</Button>}
       {version && <Button variant="text" loading={loadingRelated} onClick={() => setRelatedAttempt(value => value + 1)}>刷新关联版本</Button>}
@@ -272,7 +274,7 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
       <ResultCorrectionPanel key={`correction:${version.versionId}`} versionId={version.versionId} onOpen={(id) => void openSuccessor(id)} />
       <ResultLineagePanel key={`lineage:${version.versionId}`} version={version} selectedText={anchor && anchor.versionId === version.versionId ? anchor.selection.selectedText : null}
         onOpen={({ versionId, path: target, runId: targetRun }) => navigate(`/app/runs/${encodeURIComponent(targetRun ?? version.producer.runId ?? version.producer.sessionId ?? "result")}/files/${target.split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(versionId)}`)} />
-      {items.length > 1 && <label className="block">与历史版本比较<select aria-label="比较版本" value={comparisonId} className={inputClasses({ className: "mt-2" })} onChange={(event) => setComparisonId(event.target.value)}><option value="">选择比较版本</option>{items.filter((item) => item.versionId !== selectedId && canCompareResults(version, item)).map((item) => <option key={item.versionId} value={item.versionId}>{item.path !== path ? `${item.path.split("/").pop()} · ` : ""}{new Date(item.capturedAt).toLocaleString("zh-CN")} · {item.digest.slice(0, 8)}</option>)}</select></label>}
+      {items.length > 1 && <label className="block">与历史版本比较<select aria-label="比较版本" value={comparisonId} className={inputClasses({ className: "mt-2" })} onChange={(event) => setComparisonId(event.target.value)}><option value="">选择比较版本</option>{items.filter((item) => item.versionId !== selectedId && canCompareResults(version, item)).map((item) => <option key={item.versionId} value={item.versionId}>{item.path !== path ? `${item.path.split("/").pop()} · ` : ""}{versionLabel(item)}</option>)}</select></label>}
       <ResultImpactPanel key={`impact:${version.versionId}`} projectId={version.projectId} versionId={version.versionId} digest={version.digest} />
       {comparing && <Loading text="正在比较版本" />}
       {comparisonError && <div role="alert" className="space-y-2 text-error"><p>{comparisonError}</p><Button variant="secondary" onClick={() => setCompareAttempt((n) => n + 1)}>重试比较</Button></div>}
@@ -294,6 +296,23 @@ function ReplayOutcome({ comparison }: { comparison: NonNullable<ResultReplay["c
   return <p role="status" className="text-caption text-muted">{numbers}{numbers && environment ? "；" : ""}{environment && <span className={comparison.environment?.status === "same" ? undefined : "text-verify-pending"}>{environment}</span>}</p>;
 }
 function Loading({ text }: { text: string }) { return <p role="status" className="flex items-center gap-2 p-3 text-muted"><Loader2 size={16} aria-hidden="true" className="animate-spin" />{text}</p>; }
+/**
+ * What a researcher calls a version of this file: its number among the file's saved versions, counted from the first, and the day and
+ * time it was saved, as the app's other version lists say them. The number is told only while every version is listed — behind
+ * 「更多版本」 the first is not known, and a number counted from the wrong end would name a different version tomorrow. A result of
+ * another file is named by its file where the list says so, and has no number here.
+ */
+function versionLabels(items: ResultVersion[], path: string, complete: boolean): (item: ResultVersion) => string {
+  // The list is newest first, so a tie in time keeps that order.
+  const own = [...new Map(items.filter((item) => item.path === path).map((item) => [item.versionId, item])).values()]
+    .map((item, index) => ({ item, index })).sort((a, b) => (Date.parse(a.item.capturedAt) - Date.parse(b.item.capturedAt)) || (b.index - a.index));
+  const numbers = new Map(own.map(({ item }, position) => [item.versionId, position + 1]));
+  return (item) => {
+    const when = `${formatDay(item.capturedAt)} ${formatClock(item.capturedAt)}`.trim() || "时间未记录";
+    const number = complete && item.path === path ? numbers.get(item.versionId) : undefined;
+    return number ? `第 ${number} 版 · ${when}` : when;
+  };
+}
 function isText(version: ResultVersion) { return version.mimeType.startsWith("text/") || /\.(md|txt|json|csv|tsv|py|r|js|mjs)$/i.test(version.path); }
 function canCompareResults(left: ResultVersion, right: ResultVersion) { return left.projectId === right.projectId && ((left.path === right.path && left.artifactId === right.artifactId) || directlyRelatedResults(left, right)); }
 function resultHref(version: ResultVersion) { return `/app/runs/${encodeURIComponent(version.producer.runId ?? version.producer.sessionId ?? "result")}/files/${version.path.split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(version.versionId)}`; }

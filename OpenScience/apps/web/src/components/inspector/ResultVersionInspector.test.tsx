@@ -51,6 +51,38 @@ describe("publishing a clinical result as an evidence card", () => {
     expect(screen.queryByRole("button", { name: "发布为证据卡" })).not.toBeInTheDocument();
   });
 });
+// Static review 2026-10-10 §2.3: both version lists named a version by the browser's own 12-digit date and the first eight characters of its digest.
+describe("naming a version", () => {
+  const year = new Date().getFullYear();
+  const first: ResultVersion = { ...old, versionId: "rv_first", capturedAt: `${year}-03-04T08:05:00`, digest: "c".repeat(64) };
+  const second: ResultVersion = { ...old, versionId: "rv_second", capturedAt: `${year}-03-05T09:30:00`, digest: "d".repeat(64), findings: [] };
+  const labels = (name: string) => within(screen.getByRole("combobox", { name })).getAllByRole("option").map((option) => option.textContent);
+  beforeEach(() => { api.get.mockImplementation(async (id: string) => (id === first.versionId ? first : second)); });
+
+  it("tells a version by its number and the day and time it was saved, in both lists, and never by the start of its digest", async () => {
+    api.list.mockResolvedValue({ items: [second, first], nextCursor: null });
+    mount(); await screen.findByText("新结论");
+    expect(labels("结果版本")).toEqual(["第 2 版 · 3月5日 09:30", "第 1 版 · 3月4日 08:05"]);
+    expect(labels("比较版本")).toEqual(["选择比较版本", "第 1 版 · 3月4日 08:05"]);
+    for (const list of ["结果版本", "比较版本"]) expect(screen.getByRole("combobox", { name: list })).not.toHaveTextContent(/[0-9a-f]{8}/);
+  });
+
+  it("leaves the number out while older versions are still to be loaded: which one is the first is not yet known", async () => {
+    api.list.mockResolvedValue({ items: [second, first], nextCursor: "more" });
+    mount(); await screen.findByText("新结论");
+    expect(labels("结果版本")).toEqual(["3月5日 09:30", "3月4日 08:05"]);
+  });
+
+  it("names a result of another file by that file, and numbers only this file's own versions", async () => {
+    const revised: ResultVersion = { ...second, versionId: "rv_revised", path: "artifacts/revised.md", supersedesVersionId: first.versionId, capturedAt: `${year}-03-06T10:00:00` };
+    api.list.mockResolvedValue({ items: [second, first], nextCursor: null });
+    api.related.mockResolvedValue({ items: [revised], nextCursor: null });
+    mount(first.versionId); await screen.findByText("新结论");
+    await waitFor(() => expect(labels("结果版本")).toHaveLength(3));
+    expect(labels("结果版本")).toContain("后续结果 · revised.md · 3月6日 10:00");
+    expect(labels("结果版本")).toEqual(expect.arrayContaining(["第 2 版 · 3月5日 09:30", "第 1 版 · 3月4日 08:05"]));
+  });
+});
 describe("immutable result inspection", () => {
   it("keeps exactly one lineage and impact panel for the selected version after loading and switching", async () => {
     mount(old.versionId);
