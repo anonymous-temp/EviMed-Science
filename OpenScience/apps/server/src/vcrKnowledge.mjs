@@ -6,8 +6,9 @@
  *
  * - **A pack is definitions, and a study binds exactly one.** The curated packs
  *   are files in `@evimed/domain`, validated when the module loads; an AI draft
- *   is a row, written through the same validator at its floor (`draft`) and
- *   marked 「AI 草拟」 wherever it is shown. Nothing in the programme waits for
+ *   is a row, written through the same validator at its floor (`draft`); its status
+ *   is the ledger's (it decides whether a lead may promote it), not a tag on the
+ *   page (owner ruling 2026-10-10). Nothing in the programme waits for
  *   curation: a study with no pack for its disease drafts one and goes on, and
  *   a reviewed draft is promoted by the study's lead or an operator — the same
  *   row, status `curated`, with who reviewed it. A draft never silently becomes

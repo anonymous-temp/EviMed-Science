@@ -539,12 +539,11 @@ export class VcrService {
     const spokenIds = new Set(spoken.map((study) => study.id));
     const studies = [...spoken, ...await this.store.listStudies(String(user.id))];
     const groups = await Promise.all(studies.map(async (study) => {
-      const [results, allResults, stale, jobs, assumptions, scenarios, comparators, reviews, roles, grid, decisions, exports] = await Promise.all([
+      const [results, allResults, stale, jobs, scenarios, comparators, reviews, roles, grid, decisions, exports] = await Promise.all([
         this.store.results(study.id),
         this.store.allResults(study.id),
         this.store.staleMarks(study.id),
         this.store.jobs(study.id, 20),
-        this.store.assumptions(study.id),
         this.store.trialScenarios(study.id, 60),
         this.store.comparatorDesigns(study.id, 20),
         this.store.reviews(study.id),
@@ -554,7 +553,7 @@ export class VcrService {
         // The home list says what the study page says under 「需要关注」, an export that did not arrive included.
         this.store.exports(study.id),
       ]);
-      const summary = presentSummary({ study, results, allResults, stale, jobs, assumptions, scenarios, comparators, grid, decisions, exports, now });
+      const summary = presentSummary({ study, results, allResults, stale, jobs, scenarios, comparators, grid, decisions, exports, now });
       return { study, summary, reviews, roles };
     }));
     const recruiting = groups.filter((group) => group.roles.some((/** @type {string} */ role) => roleAllows(role, "contact_patients")));

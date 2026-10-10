@@ -320,26 +320,16 @@ export function failedExportsOf(exports) {
 
 /**
  * The lines under 「需要关注」: what the reader has to look at. Deterministic
- * over the rows, so the home list and the overview say the same thing.
- * @param {{ assumptions: readonly Record<string, any>[], scenarios: readonly Record<string, any>[],
- *   comparators: readonly Record<string, any>[], results: readonly Record<string, any>[], allResults?: readonly Record<string, any>[],
+ * over the rows, so the home list and the overview say the same thing. A value an AI set and no one has countersigned is not
+ * among them: who set a value is the platform's own record, and a countersignature is an act the reader may take or leave
+ * (owner ruling 2026-10-10), so the list holds only what is broken, stale or waiting.
+ * @param {{ comparators: readonly Record<string, any>[], results: readonly Record<string, any>[], allResults?: readonly Record<string, any>[],
  *   stale: readonly Record<string, any>[], jobs: readonly Record<string, any>[], steps: Record<string, any>,
  *   exports?: readonly Record<string, any>[] }} input
  */
-export function attentionOf({ assumptions, scenarios, comparators, results, allResults, stale, jobs, steps, exports = [] }) {
+export function attentionOf({ comparators, results, allResults, stale, jobs, steps, exports = [] }) {
   /** @type {Array<Record<string, any>>} */
   const lines = [];
-  const used = new Set(scenarios.flatMap((scenario) => list(scenario.assumptionIds).map(String)));
-  const keyed = used.size ? assumptions.filter((card) => used.has(card.key) || used.has(card.id)) : assumptions;
-  const aiSet = keyed.filter((card) => card.reviewState === "ai_set");
-  if (aiSet.length) {
-    lines.push({
-      kind: "ai_set", tone: "attention", tab: "data",
-      text: used.size ? `${aiSet.length} 条关键假设由 AI 设定` : `${aiSet.length} 张假设卡由 AI 设定，还没有复核`,
-      items: aiSet.slice(0, 3).map((card) => String(card.name || card.key)),
-      action: { label: "去复核", tab: "data" },
-    });
-  }
   const unestimable = notEstimableDesign(comparators, allResults ?? results);
   if (unestimable) {
     const gaps = list(unestimable.gapList);
@@ -468,11 +458,11 @@ export function numberString(value, precision, mcse = null) {
 /**
  * One row of the home list.
  * @param {{ study: Record<string, any>, results: readonly Record<string, any>[], stale: readonly Record<string, any>[],
- *   jobs: readonly Record<string, any>[], assumptions: readonly Record<string, any>[], scenarios: readonly Record<string, any>[],
+ *   jobs: readonly Record<string, any>[], scenarios: readonly Record<string, any>[],
  *   comparators: readonly Record<string, any>[], grid: Record<string, any> | null, decisions?: readonly Record<string, any>[], now: Date,
  *   allResults?: readonly Record<string, any>[], exports?: readonly Record<string, any>[] }} input
  */
-export function presentSummary({ study, results, allResults, stale, jobs, assumptions, scenarios, comparators, grid, decisions = [], exports = [], now }) {
+export function presentSummary({ study, results, allResults, stale, jobs, scenarios, comparators, grid, decisions = [], exports = [], now }) {
   const { designs } = presentDesigns({ study, scenarios, results, allResults, stale, executions: new Map(), grid, decisions, forecastResults: [], now });
   return {
     id: study.id,
@@ -484,7 +474,7 @@ export function presentSummary({ study, results, allResults, stale, jobs, assump
     status: study.status,
     steps: publicSteps(study.steps),
     conclusion: conclusionOf({ designs, results, allResults, comparators }),
-    attention: attentionOf({ assumptions, scenarios, comparators, results, allResults, stale, jobs, steps: study.steps, exports }),
+    attention: attentionOf({ comparators, results, allResults, stale, jobs, steps: study.steps, exports }),
     updatedAt: zhTime(study.updatedAt, now) ?? "",
     createdAt: study.createdAt,
   };
@@ -647,7 +637,7 @@ function publicSteps(steps) {
  * @param {Record<string, any>} bundle what `VcrService` gathered
  */
 export function presentStudy(bundle) {
-  const { study, results, stale, reviews, jobs, budget, assumptions, exports, scenarios, comparators, now, roles } = bundle;
+  const { study, results, stale, reviews, jobs, budget, exports, comparators, now, roles } = bundle;
   const { rows, designs } = presentDesigns(bundle);
   // The counts belong to the design a person chose; with no decision, to the
   // last design that is still in the running — never to one another design beats.
@@ -660,7 +650,7 @@ export function presentStudy(bundle) {
     metrics: overviewMetrics(bundle, designs),
     counts: headline ? countsView(headline.counts, { tier: study.dataTier, scope: headlineScope(headline, rows) }) : null,
     designs,
-    attention: attentionOf({ assumptions, scenarios, comparators, results, allResults: allResultsOf(bundle), stale, jobs, steps: study.steps, exports }),
+    attention: attentionOf({ comparators, results, allResults: allResultsOf(bundle), stale, jobs, steps: study.steps, exports }),
     changes: presentChanges(bundle),
     // The AI reviews and the people's, apart from the changes: the study page's 变更记录 shows both (no model names: `presentVcrReview`).
     reviews: reviews.slice(0, 6).map((/** @type {any} */ review) => presentVcrReview(review, reviewContextOf(bundle))),
@@ -823,11 +813,10 @@ function presentChanges(bundle) {
       by: null, state: staleNodes.has(resultNode(result)) ? "stale" : null });
   }
   for (const card of [...assumptions].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 2)) {
-    rows.push({ id: `assumption:${card.id}`, at: card.createdAt, text: `假设卡「${card.name || card.key}」已更新`, by: null,
-      state: card.reviewState === "reviewed" ? "reviewed" : null });
+    rows.push({ id: `assumption:${card.id}`, at: card.createdAt, text: `假设卡「${card.name || card.key}」已更新`, by: null, state: null });
   }
   const names = assumptionNames(bundle);
-  for (const review of reviews.slice(0, 2)) rows.push({ id: `review:${review.id}`, at: review.createdAt, text: `${review.reviewerKind === "ai" ? "AI " : ""}${reviewSubject(review, { version: false, names })} · ${presentVcrReview(review, { now }).state}`, by: presentVcrReview(review, { now }).by, state: !review.status || review.status === "done" ? "reviewed" : "ai_set" });
+  for (const review of reviews.slice(0, 2)) rows.push({ id: `review:${review.id}`, at: review.createdAt, text: `${review.reviewerKind === "ai" ? "AI " : ""}${reviewSubject(review, { version: false, names })} · ${presentVcrReview(review, { now }).state}`, by: presentVcrReview(review, { now }).by, state: null });
   for (const decision of decisions.slice(0, 1)) rows.push({ id: `decision:${decision.id}`, at: decision.createdAt, text: `写入决策记录：${decision.question}`, by: null, state: null });
   for (const row of exports.slice(0, 2)) {
     rows.push({ id: `export:${row.id}`, at: row.createdAt,
@@ -1384,11 +1373,9 @@ export function presentPrecedents({ available, message = null, rows = [], source
 // --- the package (export) ---------------------------------------------------------------------------------------------------------------------
 
 /**
- * One package for the reader: the cover states the intended use, each
- * countersignature and the outcome seal truthfully — 未复核 is printed, never
- * hidden — and the sections are rendered from the study's own results
- * (plan §8.3, AC-20). Numbers come from `measureValue`, so the package and the
- * pages cannot disagree about one.
+ * One package for the reader: the cover states the intended use and the outcome seal, the reviews that were done are listed with their
+ * findings, and the sections are rendered from the study's own results (plan §8.3, AC-20). Numbers come from `measureValue`, so the
+ * package and the pages cannot disagree about one.
  *
  * @param {Record<string, any>} row the export row
  * @param {Record<string, any>} bundle the study's rows
@@ -1446,34 +1433,18 @@ function modelSections(row, cover, model) {
   return rendered ? modelDocumentReaderSections(rendered.sections) : null;
 }
 
-/** The cover block: intended use, each review, the seal. @param {{ cover: Record<string, any>, row: Record<string, any>, bundle: Record<string, any>, model: Record<string, any> }} input */
+/**
+ * The cover block: intended use, the seal, the stale results. The reviews are listed beside it in their own right (`document.reviews`,
+ * each by its label, outcome and findings); the cover does not add a line saying a kind of review is done, changed or missing
+ * (owner ruling 2026-10-10: a review-state chip is the platform's bookkeeping, not something the reader acts on).
+ * @param {{ cover: Record<string, any>, row: Record<string, any>, bundle: Record<string, any>, model: Record<string, any> }} input
+ */
 function coverStatus({ cover, row, bundle, model }) {
   const { now } = bundle;
   const word = (/** @type {string} */ use) => (/** @type {Record<string, string>} */ (VCR_INTENDED_USE_LABELS_ZH))[use] ?? use;
   const use = String(cover.intendedUse ?? model.intendedUse ?? bundle.study.intendedUse);
   /** @type {Array<{ label: string, value: string, state: string, note: string | null }>} */
   const status = [{ label: "预期用途", value: word(use), state: "neutral", note: null }];
-  const reviews = (list(cover.reviews).length ? list(cover.reviews) : list(model.review?.records)).map(review => ({ ...review,
-    current: review.current !== false && vcrReviewIsCurrent(review, { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null, exports: [row] }) }));
-  for (const kind of ["statistical", "clinical"]) {
-    // A review the cover says has stopped holding (`current: false`) is not 已复核 — the page says what became of it.
-    const ofKind = reviews.filter((review) => String(object(review).kind) === kind);
-    const done = ofKind.find((review) => object(review).current !== false && (!review.status || review.status === "done"));
-    const changed = !done ? ofKind[0] : null;
-    const label = `${(/** @type {Record<string, string>} */ (VCR_REVIEW_KIND_LABELS_ZH))[kind]}`;
-    if (changed?.reviewerKind === 'ai' && changed.status !== 'done') {
-      const shown = presentVcrReview(changed);
-      status.push({ label, value: shown.state, state: 'attention', note: shown.note });
-    } else if (changed) {
-      status.push({ label, value: "复核后有变更", state: "attention", note: null });
-    } else if (done) {
-      const at = zhTime(object(done).at ?? object(done).createdAt, now);
-      status.push({ label, value: `已复核${at ? `（${at.replace(/ \d\d:\d\d$/, "")}）` : ""}`, state: "ok",
-        note: list(object(done).nodes).length ? `针对 ${list(object(done).nodes).map((/** @type {string} */ node) => nodeLabel(String(node), { names: assumptionNames(bundle) })).filter(Boolean).slice(0, 2).join("、")}` : null });
-    } else {
-      status.push({ label, value: "未复核", state: "attention", note: null });
-    }
-  }
   const seal = object(cover.seal ?? model.seal);
   status.push(seal.required === true
     ? { label: "结局封存", value: seal.planFrozenAt ? "已按计划解封" : "封存中", state: "neutral",
@@ -1506,11 +1477,13 @@ function packageSections({ cover, bundle, model }) {
     add({
       id: "assumptions", title: "假设登记表",
       table: {
-        columns: ["假设", "取值", "来源", "复核"],
+        // The source column stays (HARPER asks where each assumption's value came from); the column that said whether the value was
+        // AI-set, reviewed or changed after review does not.
+        columns: ["假设", "取值", "来源"],
         rows: assumptions.map((card) => {
           const entry = object(card);
           return [String(entry.name || entry.key), entry.value == null ? "—" : `${numberString(Number(entry.value), null)}${entry.unit ? ` ${entry.unit}` : ""}`,
-            String(entry.valueSourceLabel ?? "—"), (/** @type {Record<string, string>} */ ({ ai_set: "AI 设定", reviewed: "已复核", changed_after_review: "复核后有变更" }))[String(entry.reviewState)] ?? "—"];
+            String(entry.valueSourceLabel ?? "—")];
         }),
       },
     });

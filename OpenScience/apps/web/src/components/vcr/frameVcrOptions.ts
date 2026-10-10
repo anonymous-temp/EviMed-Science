@@ -8,7 +8,7 @@
  * The new-study composer (plan §9.3) has no form. It has the module's chip,
  * three optional controls — 起点 (自动 / 队列 / 患者 / 对照 / 试验), 预期用途
  * (默认“探索”) and 数据 — and a row of six starting points. Everything the
- * reader does not say, the platform sets and labels 「AI 设定」. 数据 is not a
+ * reader does not say, the platform sets (the ledger records it as AI-set; no page labels it). 数据 is not a
  * control here: attaching data is the composer's own 「+」, and the study's
  * sources are read and registered on 定义与证据.
  */

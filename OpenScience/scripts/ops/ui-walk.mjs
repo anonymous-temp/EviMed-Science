@@ -226,6 +226,10 @@ export const BACK_OFFICE = [
   /导读由模型根据原文写成/, /引用前请阅读原文/,
   /证据卡是 EviMed 对来源的整理/, /请引用它列出的原始来源/, /不要引用这张卡/, /撤回的卡片保留这一页/, /不为它们背书/, /是平台还没核对这一项/, /三项都未核实/, /(?:未做|未安排)独立复核/,
   /AI 已评议/, /AI 待评议/, /当前内容(?:已完成 AI 评议|待重新评议)/, /沿用上次保留内容/, /上次成功读取于/, /本轮(?:未能重新读取|尚未核查)/, /部分来源(?:本轮尚未完成复核|待复核)/,
+  // 虚拟临床研究: who set a value, who drafted a pack or wrote a record, and whether a card was countersigned are not marks on the
+  // value, the card or the cover. 「AI 设定」 stands on its own as the chip did; inside a sentence it is the headline's or the nag's.
+  /(?<![\p{Script=Han}\w])AI 设定(?![\p{Script=Han}\w])/u, /由 AI 设定/, /去复核/, /复核后有变更/, /AI 草拟/, /AI 写入/, /AI 最小版本/,
+  /(?:临床|统计)复核[：:]?\s*(?:未复核|已复核（)/,
 ];
 
 /**

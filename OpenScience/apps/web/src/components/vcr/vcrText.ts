@@ -35,9 +35,7 @@ import {
   VCR_MODEL_TIER_LABELS_ZH,
   VCR_REFERRAL_STATE_LABELS_ZH,
   VCR_REVIEW_KIND_LABELS_ZH,
-  VCR_REVIEW_STATE_LABELS_ZH,
   VCR_STEP_LABELS_ZH,
-  VCR_STEP_STATUS_LABELS_ZH,
   VCR_VALUE_SOURCE_LABELS_ZH,
 } from "@evimed/domain";
 import type {
@@ -55,9 +53,7 @@ import type {
   VcrModelTier,
   VcrReferralState,
   VcrReviewKind,
-  VcrReviewState,
   VcrStepKey,
-  VcrStepStatus,
   VcrValue,
   VcrValueSource,
 } from "@/lib/vcrClient";
@@ -67,14 +63,12 @@ const table = <K extends string>(labels: unknown) => (key: K | null | undefined)
 
 export const sourceLabel = table<VcrValueSource>(VCR_VALUE_SOURCE_LABELS_ZH);
 export const conclusionLabel = table<VcrConclusion>(VCR_CONCLUSION_LABELS_ZH);
-export const reviewLabel = table<VcrReviewState>(VCR_REVIEW_STATE_LABELS_ZH);
 export const reviewKindLabel = table<VcrReviewKind>(VCR_REVIEW_KIND_LABELS_ZH);
 export const countLabel = table<VcrCountKey>(VCR_COUNT_LABELS_ZH);
 export const intervalLabel = table<VcrInterval["kind"]>(VCR_INTERVAL_KIND_LABELS_ZH);
 export const tierLabel = table<VcrDataTier>(VCR_DATA_TIER_LABELS_ZH);
 export const intendedUseLabel = table<VcrIntendedUse>(VCR_INTENDED_USE_LABELS_ZH);
 export const stepLabel = table<VcrStepKey>(VCR_STEP_LABELS_ZH);
-export const stepStatusLabel = table<VcrStepStatus>(VCR_STEP_STATUS_LABELS_ZH);
 export const jobStateLabel = table<VcrJobState>(VCR_JOB_STATE_LABELS_ZH);
 /** The one line under a live job that waits on something the reader has nothing to do about. */
 export const jobWaitLabel = table<VcrJobWait>(VCR_JOB_WAIT_LABELS_ZH);
@@ -222,7 +216,7 @@ export function isPlaceholder(value: VcrValue | null | undefined): boolean {
 
 /**
  * The whole value as one line, for a screen reader, a tooltip and a test:
- * 「4.1 个月，汇总，预测区间 3.0–5.6，AI 设定」.
+ * 「4.1 个月，汇总，预测区间 3.0–5.6」.
  */
 export function valueSentence(value: VcrValue | null | undefined): string {
   if (!value) return NO_VALUE;
@@ -231,7 +225,6 @@ export function valueSentence(value: VcrValue | null | undefined): string {
     sourceLabel(value.source),
     intervalText(value.interval, value.precision),
     value.mcse != null ? `蒙特卡洛标准误 ${mcseText(value.mcse)}` : "",
-    value.review ? reviewLabel(value.review) : "",
     value.stale ? "已过期" : "",
     value.reason ?? "",
   ].filter(Boolean).join("，");

@@ -30,8 +30,8 @@
  *   requirement is checked by the domain's `validateRequirement`, the grammar
  *   the evaluator reads.
  * - **A person's edit is a reviewed version.** The version carries
- *   `reviewed`, like an assumption card the page edits; 「AI 设定」 stays on what
- *   the model wrote.
+ *   `reviewed`, like an assumption card the page edits; what the model wrote
+ *   keeps the state `ai_set`, which the ledger holds and no page prints.
  * - **Only the newest version is edited.** An object that has a newer version
  *   is refused (`vcr_card_not_current`): editing the past would write a version
  *   newer than the one a reader is looking at.

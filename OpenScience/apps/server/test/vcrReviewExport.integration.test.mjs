@@ -325,5 +325,8 @@ test('conversion failure keeps every original download and includes true failed 
   assert.match(partial, /本次审查因服务配置变化未完成/); assert.doesNotMatch(partial, /AI统计复核：未发现明确问题/);
   assert.equal(latest.cover.reviewDocumentRefresh.records[1].provenance.error, 'review_configuration_changed');
   for (const [index, format] of ['docx', 'pdf', 'html'].entries()) assert.deepEqual((await f.conversion.download({ id: 'alice' }, f.original.id, format)).bytes, before[index].bytes);
-  assert.match(canonicalVcrDocument(f.study, latest).canonicalMarkdown, /尚未完成复核/);
+  // The frozen model holds no review record: the document built from it lists none, and does not say that none was done.
+  const unrefreshed = canonicalVcrDocument(f.study, latest).canonicalMarkdown;
+  assert.match(unrefreshed, /## 复核与限制/);
+  assert.doesNotMatch(unrefreshed, /AI统计复核|AI临床复核|尚未完成复核/);
 });

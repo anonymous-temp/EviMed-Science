@@ -1011,11 +1011,12 @@ describe("数据与证据 — the card's §6.1 fields", () => {
     expect(screen.queryByText("下游结果随版本重算")).toBeNull();
   });
 
-  it("shows the reviewed version and time without inventing an unavailable display name", async () => {
+  it("shows the countersignature's kind and time in the detail, with no 「已复核」 chip on the card, and no invented display name", async () => {
     drawTab(<DataTab studyId={STUDY_ID} study={study()} />, dataPath("orr_control"));
     await screen.findByRole("heading", { name: "对照组 ORR" });
+    // The chip that used to say 「已复核（昨天）」 beside the title is gone (owner ruling 2026-10-10); who signed what, when, stays in the detail.
+    expect(screen.queryByText(/已复核|复核后有变更/)).toBeNull();
     // A missing display name stays absent; immutable account ids are not names.
-    expect(within(detail()).getByText("已复核（昨天）")).toBeInTheDocument();
     expect(screen.getByText("统计复核 · 昨天")).toBeInTheDocument();
     expect(screen.queryByText(/u_stat/)).toBeNull();
     // A card already countersigned offers no second countersignature.

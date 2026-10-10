@@ -16,7 +16,6 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { HeatGrid } from "@/components/charts/HeatGrid";
 import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
 import { VcrMilestoneTimeline, VcrTradeoffScatter, canDrawTradeoff } from "../VcrDiagrams";
-import { ReviewChip } from "../VcrMarks";
 import { VcrPredictionsDrawer } from "../VcrPredictionsDrawer";
 import { VcrNumber } from "../VcrNumber";
 import { VcrSettingsDrawer } from "../VcrSettingsDrawer";
@@ -166,12 +165,7 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
               reader of the table needs first. */}
           {data.ademp.length > 0 && (
             <Disclosure
-              summary={(
-                <span className="inline-flex items-center gap-2">
-                  模拟设定
-                  <ReviewChip state={data.ademReview ?? null} />
-                </span>
-              )}
+              summary="模拟设定"
             >
               <dl data-vcr-setup="" className="divide-y divide-faint">
                 {data.ademp.map((line) => (

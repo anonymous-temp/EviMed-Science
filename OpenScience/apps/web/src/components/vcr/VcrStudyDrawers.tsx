@@ -6,7 +6,6 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Tag } from "@/components/ui/Tag";
 import { ListRow, List } from "@/components/ui/ListRow";
 import { LoadError } from "@/components/cards/LoadError";
-import { ReviewChip } from "./VcrMarks";
 import { VcrReviews } from "./VcrReviews";
 import { VcrTabSkeleton } from "./VcrStates";
 import { useOpenVcrConversation } from "./useOpenVcrConversation";
@@ -33,7 +32,7 @@ export function VcrChangeLogDrawer({ study, onClose }: { study: Pick<VcrStudy, "
                     {change.text}
                     {change.by && <span className="ml-1.5 text-caption text-text-3">{change.by}</span>}
                   </span>
-                  {change.state === "stale" ? <Tag>已过期</Tag> : <ReviewChip state={change.state ?? null} />}
+                  {change.state === "stale" ? <Tag>已过期</Tag> : null}
                 </li>
               ))}
             </ol>

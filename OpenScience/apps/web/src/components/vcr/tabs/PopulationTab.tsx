@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/Card";
 import { Tag } from "@/components/ui/Tag";
 import { VcrAttritionChart, VcrFunnelBar, VcrSmdDot } from "../VcrDiagrams";
 import { VcrMiniHistogram } from "../VcrMiniHistogram";
-import { ReviewChip, SourceTag } from "../VcrMarks";
+import { SourceTag } from "../VcrMarks";
 import { VcrNumber } from "../VcrNumber";
 import { VcrSettingsDrawer } from "../VcrSettingsDrawer";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
@@ -351,11 +351,10 @@ function DefinitionCard({ data, onEdit }: { data: PopulationData; onEdit: (() =>
                 {criterion.quote && (
                   <p className="ml-8 mt-1 text-caption text-text-3">{`“${criterion.quote}”`}</p>
                 )}
-                {(criterion.source || criterion.review || criterion.changed) && (
+                {(criterion.source || criterion.changed) && (
                   <p className="ml-8 mt-1.5 flex flex-wrap items-center gap-1.5">
                     {criterion.changed && <Tag>{criterion.changed}</Tag>}
                     {criterion.source && <SourceTag source={criterion.source} />}
-                    <ReviewChip state={criterion.review} />
                   </p>
                 )}
               </li>

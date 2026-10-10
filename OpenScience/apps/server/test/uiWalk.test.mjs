@@ -226,6 +226,19 @@ test("the back-office list catches what the 2026-10-10 ruling took off the scree
   }
 });
 
+test("the back-office list catches the virtual clinical research authorship marks, and not a study's own words", () => {
+  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
+  // The chip, the data tab's headline and the overview's nag, the pack tag and its option suffix, the record's writer, the step's label, the cover rows.
+  for (const text of ["AI 设定", "4 张假设卡，其中 3 张由 AI 设定、还没有复核。", "2 条关键假设由 AI 设定", "去复核", "复核后有变更", "某罕见病（AI 草拟）", "AI 草拟", "AI 写入 · 昨天", "AI 最小版本",
+    "统计复核 已复核（昨天）", "临床复核：未复核"]) {
+    assert.equal(caught(text), true, text);
+  }
+  // The countersignature's kind and time in a card's detail, a person's own edit, and a researcher's own words stay.
+  for (const text of ["统计复核 · 昨天", "陈统计 修改 · 昨天", "对照组 ORR", "AI 设定了这个指标吗？先看方案", "人工临床复核 · 已有修订建议"]) {
+    assert.equal(caught(text), false, text);
+  }
+});
+
 /** A list row's title: a text button with no height of its own, `lines` lines of 22 px. */
 const title = (lines) => ({ tag: "button", text: "一个很长的资料标题".repeat(lines), height: 22 * lines });
 

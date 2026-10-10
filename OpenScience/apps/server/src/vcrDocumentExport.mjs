@@ -44,7 +44,7 @@ export function canonicalVcrDocument(study, row) {
   const use = model.intendedUse ?? model.study.intendedUse ?? study.intendedUse;
   const seal = model.seal ?? {};
   const header = [`# ${title}`, `预期用途：${VCR_INTENDED_USE_LABELS_ZH[use] ?? use}`, '## 复核与限制',
-    reviewLines.length ? reviewLines.join('\n') : '尚未完成复核。',
+    ...(reviewLines.length ? [reviewLines.join('\n')] : []),
     ...((model.stale ?? []).map(mark => `- ${mark.node}: ${mark.reason}`)),
     seal.required ? `分析计划冻结：${seal.planFrozenAt ?? '未记录'}；首次读取结局：${seal.outcomeFirstReadAt ?? '未记录'}。` : '结局封存：不适用。', ''];
   // The two model documents are the platform's structure with a run's words in it: the same report write fills the prose

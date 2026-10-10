@@ -48,7 +48,8 @@ describe("模型评估", () => {
     expect(within(risk).getByText("高")).toBeInTheDocument();
     expect(within(risk).getByText("两项评级不同，模型风险随影响更大的一项——错误决策的后果。")).toBeInTheDocument();
     expect(within(risk).getByText("后果为高而影响力为中，风险随后果")).toBeInTheDocument();
-    expect(section.getByText("AI 写入 · 昨天")).toBeInTheDocument();
+    // Who wrote a record is not said when it was the run; a person's edit is (owner ruling 2026-10-10).
+    expect(section.queryByText(/AI 写入/)).not.toBeInTheDocument();
     // What nobody has written yet says so; it is never a blank that reads as a finding.
     expect(within(section.getByText("模型与模型结果的评价").closest("[data-vcr-assessment-row]") as HTMLElement).getByText("未填写")).toBeInTheDocument();
   });

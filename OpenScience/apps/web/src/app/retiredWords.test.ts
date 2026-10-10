@@ -92,6 +92,15 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["不是手写的", "a results table does not vouch that its numbers are not typed"],
   ["平台不自动选定方案", "the platform does not announce what it does not do; the form says what to write"],
   ["不在内容哈希的范围内", "a document does not explain what its hash does and does not cover"],
+  // 虚拟临床研究's authorship marks (R36): who set a value, who drafted a pack or wrote a record, and whether a card was countersigned are
+  // the ledger's own record. A page shows a number's source as a neutral field and the countersignature in a card's detail; it puts no
+  // chip on the value, no tally in a headline and no nag under 「需要关注」.
+  ["由 AI 设定", "the data tab's headline and the overview's attention line do not count the cards an AI set, nor ask the reader to review them"],
+  ["去复核", "same: no link asks the reader to go and review"],
+  ["复核后有变更", "a card does not carry a chip saying its countersignature no longer holds"],
+  ["AI 草拟", "a knowledge pack is not tagged with who drafted it, and its option in the picker carries no suffix"],
+  ["AI 写入", "a model assessment does not say that the run wrote it; a person's edit is named"],
+  ["AI 最小版本", "a finished step is 已完成, whoever made it"],
   // 数据含义 (R34): who vouches for a meaning is the contract; on the page it is a fact's own line (「依据：AI 判断」), not a count and not a tag.
   ["模型推断", "the page says 「依据：AI 判断」 on a fact's own line; there is no count of inferred facts and no tag"],
   ["你已确认", "same"],
@@ -131,6 +140,8 @@ const RETIRED_VISIBLE: ReadonlyArray<readonly [string, string]> = [
   ["approved", "a method's review state is internal; the page says 在用 or nothing"],
   ["SKILL.md", "a method is shown as its title and steps, never as the file it is stored in"],
   ["digest", "a content digest is how versions are told apart internally; the reader sees 版本"],
+  ["AI 设定", "a value, a card or a version carries no chip saying an AI set it (R36)"],
+  ["未复核", "a cover, a card or a package does not announce what has not been countersigned (R36)"],
 ];
 
 const CJK = /[㐀-鿿]/;

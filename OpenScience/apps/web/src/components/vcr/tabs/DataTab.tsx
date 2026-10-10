@@ -30,7 +30,7 @@ import { VcrNoDefinition } from "../VcrStates";
 import { hasDefinition } from "../vcrTabs";
 import { intendedUseLabel } from "../vcrText";
 import { VcrForestPlot } from "../VcrDiagrams";
-import { ReviewChip, SourceTag } from "../VcrMarks";
+import { SourceTag } from "../VcrMarks";
 import { VcrValueText } from "../VcrNumber";
 import { VcrPrecedentTable } from "../VcrPrecedentsPanel";
 import { VcrStepPending, VcrTabSkeleton } from "../VcrStates";
@@ -38,21 +38,16 @@ import { useVcrLoad, VcrFacts, VcrHeadline, VcrSection, VcrTabError } from "../v
 import { intervalText, reviewKindLabel, valueText } from "../vcrText";
 import { vcrTabPath } from "../vcrTabs";
 
-type Filter = "all" | "key" | "ai_set" | "reviewed" | "changed";
+type Filter = "all" | "key";
 
+// Who set a card and whether a person has signed it are not ways to sort the list (owner ruling 2026-10-10): the one filter is the cards that matter most.
 const FILTER_LABELS: ReadonlyArray<{ value: Exclude<Filter, "all">; label: string }> = Object.freeze([
   { value: "key", label: "关键假设" },
-  { value: "ai_set", label: "AI 设定" },
-  { value: "reviewed", label: "已复核" },
-  { value: "changed", label: "有变更" },
 ]);
 
 function matches(assumption: VcrAssumption, filter: Filter): boolean {
   switch (filter) {
     case "key": return assumption.isKey === true;
-    case "ai_set": return assumption.value.review === "ai_set";
-    case "reviewed": return assumption.value.review === "reviewed";
-    case "changed": return assumption.value.review === "changed_after_review";
     default: return true;
   }
 }
@@ -83,9 +78,8 @@ export function reviewKindsFor(abilities: readonly string[]): VcrReviewKind[] {
  * ones; a sample size taken off a confidence interval alone is a sample size
  * computed against a precision nobody has.
  *
- * Every card carries its review state as a label on a live value: the number
- * is in use now, and 「AI 设定」 says who set it, not that it is pending
- * (plan §10). A card is one of the few things the page itself edits (plan
+ * A card's number is in use now, whoever set it; the page does not label it with who did or whether anybody signed it (owner ruling 2026-10-10).
+ * A card is one of the few things the page itself edits (plan
  * §9.5): 「改这张卡」 writes its next version, which is what marks the results
  * downstream of it stale, and 「签注复核」 countersigns the version on screen.
  *
@@ -206,7 +200,6 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
                     <span className="flex flex-wrap items-center gap-1.5">
                       <SourceTag source={assumption.value.source} />
                       {assumption.newEvidence && <Tag tone="accent">{assumption.newEvidence.label}</Tag>}
-                      <ReviewChip state={assumption.value.review} />
                       {assumption.summary && <span className="min-w-0 truncate text-caption text-text-3">{assumption.summary}</span>}
                     </span>
                   )}
@@ -326,7 +319,6 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
           <h2 className="text-section font-semibold text-text">{assumption.name}</h2>
           <SourceTag source={assumption.value.source} />
           {assumption.sourceType && <Tag>{assumption.sourceType}</Tag>}
-          <ReviewChip state={assumption.value.review} by={review?.by} at={review?.at} />
           {assumption.isKey && <Tag>关键假设</Tag>}
           {assumption.newEvidence && <Tag tone="accent">{assumption.newEvidence.label}</Tag>}
           <span className="flex-1" />

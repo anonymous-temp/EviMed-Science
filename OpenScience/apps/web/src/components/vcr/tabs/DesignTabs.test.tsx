@@ -103,9 +103,10 @@ describe("总览", () => {
     expect(band.querySelector("[data-vcr-count='generatedRecords']")).toHaveTextContent("约 648 万");
   });
 
-  it("links an attention line to the tab the server named, and gives the budget line no link of its own", () => {
+  it("links an attention line to the tab the server named, gives the budget line no link of its own, and has no line about who set an assumption", () => {
     draw(<OverviewTab studyId={STUDY_ID} study={ev201()} />);
-    expect(screen.getByRole("link", { name: "去复核" })).toHaveAttribute("href", `/app/virtual-research/${STUDY_ID}/data`);
+    expect(screen.queryByRole("link", { name: "去复核" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/由 AI 设定/)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看缺口" })).toHaveAttribute("href", `/app/virtual-research/${STUDY_ID}/comparator`);
     const budget = screen.getByText("1 项计算在等你确认计算预算").closest("li") as HTMLElement;
     expect(within(budget).queryByRole("link")).not.toBeInTheDocument();
@@ -725,12 +726,11 @@ describe("对照", () => {
     expect(container.querySelector("[data-vcr-counts]")).toBeNull();
   });
 
-  it("says the method's conclusion and the review state apart", async () => {
+  it("says the method's conclusion, and nothing of who set it or whether it was reviewed", async () => {
     const { container } = draw(<ComparatorTab studyId={STUDY_ID} study={ev201()} />);
     const verdict = await found(container, "[data-vcr-verdict]");
     expect(verdict).toHaveTextContent("有限制地估计");
-    expect(verdict).toHaveTextContent("AI 设定");
-    expect(verdict).toHaveTextContent("未复核");
+    expect(verdict).not.toHaveTextContent(/AI 设定|未复核|已复核/);
   });
 
   it("prints 1.04 as 1.04, not as 1.0", async () => {
