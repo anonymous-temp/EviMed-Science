@@ -1521,12 +1521,13 @@ The surface inventory covers 152 reviewed upstream capabilities. Corpus and
 terminology rights are individual entries in `data-rights.json`; an upstream
 code licence does not admit a dataset, vocabulary or cloud processing purpose.
 
-Clinical enrichment is off by default. After measuring a selected study, add its
-study id to `OPEN_SCIENCE_VCR_CLINICAL_STUDY_IDS` and follow the normal web release
-procedure. An empty list returns the existing extraction guidance. Clearing this
-list does not remove clinical facts, corrections, frozen inputs, registry versions
-or prior reports. Disabling the VCR module also leaves historical cloud permission
-checks active. No production study was activated by this implementation batch.
+Clinical enrichment (the `clinical` fact field with its contract, terminology and
+guidance) is on for every study since 2026-10-10. `OPEN_SCIENCE_VCR_CLINICAL_STUDY_IDS`
+is an optional restriction: an empty list is every study, and a list of study ids
+narrows it to those (the other studies read the existing extraction guidance).
+Changing the list does not remove clinical facts, corrections, frozen inputs, registry
+versions or prior reports. Disabling the VCR module also leaves historical cloud
+permission checks active.
 
 A patient document stays in the protected data plane; only the control plane reads
 it. Since 2026-10-10 the deployment's own record of its agreements with the model

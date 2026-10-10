@@ -19,7 +19,7 @@ import { VcrService, vcrReadiness } from "../src/vcrService.mjs";
 import { removeVcrArtifacts } from "../src/vcrStoreBase.mjs";
 import { createIntakeCounters } from "../src/vcrRecordExtract.mjs";
 import {
-  composeVcr, createVcrEngineJobRemover, matchingContextOf, vcrDataPlaneSeam, vcrDocumentsSeam, vcrEngineStatus,
+  clinicalEnrichmentOn, composeVcr, createVcrEngineJobRemover, matchingContextOf, vcrDataPlaneSeam, vcrDocumentsSeam, vcrEngineStatus,
   vcrMatchingExecutor, vcrMatchingSeam, vcrMetricFamilies, vcrSubjectTableSeam, withVcrEngineWarnings,
 } from "../src/vcrComposition.mjs";
 
@@ -906,4 +906,11 @@ test("the plane's seam answers a refusal as an answer and the identity as metada
     "judged for the study's owner for the module's purpose, like every other read of a patient-level document");
   assert.equal(await seam.identity({ id: "std_1" }), null, "an identity that cannot be read is no table, not an error");
   assert.deepEqual(await vcrSubjectTableSeam({ dataPlane: null }).read({ id: "std_1" }), { available: false, reason: "vcr_data_plane_unavailable" });
+});
+
+test("clinical enrichment is every study's unless the deployment lists study ids, and the deployment's config says so", () => {
+  for (const unset of [[], undefined, null]) assert.equal(clinicalEnrichmentOn(unset, "std_1"), true, `a list of ${JSON.stringify(unset)} is every study`);
+  assert.equal(clinicalEnrichmentOn(["std_2"], "std_1"), false);
+  assert.equal(clinicalEnrichmentOn(["std_2", "std_1"], "std_1"), true);
+  assert.deepEqual(loadConfig({ rootDir: repoRoot }).vcrClinicalStudyIds, [], "the shipped default restricts nothing");
 });

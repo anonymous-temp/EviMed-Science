@@ -518,6 +518,17 @@ function matchingInputs({ asOf, protocolVersionId, facts, judgments, table = nul
 }
 
 /**
+ * Whether a study is given the clinical fact contract and the terminology that goes with it (2026-10-10 owner ruling: every
+ * VCR feature takes effect). Every study is, unless the deployment lists study ids, which then restricts it to those: the list
+ * is an optional restriction, no longer the way in.
+ * @param {unknown} studyIds `OPEN_SCIENCE_VCR_CLINICAL_STUDY_IDS` @param {string} studyId
+ */
+export function clinicalEnrichmentOn(studyIds, studyId) {
+  const listed = list(studyIds);
+  return listed.length === 0 || listed.includes(studyId);
+}
+
+/**
  * The matching seam: the page's tab, the runtime's read, and the flow's own
  * steps — freezing a job, persisting its assessments, re-evaluating what has
  * come due, and the accrual forecast built from the referral ledger. Built from
@@ -527,7 +538,7 @@ function matchingInputs({ asOf, protocolVersionId, facts, judgments, table = nul
  * @param {{ matchStore: VcrMatchStore, store: VcrStore, jobs?: VcrJobs | null,
  *   getNotifier?: (() => any) | null, report?: (code: string) => void, now?: () => Date, dataPlaneDir?: string, subjectTable?:any, documents?:any, clinicalEnabled?:(study:any)=>boolean, clinicalContext?:(study:any,criteria:any[])=>Promise<any> }} parts
  */
-export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTable = null, jobs = null, getNotifier = null, report = () => {}, now = () => new Date(), dataPlaneDir = "", clinicalEnabled = () => false, clinicalContext = async () => null }) {
+export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTable = null, jobs = null, getNotifier = null, report = () => {}, now = () => new Date(), dataPlaneDir = "", clinicalEnabled = () => true, clinicalContext = async () => null }) {
   /** @param {any} study */
   const languageKeys = async (study, /** @type {string|null} */ protocolVersionId = null) => {
     const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId }).catch(() => []);
@@ -1146,7 +1157,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   let composed = null;
   const matching = vcrMatchingSeam({
     matchStore, store, documents, subjectTable, jobs, report, getNotifier: () => composed?.notifier ?? null, dataPlaneDir: String(config.vcrDataPlaneDir ?? ""),
-    clinicalEnabled: study => list(config.vcrClinicalStudyIds).includes(study.id),
+    clinicalEnabled: study => clinicalEnrichmentOn(config.vcrClinicalStudyIds, study.id),
     clinicalContext: async (study,criteria) => clinicalTerminologyContext((await knowledge.studyPack(study))?.pack,criteria),
   });
   // A matching job that has finished has its assessments persisted, its
