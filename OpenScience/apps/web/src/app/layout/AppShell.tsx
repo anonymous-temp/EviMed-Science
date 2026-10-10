@@ -35,6 +35,8 @@ export function AppShell() {
   const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
   const currentProjectId = useProjectStore((state) => state.currentId);
   const location = useLocation();
+  // The workbench section the address is in (`/app/<section>/…`): see the Suspense boundary below.
+  const section = location.pathname.split("/")[2] ?? "";
   const onChat = isChatPath(location.pathname);
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   // A person who signed out (or deleted the account) is not sent back to the page they left when they sign in again; one whose session
@@ -235,7 +237,13 @@ export function AppShell() {
             * On the conversation surface the route renders overlays only, so
             * it floats above the frame and lets pointer events through. */}
           <div className={cn(onChat && "pointer-events-none absolute inset-0 z-sticky", !onChat && "h-full")}>
-            <Suspense fallback={onChat ? null : <RouteFallback />}>
+            {/* Keyed by the workbench section, never by a page's parameters. The router navigates inside a
+              * transition, and a transition never hides content a boundary has already shown: with one boundary for
+              * every page, a section whose chunk was slow left the previous one on screen with no sign the click was
+              * taken (live walk 2026-10-10: 科研工具 stayed 11 s under /app/virtual-research). A new boundary per
+              * section shows its fallback; a list and its detail, a tab or a parameter inside one section keep the
+              * boundary, so a row chosen in an in-page list keeps its focus and the page its state. */}
+            <Suspense key={onChat ? "chat" : section} fallback={onChat ? null : <RouteFallback />}>
               <Outlet key={onChat ? "chat" : currentProjectId} />
             </Suspense>
           </div>
