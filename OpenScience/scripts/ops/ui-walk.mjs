@@ -211,6 +211,8 @@ export const BACK_OFFICE = [
   /来源未验证/, /不会带上\s*(?:\d+\s*条|：)/, /\d+\s*条没有带上/, /没有通过自动检查/,
   // What a shared file or a subscribed zone holds is not assured to the researcher.
   /只分享文字，不含脚本/, /脚本不会随它分享/, /引用时只引用原始来源/,
+  // The citation checker's own state under an answer: drawn only when it has a list to show.
+  /引文核对中/, /引文暂时无法核对/,
 ];
 
 /**

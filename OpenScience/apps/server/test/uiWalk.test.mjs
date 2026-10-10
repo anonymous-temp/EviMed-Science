@@ -216,7 +216,7 @@ test("the back-office list catches what the 2026-10-10 ruling took off the scree
   }
   assert.equal(caught("他出门时没有带上伞，所以不会带上那本书"), false);
   // A share panel and a zone page: no assurance of what the file or the reference holds.
-  for (const text of ["对方会在收件箱里收到一条通知。只分享文字，不含脚本。", "已学到的做法按通用的技能格式导出；脚本不会随它分享。", "会把专区里的卡片当作线索，引用时只引用原始来源。"]) {
+  for (const text of ["引文核对中", "引文暂时无法核对", "对方会在收件箱里收到一条通知。只分享文字，不含脚本。", "已学到的做法按通用的技能格式导出；脚本不会随它分享。", "会把专区里的卡片当作线索，引用时只引用原始来源。"]) {
     assert.equal(caught(text), true, text);
   }
 });
