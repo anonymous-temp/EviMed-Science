@@ -654,20 +654,43 @@ export class GeoMeasureStore {
     return this.transaction(async (client) => {
       const result = await client.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, brands, mentions_ours, first_ours,
           recommended_ours, position_ours, brands_mentioned, retrieval_triggered, cites_ours, cites_ours_in_body, care_hint, statements,
-          failure_mode, parser_version, judged_at, red_flag_expected, red_flag_hits, safety_terms_hit, created_at, registry_key, judge_extract, checks)
+          failure_mode, parser_version, judged_at, red_flag_expected, red_flag_hits, safety_terms_hit, created_at, registry_key, judge_extract, checks,
+          errors_owed)
         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18::jsonb, $19::jsonb, $20::jsonb,
-          coalesce($21::timestamptz, now()), $22, $23::jsonb, $24::jsonb)
+          coalesce($21::timestamptz, now()), $22, $23::jsonb, $24::jsonb, $25)
         ON CONFLICT (snapshot_id) DO NOTHING RETURNING snapshot_id`,
       [snapshot.id, snapshot.userId, snapshot.geoProjectId, JSON.stringify(facts.brands ?? []), facts.mentionsOurs ?? null, facts.firstOurs ?? null,
         facts.recommendedOurs ?? null, facts.positionOurs ?? null, facts.brandsMentioned ?? null, facts.retrievalTriggered ?? null,
         facts.citesOurs ?? null, facts.citesOursInBody ?? null, facts.careHint ?? null, JSON.stringify(facts.statements ?? []),
         facts.failureMode ?? null, facts.parserVersion ?? null, facts.judgedAt ?? null, JSON.stringify(facts.redFlagExpected ?? []),
         JSON.stringify(facts.redFlagHits ?? []), JSON.stringify(facts.safetyTermsHit ?? []), at ? at.toISOString() : null,
-        facts.registryKey ?? null, facts.judgeExtract ? JSON.stringify(facts.judgeExtract) : null, JSON.stringify(facts.checks ?? {})]);
+        facts.registryKey ?? null, facts.judgeExtract ? JSON.stringify(facts.judgeExtract) : null, JSON.stringify(facts.checks ?? {}),
+        (facts.statements ?? []).some((/** @type {any} */ statement) => statement?.verdict === "wrong")]);
       if (!result.rows.length) return false;
       if (status) await client.query(`UPDATE evimed_geo.snapshots SET status = $2 WHERE id = $1`, [snapshot.id, status]);
       return true;
     });
+  }
+
+  /**
+   * The facts row's wrong statements are in the error ledger now (or it has none): nothing is owed for it.
+   * @param {string} snapshotId
+   */
+  async errorsRecorded(snapshotId) {
+    await this.query(`UPDATE evimed_geo.facts SET errors_owed = false WHERE snapshot_id = $1 AND errors_owed`, [snapshotId]);
+  }
+
+  /**
+   * Facts rows that owe the error ledger an error, written before `before` (a fresh one is its parse tick's), oldest first: the
+   * snapshot as the parse loop reads it, with the row's statements.
+   * @param {number} limit @param {Date} before
+   */
+  async factsOwingErrors(limit, before) {
+    const result = await this.query(`SELECT s.*, f.statements AS fact_statements FROM evimed_geo.facts f
+        JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
+        JOIN evimed_geo.projects p ON p.id = f.geo_project_id AND p.deleted_at IS NULL
+      WHERE f.errors_owed AND f.created_at <= $2 ORDER BY f.created_at, f.snapshot_id LIMIT $1`, [limit, before.toISOString()]);
+    return result.rows.map((/** @type {any} */ row) => ({ snapshot: snapshotRow(row), statements: list(row.fact_statements) }));
   }
 
   /**

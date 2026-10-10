@@ -622,6 +622,12 @@ ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS entity_keys text[];
 -- \`updated_at\`: that orders the owner's project list, and a market tick is not an edit.
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS market_served_at timestamptz;
 
+-- A facts row with a judged-wrong statement owes the error ledger its error (Q-6): set when the facts are written, cleared when
+-- \`recordErrorsFromFacts\` has run. The two writes are not one transaction (the error also tells the owner and queues a confirmation
+-- round), so a restart or a failed write between them used to lose the error for good; the errors housekeeping records what is owed.
+ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS errors_owed boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS geo_facts_errors_owed_idx ON evimed_geo.facts (created_at) WHERE errors_owed;
+
 -- A claim's source as a reader names it (「玛仕度肽注射液说明书（国家药监局 2025）」);
 -- source_ref stays the machine reference the quote is checked against.
 ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS source_label text;

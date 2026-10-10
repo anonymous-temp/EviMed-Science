@@ -362,6 +362,80 @@ test("an S3 error notifies once, is confirmed by ten fresh asks, closes only aft
   }
 });
 
+test("a wrong statement whose error was never written is recorded by the housekeeping, notified and queued for confirmation, once (Q-6)", options, async () => {
+  await reset();
+  await seed("geo_q6", { engines: ["deepseek"] });
+  const h = await harness({ answers: ({ question }) => (question === Q1 ? { answer: A_WRONG, searchResults: OWNED_LABEL } : { answer: A_RIGHT }) });
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_q6", kind: "baseline", questionIds: ["geo_q6_q1"] });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    // The facts are written and the error is not: a restart, or a database error, between the two. Nothing re-parses the answer (it has
+    // its facts), so before the housekeeping looked for it the error row, its S3 notice and its confirmation round were lost for good,
+    // while the wrong-statement counts still included it.
+    const lost = new Proxy(store, {
+      get(target, key) {
+        const value = Reflect.get(target, key, target);
+        if (key === "upsertError") return async () => { throw new Error("connection terminated unexpectedly"); };
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    await assert.rejects(tickParse({ ...h.deps, store: lost, maxParse: 10 }), /connection terminated unexpectedly/);
+    const [fact] = await rows(`SELECT failure_mode, errors_owed, statements FROM evimed_geo.facts`);
+    assert.equal(fact.failure_mode, "wrong_ours");
+    assert.equal(fact.statements.filter((/** @type {any} */ statement) => statement.verdict === "wrong").length, 1);
+    assert.equal(fact.errors_owed, true, "the facts row says an error is owed");
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.errors`))[0].n, 0);
+    assert.equal(h.notices.length, 0);
+
+    // A fresh facts row is left to the parse tick that wrote it: a minute's grace.
+    assert.equal((await tickErrors(h.deps)).recorded, 0);
+    h.clock.advance(61_000);
+    const swept = await tickErrors(h.deps);
+    assert.equal(swept.recorded, 1, "the housekeeping wrote the error");
+    const [error] = await rows(`SELECT * FROM evimed_geo.errors`);
+    assert.deepEqual({ engine: error.engine, severity: error.severity, status: error.status, question: error.question_id, type: error.error_type },
+      { engine: "deepseek", severity: "S3", status: "open", question: "geo_q6_q1", type: "number" });
+    assert.equal(error.statement, WRONG);
+    assert.equal(h.notices.length, 1, "and told the owner of an S3 error, as the parse tick would have");
+    assert.equal(h.notices[0].errorId, error.id);
+    assert.equal(error.confirm.status, "pending", "and queued its confirmation round");
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind = 'confirm'`))[0].n, 1);
+    assert.equal((await rows(`SELECT errors_owed FROM evimed_geo.facts`))[0].errors_owed, false, "and nothing is owed any more");
+
+    // Idempotent: nothing more is recorded, told or queued however often it runs.
+    for (let again = 0; again < 2; again += 1) {
+      h.clock.advance(61_000);
+      assert.equal((await tickErrors(h.deps)).recorded, 0);
+    }
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.errors`))[0].n, 1);
+    assert.equal(h.notices.length, 1);
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind = 'confirm'`))[0].n, 1);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an error recorded in the parse tick leaves nothing owed, and a facts row with no wrong statement never owed any (Q-6)", options, async () => {
+  await reset();
+  await seed("geo_q6b");
+  const h = await harness();
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_q6b", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    h.clock.advance(3 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    await tickParse({ ...h.deps, maxParse: 20 });
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.errors`))[0].n, 1);
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.facts WHERE errors_owed`))[0].n, 0, "recorded in the tick that wrote the facts");
+    assert.ok((await rows(`SELECT count(*)::int AS n FROM evimed_geo.facts`))[0].n > 1, "facts without a wrong statement are there too");
+    h.clock.advance(61_000);
+    assert.equal((await tickErrors(h.deps)).recorded, 0);
+    assert.equal(h.notices.length, 1);
+  } finally {
+    await h.probe.close();
+  }
+});
+
 test("an answer asked before an error moved, in the same millisecond, is not a later answer and does not close it", options, async () => {
   await reset();
   await seed("geo_ms");

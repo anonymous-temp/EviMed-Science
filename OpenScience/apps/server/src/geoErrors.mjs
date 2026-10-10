@@ -252,6 +252,7 @@ export async function recordErrorsFromFacts(deps, { snapshot, statements, contex
   const out = { created: 0, seen: 0, notified: 0 };
   const wrong = statements.filter((statement) => statement.verdict === "wrong");
   if (!wrong.length) return out;
+  // Recorded below, the facts row stops owing them (`errorsRecorded`); one that throws first leaves the debt for the housekeeping.
   const round = snapshot.roundId ? await deps.store.round(snapshot.roundId) : null;
   for (const statement of wrong) {
     const claim = context.claims.find((entry) => entry.id === statement.claimId) ?? null;
@@ -282,6 +283,7 @@ export async function recordErrorsFromFacts(deps, { snapshot, statements, contex
     const confirm = await confirmationFor(deps, error, round ? { roundId: round.id, kind: round.kind, ref: round.ref } : null);
     if (confirm) await deps.store.updateError(error.id, { confirm });
   }
+  await deps.store.errorsRecorded(snapshot.id);
   return out;
 }
 
@@ -345,13 +347,36 @@ export async function tickErrors(deps) {
   const { store } = deps;
   await store.ready();
   const now = (deps.now ?? (() => new Date()))();
-  const counts = { notified: 0, confirmsQueued: 0, confirmsRead: 0, confirmsRequeued: 0, closed: 0, traced: 0, disposed: 0 };
+  const counts = { recorded: 0, notified: 0, confirmsQueued: 0, confirmsRead: 0, confirmsRequeued: 0, closed: 0, traced: 0, disposed: 0 };
   /** @type {Map<string, any>} */
   const contexts = new Map();
   const context = async (/** @type {string} */ geoProjectId) => {
     if (!contexts.has(geoProjectId)) contexts.set(geoProjectId, await store.projectContext(geoProjectId));
     return contexts.get(geoProjectId);
   };
+
+  // Wrong statements the ledger does not hold (Q-6): the facts were written and the process stopped, or a write failed, before the error
+  // was, and nothing parses an answer twice. The facts row owes the error until it is recorded; a minute's grace leaves a fresh one to
+  // the parse tick that wrote it. The call is the parse tick's own and idempotent (one error per fact per engine; the notice and the
+  // confirmation round are keyed), so a row that was recorded after all is recorded once.
+  /** @type {Map<string, any>} */
+  const owedContexts = new Map();
+  /** @type {Map<string, Map<string, any>>} */
+  const owedQuestions = new Map();
+  for (const owed of await store.factsOwingErrors(20, new Date(now.getTime() - CONFIRM_GRACE_MS))) {
+    const { snapshot } = owed;
+    const key = `${snapshot.geoProjectId}:${snapshot.roundId ?? "live"}`;
+    if (!owedContexts.has(key)) owedContexts.set(key, await store.projectContext(snapshot.geoProjectId, snapshot.roundId));
+    const ctx = owedContexts.get(key);
+    if (!ctx) continue;
+    if (!owedQuestions.has(snapshot.geoProjectId)) {
+      owedQuestions.set(snapshot.geoProjectId, new Map((await store.questions(snapshot.geoProjectId)).map((/** @type {any} */ question) => [question.id, question])));
+    }
+    const question = owedQuestions.get(snapshot.geoProjectId)?.get(String(snapshot.questionId)) ?? null;
+    const recorded = await recordErrorsFromFacts(deps, { snapshot, statements: owed.statements, context: ctx, question });
+    counts.recorded += recorded.created;
+    counts.notified += recorded.notified;
+  }
 
   if (typeof deps.notify === "function") {
     for (const error of await store.errorsToNotify([...GEO_NOTIFY_SEVERITIES], 20)) {
