@@ -723,6 +723,9 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
 
 vcr_job_population_quality <- function(job, output_dir = NULL, ...) {
   sc <- job$scenario
+  # The disclosure report compares size-matched subsamples of the larger set, drawn from this stream. Unseeded, the result echoed a
+  # seed it did not use and the same job gave a nearest-neighbour share on either side of its band (C2-15b).
+  set.seed(job$seed, kind = VCR_RNG_KIND)
   read <- function(id_key, required = TRUE) {
     id <- sc[[id_key]]
     if (is.null(id)) { if (required) vcr_abort("scenario_field_missing", paste0("scenario.", id_key), "The scenario names the input this role reads."); return(NULL) }
