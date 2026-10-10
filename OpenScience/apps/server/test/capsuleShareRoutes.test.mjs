@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { HttpError, sendError } from "../src/security.mjs";
 import { createCapsuleRoutes } from "../src/capsuleRoutes.mjs";
-import { capsuleShareMetricFamilies, recordShareRefused, recordShared, recordTakedown, resetCapsuleShareMetrics } from "../src/capsuleShareMetrics.mjs";
+import { capsuleShareMetricFamilies, recordCorroborationKeepers, recordShareRefused, recordShared, recordTakedown, resetCapsuleShareMetrics } from "../src/capsuleShareMetrics.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { unzipSync } from "fflate";
 
@@ -150,6 +150,11 @@ test("the counters start at zero for every label and count only what they are to
   assert.equal(now.open_science_capsule_shares_total.reduce((sum, row) => sum + row.value, 0), 1, "an unknown label is ignored, never counted under a made-up one");
   assert.equal(now.open_science_capsule_takedown_copies_total.find((row) => row.labels.by === "operator").value, 3);
   assert.equal(now.open_science_capsule_share_refused_total.find((row) => row.labels.reason === "not_text_only").value, 1);
+  // The keepers a corroboration judgement saw: counted, or left out and why (review C4b).
+  assert.ok(read().open_science_capsule_share_keepers_total.every((row) => row.value === 0), "every outcome exists from the start, at zero");
+  recordCorroborationKeepers("counted", 2); recordCorroborationKeepers("account_too_new", 1); recordCorroborationKeepers("not-an-outcome", 9); recordCorroborationKeepers("too_few_runs", -4);
+  const keepers = Object.fromEntries(read().open_science_capsule_share_keepers_total.map((row) => [row.labels.outcome, row.value]));
+  assert.deepEqual(keepers, { counted: 2, account_too_new: 1, too_few_runs: 0 }, "an unknown outcome is ignored and a count below zero adds nothing");
   resetCapsuleShareMetrics();
 });
 
@@ -158,6 +163,8 @@ const LEVERS = [
   ["OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES", "capsuleShareLinkMaxUses", 20, ["0", "1001"]],
   ["OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS", "capsuleShareCorroborationMinAccounts", 3, ["0", "101"]],
   ["OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS", "capsuleShareCorroborationKeptDays", 14, ["0", "366"]],
+  ["OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNT_AGE_DAYS", "capsuleShareCorroborationMinAccountAgeDays", 14, ["-1", "366", "x"]],
+  ["OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_FINISHED_RUNS", "capsuleShareCorroborationMinFinishedRuns", 3, ["-1", "1001"]],
   ["OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY", "capsuleShareDeliveriesPerDay", 50, ["0", "1001"]],
   ["OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT", "evidenceZoneSubscriptionMaxPerProject", 5, ["0", "21"]],
   ["OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS", "evidenceZoneSubscriptionMaxItems", 6, ["0", "31"]],

@@ -9,7 +9,7 @@ import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { packCapsule } from "../src/capsuleContainer.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleShareLinks } from "../src/capsuleShareLinks.mjs";
-import { resetCapsuleShareMetrics } from "../src/capsuleShareMetrics.mjs";
+import { capsuleShareMetricFamilies, resetCapsuleShareMetrics } from "../src/capsuleShareMetrics.mjs";
 import { CapsuleSharing } from "../src/capsuleSharing.mjs";
 import { createGuestInfluence, shareIsCorroborated } from "../src/capsuleShareTrust.mjs";
 import { CapsuleTransferService, renderCapsuleTransferFiles } from "../src/capsuleTransferService.mjs";
@@ -18,6 +18,7 @@ import { createEvolutionLearningCoupling } from "../src/evolutionLearningCouplin
 import { LearningTriggers } from "../src/learningTriggers.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
+import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -335,7 +336,8 @@ test("a share is corroborated only by other accounts that kept it enabled for th
   const made = await sharing.deliver(author, capsule.id, { recipients: [alice, bob, carol, dave] });
   const hash = made.snapshot.manifestSha256;
   const days = 14;
-  const at = (offset) => ({ database, minAccounts: 3, keptDays: days, now: () => Date.now() + offset * DAY });
+  // The keeping period is what this test is about; an account's age and runs are the next test's (they are switched off here).
+  const at = (offset) => ({ database, minAccounts: 3, keptDays: days, minAccountAgeDays: 0, minFinishedRuns: 0, now: () => Date.now() + offset * DAY });
   /** @type {any[]} */ const copies = [];
   for (const userId of [alice, bob, carol]) {
     const notice = (await shareNotices(userId)).find((item) => item.source.id.startsWith("delivery/"));
@@ -359,6 +361,72 @@ test("a share is corroborated only by other accounts that kept it enabled for th
   await capsules.enableReceived(copies[2][0], copies[2][1].id);
   assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, at(1)), false);
   assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, at(15)), true);
+});
+
+/** A delivery of `snapshotId` taken in and kept enabled by `userId`, as that recipient would. @param {string} userId @param {string} snapshotId */
+async function takenIn(userId, snapshotId) {
+  const delivery = (await sharing.pending(userId)).find((item) => item.snapshotId === snapshotId);
+  assert.ok(delivery, `${userId} has the delivery`);
+  const opened = await sharing.open(userId, delivery.id);
+  const copy = await sharing.import(userId, delivery.id, { expectedDigest: opened.preview.archiveSha256, title: "x" });
+  await capsules.enableReceived(userId, copy.id);
+  return copy;
+}
+/** One model request of `userId` in the usage ledger, for `runId`. @param {string} userId @param {string | null} runId @param {{ purpose?: string, status?: string }} [how] */
+async function ledgerRow(userId, runId, { purpose = "kernel", status = "settled" } = {}) {
+  await migrateUsageLedger(database);
+  await database.query(`INSERT INTO evimed_usage.model_requests (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,
+      reserved_cost,actual_cost,priced,reservation_expires_at,created_at,settled_at,purpose)
+    VALUES ($1,$2,NULL,$3,'deepseek-flash','v','CNY',$4,$5,0.01,0.01,true,now(),now(),now(),$6)`, [randomUUID(), userId, runId, "c".repeat(64), status, purpose]);
+}
+/** Finished research runs for `userId`: `count` distinct runs, each with a settled kernel request. @param {string} userId @param {number} count @param {string} prefix */
+async function finishedRuns(userId, count, prefix) { for (let index = 0; index < count; index += 1) await ledgerRow(userId, `${prefix}-${index}`); }
+/** @param {string} userId @param {number} instant when the account is judged @param {number} days how old it was then */
+const createdBefore = (userId, instant, days) => database.query("UPDATE evimed_control.users SET created_at=$2::timestamptz WHERE id=$1", [userId, new Date(instant - days * DAY).toISOString()]);
+
+test("an account counts toward a share's corroboration only when it is old enough and has finished runs; the keepers left out are counted, nothing is blocked", options, async () => {
+  resetCapsuleShareMetrics();
+  const { capsule } = await authored("只有真实使用过平台的账号才算数。");
+  const made = await sharing.deliver(author, capsule.id, { recipients: [alice, bob, carol] });
+  const hash = made.snapshot.manifestSha256;
+  const copies = [];
+  for (const userId of [alice, bob, carol]) copies.push(await takenIn(userId, made.snapshot.id));
+
+  // The same pack, judged fifteen days on: all three kept it for the period, so the period is not what tells them apart.
+  const evaluation = Date.now() + 15 * DAY;
+  const judged = (extra = {}) => ({ database, minAccounts: 3, keptDays: 14, minAccountAgeDays: 14, minFinishedRuns: 3, now: () => evaluation, ...extra });
+  await createdBefore(alice, evaluation, 60);   // old, will have runs
+  await createdBefore(bob, evaluation, 30);     // old, too few runs
+  await createdBefore(carol, evaluation, 3);    // runs, but three days old
+  await finishedRuns(alice, 3, `run-a-${tag}`);
+  // What is not a finished run of bob's: the same run again, a request still reserved, a background purpose, a request with no run.
+  await ledgerRow(bob, `run-b-${tag}-0`); await ledgerRow(bob, `run-b-${tag}-0`); await ledgerRow(bob, `run-b-${tag}-1`);
+  await ledgerRow(bob, `run-b-${tag}-2`, { status: "reserved" }); await ledgerRow(bob, `run-b-${tag}-3`, { purpose: "learning" }); await ledgerRow(bob, null);
+  await finishedRuns(carol, 5, `run-c-${tag}`);
+
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged({ minAccounts: 1 })), true, "one established keeper is enough where one is asked");
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged({ minAccounts: 2 })), false, "bob has two finished runs and carol is three days old: three keepers, one counted");
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged()), false, "three accounts that kept it are not three that count");
+  const seen = Object.fromEntries(capsuleShareMetricFamilies().find((family) => family.name === "open_science_capsule_share_keepers_total").series.map((row) => [row.labels.outcome, row.value]));
+  assert.deepEqual(seen, { counted: 3, account_too_new: 3, too_few_runs: 3 }, "each of the three judgements saw the same three keepers: alice counted, carol too new, bob with too few runs");
+
+  // Time and use make an account count; nothing else changed.
+  await ledgerRow(bob, `run-b-${tag}-4`);
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged({ minAccounts: 2 })), true, "bob's third finished run makes two");
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged()), false, "carol is still three days old");
+  await createdBefore(carol, evaluation, 20);
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged()), true, "and at twenty days she counts");
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged({ minAccountAgeDays: 30, minFinishedRuns: 0 })), false, "the thresholds are the operator's: thirty days leaves carol out again");
+  assert.equal(await shareIsCorroborated({ authorId: author, snapshotHash: hash }, judged({ minAccountAgeDays: 0, minFinishedRuns: 0 })), true, "and zero asks nothing of an account");
+
+  // The learning loop's question, asked through the same options a deployment configures.
+  await createdBefore(carol, evaluation, 3);
+  const factId = (await capsules.entries(alice, copies[0].id)).items[0].id;
+  const run = { recalledMemories: [{ id: `capsule:${factId}`, kind: "method_preference", scope: "capsule" }] };
+  const assess = (extra) => createGuestInfluence({ database, documents, ...judged(extra) }).assess(alice, run);
+  assert.deepEqual((await assess({})).uncorroborated, [copies[0].id], "three keepers, two that count: not corroborated");
+  assert.deepEqual((await assess({ minAccounts: 2 })).uncorroborated, [], "asked for two, the two that count are enough");
+  await createdBefore(carol, evaluation, 20);
 });
 
 test("a run that used an uncorroborated guest capsule still learns for its own account, and reaches no platform signal; a corroborated one does", options, async () => {
@@ -386,7 +454,7 @@ test("a run that used an uncorroborated guest capsule still learns for its own a
   const audited = [];
   const triggersAt = (offset) => new LearningTriggers({ jobs: { enqueue: async (_user, _kind, payload) => queued.push(payload) }, agentRuns: { list: async () => [], runWorkflowProjection: async () => null },
     audit: async (event, detail) => audited.push([event, detail.code]),
-    guestInfluence: createGuestInfluence({ database, documents, minAccounts: 1, keptDays: 14, now: () => Date.now() + offset * DAY }) });
+    guestInfluence: createGuestInfluence({ database, documents, minAccounts: 1, keptDays: 14, minAccountAgeDays: 0, minFinishedRuns: 0, now: () => Date.now() + offset * DAY }) });
   const [guestA, guestB, vouchedA, vouchedB] = ["g1", "g2", "v1", "v2"].map((name) => finished(`run_${name}_${tag}`, { recalledMemories: recalled }));
   const early = await triggersAt(0).afterRun(project, { ...guestA });
   await triggersAt(0).afterRun(project, { ...guestB });

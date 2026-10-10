@@ -605,14 +605,18 @@ services:
       # Sharing memory inside the platform (evidence-flywheel plan 2026-10-05, F17-F19):
       # how long a share link lives and how often it may be used, how many other
       # accounts must keep a new author's pack before it counts for platform
-      # learning and for how long, the daily ceiling on deliveries to other
-      # accounts, and the evidence-zone subscription (each switch off until turned on).
+      # learning and for how long, how old an account must be and how many runs it
+      # must have finished to be one of them, the daily ceiling on deliveries to
+      # other accounts, and the evidence-zone subscription (each switch off until
+      # turned on).
       # Value-less: unset keeps config.mjs's defaults.
       OPEN_SCIENCE_CAPSULE_SHARE_ENABLED:
       OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS:
       OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES:
       OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS:
       OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS:
+      OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNT_AGE_DAYS:
+      OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_FINISHED_RUNS:
       OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT:

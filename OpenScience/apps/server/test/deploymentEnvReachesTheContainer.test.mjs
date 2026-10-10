@@ -284,12 +284,14 @@ const operatorLevers = {
   OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY: ["open-science-web"],
   // Sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05): a lever that does not arrive leaves share links
   // living and used by the defaults while the operator believes they shortened them, or a new author's pack counted as
-  // corroborated by a threshold the operator never set.
+  // corroborated by a threshold the operator never set, or by accounts of any age and use.
   OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS: ["open-science-web"],
+  OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNT_AGE_DAYS: ["open-science-web"],
+  OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_FINISHED_RUNS: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT: ["open-science-web"],

@@ -3966,7 +3966,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
       // every platform-level consumer (capsuleShareTrust.mjs, plan §7).
       guestInfluence: productDatabase ? createGuestInfluence({ database: productDatabase, documents: productDocuments,
-        minAccounts: config.capsuleShareCorroborationMinAccounts, keptDays: config.capsuleShareCorroborationKeptDays }) : null,
+        minAccounts: config.capsuleShareCorroborationMinAccounts, keptDays: config.capsuleShareCorroborationKeptDays,
+        minAccountAgeDays: config.capsuleShareCorroborationMinAccountAgeDays, minFinishedRuns: config.capsuleShareCorroborationMinFinishedRuns }) : null,
       // A conversation trying someone else's capsule teaches the loop nothing.
       sessionState: researchMemory.configured
         ? (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId) : null,

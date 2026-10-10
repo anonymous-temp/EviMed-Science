@@ -14,6 +14,9 @@ const REFUSALS = Object.freeze(["not_text_only", "link_expired", "link_revoked",
 const TAKEDOWN_BY = Object.freeze(["author", "operator"]);
 const SUBSCRIPTION_EVENTS = Object.freeze(["subscribed", "unsubscribed", "recalled"]);
 const LEARNING_EVENTS = Object.freeze(["kept_from_platform", "counted"]);
+// How the keepers of a shared pack stood when corroboration was judged: counted, or left out because the account was too new or had
+// finished too few runs (capsuleShareTrust.mjs). Left out is a label on the count, never a refusal of the keeper.
+const KEEPER_OUTCOMES = Object.freeze(["counted", "account_too_new", "too_few_runs"]);
 // What keeps the capsule store bounded and honest whether or not sharing is on (review C-10, C-11): the password derivation's
 // refusals, the snapshot files taken off the disk, and how an account's capsule cleanup ended.
 const KDF_REFUSALS = Object.freeze(["account_busy", "queue_full", "waited_out", "params_unsupported"]);
@@ -34,6 +37,7 @@ const takedownCopies = table(TAKEDOWN_BY);
 const refusals = table(REFUSALS);
 const subscriptions = table(SUBSCRIPTION_EVENTS);
 const learning = table(LEARNING_EVENTS);
+const keepers = table(KEEPER_OUTCOMES);
 const kdfRefusals = table(KDF_REFUSALS);
 const snapshotFiles = table(SNAPSHOT_FILES);
 const accountCleanup = table(ACCOUNT_CLEANUP);
@@ -54,6 +58,8 @@ export function recordShareRefused(reason) { bump(refusals, reason); }
 export function recordSubscriptionEvent(event) { bump(subscriptions, event); }
 /** A finished run's guest-capsule influence, as learning handled it. @param {string} event */
 export function recordShareLearning(event) { bump(learning, event); }
+/** Keepers of a shared pack as one corroboration judgement saw them: how many counted, or were left out and why. @param {string} outcome @param {number} count */
+export function recordCorroborationKeepers(outcome, count) { bump(keepers, outcome, Math.max(0, Math.trunc(count) || 0)); }
 
 /** A password key derivation refused: this account already has one, the line is full, the wait ran out, or the container asked for a cost the platform never wrote. @param {string} reason */
 export function recordKdfRefused(reason) { bump(kdfRefusals, reason); }
@@ -64,7 +70,7 @@ export function recordAccountCleanup(outcome) { bump(accountCleanup, outcome); }
 
 /** The test hook: counters are process state. */
 export function resetCapsuleShareMetrics() {
-  for (const map of [shared, imported, trials, declined, takedowns, takedownCopies, refusals, subscriptions, learning, kdfRefusals, snapshotFiles, accountCleanup]) {
+  for (const map of [shared, imported, trials, declined, takedowns, takedownCopies, refusals, subscriptions, learning, keepers, kdfRefusals, snapshotFiles, accountCleanup]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -95,6 +101,8 @@ export function capsuleShareMetricFamilies() {
       help: "Evidence-zone subscriptions of a project: subscribed, unsubscribed, and recalls that carried a zone's cards as index-only context." },
     { name: "open_science_capsule_share_learning_total", type: "counter", series: series(learning, "event"),
       help: "Finished runs that used a guest capsule: kept from platform-level learning because the share is not yet corroborated, or counted because it is." },
+    { name: "open_science_capsule_share_keepers_total", type: "counter", series: series(keepers, "outcome"),
+      help: "Accounts that kept a shared pack for the corroboration period, as each judgement of it saw them (summed over judgements): counted toward the minimum, or left out because the account was too new or had too few finished runs." },
   ];
 }
 

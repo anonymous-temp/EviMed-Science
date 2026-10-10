@@ -598,7 +598,10 @@ function evidenceFlywheelSettings(overrides) {
  *   a link that never ends is a pack nobody can take back without remembering it exists.
  * - A new author's share does not feed platform learning until `OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS` other
  *   accounts (3) have imported it and kept it enabled for `OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS` days (14)
- *   without disabling it. Both are the write-side defence of plan §7: nothing is filtered at reading time.
+ *   without disabling it. An account counts only when it is at least `OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNT_AGE_DAYS`
+ *   days old (14) and has finished `OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_FINISHED_RUNS` runs (3), because accounts register
+ *   themselves and three of them are cheap (2026-10-10 review, C4b); a keeper that does not count is a counter, never a refusal.
+ *   Zero asks nothing of an account. All of it is the write-side defence of plan §7: nothing is filtered at reading time.
  * - An account may deliver to others at most `OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY` times in a day (50): a limit that
  *   protects other people's inboxes, not an opinion about what is shared.
  * - Subscribing a project to an evidence zone is off by default and needs the frontier as well (`OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED`):
@@ -625,6 +628,8 @@ function memorySharingSettings(overrides, frontierEnabled) {
     capsuleShareLinkMaxUses: integer("capsuleShareLinkMaxUses", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES", 20, 1, 1000),
     capsuleShareCorroborationMinAccounts: integer("capsuleShareCorroborationMinAccounts", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS", 3, 1, 100),
     capsuleShareCorroborationKeptDays: integer("capsuleShareCorroborationKeptDays", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS", 14, 1, 365),
+    capsuleShareCorroborationMinAccountAgeDays: integer("capsuleShareCorroborationMinAccountAgeDays", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNT_AGE_DAYS", 14, 0, 365),
+    capsuleShareCorroborationMinFinishedRuns: integer("capsuleShareCorroborationMinFinishedRuns", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_FINISHED_RUNS", 3, 0, 1000),
     capsuleShareDeliveriesPerDay: integer("capsuleShareDeliveriesPerDay", "OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY", 50, 1, 1000),
     evidenceZoneSubscriptionEnabled: frontierEnabled && (overrides.evidenceZoneSubscriptionEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", false)),
     evidenceZoneSubscriptionMaxPerProject: integer("evidenceZoneSubscriptionMaxPerProject", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT", 5, 1, 20),
