@@ -56,6 +56,24 @@ test('cross-sentence endpoints require explicit coreference evidence and remain 
   assert.equal(r.relations.length,0);assert.equal(r.groundingIssues[0].kind,'relation_quote_endpoint_mismatch');
 });
 
+test('sentence separators reject lowercase, non-Latin and ambiguous abbreviation endpoint links',()=>{
+  for (const middle of [' was administered. ', ' was administered! ', ' was administered? ', ' was administered.” ', '已用药。', '已用药！', '已用药？', ' administered\n', ' (e.g. ', ' administered…']) {
+    const e={documentId:'boundary',text:`aspirin${middle}cox activity fell.`};
+    const f=freezePublicEntities(e,JSON.stringify({entities:[['a','CHEMICAL','aspirin',1],['g','GENE','cox',1]],relations:[]}));
+    const r=groundPublicRelations(e,f,JSON.stringify({relations:[['INHIBITOR','e1','e2',e.text,1]]}));
+    assert.equal(r.relations.length,0,middle);
+    assert.equal(r.groundingIssues[0].kind,'relation_quote_endpoint_mismatch',middle);
+  }
+});
+
+test('decimal measurements within a sentence preserve exact endpoint support',()=>{
+  const e={documentId:'decimal',text:'aspirin at 0.5 mg inhibits cox.'};
+  const f=freezePublicEntities(e,JSON.stringify({entities:[['a','CHEMICAL','aspirin',1],['g','GENE','cox',1]],relations:[]}));
+  const r=groundPublicRelations(e,f,JSON.stringify({relations:[['INHIBITOR','e1','e2',e.text,1]]}));
+  assert.equal(r.relations.length,1);
+  assert.deepEqual(r.relations[0].quoteLocator,{start:0,end:e.text.length,offsetUnit:'utf16'});
+});
+
 test('formal evaluation workflow freezes IDs before the relation turn and archives both turn identities',async()=>{
   const calls=[];let recorded=false;
   const native=async request=>{

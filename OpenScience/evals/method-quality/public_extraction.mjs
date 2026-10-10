@@ -40,7 +40,11 @@ export function relationQuoteBinding(text, chemical, gene, quote, occurrence) {
   // mentions cannot form a certified endpoint pair. Do not guess an ID repair.
   const left=chemical.start<=gene.start?chemical:gene;
   const right=left===chemical?gene:chemical;
-  if (/[.!?]\s+(?=[A-Z])|\n\s*\n/.test(text.slice(left.end,right.start+1))) return null;
+  // Case and script do not determine sentence boundaries. A period followed
+  // by whitespace is deliberately conservative: an ambiguous abbreviation
+  // remains unresolved rather than supplying an unverified coreference link.
+  // Decimal points without intervening whitespace are not separators.
+  if (/[.!?]["'”’)\]]*\s|[。！？｡．…]|[\r\n]/u.test(text.slice(left.end,right.start))) return null;
   const starts=[];
   for (let start=text.indexOf(quote);start>=0;start=text.indexOf(quote,start+1)) starts.push(start);
   if (occurrence != null && (!Number.isSafeInteger(occurrence) || occurrence<1 || occurrence>starts.length)) return null;

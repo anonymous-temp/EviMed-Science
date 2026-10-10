@@ -328,15 +328,16 @@ test("the plan named files and none was written: required output missing, with t
 
   // A plan that named a deliverable, none accepted and nothing on disk.
   await withRun(ANSWER, async ({ project, dispatch, turn, reconcile }) => {
+    const run = await dispatch();
     await mkdir(path.join(project.workspaceDir, ".evimed-run"), { recursive: true });
     await writeFile(path.join(project.workspaceDir, ".evimed-run", "state.json"), JSON.stringify({
       formatVersion: 1,
+      runId: run.id,
       plan: { revision: 1, items: [{ id: "d1", status: "submitted", attempts: 2 }] },
       budget: { steps: 12, tokens: 1, children: 0, limits: {} },
       evidence: { total: 0, byStatus: {} },
       gateRuns: [], subagents: [], qualityNotices: [], degraded: [],
     }, null, 2), "utf8");
-    await dispatch();
     turn([
       skillLoaded(),
       mcpFailure("mcp__evimed__literature_search", "public_source_http_error"),
