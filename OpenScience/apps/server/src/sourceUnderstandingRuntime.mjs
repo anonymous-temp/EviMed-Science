@@ -374,7 +374,7 @@ export function createSourceUnderstandingRuntime({ config, store, sources, agent
                 // platform's, and saying so must not depend on a marker that
                 // exists for the budget (2026-09-26 audit, M-2).
                 text: `${repairText || question}\n\n<evimed-source-understanding>${dispatchId}</evimed-source-understanding>\n${marker}`, system: prepared.system,
-                agent: selected.runtimeAgent, strictContext: true, model: `deepseek/${config.deepseekModel}`,
+                routedCapability: prepared.routedCapability, agent: selected.runtimeAgent, strictContext: true, model: `deepseek/${config.deepseekModel}`,
                 runId: dispatchedRun.id, allowBounded: true, requestId: dispatchedRun.kernelRequestIds?.at(-1),
               });
             });

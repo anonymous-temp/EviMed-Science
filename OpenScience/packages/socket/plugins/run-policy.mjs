@@ -91,7 +91,7 @@ import {
   awaitSelection,
   buildDelegation,
   buildInlineMethod,
-  namedCapabilityIds, routedCapabilityOf,
+  namedCapabilityIds, capabilityIdOf,
   childReport,
   completionCheck,
   contentTriggerIssues,
@@ -408,9 +408,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         completed: false,
         /** Capabilities whose method is already in front of this session. */
         inlineCapabilities: new Set(),
-        /** The control plane's context block for this dispatch, kept because it
-         *  is where a routed session's capability is named. */
-        contextText: null,
+        /** The capability the control plane routed this dispatch to, from the
+         *  index it wrote, or ''. Never read out of the context block: that
+         *  carries recalled memories and knowledge text. */
+        routedCapability: '',
         /** The capability the control plane bound this conversation to when it was opened, or ''. */
         binding: '',
         /** Set when the turn ended: the receipt is written and the bytes are
@@ -613,7 +614,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    *
    * An internal capability is dispatched by its own background workflow and
    * is not something a conversation takes on — except in that workflow's own
-   * run, which the control plane routed to it in the context it wrote. That
+   * run, which the control plane routed to it in the index it wrote. That
    * run does the work here now that delegation is on demand, and refusing it
    * its method failed every distillation, relation and source-understanding
    * run as `specialist_required_skill_missing` (production, 2026-09-21: the
@@ -624,7 +625,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const inlineManifest = (entry, capabilityId) => {
     const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === capabilityId)
     if (!manifest) return null
-    if (manifest.visibility === 'internal' && routedCapabilityOf(entry.contextText) !== capabilityId) return null
+    if (manifest.visibility === 'internal' && entry.routedCapability !== capabilityId) return null
     return manifest
   }
 
@@ -637,24 +638,26 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /**
    * The capability this session is working as, when there is exactly one.
    *
-   * The control plane's explicit route or session binding comes first. The
-   * context also contains a catalogue naming other capabilities; those names
-   * must not suppress the routed capability's tools on the first request.
-   * Without an explicit route, one model plan or one named capability is the
-   * fallback. Ambiguous unbound work activates neither capability.
+   * The control plane's explicit route (the dispatch index's `capability`) or
+   * session binding comes first, and outranks the model's own plan: a plan that
+   * names a second capability delegates it, and the routed one is still the
+   * root's. The context also contains a catalogue naming other capabilities;
+   * those names must not suppress the routed capability's tools on the first
+   * request, and are not read at all. Without an explicit route, one model plan
+   * or one capability named in the researcher's own request is the fallback.
+   * Ambiguous unbound work activates neither capability.
    * @param {Record<string, any>} entry
    * @returns {{ capabilityId: string, item: Record<string, any> | null } | null}
    */
   const boundCapability = (entry) => {
-    const routed = routedCapabilityOf(entry.contextText)
-    if (routed) return { capabilityId: routed, item: null }
+    if (entry.routedCapability) return { capabilityId: entry.routedCapability, item: null }
     if (entry.binding) return { capabilityId: entry.binding, item: null }
     const planned = [...new Set(entry.items.map((/** @type {any} */ item) => String(item.capability ?? '')).filter(Boolean))]
     if (planned.length > 1) return null
     if (planned.length === 1) {
       return { capabilityId: planned[0], item: entry.items.find((/** @type {any} */ candidate) => String(candidate.capability ?? '') === planned[0]) ?? null }
     }
-    const named = namedCapabilityIds(`${entry.briefText ?? ''}\n${entry.contextText ?? ''}`, ctx.get('evimedCapabilities') ?? [])
+    const named = namedCapabilityIds(entry.briefText, ctx.get('evimedCapabilities') ?? [])
     if (named.length === 1) return { capabilityId: named[0], item: null }
     if (named.length > 1) return null
     return null
@@ -2855,8 +2858,7 @@ async function loadBrief(ctx, agent, sessionState, config) {
  * @param {string | null} raw @returns {string}
  */
 function parseBinding(raw) {
-  const capability = raw == null ? '' : String(parseJson(raw)?.capability ?? '')
-  return /^[a-z0-9][a-z0-9-]{0,63}$/.test(capability) ? capability : ''
+  return capabilityIdOf(raw == null ? '' : parseJson(raw)?.capability)
 }
 
 /**
@@ -2940,6 +2942,9 @@ async function loadBriefRevision(ctx, agent, entry, config) {
     entry.frozen = false
   }
   entry.limits = runLimits(config, index?.budget && typeof index.budget === 'object' ? index.budget : {})
+  // What this dispatch was routed to, from the index the control plane wrote and only from it. Stated by every revision, so a
+  // follow-up run that is not routed does not keep the previous run's route.
+  entry.routedCapability = capabilityIdOf(index?.capability)
   const brief = await readFileAt(ctx, cwd, briefFileForSession(sessionId))
     ?? (legacyMatches ? await readFileAt(ctx, cwd, workspaceLayout.briefFile) : null)
   const context = await readFileAt(ctx, cwd, `${sessionBriefDir}/context.md`)
@@ -2952,7 +2957,6 @@ async function loadBriefRevision(ctx, agent, entry, config) {
   const memory = await readFileAt(ctx, cwd, `${sessionBriefDir}/memory.md`)
     ?? (legacyMatches ? await readFileAt(ctx, cwd, workspaceLayout.briefMemoryFile) : null)
   entry.briefText = brief
-  entry.contextText = typeof context === 'string' ? context : null
   entry.memoryText = typeof memory === 'string' && memory.trim() ? memory : null
   entry.knowledgeEntries = (await listDirAt(ctx, cwd, workspaceLayout.knowledgeDir)).length
   const parts = []

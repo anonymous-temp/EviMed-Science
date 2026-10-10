@@ -2421,6 +2421,55 @@ test("a follow-up and repair commit distinct session context revisions", async (
   assert.equal(await readFile(path.join(root, "context.md"), "utf8"), "# Repair context\n");
 });
 
+test("the capability a dispatch was routed to is stated in the session's index, and only there", async (t) => {
+  // 2026-10-10 review D5: the runtime used to learn the route by parsing a sentence out of context.md, a file that also embeds
+  // the researcher's recalled memories and knowledge text. The index is the control plane's own structured word.
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => {
+    await manager.closeAll();
+    await rm(rootDir, { recursive: true, force: true });
+  });
+  await manager.start(project);
+  const sessionId = "ses_routed";
+  const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", sessionId);
+  const index = async () => JSON.parse(await readFile(path.join(root, "index.json"), "utf8"));
+
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "first", system: "# Context\n", routedCapability: "method-distillation", runId: "run_a", requestId: "req_1", strictContext: true,
+  });
+  assert.equal((await index()).capability, "method-distillation");
+  assert.equal(await readFile(path.join(root, "context.md"), "utf8"), "# Context\n", "the context carries no route of its own to read");
+
+  // A steer into the running run writes no context, so the context on disk is still the routed one: its index says so too.
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "<evimed-correction>x</evimed-correction>", runId: "run_a", requestId: "req_2", mode: "steer", strictContext: true,
+  });
+  assert.equal((await index()).capability, "method-distillation");
+  assert.equal((await index()).contextRevision, "req_2");
+
+  // Another run does not inherit it: a dispatch states its route, an unrouted one states none.
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "second", system: "# Context 2\n", routedCapability: null, runId: "run_b", requestId: "req_3", strictContext: true,
+  });
+  assert.equal("capability" in await index(), false);
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "<evimed-correction>y</evimed-correction>", runId: "run_c", requestId: "req_4", mode: "steer", strictContext: true,
+  });
+  assert.equal("capability" in await index(), false, "and a steer of a run that never stated one has nothing to keep");
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "third", system: "# Context 3\n", routedCapability: "method-distillation", runId: "run_d", requestId: "req_5", strictContext: true,
+  });
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "<evimed-correction>z</evimed-correction>", runId: "run_e", requestId: "req_6", mode: "steer", strictContext: true,
+  });
+  assert.equal("capability" in await index(), false, "a steer keeps the route of its own run, not of the run before it");
+
+  // Not an id: refused where it is written, not read back as one.
+  await assert.rejects(() => manager.dispatchPrompt(project, sessionId, {
+    text: "bad", system: "# Context\n", routedCapability: "../../etc", runId: "run_f", requestId: "req_7", strictContext: true,
+  }), { code: "invalid_id" });
+});
+
 test("a bounded runtime excludes interactive prompts until its episode releases the runtime", async (t) => {
   const { rootDir, project, manager } = await dshDispatchFixture();
   t.after(async () => {

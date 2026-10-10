@@ -123,7 +123,7 @@ export function createEvolutionRuns({ config, store, registry, runtimeManager, r
             skill: selected.skill, companionSkills: selected.companionSkills } });
         const marker = issueModelGatewayBudgetMarker({ secret: config.modelGatewaySigningSecret, userId, projectId, runId: reusedScope?.runId ?? dispatchId, ...scope });
         return runtimeManager.dispatchPrompt(project, session.id, { text: `${repairText || brief}\n\n<evimed-evolution>${dispatchId}</evimed-evolution>\n\n${marker}`,
-          system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, strictContext: true,
+          system: prepared.system, routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, residentProfile: true, strictContext: true,
           agent: selected.runtimeAgent, model: "deepseek/deepseek-flash", runId: run.id, allowBounded: true,
           requestId: run.kernelRequestIds?.at(-1) });
       });

@@ -587,6 +587,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
     ));
     assert.equal(routedIndex.runId, result.body.data.id);
     assert.match(routedIndex.contextRevision, /^req_/);
+    assert.equal(routedIndex.capability, "clinical-evidence-synthesis", "the route is stated in the index, where the runtime reads it");
 
     // The same chest-pain question WITHOUT an explicit report request stays on
     // the default answer agent instead of being dragged into the report line.
@@ -604,6 +605,8 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       await readFile(path.join(workspace, ".evimed-brief", "sessions", "ses_unrouted_clinical", "context.md"), "utf8"),
       /保持开放域回答/,
     );
+    assert.equal("capability" in JSON.parse(await readFile(path.join(workspace, ".evimed-brief", "sessions", "ses_unrouted_clinical", "index.json"), "utf8")), false,
+      "an answer-line dispatch was routed nowhere");
     await assert.rejects(
       () => readFile(path.join(workspace, ".evimed-brief", "context.md"), "utf8"),
       { code: "ENOENT" },

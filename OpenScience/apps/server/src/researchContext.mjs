@@ -321,6 +321,11 @@ export async function prepareResearchContext(
 
   const attachedHandbooks = handbookContextFor(handbooks, project, routedSpecialist?.agentId ?? session.agentId ?? "");
   return {
+    // The capability the routing sentence above names, or null when it was not said. A dispatch passes it on to
+    // `dispatchPrompt`, which states it in the session's index: that file is where the runtime learns the route. The sentence
+    // is prose for the model and is never read back by the runtime, because this context also embeds the researcher's
+    // recalled memories and knowledge text (2026-10-10 review D5).
+    routedCapability: routedSpecialist ? String(routedSpecialist.agentId) : null,
     handbooks: attachedHandbooks.items,
     // What this prompt actually carries, for the caller to record. A run record
     // saying a skill was mounted must come from the code that mounted it, not

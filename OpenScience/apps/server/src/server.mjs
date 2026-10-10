@@ -4278,7 +4278,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // 「<evimed-budget-scope>e…」 (2026-09-21 walk). The gateway finds
             // and strips the markers wherever they are.
             text: `${prompt}\n\n<evimed-autopilot-verification>${verification.verificationId}</evimed-autopilot-verification>\n${budgetMarker}`,
-            system: prepared.system, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
+            system: prepared.system, routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
             model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
             requestId: dispatchedRun.kernelRequestIds?.at(-1),
           });
@@ -4455,6 +4455,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               },
               text,
               system: `${prepared.system}${episodeContextBlock({ brief: episode.prompt, episodeId: episode.episodeId, marker: budgetMarker })}`,
+              routedCapability: prepared.routedCapability,
               memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
               model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),
@@ -5007,7 +5008,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // The mark always, open runtime or not: a brief the orchestrator
           // wrote is never the researcher's words.
           text: `${promptText}\n\n<evimed-vcr-run>${vcrRunId(dispatchId)}</evimed-vcr-run>${marker ? `\n\n${marker}` : ""}`,
-          system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
+          system: prepared.system, routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
           model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
         });
@@ -5095,7 +5096,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // The GEO mark always, open runtime or not: a brief is never the
           // researcher's words (the same text `geoRunPrompt` writes).
           text: `${promptText}\n\n<evimed-geo-run>${geoRunId(dispatchId)}</evimed-geo-run>${marker ? `\n\n${marker}` : ""}`,
-          system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
+          system: prepared.system, routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
           model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
         });
@@ -5492,6 +5493,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         recordPromptActor: request => recordExtensionPromptActor(user, project, request),
         text: promptText,
         system: prepared.system,
+        routedCapability: prepared.routedCapability,
         memoryContext: prepared.memoryContext,
         residentProfile: true,
         agent: routed?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
@@ -6615,6 +6617,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // the capsule plugin at its first step (memorySessions.mjs), for a
             // dispatch and a conversation typed in the kernel's own surface alike.
             system: prepared.system,
+            routedCapability: prepared.routedCapability,
             memoryContext: prepared.memoryContext,
             residentProfile: true,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
