@@ -85,6 +85,12 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["本卡由平台议程完成", "a card does not say that the platform's agenda made it"],
   ["证明哈希", "a card does not carry the evaluator's proof hash"],
   ["内部研究记录", "a card does not tell its reader what the platform keeps in its internal project"],
+  // Disclaimers and "not verified" notes the platform wrote about itself (R31).
+  ["不为它们背书", "the platform does not disclaim the cards of other users on the page that lists them"],
+  ["是平台还没核对这一项", "a condition the platform has not checked is not listed, and nothing says so"],
+  ["三项都未核实", "same"],
+  ["未做独立复核", "why a finding will not be independently re-checked is the platform's reason, not the reader's"],
+  ["未安排独立复核", "same"],
   // Why the platform routed a request as it did (R28) is the ledger's machine reason, for operations; no sentence for the reader.
   ["按问题内容交给", "a run's route is not explained to the researcher"],
   ["不需要交付报告", "same"],
