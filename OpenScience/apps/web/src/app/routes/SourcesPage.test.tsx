@@ -185,6 +185,18 @@ describe("知识库", () => {
       expect(mocks.listSources).toHaveBeenCalledWith({ kind: "project", projectId: "default" }, { q: "", limit: 50 });
     });
 
+    // Review L-6 (live walk 2026-10-10): this page's left edge was 260 px where every other list page's was 340. It had been given the
+    // dashboard column (`wide`, which fills the content area at 1440) from the days it was three columns, and it is one list of documents.
+    it("sits in the one page column every list page uses, its title and its list in the same box", async () => {
+      const { container } = renderPage();
+      const heading = await screen.findByRole("heading", { level: 1, name: "知识库" });
+      const column = container.querySelector(".max-w-page");
+      expect(column, "the page has no list column").not.toBeNull();
+      expect(column).toContainElement(heading);
+      expect(column).toContainElement(await screen.findByRole("list", { name: "资料" }));
+      expect(container.querySelector(".max-w-wide")).toBeNull();
+    });
+
     it("is, when empty, one sentence about what to put in and the 「添加」 button — which is then not also in the header", async () => {
       mocks.listSources.mockResolvedValue(listing([]));
       renderPage();

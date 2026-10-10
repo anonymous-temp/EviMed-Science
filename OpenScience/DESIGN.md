@@ -264,8 +264,8 @@ first, then a quiet ground, and draw a line last.
 | Name | Width | For |
 |---|---|---|
 | `max-w-read` | **720** | an answer, a report, an article, an evidence card |
-| `max-w-page` | **1040** | a list: tools, the frontier feed, capsules, settings |
-| `max-w-wide` | **1200** (1280 at ≥1440) | a dashboard: GEO, the evidence zone, the three-column knowledge base |
+| `max-w-page` | **1040** | a list: tools, the frontier feed, capsules, the knowledge base, settings |
+| `max-w-wide` | **1200** (1280 at ≥1440) | a dashboard: GEO, the evidence zone |
 | `max-w-measure` / `max-w-measure-body` | 560 / 640 | a paragraph's line length |
 | `max-w-content` | *retired* → 720 | no call site is left and ESLint refuses it; the preset keeps the name for the Vue shell until a major release |
 | `max-w-content-narrow` | 560 | a form inside a drawer |

@@ -75,8 +75,11 @@ export function TaskList({ agendas, episodes, selectedId, search, onSearch, proj
         { label: "删除", destructive: true, disabled: !operable, onSelect: () => actions.remove(agenda) },
       ]} />} />;
   };
-  return <div className={cn("flex min-h-0 flex-1 flex-col", singleColumn && "mx-auto w-full max-w-page")}>
-    <header className="flex min-h-8 shrink-0 items-center justify-between gap-3 px-4 pb-3 pt-5">
+  // Where the list is the page it is the page column, with the page's own gutter (16 on a phone, 24 from `md`, as `PageShell` has it) on the box
+  // that holds the title and the rows; beside a conversation it is a column of its own and pads itself.
+  const inset = !singleColumn;
+  return <div className={cn("flex min-h-0 flex-1 flex-col", singleColumn && "mx-auto w-full max-w-page px-4 md:px-6")}>
+    <header className={cn("flex min-h-8 shrink-0 items-center justify-between gap-3 pb-3 pt-5", inset && "px-4")}>
       <div className="flex min-w-0 items-baseline gap-2">
         <h1 className={PAGE_TITLE_CLASS}>定时任务</h1>
         {projectName && <span className="min-w-0 truncate text-caption text-text-3">{projectName}</span>}
@@ -84,9 +87,9 @@ export function TaskList({ agendas, episodes, selectedId, search, onSearch, proj
       <IconButton icon={Plus} label="新建" onClick={onCreate} />
     </header>
     {/* A search box over nothing to search is not drawn. */}
-    {(agendas?.length ?? 0) > 0 && <div className="shrink-0 px-4 pb-3"><SearchInput label="搜索任务" value={search} onChange={event => onSearch(event.target.value)} onClear={() => onSearch("")} className="w-full" /></div>}
-    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-2 pb-6">
-      {error && <LoadError message={error} onRetry={onRetry} className="mx-2" />}
+    {(agendas?.length ?? 0) > 0 && <div className={cn("shrink-0 pb-3", inset && "px-4")}><SearchInput label="搜索任务" value={search} onChange={event => onSearch(event.target.value)} onClear={() => onSearch("")} className="w-full" /></div>}
+    <div className={cn("min-h-0 flex-1 space-y-5 overflow-y-auto pb-6", inset && "px-2")}>
+      {error && <LoadError message={error} onRetry={onRetry} className={cn(inset && "mx-2")} />}
       {agendas === null ? <FilesSkeleton /> : <>
         {groups.map(([label, items]) => <TaskGroup key={label} label={label}><List>{items.map(row)}</List></TaskGroup>)}
         {visible.length === 0 && !error && (search.trim() ? <p className="px-2 text-ui text-text-3">没有匹配的任务</p>
