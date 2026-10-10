@@ -310,6 +310,26 @@ test("source replacement marks only linked work and keeps earlier conclusions re
   assert.equal(value.data.findings.length, 2);
 });
 
+test("the changed sources the page counts are those that reach a finding that stands; the total is kept beside them (D-19)", options, async () => {
+  // Every standing change was counted, linked or not: a change that names no finding of the profile, or whose only finding was retired
+  // since, stayed in "N sources changed" for good, and nothing resolved it.
+  const project = await fresh();
+  await store.writeValue("alice", project.id, {
+    findings: [{ id: "f1", statement: "Linked", sources: [{ sourceId: "src-a" }] }, { id: "f2", statement: "Retired later", sources: [{ sourceId: "src-b" }] }],
+    sourceChanges: [
+      { id: "c1", sourceId: "src-a", status: "needs_review" },
+      { id: "c2", sourceId: "src-unknown", status: "needs_review" },
+      { id: "c3", sourceId: "src-b", status: "needs_review" },
+      { id: "c4", sourceId: "src-a", status: "retired" },
+    ] });
+  await store.writeValue("alice", project.id, { findings: [{ id: "f2", status: "retired" }] });
+  const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
+  const value = await service.value({ id: "alice" }, project.id);
+  assert.deepEqual(value.impacts.map((impact) => [impact.change.id, impact.findingIds]), [["c1", ["f1"]]], "only a change that reaches a finding that stands");
+  assert.equal(value.impactsTotal, 3, "the standing changes, linked or not, are still counted beside it");
+  assert.equal(value.data.sourceChanges.length, 4, "and every change stays in the profile as written");
+});
+
 test("article, source and question context round-trips through the views read by later GEO runs", options, async () => {
   const project = await fresh();
   await write(project, "value", { findings: [{ id: "f1", statement: "No comparative safety estimate" }] });

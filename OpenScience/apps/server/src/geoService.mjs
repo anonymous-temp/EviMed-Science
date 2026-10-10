@@ -39,7 +39,7 @@
  */
 
 import path from "node:path";
-import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoSpecifiedInfoAccuracy, geoValueContext, geoValueImpacts, summarizeGeoValueCoverageCounts } from "@evimed/domain";
+import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoSpecifiedInfoAccuracy, geoValueActive, geoValueContext, geoValueImpacts, geoValueList, summarizeGeoValueCoverageCounts } from "@evimed/domain";
 
 /** A failure mode as the page says it. @param {string | null} code */
 const failureModeWord = (code) => (code ? /** @type {Record<string, string>} */ (GEO_FAILURE_MODE_LABELS_ZH)[code] ?? null : null);
@@ -1715,8 +1715,14 @@ export class GeoService {
     const byStatus = {};
     for (const entry of onBasis) if (entry.status) byStatus[entry.status] = (byStatus[entry.status] ?? 0) + entry.n;
     const observations = basisVersion == null ? [] : sample.filter((observation) => observation.basisVersion === basisVersion).slice(0, GEO_VALUE_OBSERVATIONS_SHOWN);
+    // The changed sources a reader is asked to look at are those that reach a finding that still stands: a change that names no finding
+    // of the profile, or whose findings were retired since, asks for no look at anything. Nothing closes such a change, so counting every
+    // standing one made the count only grow (D-19); the total is kept beside it, and every change stays in `data.sourceChanges`.
+    const impacts = geoValueImpacts(profile.data, articles);
+    const standing = new Set(geoValueList(profile.data.findings).filter((finding) => finding && typeof finding === "object" && geoValueActive(finding)).map((finding) => finding.id));
     return { ...profile, data: { ...profile.data, ...geoValueContext(profile.data, filter) }, research,
-      impacts: geoValueImpacts(profile.data, articles), coverage: { ...summarizeGeoValueCoverageCounts(byStatus), basisVersion }, observations,
+      impacts: impacts.filter((impact) => impact.findingIds.some((id) => standing.has(id))), impactsTotal: impacts.length,
+      coverage: { ...summarizeGeoValueCoverageCounts(byStatus), basisVersion }, observations,
       observationsTotal: onBasis.reduce((total, entry) => total + entry.n, 0) };
   }
 
