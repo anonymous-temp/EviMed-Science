@@ -125,6 +125,11 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/packages\/contracts\/loopx\/goalbar-locale\.json$/,
+    why: "the LoopX goal bar's dictionaries recorded off the pinned plugin archive; a test holds the recorded version equal to the plugin pin, so moving the pin fails until the record is taken again from the new archive — it is re-taken, never re-dated",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/packages\/contracts\/dsh\/client-locale\.json$/,
     why: "the kernel client's Chinese dictionaries recorded from the published packages of this release; a test holds the recorded version equal to the pin, so moving the pin fails until `record-client-locale.mjs` is run again — the record is re-taken, never re-dated",
   },

@@ -123,8 +123,7 @@ flowchart LR
   bare kernel into the EviMed runtime.
 - **The runtime holds no provider key.** Model calls go through the control plane's model
   gateway, which holds the credentials. Access is workspace-only by default.
-- **Upstream pins live in one file**, [`OpenScience/deps-version.json`](OpenScience/deps-version.json)
-  (DSH `0.1.7-rc.2` at the time of writing); tests assert that every derived copy equals it.
+- **Upstream pins live in one file**, [`OpenScience/deps-version.json`](OpenScience/deps-version.json); tests assert that every derived copy equals it.
 
 ## AI-native by design
 

@@ -96,8 +96,8 @@ flowchart LR
 - **`packages/harness-port` 是防腐层**，也是唯一允许导入 `@deepseek-ai/*` 的包。`packages/socket`
   是 `evimed-universal` 组合，把裸内核变成 EviMed 运行时。
 - **运行时不持有服务商密钥。** 模型调用经控制面的模型网关转发，凭据由网关持有。默认只允许访问工作区。
-- **上游版本钉在同一个文件里**：[`OpenScience/deps-version.json`](OpenScience/deps-version.json)
-  （撰写时 DSH 为 `0.1.7-rc.2`），测试会断言所有派生副本与它一致。
+- **上游版本钉在同一个文件里**：[`OpenScience/deps-version.json`](OpenScience/deps-version.json)，
+  测试会断言所有派生副本与它一致。
 
 ## AI 原生的设计原则
 
