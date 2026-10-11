@@ -8,8 +8,8 @@ const store = path.resolve(dir, "..", "..", "..", "OpenScience", "node_modules",
 const find = (pkg) => { const d = fs.readdirSync(store).find((x) => x.startsWith(pkg + "@")); return pathToFileURL(path.join(store, d, "node_modules", pkg, "index.js")).href; };
 const { micromark } = await import(find("micromark"));
 const { gfm, gfmHtml } = await import(find("micromark-extension-gfm"));
-const core = "/home/coder/workspace/EviMedScience/.evimed-local/toolchains/playwright-core/node_modules/playwright-core/index.mjs";
-const exe = "/home/coder/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome";
+const core = "/workspace/EviMedScience/.evimed-local/toolchains/playwright-core/node_modules/playwright-core/index.mjs";
+const exe = "/workspace/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome";
 const { chromium } = await import(pathToFileURL(core).href);
 const md = fs.readFileSync(path.join(dir, name + ".md"), "utf8");
 const body = micromark(md, { extensions: [gfm()], htmlExtensions: [gfmHtml()], allowDangerousHtml: false });

@@ -1,10 +1,10 @@
 // Render mockup HTML files to PNG at 1512 x 945 (the owner's screen), DPR 2. Usage: node render.cjs [prefix...]
 // A file may set <meta name="shot" content="full"> for a full-page capture, or content="WxH" for a custom viewport.
 const fs = require('fs'); const path = require('path');
-const pw = require('/home/coder/workspace/EviMedScience/.evimed-local/toolchains/playwright-core/node_modules/playwright-core');
+const pw = require('/workspace/EviMedScience/.evimed-local/toolchains/playwright-core/node_modules/playwright-core');
 const dir = __dirname; const only = process.argv.slice(2);
 (async () => {
-  const b = await pw.chromium.launch({ headless: true, executablePath: '/home/coder/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome', args: ['--no-sandbox', '--allow-file-access-from-files', '--font-render-hinting=none'] });
+  const b = await pw.chromium.launch({ headless: true, executablePath: '/workspace/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome', args: ['--no-sandbox', '--allow-file-access-from-files', '--font-render-hinting=none'] });
   for (const f of fs.readdirSync(dir).filter((n) => /^v\d.*\.html$/.test(n)).sort()) {
     if (only.length && !only.some((o) => f.startsWith(o))) continue;
     const html = fs.readFileSync(path.join(dir, f), 'utf8');

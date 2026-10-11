@@ -24,7 +24,7 @@ This proposal is separate from the VCR production-integration plan. It reuses th
 
 ## 2. Current state, verified from the workspace
 
-Repository: `/Users/wangzeyuan/Desktop/EviMedScience`. The inspected local/main ref is `04e8b3509297b81973f076a275f67535500aef05`, the merge of PR #1 from the platform follow-up branch. This is repository evidence, not a fresh production-host inspection. Read live release identity again before any future deployment. DSH remains pinned to `0.1.7-rc.2` in `OpenScience/deps-version.json`.
+Repository: `/workspace/EviMedScience`. The inspected local/main ref is `04e8b3509297b81973f076a275f67535500aef05`, the merge of PR #1 from the platform follow-up branch. This is repository evidence, not a fresh production-host inspection. Read live release identity again before any future deployment. DSH remains pinned to `0.1.7-rc.2` in `OpenScience/deps-version.json`.
 
 | Surface | What exists | Gap for the requested product |
 |---|---|---|
