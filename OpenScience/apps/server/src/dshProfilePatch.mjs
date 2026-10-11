@@ -130,6 +130,9 @@ export const COMMUNITY_CLIENT_BUNDLE_ROWS = Object.freeze({
  */
 export const IMAGE_INPUT_MODELS = Object.freeze(new Set(["deepseek-flash", "deepseek-v4-flash-vision-exp"]));
 
+/** What a researcher sees where the kernel names the model (its /model popup); the catalogue id is not shown. */
+export const MODEL_DISPLAY_NAME = "DeepSeek";
+
 /**
  * The model provider's retry policy: the adapter's own defaults (5 retries,
  * 0.5–10 s backoff, 10% jitter; EMPTY_RESPONSE, RATE_LIMIT, SERVER, TIMEOUT,
@@ -174,6 +177,9 @@ export function renderProfilePatch(input) {
     `    reasoningEffort: ${yamlScalar(input.reasoningEffort || "high")}`,
     "    models:",
     `      - id: ${yamlScalar(input.model)}`,
+    // Shown by a name, never by its id (owner ruling 8, 2026-10-10): the kernel's /model popup lists this entry, and an entry
+    // without a name is shown as 「deepseek-flash」. The id stays what the gateway certifies and every request carries.
+    `        name: ${yamlScalar(MODEL_DISPLAY_NAME)}`,
     `        contextWindow: ${Number(input.contextWindow) || 1000000}`,
     // This list replaces the adapter's own catalog wholesale, and an entry
     // that does not say it takes images is a text-only route: every image

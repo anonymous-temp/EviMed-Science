@@ -298,9 +298,19 @@ test("the image-capable model is declared as taking images, and a text-only one 
   // without inputModalities is a text-only route, and every image attached in
   // the composer was refused at send (2026-09-22).
   const flash = YAML.parse(renderProfilePatch(input)).find((row) => row.id === "llm-deepseek");
-  assert.deepEqual(flash.config.models, [{ id: "deepseek-flash", contextWindow: 1000000, inputModalities: ["text", "image"] }]);
+  assert.deepEqual(flash.config.models, [{ id: "deepseek-flash", name: "DeepSeek", contextWindow: 1000000, inputModalities: ["text", "image"] }]);
   const pro = YAML.parse(renderProfilePatch({ ...input, model: "deepseek-v4-pro" })).find((row) => row.id === "llm-deepseek");
-  assert.deepEqual(pro.config.models, [{ id: "deepseek-v4-pro", contextWindow: 1000000 }]);
+  assert.deepEqual(pro.config.models, [{ id: "deepseek-v4-pro", name: "DeepSeek", contextWindow: 1000000 }]);
+});
+
+test("the model is shown by a name, never by its id (owner ruling 8, 2026-10-10)", () => {
+  // The composer's seat is a 思考强度 control for a researcher, but the kernel's own /model popup still listed the catalogue
+  // entry, and an entry without a name is shown by its id: 「deepseek-flash」 (live check, 2026-10-11). The id stays what the
+  // gateway certifies and every request carries; the name is display only.
+  const patch = YAML.parse(renderProfilePatch(input));
+  const models = patch.find((row) => row.id === "llm-deepseek").config.models;
+  assert.ok(models.every((model) => model.name && model.name !== model.id && !/deepseek-/i.test(model.name)), JSON.stringify(models));
+  assert.equal(patch.find((row) => row.id === "agent-default-model").config.model, "deepseek-flash", "the default is still the certified id");
 });
 
 test("the build-time smoke patch has the same shape as the one the control plane sends", async () => {
