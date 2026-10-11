@@ -4,7 +4,7 @@
 
 This inventory records known findings and validation limits for the release. It is limited to retained review evidence and is not an exhaustive product audit.
 
-Release revision `f000cf96af5ed4948e3b681b587bb6d6e311e906` is deployed as `evimed-f000cf96af5e-1` and is on GitHub `main`. Public cutover at `https://82.156.128.153` completed on 2026-09-14 at **11:24:45 UTC**. The configured 22-service composition was started, with one-time initialization jobs completing successfully. The production `.env` is mode 0600, and the homepage and API health return HTTP 200 with verified TLS.
+Release revision `f000cf96af5ed4948e3b681b587bb6d6e311e906` is deployed as `evimed-f000cf96af5e-1` and is on GitHub `main`. Public cutover at `https://<production-host>` completed on 2026-09-14 at **11:24:45 UTC**. The configured 22-service composition was started, with one-time initialization jobs completing successfully. The production `.env` is mode 0600, and the homepage and API health return HTTP 200 with verified TLS.
 
 At **11:41:28 UTC**, the public `/api/ready` returned **HTTP 200, `ok:true`, with all 24 checks passing**, with TLS verified. The earlier model-receipt problem was resolved through deployment configuration: the receipt was minted at **11:37:32.745 UTC**, and its scheduler is healthy with `consecutiveFailures=0`. No source code change was needed for that correction. The native UI on port 8443 returns HTTP 401 without authentication; this is not an authenticated UI acceptance result.
 

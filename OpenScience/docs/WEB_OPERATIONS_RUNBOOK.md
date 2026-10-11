@@ -121,7 +121,7 @@ never reclaim current/rollback images, volumes or cache. Keep other workloads
 and all default-profile containers outside this operation.
 
 A build target records `context: "colima-evimed-builder"`, the exact endpoint
-`unix:///Users/wangzeyuan/.colima/evimed-builder/docker.sock`, live `engineId`,
+`unix:///workspace/.colima/evimed-builder/docker.sock`, live `engineId`,
 `engineName`, builder `hostName`, and distinct `servingHostName`. The live context,
 engine and single-node Buildx Docker driver must agree. `sourceRoot` is an
 absolute clean Git checkout, `sourceTree` its full tree ID, `inputs` a list of
@@ -452,7 +452,7 @@ printf '%s\n' "$walk_password" | sudo sh -c 'umask 077; cat > /srv/evimed-scienc
 unset walk_password
 sudo tee /srv/evimed-science/shared/ui-walk.env >/dev/null <<'EOF'
 OPEN_SCIENCE_WALK_BASE_URL=https://<the public origin, as a browser reaches it from this host>
-OPEN_SCIENCE_WALK_USER=cdss-access
+OPEN_SCIENCE_WALK_USER=<owner-account>
 OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE=/srv/evimed-science/shared/secrets/ui-walk-password
 OPEN_SCIENCE_WALK_CHAT=1
 EOF
