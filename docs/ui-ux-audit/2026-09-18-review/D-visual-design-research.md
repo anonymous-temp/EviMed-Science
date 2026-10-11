@@ -674,7 +674,7 @@ EviMed 在这一点上**领先于模式而不是落后**：`claim` 已经有 dir
 
 ### 7.0 先说一个实测到的关键事实：框架的 token 模型与我们的是同构的
 
-从 `docs/ui-ux-audit/2026-09-18-walk/chat.json` 里提取出框架暴露的 **358 个 `--dsw-*` 变量**，
+从 2026-09-18 走查采集的 `chat.json`（未随仓库发布） 里提取出框架暴露的 **358 个 `--dsw-*` 变量**，
 它的结构是标准三层：
 
 | 层 | 变量族 | 例 |
@@ -1887,10 +1887,10 @@ dataviz validator run.
 **实测抓取（一手）**
 - Elicit 首页 HTML 内联色值（`#083d44` ×66、`#fcfcf8` ×6、`#026370`、`#e5ff96`）：<https://elicit.com>
 - Consensus 的 CSS bundle（Tailwind v4 `oklch()` + `--color-{green,red,yellow,orange}-faint`）：<https://consensus.app>
-- 框架 `--dsw-*` 变量清单 358 个：`docs/ui-ux-audit/2026-09-18-walk/chat.json`
+- 框架 `--dsw-*` 变量清单 358 个：2026-09-18 走查采集的 `chat.json`（未随仓库发布）
 - EviMed 现有 token：`OpenScience/apps/web/src/index.css`、`OpenScience/apps/web/tailwind.config.js`
 - 现场发现：`outputs/product-review-2026-09-18/00-live-findings.md`（F2 / F3 / F4 / F6 / F7）
-- 截图：`docs/ui-ux-audit/2026-09-18-walk/`（01-runs / 05-capabilities / 06-inbox / 13-chat-tool-row-clicked / 16-chat-subagent-menu / 14-chat-right-panel）
+- 截图：2026-09-18 走查采集（未随仓库发布；01-runs / 05-capabilities / 06-inbox / 13-chat-tool-row-clicked / 16-chat-subagent-menu / 14-chat-right-panel）
 
 **对比度计算方法**（可复现）
 所有 `n:1` 数字由 `node` 实算：sRGB → 线性化（`c<=0.04045 ? c/12.92 : ((c+0.055)/1.055)^2.4`）

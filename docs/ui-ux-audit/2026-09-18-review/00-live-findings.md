@@ -1,6 +1,6 @@
 # Live findings (main session, 2026-09-18) — evidence gathered on production, read-only
 
-Release `evimed-3dc0fa10cd25-1`, account `cdss-access`, kernel client 0.1.5-rc.2. Screenshots: `docs/ui-ux-audit/2026-09-18-walk/`.
+Release `evimed-3dc0fa10cd25-1`, account `cdss-access`, kernel client 0.1.5-rc.2. Screenshots: the 2026-09-18 walk captures (retained privately).
 
 ## Done
 - 18 test projects archived (`.evimed-local/acceptance/archive/cdss-access-test-projects-2026-09-17.tgz`, 99 MB) and deleted via `DELETE /api/projects/:id`. Remaining: `default`, `eval-memory-ablation-v11-9def6619` (most complete: 62 KB report, 72 claims of all three types, matrix + revision-notes + agenda-delta, clean workspace, judge 4/4/4/5). Inbox unread went 31 → 2 (notifications cascade with project deletion).

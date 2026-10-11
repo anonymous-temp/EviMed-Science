@@ -6,7 +6,7 @@ and the design tokens in `apps/web/src/index.css`.
 
 Built on the production measurements in `outputs/product-review-2026-09-18/00-live-findings.md`
 (release `evimed-3dc0fa10cd25-1`, kernel client 0.1.5-rc.2) — those facts are not re-measured here.
-Screenshots: `docs/ui-ux-audit/2026-09-18-walk/`.
+Screenshots: the 2026-09-18 walk captures (retained privately).
 
 All paths are relative to `/home/coder/workspace/EviMedScience/OpenScience` unless stated.
 
@@ -349,11 +349,11 @@ export function runTitle(run: WebAgentRun): string {
 ```
 
 The capability name wins **because `run.question` is null on almost every row**. Measured on the
-walk's own capture (`docs/ui-ux-audit/2026-09-18-walk/runs.json`, 25-row sample of 25 runs):
+walk's own capture (the 2026-09-18 walk capture `runs.json` (retained privately), 25-row sample of 25 runs):
 **23 of 25 have an empty prompt**; only the two runs started after the adoption path landed
 carry one. `runAgentName` → `capabilityTitle('clinical-evidence-synthesis')` → 「临床证据深度分析」
 for every one of them, which is exactly the eleven identical rows in
-`docs/ui-ux-audit/2026-09-18-walk/01-runs.png`.
+the 2026-09-18 walk capture `01-runs.png` (retained privately).
 
 Why `question` is null: it is only written on three paths —
 `agentRuns.mjs:164` (`questionPreview(input.question)`, dispatch payload),
@@ -711,7 +711,7 @@ filtered to ids that exist in `CAPABILITY_DISPLAY`, sorted by `category` then `t
 - **P2 — inline styles, none of them theme-aware.** `rgba(127,127,127,0.28)` is a fixed grey
   border and `color: 'inherit'` inherits the kernel's own text colour; the pills therefore match
   neither the shell's `--border`/`--accent` nor the kernel's own token set
-  (`--dsw-*`, 358 variables, captured in `docs/ui-ux-audit/2026-09-18-walk/chat.json`). Read the
+  (`--dsw-*`, 358 variables, captured in the 2026-09-18 walk capture `chat.json` (retained privately)). Read the
   kernel's own `--dsw-` variables instead — they are on the document and are the only tokens
   valid inside that frame.
 - **P2 — a pill carries only the title.** Duration, category and what it produces are in the
@@ -1044,7 +1044,7 @@ Four different marks/colours claim to be EviMed:
 | the frame's React `Mark` | **`#2563EB`**, redrawn by hand | `packages/harness-port/src/runtimeUiShell.mjs:133`, `:135` |
 | the frame's favicon | **`#1f6f5c`** (green), a *different glyph* (a plus in a rounded square) | `runtimeUiShell.mjs:61-66` (`EVIMED_FAVICON`) |
 | the product's action colour | **`#B24F2A`** (rust/terracotta) | `--accent`, `index.css:28` |
-| the kernel frame's own action colour | **`rgb(65,118,230)` = `#4176E6`** (blue send button), `rgb(237,243,254)` user bubble | measured, F7; the kernel's `--dsw-*` tokens, 358 of them (`docs/ui-ux-audit/2026-09-18-walk/chat.json`) |
+| the kernel frame's own action colour | **`rgb(65,118,230)` = `#4176E6`** (blue send button), `rgb(237,243,254)` user bubble | measured, F7; the kernel's `--dsw-*` tokens, 358 of them (the 2026-09-18 walk capture `chat.json` (retained privately)) |
 
 So on the conversation page a researcher sees a **blue** mark in the left column, a **rust**
 focus ring and badge in that same column, a **blue** send button in the frame beside it, and a
@@ -1209,7 +1209,7 @@ Severity: **P0** = wrong information, a dead end, or a destructive action with n
 - **P1** `RuntimeUiFrame.tsx:224` — the only escalation between "loading" and "failed" is a
   30-second timeout. Nothing is said at 5 s or 10 s.
 - **P2** — the hero still reads 「从一个研究问题开始 / 选择一个工作区开始」 (captured in
-  `2026-09-18-walk/chat.json`). The workspace row is hidden with CSS
+  the 2026-09-18 walk capture `chat.json` (retained privately)). The workspace row is hidden with CSS
   (`runtimeUiShell.mjs:302`, `[class$="_heroWorkspaceRow"]{display:none}`) but the string is
   still in the accessible tree and is read by assistive technology. Override the key in
   `EVIMED_DICTIONARIES` instead of hiding the element.
