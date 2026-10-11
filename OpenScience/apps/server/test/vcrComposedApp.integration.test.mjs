@@ -205,6 +205,8 @@ function requests(target, ids) {
     "POST /studies/:id/reviews statistical": async () => ["POST", `${S}/reviews`, { kind: "statistical", nodes: ["result:res_1@1"], note: "统计复核" }],
     "POST /studies/:id/reviews data": async () => ["POST", `${S}/reviews`, { kind: "data", nodes: ["result:res_1@1"], note: "数据复核" }],
     "POST /studies/:id/decisions": async () => ["POST", `${S}/decisions`, { question: "选哪个设计", chosen: { design: "B" }, rationale: "功效更高" }],
+    // A regulatory contact: a role that may write adds it (the identical contact from the next caller answers the row that is there).
+    "POST /studies/:id/regulatory-contacts": async () => ["POST", `${S}/regulatory-contacts`, { date: "2026-09-30", agency: "药审中心", type: "沟通交流会议", summary: "讨论入排标准", outcome: "同意按此设计", attachments: ["minutes.pdf"] }],
     "POST /studies/:id/export": async () => ["POST", `${S}/export`, { kind: "study_package" }],
     "GET /studies/:id/export/:export": async () => ["GET", `${S}/export/${ids.exportId}`, undefined],
     // The generated records as a file: the study holds no such result, so a reader is answered 404 by name, and a role that reads no page 403.

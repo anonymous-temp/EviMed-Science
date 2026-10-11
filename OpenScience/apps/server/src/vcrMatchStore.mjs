@@ -41,6 +41,7 @@ import { VCR_CRITERION_STATES, VCR_REFERRAL_STATES, clinicalFactIssues, clinical
 import { HttpError } from "./security.mjs";
 import { VCR_SCHEMA, matchingManifestDigestSql } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
+import { carryScheduleForward } from "./vcrSchedule.mjs";
 
 /** A fact's id: `fac_` and the tail of a uuid, like every id of the module (the base's table has no row for it). */
 const factId = () => `fac_${randomUUID().replace(/-/g, "").slice(0, 22)}`;
@@ -216,9 +217,11 @@ export class VcrMatchStore extends VcrStoreBase {
             JSON.stringify(criterion?.sourceLocator ?? {}), JSON.stringify(criterion?.evidenceNeeded ?? []),
             criterion?.reviewState ?? "ai_set"])).rows[0]));
       }
+      // The version starts with the visit schedule the one before it had.
+      const carried = await carryScheduleForward(client, { studyId, userId, protocolVersionId: id });
       await this.audit({
         client, studyId, userId, actor: "control-plane", action: "vcr.protocol.save", object: id,
-        detail: { version, criteria: saved.length },
+        detail: { version, criteria: saved.length, schedule: carried },
       });
       return { id, studyId, version, title: String(row.title ?? ""), sourceRef: row.source_ref ?? null, usdm: row.usdm ?? {},
         frozenAt: row.frozen_at ?? null, createdAt: row.created_at, criteria: saved };

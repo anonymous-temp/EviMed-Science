@@ -20,6 +20,7 @@ description: 把一项「虚拟临床研究」写成可检查、可复现的研�
 - `mcp__evimed__vcr_read` `what: "population"` / `"comparator"` / `"trial"` — 定义与版本。
 - `mcp__evimed__vcr_read` `what: "jobs"` — 执行记录：种子、环境、CPU 秒。
 - `mcp__evimed__vcr_read` `what: "report_model"` — **可以引用的字段有哪些**：`{{n:…}}` 的路径都在这里（`counts`、`measures`、`assumptions`、`definition`、按场景 id 分开的结果等）。人数很小的格子读给你的时候已经隐去；引用照写，平台渲染时用的是完整的数。
+- 其中的 `schedule`（方案的访视日程）和 `regulatoryContacts`（监管沟通记录）由平台把表格印进包里，正文不必重写；要在文字里说访视的次数、天数，写引用（`{{n:schedule.totals.visits|int}}`、`{{n:schedule.visits[3].day|int}}`）。没有就是没有记录，不要从对话里补。
 
 ## 包的结构
 

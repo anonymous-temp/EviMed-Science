@@ -102,6 +102,7 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
     },
     async addReview(/** @type {any} */ input) { calls.push(["vcr.review", input.kind, input.reviewer]); return { id: "rvw_1", ...input }; },
     async addDecision(/** @type {any} */ input) { calls.push(["vcr.decision", input.decidedBy]); return { id: "dec_1", ...input }; },
+    async addRegulatoryContact(/** @type {any} */ input) { calls.push(["vcr.regulatory", input.actor, input.agency]); return { id: "reg_1", existing: input.agency === "FDA", ...input }; },
     async exportRow(/** @type {string} */ _studyId, /** @type {string} */ id) {
       calls.push(["vcr.export", id]);
       if (id === "exp_sim") return { id: "exp_sim", kind: "simulation_report", state: "ready" };
@@ -468,6 +469,7 @@ const REQUESTS = {
   "POST /studies/:id/reviews statistical": ["POST", "/api/vcr/studies/std_1/reviews", { kind: "statistical", nodes: ["result:res_1@1"] }],
   "POST /studies/:id/reviews data": ["POST", "/api/vcr/studies/std_1/reviews", { kind: "data", nodes: ["result:res_1@1"] }],
   "POST /studies/:id/decisions": ["POST", "/api/vcr/studies/std_1/decisions", { question: "q" }],
+  "POST /studies/:id/regulatory-contacts": ["POST", "/api/vcr/studies/std_1/regulatory-contacts", { date: "2026-08-14", agency: "NMPA-CDE", type: "Pre-IND" }],
   "POST /studies/:id/export": ["POST", "/api/vcr/studies/std_1/export", { kind: "study_package" }],
   "GET /studies/:id/export/:export": ["GET", "/api/vcr/studies/std_1/export/exp_1", undefined],
   "GET /studies/:id/records/:result.csv": ["GET", "/api/vcr/studies/std_1/records/res_1.csv", undefined],
@@ -626,6 +628,26 @@ test("「为该患者找试验」 asks the orchestrator for the run, judges the 
   // A deployment without the orchestrator says so; a run that cannot start leaves the judgment standing.
   const bare = fixture({ overrides: { ...composedHooks(), orchestrator: null } });
   await assert.rejects(bare.routes(request("POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-0192" }), response()), { status: 503, code: "vcr_unavailable" });
+});
+
+test("a regulatory contact is added by a member who may write, as that member; a bad body is refused by field, and an exact repeat is the same record", async () => {
+  const { routes, calls, audits } = fixture({ overrides: composedHooks() });
+  const body = { date: "2026-08-14", agency: " NMPA-CDE ", type: "Pre-IND", summary: "讨论外部对照", outcome: "同意作支持性证据", attachments: ["minutes.pdf"] };
+  const made = response();
+  assert.equal(await routes(request("POST", "/api/vcr/studies/std_1/regulatory-contacts", body), made), true);
+  assert.equal(made.status, 201);
+  assert.deepEqual(calls.filter((call) => call[0] === "vcr.regulatory"), [["vcr.regulatory", OWNER, "NMPA-CDE"]], "recorded by the account that wrote it, trimmed");
+  assert.ok(audits.some((line) => line[0] === "vcr.regulatory.add" && line[1] === "completed"), "audited");
+  const again = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/regulatory-contacts", { ...body, agency: "FDA" }), again);
+  assert.equal(again.status, 200, "a contact already in the log answers 200, not a second 201");
+  for (const [bad, says] of [[{ agency: "FDA" }, /^date 必填/], [{ date: "2026-02-30", agency: "FDA" }, /2026-02-30 不是一个真实存在的日期/], [{ date: "2026-08-14" }, /^agency 必填/],
+    [{ date: "2026-08-14", agency: "FDA", attachments: "a.pdf" }, /^attachments 是最多/]]) {
+    await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/regulatory-contacts", bad), response()),
+      (error) => error instanceof HttpError && error.status === 400 && error.code === "vcr_regulatory_contact_invalid" && says.test(error.message), JSON.stringify(bad));
+  }
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/regulatory-contacts", { ...body, decidedBy: "x" }), response()), { status: 400 }, "the body is the contact's fields and nothing else");
+  assert.equal(calls.filter((call) => call[0] === "vcr.regulatory").length, 2, "nothing refused was recorded");
 });
 
 test("a computation queued from the page names the object it is for: the id is checked against the study's objects and rides the job; a bad id is refused", async () => {

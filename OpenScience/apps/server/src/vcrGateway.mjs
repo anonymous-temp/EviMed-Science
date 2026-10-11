@@ -66,12 +66,13 @@ import {
   VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_DOCUMENT_KINDS, VCR_POPULATION_KINDS, VCR_RATINGS, VCR_RUN_SCENARIO_FIELDS, VCR_SCENARIO_SCHEMAS,
   VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement, vcrAssessmentIssues,
-  isPlatformCardAddress, platformCardCitations, vcrModelDocumentTakesProse,
+  isPlatformCardAddress, platformCardCitations, vcrModelDocumentTakesProse, VCR_SOA_LIMITS,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
+import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { VCR_TRIAL_RESTRICTED_FIELDS, deriveFromExit, followupFidelityFindings, postExitEpisode, trialPeriodEpisode } from "./vcrRecruit.mjs";
 import { VCR_MATCHING_VOCABULARY_VERSION } from "./vcrMatching.mjs";
@@ -684,6 +685,37 @@ function checkedCriterion(deps, candidate, index, where, issues) {
 }
 
 /**
+ * The activities of one visit as an item writes them — each a name, or `{ name, note }` — checked one by one: a name, a short note, and
+ * no activity twice in a visit (an activity written twice is refused, not quietly made one). At least one.
+ * @param {Item} item @returns {Array<{ name: string, note: string }> | undefined}
+ */
+function activitiesOf(item) {
+  const rows = item.arr("procedures", { max: VCR_SOA_LIMITS.activitiesPerVisit, required: true });
+  if (!rows) return undefined;
+  if (!rows.length) return void item.bad("procedures", "procedures 至少写一项这次访视要做的评估或操作。");
+  /** @type {Array<{ name: string, note: string }>} */
+  const out = [];
+  /** @type {Map<string, number>} */
+  const seen = new Map();
+  for (const [at, entry] of rows.entries()) {
+    const where = `procedures[${at}]`;
+    const row = typeof entry === "string" ? { name: entry } : entry;
+    if (!row || typeof row !== "object" || Array.isArray(row)) { item.bad(where, "每一项是一个名称，或 { name, note }。"); continue; }
+    const stray = Object.keys(row).find((key) => key !== "name" && key !== "note");
+    if (stray) { item.bad(`${where}.${stray}`, "评估或操作只写 name，可加一条 note。"); continue; }
+    const name = typeof row.name === "string" ? row.name.trim().replace(/\s+/g, " ") : "";
+    const note = row.note == null ? "" : typeof row.note === "string" ? row.note.trim() : null;
+    if (!name || [...name].length > VCR_SOA_LIMITS.activityName) { item.bad(`${where}.name`, `name 是不超过 ${VCR_SOA_LIMITS.activityName} 个字符的名称。`); continue; }
+    if (note === null || [...note].length > VCR_SOA_LIMITS.note) { item.bad(`${where}.note`, `note 是不超过 ${VCR_SOA_LIMITS.note} 个字符的文字。`); continue; }
+    const key = visitKey(name);
+    if (seen.has(key)) { item.bad(where, `「${name.slice(0, 40)}」在这次访视里写了两次（procedures[${seen.get(key)}]）；一次访视里同一项只写一次。`); continue; }
+    seen.set(key, at);
+    out.push({ name, note });
+  }
+  return out;
+}
+
+/**
  * The writers, one per kind. Each takes the item's kit and the deps, validates
  * every field it uses first, and returns the id it wrote — or nothing, having
  * recorded why.
@@ -1112,12 +1144,17 @@ const WRITERS = {
     return saved.id;
   },
 
-  async patient_set(item, { store, study }) {
+  async patient_set(item, { store, study }, extra) {
     if (!item.only(["populationId", "name", "modelId", "modelVersion", "scenario"])) return null;
     const name = item.str("name", { max: 120 }) ?? "";
     const modelId = item.str("modelId", { max: 160 });
     const modelVersion = item.str("modelVersion", { max: 40 });
-    const scenario = item.obj("scenario") ?? {};
+    let scenario = item.obj("scenario") ?? {};
+    // Where the scenario takes its visit times, the study's own schedule may be named instead of a list (`visits: { fromSoa, unit }`):
+    // the platform reads the times off the schedule and writes them in, so the run never types a converted number.
+    const times = await resolveVisitsRef(scenario, () => store.latestSchedule?.(study.id) ?? null);
+    if ("scenario" in times) scenario = times.scenario; else item.bad("scenario.visits", times.message);
+    const visitTimes = "timeUnit" in times && times.timeUnit ? { unit: times.timeUnit.unit, basis: times.timeUnit.basis, times: scenario.visits } : null;
     const populationId = item.row.populationId == null ? null : String(item.row.populationId);
     if (populationId) await item.owned("populationId", "population", populationId);
     let selected = null;
@@ -1134,6 +1171,8 @@ const WRITERS = {
     const saved = await store.savePatientSet({
       studyId: study.id, userId: study.userId, populationId, name, modelId: selected?.id ?? null, modelVersion: selected?.version ?? null, scenario, twinLabel: null,
     });
+    // Which unit the schedule's days were read in, and whether that was the run's word or the months nothing said.
+    if (visitTimes) extra.results.push({ index: item.index, visitTimes });
     return saved.id;
   },
 
@@ -1183,6 +1222,59 @@ const WRITERS = {
     const saved = await store.saveDesignGrid({
       studyId: study.id, userId: study.userId, dimensions, truthScenarios, comparisonGoal: comparisonGoal ?? null, cells: [],
     });
+    return saved.id;
+  },
+
+  /**
+   * One visit of the protocol's schedule of activities (「访视日程」): its name, the day it falls on, the window around the day and what is
+   * done at it. The schedule belongs to the study's current protocol version; an item replaces the visit of that name and leaves the
+   * others alone, and `remove: true` takes a visit out. Every field is checked before anything is written, and a visit that fails is
+   * refused alone with the field named.
+   */
+  async soa(item, { store, study }, extra) {
+    if (!item.only(["visit", "day", "windowDays", "note", "procedures", "remove"])) return null;
+    const visit = item.str("visit", { max: VCR_SOA_LIMITS.visitName, required: true });
+    const remove = item.row.remove;
+    if (remove != null && typeof remove !== "boolean") item.bad("remove", "remove 写 true：把这次访视从日程里去掉。");
+    if (remove === true) {
+      const others = ["day", "windowDays", "note", "procedures"].find((key) => item.row[key] != null);
+      if (others) item.bad(others, "remove 只去掉一次访视，不和别的字段一起写；要改这次访视就不写 remove，把整次访视重写。");
+    }
+    const day = remove === true ? undefined : item.num("day", { min: -VCR_SOA_LIMITS.day, max: VCR_SOA_LIMITS.day });
+    const windowDays = remove === true ? undefined : item.num("windowDays", { min: 0, max: VCR_SOA_LIMITS.windowDays });
+    const note = remove === true ? undefined : item.str("note", { max: VCR_SOA_LIMITS.note });
+    const procedures = remove === true ? [] : activitiesOf(item);
+    if (!item.ok) return null;
+    const protocol = await store.latestProtocolVersion(study.id);
+    if (!protocol) {
+      return void item.bad("visit", "本研究还没有方案版本：访视日程属于方案的当前版本，先用 what: protocol 写入方案（至少一条入排条件），再写日程。", "vcr_write_refused");
+    }
+    const [saved] = await store.saveScheduleVisits({
+      studyId: study.id, userId: study.userId, protocolVersionId: protocol.id, actor: "ai_set",
+      visits: [{ visit: /** @type {string} */ (visit), day: day ?? null, windowDays: windowDays ?? null, note: note ?? "", procedures: procedures ?? [], remove: remove === true }],
+    });
+    if (remove === true) {
+      if (!saved.removed) return void item.bad("visit", `方案 v${protocol.version} 的日程里没有「${String(visit).slice(0, 60)}」这次访视，没有可去掉的。`);
+      extra.results.push({ index: item.index, visit, removed: true, protocolVersion: protocol.version });
+      return protocol.id;
+    }
+    extra.results.push({ index: item.index, visit, activities: saved.activities, replaced: saved.replaced, protocolVersion: protocol.version });
+    return saved.id;
+  },
+
+  /**
+   * One regulatory contact (「监管沟通记录」): when, with which agency, what kind, what was discussed, what the agency concluded in its
+   * own words and what it left. A record is added, never edited; a contact written twice exactly is one contact.
+   */
+  async regulatory_contact(item, { store, study }, extra) {
+    if (!item.only(["date", "agency", "type", "summary", "outcome", "attachments"])) return null;
+    const checked = checkRegulatoryContact(item.row);
+    if ("issues" in checked) {
+      for (const found of checked.issues) item.bad(found.field, found.message);
+      return null;
+    }
+    const saved = await store.addRegulatoryContact({ studyId: study.id, userId: study.userId, actor: "ai_set", ...checked.value });
+    extra.results.push({ index: item.index, id: saved.id, ...(saved.existing ? { existing: true, note: "已有一条完全相同的记录，没有重复写入。" } : {}) });
     return saved.id;
   },
 
@@ -2268,6 +2360,17 @@ async function startJob(vcr, study, request) {
     }
     scenario = { ...object(own.definition) };
     if (!inputs.length && own.snapshotId) inputs = [{ kind: "snapshot", id: String(own.snapshotId) }];
+  }
+  // A trajectory's visit times may be the study's own schedule (`visits: { fromSoa, unit }`), read off it here before the scenario is frozen.
+  if (request.kind === "generate_patients_longitudinal") {
+    const times = await resolveVisitsRef(scenario, () => vcr.store.latestSchedule?.(study.id) ?? null);
+    if ("message" in times) throw gatewayError(400, "vcr_simulate_payload_invalid", times.message);
+    scenario = times.scenario;
+    // The unit the schedule was read in reaches the run (`notes`) and the result (`timeUnitBasis`, which the result page prints).
+    if ("timeUnit" in times && times.timeUnit) {
+      notes = { ...(notes ?? {}), visitTimes: { ...times.timeUnit, times: scenario.visits } };
+      detail = { ...detail, timeUnitBasis: { ...times.timeUnit } };
+    }
   }
   const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null })).digest("hex").slice(0, 16);
   // A computation of a research object names it: its result is filed under that object and replaces only that object's earlier

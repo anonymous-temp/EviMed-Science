@@ -46,6 +46,7 @@ import {
 import { VCR_ENGINE_RETRYABLE_CODES } from "./vcrEngineClient.mjs";
 import { vcrExportHoldsDocument, vcrReportModel, vcrReportReviewRevision } from "./vcrRender.mjs";
 import { modelDocumentReaderSections, renderModelDocument } from "./vcrModelDocuments.mjs";
+import { contactsTable, scheduleTable } from "./vcrScheduleView.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import {
   allResultsOf, countsView, dominatedScenarioMap, evidenceLabel, finite, MODEL_TYPE_LABELS, VALIDATION_LABELS, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
@@ -1369,6 +1370,7 @@ export function presentExport(row, bundle) {
       current: vcrReviewIsCurrent(review, { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null, exports: bundle.exports ?? [] }) })),
     staleMarks: bundle.stale, models: bundle.models, population: bundle.populations[0] ?? null,
     comparator: bundle.comparator, scenarios: bundle.scenarios, modelAnalysis: bundle.modelAnalysis ?? null,
+    schedule: bundle.schedule ?? null, contacts: bundle.regulatory ?? [],
   });
   const model = object(cover.results).study ? cover.results : currentModel;
   // Old documents remain readable. Compare the inputs available to their
@@ -1376,6 +1378,8 @@ export function presentExport(row, bundle) {
   const comparable = (value) => {
     const result = { ...value };
     if (!Object.hasOwn(model, 'inputVersions')) delete result.inputVersions;
+    // A package frozen before the visit schedule and the regulatory log were part of it is not "changed" by their being there now.
+    for (const key of ['schedule', 'regulatoryContacts']) if (!Object.hasOwn(model, key)) delete result[key];
     result.review = { ...result.review, records: list(result.review?.records).map((review, position) => {
       const entry = { ...review };
       if (!Object.hasOwn(model.review?.records?.[position] ?? {}, 'current')) delete entry.current;
@@ -1450,6 +1454,12 @@ function packageSections({ cover, bundle, model }) {
       ...(text(model.estimand) ? [{ label: "估计目标", value: (/** @type {Record<string, string>} */ (VCR_ESTIMAND_LABELS_ZH))[String(model.estimand)] ?? String(model.estimand) }] : []),
     ],
   });
+  // The protocol's visit schedule: the package's own freeze when it has one, the study's current one for a package frozen before.
+  const visits = list(Object.hasOwn(model, "schedule") ? object(model.schedule).visits : object(bundle.schedule).visits);
+  if (visits.length) {
+    add({ id: "schedule", title: "访视日程", table: scheduleTable(visits),
+      note: `${visits.length} 次访视；每次访视的评估与操作按方案写明。` });
+  }
   const assumptions = list(model.assumptions);
   if (assumptions.length) {
     add({
@@ -1532,5 +1542,8 @@ function packageSections({ cover, bundle, model }) {
       },
     });
   }
+  // The regulatory contacts (plan section 10: the decision record carries them): as recorded, latest first.
+  const contacts = list(Object.hasOwn(model, "regulatoryContacts") ? model.regulatoryContacts : bundle.regulatory);
+  if (contacts.length) add({ id: "regulatory", title: "监管沟通记录", table: contactsTable(contacts) });
   return sections;
 }

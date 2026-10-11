@@ -73,6 +73,11 @@ const store = {
   async exports() { return []; },
   async modelAssessments() { return [{ key: "survival_projection", version: 1, modelName: "reference-time-to-event", modelVersion: "1.0.0", questionOfInterest: "q", influence: "low", consequence: "low" }]; },
   async modelPlanVersions() { return []; },
+  // The protocol's visit schedule and the regulatory log: neither holds a head count, and both are read like the rest.
+  async schedule() { return [{ visit: "筛选期", day: -14, windowDays: 3, note: "", procedures: [{ name: "知情同意", note: "" }] }]; },
+  async regulatoryContacts() {
+    return [{ id: "ctc_1", date: "2026-09-30", agency: "药审中心", type: "沟通交流会议", summary: "", outcome: "", attachments: [], source: "researcher", recordedAt: AT }];
+  },
 };
 
 function service(packages = {}) {
