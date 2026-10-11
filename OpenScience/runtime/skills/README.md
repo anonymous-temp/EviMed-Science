@@ -28,23 +28,22 @@ name no deployment path at all — the previous convention, where each body
 spelled out an absolute root, is how 45 bodies came to name a directory that no
 longer existed. Directories without a `SKILL.md` are skipped.
 
-## Default pack: ai4s-skills (bundled into the installer)
+## AI4S pack: fetched, not read by a run
 
-The default scientific skills come from
+`external/ai4s-skills` is the third-party pack from
 [ai4s-research/ai4s-skills](https://github.com/ai4s-research/ai4s-skills)
 (research-explorer, literature-survey, experiment-suite, paper-writer,
-integrity-auditor, mindmap-render, ai4s-agent).
+integrity-auditor, mindmap-render, ai4s-agent), pinned to one commit.
 
-How they ship, end to end:
+Where it goes:
 
-1. `scripts/dev/fetch-skills.sh` (run locally and in CI) downloads the pack at a
-   pinned commit into `external/ai4s-skills/`.
-2. `tauri.conf.json` bundles that directory as an app resource (`resources/skills/`).
-3. On every runtime start, `runtime.rs::deploy_bundled_skills` syncs the pack
-   into the app-private profile's skills directory, which the runtime loads as a
-   root regardless of which project is open. Bundled skill directories are
-   replaced on app upgrade, and only bundled ones: everything else the directory
-   holds is left alone.
+1. `scripts/dev/fetch-skills.sh` (run locally and in CI) downloads the pack at the
+   pinned commit into `external/ai4s-skills/`, which is git-ignored, and patches its
+   integrity auditor.
+2. `deploy/web/Dockerfile` copies the tree into the control-plane image, and the
+   hosted-compliance audit (`pnpm audit:hosted-compliance`) checks that copy.
+3. The hosted runtime image does not ship it: it is not one of the roots in
+   `RUNTIME_SKILL_ROOTS`, no run reads it, and the release manifest does not bind it.
 
 To bump the pack version, update `AI4S_SKILLS_COMMIT` in `fetch-skills.sh`.
 
@@ -54,7 +53,7 @@ The `office/` pack contains EviMed-owned MIT implementations for baseline DOCX,
 PDF, PPTX, and XLSX export. Each skill has an executable standard-library script,
 an explicit artifact boundary, and an independent smoke test. The restricted
 Anthropic document skills under a developer's ignored `external/` cache are not
-fetched, copied into images, or bundled into desktop installers.
+fetched or copied into images.
 
 These exporters are deliberately narrow. They establish a real cross-runtime
 artifact chain without claiming full Office editing or layout fidelity.
