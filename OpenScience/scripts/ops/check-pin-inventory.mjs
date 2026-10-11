@@ -50,13 +50,6 @@ const workspaceRoot = path.resolve(repoRoot, "..");
  */
 export const RULES = [
   {
-    // Scratch from a past analysis. Kept out of the product's inventory
-    // deliberately: `uploads/` is ephemeral and is an input to nothing.
-    kind: "history",
-    where: /^uploads\//,
-    why: "a saved artifact of a past run, and an input to no build",
-  },
-  {
     kind: "provenance",
     where: /^OpenScience\/evals\/acceptance\/(?:local-integration-\d{8}\/)?[^/]+\.json$/,
     why: "a live acceptance record names the release and the image tags it was measured on; re-dating it claims the acceptance ran on a kernel it never saw",
