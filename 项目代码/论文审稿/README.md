@@ -16,9 +16,12 @@
 
 ### 1. 安装依赖
 
+本系统是 EviMed Science 单体仓库中的一个目录，没有单独的仓库：
+
 ```bash
-git clone https://github.com/your-repo/Paper-Reading.git
-cd Paper-Reading
+git clone https://github.com/anonymous-temp/EviMed-Science.git
+cd EviMed-Science/项目代码/论文审稿
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # 可选：安装 Marker 获得更好的 PDF 解析质量
@@ -115,7 +118,7 @@ python
 ## 项目结构
 
 ```
-Paper-Reading/
+论文审稿/
 ├── src/
 │   ├── agents/                    # Agent 模块
 │   │   ├── review_planner.py      # [NEW] 审稿规划器
@@ -142,7 +145,7 @@ Paper-Reading/
 │   │   ├── evidence_retriever.py  # 三阶段证据检索
 │   │   └── ocr_parser.py          # OCR 解析
 │   │
-│   ├── rubrics/                   # 11 种 Checklist
+│   ├── rubrics/                   # 15 个 Checklist YAML
 │   │   ├── consort_2025.yaml      # RCT
 │   │   ├── prisma_2020.yaml       # 系统综述/Meta分析
 │   │   ├── strobe.yaml            # 观察性研究
@@ -192,7 +195,9 @@ Paper-Reading/
 ### 启动服务
 
 ```bash
-uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+python start.py                                              # 监听 6009 端口
+# 或直接用 uvicorn：
+uvicorn src.api.main:app --host 0.0.0.0 --port 6009
 ```
 
 ### API 端点
@@ -214,17 +219,17 @@ import requests
 # 提交审稿
 with open('manuscript.pdf', 'rb') as f:
     response = requests.post(
-        'http://localhost:8000/api/v1/review/submit',
+        'http://localhost:6009/api/v1/review/submit',
         files={'file': f}
     )
 job_id = response.json()['job_id']
 
 # 查询状态
-status = requests.get(f'http://localhost:8000/api/v1/review/{job_id}/status')
+status = requests.get(f'http://localhost:6009/api/v1/review/{job_id}/status')
 print(status.json())
 
 # 获取报告
-report = requests.get(f'http://localhost:8000/api/v1/review/{job_id}/report/author')
+report = requests.get(f'http://localhost:6009/api/v1/review/{job_id}/report/author')
 print(report.json()['content'])
 ```
 
