@@ -23,9 +23,11 @@ from typing import Any
 
 import requests
 
+from new_meta.config import PUBMED_EMAIL, contact_user_agent
+
 logger = logging.getLogger("metaagent.multi_search")
 
-HEADERS = {"User-Agent": "MetaAgent/1.0 (mailto:metaagent@research.ai)"}
+HEADERS = {"User-Agent": contact_user_agent("MetaAgent/1.0")}
 MULTI_SEARCH_TIMEOUT = float(os.getenv("MULTI_SEARCH_TIMEOUT", "12"))
 MULTI_SEARCH_RATE_LIMIT_SLEEP = float(os.getenv("MULTI_SEARCH_RATE_LIMIT_SLEEP", "5"))
 MULTI_SEARCH_DISABLED = os.getenv("MULTI_SEARCH_DISABLED", "").lower() in {"1", "true", "yes"}
@@ -117,8 +119,9 @@ def search_openalex(
     params: dict[str, Any] = {
         "search": query[:300],
         "per_page": min(max_results, 200),
-        "mailto": "metaagent@research.ai",
     }
+    if PUBMED_EMAIL:
+        params["mailto"] = PUBMED_EMAIL
     if year_range:
         params["filter"] = f"from_publication_date:{year_range[0]}-01-01,to_publication_date:{year_range[1]}-12-31"
 

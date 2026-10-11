@@ -103,6 +103,17 @@ LLM_SEARCH_STRATEGY = os.getenv("LLM_SEARCH_STRATEGY", "").strip()
 PUBMED_EMAIL = os.getenv("PUBMED_EMAIL", "").strip()
 PUBMED_API_KEY = os.getenv("PUBMED_API_KEY", "")
 
+
+def contact_user_agent(product: str) -> str:
+    """User-Agent string for the public scholarly APIs (OpenAlex, Crossref, publishers).
+
+    The operator's contact address (``PUBMED_EMAIL``, the one variable the
+    deployment already hands over) joins the "polite pool" as ``(mailto:...)``.
+    With no address configured the product name is sent alone: no contact
+    address is ever invented.
+    """
+    return f"{product} (mailto:{PUBMED_EMAIL})" if PUBMED_EMAIL else product
+
 # --- Internal Database ---
 INTERNAL_DB_URL = os.getenv(
     "INTERNAL_DB_URL",

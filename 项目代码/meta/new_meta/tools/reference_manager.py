@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 import requests
 
+from new_meta.config import contact_user_agent
 from new_meta.tools.utils import first_author_lastname
 
 logger = logging.getLogger("metaagent.reference_manager")
@@ -223,7 +224,7 @@ def _fetch_crossref_metadata(doi: str) -> dict:
     try:
         response = requests.get(
             f"https://api.crossref.org/works/{quote(normalized, safe='')}",
-            headers={"User-Agent": "MetaAgent reference metadata enrichment (mailto:metaagent@research.ai)"},
+            headers={"User-Agent": contact_user_agent("MetaAgent reference metadata enrichment")},
             timeout=6,
         )
         response.raise_for_status()

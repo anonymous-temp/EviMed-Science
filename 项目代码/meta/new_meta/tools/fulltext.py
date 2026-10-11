@@ -10,13 +10,15 @@ from typing import Any
 
 import requests
 
+from new_meta.config import contact_user_agent
+
 logger = logging.getLogger("metaagent.fulltext")
 
 EUROPE_PMC_SEARCH_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 EUROPE_PMC_FULLTEXT_XML_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}/fullTextXML"
 PMC_HTML_URL = "https://pmc.ncbi.nlm.nih.gov/articles/{pmcid}/"
 HEADERS = {
-    "User-Agent": "MetaAgent/1.0 (mailto:metaagent@research.ai)",
+    "User-Agent": contact_user_agent("MetaAgent/1.0"),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 

@@ -17,6 +17,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 
 from new_meta.config import (
+    contact_user_agent,
     FULLTEXT_MAX_ATTEMPTS_PER_PAPER,
     FULLTEXT_PAPER_DEADLINE_SECONDS,
     PDF_DOWNLOAD_MAX_BYTES,
@@ -32,7 +33,7 @@ logger = logging.getLogger("metaagent.pdf_downloader")
 # one with the article (citation_pdf_url) and the PDF; BMJ, PLOS answered both
 # alike, and the Cloudflare-walled hosts refused both alike.
 HEADERS = {
-    "User-Agent": "MetaAgent/1.0 (mailto:metaagent@research.ai)",
+    "User-Agent": contact_user_agent("MetaAgent/1.0"),
     "Accept": "application/pdf,text/html;q=0.9,*/*;q=0.8",
 }
 
