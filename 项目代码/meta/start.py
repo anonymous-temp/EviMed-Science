@@ -225,25 +225,17 @@ from web_service.manuscript_review import (
 
 AGENT_TYPE = "meta-analysis"
 
-# ── 线上环境 ──
-JAVA_WS_URL = os.getenv("JAVA_WS_URL", "wss://evidence-factory.evimed.com/ws/ws")
-JAVA_TOKEN_URL = os.getenv(
-    "JAVA_TOKEN_URL",
-    f"https://evidence-factory.evimed.com/api-evimed/ai-agent/token?clientType={AGENT_TYPE}",
-)
-JAVA_API_BASE = os.getenv("JAVA_API_BASE", "https://evidence-factory.evimed.com/api-evimed")
-# ── 测试环境 ──
-# JAVA_WS_URL = os.getenv("JAVA_WS_URL", "ws://192.168.20.252:2066/ws/ws")
-# JAVA_TOKEN_URL = os.getenv(
-#     "JAVA_TOKEN_URL",
-#     f"http://192.168.20.252:2066/api-evimed/ai-agent/token?clientType={AGENT_TYPE}",
-# )
-# JAVA_API_BASE = os.getenv("JAVA_API_BASE", "http://192.168.20.252:2066/api-evimed")
+# Legacy upstream-platform gateway and report storage. Every value comes from
+# the environment only; empty means "not configured" and the matching path
+# (outbound WebSocket client, upstream file download, OSS upload) does nothing.
+JAVA_WS_URL = os.getenv("JAVA_WS_URL", "").strip()
+JAVA_TOKEN_URL = os.getenv("JAVA_TOKEN_URL", "").strip()
+JAVA_API_BASE = os.getenv("JAVA_API_BASE", "").strip()
 OSS_ACCESS_KEY_ID     = os.getenv("OSS_ACCESS_KEY_ID")
 OSS_ACCESS_KEY_SECRET = os.getenv("OSS_ACCESS_KEY_SECRET")
 OSS_ENDPOINT          = os.getenv("OSS_ENDPOINT", "https://oss-cn-beijing.aliyuncs.com")
-OSS_BUCKET_NAME       = os.getenv("OSS_BUCKET_NAME", "project-beijing-a4hznzutlh")
-OSS_PUBLIC_BASE_URL   = os.getenv("OSS_PUBLIC_BASE_URL", "https://image.evimed.com/oss")
+OSS_BUCKET_NAME       = os.getenv("OSS_BUCKET_NAME", "")
+OSS_PUBLIC_BASE_URL   = os.getenv("OSS_PUBLIC_BASE_URL", "")
 SERVICE_PORT          = int(os.getenv("SERVICE_PORT", "8002"))
 MAX_SESSIONS          = int(os.getenv("MAX_CONCURRENT_SESSIONS", "16"))
 USER_PDF_MAX_BYTES    = int(os.getenv("USER_PDF_MAX_BYTES", str(50 * 1024 * 1024)))
@@ -705,6 +697,9 @@ async def _upload_report(content: str, user_id: str, message_id: str) -> Optiona
     if not OSS_ACCESS_KEY_ID or not OSS_ACCESS_KEY_SECRET:
         logger.warning("OSS 凭证未配置，跳过上传")
         return None
+    if not OSS_BUCKET_NAME or not OSS_PUBLIC_BASE_URL:
+        logger.warning("OSS bucket / public base URL 未配置，跳过上传")
+        return None
     remote_path = f"{AGENT_TYPE}/{user_id}/{message_id}/{int(time.time() * 1000)}.md"
     data = content.encode("utf-8")
 
@@ -812,6 +807,9 @@ async def _download_user_pdfs(file_ids: list, save_dir: Path, token: str = "") -
     返回本地文件路径列表。
     """
     if not file_ids:
+        return []
+    if not JAVA_API_BASE:
+        logger.warning("JAVA_API_BASE 未配置，无法从上游文件服务下载用户 PDF")
         return []
 
     papers_dir = save_dir / "papers"
@@ -5491,6 +5489,9 @@ async def _handle_session(
 
 async def _java_ws_client():
     import websockets
+    if not (JAVA_WS_URL and JAVA_TOKEN_URL):
+        logger.info("Upstream platform not configured (JAVA_WS_URL / JAVA_TOKEN_URL empty); outbound WebSocket client not started")
+        return
     active_sessions: Dict[str, dict] = {}
 
     _hb_task = None
@@ -5607,7 +5608,7 @@ async def lifespan(app: FastAPI):
 
     logger.info(
         f"Meta 分析服务启动 | port={SERVICE_PORT} "
-        f"| Java={JAVA_WS_URL} | MaxSessions={MAX_SESSIONS}"
+        f"| Java={JAVA_WS_URL or 'not configured'} | MaxSessions={MAX_SESSIONS}"
     )
     _java_client_task = asyncio.create_task(_java_ws_client())
     yield
