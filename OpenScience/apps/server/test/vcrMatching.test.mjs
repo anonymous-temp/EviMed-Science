@@ -357,6 +357,29 @@ test("CS-33 a fact with no unit against a criterion that names one is unknown (u
   assert.equal(evaluateRequirement({ ...node, unit: undefined }, { facts: [fact], asOf: Date.parse(AS_OF) }).state, SATISFIED);
 });
 
+// A live 给患者找试验 run (2026-10-11) wrote every registry age criterion with `"unit": "years"` against a chart's age in `year`: the
+// tokens differed, the lab-unit table knows no time units, and a 72-year-old read as unknown against "Age >= 75 years" in all four
+// trials that had one. Time and age units are the module's one closed table (`vcrTimeUnits`): any spelling there is that unit, and
+// two of them convert through the days each stands for.
+test("an age or a duration in any spelling of the time-unit table is compared, and converted between units of the table", () => {
+  const age = (unit) => ({ id: `age-${unit}`, variable: "age", value: 72, unit, extractedBy: "code", occurredAt: "2026-09-10T00:00:00Z" });
+  const atLeast75 = { op: "compare", variable: "age", comparator: "gte", value: 75, unit: "years" };
+  for (const unit of ["year", "years", "Years", "yr", "y", "年", "岁", "周岁"]) {
+    const judged = evaluateRequirement(atLeast75, { facts: [age(unit)], asOf: Date.parse(AS_OF) });
+    assert.equal(judged.state, NOT_SATISFIED, `72 ${unit} against >= 75 years`);
+  }
+  assert.equal(evaluateRequirement({ ...atLeast75, value: 18 }, { facts: [age("岁")], asOf: Date.parse(AS_OF) }).state, SATISFIED);
+  // Between units of the table: 10 weeks of symptoms is 70 days, so "at least 60 days" holds and "at most 8 weeks" does not.
+  const duration = { id: "dur", variable: "symptom_duration", value: 10, unit: "weeks", extractedBy: "code", occurredAt: "2026-09-10T00:00:00Z" };
+  assert.equal(evaluateRequirement({ op: "compare", variable: "symptom_duration", comparator: "gte", value: 60, unit: "days" }, { facts: [duration], asOf: Date.parse(AS_OF) }).state, SATISFIED);
+  assert.equal(evaluateRequirement({ op: "compare", variable: "symptom_duration", comparator: "lte", value: 8, unit: "weeks" }, { facts: [duration], asOf: Date.parse(AS_OF) }).state, NOT_SATISFIED);
+  // A unit outside the table is still not guessed: cycles against weeks stays unknown.
+  const cycles = { ...duration, unit: "cycles" };
+  const refused = evaluateRequirement({ op: "compare", variable: "symptom_duration", comparator: "gte", value: 8, unit: "weeks" }, { facts: [cycles], asOf: Date.parse(AS_OF) });
+  assert.equal(refused.state, UNKNOWN);
+  assert.deepEqual(refused.missing, [{ variable: "symptom_duration", reason: "unit_mismatch" }]);
+});
+
 test("CS-33 a requirement outside the grammar is unknown (criterion_malformed), never a guess", () => {
   const facts = [{ id: "f", variable: "ecog", value: 1, extractedBy: "snapshot" }];
   for (const node of [

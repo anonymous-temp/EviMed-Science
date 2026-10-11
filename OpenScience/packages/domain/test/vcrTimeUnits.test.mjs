@@ -16,7 +16,7 @@ test('a source writes a unit many ways; the closed spellings read as the four un
   for (const [spelling, unit] of /** @type {[string, string][]} */ ([
     ['Months', 'months'], ['month', 'months'], [' months ', 'months'], ['mo', 'months'], ['个月', 'months'], ['月', 'months'], ['MONTHS', 'months'],
     ['Weeks', 'weeks'], ['week', 'weeks'], ['wk', 'weeks'], ['周', 'weeks'],
-    ['Years', 'years'], ['year', 'years'], ['yr', 'years'], ['年', 'years'],
+    ['Years', 'years'], ['year', 'years'], ['yr', 'years'], ['年', 'years'], ['岁', 'years'], ['周岁', 'years'],
     ['Days', 'days'], ['day', 'days'], ['天', 'days'], ['日', 'days'],
   ])) assert.equal(vcrTimeUnitOf(spelling), unit, spelling)
   for (const other of ['', '   ', null, undefined, 'cycles', 'visits', 'months (median)', '%', 'm', 'kg', 'time units', 42]) assert.equal(vcrTimeUnitOf(other), null, String(other))

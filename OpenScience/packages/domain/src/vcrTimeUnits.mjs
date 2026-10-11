@@ -28,7 +28,8 @@ const SPELLINGS = Object.freeze(/** @type {Record<string, readonly string[]>} */
   days: ['day', 'days', 'd', '天', '日'],
   weeks: ['week', 'weeks', 'wk', 'wks', 'w', '周', '星期'],
   months: ['month', 'months', 'mo', 'mos', 'mth', 'mths', '月', '个月'],
-  years: ['year', 'years', 'yr', 'yrs', 'y', '年'],
+  // 岁 and 周岁 are an age in years: how a chart and a Chinese registry write the age criterion's unit.
+  years: ['year', 'years', 'yr', 'yrs', 'y', '年', '岁', '周岁'],
 }))
 /** @type {Map<string, string>} */
 const UNIT_OF_SPELLING = new Map(Object.entries(SPELLINGS).flatMap(([unit, spellings]) => spellings.map((spelling) => [spelling, unit])))

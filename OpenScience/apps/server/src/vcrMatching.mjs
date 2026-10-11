@@ -48,7 +48,7 @@
  * @module vcrMatching
  */
 
-import { CLINICAL_ASSERTIVE_POLARITIES, clinicalFactPolarity, clinicalFactView, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit } from "@evimed/domain";
+import { CLINICAL_ASSERTIVE_POLARITIES, clinicalFactPolarity, clinicalFactView, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit, vcrConvertTime, vcrTimeUnitOf } from "@evimed/domain";
 import { createHash } from 'node:crypto';
 import {
   canonicalScenarioJson, VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ELIGIBILITY_SUMMARIES, VCR_MISSING_REASONS, validateRequirement,
@@ -557,6 +557,10 @@ const unitToken = clinicalUnitToken;
 /** @param {number} value @param {string} from @param {string} to @param {string} variable
  * @param {((value:number,from:string,to:string,variable?:string)=>number|null)|undefined} custom */
 function convertUnit(value, from, to, variable, custom) {
+  // Ages and durations: the module's one closed table of time units (`vcrTimeUnits`) — any spelling there is that unit (`year`,
+  // `years`, `岁`), and two of them convert through the days each stands for. A unit outside it is never guessed into one.
+  const fromTime = vcrTimeUnitOf(from), toTime = vcrTimeUnitOf(to);
+  if (fromTime && toTime) return vcrConvertTime(value, fromTime, toTime);
   const known = convertClinicalUnit(value, from, to, variable);
   if (known) return known.value;
   const supplied = custom ? custom(value, from, to, variable) : null;
