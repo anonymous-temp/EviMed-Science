@@ -9,7 +9,7 @@
 
 EviMed Science（循证医学，evidence-based medicine）是一套托管的多租户医学科研工作台。
 研究者通过对话开展工作；每个项目运行在自己独立隔离的运行时里，内核是
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）智能体内核，
+[DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)（DSH）智能体内核，
 文献与资料检索、统计、专项分析引擎和报告撰写都以能力包的形式提供。交付给研究者的是项目工作区里的一组文件：
 每一条结论都对应一份已留存并引用过的来源，哪些内容未能核实也会明确写出。
 
@@ -43,6 +43,9 @@ EviMed Science（循证医学，evidence-based medicine）是一套托管的多�
   其中的 AI 步骤就是四个 GEO 能力的运行。专有方法包不在本仓库中；没有它时，这些能力按各自简短的方法运行。
 - **虚拟临床研究（代码名 `vcr`）。** 从方案到研究资料包的分步骤方案。所有数字都来自确定性的 R 引擎
   （`项目代码/vcr-engine`），患者级数据留在任何运行时都不挂载的数据平面中。
+- **长任务。** 研究者可以把一个跨多轮完成的目标交给对话：运行时镜像内置
+  [LoopX](https://github.com/loopx-project/loopx)，目标栏负责启动和暂停，驱动器在同一会话里自动续跑。
+  每一轮自动续跑在运行台账和收件箱里都算研究者自己的工作。
 - **专项引擎。** `项目代码/` 下有六个 Python 智能体（Meta 分析、孟德尔随机化、论文审稿、文献计量、
   科研选题、药物安全）。凡涉及统计，都由确定性代码计算；模型负责解读和写作，从不参与计算。
 

@@ -9,7 +9,7 @@ English | [简体中文](README.zh-CN.md)
 
 EviMed Science (循证医学, evidence-based medicine) is a hosted, multi-tenant research
 workbench for medical researchers. A researcher works in conversation; each project
-runs in its own isolated runtime on the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
+runs in its own isolated runtime on the [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)
 (DSH) agent kernel, with literature and source retrieval, statistics, specialist analysis
 engines and report writing available as capability packages. What comes back is a set of
 files in a project workspace, with every claim tied to a source that was preserved and
@@ -63,6 +63,10 @@ earlier version had was deleted on 2026-09-04.
 - **虚拟临床研究 (virtual clinical research, code `vcr`).** A stepwise programme from protocol
   to study package. Every number comes from a deterministic R engine (`项目代码/vcr-engine`)
   and patient-level data stays in a data plane that no runtime mounts.
+- **Long-running goals.** A researcher can hand a conversation a goal that runs across turns:
+  [LoopX](https://github.com/loopx-project/loopx) is built into the runtime image, and its goal
+  bar starts and pauses the goal while its driver continues it in the same session. Each
+  automatic turn is the researcher's own work in the run ledger and the inbox.
 - **Specialist engines.** Six Python agents under `项目代码/` (meta-analysis, Mendelian
   randomization, peer review, bibliometrics, topic selection, drug safety). Wherever statistics
   are involved they are computed in deterministic code; the model interprets and writes, and
