@@ -1,314 +1,200 @@
-# Open Science Web API
+# EviMed control plane (`@ai4s/server`)
 
-This package is the server-side runtime boundary for hosted web deployments.
-It uses the pinned, OpenID-certified `openid-client` package for production
-OIDC and otherwise keeps the hosted boundary independent of a database, durable
-queue, or model-provider setup.
-See `../../docs/WEB_PRIVACY_AND_COMPLIANCE.md` for the hosted data, privacy,
-retention, and third-party license checklist.
+The server side of the hosted web application: HTTP API, authentication and tenancy,
+project workspaces, the run ledger and delivery gate, the gateways a runtime calls, and the
+feature modules (knowledge base, autopilot, memory, frontier feed, and so on). The browser
+talks to this process and to nothing else; it never reaches an agent kernel.
 
-Implemented in this slice:
+It is plain Node (`.mjs`, ESM, no build step). `tsconfig.json` runs `checkJs` over
+`src/**/*.mjs` and ESLint gates it at `--max-warnings 0`, so `pnpm lint` and
+`pnpm typecheck:server` from `OpenScience/` cover it.
 
-- `POST /api/commands/:command` with an allowlist and consistent `{ data }` /
-  `{ error, code }` envelopes. Malformed percent-encoded route parameters are
-  rejected with stable `400 invalid_encoding` JSON responses instead of leaking
-  internal decode errors.
-- Explicit development, local-password, and OIDC authentication modes. Set
-  `OPEN_SCIENCE_AUTH_MODE=local` to require `/api/auth/login`; the first
-  file-backed user can be bootstrapped with `OPEN_SCIENCE_BOOTSTRAP_USER` and
-  an `OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE`. The production Compose path mounts
-  that owner-only, no-follow file through `docker-compose.local-auth.yml`, and
-  production readiness rejects a bootstrap password sourced directly from the
-  process environment. `pnpm configure:local-auth` creates the file without
-  printing its value. Set `OPEN_SCIENCE_AUTH_MODE=oidc` to use
-  Authorization Code with PKCE, state/nonce/ID Token validation, optional exact
-  group or verified email-domain admission, encrypted short-lived flow state,
-  and a stable hashed external identity mapping. Provider tokens and raw
-  identity subjects are not persisted. Session indexes are file-backed under
-  `OPEN_SCIENCE_SESSIONS_FILE` by default, store only hashed session IDs, and
-  survive server restarts. `OPEN_SCIENCE_SESSION_TTL_MS` controls the server
-  session expiry and browser cookie `Max-Age`; production readiness rejects
-  invalid TTL values. The configured `OPEN_SCIENCE_DATA_DIR` itself must be a
-  real directory, not a symbolic link or file; the default `users.json` and
-  session index paths under it also reject symbolic links and are written
-  through temporary files before atomic rename. In local and OIDC modes, mutating cookie-backed
-  APIs also require the `X-Open-Science-CSRF` token returned by
-  `/api/auth/login` or `/api/me`. Under `NODE_ENV=production`, development auth
-  is rejected by both `/api/ready` and authenticated API routes. Malformed
-  cookie values are ignored during session lookup so authentication failures
-  remain stable JSON responses.
-- User/project-scoped workspaces under `OPEN_SCIENCE_DATA_DIR`.
-- Project listing and creation through `/api/projects`; project isolation then
-  uses `X-Open-Science-Project` or `projectId=...`. User roots, per-user
-  project containers, project roots, project metadata files, and active
-  workspace directories reject symbolic links so a polluted data volume cannot
-  redirect work outside its user-owned tree.
-- Current-account export and deletion are available through `/api/account/export`
-  and `DELETE /api/account`. Account exports contain scoped user/project data
-  plus non-secret `account.json` metadata; they omit password hashes, sessions,
-  CSRF tokens, and host paths. Account deletion requires exact user id
-  confirmation, requires the current password in login mode, rejects queued or
-  running tasks, stops the user's attached runtimes, revokes sessions, removes
-  the user root, and records a tombstone so deleted bootstrap users are not
-  recreated on restart.
-- Each project stores its active workspace folder in `project.json`, so
-  `set_workspace` and `new_dated_workspace` survive server restarts without
-  exposing host absolute paths. Successful workspace changes stop the selected
-  project's attached or starting runtime so the next start or proxy request is
-  bound to the newly selected folder.
-- Path traversal protection for all workspace file commands.
-- Current-project `root=base` scoping, so one project cannot use the base tree
-  to read or write a sibling project.
-- File upload, preview, download, directory listing, and provenance JSONL
-  storage, with per-project storage quota checks. Uploads
-  accept nested project-relative paths such as `inputs/raw.csv`, but reject
-  absolute paths, `..` traversal, empty segments, and oversized payloads.
-  Provenance records are versioned per workspace-relative artifact path; large
-  recorded content is capped, and the provenance JSONL rotates with
-  `OPEN_SCIENCE_MAX_LOG_FILE_BYTES`.
-  Project quota usage scans are bounded by
-  `OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES` and return
-  `project_scan_too_large` when a project tree is too large to scan safely.
-  Project and account archive exports are bounded by both
-  `OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES` and `OPEN_SCIENCE_MAX_ARCHIVE_BYTES` before
-  tarball streaming starts.
-  Hosted file APIs also reject symbolic links inside workspaces, skip symbolic
-  links during directory listing and artifact resolution, and
-  return stable JSON 404 errors for missing files or directories instead of
-  surfacing filesystem exceptions. Linux workspace I/O pins each directory and
-  file with `O_NOFOLLOW` descriptors, uses descriptor-relative atomic writes,
-  and bounds archive streams to the collected file size so concurrent runtime
-  path replacement cannot redirect API reads or writes outside the project.
-  Capacity checks and mutations are serialized per project inside one API
-  process. Multiple API replicas require distributed coordination or
-  per-project routing.
-  Upload request JSON envelopes are sized from `OPEN_SCIENCE_MAX_FILE_BYTES`
-  so browser/base64 uploads can reach the actual decoded file-size check. This
-  applies to direct browser uploads, `upload_file`, and queued `upload_file`
-  tasks; non-upload command and task JSON APIs remain bounded by
-  `OPEN_SCIENCE_MAX_JSON_BYTES`. Mutating command, task, and direct upload
-  routes validate the authenticated user/project context before reading
-  upload-sized request bodies.
-  Preview responses use `Cache-Control: no-store` and a sandboxed
-  file-preview CSP that disables scripts, network connections, forms, object
-  embeds, and base-URI changes. The hosted frontend also renders HTML previews
-  in an iframe without script permission and uses the authenticated download
-  endpoint instead of desktop `open_path` or frontend Blob buffering. Downloads
-  are served as attachments with sanitized filenames.
-- Server-side OpenCode runtime management, status, graceful stop, and HTTP/SSE
-  proxying. Production auth mode refuses unsandboxed host OpenCode startup by
-  default; set `OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker` to use the container
-  launch plan, or explicitly opt into host mode with
-  `OPEN_SCIENCE_ALLOW_UNSANDBOXED_RUNTIME=true`. Production Compose uses an
-  isolated Runtime Controller. The Web
-  API has no Docker socket; it connects to a mode-`0600` controller Unix socket,
-  while the unexposed controller validates canonical user/project identifiers
-  and reconstructs fixed image, mount, network, resource, and command arguments
-  from server configuration. Arbitrary Docker commands are not part of the
-  protocol. Protocol v2 requires API/Controller runtime-capacity limits to
-  match; the Controller independently discovers labelled Docker runtimes,
-  reserves in-flight starts, enforces global/per-user limits, and serializes
-  lifecycle operations for each project. Production readiness plus
-  runtime launch reject direct Docker control by default. Docker
-  runtimes use deterministic per-project container names and labels. Server startup scans
-  stored project runtime state and removes previously attached Docker containers
-  before accepting traffic; per-project runtime launches also clean matching
-  stale containers before startup, report true launch cleanup failures as
-  `runtime_cleanup_failed` plus `cleanup_failed` runtime log rows, and can be
-  replaced through `restart_runtime`.
-  They also set `no-new-privileges`, drop Linux capabilities by default, apply
-  a pids limit, run with a read-only container root filesystem plus a bounded
-  tmpfs, and reject host/shared-container networking unless explicitly enabled.
-  In production, any runtime network other than `none` requires both
-  `OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS=true` and the separate
-  `OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK=true` operator confirmation.
-  The supplied Compose profile uses a stable `OPEN_SCIENCE_DATA_VOLUME`, mounts
-  only the active project's `volume-subpath` into sibling runtime containers,
-  and defaults to `OPEN_SCIENCE_RUNTIME_TRANSPORT=unix` plus
-  `OPEN_SCIENCE_RUNTIME_NETWORK_MODE=none`. OpenCode listens on container
-  loopback and HTTP/SSE is relayed through a project-scoped Unix socket, so no
-  runtime port or API-container localhost assumption is required.
-  Docker runtime proxy requests inject the container-visible `/workspace`
-  directory, while explicit host and mock runtimes use the server workspace path.
-  Active runtime proxy requests and SSE streams are capped globally and per
-  project by `OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS` and
-  `OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS_PER_PROJECT`.
-  Every attached runtime also gets a project usage monitor controlled by
-  `OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS`. It stops the runtime when the
-  workspace exceeds `OPEN_SCIENCE_MAX_PROJECT_BYTES`, and fails closed with a
-  `quota_check_failed` event when usage cannot be scanned safely.
-  Explicit host-mode runtimes also attempt conservative stale PID cleanup from
-  the same project's runtime state before startup, but Docker remains the
-  recommended hosted sandbox. Each project also gets
-  `.openscience/runtime-state.json` with sanitized runtime status metadata;
-  after a server restart, mock/uncleaned states are reported as stale while
-  successfully cleaned Docker orphans are marked `orphan_cleanup`, without
-  exposing runtime URLs, passwords, or host paths. Runtime state and
-  runtime-event files reject symbolic links.
-- Async task API under `/api/tasks` for queueing command work, checking status,
-  canceling queued/running tasks, applying command timeouts, and passing an
-  `AbortSignal` into interruptible command handlers. The execution queue is
-  in-process and enforces both global and per-project concurrency limits, while
-  each project gets a file-backed task index at `.openscience/tasks-state.json`
-  plus task events in `.openscience/tasks.jsonl`.
-  On restart, completed task records remain visible and unfinished records are
-  marked failed with `server_restarted` instead of being re-executed. Task
-  state and task-event files reject symbolic links.
-- Scoped observability endpoints under `/api/logs/audit`, `/api/logs/tasks`,
-  `/api/logs/runtime`, `/api/logs/errors`, and `/api/metrics`. The metrics
-  endpoint reports the current project's storage/quota, task status counts, runtime status, and
-  server process resource data without exposing absolute filesystem paths; if
-  the storage scan exceeds `OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES`, it
-  reports `project.storage.scanLimited=true`. Log
-  read APIs cap file reads to the latest `OPEN_SCIENCE_MAX_LOG_READ_BYTES`
-  bytes before applying the requested row limit, so long-lived JSONL logs are
-  not loaded fully into memory for each request.
-  Runtime logs include sanitized OpenCode proxy method, route pattern, status,
-  duration, streaming flag, and policy error code without browser credentials,
-  query secrets, or workspace paths. The proxy strips browser credentials before
-  forwarding requests, strips runtime cookies/challenges/hop-by-hop headers
-  before responses reach the browser, and rewrites runtime-local redirects back
-  through `/api/opencode/:projectId`. The hosted proxy is not a general
-  OpenCode reverse proxy: it allowlists the session, message, event, catalog,
-  question, permission, and cancel/delete routes needed by the Web client, while
-  blocking runtime config/auth/OAuth/MCP mutation routes such as
-  `/global/config`, `/auth/:provider`, `/provider/:provider/oauth/*`, and
-  unknown paths before reading request bodies or starting a runtime. Allowed
-  runtime mutation routes validate their JSON-object payload shape before runtime
-  startup as well, so malformed prompts, slash-command payloads, shell payloads,
-  question replies, and permission replies return `invalid_runtime_proxy_payload`
-  without waking the agent. Stale abort/session-delete controls are idempotent
-  and do not wake a stopped runtime; stale question and permission mutations
-  return `runtime_not_running` instead of starting a new agent. Non-GET/HEAD
-  runtime proxy requests are bounded by
-  `OPEN_SCIENCE_MAX_JSON_BYTES`; oversized requests are rejected before a runtime
-  is started or contacted. Runtime proxy requests and SSE streams are
-  concurrency-limited before additional runtime work is started. Server-disabled
-  persistent approvals and direct shell proxy requests are also rejected before
-  starting a runtime whenever their decision does not depend on the runtime
-  sandbox mode.
-  `/api/ops/metrics` exposes low-cardinality deployment metrics behind
-  `OPEN_SCIENCE_OPERATOR_METRICS_TOKEN` or the no-follow
-  `OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE`. It includes normalized HTTP
-  request/error counters and request-duration histograms in addition to
-  readiness, process, task, and runtime signals; route labels never contain
-  concrete project ids or file paths. Production readiness requires a
-  non-placeholder token of at least 32 bytes, rejects conflicting or invalid
-  token-file sources, and never returns the token or secret-file path.
-- API responses include `X-Open-Science-Request-Id`; error responses include
-  the same request id in the JSON envelope. Failed `/api/*` requests are written
-  to `.openscience/errors.jsonl` under `OPEN_SCIENCE_DATA_DIR` with sanitized
-  method, route pattern, status, code, request id, and optional project id. The
-  records omit request bodies, prompts, query strings, file paths, runtime URLs,
-  cookies, and authorization headers, and the error log file rejects symbolic
-  links. `/api/logs/errors` returns only rows for the selected project plus
-  projectless rows.
-- Server-managed OpenCode runtime startup synchronizes manifest-backed skills
-  from `OPEN_SCIENCE_RUNTIME_SKILL_DIRS` into
-  `XDG_CONFIG_HOME/opencode/skills` for the selected project. The default
-  source is the first-party `runtime/skills/core` pack copied into the hosted
-  Web service image; deployed skill targets reject symbolic links.
-- In-memory rate limits for API requests by client address, stricter login
-  attempt limits, and per-user/project/command command limits.
-- Project audit events for commands, project creation, file upload/preview/
-  download, task lifecycle actions, and runtime lifecycle actions
-  (`runtime.start`, `runtime.restart`, `runtime.stop`). Runtime audit rows keep
-  only sanitized metadata such as the command name, runtime action, kind,
-  sandbox mode, running flag, and stale flag; they do not record proxied runtime
-  URLs, passwords, or host workspace paths. Login/logout metadata is written to
-  `.openscience/security.jsonl` under `OPEN_SCIENCE_DATA_DIR`. Project JSONL
-  logs, provenance files, task state, runtime state, and server error logs are
-  opened without following symbolic links.
-- `/api/health` for process liveness and `/api/ready` for deployment readiness
-  checks. Readiness verifies the data directory is a writable real directory
-  rather than a symbolic link or file, verifies static asset access, rejects
-  development auth under `NODE_ENV=production`, confirms local mode has at least
-  one configured user, validates OIDC issuer/client/callback and separate secret
-  settings, and validates production resource-limit settings for upload
-  size, project quota, scan bounds, log bounds, rate limits, queues, timeouts,
-  runtime proxy limits, runtime quota-monitor interval, attached-runtime limits,
-  and Docker CPU/memory/pids limits. It validates production backup/restore
-  configuration, protected observability metrics, an immutable deployment
-  release manifest, and the selected OpenCode
-  runtime sandbox configuration, and rejects mock runtime mode in production unless
-  `OPEN_SCIENCE_ALLOW_MOCK_RUNTIME=true` is set for an explicit smoke test.
-  The Docker runtime check also verifies the Runtime Controller protocol,
-  release identity, Docker Engine version, and runtime image metadata through
-  the controller rather than granting the API direct daemon access.
-  It also rejects disabled production security headers, wildcard/invalid/
-  non-HTTPS/local production CORS origins, dangerous hosted shell escape hatches,
-  persistent approvals, and full approval mode for production deployments. In production Docker runtime mode it requires the
-  configured runtime image to be locally inspectable unless
-  `OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=false` is set for a lazy-pull
-  deployment. A local production image must have the exact image ID and
-  OpenCode/uv OCI labels recorded by the release manifest. Readiness rejects
-  release/config/image mismatches without returning image IDs. It also rejects
-  outbound runtime networking until both its technical
-  opt-in and operator policy acknowledgement are set. Static frontend assets
-  are served without following symbolic links, and readiness fails if the
-  configured `index.html` is a symbolic link.
-- Hosted security headers, exact-origin CORS allowlisting, server-side approval
-  policy enforcement, disabled persistent approvals by default, production-mode
-  CSRF checks, and direct host shell proxy blocking unless explicitly allowed.
-  Production CSP restricts browser connections to the hosted origin, so browser
-  traffic reaches OpenCode through `/api/opencode/:projectId` instead of
-  localhost or bare WebSocket runtime URLs; non-production mode keeps localhost
-  allowances for local development. HTTPS public origins also get
-  `Strict-Transport-Security: max-age=31536000` when security headers are
-  enabled.
-  With no `OPEN_SCIENCE_CORS_ORIGINS`, development mode allows localhost
-  frontends and production mode only allows `OPEN_SCIENCE_PUBLIC_URL`'s origin;
-  separate frontend/API origins must be configured explicitly as exact HTTPS
-  origins, and `/api/ready` rejects wildcard, local, invalid, non-HTTPS, or
-  path-bearing production CORS entries.
-- Single-node backup and restore helpers for `OPEN_SCIENCE_DATA_DIR` live under
-  `scripts/ops/`; they reject symbolic links and unsafe archive paths. The
-  optional backup Compose profile runs those helpers from the immutable Web
-  image with read-only application data, API-inaccessible file-backed
-  encryption, retries, persistent health, and scheduled restore drills.
-  Encrypted archives and
-  checksum sidecars can be uploaded to and downloaded from S3-compatible object
-  storage with `pnpm backup:object` / `pnpm restore:object`; the adapter rejects
-  plaintext by default and keeps credentials in the selected CLI's credential
-  chain. Production readiness
-  requires either `OPEN_SCIENCE_BACKUP_MODE=local` with an absolute backup
-  directory outside `OPEN_SCIENCE_DATA_DIR`, positive retention days, encrypted
-  archives, and restore-drill acknowledgement; or
-  `OPEN_SCIENCE_BACKUP_MODE=external` with explicit operator acknowledgement
-  that platform/object-store backup and restore drills are owned outside the
-  service container.
-- Hosted compliance checks run with `pnpm audit:hosted-compliance`; the audit
-  verifies default skill packaging, runtime version pins and OCI labels,
-  release-manifest wiring, privacy/license docs, and configured runtime skill
-  directories before publishing a hosted image. `pnpm release:manifest` records
-  exact Web/runtime image IDs, tool versions, core skill digest, monitoring
-  versions, and release input digests; `pnpm verify:release-manifest` rechecks
-  source content and both local images before deployment.
+## Entrypoints
 
-Not implemented yet by design:
+| Entry | Script | What it starts |
+| --- | --- | --- |
+| `src/index.mjs` | `pnpm --filter @ai4s/server start` | The HTTP API (`createWebApiApp` in `src/server.mjs`), default `127.0.0.1:8787` |
+| `src/runtimeControllerIndex.mjs` | `pnpm --filter @ai4s/server start:controller` | The runtime controller: the only process allowed to drive Docker, listening on a mode-0600 unix socket (`OPEN_SCIENCE_RUNTIME_CONTROLLER_SOCKET`) |
 
-- Database-backed users/projects/sessions.
-- Encrypted model key storage.
-- Production durable job queues.
-- Centralized rate limiting for horizontally scaled API replicas.
-- Filesystem-level hard project quotas for runtime workspace mounts.
-- Hosted-use license review for optional external skill packs.
+In a Docker deployment the API has no Docker socket. It asks the controller, which validates
+canonical user and project identifiers and rebuilds the fixed image, mounts, network, resource
+limits and command from server configuration; arbitrary Docker commands are not part of the
+protocol (`runtimeControllerClient.mjs` / `runtimeControllerServer.mjs`, versioned by
+`RUNTIME_CONTROLLER_PROTOCOL_VERSION`).
 
-Run locally:
+## How a request reaches a runtime
+
+The agent kernel is the DeepSeek Harness (DSH), the only kernel. Each project has at most one
+runtime: a container on this host (`OPEN_SCIENCE_RUNTIME_PROVIDER=docker`, the default) or an
+Alibaba AgentBay session (`agentbay`). The runtime runs only from the runtime image
+(`OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker`); any other sandbox mode is refused by name.
+`OPEN_SCIENCE_RUNTIME_MODE=mock` swaps in an in-process fake kernel for tests and demos.
+
+- `runtimeManager.mjs` owns the lifecycle and the launch plan (start, stop, idle reaping,
+  capacity, quota monitor). `agentbay/` is the other provider.
+- `dshProfilePatch.mjs` renders the per-project kernel profile before each start;
+  `dshBrowserAuth.mjs` mints the kernel's browser-session cookie. No provider key enters the
+  container.
+- `dshMux.mjs` holds the single WebSocket to the kernel at `/api/remote.mux`, which carries
+  every logical stream, addressed by slashed method names (`session/create`,
+  `session/prompt`, `session/page`, `session/cancel`, ...). `dshEventPump.mjs` follows the
+  sessions the ledger says are running.
+- `dshRuntimeAdapter.mjs` decodes kernel frames into `@evimed/domain`'s `RunEvent` and
+  `RunTranscript`, so the ledger, the gate and the browser never learn the kernel's
+  vocabulary. `runEventStream.mjs` serves the result at `GET /api/runs/:id/events`, resumable
+  by sequence number. Only `@evimed/harness-port` may import `@deepseek-ai/*`.
+- `agentRuns.mjs` is the run ledger: dispatch (`POST /api/agent-runs/dispatch`), progress,
+  steer, cancel, and the delivery decision. `specialistRouting.mjs` and
+  `specialistClassifier.mjs` choose between the open-domain answer line and a capability.
+- The old browser-to-kernel pass-through is gone: `/api/opencode/*` answers
+  `410 runtime_passthrough_retired` and `/api/runtime-ui/*` answers `410 runtime_ui_path_retired`.
+
+## The delivery gate
+
+The rules that decide whether a finished run may be delivered exist once, in
+`packages/domain/src/clinicalEvidence.mjs`. `src/clinicalEvidenceQuality.mjs` is a re-export
+shim and holds no logic; the run side reaches the same module through the socket's
+`evimed_submit_deliverable` tool. Safety rules for specific medicines are data in
+`packages/domain/src/clinical-safety-rules.json`. A verdict is a return value: a package is
+delivered with its findings attached and each claim marked, not withheld. See the root
+`CLAUDE.md` / `AGENTS.md` for the full account.
+
+## Persistence
+
+- `OPEN_SCIENCE_STATE_STORE` is `file` (the default; users and sessions in JSON files under
+  `OPEN_SCIENCE_DATA_DIR`, for local development) or `postgres`
+  (`OPEN_SCIENCE_DATABASE_URL` or `OPEN_SCIENCE_DATABASE_URL_FILE`; `controlPlaneDatabase.mjs`
+  is the pool and the `evimed_control` schema, `store.mjs` the user/project/session store).
+- Every durable product module is a document-and-job ledger over that database:
+  `productPersistence.mjs` (schema `evimed_product`: `documents`, `revisions`, `jobs`),
+  `productStore.mjs`, `productJobs.mjs`. Research memory (`researchMemory.mjs`) and the
+  frontier, GEO, VCR, review and credits modules keep their own schemas. Modules that need the
+  database stay unconfigured on the file store.
+- Workspaces are directories under `OPEN_SCIENCE_DATA_DIR` (default `.openscience-web-data`
+  relative to the working directory), scoped per user and project. Workspace I/O refuses
+  symbolic links, pins directories and files with `O_NOFOLLOW` descriptors, and writes
+  atomically (`security.mjs`).
+
+## Feature modules
+
+Each module is a service, a routes file, optionally a leased worker, and one switch in
+`src/config.mjs`; `createWebApiApp` registers it. With a switch off the module's routes are
+not mounted and the rest of the platform is unaffected.
+
+| Module | Files | Switch (default) |
+| --- | --- | --- |
+| Knowledge-base intake | `source*.mjs`, `openList*.mjs`, `documentParserClient.mjs` | `OPEN_SCIENCE_SOURCE_INGESTION_ENABLED` (on in production) |
+| Autopilot (proactive research) | `autopilot*.mjs` | `OPEN_SCIENCE_AUTOPILOT_ENABLED` (on in production) |
+| Learning loop | `learning*.mjs`, `method*.mjs`, `handbook*.mjs` | `OPEN_SCIENCE_LEARNING_ENABLED` (on) |
+| Research evolution | `evolution*.mjs` | `OPEN_SCIENCE_EVOLUTION_ENABLED` (on) |
+| Research memory and recall | `memory*.mjs`, `researchMemory.mjs` | `OPEN_SCIENCE_MEMORY_ENABLED` (on), `OPEN_SCIENCE_MEMORY_RECALL_ENABLED` |
+| Data semantics, result versions | `dataSemantics*.mjs`, `result*.mjs` | `OPEN_SCIENCE_DATA_SEMANTICS_ENABLED`, `OPEN_SCIENCE_RESULTS_ENABLED` (on) |
+| Frontier feed | `frontier*.mjs` | `OPEN_SCIENCE_FRONTIER_ENABLED` (off) |
+| Evidence-based GEO | `geo*.mjs` | `OPEN_SCIENCE_GEO_ENABLED` (off) |
+| Virtual clinical research | `vcr*.mjs` | `OPEN_SCIENCE_VCR_ENABLED` (off) |
+| Independent reviewer, Jev judge sites | `review*.mjs`, `judge*.mjs` | `OPEN_SCIENCE_REVIEW_ENABLED` (off), `OPEN_SCIENCE_JEV_ENABLED` (on) |
+| Chat channels | `im*.mjs`, `channels/` | `OPEN_SCIENCE_IM_ENABLED` (off), plus one `OPEN_SCIENCE_CHANNEL_<NAME>_ENABLED` per channel |
+| Credits | `evimedCredits*.mjs` | `OPEN_SCIENCE_EVIMED_CREDITS_ENABLED` (off) |
+| Public evidence pages | `evidence*.mjs` | `OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED` (off) |
+| Web read, render, managed browser | `webRead*.mjs`, `webRender*.mjs`, `managedBrowser*.mjs` | `OPEN_SCIENCE_WEB_READ_ENABLED` (on), `OPEN_SCIENCE_WEB_RENDER_ENABLED` and `OPEN_SCIENCE_MANAGED_BROWSER_ENABLED` (off) |
+
+Capsules, plugin settings, the inbox, the usage ledger, the skill library, document export
+and extensions have no switch of their own: they exist whenever the product database does.
+Self-registration is `OPEN_SCIENCE_SELF_REGISTRATION_ENABLED` (on).
+
+## Gateways
+
+A runtime holds no provider key. It calls the control plane's gateways with a signed,
+timestamped token that each gateway verifies; an unset gateway refuses that egress by a named
+code. Paths include `/internal/model/v1/chat/completions` and `/internal/model/v1/messages`
+(`modelGateway.mjs`), `/internal/sources/v1/fetch` (`publicSourceGateway.mjs`, which also
+backs `web_read`: robots.txt honoured, every hop's DNS answer checked, private addresses
+refused), `/internal/search/v1/query`, `/internal/kb/v1/search`, `/internal/frontier/v1/search`,
+`/internal/capsules/v1`, `/internal/geo/v1`, `/internal/vcr/v1`, `/internal/results/v1` and
+`/internal/semantics/v1`. A runtime in an AgentBay session, which is on the internet, reaches
+the same gateways through `/runtime-gateway/<name>/` (`runtimeGatewayEntry.mjs`), with a
+per-runtime rate limit.
+
+## Security defaults
+
+- Auth modes (`OPEN_SCIENCE_AUTH_MODE`): `development` (the default when nothing is set),
+  `local` (password login; bootstrap user from `OPEN_SCIENCE_BOOTSTRAP_USER` and
+  `OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE`, created by `pnpm configure:local-auth`), `oidc`
+  (Authorization Code with PKCE, state/nonce/ID Token validation) and `evimed`. Under
+  `NODE_ENV=production`, `development` is rejected by readiness, and a bootstrap password
+  taken from the process environment is rejected.
+- Mutating cookie-backed requests need the `X-Open-Science-CSRF` token returned by login and
+  `/api/me`. The active project comes from `X-Open-Science-Project` or `projectId=`.
+- Security headers and a CSP are on by default (`OPEN_SCIENCE_SECURITY_HEADERS`); production
+  CORS admits only `OPEN_SCIENCE_PUBLIC_URL`'s origin and exact HTTPS entries of
+  `OPEN_SCIENCE_CORS_ORIGINS`. Production also requires `OPEN_SCIENCE_TRUST_PROXY`.
+- Docker runtimes drop capabilities, set `no-new-privileges` and a pids limit, run with a
+  read-only root and a bounded tmpfs, and default to no network. Host or shared-container
+  networking is refused; in production any other network needs both
+  `OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS=true` and
+  `OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK=true`.
+- In-memory fixed-window rate limits: 600 requests per minute per client address, 20 per five
+  minutes for login, 120 per minute per user/project/command
+  (`OPEN_SCIENCE_RATE_LIMIT_*`, `OPEN_SCIENCE_AUTH_RATE_LIMIT_*`,
+  `OPEN_SCIENCE_COMMAND_RATE_LIMIT_*`).
+- Every response carries `X-Open-Science-Request-Id`; failed `/api/*` requests are written,
+  sanitized, to `.openscience/errors.jsonl`. Account export and deletion are
+  `GET /api/account/export` and `DELETE /api/account`.
+
+## Health, readiness and metrics
+
+`GET /api/health` is liveness. `GET /api/ready` runs the checks: data directory, static
+assets, auth, state store, memory, usage ledger, security, observability, release manifest,
+resource limits, backup, runtime sandbox and controller, and each enabled module's own
+invariants. `GET /api/metrics` is the current project's storage, task and runtime snapshot.
+`GET /api/ops/metrics` is the low-cardinality deployment metrics endpoint, behind
+`OPEN_SCIENCE_OPERATOR_METRICS_TOKEN` or `OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE`
+(production requires one). Alertmanager posts to `/api/ops/alerts`.
+
+## Run it
+
+From `OpenScience/` (Node 22.22 or newer, `pnpm install` first):
 
 ```bash
-OPEN_SCIENCE_DATA_DIR=.openscience-web-data node apps/server/src/index.mjs
+pnpm dev:server    # the HTTP API on 127.0.0.1:8787, file state store, development auth
+pnpm dev:evimed    # local stack: local auth, serves apps/web/dist if built, port 8798
+pnpm dev           # the Vite dev server, in another terminal
 ```
 
-Then build the frontend with `VITE_OPEN_SCIENCE_API_URL=http://127.0.0.1:8787/api`.
+Relative defaults (`.openscience-web-data`, the bundled skill roots) resolve against the
+working directory, and `pnpm dev:server` runs the package script from `apps/server`. To keep
+them under `OpenScience/`, run `node apps/server/src/index.mjs` from there, or set
+`OPEN_SCIENCE_DATA_DIR`; `pnpm dev:evimed` already runs from `OpenScience/`.
 
-Verification:
+A real runtime needs Docker, the runtime image and
+`OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker`; without them set
+`OPEN_SCIENCE_RUNTIME_MODE=mock`. Point the frontend at the API with
+`VITE_OPEN_SCIENCE_API_URL=http://127.0.0.1:8787/api`. Hosted deployment is described in
+`docs/WEB_DEPLOYMENT.md` and the Compose stacks under `deploy/web/`.
+
+## Tests
 
 ```bash
-pnpm --filter @ai4s/server test
-pnpm --filter @ai4s/server test:e2e
-OPEN_SCIENCE_SMOKE_BASE_URL=https://science.example.com \
-OPEN_SCIENCE_SMOKE_USERNAME=admin \
-OPEN_SCIENCE_SMOKE_PASSWORD=... \
-pnpm smoke:deployment
+pnpm test:server                                           # whole suite (scripts/test/runServerTests.mjs)
+pnpm --filter @ai4s/server exec node --test test/<file>.test.mjs   # one file
+pnpm lint:server && pnpm typecheck:server
+pnpm smoke:deployment    # against a deployed stack: OPEN_SCIENCE_SMOKE_BASE_URL, _USERNAME, _PASSWORD
 ```
+
+`*.integration.test.mjs` files need PostgreSQL and skip unless
+`OPEN_SCIENCE_TEST_POSTGRES_URL` is set. With it set, `pnpm test:server` runs those files one
+at a time, because each resets and counts across the schema it is given. `pnpm test:web:e2e`
+runs the hosted production end-to-end script.
+
+## Known limits
+
+The task queue, the rate limiter and per-project storage mutation serialization live in one
+process; running several API replicas needs distributed coordination or per-project routing.
+Project quotas are checked by the API and a runtime monitor, not enforced by the filesystem.
+
+## Where the rest is
+
+`../../docs/TECHNICAL_DESIGN.md` (architecture), `../../docs/WEB_DEPLOYMENT.md`,
+`../../docs/WEB_OPERATIONS_RUNBOOK.md`, `../../docs/WEB_PRIVACY_AND_COMPLIANCE.md`,
+`../../docs/EVIMED_RELEASE_AND_DELIVERY_CHECKLIST.md`, and `../../AGENTS.md` for the working
+rules of this subtree.
