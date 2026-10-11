@@ -31,7 +31,9 @@ the newest decision wins and the code is the final word.
 | [`2026-10-07-rename-strings.md`](../OpenScience/docs/2026-10-07-rename-strings.md) | The module renames of 2026-10-07 (循证 GEO, 虚拟临床研究) and where the names appear. |
 | [`DESIGN.md`](../OpenScience/DESIGN.md) | The design system: tokens, the generated artifacts and the page structure. |
 
-The frontier feed's design is the plan
+The frontier feed (前沿动态) as built is described in
+[`FRONTIER_FEED_TECHNICAL_DESIGN.md`](../OpenScience/docs/FRONTIER_FEED_TECHNICAL_DESIGN.md) (zh); the plan it
+was built from is
 [`2026-09-21-frontier-feed-medical-aihot-plan.md`](superpowers/specs/2026-09-21-frontier-feed-medical-aihot-plan.md)
 (zh).
 
