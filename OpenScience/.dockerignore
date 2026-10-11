@@ -9,9 +9,6 @@
 node_modules
 .git
 apps/*/node_modules
-apps/desktop/dist
-apps/desktop/src-tauri/target
-apps/desktop/src-tauri/binaries
 .openscience-web-data
 .DS_Store
 *.log
