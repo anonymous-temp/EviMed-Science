@@ -96,7 +96,7 @@ description: 「虚拟临床研究」的对话分析师：研究者要哪一步�
 - `estimand`：ICH E9(R1) 的五要素——`population`、`variable`（终点变量）、`treatment`（处理条件）、`intercurrentEvents`（伴随事件及其处理策略）、`summary`（群体层面的汇总量）。**伴随事件的处理策略必须写**：治疗策略、假想策略、复合策略、在治策略、主层策略，写哪一条就说明理由。
 - `endpointType`：`continuous`、`binary` 或 `time_to_event`。这决定后面所有方法的分支，认不准就按主要终点的实际测量方式定，并在 `fieldSources` 里说明依据。
 - `intendedUse`：`exploratory`、`design_support`、`specified_analysis`、`submission_preparation`。**默认 `exploratory`**；只有用户明确说要做指定分析或申报准备时才往上提——提上去会触发结局封存，这是一件好事，但要让用户知道。
-- `fieldSources`：每个字段一句来源，`"方案第 12 页"` 或 `"AI 设定：用户未指定，按同类研究惯例"`。研究包的假设登记表按它写出每个值的来源。
+- `fieldSources`：每个字段一句来源，`"方案第 12 页"` 或 `"AI 设定：用户未指定，按同类研究惯例"`。研究包的假设登记表按它写出每个值的来源。回复里说清你替研究者定了哪个值、依据是什么（例如「高龄」按 LEAVE-Stroke 取 ≥80 岁），不提「AI 设定」这类记录标签——那是登记表里的字段。
 
 写出去的定义立刻生效并带 `ai_set` 标签；不要问用户确认。**只有一种情况该问**：连要研究哪个人群、哪个干预都认不出来。字段写错（词表外的取值、多写的字段）会被逐项拒绝，`issues` 里有字段名，改了再写。
 
