@@ -52,7 +52,7 @@
 | `research/upstream-limits-2026-09-21.md`、`upstream-limits-detail-2026-09-21.md` | 上游接口的限速与模型价格核对 |
 | `src/` | 十张图的源文件、正文分段、组装与导出脚本 |
 
-复跑：`merge_registry.py` → `probe_registry.py local …` 与 `probe_registry.py ssh:evimed …` → `classify_registry.py` → `src/make-charts.py` → `src/render.mjs` → `src/build-doc.py` → `src/export-pdf.mjs`。
+复跑：`merge_registry.py` → `probe_registry.py local …` 与 `probe_registry.py ssh:<production-host> …` → `classify_registry.py` → `src/make-charts.py` → `src/render.mjs` → `src/build-doc.py` → `src/export-pdf.mjs`。
 
 核查中踩到、实现时要记住的几件事：
 

@@ -10,7 +10,7 @@
 
 **AIHOT 是什么。** aihot.news（旧址 aihot.virxact.com），「数字生命卡兹克」做的中文 AI 资讯聚合站：机器每天读一两百个 AI 信源，大模型筛掉噪声、打分、写中文摘要和推荐理由，编成精选、热点榜和日报。
 
-**GitHub 地址与开源状态。** 官方仓库是 `github.com/KKKKhazix/khazix-skills`，其中 `aihot/` 目录是官方的 Agent Skill（一份调用说明加安装脚本）。**网站本身——抓取、打分、聚类、页面——没有开源。** 已 clone 到本机 `/home/coder/workspace/aihot-reference/`，连同四个有参考价值的周边仓库（见 1.1）。另外，它的公开接口写明：对外商业产品要先拿书面授权。所以这个方案**不接它的接口，整条管线自己建**；AI 那一栏的信源也自己配。
+**GitHub 地址与开源状态。** 官方仓库是 `github.com/KKKKhazix/khazix-skills`，其中 `aihot/` 目录是官方的 Agent Skill（一份调用说明加安装脚本）。**网站本身——抓取、打分、聚类、页面——没有开源。** 已 clone 到本机 `/workspace/aihot-reference/`，连同四个有参考价值的周边仓库（见 1.1）。另外，它的公开接口写明：对外商业产品要先拿书面授权。所以这个方案**不接它的接口，整条管线自己建**；AI 那一栏的信源也自己配。
 
 **我们做什么。** 在 EviMed 里加一个栏目「前沿动态」：平台每天替用户读 267 个医学与 AI 信源，只留下值得看的二三十条，每条标明**谁说的、证据有多硬**，点开就是原文；并且每一条都能接着往下做——带着它开一个研究、存进知识库、让主动科研持续盯着。
 
@@ -64,7 +64,7 @@
 | `zycyyyya/finhot` | 照着做的金融保险版（Skill 形态） | 换领域时信源与分类怎么改的先例 |
 | `tbang6860-commits/aihot` | 同名但无关的热点聚合项目（Express 加 React） | 仅作对照 |
 
-位置：`/home/coder/workspace/aihot-reference/`，在 EviMed 仓库之外，不进版本库。
+位置：`/workspace/aihot-reference/`，在 EviMed 仓库之外，不进版本库。
 
 ## 1.2 它的产品形态
 
@@ -777,7 +777,7 @@ frontier_search(q, lane?, specialty?, window = "30d", mode = "selected", limit =
 
 **已经到位或不再需要的：**
 
-- **境外云主机**：Vultr 东京（45.32.58.204），业主 9 月 22 日重装后可以登录，当天验收通过（10.2.5），联网搜索、北京连不上的三个库和被拒网页的代读当天已接通。
+- **境外云主机**：Vultr 东京（<edge-node>），业主 9 月 22 日重装后可以登录，当天验收通过（10.2.5），联网搜索、北京连不上的三个库和被拒网页的代读当天已接通。
 - **文档解析接口不需要密钥**：9 月 22 日在生产机实测，不带密钥解析 PDF 与 docx 都成功（我先前测到的 500 是 .txt 文件，平台对纯文本本来就本地读取）。
 - **AgentBay 密钥只作后备。** 国内监管站点改由北京主机上的自有无头浏览器读（9 月 22 日实测可行，10.2.6）。业主会照样提供，用于瑞数开始识别无头浏览器时的切换，以及运行时迁到 AgentBay。
 - **EviMed 资料检索接口**是业主自己开发的、不限量，不需要同意或确认余额；索引新鲜度 9 月 22 日量过一次（12.2）。
@@ -2938,7 +2938,7 @@ DOI 和身份键上的两个唯一索引是去重的最后一道保险：管线�
 | `research/upstream-limits-2026-09-21.md`、`upstream-limits-detail-2026-09-21.md` | 上游接口的限速与模型价格核对 |
 | `src/` | 十张图的源文件、正文分段、组装与导出脚本 |
 
-复跑：`merge_registry.py` → `probe_registry.py local …` 与 `probe_registry.py ssh:evimed …` → `classify_registry.py` → `src/make-charts.py` → `src/render.mjs` → `src/build-doc.py` → `src/export-pdf.mjs`。
+复跑：`merge_registry.py` → `probe_registry.py local …` 与 `probe_registry.py ssh:<production-host> …` → `classify_registry.py` → `src/make-charts.py` → `src/render.mjs` → `src/build-doc.py` → `src/export-pdf.mjs`。
 
 核查中踩到、实现时要记住的几件事：
 

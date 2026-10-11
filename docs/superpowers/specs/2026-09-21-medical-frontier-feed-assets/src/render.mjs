@@ -2,8 +2,8 @@
 // Usage: node render.mjs   (paths below are this machine's toolchain; override with env)
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath, pathToFileURL } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
-const core = process.env.PLAYWRIGHT_CORE ?? "/home/coder/workspace/EviMedScience/.evimed-local/toolchains/playwright-core/node_modules/playwright-core/index.mjs";
-const exe = process.env.CHROMIUM ?? "/home/coder/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell";
+const core = process.env.PLAYWRIGHT_CORE ?? "/workspace/EviMedScience/.evimed-local/toolchains/playwright-core/node_modules/playwright-core/index.mjs";
+const exe = process.env.CHROMIUM ?? "/workspace/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell";
 const { chromium } = await import(pathToFileURL(core).href);
 const browser = await chromium.launch({ executablePath: exe });
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 2 });

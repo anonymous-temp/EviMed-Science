@@ -4,7 +4,7 @@
 NOT RUN YET: it needs the deployment's EviMed API key, and the platform's rule is that touching a credential needs the
 owner's go-ahead first. Once given, run it from this machine so nothing is written on the host:
 
-  ssh evimed 'docker exec -i web-open-science-web-1 python3 - ' < tools/evimed_api_freshness.py >> research/evimed-freshness.jsonl
+  ssh <production-host> 'docker exec -i web-open-science-web-1 python3 - ' < tools/evimed_api_freshness.py >> research/evimed-freshness.jsonl
 
 Inside the web container the key is the file the control plane already reads (/run/secrets/evimed-api-key, see
 deploy/web/docker-compose.yml); this script opens it, sends it only in the Authorization header, and never prints,

@@ -12,7 +12,7 @@ Tools
   - WebSearch and WebFetch are deferred tools: load them first with ToolSearch, query
     "select:WebSearch,WebFetch".
   - Verifier (mandatory for every row):
-      python3 /home/coder/workspace/EviMedScience/docs/superpowers/specs/2026-09-21-medical-frontier-feed-assets/tools/verify_feed.py <url> [<url> ...]
+      python3 /workspace/EviMedScience/docs/superpowers/specs/2026-09-21-medical-frontier-feed-assets/tools/verify_feed.py <url> [<url> ...]
     It prints one JSON line per URL: http, content_type, kind (rss|atom|jsonfeed|json|html), items,
     latest, age_days, dated_last_7d, anti_bot, advertised_feeds, verdict
     (feed-ok | api-ok | page-ok | blocked | failed). Copy that JSON (minus "url") into the row's

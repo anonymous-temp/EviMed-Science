@@ -1,5 +1,5 @@
 import fs from "node:fs"; import path from "node:path"; import { pathToFileURL } from "node:url";
-const store = "/home/coder/workspace/EviMedScience/OpenScience/node_modules/.pnpm";
+const store = "/workspace/EviMedScience/OpenScience/node_modules/.pnpm";
 const find = (pkg) => { const dir = fs.readdirSync(store).find((d) => d.startsWith(pkg + "@")); return pathToFileURL(path.join(store, dir, "node_modules", pkg, "index.js")).href; };
 const { micromark } = await import(find("micromark")); const { gfm, gfmHtml } = await import(find("micromark-extension-gfm"));
 const md = fs.readFileSync(process.argv[2], "utf8");

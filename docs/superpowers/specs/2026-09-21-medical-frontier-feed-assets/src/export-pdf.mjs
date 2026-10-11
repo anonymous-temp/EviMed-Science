@@ -8,8 +8,8 @@ const store = process.env.PNPM_STORE ?? path.resolve(specs, "..", "..", "..", "O
 const find = (pkg) => { const dir = fs.readdirSync(store).find((d) => d.startsWith(pkg + "@")); return pathToFileURL(path.join(store, dir, "node_modules", pkg, "index.js")).href; };
 const { micromark } = await import(find("micromark"));
 const { gfm, gfmHtml } = await import(find("micromark-extension-gfm"));
-const core = process.env.PLAYWRIGHT_CORE ?? "/home/coder/workspace/EviMedScience/.evimed-local/toolchains/playwright-core/node_modules/playwright-core/index.mjs";
-const exe = process.env.CHROMIUM ?? "/home/coder/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell";
+const core = process.env.PLAYWRIGHT_CORE ?? "/workspace/EviMedScience/.evimed-local/toolchains/playwright-core/node_modules/playwright-core/index.mjs";
+const exe = process.env.CHROMIUM ?? "/workspace/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell";
 const { chromium } = await import(pathToFileURL(core).href);
 const md = fs.readFileSync(path.join(specs, name + ".md"), "utf8");
 const body = micromark(md, { extensions: [gfm()], htmlExtensions: [gfmHtml()], allowDangerousHtml: false });
