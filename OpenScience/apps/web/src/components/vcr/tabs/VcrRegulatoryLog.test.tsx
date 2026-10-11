@@ -62,8 +62,9 @@ describe("the regulatory log", () => {
     expect(items.map((item) => item.getAttribute("data-vcr-regulatory-contact"))).toEqual(["reg_2", "reg_1"]);
     const first = items[0].textContent ?? "";
     for (const piece of ["2026-08-14", "药审中心（CDE）", "Pre-IND 沟通交流", "讨论单臂加外部对照的可行性", "结论：同意以外部对照作支持性证据", "附件：minutes.pdf；briefing/package.zip"]) expect(first).toContain(piece);
-    expect(first).not.toContain("AI 设定");
-    expect(items[1].textContent).toContain("AI 设定");
+    // Who recorded a contact is the ledger's record (R36): a contact a run wrote reads like any other, with no chip saying an AI set it.
+    for (const item of items) expect(item.textContent).not.toContain("AI 设定");
+    expect(items[1].textContent).toContain("FDA");
     // the log has its own 添加; the action row no longer offers the first-entry button
     expect(screen.getByRole("button", { name: "添加" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "记录监管沟通" })).toBeNull();

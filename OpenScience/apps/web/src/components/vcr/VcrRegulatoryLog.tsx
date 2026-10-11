@@ -31,7 +31,6 @@ export function VcrRegulatoryLog({ contacts, canWrite, onAdd }: { contacts: read
               <span className="tabular-nums text-text-2">{contact.date ?? "日期未记"}</span>
               <span>{contact.agency}</span>
               {contact.type && <Tag>{contact.type}</Tag>}
-              {contact.source === "ai_set" && <Tag>AI 设定</Tag>}
             </p>
             {contact.summary && <p className="mt-1 whitespace-pre-wrap break-words text-ui text-text-2">{contact.summary}</p>}
             {contact.outcome && (
