@@ -333,7 +333,10 @@ export function runFinishedReachesInbox(run, { internalProject = false, automate
  * @param {Record<string, any> | null | undefined} run @returns {boolean}
  */
 export function isGoalContinuation(run) {
-  return run?.effectiveRouteReason === "loopx-continuation";
+  // An adopted turn's reason is the adoption prefix and its route (`adopted:runtime-ui:loopx-continuation`,
+  // agentRuns.adoptNativeTurns), which is what production records — the bare route never reaches the ledger.
+  const reason = String(run?.effectiveRouteReason ?? "");
+  return reason === "loopx-continuation" || reason.endsWith(":loopx-continuation");
 }
 
 /**

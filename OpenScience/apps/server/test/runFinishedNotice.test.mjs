@@ -253,9 +253,13 @@ test("only a person's own research reaches the inbox; evaluations and background
 test("a goal's automatic turns reach the inbox as one item per conversation, whatever their length", () => {
   const project = { id: "default" };
   const turn = finished("run-g2", "2026-09-18T03:00:00.000Z", {
-    durationMs: 40_000, artifacts: [], automated: true, effectiveRouteReason: "loopx-continuation", sessionId: "session-goal-1",
+    // The reason the ledger records for an adopted continuation turn (live acceptance, 2026-10-11).
+    durationMs: 40_000, artifacts: [], automated: true, effectiveRouteReason: "adopted:runtime-ui:loopx-continuation", sessionId: "session-goal-1",
   });
   assert.equal(isGoalContinuation(turn), true);
+  assert.equal(isGoalContinuation({ effectiveRouteReason: "loopx-continuation" }), true);
+  assert.equal(isGoalContinuation({ effectiveRouteReason: "adopted:runtime-ui:unrouted:open-domain" }), false);
+  assert.equal(isGoalContinuation({ effectiveRouteReason: "loopx-continuation-x" }), false);
   // The ledger's `automated` is the driver's, not a harness's: the goal is the researcher's own work.
   assert.equal(runFinishedReachesInbox(turn, { automated: true }), true, "a short automatic turn nobody watched");
   assert.equal(runFinishedReachesInbox({ ...turn, status: "canceled", canceledBy: "user" }, { automated: true }), false);
