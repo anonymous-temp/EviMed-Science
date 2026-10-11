@@ -1,7 +1,7 @@
 {
   "capability": "evidence-appraisal",
   "brief": "appraisal-001-sglt2-hfpef",
-  "base": "https://123.57.53.47",
+  "base": "https://<pilot-host>",
   "project": "acceptance-evidence-appraisal",
   "session": "acc-evidence-appraisal-musc4diz",
   "runId": "run_e84f15ad0ba3aca2cc48e1beec36bde8",

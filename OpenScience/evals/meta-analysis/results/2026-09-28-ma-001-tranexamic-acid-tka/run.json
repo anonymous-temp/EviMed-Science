@@ -1,7 +1,7 @@
 {
   "capability": "meta-analysis",
   "brief": "ma-001-tranexamic-acid-tka",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-meta-0928",
   "session": "acc-meta-analysis-mul726h5",
   "runId": "run_5b187bb23c5bffe5e5b06b99da7d391f",

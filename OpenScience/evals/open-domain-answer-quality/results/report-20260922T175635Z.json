@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "judgePromptVersion": 1,
   "judgeModel": "deepseek-v4-pro",
-  "answersFile": "/home/coder/workspace/EviMedScience/OpenScience/evals/open-domain-answer-quality/results/answers-20260922T175448Z.json",
+  "answersFile": "/workspace/workspace/EviMedScience/OpenScience/evals/open-domain-answer-quality/results/answers-20260922T175448Z.json",
   "generatedAt": "2026-09-22T17:56:35Z",
   "cases": [
     {
@@ -66,7 +66,7 @@
       "domain": "pharmacy-safety",
       "question": "最近一个月国内外有没有新的药品安全警示或说明书修订？",
       "missingAnswer": true,
-      "collectionError": "GET https://82.156.128.153/api/agent-runs?limit=200 failed: timed out. Is an OpenScience server running at that URL? (start one with `pnpm dev:server`, or use --answers-file for offline judging)"
+      "collectionError": "GET https://<production-host>/api/agent-runs?limit=200 failed: timed out. Is an OpenScience server running at that URL? (start one with `pnpm dev:server`, or use --answers-file for offline judging)"
     },
     {
       "id": "frontier-case-3",

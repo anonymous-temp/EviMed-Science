@@ -1,7 +1,7 @@
 {
   "capability": "comprehensive-drug-evaluation",
   "brief": "cde-001-dapagliflozin-ckd",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-comprehensive-drug-evaluation",
   "session": "acc-comprehensive-drug-e-mujh8uhp",
   "runId": "run_7715573f318a04b7ff7638d6ec3a1c2e",

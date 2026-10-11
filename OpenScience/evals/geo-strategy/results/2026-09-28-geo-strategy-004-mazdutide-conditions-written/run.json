@@ -1,7 +1,7 @@
 {
   "capability": "geo-strategy",
   "brief": "geo-strategy-004-mazdutide-conditions-written",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "geo",
   "session": "acc-geo-strategy-mukqfl6e",
   "runId": "run_0c0d84e10f9fc68cdde65f9886855c1d",

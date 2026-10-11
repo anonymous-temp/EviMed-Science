@@ -1,7 +1,7 @@
 {
   "capability": "geo-insight",
   "brief": "geo-insight-003-clopidogrel-identity",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "p-d69f6790",
   "session": "geo-4596dde470dfdfe69a531e275fbc2dd2",
   "runId": "run_d1ab0bf93a96d037498644ff984a21d2",

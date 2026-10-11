@@ -1,7 +1,7 @@
 {
   "capability": "adr-analysis",
   "brief": "adr-001-osimertinib-cardiac",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-adr-analysis",
   "session": "acc-adr-analysis-mujql42o",
   "runId": "run_24835d2b6d455589e3ef2c9461755bce",

@@ -2,7 +2,7 @@
   "capability": "source-understanding",
   "brief": null,
   "briefCorrespondence": "None: a real upload, not a brief. Its docType (note-memo) is that of the fixture brief `notes` in briefs.json.",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "evimed-sources (the account's internal source project), workspace src_1c3a3a0f7129a3b6a80207a7adda1968-g1-494e28e41a2ad690808c223b",
   "session": "session_e5ee11ec2bc06bff4f4fea75588d23b4",
   "runId": "run_f3acd23a1a7728702d5f5dd22783b4b2",

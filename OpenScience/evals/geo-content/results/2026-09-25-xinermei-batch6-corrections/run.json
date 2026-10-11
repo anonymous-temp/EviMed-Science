@@ -2,7 +2,7 @@
   "capability": "geo-content",
   "brief": null,
   "briefCorrespondence": "geo-006-semaglutide-correction: the same kind of work — correction materials for 讲错我方 the platform measured — on 信尔美 rather than 诺和盈. Dispatched with the orchestrator's batch brief (prompt below, verbatim).",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "geo",
   "geoProject": "geo_46a709c7e4f73d5d2e019df6b6d418a1 (信尔美 / 玛仕度肽注射液, the 循证 GEO acceptance project of the acceptance account)",
   "session": "session_2a5424b2dba8c3d4d49d3530c7ddd3ac",

@@ -246,7 +246,7 @@
         "tenantId": "",
         "userId": "",
         "projectId": "",
-        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+        "workspaceDir": "/workspace/workspace/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
       }
     }
   }

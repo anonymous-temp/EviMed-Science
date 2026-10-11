@@ -1,7 +1,7 @@
 {
   "capability": "geo-content",
   "brief": "geo-001-suxiao-baseline",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-geo-content",
   "session": "acc-geo-content-mttp40pd",
   "runId": "run_5a8ba1691dd23b7e40431dbc362b8f92",

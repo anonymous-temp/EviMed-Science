@@ -1,7 +1,7 @@
 {
   "capability": "research-grant-development",
   "brief": "grant-001-nsfc-general",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-research-grant-development",
   "session": "acc-research-grant-devel-mtu24vlw",
   "runId": "run_e3c4d584adb5cc7ab73e1eb86956ea80",

@@ -1,7 +1,7 @@
 {
   "capability": "statistical-analysis",
   "brief": "statistics-001-wdbc-group-comparison",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-t21-statistical-analysis-5ad89da42cc5",
   "session": "acc-statistical-analysis-munh7b7h",
   "runId": "run_6b630afe140deee843183a37a6753b56",

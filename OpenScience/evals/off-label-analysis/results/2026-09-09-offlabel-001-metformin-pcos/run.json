@@ -1,7 +1,7 @@
 {
   "capability": "off-label-analysis",
   "brief": "offlabel-001-metformin-pcos",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-off-label-analysis",
   "session": "acc-off-label-analysis-mttp40mg",
   "runId": "run_59c14e8c666a45804a008f3c31fb7dfc",

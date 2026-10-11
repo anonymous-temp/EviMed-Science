@@ -1,7 +1,7 @@
 {
   "capability": "research-topic-selection",
   "brief": "ordinary-constrained-cohort",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-topic-0928",
   "session": "acc-research-topic-selec-mukr7g8s",
   "runId": "run_cb0fb23406507d8fbc22fc78ef7c7b31",

@@ -36,7 +36,7 @@
         "tenantId": "",
         "userId": "",
         "projectId": "",
-        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+        "workspaceDir": "/workspace/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
       }
     }
   }

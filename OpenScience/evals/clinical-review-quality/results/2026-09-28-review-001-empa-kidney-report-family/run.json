@@ -1,7 +1,7 @@
 {
   "capability": "clinical-evidence-synthesis",
   "brief": "review-001-empa-kidney-report-family",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-ces-0928a",
   "session": "acc-clinical-evidence-sy-mukkset5",
   "runId": "run_dc51742c48fd1c2287ee93d081351916",

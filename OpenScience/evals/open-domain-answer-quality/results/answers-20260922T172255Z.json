@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "collectedAt": "2026-09-22T17:22:55Z",
   "mode": "live",
-  "baseUrl": "https://82.156.128.153",
+  "baseUrl": "https://<production-host>",
   "label": "off-1",
   "project": "eval-frontier-off-1",
   "answers": [

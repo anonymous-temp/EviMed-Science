@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "judgePromptVersion": 1,
   "judgeModel": "deepseek-v4-pro",
-  "answersFile": "/home/coder/workspace/EviMedScience/OpenScience/evals/open-domain-answer-quality/results/answers-20260730T111533Z.json",
+  "answersFile": "/workspace/workspace/EviMedScience/OpenScience/evals/open-domain-answer-quality/results/answers-20260730T111533Z.json",
   "generatedAt": "2026-07-30T11:16:14Z",
   "cases": [
     {

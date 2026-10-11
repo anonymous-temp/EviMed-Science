@@ -1,7 +1,7 @@
 {
   "capability": "drug-selection",
   "brief": "ds-001-doac-nvaf-no-rubric",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-drug-selection",
   "session": "acc-drug-selection-mujhdstc",
   "runId": "run_d94fd19ee5a6ee3dedd020117963aaf8",

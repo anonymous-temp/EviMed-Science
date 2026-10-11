@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "label": "fidelity-gate-v1",
-  "corpusPath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/evals/title-to-paper/corpus-v3/manifest.json",
+  "corpusPath": "/workspace/Desktop/EviMed Science/OpenScience/evals/title-to-paper/corpus-v3/manifest.json",
   "startedAtCase": 0,
   "requestedCases": 9,
   "succeeded": 9,

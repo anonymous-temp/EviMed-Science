@@ -1,7 +1,7 @@
 {
   "capability": "geo-proposal",
   "brief": "geo-proposal-001-mazdutide-package",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "geo",
   "session": "session_0d5ba9d1c935475448f7ba25060b0c07",
   "runId": "run_cf436f220d859f3300fa967f9bec6a23",

@@ -1,7 +1,7 @@
 {
   "capability": "peer-review",
   "brief": "review-001-retrospective-cohort-strobe",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-peer-review",
   "session": "acc-peer-review-muti6n0z",
   "runId": "run_0370f95c62e10836294c0253a59f6195",

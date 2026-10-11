@@ -1,7 +1,7 @@
 {
   "capability": "manuscript-support",
   "brief": "ms-001-strobe-methods-retrospective-cohort",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-manuscript-support",
   "session": "acc-manuscript-support-mttvdmgy",
   "runId": "run_6450c24d7c5bb380eecd7c425129beee",

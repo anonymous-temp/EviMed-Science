@@ -2,7 +2,7 @@
   "capability": "geo-strategy",
   "brief": null,
   "briefCorrespondence": "Closest brief: geo-strategy-004-mazdutide-conditions-written (same product and step). The run was dispatched with the orchestrator's own step-5 brief, not with that brief's text.",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "geo",
   "geoProject": "geo_46a709c7e4f73d5d2e019df6b6d418a1 (信尔美 / 玛仕度肽注射液, the 循证 GEO acceptance project of the acceptance account)",
   "session": "session_e6b4d7edcc3e1da6a123175bef510c07",

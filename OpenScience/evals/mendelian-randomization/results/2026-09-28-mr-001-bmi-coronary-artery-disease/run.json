@@ -1,7 +1,7 @@
 {
   "capability": "mendelian-randomization",
   "brief": "mr-001-bmi-coronary-artery-disease",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-mr-0928",
   "session": "acc-mendelian-randomizat-mukt3hfm",
   "runId": "run_af40501c0bca1072ccee892c9baa97a7",

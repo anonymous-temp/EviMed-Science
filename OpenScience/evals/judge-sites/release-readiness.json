@@ -692,7 +692,7 @@
     },
     "pythonEngines": "Shared gateway client 6 tests and five focused engine suites 19 tests passed, including the merged MetaAgent concurrency changes. Prior six source-delta image proofs remain separately scoped.",
     "privateEvidence": {
-      "directory": "/home/coder/workspace/EviMedScience/.evimed-local/acceptance/jev-main-20261007",
+      "directory": "/workspace/workspace/EviMedScience/.evimed-local/acceptance/jev-main-20261007",
       "logs": [
         {
           "file": "jev-main-alignment.log",

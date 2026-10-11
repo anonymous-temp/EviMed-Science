@@ -1,7 +1,7 @@
 {
   "capability": "bibliometric-analysis",
   "brief": "biblio-001-glp1-obesity-landscape",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "acceptance-bibliometric-analysis",
   "session": "acc-bibliometric-analysi-mtu3cpyh",
   "runId": "run_3005de2c6f03139babaf4d7820c5a2ca",

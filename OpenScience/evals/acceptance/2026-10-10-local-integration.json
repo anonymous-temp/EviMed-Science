@@ -537,7 +537,7 @@
     ],
     "retention": "Sanitized compact records committed; private raw logs, initial failures, model receipts, numeric results and screenshots archived separately with hashes. Credentials, session state and installed dependencies excluded.",
     "archive": {
-      "path": "/home/coder/workspace/EviMedScience/.evimed-local/acceptance/release-closure-20261010/closure-evidence-20261010T052936Z.tar.gz",
+      "path": "/workspace/workspace/EviMedScience/.evimed-local/acceptance/release-closure-20261010/closure-evidence-20261010T052936Z.tar.gz",
       "sha256": "c54bfa572810a57f29581833b5ac65299d436a8de5aacf133f21881dcae97303",
       "bytes": 28626023,
       "evidenceFiles": 1440,
@@ -551,7 +551,7 @@
     },
     "previousPrivateRoot": "/tmp/evimed-integration-audit",
     "priorArchive": {
-      "path": "/home/coder/workspace/EviMedScience/.evimed-local/acceptance/integration-local-20261010/local-evidence-20261010T030845Z.tar.gz",
+      "path": "/workspace/workspace/EviMedScience/.evimed-local/acceptance/integration-local-20261010/local-evidence-20261010T030845Z.tar.gz",
       "sha256": "b7bf1e8fb94b43e3b3fa3cef8407028890d6b806bc27f5d5329743d1624f4f41",
       "bytes": 13261026,
       "evidenceFiles": 1034,

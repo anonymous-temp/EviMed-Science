@@ -2,7 +2,7 @@
   "capability": "geo-content",
   "brief": null,
   "briefCorrespondence": "geo-005-mazdutide-first-batch: the same product and the same case — the first battlefield batch after the strategy step (card, Q&A, popular and deep articles for the battlefield groups). Dispatched with the orchestrator's batch brief, not with that brief's text.",
-  "base": "https://82.156.128.153",
+  "base": "https://<production-host>",
   "project": "geo",
   "geoProject": "geo_46a709c7e4f73d5d2e019df6b6d418a1 (信尔美 / 玛仕度肽注射液, the 循证 GEO acceptance project of the acceptance account)",
   "session": "session_2e114dd75f9732355016506cf3c294a0",
