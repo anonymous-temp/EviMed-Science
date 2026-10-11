@@ -83,23 +83,25 @@ archives plus sanitized health metadata.
   `Strict-Transport-Security: max-age=31536000`.
 - Hosted sign-out revokes the server session. Sign-out, account deletion, and
   authenticated requests receiving HTTP 401 clear the frontend's in-memory CSRF
-  token and selected-project key, disconnect the Runtime client, and drop
-  account-derived session titles, thread content, pending questions/permissions,
-  workspace state, and inspector state before another user can sign in on the
-  same browser.
-- The hosted AppShell checks `/api/me` before starting a Runtime. Anonymous
-  browsers are sent directly to the Settings login surface, and a session-ended
-  event returns an active view there; desktop startup remains independent of
-  this Web authentication gate.
+  token, cached `/api/me` answer and selected-project key, empty the project
+  store, and send the browser to the login page, which unmounts every page,
+  including the frame that shows the conversation, before another user can sign
+  in on the same browser.
+- The hosted AppShell checks `/api/me` before it renders any page or starts a
+  Runtime. Anonymous browsers are sent directly to the `/login` page, and a
+  session-ended event returns an active view there.
 - In production local and OIDC modes, mutating cookie-backed APIs require an
   `X-Open-Science-CSRF` token returned by `/api/auth/login` or `/api/me`. The
-  hosted frontend sends it automatically for command, task, project, file, and
-  proxied runtime writes. The OpenCode proxy strips browser session, project,
-  and CSRF headers before forwarding to the runtime, and its runtime proxy logs
-  record only sanitized method/route/status/duration and request/response byte
-  count metadata. The proxy also allowlists the browser-facing runtime routes
-  and blocks runtime config/auth/OAuth/MCP mutation endpoints before request
-  bodies are parsed or a runtime is started.
+  hosted frontend sends it automatically for every mutating call. The browser
+  never reaches an agent kernel: the control plane holds the one connection to a
+  project's DSH kernel and serves its own run-event stream
+  (`GET /api/runs/:id/events`), and the earlier pass-through route
+  (`/api/opencode/*`) is retired and answers HTTP 410
+  `runtime_passthrough_retired`. Where a deployment enables the kernel's own
+  browser application, the control plane forwards that traffic on an origin of
+  its own after authentication and project authorization, strips the browser
+  session, project, and CSRF headers before forwarding, and attaches a kernel
+  session cookie it minted itself.
 - Credentialed CORS is exact-origin allowlisted. Without
   `OPEN_SCIENCE_CORS_ORIGINS`, development mode allows localhost frontends and
   production mode only allows the origin from `OPEN_SCIENCE_PUBLIC_URL`.
@@ -114,9 +116,10 @@ archives plus sanitized health metadata.
   preview execution, but generated files remain user data and must still be
   covered by retention, export, and deletion policy.
 - Hosted workspace paths shown to the browser are scoped display paths such as
-  `/workspace/<project>`, not host filesystem paths. Runtime directory selection
-  is enforced inside the server-side OpenCode proxy after authentication and
-  project authorization.
+  `/workspace/<project>`, not host filesystem paths. The control plane, not the
+  browser, selects the runtime and its workspace directory after authentication
+  and project authorization; the browser never names a runtime address or
+  directory.
 - OIDC delegates authentication, MFA, and account recovery policy to the
   configured provider. The application session index remains file-backed and
   does not provide application roles, per-organization tenancy, or centralized
@@ -152,11 +155,13 @@ provider keys in frontend code, static assets, browser storage, project
 workspaces, provenance, or task logs.
 
 The DeepSeek production profile mounts an owner-readable key file only into the
-Web service. OpenCode receives a runtime-lifetime project token, not the
-provider key, and can reach only the internal Model Gateway network. Before a
-release is accepted, `pnpm preflight:deepseek:release` must produce a non-fake,
-mode-0600 receipt bound to the exact source revision, reviewed gateway config
-revision, `deepseek-v4-pro`, and OpenCode 1.17.13. The receipt contains only
+Web service. The DSH kernel in a project's runtime receives a project-scoped
+gateway token, not the provider key, and can reach only the internal Model
+Gateway network. Before a release is accepted, `pnpm preflight:deepseek:release`
+must produce a non-fake, mode-0600 receipt bound to the exact source revision,
+reviewed gateway config revision, the certified DeepSeek model the deployment
+configures (`OPEN_SCIENCE_DEEPSEEK_MODEL`), and the DSH version pinned in
+`deps-version.json`. The receipt contains only
 capability booleans and release identifiers; it contains no prompts, messages,
 keys, or runtime tokens. It is HMAC-signed with a domain-separated key derived
 from the private Model Gateway signing secret. Host preflight and server
@@ -170,16 +175,18 @@ resource exhaustion; they do not make prompts or provider responses
 non-sensitive, so normal workspace retention and operator-access rules still
 apply.
 
-In hosted Web mode, the Settings page hides browser-visible provider key,
-OAuth, custom endpoint, and provider-removal controls. Treat real provider
+In hosted Web mode, the account pages offer no browser-visible provider key,
+model-selection, approval-mode or MCP controls. Treat real provider
 credentials as operator-managed server runtime configuration until encrypted
-server-side key storage exists. The hosted Settings page also disables
-browser-side MCP provisioning and removal controls; existing MCP
-entries are shown as server-managed status only, without local command strings
-or deployment secrets. The hosted Skills page is similarly read-only: it shows
-the server runtime's reported agents and skills, but does not expose browser
-controls for custom skill installation or local scientific-environment
-detection.
+server-side key storage exists. The one MCP server a runtime mounts is fixed by
+the runtime image (plus the optional ToolUniverse sidecar a deployment
+configures); a researcher cannot point a runtime at another. Skills are the part
+a researcher can add: the 「插件与技能」 page lists the platform's skills
+read-only and lets a researcher write or import personal skills (a file, a
+public repository at one pinned commit, or an earlier export). The control
+plane validates a personal skill in a disposable container and mounts it
+read-only into a project's runtime only for projects where the researcher has
+switched it on.
 
 Before enabling real hosted model use, add server-side key management with:
 
@@ -200,8 +207,9 @@ Before enabling real hosted model use, add server-side key management with:
   `no-new-privileges`, dropped Linux capabilities, pids limits, CPU and memory
   limits, and rejects host/shared-container networking unless explicitly
   allowed. The supplied Compose profile mounts only the selected project's
-  named-volume subpaths and carries OpenCode HTTP/SSE over a project-scoped Unix
-  socket, with no published runtime port. It defaults to the named Docker
+  named-volume subpaths and reaches the kernel's loopback web host (HTTP and the
+  multiplexed WebSocket) over a project-scoped Unix socket, with no published
+  runtime port. It defaults to the named Docker
   `internal: true` network `open-science-runtime-internal`, which can reach the
   authenticated Web Model Gateway and the separate public-source gateway but
   has no public route. Every public-source request is authenticated with the
@@ -231,8 +239,8 @@ Before enabling real hosted model use, add server-side key management with:
   unexposed Runtime Controller. The controller reconstructs canonical project
   paths and container arguments from deployment configuration, mounts the data
   volume read-only in its own process, and rejects arbitrary image, mount,
-  network, command, and Docker-argument fields. Runtime passwords and kernel
-  source pass through this local socket only for the lifetime of the operation;
+  network, command, and Docker-argument fields. Runtime passwords pass through
+  this local socket only for the lifetime of the operation;
   the controller does not persist them or include them in responses or logs.
 - Browser-direct shell proxying is disabled by default with
   `OPEN_SCIENCE_ALLOW_DIRECT_SHELL=false`. Host-mode shell proxying additionally
@@ -249,7 +257,10 @@ Before enabling real hosted model use, add server-side key management with:
   `runtime/skills/core` pack by default. Add external skill directories to
   `OPEN_SCIENCE_RUNTIME_SKILL_DIRS` only after their hosted-use licenses,
   notices, network behavior, and credential handling have been reviewed. The
-  hosted browser UI does not provide a custom skill installation path.
+  hosted browser UI never installs a skill into the runtime image: a
+  researcher's personal skills are stored with the account, validated by the
+  control plane, and mounted read-only only into the projects they are switched
+  on for.
 - Code runs only inside a project's own runtime container. The command API's
   separate kernel execution, which served the computational notebook, was
   removed with it on 2026-09-19; a notebook a run delivers is an ordinary file.
@@ -293,9 +304,10 @@ is not a substitute for legal review of upstream licenses.
   `/usr/share/licenses/uv/LICENSE-MIT`. Update each version, every architecture
   digest, and the license digest as one reviewed change.
 - Runtime socket relay: the hosted runtime image installs Debian `socat` and
-  uses it only to relay OpenCode loopback HTTP/SSE over a project-scoped Unix
-  socket. Preserve the corresponding package license and source notices in the
-  runtime image's third-party inventory.
+  uses it only to relay the DSH kernel's loopback web host (HTTP and the
+  multiplexed WebSocket) over a project-scoped Unix socket. Preserve the
+  corresponding package license and source notices in the runtime image's
+  third-party inventory.
 - OIDC client: the Web API pins `openid-client` 6.8.4 (MIT), with its pinned
   `jose` and `oauth4webapi` dependencies from `pnpm-lock.yaml`. Preserve their
   license notices and review their security advisories when updating the
@@ -307,23 +319,24 @@ is not a substitute for legal review of upstream licenses.
   moderate severity and is part of `pnpm ci:web`. Re-run preview tests and a
   real browser document fixture whenever either override changes because these
   are compatibility overrides above the parents' declared major ranges.
-- `uv`: `scripts/dev/fetch-uv.sh` pins the desktop sidecar helper, and the
-  hosted runtime Dockerfile pins the runtime image helper. The hosted image
-  verifies both Linux architecture archives and preserves the selected MIT
-  license from uv's `MIT OR Apache-2.0` upstream license under
-  `/usr/share/licenses/uv/LICENSE-MIT`. Update its version and digests together.
+- `uv`: the hosted runtime Dockerfile pins the runtime image helper
+  (`UV_VERSION`). The hosted image verifies both Linux architecture archives and
+  preserves the selected MIT license from uv's `MIT OR Apache-2.0` upstream
+  license under `/usr/share/licenses/uv/LICENSE-MIT`. Update its version and
+  digests together.
 - `ai4s-skills`: `scripts/dev/fetch-skills.sh` pins a commit, and the local
   external copy records that commit in `.commit`. No license file is present in
   the local fetched directory; verify the upstream license before bundling it
-  into a hosted image or installer.
-- Office exporters: Hosted and desktop releases package four first-party MIT
+  into a hosted image.
+- Office exporters: Hosted releases package four first-party MIT
   `docx`, `pdf`, `pptx`, and `xlsx` implementations with independent artifact
   smoke tests. Restricted Anthropic source directories remain excluded, and the
   hosted compliance audit rejects them if reconfigured for runtime deployment.
 - Seven audited science connectors are included in the Hosted default through
-  the fixed-host EviMed gateway. Additional MCP servers, browser tools, HPC
-  tools, and user-installed skills remain outside the reviewed slice; assess
-  each package's license, network behavior, credentials, and data flow first.
+  the fixed-host EviMed gateway. Additional MCP servers, browser tools, and HPC
+  tools remain outside the reviewed slice; assess each package's license,
+  network behavior, credentials, and data flow first. A researcher's personal
+  skills are that researcher's own content, kept with the account.
 
 ## Logs, Backups, and Retention
 
@@ -351,21 +364,16 @@ can be exported as a `tar.gz` archive through `/api/projects/:id/export`; the
 archive contains project-relative workspace, metadata, task, runtime, and log
 files, rejects symbolic links, is capped by `OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES`
 and `OPEN_SCIENCE_MAX_ARCHIVE_BYTES`, and does not expose host filesystem paths.
-Runtime proxy logs record sanitized OpenCode proxy route patterns, HTTP status,
-duration, request/response byte counts, streaming flag, and policy error codes;
-they do not include browser auth headers, cookies, `auth_token` query values,
-OpenCode `directory` paths, prompts, request bodies, response bodies, or file
-contents.
-Runtime proxy write requests are bounded by `OPEN_SCIENCE_MAX_JSON_BYTES`, so
-oversized browser payloads are rejected before a runtime is started or contacted.
-Runtime config/auth/OAuth/MCP mutation routes and unknown upstream OpenCode
-paths return `runtime_proxy_forbidden` before request bodies are read.
-Allowed runtime mutation payloads are schema-checked before startup; malformed
-prompt, slash-command, shell, question, and permission bodies return
-`invalid_runtime_proxy_payload` without reaching OpenCode.
-Stale abort/session-delete controls are idempotent and do not wake a stopped
-runtime; stale question and permission mutations return `runtime_not_running`
-instead of starting a new agent.
+Where a deployment enables the kernel's own browser application, the calls the
+control plane forwards to it are logged as sanitized runtime events: method,
+route pattern (for that application, the method's namespace and name), HTTP
+status, duration, request/response byte counts, streaming flag, and
+error code. They do not include browser auth headers, cookies, prompts, request
+bodies, response bodies, or file contents. Forwarded write requests are bounded
+by `OPEN_SCIENCE_MAX_JSON_BYTES` (a file upload by
+`OPEN_SCIENCE_MAX_FILE_BYTES`), so oversized payloads are rejected before a
+runtime is started or contacted. A run's events reach the browser only through
+`GET /api/runs/:id/events`, which the control plane decodes itself.
 Task status APIs expose task metadata only and do not return raw command
 arguments, stdout/stderr payloads, file contents, or command result objects.
 Runtime state files record sanitized operational metadata such as runtime kind,
@@ -461,14 +469,14 @@ Do not mark a hosted deployment production-ready until these items are resolved:
   signed gateway; browser, workspace, runtime, logs, and exports do not receive
   it. Any future per-user or per-organization BYOK requires encrypted scoping,
   rotation, and deletion.
-- A fresh, HMAC-authenticated, non-fake DeepSeek/OpenCode release-gate receipt
+- A fresh, HMAC-authenticated, non-fake DeepSeek/DSH release-gate receipt
   matches the deployed source revision, reviewed config revision, model, and
   receipt ID.
 - Runtime containers are sandboxed and resource-limited, or real runtime use is
   disabled.
 - A protected operator metrics token and content-safe monitoring retention,
   alerting, and access policy are configured.
-- The OpenCode runtime image and any bundled skills have verified licenses and
+- The DSH runtime image and any bundled skills have verified licenses and
   preserved notices.
 - Only the first-party MIT Office exporters are packaged; restricted third-party
   document directories remain excluded by the compliance gate.
@@ -479,5 +487,5 @@ Do not mark a hosted deployment production-ready until these items are resolved:
   privacy/legal owners have exercised the security incident response procedure.
 - Deployment smoke tests are run with non-sensitive test inputs and the created
   project/log records are covered by retention and deletion procedures.
-- CI checks pass for the server, hosted frontend build, and Tauri backend
-  compile check.
+- CI checks pass for the server, the packages, and the hosted frontend build
+  (`pnpm ci:web`).
