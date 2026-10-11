@@ -2,6 +2,7 @@
 
 **An AI-native research workbench for evidence-based medicine.**
 
+[![CI](https://github.com/anonymous-temp/EviMed-Science/actions/workflows/web.yml/badge.svg?branch=main)](https://github.com/anonymous-temp/EviMed-Science/actions/workflows/web.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js >= 22.22](https://img.shields.io/badge/node-%3E%3D22.22.0-339933.svg)](OpenScience/package.json)
 
