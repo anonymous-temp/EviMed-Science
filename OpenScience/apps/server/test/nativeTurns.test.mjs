@@ -13,6 +13,26 @@ const fixture = JSON.parse(await readFile(new URL("./fixtures/dsh/native-turn-fr
 const question = (event) => event.data.content.map((part) => part.text ?? "").join(" ");
 const inputs = fixture.events.filter((event) => event.type === "user/message" && event.data.source.kind === "user");
 
+test("LoopX continuation inherits the research contract and replay never creates a duplicate or human question", async t => {
+  const events = structuredClone(fixture.events);
+  const second = events.filter(event => event.type === "user/message" && event.data.source.kind === "user")[1];
+  second.data.source = { kind: "loopx-continuation", goalId: "goal-1", agentId: "agent-1", turnInstanceId: "dsh-loopx-turn-2" };
+  const f = await setup(t, events);
+  let routes = 0;
+  await f.adopt(async () => { routes++; return { effectiveAgentId: "open-domain-answer", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-open-domain-answer" }; });
+  const runs = await f.runs();
+  assert.equal(runs.length, 2); assert.equal(routes, 1);
+  const automatic = runs.find(run => run.automated);
+  assert.ok(automatic);
+  assert.deepEqual(automatic.kernelRequestIds, ["loopx:dsh-loopx-turn-2"]);
+  assert.equal(automatic.effectiveAgentId, "open-domain-answer");
+  assert.equal(automatic.question, runs.find(run => !run.automated).question);
+  f.restart(); await f.adopt();
+  assert.deepEqual((await f.runs()).map(run => run.id).sort(), runs.map(run => run.id).sort());
+  const transcript = normalizeTranscript(fixture.sessionId, events);
+  assert.equal(transcript.messages.find(message => message.sourceRequestId === "loopx:dsh-loopx-turn-2").source, "loopx-continuation");
+});
+
 async function setup(t, initial = fixture.events) {
   const root = await mkdtemp(path.join(tmpdir(), "native-turns-"));
   const project = { id: "p1", userId: "u1", rootDir: root, metaDir: path.join(root, ".openscience"), workspaceDir: path.join(root, "workspace") };

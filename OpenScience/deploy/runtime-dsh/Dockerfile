@@ -20,7 +20,7 @@ ARG DSH_CORDIS_VERSION=4.0.4
 # below verifies the resulting kernel closure rather than trusting the date.
 ARG DSH_PUBLISHED_BEFORE=2026-09-24T15:18:11.337Z
 ARG SOCKET_VERSION=0.1.0
-ARG NODE_VERSION=22.22.0
+ARG NODE_VERSION=22.22.3
 # Where to fetch the Node tarball. The default is upstream; a deployment behind
 # a slow or broken route to nodejs.org passes its own mirror. Trust does not
 # move with the URL: the sha256 pins below verify whatever host served it.
@@ -33,8 +33,8 @@ ARG NODE_VERSION=22.22.0
 ARG NODE_DIST_BASE=https://nodejs.org/dist
 ARG PNPM_VERSION=11.7.0
 ARG UV_VERSION=0.11.26
-ARG NODE_SHA256_AMD64=9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37
-ARG NODE_SHA256_ARM64=1bf1eb9ee63ffc4e5d324c0b9b62cf4a289f44332dfef9607cea1a0d9596ba6f
+ARG NODE_SHA256_AMD64=2e5d13569282d016861fae7c8f935e741693c269101a5bebcf761a5376d1f99f
+ARG NODE_SHA256_ARM64=1c4a9933a5e45bc88f54f70b5f91232c127ec49f1a5989d23fb85824c7adf9b7
 ARG UV_SHA256_AMD64=6426a73c3837e6e2483ee344cbc00f36394d179afcba6183cb77437e67db4af0
 ARG UV_SHA256_ARM64=befa1a59c91e96eb601b0fd9a97c03dd666f17baba644b2b4db9c59a767e387e
 ARG UV_LICENSE_MIT_SHA256=860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c
@@ -247,6 +247,10 @@ ARG DSH_CITE_BUNDLE="dsh-cite@0.3.2"
 ARG DSH_ANNOTATION_BUNDLE="@changfenhuang/dsh-annotation@1.4.10"
 ARG DSH_MERMAID_BUNDLE="dsh-mermaid@0.4.0"
 ARG DSH_COMMUNITY_PEER_PINS="cordis@4.0.0-rc.10"
+COPY deploy/runtime-dsh/install-loopx.mjs /usr/local/lib/evimed/install-loopx.mjs
+COPY deploy/runtime-dsh/loopx-compat.mjs /usr/local/lib/evimed/loopx-compat.mjs
+ENV LOOPX_USAGE_PING=0 DO_NOT_TRACK=1 LOOPX_BIN=/opt/evimed/venv/bin/loopx
+RUN bash /usr/local/lib/evimed/install-runtime.sh loopx
 RUN bash /usr/local/lib/evimed/install-runtime.sh profile-seed
 RUN node /usr/local/bin/runtime-yaml-security.mjs verify
 

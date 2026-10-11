@@ -75,7 +75,7 @@ test("the composition mounts every agent plugin we own and nothing we ruled out"
   assert.equal(AGENT_PLUGIN_IDS.length, 9, "add the row here when a plugin is added, so the count stays a fact");
   assert.deepEqual([...HOST_PLUGIN_IDS].sort(), [
     "evimed-runtime-ui", "evimed-skill-catalogue", "evimed-plugin-probe", "evimed-seam-probe",
-    "evimed-evidence-store", "evimed-web", "evimed-engine-context",
+    "evimed-evidence-store", "evimed-web", "evimed-engine-context", "evimed-loopx-bootstrap",
   ].sort());
   assert.deepEqual([...patch.matchAll(/^\s+- id: (evimed-[\w-]+)\s*$/gm)].map(row => row[1]).sort(),
     [...HOST_PLUGIN_IDS].sort(), "the host patch must mount exactly the intended plugin identities");

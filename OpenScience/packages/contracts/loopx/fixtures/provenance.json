@@ -1,0 +1,397 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-11T03:16:30.213385+00:00",
+  "upstreamRevision": "573c655879094d38aec2717e9b229962de8717a8",
+  "baseRevision": "2ff9e5fe7973",
+  "loopxVersion": "1.3.1",
+  "pluginVersion": "0.1.1-beta.6",
+  "dshVersion": "0.1.7-rc.2",
+  "providerModel": "deepseek-flash",
+  "transport": "EviMed control plane and native DSH; host processes in isolated scratch projects, not production containers",
+  "installation": {
+    "schemaVersion": 1,
+    "version": "1.3.1",
+    "pluginVersion": "0.1.1-beta.6",
+    "wheelSha256": "47f626cd120d08b8fa04d2dc5bd68efa2857c28e4065d71ef1bf2ae8e4bee8d9",
+    "pluginSha256": "5c36776ded02ea330f560fa5395ed8deef144b59690ac15353df1c7263474a90",
+    "skills": [
+      {
+        "name": "loopx",
+        "sha256": "ac657d6eec8b92ac926e320016366ae251f381013bb77a81059899c69f7e98cb"
+      },
+      {
+        "name": "loopx-benchmark",
+        "sha256": "0998a9c0b7306b152ea9e6e28d2193ad5a59de006b9be06bd527b042662cce98"
+      },
+      {
+        "name": "loopx-doc-registry",
+        "sha256": "c5ad255cab5c6a701af57bc903573c044d93f2bf8594dea88abba2a60c42a3eb"
+      },
+      {
+        "name": "loopx-performance-diagnosis",
+        "sha256": "77912b10ceb3d22aeeda6c1d6001dfde055774ddff844483e78464a5253437ec"
+      },
+      {
+        "name": "loopx-pr-program",
+        "sha256": "feb0428eb9ef49cffc659ccdcc56387be857e97e6837595cf95ce54e8988fef2"
+      },
+      {
+        "name": "loopx-pr-review",
+        "sha256": "a1e8757e50c28b34b82d146a012816090e40d0df1ee522698301aa75e8a6eca0"
+      },
+      {
+        "name": "loopx-project",
+        "sha256": "106e24ad423670dadaab3e75fa9e4af5dbe868fa56035582c6bcc9ea0aef0789"
+      },
+      {
+        "name": "loopx-self-repair",
+        "sha256": "2b96cfbc99b5322e13b241ca3feffed113da819dcb4ce8407d789cabd66ade00"
+      }
+    ]
+  },
+  "comparison": {
+    "task": "Create and check a two-group CSV after an intentional missing-file read; apply a researcher correction to the same artifact; answer an unrelated one-sentence follow-up.",
+    "arms": [
+      {
+        "arm": "off",
+        "repetitions": 2,
+        "turns": 6,
+        "correctFinalArtifact": true,
+        "durationMsByRepetition": [
+          [
+            9529,
+            7539,
+            1988
+          ],
+          [
+            8503,
+            8620,
+            1708
+          ]
+        ],
+        "toolCallsByRepetition": [
+          [
+            3,
+            2,
+            0
+          ],
+          [
+            4,
+            2,
+            0
+          ]
+        ],
+        "cases": [
+          {
+            "projectId": "cmp-final-off-0",
+            "sessionId": "session-cc65ece9-5c67-4cff-84e6-703fd0671def",
+            "runIds": [
+              "run_82b032404515fa58b0cb27ed1fe3a9cd",
+              "run_9eca7c773a6e2110d129365d8939788d",
+              "run_e3f6d8a5f32b91a86818da7d85aefd8d"
+            ]
+          },
+          {
+            "projectId": "cmp-final-off-1",
+            "sessionId": "session-0786370a-402e-44cb-be7b-90d2530fa348",
+            "runIds": [
+              "run_519317a10c015788148ddb89ea64cb52",
+              "run_ee7ffe0b5bfae37abd72afce3d004fed",
+              "run_02194d5695d84ab3ab4c8e636df44a45"
+            ]
+          }
+        ]
+      },
+      {
+        "arm": "idle",
+        "repetitions": 2,
+        "turns": 6,
+        "correctFinalArtifact": true,
+        "durationMsByRepetition": [
+          [
+            13014,
+            9711,
+            2451
+          ],
+          [
+            11344,
+            10396,
+            2069
+          ]
+        ],
+        "toolCallsByRepetition": [
+          [
+            4,
+            2,
+            0
+          ],
+          [
+            4,
+            3,
+            0
+          ]
+        ],
+        "cases": [
+          {
+            "projectId": "cmp-final-idle-0",
+            "sessionId": "session-0b6e1520-ce53-4d87-a21f-d36df1e054be",
+            "runIds": [
+              "run_fce4662a2137682fad0e8a21151a6eee",
+              "run_64890c99e08c2dbe70d93ba0e9ab8c8b",
+              "run_4750941666c29e9843100f605e6b50a6"
+            ]
+          },
+          {
+            "projectId": "cmp-final-idle-1",
+            "sessionId": "session-0afb9169-0c1c-40c6-a81a-938b5fadd3f3",
+            "runIds": [
+              "run_16fbb1fb4b3b546d3455bac883aaf674",
+              "run_15f2ec01f98874e3c78df7106e5ef1c8",
+              "run_24aecd48765af6208727da60b1f63677"
+            ]
+          }
+        ]
+      },
+      {
+        "arm": "active",
+        "repetitions": 2,
+        "turns": 6,
+        "correctFinalArtifact": true,
+        "durationMsByRepetition": [
+          [
+            74371,
+            68817,
+            3069
+          ],
+          [
+            82311,
+            113304,
+            2618
+          ]
+        ],
+        "toolCallsByRepetition": [
+          [
+            24,
+            19,
+            0
+          ],
+          [
+            31,
+            30,
+            0
+          ]
+        ],
+        "cases": [
+          {
+            "projectId": "cmp-final-active-0",
+            "sessionId": "session-6e56b81f-9034-4597-9661-0af098781b54",
+            "runIds": [
+              "run_cefbdb97fa66c8985970a06f5c415fdb",
+              "run_c85d933a9b7dd1839d2796a5d3205891",
+              "run_7bdda5546234b06764313770322d1c84"
+            ]
+          },
+          {
+            "projectId": "cmp-final-active-1",
+            "sessionId": "session-00c1a080-3604-4105-9cb3-d60e1a5fc0da",
+            "runIds": [
+              "run_1d458de7f10aeafb60b273534c64ea0a",
+              "run_c36319ec6363ad3d5e45a9662aca0af0",
+              "run_5eab7c9697a650661f9953b57914876a"
+            ]
+          }
+        ]
+      }
+    ],
+    "interpretation": "All 18 turns succeeded. Explicit LoopX activation adds substantial setup and settlement work for this short task; these are functional and latency observations, not a clinical-quality or LHTB score."
+  },
+  "lifecycle": {
+    "projectId": "lifecycle-v4",
+    "sessionId": "session-9e773b14-8d7f-4809-a284-e7fd46caf2f6",
+    "pauseDuringWork": {
+      "succeeded": true,
+      "pausedFiles": [
+        "stage1.txt"
+      ],
+      "snapshot": {
+        "sessionId": "session-9e773b14-8d7f-4809-a284-e7fd46caf2f6",
+        "goalId": "workspace-goal",
+        "loopxAgentId": "evimed-lane-1",
+        "goalActivation": "stopped",
+        "agentStatus": "idle",
+        "progress": {
+          "processed": 0,
+          "remaining": 3,
+          "total": 3
+        }
+      }
+    },
+    "resume": {
+      "succeeded": true,
+      "finalSnapshot": {
+        "sessionId": "session-9e773b14-8d7f-4809-a284-e7fd46caf2f6",
+        "goalId": "workspace-goal",
+        "loopxAgentId": "evimed-lane-1",
+        "goalActivation": "stopped",
+        "agentStatus": "idle",
+        "progress": {
+          "processed": 3,
+          "remaining": 0,
+          "total": 3
+        }
+      },
+      "runs": [
+        {
+          "id": "run_242ddbcf1874e9366d8a7f9cb7466169",
+          "automated": true,
+          "status": "succeeded",
+          "durationMs": 113166,
+          "observedToolCalls": 21,
+          "kernelRequestIds": [
+            "loopx:dsh-loopx-effcc478-008c-42ae-89b4-a0d34b4b590f"
+          ]
+        },
+        {
+          "id": "run_4958f9b2e26519d6f5615078190ce136",
+          "automated": true,
+          "status": "succeeded",
+          "durationMs": 57966,
+          "observedToolCalls": 9,
+          "kernelRequestIds": [
+            "loopx:dsh-loopx-ed927c9b-09df-4473-98b9-e9ce15c5a08c"
+          ]
+        },
+        {
+          "id": "run_6a48ee7d53932b9ca6d814101b9dac8e",
+          "automated": true,
+          "status": "succeeded",
+          "durationMs": 103326,
+          "observedToolCalls": 27,
+          "kernelRequestIds": [
+            "loopx:dsh-loopx-21977748-0b91-4234-b5e7-a9c8359b7a8e"
+          ]
+        },
+        {
+          "id": "run_457057f1f9a3f783e8fe9eb476c38ba9",
+          "automated": null,
+          "status": "succeeded",
+          "durationMs": 62591,
+          "observedToolCalls": 20,
+          "kernelRequestIds": [
+            "req_05f87151bfacea694d163e6e9a725b4e"
+          ]
+        }
+      ]
+    },
+    "artifacts": [
+      {
+        "path": "acceptance/stage1.txt",
+        "sha256": "2c8b08da5ce60398e1f19af0e5dccc744df274b826abe585eaba68c525434806"
+      },
+      {
+        "path": "acceptance/stage2.txt",
+        "sha256": "27dd8ed44a83ff94d557f9fd0412ed5a8cbca69ea04922d88c01184a07300a5a"
+      },
+      {
+        "path": "acceptance/stage3.txt",
+        "sha256": "f6936912184481f5edd4c304ce27c5a1a827804fc7f329f43d273b8621870776"
+      }
+    ]
+  },
+  "coldRestartRecovery": {
+    "projectId": "lifecycle",
+    "sessionId": "session-af6e8916-10d6-4812-9677-58a00d0a7654",
+    "verified": "Stopped and restarted the kernel, opened the real EviMed conversation, clicked native Start, and completed two automatic continuation turns.",
+    "automaticRunIds": [
+      "run_9154a20991617eb811b07c40fd8d4e09",
+      "run_f42a7d2a7f9e21a742873faaf732cbdd"
+    ]
+  },
+  "usage": [
+    {
+      "project_id": "lifecycle",
+      "run_id": "run_9154a20991617eb811b07c40fd8d4e09",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "calls": 17,
+      "cost": 0.10271128
+    },
+    {
+      "project_id": "lifecycle",
+      "run_id": "run_d68c40ad131d3f9cce5c7397c8be0ac1",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "calls": 31,
+      "cost": 0.10148116
+    },
+    {
+      "project_id": "lifecycle",
+      "run_id": "run_f42a7d2a7f9e21a742873faaf732cbdd",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "calls": 12,
+      "cost": 0.03860132
+    },
+    {
+      "project_id": "lifecycle",
+      "run_id": null,
+      "model": "deepseek-flash",
+      "status": "settled",
+      "calls": 1,
+      "cost": 0.00297412
+    },
+    {
+      "project_id": "lifecycle-v4",
+      "run_id": "run_242ddbcf1874e9366d8a7f9cb7466169",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "calls": 23,
+      "cost": 0.07404776
+    },
+    {
+      "project_id": "lifecycle-v4",
+      "run_id": "run_457057f1f9a3f783e8fe9eb476c38ba9",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "calls": 23,
+      "cost": 0.08040968
+    },
+    {
+      "project_id": "lifecycle-v4",
+      "run_id": "run_4958f9b2e26519d6f5615078190ce136",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "calls": 12,
+      "cost": 0.1220318
+    },
+    {
+      "project_id": "lifecycle-v4",
+      "run_id": "run_6a48ee7d53932b9ca6d814101b9dac8e",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "calls": 29,
+      "cost": 0.09867
+    },
+    {
+      "project_id": "lifecycle-v4",
+      "run_id": null,
+      "model": "deepseek-flash",
+      "status": "settled",
+      "calls": 1,
+      "cost": 0.00033988
+    }
+  ],
+  "findings": [
+    "Unmodified published beta did not activate on the pinned DSH tool-role result; the digest-bound adapter fixes that recorded protocol difference.",
+    "Without pause intent context, the model may attempt to undo a pause or spend a turn investigating it; the adapted native GoalBar sends the actual user action to a busy model without waking an idle session.",
+    "LoopX onboarding can be missed by a model; initialization guidance requests exact thread-binding readback.",
+    "Optional Explore and Reward Memory CLIs are installed, but separate providers or memory services are not provisioned.",
+    "This acceptance does not certify production deployment, Docker isolation, clinical superiority, or equal-budget benchmark gains."
+  ],
+  "artifactDigests": {
+    "lifecycle.json": "0d4cc3d506dd8c6fe4bb01cae661d27acdd7e8f942f13f6d26c854ae8da7e19a",
+    "lifecycle-v3.json": "033a612551cd9a605bdc4c9080832eb54217c3b37f2d8f6226d55b7609c82bd0",
+    "lifecycle-v4.json": "b6b9aa1aa48e01f6fdef5e0022a0e1cf63dbc7130e9f0f0b2074ba86ee59edbe",
+    "comparison-final.log": "e88c7bcdf7e41af1c504fa5e3cb402dac3fd779cd45a9ff48aa24394836fce08"
+  }
+}

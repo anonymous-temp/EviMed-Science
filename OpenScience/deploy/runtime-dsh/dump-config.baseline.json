@@ -499,6 +499,7 @@
   name: '@deepseek-ai/dsh-tool-cordis/host'
 - id: web-startup
   name: '@deepseek-ai/dsh-web-app/startup'
+# == @deepseek-ai/dsh-web-app, patched by dsh-loopx-plugin, @evimed/dsh-socket
 - id: webserver
   name: '@deepseek-ai/dsh-host-webserver'
   inject:
@@ -518,6 +519,7 @@
     printUrl: true
     surfaceContext: true
     trustedHosts: !!js ctx.webStartup.trustedHosts
+# == @deepseek-ai/dsh-web-app
 - id: client-hmr
   name: '@deepseek-ai/dsh-client-hmr'
 - id: modules
@@ -1292,6 +1294,19 @@
         name: '@deepseek-ai/dsh-plugin-manager/tools'
         disabled: !!js '!ctx.get(''profileContext'')'
   disabled: true
+# == dsh-loopx-plugin, patched by @evimed/dsh-socket
+- id: loopx-goalbar
+  name: dsh-loopx-plugin
+  disabled: !!js process.env.EVIMED_LOOPX_ENABLED === '0'
+- id: loopx-init-command
+  name: dsh-loopx-plugin/init-command
+  disabled: true
+- id: loopx-driver
+  name: dsh-loopx-plugin/driver
+  disabled: !!js process.env.EVIMED_LOOPX_ENABLED === '0'
+# == dsh-loopx-plugin
+- id: loopx-shadow-observer
+  name: dsh-loopx-plugin/observer
 # == @evimed/dsh-socket
 - id: evimed-runtime-ui
   name: '@evimed/dsh-socket'
@@ -1311,6 +1326,12 @@
     searchUrl: !!js process.env.EVIMED_WEB_SEARCH_GATEWAY_URL
     fetchUrl: !!js process.env.EVIMED_PUBLIC_SOURCE_GATEWAY_URL
     tokenFile: !!js process.env.EVIMED_MODEL_GATEWAY_TOKEN_FILE
+- id: evimed-loopx-bootstrap
+  name: '@evimed/dsh-socket/plugins/loopx-bootstrap'
+  config:
+    enabled: !!js process.env.EVIMED_LOOPX_ENABLED !== '0'
+    root: !!js process.env.EVIMED_LOOPX_ROOT
+    cli: !!js process.env.LOOPX_BIN
 - id: preset-evimed-universal
   name: '@deepseek-ai/dsh-agent-preset'
   config:
@@ -1418,6 +1439,10 @@
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/office'
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/geo-private/skills'
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/community'
+            - !!js >-
+              (process.env.EVIMED_LOOPX_ENABLED !== '0' &&
+              ((process.env.EVIMED_LOOPX_ROOT || '/opt/evimed/loopx') +
+              '/skills')) || '/opt/evimed/loopx-disabled'
             - !!js >-
               process.env.EVIMED_PERSONAL_SKILLS_DIR ||
               '/opt/evimed/personal-skills'

@@ -1179,7 +1179,7 @@ function storedKernelRequestId(value) {
 
 /** The log, not elapsed time or matching text, assigns messages to a run. */
 export function runHistory(run, history) {
-  const turns = new Set(history.filter((message) => actualUserMessage(message) && (run.kernelRequestIds ?? []).includes(message.info?.sourceRequestId))
+  const turns = new Set(history.filter((message) => workloadInput(message) && (run.kernelRequestIds ?? []).includes(message.info?.sourceRequestId))
     .map((message) => message.info?.turnStartSeq).filter((seq) => Number.isSafeInteger(seq)));
   if (run.nativeTurn && !run.kernelRequestIds?.length) turns.add(run.nativeTurn.startSeq);
   if (turns.size) return history.filter((message) => turns.has(message.info?.turnStartSeq));
@@ -1190,6 +1190,12 @@ export function runHistory(run, history) {
 
 function actualUserMessage(message) {
   return messageRole(message) === "user" && message.info?.source === "user";
+}
+
+/** LoopX's recorded automatic turns use the same ledger without becoming user intent. */
+function workloadInput(message) {
+  return actualUserMessage(message) || (messageRole(message) === "user" && message.info?.source === "loopx-continuation"
+    && String(message.info?.sourceRequestId ?? "").startsWith("loopx:"));
 }
 
 /**
@@ -5778,8 +5784,8 @@ export class AgentRunStore {
       run = await this.recordNativeWorkflow(project, run, history);
       if (run.status !== "running") return run;
     }
-    const ownsTurns = Boolean(run.nativeTurn) || history.some((message) => actualUserMessage(message) && (run.kernelRequestIds ?? []).includes(message.info?.sourceRequestId));
-    if (run.dispatchId && ownsTurns && !history.some((message) => actualUserMessage(message) && message.info?.sourceRequestId === run.kernelRequestIds?.at(-1))) return run;
+    const ownsTurns = Boolean(run.nativeTurn) || history.some((message) => workloadInput(message) && (run.kernelRequestIds ?? []).includes(message.info?.sourceRequestId));
+    if (run.dispatchId && ownsTurns && !history.some((message) => workloadInput(message) && message.info?.sourceRequestId === run.kernelRequestIds?.at(-1))) return run;
     const ownEnd = history.at(-1)?.info?.turnEnd;
     if (ownsTurns && !ownEnd) return run;
     const baselineIndex = ownsTurns && !run.nativeTurn ? -1 : baselineCursor == null
@@ -6965,7 +6971,7 @@ export class AgentRunStore {
     if (!Array.isArray(history)) return false;
     const requests = new Set(run.kernelRequestIds ?? []);
     if (!requests.size) return false;
-    return !history.some((message) => actualUserMessage(message) && requests.has(message.info?.sourceRequestId));
+    return !history.some((message) => workloadInput(message) && requests.has(message.info?.sourceRequestId));
   }
 
   scheduleMonitor(project, runId) {
@@ -7371,7 +7377,7 @@ export class AgentRunStore {
     const seedEnd = Number.isSafeInteger(transcript.seedEndSeq) ? Number(transcript.seedEndSeq) : -1;
     const turns = (transcript.turns ?? []).map((turn) => ({
       ...turn,
-      inputs: transcript.messages.filter((message) => message.turnStartSeq === turn.startSeq && message.role === "user" && message.source === "user"),
+      inputs: transcript.messages.filter((message) => message.turnStartSeq === turn.startSeq && workloadInput({ role: message.role, info: message })),
     })).filter((turn) => turn.inputs.length > 0 && turn.startSeq > seedEnd);
     const knownRuns = await this.list(project);
     const source = forkedFrom && /^[A-Za-z0-9_-]{1,128}$/.test(forkedFrom) ? forkedFrom : null;
@@ -7434,7 +7440,12 @@ export class AgentRunStore {
         const legacy = index === 0 ? knownRuns.find((item) => item.sessionId === sessionId && !item.nativeTurn
           && String(item.effectiveRouteReason ?? "").startsWith(adoptedRouteReason)) : null;
         const question = first.parts.map((part) => part.type === "text" ? part.text : "").join(" ").trim();
-        const routed = legacy ? {} : await routeTurn(question, { requestIds });
+        const continuation = first.source === "loopx-continuation";
+        const previous = continuation ? knownRuns.filter(item => item.sessionId === sessionId
+          && Date.parse(item.startedAt) <= turn.time).sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))[0] : null;
+        // Keep the initiating research contract; heartbeat text is not a new specialty request.
+        const routed = legacy ? {} : continuation ? { ...previous, effectiveRouteReason: "loopx-continuation" }
+          : await routeTurn(question, { requestIds });
         const reservation = await this.reserveRun(project, binding ?? {
           sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null,
         }, {
@@ -7443,7 +7454,8 @@ export class AgentRunStore {
           startedAt: turn.time > 0 ? new Date(turn.time).toISOString() : null,
           kernelRequestIds: requestIds,
           legacyRunId: legacy?.id,
-          question: questionPreview(question),
+          question: continuation && previous?.question ? previous.question : questionPreview(question),
+          automated: continuation,
           estimatedMinutes: routed.estimatedMinutes ?? null,
           forkedFrom: source,
           effectiveAgentId: routed.effectiveAgentId ?? binding?.agentId ?? null,

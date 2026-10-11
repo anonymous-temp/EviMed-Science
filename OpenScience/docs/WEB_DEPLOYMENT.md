@@ -1066,6 +1066,26 @@ archive and license digest in the same reviewed release change; a mismatched
 asset fails the image build. For a production release, prepare it on the verified
 isolated builder through `release:images`; do not run a Compose build here.
 
+The image also installs the complete native LoopX bundle and its CLI/workflow
+skills from the digest-bound `loopx` entry in `deps-version.json`. Use `/loopx`
+in a conversation to start goal tracking; its native GoalBar supports pause and
+resume. `OPEN_SCIENCE_LOOPX_ENABLED=false` disables its hosted driver and skill
+root after recreating the controller and project runtimes. Bootstrap is done
+at build time; `/loopx-init` only verifies the installed tools. The published
+driver needs the recorded DSH tool-result envelope adaptation in
+`deploy/runtime-dsh/loopx-compat.mjs`; it is applied before sealing, with a
+receipt, and never modifies a serving installation. The same small adaptation
+passes a verified Pause action into the current model step as user context,
+without waking an idle session or cancelling its checkpoint. GoalBar requests retain
+project/session authorization and automatic turns enter the existing run and
+usage ledgers with `loopx-continuation` provenance. Goal state stays in the
+project's `.loopx` registry and `.codex/goals/` workspace files. Calendar agendas, research memory, evidence and
+statistical engines retain their existing owners. Optional upstream Explore
+and Reward Memory commands are installed; they do not provision another model
+provider or another research-memory store. Pause prevents later continuations;
+the current turn may finish its checkpoint. The normal conversation Stop action
+cancels the running turn.
+
 Prepare and verify the image before marking the service healthy, or set
 `OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=false` if your deployment policy
 allows runtime lazy pulls. For local API smoke tests without a real agent image

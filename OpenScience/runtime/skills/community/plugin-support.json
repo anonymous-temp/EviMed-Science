@@ -7,6 +7,7 @@
     "evimed-skill-catalogue",
     "evimed-plugin-probe",
     "evimed-engine-context",
+    "evimed-loopx-bootstrap",
     "evimed-seam-probe",
     "evimed-evidence-store",
     "evimed-web",
@@ -20,6 +21,25 @@
     "evimed-compaction",
     "evimed-duplicate-lines",
     "evimed-cowork-bridge"
+  ],
+  "hostExtensions": [
+    {
+      "name": "dsh-loopx-plugin",
+      "pin": "deps-version.json#loopx",
+      "management": "immutable-release",
+      "switch": "OPEN_SCIENCE_LOOPX_ENABLED",
+      "activation": "The official loopx skill activates the native driver in its exact session.",
+      "components": [
+        "GoalBar",
+        "continuation-driver",
+        "CLI",
+        "workflow-skills",
+        "optional-shadow-observer"
+      ],
+      "adaptation": "Image-build installation, read-only bootstrap, and a digest-bound DSH tool-result envelope compatibility patch; goal state and scheduling remain the upstream implementation.",
+      "recordAuthority": "LoopX owns workspace goal state. EviMed records automated turns and usage; research memory remains in the control plane.",
+      "contract": "packages/contracts/loopx/contract.test.mjs"
+    }
   ],
   "communitySkills": [
     "dsh-ppt@0db836e8251a10bf93f26e702534ab9d8b2a1818",

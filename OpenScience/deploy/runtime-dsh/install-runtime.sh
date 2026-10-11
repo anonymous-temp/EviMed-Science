@@ -28,7 +28,7 @@ case "${target}" in docker|agentbay) ;; *) echo "EVIMED_RUNTIME_TARGET must be d
 
 # Invalid requests are rejected before reading or changing host state.
 case "${phase}" in
-  system|renderer|toolchain|kernel|pnpm|python|browser|verify-tools|curated-smoke|office-smoke|sider-cache|socket-client|preset-skills|preset-row|profile-seed|smoke|serve|session) ;;
+  system|renderer|toolchain|kernel|pnpm|python|browser|verify-tools|curated-smoke|office-smoke|sider-cache|socket-client|preset-skills|preset-row|loopx|profile-seed|smoke|serve|session) ;;
   *) echo "unknown phase: ${phase}" >&2; exit 64 ;;
 esac
 if [ "${phase}" = session ] && [ "${target}" != agentbay ]; then
@@ -398,6 +398,11 @@ preset_row() {
 # the profile independently of npm's --before), and so is each community
 # bundle's own peer outside that closure (DSH_COMMUNITY_PEER_PINS), which pnpm
 # would otherwise install at whatever its range resolves to on the build day.
+loopx() {
+  node /usr/local/lib/evimed/install-loopx.mjs
+  chmod -R a-w /opt/evimed/loopx
+}
+
 profile_seed() {
   set -x
   install -d -m 0755 "${DSH_HOME_SEED}/profiles/evimed-runtime"
@@ -405,7 +410,10 @@ profile_seed() {
   DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime list --depth 0
   # shellcheck disable=SC2086
   node /usr/local/bin/evimed-profile-kernel-pins.mjs /usr/local/lib/node_modules/@deepseek-ai/dsh/package.json "${DSH_HOME_SEED}/profiles/evimed-runtime" /opt/evimed/profile-pnpm-workspace.yaml "${DSH_VERSION}" "${DSH_CORDIS_VERSION}" ${DSH_COMMUNITY_PEER_PINS}
-  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --save-prod --save-exact "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "${DSH_CITE_BUNDLE}" "${DSH_ANNOTATION_BUNDLE}" "${DSH_MERMAID_BUNDLE}" file:/opt/evimed/socket
+  loopx_archive="$(node -p '"/opt/evimed/loopx/" + JSON.parse(require("node:fs").readFileSync("/opt/evimed/runtime-deps-version.json", "utf8")).loopx.plugin.filename')"
+  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --save-prod --save-exact "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "${DSH_CITE_BUNDLE}" "${DSH_ANNOTATION_BUNDLE}" "${DSH_MERMAID_BUNDLE}" "${loopx_archive}" file:/opt/evimed/socket
+  node -e 'const fs=require("node:fs"); const pin=JSON.parse(fs.readFileSync("/opt/evimed/runtime-deps-version.json")).loopx.plugin; const pkg=JSON.parse(fs.readFileSync(process.argv[1])); if(pkg.version!==pin.version)throw Error("LoopX profile pin mismatch");' "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/dsh-loopx-plugin/package.json"
+  node /usr/local/lib/evimed/loopx-compat.mjs "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/dsh-loopx-plugin"
   node -e 'const fs=require("node:fs"),path=require("node:path"); const [root,want]=process.argv.slice(1),seen=new Set(); for(const entry of fs.readdirSync(root,{recursive:true})){const match=entry.match(/(?:^|\/)@deepseek-ai\/(dsh(?:-[^/]+)?)\/package\.json$/); if(!match)continue; const pkg=JSON.parse(fs.readFileSync(path.join(root,entry),"utf8")); if(pkg.name!=="@deepseek-ai/"+match[1]||pkg.version!==want)throw Error("Profile kernel package differs from the pinned CLI: "+pkg.name); seen.add(pkg.name);} if(seen.size<100)throw Error("Profile kernel inventory is incomplete"); console.log("Verified profile kernel packages:",seen.size,want);' "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" "${DSH_VERSION}"
   # Each community bundle at exactly its recorded version, read back from what
   # pnpm installed rather than from what was asked for.
@@ -485,6 +493,7 @@ case "${phase}" in
   preset-skills) preset_skills ;;
   preset-row) preset_row ;;
   profile-seed) profile_seed ;;
+  loopx) loopx ;;
   smoke) smoke ;;
   serve) serve ;;
   session) session ;;

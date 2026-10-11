@@ -180,7 +180,7 @@ function fakeContext(overrides = {}) {
   /** @type {Map<string, any>} */
   const services = new Map(Object.entries({
     tools: {}, systemPrompt: {}, agents: {}, sessions: {}, subagents: {}, agentPresets: {}, shell: {},
-    storageDomain: {}, skills: {}, fs: {}, jobs: {}, workflowEngine: {},
+    storageDomain: {}, skills: {}, fs: {}, jobs: {}, workflowEngine: {}, commands: {},
     web: { registerSearchProvider: () => () => {}, registerFetchProvider: () => () => {} },
     ...overrides.services,
   }));

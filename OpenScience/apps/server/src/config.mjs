@@ -2086,6 +2086,7 @@ export function loadConfig(overrides = {}) {
     runtimeSandboxEnforcement: String(
       overrides.runtimeSandboxEnforcement ?? process.env.OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT ?? (production ? "full" : "partial"),
     ).trim().toLowerCase(),
+    loopxEnabled: overrides.loopxEnabled ?? boolEnv("OPEN_SCIENCE_LOOPX_ENABLED", true),
     runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", false),
     // The socket plugins a runtime runs without (preset row ids, comma
     // separated). Empty — every plugin on — is the product; naming one is how

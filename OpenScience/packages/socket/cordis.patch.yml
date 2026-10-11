@@ -260,3 +260,30 @@
 # to un-send.
 - id: plugin-package-inventory-deepseek
   disabled: true
+
+# The official LoopX bundle is installed before this one. Only bootstrap is
+# adapted: its complete CLI and skills are image-owned, never runtime-installed.
+- id: loopx-init-command
+  disabled: true
+- insert:
+    - id: evimed-loopx-bootstrap
+      name: '@evimed/dsh-socket/plugins/loopx-bootstrap'
+      config:
+        enabled: !!js process.env.EVIMED_LOOPX_ENABLED !== '0'
+        root: !!js process.env.EVIMED_LOOPX_ROOT
+        cli: !!js process.env.LOOPX_BIN
+# Goal controls follow the deployment switch alongside the installed skills.
+- id: loopx-goalbar
+  disabled: !!js process.env.EVIMED_LOOPX_ENABLED === '0'
+# Only the upstream driver schedules additional turns for a LoopX session.
+- id: loopx-driver
+  disabled: !!js process.env.EVIMED_LOOPX_ENABLED === '0'
+# beta.6 gates shared web services on its bootstrap. Restore their original
+# dependencies so disabling LoopX leaves ordinary research available.
+- id: webserver
+  inject:
+    - webStartup
+# The shared web app must also boot when the optional goal driver is disabled.
+- id: web-runtime
+  inject:
+    - webStartup

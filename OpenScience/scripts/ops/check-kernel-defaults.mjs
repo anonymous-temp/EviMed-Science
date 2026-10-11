@@ -99,8 +99,8 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.7-rc.2",
-  sha256: "526992bc5c913dcc9429decb34f2f4c45737d521e441e62942e4c3c5ea026127",
-  recordedBy: "dsh@0.1.7-rc.2 --profile evimed-runtime --dump-config inside full AMD64 runtime image sha256:31779dd0b341bc9045068a454169d12d3a2417bf7d749df80806b13a14805439 on 2026-10-02; re-recorded 2026-10-05 from the same kernel's dump in CI run 37291192706 (profile-seed), whose only difference was the platform-skills root the preset gained; 2026-10-07 the duplicate-lines row the Jev integration added to the compaction group (hand-inserted where the preset puts it; the image build's diff is the check)",
+  sha256: "71d9ec5c2f2567452befd17595061ef196c0193850be01facd1a1d1bd353be79",
+  recordedBy: "Pinned DSH --profile evimed-runtime --dump-config from the isolated seeded native profile on 2026-10-11, with the official LoopX bundle followed by EviMed. Real sessions booted this profile. The runtime image build compares its own fresh dump byte for byte before sealing.",
   // The complete recipe booted its seeded composition and an evimed-universal
   // session. A second read-only, network-isolated UID65534 boot passed after
   // import; image-owned profile sync then produced this byte-identical dump.

@@ -734,6 +734,15 @@ export class DshRuntimeAdapter {
 
 /* ------------------------------------------------------------ normalizers */
 
+/** A continuation is workload input, but never a human message. @param {any} source @returns {string|null} */
+function nativeInputIdentity(source) {
+  if (source?.kind === "loopx-continuation") {
+    const id = source.turnInstanceId;
+    return typeof id === "string" && /^[A-Za-z0-9_.:-]{1,256}$/.test(id) ? `loopx:${id}` : null;
+  }
+  return typeof source?.rpcId === "string" ? source.rpcId : null;
+}
+
 /**
  * Turns a page of history entries into the transcript the gate reads.
  *
@@ -784,7 +793,7 @@ export function normalizeTranscript(sessionId, entries) {
           // `plugin` is how an injected context is told apart from something the
           // user typed — the difference the injection is logged for.
           source: /** @type {any} */ (String(data?.source?.kind ?? "user")),
-          sourceRequestId: typeof data?.source?.rpcId === "string" ? data.source.rpcId : null,
+          sourceRequestId: nativeInputIdentity(data.source),
           turnStartSeq: activeTurn?.startSeq ?? null,
           seq,
           time,
@@ -1068,7 +1077,7 @@ export function decodeMuxFrame(frame) {
           seq,
           text: contentText(data.content),
           source: /** @type {any} */ (String(data?.source?.kind ?? "user")),
-          ...(typeof data?.source?.rpcId === "string" ? { sourceRequestId: data.source.rpcId } : {}),
+          ...(nativeInputIdentity(data.source) ? { sourceRequestId: nativeInputIdentity(data.source) } : {}),
         },
       };
     case "assistant/message": {

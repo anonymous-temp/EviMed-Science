@@ -346,11 +346,11 @@ test("the patch's override rows are collected as host-row references, not lost",
   // 2026-09-28, disabled so `evimed-universal` is the only preset and no agent
   // is offered resource tools no configured server serves.
   assert.deepEqual(hostRows.sort(), [
-    "account-controller", "agent-preset-registry", "deepseek-account", "hmr", "llm-deepseek-account", "mcp-resources",
+    "account-controller", "agent-preset-registry", "deepseek-account", "hmr", "llm-deepseek-account", "loopx-driver", "loopx-goalbar", "loopx-init-command", "mcp-resources",
     "open-in-app", "plugin-manager", "plugin-package-inventory-deepseek",
     "preset-cordis", "preset-minimal", "preset-ptc", "preset-standard", "session-log-deepseek", "session-telemetry-otel",
     "terminal-controller", "tool-web", "ui-open-in-app", "ui-plugin-manager", "ui-settings-account", "ui-sidebar-browser", "ui-sidebar-terminal",
-    "web", "web-fetch-http",
+    "web", "web-fetch-http", "web-runtime", "webserver",
   ]);
   assert.ok(collected.hostRowIds.size > 40, `the dumped host composition read as only ${collected.hostRowIds.size} rows`);
 });

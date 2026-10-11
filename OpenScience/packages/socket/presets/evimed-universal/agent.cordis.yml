@@ -210,6 +210,7 @@
       # can displace a skill we wrote. What is in here is recorded in
       # runtime/skills/community/sources.json, one entry per skill.
       - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/community'
+      - !!js (process.env.EVIMED_LOOPX_ENABLED !== '0' && ((process.env.EVIMED_LOOPX_ROOT || '/opt/evimed/loopx') + '/skills')) || '/opt/evimed/loopx-disabled'
       # Exact selected personal revisions, mounted read-only outside the workspace.
       - !!js process.env.EVIMED_PERSONAL_SKILLS_DIR || '/opt/evimed/personal-skills'
       - !!js process.env.EVIMED_PLATFORM_SKILLS_DIR || '/opt/evimed/platform-skills'
