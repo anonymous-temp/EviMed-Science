@@ -5,7 +5,7 @@ description: Run the local MetaAgent from one clinical or scientific research to
 
 # Meta Analysis Agent
 
-Use the canonical MetaAgent repository at `/Users/wangzeyuan/Desktop/meta`. Keep the interaction simple: accept a topic and return the article and its output files.
+Use the MetaAgent project at `项目代码/meta` (relative to the repository root). Keep the interaction simple: accept a topic and return the article and its output files.
 
 ## Run
 
@@ -14,7 +14,7 @@ Use the canonical MetaAgent repository at `/Users/wangzeyuan/Desktop/meta`. Keep
    - output language, optional and otherwise inferred from the topic;
    - full-auto mode, only when the user explicitly asks for unattended execution;
    - resume directory or PDF directory, only when supplied.
-2. Run from `/Users/wangzeyuan/Desktop/meta` with the repository virtual environment:
+2. Run from `项目代码/meta` with the project virtual environment:
 
 ```bash
 .venv/bin/metaagent --topic "<topic>" [--output-language zh|en]

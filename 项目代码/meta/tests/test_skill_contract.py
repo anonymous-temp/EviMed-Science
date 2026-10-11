@@ -11,7 +11,7 @@ def test_repository_contains_thin_topic_to_article_skill() -> None:
 
     assert "name: meta-analysis-agent" in text
     assert "[TODO" not in text
-    assert "/Users/wangzeyuan/Desktop/meta" in text
+    assert "项目代码/meta" in text
     assert '.venv/bin/metaagent --topic "<topic>"' in text
     assert "multiple clinically distinct analysis sets" in text
     assert "context-dependent certainty domains" in text
