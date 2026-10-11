@@ -208,7 +208,7 @@ describe("数据接入 — what the page sends", () => {
     expect(query.get("role")).toBe("document");
     expect(query.get("subject")).toBe("HZ-30001");
     expect(query.get("visibleAt")).toBe("2026-03-01");
-  });
+  }, 20_000); // several user-event uploads and selects: slower than the 5 s default on a loaded runner
 
   it("takes a PDF or Word record where the deployment converts them, and says what a scan needs", async () => {
     // The page offers only what the deployment would take: text alone until a converter is composed.
