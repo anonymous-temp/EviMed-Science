@@ -11,6 +11,22 @@ const pauseOriginal = '\t\treturn {\n\t\t\tkind: "succeeded",\n\t\t\tsnapshot: p
 const pauseReplacement = '\t\tif (request.op === "pause" && postRead.snapshot.goalActivation === "stopped") explainLoopxPause(capture.agent);\n' + pauseOriginal;
 const pausePreamble = 'import { explainLoopxPause } from "./evimed-loopx-pause.mjs";\n';
 
+/** pnpm sorts package names; DSH appends new bundles in that order, not CLI argument order. */
+export function orderLoopxProfileBundles(profileFile) {
+  const manifest = JSON.parse(readFileSync(profileFile, 'utf8'));
+  const bundles = manifest.dsh?.profile?.bundles;
+  if (!Array.isArray(bundles) || ['dsh-loopx-plugin', '@evimed/dsh-socket'].some(name => bundles.filter(value => value === name).length !== 1)) {
+    throw new Error('The prepared profile must contain exactly one LoopX and EviMed bundle.');
+  }
+  const ordered = bundles.filter(name => name !== 'dsh-loopx-plugin');
+  ordered.splice(ordered.indexOf('@evimed/dsh-socket'), 0, 'dsh-loopx-plugin');
+  if (JSON.stringify(ordered) !== JSON.stringify(bundles)) {
+    manifest.dsh.profile.bundles = ordered;
+    writeFileSync(profileFile, `${JSON.stringify(manifest, null, 2)}\n`);
+  }
+  return ordered;
+}
+
 export function adaptLoopxDriver({ pluginDir, pin, helper }) {
   const hash = text => createHash('sha256').update(text).digest('hex');
   const goalbarFile = path.join(pluginDir, pin.compatibility.goalbarFile);
@@ -44,7 +60,10 @@ export function adaptLoopxDriver({ pluginDir, pin, helper }) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const pins = JSON.parse(readFileSync(process.argv[3] ?? '/opt/evimed/runtime-deps-version.json', 'utf8'));
-  const helper = process.argv[4] ?? '/opt/evimed/socket/node_modules/@evimed/harness-port/src/loopxEvents.mjs';
-  adaptLoopxDriver({ pluginDir: process.argv[2], pin: pins.loopx, helper });
+  if (process.argv[2] === '--order-profile') orderLoopxProfileBundles(process.argv[3]);
+  else {
+    const pins = JSON.parse(readFileSync(process.argv[3] ?? '/opt/evimed/runtime-deps-version.json', 'utf8'));
+    const helper = process.argv[4] ?? '/opt/evimed/socket/node_modules/@evimed/harness-port/src/loopxEvents.mjs';
+    adaptLoopxDriver({ pluginDir: process.argv[2], pin: pins.loopx, helper });
+  }
 }

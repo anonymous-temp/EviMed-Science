@@ -9,7 +9,7 @@ import { verifyHostedLoopx, registerHostedLoopx } from '../../harness-port/src/l
 import { runtimeUiMethodFromPath } from '../../domain/src/runtimeUiSurface.mjs';
 import { isSuccessfulLoopxSkillResult } from '../../harness-port/src/loopxEvents.mjs';
 import { explainLoopxPause } from '../../harness-port/src/loopxPause.mjs';
-import { adaptLoopxDriver } from '../../../deploy/runtime-dsh/loopx-compat.mjs';
+import { adaptLoopxDriver, orderLoopxProfileBundles } from '../../../deploy/runtime-dsh/loopx-compat.mjs';
 
 const root = new URL('../../../', import.meta.url);
 const read = file => readFile(new URL(file, root), 'utf8');
@@ -38,11 +38,30 @@ test('the complete official distribution is pinned and installed before the immu
   const install = await read('deploy/runtime-dsh/install-runtime.sh');
   assert.match(install, /loopx\) loopx ;;/);
   assert.match(install, /loopx\.plugin\.filename/);
+  assert.ok(install.indexOf('loopx-compat.mjs --order-profile') < install.indexOf('> /opt/evimed/dump-config.baseline.json'));
   const bundle = await read('packages/socket/cordis.patch.yml');
   assert.match(bundle, /id: loopx-init-command\n  disabled: true/);
   assert.match(bundle, /name: '@evimed\/dsh-socket\/plugins\/loopx-bootstrap'/);
   const composition = await read('deploy/runtime-dsh/dump-config.baseline.json');
   for (const id of ['loopx-goalbar', 'loopx-driver', 'loopx-shadow-observer', 'evimed-loopx-bootstrap']) assert.ok(composition.includes(`- id: ${id}\n`));
+});
+
+test('image preparation restores patch order after native package reconciliation and preserves every other bundle', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loopx-profile-order-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'package.json');
+  const bundles = ['@deepseek-ai/dsh-base', '@changfenhuang/dsh-annotation', '@deepseek-ai/dsh-web-app',
+    '@evimed/dsh-socket', 'dsh-cite', 'dsh-loopx-plugin', 'dsh-mermaid'];
+  const manifest = { private: true, dependencies: { 'dsh-loopx-plugin': 'file:official.tgz' }, dsh: { profile: { bundles } } };
+  await writeFile(file, JSON.stringify(manifest));
+  const ordered = orderLoopxProfileBundles(file);
+  assert.deepEqual(ordered, [...bundles.slice(0, 3), 'dsh-loopx-plugin', '@evimed/dsh-socket', 'dsh-cite', 'dsh-mermaid']);
+  const first = await readFile(file, 'utf8');
+  assert.deepEqual(JSON.parse(first).dependencies, manifest.dependencies);
+  assert.deepEqual(orderLoopxProfileBundles(file), ordered);
+  assert.equal(await readFile(file, 'utf8'), first);
+  await writeFile(file, JSON.stringify({ dsh: { profile: { bundles: bundles.filter(name => name !== 'dsh-loopx-plugin') } } }));
+  assert.throws(() => orderLoopxProfileBundles(file), /exactly one/);
 });
 
 test('archive integrity is checked before any package is executed', async t => {
