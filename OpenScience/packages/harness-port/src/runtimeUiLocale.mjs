@@ -147,6 +147,25 @@ export function evimedDictionaries() {
     trajectory: {
       'view.trajectory': '运行',
     },
+    // The goal bar of the LoopX plugin (`dsh-loopx-plugin`, pinned in deps-version.json `loopx`). Its own
+    // Chinese names the vendor and an internal lane (「LoopX 目标状态」「Agent 通道待办」); the product calls
+    // the feature 长任务, as the /loopx-init command does. Keys are the plugin's, recorded in
+    // packages/contracts/loopx/goalbar-locale.json.
+    'loopx.goalbar': {
+      'region.label': '长任务目标',
+      'progress.label': '进度：已完成 {processed} / {total}',
+      'progress.empty': '还没有待办',
+      'error.cli_unavailable': '长任务工具暂不可用，请刷新后重试',
+      'error.binding_read_failed': '读不到这条对话的长任务，请刷新后重试',
+      'error.protocol_mismatch': '长任务返回了无法识别的状态，请刷新后重试',
+      'error.transport_error': '暂时连不上长任务，请刷新后重试',
+      'error.protocol_error': '长任务返回了无法识别的结果，请刷新后重试',
+      'error.binding_mismatch': '这条对话的长任务已变化，请刷新后再试',
+      'error.binding_validation_failed': '无法核对这条对话的长任务，请刷新后再试',
+      'error.action_in_flight': '另一个操作正在进行，请刷新查看结果',
+      'error.driver_sync_failed': '长任务已更新，但对话没有同步，请刷新查看',
+      'error.post_read_failed': '长任务已更新，但暂时读不到最新状态，请刷新查看',
+    },
   };
 }
 

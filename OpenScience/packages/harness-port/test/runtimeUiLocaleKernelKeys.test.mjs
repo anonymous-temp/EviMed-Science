@@ -9,19 +9,30 @@ import { EVIMED_DICTIONARIES, EVIMED_OWN_KEYS } from '../src/runtimeUiLocale.mjs
 
 const recorded = JSON.parse(await readFile(new URL('../../contracts/dsh/client-locale.json', import.meta.url), 'utf8'));
 const pins = JSON.parse(await readFile(new URL('../../../deps-version.json', import.meta.url), 'utf8'));
+// A namespace a pinned plugin of the composition owns (not the kernel), recorded off that plugin's own bytes.
+const loopxGoalbar = JSON.parse(await readFile(new URL('../../contracts/loopx/goalbar-locale.json', import.meta.url), 'utf8'));
+const pluginNamespaces = { [loopxGoalbar.namespace]: loopxGoalbar.locales.zh };
 
 test("the recorded kernel dictionaries are the pinned kernel's", () => {
   assert.equal(recorded.pin, pins.dsh.version,
     're-record packages/contracts/dsh/client-locale.json with record-client-locale.mjs on every DSH pin change');
 });
 
-test('every key the product rephrases is a key the pinned kernel has', () => {
+test("the recorded LoopX goal-bar dictionaries are the pinned plugin's", () => {
+  assert.equal(loopxGoalbar.version, pins.loopx.plugin.version,
+    're-record packages/contracts/loopx/goalbar-locale.json from the plugin archive on every LoopX plugin pin change');
+  assert.deepEqual(Object.keys(loopxGoalbar.locales.zh).sort(), Object.keys(loopxGoalbar.locales.en).sort());
+});
+
+test('every key the product rephrases is a key the pinned kernel (or a pinned plugin of its namespace) has', () => {
   for (const [namespace, dictionary] of Object.entries(EVIMED_DICTIONARIES)) {
-    assert.ok(recorded.namespaces[namespace], `namespace ${namespace} is not among the recorded kernel dictionaries`);
+    /** @type {Record<string, unknown> | undefined} */
+    const keys = recorded.namespaces[namespace] ?? /** @type {Record<string, any>} */ (pluginNamespaces)[namespace];
+    assert.ok(keys, `namespace ${namespace} is not among the recorded kernel or plugin dictionaries`);
     const own = /** @type {Record<string, readonly string[]>} */ (EVIMED_OWN_KEYS)[namespace] ?? [];
     for (const key of Object.keys(dictionary)) {
       if (own.includes(key)) continue;
-      assert.ok(key in recorded.namespaces[namespace], `${namespace}:${key} — the pinned kernel has no such key (renamed or removed?)`);
+      assert.ok(key in keys, `${namespace}:${key} — the pinned kernel or plugin has no such key (renamed or removed?)`);
     }
   }
 });
