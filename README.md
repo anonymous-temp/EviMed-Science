@@ -238,3 +238,4 @@ unchanged. Third-party components keep their own licenses: the DSH packages, the
 recorded in `sources.json` beside them. See
 [`OpenScience/docs/WEB_PRIVACY_AND_COMPLIANCE.md`](OpenScience/docs/WEB_PRIVACY_AND_COMPLIANCE.md)
 for the redistribution checklist of the hosted image.
+[`NOTICE`](NOTICE) lists every third-party component, its license and where it lives.

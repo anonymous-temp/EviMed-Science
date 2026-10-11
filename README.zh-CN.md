@@ -195,3 +195,4 @@ contributors”），该文件未作改动。第三方组件保留各自的许�
 （Apache-2.0），以及 `OpenScience/runtime/skills/community` 下的社区技能；这些技能的来源、固定提交和许可证记录在
 同目录的 `sources.json` 中。托管镜像再分发的核对清单见
 [`OpenScience/docs/WEB_PRIVACY_AND_COMPLIANCE.md`](OpenScience/docs/WEB_PRIVACY_AND_COMPLIANCE.md)。
+全部第三方组件、其许可证和所在位置列在 [`NOTICE`](NOTICE) 中。

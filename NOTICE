@@ -1,0 +1,60 @@
+EviMed Science
+Copyright (c) 2026 EviMed Science contributors
+
+This repository is licensed under the MIT License (see LICENSE). It includes or
+adapts work from third parties; each keeps its own license and notice, and the
+MIT License of this repository does not replace them.
+
+Code
+----
+- OpenScience/ began as the Open Science workbench ("AI4S Workbench
+  contributors", MIT). Its original notice is kept unchanged in
+  OpenScience/LICENSE.
+- OpenScience/scripts/ops/ui-walk.mjs embeds axe-core 4.12.1, Copyright (c)
+  2015-2026 Deque Systems, Inc., under the Mozilla Public License 2.0, with its
+  notice in place. That embedded code remains under the MPL-2.0.
+- OpenScience/apps/server/src/channels/feishu/{client,messages,registration}.mjs
+  are adapted from an MIT-licensed project; the attribution is in each file's
+  header comment.
+
+Skills
+------
+- OpenScience/runtime/skills/curated-scientific/ derives from K-Dense's
+  scientific-agent-skills (MIT; LICENSE.scientific-agent-skills.md). Per-skill
+  provenance is recorded in its inventory.json.
+- OpenScience/runtime/skills/community/ and core/humanizer, core/humanizer-zh
+  are third-party skills under the MIT License, each with its LICENSE file; the
+  community skills' pinned sources are recorded in community/sources.json.
+
+Contracts and notices of upstream services
+-------------------------------------------
+- OpenScience/packages/contracts/openmed/ keeps OpenMed's Apache-2.0 LICENSE and
+  NOTICE (LICENSE.upstream, NOTICE.upstream). Reference contracts only; no
+  OpenMed code or weights are included.
+- OpenScience/deploy/tooluniverse/NOTICE: ToolUniverse (Apache-2.0), installed
+  when its image is built, not included here.
+
+Installed at image build time, not part of this repository
+-----------------------------------------------------------
+The runtime image installs, from archives pinned by digest in
+OpenScience/deps-version.json: the DeepSeek Harness packages (@deepseek-ai/*),
+the community DSH bundles dsh-cite, @changfenhuang/dsh-annotation and
+dsh-mermaid, and LoopX (the loopx CLI and dsh-loopx-plugin, Apache-2.0). Their
+licenses travel with those packages.
+
+Data
+----
+- OpenScience/evals/statistical-analysis/fixtures/: see THIRD_PARTY_LICENSES.txt
+  there (CC BY 4.0 data, BSD-3-Clause adapted reference code, LGPL-2 data from
+  the R survival package, with the license text).
+- 项目代码/vcr-engine/tests/fixtures/: data from the CRAN packages
+  EmpiricalCalibration and maicplus, Apache-2.0, with their notices.
+- OpenScience/runtime/mcp/evimed-research/test/fixtures/vcr_imports/: synthetic
+  patient data (CC0 / Apache-2.0); license and digest per file in
+  provenance.json.
+- OpenScience/evals/title-to-paper/corpus-v3/fulltext/: open-access articles
+  from Europe PMC under the license recorded per article in manifest.json,
+  including CC BY-NC and CC BY-ND terms. Those articles are redistributed
+  unmodified under their own licenses, which the MIT License does not override.
+- 项目代码/knowledge-plugin/tests/fixtures/: captured public web pages and feeds,
+  kept only to test parsing; their content belongs to the publishers.

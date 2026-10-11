@@ -15,11 +15,13 @@ This file provides guidance to AI coding agents (Codex, Claude Code, etc.) worki
 
 **The hosted SaaS under `OpenScience/` is the production system and the single source of new product work.** It is a ground-up rewrite of the drug-evaluation capabilities that the five Java services used to provide; the Java tree is archived, not a fork to keep in sync. New evidence/evaluation logic goes into `OpenScience/` (its MCP tools, skills, and server), never back into the Java services.
 
-Git model: the workspace root is the single authoritative repository (branch `main`, cloned from `git@gitee.com:zwan7221/evimed-science.git` per the root `README.md`). `OpenScience/` and the six Python specialist agents and the knowledge-source plugin under `项目代码/` are normal tracked directories, not submodules. Commit and push from the workspace root. The **five Java services are untracked as of 2026-07-24** (`.gitignore` — kept on disk for reference, out of the repo); `项目代码/scientific-agent-skills-main/` and `grok-build-main/` are ignored reference snapshots.
+Git model: the workspace root is the single authoritative repository (branch `main`, published at `https://github.com/anonymous-temp/EviMed-Science` under the MIT License — `LICENSE`, third-party notices in `NOTICE`). `OpenScience/` and the six Python specialist agents and the knowledge-source plugin under `项目代码/` are normal tracked directories, not submodules. Commit and push from the workspace root. The **five Java services are untracked as of 2026-07-24** (`.gitignore` — kept on disk for reference, out of the repo); `项目代码/scientific-agent-skills-main/` and `grok-build-main/` are ignored reference snapshots.
 
 Working language: discussion in Chinese is fine, but **code, files, comments, and commits are English** (per `OpenScience/AGENTS.md`). When a subtree has its own `AGENTS.md`/`CLAUDE.md`, that file wins for that subtree. `CLAUDE.md` at the workspace root is the Claude-Code-variant of this file — keep them in sync when editing rules.
 
 ### Supporting directories (do not code here)
+
+Only `docs/` below is part of the published tree; the others are local to a maintainer's checkout (gitignored) and may not exist in yours.
 
 - `药学基础数据/` — pharmacy base data (gitignored): `中医药数据/` (TCM data), `药品说明书数据库_医药数据查询/` (drug-label database), `药学相关资料/`, `重点整理数据表/` (curated tables). Data only, no code.
 - `.evimed-local/` — local infra state: `secrets/` (`deepseek.api-key`, `dashscope.api-key`, signing keys, bootstrap password; the DashScope key is the operator-supplied one OpenViking's `ov.conf` and the control-plane reranker are both configured from), `toolchains/`, `infra/`, `run/`, `acceptance/`, `memos/memos_prod.db` (the retired usememos SQLite, kept only as the source of the one-off research-memory import), and recoverable migration metadata under `git-backups/`. Treated as runtime state; never commit, never echo.
@@ -28,7 +30,7 @@ Working language: discussion in Chinese is fine, but **code, files, comments, an
 - `docs/superpowers/` — `plans/` and `specs/` for the `superpowers` skill framework (incl. the EviMed platform design spec and the `grok-build` fusion design). `docs/ui-ux-audit/` — frontend UI/UX audit reports (Chinese).
 - `grok-build-main/` — vendored Rust workspace (SpaceXAI "Grok Build" terminal coding agent; `xai-*` crates under `crates/`, vendored `third_party/`). Unrelated to platform code; read-only reference for the fusion design in `docs/superpowers/specs/`.
 - `.playwright-mcp/` — Playwright MCP session logs/snapshots. Tooling artifact.
-- `uploads/` — untracked scratch dir of run inputs/outputs from manual product exercises (timestamped run dirs plus `deploy-tools/`). Ephemeral; not an input to any build.
+- `uploads/` — gitignored local scratch of run inputs/outputs from manual product exercises. Ephemeral; not an input to any build, and never committed (it left the tree on 2026-10-11).
 
 ## OpenScience/ — production SaaS (AI research workbench)
 
