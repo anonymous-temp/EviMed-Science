@@ -8,6 +8,8 @@ import test from "node:test";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { createModelGatewayHandler } from "../src/modelGateway.mjs";
 import { createVcrCloudEgress, createVcrSessionResolver } from "../src/vcrCloudEgress.mjs";
+import { cloudPermission, deploymentCloudPermission, projectionHash } from "../src/vcrCloudProjection.mjs";
+import { canonicalScenarioJson } from "@evimed/domain";
 
 // The privacy hook sits on every model call of every project. It must cost a project that never touched clinical data
 // nothing it can fail on: the session used to be resolved first, from the whole run ledger, so a damaged or oversized
@@ -173,4 +175,47 @@ test("the server wires the privacy hook with the resolver these tests pin, on ev
   // And the one function it makes is the hook of the model gateway, the review model and the reply check alike.
   assert.match(source, /assertModelAccess: assertVcrCloudAccess,/);
   assert.match(source, /assertModelAccess: \(caller, body\) => assertVcrCloudAccess\?\.\(caller, body\)/);
+});
+
+// The deployment's provider agreements (2026-10-10): what a dependency that no operator attested may do, and what no agreement reopens.
+const agreements = deploymentCloudPermission({ deepseekBaseUrl: origin, vcrProviderAgreements: true });
+const documentId = "sfl_" + "c".repeat(22);
+/** A dependency on a document of source `src_1`, which has whatever permission record the test gives it. */
+const rowWith = (cloud_permission, extra = {}) => ({ id: documentId, study_id: "study-1", deleted_at: null, permission_hash: null, source_id: "src_1", cloud_permission, ...extra });
+const hook = (rows, options = {}) => createVcrCloudEgress({ store: storeDouble({ study: true, rows }), resolveSession: async () => "ledger-session", destinations: () => [origin], ...options });
+
+test("under the provider agreements a conversation that read a document nobody attested is not refused", async () => {
+  await hook([rowWith(null)], { deployment: () => agreements })(caller, { messages: ["cached clinical context"] });
+  await assert.rejects(hook([rowWith(null)])(caller, { messages: ["cached clinical context"] }), { code: "vcr_cloud_processing_not_authorized" },
+    "without the agreements the same dependency is refused as before");
+});
+
+test("no agreement reopens a revoked source, a source that was deleted, or a study that was hidden", async () => {
+  const deployment = () => agreements;
+  await assert.rejects(hook([rowWith(cloudPermission({ status: "revoked" }, "operator", "2026-10-10T00:00:00.000Z"))], { deployment })(caller, { messages: ["x"] }),
+    { code: "vcr_cloud_processing_not_authorized" });
+  await assert.rejects(hook([rowWith(null, { source_id: null })], { deployment })(caller, { messages: ["x"] }), { code: "vcr_cloud_processing_not_authorized" });
+  await assert.rejects(hook([rowWith(null, { deleted_at: new Date() })], { deployment })(caller, { messages: ["x"] }), { code: "vcr_cloud_processing_not_authorized" });
+});
+
+test("a projection stays bound to the permission an operator recorded for it, and to nothing when the agreements stood for it", async () => {
+  const record = cloudPermission({ status: "approved", dataClass: "deidentified", destinations: [origin], purpose: "vcr", reference: "Partner agreement", retention: "none", training: "disabled", humanReview: "disabled" }, "operator", "2026-10-10T00:00:00.000Z");
+  const reviewedUnder = projectionHash(canonicalScenarioJson(record));
+  const projection = "prj_" + "d".repeat(48);
+  const row = (permission_hash) => rowWith(record, { id: projection, permission_hash });
+  await hook([row(reviewedUnder)], { deployment: () => agreements })(caller, { messages: ["x"] });
+  await hook([row("deployment_agreements")], { deployment: () => agreements })(caller, { messages: ["x"] });
+  await assert.rejects(hook([row("f".repeat(64))], { deployment: () => agreements })(caller, { messages: ["x"] }), { code: "vcr_projection_permission_changed" });
+  // Its source following the deployment again, the projection reviewed under the earlier record is not retired by that.
+  await hook([rowWith(null, { id: projection, permission_hash: "f".repeat(64) })], { deployment: () => agreements })(caller, { messages: ["x"] });
+});
+
+test("a document id in a request body is a dependency like a projection id: a copied context inherits it", async () => {
+  const store = storeDouble({ study: true, rows: [rowWith(null)] });
+  const inherited = [];
+  store.inheritCloudDependency = async (...args) => { inherited.push(args); };
+  const egress = createVcrCloudEgress({ store, resolveSession: async () => "ledger-session", destinations: () => [origin], deployment: () => agreements });
+  await egress(caller, { messages: [`the chart ${documentId} was read earlier`] });
+  assert.ok(store.calls.includes("cloudDependencies:ledger-session:1"), "the id was looked up");
+  assert.deepEqual(inherited, [["study-1", "ledger-session", "ledger-session", documentId]]);
 });

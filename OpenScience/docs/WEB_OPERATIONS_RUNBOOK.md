@@ -1552,45 +1552,106 @@ The surface inventory covers 152 reviewed upstream capabilities. Corpus and
 terminology rights are individual entries in `data-rights.json`; an upstream
 code licence does not admit a dataset, vocabulary or cloud processing purpose.
 
-Clinical enrichment is off by default. After measuring a selected study, add its
-study id to `OPEN_SCIENCE_VCR_CLINICAL_STUDY_IDS` and follow the normal web release
-procedure. An empty list returns the existing extraction guidance. Clearing this
-list does not remove clinical facts, corrections, frozen inputs, registry versions
-or prior reports. Disabling the VCR module also leaves historical cloud permission
-checks active. No production study was activated by this implementation batch.
+Clinical enrichment (the `clinical` fact field with its contract, terminology and
+guidance) is on for every study since 2026-10-10. `OPEN_SCIENCE_VCR_CLINICAL_STUDY_IDS`
+is an optional restriction: an empty list is every study, and a list of study ids
+narrows it to those (the other studies read the existing extraction guidance).
+Changing the list does not remove clinical facts, corrections, frozen inputs, registry
+versions or prior reports. Disabling the VCR module also leaves historical cloud
+permission checks active.
 
-A patient document first stays in the protected data plane. In its source panel,
-record the processing purpose, approved HTTPS origins, terms, authorization
-reference and optional expiry. A deidentified source needs recorded no-retention,
-no-training and no-human-review terms. These fields are the operator's attestation;
-the application does not independently certify a provider's actual practices.
-Original text is shown only through the authenticated protected view. Explicitly
-reviewed identifier spans produce a study-scoped text projection with an exact
-UTF-16 mapping back to the original. This is not an automatic PII detector. Images,
-scanned records, unsupported geometry and date shifting are not added by this
-projection feature. Missing source permission affects that source operation.
+A patient document stays in the protected data plane; only the control plane reads
+it. Since 2026-10-10 the deployment's own record of its agreements with the model
+providers it calls is the cloud permission (`OPEN_SCIENCE_VCR_PROVIDER_AGREEMENTS`,
+on by default): no retention, no training and no human review, for the destinations the
+model gateway and the configured reviewers reach, for identifiable records as well as
+de-identified ones. With it every study document may be read by those providers, as
+the document stands or as a reviewed projection when one exists (a projection is used
+when there is one and is no longer required), with no per-document attestation. The
+basis of each read (`deployment_agreements` or `source_permission`, with the agreement
+reference `OPEN_SCIENCE_VCR_PROVIDER_AGREEMENT_REFERENCE` when the deployment's stood)
+is in the `document.cloud_read` audit row, never in a notice to a researcher, and
+`open_science_vcr_cloud_reads_total{basis}` counts the reads. The application does not
+independently certify a provider's actual practices: the record is the deployment's
+declaration. An operator restricts one source by revoking its cloud permission in its
+panel (`{ status: "revoked" }`), and nothing overrides that; `{ status: "default" }`
+brings the source back to the deployment. With the switch off, each source needs a
+permission recorded in its panel as before: processing purpose, approved HTTPS origins,
+terms (`public`, `synthetic`, `deidentified` or `clinical` text; the last two need
+recorded no-retention, no-training and no-human-review terms), authorization reference
+and optional expiry. A recorded approved permission still stands beside the agreements,
+and a projection reviewed under it stays bound to it. Original text is shown only
+through the authenticated protected view. Explicitly reviewed identifier spans produce
+a study-scoped text projection with an exact UTF-16 mapping back to the original. This
+is not an automatic PII detector. The reviewer is offered suggestions for the identifiers
+that have a closed format (`@evimed/domain`'s `suggestIdentifierSpans`: an 18-digit
+mainland resident identity number with its region, birth date and check character, a
+mobile number, the number after a record-number label such as 住院号 or MRN, and a date
+with its year): each is a span the reviewer accepts or leaves, none is applied by itself,
+and no date is shifted. Names and addresses stay the reviewer's to list. Images, scanned
+records and unsupported geometry are not added by this projection feature. A refusal
+affects that source operation only.
 
 Cloud reads record source/projection hashes, served windows and the run/session
 that received them, without putting text in audit rows. A served window is not
 proof of complete extraction; its extraction coverage remains unknown unless
 supported by another receipt. Provider requests are associated with their actual
 observed model and configuration fingerprint, not an invented model version.
-The ordinary gateway and configured reviewers recheck permission before sending.
+The ordinary gateway, the configured reviewers (the editor pass, the cited-sentence
+and reply-number checks) and every Jev judge site recheck permission before sending.
 Revocation, expiry and changed terms also prevent resending an affected cached
 conversation. Start a fresh conversation for unrelated work or a newly reviewed
 projection. Clinical sessions do not seed general research memory, capsule notes,
-shared evaluation traces or account-wide method learning. Study-local corrections
-and deterministic historical replay remain available.
+shared evaluation traces or account-wide method learning. The reply check (the
+citation check and, in a study's conversation, the check of the numbers a reply
+reports against the engine's results) runs for them like for every conversation: it
+is a notice that never holds a reply back, and its reviewer calls ask the same
+permission check. Study-local corrections and deterministic historical replay remain
+available.
 
 The study delete operation hides a study; it has never meant erasing its project.
 Cloud dependencies continue to refuse its cached clinical content after hiding.
-Unfrozen source deletion removes its derived projections and facts. Inputs used by
-a frozen analysis remain protected for historical reproducibility and are identified
-as retained. Full project/account deletion removes the study tables, protected
-study directory and project conversations through the existing deletion path.
-Metadata-only audit records and authorized backup retention follow existing policy;
-this feature makes no claim of instant erasure from backup media or a provider.
-Do not treat these controls as HIPAA, GDPR or 21 CFR Part 11 certification.
+Unfrozen source deletion removes its derived projections and facts. A patient's
+consent withdrawal (`POST /api/vcr/studies/:id/data/subjects/:subject/withdraw`, role
+`manage_data`, the source panel's 「患者撤回同意」) and a deletion request for a document
+that an evaluation was frozen on erase the text instead of refusing: the plane keeps
+its documents as plain files (there is no per-document key to destroy), so each text
+file, converted original and projection manifest is overwritten in place with zeros,
+synced and removed, after the database commits that the row is erased (`source_files.
+erased_at`, `document_projections.retired_at`/`purged_at`); asked again, the request
+overwrites what a failed attempt left. The rows, their hashes and the audit trail stay
+(`source.file.erase` and `subject.withdraw` hold hashes and counts, never a word).
+What was read from the erased text is deleted when no evaluation was frozen on it and
+redacted when one was (quote kept as a hash, surface, written date, text value and the
+quotes of relations emptied; the digest it was frozen under is kept in
+`withdrawn.digest`), so a frozen evaluation still verifies and reads as 「已撤回」 beside the
+person. A withdrawn subject (`subject_withdrawals`) is on no roster, is counted
+unavailable in a batch frozen before the withdrawal, and their open referrals close as
+退出. A projection that missed an identifier is retired and purged the same way
+(`POST .../data/projections/:projection/retire`, the source panel's 「停用并清除」): no
+read serves it, what was quoted from it is deleted or redacted, and the newest live
+projection (or, with none, the document under the deployment's agreements) is read
+instead. A correction case (study-local evaluation export) that rests on an erased source
+cannot be replayed: it is left out of an export and a replay and counted (`selection.
+withdrawn`, `withdrawn`), and the other cases go on. Structured data files in a snapshot are the snapshot's own record and are not
+rewritten; text already copied into the project's conversations, and into backups made
+before the erasure, follows those stores' retention. Full project/account deletion
+removes the study tables, protected study directory and project conversations through
+the existing deletion path. Metadata-only audit records and authorized backup
+retention follow existing policy; this feature makes no claim of instant erasure from
+backup media or a provider. Do not treat these controls as HIPAA, GDPR or 21 CFR
+Part 11 certification.
+
+What an evaluation rested on can change afterwards: a permission of its source, a
+reviewed text that now takes the place of a record, a record added for the person, a
+withdrawal. The facts, language judgments and assessments derived from it are marked
+(`evimed_vcr.derived_marks`, found from a fact's source, a judgment's evidence and the
+facts a frozen input names), the matching page says 「依据已更新」 (or 「已撤回」) beside the
+person and offers 「重新评估」, which is the ordinary evaluation request for those
+people. A mark is a label: nothing is blocked, nothing runs because of one, a new
+evaluation writes a new assessment that carries no mark, and a withdrawal is not
+weakened by a later change. `open_science_vcr_erasure_total{kind}` counts withdrawals,
+erasures, retirements, files overwritten and marks written (and the ones that failed).
 
 Matching jobs freeze the candidate roster, facts, language judgments, criteria and
 as-of time before queueing. Continue a batch using its `inputSnapshotId` and

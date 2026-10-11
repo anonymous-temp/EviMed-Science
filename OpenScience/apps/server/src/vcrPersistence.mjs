@@ -46,6 +46,7 @@ import {
   VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES, VCR_FIELD_ROLES, VCR_PACK_STATUSES, PLATFORM_PUBLISHER_USER_ID,
 } from "@evimed/domain";
 import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
+import { VCR_ERASURE_SQL } from "./vcrErasureSchema.mjs";
 
 /** The schema name, written once. */
 export const VCR_SCHEMA = "evimed_vcr";
@@ -84,7 +85,7 @@ export const VCR_TABLES = Object.freeze([
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
   "jobs", "executions", "results", "forecasts", "longitudinal_artifacts",
-  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "matching_candidates", "matching_producers",
+  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "derived_marks", "matching_candidates", "matching_producers",
   "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments",
   "referrals", "referral_events", "sites", "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
@@ -1083,6 +1084,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.cloud_reads (
   PRIMARY KEY(study_id,session_id,projection_id)
 );
 ALTER TABLE evimed_vcr.cloud_reads ADD COLUMN IF NOT EXISTS windows jsonb NOT NULL DEFAULT '{}'::jsonb;
+${VCR_ERASURE_SQL}
 CREATE TABLE IF NOT EXISTS evimed_vcr.matching_candidates (
   study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
   snapshot_id text NOT NULL REFERENCES evimed_vcr.snapshots(id) ON DELETE CASCADE,

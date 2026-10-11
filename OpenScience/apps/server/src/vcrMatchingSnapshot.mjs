@@ -70,7 +70,8 @@ export function hydrateMatchingInputs(snapshot, facts, judgments) {
   const languageMap = new Map(judgments.map(row => [row.id, row]));
   const selected = snapshot.facts.map((/** @type {any} */ ref) => {
     const row = factMap.get(ref.id);
-    if (!row || matchingInputDigest(row) !== ref.hash) throw new HttpError(409, 'vcr_matching_input_changed', 'A frozen fact is unavailable or changed.');
+    // A fact whose words were erased keeps the digest it was frozen under: the evaluation reads as withdrawn, not as changed.
+    if (!row || (row.withdrawn?.digest ?? matchingInputDigest(row)) !== ref.hash) throw new HttpError(409, 'vcr_matching_input_changed', 'A frozen fact is unavailable or changed.');
     return row;
   });
   /** @type {Map<string,Record<string,any>>} */
@@ -78,7 +79,7 @@ export function hydrateMatchingInputs(snapshot, facts, judgments) {
   for (const ref of snapshot.languages) {
     const row = languageMap.get(ref.id);
     if (!row || row.subjectKey !== ref.subjectKey || row.criterionKey !== ref.key
-      || row.protocolVersionId !== snapshot.protocolVersionId || matchingInputDigest(languageInput(row)) !== ref.hash) {
+      || row.protocolVersionId !== snapshot.protocolVersionId || (row.withdrawn?.digest ?? matchingInputDigest(languageInput(row))) !== ref.hash) {
       throw new HttpError(409, 'vcr_matching_input_changed', 'A frozen language judgment is unavailable or changed.');
     }
     const entries = languages.get(ref.subjectKey) ?? {};

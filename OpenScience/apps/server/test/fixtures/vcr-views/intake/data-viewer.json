@@ -208,6 +208,10 @@
         "readable": false,
         "canGrant": false,
         "cloudPermission": null,
+        "cloud": {
+          "state": "closed",
+          "basis": null
+        },
         "status": "frozen",
         "statusLabel": "已冻结",
         "valueSource": "observed",
@@ -266,6 +270,10 @@
         "readable": false,
         "canGrant": false,
         "cloudPermission": null,
+        "cloud": {
+          "state": "closed",
+          "basis": null
+        },
         "status": "profiled",
         "statusLabel": "已上传",
         "valueSource": "extracted",

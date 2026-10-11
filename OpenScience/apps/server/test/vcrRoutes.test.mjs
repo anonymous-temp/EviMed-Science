@@ -497,6 +497,8 @@ const REQUESTS = {
   "GET /studies/:id/data/documents/:document": ["GET", "/api/vcr/studies/std_1/data/documents/sfl_1", undefined],
   "POST /studies/:id/data/documents/:document/projection": ["POST", "/api/vcr/studies/std_1/data/documents/sfl_1/projection", {}],
   "POST /studies/:id/data/documents/:document/quote": ["POST", "/api/vcr/studies/std_1/data/documents/sfl_1/quote", {}],
+  "POST /studies/:id/data/projections/:projection/retire": ["POST", "/api/vcr/studies/std_1/data/projections/prj_1/retire", {}],
+  "POST /studies/:id/data/subjects/:subject/withdraw": ["POST", "/api/vcr/studies/std_1/data/subjects/P0001/withdraw", {}],
   "POST /studies/:id/data/sources": ["POST", "/api/vcr/studies/std_1/data/sources", { name: "合作方基线" }],
   "POST /studies/:id/data/sources/:source/files": ["POST", "/api/vcr/studies/std_1/data/sources/src_1/files?name=cohort.csv", undefined],
   "DELETE /studies/:id/data/files/:file": ["DELETE", "/api/vcr/studies/std_1/data/files/sfl_1", undefined],
@@ -547,6 +549,8 @@ function composedHooks() {
         documentText: async () => ({ id: "sfl_1", text: "synthetic" }),
         createDocumentProjection: async () => ({ id: "prj_1" }),
         resolveProjectionQuote: async () => ({ quote: "synthetic" }),
+        retireProjection: async () => ({ id: "prj_1", files: 0, projections: 1, factsRemoved: 0, factsRedacted: 0 }),
+        withdrawSubject: async () => ({ subjectKey: "P0001", files: 1, projections: 1, factsRemoved: 0, factsRedacted: 0 }),
         storeUpload: async () => ({ created: true, file }),
         removeUpload: async () => ({ removed: true, fileId: "sfl_1" }),
         proposeFieldMap: async () => ({ source, hash: "a".repeat(64), entryIssues: [], mapIssues: [] }),
@@ -582,6 +586,22 @@ test("CS-7 every route in the ability table is driven as every role, and 403 fal
     }
   }
   assert.ok(asserted >= (VCR_MEMBER_ROLES.length + 1) * Object.keys(VCR_ROUTE_ABILITIES).length, "the walk covered the whole grid");
+});
+
+test("the protected document comes with the identifiers of closed formats in it as spans to accept, and none of them applied", async () => {
+  const text = "患者王小明，身份证号 11010519491231002X，电话 13812345678，住院号：20261234，入院 2026-10-01。";
+  const overrides = composedHooks();
+  overrides.dataPlane = { ...overrides.dataPlane, documentText: async () => ({ id: "sfl_1", text }) };
+  const { routes } = fixture({ overrides });
+  const res = response();
+  await routes(request("GET", "/api/vcr/studies/std_1/data/documents/sfl_1"), res);
+  assert.equal(res.status, 200);
+  const { document } = res.json().data;
+  assert.equal(document.text, text, "the original is shown exactly as it is");
+  assert.deepEqual(document.suggestions.map((/** @type {any} */ span) => [span.format, text.slice(span.start, span.end)]),
+    [["resident_id", "11010519491231002X"], ["mobile", "13812345678"], ["record_number", "20261234"], ["date", "2026-10-01"]]);
+  assert.deepEqual(document.suggestions.map((/** @type {any} */ span) => span.kind), ["identifier", "contact", "identifier", "date"]);
+  assert.ok(!document.suggestions.some((/** @type {any} */ span) => "text" in span || "replacement" in span), "spans only: the reviewer decides, and the projection is built from what was accepted");
 });
 
 test("「为该患者找试验」 asks the orchestrator for the run, judges the trials the study already holds for the patient at once, and refuses a patient the study does not hold", async () => {

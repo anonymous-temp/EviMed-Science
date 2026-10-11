@@ -458,3 +458,21 @@ test('deleting an unfrozen source removes derived facts and projection files whi
   const egress=createVcrCloudEgress({store:vcr.store,resolveSession:async()=> 'deleted_cache',destinations:()=>[origin]});
   await assert.rejects(egress({userId:'owner',projectId:target.projectId},{messages:['cached quotation']}),{code:'vcr_cloud_processing_not_authorized'});
 });
+
+test('clinical enrichment is on for every study unless the deployment lists study ids, which then restrict it', options, async () => {
+  const first = await study(), second = await study();
+  await write(first, 'criteria', [rule('Consent')]); await write(second, 'criteria', [rule('Consent')]);
+  // No list: every study gets the fact contract and its terminology, and `clinical` is written and kept for each.
+  for (const target of [first, second]) {
+    const view = await vcr.matching.runtimeRead(target, {});
+    assert.equal(view.factContract?.schema, 1, 'the contract is part of the read of every study');
+    assert.ok(view.terminology !== undefined, 'and so is the terminology slot');
+  }
+  const written = await write(second, 'fact', [{ subjectKey: 'P-enrich', variable: 'age', value: 62, unit: 'year', documentId: 'sfl_unread', quote: '年龄 62 岁', surface: '62',
+    clinical: { schema: 1, assertion: 'affirmed', experiencer: 'patient' } }]);
+  assert.equal(written.ids.length, 0, 'a fact of a document nobody read is refused for its quote, not for being clinical');
+  // A list restricts: only a study on it keeps the contract, and the others read as they did before it.
+  const restricted = composeVcr({ config: { vcrEnabled: true, vcrAudience: 'all', vcrDataPlaneDir: directory, deepseekBaseUrl: origin, vcrClinicalStudyIds: [first.id] }, productDatabase: database });
+  assert.equal((await restricted.matching.runtimeRead(first, {})).factContract?.schema, 1);
+  assert.equal((await restricted.matching.runtimeRead(second, {})).factContract, null);
+});

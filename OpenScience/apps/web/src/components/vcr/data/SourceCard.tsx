@@ -11,6 +11,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { Tag } from "@/components/ui/Tag";
 import { CloudDocuments } from "./CloudDocuments";
+import { WithdrawConsent } from "./WithdrawConsent";
 import { readingText } from "./intakeState";
 import { FieldMapEditor } from "./FieldMapEditor";
 import { IMPORT_FORMATS, documentAccept, importAccept, importProblem, importSummary, intakeErrorMessage, uploadProblem } from "./intakeState";
@@ -53,8 +54,9 @@ function FileRow({ file, frozen, canManage, busy, onRemove }: { file: VcrIntakeF
       </span>
       <span className="flex shrink-0 items-center gap-2">
         {file.latest === false && <Tag title="同名文件有更新的版本，快照取最新的一份">旧版本</Tag>}
+        {file.erased && <Tag title="文本已清除，行和哈希保留">已撤回</Tag>}
         {frozen && <Tag>已入快照</Tag>}
-        {canManage && !frozen && <IconButton icon={Trash2} size="sm" label={`删除 ${file.name}`} disabled={busy} onClick={onRemove} />}
+        {canManage && !frozen && !file.erased && <IconButton icon={Trash2} size="sm" label={`删除 ${file.name}`} disabled={busy} onClick={onRemove} />}
       </span>
     </li>
   );
@@ -313,12 +315,12 @@ export function SourceCard({ studyId, source, snapshots, options, canManage, onC
   const dataFiles = source.files.filter((file) => file.role === "data");
   const editable = canManage && source.readable;
 
-  const run = (label: string, work: () => Promise<unknown>, done: string, failed: string) => {
+  const run = (label: string, work: () => Promise<unknown>, done: string, failed: string, said?: (answer: unknown) => string | null) => {
     if (holding.current) return;
     holding.current = true;
     setBusy(label);
     work()
-      .then(() => { toast.success(done); onChanged(); })
+      .then((answer) => { toast.success(said?.(answer) ?? done); onChanged(); })
       .catch((error: unknown) => toast.error(intakeErrorMessage(error, failed)))
       .finally(() => { holding.current = false; setBusy(null); });
   };
@@ -359,13 +361,14 @@ export function SourceCard({ studyId, source, snapshots, options, canManage, onC
                   <FileRow
                     key={file.id} file={file} canManage={canManage} busy={busy !== null}
                     frozen={file.role === "data" && file.latest !== false && frozenNames.has(file.name)}
-                    onRemove={() => run(`remove:${file.id}`, () => removeVcrFile(studyId, file.id), "已删除。", "文件暂时无法删除，请稍后重试。")}
+                    onRemove={() => run(`remove:${file.id}`, () => removeVcrFile(studyId, file.id), "已删除。", "文件暂时无法删除，请稍后重试。", (answer) => ((answer as { erased?: boolean })?.erased ? "已清除这份病历的文本。" : null))}
                   />
                 ))}
               </ul>
             )}
             {editable && source.status !== "withdrawn" && <UploadForm studyId={studyId} source={source} onChanged={onChanged} />}
             {editable && <CloudDocuments studyId={studyId} source={source} onChanged={onChanged} />}
+            {editable && <WithdrawConsent studyId={studyId} source={source} onChanged={onChanged} />}
           </Step>
 
           <Step number={2} title="字段映射" meta={source.fieldMap.stateLabel}>

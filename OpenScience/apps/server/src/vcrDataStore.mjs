@@ -130,6 +130,7 @@ export function vcrSourceFileFromRow(row) {
     profile: object(row.profile),
     detail: object(row.detail),
     createdAt: iso(row.created_at),
+    ...(row.erased_at ? { erasedAt: iso(row.erased_at) } : {}),
   };
 }
 
@@ -385,10 +386,10 @@ export class VcrDataStore extends VcrStoreBase {
   async setCloudPermission({ studyId, sourceId, actor, permission }) {
     return this.transaction(async client => {
       const row = (await client.query(`UPDATE ${this.schema}.sources SET cloud_permission=$3::jsonb, updated_at=now()
-        WHERE study_id=$1 AND id=$2 RETURNING *`, [studyId, sourceId, JSON.stringify(permission)])).rows[0];
+        WHERE study_id=$1 AND id=$2 RETURNING *`, [studyId, sourceId, permission == null ? null : JSON.stringify(permission)])).rows[0];
       if (!row) return null;
       await this.audit({ client, studyId, userId: actor, actor, action: 'source.cloud_permission', object: sourceId,
-        detail: { status: permission.status, destinations: permission.destinations ?? [] } });
+        detail: { status: permission?.status ?? 'default', destinations: permission?.destinations ?? [] } });
       return vcrSourceFromRow(row);
     });
   }
@@ -398,7 +399,8 @@ export class VcrDataStore extends VcrStoreBase {
     return this.transaction(async client => {
       const row = (await client.query(`INSERT INTO ${this.schema}.document_projections
         (id,study_id,source_id,document_id,source_hash,projection_hash,permission_hash,location,manifest_hash)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO UPDATE SET id=EXCLUDED.id RETURNING *`,
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        ON CONFLICT(id) DO UPDATE SET retired_at=NULL, purged_at=NULL, location=EXCLUDED.location, manifest_hash=EXCLUDED.manifest_hash RETURNING *`,
         [input.id, input.studyId, input.sourceId, input.documentId, input.sourceHash, input.projectionHash,
           input.permissionHash, input.location, input.manifestHash])).rows[0];
       await this.audit({ client, studyId: input.studyId, userId: input.actor, actor: input.actor,
@@ -407,10 +409,31 @@ export class VcrDataStore extends VcrStoreBase {
     });
   }
 
-  /** @param {string} studyId @param {string} documentId @param {string|null} [permissionHash] */
-  async documentProjection(studyId, documentId, permissionHash = null) {
-    return this.one(`SELECT * FROM ${this.schema}.document_projections WHERE study_id=$1 AND (id=$2 OR document_id=$2)
-      AND ($3::text IS NULL OR permission_hash=$3) ORDER BY created_at DESC,id DESC LIMIT 1`, [studyId, documentId, permissionHash]);
+  /** Every projection row of some documents of the study, retired ones included: the ids a fact may name as where it was read.
+   * @param {string} studyId @param {string[]} documentIds */
+  async projectionsOfDocuments(studyId, documentIds) {
+    return this.rows(`SELECT id, document_id, retired_at FROM ${this.schema}.document_projections WHERE study_id=$1 AND document_id=ANY($2::text[])`, [studyId, documentIds]);
+  }
+
+  /** The reviewed texts of a study's documents that are still live. @param {string} studyId */
+  async liveProjectionsOfStudy(studyId) {
+    return this.rows(`SELECT id, document_id, created_at FROM ${this.schema}.document_projections WHERE study_id=$1 AND retired_at IS NULL ORDER BY created_at, id`, [studyId]);
+  }
+
+  /** The account that owns a study: whose name the study's own rows carry. @param {string} studyId */
+  async studyOwner(studyId) {
+    const row = await this.one(`SELECT user_id FROM ${this.schema}.studies WHERE id=$1`, [studyId]);
+    return row ? String(row.user_id) : null;
+  }
+
+  /** The newest reviewed projection of a document, or the one a projection id names. A projection is bound to the permission it
+   * was reviewed under when `permissionHashes` lists them (one hash or several); null takes any.
+   * @param {string} studyId @param {string} documentId @param {string|string[]|null} [permissionHashes] */
+  async documentProjection(studyId, documentId, permissionHashes = null) {
+    const hashes = permissionHashes == null ? null : [permissionHashes].flat().map(String);
+    // A retired projection is not served by id or as the newest of its document: the next newest is chosen, or none.
+    return this.one(`SELECT * FROM ${this.schema}.document_projections WHERE study_id=$1 AND (id=$2 OR document_id=$2) AND retired_at IS NULL
+      AND ($3::text[] IS NULL OR permission_hash=ANY($3::text[])) ORDER BY created_at DESC,id DESC LIMIT 1`, [studyId, documentId, hashes]);
   }
 
   /** Only pseudonyms cross the data-plane boundary; never patient table values.
@@ -636,7 +659,7 @@ export class VcrDataStore extends VcrStoreBase {
       const used = await client.query(
         `SELECT 1 FROM ${this.schema}.snapshots WHERE source_id = $1 AND file_hashes @> $2::jsonb LIMIT 1`,
         [row.source_id, JSON.stringify([{ id: entry.fileId }])]);
-      if (used.rowCount) return { removed: null, frozen: true };
+      if (used.rowCount) return { removed: null, frozen: true, frozenBy: "snapshot" };
       const projections = (await client.query(`SELECT id,location FROM ${this.schema}.document_projections WHERE study_id=$1 AND document_id=$2`, [entry.studyId,entry.fileId])).rows;
       const documentIds = [entry.fileId,...projections.map(p => p.id)];
       const matchingUse = await client.query(`SELECT 1 FROM ${this.schema}.matching_inputs m WHERE m.study_id=$1 AND (
@@ -644,7 +667,7 @@ export class VcrDataStore extends VcrStoreBase {
           WHERE f.study_id=$1 AND f.source->>'documentId'=ANY($2::text[])) OR
         EXISTS(SELECT 1 FROM jsonb_array_elements(m.manifest->'languages') ref JOIN ${this.schema}.language_judgments j ON j.id=ref->>'id', jsonb_array_elements(j.evidence) e
           WHERE j.study_id=$1 AND e->>'documentId'=ANY($2::text[]))) LIMIT 1`, [entry.studyId,documentIds]);
-      if (matchingUse.rowCount) return { removed:null, frozen:true };
+      if (matchingUse.rowCount) return { removed:null, frozen:true, frozenBy:"matching" };
       await client.query(`DELETE FROM ${this.schema}.matching_facts WHERE study_id=$1 AND source->>'documentId'=ANY($2::text[])`, [entry.studyId,documentIds]);
       await client.query(`DELETE FROM ${this.schema}.language_judgments WHERE study_id=$1 AND EXISTS(SELECT 1 FROM jsonb_array_elements(evidence) e WHERE e->>'documentId'=ANY($2::text[]))`, [entry.studyId,documentIds]);
       await client.query(`DELETE FROM ${this.schema}.source_files WHERE id = $1`, [entry.fileId]);

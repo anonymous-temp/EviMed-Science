@@ -904,7 +904,16 @@ function vcrSettings(overrides) {
   return {
     vcrEnabled: overrides.vcrEnabled ?? boolEnv("OPEN_SCIENCE_VCR_ENABLED", false),
     vcrAudience: audience,
-    // Explicit study ids only; an empty list preserves native extraction guidance.
+    // The deployment's own record of the agreements it holds with the model providers it is configured to call (2026-10-10 owner
+    // ruling: the agreements are signed and every study document may be analysed): no retention, no training, no human review,
+    // for identifiable patient text as well as de-identified text. On by default. With it a study document needs no per-document
+    // attestation to reach those providers, as it is or as a reviewed projection; an operator restricts one source by revoking its
+    // permission, and nothing overrides that. Off, every source needs a permission recorded for it. The reference is what the audit
+    // row of each read names as the basis. Counter: `open_science_vcr_cloud_reads_total{basis}`.
+    vcrProviderAgreements: overrides.vcrProviderAgreements ?? boolEnv('OPEN_SCIENCE_VCR_PROVIDER_AGREEMENTS', true),
+    vcrProviderAgreementReference: String(read('vcrProviderAgreementReference', 'OPEN_SCIENCE_VCR_PROVIDER_AGREEMENT_REFERENCE', '')).trim().slice(0, 500),
+    // Clinical enrichment (the `clinical` fact field and its terminology) is on for every study (2026-10-10 owner ruling); study ids
+    // listed here restrict it to those studies. An empty list is every study.
     vcrClinicalStudyIds: overrides.vcrClinicalStudyIds ?? listEnv('OPEN_SCIENCE_VCR_CLINICAL_STUDY_IDS'),
     // Accounts that see the module under `operators` without being operators.
     vcrPreviewUsers: overrides.vcrPreviewUsers ?? listEnv("OPEN_SCIENCE_VCR_PREVIEW_USERS"),

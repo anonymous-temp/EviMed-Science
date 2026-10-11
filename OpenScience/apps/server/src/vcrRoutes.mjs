@@ -67,7 +67,7 @@ import { createReadStream } from "node:fs";
 
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { fileView, importAttemptAuditDetail, importAuditDetail, snapshotView, sourceView, tableView, uploadAttemptAuditDetail, uploadAuditDetail } from "./vcrDataPlane.mjs";
-import { VCR_LONGITUDINAL_JOBS } from '@evimed/domain';
+import { VCR_LONGITUDINAL_JOBS, suggestIdentifierSpans } from '@evimed/domain';
 import { presentLongitudinal } from './vcrLongitudinalPresentation.mjs';
 import { LONGITUDINAL_TEMPLATES } from './vcrLongitudinal.mjs';
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
@@ -216,6 +216,8 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id/data/documents/:document": ["read_patient_level"],
   "POST /studies/:id/data/documents/:document/projection": ["manage_data"],
   "POST /studies/:id/data/documents/:document/quote": ["read_patient_level"],
+  "POST /studies/:id/data/projections/:projection/retire": ["manage_data"],
+  "POST /studies/:id/data/subjects/:subject/withdraw": ["manage_data"],
   "POST /studies/:id/data/sources/:source/files": ["manage_data"],
   "DELETE /studies/:id/data/files/:file": ["manage_data"],
   "POST /studies/:id/data/sources/:source/fieldmap": ["manage_data"],
@@ -903,7 +905,9 @@ export function createVcrRoutes(dependencies) {
         const document = await plane().documentText({ studyId: id, documentId: parts[4], principal: actor, purpose: 'vcr' });
         if (!document) throw new HttpError(404, 'vcr_document_not_found', 'Document not found.');
         const { createHash } = await import('node:crypto');
-        return reply({ document: { id: document.id, text: document.text, sourceHash: createHash('sha256').update(document.text).digest('hex') } });
+        // The reviewer is shown the identifiers of closed formats in it as spans to accept; none is applied (domain `suggestIdentifierSpans`).
+        return reply({ document: { id: document.id, text: document.text, sourceHash: createHash('sha256').update(document.text).digest('hex'),
+          suggestions: suggestIdentifierSpans(document.text) } });
       }
       if (kind === "documents" && parts.length === 6 && parts[5] === "projection" && method === "POST") {
         await authorize(id, "manage_data");
@@ -917,6 +921,21 @@ export function createVcrRoutes(dependencies) {
         const body = await bodyOf(req, maxJsonBytes, ["start", "end", "quote"]);
         return reply({ evidence: await plane().resolveProjectionQuote({ studyId: id, documentId: parts[4], principal: actor,
           span: { start: body.start, end: body.end, quote: body.quote } }) });
+      }
+
+      // A projection that missed an identifier is retired: no read serves it, its text is overwritten, a newer one is chosen.
+      if (kind === "projections" && parts.length === 6 && parts[5] === "retire" && method === "POST") {
+        await authorize(id, "manage_data");
+        const body = await bodyOf(req, maxJsonBytes, ["reason"]);
+        return reply({ retired: await audited("vcr.data.projection.retire", (result) => ({ code: parts[4], detail: `${result.projections} projections ${result.factsRemoved + result.factsRedacted} facts` }),
+          { code: parts[4], detail: id }, () => plane().retireProjection({ ...S, projectionId: parts[4], reason: body.reason })) });
+      }
+      // A subject's consent withdrawn: the text of their documents and projections is erased, hashes and the audit trail stay.
+      if (kind === "subjects" && parts.length === 6 && parts[5] === "withdraw" && method === "POST") {
+        await authorize(id, "manage_data");
+        const body = await bodyOf(req, maxJsonBytes, ["reason"]);
+        return reply({ withdrawn: await audited("vcr.data.subject.withdraw", (result) => ({ code: parts[4], detail: `${result.files} documents ${result.projections} projections` }),
+          { code: parts[4], detail: id }, () => plane().withdrawSubject({ ...S, subjectKey: parts[4], reason: body.reason })) });
       }
 
       if (kind === "sources" && parts.length === 6 && parts[5] === "files" && method === "POST") {

@@ -4,8 +4,8 @@ import { ClinicalTimeline, MatchingPanelControls } from './ClinicalMatchingDetai
 import { CloudDocuments, reviewedSpans } from './data/CloudDocuments';
 import type { VcrIntakeSource, VcrMatchingTab } from '@/lib/vcrClient';
 import { WebApiError } from '@/lib/apiClient';
-const api = vi.hoisted(() => ({ enqueue:vi.fn(),quote:vi.fn(),permission:vi.fn(),document:vi.fn(),projection:vi.fn() }));
-vi.mock('@/lib/vcrClient',()=>({enqueueVcrMatching:api.enqueue,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection}));
+const api = vi.hoisted(() => ({ enqueue:vi.fn(),quote:vi.fn(),permission:vi.fn(),document:vi.fn(),projection:vi.fn(),retire:vi.fn() }));
+vi.mock('@/lib/vcrClient',()=>({enqueueVcrMatching:api.enqueue,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection,retireVcrProjection:api.retire}));
 beforeEach(()=>vi.clearAllMocks());
 
 describe('evaluating from the controls',()=>{
@@ -46,6 +46,24 @@ describe('evaluating from the controls',()=>{
     expect(start).toBeEnabled();
     fireEvent.click(start);
     await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1'],subjectKeys:['P-001'],direction:'patient_to_trial'}));
+  });
+  // Per-source reprocessing (E-13): what an evaluation rested on has changed, so the page says so and offers the evaluation that exists.
+  it('says how many evaluations rest on a basis that has changed, and evaluates those people again with the existing trigger',async()=>{
+    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
+    controls(page({basisUpdated:{count:2,subjects:['P-001','P-002']}}));
+    expect(screen.getByText('2 人的评估依据已更新')).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'重新评估'}));
+    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p2'],subjectKeys:['P-001','P-002'],direction:'trial_to_patient'}));
+    expect(await screen.findByText('已提交 1 项评估。')).toBeVisible();
+  });
+  it('says nothing about a basis when nothing changed, and offers the evaluation only to a reader who may run it',()=>{
+    controls();
+    expect(screen.queryByText(/评估依据已更新/)).toBeNull();
+    expect(screen.queryByRole('button',{name:'重新评估'})).toBeNull();
+    document.body.innerHTML='';
+    controls(page({basisUpdated:{count:1,subjects:['P-001']}}),{canRun:false});
+    expect(screen.getByText('1 人的评估依据已更新')).toBeVisible();
+    expect(screen.queryByRole('button',{name:'重新评估'})).toBeNull();
   });
   it('offers no run to a reader who may not run it, and keeps the refresh',()=>{
     controls(page(),{canRun:false});
@@ -131,6 +149,148 @@ describe('the redaction a reviewer attests to',()=>{
   });
 });
 
+describe('the identifiers the server suggests to the reviewer',()=>{
+  const TEXT='患者张三，电话 13812345678，出生日期 1980-02-29，入院 2026-10-01。';
+  const at=(value:string)=>({start:TEXT.indexOf(value),end:TEXT.indexOf(value)+value.length});
+  const suggestions=()=>[{...at('13812345678'),format:'mobile',kind:'contact'},{...at('1980-02-29'),format:'date',kind:'date',birth:true},{...at('2026-10-01'),format:'date',kind:'date'}];
+  const source=()=>({id:'src',files:[{id:'doc1',name:'病历.txt',role:'document'}],upload:{cloudDestinations:['https://api.example.org']},
+    cloudPermission:{status:'approved',reference:'合作协议 2026-09',expiresAt:'2999-01-01'}}) as unknown as VcrIntakeSource;
+  async function open(){
+    api.document.mockResolvedValue({document:{id:'doc1',text:TEXT,sourceHash:'h1',suggestions:suggestions()}});
+    api.projection.mockResolvedValue({});
+    render(<CloudDocuments studyId="s1" source={source()} onChanged={()=>{}}/>);
+    fireEvent.click(screen.getByText('病历云端处理 · 已授权'));
+    fireEvent.change(screen.getByLabelText('准备脱敏文本'),{target:{value:'doc1'}});
+    fireEvent.click(screen.getByRole('button',{name:'打开原文'}));
+    await screen.findByLabelText('受保护的原文');
+  }
+  const preview=()=>screen.getByRole('region',{name:'脱敏后的文本'});
+
+  it('lists them with what each is, applies none until the reviewer accepts it, and shows the text as it will be saved',async()=>{
+    await open();
+    const list=screen.getByRole('list',{name:'建议遮蔽'});
+    const [phone,birth,admitted]=within(list).getAllByRole('listitem');
+    expect(phone).toHaveTextContent('手机号');expect(phone).toHaveTextContent('13812345678');
+    expect(birth).toHaveTextContent('出生日期');expect(birth).toHaveTextContent('1980-02-29');
+    expect(admitted).toHaveTextContent('日期');expect(admitted).not.toHaveTextContent('出生日期');
+    expect(screen.getByText('建议遮蔽 · 3 处')).toBeVisible();
+    // Nothing is applied: the text is whole, and no span is counted.
+    expect(screen.getByText(/共 0 处将被替换/)).toBeVisible();
+    expect(preview()).toHaveTextContent('13812345678');
+    expect(within(preview()).queryAllByText('已遮蔽')).toHaveLength(0);
+    fireEvent.click(within(phone).getByRole('button',{name:'接受 13812345678'}));
+    expect(preview()).not.toHaveTextContent('13812345678');
+    expect(preview()).toHaveTextContent('1980-02-29');
+    expect(within(preview()).getAllByText('已遮蔽')).toHaveLength(1);
+    expect(screen.getByText(/共 1 处将被替换/)).toBeVisible();
+    // Taking one back puts the text back.
+    fireEvent.click(within(phone).getByRole('button',{name:'取消接受 13812345678'}));
+    expect(preview()).toHaveTextContent('13812345678');
+    expect(screen.getByText(/共 0 处将被替换/)).toBeVisible();
+  });
+  it('accepting asks for the full-text check again, and saves each accepted span as the kind the server named',async()=>{
+    await open();
+    fireEvent.click(screen.getByRole('button',{name:'全部接受'}));
+    expect(screen.queryByRole('button',{name:'全部接受'})).toBeNull();
+    expect(screen.getByText(/共 3 处将被替换/)).toBeVisible();
+    const save=screen.getByRole('button',{name:'保存脱敏文本'});
+    expect(save).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox',{name:/已检查脱敏后的全文/}));
+    // Accepting one less is a change to the text, which has to be read again.
+    fireEvent.click(screen.getByRole('button',{name:'取消接受 2026-10-01'}));
+    expect(save).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox',{name:/已检查脱敏后的全文/}));
+    fireEvent.click(save);
+    await waitFor(()=>expect(api.projection).toHaveBeenCalledWith('s1','doc1',{sourceHash:'h1',attestation:'合作协议 2026-09',
+      spans:[{...at('13812345678'),kind:'contact'},{...at('1980-02-29'),kind:'date'}]}));
+  });
+  it('joins the names the reviewer typed with the suggestions accepted, one span where they overlap',async()=>{
+    await open();
+    fireEvent.click(screen.getByRole('button',{name:'接受 13812345678'}));
+    fireEvent.change(screen.getByLabelText('需替换的姓名、编号或地址（每行一项）'),{target:{value:'张三\n138123'}});
+    expect(screen.getByText(/共 2 处将被替换/)).toBeVisible();
+    expect(reviewedSpans(TEXT,'张三\n138123',[{...at('13812345678'),kind:'contact'}])).toEqual([
+      {start:2,end:4,kind:'identifier'},{...at('13812345678'),kind:'contact'}]);
+    expect(reviewedSpans(TEXT,'',[])).toEqual([]);
+  });
+  it('says nothing about suggestions when the server found none',async()=>{
+    api.document.mockResolvedValue({document:{id:'doc1',text:TEXT,sourceHash:'h1'}});
+    render(<CloudDocuments studyId="s1" source={source()} onChanged={()=>{}}/>);
+    fireEvent.click(screen.getByText('病历云端处理 · 已授权'));
+    fireEvent.change(screen.getByLabelText('准备脱敏文本'),{target:{value:'doc1'}});
+    fireEvent.click(screen.getByRole('button',{name:'打开原文'}));
+    await screen.findByLabelText('受保护的原文');
+    expect(screen.queryByRole('list',{name:'建议遮蔽'})).toBeNull();
+  });
+});
+
+describe('the reviewed texts saved of a record',()=>{
+  const source=(projections:unknown[])=>({id:'src',files:[{id:'doc1',name:'病历.txt',role:'document',projections},{id:'doc2',name:'另一份.txt',role:'document'},{id:'gone',name:'已撤回.txt',role:'document',erased:true}],
+    upload:{cloudDestinations:['https://api.example.org']},cloud:{state:'allowed',basis:'deployment_agreements'}}) as unknown as VcrIntakeSource;
+  it('lists the ones of the chosen record and retires the one that missed an identifier',async()=>{
+    api.retire.mockResolvedValue({retired:{projections:1}});
+    const changed=vi.fn();
+    render(<CloudDocuments studyId="s1" source={source([{id:'prj_a',at:'2026-10-09T08:00:00Z'},{id:'prj_b',at:'2026-10-10T08:00:00Z'}])} onChanged={changed}/>);
+    fireEvent.click(screen.getByText('病历云端处理 · 已开放'));
+    expect(screen.queryByRole('list',{name:'已保存的脱敏文本'})).toBeNull();
+    expect(screen.queryByRole('option',{name:'已撤回.txt'})).toBeNull();
+    fireEvent.change(screen.getByLabelText('准备脱敏文本'),{target:{value:'doc1'}});
+    const list=screen.getByRole('list',{name:'已保存的脱敏文本'});
+    const [first,second]=within(list).getAllByRole('listitem');
+    expect(first).toHaveTextContent('脱敏文本 1 · 2026-10-09 保存');expect(second).toHaveTextContent('脱敏文本 2 · 2026-10-10 保存');
+    fireEvent.click(within(second).getByRole('button',{name:'停用并清除'}));
+    await waitFor(()=>expect(api.retire).toHaveBeenCalledWith('s1','prj_b'));
+    await waitFor(()=>expect(changed).toHaveBeenCalled());
+    expect(await screen.findByText('已停用并清除这份脱敏文本。')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('准备脱敏文本'),{target:{value:'doc2'}});
+    expect(screen.queryByRole('list',{name:'已保存的脱敏文本'})).toBeNull();
+  });
+});
+
+describe('where a source stands for the cloud models',()=>{
+  const placed=(cloud:Record<string,unknown>|undefined,extra:Record<string,unknown>={})=>({id:'src',files:[{id:'doc1',name:'病历.txt',role:'document'}],
+    upload:{cloudDestinations:['https://api.example.org']},cloud,...extra}) as unknown as VcrIntakeSource;
+  // The deployment holds the agreements with its model providers (2026-10-10): a source needs no attestation, says so in a word, and can be restricted.
+  it('is open under the deployment, with nothing to attest and a way to restrict it',async()=>{
+    api.permission.mockResolvedValue({});
+    const changed=vi.fn();
+    render(<CloudDocuments studyId="s1" source={placed({state:'allowed',basis:'deployment_agreements'})} onChanged={changed}/>);
+    fireEvent.click(screen.getByText('病历云端处理 · 已开放'));
+    expect(screen.queryByRole('button',{name:'保存云端处理授权'})).toBeNull();
+    expect(screen.queryByLabelText('授权依据')).toBeNull();
+    expect(screen.getByLabelText('准备脱敏文本')).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'限制云端处理'}));
+    await waitFor(()=>expect(api.permission).toHaveBeenCalledWith('s1','src',{status:'revoked'}));
+    await waitFor(()=>expect(changed).toHaveBeenCalled());
+    expect(await screen.findByText('已限制这个数据源的云端处理。')).toBeVisible();
+  });
+  it('is restricted when an operator revoked it: no text is prepared, and one press brings it back to the deployment',async()=>{
+    api.permission.mockResolvedValue({});
+    render(<CloudDocuments studyId="s1" source={placed({state:'restricted',basis:null},{cloudPermission:{status:'revoked'}})} onChanged={()=>{}}/>);
+    fireEvent.click(screen.getByText('病历云端处理 · 已限制'));
+    expect(screen.queryByLabelText('准备脱敏文本')).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'恢复云端处理'}));
+    await waitFor(()=>expect(api.permission).toHaveBeenCalledWith('s1','src',{status:'default'}));
+  });
+  it('asks for a recorded permission only where nothing else stands, and takes identifiable records as a class of it',async()=>{
+    api.permission.mockResolvedValue({});
+    render(<CloudDocuments studyId="s1" source={placed({state:'closed',basis:null})} onChanged={()=>{}}/>);
+    fireEvent.click(screen.getByText('病历云端处理 · 未授权'));
+    fireEvent.change(screen.getByLabelText('文本来源'),{target:{value:'clinical'}});
+    fireEvent.change(screen.getByLabelText('授权依据'),{target:{value:'合作协议 7'}});
+    const save=screen.getByRole('button',{name:'保存云端处理授权'});
+    expect(save).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox',{name:/已核实服务不保留文本/}));
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    await waitFor(()=>expect(api.permission).toHaveBeenCalledWith('s1','src',expect.objectContaining({status:'approved',dataClass:'clinical',retention:'none',training:'disabled',humanReview:'disabled'})));
+  });
+  it('reads a recorded permission when the server did not say where the source stands',()=>{
+    render(<CloudDocuments studyId="s1" source={placed(undefined,{cloudPermission:{status:'revoked'}})} onChanged={()=>{}}/>);
+    expect(screen.getByText('病历云端处理 · 已限制')).toBeInTheDocument();
+  });
+});
+
 describe('the clinical timeline',()=>{
   const fact=(id:string,extra:Record<string,unknown>={})=>({id,variable:'creatinine',value:2.4,unit:'mg/dL',at:null,assertion:'affirmed',experiencer:'patient',medicationState:null,correctionOf:null,quote:null,superseded:false,conflictFactIds:[],correctionReason:null,locator:null,...extra});
   const timeline=(entries:unknown[],mayReadOriginal=true)=>{
@@ -150,6 +310,11 @@ describe('the clinical timeline',()=>{
     fireEvent.click(screen.getByRole('button',{name:'显示更多 · 还有 5 条'}));
     expect(rows()).toHaveLength(45);
     expect(screen.queryByRole('button',{name:/显示更多/})).toBeNull();
+  });
+  it('says 依据已更新 beside a fact that was read from a basis that has changed',()=>{
+    timeline([fact('f1',{basis:'updated'}),fact('f2')]);
+    expect(rows()[0]).toHaveTextContent('依据已更新');
+    expect(rows()[1]).not.toHaveTextContent('依据已更新');
   });
   // ...a structured value printed as [object Object]...
   it('writes a recorded value a reader can read — a record, a list, a yes or no — never [object Object]',()=>{

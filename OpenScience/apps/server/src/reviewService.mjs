@@ -1037,7 +1037,7 @@ export class ReviewService {
     if (!sentences.length) return { verdicts: [], cost: 0, model: null };
     const facts = await this.vcrFacts?.({ userId: row.user_id, projectId: row.project_id });
     if (!facts || facts.studyId !== row.study_id) return { verdicts: [], cost: 0, model: null };
-    const ledger = { config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl };
+    const ledger = { config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl, assertModelAccess: this.assertModelAccess };
     const answer = await callReviewModel(ledger, {
       userId: row.user_id, projectId: row.project_id, runId: row.run_id,
       messages: [{ role: "system", content: vcrReplySystemPrompt() }, { role: "user", content: vcrReplyMessage(sentences) }],

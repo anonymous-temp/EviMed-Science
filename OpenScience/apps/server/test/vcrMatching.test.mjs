@@ -19,7 +19,7 @@ import {
   evaluateRequirement, evidenceGaps, factsVisibleAt, frozenAsOf, interRaterAgreement, kleeneAnd, kleeneNot, kleeneOr,
   labelClinicalPriority, matchingAssessmentDocument, matchingEvaluationReport, matchingReportDiff, patientMatchingMetrics,
   pendingReviewExclusions, requiresLanguageJudgment, runMatchingEvaluation, separateLedgers,
-  summarizeEligibility, verifyFactEvidence, windowStart, withinWindow,
+  summarizeEligibility, verifyFactEvidence, windowStart, withinWindow, VCR_FACT_VOID_REASONS,
 } from "../src/vcrMatching.mjs";
 import { clinicalFactView, validateCapabilityManifest, vcrMatchingFindings } from "@evimed/domain";
 
@@ -1003,6 +1003,15 @@ test('laboratory units outside the conversion vocabulary must still be stated in
   assert.deepEqual(verifyFactEvidence(guessed,{documents:source.documents}),{ok:false,reason:'unit_not_in_span'});
   const stated=chart('肌钙蛋白 0.02 ng/mL。');
   assert.deepEqual(verifyFactEvidence(stated.fact('肌钙蛋白 0.02 ng/mL',{variable:'troponin',value:0.02,unit:'ng/mL',clinical}),{documents:stated.documents}),{ok:true,reason:null});
+});
+
+test('a fact whose words were erased on a withdrawal is void for any verdict, with the reason named, whatever the document says', () => {
+  const source = { documentId: 'doc-erased', start: 0, end: 6, quote: '肌酐 2.4' };
+  const fact = { id: 'fac_w', variable: 'creatinine', value: 2.4, surface: '肌酐 2.4', polarity: 'affirmed', extractedBy: 'model', visibleAt: '2026-09-01T00:00:00Z', source };
+  const documents = new Map([['doc-erased', { text: '肌酐 2.4 mg/dL' }]]);
+  assert.equal(verifyFactEvidence(fact, { documents, asOf: Date.parse(AS_OF) }).ok, true, 'the control: the same fact, not withdrawn, stands');
+  assert.deepEqual(verifyFactEvidence({ ...fact, withdrawn: { at: AS_OF, digest: 'a'.repeat(64) } }, { documents, asOf: Date.parse(AS_OF) }), { ok: false, reason: 'source_withdrawn' });
+  assert.ok(VCR_FACT_VOID_REASONS.includes('source_withdrawn'));
 });
 
 test('a newer prescribed, planned or unknown-state exposure that could reset the washout leaves it unknown with a named reason, not satisfied from the older administration (E-04)', () => {

@@ -73,6 +73,7 @@ import { HttpError } from "./security.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
 import { VcrDataPlane } from "./vcrDataPlane.mjs";
 import { VcrDataStore } from "./vcrDataStore.mjs";
+import { VcrErasureStore } from "./vcrErasureStore.mjs";
 import { createVcrEngineClient } from "./vcrEngineClient.mjs";
 import { createVcrEngineProbe } from "./vcrEngineProbe.mjs";
 import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
@@ -266,9 +267,10 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
     if (!criteria.length || criteria.length !== frozenIds.length || criteria.some((/** @type {any} */ c) => !frozenIds.includes(c.id))) {
       throw new HttpError(409, 'vcr_criteria_missing', 'The scenario and its frozen criteria disagree.');
     }
-    const [frozenFacts, frozenJudgments] = await Promise.all([
+    const [frozenFacts, frozenJudgments, withdrawn] = await Promise.all([
       matchStore.matchingFactsByIds(studyId, snapshot.facts.map((/** @type {any} */ row) => row.id)),
       matchStore.languageJudgmentsByIds(studyId, snapshot.languages.map((/** @type {any} */ row) => row.id)),
+      matchStore.withdrawnSubjects?.(studyId) ?? new Set(),
     ]);
     const { facts: allFacts, languages: languageBySubject } = hydrateMatchingInputs(snapshot, frozenFacts, frozenJudgments);
     /** @type {Map<string, any[]>} */
@@ -306,6 +308,13 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
     let voidedTotal = 0;
     let done = 0;
     for (const subjectKey of subjects) {
+      // A subject who withdrew consent after this batch was frozen is no longer evaluated; the roster counts them unavailable.
+      if (withdrawn.has(subjectKey)) {
+        errors.push("vcr_subject_withdrawn");
+        outcomes[subjectKey] = { state: "unavailable", code: "vcr_subject_withdrawn", jobId: job.id };
+        done += 1;
+        continue;
+      }
       try {
         const facts = factsBySubject.get(subjectKey) ?? [];
         const modelJudgments = languageBySubject.get(subjectKey) ?? {};
@@ -414,7 +423,8 @@ export function vcrDocumentsSeam({ dataPlane }) {
       if (!document || document.subjectKey !== subjectKey) return null;
       return document;
     },
-    /** A quote or fact written under a revoked/legacy permission is not sent back out.
+    /** A quote or fact is sent back out only from a document the cloud may have now: one read under a permission since revoked,
+     * or from a document that now has a reviewed projection (its own text is what a run reads), is not.
      * @param {any} study @param {any[]} entries @param {string} subjectKey */
     async runtimeEvidence(study, entries, subjectKey) {
       const decisions = new Map();
@@ -422,7 +432,7 @@ export function vcrDocumentsSeam({ dataPlane }) {
       for (const entry of entries) {
         const source = entry.source ?? entry.locator ?? entry;
         const id = String(source.documentId ?? '');
-        if (!id.startsWith('prj_')) continue;
+        if (!id) continue;
         if (!decisions.has(id)) decisions.set(id, await this.runtimeRead(study, { subjectKey, documentId: id }).catch(() => null));
         const document = decisions.get(id);
         const quote = source.quote ?? entry.quote;
@@ -444,8 +454,11 @@ export function vcrDocumentsSeam({ dataPlane }) {
         if (!subjectKey) return { available: false, code: "vcr_read_filter_invalid", message: "读取一份文档要同时写 subjectKey 和 documentId。" };
         let document;
         try { document = await this.runtimeRead(study, { subjectKey, documentId: String(filter.documentId) }); }
-        catch (error) { return { available: false, code: String(/** @type {any} */ (error)?.code ?? 'vcr_projection_unavailable'),
-          message: '这份病历尚无适用的云端处理授权或已审阅的脱敏文本；其他工作可以继续。' }; }
+        catch (error) {
+          const code = String(/** @type {any} */ (error)?.code ?? 'vcr_projection_unavailable');
+          return { available: false, code, message: code === 'vcr_document_withdrawn' ? '这份病历已撤回，文本已清除；其他工作可以继续。'
+            : '这份病历现在不能交给云端模型读取（云端处理被限制或尚未授权，或它已不在这项研究里）；其他工作可以继续。' };
+        }
         if (!document) return { available: false, code: "vcr_document_not_found", message: "这位受试者没有这份文档。" };
         const offset = Math.max(0, Number(filter?.offset ?? 0));
         const window = clinicalDocumentWindow(document.text, offset, this.windowChars);
@@ -510,6 +523,17 @@ function matchingInputs({ asOf, protocolVersionId, facts, judgments, table = nul
 }
 
 /**
+ * Whether a study is given the clinical fact contract and the terminology that goes with it (2026-10-10 owner ruling: every
+ * VCR feature takes effect). Every study is, unless the deployment lists study ids, which then restricts it to those: the list
+ * is an optional restriction, no longer the way in.
+ * @param {unknown} studyIds `OPEN_SCIENCE_VCR_CLINICAL_STUDY_IDS` @param {string} studyId
+ */
+export function clinicalEnrichmentOn(studyIds, studyId) {
+  const listed = list(studyIds);
+  return listed.length === 0 || listed.includes(studyId);
+}
+
+/**
  * The matching seam: the page's tab, the runtime's read, and the flow's own
  * steps — freezing a job, persisting its assessments, re-evaluating what has
  * come due, and the accrual forecast built from the referral ledger. Built from
@@ -519,7 +543,7 @@ function matchingInputs({ asOf, protocolVersionId, facts, judgments, table = nul
  * @param {{ matchStore: VcrMatchStore, store: VcrStore, jobs?: VcrJobs | null,
  *   getNotifier?: (() => any) | null, report?: (code: string) => void, now?: () => Date, dataPlaneDir?: string, subjectTable?:any, documents?:any, clinicalEnabled?:(study:any)=>boolean, clinicalContext?:(study:any,criteria:any[])=>Promise<any> }} parts
  */
-export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTable = null, jobs = null, getNotifier = null, report = () => {}, now = () => new Date(), dataPlaneDir = "", clinicalEnabled = () => false, clinicalContext = async () => null }) {
+export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTable = null, jobs = null, getNotifier = null, report = () => {}, now = () => new Date(), dataPlaneDir = "", clinicalEnabled = () => true, clinicalContext = async () => null }) {
   /** @param {any} study */
   const languageKeys = async (study, /** @type {string|null} */ protocolVersionId = null) => {
     const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId }).catch(() => []);
@@ -597,6 +621,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       }
       const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id });
       const subjectKey = filter?.subjectKey ? String(filter.subjectKey) : null;
+      const withdrawn = await matchStore.withdrawnSubjects?.(study.id) ?? new Set();
       const view = {
         factContract: clinicalEnabled(study) ? CLINICAL_FACT_CONTRACT : null,
         terminology: clinicalEnabled(study) ? await clinicalContext(study,criteria).catch(() => null) : null,
@@ -608,6 +633,8 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
           languageKeys: languageKeysOf(criterion.requirement, criterion.id),
         })),
       };
+      // A subject whose consent was withdrawn is read as that and nothing else: no assessment, no facts, no work to owe.
+      if (subjectKey && withdrawn.has(subjectKey)) return { ...view, subjectKey, withdrawn: true, assessment: null, semanticFields: [], facts: [], requests: [] };
       if (subjectKey) {
         const [assessment, facts, judgments] = await Promise.all([
           matchStore.latestAssessment({ studyId: study.id, subjectKey, protocolVersionId: protocol.id }),
@@ -655,7 +682,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       const factSubjects = await matchStore.factSubjects(study.id);
       const roster = await matchStore.candidateSubjects({ studyId: study.id });
       const known = new Map(subjects.map((row) => [row.subjectKey, row.summary]));
-      const keys = [...new Set([...roster, ...known.keys(), ...factSubjects.map((entry) => entry.subjectKey)])].sort();
+      const keys = [...new Set([...roster, ...known.keys(), ...factSubjects.map((entry) => entry.subjectKey)])].filter((key) => !withdrawn.has(key)).sort();
       return {
         ...view,
         // Cells of siblings, so the boundary can hide the small ones together with the next-smallest.
@@ -715,7 +742,8 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         const table = await subjectTable.read(study).catch(() => null);
         if (table?.available) {
           const candidates = subjectTableFacts({...table,variables:[],limit:Number.POSITIVE_INFINITY}).subjects.map(row=>row.subjectKey);
-          roster.push(...candidates.filter(key=>!roster.includes(key)));
+          const withdrawn = await matchStore.withdrawnSubjects?.(study.id) ?? new Set();
+          roster.push(...candidates.filter(key=>!roster.includes(key) && !withdrawn.has(key)));
           frozenTable = {snapshotId:table.snapshotId,sha256:table.sha256??null,identity:matchingTableIdentity(table),subjects:candidates};
         }
       }
@@ -1059,6 +1087,8 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const store = new VcrStore({ database: productDatabase, entityVocabulary });
   const dataStore = new VcrDataStore({ database: productDatabase });
   const matchStore = new VcrMatchStore({ database: productDatabase });
+  // Withdrawal, the retirement of a projection, and the marks on what was derived from a basis that has since changed.
+  const erasure = new VcrErasureStore({ database: productDatabase, matchStore });
   // The trials a run found for a patient (「给患者找试验」): their own tables, never the study's protocol versions.
   const candidateStore = new VcrCandidateTrialStore({ database: productDatabase });
   const evidenceStore = new VcrEvidenceStore({ database: productDatabase });
@@ -1076,7 +1106,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // A source held in FHIR, OMOP or ADaM is converted in the same container (operation `convert`).
   const importer = createVcrImporter({ config, controller: intakeController, counters: intakeCounters, report });
   const dataPlane = String(config.vcrDataPlaneDir ?? "").trim()
-    ? new VcrDataPlane({ store: dataStore, config, access, extractor, importer })
+    ? new VcrDataPlane({ store: dataStore, config, access, extractor, importer, erasure })
     : null;
 
   const engineStatus = vcrEngineStatus(config);
@@ -1137,7 +1167,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   let composed = null;
   const matching = vcrMatchingSeam({
     matchStore, store, documents, subjectTable, jobs, report, getNotifier: () => composed?.notifier ?? null, dataPlaneDir: String(config.vcrDataPlaneDir ?? ""),
-    clinicalEnabled: study => list(config.vcrClinicalStudyIds).includes(study.id),
+    clinicalEnabled: study => clinicalEnrichmentOn(config.vcrClinicalStudyIds, study.id),
     clinicalContext: async (study,criteria) => clinicalTerminologyContext((await knowledge.studyPack(study))?.pack,criteria),
   });
   // A matching job that has finished has its assessments persisted, its
@@ -1165,7 +1195,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     // Platform packs (flywheel F26): off, no platform row is read and the request is a 404 by its own code.
     platform: { enabled: Boolean(config.vcrPlatformPacksEnabled), publisherId: PLATFORM_PUBLISHER_USER_ID, sourceChanges, entityVocabulary, officialZoneForKeys,
       people: (ids) => store.personNames(ids) } });
-  service.attach({ corrections, knowledge, engineProbe });
+  service.attach({ corrections, knowledge, engineProbe, erasure });
   // The study's project carries the study's name: the first definition names a draft, and the sidebar lists projects. A project the
   // researcher renamed since is left alone, like GEO's — the old name is the study's own, or one nobody gave.
   if (projectStore?.renameProject) {
@@ -1197,7 +1227,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const records = createVcrRecords({ store, config });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal,
+    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
@@ -1311,6 +1341,7 @@ export async function vcrMetricsSnapshot(vcr) {
     worker: vcr.worker?.status?.() ?? null,
     engine: vcr.engineStatus ?? null,
     intake: vcr.intake ? { counters: { ...vcr.intake.counters } } : null,
+    cloud: vcr.dataPlane?.counters ? { ...vcr.dataPlane.counters } : null,
     evidence: vcr.evidence?.counters ? { ...vcr.evidence.counters } : null,
     publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
     predictions: vcr.predictions ? { ...vcr.predictions.counters } : null,
@@ -1378,6 +1409,18 @@ export function vcrMetricFamilies(enabled, snapshot) {
   if (snapshot.intake?.counters) {
     add("intake_total", "What the intake conversions did since this process started: record documents converted or refused (needsText, unreadable, tooLong, tooLarge), conversions that timed out, failed or had no converter, and figures digitized or refused.", "counter",
       Object.entries(snapshot.intake.counters).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.cloud) {
+    add("cloud_reads_total", "Study documents authorized for a cloud model since this process started, by the basis they stood on (the deployment's provider agreements, or a permission recorded for the source), and the ones refused.", "counter",
+      [{ labels: { basis: "deployment_agreements" }, value: Number(snapshot.cloud.cloudReadsDeploymentAgreements ?? 0) },
+        { labels: { basis: "source_permission" }, value: Number(snapshot.cloud.cloudReadsSourcePermission ?? 0) },
+        { labels: { basis: "refused" }, value: Number(snapshot.cloud.cloudReadsRefused ?? 0) }]);
+  }
+  if (snapshot.cloud) {
+    add("erasure_total", "What withdrawal and the marks on changed bases did since this process started: subjects withdrawn, records and reviewed texts erased or retired, files overwritten (and the ones that could not be), and marks written on what was derived from a changed basis (and the ones that could not be).", "counter",
+      [["withdrawals", "withdrawals"], ["documentsErased", "documentsErased"], ["projectionsRetired", "projectionsRetired"], ["filesOverwritten", "filesOverwritten"],
+        ["overwriteFailures", "overwriteFailures"], ["marksWritten", "marksWritten"], ["marksFailed", "marksFailed"]]
+        .map(([kind, key]) => ({ labels: { kind }, value: Number(/** @type {any} */ (snapshot.cloud)[key] ?? 0) })));
   }
   if (snapshot.evidence) {
     add("card_candidates_total", "Evidence items a run wrote as candidates it found through an evidence card (flywheel F23): written, and the ones that passed the quote and number check.", "counter",

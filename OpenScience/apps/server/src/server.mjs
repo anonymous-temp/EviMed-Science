@@ -8,7 +8,7 @@ import { createJudgeService } from './judgeService.mjs';
 import { createJudgeGatewayHandler, JUDGE_GATEWAY_PATH } from './judgeGateway.mjs';
 import { createVcrCloudEgress, createVcrSessionResolver } from './vcrCloudEgress.mjs';
 import { VcrStore } from './vcrStore.mjs';
-import { vcrCloudDestinations } from './vcrCloudProjection.mjs';
+import { deploymentCloudPermission, vcrCloudDestinations } from './vcrCloudProjection.mjs';
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
 import { ResultProvenanceService } from "./resultProvenanceService.mjs";
 import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
@@ -1221,7 +1221,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // `overrides.usageLedger` is for tests that need the ledger's interface
   // without a database, as `researchMemory` and `connectorCredentials` are.
   const usageLedger = overrides.usageLedger ?? (productDatabase ? new UsageLedger(productDatabase) : null);
-  const judgeService = overrides.judgeService ?? createJudgeService({config,usageLedger,database:productDatabase,fetchImpl:overrides.jevFetch});
+  // Every judge site asks the privacy hook before Jev sees a state, as the reviewer and the model gateway do: the hook is defined
+  // further down, so it is reached through a closure (it is only ever called while a request is being served).
+  const judgeService = overrides.judgeService ?? createJudgeService({config,usageLedger,database:productDatabase,fetchImpl:overrides.jevFetch,
+    assertModelAccess:(caller,body)=>assertVcrCloudAccess?.(caller,body)??Promise.resolve()});
   const judgeGatewayHandler = createJudgeGatewayHandler({config,judgeService,runtimeManager:{assertActiveModelGatewayToken: token => runtimeManager.assertActiveModelGatewayToken(token)}});
   const notificationService = productDatabase ? new NotificationService(productDatabase) : null;
   const notificationRoutes = createNotificationRoutes({ store, service: notificationService, maxJsonBytes: config.maxJsonBytes });
@@ -3646,7 +3649,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       })());
       // The platform's own projects (an evaluation harness's among them) must not
       // recursively distil benchmark answers or seed the researcher's memory.
-      if (internalFor(project.userId, project.id) || !reusableClinicalContext) return;
+      if (internalFor(project.userId, project.id)) return;
       // Nor does the platform's own background work: a distillation, a
       // relations pass or a source being understood reads excerpts of the
       // researcher's runs, and extracting memory from it paid a model call to
@@ -3658,6 +3661,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // names a medicine is checked after it was shown — never held, never
       // rewritten — off the transcript persisted above. Queued, not awaited: a
       // check that fails is a row that says so, never a reason this hook stops.
+      // It runs for a conversation that read a patient record too (2026-10-10, OpenMed review E-16): those are the answers that
+      // report counts from that record, and the check is a notice that holds nothing back. What such a conversation must not do is
+      // seed memory and lessons, which is the return below; the reviewer calls ask the privacy hook like every other provider path.
       if (review && run.status === "succeeded") {
         void (async () => {
           const stored = await readRunTranscript(project, run.id);
@@ -3667,6 +3673,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           if (reply) await review.service.considerReply({ userId: project.userId, projectId: project.id }, run, reply, { studyId: study?.id ?? null });
         })().catch((error) => process.stderr.write(`review reply check not queued: ${typeof error?.code === "string" ? error.code : error?.name ?? "error"}\n`));
       }
+      // A conversation that read a clinical source seeds neither research memory nor lessons: its text is the study's, not the account's.
+      if (!reusableClinicalContext) return;
       // Queue the lessons this run is evidence for — a finished delivery, a
       // correction, a repeated routine (learningTriggers.mjs). After the
       // memory write when there is one, because the extractor is what says the
@@ -4525,6 +4533,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const autopilotRunScope = autopilotService ? createAutopilotRunScope({ store, agentRuns, service: autopilotService }) : null;
   const assertVcrCloudAccess = vcrPrivacyStore ? createVcrCloudEgress({ store: vcrPrivacyStore, destinations: () => vcrCloudDestinations(config),
     resolveSession: createVcrSessionResolver({ sourceProject, agentRuns }),
+    deployment: () => deploymentCloudPermission(config),
   }) : null;
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,

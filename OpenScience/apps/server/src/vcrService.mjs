@@ -461,7 +461,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, patientTrials, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null) };
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, patientTrials, erasure: null, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null) };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -1081,7 +1081,9 @@ export class VcrService {
     const latest = `SELECT DISTINCT ON (subject_key) * FROM ${VCR_SCHEMA}.matching_assessments
       WHERE study_id = $1 AND ($2::text IS NULL OR protocol_version_id=$2) ORDER BY subject_key, as_of DESC, created_at DESC`;
     const [tallyRows, subjectRows, referrals, sites, siteFunnel, followups, gapRows, reviewRows] = await Promise.all([
-      matchStore.rows(`SELECT summary, count(*)::int AS total FROM (${latest}) l GROUP BY summary`, matchingArgs).catch(() => []),
+      // A subject whose consent was withdrawn is listed with their evaluation, as withdrawn, and is not counted among the candidates.
+      matchStore.rows(`SELECT summary, count(*)::int AS total FROM (${latest}) l
+        WHERE NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = $1 AND w.subject_key = l.subject_key) GROUP BY summary`, matchingArgs).catch(() => []),
       matchStore.rows(`SELECT * FROM (${latest}) l WHERE summary <> 'ineligible' ORDER BY subject_key LIMIT 200`, matchingArgs).catch(() => []),
       matchStore.listReferrals({ studyId: study.id, limit: 500 }).catch(() => []),
       matchStore.listSites(study.id).catch(() => []),
@@ -1096,9 +1098,13 @@ export class VcrService {
         AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.criterion_judgments j WHERE j.assessment_id = l.id AND j.applicable
           AND j.state = 'not_satisfied' AND j.decided_by <> 'model') ORDER BY l.subject_key LIMIT 200`, matchingArgs).catch(() => []),
     ]);
+    // What the evaluation rested on, when that has since changed (a document, a projection, a permission) or was withdrawn: a plain
+    // state beside the subject, and the evaluation that already exists offered again. Nothing is blocked and nothing re-runs.
+    const marks = await this.packages.erasure?.assessmentMarks?.(study.id, subjectRows.map((row) => String(row.id))).catch(() => new Map()) ?? new Map();
     const subjects = subjectRows.map((row) => ({
       id: String(row.id), subjectKey: String(row.subject_key), summary: String(row.summary), counts: row.counts ?? {},
       priority: row.priority ?? null, direction: String(row.direction ?? "trial_to_patient"), asOf: row.as_of, reviewedBy: row.reviewed_by ?? null,
+      basis: marks.get(String(row.id))?.cause === "withdrawn" ? "withdrawn" : marks.has(String(row.id)) ? "updated" : null,
     }));
     const wanted = subjects.map((subject) => subject.id);
     const openRows = wanted.length
@@ -1130,8 +1136,10 @@ export class VcrService {
       assessment: await matchStore.latestAssessment({ studyId: study.id, subjectKey: focusKey, protocolVersionId: entry.id }) }))) : [];
     const timeline = focusKey ? await matchStore.listFacts({ studyId: study.id, subjectKey: focusKey }) : [];
     const longitudinal = clinicalFactView(timeline, new Date().toISOString());
+    // A fact read from a basis that has since changed says so, beside the fact.
+    const factMarks = await this.packages.erasure?.factMarks?.(study.id, timeline.map(fact => fact.id)).catch(() => new Map()) ?? new Map();
     const clinicalTimeline = timeline.map(fact => ({ ...fact, superseded: longitudinal.superseded.includes(fact.id),
-      conflicts: longitudinal.conflicts.find(entry => entry.factId === fact.id)?.withFacts ?? [] }));
+      conflicts: longitudinal.conflicts.find(entry => entry.factId === fact.id)?.withFacts ?? [], ...(factMarks.has(fact.id) ? { basis: "updated" } : {}) }));
     const candidateCoverage = protocol && matchStore.latestMatchingProgress ? await matchStore.latestMatchingProgress(study.id,protocol.id) : null;
     // The documents the page cites, by the names the data tab lists them under: a citation carries an id, a reader needs a name.
     const cited = [...list(selected?.judgments).flatMap((/** @type {any} */ judgment) => list(judgment.evidence).map((/** @type {any} */ item) => item?.locator?.documentId)),

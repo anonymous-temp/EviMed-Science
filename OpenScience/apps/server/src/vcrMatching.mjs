@@ -95,6 +95,8 @@ export const VCR_MATCHING_STATES = Object.freeze([SATISFIED, NOT_SATISFIED, UNKN
 export const VCR_FACT_VOID_REASONS = Object.freeze([
   "locator_missing", "document_unavailable", "span_out_of_range", "quote_mismatch",
   "surface_missing", "value_not_in_span", "date_not_in_span", "not_yet_visible", "polarity_not_assertive",
+  // The words it was read from were erased on a withdrawal: the fact is still the record it was, and no verdict rests on it.
+  "source_withdrawn",
 ]);
 
 /** Polarities that may be reasoned from. A family history or a plan is not a finding. */
@@ -257,6 +259,7 @@ function numeralsIn(text) {
  */
 export function verifyFactEvidence(fact, context = {}) {
   const asOf = instant(context.asOf) ?? Number.POSITIVE_INFINITY;
+  if (fact?.withdrawn) return { ok: false, reason: "source_withdrawn" };
   if (context.anyPolarity !== true && !VCR_ASSERTIVE_POLARITIES.includes(String(fact?.polarity ?? "affirmed"))) {
     return { ok: false, reason: "polarity_not_assertive" };
   }

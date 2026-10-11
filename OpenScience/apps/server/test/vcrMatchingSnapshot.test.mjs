@@ -43,3 +43,16 @@ test('executor accounts for an empty extraction, uses frozen facts and exposes c
   assert.equal(result.diagnostics.nextOffset, 2);
   assert.equal(result.diagnostics.subjectsNotEvaluated, 1);
 });
+
+test('a frozen reference to a fact or a judgment whose words were erased still verifies, under the digest it was frozen with, and reads as withdrawn', () => {
+  const snapshot = freeze();
+  // What the erasure writes: the words are gone, the digest of what the row was is kept beside them.
+  const erasedFact = { ...fact, value: null, surface: '', withdrawn: { at: asOf, digest: snapshot.payload.facts[0].hash, cause: 'withdrawn' } };
+  const erasedJudgment = { ...judgment, evidence: [{ documentId: 'sfl_1', quote: '', quoteHash: 'a'.repeat(64), withdrawn: true }], withdrawn: { at: asOf, digest: snapshot.payload.languages[0].hash, cause: 'withdrawn' } };
+  const hydrated = hydrateMatchingInputs(snapshot.payload, [erasedFact], [erasedJudgment]);
+  assert.equal(hydrated.facts[0].withdrawn.cause, 'withdrawn');
+  assert.equal(hydrated.languages.get('P-1').consent.state, 'satisfied');
+  // The kept digest is the only thing that makes it verify: a withdrawn row that carries another one is a changed input.
+  assert.throws(() => hydrateMatchingInputs(snapshot.payload, [{ ...erasedFact, withdrawn: { ...erasedFact.withdrawn, digest: 'b'.repeat(64) } }], [erasedJudgment]), { code: 'vcr_matching_input_changed' });
+  assert.throws(() => hydrateMatchingInputs(snapshot.payload, [erasedFact], [{ ...erasedJudgment, withdrawn: { ...erasedJudgment.withdrawn, digest: 'b'.repeat(64) } }]), { code: 'vcr_matching_input_changed' });
+});
