@@ -38,10 +38,10 @@ load_dotenv()
 
 AGENT_TYPE        = "paper-review"
 AGENT_TYPE_REVIEW = "paper-review"
-JAVA_WS_URL    = os.getenv("JAVA_WS_URL",    "wss://evidence-factory.evimed.com/ws/ws")
-JAVA_TOKEN_URL = os.getenv("JAVA_TOKEN_URL", "https://evidence-factory.evimed.com/api-evimed/ai-agent/token?clientType=paper-review")
-# JAVA_WS_URL    = os.getenv("JAVA_WS_URL",    "ws://192.168.20.252:2066/ws/ws")
-# JAVA_TOKEN_URL = os.getenv("JAVA_TOKEN_URL", "http://192.168.20.252:2066/api-evimed/ai-agent/token?clientType=paper-review")
+# Legacy upstream-platform gateway. Both settings come from the environment
+# only; with either one empty the outbound WebSocket loop does nothing.
+JAVA_WS_URL    = os.getenv("JAVA_WS_URL", "").strip()
+JAVA_TOKEN_URL = os.getenv("JAVA_TOKEN_URL", "").strip()
 
 # ── MongoDB 全局单例连接池 ────────────────────────────────────────────────────
 # 复用同一个 AsyncIOMotorClient，避免每次查询重建连接
@@ -521,6 +521,9 @@ async def _handle_session(
 async def _java_ws_client():
     import websockets
     global _global_ws_send
+    if not (JAVA_WS_URL and JAVA_TOKEN_URL):
+        logger.info("Upstream platform not configured (JAVA_WS_URL / JAVA_TOKEN_URL empty); outbound WebSocket client not started")
+        return
     active_sessions: Dict[str, dict] = {}
 
     while True:

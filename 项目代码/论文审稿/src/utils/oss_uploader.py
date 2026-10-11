@@ -27,7 +27,7 @@ def _upload_to_oss(content: str, remote_path: str) -> None:
     access_key_id = os.getenv("OSS_ACCESS_KEY_ID")
     access_key_secret = os.getenv("OSS_ACCESS_KEY_SECRET")
     endpoint = os.getenv("OSS_ENDPOINT", "https://oss-cn-beijing.aliyuncs.com")
-    bucket_name = os.getenv("OSS_BUCKET_NAME", "project-beijing-a4hznzutlh")
+    bucket_name = os.getenv("OSS_BUCKET_NAME", "")
 
     auth = oss2.Auth(access_key_id, access_key_secret)
     bucket = oss2.Bucket(auth, endpoint, bucket_name)
@@ -81,7 +81,10 @@ async def upload_report(
         logger.warning("OSS 凭证未配置，跳过上传")
         return None
 
-    base_url = os.getenv("OSS_PUBLIC_BASE_URL", "https://image.evimed.com/oss")
+    base_url = os.getenv("OSS_PUBLIC_BASE_URL", "")
+    if not os.getenv("OSS_BUCKET_NAME") or not base_url:
+        logger.warning("OSS bucket / public base URL 未配置，跳过上传")
+        return None
     timestamp_ms = int(time.time() * 1000)
     remote_path = f"{agent_type}/{user_id}/{message_id}/{timestamp_ms}.md"
 
