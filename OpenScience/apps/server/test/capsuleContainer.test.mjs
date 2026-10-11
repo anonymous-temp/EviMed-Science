@@ -10,7 +10,7 @@
 // otherwise.
 import assert from "node:assert/strict";
 import crypto, { createCipheriv, createHash, createPrivateKey, randomBytes, scryptSync, sign } from "node:crypto";
-import test from "node:test";
+import test, { after } from "node:test";
 import { syncBuiltinESMExports } from "node:module";
 
 import { CAPSULE_FORMAT_VERSION, merkleRoot, signablePayload, validateCapsuleManifest } from "@evimed/domain";
@@ -23,6 +23,13 @@ import {
   unwrapWithPassword,
   verifyCapsule,
 } from "../src/capsuleContainer.mjs";
+
+// The gate's wait timer is unref'd on purpose: a queued request must not hold a stopping process open, and in production the
+// request's own socket keeps the event loop alive. A test has no socket, and Node 22's runner (CI pins 22.22.0) cancels a test whose
+// only pending handle is an unref'd timer ("Promise resolution is still pending but the event loop has already resolved"), so the
+// file holds one ref'd handle while it runs, as a listening server would.
+const alive = setInterval(() => {}, 60_000);
+after(() => clearInterval(alive));
 
 const alice = generateCapsuleIdentity();
 const bob = generateCapsuleIdentity();

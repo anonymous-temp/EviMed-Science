@@ -2,9 +2,16 @@
 // one account sending requests back to back kept every other account's preview, import and link redemption at 429. The gate
 // gives an account one place, serves places in the order they were taken, and bounds the line and the wait.
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
 
 import { KDF_GATE_DEFAULTS, KDF_REFUSAL_REASONS, PasswordKdfGate } from "../src/capsuleKdfGate.mjs";
+
+// The gate's wait timer is unref'd on purpose: a queued request must not hold a stopping process open, and in production the
+// request's own socket keeps the event loop alive. A test has no socket, and Node 22's runner (CI pins 22.22.0) cancels a test whose
+// only pending handle is an unref'd timer ("Promise resolution is still pending but the event loop has already resolved"), so the
+// file holds one ref'd handle while it runs, as a listening server would.
+const alive = setInterval(() => {}, 60_000);
+after(() => clearInterval(alive));
 
 /** A task the test finishes when it chooses. */
 function manual() {
