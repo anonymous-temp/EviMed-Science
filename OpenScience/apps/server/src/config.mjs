@@ -924,15 +924,17 @@ function vcrSettings(overrides) {
     // read. Counter: `open_science_vcr_publications_total`.
     vcrPublicSimulationsEnabled: overrides.vcrPublicSimulationsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_PUBLIC_SIMULATIONS_ENABLED", true),
     // The frontier feed's trial events for a study's subject (flywheel F24, 2026-10-06): precedent candidates, 「有新证据」 on a card
-    // and the request for a new version, ticked by the module's worker. Off, no consumer is composed and nothing is read. Each tick
-    // looks at this many studies, the one looked at longest ago first (a resource limit: every study is one query set), and reads
-    // the feed this many days back (an item enters the feed with its own publication date, so a window, not a cursor). Counters:
-    // `open_science_vcr_frontier_events_total`.
+    // and the request for a new version, ticked by the module's worker. On by default (owner, 2026-10-10: a working feature is not off
+    // by default), and composed only where the frontier module is on, since the feed is all it reads; `=false` turns it off, and then no
+    // consumer is composed and nothing is read. Each tick looks at this many studies, the one looked at longest ago first (a resource
+    // limit: every study is one query set), and reads the feed this many days back (an item enters the feed with its own publication
+    // date, so a window, not a cursor). Counters: `open_science_vcr_frontier_events_total`.
     // Platform knowledge packs (flywheel F26, 2026-10-06): a pack the study lead curated may be re-checked and offered as the platform's
-    // own immutable version, read by every account beside the shipped packs. Off, the request routes answer 404
-    // `vcr_platform_packs_not_enabled`, no platform row is read and the source watch does not run. Counter: `open_science_vcr_platform_packs_total`.
-    vcrPlatformPacksEnabled: overrides.vcrPlatformPacksEnabled ?? boolEnv("OPEN_SCIENCE_VCR_PLATFORM_PACKS_ENABLED", false),
-    vcrFrontierEventsEnabled: overrides.vcrFrontierEventsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_FRONTIER_EVENTS_ENABLED", false),
+    // own immutable version, read by every account beside the shipped packs. On by default with the module; nothing is offered but on
+    // the lead's own request. `=false` turns it off: the request routes then answer 404 `vcr_platform_packs_not_enabled`, no platform
+    // row is read and the source watch does not run. Counter: `open_science_vcr_platform_packs_total`.
+    vcrPlatformPacksEnabled: overrides.vcrPlatformPacksEnabled ?? boolEnv("OPEN_SCIENCE_VCR_PLATFORM_PACKS_ENABLED", true),
+    vcrFrontierEventsEnabled: overrides.vcrFrontierEventsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_FRONTIER_EVENTS_ENABLED", true),
     vcrFrontierEventsStudiesPerTick: integer("vcrFrontierEventsStudiesPerTick", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_STUDIES_PER_TICK", 10, 1, 200),
     vcrFrontierEventsWindowDays: integer("vcrFrontierEventsWindowDays", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_WINDOW_DAYS", 30, 1, 365),
     // How long a draft study (made by 「新建研究」, never described) lives with nobody speaking in it, in minutes; then the sweep deletes
