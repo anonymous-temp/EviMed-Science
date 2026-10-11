@@ -61,8 +61,13 @@
    "fetched_at": "2026-09-22T11:32:28+00:00",
    "file": "01.html",
    "gzip": false,
-   "bytes": 19607,
-   "sha256": "1bca12a74e0b3bb0a15e64cd820fd2dd2316cda49249aa577d6f47707020d0cb"
+   "bytes": 19604,
+   "sha256": "b23bc0363e9e4e0c4a00176c4a0fdb1f0489efb4f306cc8272074214ba4b81ba",
+   "redacted_keys": [
+    "contact_name",
+    "contact_phone"
+   ],
+   "original_sha256": "1bca12a74e0b3bb0a15e64cd820fd2dd2316cda49249aa577d6f47707020d0cb"
   }
  ]
 }
