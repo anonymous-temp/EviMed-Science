@@ -187,11 +187,16 @@ async function removeTree(target) {
   }
 }
 
+// A directory can vanish between being listed and being opened: the first `fs.rm` pass, or the deletion of the
+// account that holds this project, removes it concurrently (a battery run on a loaded box, 2026-10-11:
+// `scandir …/.openscience` ENOENT). Gone is what the walk wants, so ENOENT ends that branch at every step.
+const goneIsDone = (fallback) => (err) => (err?.code === "ENOENT" ? fallback : Promise.reject(err));
+
 async function restoreOwnerAccess(dir) {
-  const stat = await fs.lstat(dir).catch((err) => (err?.code === "ENOENT" ? null : Promise.reject(err)));
+  const stat = await fs.lstat(dir).catch(goneIsDone(null));
   if (!stat?.isDirectory()) return;
-  if ((stat.mode & 0o700) !== 0o700) await fs.chmod(dir, (stat.mode & 0o7777) | 0o700);
-  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+  if ((stat.mode & 0o700) !== 0o700) await fs.chmod(dir, (stat.mode & 0o7777) | 0o700).catch(goneIsDone(undefined));
+  for (const entry of await fs.readdir(dir, { withFileTypes: true }).catch(goneIsDone([]))) {
     if (entry.isDirectory()) await restoreOwnerAccess(path.join(dir, entry.name));
   }
 }
