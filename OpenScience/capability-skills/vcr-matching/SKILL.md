@@ -167,7 +167,7 @@ Report inter-rater agreement and disagreements as properties of that reference s
 用户要为某位受试者找可参加的试验时（页面上的「为该患者找试验」，或在对话里直接说），做的是同一件事的另一头：不是一份方案找患者，而是一位患者找试验。条件的文法、事实的写法、语言条件的回答、判定由评估器做，都和上面一样。
 
 - 候选试验来自试验登记平台：`mcp__evimed__clinical_trial_search` 找正在招募或即将招募的，凭这位受试者的诊断、分期、生物标志物、年龄、性别和所在地区挑；有希望的用 `mcp__evimed__trial_registry_record` 读登记记录。本研究已经有的候选试验在 `mcp__evimed__vcr_read` `{ "what": "candidate_trials" }` 里，不必重复写。
-- 一个试验写成一项候选试验：`what: "candidate_trial"`，`registryId`、`subjectKeys`（这位受试者）和 `criteria`——登记记录里入选和排除标准的原句，一条一条按第一节的写法结构化，`sourceText` 逐字照抄，判不了的写成 `language`。试验的名称、分期、状态和中心由平台从登记记录读，你不写。写入时平台就把这位受试者对照这个试验判了，判定在返回值里。
+- 一个试验写成一项候选试验：`what: "candidate_trial"`，`registryId`、`subjectKeys`（这位受试者）和 `criteria`——登记记录里入选和排除标准的原句，一条一条按第一节的写法结构化，`sourceText` 逐字照抄，判不了的写成 `language`。试验的名称、分期、状态和中心由平台从登记记录读，你不写。写入时平台就把这位受试者对照这个试验判了，判定在返回值里。条件里的 `variable` 用这位受试者已有事实的变量名（`mcp__evimed__vcr_read` 读到的那些，例如已有 `egfr` 就不要另写 `gfr`）：同一个概念一个名字，平台才能拿这条事实判这条条件；单位照登记原句写，年龄、病程这类时间单位平台会换算。没有对应事实的，再按第一节起名。
 
 ```json
 { "what": "candidate_trial", "items": [ {
