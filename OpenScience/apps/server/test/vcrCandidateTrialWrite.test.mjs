@@ -245,3 +245,36 @@ test("a language answer about the study's own protocol is written exactly as it 
   assert.equal(kept[0].protocolVersionId, "prt_1");
   assert.equal(seam.saved.length + seam.evaluated.length, 0);
 });
+
+// A live 给患者找试验 run (real DSH + DeepSeek, 2026-10-11) wrote all nine of its structured exclusions the way the registry states
+// them -- "Modified rankin scale > 3" as `gt 3`, "Diagnosis of atrial fibrillation" as `present` -- although the grammar reads a
+// requirement as what keeps the patient in, so an AF patient read as passing an AF exclusion. Negating a condition is a mechanical
+// step, so it is the platform's: an exclusion may be written as stated (`excludeWhen`) and is stored as its negation.
+test("an exclusion written as the registry states it (excludeWhen) is stored as the requirement that keeps the patient in", async () => {
+  const seam = seams();
+  const AF = { kind: "exclusion", criterionType: "comorbidity", sourceText: "Diagnosis of atrial fibrillation",
+    excludeWhen: { op: "present", variable: "atrial_fibrillation" } };
+  const MRS = { kind: "exclusion", criterionType: "other", sourceText: "Modified rankin scale > 3",
+    excludeWhen: { op: "compare", variable: "modified_rankin_scale", comparator: "gt", value: 3 } };
+  const answer = await write(seam, [{ registryId: "NCT05000001", subjectKeys: ["P-0192"], criteria: [AGE, AF, MRS, BRAIN] }]);
+  assert.deepEqual(answer.issues, []);
+  const stored = seam.written[0].criteria;
+  assert.deepEqual(stored.map((criterion) => criterion.requirement), [
+    AGE.requirement,
+    { op: "not", operand: AF.excludeWhen },
+    { op: "not", operand: MRS.excludeWhen },
+    BRAIN.requirement,
+  ], "excludeWhen becomes not(...); a requirement written as one is kept as written");
+  assert.ok(stored.every((criterion) => !("excludeWhen" in criterion)), "the stored criterion has one shape: a requirement");
+});
+
+test("excludeWhen is only an exclusion's, and never beside a requirement", async () => {
+  const seam = seams();
+  const answer = await write(seam, [{ registryId: "NCT05000001", subjectKeys: ["P-0192"], criteria: [
+    { ...AGE, requirement: undefined, excludeWhen: AGE.requirement },
+    { ...BRAIN, excludeWhen: { op: "present", variable: "active_brain_metastasis" } },
+    { kind: "exclusion", criterionType: "other", sourceText: "x", excludeWhen: { op: "sometimes", variable: "x" } },
+  ] }]);
+  assert.deepEqual(answer.issues.map((found) => found.field), ["criteria[0].excludeWhen", "criteria[1].excludeWhen", "criteria[2].excludeWhen"]);
+  assert.equal(seam.written.length, 0);
+});

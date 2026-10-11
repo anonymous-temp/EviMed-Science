@@ -613,7 +613,7 @@ function distributionOf(item, field, value) {
  */
 
 /** The criterion fields a protocol write takes. */
-const CRITERION_FIELDS = Object.freeze(["kind", "criterionType", "requirement", "applicability", "sourceText", "sourceLocator", "evidenceNeeded"]);
+const CRITERION_FIELDS = Object.freeze(["kind", "criterionType", "requirement", "excludeWhen", "applicability", "sourceText", "sourceLocator", "evidenceNeeded"]);
 
 /**
  * The criteria of a protocol or criteria write, checked one by one: the
@@ -661,10 +661,17 @@ function checkedCriterion(deps, candidate, index, where, issues) {
   const sourceText = item.str("sourceText", { max: 4000 }) ?? "";
   const sourceLocator = item.obj("sourceLocator", { bytes: 4096 }) ?? {};
   const evidenceNeeded = item.arr("evidenceNeeded", { max: 30 }) ?? [];
-  const requirement = item.obj("requirement", { required: true, bytes: 32 * 1024 });
+  // An exclusion may be written as the registry states it -- the condition that excludes (`excludeWhen`) -- and is stored as its
+  // negation, the requirement that keeps the patient in, which is the one shape the evaluator reads. Negating is mechanical, so it is
+  // the platform's: a live run wrote every structured exclusion as stated, and each read backwards (2026-10-11).
+  const statesExclusion = item.row.excludeWhen != null;
+  if (statesExclusion && kind && kind !== "exclusion") item.bad("excludeWhen", "excludeWhen 只用于排除标准（照原句写会被排除的条件）；入选标准写 requirement。");
+  if (statesExclusion && item.row.requirement != null) item.bad("excludeWhen", "requirement 和 excludeWhen 只写一个：排除标准照原句写 excludeWhen，平台换算成不被排除的要求。");
+  const requirement = statesExclusion ? undefined : item.obj("requirement", { required: true, bytes: 32 * 1024 });
+  const excludeWhen = statesExclusion ? item.obj("excludeWhen", { bytes: 32 * 1024 }) : undefined;
   const applicability = item.obj("applicability", { bytes: 8 * 1024 });
   /** @type {Array<[string, Record<string, any> | undefined]>} */
-  const nodes = [["requirement", requirement], ["applicability", applicability]];
+  const nodes = [["requirement", requirement], ["excludeWhen", excludeWhen], ["applicability", applicability]];
   for (const [field, node] of nodes) {
     if (!node) continue;
     const problems = validateRequirement(node, { path: field });
@@ -680,7 +687,7 @@ function checkedCriterion(deps, candidate, index, where, issues) {
     // Applicability is its own column, beside the requirement: the evaluator
     // reads it from there, and the grammar would refuse it inside the
     // requirement. A criterion that does not apply is not an unknown.
-    requirement, applicability: applicability ?? null,
+    requirement: excludeWhen ? { op: "not", operand: excludeWhen } : requirement, applicability: applicability ?? null,
   };
 }
 
