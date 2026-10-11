@@ -30,6 +30,11 @@ test('the complete official distribution is pinned and installed before the immu
     assert.ok(body.indexOf('install-runtime.sh loopx') < body.indexOf('install-runtime.sh profile-seed'));
     assert.ok(body.includes(`ARG NODE_VERSION=${deps.$runtimeTools.node.version}`));
   }
+  const compose = await read('deploy/web/docker-compose.yml');
+  const environment = await read('deploy/web/.env.example');
+  assert.ok(compose.includes('NODE_VERSION: ${OPEN_SCIENCE_NODE_VERSION:-' + deps.$runtimeTools.node.version + '}'),
+    'Compose must not override the pinned runtime Node version with a stale default');
+  assert.ok(environment.includes(`OPEN_SCIENCE_NODE_VERSION=${deps.$runtimeTools.node.version}\n`));
   const install = await read('deploy/runtime-dsh/install-runtime.sh');
   assert.match(install, /loopx\) loopx ;;/);
   assert.match(install, /loopx\.plugin\.filename/);
