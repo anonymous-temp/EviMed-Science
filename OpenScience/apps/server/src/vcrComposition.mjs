@@ -1182,9 +1182,9 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // while the switch is off, so nothing reads the table and the routes answer 404 by their own code.
   const publications = config.vcrPublicSimulationsEnabled ? createVcrPublications({ store, service, matchStore }) : null;
   const simulations = config.vcrPublicSimulationsEnabled ? createVcrPublicSimulations({ store }) : null;
-  // The frontier feed's trial events (flywheel F24): a consumer the module's worker ticks. The orchestrator and the notifier are
-  // composed later, so it asks for them when it needs them.
-  const frontierEvents = config.vcrFrontierEventsEnabled
+  // The frontier feed's trial events (flywheel F24): a consumer the module's worker ticks, composed where the feed it reads is on. The
+  // orchestrator and the notifier are composed later, so it asks for them when it needs them.
+  const frontierEvents = config.vcrFrontierEventsEnabled && config.frontierEnabled !== false
     ? createVcrFrontierEvents({
       store, entityVocabulary, sourceChanges, report: (code) => report(code),
       orchestrator: () => composed?.orchestrator ?? null, notifier: () => composed?.notifier ?? null,

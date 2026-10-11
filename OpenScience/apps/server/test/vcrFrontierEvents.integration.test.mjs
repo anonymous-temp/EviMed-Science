@@ -298,4 +298,7 @@ test("a tick looks at a bounded number of studies, the one looked at longest ago
   assert.equal(off.frontierEvents, null);
   const on = composeVcr({ config: { vcrEnabled: true, vcrAudience: "all", vcrFrontierEventsEnabled: true, vcrDataPlaneDir: "", vcrEngineUrl: "" }, productDatabase: database });
   assert.equal(typeof on.frontierEvents.tick, "function");
+  // The feed is all it reads: where the frontier module is off there is nothing to read, and no consumer is composed to look.
+  const noFeed = composeVcr({ config: { vcrEnabled: true, vcrAudience: "all", vcrFrontierEventsEnabled: true, frontierEnabled: false, vcrDataPlaneDir: "", vcrEngineUrl: "" }, productDatabase: database });
+  assert.equal(noFeed.frontierEvents, null);
 });
