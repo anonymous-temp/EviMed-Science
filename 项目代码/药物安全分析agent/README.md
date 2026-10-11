@@ -52,7 +52,7 @@ cp .env.example .env          # 填 DEEPSEEK_API_KEY 后启用 LLM;JAVA_WS_URL/T
 ### 启动服务(REST + WS 并存)
 
 ```bash
-.venv/bin/python start.py                    # 默认 0.0.0.0:6010,自动连 JAVA_WS_URL
+.venv/bin/python start.py                    # 默认 0.0.0.0:6010;仅当 JAVA_WS_URL 非空时才启动出站 WS
 .venv/bin/python start.py --no-ws            # 只起 REST
 ```
 

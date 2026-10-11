@@ -337,6 +337,12 @@ async def _handle_session(
 async def ws_client_loop(service: ServiceContext) -> None:
     """Reconnect-forever WS client loop (started from the app lifespan)."""
     settings = service.settings
+    if not (settings.java_ws_url and settings.java_token_url):
+        logger.info(
+            "upstream platform not configured (JAVA_WS_URL / JAVA_TOKEN_URL empty); "
+            "WS client not started"
+        )
+        return
     active_sessions: dict[str, dict] = {}
     max_sessions = settings.max_concurrent_sessions
 

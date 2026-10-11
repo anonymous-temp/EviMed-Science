@@ -44,6 +44,12 @@ async def lifespan(app):
             settings.service_port,
             settings.java_ws_url,
         )
+    elif app.state.enable_ws:
+        logger.info(
+            "service starting | port=%s | upstream platform not configured "
+            "(JAVA_WS_URL empty); WS client not started",
+            settings.service_port,
+        )
     else:
         logger.info("service starting | port=%s | WS disabled", settings.service_port)
     try:

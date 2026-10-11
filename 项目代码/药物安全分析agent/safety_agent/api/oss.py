@@ -41,8 +41,13 @@ async def upload_markdown(
     """Upload report markdown; returns the public URL or None on failure."""
     key_id = settings.oss_access_key_id.get_secret_value()
     key_secret = settings.oss_access_key_secret.get_secret_value()
-    if not key_id or not key_secret or not settings.oss_bucket_name:
-        logger.warning("OSS credentials not configured; skipping upload")
+    if (
+        not key_id
+        or not key_secret
+        or not settings.oss_bucket_name
+        or not settings.oss_public_base_url
+    ):
+        logger.warning("OSS credentials, bucket or public base URL not configured; skipping upload")
         return None
     remote_path = "/".join(
         (
