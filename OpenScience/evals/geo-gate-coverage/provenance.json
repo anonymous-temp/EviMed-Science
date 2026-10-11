@@ -15,8 +15,8 @@
   ],
   "environment": {
     "note": "The probe channel needs a desktop host with five vendor tabs already logged in and Chrome DevTools Protocol reachable. Gate coverage does NOT need any of that — it is pure static mutation and runs anywhere Python and pytest do.",
-    "probeChannel": "http://43.248.117.249:9999",
-    "socialChannel": "http://43.248.117.249:9966",
+    "probeChannel": "the GEO probe host, port 9999 (address not published)",
+    "socialChannel": "the social-crawl host, port 9966 (address not published)",
     "cdp": "127.0.0.1:9222"
   }
 }

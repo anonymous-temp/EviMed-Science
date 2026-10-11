@@ -2,7 +2,7 @@
   "contractVersion": "0.5.0",
   "docsCommit": "83f79c4",
   "sourceRepo": "text_extraction (the parser team's repository; read-only clone of develop at 83f79c4, docs/api/API.md v0.5.0)",
-  "server": "http://123.57.56.88:9011",
+  "server": "the parser team's test environment (its address is not published; a deployment names its parser in OPEN_SCIENCE_DOCUMENT_PARSER_URL)",
   "serverRole": "the parser team's test environment and the only address the owner gave; production per their env templates listens on 9021 on a host not yet named",
   "observedAt": "2026-09-19T09:37:05Z",
   "fixtureEvidence": "Every other file in this directory is the verbatim response body the server returned, byte for byte, captured with curl. The status and the headers the client reads are recorded here beside each one. Nothing was re-indented, added, renamed or invented: a hand-written fixture once certified a shape the wire never produced and defeated the audit that depended on it.",

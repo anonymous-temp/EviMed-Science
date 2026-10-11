@@ -288,12 +288,12 @@ test("a request without a valid workload token never reaches the probe", async (
 // ----------------------------------------------------------------- transport
 
 test("plaintext to a public address is refused unless the operator accepted it", async () => {
-  const res = await run({ geoProbeUrl: "http://43.248.117.249:9999" }, async () => jsonResponse({}), { op: "providers" });
+  const res = await run({ geoProbeUrl: "http://203.0.113.30:9999" }, async () => jsonResponse({}), { op: "providers" });
   assert.equal(res.statusCode, 503);
   assert.equal(res.json().code, "geo_probe_plaintext_forbidden");
 
   const accepted = await run(
-    { geoProbeUrl: "http://43.248.117.249:9999", geoProbeAllowPlaintext: true },
+    { geoProbeUrl: "http://203.0.113.30:9999", geoProbeAllowPlaintext: true },
     async () => jsonResponse({ providers: { deepseek: "tab_found" } }),
     { op: "providers" },
   );
@@ -312,7 +312,7 @@ test("an unauthenticated plaintext measurement says so in the answer", async () 
   // Silence here would be the whole defect: a number that crossed an
   // unprotected hop reads identically to one that did not.
   const res = await run(
-    { geoProbeUrl: "http://43.248.117.249:9999", geoProbeAllowPlaintext: true },
+    { geoProbeUrl: "http://203.0.113.30:9999", geoProbeAllowPlaintext: true },
     async () => jsonResponse({ results: [{ provider: "deepseek", ...answered }] }),
     { op: "ask", question: "q", providers: ["deepseek"] },
   );
@@ -403,7 +403,7 @@ test("isPrivateHost knows the ranges that make plaintext acceptable", () => {
   for (const host of ["127.0.0.1", "10.0.0.1", "172.16.0.1", "172.31.255.255", "192.168.0.1", "100.64.0.1", "169.254.1.1", "localhost", "geo-probe", "db.internal", "::1"]) {
     assert.equal(isPrivateHost(host), true, `${host} is private`);
   }
-  for (const host of ["43.248.117.249", "8.8.8.8", "172.32.0.1", "172.15.0.1", "example.com", "probe.evimed.com"]) {
+  for (const host of ["203.0.113.30", "8.8.8.8", "172.32.0.1", "172.15.0.1", "example.com", "probe.evimed.com"]) {
     assert.equal(isPrivateHost(host), false, `${host} is public`);
   }
 });

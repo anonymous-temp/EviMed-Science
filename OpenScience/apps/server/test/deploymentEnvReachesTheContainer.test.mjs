@@ -946,7 +946,7 @@ test("F12e: the plugin reads the platform's own evidence feed by default, at the
   const { evidencePublicBase, setEvidencePublicBase } = await import("../src/evidencePublicPaths.mjs");
   const served = evidencePublicBase();
   try {
-    for (const publicUrl of ["https://science.example.com", "https://82.156.128.153"]) {
+    for (const publicUrl of ["https://science.example.com", "https://203.0.113.10"]) {
       // Unset or empty base path is the code's own default, /evidence.
       assert.equal(rendered({ OPEN_SCIENCE_PUBLIC_URL: publicUrl }), `${publicUrl}/evidence/feed.json`);
       assert.equal(rendered({ OPEN_SCIENCE_PUBLIC_URL: publicUrl, OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH: "" }), `${publicUrl}/evidence/feed.json`);

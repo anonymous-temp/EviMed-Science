@@ -112,13 +112,13 @@ async def test_no_relay_configured_is_refused_by_name(plain_settings):
 
 
 @pytest.mark.parametrize("url, credentials, ok", [
-    ("https://45.32.58.204", "evimed:fake-password", True),
+    ("https://203.0.113.20", "evimed:fake-password", True),
     ("http://127.0.0.1:3128", "u:p", True),
-    ("https://user:fake-password@45.32.58.204", "u:p", False),   # credentials never in the URL
-    ("https://45.32.58.204/path", "u:p", False),
-    ("socks5://45.32.58.204", "u:p", False),
-    ("https://45.32.58.204", "no-colon", False),
-    ("https://45.32.58.204", None, False),
+    ("https://user:fake-password@203.0.113.20", "u:p", False),   # credentials never in the URL
+    ("https://203.0.113.20/path", "u:p", False),
+    ("socks5://203.0.113.20", "u:p", False),
+    ("https://203.0.113.20", "no-colon", False),
+    ("https://203.0.113.20", None, False),
     (None, "u:p", False),
 ])
 def test_edge_proxy_configuration(url, credentials, ok):

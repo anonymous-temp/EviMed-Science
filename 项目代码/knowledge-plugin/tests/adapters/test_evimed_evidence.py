@@ -156,7 +156,7 @@ def _feed(public, base, count=3):
 
 
 @pytest.mark.parametrize("base", ["/evidence", "/evimed-evidence"])
-@pytest.mark.parametrize("public", ["https://science.example.com", "https://82.156.128.153"])
+@pytest.mark.parametrize("public", ["https://science.example.com", "https://203.0.113.10"])
 def test_the_feed_address_the_platforms_public_url_gives_is_a_source_the_plugin_reads_card_for_card(case, public, base):
     # F12e: the deployment's default for EVIMED_EVIDENCE_FEED_URL is `$OPEN_SCIENCE_PUBLIC_URL<evidence base>/feed.json`, the address the
     # platform builds every card link on, so the host the feed is read from is the host of each card.

@@ -65,7 +65,8 @@ test("the pin is defined once, with the contract version and the documentation i
   assert.match(pin.docsCommit, /^[0-9a-f]{7,40}$/);
   assert.equal(pin.revision, `evimed-extract@${pin.version}`, "the index revision names the contract it was parsed under");
   assert.equal(pin.contractDir, "packages/contracts/evimed-extract");
-  assert.match(pin.testServer, /^https?:\/\/[^/]+$/);
+  assert.equal(pin.testServer, undefined, "the partner's test server address is not published");
+  assert.match(String(pin.recordedAgainst ?? ""), /test environment/, "the pin says what the fixtures were recorded against");
   assert.ok(String(pin.notes ?? "").length > 40, "a pin carries the reason it is what it is");
   assert.equal(deps.mineru, undefined, "MinerU was deleted with the switch; nothing may pin it");
 });
@@ -73,7 +74,7 @@ test("the pin is defined once, with the contract version and the documentation i
 test("the fixtures were recorded against the contract this pin names", () => {
   assert.equal(provenance.contractVersion, pin.version);
   assert.equal(provenance.docsCommit, pin.docsCommit);
-  assert.equal(provenance.server, pin.testServer);
+  assert.equal(provenance.server, pin.recordedAgainst);
   // The walk must prove it walked: two recordings exist from the first day.
   assert.ok(Object.keys(provenance.fixtures).length >= 2);
   assert.ok("health.json" in provenance.fixtures && "extract-missing-file.json" in provenance.fixtures);
@@ -85,10 +86,11 @@ test("every derived copy of the revision and the address equals the pin", async 
   assert.match(config, /depsVersions\["evimed-extract"\]\?\.revision/, "the code default must be read from the pin, not retyped");
   const overlay = await read("deploy/web/docker-compose.ingestion.yml");
   assert.equal(overlay.match(/OPEN_SCIENCE_DOCUMENT_PARSER_REVISION: \$\{OPEN_SCIENCE_DOCUMENT_PARSER_REVISION:-([^}]+)\}/)?.[1], pin.revision);
-  assert.equal(overlay.match(/OPEN_SCIENCE_DOCUMENT_PARSER_URL: \$\{OPEN_SCIENCE_DOCUMENT_PARSER_URL:-([^}]+)\}/)?.[1], pin.testServer);
+  // No default address: a deployment names its parser service.
+  assert.match(overlay, /OPEN_SCIENCE_DOCUMENT_PARSER_URL: \$\{OPEN_SCIENCE_DOCUMENT_PARSER_URL:-\}/);
   const example = await read("deploy/web/.env.example");
   assert.equal(example.match(/^OPEN_SCIENCE_DOCUMENT_PARSER_REVISION=(.+)$/m)?.[1], pin.revision);
-  assert.equal(example.match(/^OPEN_SCIENCE_DOCUMENT_PARSER_URL=(.+)$/m)?.[1], pin.testServer);
+  assert.equal(example.match(/^OPEN_SCIENCE_DOCUMENT_PARSER_URL=(.*)$/m)?.[1], "");
 });
 
 test("health, as the deployed build answers it, reads as healthy", async () => {

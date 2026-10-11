@@ -88,14 +88,14 @@ const close = (server) => new Promise((resolve) => {
 
 test("the node is configured only by a URL and user:password credentials, and routes only the hosts it names", () => {
   assert.equal(edgeProxyFromConfig({}), null);
-  assert.equal(edgeProxyFromConfig({ edgeProxyUrl: "https://45.32.58.204" }), null, "no credentials, no node");
-  assert.equal(edgeProxyFromConfig({ edgeProxyUrl: "https://45.32.58.204", edgeProxyCredentials: "no-colon" }), null);
-  const withUserInfo = new URL("https://45.32.58.204");
+  assert.equal(edgeProxyFromConfig({ edgeProxyUrl: "https://203.0.113.20" }), null, "no credentials, no node");
+  assert.equal(edgeProxyFromConfig({ edgeProxyUrl: "https://203.0.113.20", edgeProxyCredentials: "no-colon" }), null);
+  const withUserInfo = new URL("https://203.0.113.20");
   withUserInfo.username = "someone";
   withUserInfo.password = "something";
   assert.equal(edgeProxyFromConfig({ edgeProxyUrl: withUserInfo.href, edgeProxyCredentials: CREDENTIALS }), null, "credentials never ride in the URL");
-  assert.equal(edgeProxyFromConfig({ edgeProxyUrl: "ftp://45.32.58.204", edgeProxyCredentials: CREDENTIALS }), null);
-  const edge = edgeProxyFromConfig({ edgeProxyUrl: "https://45.32.58.204:443", edgeProxyCredentials: CREDENTIALS, edgeProxyHosts: " GTExPortal.org , api.omim.org,," });
+  assert.equal(edgeProxyFromConfig({ edgeProxyUrl: "ftp://203.0.113.20", edgeProxyCredentials: CREDENTIALS }), null);
+  const edge = edgeProxyFromConfig({ edgeProxyUrl: "https://203.0.113.20:443", edgeProxyCredentials: CREDENTIALS, edgeProxyHosts: " GTExPortal.org , api.omim.org,," });
   assert.equal(edge.authorization, AUTHORIZATION);
   assert.deepEqual([...edge.hosts], ["gtexportal.org", "api.omim.org"]);
   assert.equal(routesThroughEdge(edge, "gtexportal.org"), true);

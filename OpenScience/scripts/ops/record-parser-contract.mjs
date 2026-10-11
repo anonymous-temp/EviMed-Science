@@ -141,8 +141,8 @@ function argument(name) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const deps = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8"));
-  const baseUrl = argument("url") ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_URL ?? deps["evimed-extract"]?.testServer;
+  const baseUrl = argument("url") ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_URL;
+  if (!baseUrl) throw new Error("Name the parser service: --url <base URL> or OPEN_SCIENCE_DOCUMENT_PARSER_URL.");
   const keyFile = process.env.OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE ?? "";
   let token = "";
   if (keyFile) {

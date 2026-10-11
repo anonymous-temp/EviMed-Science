@@ -13,7 +13,7 @@ from knowledge_plugin.budget import HostBudget, MemoryCounterStore
 from knowledge_plugin.fetch import ProtectedFetcher, detect_challenge, is_empty_shell, is_public_address, redact_url, user_agent
 from knowledge_plugin.model import FetchError, RequestSpec
 
-PUBLIC = {"www.example.org": ["93.184.216.34"], "api.example.org": ["93.184.216.35"], "www.evimed.com": ["101.37.98.4"],
+PUBLIC = {"www.example.org": ["93.184.216.34"], "api.example.org": ["93.184.216.35"], "www.evimed.com": ["93.184.216.37"],
           "eutils.ncbi.nlm.nih.gov": ["130.14.29.110"], "other.example.net": ["151.101.1.69"],
           "rebind.example.org": ["93.184.216.36", "10.0.0.5"], "inside.example.org": ["192.168.1.10"]}
 ARTICLE = ("<html><head><title>News</title></head><body>" + "<p>A long article paragraph about a new trial. </p>" * 40

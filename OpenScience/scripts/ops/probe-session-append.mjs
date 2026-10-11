@@ -45,8 +45,9 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const base = String(args.base ?? process.env.OPEN_SCIENCE_PROBE_BASE_URL ?? "https://82.156.128.153");
-const username = String(process.env.OPEN_SCIENCE_PROBE_USERNAME ?? "cdss-access");
+const base = String(args.base ?? process.env.OPEN_SCIENCE_PROBE_BASE_URL ?? "http://127.0.0.1:8798");
+const username = String(process.env.OPEN_SCIENCE_PROBE_USERNAME ?? "");
+if (!username) throw new Error("Name the account the driver signs in as: OPEN_SCIENCE_PROBE_USERNAME.");
 if (args.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 /** @type {Record<string, string>} */

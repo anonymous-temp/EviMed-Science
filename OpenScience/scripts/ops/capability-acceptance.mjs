@@ -70,8 +70,9 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const base = String(args.base ?? process.env.OPEN_SCIENCE_ACCEPTANCE_BASE_URL ?? "https://82.156.128.153").replace(/\/+$/, "");
-const username = String(process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "cdss-access");
+const base = String(args.base ?? process.env.OPEN_SCIENCE_ACCEPTANCE_BASE_URL ?? "http://127.0.0.1:8798").replace(/\/+$/, "");
+const username = String(process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "");
+if (!username) throw new Error("Name the account the driver signs in as: OPEN_SCIENCE_ACCEPTANCE_USERNAME.");
 const capabilityId = String(args.capability ?? "");
 const briefId = String(args.brief ?? "");
 const attachRunId = typeof args.run === "string" ? args.run : "";

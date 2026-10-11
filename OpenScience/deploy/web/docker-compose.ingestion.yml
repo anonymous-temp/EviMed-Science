@@ -7,13 +7,14 @@ services:
       # .env says otherwise.
       OPEN_SCIENCE_SOURCE_MATERIALS_ENABLED:
       # The in-house parsing API is the parser team's own service, reached over
-      # HTTP; nothing of it runs here. The address defaults to the parser team's
-      # test server, the only one given. It needs no key (measured 2026-09-22:
-      # parse and extract answer 200 with no Authorization header). Required
+      # HTTP; nothing of it runs here. There is no default address: the
+      # deployment names its parser service. The parser team's test environment
+      # needs no key (measured 2026-09-22: parse and extract answer 200 with no
+      # Authorization header). Required
       # means readiness fails unless the service answers healthy; CI has no
       # parser to reach and switches it off.
       OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER: ${OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER:-true}
-      OPEN_SCIENCE_DOCUMENT_PARSER_URL: ${OPEN_SCIENCE_DOCUMENT_PARSER_URL:-http://123.57.56.88:9011}
+      OPEN_SCIENCE_DOCUMENT_PARSER_URL: ${OPEN_SCIENCE_DOCUMENT_PARSER_URL:-}
       OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE: /run/secrets/document-parser-token
       OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS: ${OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS:-300000}
       OPEN_SCIENCE_DOCUMENT_PARSER_REVISION: ${OPEN_SCIENCE_DOCUMENT_PARSER_REVISION:-evimed-extract@0.5.0}

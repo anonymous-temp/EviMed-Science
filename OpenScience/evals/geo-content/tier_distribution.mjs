@@ -100,7 +100,7 @@ const PROVOCATIONS = {
   },
   geo_probe_host_in_prose: {
     "geo-probe-log.jsonl": round(),
-    "geo-content-pack.md": "测量来自 43.248.117.249:9999。",
+    "geo-content-pack.md": "测量来自 203.0.113.30:9999。",
   },
 };
 const inert = [];

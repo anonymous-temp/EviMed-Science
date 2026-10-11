@@ -254,7 +254,7 @@ test("an ad-hoc probe ledger is still read honestly, as notices", () => {
 
 test("the probe host in an article is noticed, and revision notes are exempt", () => {
   const leaking = goodPack();
-  leaking.files["articles/a1.md"] = `${CARD}测量来自 43.248.117.249:9999。\n`;
+  leaking.files["articles/a1.md"] = `${CARD}测量来自 203.0.113.30:9999。\n`;
   const verdict = gate(leaking);
   assert.equal(verdict.ok, true, "a new check ships as a notice");
   const raised = verdict.issues.filter((entry) => entry.code === "geo_probe_host_in_prose");
@@ -262,7 +262,7 @@ test("the probe host in an article is noticed, and revision notes are exempt", (
   assert.equal(raised[0].path, "articles/a1.md");
 
   const noted = goodPack();
-  noted.files["revision-notes.md"] = "本轮改动：把 43.248.117.249:9999 换成内网地址后重测。\n";
+  noted.files["revision-notes.md"] = "本轮改动：把 203.0.113.30:9999 换成内网地址后重测。\n";
   assert.deepEqual(gate(noted).issues, []);
 });
 
