@@ -1,5 +1,5 @@
 # L1 — Content-side modules: what they produce/consume, existing links, gaps
-Repo: /home/coder/workspace/EviMedScience (branch codex/research-evolution-engine-20261004, HEAD c1f02c3cc).
+Repo: /workspace/EviMedScience (branch codex/research-evolution-engine-20261004, HEAD c1f02c3cc).
 Paths below are relative to `OpenScience/` unless absolute. "READ" = read in code; "INFER" = my inference.
 
 ## (a) Evidence zones & cards (证据专区 / 证据卡片)

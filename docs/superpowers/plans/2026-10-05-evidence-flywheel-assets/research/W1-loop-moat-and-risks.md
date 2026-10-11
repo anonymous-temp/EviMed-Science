@@ -173,4 +173,4 @@ Not supported / contradicted
 
 Process notes
 - No user identifiers were sent in any URL/header/payload; no API requiring a contact field was used (Crossref data read from public web pages, EDGAR skipped).
-- Side effect to disclose: one Playwright MCP navigation (to a Cloudflare-blocked Wolters Kluwer page) auto-wrote two gitignored log files into /home/coder/workspace/EviMedScience/.playwright-mcp/; I deleted exactly those two files and stopped using Playwright. Nothing else in the repository was touched.
+- Side effect to disclose: one Playwright MCP navigation (to a Cloudflare-blocked Wolters Kluwer page) auto-wrote two gitignored log files into /workspace/EviMedScience/.playwright-mcp/; I deleted exactly those two files and stopped using Playwright. Nothing else in the repository was touched.

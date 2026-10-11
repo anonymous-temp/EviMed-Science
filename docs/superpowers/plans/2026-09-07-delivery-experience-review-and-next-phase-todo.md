@@ -49,7 +49,7 @@
 
 **证书**：Let's Encrypt `shortlived` profile（6.67 天），`evimed-certbot-renew.timer` 每天两次，上次续期 9/5 00:05 CST，日志"no renewal failures"，下次预计 9/9。**P0-3 是误报**——它是一张会自动换的短期证书，不是"9/11 之前压倒一切"的事故。缺的是证书到期告警，不是人工续期。
 
-**部署**：`/srv/evimed-science/releases/evimed-20260907-fd5657b`（合并前 review 分支尖）。上一阶段 11 个提交无一上线。
+**部署**：release `evimed-20260907-fd5657b`（合并前 review 分支尖）。上一阶段 11 个提交无一上线。
 
 ## 3. 一类问题，不是一堆问题
 
@@ -172,7 +172,7 @@
 >
 > **第二轮电池的最后两项，读记录而不是信判决。** geo-content 第二次运行 63 分钟、289 条消息、150 次工具调用、十个文件全写、提交时通过合约，最后被 `specialist_required_skill_missing` 判失败。记录显示的原因是控制面自己的：路由指令要模型「逐个用 skill 工具加载」六个方法并「自行执行 SKILL.md」，而其中两个（`geo-content`、`autopilot-episode`）是能力正文，故意不在内核的技能根目录里，只能经 `evimed_delegate` 注入；模型加载了能加载的四个、在根会话里自己干完，门禁再按它拿不到的方法判它失败。更糟的是 evidence-appraisal 昨天的「accepted」是假阳性：它对自己能力的那一次 `skill` 调用返回的是 `skill "evidence-appraisal" is unknown or no longer available`，门禁把「已完成的调用」一律计为加载。三处修法（`15df67354`）：门禁只认内核为该名字渲染的 `<skill_content>` 块；路由指令改为「先 evimed_plan，再 evimed_delegate 委派给该能力，方法由委派注入」；判决带上缺的方法名和补救路线。台账：evidence-appraisal 回退为 failed，两个包保留为证据，bibliometric 的第三次运行（审稿人推翻一个手打百分比）作为原则 10c 的评测案例记入。
 >
-> **事故（我造成的）。** 2026-09-09 23:17 CST，为追查一次负载尖峰我在生产主机上跑了只读的 `docker buildx history ls`，dockerd 29.1.3 在 BuildKit 的 `filterHistoryEvents` 空指针崩溃（几乎肯定是十六分钟前一次被 OOM 杀掉的构建留下的坏记录——那次构建不是我发起的），systemd 重启了守护进程，但**共享主机上 38 个容器（含 tcm-cdss 之外的其他四个产品）全部停在 exited**，`unless-stopped` 对守护进程崩溃时标记为已停止的容器不生效。直到今早 01:50 UTC 我查 `/api/health` 得到 nginx 502 才发现，停机约 10.5 小时；按依赖顺序 `docker start` 逐个拉起，数据无损，PostgreSQL 备份定时器在停机中失败的一次已补跑、回执 healthy。已写入记忆：那台主机上永远不要再查询 build history；任何守护进程重启后要按 `FinishedAt` 找出被停的容器手工拉起。顺带修了控制面自己的一处崩溃：autopilot 与 consolidation 两个定时器的 catch 会把非维护错误重新抛出，Postgres 连接超时因此成为未处理的 Promise 拒绝、Node 直接退出（15:01 UTC 发生过一次，容器重启拉回）；两处改为报告后下一轮重试，入口加了兜底处理器，测试钉住「五个定时任务的 catch 都不再抛」。
+> **事故（我造成的）。** 2026-09-09 23:17 CST，为追查一次负载尖峰我在生产主机上跑了只读的 `docker buildx history ls`，dockerd 29.1.3 在 BuildKit 的 `filterHistoryEvents` 空指针崩溃（几乎肯定是十六分钟前一次被 OOM 杀掉的构建留下的坏记录——那次构建不是我发起的），systemd 重启了守护进程，但**共享主机上 38 个容器（含同机的其他几个产品）全部停在 exited**，`unless-stopped` 对守护进程崩溃时标记为已停止的容器不生效。直到今早 01:50 UTC 我查 `/api/health` 得到 nginx 502 才发现，停机约 10.5 小时；按依赖顺序 `docker start` 逐个拉起，数据无损，PostgreSQL 备份定时器在停机中失败的一次已补跑、回执 healthy。已写入记忆：那台主机上永远不要再查询 build history；任何守护进程重启后要按 `FinishedAt` 找出被停的容器手工拉起。顺带修了控制面自己的一处崩溃：autopilot 与 consolidation 两个定时器的 catch 会把非维护错误重新抛出，Postgres 连接超时因此成为未处理的 Promise 拒绝、Node 直接退出（15:01 UTC 发生过一次，容器重启拉回）；两处改为报告后下一轮重试，入口加了兜底处理器，测试钉住「五个定时任务的 catch 都不再抛」。
 >
 > **上线。** `evimed-20260910-a8f9c0f`：主机上以 `sudo cp -a` 从 7f88cf2 播种、按 `git ls-files` 同步跟踪树（1805 文件、零残差）、五处锚点改写、一个 `BUILD_CREATED` 传给两个镜像并写入 `.env`、三个镜像共 7 分钟（web 1.5 分钟、runtime 51 秒缓存命中、bibliometric 适配器 4 分钟）、标签核对、清单生成与 `--verify-images`、`preflight:host` 只红回执、切换、receipt 容器 20 秒后重签、`/api/ready` **25/25**、`smoke:deployment` **13/13**、英文浏览器实测会话面全中文。bibliometric 适配器镜像已重建上线：旧镜像 openai 3.8.0 且无 httpx，新镜像 openai 1.109.1 + httpx 0.28.1。随后发现内核在插槽之外直接渲染的「workspace」芯片（撤掉的只是它打开的弹窗）成了首屏一个无效按钮，已隐藏（`bd7d2dd03`），随下一版上线。
 >
@@ -182,14 +182,14 @@
 
 ### B. 需要用户输入的外部项（不是代码）
 
-- **B1 · 域名与证书。** 现在 `OPEN_SCIENCE_PUBLIC_URL=https://82.156.128.153`，Let's Encrypt 6 天短证书对 IP 签发、自动续。正式域名是 Cookie/CSP/OIDC/对外发布的前提。
-- **B2 · bootstrap 账号口令。** `sxjxw-research` 是操作者本人的登录账号，口令按 2026-09-04 的指示设为 6 位且在公网 IP 上；上线前改强口令（我不能替你选）。
+- **B1 · 域名与证书。** 现在 `OPEN_SCIENCE_PUBLIC_URL=https://<production-host>`，Let's Encrypt 6 天短证书对 IP 签发、自动续。正式域名是 Cookie/CSP/OIDC/对外发布的前提。
+- **B2 · bootstrap 账号口令。** 操作者本人的登录账号口令按 2026-09-04 的指示设得很短；上线前改强口令（我不能替你选）。
 - **B3 · 告警接收人。** Alertmanager 唯一接收器是示例占位 `http://127.0.0.1:5001/`——13 条规则（含证书 < 3 天、磁盘 < 20 GB、就绪探针失败）一条都到不了人。给我一个企业微信/飞书/钉钉 webhook 或 SMTP。
 - **B4 · 异地备份。** `OPEN_SCIENCE_BACKUP_EXTERNAL_ACK=false`、对象存储 URI 为空，备份只在本机盘上；给一个 S3 兼容桶 + 密钥 + 端点（检查表 P0-7）。
 - **B5 · OpenGWAS token + MR 通道回执。** `audit:capabilities` 自 8 月中起红（探针证据 07-31、14 天窗口），`ci:web` 因此不能全绿；只有账号主能续 token。
 - **B6 · 法律最小交付。** 产品内没有隐私政策、服务条款、科研辅助免责声明页（0 处）。此前裁定不做合规闸，但发布这三页是运营事项。
 - **B7 · 容量。** 全局并发任务 2、每用户运行时 2、第 3 个派发直接 429；主机 4 核 15 GB 与另外四个产品共用，可用内存 5 GB。要么专用主机，要么邀请制 ≤ N 人试点。
-- **B8 · 删号点名。** 死实验账号 `rq01-pipeline`（43 项目/361 MB）、`scoping-v12`（6/74 MB）、`qa-native-cbc94a7a3f`（1/2.6 MB）与两个孤儿目录；你自己账号下 8 月的 sxjxw v1–fin 迭代（1.2 GB）。没有管理员删号路由，删是 DB + 卷两步。
+- **B8 · 删号点名。** 死实验账号 `rq01-pipeline`（43 项目/361 MB）、`scoping-v12`（6/74 MB）、`qa-native-cbc94a7a3f`（1/2.6 MB）与两个孤儿目录；你自己账号下 8 月的 v1–fin 迭代（1.2 GB）。没有管理员删号路由，删是 DB + 卷两步。
 
 ### C. 上线后第一周（不阻断）
 

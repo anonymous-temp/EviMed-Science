@@ -1,6 +1,6 @@
 # L2 — Platform-side modules: produces / consumes / visibility / links / gaps
 
-Repository: /home/coder/workspace/EviMedScience (branch codex/research-evolution-engine-20261004), read-only mapping 2026-10-05.
+Repository: /workspace/EviMedScience (branch codex/research-evolution-engine-20261004), read-only mapping 2026-10-05.
 Paths below are relative to `OpenScience/` unless stated. `[code]` = read in code; `[infer]` = my inference.
 
 ## (a) Memory, capsules, learning

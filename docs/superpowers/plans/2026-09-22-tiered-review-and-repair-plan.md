@@ -516,7 +516,7 @@ evimed_submit_deliverable
 
 **这一轮学到的。** 直接调网关的探针证明的是网关，不是功能：第 6、7 条都在探针绕过的那段里。所以最终验证走用户路径：派发 → 运行 → 提交 → 审查行 → 通知；真实回答 → 核查行 → 判定。
 
-**最终验证（`ee8759017e4c`）。** 走用户路径，账号 cdss-access，项目 review-tiered-0923：
+**最终验证（`ee8759017e4c`）。** 走用户路径，账号 <owner-account>，项目 review-tiered-0923：
 
 - **运行时**：镜像 `…-ee8759017e4c`，`EVIMED_REVIEW_ENABLED=1`。上线前每个运行时都是 0。
 - **L2**：一次 clinical-evidence-synthesis 真实交付（`run_61eaa729…`），11.7 min 送达，提交三次：
@@ -562,8 +562,8 @@ evimed_submit_deliverable
 
   药名句不交 Jev，因为药师警示它漏了 11/73，词表匹配是 73/73。
 - **计价。** Jev 按美元计费，账本是人民币。价目表 `evimed-reference-2026-09-24` 按 CFETS 汇率 6.7489 折算，一行一模型。
-- **密钥。** 放在宿主机 `/srv/evimed-science/shared/secrets/typesafe.api-key`（root 0400）；`.env` 只写路径，运行时容器不持有。
-- **线上结果**（`run_9ba4b706…`，cdss-access）：
+- **密钥。** 放在宿主机的 secrets 目录里（root 0400）；`.env` 只写路径，运行时容器不持有。
+- **线上结果**（`run_9ba4b706…`，<owner-account>）：
   - 回答结束后 5 s 核查落定；
   - 4 句中 Jev 落定 1 句，3 句送 Qwen；
   - 账本 Jev ¥0.00071（2,511 token），Qwen ¥0.0388；

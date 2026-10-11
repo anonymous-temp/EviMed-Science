@@ -24,7 +24,7 @@
 
 ## 1. Verified baseline and evidence limits
 
-Repository root: `/Users/wangzeyuan/Desktop/EviMedScience`. Paths below are relative to that root unless a task says that commands run from `OpenScience/`.
+Repository root: `/workspace/EviMedScience`. Paths below are relative to that root unless a task says that commands run from `OpenScience/`.
 
 | Item | Evidence and its scope |
 |---|---|
@@ -706,7 +706,7 @@ The owner requested a code handoff and assigned all subsequent work to the team.
 
 - Integration branch: `codex/extension-center-20261002`; review: https://github.com/anonymous-temp/EviMed-Science/pull/5. Product changes end at `00a33eb7df0b9457e5be7e631b984500eca74117`; `fccf4d61f` repairs test fixtures and dispatch synchronization; `218fa38549444f2cb922f122f86204db78f1cd59` contains the reviewed native acceptance driver. `5c626956c` preserves eight owner-authored historical progress entries.
 - PR 3 frontier commit `5d3a875bcbf07de1f472098eb05025b0a0b0fc6e`, VCR integration `174a33e66`, and release integration `0a4abc9caba5f26f79cc5a58014e99786248e792` are already in this integration history. PR 5 remains a draft and is not merged into main. The primary checkout remains on `e15ba95ed13e1b340befb4b1e027a210ccf7b1d9`; unrelated untracked files and the original local progress file are preserved.
-- Production still serves `62faa8a00234`. Candidate directory: `/srv/evimed-science/releases/prepared-core0d-20261003-fecabd4316`. The native-staged Web image is `sha256:b15ae61ccaa289716b1376cb35c01280826af1e4ef7cc5f72f07e6999a8e9baa`, built from product source `00a33eb7df0b9457e5be7e631b984500eca74117`. Runtime image: `sha256:340a05f4ae4da6f291d53b7ad302b159fb89b565bd703d0937aa95c46490bb4c`, from source `0d936480f496e21d948d702109a4feb2bf44c05e`. Do not relabel either image as a later documentation/QA commit.
+- Production still serves `62faa8a00234`. Candidate directory: `<install-root>/releases/prepared-core0d-20261003-fecabd4316`. The native-staged Web image is `sha256:b15ae61ccaa289716b1376cb35c01280826af1e4ef7cc5f72f07e6999a8e9baa`, built from product source `00a33eb7df0b9457e5be7e631b984500eca74117`. Runtime image: `sha256:340a05f4ae4da6f291d53b7ad302b159fb89b565bd703d0937aa95c46490bb4c`, from source `0d936480f496e21d948d702109a4feb2bf44c05e`. Do not relabel either image as a later documentation/QA commit.
 - The candidate passed a signed real-model call and 18 host preflight checks. Local/native evidence includes 21 browser isolation controls, 15 DOCX/PDF/HTML renders, 16 replay-image checks and independently repeated 22-case PostgreSQL rollback checks. Corrected server composition passes 32/32 and the run-ledger file passes 157/157. These are scoped results, not complete production acceptance.
 - Full CI on `218fa3854` was running at handoff: push run `37114869486`, PR run `37114871851`. The earlier `00a33` CI had 17 failures subsequently addressed by the test-fixture and synchronization fixes. Verify the final workflow results; hosted-production E2E is separately skipped by that workflow and needs real execution.
 - An isolated VCR engine is running with its own internal network; the old application has not been switched to it. Its imported evidence validates 12 of 24 method entries, not all 24. Six updated specialist images and the replay image are staged; historical scientific runs cannot certify those changed sources.

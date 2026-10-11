@@ -78,7 +78,7 @@ class PrimaryAlignmentAssessment(BaseModel):
 
 ## Task 5: Verification and independent review
 
-- [x] Run focused new/modified tests with `/Users/wangzeyuan/Desktop/EviMedScience/项目代码/meta/.venv/bin/python` from the release checkout's Meta directory.
+- [x] Run focused new/modified tests with `/workspace/EviMedScience/项目代码/meta/.venv/bin/python` from the release checkout's Meta directory.
 - [x] Run numeric regression tests, extraction/review tests, phase/CLI/Web tests and checkpoint tests, then `python tests/test_deep.py`.
 - [x] Run scoped `git diff --check`. Send the stable diff plus exact test results and remaining limitations to `meta_clinical_review` and the parent. The parent reviews, commits, and starts fresh managed evaluation. Do not edit historical job states or receipts, start another agent job, or deploy from this subtask.
 

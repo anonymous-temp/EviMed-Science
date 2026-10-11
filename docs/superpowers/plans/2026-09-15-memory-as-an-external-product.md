@@ -17,7 +17,7 @@
 
 配置里两条臂的 `records` 都是空的，也就是说照原样跑会拿 12 次运行去和自己比。要填真实记录 id，于是去生产库里找——找到了一个真缺陷：
 
-`sxjxw-research` 账号有 10 条 `preference.explicit.<hash>` 记录，内容全是**整段任务题面**（`<evimed-brief>` 包着的「请以《Therapeutic Reference Range for Aripiprazole in Schizophrenia Revised》为题完成一份中文科研综述报告」之类），却以 `origin=explicit`、`status=active`、`importance=0.75` 存着。三层根因：
+`<owner-account>` 账号有 10 条 `preference.explicit.<hash>` 记录，内容全是**整段任务题面**（`<evimed-brief>` 包着的「请以《Therapeutic Reference Range for Aripiprazole in Schizophrenia Revised》为题完成一份中文科研综述报告」之类），却以 `origin=explicit`、`status=active`、`importance=0.75` 存着。三层根因：
 
 1. `run-policy.mjs` 把本次题面包进 `<evimed-brief>` 注入会话，它带着 `source: "user"`——因为确实是用户间接引起的——所以既有的 sender 检查看不见它。
 2. `deterministicCandidates`（模型抽取不可用时的兜底）用一堵开放词表正则判断一条消息是不是偏好，命中后把**整条最多 4000 字**原样存成记忆值。这正是原则 5 说不要扩展的那种输入侧关键词墙。
@@ -27,7 +27,7 @@
 
 **那十条脏记录没有动**——删用户可见的记忆是运维的决定。
 
-评测配置改成用 `cdss-access` 的四条用户域记录（一条 active、三条 pending，都不是从注入题面来的），基线停用、候选启用，两条臂真的不同了。四条是**薄**的消融，报告里要这么写，而不是把薄的装成厚的。跑它是 12 次 `clinical-evidence-synthesis` 运行、并发 1、每次上限 45 分钟、$12 成本帽，打在真实账号的预算上——这一步留给运维决定何时跑。
+评测配置改成用 `<owner-account>` 的四条用户域记录（一条 active、三条 pending，都不是从注入题面来的），基线停用、候选启用，两条臂真的不同了。四条是**薄**的消融，报告里要这么写，而不是把薄的装成厚的。跑它是 12 次 `clinical-evidence-synthesis` 运行、并发 1、每次上限 45 分钟、$12 成本帽，打在真实账号的预算上——这一步留给运维决定何时跑。
 
 **2. 抽取的模型调用改走模型网关并入账 — 做了。** `modelGateway.mjs` 新增 `callModelForControlPlane`：预留—结算、上游 URL 规则、模型白名单三件共享一次。`memoryIntelligence` 不再直连 `api.deepseek.com`，它自己那份 `extractionUrl` 与 `boundedJsonResponse` 删掉了——第二份出网规则就是第二条出网路径。拿不到 provider 用量时记 `uncertain` 而不是按估算结算（按估算结算在账本里和按实测结算长得一模一样，那正是 `markUncertain` 要分开的东西）；被拒时按是否已 dispatch 决定 `uncertain` 还是 `release`。
 
@@ -64,7 +64,7 @@ key 存在 `evimed_agent.api_keys`：只存 SHA-256，明文只在创建那一�
 ## 三、还欠的三件（按顺序）
 
 1. 跑 `memory-ablation-v1`，四条记录的薄消融，报告里如实写薄。
-2. 那十条脏记录：运维决定删、归档还是留。SQL 现成：`UPDATE evimed_memory.records SET status='archived' WHERE user_id='sxjxw-research' AND value LIKE '%<evimed-brief>%';`
+2. 那十条脏记录：运维决定删、归档还是留。SQL 现成：`UPDATE evimed_memory.records SET status='archived' WHERE user_id='<owner-account>' AND value LIKE '%<evimed-brief>%';`
 3. 外部 agent 回报观察的接口——「挂了哪个摘要、成没成」。没有它，自迭代回路的外放只能是半个。
 
 ## 四、2026-09-16 补记：记忆到不了干活的子代理

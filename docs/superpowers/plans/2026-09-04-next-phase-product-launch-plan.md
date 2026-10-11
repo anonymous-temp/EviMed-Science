@@ -1,8 +1,8 @@
 # 下阶段任务：把 EviMed Science 做成可对外开放的产品（2026-09-04）
 
-一句话：**内核换钉到 0.1.2-rc.1，DSH 网页作为托管对话面被 EviMed 产品壳包住，入口是 `https://82.156.128.153/` 裸根，任何研究者都能注册登录、在自己的租户里跑出过门禁的交付物。** 工具 license（OpenGWAS、Materials Project 网络等）另立项目，本计划不含。
+一句话：**内核换钉到 0.1.2-rc.1，DSH 网页作为托管对话面被 EviMed 产品壳包住，入口是 `https://<production-host>/` 裸根，任何研究者都能注册登录、在自己的租户里跑出过门禁的交付物。** 工具 license（OpenGWAS、Materials Project 网络等）另立项目，本计划不含。
 
-**用户裁决（2026-09-04，已生效，覆盖本文初稿的 §5 三问）**：① DSH web UI 为主界面，生态里能复用的插件直接集成，尽量吃 DSH 内核与框架的现成能力；② 不再提 OpenScience / OpenCode，历史残留删掉；③ 域名与备案暂缓——先把产品跑起来；④ 裸根 `/` 从 cro-demo 手里收回；⑤ 身份先做**本地注册**，OIDC 等产品跑顺再说。
+**用户裁决（2026-09-04，已生效，覆盖本文初稿的 §5 三问）**：① DSH web UI 为主界面，生态里能复用的插件直接集成，尽量吃 DSH 内核与框架的现成能力；② 不再提 OpenScience / OpenCode，历史残留删掉；③ 域名与备案暂缓——先把产品跑起来；④ 裸根 `/` 从同机另一应用手里收回；⑤ 身份先做**本地注册**，OIDC 等产品跑顺再说。
 
 本计划是执行清单，不是设计文档。设计仍以 `docs/superpowers/specs/2026-08-22-evimed-dsh-plug-harness-design.md`（下称 SPEC）为准；与 SPEC 冲突之处由批次 0 的决策记录 #26 收口。
 
@@ -15,7 +15,7 @@
 - 版本 `evimed-20260907-287cd59`（2026-09-07 公网就绪独立确认）。本行其余数值为 2026-09-04 08:30Z 在 `evimed-20260904-bf10ff35` 上的实测，未在当前版本复测：`/api/ready` 18/18，`saasProfile.profile = individual-saas`，`technicalSaas: true`，但两项是**声明未配置**而非达标：`oidc-identity`、`external-recovery`（`OPEN_SCIENCE_SAAS_PROFILE_UNCONFIGURED`）。备份 `mode: local`。
 - 身份：`OPEN_SCIENCE_AUTH_MODE=local`，仅一个 bootstrap 账号，无注册入口（`store.createUser` 存在但没有路由）。
 - 内核：`0.1.2-rc.1`（`OpenScience/deps-version.json` 的 `dsh.version`；T1.1 的 alpha.5 → rc.1 换钉已执行）。
-- 入口：`https://82.156.128.153`，与另外十余个应用共用一台 nginx（`/etc/nginx/sites-enabled/cro-qa` 与 `evimed-science` 两个 server 块，十几个 include 片段）。裸根 `/` 被 `snippets/cro-demo.conf` 的 `location = /` 占用；EviMed 只拿到 `location /` 兜底。证书是 Let's Encrypt 的 IP 证书，6 天一续（`evimed-certbot-renew.timer` 在跑）。`evimed.com` 解析到阿里云（`101.201.39.91` 等），`science.evimed.com` / `app.evimed.com` 无解析。
+- 入口：`https://<production-host>`，与另外十余个应用共用一台 nginx（`/etc/nginx/sites-enabled/` 下有两个 server 块，十几个 include 片段）。裸根 `/` 被另一应用片段里的 `location = /` 占用；EviMed 只拿到 `location /` 兜底。证书是 Let's Encrypt 的 IP 证书，6 天一续（`evimed-certbot-renew.timer` 在跑）。`evimed.com` 解析到阿里云（`<pilot-host>` 等），`science.evimed.com` / `app.evimed.com` 无解析。
 - 主机：4 核、15 GiB（已用 7.7 GiB）、磁盘 81%。
 
 **前端壳（当时的 `apps/desktop`，已随 T2.4 改名为 `apps/web`；托管形态）**
@@ -49,7 +49,7 @@ SPEC D12、§16 #10、§18.1 结论、ARCH §14、FEPLAN「不把容器里的 DS
 
 ## 2. 目标形态（「做完」的定义）
 
-1. 入口是 `https://82.156.128.153/` 裸根。未登录到登录页，登录后到工作台。**URL 里没有项目 id，没有 `/api/`。** 域名与备案后议。
+1. 入口是 `https://<production-host>/` 裸根。未登录到登录页，登录后到工作台。**URL 里没有项目 id，没有 `/api/`。** 域名与备案后议。
 2. 工作台 = EviMed 壳（SPEC §23.1 的导航、顶部项目切换器、运行记录 / 交付物 / 证据 / 账户）+ 对话区 = **DSH 网页嵌入**（托管加固：方法名单、隐藏设置类面板、EviMed 主题与品牌、中文默认）。
 3. 任何人可注册登录（先本地注册），每人一个独立租户；**用量计量与日 / 周上限先于开放注册**（SPEC 锁定项 #19「额度先于功能」）。
 4. 内核 `0.1.2-rc.1`；附 B 五棵树删除。
@@ -79,7 +79,7 @@ SPEC D12、§16 #10、§18.1 结论、ARCH §14、FEPLAN「不把容器里的 DS
 - **T2.2 对话区嵌入**（批次 1 已落地其主体）：`/app/chat` 内 iframe 指向内核界面**自己的源**（同主机、独立端口）。路径前缀方案已被实测否掉——应用用 `location.origin` 拼绝对路径，`/plugins/…` 与 `/api/<方法>` 在前缀下落回我们自己的 SPA，页面在启动时就死。项目由该源的 cookie 记住（`?project=` 一次性钉入）。切换项目即换 iframe。
 - **T2.3 运行面板与门禁可见**：壳在对话区旁展示该会话对应运行的 `status / verification / deliverables / receipt`（数据源已有：认领 + 路由 + `agentRuns` 台账 + `GET /api/runs/:id/events`），交付物下载、修复回环提示、`unchecked` 的原因说明。`RunsPage`（1158 行）保留并接同一数据。
 - **T2.4 删除旧会话层与附 B**：`LiveSessionPage.tsx`、`components/thread/*` 中只服务旧页的部分、`lib/runtime.ts`、`packages/sdk`、`apps/desktop/src-tauri`、`runtime/harness`、`SessionRoute` 的双视图开关与 `/api/me.sessionView`；grep 断言 OpenCode 残留只剩评测历史产物（附 B 第三类）。`apps/desktop` 改名 `apps/web` 随此 PR（SPEC §9.8）。
-- **T2.5 nginx：收回裸根**：把 `location = /` 从 `/etc/nginx/snippets/cro-demo.conf` 里去掉（那条精确匹配优先于本站的 `location /`），EviMed 拿回 `https://82.156.128.153/`；cro-demo 自身的 `/cro-demo/` 路径不动，只失去裸根。同时为内核界面的源加一个 443 之外的 TLS 端口（`OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN`），证书复用现有 IP 证书。域名与备案暂缓，不做。
+- **T2.5 nginx：收回裸根**：把 `location = /` 从另一应用的 nginx 片段里去掉（那条精确匹配优先于本站的 `location /`），EviMed 拿回 `https://<production-host>/`；该应用自身的路径前缀不动，只失去裸根。同时为内核界面的源加一个 443 之外的 TLS 端口（`OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN`），证书复用现有 IP 证书。域名与备案暂缓，不做。
 - **T2.6 「Research session not found」**：壳的 research_session 与 DSH 的 kernel session 是两套概念，旧页面用前者定位后者失败。嵌入后壳不再自己开会话，该路径随 T2.4 删除；`/api/research-sessions` 若无其他消费者一并退役。
 
 ### 批次 3 · 多用户与开放（4–6 天，含一次发版）
