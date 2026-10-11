@@ -623,11 +623,13 @@ const CRITERION_FIELDS = Object.freeze(["kind", "criterionType", "requirement", 
  * ONE protocol version, never one version per row.
  *
  * @param {WriteDeps} deps @param {any[]} rows @param {any[]} issues @param {string} what
- * @returns {Promise<{ criteria: any[], versionRow: Record<string, any> }>}
+ * @returns {Promise<{ criteria: any[], versionRow: Record<string, any>, warnings: any[] }>}
  */
 async function checkedCriteria(deps, rows, issues, what) {
   /** @type {any[]} */
   const criteria = [];
+  /** An exclusion written as a negation, named for the run beside the write (`warnNegatedExclusion`). @type {any[]} */
+  const warnings = [];
   /** @type {Record<string, any>} */
   let versionRow = {};
   for (const [index, raw] of rows.entries()) {
@@ -640,9 +642,10 @@ async function checkedCriteria(deps, rows, issues, what) {
     for (const [at, candidate] of candidates.entries()) {
       const criterion = checkedCriterion(deps, candidate, index, candidates === rows ? "" : `criteria[${at}].`, issues);
       if (criterion) criteria.push(criterion);
+      if (criterion) warnNegatedExclusion(criterion, candidates === rows ? `[${index}].requirement` : `criteria[${at}].requirement`, warnings);
     }
   }
-  return { criteria, versionRow };
+  return { criteria, versionRow, warnings };
 }
 
 /**
@@ -688,6 +691,19 @@ function checkedCriterion(deps, candidate, index, where, issues) {
     // exclusions back as stated (`statedRequirement`), so a criterion rewritten as read keeps its meaning.
     requirement: kind === "exclusion" ? storedExclusion(/** @type {Record<string, any>} */ (requirement)) : requirement, applicability: applicability ?? null,
   };
+}
+
+/**
+ * An exclusion is written as the registry states it and the platform negates it (`storedExclusion`). One written as a negation --
+ * not(...) at its top -- is either the registry's own negative ("unable to consent") or a hand negation of the old grammar, which the
+ * platform's negation would turn back into the opposite. Which one is language, so the platform keeps the criterion and says so
+ * beside the write for the run to look again (a live run negated two of fourteen by hand, 2026-10-11).
+ * @param {Record<string, any>} criterion as checked (`requirement` already stored) @param {string} field @param {any[]} warnings
+ */
+function warnNegatedExclusion(criterion, field, warnings) {
+  if (criterion?.kind !== "exclusion" || criterion.requirement?.operand?.op !== "not") return;
+  warnings.push({ field, code: "exclusion_written_negated",
+    message: "这条排除标准写成了 not(…)。排除标准照原句写会被排除的情况，取反由平台做：原句是「X 者除外」就写 X 本身；只有原句本身是否定说法（如「不能签署知情同意者」）才保留 not。" });
 }
 
 /**
@@ -974,6 +990,7 @@ const WRITERS = {
     const warnings = [];
     let located = 0;
     const criteria = checked?.map((criterion, at) => {
+      warnNegatedExclusion(criterion, `criteria[${at}].requirement`, warnings);
       const found = locateSourceText(criterion.sourceText, trial.eligibilityText);
       if (found) located += 1;
       else if (trial.eligibilityText) {
@@ -1800,7 +1817,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
 
   if (what === "protocol" || what === "criteria") {
     try {
-      const { criteria, versionRow } = await checkedCriteria(deps, rows, issues, what);
+      const { criteria, versionRow, warnings: negated } = await checkedCriteria(deps, rows, issues, what);
       if (criteria.length) {
         const previous = await store.latestProtocolVersion(study.id);
         // The matching store writes the version with its criteria and their
@@ -1813,6 +1830,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
         });
         changed.push(`protocol_version:${saved.id}@${saved.version}`);
         ids.push(saved.id);
+        if (negated.length) results.push({ protocolVersion: saved.version, warnings: negated });
         // A version written without the criteria that were refused is a version that
         // asks less than the protocol does: the run is told that the whole set is
         // what a corrected write must carry, not only the refused ones.

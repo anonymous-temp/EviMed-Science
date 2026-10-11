@@ -276,3 +276,36 @@ test("a run reads an exclusion back as it wrote it, and a criterion stored befor
   const rewritten = storedExclusion(statedRequirement({ kind: "exclusion", requirement: legacy }));
   assert.deepEqual(rewritten, { op: "not", operand: { op: "not", operand: legacy } });
 });
+
+// The run after the change (2026-10-11) wrote twelve of fourteen exclusions as stated and negated two by hand ("Patients older than
+// 85 years" as not(age > 85)), which the platform's own negation turned back into "older than 85 keeps you in". Whether a written
+// not(...) is the registry's own negative ("unable to consent") or a hand negation is language, so the platform does not decide it:
+// it says so beside the write, and the run that wrote it looks again.
+test("an exclusion written as a negation is kept and named in the write's warnings, so the run can look again", async () => {
+  const seam = seams();
+  const OLDER = { kind: "exclusion", criterionType: "demographic", sourceText: "Patients older than 85 years",
+    requirement: { op: "not", operand: { op: "compare", variable: "age", comparator: "gt", value: 85 } } };
+  const AF = { kind: "exclusion", criterionType: "comorbidity", sourceText: "Diagnosis of atrial fibrillation", requirement: { op: "present", variable: "atrial_fibrillation" } };
+  const answer = await write(seam, [{ registryId: "NCT05000001", subjectKeys: ["P-0192"], criteria: [AGE, OLDER, AF] }]);
+  assert.deepEqual(answer.issues, []);
+  assert.equal(seam.written[0].criteria.length, 3, "kept: a written negation can be the registry's own wording");
+  const warned = (answer.results[0].warnings ?? []).filter((found) => found.code === "exclusion_written_negated");
+  assert.deepEqual(warned.map((found) => found.field), ["criteria[1].requirement"]);
+  assert.match(warned[0].message, /照原句/);
+});
+
+test("a protocol write keeps a negated exclusion and names it beside the version, as the candidate-trial write does", async () => {
+  /** @type {any[]} */
+  const saved = [];
+  const store = {
+    async latestProtocolVersion() { return null; },
+    async saveProtocolVersion(/** @type {any} */ input) { saved.push(input); return { id: "prt_1", version: 1 }; },
+  };
+  const OLDER = { kind: "exclusion", criterionType: "demographic", sourceText: "年龄大于 85 岁者除外",
+    requirement: { op: "not", operand: { op: "compare", variable: "age", comparator: "gt", value: 85 } } };
+  const answer = await vcrRuntimeWrite({ store, service: {}, orchestrator: null, study, what: "criteria", items: [{ title: "v1", criteria: [AGE, OLDER] }], data: null });
+  assert.deepEqual(answer.issues, []);
+  assert.equal(saved[0].criteria.length, 2);
+  const warned = answer.results.flatMap((row) => row.warnings ?? []).filter((found) => found.code === "exclusion_written_negated");
+  assert.deepEqual(warned.map((found) => found.field), ["criteria[1].requirement"]);
+});
