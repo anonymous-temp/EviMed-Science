@@ -123,7 +123,8 @@ test('a pause explains the user action to the current step and never wakes or qu
   const messages = [];
   const agent = { status: 'running', inject: message => messages.push(message) };
   assert.equal(explainLoopxPause(agent), true);
-  assert.equal(messages[0].source.kind, 'user');
+  // Machine text, never the researcher's bubble or their steering (kind 'user').
+  assert.equal(messages[0].source.kind, 'plugin:evimed-loopx-pause');
   assert.match(messages[0].content[0].text, /user just pressed Pause/);
   assert.match(messages[0].content[0].text, /no diagnosis or repair/);
   agent.status = 'idle';

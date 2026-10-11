@@ -629,7 +629,7 @@ export class AgentBayRuntimeProvider {
         bundleVersion: String(config.socketBundleVersion ?? ""),
         compaction: compactionRuntimeEnv(runtimeCompactionSettings(config)),
         disabledPlugins: config.runtimeDisabledSocketPlugins ?? [],
-          loopxEnabled: config.loopxEnabled !== false,
+        loopxEnabled: config.loopxEnabled !== false,
         flags: {
           hosted: Boolean(config.production || config.runtimeUiProxyEnabled),
           askUser: Boolean(config.runtimeAskUserEnabled),

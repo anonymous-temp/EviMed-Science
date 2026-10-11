@@ -295,7 +295,8 @@
       "driverSha256": "2d10101fbb2b073c2e33935716e910f2d7e06d669004e8fb3c9a82bae2b5bd78",
       "goalbarFile": "lib/index.js",
       "goalbarSha256": "bfdf259e671bfe1b5e61129492221a90b95f79da1897a74603a0528d9fb45534",
-      "reason": "Accept the recorded tool-role activation envelope of pinned DSH 0.1.7. After a verified GoalBar pause, explain the user action to the current model step without waking an idle session."
+      "reason": "Accept the recorded tool-role activation envelope of pinned DSH 0.1.7. After a verified GoalBar pause, explain the user action to the current model step without waking an idle session.",
+      "upgradePath": "Both adaptations are build-time, digest-bound edits of the pinned plugin archive (deploy/runtime-dsh/loopx-compat.mjs); a changed byte fails the image build by name. Drop the driver adaptation when the plugin pin recognizes the DSH 0.1.7 tool-role result, or when the DSH pin moves to a kernel that records the user/tool-result envelope; drop the pause adaptation when the GoalBar itself tells a busy model that its owner paused the goal. Re-record packages/contracts/loopx/goalbar-locale.json on any plugin pin change."
     }
   }
 }
