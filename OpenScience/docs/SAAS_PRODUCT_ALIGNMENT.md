@@ -16,11 +16,12 @@ connectors, and domain-correctness gates. SaaS delivery must make those
 capabilities remotely operable without turning the product into a generic chat
 page or an organization-administration dashboard.
 
-The desktop edition remains local-first and model-agnostic. The first hosted
-SaaS tenant is one authenticated individual account; projects are isolated
-research workspaces inside that tenant. Organization membership, shared-project
-roles, invitations, billing, and institutional administration are expansion
-products, not implied phase-one features.
+There is no desktop edition: the Tauri shell was deleted on 2026-09-04 and the
+hosted product is the only form. The first hosted SaaS tenant is one
+authenticated individual account; projects are isolated research workspaces
+inside that tenant. Organization membership, shared-project roles, invitations,
+billing, and institutional administration are expansion products, not implied
+phase-one features.
 
 ## Deployment Profiles
 
@@ -72,7 +73,7 @@ boundaries instead of treating authentication alone as isolation.
 | Agent runtime | Adapted | Per-project Docker sandbox through an isolated controller |
 | Model access | Adapted | Operator key stays server-side; browser and workspace never receive it |
 | 38 curated scientific Skills | Adapted | All 38 have executable contracts; 36 share a bounded deterministic executor and two retain dedicated tested pipelines |
-| Four Office exporters | Adapted | First-party MIT implementations, packaged for desktop and Hosted, each with artifact smoke tests |
+| Four Office exporters | Adapted | First-party MIT implementations, packaged in the hosted runtime image, each with artifact smoke tests |
 | Seven science connector MCPs | Adapted | Paper Search, BioMCP, Materials Project, FRED, Space Weather, Open-Meteo, and USGS Water are registered by default through the fixed-host server gateway with independent protocol tests |
 | Biomedical public-source routes | Adapted | The current 64-source default registry must pass two traceable queries per source through a controlled route; registry source and ordered-ID hashes prevent stale evidence from passing |
 | Drug evidence decision support | Adapted | Drug selection, off-label use, and comprehensive evaluation use EviMed retrieval, frozen evidence snapshots bound by compiler input SHA-256, deterministic compilation, independent regression tests, and mandatory human decision boundaries |
