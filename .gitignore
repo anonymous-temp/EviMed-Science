@@ -55,3 +55,7 @@ coverage/
 
 # Per-machine agent tool settings
 **/.claude/settings.local.json
+
+# The root STATUS file is the local step log of long-running work (one line per finished step); it is a
+# working file of this checkout, not part of the published tree.
+/STATUS
