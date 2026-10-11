@@ -70,7 +70,7 @@ OpenCode kernel) read it in the past tense.
 
 ## UI and UX audits: `docs/ui-ux-audit/`
 
-Frontend audits, walk-through screenshots and design notes (zh), from the first research report
+Frontend audits and design notes (zh; the captures of the live walk-throughs are not distributed), from the first research report
 to the latest design reference. Start with
 [`2026-10-08-evimed-design-reference.md`](ui-ux-audit/2026-10-08-evimed-design-reference.md);
 the earlier reports are listed in [`ui-ux-audit/`](ui-ux-audit). The design system itself is in
