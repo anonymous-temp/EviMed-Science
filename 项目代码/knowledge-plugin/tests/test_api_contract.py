@@ -31,6 +31,8 @@ from knowledge_plugin.store import claim_texts, save_text_result, store_entries
 pytestmark = pytest.mark.db
 
 ROOT = Path(__file__).resolve().parent.parent
+# The committed registry is what the app loads; its row count (test_registry_load pins it) is what the API must page through.
+SOURCE_COUNT = len(load_registry(ROOT / "registry" / "sources.json", {}))
 SPEC = yaml.safe_load((ROOT / "contract" / "knowledge-plugin-openapi.yaml").read_text(encoding="utf-8"))
 NOW = datetime(2026, 9, 22, 8, 0, tzinfo=timezone.utc)
 
@@ -172,7 +174,7 @@ async def test_manifest(client):
     body = response.json()
     assert_schema(body, "Manifest")
     assert body["contract"]["version"] == SPEC["info"]["version"]
-    assert body["sources"]["total"] == 722 and body["sources"]["enabled"] >= 256
+    assert body["sources"]["total"] == SOURCE_COUNT and body["sources"]["enabled"] >= 256
     assert body["capabilities"] == {"stream": True, "text": True, "refresh": True, "lookups": []}
     assert body["oldest_seq_available"] == 1
     assert "doi" in body["fields"]["entry"] and "journal" in body["fields"]["facts"]
@@ -185,8 +187,8 @@ async def test_sources_pages_and_filters(client):
     assert len(first["sources"]) == 500 and first["next_cursor"]
     second = (await client.get("/v1/sources", params={"cursor": first["next_cursor"]})).json()
     assert_schema(second, "SourcePage")
-    assert len(second["sources"]) == 222 and second["next_cursor"] is None
-    assert len({s["id"] for s in first["sources"] + second["sources"]}) == 722
+    assert len(second["sources"]) == SOURCE_COUNT - 500 and second["next_cursor"] is None
+    assert len({s["id"] for s in first["sources"] + second["sources"]}) == SOURCE_COUNT
     tier = (await client.get("/v1/sources", params={"tier": "P0", "egress": "direct", "limit": 1000})).json()
     assert tier["sources"] and all(s["launch_tier"] == "P0" and s["egress"] == "direct" for s in tier["sources"])
     one = await client.get("/v1/sources/j-0028-4793")
