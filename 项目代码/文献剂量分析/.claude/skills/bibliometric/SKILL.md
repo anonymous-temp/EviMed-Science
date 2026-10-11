@@ -39,7 +39,7 @@ output/<topic>/
 
 ## How to run
 
-The project is located at `/Users/wangzeyuan/Desktop/文献计量分析`.
+The project is located at `项目代码/文献剂量分析` (relative to the repository root).
 
 Parse the user's arguments from `$ARGUMENTS`. Expected format:
 - First argument: research topic (required, in quotes if multi-word)
@@ -52,17 +52,17 @@ Parse the user's arguments from `$ARGUMENTS`. Expected format:
 Execute:
 
 ```bash
-cd /Users/wangzeyuan/Desktop/文献计量分析
-source venv/bin/activate
+cd 项目代码/文献剂量分析   # from the repository root
+source .venv/bin/activate
 PYTHONPATH=src python3 -m bibliometric analyze $ARGUMENTS
 ```
 
 If venv doesn't exist, create it first:
 
 ```bash
-cd /Users/wangzeyuan/Desktop/文献计量分析
-python3 -m venv venv
-source venv/bin/activate
+cd 项目代码/文献剂量分析   # from the repository root
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 PYTHONPATH=src python3 -m bibliometric analyze $ARGUMENTS
 ```

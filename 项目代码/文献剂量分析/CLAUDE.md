@@ -19,8 +19,8 @@ CLI工具：PubMed检索 → 元数据清洗 → 网络分析 → CiteSpace复�
 
 ## 运行方式
 ```bash
-cd /Users/wangzeyuan/Desktop/文献计量分析
-source venv/bin/activate
+cd 项目代码/文献剂量分析   # from the repository root
+source .venv/bin/activate
 PYTHONPATH=src python3 -m bibliometric analyze "topic" --date-range 2018-2025 --max-records 2000
 ```
 
