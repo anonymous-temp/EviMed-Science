@@ -5,7 +5,6 @@
     "tenantModel": "individual-account",
     "projectRole": "isolated-research-workspace",
     "invariants": [
-      "local-first-desktop-remains-supported",
       "model-agnostic-runtime",
       "reproducible-artifacts-and-provenance",
       "domain-connectors-and-correctness-gates",

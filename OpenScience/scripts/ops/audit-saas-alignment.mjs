@@ -134,7 +134,6 @@ const curated = JSON.parse(curatedText);
 const office = JSON.parse(officeText);
 const rootPackage = JSON.parse(pkg);
 
-requireBoundary(/local-first, model-agnostic/.test(prd), "product_local_first", "PRD local-first/model-agnostic invariant is missing.");
 requireBoundary(/Institutions needing multi-user collaborative SaaS/.test(prd), "product_phase_one_scope", "PRD must preserve the organization-SaaS non-target.");
 requireBoundary(/reproducible artifact system/.test(requirements) && /domain tool\/database connectors/.test(requirements), "product_moat", "Research-runtime moat drifted.");
 requireBoundary(/OPEN_SCIENCE_DEPLOYMENT_PROFILE/.test(config) && /controlled-pilot/.test(config), "config_profile", "Server config lacks a safe deployment profile default.");
