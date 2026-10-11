@@ -106,7 +106,7 @@
  * runtime image rebuild. Point it at an installed playwright-core instead.
  *
  *   OPEN_SCIENCE_WALK_BASE_URL=https://evimed.example.org \
- *   OPEN_SCIENCE_WALK_USER=cdss-access \
+ *   OPEN_SCIENCE_WALK_USER=<account> \
  *   OPEN_SCIENCE_WALK_PASSWORD_FILE=/path/to/password \
  *   OPEN_SCIENCE_PLAYWRIGHT_CORE=/path/to/node_modules/playwright-core \
  *   [OPEN_SCIENCE_WALK_CHROMIUM=/path/to/chrome] \

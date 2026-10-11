@@ -106,6 +106,8 @@ function required(name) { const value = process.env[name]?.trim(); assert.ok(val
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
 export async function runResultRevisionAcceptance(args) {
+  const username = String(process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "").trim();
+  if (!username) throw new Error("Name the account the driver signs in as: OPEN_SCIENCE_ACCEPTANCE_USERNAME.");
   const base = String(args.base ?? required("OPEN_SCIENCE_ACCEPTANCE_BASE_URL")).replace(/\/+$/, "");
   const manifest = JSON.parse(await readFile(String(args["candidate-manifest"] ?? required("OPEN_SCIENCE_ACCEPTANCE_CANDIDATE_MANIFEST")), "utf8"));
   const expectedRevision = String(args["expected-revision"] ?? required("OPEN_SCIENCE_ACCEPTANCE_EXPECTED_REVISION"));
@@ -128,7 +130,7 @@ export async function runResultRevisionAcceptance(args) {
     assert.equal(health.status(), 200); assert.equal(ready.status(), 200);
     assertCandidate(manifest, (await health.json()).data, (await ready.json()).data, expectedRevision);
     report.candidateVerified = true;
-    const login = await context.request.post(`${base}/api/auth/login`, { data: { username: process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "cdss-access",
+    const login = await context.request.post(`${base}/api/auth/login`, { data: { username,
       password: (await readFile(required("OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE"), "utf8")).trim() } });
     assert.equal(login.status(), 200, "acceptance login failed");
     const csrf = (await login.json()).data.csrfToken;

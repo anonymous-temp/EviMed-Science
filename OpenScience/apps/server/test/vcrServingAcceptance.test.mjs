@@ -91,13 +91,19 @@ test('actual CLI uses native HTTP fetch properties and preserves an unverified b
   const out = path.join(directory, 'evidence'), entry = fileURLToPath(new URL('../../../scripts/ops/vcr-serving-acceptance.mjs', import.meta.url));
   const result = await promisify(execFile)(process.execPath, [entry, '--base', `http://127.0.0.1:${server.address().port}`,
     '--candidate-manifest', manifestFile, '--expected-revision', revision, '--capability', 'vcr-protocol', '--study', 'actual-study', '--out', out],
-  { timeout: 10000, maxBuffer: 65536, env: { PATH: process.env.PATH, OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE: passwordFile } });
+  { timeout: 10000, maxBuffer: 65536, env: { PATH: process.env.PATH, OPEN_SCIENCE_ACCEPTANCE_USERNAME: 'acceptance-user', OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE: passwordFile } });
   const summary = JSON.parse(result.stdout), evidence = JSON.parse(await readFile(path.join(out, 'observation.json'), 'utf8'));
   assert.equal(summary.usableDelivery, true); assert.equal(summary.verificationComplete, false); assert.equal(summary.acceptanceIndependent, true);
   assert.equal(evidence.qualified, false); assert.equal(evidence.run.verification, 'unverified'); assert.deepEqual(evidence.run.qualityNotices, run.qualityNotices);
   assert.deepEqual(await readFile(path.join(out, 'deliverable/deliverables/report.pdf')), bytes);
   assert.equal(calls.filter(route => route.endsWith('/run')).length, 1);
   assert.ok(calls.indexOf('/api/health') < calls.indexOf('/api/auth/login'));
+});
+test('actual CLI refuses to run without a named acceptance account', async () => {
+  const entry = fileURLToPath(new URL('../../../scripts/ops/vcr-serving-acceptance.mjs', import.meta.url));
+  await assert.rejects(promisify(execFile)(process.execPath, [entry, '--base', 'http://127.0.0.1:1', '--out', os.tmpdir()],
+    { timeout: 10000, maxBuffer: 65536, env: { PATH: process.env.PATH } }),
+  error => error.code === 2 && /OPEN_SCIENCE_ACCEPTANCE_USERNAME/.test(error.stderr));
 });
 test('missing downloadable artifact cannot establish delivery', async () => {
   const report = await observeVcrRun(fixture({ artifactError: true }).options);

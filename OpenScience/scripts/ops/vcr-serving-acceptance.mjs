@@ -126,6 +126,11 @@ export async function observeVcrRun({ api, manifest, expectedRevision, capabilit
 }
 
 async function main() {
+  const username = String(process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? '').trim();
+  if (!username) {
+    // A missing setting is not a credential: say what to set rather than the fixed driver error below.
+    process.stderr.write('Name the account the driver signs in as: OPEN_SCIENCE_ACCEPTANCE_USERNAME.\n'); process.exitCode = 2; return;
+  }
   const args = {}; const entries = process.argv.slice(2);
   for (let index = 0; index < entries.length; index += 2) {
     assert.ok(entries[index].startsWith('--') && entries[index + 1], 'arguments use --name value');
@@ -164,7 +169,7 @@ async function main() {
   // Verify release before sending a credential or making any authenticated mutation.
   assertCandidate(manifest, await api('/api/health'), await api('/api/ready'), expectedRevision);
   const login = await fetch(`${base}/api/auth/login`, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(30_000),
-    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? 'cdss-access',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username,
       password: (await readFile(process.env.OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE, 'utf8')).trim() }) });
   assert.equal(login.status, 200, 'acceptance login failed');
   const csrf = (await login.json()).data?.csrfToken;
