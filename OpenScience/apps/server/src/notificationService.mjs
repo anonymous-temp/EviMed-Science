@@ -318,8 +318,33 @@ const WATCHED_TURN_MS = 120_000;
  *   owns it.
  */
 export function runFinishedReachesInbox(run, { internalProject = false, automated = false, autopilotOwned = false } = {}) {
-  if (internalProject || automated || autopilotOwned) return false;
+  if (internalProject || autopilotOwned) return false;
+  if (isGoalContinuation(run)) return goalContinuationNotifies(run);
+  if (automated) return false;
   return runFinishedNotifies(run);
+}
+
+/**
+ * A turn LoopX started on a researcher's own goal (route `loopx-continuation`,
+ * `agentRuns.adoptNativeTurns`). The ledger marks it `automated` — the driver,
+ * not a person, sent it, so it teaches nothing and counts no new question — but
+ * the goal is the researcher's, and a long goal is exactly the work they left
+ * to run. Its turns are told, grouped into one item per conversation.
+ * @param {Record<string, any> | null | undefined} run @returns {boolean}
+ */
+export function isGoalContinuation(run) {
+  return run?.effectiveRouteReason === "loopx-continuation";
+}
+
+/**
+ * A continuation turn is never one the reader watched finish, so the
+ * watched-turn rule of `runFinishedNotifies` does not apply; the person's own
+ * stop and a refused dispatch still leave nothing.
+ * @param {Record<string, any>} run @returns {boolean}
+ */
+function goalContinuationNotifies(run) {
+  if (run?.dispatchStatus === "rejected") return false;
+  return !(run?.status === "canceled" && run?.canceledBy !== "platform");
 }
 
 /** @param {{ outcome: string, severity: string }} notice */
@@ -361,6 +386,14 @@ export function runFinishedInboxItem(project, run, { peers = [] } = {}) {
     idempotencyKey: `run-finished:${run.id}`,
     severity: notice.severity,
   };
+  // A goal's automatic turns keep one item per conversation, brought back
+  // unread by each turn, instead of joining the day's count of questions asked.
+  // A turn that did not finish, or found a safety issue, says so in its title.
+  if (isGoalContinuation(run) && typeof run.sessionId === "string" && run.sessionId) {
+    return routineCompletion(notice)
+      ? { ...base, groupKey: `goal:${run.sessionId}`, title: "长任务有新进展", body: runLabel(run) }
+      : { ...base, groupKey: `goal:${run.sessionId}`, title: notice.title, body: notice.body };
+  }
   const day = shanghaiDay(run.finishedAt ?? run.startedAt);
   if (!routineCompletion(notice) || !day) return { ...base, title: notice.title, body: notice.body };
   const groupKey = `run-finished:${project.id}:${day}`;

@@ -16,7 +16,7 @@ import test from "node:test";
 
 import { ALL_ERROR_CODES, RUN_OUTCOME_KINDS, errorCodeMessage } from "@evimed/domain";
 import {
-  RUN_NOTICE_STATUS_WORDS, runFinishedInboxItem, runFinishedNotice, runFinishedNotifies, runFinishedReachesInbox, shanghaiDay,
+  RUN_NOTICE_STATUS_WORDS, isGoalContinuation, runFinishedInboxItem, runFinishedNotice, runFinishedNotifies, runFinishedReachesInbox, shanghaiDay,
 } from "../src/notificationService.mjs";
 import { automatedRun } from "../src/server.mjs";
 
@@ -248,6 +248,31 @@ test("only a person's own research reaches the inbox; evaluations and background
   assert.equal(runFinishedReachesInbox({ ...run, dispatchStatus: "rejected" }), false);
   assert.equal(runFinishedReachesInbox({ ...run, status: "canceled", canceledBy: "platform", errorCode: "runtime_canceled" }), true);
   assert.equal(runFinishedNotifies({ ...run, durationMs: 3_000, artifacts: [] }), false, "a turn the reader watched finish");
+});
+
+test("a goal's automatic turns reach the inbox as one item per conversation, whatever their length", () => {
+  const project = { id: "default" };
+  const turn = finished("run-g2", "2026-09-18T03:00:00.000Z", {
+    durationMs: 40_000, artifacts: [], automated: true, effectiveRouteReason: "loopx-continuation", sessionId: "session-goal-1",
+  });
+  assert.equal(isGoalContinuation(turn), true);
+  // The ledger's `automated` is the driver's, not a harness's: the goal is the researcher's own work.
+  assert.equal(runFinishedReachesInbox(turn, { automated: true }), true, "a short automatic turn nobody watched");
+  assert.equal(runFinishedReachesInbox({ ...turn, status: "canceled", canceledBy: "user" }, { automated: true }), false);
+  assert.equal(runFinishedReachesInbox({ ...turn, dispatchStatus: "rejected" }, { automated: true }), false);
+  assert.equal(runFinishedReachesInbox(turn, { automated: true, internalProject: true }), false);
+  const item = runFinishedInboxItem(project, turn, { peers: [finished("run-a", "2026-09-18T01:00:00.000Z")] });
+  assert.equal(item.groupKey, "goal:session-goal-1", "every turn of the goal updates the same item");
+  assert.equal(item.title, "长任务有新进展");
+  assert.equal(item.idempotencyKey, "run-finished:run-g2");
+  const next = runFinishedInboxItem(project, { ...turn, id: "run-g3" });
+  assert.equal(next.groupKey, item.groupKey);
+  const stopped = runFinishedInboxItem(project, { ...turn, status: "failed", errorCode: "runtime_monitor_timeout" });
+  assert.equal(stopped.groupKey, "goal:session-goal-1");
+  assert.equal(stopped.severity, "attention");
+  assert.notEqual(stopped.title, "长任务有新进展");
+  // An evaluation harness's run is still nobody's news.
+  assert.equal(runFinishedReachesInbox({ ...turn, effectiveRouteReason: "unrouted:open-domain" }, { automated: true }), false);
 });
 
 test("a run is automated when a harness said so, or when autopilot started it", () => {
