@@ -45,10 +45,10 @@ info:
   contact:
     name: EviMed knowledge plugin team
   license:
-    name: Proprietary
+    name: MIT
 servers:
   - url: http://evimed-knowledge-plugin:8080
-    description: The container on the Beijing host's internal compose network. No public port.
+    description: The container on the deployment's internal compose network. No public port.
 security:
   - bearerToken: []
 tags:

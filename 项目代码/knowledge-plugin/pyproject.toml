@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "EviMed knowledge-source plugin: registry, scheduling, protected fetch, normalisation and the v1 HTTP contract"
 requires-python = ">=3.12"
 readme = "README.md"
-license = { text = "Proprietary" }
+license = { text = "MIT" }
 # Exact pins live in requirements.txt (what the image installs); these ranges are what the code needs.
 dependencies = [
   "fastapi>=0.115",
