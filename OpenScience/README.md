@@ -15,7 +15,7 @@ against the original evidence.
 
 ## What is here
 
-A pnpm monorepo (`engines.node >= 22.22.0`, `pnpm@9.4.0`; workspaces `apps/*` and
+A pnpm monorepo (`engines.node >= 22.22.0`, pnpm 9.4.0; workspaces `apps/*` and
 `packages/*`). The product is the hosted web application and nothing else.
 
 | Path | What it is |

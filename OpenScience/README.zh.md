@@ -11,7 +11,7 @@ EviMed 是一套可追溯的医学科研智能体平台：托管的多租户科�
 
 ## 目录内容
 
-这是一个 pnpm monorepo（`engines.node >= 22.22.0`，`pnpm@9.4.0`；工作区为 `apps/*` 与
+这是一个 pnpm monorepo（`engines.node >= 22.22.0`，pnpm 9.4.0；工作区为 `apps/*` 与
 `packages/*`）。产品只有托管 Web 应用这一种形态。
 
 | 路径 | 说明 |
