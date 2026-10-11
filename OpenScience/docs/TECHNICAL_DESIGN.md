@@ -3,8 +3,8 @@
 > **This is the v0.1 desktop design, superseded on two axes. Do not implement from it
 > without checking `AGENTS.md` first.** It was written on 2026-07-02, when the product was
 > a local-first desktop app and the agent runtime was a bundled OpenCode sidecar. Since
-> then the release target moved to the hosted multi-tenant SaaS (desktop packaging is
-> optional), and the agent kernel became **DeepSeek Harness (DSH)** — OpenCode was deleted
+> then the release target moved to the hosted multi-tenant SaaS (the desktop shell was
+> deleted on 2026-09-04), and the agent kernel became **DeepSeek Harness (DSH)** — OpenCode was deleted
 > on 2026-09-01, with no rollback lever and no second code path kept alive. §5 below has
 > been rewritten for the current kernel, §5.6 lists the control-plane modules and seams
 > added from 2026-09-22 to 09-28, and §16 is the repository as it is; the rest of the
