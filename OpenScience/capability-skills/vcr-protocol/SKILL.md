@@ -109,11 +109,11 @@ description: 「虚拟临床研究」的对话分析师：研究者要哪一步�
   { "kind": "exclusion", "criterionType": "time_window",
     "sourceText": "近 6 个月内发生过心肌梗死者除外",
     "sourceLocator": { "page": 12, "section": "4.2" },
-    "requirement": { "op": "absent", "variable": "myocardial_infarction", "window": { "months": 6 } },
+    "excludeWhen": { "op": "present", "variable": "myocardial_infarction", "window": { "months": 6 } },
     "evidenceNeeded": ["出院记录", "心肌酶谱"] } ] } }
 ```
 
-一次写入是**一个完整的方案版本**。每条条件只有这些字段：`kind`（`inclusion` 或 `exclusion`）、`criterionType`、`requirement`、`applicability`、`sourceText`、`sourceLocator`、`evidenceNeeded`；多写别的字段会被拒。
+一次写入是**一个完整的方案版本**。每条条件只有这些字段：`kind`（`inclusion` 或 `exclusion`）、`criterionType`、`requirement`（排除标准写 `excludeWhen` 代替它）、`applicability`、`sourceText`、`sourceLocator`、`evidenceNeeded`；多写别的字段会被拒。
 
 - `criterionType`：`demographic` `diagnosis` `biomarker` `lab` `prior_treatment` `time_window` `performance_status` `comorbidity` `concomitant_medication` `pregnancy` `consent_capacity` `other`。
 - `sourceText`：**原句照抄**，一个字不改。
@@ -160,7 +160,7 @@ Criterion variables identify the same clinical concept in criteria and facts. A 
 
 ### 三条铁律
 
-1. **每条都写成「要满足的要求」。** 排除标准写成「不被这一条排除」的要求：「近 6 个月内发生过心肌梗死者除外」写成 `absent myocardial_infarction`（窗口 6 个月），于是「满足」在纳入与排除两种条件下意思一致。
+1. **纳入标准写成「要满足的要求」，排除标准照原句写「会被排除的情况」。** 排除标准放在 `excludeWhen`：「近 6 个月内发生过心肌梗死者除外」写成 `excludeWhen: present myocardial_infarction`（窗口 6 个月），不要自己取反——平台把它存成「不被这一条排除」的要求，于是「满足」在纳入与排除两种条件下意思一致。读回来的排除标准是 `not(…)` 的 requirement，原样改写即可。
 2. **改写不得比原文更宽或更严。** 原文写「ECOG 0–1」就不要写成「ECOG ≤ 2」；原文写「三个月内」就不要丢掉时间窗。
 3. **判不了不等于不符合。** 结构化时把「需要什么证据」写清楚，后面匹配那一步才会给出「未知」而不是「不符合」。
 

@@ -30,8 +30,8 @@ metadata:
 **评估针对明确选择的方案版本**；读取时可用 `filter.protocolVersionId`，不指定才取最新版本。没有条件时先写：`mcp__evimed__vcr_write` `what: "criteria"`（首次写方案用 `what: "protocol"`），
 `data` 是 `{ "title"?, "criteria": [ … ] }`，一次写入是一个完整的方案版本，旧版本仍在。
 
-每条条件写成「要满足的要求」——排除标准写成「不被这一条排除」。「既往接受过多西他赛者除外」写成 `absent prior_docetaxel`，不要另写一个取反。
-条件只有这些字段：`kind`（`inclusion` / `exclusion`）、`criterionType`、`requirement`、`applicability`、`sourceText`（原句照抄）、`sourceLocator`、`evidenceNeeded`。
+纳入标准写成「要满足的要求」（`requirement`）；排除标准照原句写「会被排除的情况」，放在 `excludeWhen`，平台把它换算成「不被这一条排除」的要求：「既往接受过多西他赛者除外」写成 `excludeWhen: present prior_docetaxel`，不要自己取反。读回来的排除标准是 `not(…)` 的 requirement，原样改写即可。
+条件只有这些字段：`kind`（`inclusion` / `exclusion`）、`criterionType`、`requirement`（排除标准写 `excludeWhen` 代替它）、`applicability`、`sourceText`（原句照抄）、`sourceLocator`、`evidenceNeeded`。
 
 要求的文法是封闭的，不在里面的写法当场被拒（`vcr_criterion_malformed`，指出 `criteria[n].requirement`）：
 
@@ -91,7 +91,7 @@ metadata:
   "evidence": [ { "documentId": "<文档 id>", "quote": "患者本人可理解研究内容并签署知情同意" } ] } ] }
 ```
 
-`state` 只有三种：`satisfied`、`not_satisfied`、`unknown`。判为满足或不满足必须带原句证据，原句的核对方式和事实的一样；
+`state` 只有三种：`satisfied`、`not_satisfied`、`unknown`。语言节点在 `excludeWhen` 里时，回答的是原句说的情况在这位受试者身上是否成立（成立就是 `satisfied`），取反由平台做。判为满足或不满足必须带原句证据，原句的核对方式和事实的一样；
 `unknown` 在病历没有说清时是正确答案，不带证据。**「未知」永远不是「不满足」**：没有治疗史的记录不满足洗脱期，育龄女性没有妊娠检查不是阴性。
 只要有一条适用的排除标准是「未知」，这个人就不能是「符合」——这是算术，不是判断，评估器替你做。
 
@@ -176,7 +176,7 @@ Report inter-rater agreement and disagreements as properties of that reference s
     { "kind": "inclusion", "criterionType": "demographic", "sourceText": "Age >= 18 years",
       "requirement": { "op": "compare", "variable": "age", "comparator": "gte", "value": 18, "unit": "year" } },
     { "kind": "exclusion", "criterionType": "comorbidity", "sourceText": "Active brain metastases",
-      "requirement": { "op": "absent", "variable": "active_brain_metastasis" } } ] } ] }
+      "excludeWhen": { "op": "present", "variable": "active_brain_metastasis" } } ] } ] }
 ```
 
 - 补了这位受试者的新事实，或要让另一位受试者也对照已有的试验：同一个 `registryId` 再写一次，只写 `subjectKeys`，不带 `criteria`。条件要改就把整套 `criteria` 重写，平台会把受影响的判定重做。
