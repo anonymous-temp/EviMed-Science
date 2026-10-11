@@ -94,18 +94,18 @@ class Settings(BaseSettings):
     # This outer deadline must not race the inner model deadline.
     MODULE_TIMEOUT_SECONDS: int = Field(default=700, env="MODULE_TIMEOUT_SECONDS")
 
-    # Java WebSocket 网关配置（Python作为客户端连接Java）
-    # JAVA_WS_URL: str = Field(default="ws://192.168.20.252:2066/ws/ws", env="JAVA_WS_URL")
-    # JAVA_TOKEN_URL: str = Field(default="http://192.168.20.252:2066/api-evimed/ai-agent/token?clientType=research-topic-selection", env="JAVA_TOKEN_URL")
-    JAVA_WS_URL: str = Field(default="wss://evidence-factory.evimed.com/ws/ws", env="JAVA_WS_URL")
-    JAVA_TOKEN_URL: str = Field(default="https://evidence-factory.evimed.com/api-evimed/ai-agent/token?clientType=research-topic-selection", env="JAVA_TOKEN_URL")
+    # Legacy upstream-platform WebSocket gateway (Python connects out as a client).
+    # Both values come from the environment only; empty means "not configured"
+    # and the outbound client does nothing.
+    JAVA_WS_URL: str = Field(default="", env="JAVA_WS_URL")
+    JAVA_TOKEN_URL: str = Field(default="", env="JAVA_TOKEN_URL")
 
     # 阿里云 OSS 配置（必须通过环境变量或 .env 文件配置，不允许硬编码）
     OSS_ACCESS_KEY_ID: Optional[str] = Field(default=None, env="OSS_ACCESS_KEY_ID")
     OSS_ACCESS_KEY_SECRET: Optional[str] = Field(default=None, env="OSS_ACCESS_KEY_SECRET")
     OSS_ENDPOINT: str = Field(default="https://oss-cn-beijing.aliyuncs.com", env="OSS_ENDPOINT")
-    OSS_BUCKET_NAME: str = Field(default="project-beijing-a4hznzutlh", env="OSS_BUCKET_NAME")
-    OSS_PUBLIC_BASE_URL: str = Field(default="https://image.evimed.com/oss", env="OSS_PUBLIC_BASE_URL")
+    OSS_BUCKET_NAME: str = Field(default="", env="OSS_BUCKET_NAME")
+    OSS_PUBLIC_BASE_URL: str = Field(default="", env="OSS_PUBLIC_BASE_URL")
 
     # # Hermes Memory 记忆系统配置
     # HERMES_MEMORY_URL: str = Field(default="http://localhost:5000", env="HERMES_MEMORY_URL")

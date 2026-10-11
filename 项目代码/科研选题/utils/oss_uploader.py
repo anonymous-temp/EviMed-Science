@@ -73,6 +73,9 @@ async def upload_report(
     if not settings.OSS_ACCESS_KEY_ID or not settings.OSS_ACCESS_KEY_SECRET:
         logger.warning("OSS 凭证未配置，跳过上传")
         return None
+    if not settings.OSS_BUCKET_NAME or not settings.OSS_PUBLIC_BASE_URL:
+        logger.warning("OSS bucket / public base URL 未配置，跳过上传")
+        return None
 
     timestamp_ms = int(time.time() * 1000)
     remote_path = f"{agent_type}/{user_id}/{message_id}/{timestamp_ms}.md"

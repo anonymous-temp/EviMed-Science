@@ -779,6 +779,9 @@ async def _java_ws_client():
     断线后自动重连。
     """
     import websockets
+    if not (settings.JAVA_WS_URL.strip() and settings.JAVA_TOKEN_URL.strip()):
+        logger.info("Upstream platform not configured (JAVA_WS_URL / JAVA_TOKEN_URL empty); outbound WebSocket client not started")
+        return
     active_sessions: Dict[str, dict] = {}   # {parent_id: {queue, task}}
 
     while True:
