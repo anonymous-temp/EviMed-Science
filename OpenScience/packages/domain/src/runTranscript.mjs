@@ -41,7 +41,7 @@ import { isEviMedToolName } from './toolNames.mjs'
 /**
  * @typedef {object} TranscriptMessage
  * @property {'user'|'assistant'|'tool'} role
- * @property {'user'|'plugin'|'system'|'subagent'|'skill-catalog'} source
+ * @property {'user'|'plugin'|'system'|'subagent'|'skill-catalog'|'loopx-continuation'} source
  *   the kinds a recorded run has carried in the user slot. Not a closed list:
  *   `skill-catalog` was missing from it until a recorded wire fixture showed one,
  *   and the adapter passes the kernel's word through unchanged — so a reader
@@ -173,7 +173,7 @@ export function totalOutputTokens(transcript) {
  *   | { type: 'turn/end', seq: number, turn: number, endKind: string, errorCode?: string, subCode?: string }
  *   | { type: 'step/start', seq: number, turn: number, step: number }
  *   | { type: 'step/end', seq: number, turn: number, step: number }
- *   | { type: 'message/user', seq: number, text: string, source: 'user'|'plugin'|'system'|'subagent'|'skill-catalog', sourceRequestId?: string }
+ *   | { type: 'message/user', seq: number, text: string, source: 'user'|'plugin'|'system'|'subagent'|'skill-catalog'|'loopx-continuation', sourceRequestId?: string }
  *   | { type: 'message/assistant', seq: number, text: string, reasoning: string, usage: { input: number, output: number, cacheHit: number, cacheMiss: number } | null, interrupted: boolean }
  *   | { type: 'assistant/delta', seq: number, kind: 'text'|'reasoning', text: string, stream?: {attemptId: string, index: number} }
  *   | { type: 'tool/call', seq: number, callId: string, tool: string, input: Record<string, unknown>, narration: string, phase?: import('./runPhases.mjs').RunActivityPhase | null }

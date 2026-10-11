@@ -627,6 +627,21 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     let workspaceBody = null;
     let promptBody = null;
     let modelBody = null;
+    let loopxBody = null;
+    if (method === "loopx.goalbar") {
+      if (req.method !== "POST" || config.loopxEnabled === false) { sendDenied(res, method); return; }
+      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      req.__openScienceProxyBody = raw;
+      try { loopxBody = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
+      const payload = loopxBody?.payload;
+      if (loopxBody?.type !== "client-request" || loopxBody.method !== method
+        || typeof loopxBody.rpcId !== "string" || !loopxBody.rpcId || loopxBody.rpcId.length > 128
+        || payload?.v !== "loopx_goalbar_request_v2" || !["read", "watch", "start", "pause"].includes(payload.op)
+        || typeof payload.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(payload.sessionId)) {
+        throw new HttpError(400, "runtime_ui_prompt_invalid", "A native LoopX GoalBar request is required.");
+      }
+      await authorizePromptSession(project, { args: { request: { sessionId: payload.sessionId } } });
+    }
     if (method === "session/prompt") {
       const raw = await readBody(req, config.maxJsonBytes);
       req.__openScienceProxyBody = raw;
@@ -719,6 +734,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     // a runtime is what reading a transcript also does, and reading your own
     // finished work is not spending.
     await authorizeMethod(config, project, method, boundWorkspace, usageLedger, runtimeManager, balanceGate, promptBody?.payload);
+    if (loopxBody?.payload.op === "start") {
+      await authorizeMethod(config, project, "session/prompt", false, usageLedger, runtimeManager, balanceGate,
+        { args: { request: { sessionId: loopxBody.payload.sessionId } } });
+    }
     const forward = () => runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       uiBasePath: frame.prefix,
@@ -757,6 +776,15 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     } else if (method === "session/selectModel") {
       const select = async () => { await authorizePromptSession(project, modelBody?.payload); return forward(); };
       if (authorizeMutation) await authorizeMutation(select); else await select();
+    } else if (loopxBody?.payload.op === "start") {
+      const start = async () => {
+        const current = await resolveFrame(snapshot, null);
+        await recordNativeActor(current.user, current.project, { args: { request: { sessionId: loopxBody.payload.sessionId } } });
+        return forward();
+      };
+      const admitted = () => runtimeManager.pluginService
+        ? runtimeManager.pluginService.withAdmission(project, start, { prompt: true }) : start();
+      if (authorizeMutation) await authorizeMutation(admitted); else await admitted();
     } else await forward();
   }
 

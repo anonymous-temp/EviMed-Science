@@ -634,7 +634,7 @@ export const SOCKET_PLUGIN_SWITCHES = Object.freeze({
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'answerPersonaDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'extensionProjectionFile'|'extensionGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[] }} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'answerPersonaDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'extensionProjectionFile'|'extensionGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[], loopxEnabled?: boolean }} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
@@ -652,6 +652,11 @@ export function runtimeEnvironment(input) {
     // while the deployment believes it set one.
     ...Object.fromEntries(Object.entries(SOCKET_PLUGIN_SWITCHES)
       .map(([id, name]) => [name, disabledPlugins.has(id) ? "0" : "1"])),
+    EVIMED_LOOPX_ENABLED: input.loopxEnabled === false ? "0" : "1",
+    EVIMED_LOOPX_ROOT: "/opt/evimed/loopx",
+    LOOPX_USAGE_PING: "0",
+    DO_NOT_TRACK: "1",
+    LOOPX_BIN: "/opt/evimed/venv/bin/loopx",
     EVIMED_CITE_ENABLED: pluginConfig.enabled ? "1" : "0",
     EVIMED_CITE_TIMEOUT_MS: String(pluginConfig.settings.timeoutMs),
     EVIMED_CITE_CONFIG_REVISION: String(pluginConfig.revision),

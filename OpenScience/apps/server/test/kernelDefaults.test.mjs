@@ -88,7 +88,7 @@ test("every setting the runtime depends on still holds in the composition the im
   // leaves; `code-runtime`, `workflow-worker-thread` and `agent-presets` left.
   // 192 on 2026-09-30: the request-scoped engine execution-context plugin.
   // 193 on 2026-10-02: the scoped native skill catalogue host plugin.
-  assert.equal(report.counts.baselineRows, 193, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context and scoped skill catalogue");
+  assert.equal(report.counts.baselineRows, 198, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue and LoopX");
   assert.equal(parseCordisDocument(await readFile(source("baseline"), "utf8")).rows.filter((row) => ["dsh-annotation", "ui-mermaid"].includes(row.id)).length, 2);
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.byId.get("evimed-engine-context").name, "@evimed/dsh-socket/plugins/engine-context");
@@ -156,6 +156,9 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "deepseek-account.disabled=true",
       "hmr.disabled=true",
       "llm-deepseek-account.disabled=true",
+      "loopx-driver.disabled=!!js process.env.EVIMED_LOOPX_ENABLED === '0'",
+      "loopx-goalbar.disabled=!!js process.env.EVIMED_LOOPX_ENABLED === '0'",
+      "loopx-init-command.disabled=true",
       // 0.1.7's MCP-resource tools: offered to every agent with an MCP server,
       // and no server this composition configures serves a resource.
       "mcp-resources.disabled=true",
@@ -188,12 +191,14 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "ui-sidebar-terminal.disabled=true",
       // Sorted, and `-` sorts before `.`, so the disabled row comes first.
       "web-fetch-http.disabled=true",
+      "web-runtime.inject[0]=webStartup",
       // 2026-09-15: the composition stopped protecting the web row by absence
       // alone and started naming a provider of its own — one that goes to the
       // control-plane gateway. Both halves, because a patch row replaces
       // `config` whole.
       "web.config.fetchProvider=evimed-gateway",
       "web.config.searchProvider=evimed-gateway",
+      "webserver.inject[0]=webStartup",
     ],
     "every host-scope override the bundle patch makes should become an invariant",
   );

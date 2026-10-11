@@ -326,7 +326,7 @@ test("the boot proof boots under the environment production actually emits", asy
 
   const smoke = await readFile(path.join(repoRoot, "deploy/runtime-dsh/build-smoke.sh"), "utf8");
   const exportedNames = script => new Set(script.split("\n").filter(line => /^export\s/.test(line))
-    .flatMap(line => [...line.matchAll(/\b(EVIMED_[A-Z_]+)=/g)].map(match => match[1])));
+    .flatMap(line => [...line.matchAll(/\b([A-Z][A-Z0-9_]+)=/g)].map(match => match[1])));
   const exported = exportedNames(smoke);
   const missing = produced.filter((name) => !exported.has(name)).sort();
   assert.deepEqual(missing, [], "the boot proof would boot under an environment no run has");

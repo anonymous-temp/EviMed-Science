@@ -189,6 +189,8 @@ test("every deployment value the preset reads is a value the container is given"
   for (const name of read) {
     assert.ok(name in provided, `a row reads ${name} and nothing provides it`);
   }
+  // The image-owned LoopX CLI reads its telemetry switches outside the preset.
+  for (const name of ["LOOPX_USAGE_PING", "DO_NOT_TRACK"]) read.add(name);
   for (const name of Object.keys(provided)) {
     assert.ok(read.has(name), `${name} is provided and no row reads it`);
   }

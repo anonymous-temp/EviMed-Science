@@ -121,6 +121,32 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
 
 const open = (streamId, endpoint, args = {}) => ({ type: "open", streamId, endpoint, payload: { args } });
 
+test("LoopX GoalBar uses the authenticated project, preserves its protocol, and spends only on start", async t => {
+  const checked = [], charged = [], forwarded = [];
+  const f = await fixture(t, {}, {}, {
+    authorizePrompt: async (_project, sessionId) => {
+      checked.push(sessionId);
+      if (sessionId === "source-private") throw new HttpError(403, "agent_background_only", "Internal session.");
+    },
+    balanceGate: async (_project, payload) => { charged.push(payload.args.request.sessionId); },
+  });
+  f.manager.proxy = async (req, res) => { forwarded.push(JSON.parse(req.__openScienceProxyBody)); res.writeHead(200); res.end("{}"); };
+  const request = (op, sessionId = "public-session") => ({ type: "client-request", rpcId: `rpc-${op}`, method: "loopx.goalbar",
+    payload: { v: "loopx_goalbar_request_v2", op, sessionId, ...(op === "start" || op === "pause" ? { expected: { goalId: "goal", loopxAgentId: "agent" } } : {}) } });
+  const send = body => fetch(`${f.base}/api/loopx.goalbar`, { method: "POST",
+    headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" }, body: JSON.stringify(body) });
+  for (const op of ["read", "watch", "pause", "start"]) {
+    const body = request(op); assert.equal((await send(body)).status, 200); assert.deepEqual(forwarded.at(-1), body);
+  }
+  assert.deepEqual(charged, ["public-session"]);
+  assert.equal(checked.length, 4);
+  assert.equal((await send(request("start", "source-private"))).status, 403);
+  assert.equal(forwarded.length, 4);
+  assert.equal((await send({ ...request("read"), method: "session/prompt" })).status, 400);
+  f.config.loopxEnabled = false;
+  assert.equal((await send(request("start"))).status, 403);
+});
+
 test("native HTTP prompts check the bound session before forwarding while source history stays readable", async t => {
   const checked = [];
   const f = await fixture(t, {}, {}, { authorizePrompt: async (project, sessionId) => {

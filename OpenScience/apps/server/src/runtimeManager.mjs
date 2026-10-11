@@ -2748,6 +2748,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           // The socket plugins this deployment runs without; every switch is
           // sent either way (`SOCKET_PLUGIN_SWITCHES`).
           disabledPlugins: config.runtimeDisabledSocketPlugins ?? [],
+          loopxEnabled: config.loopxEnabled !== false,
           // `retainTokens` is a port-level option with no row to read it, so it
           // never crosses the boundary. Sending it would put a name on the
           // container's env that nothing reads, which is the same defect as a

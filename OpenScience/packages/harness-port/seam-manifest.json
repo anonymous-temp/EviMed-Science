@@ -17,7 +17,8 @@
       "skills",
       "fs",
       "jobs",
-      "web"
+      "web",
+      "commands"
     ]
   },
   "events": {

@@ -366,7 +366,8 @@ export function runtimeUiMethodFromPath(pathname) {
   const clean = String(pathname ?? "").split("?")[0];
   if (!clean.startsWith("/api/")) return null;
   const method = clean.slice("/api/".length).replace(/\/+$/, "");
-  if (!ENDPOINT_NAME.test(method)) return null;
+  // The pinned LoopX native bundle registers this one dotted HTTP endpoint.
+  if (method !== "loopx.goalbar" && !ENDPOINT_NAME.test(method)) return null;
   return method;
 }
 
