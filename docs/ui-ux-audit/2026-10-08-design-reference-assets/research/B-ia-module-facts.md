@@ -1,7 +1,7 @@
 # B · 信息架构 / 模块 / 页面行为 / AI 任务状态 —— 对 R11.2 的事实核对
 
 被审文档：`docs/ui-ux-audit/2026-10-08-evimed-design-reference.md`（v1.0，行号取 Read 工具编号）。
-核对基线：release 11.2，worktree `/home/coder/evimed-wt/release`（`r11/ui-audit`，3e52ca1f2）。下文 `src/` 一律指 `OpenScience/apps/web/src/`，除非写了完整前缀。
+核对基线：release 11.2，worktree `/workspace/evimed-wt/release`（`r11/ui-audit`，3e52ca1f2）。下文 `src/` 一律指 `OpenScience/apps/web/src/`，除非写了完整前缀。
 R11 的取舍依据：`docs/ui-ux-audit/2026-10-07-review/R11-两份审查整改方案.md` 及其 `R11/triage-*.md`。
 只读核对：没有改动任何代码树；没有浏览器/网络/ssh。内核（DSH）浏览器客户端包不在仓库内（只有 renderer/slots/sidebar-browser 三个），凡涉及内核自绘行为而仓库注释/测试没有记录的，一律标「无法核实」。
 

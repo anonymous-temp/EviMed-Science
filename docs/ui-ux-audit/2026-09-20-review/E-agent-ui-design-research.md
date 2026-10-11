@@ -113,9 +113,9 @@ The field has converged on one pattern: **pill under the composer → removable 
 - **States:** hover surface-2; selected accent-soft; focus 2 px accent ring; disabled 40 %; loading skeleton; running = pulsing dot.
 
 Repo files read:
-- `/home/coder/workspace/EviMedScience/OpenScience/DESIGN.md`
-- `/home/coder/workspace/EviMedScience/OpenScience/packages/harness-port/src/runtimeUiTheme.mjs`
-- `/home/coder/workspace/EviMedScience/OpenScience/apps/web/src/components/sidebar/Sidebar.tsx`
+- `/workspace/EviMedScience/OpenScience/DESIGN.md`
+- `/workspace/EviMedScience/OpenScience/packages/harness-port/src/runtimeUiTheme.mjs`
+- `/workspace/EviMedScience/OpenScience/apps/web/src/components/sidebar/Sidebar.tsx`
 
 ## Sources
 [1] https://aiuxplayground.com/teardowns/manus/composer/

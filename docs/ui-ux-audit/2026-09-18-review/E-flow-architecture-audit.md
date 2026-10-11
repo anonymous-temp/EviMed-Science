@@ -3,7 +3,7 @@
 Scope: end-to-end algorithm architecture, flow and logic of a deep run on the hosted
 EviMed SaaS (`OpenScience/`), read against the repo's 20 development principles.
 Companion to `00-live-findings.md` (measured production facts F1–F7, not re-measured here).
-All paths relative to `/home/coder/workspace/EviMedScience/OpenScience` unless stated.
+All paths relative to `/workspace/EviMedScience/OpenScience` unless stated.
 
 Status: **COMPLETE**.
 
@@ -849,7 +849,7 @@ Two more narrowings worth naming:
 
 ### 7.3 Chinese-language and drug-label assets are almost entirely unused
 
-- `/home/coder/workspace/EviMedScience/药学基础数据/` is **referenced by path nowhere** in
+- `/workspace/EviMedScience/药学基础数据/` is **referenced by path nowhere** in
   `OpenScience/`. The only coupling is `runtime/mcp/evimed-research/build_pharmacy_reference.py:25-48`,
   which names **22 CSV filenames** from `重点整理数据表/` and takes the directory as a
   build-time `--source-root` (`:186-190`). All 22 exist; the coupling is by filename
@@ -1438,7 +1438,7 @@ length (`DETERMINISTIC_SOURCE_MAX_CHARS = 1200`, `:363, 369`); and origin downgr
 - **What production actually reports**: every memory-ablation report keeps `/api/ready`
   verbatim, and v9/v10/v11 all record
   `"provider": "builtin"`, `"rerank": {"code": "memory_rerank_not_reached",
-  "configured": false}` against `https://82.156.128.153`
+  "configured": false}` against `https://<production-host>`
   (`evals/method-quality/reports/memory-ablation-v9.json:323-338`, `v10.json:327`,
   `v11.json:327`), generated 2026-09-17.
 

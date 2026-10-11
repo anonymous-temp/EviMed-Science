@@ -1,14 +1,14 @@
 ⚠️ DEGRADED: single-context（目标是静态截图，没有可交给 `impeccable detect` 的标记或 URL，按任务要求也未运行 launcher 二进制，所以评估 B「检测器 + 浏览器证据」没有执行；评估 A 在单一上下文里完成，没有隔离子代理，并且为核对“点一下会发生什么”读过 release 工作树源码，独立性因此打折）
 
-impeccable skill **v4.5.0**（本地 `/home/coder/.codex/skills/impeccable/`；GitHub 最新 skill release 是 `skill-v4.5.0`，2026-10-02，与本地一致；README 没有 critique 方法的变更说明；`engine-v0.1.12`（2026-10-07）是检测引擎二进制，不改评审方法）。参考文件：SKILL.md · reference/critique.md · shape.md · layout.md · distill.md · clarify.md · operate.md · mode-operate.md。项目上下文：`2026-10-07-impeccable/impeccable-context.txt`（内含 DESIGN.md）；设计参考 `2026-10-08-evimed-design-reference.md` §2.1 §4.1 §4.6 §6.2 §13 §14.2 §15.3 附录 A，另读 §5.3 §6.5 §9.1 §18.4 §21。
+impeccable skill **v4.5.0**（本地 `/workspace/.codex/skills/impeccable/`；GitHub 最新 skill release 是 `skill-v4.5.0`，2026-10-02，与本地一致；README 没有 critique 方法的变更说明；`engine-v0.1.12`（2026-10-07）是检测引擎二进制，不改评审方法）。参考文件：SKILL.md · reference/critique.md · shape.md · layout.md · distill.md · clarify.md · operate.md · mode-operate.md。项目上下文：`2026-10-07-impeccable/impeccable-context.txt`（内含 DESIGN.md）；设计参考 `2026-10-08-evimed-design-reference.md` §2.1 §4.1 §4.6 §6.2 §13 §14.2 §15.3 附录 A，另读 §5.3 §6.5 §9.1 §18.4 §21。
 
 # H · impeccable 评审（critique + shape）：截图 1–4
 
 ## 0. 方法与证据等级
 
 - 模式：四屏都是 **Operate**（用户在完成任务）。方法：critique（Nielsen 十项 0–4 分、认知负荷八项清单、P0–P3）→ shape（目标结构，不写代码）。layout / distill / clarify 只借其检查问题（分组与节奏、少即是多、每个意思只说一次）。
-- 证据等级：**[图]** 截图直接可见；**[码]** 读了 `/home/coder/evimed-wt/release`（`adcd02e6b`，R12，截图对应的版本）源码，没有在线点击；**[推]** 我的推断，需要验证。
-- 提醒：`/home/coder/workspace/EviMedScience` 当前工作树里的 `SourcesTab.tsx` 还是 R11 之前的 8 列 `DataTable`（没有任何行点击），与截图 1 不是同一版本；下面凡写“代码”都指 release 工作树。
+- 证据等级：**[图]** 截图直接可见；**[码]** 读了 `/workspace/evimed-wt/release`（`adcd02e6b`，R12，截图对应的版本）源码，没有在线点击；**[推]** 我的推断，需要验证。
+- 提醒：`/workspace/EviMedScience` 当前工作树里的 `SourcesTab.tsx` 还是 R11 之前的 8 列 `DataTable`（没有任何行点击），与截图 1 不是同一版本；下面凡写“代码”都指 release 工作树。
 - 设计专属性（critique 第一问）：外壳的克制、扁平、一条左边线是 EviMed 自己的，类别内可信。截图 3、4 的抽屉内容却可以放进任何 SaaS；唯一能让它们“只属于 EviMed”的东西是**带依据的细节**（截图 1 的讲错句子和来源，截图 4 的页码与原文位置），而这两处恰好是现在缺的。
 
 ## 1. 启发式评分（0–4，Operate 全部适用；n/a 写明原因）

@@ -1,9 +1,9 @@
 # Live findings (main session, 2026-09-18) — evidence gathered on production, read-only
 
-Release `evimed-3dc0fa10cd25-1`, account `cdss-access`, kernel client 0.1.5-rc.2. Screenshots: the 2026-09-18 walk captures (retained privately).
+Release `evimed-3dc0fa10cd25-1`, account `<owner-account>`, kernel client 0.1.5-rc.2. Screenshots: the 2026-09-18 walk captures (retained privately).
 
 ## Done
-- 18 test projects archived (`.evimed-local/acceptance/archive/cdss-access-test-projects-2026-09-17.tgz`, 99 MB) and deleted via `DELETE /api/projects/:id`. Remaining: `default`, `eval-memory-ablation-v11-9def6619` (most complete: 62 KB report, 72 claims of all three types, matrix + revision-notes + agenda-delta, clean workspace, judge 4/4/4/5). Inbox unread went 31 → 2 (notifications cascade with project deletion).
+- 18 test projects archived (`.evimed-local/acceptance/archive/<owner-account>-test-projects-2026-09-17.tgz`, 99 MB) and deleted via `DELETE /api/projects/:id`. Remaining: `default`, `eval-memory-ablation-v11-9def6619` (most complete: 62 KB report, 72 claims of all three types, matrix + revision-notes + agenda-delta, clean workspace, judge 4/4/4/5). Inbox unread went 31 → 2 (notifications cascade with project deletion).
 - No rename route exists (`server.mjs:3032-3081` has GET/POST/DELETE/export only); POST accepts `name` ≤128 but `ProjectSwitcher.tsx` sends only an ASCII id. "Default Project" is hard-coded in `store.mjs:571` and `store.mjs:1035`.
 
 ## F1 「深度求索中...」

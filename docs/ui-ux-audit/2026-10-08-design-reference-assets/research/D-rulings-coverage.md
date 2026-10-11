@@ -16,7 +16,7 @@
 
 ### 0.1 一个影响全文的事实：文档引用的「现行」代码是 R10 之前的主干树
 
-文档 L21、L108、L960 把 `Sidebar.tsx`、`router.tsx`、`FrontierNavigation.tsx`、`DESIGN.md` 当作「现行」依据。这些文件取自主干工作区（分支 `codex/research-evolution-engine-20261004`）。该分支不含 R10/R11：`git merge-base --is-ancestor 592ec547b HEAD` 为否；R10/R10.1/R11 只在 `r11/ui-audit`（release 树 `/home/coder/evimed-wt/release`，HEAD `3e52ca1f2` = R11.2 候选；线上为 R11.1 `aa3cec34b`，2026-10-08 06:45Z），尚未并入 main。两棵树的差别直接造成文档的「现行约束」失真：
+文档 L21、L108、L960 把 `Sidebar.tsx`、`router.tsx`、`FrontierNavigation.tsx`、`DESIGN.md` 当作「现行」依据。这些文件取自主干工作区（分支 `codex/research-evolution-engine-20261004`）。该分支不含 R10/R11：`git merge-base --is-ancestor 592ec547b HEAD` 为否；R10/R10.1/R11 只在 `r11/ui-audit`（release 树 `/workspace/evimed-wt/release`，HEAD `3e52ca1f2` = R11.2 候选；线上为 R11.1 `aa3cec34b`，2026-10-08 06:45Z），尚未并入 main。两棵树的差别直接造成文档的「现行约束」失真：
 
 | 文档依据 | 主干树（文档所见） | release 树（线上现状） |
 |---|---|---|
@@ -34,7 +34,7 @@
 
 - 裁定强度：**[O]** 所有者原话或明确裁定（带日期）；**[OA]** 所有者批准的方案条文（「开始」「执行到位」之后落地的方案）；**[R]** R10/R11 分诊或 `DESIGN.md` 的派生规则（背后有所有者裁定，但不是原话）；**[S]** v2.1 规范条文（所有者委托撰写）。
 - 冲突性质：**硬**＝文档与裁定直接矛盾；**半**＝措辞可被读成矛盾，或缺少裁定附带的例外/范围；**旧**＝文档写的是 R10/R11 之前的状态；**合**＝已核对、与裁定一致。
-- 裁定出处缩写（均在 `/home/coder/.claude/projects/-home-coder-workspace-EviMedScience/memory/`）：`ui-rulings`＝`owner-ui-rulings-2026-09-20.md`；`over-pres`＝`ui-over-presentation-2026-09-23.md`；`plan-10-07`＝`ui-rectification-plan-2026-10-07.md`（方案正文在 release 树 `docs/ui-ux-audit/2026-10-07-页面与模块整改方案.md`）；`plan-09-20`＝`docs/ui-ux-audit/2026-09-20-产品现状根因分析与一次性整改方案.md`；`plan-09-23`＝`docs/ui-ux-audit/2026-09-23-界面与交互整改方案.md`（磁盘上已不存在，仅在 t3 检查点提交里，如 `git show b2baaaa71:docs/ui-ux-audit/2026-09-23-界面与交互整改方案.md`）；`R11`＝release 树 `docs/ui-ux-audit/2026-10-07-review/R11-两份审查整改方案.md` 与 `R11/triage-A…F.md`。
+- 裁定出处缩写（均在 `/workspace/.claude/projects/-workspace-EviMedScience/memory/`）：`ui-rulings`＝`owner-ui-rulings-2026-09-20.md`；`over-pres`＝`ui-over-presentation-2026-09-23.md`；`plan-10-07`＝`ui-rectification-plan-2026-10-07.md`（方案正文在 release 树 `docs/ui-ux-audit/2026-10-07-页面与模块整改方案.md`）；`plan-09-20`＝`docs/ui-ux-audit/2026-09-20-产品现状根因分析与一次性整改方案.md`；`plan-09-23`＝`docs/ui-ux-audit/2026-09-23-界面与交互整改方案.md`（磁盘上已不存在，仅在 t3 检查点提交里，如 `git show b2baaaa71:docs/ui-ux-audit/2026-09-23-界面与交互整改方案.md`）；`R11`＝release 树 `docs/ui-ux-audit/2026-10-07-review/R11-两份审查整改方案.md` 与 `R11/triage-A…F.md`。
 - 注意：09-20/09-22/09-23/09-24 的多数所有者裁定只存在于 memory 笔记和 plan 文档里，不在仓库规则文件中。文档 L21「规则发生冲突时，以用户最新明确决策、适用的 AGENTS.md、现行业务与数据契约为先」里的「用户最新明确决策」缺少可检索的落点（见 §1.4 建议）。
 
 ## 1. 与所有者裁定的冲突
@@ -151,7 +151,7 @@
 - R11 方案表的行数与处理（`R11-两份审查整改方案.md`，按方案自述的计数）：A 全局（自述 27 项：open 8、partly 3、保留 3、reject 6，其余并入同页）；B 前沿 16 行（partly 4、open 11、reject 1）；C 工具 7 行（fixed 4、partly 1、open 2）；D GEO 10 行（9 页 open＋无障碍）；E 虚拟临床研究 14 行（fixed 1、partly 8、open 4、另 1 行为覆盖与走查）；F 生活类（自述 21 行：fixed 1、mostly 1、partly 8、open 8、keep 4）。表中的 open/partly 是对 R10.1 代码的判定；「执行结果」把 11 个包＋INTEGRATE 合入 RC30/RC31，RC32 追加 4 项产品缺陷（抽屉要按两次 Esc、矩阵加载时不显示行数、GEO 旅程滚动区没有 Tab 停靠、证据卡正文按纯文本打印）与 2 处走查脚本修正，RC33（R11.2）追加 2 项。
 - 不做的 7 项（✖，文档不得重新引入）：找回密码链接、404「返回上一页」、对话输入框下统计行（研究者）、全部 44 px 触区、热度解释、标题改开站内详情、能力地图「补全」。
 - 我抽查了约 30 个符号与文案（`reconcileFailedStops`、`runtimeStartRecovery`、`inert`、`projectLabels`、`FollowingView.tsx`、`ScrollRegion`、`readingChange`、`trendAxis`、`isReadableArtifact`、`safetyKept`、「先验借用」「还没算」「这项研究现在只有公开资料」等），release 树里均存在。**没有找到完成证据的只有**：GEO 的统一取轮解析器 `latestMeasuredRound`（triage-D 观察 3，热图与分母不一致的数据核对，可选）；手机精选首条标题 y≤520 的实测值；见各节「未闭合」。
-- 五项待所有者（`r10-paused-open-items-2026-10-07.md`，R11.1 验收发现）：**(1)** 虚拟临床研究的后台分析运行在研究有定义后立即启动，占用每账号 2 个运行位（`OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER=2`），第三个研究的对话要排队；建议后台最多占 cap−1。**(2)** 模型有时在回合内等长模拟（bash 等待循环 24 分钟以上），追问排在它后面。**(3)** 多方案比较把方案 A（2:1）按方案 B 的 N 模拟，「检验」读成 99.7% 功效；建议试验页签给确定性提示「模拟人数与解析结果不同」。**(4)** 一次项目删除在研究的引擎作业还在写入时回 500（重试 200），没有日志。**(5)** `cdss-access` 账号 15 条过程状态类记忆等所有者定夺（`docs/ui-ux-audit/2026-10-07-review/memory-pending-state-cdss-access.tsv`）。
+- 五项待所有者（`r10-paused-open-items-2026-10-07.md`，R11.1 验收发现）：**(1)** 虚拟临床研究的后台分析运行在研究有定义后立即启动，占用每账号 2 个运行位（`OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER=2`），第三个研究的对话要排队；建议后台最多占 cap−1。**(2)** 模型有时在回合内等长模拟（bash 等待循环 24 分钟以上），追问排在它后面。**(3)** 多方案比较把方案 A（2:1）按方案 B 的 N 模拟，「检验」读成 99.7% 功效；建议试验页签给确定性提示「模拟人数与解析结果不同」。**(4)** 一次项目删除在研究的引擎作业还在写入时回 500（重试 200），没有日志。**(5)** `<owner-account>` 账号 15 条过程状态类记忆等所有者定夺（`docs/ui-ux-audit/2026-10-07-review/memory-pending-state-<owner-account>.tsv`）。
 
 ### 3.1 §3 信息架构与入口层级（L93-148）
 
@@ -232,7 +232,7 @@
 
 - **现行**：记忆页四个页签（关于你·项目·做法·成长），每签一张清单、点行开抽屉；页头＝标题＋记忆开关＋一个「⋯」（分享与导入·已忘记的内容·本项目不使用记忆·重置记忆）；打开时进入第一个有内容的页签；头部数字与列表一致（成长不再把做法算作记忆）；抽屉不显示模型写的英文正文；失效分享链接给「回到记忆胶囊」；导入前有一行提示（`app/routes/MemoryHubPage.tsx`、`components/memory/*`、`SharedCapsulePage.tsx`；LIFE-2 ✔RC31）。定时任务：行写「下次…」「上次…」；成果先列可读文档，其余收进「其他文件 N 个」；长说明折叠；更早 N 次运行折叠；暂停／删除进「更多」；新建表单有一行摘要（`AutopilotPage.tsx`、`components/autopilot/*`、`lib/artifactNames.ts` `isReadableArtifact`；LIFE-1 ✔RC31）。
 - **R11 行与终态**：F「定时任务首页 open（回归）」「详情 open P1」「记忆总览 partly」「新建 partly」「接收/共享详情 open」均 ✔RC31。
-- **未闭合**：`cdss-access` 的过程状态类记忆（五项第 5）⌛；triage-F 「Not doing」：重复的 0/0 简报行不折叠（R10 起新的 0/0 简报不再发送）。
+- **未闭合**：`<owner-account>` 的过程状态类记忆（五项第 5）⌛；triage-F 「Not doing」：重复的 0/0 简报行不折叠（R10 起新的 0/0 简报不再发送）。
 - **五项**：第 5 项。
 
 ### 3.13 §15 科研工具与专业模块（L640-672）
@@ -391,7 +391,7 @@
 | B-2 | 五项第 2 项：模型在回合内等长模拟，追问排在后面 | `vcr-protocol` SKILL 第 6 步改为「排好引擎任务就结束这一回合，结果以卡片推回，不轮询」 | `capabilities/vcr-protocol/SKILL.md` 与 `capability-skills/`、`runtime/skills/evimed/`、`packages/socket/capability-skills/` 的副本（逐字节一致） | `designs` 验收（三方案）一回合内结束，追问不排队（`docs/ui-ux-audit/2026-10-07-review/acceptance/designs-r11.json` 同路径复跑） |
 | B-3 | 五项第 3 项：A 方案（2:1）按 B 的 N 模拟 | 试验页签加确定性提示「模拟人数与解析结果不同」，只提示不拦截（原则 4） | `apps/server/src/vcrViewsTabs.mjs`（试验页签呈现器）、`components/vcr/tabs/TrialTab.tsx` | 构造 A 用 B 的 N 的夹具，页签出现该提示；功效读数旁不再单独显示 99.7% |
 | B-4 | 五项第 4 项：删除遇到仍在写入的研究作业回 500 | 先停引擎作业再删；失败时回可重试的具名码并记日志 | `apps/server/src/server.mjs`（项目删除，约 6780 行的 `deleteGeoProjectRows`／`deleteVcrProjectRows`）、`vcrService.mjs` | 在作业运行中删除：200 或具名可重试码，日志有记录，无裸 500 |
-| B-5 | 五项第 5 项：`cdss-access` 的 15 条过程状态类记忆 | 由所有者看一眼后清除（它们是用户自己的数据，不擅自删） | `docs/ui-ux-audit/2026-10-07-review/memory-pending-state-cdss-access.tsv`；`scripts/ops/memory-pending-state-report.mjs` | 「项目」页签无待办类条目 |
+| B-5 | 五项第 5 项：`<owner-account>` 的 15 条过程状态类记忆 | 由所有者看一眼后清除（它们是用户自己的数据，不擅自删） | `docs/ui-ux-audit/2026-10-07-review/memory-pending-state-<owner-account>.tsv`；`scripts/ops/memory-pending-state-report.mjs` | 「项目」页签无待办类条目 |
 | B-6 | 文档引出的口径裁定：(i) 触区 44 或 40（C18）；(ii) 矩阵里「未核对」「暂无核对结果」的字样（X3）；(iii) 两个壳的计费名（X7）；(iv) 确认 GEO 把「预期匹配／主战场／预期达标」挪进方案页、准确与安全页折叠图表（triage-D 标注 `a layout change the owner has not approved`，R11 已实施）；(v) 晋升后的进化工具在哪露出（R10 方案 §6「会进网格」与代码不符）；(vi) 「科研分析」技能组含天文、量子、材料类，是否按医学研究者收窄 | (i) 40 并改 spec 10.5；(ii) ✓／⚠／空＋短暂「核对中」；(iii) 各壳各用其名并在文档注明；(iv) 确认；(v)(vi) 暂不动 | 见各自 C／X 条 | 一次回复定下，回写文档与 spec |
 | B-7 | §17 六个探索方向与 §20.6 的衡量计划 | 保留「新证据变化摘要」「可恢复的研究工作区」两项（数据面最近：`evimed_frontier.item_changes`／`content_version`、运行账本加会话），其余不做；§20.6 改为真实会话验收 | `docs/ui-ux-audit/2026-10-08-evimed-design-reference.md` §17、§20.6 | 文档里没有「待验证」的未决方向 |
 

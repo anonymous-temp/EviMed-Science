@@ -1,6 +1,6 @@
 # A. 视觉 / 版式 / 组件 / 无障碍 / 性能事实核对（针对 2026-10-08-evimed-design-reference.md v1.0）
 
-核对基准：现行 = R11.2 工作树 `/home/coder/evimed-wt/release`（分支 `r11/ui-audit`，提交 3e52ca1f2）；文档相对链接实际解析到 `/home/coder/workspace/EviMedScience`（HEAD c1f02c3cc）的陈旧树。下文 `R11` 指前者，`陈旧树` 指后者。路径均相对 `OpenScience/`，除非另写。
+核对基准：现行 = R11.2 工作树 `/workspace/evimed-wt/release`（分支 `r11/ui-audit`，提交 3e52ca1f2）；文档相对链接实际解析到 `/workspace/EviMedScience`（HEAD c1f02c3cc）的陈旧树。下文 `R11` 指前者，`陈旧树` 指后者。路径均相对 `OpenScience/`，除非另写。
 令牌包版本：R11 与陈旧树 `packages/design-tokens/package.json` 均为 **2.1.2**，`src/index.mjs` 两树逐字节相同（`diff -q` 无差异）；因此第 10 节引用的"令牌数值"本身没有陈旧问题。陈旧的是**消费令牌的代码**（组件/页面）和 `DESIGN.md`：两树 `DESIGN.md` 有 3 处差异（陈旧树缺 「页面结构 (2026-10-07)」六条规则、缺 coarse-pointer 点击区加宽与 `ScrollRegion` 一段、缺 `Tabs trailing`；记忆胶囊增长线在陈旧树仍写"页面顶部"，R11 已移入"成长"标签页）。
 文档整体是对着陈旧树写的：证据之一，文档 §3.2/§4.5/§15.2/§20.2/§20.3 全部使用已被业主 2026-10-07 废止的名称「虚拟临研」，陈旧树 `components/sidebar/Sidebar.tsx:83` 的侧栏标签还是 "虚拟临研"，R11 同一行已是 "虚拟临床研究"（`apps/web/src/components/sidebar/Sidebar.tsx:84`）。
 

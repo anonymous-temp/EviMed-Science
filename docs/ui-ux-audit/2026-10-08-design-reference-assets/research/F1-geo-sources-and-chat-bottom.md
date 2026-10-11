@@ -2,7 +2,7 @@
 
 范围与口径：
 
-- 代码基线是线上 R12 的 worktree `/home/coder/evimed-wt/release`（HEAD `adcd02e6b`，2026-10-08），下文所有路径都相对 `/home/coder/evimed-wt/release/OpenScience/`，格式 `path:line`。没有读 `/home/coder/workspace/EviMedScience/OpenScience`（陈旧分支）。
+- 代码基线是线上 R12 的 worktree `/workspace/evimed-wt/release`（HEAD `adcd02e6b`，2026-10-08），下文所有路径都相对 `/workspace/evimed-wt/release/OpenScience/`，格式 `path:line`。没有读 `/workspace/EviMedScience/OpenScience`（陈旧分支）。
 - 只读：没有改任何源文件、没有 commit、没有 stash/checkout。
 - 内核（DSH）的浏览器包：release worktree 的 `node_modules/.pnpm` 里只有 `dsh-client-ui-renderer/slots/sidebar-browser/modules`，没有 `ui-conversation`、`ui-chat`；本机其他位置只有 0.1.2-rc.1 的旧包（不能用）。所以我从 npm 取了 `@deepseek-ai/dsh-client-ui-{conversation,chat,layout,theme}@0.1.7-rc.2` 的 tarball，解到 `/tmp/f1-kernel-fetch/x/`（只读文件、未执行），用 python 做上下文摘取。`deps-version.json` 说明 73 个内核子包都按 exact 钉在 0.1.7-rc.2（`deps-version.json:20`），所以这批 tarball 与线上镜像应当是同一份，但我没有拿线上镜像逐字节比对，凡引用内核包处都标「内核包 `lib/client.js` @偏移」，偏移是压缩后文件的字符位置。
 - R12 对本报告涉及区域的改动：`git diff --stat 3e52ca1f2..adcd02e6b -- OpenScience/apps/web OpenScience/apps/server/src/runtimeUi*` 输出为空，`packages/harness-port`、`packages/socket` 也不在这 16 个提交的改动清单里（改动只在 autopilot、frontier、runtime、vcr 技能文本、monitoring 等）。所以下面两个问题都是 R11 及更早就存在的行为，R12 没有动过。

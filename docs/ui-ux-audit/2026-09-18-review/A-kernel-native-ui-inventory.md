@@ -7,7 +7,7 @@ Primary source: the client packages extracted from the production runtime image 
 (47 client packages + the `dsh-client-0.1.5-rc.2.tgz`). Each lives at
 `/tmp/dshc/@deepseek-ai+dsh-client-<name>@0.1.5-rc.2_.../node_modules/@deepseek-ai/dsh-client-<name>/`;
 below, paths are abbreviated to `<name>/…` for that prefix.
-Repo source: `/home/coder/workspace/EviMedScience/OpenScience/`.
+Repo source: `/workspace/EviMedScience/OpenScience/`.
 
 Already-established live facts are in `00-live-findings.md` in this directory and are not repeated.
 

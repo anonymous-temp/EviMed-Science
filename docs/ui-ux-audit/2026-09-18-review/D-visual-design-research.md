@@ -1808,7 +1808,7 @@ dataviz validator run.
 | 品牌资产 | 替换残留上游蓝 `#2563eb`（favicon / theme-color / PWA） | 同意，并指出 **favicon 绿 `#1f6f5c` 才是对的那个** —— 方向 A 让它扶正，logo 蓝改掉 | ✅ 深化 |
 | `packages/ui` 两期计划 | 一期就地收敛 8 原语 | 不变（本次不涉及） | ✅ |
 
-### 13.2 与 `/home/coder/workspace/深圳医保局/docs/DESIGN_GUIDELINES.md`（同一 owner 的兄弟医疗平台）
+### 13.2 与 `/workspace/深圳医保局/docs/DESIGN_GUIDELINES.md`（同一 owner 的兄弟医疗平台）
 
 | 兄弟平台的规则 | EviMed 现状 | 建议 |
 |---|---|---|

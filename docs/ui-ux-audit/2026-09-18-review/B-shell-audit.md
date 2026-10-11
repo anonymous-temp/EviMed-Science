@@ -8,7 +8,7 @@ Built on the production measurements in `outputs/product-review-2026-09-18/00-li
 (release `evimed-3dc0fa10cd25-1`, kernel client 0.1.5-rc.2) — those facts are not re-measured here.
 Screenshots: the 2026-09-18 walk captures (retained privately).
 
-All paths are relative to `/home/coder/workspace/EviMedScience/OpenScience` unless stated.
+All paths are relative to `/workspace/EviMedScience/OpenScience` unless stated.
 
 Status: COMPLETE.
 
@@ -127,7 +127,7 @@ Six producers, all confirmed by call site:
   `apps/server/src/learningEvaluation.mjs:110`.
 - **Every other automated run does notify.** `evals/` harnesses dispatch through the ordinary
   run path, so each eval cell produces a 「研究已完成」 item. The memory-ablation batches (v1–v11,
-  ~12 cells each) are exactly this: the walk found 31 unread items on `cdss-access`, and
+  ~12 cells each) are exactly this: the walk found 31 unread items on `<owner-account>`, and
   deleting 18 test projects took it to 2 (00-live-findings, "Done") — i.e. **29 of 31 unread
   items were machine-generated**.
 - **Autopilot episodes notify twice**: the `review` digest (`autopilotService.mjs:1038`) plus
@@ -1562,7 +1562,7 @@ debt. Everything in the 2026-09-15 walk's A/B/C/D/E series landed except where l
 | **P1-10** | 03 | hosted run ledger should not fetch the whole list | `RunsPage.tsx:265-267` still says "no server-side paging or facets"; `:343-362` filters client-side over every run the account has ever had. |
 | **P3-6** | 03 | account-level login backoff + password recovery | only IP limiting exists (`apps/server/src/server.mjs:3450-3452`); `LoginPage.tsx` has no recovery link. |
 | **D7** | 2026-09-15 walk | two 403s per kernel load (`syncInspectManifest`) | `packages/harness-port/seam-manifest.json:170` still lists it as `denied`; F7 re-observed the console noise on 2026-09-18. Harmless, but it is the first thing in the console on every session open. |
-| **E2** | 2026-09-15 walk | July acceptance runs still occupy the first page of history | a data decision; `scripts/ops/capability-acceptance.mjs:51` still defaults to `cdss-access`. Partly discharged by the 2026-09-17 project archive (00-live-findings, "Done"). |
+| **E2** | 2026-09-15 walk | July acceptance runs still occupy the first page of history | a data decision; `scripts/ops/capability-acceptance.mjs:51` still defaults to `<owner-account>`. Partly discharged by the 2026-09-17 project archive (00-live-findings, "Done"). |
 | **§3.7** | 2026-09-16 review | a memory row should show which runs used it (`servedIn`) | `grep -rn servedIn apps/server/src` → no hits. The reverse view exists on the run (`RunsPage.tsx:720-739`). |
 | **P2 #15b** | 2026-09-16 review | external-agent observation report-back | `apps/server/src/learningRoutes.mjs:92-114` exposes `/api/methods` only; no observation endpoint. |
 | **D4 (half)** | 2026-09-16 review | `knip` into lint | no `knip` config or script in the repo. `RightPane` and `FilesPage.tsx:266 SessionFilesPane` are now referenced only by their own tests, and `RightPane.tsx:169-174` is provably dead (`const overlayTitlebar = false`). |

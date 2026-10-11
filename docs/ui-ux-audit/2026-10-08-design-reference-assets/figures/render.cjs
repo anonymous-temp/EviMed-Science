@@ -2,13 +2,13 @@
 // A file may set <meta name="shot" content="WxH"> for its viewport (default 1512 x 945). Design renders, not screenshots.
 const fs = require('fs');
 const path = require('path');
-const pw = require('/home/coder/workspace/EviMedScience/.evimed-local/toolchains/playwright-core/node_modules/playwright-core');
+const pw = require('/workspace/EviMedScience/.evimed-local/toolchains/playwright-core/node_modules/playwright-core');
 const dir = __dirname;
 const only = process.argv.slice(2);
 (async () => {
   const browser = await pw.chromium.launch({
     headless: true,
-    executablePath: '/home/coder/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome',
+    executablePath: '/workspace/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome',
     args: ['--no-sandbox', '--allow-file-access-from-files', '--font-render-hinting=none'],
   });
   for (const file of fs.readdirSync(dir).filter((name) => /^fig-\d\d-.*\.html$/.test(name)).sort()) {

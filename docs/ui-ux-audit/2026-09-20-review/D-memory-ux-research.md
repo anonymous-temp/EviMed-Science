@@ -122,4 +122,4 @@ Strength is shown as a count ("3 次对话"), never a percentage. Expanding a ro
 - A 「本次用到的背景」 expander per answer, with 「别再用这条」 per item. The run ledger already holds this data as `recalledMemories` and `methodsLoaded`.
 - 无痕对话 at the composer.
 
-Local context used: /home/coder/.claude/projects/-home-coder-workspace-EviMedScience/memory/memory-capsule-vision-and-gap-2026-09-19.md. The proposal that note points to specified a six-section capsule page, which shipped as the six tabs the owner now rejects.
+Local context used: /workspace/.claude/projects/-workspace-EviMedScience/memory/memory-capsule-vision-and-gap-2026-09-19.md. The proposal that note points to specified a six-section capsule page, which shipped as the six tabs the owner now rejects.

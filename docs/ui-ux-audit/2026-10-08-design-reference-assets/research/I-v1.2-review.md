@@ -1,8 +1,8 @@
 # I · 设计参考 v1.2 独立评审
 
-评审对象：`docs/ui-ux-audit/2026-10-08-evimed-design-reference.md`（v1.2，1568 行），范围是附录 D「v1.1 → v1.2」表列出的改动。核对依据：F1、F2、G、H 四份记录；五张图（fig-01、03、04、05 逐张看过，fig-02 未改）；线上 R12 的代码（`/home/coder/evimed-wt/release/OpenScience`，HEAD `182211534`，含 `adcd02e6b`）。没有改文档或代码，只写了本文件。
+评审对象：`docs/ui-ux-audit/2026-10-08-evimed-design-reference.md`（v1.2，1568 行），范围是附录 D「v1.1 → v1.2」表列出的改动。核对依据：F1、F2、G、H 四份记录；五张图（fig-01、03、04、05 逐张看过，fig-02 未改）；线上 R12 的代码（`/workspace/evimed-wt/release/OpenScience`，HEAD `182211534`，含 `adcd02e6b`）。没有改文档或代码，只写了本文件。
 
-引用写法：文档位置写「§节 + 行号 + 短引文」，行号是 v1.2 文件的行号；代码引用相对 `/home/coder/evimed-wt/release/OpenScience/`；F1、F2、G、H 在 `research/` 下。凡是我自己在代码里补核的，标「补核」。
+引用写法：文档位置写「§节 + 行号 + 短引文」，行号是 v1.2 文件的行号；代码引用相对 `/workspace/evimed-wt/release/OpenScience/`；F1、F2、G、H 在 `research/` 下。凡是我自己在代码里补核的，标「补核」。
 
 ## 先说结论
 

@@ -1,8 +1,8 @@
 # F2 定时任务与知识库:代码级事实核对
 
-核对对象是线上 R12(commit `adcd02e6b`)的 worktree `/home/coder/evimed-wt/release/OpenScience`,只读,没有改动任何源文件。下文路径均相对该目录:`web` = `apps/web/src`,`srv` = `apps/server/src`。行号是该 worktree 里的真实行号。凡未能在代码里直接看到、或需要线上实机才能确认的,标注「未核实」并写明原因。
+核对对象是线上 R12(commit `adcd02e6b`)的 worktree `/workspace/evimed-wt/release/OpenScience`,只读,没有改动任何源文件。下文路径均相对该目录:`web` = `apps/web/src`,`srv` = `apps/server/src`。行号是该 worktree 里的真实行号。凡未能在代码里直接看到、或需要线上实机才能确认的,标注「未核实」并写明原因。
 
-内核(DSH `0.1.7-rc.2`)的完整 bundle 不在这份 worktree 的 `node_modules` 里,只有 73 个子包里的一小部分(`dsh-agent`、`dsh-session` 等),没有 `dsh-schedule`。内核侧结论因此依据三类材料:已提交的 0.1.7-rc.2 组合基线 `deploy/runtime-dsh/dump-config.baseline.json`、2026-09-18 的内核 UI 清单 `docs/ui-ux-audit/2026-09-18-review/A-kernel-native-ui-inventory.md`、以及本机另一个项目(`/home/coder/workspace/HECRS/app/harness/node_modules/@deepseek-ai/dsh-schedule`,版本 0.1.2-rc.1)里的 README。凡引用后两者处都已注明版本差异。
+内核(DSH `0.1.7-rc.2`)的完整 bundle 不在这份 worktree 的 `node_modules` 里,只有 73 个子包里的一小部分(`dsh-agent`、`dsh-session` 等),没有 `dsh-schedule`。内核侧结论因此依据三类材料:已提交的 0.1.7-rc.2 组合基线 `deploy/runtime-dsh/dump-config.baseline.json`、2026-09-18 的内核 UI 清单 `docs/ui-ux-audit/2026-09-18-review/A-kernel-native-ui-inventory.md`、以及本机另一个项目(`/workspace/HECRS/app/harness/node_modules/@deepseek-ai/dsh-schedule`,版本 0.1.2-rc.1)里的 README。凡引用后两者处都已注明版本差异。
 
 ---
 
