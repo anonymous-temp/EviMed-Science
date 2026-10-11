@@ -1,5 +1,5 @@
-// Stable domain types for EviMed.
-// Imported by the desktop app now, and by the SDK / runtime in later slices.
+// Types and a chart palette for the EviMed web app.
+// Imported only by `apps/web`; the platform's shared vocabulary is `@evimed/domain`.
 
 export type RuntimeStatus = "connecting" | "ready" | "error" | "offline";
 export type ModelStatus = "connected" | "disconnected" | "error";
