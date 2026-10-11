@@ -1144,7 +1144,7 @@ const WRITERS = {
     return saved.id;
   },
 
-  async patient_set(item, { store, study }) {
+  async patient_set(item, { store, study }, extra) {
     if (!item.only(["populationId", "name", "modelId", "modelVersion", "scenario"])) return null;
     const name = item.str("name", { max: 120 }) ?? "";
     const modelId = item.str("modelId", { max: 160 });
@@ -1154,6 +1154,7 @@ const WRITERS = {
     // the platform reads the times off the schedule and writes them in, so the run never types a converted number.
     const times = await resolveVisitsRef(scenario, () => store.latestSchedule?.(study.id) ?? null);
     if ("scenario" in times) scenario = times.scenario; else item.bad("scenario.visits", times.message);
+    const visitTimes = "timeUnit" in times && times.timeUnit ? { unit: times.timeUnit.unit, basis: times.timeUnit.basis, times: scenario.visits } : null;
     const populationId = item.row.populationId == null ? null : String(item.row.populationId);
     if (populationId) await item.owned("populationId", "population", populationId);
     let selected = null;
@@ -1170,6 +1171,8 @@ const WRITERS = {
     const saved = await store.savePatientSet({
       studyId: study.id, userId: study.userId, populationId, name, modelId: selected?.id ?? null, modelVersion: selected?.version ?? null, scenario, twinLabel: null,
     });
+    // Which unit the schedule's days were read in, and whether that was the run's word or the months nothing said.
+    if (visitTimes) extra.results.push({ index: item.index, visitTimes });
     return saved.id;
   },
 
@@ -2363,6 +2366,11 @@ async function startJob(vcr, study, request) {
     const times = await resolveVisitsRef(scenario, () => vcr.store.latestSchedule?.(study.id) ?? null);
     if ("message" in times) throw gatewayError(400, "vcr_simulate_payload_invalid", times.message);
     scenario = times.scenario;
+    // The unit the schedule was read in reaches the run (`notes`) and the result (`timeUnitBasis`, which the result page prints).
+    if ("timeUnit" in times && times.timeUnit) {
+      notes = { ...(notes ?? {}), visitTimes: { ...times.timeUnit, times: scenario.visits } };
+      detail = { ...detail, timeUnitBasis: { ...times.timeUnit } };
+    }
   }
   const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null })).digest("hex").slice(0, 16);
   // A computation of a research object names it: its result is filed under that object and replaces only that object's earlier

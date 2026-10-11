@@ -85,10 +85,18 @@ test("where a scenario takes visit times, the schedule may be named; a list is l
   assert.deepEqual(await resolveVisitsRef({ visits: [0, 3, 6] }, none), { ok: true, scenario: { visits: [0, 3, 6] } });
   assert.deepEqual(await resolveVisitsRef({ design: {} }, none), { ok: true, scenario: { design: {} } });
   const named = await resolveVisitsRef({ design: { nTreat: 60 }, visits: { fromSoa: true, unit: "weeks" } }, schedule);
-  assert.deepEqual(named, { ok: true, scenario: { design: { nTreat: 60 }, visits: [0, 2, 4, 8] } });
+  assert.deepEqual(named, { ok: true, scenario: { design: { nTreat: 60 }, visits: [0, 2, 4, 8] }, timeUnit: { unit: "weeks", basis: "stated" } });
+  // The module's one unit rule (vcrTimeUnits): any spelling of a unit in the table is that unit, and a reference naming none is read in
+  // months and says so -- never refused for it. Only a unit outside the table, which cannot carry a schedule's days, is.
+  assert.deepEqual(await resolveVisitsRef({ visits: { fromSoa: true, unit: "周" } }, schedule),
+    { ok: true, scenario: { visits: [0, 2, 4, 8] }, timeUnit: { unit: "weeks", basis: "stated" } });
+  for (const unstated of [{ fromSoa: true }, { fromSoa: true, unit: null }, { fromSoa: true, unit: " " }]) {
+    assert.deepEqual(await resolveVisitsRef({ visits: unstated }, schedule),
+      { ok: true, scenario: { visits: [0, 0.46, 0.9199, 1.8398] }, timeUnit: { unit: "months", basis: "assumed" } }, JSON.stringify(unstated));
+  }
   for (const [visits, reader, expected] of [
-    [{ fromSoa: true }, schedule, /unit 写 days、weeks、months、years 之一/],
-    [{ fromSoa: true, unit: "fortnights" }, schedule, /unit 写/],
+    [{ fromSoa: true, unit: "fortnights" }, schedule, /unit 写 days、weeks、months、years/],
+    [{ fromSoa: true, unit: 2 }, schedule, /unit 写/],
     [{ fromSoa: true, unit: "weeks" }, none, /还没有访视日程/],
     [{ fromSoa: true, unit: "weeks" }, async () => ({ visits: [visit("a", 0, ["x"])] }), /不足两个/],
     [{ fromSoa: false, unit: "weeks" }, schedule, /"fromSoa": true/],
@@ -249,17 +257,24 @@ function gateway(storeOverrides = {}) {
 
 const TRAJECTORY = { design: { nTreat: 150, nControl: 150 }, endpoint: { type: "continuous" }, truth: { effect: -0.2, intercept: 50, slope: -0.4, sd: 3 } };
 
-test("a patient set whose trajectory takes the protocol's schedule has the visit times written in, in the unit it names", async () => {
+test("a patient set whose trajectory takes the protocol's schedule has the visit times written in, in the unit it names or in months", async () => {
   const { saved, send } = gateway();
   const res = await send("write", { what: "patient_set", items: [
     { name: "按日程", scenario: { ...TRAJECTORY, visits: { fromSoa: true, unit: "weeks" } } },
     { name: "手写", scenario: { ...TRAJECTORY, visits: [0, 3, 6] } },
     { name: "没写单位", scenario: { ...TRAJECTORY, visits: { fromSoa: true } } },
+    { name: "表外单位", scenario: { ...TRAJECTORY, visits: { fromSoa: true, unit: "cycles" } } },
   ] });
   assert.equal(res.status, 200, res.body);
-  assert.equal(res.json().data.ids.length, 2);
-  assert.deepEqual(saved.map((entry) => entry.scenario.visits), [[0, 2, 4, 8], [0, 3, 6]], "the stored scenario carries numbers, as the engine's schema reads them");
-  assert.deepEqual(res.json().data.issues.map((issue) => [issue.index, issue.field]), [[2, "scenario.visits"]]);
+  assert.equal(res.json().data.ids.length, 3);
+  assert.deepEqual(saved.map((entry) => entry.scenario.visits), [[0, 2, 4, 8], [0, 3, 6], [0, 0.46, 0.9199, 1.8398]],
+    "the stored scenario carries numbers, as the engine's schema reads them; an unstated unit is months");
+  // The run is told which unit the schedule's days were read in, and that months was assumed where it named none.
+  assert.deepEqual(res.json().data.results, [
+    { index: 0, visitTimes: { unit: "weeks", basis: "stated", times: [0, 2, 4, 8] } },
+    { index: 2, visitTimes: { unit: "months", basis: "assumed", times: [0, 0.46, 0.9199, 1.8398] } },
+  ]);
+  assert.deepEqual(res.json().data.issues.map((issue) => [issue.index, issue.field]), [[3, "scenario.visits"]]);
   assert.match(res.json().data.issues[0].message, /unit 写/);
 });
 
@@ -277,10 +292,19 @@ test("a trajectory started with the schedule's visit times is frozen with the nu
   assert.equal(started.status, 200, started.body);
   assert.deepEqual(queued[0].scenario.visits, [0, 14, 28, 56]);
   assert.equal(queued[0].detail.subjectId, "pts_1");
+  assert.deepEqual(queued[0].detail.timeUnitBasis, { unit: "days", basis: "stated" }, "the result says the unit its times are in");
+  assert.deepEqual(started.json().data.notes, { visitTimes: { unit: "days", basis: "stated", times: [0, 14, 28, 56] } });
   // The same request with a list is the same job (the idempotency key reads the numbers, not the way they were asked for).
   const again = await send("simulate", { action: "start", kind: "generate_patients_longitudinal", subjectId: "pts_1", scenario: { ...TRAJECTORY, visits: [0, 14, 28, 56] } });
   assert.equal(again.status, 200);
   assert.equal(queued[1].idempotencyKey, queued[0].idempotencyKey);
+
+  // A trajectory that names no unit is read in months and says so, where the run and the result page read it.
+  const unstated = await send("simulate", { action: "start", kind: "generate_patients_longitudinal", subjectId: "pts_1", scenario: { ...TRAJECTORY, visits: { fromSoa: true } } });
+  assert.equal(unstated.status, 200, unstated.body);
+  assert.deepEqual(queued[2].scenario.visits, [0, 0.46, 0.9199, 1.8398]);
+  assert.deepEqual(queued[2].detail.timeUnitBasis, { unit: "months", basis: "assumed" });
+  assert.equal(unstated.json().data.notes.visitTimes.basis, "assumed");
 
   const lonely = gateway({ async latestSchedule() { return null; } });
   const refused = await lonely.send("simulate", { action: "start", kind: "generate_patients_longitudinal", subjectId: "pts_1", scenario: { ...TRAJECTORY, visits: { fromSoa: true, unit: "days" } } });

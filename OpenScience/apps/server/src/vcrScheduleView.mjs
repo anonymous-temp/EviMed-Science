@@ -7,7 +7,7 @@
  * @module vcrScheduleView
  */
 
-import { VCR_REGULATORY_LIMITS, VCR_SOA_TIME_UNITS, soaDayText, soaSummary, soaVisitTimes, soaWindowText } from "@evimed/domain";
+import { VCR_DEFAULT_TIME_UNIT, VCR_REGULATORY_LIMITS, VCR_SOA_TIME_UNITS, soaDayText, soaSummary, soaVisitTimes, soaWindowText, vcrTimeUnitOf } from "@evimed/domain";
 
 /** @param {unknown} value */
 const list = (value) => (Array.isArray(value) ? value : []);
@@ -68,7 +68,7 @@ export function reportSchedule(schedule) {
 
 /** The reason a schedule could not give visit times, in the words a run reads. @type {Record<string, string>} */
 const TIME_REFUSALS = Object.freeze({
-  unit_unknown: `unit 写 ${VCR_SOA_TIME_UNITS.join("、")} 之一：它是这个情景里效应和斜率所用的时间单位。`,
+  unit_unknown: `unit 写 ${VCR_SOA_TIME_UNITS.join("、")} 之一（天、周、月、年这样的写法也认；不写按月）：它是这个情景里效应和斜率所用的时间单位。`,
   too_few_visits: "本研究的访视日程里从第 0 天起的访视不足两个，排不出访视时间；补写日程，或直接在 visits 里写时间数组。",
   too_many_visits: "访视日程里从第 0 天起的访视多于轨迹模型一次能取的 50 个；直接在 visits 里写要用的时间数组。",
   unit_too_coarse: "按这个时间单位，日程里相邻的两次访视会变成同一个时间；换成更细的单位。",
@@ -76,11 +76,12 @@ const TIME_REFUSALS = Object.freeze({
 
 /**
  * Where a scenario takes visit times (`visits`), the study's own schedule may be named instead of a list: `{ fromSoa: true, unit }`.
- * Answers the scenario with the elapsed times written in, or the refusal in words; a `visits` that is a list (or absent) is returned
- * as it is, and a scenario that names the schedule without the right keys is refused rather than guessed at.
+ * Answers the scenario with the elapsed times written in and the unit they are in (`timeUnit`: the run's word, or months where it named
+ * none), or the refusal in words; a `visits` that is a list (or absent) is returned as it is, and a scenario that names the schedule
+ * without the right keys is refused rather than guessed at.
  * @param {Record<string, any>} scenario
  * @param {() => Promise<{ visits: readonly any[] } | null>} readCurrent how the study's current schedule is read
- * @returns {Promise<{ ok: true, scenario: Record<string, any> } | { ok: false, message: string }>}
+ * @returns {Promise<{ ok: true, scenario: Record<string, any>, timeUnit?: { unit: string, basis: 'stated' | 'assumed' } } | { ok: false, message: string }>}
  */
 export async function resolveVisitsRef(scenario, readCurrent) {
   const ref = scenario?.visits;
@@ -92,9 +93,14 @@ export async function resolveVisitsRef(scenario, readCurrent) {
   if (!schedule?.visits?.length) {
     return { ok: false, message: "本研究还没有访视日程：先用 vcr_write what: soa 写入（日程属于方案的当前版本），或直接在 visits 里写时间数组。" };
   }
-  const times = soaVisitTimes(/** @type {any} */ (schedule.visits), String(ref.unit ?? ""));
+  // The module's one unit rule (`vcrTimeUnits`): any spelling of a unit in the table is that unit, and a reference that names none is
+  // read in months and says so (`timeUnit.basis`), never refused for it. A unit outside the table cannot carry a schedule's days.
+  const unstated = ref.unit == null || (typeof ref.unit === "string" && ref.unit.trim() === "");
+  const unit = unstated ? VCR_DEFAULT_TIME_UNIT : vcrTimeUnitOf(ref.unit);
+  if (unit === null) return { ok: false, message: TIME_REFUSALS.unit_unknown };
+  const times = soaVisitTimes(/** @type {any} */ (schedule.visits), unit);
   if ("reason" in times) return { ok: false, message: TIME_REFUSALS[times.reason] ?? "访视日程排不出访视时间。" };
-  return { ok: true, scenario: { ...scenario, visits: times.times } };
+  return { ok: true, scenario: { ...scenario, visits: times.times }, timeUnit: { unit, basis: unstated ? "assumed" : "stated" } };
 }
 
 /**
