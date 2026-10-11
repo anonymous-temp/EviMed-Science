@@ -32,21 +32,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger(__name__)
 
 AGENT_TYPE = "quantitative-analysis"
-# JAVA_WS_URL = os.getenv("JAVA_WS_URL", "ws://192.168.20.252:2066/ws/ws")
-# JAVA_TOKEN_URL = os.getenv(
-#     "JAVA_TOKEN_URL",
-#     f"http://192.168.20.252:2066/api-evimed/ai-agent/token?clientType={AGENT_TYPE}",
-# )
-JAVA_WS_URL = os.getenv("JAVA_WS_URL", "wss://evidence-factory.evimed.com/ws/ws")
-JAVA_TOKEN_URL = os.getenv(
-    "JAVA_TOKEN_URL",
-    f"https://evidence-factory.evimed.com/api-evimed/ai-agent/token?clientType={AGENT_TYPE}",
-)
+# Legacy upstream-platform gateway and report storage. Every value comes from
+# the environment only; empty means "not configured" and the matching path
+# (outbound WebSocket client, OSS upload) does nothing.
+JAVA_WS_URL = os.getenv("JAVA_WS_URL", "").strip()
+JAVA_TOKEN_URL = os.getenv("JAVA_TOKEN_URL", "").strip()
 OSS_ACCESS_KEY_ID = os.getenv("OSS_ACCESS_KEY_ID")
 OSS_ACCESS_KEY_SECRET = os.getenv("OSS_ACCESS_KEY_SECRET")
 OSS_ENDPOINT = os.getenv("OSS_ENDPOINT", "https://oss-cn-beijing.aliyuncs.com")
-OSS_BUCKET_NAME = os.getenv("OSS_BUCKET_NAME", "project-beijing-a4hznzutlh")
-OSS_PUBLIC_BASE_URL = os.getenv("OSS_PUBLIC_BASE_URL", "https://image.evimed.com/oss")
+OSS_BUCKET_NAME = os.getenv("OSS_BUCKET_NAME", "")
+OSS_PUBLIC_BASE_URL = os.getenv("OSS_PUBLIC_BASE_URL", "")
 
 # 内部数据库接口（优先检索，PubMed 兜底）
 INTERNAL_DB_URL = os.getenv(
@@ -115,6 +110,9 @@ async def _upload_report(content: str, user_id: str, message_id: str) -> str | N
     路径规则: {agentType}/{userId}/{messageId}/{timestamp_ms}.md
     """
     import time
+    if not (OSS_ACCESS_KEY_ID and OSS_ACCESS_KEY_SECRET and OSS_BUCKET_NAME and OSS_PUBLIC_BASE_URL):
+        logger.warning("OSS 未配置（凭证 / bucket / 公开地址），跳过上传")
+        return None
     remote_path = f"{AGENT_TYPE}/{user_id}/{message_id}/{int(time.time() * 1000)}.md"
     data = content.encode("utf-8")
 
@@ -1061,6 +1059,9 @@ async def _handle_session(
 
 async def _java_ws_client():
     import websockets
+    if not (JAVA_WS_URL and JAVA_TOKEN_URL):
+        logger.info("Upstream platform not configured (JAVA_WS_URL / JAVA_TOKEN_URL empty); outbound WebSocket client not started")
+        return
     active_sessions: Dict[str, dict] = {}
 
     while True:
