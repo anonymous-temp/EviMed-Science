@@ -30,7 +30,7 @@
 
 import { HttpError } from "./security.mjs";
 import { CTGOV_STUDY_URL, CTIS_STUDY_URL } from "./trialRegistryClient.mjs";
-import { VCR_MATCHING_VOCABULARY_VERSION, assessSubject, frozenAsOf, languageKeysOf, matchingInputDigest } from "./vcrMatching.mjs";
+import { VCR_MATCHING_VOCABULARY_VERSION, assessSubject, frozenAsOf, languageKeysOf, matchingInputDigest, statedRequirement } from "./vcrMatching.mjs";
 import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
 
 /**
@@ -222,7 +222,8 @@ function trialForRun(trial, criteria, { withCriteria = false } = {}) {
     criteria: withCriteria
       ? criteria.map((criterion) => ({
         id: criterion.id, ordinal: criterion.ordinal, kind: criterion.kind, criterionType: criterion.criterionType,
-        sourceText: criterion.sourceText, requirement: criterion.requirement, applicability: criterion.applicability,
+        // An exclusion reads back as written: the condition that excludes (`statedRequirement`).
+        sourceText: criterion.sourceText, requirement: statedRequirement(criterion), applicability: criterion.applicability,
         languageKeys: languageKeysOf(criterion.requirement, criterion.id),
       }))
       : criteria.length,

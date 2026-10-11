@@ -34,7 +34,7 @@
  * @module vcrService
  */
 
-import { VCR_PRIVATE_MATCHING_PROVENANCE_KEYS } from './vcrMatching.mjs';
+import { VCR_PRIVATE_MATCHING_PROVENANCE_KEYS, statedRequirement } from './vcrMatching.mjs';
 import { presentLongitudinalRead } from './vcrLongitudinalPresentation.mjs';
 import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
 import {
@@ -1379,9 +1379,11 @@ export class VcrService {
           ? (await this.packages.matchStore.protocols(study.id, String(filter.protocolVersionId)))[0] ?? null
           : await this.store.latestProtocolVersion(study.id);
         // The matching store's criteria carry their applicability beside the requirement.
-        const criteria = protocol
+        const stored = protocol
           ? (this.packages.matchStore ? await this.packages.matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }) : await this.store.criteria(protocol.id))
           : [];
+        // An exclusion reads back as written, the condition that excludes, so a run that rewrites what it read keeps its meaning.
+        const criteria = stored.map((/** @type {any} */ criterion) => (criterion?.kind === "exclusion" ? { ...criterion, requirement: statedRequirement(criterion) } : criterion));
         return { protocol, criteria, protocols: this.packages.matchStore ? await this.packages.matchStore.protocols(study.id) : [] };
       }
       case "soa": {

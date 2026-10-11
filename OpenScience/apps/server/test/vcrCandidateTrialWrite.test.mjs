@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { HttpError } from "../src/security.mjs";
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
+import { statedRequirement, storedExclusion } from "../src/vcrMatching.mjs";
 import { VCR_READ_WHATS, VCR_WRITE_WHATS } from "../src/vcrService.mjs";
 
 const study = { id: "std_1", userId: "u1", projectId: "prj_1", dataTier: "T1" };
@@ -246,35 +247,32 @@ test("a language answer about the study's own protocol is written exactly as it 
   assert.equal(seam.saved.length + seam.evaluated.length, 0);
 });
 
-// A live 给患者找试验 run (real DSH + DeepSeek, 2026-10-11) wrote all nine of its structured exclusions the way the registry states
-// them -- "Modified rankin scale > 3" as `gt 3`, "Diagnosis of atrial fibrillation" as `present` -- although the grammar reads a
-// requirement as what keeps the patient in, so an AF patient read as passing an AF exclusion. Negating a condition is a mechanical
-// step, so it is the platform's: an exclusion may be written as stated (`excludeWhen`) and is stored as its negation.
-test("an exclusion written as the registry states it (excludeWhen) is stored as the requirement that keeps the patient in", async () => {
+// Two live 给患者找试验 runs (real DSH + DeepSeek, 2026-10-11) wrote all twelve of their structured exclusions as the registry states
+// them -- "Modified rankin scale > 3" as `gt 3`, "Diagnosis of atrial fibrillation" as `present` -- the second after the skill asked for
+// the negated form, while the grammar reads every stored requirement as what keeps the patient in: an AF patient read as passing an AF
+// exclusion. Negating is mechanical, so it is the platform's: an exclusion is written as stated and stored as its negation, and a run
+// reads it back as stated.
+test("an exclusion is written as the registry states it and stored as the requirement that keeps the patient in", async () => {
   const seam = seams();
   const AF = { kind: "exclusion", criterionType: "comorbidity", sourceText: "Diagnosis of atrial fibrillation",
-    excludeWhen: { op: "present", variable: "atrial_fibrillation" } };
+    requirement: { op: "present", variable: "atrial_fibrillation" } };
   const MRS = { kind: "exclusion", criterionType: "other", sourceText: "Modified rankin scale > 3",
-    excludeWhen: { op: "compare", variable: "modified_rankin_scale", comparator: "gt", value: 3 } };
-  const answer = await write(seam, [{ registryId: "NCT05000001", subjectKeys: ["P-0192"], criteria: [AGE, AF, MRS, BRAIN] }]);
+    requirement: { op: "compare", variable: "modified_rankin_scale", comparator: "gt", value: 3 } };
+  const answer = await write(seam, [{ registryId: "NCT05000001", subjectKeys: ["P-0192"], criteria: [AGE, AF, MRS] }]);
   assert.deepEqual(answer.issues, []);
-  const stored = seam.written[0].criteria;
-  assert.deepEqual(stored.map((criterion) => criterion.requirement), [
-    AGE.requirement,
-    { op: "not", operand: AF.excludeWhen },
-    { op: "not", operand: MRS.excludeWhen },
-    BRAIN.requirement,
-  ], "excludeWhen becomes not(...); a requirement written as one is kept as written");
-  assert.ok(stored.every((criterion) => !("excludeWhen" in criterion)), "the stored criterion has one shape: a requirement");
+  assert.deepEqual(seam.written[0].criteria.map((criterion) => criterion.requirement), [
+    AGE.requirement, { op: "not", operand: AF.requirement }, { op: "not", operand: MRS.requirement },
+  ], "an inclusion is stored as written, an exclusion as the negation of what was written");
 });
 
-test("excludeWhen is only an exclusion's, and never beside a requirement", async () => {
-  const seam = seams();
-  const answer = await write(seam, [{ registryId: "NCT05000001", subjectKeys: ["P-0192"], criteria: [
-    { ...AGE, requirement: undefined, excludeWhen: AGE.requirement },
-    { ...BRAIN, excludeWhen: { op: "present", variable: "active_brain_metastasis" } },
-    { kind: "exclusion", criterionType: "other", sourceText: "x", excludeWhen: { op: "sometimes", variable: "x" } },
-  ] }]);
-  assert.deepEqual(answer.issues.map((found) => found.field), ["criteria[0].excludeWhen", "criteria[1].excludeWhen", "criteria[2].excludeWhen"]);
-  assert.equal(seam.written.length, 0);
+test("a run reads an exclusion back as it wrote it, and a criterion stored before reads as its negation", () => {
+  const stated = { op: "present", variable: "atrial_fibrillation" };
+  assert.deepEqual(statedRequirement({ kind: "exclusion", requirement: storedExclusion(stated) }), stated, "written as stated, read as stated");
+  const legacy = { op: "absent", variable: "active_brain_metastasis" };
+  assert.deepEqual(statedRequirement({ kind: "exclusion", requirement: legacy }), { op: "not", operand: legacy },
+    "one stored as a requirement that keeps the patient in reads as the condition that excludes");
+  assert.deepEqual(statedRequirement({ kind: "inclusion", requirement: stated }), stated, "an inclusion reads as it is stored");
+  // What a run reads, written back, means what it meant: the evaluator's negation is three-valued, so not(not(x)) is x.
+  const rewritten = storedExclusion(statedRequirement({ kind: "exclusion", requirement: legacy }));
+  assert.deepEqual(rewritten, { op: "not", operand: { op: "not", operand: legacy } });
 });

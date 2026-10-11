@@ -153,7 +153,8 @@ function runWrites(study, items) {
 
 const AGE = { kind: "inclusion", criterionType: "demographic", sourceText: "Age >= 18 years", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" } };
 const ECOG = { kind: "inclusion", criterionType: "performance_status", sourceText: "ECOG performance status 0 or 1", requirement: { op: "compare", variable: "ecog", comparator: "lte", value: 1 } };
-const BRAIN = { kind: "exclusion", criterionType: "comorbidity", sourceText: "Active brain metastases", requirement: { op: "absent", variable: "active_brain_metastasis" },
+// Written as the registry states it -- the condition that excludes; the platform stores the negation (2026-10-11).
+const BRAIN = { kind: "exclusion", criterionType: "comorbidity", sourceText: "Active brain metastases", requirement: { op: "present", variable: "active_brain_metastasis" },
   evidenceNeeded: ["申请近 4 周头颅 MRI"] };
 const EGFR = { kind: "inclusion", criterionType: "biomarker", sourceText: "Documented EGFR exon 19 deletion or L858R mutation", requirement: { op: "present", variable: "egfr_mutation" },
   evidenceNeeded: ["EGFR 突变检测报告"] };

@@ -799,6 +799,27 @@ function evaluateLanguage(node, context) {
   });
 }
 
+/**
+ * An exclusion as stored: the negation of the condition the run wrote (`vcrGateway.mjs` `checkedCriterion`). `not(not(x))` is not folded: the
+ * evaluator's three-valued negation makes it `x` again, and a stored node stays the node that was written plus one negation.
+ * @param {Record<string, any>} stated @returns {Record<string, any>}
+ */
+export function storedExclusion(stated) {
+  return { op: "not", operand: stated };
+}
+
+/**
+ * An exclusion as a run reads it back: the condition that excludes. A criterion stored by `storedExclusion` loses its one negation;
+ * one stored before exclusions were written as stated (a requirement that keeps the patient in) is shown negated. Either way the
+ * run can write back what it read without changing what the criterion means.
+ * @param {{ kind?: unknown, requirement?: any }} criterion @returns {any}
+ */
+export function statedRequirement(criterion) {
+  const requirement = criterion?.requirement;
+  if (criterion?.kind !== "exclusion" || !requirement || typeof requirement !== "object") return requirement;
+  return requirement.op === "not" && requirement.operand && typeof requirement.operand === "object" ? requirement.operand : { op: "not", operand: requirement };
+}
+
 /** The keys of the language nodes of a requirement: how the model's answers are found. @param {any} node @returns {string[]} */
 export function languageKeysOf(node, fallback = "") {
   if (!node || typeof node !== "object") return [];

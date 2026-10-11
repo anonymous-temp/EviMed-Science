@@ -134,9 +134,9 @@ test("criteria are validated against the domain's grammar per criterion, and the
       // The first build's teaching: a `{ field, op: "<=", value }` node, which the evaluator answers 未知 for every patient.
       { kind: "inclusion", criterionType: "performance_status", sourceText: "ECOG 0–1", requirement: { field: "ecog", op: "<=", value: 1 } },
       { kind: "exclusion", criterionType: "time_window", sourceText: "近 6 个月内发生过心肌梗死者除外", sourceLocator: { page: 12 },
-        requirement: { op: "absent", variable: "myocardial_infarction", window: { months: 6 } } },
+        requirement: { op: "present", variable: "myocardial_infarction", window: { months: 6 } } },
       { kind: "exclusion", criterionType: "pregnancy", sourceText: "妊娠或哺乳期女性除外",
-        requirement: { op: "absent", variable: "pregnancy" }, applicability: { op: "compare", variable: "sex", comparator: "in", value: ["female"] } },
+        requirement: { op: "present", variable: "pregnancy" }, applicability: { op: "compare", variable: "sex", comparator: "in", value: ["female"] } },
       { kind: "inclusion", criterionType: "consent_capacity", sourceText: "能够理解研究内容并签署知情同意书",
         requirement: { op: "language", text: "受试者能够理解研究内容并签署知情同意书", key: "consent" } },
       // A kind that is neither inclusion nor exclusion is refused, not coerced into an inclusion.
@@ -179,11 +179,13 @@ test("criteria are validated against the domain's grammar per criterion, and the
   assert.equal(none.issues[0].code, "vcr_criterion_malformed");
 });
 
+// The exclusions below are written as the protocol states them -- the condition that excludes -- and the platform stores their
+// negation (2026-10-11, `storedExclusion`), which is what the matching tests further down evaluate.
 test("the protocol write takes the same grammar and the same one-version rule: this is the protocol the matching tests below read", options, async () => {
   const written = await write("protocol", [{ title: "EV-201 修订", criteria: [
     { kind: "inclusion", criterionType: "demographic", sourceText: "年龄 ≥ 18 岁", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18 } },
-    { kind: "exclusion", criterionType: "time_window", sourceText: "近 6 个月内发生过心肌梗死者除外", requirement: { op: "absent", variable: "myocardial_infarction", window: { months: 6 } } },
-    { kind: "exclusion", criterionType: "pregnancy", sourceText: "妊娠或哺乳期女性除外", requirement: { op: "absent", variable: "pregnancy" },
+    { kind: "exclusion", criterionType: "time_window", sourceText: "近 6 个月内发生过心肌梗死者除外", requirement: { op: "present", variable: "myocardial_infarction", window: { months: 6 } } },
+    { kind: "exclusion", criterionType: "pregnancy", sourceText: "妊娠或哺乳期女性除外", requirement: { op: "present", variable: "pregnancy" },
       applicability: { op: "compare", variable: "sex", comparator: "in", value: ["female"] } },
     { kind: "inclusion", criterionType: "consent_capacity", sourceText: "能够理解研究内容并签署知情同意书",
       requirement: { op: "language", text: "受试者能够理解研究内容并签署知情同意书", key: "consent" } },
