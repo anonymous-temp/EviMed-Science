@@ -99,7 +99,7 @@ Working conventions (from `OpenScience/AGENTS.md`): design principles **simple, 
 
 Each agent is an independent Python project with its own `requirements.txt`, `start.py` (FastAPI/uvicorn entry for the platform-facing service), and `tests/`. Several have a CLI mode (`python -m ...`) for local runs. They mostly talk to **DeepSeek** (OpenAI-compatible API, V4 Flash/Pro two-tier routing) and write artifacts under their own `output/` or `outputs/`. Read each agent's own `README.md` / `CLAUDE.md` / `AGENTS.md` before changing it — this section is the orientation only.
 
-Platform integration is the same across the service agents: an **outbound WebSocket** to the Java side (`JAVA_WS_URL`, default `wss://evidence-factory.evimed.com/ws/ws`) plus **Aliyun OSS report upload via oss2**; `孟德尔随机化/`, `论文审稿/`, `文献剂量分析/`, `科研选题/`, and `药物安全分析agent/` additionally ship an `evimed_runner.py` "fixed-argument EviMed adapter" CLI (request.json → result.json). In the SaaS deployment they are fronted by `OpenScience/deploy/specialist-adapter/`.
+Platform integration is the same across the service agents: an **outbound WebSocket** to the Java side (`JAVA_WS_URL`, no default since 2026-10-11: the standalone service mode dials nothing until it is configured) plus **Aliyun OSS report upload via oss2** (bucket and public URL from the environment only); `孟德尔随机化/`, `论文审稿/`, `文献剂量分析/`, `科研选题/`, and `药物安全分析agent/` additionally ship an `evimed_runner.py` "fixed-argument EviMed adapter" CLI (request.json → result.json). In the SaaS deployment they are fronted by `OpenScience/deploy/specialist-adapter/`.
 
 | Dir | Purpose | Entry | Default port | Docs |
 |---|---|---|---|---|
