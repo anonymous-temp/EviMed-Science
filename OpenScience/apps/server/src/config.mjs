@@ -2842,6 +2842,8 @@ export function loadConfig(overrides = {}) {
     evolutionMaxPaperScoutsPerDay: Number(overrides.evolutionMaxPaperScoutsPerDay ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY ?? 2),
     evolutionScoutBudgetShare: Number(overrides.evolutionScoutBudgetShare ?? process.env.OPEN_SCIENCE_EVOLUTION_SCOUT_BUDGET_SHARE ?? 0.2),
     evolutionModuleLoopBudgetShare: Number(overrides.evolutionModuleLoopBudgetShare ?? process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LOOP_BUDGET_SHARE ?? 0.5),
+    evolutionRecordRetentionDays: Number(overrides.evolutionRecordRetentionDays ?? process.env.OPEN_SCIENCE_EVOLUTION_RECORD_RETENTION_DAYS ?? 14),
+    evolutionRetentionBatchRows: Number(overrides.evolutionRetentionBatchRows ?? process.env.OPEN_SCIENCE_EVOLUTION_RETENTION_BATCH_ROWS ?? 5000),
     evolutionDecisionTimeoutMs: Number(overrides.evolutionDecisionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS ?? 86_400_000),
     evolutionPollMs: Number(overrides.evolutionPollMs ?? process.env.OPEN_SCIENCE_EVOLUTION_POLL_MS ?? 15_000),
     evolutionLeaseMs: Number(overrides.evolutionLeaseMs ?? process.env.OPEN_SCIENCE_EVOLUTION_LEASE_MS ?? 120_000),

@@ -23,6 +23,7 @@ import { HttpError } from "./security.mjs";
 import { EVOLUTION_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { createEvolutionToolAdmission } from "./evolutionToolAdmission.mjs";
 import { createEvolutionService, evolutionKey, evolutionToolArchiveId } from "./evolutionService.mjs";
+import { createEvolutionRetention } from "./evolutionRetention.mjs";
 import { createEvolutionDecisions, evolutionDecisionReviewProof, evolutionExecutableOperation, evolutionRetirementNotice, evolutionValidationWait } from "./evolutionDecisions.mjs";
 import { createEvolutionMaintenance, evolutionRetrievalScore } from "./evolutionMaintenance.mjs";
 import { createEvolutionWorker } from "./evolutionWorker.mjs";
@@ -295,6 +296,9 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   // The sources the platform asks the knowledge-source plugin for (`evolutionSourceRequests.mjs`): filed from what the scout finds, kept until the plugin has them.
   const frontierSources = config.frontierEnabled ? createFrontierEvolutionDiscovery({ database }) : null;
   const sourceRequests = createEvolutionSourceRequests({ service, fetchImpl, lapseDays: config.evolutionSourceRequestLapseDays, sources: () => frontierSources?.sources() ?? Promise.resolve([]) });
+  // The daily fold of the high-frequency records (`evolutionRetention.mjs`); a pass that fails is counted there and never fails the housekeeping.
+  const retention = createEvolutionRetention({ service, config });
+  service.callbacks.compactRecords = () => retention.compact();
   service.callbacks.reconcileSourceRequests = async () => { try { await sourceRequests.reconcile(); } catch { /* looked at again in six hours */ } };
   const scout = createEvolutionScout({ config, service, runs, registry, decisions, fetchImpl, judgeService, sourceRequests,
     normalizeFeatures: input => model("Normalize only missing structural fields from this preserved scout result and the supplied actual inventory. Return JSON {literatureQuery:string,implementationMissing:boolean,reason:string}. literatureQuery must preserve the named research method, not its example findings; omit the date window, which code applies. implementationMissing is true only when the described executable calculation is absent from the actual inventory; a prose mention is not an implementation. Do not infer literature counts, invent sources, change the method, or declare correctness. This is metadata extraction, not a new search or validation.", input),
@@ -621,7 +625,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   // What the candidate executor has done and refused, read from the runtime controller where it acts (`evolutionOpsMetrics.mjs`).
   const executorCounters = async () => (await controller.evolutionAdmissionAvailable())?.executor ?? null;
   // The counters of the limits that act inside the loops, scraped through `evolutionOpsMetrics.mjs`.
-  const limitCounters = () => ({ signals: loops.signals.counters, engineReviews: engineReviews.counters, policy: loops.policy.counters, selfResearch: loops.selfResearch.counters, sourceRequests: sourceRequests.counters, resourceWaits: decisions.counters,
+  const limitCounters = () => ({ signals: loops.signals.counters, engineReviews: engineReviews.counters, policy: loops.policy.counters, selfResearch: loops.selfResearch.counters, sourceRequests: sourceRequests.counters, resourceWaits: decisions.counters, retention: retention.counters,
     heavyWindow: { open: worker.heavyWindowOpen(), started: worker.counters.heavyStarted } });
   return { service, loops, engineBuilder, engineReviews, model, budgeted, runtimeSession, limitCounters, observeVerifiedRun: feedback.observeVerifiedRun, decisions, maintenance, worker, integration, routes, gateway, toolAdmission, executorCounters, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
     observeFeedback: feedback.observeFeedback };

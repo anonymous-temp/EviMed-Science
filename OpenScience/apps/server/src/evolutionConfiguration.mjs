@@ -25,6 +25,12 @@ export const EVOLUTION_CONFIG_SCHEMA=Object.freeze({
   // platform (scouts, builds, evaluations, audits, self-research) cannot borrow the part of it the loops have not yet taken; the loops themselves may take
   // more than the share when the day has money left. Together with the scout share it must leave room for the rest: the two may not exceed 1.
   evolutionModuleLoopBudgetShare:{env:'OPEN_SCIENCE_EVOLUTION_MODULE_LOOP_BUDGET_SHARE',default:0.5,min:0,max:1},
+  // How long the two high-frequency records of the loops are kept before they are folded into a count of their day (`evolutionRetention.mjs`): a module observation
+  // that counted no failure, and a processed event of the platform's own routine types. 14 days is past the feed's 3-day look-back that can emit an event again and
+  // twice the weekly rhythm of the loops that read them; a week is the least, a year the most. Observations that counted a failure are never folded.
+  evolutionRecordRetentionDays:{env:'OPEN_SCIENCE_EVOLUTION_RECORD_RETENTION_DAYS',default:14,min:7,max:365,integer:true},
+  // The rows of each type one daily pass folds, oldest first: a bound on the pass (one transaction), not on what is kept. 5000 is two days of the live write rate.
+  evolutionRetentionBatchRows:{env:'OPEN_SCIENCE_EVOLUTION_RETENTION_BATCH_ROWS',default:5000,min:100,max:50000,integer:true},
   evolutionDecisionTimeoutMs:{env:'OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS',default:86400000,min:1000,max:7*86400000,integer:true},
   evolutionPollMs:{env:'OPEN_SCIENCE_EVOLUTION_POLL_MS',default:15000,min:100,max:3600000,integer:true},
   evolutionLeaseMs:{env:'OPEN_SCIENCE_EVOLUTION_LEASE_MS',default:120000,min:1000,max:86400000,integer:true},

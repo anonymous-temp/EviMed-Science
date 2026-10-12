@@ -112,6 +112,12 @@ export function evolutionOpsMetricFamilies(composed, snapshot, refusal = null) {
     series: [...Object.entries(limits.resourceWaits.resourceWaits ?? {}).map(([category, value]) => ({ value: Number(value) || 0, labels: { category } })),
       { value: Number(limits.resourceWaits.resourceWaitFailed) || 0, labels: { category: "unrecorded" } }],
   });
+  if (limits.retention) families.push({
+    name: "open_science_evolution_records_folded_total", type: "counter",
+    help: "Records of the loops folded into a count of their day and deleted, since process start: module observations that counted no failure, and processed routine events (OPEN_SCIENCE_EVOLUTION_RECORD_RETENTION_DAYS); passes that failed leave every row where it was.",
+    series: [["observationsFolded", "module_observation"], ["eventsFolded", "event"], ["failures", "pass_failed"]]
+      .map(([key, record]) => ({ value: Number(limits.retention[key]) || 0, labels: { record } })),
+  });
   if (limits.heavyWindow) families.push({
     name: "open_science_evolution_heavy_window_open", type: "gauge", series: [{ value: limits.heavyWindow.open ? 1 : 0 }],
     help: "Whether the heavy, model-intensive evolution jobs may be claimed now: 1 inside OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW (22:00-07:00 China time by default) or when there is no window, 0 outside it.",

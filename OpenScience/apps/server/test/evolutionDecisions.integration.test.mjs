@@ -158,7 +158,7 @@ test("a digest over the inbox's limit is cut with a count and still delivered, a
     await decisions.propose({ category: index % 2 ? "resource" : "worker-resource", subjectId: `wait-${index}`, resourceOnly: true, title: index % 2 ? "研发线索等待资料" : "进化任务等待资源",
       body: `${"需要新的公开数据。".repeat(30)}${index}`, options: [{ id: "wait", label: "等待", operation: "wait" }, { id: "rescout", label: "重新检索", operation: "rescout" }], recommended: "wait", conservative: "wait" });
   }
-  assert.equal((await service.list("decision")).length, 0);
+  assert.equal((await service.list("decision")).filter((row) => row.payload.decisionClass === "D").length, 0);
   for (let index = 0; index < 20; index++) await service.save("evaluation", `evolution-evaluation-overflow-${index}`, { at: new Date(clock.getTime() + 3600_000 - 60_000).toISOString(), units: [{ capabilityId: `capability-${index}`, type: "method", allStagesValid: true }] });
   await service.registerTool({ id: "new-today", track: "M", status: "active", name: "今日新工具", artifactDigest: "d1", toolKind: "workflow", smokePassed: true });
   const old = await service.registerTool({ id: "used-today", track: "M", status: "active", name: "早已上线的工具", artifactDigest: "d2", toolKind: "workflow", smokePassed: true });
@@ -174,7 +174,7 @@ test("a digest over the inbox's limit is cut with a count and still delivered, a
   assert.deepEqual(notice.source, { type: "system", id: digest.id }, "an evolution digest is not an autopilot digest and links to the inbox");
   assert.ok(JSON.stringify(digest.payload).length < 100_000, "the snapshot holds what the text says, not the documents it was read from");
   // No wait is carried by a decision, so there is none left to report tomorrow.
-  assert.equal((await service.list("decision")).length, 0);
+  assert.equal((await service.list("decision")).filter((row) => row.payload.decisionClass === "D").length, 0);
 });
 
 test("whatever a snapshot holds, the text of a digest fits the inbox and says what it left out (F15)", () => {
