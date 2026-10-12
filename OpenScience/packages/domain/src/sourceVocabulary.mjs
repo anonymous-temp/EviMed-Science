@@ -44,9 +44,11 @@ export const SOURCE_KINDS = Object.freeze([
   { id: 'page', label: '网页' },
   { id: 'note', label: '笔记' },
   { id: 'image', label: '图片' },
+  // The pages the platform compiles out of the project's documents (`knowledgePage.mjs`); the filter that lists them.
+  { id: 'wiki', label: '知识页' },
 ].map((kind) => Object.freeze(kind)))
 
-/** @typedef {'literature' | 'table' | 'document' | 'page' | 'note' | 'image'} SourceKind */
+/** @typedef {'literature' | 'table' | 'document' | 'page' | 'note' | 'image' | 'wiki'} SourceKind */
 /** @typedef {'paper' | 'procedure' | 'notes' | 'general'} SourceSchemaId */
 
 /**
@@ -89,10 +91,18 @@ export const SOURCE_DOC_TYPES = Object.freeze([
   { id: 'certificate-scan', label: '证书或扫描件', short: '扫描件', kind: 'image', schema: 'general', deep: false },
   { id: 'image-figure', label: '图片或图表', short: '图片', kind: 'image', schema: 'general', deep: false },
   { id: 'other', label: '其他', short: '文档', kind: 'document', schema: 'general', deep: false },
+  // Where a page lives decides this one, as for a note: never the judge and never an override (`SOURCE_CHOICE_TYPES`).
+  { id: 'wiki-page', label: '知识页', short: '知识页', kind: 'wiki', schema: 'general', deep: false },
 ].map((type) => Object.freeze(type)))
 
-/** The ids, in the table's order: what the judge chooses among and what an override may name. */
+/** The ids, in the table's order. */
 export const SOURCE_TYPES = Object.freeze(SOURCE_DOC_TYPES.map((type) => type.id))
+
+/**
+ * What the judge chooses among and what an override may name: every type but the one a document is given by being a
+ * knowledge page, which is decided by the folder it is in.
+ */
+export const SOURCE_CHOICE_TYPES = Object.freeze(SOURCE_TYPES.filter((id) => id !== 'wiki-page'))
 
 /** @type {ReadonlyMap<string, (typeof SOURCE_DOC_TYPES)[number]>} */
 const BY_ID = new Map(SOURCE_DOC_TYPES.map((type) => [type.id, type]))
@@ -152,6 +162,8 @@ export const SOURCE_FOLDERS = Object.freeze({
   frontier: 'knowledge-base/frontier',
   evidence: 'knowledge-base/evidence',
   openAccess: 'knowledge-base/open-access',
+  /** The pages compiled from the project's documents (`knowledgePage.mjs`), one Markdown file each. */
+  wiki: 'knowledge-base/wiki',
   /** The original bytes of a page a link read, kept beside its text snapshot and never a source of its own. */
   snapshots: 'knowledge-base/.evimed-snapshots',
 })
@@ -164,9 +176,10 @@ export const SOURCE_ORIGINS = Object.freeze([
   { id: 'note', label: '笔记' },
   { id: 'frontier', label: '前沿动态' },
   { id: 'conversation', label: '对话产出' },
+  { id: 'wiki', label: '知识页' },
 ].map((origin) => Object.freeze(origin)))
 
-/** @typedef {'upload' | 'drive' | 'link' | 'note' | 'frontier' | 'conversation'} SourceOrigin */
+/** @typedef {'upload' | 'drive' | 'link' | 'note' | 'frontier' | 'conversation' | 'wiki'} SourceOrigin */
 
 /** @param {unknown} origin */
 export function sourceOriginLabel(origin) {
@@ -188,6 +201,7 @@ export function sourceOriginOf({ connectorType, path }) {
   if (inside(SOURCE_FOLDERS.notes)) return 'note'
   if (inside(SOURCE_FOLDERS.frontier) || inside(SOURCE_FOLDERS.evidence)) return 'frontier'
   if (inside(SOURCE_FOLDERS.chat) || inside(SOURCE_FOLDERS.openAccess)) return 'conversation'
+  if (inside(SOURCE_FOLDERS.wiki)) return 'wiki'
   return 'upload'
 }
 
@@ -214,6 +228,9 @@ export function sourceFirstPassType(file) {
   const origin = sourceOriginOf({ path: file })
   const format = sourceFileFormat(file)
   if (origin === 'note') return { docType: 'note-memo', depth: 'structured', reason: 'A note written in the knowledge base.' }
+  // A page compiled from other documents is read for search and nothing else: understanding it would derive a second
+  // set of claims from claims that already quote their documents.
+  if (origin === 'wiki') return { docType: 'wiki-page', depth: 'index_only', reason: 'A page compiled from the project\'s documents.' }
   // A link's own text snapshot is a page; a PDF it kept is read as the document it is.
   if (origin === 'link' && ['md', 'txt', 'htm', 'html'].includes(format)) return { docType: 'webpage', depth: 'structured', reason: 'A web page saved as a snapshot.' }
   if (IMAGE_FORMATS.includes(format)) return { docType: 'image-figure', depth: 'index_only', reason: 'The image is indexed before optional visual extraction.' }

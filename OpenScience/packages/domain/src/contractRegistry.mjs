@@ -29,6 +29,7 @@ import { validateSourceUnderstanding, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTA
 import { SKILL_AUTHORING_LIMITS } from './constants.mjs'
 import { METHOD_DISPLAY_LIMITS, METHOD_OPERATIONS, cleanMethodDisplay, isMethodDigest, parseSkillFrontmatter, validateMethodSkill } from './methodSkill.mjs'
 import { METHOD_RELATION_TYPES } from './methodGraph.mjs'
+import { KNOWLEDGE_COMPILE_INPUT_FILE, KNOWLEDGE_WIKI_PATCH_FILE, knowledgePatchIssues } from './knowledgePage.mjs'
 
 const NATIVE_DATA_CONTRACTS = new Set(['statistical-analysis-package', 'dataset-scoping-package', 'gene-expression-analysis-package'])
 
@@ -98,6 +99,9 @@ export const GATE_CHECK_IDS = Object.freeze([
   'method-candidate-schema',
   'method-relations-schema',
   'method-skill-rules',
+  // The knowledge-page patch (`knowledgePage.mjs`): one that cannot be read is required; a quotation the run's input does not hold is advice.
+  'knowledge-wiki-schema',
+  'knowledge-wiki-quote',
   // appraisalContract.mjs — eleven, every one advisory.
   'appraisal-json-parse',
   'appraisal-document-shape',
@@ -873,6 +877,7 @@ const VALIDATORS = Object.freeze({
   'evolution-research-card': (input) => validateEvolutionPackage(input, 'research-card.json', false),
   'evolution-tool-candidate': (input) => validateEvolutionPackage(input, 'tool-candidate.json', true),
   'method-relations': validateMethodRelationsPackage,
+  'knowledge-wiki-patch': validateKnowledgeWikiPatchPackage,
 })
 
 /** Every kind must have a validator; the test that walks CONTRACT_KINDS holds that line. */
@@ -1398,6 +1403,34 @@ function validateMethodCandidatePackage(input) {
       ? /** @type {Record<string, string>} */ (candidate.files)
       : undefined
     issues.push(...methodSkillIssues(skill, METHOD_SKILL_FILE, attached ? { files: attached } : {}))
+  }
+  const required = issues.filter((entry) => entry.severity === 'required')
+  return { ok: !required.length, contractKind: input.contractKind, issues, metrics: {}, errorCode: required.length ? 'deliverable_rejected' : null }
+}
+
+/**
+ * `knowledge-wiki-patch`: the pages a compile run wrote, as structured claims.
+ *
+ * The structure is graded here, by the same function the control plane and the offline harness call
+ * (`knowledgePatchIssues`); the quotations are checked against the input the run carries back, as advice — the control
+ * plane checks them again against the whole documents and holds what does not stand, so a failing sentence is never a
+ * reason to withhold the pages that do (2026-09-17 ruling).
+ * @param {GateInput} input @returns {GateVerdict}
+ */
+function validateKnowledgeWikiPatchPackage(input) {
+  /** @type {GateIssue[]} */
+  const issues = requiredOutputIssues(input)
+  const patch = json(input, KNOWLEDGE_WIKI_PATCH_FILE)
+  if (patch === undefined) {
+    issues.push(issue('deliverable_rejected', `${KNOWLEDGE_WIKI_PATCH_FILE} is not valid JSON.`, { path: KNOWLEDGE_WIKI_PATCH_FILE, check: 'knowledge-wiki-schema' }))
+  } else if (patch === null) {
+    issues.push(issue('required_output_missing', `${KNOWLEDGE_WIKI_PATCH_FILE} is missing.`, { path: KNOWLEDGE_WIKI_PATCH_FILE, check: 'required-output' }))
+  } else {
+    // A copy of the input that cannot be read leaves the structure to be graded without the documents; the control plane holds its own.
+    const given = json(input, KNOWLEDGE_COMPILE_INPUT_FILE)
+    for (const found of knowledgePatchIssues(patch, given ?? undefined)) {
+      issues.push(issue('deliverable_rejected', `${KNOWLEDGE_WIKI_PATCH_FILE}: ${found.message}`, { path: KNOWLEDGE_WIKI_PATCH_FILE, check: found.check, severity: found.severity }))
+    }
   }
   const required = issues.filter((entry) => entry.severity === 'required')
   return { ok: !required.length, contractKind: input.contractKind, issues, metrics: {}, errorCode: required.length ? 'deliverable_rejected' : null }

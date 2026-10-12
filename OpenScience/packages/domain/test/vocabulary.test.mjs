@@ -939,6 +939,7 @@ test("every check id a contract module raises is registered on GATE_CHECK_IDS", 
     "sourceUnderstanding.mjs",
     "methodSkill.mjs",
     "methodGraph.mjs",
+    "knowledgePage.mjs",
   ];
   const axis = new Set(GATE_CHECK_IDS);
   assert.equal(axis.size, GATE_CHECK_IDS.length, "a duplicate id silently merges two checks into one bucket");

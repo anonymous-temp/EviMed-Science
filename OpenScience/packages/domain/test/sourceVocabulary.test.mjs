@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   DEFAULT_DEPTH_BY_TYPE,
   EXPECTED_OUTPUT_FLOORS,
+  SOURCE_CHOICE_TYPES,
   SOURCE_DOC_TYPES,
   SOURCE_KINDS,
   SOURCE_ORIGINS,
@@ -33,8 +34,8 @@ test("the knowledge base has one list of types: every row is named, counted unde
   for (const wanted of ["policy-document", "drug-label", "administrative-record", "webpage", "code", "document", "dataset"]) {
     assert.ok(SOURCE_TYPES.includes(wanted), `${wanted} is in the list next to the research types`);
   }
-  // The six chips a researcher sees, in the order the page shows them.
-  assert.deepEqual(SOURCE_KINDS.map((kind) => kind.label), ["文献与指南", "数据表", "文档", "网页", "笔记", "图片"]);
+  // The chips a researcher sees, in the order the page shows them; the last one lists the pages the platform compiled.
+  assert.deepEqual(SOURCE_KINDS.map((kind) => kind.label), ["文献与指南", "数据表", "文档", "网页", "笔记", "图片", "知识页"]);
 });
 
 test("the analysis layer and the control plane read the same list", () => {
@@ -87,6 +88,18 @@ test("the first pass knows the format and the platform's own folders, and no fil
   }
 });
 
+test("a knowledge page is a page because of its folder: counted under its own chip, read for search only, never chosen", () => {
+  assert.equal(sourceOriginOf({ path: "knowledge-base/wiki/aspirin.md" }), "wiki");
+  assert.equal(sourceOriginOf({ path: "knowledge-base/wiki/index.md" }), "wiki");
+  assert.equal(sourceOriginOf({ path: "knowledge-base/wikipedia/aspirin.md" }), "upload", "a folder that only starts with the same letters is not the wiki folder");
+  const page = sourceFirstPassType("knowledge-base/wiki/aspirin.md");
+  assert.deepEqual([page.docType, page.depth], ["wiki-page", "index_only"]);
+  assert.equal(sourceKindOf("wiki-page"), "wiki");
+  assert.ok(SOURCE_TYPES.includes("wiki-page") && !SOURCE_CHOICE_TYPES.includes("wiki-page"), "the judge and an override choose among the other types");
+  assert.deepEqual(SOURCE_CHOICE_TYPES, SOURCE_TYPES.filter((type) => type !== "wiki-page"));
+  assert.ok(SOURCE_ORIGINS.some((origin) => origin.id === "wiki" && origin.label === "知识页"));
+});
+
 test("a document's chip follows its type, and a type nobody knows is a document", () => {
   assert.equal(sourceKindOf("published-paper"), "literature");
   assert.equal(sourceKindOf("review-guideline"), "literature");
@@ -101,7 +114,7 @@ test("a document's chip follows its type, and a type nobody knows is a document"
 });
 
 test("where a source came from is read off where it lives", () => {
-  assert.deepEqual(SOURCE_ORIGINS.map((origin) => origin.label), ["上传", "网盘", "链接", "笔记", "前沿动态", "对话产出"]);
+  assert.deepEqual(SOURCE_ORIGINS.map((origin) => origin.label), ["上传", "网盘", "链接", "笔记", "前沿动态", "对话产出", "知识页"]);
   assert.equal(sourceOriginOf({ connectorType: "upload", path: "knowledge-base/a.pdf" }), "upload");
   assert.equal(sourceOriginOf({ connectorType: "upload", path: "knowledge-base/a/b.pdf" }), "upload");
   assert.equal(sourceOriginOf({ connectorType: "openlist", path: "openlist/docs/a.pdf" }), "drive");

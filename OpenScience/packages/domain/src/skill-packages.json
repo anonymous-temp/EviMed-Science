@@ -693,6 +693,26 @@
     },
     {
       "schemaVersion": 1,
+      "id": "capability/knowledge-compile",
+      "name": "knowledge-compile",
+      "origin": "capability",
+      "version": "1.0.0",
+      "source": {"kind":"release"},
+      "digest": "sha256:cde09b3c45cd716793af0920c037d73594281fdaedb109a0cdf72c06f1618eb0",
+      "digestAlgorithm": "release-directory-v1",
+      "references": [{"path":"capability.yaml","sha256":"72906b37bcdccf0a3e0db301ea93984939f833e79301b8f48fad70e6724bae17"}],
+      "operations": [
+        {
+          "name": "knowledge-wiki-patch",
+          "kind": "deliverable",
+          "summary": "Compile one project's documents into linked knowledge pages in which every sentence quotes the document it comes from, as a patch of created, updated and retired pages.",
+          "accepts": ["frozenSources","existingPages"],
+          "produces": ["wiki-patch.json","knowledge-compile-input.json"]
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "id": "capability/manuscript-support",
       "name": "manuscript-support",
       "origin": "capability",

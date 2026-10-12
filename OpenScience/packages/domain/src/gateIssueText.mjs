@@ -124,6 +124,8 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'source-understanding-schema': '文献解读结果格式有误',
   'method-candidate-schema': '方法候选格式有误',
   'method-relations-schema': '方法关系格式有误',
+  'knowledge-wiki-schema': '知识页补丁格式有误',
+  'knowledge-wiki-quote': '知识页的引文与原文不符',
   'method-skill-rules': '方法技能文件不合规',
   'appraisal-json-parse': '评价表不是有效的 JSON',
   'appraisal-document-shape': '评价表结构不完整',

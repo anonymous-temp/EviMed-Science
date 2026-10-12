@@ -42,6 +42,8 @@ const JSON_SHAPED = new Set([
   "evolution-tool-candidate",
   "method-candidate",
   "method-relations",
+  // The platform's knowledge-page compile: structured claims that quote documents, not the literature.
+  "knowledge-wiki-patch",
 ]);
 
 /** Kinds that measure something else entirely, and say so in their own metrics. */
