@@ -68,7 +68,7 @@ test("the platform's own Chinese words and identifier shapes are a closed list, 
   }
   // The row measured on production, and its two halves.
   assert.deepEqual(runBookkeepingIn("ledger 的 referenceNumber 字段是重建规范编号顺序的依据"), ["referenceNumber"]);
-  assert.deepEqual(runBookkeepingIn("门禁要求台账里每条交付物都有出处"), ["门禁", "台账", "交付物"]);
+  assert.deepEqual(runBookkeepingIn("门禁要求台账里每条交付物都有出处"), ["门禁", "交付物"]);
   assert.deepEqual(runBookkeepingIn("覆盖率写在 coverage-ledger.md 里"), ["coverage-ledger.md"]);
   // Research prose is untouched, including the identifiers research really uses.
   for (const clean of [
@@ -76,6 +76,11 @@ test("the platform's own Chinese words and identifier shapes are a closed list, 
     "队列来自 NCT00403767，随访 24 周",
     "报告先给 GRADE 分级再给效应量",
     "PMID 12345678 的主要终点是全因死亡",
+    // The software and databases research is done with, and the clinical words the platform's jargon once shared.
+    "检索一律用 PubMed 和 Embase，补 ClinicalTrials.gov，文献用 EndNote 管理，Meta 分析用 RevMan 或 GraphPad",
+    "诊断试验报告召回率与特异度",
+    "急诊预检分诊与乳房自检的依从性",
+    "药品不良事件台账按季度汇总",
   ]) assert.deepEqual(runBookkeepingIn(clean), [], clean);
 });
 

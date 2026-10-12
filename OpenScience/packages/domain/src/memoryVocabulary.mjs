@@ -220,10 +220,12 @@ export function platformIdentifiersIn(text) {
  *
  * @type {readonly { term: string, saidIn: string }[]}
  */
+// Only words a researcher does not use for their own work. 召回 (召回率), 预检 (预检分诊), 自检 (乳房自检) and 台账 (药品台账,
+// 不良事件台账) were on this list and are ordinary clinical and research words: a memory that said them was refused as the run's
+// bookkeeping (2026-10-12 replay, 3 of 3).
 export const PLATFORM_JARGON_ZH = Object.freeze([
   { term: '控制面', saidIn: 'the control plane, in our own architecture prose' },
   { term: '门禁', saidIn: 'the delivery gate (`gateIssueText.mjs`)' },
-  { term: '台账', saidIn: 'the run ledger and the coverage ledger' },
   { term: '交付物', saidIn: 'a deliverable (`contractKinds.mjs`, the plan card)' },
   { term: '运行账本', saidIn: 'the run ledger' },
   { term: '运行环境', saidIn: 'a project runtime (`runtimeManager.mjs`)' },
@@ -232,9 +234,6 @@ export const PLATFORM_JARGON_ZH = Object.freeze([
   { term: '内核', saidIn: 'the DSH kernel' },
   { term: '子任务', saidIn: 'a delegated child run (`runtimeUiToolviews.mjs`)' },
   { term: '回执', saidIn: 'the run receipt (`receipt.mjs`)' },
-  { term: '预检', saidIn: "a capability's `preflight.py`" },
-  { term: '自检', saidIn: "a package's self-declared quality checks" },
-  { term: '召回', saidIn: 'memory recall (`memoryRecall.mjs`)' },
 ])
 
 const JARGON_PATTERN = new RegExp(
@@ -250,13 +249,18 @@ const JARGON_PATTERN = new RegExp(
  * writes, or a dotted/slashed path. A format check, like a DOI or a PMID —
  * decidable from the token itself, with no opinion about what it means.
  *
+ * camelCase only, never PascalCase: that is how research software and
+ * databases are named — PubMed, EndNote, RevMan, GraphPad, ClinicalTrials —
+ * and a researcher's 「检索一律用 PubMed 和 Embase，文献用 EndNote 管理」 was
+ * refused as bookkeeping until 2026-10-12.
+ *
  * `[A-Za-z]` only: a Chinese sentence quoting one still trips, which is the
  * point — 「ledger 的 referenceNumber 字段是…」 is the run's bookkeeping in the
  * researcher's language.
  */
 const CODE_SHAPE_PATTERN = new RegExp(
-  // camelCase or PascalCase with a lower→upper hump, at least two segments
-  '(?<![A-Za-z0-9_-])[A-Za-z][a-z0-9]+(?:[A-Z][a-z0-9]+)+(?![A-Za-z0-9_-])'
+  // camelCase: a lower-case start, then a lower→upper hump, at least two segments
+  '(?<![A-Za-z0-9_-])[a-z][a-z0-9]+(?:[A-Z][a-z0-9]+)+(?![A-Za-z0-9_-])'
   // a file name with an extension a run writes
   + '|(?<![A-Za-z0-9_-])[A-Za-z0-9][A-Za-z0-9._-]*\\.(?:md|json|jsonl|ya?ml|csv|tsv|py|mjs|js|ts|bib|xlsx|docx|ipynb|log|txt|sh|R)(?![A-Za-z0-9])',
   'g',
