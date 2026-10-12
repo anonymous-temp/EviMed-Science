@@ -175,8 +175,8 @@ export class MemorySubstrate {
     this.jobs = jobs;
     this.contextLimit = Math.max(0, Math.min(20, Number(config.memoryContextLimit ?? 8)));
     // The memory page's similarity floor (`search`); recall has its budget.
-    const floor = Number(config.memorySearchMinScore ?? 0.5);
-    this.searchMinScore = Number.isFinite(floor) ? Math.max(0, Math.min(1, floor)) : 0.5;
+    const floor = Number(config.memorySearchMinScore ?? 0.75);
+    this.searchMinScore = Number.isFinite(floor) ? Math.max(0, Math.min(1, floor)) : 0.75;
     this.contextMaxChars = Math.max(0, Math.min(100_000, Number(config.memoryContextMaxChars ?? 20_000)));
     // A derived index is an optimisation. When it is down, a run that would
     // have recalled eight memories should recall the eight the term matcher

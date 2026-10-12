@@ -428,14 +428,15 @@ test("a question the index finds nothing close to gets the researcher's standing
   const records = standingFixture();
   const [, near, far] = records;
   const store = fakeStore(records);
-  // A greeting: only distant neighbours, nominated by an index that was asked for a floor and ignored it.
-  const index = fakeIndex([hit(uriOf(far), 0.31), hit(uriOf(near), 0.38)]);
+  // A greeting: only distant neighbours, nominated by an index that was asked for a floor and ignored it. Scores are on
+  // OpenViking's scale from v0.4.22, (cosine + 1) / 2: these are cosines of 0.31 and 0.38.
+  const index = fakeIndex([hit(uriOf(far), 0.655), hit(uriOf(near), 0.69)]);
   const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: index });
 
   const recalled = await substrate.recall(USER, "你好", { projectId: PROJECT });
 
   assert.deepEqual(recalled.map((row) => row.id), ["record:pref"], "the preference is the profile; the project facts were nowhere near the question");
-  assert.equal(index.calls.find[0].options.scoreThreshold, 0.5, "the page's floor is asked of the server as well");
+  assert.equal(index.calls.find[0].options.scoreThreshold, 0.75, "the page's floor is asked of the server as well");
   assert.equal(store.calls.relevant, 0, "this is the index arm, not the fallback");
 });
 
@@ -663,15 +664,16 @@ test("the sweep walks accounts in turns, and one it cannot read costs the re-arm
 test("the page's search spans every project above a similarity floor, and there is none on the term matcher", async () => {
   const geo = memoryUri(USER, { scope: "project", scopeId: "geo", kind: "project_fact", recordId: "geo-fact" });
   const unrelated = memoryUri(USER, { scope: "project", scopeId: "default", kind: "follow_up", recordId: "far" });
-  const index = fakeIndex([hit(unrelated, 0.21), hit(geo, 0.83), hit(geo, 0.8)]);
+  // On OpenViking's scale from v0.4.22, (cosine + 1) / 2: cosines of 0.21, 0.83 and 0.8.
+  const index = fakeIndex([hit(unrelated, 0.605), hit(geo, 0.915), hit(geo, 0.9)]);
   const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore([]), openViking: index });
-  assert.deepEqual(await substrate.search(USER, "信尔美"), [{ recordId: "geo-fact", score: 0.83 }]);
+  assert.deepEqual(await substrate.search(USER, "信尔美"), [{ recordId: "geo-fact", score: 0.915 }]);
   const asked = index.calls.find[0].options;
-  assert.equal(asked.scoreThreshold, 0.5, "the floor is asked of the server as well");
+  assert.equal(asked.scoreThreshold, 0.75, "the floor is asked of the server as well");
   const root = `viking://user/${openVikingUserId(USER)}/memories/evimed`;
   assert.deepEqual(asked.targets, [`${root}/user`, `${root}/project`, `${root}/session`], "every project, not the one the page was opened from");
 
-  const stricter = new MemorySubstrate({ ...openVikingConfig, memorySearchMinScore: 0.9 }, { store: fakeStore([]), openViking: fakeIndex([hit(geo, 0.83)]) });
+  const stricter = new MemorySubstrate({ ...openVikingConfig, memorySearchMinScore: 0.95 }, { store: fakeStore([]), openViking: fakeIndex([hit(geo, 0.915)]) });
   assert.deepEqual(await stricter.search(USER, "信尔美"), []);
   assert.deepEqual(await new MemorySubstrate({}, { store: fakeStore([]) }).search(USER, "信尔美"), []);
   assert.deepEqual(await substrate.search(USER, "   "), []);

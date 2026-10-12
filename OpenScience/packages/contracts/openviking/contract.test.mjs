@@ -1,6 +1,6 @@
 // What must still be true of OpenViking before its pin may move.
 //
-// Every fixture here was recorded off a running v0.4.19, not written by hand.
+// Every fixture here was recorded off a running server of the pinned version, not written by hand.
 // That distinction has cost us before: an authored wire fixture certified a
 // shape the server never produced, and the audit that depended on it passed
 // for weeks while the real response drifted.

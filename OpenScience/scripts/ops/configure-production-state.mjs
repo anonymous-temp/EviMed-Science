@@ -134,7 +134,8 @@ async function ensureDsn(file, label, expected) {
 /**
  * The recall index's whole configuration, rendered rather than hand-written.
  *
- * Every value here was settled against a running v0.4.19 or its source, and
+ * Every value here was settled against a running v0.4.19 or its source (and
+ * re-checked unchanged on v0.4.23, 2026-10-12), and
  * each one is a default that is wrong for this deployment:
  *
  *   storage.workspace   defaults to `./data` = /app/data, outside the volume

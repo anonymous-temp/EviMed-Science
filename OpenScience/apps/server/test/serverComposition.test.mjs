@@ -660,7 +660,7 @@ test("the reranker and the index strictness reach both recall paths", async (t) 
 
   // One relevance floor for both halves of a recall: the capsule index asked for none (every nearest neighbour however far),
   // so the recall tool could never say that nothing reached the floor while a capsule held any entry (review M6).
-  assert.equal(app.memorySubstrate.searchMinScore, 0.5);
+  assert.equal(app.memorySubstrate.searchMinScore, 0.75);
   assert.equal(app.memoryIndexing.scoreThreshold, app.memorySubstrate.searchMinScore,
     "the capsule index was composed without the research recall's relevance floor");
 

@@ -1294,7 +1294,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // One switch governs both recall paths: the capsule index is the same
   // OpenViking the research recall uses, so it exists exactly when that
   // provider is selected and reachable — never as a second thing to configure.
-  // And one relevance floor (`OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE`, 0.5): the recall tool answers "nothing above the floor" only if
+  // And one relevance floor (`OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE`, 0.75): the recall tool answers "nothing above the floor" only if
   // neither half pads the answer with its nearest neighbours however far they are (review M6, 2026-10-10).
   const memoryIndexing = productDatabase && productJobs && memorySubstrate.active
     ? new MemoryIndexing({ database: productDatabase, openViking: openVikingClient, jobs: productJobs, withdrawals: memoryWithdrawals, rerank: memoryRerank,
