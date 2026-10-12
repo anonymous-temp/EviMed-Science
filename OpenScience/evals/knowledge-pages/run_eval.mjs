@@ -2,7 +2,7 @@
 // Three-arm evaluation of knowledge pages: A (kb_search), A' (kb_search + decomposition sentence), B (pages + kb_search).
 // See README.md for the design, the thresholds and how to read the results. Resumable: run the same command again.
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { answerQuestion, MAX_TOOL_CALLS, TOP_K } from './lib/answer.mjs'
 import { checkAnswerCitations } from './lib/citations.mjs'
@@ -12,7 +12,7 @@ import { THRESHOLDS } from './lib/decide.mjs'
 import { judgeAnswer } from './lib/judge.mjs'
 import { BudgetExceeded, createLlm, readKeyFile, ledgerTotal } from './lib/llm.mjs'
 import { ANSWER_SYSTEM, ARMS, DECOMPOSITION_GUIDANCE, JUDGE_SYSTEM, compileUserMessage, repairUserMessage, sha256 } from './lib/prompts.mjs'
-import { buildIndex } from './lib/retrieval.mjs'
+import { buildKnowledgeBase } from './lib/kb.mjs'
 import { appendJsonl, latestByKey, readJsonl, runKey, spentElsewhere } from './lib/store.mjs'
 import { BOOTSTRAP_ITERATIONS, BOOTSTRAP_SEED } from './lib/stats.mjs'
 import { ARM_IDS, renderTable, summarize } from './lib/summary.mjs'
@@ -22,13 +22,13 @@ const SKILL_PATH = join(ROOT, '..', '..', 'capabilities', 'knowledge-compile', '
 const DOMAIN_PAGE_PATH = join(ROOT, '..', '..', 'packages', 'domain', 'src', 'knowledgePage.mjs')
 
 /** Rough per-unit spend (CNY), used only by --dry-run to print an upper bound. */
-const ESTIMATE_CNY = { answerRun: 0.05, judge: 0.02, compile: 0.4, sanity: 0.012 }
+const ESTIMATE_CNY = { answerRun: 0.02, judge: 0.01, compile: 0.22, sanity: 0.01 }
 
 function parseArgs(argv) {
   const options = {
     runId: '2026-10-12-three-arm', stage: 'all', reps: 3, arms: [...ARM_IDS], topics: null, questionsPerTopic: null, budget: 15, totalCap: 20,
     concurrency: 4, answerModel: 'deepseek-v4-flash', judgeModel: 'deepseek-v4-pro', compileModel: 'deepseek-v4-flash', thinking: 'disabled',
-    temperature: 0.7, compileTemperature: 0.3, dryRun: false, forceConfig: false,
+    temperature: 0.7, compileTemperature: 0.3, dryRun: false, forceConfig: false, kbScope: 'topic', reuseFrom: null,
   }
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index]
@@ -50,11 +50,14 @@ function parseArgs(argv) {
       case '--temperature': options.temperature = Number(next()); break
       case '--dry-run': options.dryRun = true; break
       case '--force-config': options.forceConfig = true; break
+      case '--kb-scope': options.kbScope = next(); break
+      case '--reuse-from': options.reuseFrom = next(); break
       default: throw new Error(`unknown argument ${flag}`)
     }
   }
   if (!['all', 'sanity', 'compile', 'run', 'summarize'].includes(options.stage)) throw new Error(`unknown --stage ${options.stage}`)
   for (const arm of options.arms) if (!ARM_IDS.includes(arm)) throw new Error(`unknown arm ${arm}`)
+  if (!['topic', 'pooled'].includes(options.kbScope)) throw new Error('--kb-scope must be topic or pooled')
   if (!Number.isInteger(options.reps) || options.reps < 1) throw new Error('--reps must be a positive integer')
   return options
 }
@@ -112,6 +115,7 @@ async function main() {
     schemaVersion: 1,
     models: { answer: options.answerModel, judge: options.judgeModel, compile: options.compileModel },
     thinking: options.thinking,
+    kbScope: options.kbScope,
     temperature: { answer: options.temperature, compile: options.compileTemperature, judge: 0 },
     retrieval: { engine: 'bm25', topK: TOP_K, maxToolCalls: MAX_TOOL_CALLS },
     prompts: { answerSystemSha256: sha256(ANSWER_SYSTEM), decompositionSentence: DECOMPOSITION_GUIDANCE, judgeSystemSha256: sha256(JUDGE_SYSTEM), compileUserMessageSha256: sha256(compileUserMessage('<input>')), repairUserMessageSha256: sha256(repairUserMessage([{ severity: 'required', message: '<m>' }, { severity: 'advisory', message: '<m>' }])), knowledgeCompileSkillSha256: sha256(skillText) },
@@ -142,6 +146,7 @@ async function main() {
   const questionTotal = fullCorpus.reduce((sum, topic) => sum + topic.questions.length, 0)
   const sanityDone = () => existsSync(sanityPath) && JSON.parse(readFileSync(sanityPath, 'utf8')).n === questionTotal
   async function judgeSanity() {
+    if (!sanityDone() && options.reuseFrom && existsSync(join(RESULTS_DIR, options.reuseFrom, 'judge-sanity.json'))) cpSync(join(RESULTS_DIR, options.reuseFrom, 'judge-sanity.json'), sanityPath)
     if (sanityDone()) return
     const rows = []
     const tasks = fullCorpus.flatMap((topic) => topic.questions.map((question) => ({ topic: topic.id, question })))
@@ -170,6 +175,10 @@ async function main() {
     const tasks = corpus.filter((topic) => !compiled.has(`${topic.id}/${rep}`)).map((topic) => ({ topic, rep, key: `compile/${topic.id}/${rep}` }))
     const failures = await runPool(tasks, Math.min(options.concurrency, 3), async ({ topic, rep: repetition }) => {
       let result = await readCompiled(compiledDir(topic.id, repetition))
+      if (!result && options.reuseFrom) {
+        const source = join(RESULTS_DIR, options.reuseFrom, 'compiled', `${topic.id}-rep${repetition}`)
+        if (existsSync(join(source, 'compile.json'))) { cpSync(source, compiledDir(topic.id, repetition), { recursive: true }); result = await readCompiled(compiledDir(topic.id, repetition)) }
+      }
       if (!result) {
         const fresh = await compileTopic({ llm, model: options.compileModel, topic, skillText, label: `${topic.id}/rep${repetition}`, temperature: options.compileTemperature, thinking: options.thinking, meta: { topic: topic.id, rep: repetition } })
         await writeCompiled(compiledDir(topic.id, repetition), fresh)
@@ -184,20 +193,15 @@ async function main() {
 
   const runsPath = join(runDir, 'runs.jsonl')
   const latest = latestByKey(readJsonl(runsPath))
-  const baseIndexes = new Map(corpus.map((topic) => [topic.id, buildIndex(topic.documents.map((document) => ({ id: document.sourceId, kind: 'document', title: document.title, text: document.text })))]))
-  const pageIndexes = new Map()
+  const pooled = options.kbScope === 'pooled'
+  const indexCache = new Map()
+  /** One index per distinct knowledge base: per topic (and, for B, per repetition's compile), or one pooled for all topics. */
   function indexFor(topic, arm, rep) {
-    if (arm !== 'B') return baseIndexes.get(topic.id)
-    const key = `${topic.id}/${rep}`
-    if (!pageIndexes.has(key)) {
-      const result = compiled.get(key)
-      const documents = topic.documents.map((document) => ({ id: document.sourceId, kind: 'document', title: document.title, text: document.text }))
-      for (const page of result.pages) documents.push({ id: `page:${page.slug}`, kind: 'page', title: page.title, text: page.markdown })
-      if (result.indexMarkdown) documents.push({ id: 'page:index', kind: 'page', title: '知识页目录', text: result.indexMarkdown })
-      pageIndexes.set(key, buildIndex(documents))
-    }
-    return pageIndexes.get(key)
+    const key = `${pooled ? 'pooled' : topic.id}/${arm === 'B' ? `B${rep}` : 'docs'}`
+    if (!indexCache.has(key)) indexCache.set(key, buildKnowledgeBase({ scope: options.kbScope, arm, topic, corpus, compiled, rep }))
+    return indexCache.get(key)
   }
+  const allDocuments = corpus.flatMap((topic) => topic.documents)
 
   async function runRep(rep) {
     const tasks = []
@@ -213,11 +217,11 @@ async function main() {
     }
     if (!tasks.length) return 0
     if (options.arms.includes('B')) await ensureCompiles(rep)
-    const ready = tasks.filter((task) => task.arm !== 'B' || compiled.has(`${task.topic.id}/${task.rep}`))
+    const ready = tasks.filter((task) => task.arm !== 'B' || (pooled ? corpus.every((entry) => compiled.has(`${entry.id}/${task.rep}`)) : compiled.has(`${task.topic.id}/${task.rep}`)))
     let finished = 0
     const failures = await runPool(ready, options.concurrency, async (task) => {
       const { topic, question, arm } = task
-      const resolve = (id) => { const document = topic.documents.find((entry) => entry.sourceId === id); return document ? { text: document.text } : null }
+      const resolve = (id) => { const document = (pooled ? allDocuments : topic.documents).find((entry) => entry.sourceId === id); return document ? { text: document.text } : null }
       let record = latest.get(task.key)
       if (!record?.answered) {
         const started = Date.now()

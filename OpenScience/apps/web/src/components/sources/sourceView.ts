@@ -1,4 +1,4 @@
-import { BookOpen, FileText, Globe, Image as ImageIcon, Sheet, StickyNote, type LucideIcon } from "lucide-react";
+import { BookMarked, BookOpen, FileText, Globe, Image as ImageIcon, Sheet, StickyNote, type LucideIcon } from "lucide-react";
 import { SOURCE_KINDS, SOURCE_ORIGINS, sourceDocTypeLabel } from "@evimed/domain";
 import { formatDay, humanSize } from "@/lib/format";
 import type { SourceKind, SourceRecord } from "@/lib/sourceClient";
@@ -38,7 +38,7 @@ export const KIND_LABEL: Readonly<Record<string, string>> = Object.fromEntries(S
 export const ORIGIN_LABEL: Readonly<Record<string, string>> = Object.fromEntries(SOURCE_ORIGINS.map((origin) => [origin.id, origin.label]));
 
 const KIND_ICON: Record<SourceKind, LucideIcon> = {
-  literature: BookOpen, table: Sheet, document: FileText, page: Globe, note: StickyNote, image: ImageIcon,
+  literature: BookOpen, table: Sheet, document: FileText, page: Globe, note: StickyNote, image: ImageIcon, wiki: BookMarked,
 };
 export function kindIcon(kind: string): LucideIcon {
   return KIND_ICON[kind as SourceKind] ?? FileText;
@@ -56,6 +56,11 @@ export function originalPathOf(source: SourceRecord): string | null {
 /** A note the researcher wrote here: its original is its editor, and saving it makes the next version. */
 export function isEditableNote(source: SourceRecord): boolean {
   return source.display.kind === "note" && source.display.origin === "note";
+}
+
+/** A knowledge page (「知识页」): a page the platform compiled from the project's documents, which the researcher can edit. */
+export function isKnowledgePage(source: SourceRecord): boolean {
+  return source.display.origin === "wiki";
 }
 
 /** A document's file name, never its id. */

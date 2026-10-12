@@ -6,8 +6,8 @@ import { fetchWebMe, getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/a
 import { projectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
-import { addToLibrary, decideDuplicateGroup, listDuplicateCandidates, listSources, openListOffered, refetchSource, removeFromLibrary,
-  removeSource, retrySource, type DuplicateGroup, type SourceCounts, type SourceKind, type SourcePassage, type SourceRecord, type SourceScope } from "@/lib/sourceClient";
+import { addToLibrary, decideDuplicateGroup, knowledgePagesOffered, listDuplicateCandidates, listSources, openListOffered, refetchSource, removeFromLibrary,
+  removeSource, requestKnowledgeCompile, retrySource, type DuplicateGroup, type SourceCounts, type SourceKind, type SourcePassage, type SourceRecord, type SourceScope } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
 import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "@/lib/knowledgeBaseFiles";
@@ -152,9 +152,11 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   // root (`/api/me` `features.openList`). An entry that led to a drive with nothing in it answered every browse with an
   // error (audit I3-4). Off until `/api/me` says so, and when it cannot.
   const [driveOffered, setDriveOffered] = useState(false);
+  // 「重新整理」 on the 知识页 filter, only where the deployment compiles them (`features.knowledgePages`).
+  const [pagesOffered, setPagesOffered] = useState(false);
   useEffect(() => {
     let active = true;
-    fetchWebMe().then((me) => { if (active) setDriveOffered(openListOffered(me)); }).catch(() => { /* not offered */ });
+    fetchWebMe().then((me) => { if (active) { setDriveOffered(openListOffered(me)); setPagesOffered(knowledgePagesOffered(me)); } }).catch(() => { /* not offered */ });
     return () => { active = false; };
   }, []);
 
@@ -441,6 +443,12 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       >
         {(kindsPresent >= 2 || kind !== null) && (
           <FilterChips label="资料类型" className="mb-4" options={kindOptions} maxVisible={narrow ? 3 : kindOptions.length} value={kind ?? "all"} onChange={(value) => setKind(value === "all" ? null : value)} />
+        )}
+        {kind === "wiki" && pagesOffered && !shared && (
+          <div className="mb-4">
+            <Button variant="secondary" size="sm" disabled={busy}
+              onClick={() => void mutate(async () => { await requestKnowledgeCompile(scopeProjectId ?? currentProjectId); toast.success("已开始重新整理，稍后刷新即可看到"); })}>重新整理</Button>
+          </div>
         )}
         {error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}
         {items === null ? <FilesSkeleton /> : items.length === 0 ? (error ? null

@@ -11,6 +11,7 @@ import { buildCompileInput, compileTopic, settlePatch } from '../lib/compile.mjs
 import { QUESTIONS_PER_TOPIC, checkCorpus, checkTopic, collapse, loadCorpus, loadTopic, sourceIdFor } from '../lib/corpus.mjs'
 import { THRESHOLDS, decide } from '../lib/decide.mjs'
 import { judgeAnswer, parseJudgement, scoreJudgement } from '../lib/judge.mjs'
+import { buildKnowledgeBase, pageRecords } from '../lib/kb.mjs'
 import { BudgetExceeded, PRICES, createLlm, ledgerTotal, priceCall, readUsage } from '../lib/llm.mjs'
 import { ANSWER_SYSTEM, ARMS, DECOMPOSITION_GUIDANCE } from '../lib/prompts.mjs'
 import { Bm25Index, buildIndex, chunkText, stem, tokenize } from '../lib/retrieval.mjs'
@@ -537,6 +538,14 @@ test('a clean first patch needs no repair, and an unreadable reply is asked for 
   assert.equal(never.stats.pages, 0)
 })
 
+test('a repair round that leaves the same findings is not repeated', async () => {
+  const stubborn = goodPatch()
+  const llm = fakeLlm([{ content: JSON.stringify(stubborn) }])
+  const result = await compileTopic({ llm, model: 'm', topic: miniTopic, skillText: 's', label: 'x' })
+  assert.equal(llm.log.length, 2, 'one repair, then the identical findings end it')
+  assert.equal(result.stats.rounds, 2)
+})
+
 test('a compiled page is what the retrieval index serves for arm B: the markers survive whole in a search hit', () => {
   const settled = settlePatch(goodPatch(), miniTopic.documents)
   const index = buildIndex([
@@ -547,4 +556,42 @@ test('a compiled page is what the retrieval index serves for arm B: the markers 
   const pageHit = hits.find((hit) => hit.kind === 'page')
   assert.ok(pageHit, 'the page is searchable')
   assert.ok(pageHit.text.includes('<!-- evimed-source:') && pageHit.text.includes('-->'))
+})
+
+test('arm B searches the pages beside the documents; A and A prime never see a page; a pooled project holds every topic', () => {
+  const settled = settlePatch(goodPatch(), miniTopic.documents)
+  const compiledTopic = { pages: settled.pages.map((page) => ({ slug: page.slug, title: page.content.title, markdown: page.markdown })), indexMarkdown: settled.indexMarkdown }
+  const other = { id: 'u', documents: [{ key: 'pmid-9', sourceId: `src_${'d'.repeat(32)}`, title: 'Aspirin trial', text: 'Aspirin raised major bleeding in older adults.' }] }
+  const topic = { id: 't', ...miniTopic }
+  const compiled = new Map([['t/1', compiledTopic], ['u/1', { pages: [{ slug: 'anticoagulants', title: 'Aspirin page', markdown: '# Aspirin page\n\n- Aspirin bled. <!-- evimed-source:{"sourceId":"x","quote":"y"} -->\n' }], indexMarkdown: '' }]])
+  const kinds = (index) => [...new Set(index.chunks.map((chunk) => chunk.kind))].sort()
+  const idsOf = (index) => new Set(index.chunks.map((chunk) => chunk.docId))
+  assert.deepEqual(kinds(buildKnowledgeBase({ scope: 'topic', arm: 'A', topic, corpus: [topic, other], compiled, rep: 1 })), ['document'])
+  assert.deepEqual(kinds(buildKnowledgeBase({ scope: 'topic', arm: 'Aprime', topic, corpus: [topic, other], compiled, rep: 1 })), ['document'])
+  const b = buildKnowledgeBase({ scope: 'topic', arm: 'B', topic, corpus: [topic, other], compiled, rep: 1 })
+  assert.deepEqual(kinds(b), ['document', 'page'])
+  assert.ok(idsOf(b).has('page:anticoagulants') && idsOf(b).has('page:index') && idsOf(b).has(A) && !idsOf(b).has(`src_${'d'.repeat(32)}`))
+  const pooledA = buildKnowledgeBase({ scope: 'pooled', arm: 'A', topic, corpus: [topic, other], compiled, rep: 1 })
+  assert.ok(idsOf(pooledA).has(A) && idsOf(pooledA).has(`src_${'d'.repeat(32)}`) && kinds(pooledA).join() === 'document')
+  const pooledB = buildKnowledgeBase({ scope: 'pooled', arm: 'B', topic, corpus: [topic, other], compiled, rep: 1 })
+  assert.ok(idsOf(pooledB).has('page:t/anticoagulants') && idsOf(pooledB).has('page:u/anticoagulants'), 'two topics may each have a page of the same slug')
+  assert.deepEqual(pageRecords({ pages: [], indexMarkdown: '' }), [])
+})
+
+test('the briefs pack names the capability, carries its required inputs and points at the committed abstracts', async () => {
+  const pack = JSON.parse(readFileSync(new URL('../briefs.json', import.meta.url), 'utf8'))
+  assert.equal(pack.capability, 'knowledge-compile')
+  assert.equal(pack.briefs.length, 3)
+  const manifest = readFileSync(new URL('../../../capabilities/knowledge-compile/capability.yaml', import.meta.url), 'utf8')
+  const required = ['frozenSources', 'existingPages']
+  for (const name of required) assert.ok(manifest.includes(`- ${name}`), `the manifest declares ${name}`)
+  const corpus = await loadCorpus()
+  assert.equal(new Set(pack.briefs.map((brief) => brief.id)).size, 3)
+  for (const [position, brief] of pack.briefs.entries()) {
+    for (const field of ['id', 'title', 'why', 'gradedOn']) assert.ok(String(brief[field]).trim(), field)
+    for (const field of ['mustDo', 'mustNotDo']) assert.ok(brief[field].length >= 3 && brief[field].every((line) => line.trim()), field)
+    for (const name of required) assert.ok(brief.inputs[name] && Object.keys(brief.inputs[name]).length, `${brief.id} ${name}`)
+    assert.deepEqual(brief.inputs.frozenSources.map((source) => source.sourceId), corpus[position].documents.map((document) => document.sourceId))
+    for (const source of brief.inputs.frozenSources) assert.ok(readFileSync(new URL(`../${source.textPath}`, import.meta.url), 'utf8').length > 1000)
+  }
 })

@@ -14,7 +14,8 @@
     "geo-strategy-pack": "2 required on 2026-09-25, the opening contract of the 「循证 GEO」 strategy step: the reader's report and strategy.json.",
     "geo-proposal-pack": "2 required on 2026-09-25, the opening contract of the 「循证 GEO」 client package: the cover and the package index. The office files are binary and listed in the index, never declared as outputs: the gate reads text.",
     "evolution-research-card": "1 required on 2026-10-04, opening internal development artifact under the approved evolution plan; advisory contract validation never withholds researcher deliveries.",
-    "evolution-tool-candidate": "1 required on 2026-10-04, opening internal development artifact under the approved evolution plan; advisory contract validation never withholds researcher deliveries."
+    "evolution-tool-candidate": "1 required on 2026-10-04, opening internal development artifact under the approved evolution plan; advisory contract validation never withholds researcher deliveries.",
+    "knowledge-wiki-patch": "1 required on 2026-10-12, the opening count for the knowledge-page compile: the patch. knowledge-compile-input.json ships `required: false` deliberately: the control plane validates against its own frozen input and never the copy, so the copy only lets the run check its own quotations; a ratchet that counted it would be a new blocking point nobody has an observed distribution for"
   },
   "contracts": {
     "adr-analysis-report": {
@@ -712,6 +713,17 @@
           "path": "tool-candidate.json",
           "required": true,
           "addedOn": "2026-10-04"
+        }
+      ]
+    },
+    "knowledge-wiki-patch": {
+      "capability": "knowledge-compile",
+      "requiredCount": 1,
+      "outputs": [
+        {
+          "path": "wiki-patch.json",
+          "required": true,
+          "addedOn": "2026-10-12"
         }
       ]
     }

@@ -21,7 +21,7 @@
         },
         {
           "path": "knowledge-compile-input.json",
-          "required": true,
+          "required": false,
           "role": "work"
         }
       ],

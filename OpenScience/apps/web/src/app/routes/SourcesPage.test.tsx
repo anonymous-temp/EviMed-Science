@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   browseOpenList: vi.fn(), importOpenListSource: vi.fn(), listSourceFolders: vi.fn(), registerSourceFolder: vi.fn(), syncSourceFolder: vi.fn(), setSourceFolderStatus: vi.fn(),
   listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), addToLibrary: vi.fn(), removeFromLibrary: vi.fn(),
   pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), downloadArtifact: vi.fn(),
-  listGeoProjects: vi.fn(), getVcrHome: vi.fn(),
+  listGeoProjects: vi.fn(), getVcrHome: vi.fn(), requestKnowledgeCompile: vi.fn(),
   toastSuccess: vi.fn(), toastError: vi.fn(),
 }));
 const context = vi.hoisted(() => ({ projectId: "default", features: { openList: true, geo: true, vcr: true } as Record<string, unknown> | undefined }));
@@ -25,7 +25,7 @@ const context = vi.hoisted(() => ({ projectId: "default", features: { openList: 
 vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), ...Object.fromEntries(
   ["listSources", "retrySource", "removeSource", "refetchSource", "addSourceLink", "addSourceNote", "getSourceNote", "saveSourceNote", "getSourceUnderstanding",
     "browseOpenList", "importOpenListSource", "listSourceFolders", "registerSourceFolder", "syncSourceFolder", "setSourceFolderStatus",
-    "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
+    "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary", "requestKnowledgeCompile"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
 vi.mock("@/lib/backend", () => ({ pickFiles: mocks.pickFiles, uploadFilesToWorkspace: mocks.uploadFilesToWorkspace }));
 vi.mock("@/lib/artifactFile", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadArtifact: mocks.downloadArtifact }));
 vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
@@ -79,7 +79,7 @@ const broken = makeSource("src_broken", { title: "8.11 医学测评.pdf", gist: 
 const reading = makeSource("src_reading", { title: "AAP 2026 儿童尿路感染诊断与管理指南.pdf", gist: null, pages: null, origin: "frontier" },
   { status: "parsing", currentUnderstandingId: null, outputs: {} }, { readable: false });
 
-const counts = (overrides: Partial<SourceCounts> = {}): SourceCounts => ({ all: 0, literature: 0, table: 0, document: 0, page: 0, note: 0, image: 0, ...overrides });
+const counts = (overrides: Partial<SourceCounts> = {}): SourceCounts => ({ all: 0, literature: 0, table: 0, document: 0, page: 0, note: 0, image: 0, wiki: 0, ...overrides });
 const listing = (items: SourceRecord[], extra: { nextCursor?: string | null; counts?: Partial<SourceCounts> } = {}) => {
   const tally = counts();
   for (const item of items) { tally[item.display.kind as SourceKind] += 1; tally.all += 1; }
@@ -361,6 +361,28 @@ describe("知识库", () => {
       renderPage();
       const chips = await screen.findByRole("group", { name: "资料类型" });
       expect(within(chips).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部11", "文献与指南4", "数据表2", "文档2", "网页1", "笔记1", "图片1"]);
+    });
+
+    it("list 知识页 as a type of its own and offer 重新整理 on it only where the deployment compiles them", async () => {
+      context.features = { knowledgePages: true };
+      mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
+      mocks.requestKnowledgeCompile.mockResolvedValue({ enabled: true, pages: 2, pending: 1 });
+      renderPage();
+      const chips = await screen.findByRole("group", { name: "资料类型" });
+      expect(within(chips).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部3", "文献与指南1", "知识页2"]);
+      expect(screen.queryByRole("button", { name: "重新整理" })).not.toBeInTheDocument();
+      await userEvent.click(within(chips).getByRole("button", { name: /知识页/ }));
+      await userEvent.click(await screen.findByRole("button", { name: "重新整理" }));
+      await waitFor(() => expect(mocks.requestKnowledgeCompile).toHaveBeenCalledWith("default"));
+      await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
+    });
+
+    it("do not offer 重新整理 where the deployment does not compile them", async () => {
+      context.features = { openList: true };
+      mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
+      renderPage("/app/files?kind=wiki");
+      await screen.findByRole("group", { name: "资料类型" });
+      expect(screen.queryByRole("button", { name: "重新整理" })).not.toBeInTheDocument();
     });
 
     it("are left out when only one type is there, and are not asked to count reading state", async () => {

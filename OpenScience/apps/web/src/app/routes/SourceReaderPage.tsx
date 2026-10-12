@@ -26,7 +26,8 @@ import { SourceKeyPoints } from "@/components/sources/SourceKeyPoints";
 import { SourceOriginal } from "@/components/sources/SourceOriginal";
 import { SourceQuotation } from "@/components/sources/SourceQuotation";
 import { sourceMenuItems } from "@/components/sources/SourceRow";
-import { conversationDraft, isEditableNote, isReading, isUsable, originalPathOf, readerMeta } from "@/components/sources/sourceView";
+import { KnowledgePageView } from "@/components/sources/KnowledgePageView";
+import { conversationDraft, isEditableNote, isKnowledgePage, isReading, isUsable, originalPathOf, readerMeta } from "@/components/sources/sourceView";
 import { COLUMN_GAP, fitsTwoColumns, MIN_PANE_HEIGHT, POINTS_WIDTH, useReaderBox } from "@/components/sources/useReaderBox";
 
 /** A reading document is asked again this often, so the page shows its text and key points as soon as they are in. */
@@ -234,13 +235,14 @@ function SourceReader({ sourceId }: { sourceId: string }) {
               action={<Link to={back} className={buttonClasses({ variant: "secondary" })}>回到知识库</Link>} />
           )}
           {loaded.phase === "error" && <LoadError message={loaded.message} onRetry={() => void load(false)} />}
-          {source && twoColumns && (
+          {source && isKnowledgePage(source) && <KnowledgePageView source={source} onSaved={noteSaved} />}
+          {source && !isKnowledgePage(source) && twoColumns && (
             <div className="flex h-full min-h-0" style={{ gap: COLUMN_GAP }}>
               <section aria-label="原文" data-reader-column="original" className="min-w-0 flex-1 overflow-hidden rounded-card border border-border bg-surface">{original}</section>
               <section aria-label="要点" data-reader-column="points" style={{ width: POINTS_WIDTH }} className="shrink-0 overflow-y-auto pr-1">{points}</section>
             </div>
           )}
-          {source && !twoColumns && (
+          {source && !isKnowledgePage(source) && !twoColumns && (
             <div className="flex h-full min-h-0 flex-col">
               <Tabs label="资料视图" panelId="source-reader-panel" value={tab} onChange={(next) => setView({ tab: next })}
                 items={[{ value: "content", label: "内容" }, { value: "original", label: "原文" }]} />

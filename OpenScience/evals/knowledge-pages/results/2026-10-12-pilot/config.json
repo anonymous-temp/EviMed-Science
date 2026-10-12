@@ -67,10 +67,10 @@
       "sglt2-hf-ckd",
       "aspirin-primary-prevention"
     ],
-    "questionsPerTopic": null,
-    "budgetCny": 2,
+    "questionsPerTopic": 3,
+    "budgetCny": 3,
     "totalCapCny": 20,
     "concurrency": 4
   },
-  "startedAt": "2026-10-12T13:41:39.143Z"
+  "startedAt": "2026-10-12T13:43:49.591Z"
 }

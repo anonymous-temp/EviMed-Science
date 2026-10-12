@@ -95,6 +95,7 @@ export async function compileTopic({ llm, model, topic, skillText, label, temper
   const rounds = []
   let patch = null
   let rawLast = ''
+  let lastSignature = ''
   for (let round = 0; round <= MAX_REPAIR_ROUNDS; round += 1) {
     const result = await llm.chat({ label: `${round ? 'repair' : 'compile'}:${label}`, model, messages, temperature, thinking, json: true, maxTokens: 32000, timeoutMs: 600_000, meta: { ...meta, round } })
     rawLast = String(result.message.content ?? '')
@@ -108,6 +109,10 @@ export async function compileTopic({ llm, model, topic, skillText, label, temper
       issueMessages: issues.slice(0, 60).map((issue) => `${issue.severity}: ${issue.message}`),
     })
     if (!issues.length || round === MAX_REPAIR_ROUNDS) break
+    // A round that changed nothing the platform checks is not repeated: the same message would get the same patch back.
+    const signature = issues.map((issue) => issue.message).sort().join('\n')
+    if (signature === lastSignature) break
+    lastSignature = signature
     messages.push({ role: 'user', content: repairUserMessage(issues) })
   }
   const settled = settlePatch(patch ?? { pages: [] }, topic.documents)

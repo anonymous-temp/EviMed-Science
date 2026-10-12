@@ -1595,7 +1595,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const failed = outcomes.find(outcome => outcome.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;
     },
-    afterRemove: async event => { await knowledgePages?.noteSourcesChanged(event.userId, event.projectId, [{ sourceId: event.sourceId, reason: "removed" }]); },
+    // A page's older version going is the page being rewritten, not a document the pages quote.
+    afterRemove: async event => {
+      if (KnowledgePageService.isPage(event.source)) return;
+      await knowledgePages?.noteSourcesChanged(event.userId, event.projectId, [{ sourceId: event.sourceId, reason: "removed" }]);
+    },
     report: code => { void securityAudit(config, "source.replacement", "failed", { code }).catch(() => {}); },
   }) : null;
   const documentParser = new DocumentParserClient({
@@ -3916,7 +3920,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // compile itself (the runtime, the worker, every hook that queues a round) needs `OPEN_SCIENCE_KNOWLEDGE_PAGES_ENABLED`.
   if (sourceService && knowledgeEntries && productDocuments && productJobs) {
     if (config.knowledgePagesEnabled) {
-      knowledgeCompileRuntime = createKnowledgeCompileRuntime({
+      knowledgeCompileRuntime = overrides.knowledgeCompileRuntime ?? createKnowledgeCompileRuntime({
         config, store, agentRuns, runtimeManager, researchSessions, registry: agentRegistry, usageLedger, prepareContext: prepareResearchContext,
       });
     }

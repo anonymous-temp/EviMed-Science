@@ -154,7 +154,7 @@ export async function packageCandidates(project, name, file, formatVersion, deli
  * Shared by the source understanding and the knowledge-page compile (`knowledgeCompileRuntime.mjs`): the same receipt, the
  * same places a package is looked for, the same path guard.
  * @param {any} project @param {any} run
- * @param {{ capability: string, files: Array<{ name: string, limit: number }>, required: string, missingCode: string, missingMessage: string }} spec
+ * @param {{ capability: string, contractKind?: string, files: Array<{ name: string, limit: number }>, required: string, missingCode: string, missingMessage: string }} spec
  * @returns {Promise<{ values: Record<string, any>, verified: boolean }>}
  */
 export async function readRunPackage(project, run, spec) {
@@ -175,7 +175,7 @@ export async function readRunPackage(project, run, spec) {
       }
     }
     const checked = validateDeliveryReceipt(value);
-    const entries = checked.ok ? checked.receipt.entries.filter(item => item.contractKind === spec.capability && item.capability === spec.capability) : [];
+    const entries = checked.ok ? checked.receipt.entries.filter(item => item.contractKind === (spec.contractKind ?? spec.capability) && item.capability === spec.capability) : [];
     if (entries.length === 1) { entry = entries[0]; formatVersion = checked.receipt.formatVersion; }
   } catch { /* no receipt, or none that can be read: the files are read all the same, and the path guard speaks for them below */ }
   let verified = Boolean(entry);

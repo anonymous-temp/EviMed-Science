@@ -698,9 +698,9 @@
       "origin": "capability",
       "version": "1.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:cde09b3c45cd716793af0920c037d73594281fdaedb109a0cdf72c06f1618eb0",
+      "digest": "sha256:9ade6cebd113e1a7f113ec91af05d2eae7f98d337d243d8522ecf755227ea68b",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"72906b37bcdccf0a3e0db301ea93984939f833e79301b8f48fad70e6724bae17"}],
+      "references": [{"path":"capability.yaml","sha256":"d85b4669fe6863547220314cedaa90f0097286fee5a600e8d60dc15f7196d302"}],
       "operations": [
         {
           "name": "knowledge-wiki-patch",

@@ -672,6 +672,8 @@ export class KnowledgePageService {
       { pages: new Set((await this.#pageRecords(userId, project.id)).map((row) => row.payload.slug)) });
     const row = await this.#pageRecord(userId, project.id, slug);
     const ledger = row && !row.payload.retired ? row.payload : null;
+    /** @type {Map<string, { title: string, sourceId: string | null }>} */
+    const targets = new Map((await this.#pageRecords(userId, project.id)).map((record) => [record.payload.slug, { title: record.payload.title, sourceId: record.payload.pageSourceId ?? null }]));
     /** @type {Map<number, any>} */
     const byUnit = new Map(verification.units.map((unit) => [unit.index, unit]));
     /** @type {Array<{ heading: string, items: any[] }>} */
@@ -680,7 +682,7 @@ export class KnowledgePageService {
       let section = sections.at(-1);
       if (!section || section.heading !== unit.section) { section = { heading: unit.section, items: [] }; sections.push(section); }
       const checked = byUnit.get(unit.index);
-      section.items.push(unit.kind === "nav" ? { kind: "nav", links: unit.links } : {
+      section.items.push(unit.kind === "nav" ? { kind: "nav", links: unit.links.map((link) => ({ slug: link, title: targets.get(link)?.title ?? null, sourceId: targets.get(link)?.sourceId ?? null })) } : {
         kind: "claim", text: unit.text, status: checked?.status ?? "unsupported", claimKind: checked?.kind ?? "direct", confidence: checked?.confidence ?? null,
         evidence: (checked?.evidence ?? []).map((entry) => ({ sourceId: entry.sourceId, title: texts.get(entry.sourceId)?.title ?? null, quote: entry.quote, status: entry.status })),
       });

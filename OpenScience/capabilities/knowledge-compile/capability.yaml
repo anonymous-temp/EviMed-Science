@@ -22,7 +22,7 @@ produces:
     required: true
   - path: knowledge-compile-input.json
     role: work
-    required: true
+    required: false
   checks:
   - requiredOutputsExist
   - skillsLoaded

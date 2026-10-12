@@ -222,7 +222,7 @@ export function createKnowledgeCompileRuntime({ config, store, agentRuns, runtim
       }
       // The platform stopped it for a researcher's start: the caller releases the round and waits.
       if (run.status !== "succeeded") return { status: run.status, ...(run.errorCode === RUNTIME_YIELDED_CODE ? { yielded: true } : {}) };
-      const { values, verified } = await readRunPackage(scoped, run, { capability: CAPABILITY,
+      const { values, verified } = await readRunPackage(scoped, run, { capability: CAPABILITY, contractKind: "knowledge-wiki-patch",
         files: [{ name: KNOWLEDGE_WIKI_PATCH_FILE, limit: MAX_OUTPUT_BYTES }, { name: KNOWLEDGE_COMPILE_INPUT_FILE, limit: MAX_INPUT_BYTES }],
         required: KNOWLEDGE_WIKI_PATCH_FILE, missingCode: "knowledge_output_missing", missingMessage: "The run left no patch to read." });
       const usage = await usageLedger.summaryRun(identity.userId, identity.dispatchId);
