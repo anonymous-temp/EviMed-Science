@@ -108,6 +108,35 @@ function fetchReturning(content, { ok = true, reasoningContent = undefined } = {
   return fetchImpl;
 }
 
+test("a researcher telling the assistant about themselves is not a commission the net may claim over a clean none (2026-10-12)", async () => {
+  const statement = "以后我做 Meta 分析时，先报 GRADE 证据等级，再报效应量。";
+  // The model says it only describes the researcher: the meta rule matched, and yields.
+  const yes = fetchReturning('{"statement":true,"confidence":0.95}');
+  const trace = { verdict: "none" };
+  assert.equal(await new SpecialistClassifier(baseConfig(), { fetchImpl: yes }).net(statement, agents, trace), null);
+  assert.equal(yes.calls.length, 1);
+  assert.equal(trace.statement, true);
+  assert.match(String(yes.calls[0].init.body), /以后我做 Meta 分析时/);
+
+  // Not a statement, unsure, or no answer: the net stands as before.
+  for (const content of ['{"statement":false,"confidence":0.9}', '{"statement":true,"confidence":0.5}', "not json"]) {
+    const answer = fetchReturning(content);
+    assert.equal((await new SpecialistClassifier(baseConfig(), { fetchImpl: answer }).net(statement, agents, { verdict: "none" }))?.agentId, "meta-analysis");
+  }
+  const failing = fetchReturning("", { ok: false });
+  assert.equal((await new SpecialistClassifier(baseConfig(), { fetchImpl: failing }).net(statement, agents, { verdict: "none" }))?.agentId, "meta-analysis");
+
+  // Only a rule overruling the model's own none is asked about: with no verdict (the classifier never answered) or
+  // routing off, the net is the plain net and costs no call.
+  const untouched = fetchReturning('{"statement":true,"confidence":0.95}');
+  assert.equal((await new SpecialistClassifier(baseConfig(), { fetchImpl: untouched }).net(statement, agents, {}))?.agentId, "meta-analysis");
+  assert.equal((await new SpecialistClassifier(baseConfig({ llmRoutingEnabled: false }), { fetchImpl: untouched }).net(statement, agents, { verdict: "none" }))?.agentId, "meta-analysis");
+  assert.equal(untouched.calls.length, 0);
+  // Nothing matched: nothing to ask.
+  assert.equal(await new SpecialistClassifier(baseConfig(), { fetchImpl: untouched }).net("阿司匹林是什么药", agents, { verdict: "none" }), null);
+  assert.equal(untouched.calls.length, 0);
+});
+
 test("is unavailable and never calls the model when routing is disabled", async () => {
   const fetchImpl = fetchReturning(JSON.stringify({ agentId: "adr-analysis", confidence: 0.99 }));
   const classifier = new SpecialistClassifier(baseConfig({ llmRoutingEnabled: false }), { fetchImpl });

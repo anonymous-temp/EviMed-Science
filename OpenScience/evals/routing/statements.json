@@ -1,0 +1,86 @@
+{
+  "incident": "2026-10-12, production: 「以后我做 Meta 分析时，先报 GRADE 证据等级，再报效应量。」 was routed by the meta-analysis rule over the classifier's none and failed with specialist_required_output_missing.",
+  "question": "When a rule would overrule the model's clean none, does the model's one narrow question — does this message only describe the researcher? — let a self-description through and keep every commission on its specialist?",
+  "cases": [
+    {
+      "message": "以后我做 Meta 分析时，先报 GRADE 证据等级，再报效应量。",
+      "net": "meta-analysis",
+      "expect": "yield"
+    },
+    {
+      "message": "我做 meta 分析习惯用随机效应模型",
+      "net": "meta-analysis",
+      "expect": "yield"
+    },
+    {
+      "message": "我平时做文献计量用 CiteSpace",
+      "net": "bibliometric-analysis",
+      "expect": "yield"
+    },
+    {
+      "message": "我习惯用 VOSviewer 画合作网络",
+      "net": "bibliometric-analysis",
+      "expect": "yield"
+    },
+    {
+      "message": "我是心内科医生，主要做孟德尔随机化研究",
+      "net": "mendelian-randomization",
+      "expect": "yield"
+    },
+    {
+      "message": "记住：我们科室做药品遴选时用的是 2023 版评分表",
+      "net": "drug-selection",
+      "expect": "yield"
+    },
+    {
+      "message": "我是药剂科的，平时主要做超说明书用药评价",
+      "net": "off-label-analysis",
+      "expect": "yield"
+    },
+    {
+      "message": "我们课题组做科研选题一般先看近五年的国自然",
+      "net": "research-topic-selection",
+      "expect": "yield"
+    },
+    {
+      "message": "分析奥希替尼的 FAERS 药物警戒信号",
+      "net": "adr-analysis",
+      "expect": "route"
+    },
+    {
+      "message": "帮我做一个他汀类药物与卒中风险的 meta 分析",
+      "net": "meta-analysis",
+      "expect": "route"
+    },
+    {
+      "message": "用孟德尔随机化分析一下 BMI 对 2 型糖尿病的因果效应",
+      "net": "mendelian-randomization",
+      "expect": "route"
+    },
+    {
+      "message": "帮我做一份关于 CAR-T 的文献计量分析",
+      "net": "bibliometric-analysis",
+      "expect": "route"
+    },
+    {
+      "message": "做一下阿托伐他汀超说明书用药的证据评价报告",
+      "net": "off-label-analysis",
+      "expect": "route"
+    },
+    {
+      "message": "我想做个 meta 分析，看 SGLT2 抑制剂对心衰住院的影响，帮我设计一下",
+      "net": "meta-analysis",
+      "expect": "route"
+    },
+    {
+      "message": "我是心内科医生，帮我做一个房颤消融术后复发的 meta 分析",
+      "net": "meta-analysis",
+      "expect": "route"
+    },
+    {
+      "message": "我们科室要做药品遴选，帮我按评分表评一下这三个 PPI",
+      "net": "drug-selection",
+      "expect": "route"
+    }
+  ]
+}

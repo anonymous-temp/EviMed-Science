@@ -1,0 +1,29 @@
+{
+  "id": "2026-10-12-own-health-in-passing",
+  "class": "own-health-in-passing",
+  "observedIn": "synthetic replay of 2026-10-12, deepseek-flash, temperature 0: a first wording of the remembered-own-health exception wrote this as a profile in 3 of 3 samples; the extractor before it, and the wording that shipped, wrote nothing",
+  "written": [],
+  "whyItIsWrong": "Nothing the earlier extractor wrote here was wrong; the case holds the line the remembered-own-health exception must not cross. The researcher mentions their own allergy inside a question and asks for nothing to be remembered: that is the topic of this conversation, as with the diabetes of the own-health case.",
+  "expected": "Nothing is written from this exchange.",
+  "decidable": true,
+  "preChange": "held",
+  "replay": {
+    "synthetic": true,
+    "projectId": "proj_af_rwe",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "我对青霉素过敏，下周拔智齿，术后抗生素一般怎么选？"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "青霉素过敏者拔牙后如需抗生素，常见替代包括克林霉素或大环内酯类，具体请口腔医生结合过敏反应类型决定。"
+      }
+    ]
+  },
+  "expect": {
+    "atMostRecords": 0
+  }
+}

@@ -66,6 +66,8 @@ export const REQUIRED_CLASSES = Object.freeze([
   "patient-identifiers",
   "credentials",
   "own-health",
+  "remembered-own-health",
+  "own-health-in-passing",
   "third-party-details",
   "run-tool-and-field-names",
   "transient-emotion",

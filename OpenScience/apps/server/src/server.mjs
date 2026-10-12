@@ -129,7 +129,6 @@ import {
   OPEN_DOMAIN_ANSWER_AGENT_ID,
   classifierFailureReason,
   routeNamedSpecialist,
-  routeOpenDomainSpecialist,
 } from "./specialistRouting.mjs";
 import { SpecialistClassifier } from "./specialistClassifier.mjs";
 import { ROUTING_DECISION_PATH, createRoutingDecisionRoutes } from "./routingDecision.mjs";
@@ -5362,9 +5361,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const named = routeNamedSpecialist(text, routableAgents);
     /** @type {{ failure?: string, verdict?: string }} */
     const trace = {};
-    const specialist = named ?? await specialistClassifier.classify(text, routableAgents, trace,
-      { userId: project.userId, projectId: project.id })
-      ?? routeOpenDomainSpecialist(text, routableAgents, { afterCleanNone: trace.verdict === "none" });
+    const owner = { userId: project.userId, projectId: project.id };
+    const specialist = named ?? await specialistClassifier.classify(text, routableAgents, trace, owner)
+      ?? await specialistClassifier.net(text, routableAgents, trace, owner);
     const answerAgent = specialist ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
     const effective = specialist ?? (answerAgent
       ? {
@@ -6460,9 +6459,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace,
             { userId: ctx.project.userId, projectId: ctx.project.id });
           if (!routedSpecialist) {
-            const net = routeOpenDomainSpecialist(text, routableAgents, {
-              afterCleanNone: classifierTrace.verdict === "none",
-            });
+            const net = await specialistClassifier.net(text, routableAgents, classifierTrace,
+              { userId: ctx.project.userId, projectId: ctx.project.id });
             // The net catching a request is normal after the model has said "no
             // specialist fits". It is a different event after the model never
             // answered, and the two are the same string in the ledger unless

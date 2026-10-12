@@ -360,3 +360,16 @@ test("a capability named inside 《》 is a document title, not an instruction",
     "meta-analysis",
   );
 });
+
+test("every message of the routing statements eval is one the net claims after a clean none, so the eval asks something", async () => {
+  // evals/routing/statements.json: self-descriptions the model lets through and commissions it keeps on their
+  // specialist (SpecialistClassifier.net). A case the net no longer matches would pass that eval without asking it.
+  const { readFile } = await import("node:fs/promises");
+  const statements = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../evals/routing/statements.json");
+  const { cases } = JSON.parse(await readFile(statements, "utf8"));
+  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+  assert.ok(cases.some((item) => item.expect === "yield") && cases.some((item) => item.expect === "route"));
+  for (const item of cases) {
+    assert.equal(routeOpenDomainSpecialist(item.message, agents, { afterCleanNone: true })?.agentId, item.net, item.message);
+  }
+});

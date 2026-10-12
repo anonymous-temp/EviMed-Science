@@ -127,7 +127,7 @@ function summaryText(mode, title, minutes, credits, simulated = false) {
  * @param {{
  *   question: string,
  *   agents: any[],
- *   classifier?: { available?: boolean, classify: Function } | null,
+ *   classifier?: { available?: boolean, classify: Function, net?: Function } | null,
  *   owner?: { userId: string, projectId: string } | null,
  *   consultModel?: boolean,
  *   estimateCredits?: ((input: { mode: 'deep', capabilityId: string, minutes: { min: number, max: number } | null }) => any) | null,
@@ -172,7 +172,10 @@ export async function decideRouting({
     if (specialist) decidedBy = "model";
   }
   if (!specialist) {
-    specialist = routeOpenDomainSpecialist(question, routable, { afterCleanNone: trace.verdict === "none" });
+    // The classifier's own net when there is one: it asks the model once more before a rule overrules its `none`.
+    specialist = typeof classifier?.net === "function" && modelConsulted
+      ? await classifier.net(question, routable, trace, owner)
+      : routeOpenDomainSpecialist(question, routable, { afterCleanNone: trace.verdict === "none" });
     if (specialist) decidedBy = "rules";
   }
   const capability = specialist ? routable.find((agent) => agent.id === specialist?.agentId) ?? null : null;

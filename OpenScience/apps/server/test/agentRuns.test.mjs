@@ -691,13 +691,16 @@ test("the classifier decides and the regex is the net under it", async () => {
     // and the classifier is the one able to tell that from a request to run a
     // new meta-analysis. It answers "none" for the second query below.
     const declines = calls.at(-1).includes("奥希替尼");
+    // Before the net overrules that "none" the model is asked whether the message only describes the researcher; this
+    // one asks for an analysis.
+    const statementCheck = calls.at(-1).includes("only tells the assistant about the researcher");
     return {
       ok: true,
       headers: { get: () => null },
       text: async () => JSON.stringify({
         choices: [{
           message: {
-            content: JSON.stringify(declines
+            content: JSON.stringify(statementCheck ? { statement: false, confidence: 0.95 } : declines
               ? { agentId: "none", confidence: 0.9 }
               : { agentId: "meta-analysis", confidence: 0.95 }),
           },
@@ -710,7 +713,7 @@ test("the classifier decides and the regex is the net under it", async () => {
 
     // The classifier is consulted even where a regex rule would have matched.
     const netted = await dispatchRun(base, "ses_llm_a", "turn_llm_a", "分析奥希替尼的 FAERS 药物警戒信号");
-    assert.equal(calls.length, 1, "the model was asked first");
+    assert.equal(calls.length, 2, "the model was asked first, and once more before the net overruled its none");
     // Having declined, the safety net still delivers the specialty route.
     assert.equal(netted.body.data.effectiveAgentId, "adr-analysis");
     assert.equal(netted.body.data.effectiveRouteReason, "matched:adr-analysis");
@@ -721,7 +724,7 @@ test("the classifier decides and the regex is the net under it", async () => {
       "turn_llm_b",
       "帮我把这个研究方向整理成一个可执行的分析计划",
     );
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     assert.equal(classified.body.data.effectiveAgentId, "meta-analysis");
     assert.equal(classified.body.data.effectiveRouteReason, "llm:0.95");
   }, {

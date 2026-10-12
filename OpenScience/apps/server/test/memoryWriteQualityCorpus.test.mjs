@@ -108,7 +108,7 @@ test("the code-decided checks read the written records, not their prose", () => 
 const synthetic = cases.filter((item) => item.replay.synthetic === true);
 
 test("the synthetic replays of 2026-10-12 each say how the earlier extractor fared on what it wrote", () => {
-  assert.equal(synthetic.length, 14, "fourteen synthetic replays");
+  assert.equal(synthetic.length, 16, "fourteen synthetic replays, and the two of the owner's R9 ruling");
   for (const item of synthetic) {
     assert.equal(item.decidable, true, `${item.id} is decided by code`);
     const verdicts = runner.decidedVerdicts(item, item.written);
@@ -118,7 +118,7 @@ test("the synthetic replays of 2026-10-12 each say how the earlier extractor far
       `${item.id}: preChange ${item.preChange}, yet the sample is judged ${verdicts.map((verdict) => verdict.passed).join("/")}`);
   }
   assert.deepEqual(synthetic.filter((item) => item.preChange === "held").map((item) => item.class).sort(),
-    ["credentials", "run-tool-and-field-names", "standing-method-and-format", "standing-role-and-focus"]);
+    ["credentials", "own-health-in-passing", "run-tool-and-field-names", "standing-method-and-format", "standing-role-and-focus"]);
 });
 
 test("a record that must be kept is checked by kind and by a string it carries, and a typo in a check is a shape error", () => {

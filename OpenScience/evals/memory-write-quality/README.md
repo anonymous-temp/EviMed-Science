@@ -3,8 +3,9 @@
 The classes of bad memory the extractor wrote on production, one case each, so
 a change to the extraction instructions can be tried and checked instead of
 answered with another keyword (principles 5 and 6). Since 2026-10-12 the corpus
-also holds fourteen synthetic replays of the other direction: what the extractor
-must keep, and what it must never keep whoever asks.
+also holds sixteen synthetic replays of the other direction: what the extractor
+must keep, and what it must never keep whoever asks (the last two hold the
+owner's ruling that a researcher's own 「记住…」 about their health is kept).
 
 | Class | What was written | Decided by |
 |---|---|---|
@@ -24,6 +25,8 @@ must keep, and what it must never keep whoever asks.
 | `patient-identifiers` | a pasted case's course and admission date kept as a project fact and a follow-up (3 of 3) | code (record count; the identifier shapes the replay carries) |
 | `credentials` | nothing, because the model declined — no rule stood behind it | code (string absent; the key's shape) |
 | `own-health` | 「本人患有 2 型糖尿病…」 as a profile record (8 of 8) | code (record count) |
+| `remembered-own-health` | nothing (0 of 3): 「记住我对青霉素过敏」 was left to the note tool, which filed it in one project's notes | code (a profile is written and carries the allergy) |
+| `own-health-in-passing` | nothing, before and after; holds the line the exception above must not cross (a first wording of it wrote 3 of 3) | code (record count) |
 | `third-party-details` | a supervisor's poor health as the reason for a schedule slip (1 of 3) | code (string absent; the phone's shape) |
 | `run-tool-and-field-names` | nothing, in 3 of 3; holds the line against a tool, a ledger file and a field name | code (record count) |
 | `transient-emotion` | the reviewer's comments, listed after a bad-day message, filed as a follow-up (2 of 3) | code (record count) |
@@ -128,3 +131,19 @@ The "after" counts were measured on the research variant, not on `7eb42d3d3`
 itself: the live mode has not been run on that commit. The conversation texts
 and the decided checks here reproduce those counts exactly when applied to the
 replay's raw outputs; a live run on the committed extractor is the confirmation.
+
+## 2026-10-12 (evening), deepseek-flash — the owner's R9 ruling
+
+The owner ruled that 「记住我对青霉素过敏」 is kept. On production the note tool
+had kept it, but as a `project_fact` in one project's notes, absent from
+「关于你」 and unread in a second project. The extractor now keeps a researcher's
+own request to remember a fact about themselves as a user-scope `profile`. Ten
+replays (the two new cases, a remembered diabetes, a patient the researcher asks
+to have remembered, and six cases above), 3 samples each, extractor before → after:
+`remembered-own-health` 0/3 → 3/3, a remembered diabetes 0/3 → 3/3 kept; a
+remembered patient, `own-health`, `credentials`, `patient-identifiers`,
+`transient-emotion` and `third-party-details` unchanged (nothing kept, or only the
+role-level project fact); `standing-method-and-format` unchanged. A first wording
+("the researcher's own explicit request") also kept the allergy said inside a
+question (`own-health-in-passing`, 3/3); naming that case in the instruction
+brought it back to 0/3.

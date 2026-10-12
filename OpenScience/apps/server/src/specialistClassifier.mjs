@@ -14,6 +14,7 @@
 // outside the usage ledger and outside the account's caps: the same second way
 // out that memory extraction had until it was moved onto the gateway.
 import { callModelForControlPlane } from "./modelGateway.mjs";
+import { routeOpenDomainSpecialist } from "./specialistRouting.mjs";
 
 function parseClassifierJson(content) {
   if (typeof content !== "string") return null;
@@ -237,5 +238,85 @@ export class SpecialistClassifier {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  /**
+   * The regex net under the model's decision, asked once more when it would overrule a clean `none`.
+   *
+   * The specific rules stay in force after the model declines, because the model sometimes declines a real commission
+   * (「分析奥希替尼的 FAERS 药物警戒信号」). They also fire on a researcher telling the assistant about themselves:
+   * 「以后我做 Meta 分析时，先报 GRADE 证据等级，再报效应量」 went to the meta-analysis pipeline on 2026-10-12 and was failed
+   * for the report nobody asked for, and 「我主要做孟德尔随机化研究」, 「我平时用 CiteSpace」 match the same way. Whether a message
+   * only describes the researcher is language, so the model is asked that one narrow question — only here, where a word
+   * list is about to overrule its decision — and the net yields when it says yes. Unavailable, slow or unsure, the net
+   * stands as before.
+   * @param {string} query @param {any[]} agents
+   * @param {{ failure?: string, verdict?: string, statement?: boolean }} [trace]
+   * @param {{ userId: string, projectId: string } | null} [owner]
+   */
+  async net(query, agents, trace, owner = null) {
+    const net = routeOpenDomainSpecialist(query, agents, { afterCleanNone: trace?.verdict === "none" });
+    if (!net || trace?.verdict !== "none" || !this.available) return net;
+    if (await this.describesResearcher(query, owner)) {
+      if (trace) trace.statement = true;
+      return null;
+    }
+    return net;
+  }
+
+  /** @param {string} query @param {{ userId: string, projectId: string } | null} owner @returns {Promise<boolean>} */
+  async describesResearcher(query, owner) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const body = await callModelForControlPlane({
+        config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl,
+      }, {
+        userId: owner?.userId ?? "",
+        projectId: owner?.projectId ?? "",
+        purpose: "routing",
+        signal: controller.signal,
+        body: {
+          model: this.config.deepseekModel,
+          thinking: { type: "disabled" },
+          temperature: 0,
+          max_tokens: 128,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: statementInstructions },
+            { role: "user", content: JSON.stringify({ message: query.slice(0, 4_000) }) },
+          ],
+        },
+      });
+      const message = body?.choices?.[0]?.message;
+      const parsed = parseStatementJson(message?.content) ?? parseStatementJson(message?.reasoning_content);
+      return parsed !== null && parsed.statement && parsed.confidence >= this.threshold;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+const statementInstructions = [
+  "Read one message a researcher sent to a research assistant.",
+  "Decide whether it only tells the assistant about the researcher — who they are, what they work on, how they want work done from now on, or something to remember (「以后我做 Meta 分析时，先报 GRADE 证据等级，再报效应量」, 「我主要做孟德尔随机化研究」, 「我平时用 CiteSpace 画合作网络」, 「记住我对青霉素过敏」) — rather than asking for something to be done or answered now.",
+  "A message that asks for an analysis, a report, a review or an answer, even in one clause, is not only telling (「分析奥希替尼的 FAERS 药物警戒信号」, 「帮我做一个他汀与卒中的 meta 分析」).",
+  "Return JSON only: {\"statement\": true|false, \"confidence\": <0..1>}.",
+].join(" ");
+
+/** @param {unknown} content @returns {{ statement: boolean, confidence: number } | null} */
+function parseStatementJson(content) {
+  if (typeof content !== "string") return null;
+  const match = content.match(/\{[^{}]*\}/g)?.at(-1);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match);
+    const confidence = Number(parsed?.confidence);
+    if (typeof parsed?.statement !== "boolean" || !Number.isFinite(confidence)) return null;
+    return { statement: parsed.statement, confidence: Math.max(0, Math.min(1, confidence)) };
+  } catch {
+    return null;
   }
 }
