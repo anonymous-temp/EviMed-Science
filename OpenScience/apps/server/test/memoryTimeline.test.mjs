@@ -201,12 +201,18 @@ function documentStore(byKind) {
   };
 }
 
-test("the line is weekly for a short history, monthly for a long one, and starts at zero when the whole history fits", () => {
+test("the line is daily for a new account, weekly for a short history, monthly for a long one, and starts at zero when the whole history fits", () => {
   // 2026-09-10 is a Thursday; its week starts on Monday 09-07.
   assert.deepEqual(growthBuckets("2026-09-10", "2026-09-28"), {
     unit: "week", starts: ["2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"],
   });
-  assert.deepEqual(growthBuckets("2026-09-28", "2026-09-28"), { unit: "week", starts: ["2026-09-21", "2026-09-28"] });
+  // A new account has no week to draw: its days are the points, from the zero before the first memory.
+  assert.deepEqual(growthBuckets("2026-09-28", "2026-09-28"), { unit: "day", starts: ["2026-09-27", "2026-09-28"] });
+  assert.deepEqual(growthBuckets("2026-09-25", "2026-09-28"), { unit: "day", starts: ["2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27", "2026-09-28"] });
+  // Thirteen days of history is still days; fourteen is weeks (the existing rule, from there on).
+  assert.equal(growthBuckets("2026-09-15", "2026-09-28").unit, "day");
+  assert.equal(growthBuckets("2026-09-15", "2026-09-28").starts.length, 15);
+  assert.deepEqual(growthBuckets("2026-09-14", "2026-09-28"), { unit: "week", starts: ["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"] });
   const months = growthBuckets("2026-01-15", "2026-09-28");
   assert.equal(months.unit, "month");
   assert.deepEqual([months.starts[0], months.starts.at(-1), months.starts.length], ["2025-12-01", "2026-09-01", 10]);
@@ -296,6 +302,29 @@ test("an account with nothing has no line, a bad zone is refused, and a source t
   await assert.rejects(() => memoryGrowth(growthSources(), user, { timeZone: "Mars/Olympus" }), { code: "memory_timeline_invalid" });
   // A line missing the methods would look exactly like a true one.
   await assert.rejects(() => memoryGrowth(growthSources({ failMethods: true }), user, {}), /product store/);
+});
+
+test("a new account's line is counted by the day: the memories each day held, from the zero before the first", async () => {
+  const growth = await memoryGrowth({
+    researchMemory: { growthDays: async () => [{ day: "2026-09-26", added: 2, ended: 0 }, { day: "2026-09-27", added: 1, ended: 1 }, { day: "2026-09-28", added: 3, ended: 0 }] },
+    now: () => new Date("2026-09-28T04:00:00Z"),
+  }, user, { timeZone: "UTC" });
+  assert.equal(growth.unit, "day");
+  assert.equal(growth.first, "2026-09-26");
+  assert.equal(growth.fromStart, true);
+  assert.deepEqual(growth.points, [
+    { start: "2026-09-25", known: 0 },
+    { start: "2026-09-26", known: 2 },
+    // One replaced by one: the line is flat, not a dip and a climb.
+    { start: "2026-09-27", known: 2 },
+    { start: "2026-09-28", known: 5 },
+  ]);
+  const today = await memoryGrowth({
+    researchMemory: { growthDays: async () => [{ day: "2026-09-28", added: 3, ended: 0 }] },
+    now: () => new Date("2026-09-28T04:00:00Z"),
+  }, user, { timeZone: "UTC" });
+  assert.deepEqual(today.points, [{ start: "2026-09-27", known: 0 }, { start: "2026-09-28", known: 3 }],
+    "a first day is the page's to leave undrawn: one point that holds something");
 });
 
 test("a long history is counted in months and reaches back at most two years, carrying what held before it", async () => {
