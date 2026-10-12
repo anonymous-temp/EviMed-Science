@@ -50,3 +50,29 @@ export async function completeOwnedAutopilotRun({ service, runtimeManager, usage
   }
   return true;
 }
+
+/**
+ * Episodes whose run ended while the fold failed. Nothing else finishes them: on 2026-10-05 a DNS failure (`EAI_AGAIN`)
+ * in the fold left one `running` for a week, its run long failed. Each call looks at the oldest twenty episodes still
+ * `running` whose record has not moved for fifteen minutes, and folds the ones whose run the ledger says is over — a
+ * long episode's run is still `running` there, and is left alone. Folding is idempotent (`completeRun` hands back the
+ * digest an episode already has).
+ * @param {{ database: any, readRun: (row: { userId: string, projectId: string, runId: string }) => Promise<{ project: any, run: any } | null>,
+ *   fold: (project: any, run: any) => Promise<unknown> }} dependencies
+ * @returns {Promise<{ looked: number, folded: number }>}
+ */
+export async function sweepAutopilotOrphans({ database, readRun, fold }) {
+  const { rows } = await database.query(`SELECT user_id, project_id, payload->>'runId' AS run_id FROM evimed_product.documents
+    WHERE kind='episode' AND deleted_at IS NULL AND payload->>'status'='running' AND payload->>'runId' IS NOT NULL
+      AND updated_at < now() - interval '15 minutes'
+    ORDER BY updated_at LIMIT 20`);
+  let folded = 0;
+  for (const row of rows) {
+    const found = await readRun({ userId: row.user_id, projectId: row.project_id, runId: row.run_id }).catch(() => null);
+    if (!found || !["succeeded", "failed", "canceled"].includes(found.run?.status)) continue;
+    await fold(found.project, found.run);
+    folded += 1;
+  }
+  return { looked: rows.length, folded };
+}
+

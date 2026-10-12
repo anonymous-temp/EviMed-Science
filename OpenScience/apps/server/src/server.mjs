@@ -43,7 +43,7 @@ import { createEvolution } from "./evolutionComposition.mjs";
 import { createEvaluationIsolation } from "./evaluationIsolation.mjs";
 import { EVOLUTION_GATEWAY_PATH } from "./evolutionGateway.mjs";
 import { heavyWorkAdmission, heavyWorkBlockerCount } from "./heavyWorkAdmission.mjs";
-import { completeOwnedAutopilotRun } from "./autopilotRunCompletion.mjs";
+import { completeOwnedAutopilotRun, sweepAutopilotOrphans } from "./autopilotRunCompletion.mjs";
 import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
 import { createPluginRoutes } from "./pluginRoutes.mjs";
@@ -2590,6 +2590,58 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A person's re-judgment and countersignature of a matching assessment.
     get assessments() { return vcr?.matching ?? null; },
   });
+  /**
+   * Fold a finished run into the autopilot episode that owns it (`autopilotRunCompletion.mjs`), from `onRunFinished` and
+   * again from the scheduler's sweep below. Idempotent: `completeRun` hands back the digest an episode already has.
+   * @param {any} project @param {any} run
+   */
+  function foldAutopilotRun(project, run) {
+    return completeOwnedAutopilotRun({
+      service: autopilotService, runtimeManager, usageLedger,
+      readDelta: async () => {
+        let claims = [];
+        let deltaSchemaVersion = null;
+        let deltaErrorCode = null;
+        const delta = (run.artifacts ?? []).find((artifact) => typeof artifact === "string" && artifact.endsWith("agenda-delta.json"));
+        if (delta) {
+          try {
+            const file = resolveScopedPath(project.workspaceDir, delta);
+            const parsed = JSON.parse(String(await readFileNoFollow(project.workspaceDir, file, "utf8")));
+            deltaSchemaVersion = Number(parsed?.schemaVersion);
+            if (Array.isArray(parsed?.claims)) claims = parsed.claims.slice(0, 500);
+            else deltaErrorCode = "agenda_delta_claims_invalid";
+          } catch { deltaErrorCode = "agenda_delta_unreadable"; }
+        }
+        return { claims, deltaSchemaVersion, deltaErrorCode };
+      },
+      audit: async (event, error) => securityAudit(config, event, "failed", {
+        userId: project.userId, projectId: project.id, runId: run.id,
+        code: typeof error?.code === "string" ? error.code
+          : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
+      }),
+    }, project, run);
+  }
+
+  // Episodes whose run ended while the fold above failed (`sweepAutopilotOrphans`), looked for from the scheduler's minute
+  // tick at most every ten minutes.
+  let autopilotOrphanSweepAt = 0;
+  async function sweepOrphanedEpisodes() {
+    if (!autopilotService || !productDatabase || Date.now() - autopilotOrphanSweepAt < 600_000) return;
+    autopilotOrphanSweepAt = Date.now();
+    await sweepAutopilotOrphans({
+      database: productDatabase,
+      readRun: async ({ userId, projectId, runId }) => {
+        const user = await store.userById(userId);
+        const project = user ? await store.requireProject(user, projectId) : null;
+        const run = project ? (await agentRuns.list(project)).find((/** @type {any} */ item) => item.id === runId) : null;
+        return project && run ? { project, run } : null;
+      },
+      fold: (project, run) => foldAutopilotRun(project, run).catch((/** @type {any} */ error) => securityAudit(config, "autopilot.run.complete", "failed", {
+        userId: project.userId, projectId: project.id, runId: run.id, code: typeof error?.code === "string" ? error.code : "autopilot_completion_failed",
+      })),
+    });
+  }
+
   let autopilotWorker = null;
   let autopilotScheduleTimer = null;
   let autopilotScheduleRun = null;
@@ -3430,30 +3482,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           }));
         }
       }
-      const autopilotOwned = await step("autopilot.complete", () => completeOwnedAutopilotRun({
-        service: autopilotService, runtimeManager, usageLedger,
-        readDelta: async () => {
-          let claims = [];
-          let deltaSchemaVersion = null;
-          let deltaErrorCode = null;
-          const delta = (run.artifacts ?? []).find((artifact) => typeof artifact === "string" && artifact.endsWith("agenda-delta.json"));
-          if (delta) {
-            try {
-              const file = resolveScopedPath(project.workspaceDir, delta);
-              const parsed = JSON.parse(String(await readFileNoFollow(project.workspaceDir, file, "utf8")));
-              deltaSchemaVersion = Number(parsed?.schemaVersion);
-              if (Array.isArray(parsed?.claims)) claims = parsed.claims.slice(0, 500);
-              else deltaErrorCode = "agenda_delta_claims_invalid";
-            } catch { deltaErrorCode = "agenda_delta_unreadable"; }
-          }
-          return { claims, deltaSchemaVersion, deltaErrorCode };
-        },
-        audit: async (event, error) => securityAudit(config, event, "failed", {
-          userId: project.userId, projectId: project.id, runId: run.id,
-          code: typeof error?.code === "string" ? error.code
-            : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
-        }),
-      }, project, run));
+      const autopilotOwned = await step("autopilot.complete", () => foldAutopilotRun(project, run));
       // The platform's own evidence programme: a finished episode, or a recorded independent check of one of its claims, is the
       // moment a card may be earned (evidenceProgramme.mjs `settleEpisode`, which waits for what is not in yet). Nothing for any run
       // that is not the programme's, and a failure here never touches the run.
@@ -7518,7 +7547,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         code: typeof error?.code === "string" ? error.code : "autopilot_schedule_failed",
       });
     });
-    autopilotScheduleRun = maintenanceMutation(schedule)
+    autopilotScheduleRun = maintenanceMutation(async () => { await schedule(); await sweepOrphanedEpisodes(); })
       .catch((error) => {
         if (error?.code === "maintenance_active") return null;
         // This runs from a timer under `void`. Rethrowing here made a Postgres
