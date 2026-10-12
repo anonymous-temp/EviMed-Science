@@ -71,10 +71,10 @@ export async function reviewAccount(review, researchMemory, options) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const [{ loadConfig }, { createStore }, { ResearchMemoryStore }, { MemoryReview }, { UsageLedger }] = await Promise.all([
+  const [{ loadConfig }, { createStore }, { memoryStoreForOps }, { MemoryReview }, { UsageLedger }] = await Promise.all([
     import("../../apps/server/src/config.mjs"),
     import("../../apps/server/src/store.mjs"),
-    import("../../apps/server/src/researchMemory.mjs"),
+    import("./memory-store.mjs"),
     import("../../apps/server/src/memoryReview.mjs"),
     import("../../apps/server/src/usageLedger.mjs"),
   ]);
@@ -83,7 +83,7 @@ async function main() {
   const database = "database" in store ? store.database : null;
   try {
     if (!database) throw new Error("no control-plane database is configured");
-    const researchMemory = new ResearchMemoryStore(config, { database });
+    const { researchMemory } = memoryStoreForOps(config, database);
     const review = new MemoryReview(config, researchMemory, { usageLedger: new UsageLedger(database) });
     const result = await reviewAccount(review, researchMemory, options);
     process.stdout.write(`${JSON.stringify({ user: options.user, project: options.project, ...result }, null, 2)}\n`);

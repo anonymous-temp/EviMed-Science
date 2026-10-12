@@ -74,3 +74,13 @@ export function fingerprints() {
   for (let n = 1; n <= COHORT_SIZE; n += 1) found.push(patientNo(n), survivalOf(n));
   return found;
 }
+
+/**
+ * The fingerprints as whole values: a survival time like `9.14` is also a substring of a timestamp's `…:39.147Z`, which
+ * failed CI on 2026-10-12 with 「9.14 reached what the model is shown」 — the model had been shown a millisecond, not a
+ * patient. A value counts only where it is not part of a longer number or word.
+ * @returns {RegExp[]}
+ */
+export function distinctiveFingerprints() {
+  return fingerprints().map((value) => new RegExp(`(?<![\\w.])${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w])`));
+}

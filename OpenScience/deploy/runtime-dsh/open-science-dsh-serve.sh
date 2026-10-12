@@ -82,7 +82,15 @@ patch_args=()
 # where the launcher's flags end. `dsh --profile web --help`'s own usage line
 # confirms the ordering ("dsh [options] [command] [args...]"); putting it after
 # the app flags would hand it to the web app instead, which does not know it.
-dsh --profile "${profile}" "${patch_args[@]}" --no-open --port "${port}" --trusted-host "${authority}" &
+#
+# Its start line is `dsh web: http://127.0.0.1:<port>/?token=<token>`, and the
+# container's log is readable by anyone who can run `docker logs` on the host —
+# the 2026-10-12 audit read one there. Nothing here or in the control plane
+# reads that token (the control plane mints its own session cookie), so the line
+# keeps its shape and loses the value; `-u` keeps every other line as prompt as
+# the kernel wrote it.
+dsh --profile "${profile}" "${patch_args[@]}" --no-open --port "${port}" --trusted-host "${authority}" \
+  > >(sed -u -E 's/([?&]token=)[^[:space:]&#]+/\1[redacted]/g') 2>&1 &
 dsh_pid=$!
 
 # Wait for the kernel to bind before bridging.

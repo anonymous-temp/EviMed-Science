@@ -21,7 +21,7 @@ import { VcrMembers } from "../src/vcrMembers.mjs";
 import { vcrMatchingExecutor, vcrMatchingSeam, vcrSubjectTableSeam } from "../src/vcrComposition.mjs";
 import { vcrId } from "../src/vcrStoreBase.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
-import { COHORT_SIZE, FIELD_MAP, cohortCsv, dictionaryCsv, fingerprints, patientNo, streamOf, survivalOf, visitsCsv } from "./helpers/vcrIntakeData.mjs";
+import { COHORT_SIZE, FIELD_MAP, cohortCsv, dictionaryCsv, distinctiveFingerprints, patientNo, streamOf, survivalOf, visitsCsv } from "./helpers/vcrIntakeData.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 const options = { timeout: 60_000, skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
@@ -103,7 +103,7 @@ test("AC-03 a frozen snapshot holds metadata and no patient row reaches evimed_v
   const columns = await q(`SELECT table_name, column_name FROM information_schema.columns
     WHERE table_schema = 'evimed_vcr' AND data_type IN ('text', 'jsonb', 'ARRAY') ORDER BY 1, 2`);
   assert.ok(columns.length > 50, "the scan must actually have columns to scan");
-  const distinctive = fingerprints().map((value) => new RegExp(`(?<![\\w.])${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w])`));
+  const distinctive = distinctiveFingerprints();
   let scanned = 0;
   for (const column of columns) {
     const rows = await q(`SELECT "${column.column_name}"::text AS body FROM evimed_vcr."${column.table_name}" WHERE "${column.column_name}" IS NOT NULL`);
@@ -210,7 +210,8 @@ test("AC-22 what the model is shown of a sealed snapshot is the column name and 
   assert.equal(byName.AGE.densityCompleteness, 1);
   assert.deepEqual(byName.PATIENT_NO.levels, [], "the subject key is an identifier and carries no values");
   assert.deepEqual(forModel.sealedFields, ["OS_DEAD", "OS_MONTHS"]);
-  for (const value of fingerprints()) assert.ok(!JSON.stringify(forModel).includes(value), `${value} reached what the model is shown`);
+  const shown = JSON.stringify(forModel);
+  for (const pattern of distinctiveFingerprints()) assert.ok(!pattern.test(shown), `${pattern.source} reached what the model is shown`);
 });
 
 // ---------------------------------------------------------------------------
@@ -573,7 +574,7 @@ test("a study whose subjects arrived as one cohort table is matched from the sub
   assert.deepEqual(note.variablesMapped.map((/** @type {any} */ item) => [item.variable, item.column]).sort(), [["age", "age"], ["performance_status", "ecog"], ["sex", "sex"]]);
   // No cell of the cohort is in what was produced, and nothing patient-level reached the schema.
   const text = JSON.stringify(result);
-  for (const value of fingerprints()) assert.equal(text.includes(value), false, `${value} is a cell of the partner's file`);
+  for (const pattern of distinctiveFingerprints()) assert.equal(pattern.test(text), false, `${pattern.source} is a cell of the partner's file`);
   assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.matching_facts")).at(0).n, before, "no fact was written for any row");
   assert.ok(result.assessments.every((/** @type {any} */ assessment) => JSON.stringify(assessment.judgments).includes("snapshot_cell")), "evidence says the cell it stands on, by column");
   assert.equal(JSON.stringify(result.assessments).includes("\"quote\":\"age = "), false);
