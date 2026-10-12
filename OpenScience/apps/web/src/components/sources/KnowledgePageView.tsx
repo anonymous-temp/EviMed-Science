@@ -14,7 +14,8 @@ import { NoteEditor } from "./NoteEditor";
 
 /** What a changed document did to a page, in the words the memory drawer already uses for a source that moved. */
 const STALE_LABEL: Record<string, string> = { changed: "来源已更改", retracted: "来源已撤回", removed: "来源已删除" };
-const CONFIDENCE_LABEL: Record<string, string> = { high: "高", moderate: "中", low: "低" };
+/** How firmly documents back a statement across them: independent documents agreeing, agreeing in direction, or only in part. */
+const CONFIDENCE_LABEL: Record<string, string> = { high: "多方一致", moderate: "方向一致", low: "支持有限" };
 const UNCONFIRMED = "没能在原文里核对到这句引文";
 
 /**
@@ -126,7 +127,7 @@ function PageItem({ item, onOpen }: { item: KnowledgePageItem; onOpen: (evidence
       <div className="min-w-0 space-y-1">
         <p className={unconfirmed ? "text-ui text-text-2" : "text-ui text-text"}>{item.text}</p>
         {item.claimKind === "synthesized" && (
-          <Tag>综合{item.confidence && CONFIDENCE_LABEL[item.confidence] ? ` · 置信度${CONFIDENCE_LABEL[item.confidence]}` : ""}</Tag>
+          <Tag>综合{item.confidence && CONFIDENCE_LABEL[item.confidence] ? ` · ${CONFIDENCE_LABEL[item.confidence]}` : ""}</Tag>
         )}
         {item.evidence.length > 0 && (
           <ul className="flex flex-wrap gap-x-3 gap-y-1">

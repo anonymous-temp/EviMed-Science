@@ -47,7 +47,7 @@ describe("KnowledgePageView", () => {
     expect(screen.getAllByRole("img", { name: "未能核对" })).toHaveLength(1);
     expect(screen.getAllByRole("img", { name: "我的补充" })).toHaveLength(1);
     expect(screen.getByText(/没能在原文里核对到这句引文/)).toBeInTheDocument();
-    expect(screen.getByText("综合 · 置信度中")).toBeInTheDocument();
+    expect(screen.getByText("综合 · 方向一致")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /《房颤指南》/ })).toHaveLength(2);
   });
 
