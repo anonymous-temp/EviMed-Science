@@ -11,7 +11,7 @@ import { TWO_COLUMN_MIN_WIDTH } from "@/components/sources/useReaderBox";
 import { SourceReaderPage } from "./SourceReaderPage";
 
 const mocks = vi.hoisted(() => ({
-  getSource: vi.fn(), getSourceUnderstanding: vi.fn(), getSourceMaterials: vi.fn(), getSourceFamily: vi.fn(), getSourceUses: vi.fn(),
+  getSource: vi.fn(), getSourceUnderstanding: vi.fn(), getSourceMaterials: vi.fn(), getSourceFamily: vi.fn(), getSourceUses: vi.fn(), getSourceDependents: vi.fn(),
   retrySource: vi.fn(), removeSource: vi.fn(), refetchSource: vi.fn(), getSourceNote: vi.fn(), saveSourceNote: vi.fn(),
   listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), addToLibrary: vi.fn(), removeFromLibrary: vi.fn(),
   downloadArtifact: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(),
@@ -23,6 +23,7 @@ const layout = vi.hoisted(() => ({ width: 1200, observers: new Set<() => void>()
 vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), ...Object.fromEntries(
   ["getSource", "getSourceUnderstanding", "getSourceMaterials", "getSourceFamily", "getSourceUses", "retrySource", "removeSource", "refetchSource", "getSourceNote", "saveSourceNote",
     "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
+vi.mock("@/lib/knowledgeBaseClient", async (importOriginal) => ({ ...(await importOriginal<object>()), getSourceDependents: mocks.getSourceDependents }));
 vi.mock("@/lib/artifactFile", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadArtifact: mocks.downloadArtifact }));
 vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
 vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal<object>()), hasWebApi: true, getWebProjectId: () => context.projectId }));
@@ -156,6 +157,7 @@ describe("a document's page", () => {
     mocks.getSourceMaterials.mockResolvedValue({ sourceId: "src_guideline", generation: 1, materials: null, reason: "not_extracted" });
     mocks.getSourceFamily.mockResolvedValue({ sourceId: "src_guideline", familyId: null, currentVersion: 1, items: [], nextCursor: null });
     mocks.getSourceUses.mockResolvedValue({ items: [] });
+    mocks.getSourceDependents.mockResolvedValue({ memories: [], methods: [], results: [] });
     mocks.listDuplicateCandidates.mockResolvedValue({ items: [], scanned: 0, truncated: false });
     mocks.retrySource.mockResolvedValue(guideline);
     mocks.removeSource.mockResolvedValue(guideline);
@@ -427,6 +429,43 @@ describe("a document's page", () => {
       // No count, no kind of use, no run or session identifier: only the conversation and the day.
       expect(points.textContent).not.toMatch(/ses_|run_|用过 ?\d|检索|读取/);
       expect(mocks.getSourceUses).toHaveBeenCalledWith("src_guideline");
+    });
+
+    // 「相关记忆与做法」: what rests on the document, folded, after everything else, and only where something does.
+    it("end with a fold of what rests on the document, closed, and draw nothing where nothing does", async () => {
+      mocks.getSourceDependents.mockResolvedValue({
+        memories: [{ recordId: "mem_1", text: "纳入标准为 18 岁以上", scope: "project" }],
+        methods: [{ id: "mth_1", title: "汇总前核对纳入研究数" }],
+        results: [{ versionId: `rv_${"1".repeat(64)}`, runId: "run_9", path: "deliverables/a/clinical-evidence-report.md", title: "房颤抗凝综述", at: "2020-10-06T08:00:00Z" }],
+      });
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      const points = columnOf("points")!;
+      const fold = await within(points).findByText("相关记忆与做法");
+      expect(fold.closest("details")).not.toHaveAttribute("open");
+      expect(mocks.getSourceDependents).toHaveBeenCalledWith("src_guideline");
+      order("讲了什么", "要点", "相关记忆与做法");
+      await userEvent.click(fold);
+      expect(within(points).getByRole("link", { name: "纳入标准为 18 岁以上" })).toHaveAttribute("href", "/app/memory?record=mem_1");
+      expect(within(points).getByRole("link", { name: "汇总前核对纳入研究数" })).toHaveAttribute("href", "/app/memory?method=mth_1");
+      expect(within(points).getByRole("link", { name: "证据分析报告 · 房颤抗凝综述" })).toHaveAttribute("href", "/app/runs/run_9/files/deliverables/a/clinical-evidence-report.md");
+      expect(points.textContent).not.toMatch(/mem_|mth_|run_|rv_|用过 ?\d/);
+      cleanup();
+      mocks.getSourceDependents.mockResolvedValue({ memories: [], methods: [], results: [] });
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toContain("相关记忆与做法");
+      cleanup();
+      mocks.getSourceDependents.mockRejectedValue(new WebApiError("down", { status: 503 }));
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toContain("相关记忆与做法");
+      expect(within(columnOf("points")!).queryByRole("alert")).not.toBeInTheDocument();
     });
 
     it("say nothing about use where the record has none, or cannot be read", async () => {

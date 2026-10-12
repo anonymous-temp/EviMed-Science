@@ -38,6 +38,14 @@ import { sourceLinkOf } from "./researchMemory.mjs";
 /** How many result versions one source change looks up methods for; a link is a handful, and a count is never a ledger. */
 const MAX_VERSIONS = 40;
 
+/**
+ * The memories a project's panel lists, as a predicate over a dependent row: in use (a replaced or archived memory is history that
+ * still names its source), and in this project's scope or the account's own.
+ * @param {string} projectId @returns {(row: any) => boolean}
+ */
+const listedIn = (projectId) => (row) => ["active", "pending"].includes(row.status)
+  && (row.scope === "user" || row.scope === "organization" || (row.scope === "project" && row.scopeId === projectId));
+
 /** @param {any} error @returns {string} */
 const codeOf = (error) => (typeof error?.code === "string" && /^[a-z][a-z0-9_.-]{0,63}$/.test(error.code) ? error.code : "knowledge_change_failed");
 
@@ -146,8 +154,7 @@ export class KnowledgeChangeService {
       if (dependents.some((/** @type {any} */ row) => row.state !== next && from.includes(row.state))) {
         moved = new Set((await this.memory.markSourceLinks(ownerId, link, { state: next, reason: linkReasonOf(checked), onlyFrom: from })).recordIds);
       }
-      const shown = dependents.filter((/** @type {any} */ row) => ["active", "pending"].includes(row.status)
-        && (row.scope === "user" || row.scope === "organization" || (row.scope === "project" && row.scopeId === projectId)));
+      const shown = dependents.filter(listedIn(projectId));
       return { total: shown.length, items: shown.map((/** @type {any} */ row) => ({ recordId: row.recordId, scope: row.scope, kind: row.kind,
         state: moved.has(row.recordId) ? next : row.state })) };
     } catch (error) {
@@ -198,16 +205,9 @@ export class KnowledgeChangeService {
     const state = linkStateOf(checked);
     const at = this.now().toISOString();
     /** @type {Map<string, any>} */
-    const found = new Map();
-    try {
-      for (const versionId of [...new Set(versionIds)].slice(0, MAX_VERSIONS)) {
-        for (const document of await this.methods.methodsLinkedTo(ownerId, versionId)) {
-          if (found.has(document.id)) continue;
-          const learnt = (document.payload?.provenance?.results ?? []).some((/** @type {any} */ entry) => entry?.versionId === versionId);
-          found.set(document.id, { id: document.id, title: methodLabel(document), versionId, relation: learnt ? "learnt_from" : "used_for" });
-        }
-      }
-    } catch (error) {
+    let found;
+    try { found = await this.#methodsLinked(ownerId, versionIds); }
+    catch (error) {
       this.report(codeOf(error));
       return { unknown: "lookup_failed" };
     }
@@ -221,6 +221,55 @@ export class KnowledgeChangeService {
       }
     }
     return { total: found.size, items: [...found.values()] };
+  }
+
+  /**
+   * The learned methods linked to result versions, found by the version identities their records name.
+   * @param {string} ownerId @param {readonly string[]} versionIds
+   * @returns {Promise<Map<string, any>>} by method id
+   */
+  async #methodsLinked(ownerId, versionIds) {
+    /** @type {Map<string, any>} */
+    const found = new Map();
+    for (const versionId of [...new Set(versionIds)].slice(0, MAX_VERSIONS)) {
+      for (const document of await this.methods.methodsLinkedTo(ownerId, versionId)) {
+        if (found.has(document.id)) continue;
+        const learnt = (document.payload?.provenance?.results ?? []).some((/** @type {any} */ entry) => entry?.versionId === versionId);
+        found.set(document.id, { id: document.id, title: methodLabel(document), versionId, relation: learnt ? "learnt_from" : "used_for" });
+      }
+    }
+    return found;
+  }
+
+  /**
+   * What rests on a source, read and nothing else: the memories that name it and the learned methods linked to the result
+   * versions that rest on it, found by recorded link and labelled by no one. What a document's page lists under
+   * 「相关记忆与做法」 — the same two classes `memories` and `methodsFor` label when the source changes, and the same rule for
+   * which memories a project's panel lists (`listedIn`). A class that could not be looked up is `{ unknown }`, never an empty
+   * list; the page then lists nothing of it and says nothing about it.
+   * @param {string} ownerId @param {string} projectId @param {{ id: string, doi?: string }} ref @param {readonly string[]} versionIds
+   * @returns {Promise<{ memories: { items?: any[], unknown?: string }, methods: { items?: any[], unknown?: string } }>}
+   */
+  async dependents(ownerId, projectId, ref, versionIds) {
+    return { memories: await this.#readMemories(ownerId, projectId, ref), methods: await this.#readMethods(ownerId, versionIds) };
+  }
+
+  /** @param {string} ownerId @param {string} projectId @param {{ id: string, doi?: string }} ref */
+  async #readMemories(ownerId, projectId, ref) {
+    const link = memoryLinkOf(ref);
+    if (!link) return { items: [] };
+    if (!this.memory || this.memory.configured === false) return { unknown: "unavailable" };
+    try {
+      const rows = (await this.memory.dependentsOfSource(ownerId, link)).filter(listedIn(projectId));
+      return { items: rows.map((/** @type {any} */ row) => ({ recordId: row.recordId, scope: row.scope, kind: row.kind, state: row.state })) };
+    } catch (error) { this.report(codeOf(error)); return { unknown: "lookup_failed" }; }
+  }
+
+  /** @param {string} ownerId @param {readonly string[]} versionIds */
+  async #readMethods(ownerId, versionIds) {
+    if (!this.methods) return { unknown: "unavailable" };
+    try { return { items: [...(await this.#methodsLinked(ownerId, versionIds)).values()] }; }
+    catch (error) { this.report(codeOf(error)); return { unknown: "lookup_failed" }; }
   }
 }
 

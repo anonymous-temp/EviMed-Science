@@ -239,6 +239,10 @@ import { createResearchCommerce } from "./researchCommerce.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceUses, nameConversations, recordSourceUsesOfRun } from "./sourceUses.mjs";
+import { createSourceDependents } from "./sourceDependents.mjs";
+import { KnowledgeVaultExport } from "./knowledgeVaultExport.mjs";
+import { projectDeliverables } from "./projectDeliverables.mjs";
+import { projectComposition } from "./sourceComposition.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
 import { createSourceMaterials } from "./sourceMaterials.mjs";
@@ -1670,8 +1674,44 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return nameConversations(rows, ledgers);
     },
   } : null;
+  // What rests on a document (「相关记忆与做法」): read through the change service the source-change path labels with, the result
+  // ledger and the research memory — all built further down, and all read only when a request arrives.
+  const sourceDependents = createSourceDependents({
+    knowledge: { dependents: (ownerId, projectId, ref, versionIds) => knowledgeChange.dependents(ownerId, projectId, ref, versionIds) },
+    documents: productDocuments, memory: researchMemory,
+    runs: async (project, runIds) => {
+      const wanted = new Set(runIds);
+      /** @type {Map<string, { title: string | null, deleted: boolean }>} */
+      const named = new Map();
+      for (const run of await agentRuns.list(project)) {
+        if (!wanted.has(run.id)) continue;
+        const title = String(run.title ?? run.question ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+        named.set(run.id, { title: title || null, deleted: run.deleted === true });
+      }
+      return named;
+    },
+    report: code => { void securityAudit(config, "source.dependents", "failed", { code }).catch(() => {}); },
+  });
+  // 「导出到 Obsidian」: the project's documents as notes in one zip, under the archive limits the project and account exports obey.
+  const knowledgeVault = sourceService && productDocuments ? new KnowledgeVaultExport({
+    sources: sourceService, documents: productDocuments,
+    readText: async (project, rel) => String(await readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel), "utf8")),
+    maxEntries: config.maxArchiveEntries, maxBytes: config.maxArchiveBytes,
+    report: code => { void securityAudit(config, "source.vault", "failed", { code }).catch(() => {}); },
+  }) : null;
   const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, knowledge: knowledgeEntries, uses: sourceUsesReader,
-    passages: { find: (request) => kbIndex ? kbIndex.passages(request) : Promise.resolve(null) }, maxJsonBytes: config.maxJsonBytes });
+    passages: { find: (request) => kbIndex ? kbIndex.passages(request) : Promise.resolve(null) }, dependents: sourceDependents, vault: knowledgeVault,
+    // 「对话产出」: what the project's runs delivered, as the run ledger says it. Built over the ledger and the registry further down.
+    outputs: async (project) => {
+      const registry = await agentRegistry;
+      return projectDeliverables(await agentRuns.list(project), {
+        describe: run => agentRuns.withArtifactKinds(run, registry),
+        isInternal: agent => registry?.get?.(agent)?.visibility === "internal",
+      });
+    },
+    // 资料组成: the library counted by year and keyword, in SQL over the account's documents of the project.
+    composition: productDatabase ? (userId, project) => projectComposition(productDatabase, userId, project.id) : null,
+    maxJsonBytes: config.maxJsonBytes });
   // One admission for every way a file reaches `knowledge-base/`: the upload
   // route and the upload command both refuse a format the knowledge base
   // cannot read before a byte is written, and both register what they wrote.

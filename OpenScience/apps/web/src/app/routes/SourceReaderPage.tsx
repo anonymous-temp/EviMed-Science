@@ -22,6 +22,7 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { DuplicateGroups } from "@/components/sources/DuplicateGroups";
+import { SourceDependents } from "@/components/sources/SourceDependents";
 import { SourceKeyPoints } from "@/components/sources/SourceKeyPoints";
 import { SourceOriginal } from "@/components/sources/SourceOriginal";
 import { SourceQuotation } from "@/components/sources/SourceQuotation";
@@ -204,7 +205,12 @@ function SourceReader({ sourceId }: { sourceId: string }) {
     && end > start && end - start <= 2000 && /^[a-f0-9]{64}$/.test(sha) ? { start, end, sha } : undefined;
   const original = source && (span ? <SourceQuotation source={source} page={view.page ?? undefined} span={span} onNoteSaved={noteSaved} />
     : <SourceOriginal source={source} page={view.page ?? undefined} onNoteSaved={noteSaved} />);
-  const points = source && <SourceKeyPoints source={source} busy={busy} versionPath={versionPath} onShowPage={showPage} onRetry={readAgain} />;
+  const points = source && (
+    <div className="space-y-6">
+      <SourceKeyPoints source={source} busy={busy} versionPath={versionPath} onShowPage={showPage} onRetry={readAgain} />
+      <SourceDependents source={source} />
+    </div>
+  );
   return (
     <div ref={rootRef} className="h-full">
       <PageShell

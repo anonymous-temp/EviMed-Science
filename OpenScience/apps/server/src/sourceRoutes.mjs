@@ -20,9 +20,21 @@ async function bodyOf(req, limit, allowed) {
  * `uses` reads which conversations used a document (`GET /api/sources/:id/uses`, N-16) and `passages` finds where a search
  * of the page's box matches inside the documents' own text (N-16); each is absent where its store is, and the route then
  * answers as though there were none — a list without passages is the list it always was.
+ * `dependents` reads what rests on a document — the memories, learned methods and results that name it
+ * (`GET /api/sources/:id/dependents`, `sourceDependents.mjs`); absent, the lists are empty.
+ * `vault` writes a project's knowledge base as an Obsidian vault (`GET /api/sources/export/vault?projectId=`,
+ * `knowledgeVaultExport.mjs`); absent, that route answers that the export is unavailable.
+ * `outputs` lists the files a project's conversations delivered (`GET /api/sources/outputs?projectId=`,
+ * `projectDeliverables.mjs`): an index of the run ledger, absent where the ledger is.
+ * `composition` counts what a project's library is made of by year and keyword (`GET /api/sources/composition?projectId=`,
+ * `sourceComposition.mjs`); absent, there is nothing to count.
  * @param {{store:any,service:any,openList?:any,knowledge?:any,uses?:{list:(user:any,sourceId:string)=>Promise<any[]>}|null,
- *   passages?:{find:(request:{userId:string,projectId:string|null,shared:boolean,q:string})=>Promise<any>}|null,maxJsonBytes:number}} dependencies */
-export function createSourceRoutes({ store, service, openList = null, knowledge = null, uses = null, passages = null, maxJsonBytes }) {
+ *   passages?:{find:(request:{userId:string,projectId:string|null,shared:boolean,q:string})=>Promise<any>}|null,
+ *   dependents?:((request:{user:any,project:any,source:any})=>Promise<any>)|null,
+ *   vault?:{export:(userId:string,project:any)=>Promise<{bytes:Uint8Array,filename:string,mimeType:string}>}|null,
+ *   outputs?:((project:any)=>Promise<any[]>)|null,
+ *   composition?:((userId:string,project:any)=>Promise<any>)|null,maxJsonBytes:number}} dependencies */
+export function createSourceRoutes({ store, service, openList = null, knowledge = null, uses = null, passages = null, dependents = null, vault = null, outputs = null, composition = null, maxJsonBytes }) {
   // The composition builds one OpenList connector for the browser's namespace and
   // shares this SourceService instance with the ingestion worker. Handing the
   // connector to the service here is what lets the leased folder sync page the
@@ -108,6 +120,33 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
       }
       throw new HttpError(404, "not_found", "Source route not found.");
     }
+    // The project's knowledge base as an Obsidian vault: a zip of Markdown notes, read under the account and in a project it owns.
+    if (url.pathname === "/api/sources/export/vault" && method === "GET") {
+      const projectId = url.searchParams.get("projectId");
+      if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
+      const owned = await store.requireProject(user, projectId);
+      if (!vault) throw new HttpError(503, "source_state_unavailable", "Exporting the knowledge base needs the source storage.");
+      const file = await vault.export(user.id, owned);
+      res.writeHead(200, { "Content-Type": file.mimeType, "Content-Length": file.bytes.length,
+        "Content-Disposition": `attachment; filename="${file.filename}"`, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
+      res.end(Buffer.from(file.bytes));
+      return true;
+    }
+    // The files the project's conversations delivered, for the page's 「对话产出」: read from the run ledger of a project the caller owns.
+    if (url.pathname === "/api/sources/outputs" && method === "GET") {
+      const projectId = url.searchParams.get("projectId");
+      if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
+      const owned = await store.requireProject(user, projectId);
+      return reply({ items: outputs ? await outputs(owned) : [] });
+    }
+    // What the project's library is made of, by year and keyword: counted over the documents the account holds in a project it owns.
+    if (url.pathname === "/api/sources/composition" && method === "GET") {
+      const projectId = url.searchParams.get("projectId");
+      if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
+      const owned = await store.requireProject(user, projectId);
+      return reply(composition ? await composition(user.id, owned)
+        : { total: 0, dated: 0, keyworded: 0, years: [], keywords: [] });
+    }
     if (url.pathname === "/api/sources/duplicates" && method === "GET") {
       const projectId = url.searchParams.get("projectId");
       if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
@@ -175,7 +214,7 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
     if (parts.length < 1 || parts.length > 3) throw new HttpError(404, "not_found", "Source route not found.");
     const [sourceId, action] = parts;
     const source = await service.get(user.id, sourceId, { includeDeleted: method === "DELETE" });
-    await store.requireProject(user, source.projectId);
+    const sourceProject = await store.requireProject(user, source.projectId);
     if (action === "locate" && method === "POST" && parts.length === 2) {
       const input = await bodyOf(req, maxJsonBytes, ["quote"]);
       return reply(await locateSourceQuote(service, user.id, source, input.quote));
@@ -212,6 +251,11 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
     // The conversations that used this document, newest first. The document was asked for through the account that holds it
     // (`service.get` above), and the store lists only that account's rows.
     if (action === "uses" && parts.length === 2 && method === "GET") return reply({ items: uses ? await uses.list(user, sourceId) : [] });
+    // What rests on this document: the account's own memories, learned methods and results that name it, in the document's
+    // project. The document was asked for through the account that holds it, and every read below is under that account.
+    if (action === "dependents" && parts.length === 2 && method === "GET") {
+      return reply(dependents ? await dependents({ user, project: sourceProject, source }) : { memories: [], methods: [], results: [] });
+    }
     if (parts.length > 2) throw new HttpError(404, "not_found", "Source route not found.");
     // One document, as the reader page opens it: the row's own `shared` (whether the account library holds the bytes) is a
     // column of the list query, so a single read asks for it here.

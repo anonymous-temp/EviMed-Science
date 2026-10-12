@@ -8,7 +8,7 @@ import { createSourceRoutes } from "../src/sourceRoutes.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
 import { startFakeOpenList } from "./fakeOpenList.mjs";
 
-async function fixture(t, { withOpenList = false, connector = null, withKnowledge = true, uses = null, passages = null } = {}) {
+async function fixture(t, { withOpenList = false, connector = null, withKnowledge = true, uses = null, passages = null, dependents = null, vault = null, outputs = null, composition = null } = {}) {
   const calls = [];
   const service = {
     list: async (userId, options) => { calls.push({ method: "list", userId, options }); return { items: [], nextCursor: null }; },
@@ -45,7 +45,7 @@ async function fixture(t, { withOpenList = false, connector = null, withKnowledg
     },
     requireProject: async (_user, id) => {
       if (id !== "owned-project") throw new HttpError(404, "project_not_found", "Project unavailable.");
-      return { id };
+      return { id, name: "Owned project" };
     },
   };
   const openList = connector ?? (withOpenList ? {
@@ -62,7 +62,7 @@ async function fixture(t, { withOpenList = false, connector = null, withKnowledg
     saveNote: async (input) => { calls.push({ method: "saveNote", sourceId: input.source.id, title: input.title, body: input.body }); return { source: { id: "src_note_2", kind: "source", payload: { status: "queued", paths: [], reasons: [] } }, duplicate: false, changed: true, job: null }; },
     refetchLink: async (input) => { calls.push({ method: "refetchLink", sourceId: input.source.id }); return { source: { id: "src_link", kind: "source", payload: { status: "queued", paths: [], reasons: [] } }, duplicate: true, changed: false, job: null }; },
   } : null;
-  const route = createSourceRoutes({ store, service, openList, knowledge, uses, passages, maxJsonBytes: 64 * 1024 });
+  const route = createSourceRoutes({ store, service, openList, knowledge, uses, passages, dependents, vault, outputs, composition, maxJsonBytes: 64 * 1024 });
   const server = createServer((req, res) => {
     route(req, res).then((handled) => { if (!handled) { res.writeHead(404); res.end(); } }).catch((error) => sendError(res, error));
   });
@@ -228,6 +228,94 @@ test("a document's page asks which conversations used it, through the account th
 test("without a store of uses a document's page is told there are none", async t => {
   const { base, headers } = await fixture(t);
   assert.deepEqual((await (await fetch(`${base}/api/sources/src_one/uses`, { headers })).json()).data, { items: [] });
+});
+
+test("what rests on a document is read through the account that holds it, in the document's own project", async t => {
+  const asked = [];
+  const dependents = async ({ user, project, source }) => { asked.push([user.id, project.id, source.id]); return { memories: [{ recordId: "mem_1", text: "试验入选 18 岁以上", scope: "project" }], methods: [], results: [] }; };
+  const { base, headers, service } = await fixture(t, { dependents });
+  const response = await fetch(`${base}/api/sources/src_one/dependents`, { headers });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, { memories: [{ recordId: "mem_1", text: "试验入选 18 岁以上", scope: "project" }], methods: [], results: [] });
+  assert.deepEqual(asked, [["owner", "owned-project", "src_one"]]);
+  // A read only, and unauthenticated nothing is asked.
+  assert.equal((await fetch(`${base}/api/sources/src_one/dependents`, { method: "POST", headers, body: "{}" })).status, 404);
+  assert.equal((await fetch(`${base}/api/sources/src_one/dependents`)).status, 401);
+  assert.equal(asked.length, 1);
+  // The document's project is checked before anything is read about it.
+  service.get = async () => ({ id: "src_other", projectId: "other-project" });
+  assert.equal((await fetch(`${base}/api/sources/src_other/dependents`, { headers })).status, 404);
+  assert.equal(asked.length, 1);
+});
+
+test("without the stores that know, a document's page is told there is nothing that rests on it", async t => {
+  const { base, headers } = await fixture(t);
+  assert.deepEqual((await (await fetch(`${base}/api/sources/src_one/dependents`, { headers })).json()).data, { memories: [], methods: [], results: [] });
+});
+
+test("the knowledge base downloads as a vault from a project the caller owns, and from no other", async t => {
+  const asked = [];
+  const vault = { export: async (userId, project) => { asked.push([userId, project.id]); return { bytes: new Uint8Array([80, 75, 3, 4]), filename: "evimed-knowledge-base.zip", mimeType: "application/zip" }; } };
+  const { base, headers } = await fixture(t, { vault });
+  const response = await fetch(`${base}/api/sources/export/vault?projectId=owned-project`, { headers });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/zip");
+  assert.equal(response.headers.get("content-disposition"), 'attachment; filename="evimed-knowledge-base.zip"');
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [80, 75, 3, 4]);
+  assert.deepEqual(asked, [["owner", "owned-project"]]);
+  // A project is named, it is the caller's own, and the caller is signed in; nothing is built before all three.
+  assert.equal((await fetch(`${base}/api/sources/export/vault`, { headers })).status, 400);
+  assert.equal((await fetch(`${base}/api/sources/export/vault?projectId=other-project`, { headers })).status, 404);
+  assert.equal((await fetch(`${base}/api/sources/export/vault?projectId=owned-project`)).status, 401);
+  assert.equal(asked.length, 1);
+});
+
+test("without the source storage the vault says the export is unavailable, and a refusal of the size is passed on", async t => {
+  const { base, headers } = await fixture(t);
+  const unavailable = await fetch(`${base}/api/sources/export/vault?projectId=owned-project`, { headers });
+  assert.equal(unavailable.status, 503);
+  assert.equal((await unavailable.json()).code, "source_state_unavailable");
+  const big = await fixture(t, { vault: { export: async () => { throw new HttpError(413, "archive_too_large", "The knowledge base export exceeded 10 entries."); } } });
+  const refused = await fetch(`${big.base}/api/sources/export/vault?projectId=owned-project`, { headers: big.headers });
+  assert.equal(refused.status, 413);
+  assert.equal((await refused.json()).code, "archive_too_large");
+});
+
+test("the files a project's conversations delivered are read for a project the caller owns, and for no other", async t => {
+  const asked = [];
+  const outputs = async (project) => { asked.push(project.id); return [{ runId: "run_1", title: "房颤抗凝综述", path: "deliverables/a/report.md", at: "2026-10-10T08:00:00.000Z" }]; };
+  const { base, headers } = await fixture(t, { outputs });
+  const response = await fetch(`${base}/api/sources/outputs?projectId=owned-project`, { headers });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data.items.map((item) => [item.runId, item.path]), [["run_1", "deliverables/a/report.md"]]);
+  assert.deepEqual(asked, ["owned-project"]);
+  assert.equal((await fetch(`${base}/api/sources/outputs`, { headers })).status, 400);
+  assert.equal((await fetch(`${base}/api/sources/outputs?projectId=other-project`, { headers })).status, 404);
+  assert.equal((await fetch(`${base}/api/sources/outputs?projectId=owned-project`)).status, 401);
+  assert.equal((await fetch(`${base}/api/sources/outputs?projectId=owned-project`, { method: "POST", headers, body: "{}" })).status, 404);
+  assert.equal(asked.length, 1);
+  // Where there is no ledger, there is no list — and no error.
+  const bare = await fixture(t);
+  assert.deepEqual((await (await fetch(`${bare.base}/api/sources/outputs?projectId=owned-project`, { headers: bare.headers })).json()).data, { items: [] });
+});
+
+test("what the library is made of is counted for a project the caller owns, and for no other", async t => {
+  const asked = [];
+  const composition = async (userId, project) => { asked.push([userId, project.id]); return { total: 4, dated: 3, keyworded: 2, years: [{ year: 2021, count: 3 }], keywords: [{ keyword: "房颤", count: 2 }] }; };
+  const { base, headers } = await fixture(t, { composition });
+  const response = await fetch(`${base}/api/sources/composition?projectId=owned-project`, { headers });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data.years, [{ year: 2021, count: 3 }]);
+  assert.deepEqual(asked, [["owner", "owned-project"]]);
+  assert.equal((await fetch(`${base}/api/sources/composition`, { headers })).status, 400);
+  assert.equal((await fetch(`${base}/api/sources/composition?projectId=other-project`, { headers })).status, 404);
+  assert.equal((await fetch(`${base}/api/sources/composition?projectId=owned-project`)).status, 401);
+  assert.equal(asked.length, 1);
+  // Without the store there is nothing to count, which is an answer and not an error.
+  const bare = await fixture(t);
+  assert.deepEqual((await (await fetch(`${bare.base}/api/sources/composition?projectId=owned-project`, { headers: bare.headers })).json()).data,
+    { total: 0, dated: 0, keyworded: 0, years: [], keywords: [] });
 });
 
 test("the box's search of the documents' text decides which documents the list holds, and says where each match is", async t => {
