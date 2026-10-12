@@ -465,7 +465,7 @@ test("a note answers takesEffect from what the service says is in force, and say
 
 test("a note that carries a credential or anyone's identifier is not kept, even asked for, and says so; the rest of what is asked is", async (t) => {
   const f = await fixture(t);
-  for (const content of ["记住我的 NCBI API key：sk-abcdef1234567890abcd", "记住：联系人王老师手机 13812345678", "患者身份证 11010519491231002X 的随访放在周三"]) {
+  for (const content of ["记住我的 NCBI API key：sk-fake0000000000000000", "记住：联系人王老师手机 13812345678", "患者身份证 11010519491231002X 的随访放在周三"]) {
     const refused = await (await f.request("note", { factKind: "preference", content })).json();
     assert.equal(refused.entry, null, content);
     assert.equal(refused.takesEffect, false);
