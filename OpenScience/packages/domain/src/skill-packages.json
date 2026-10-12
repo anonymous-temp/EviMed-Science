@@ -4,8 +4,12 @@
   "image": {
     "source": "deploy/runtime-dsh/install-runtime.sh",
     "python": {
+      "anndata": "0.12.19",
+      "biopython": "1.88",
+      "gseapy": "1.3.1",
       "ipykernel": "6.29.5",
       "jupyterlab": "4.4.3",
+      "lifelines": "0.30.3",
       "matplotlib": "3.10.3",
       "numpy": "2.2.6",
       "openpyxl": "3.1.5",
@@ -13,14 +17,20 @@
       "pillow": "10.4.0",
       "playwright": "1.58.0",
       "pypdf": "6.7.0",
+      "rdkit": "2026.3.6",
+      "scanpy": "1.11.5",
       "scikit-learn": "1.6.1",
       "scipy": "1.15.3",
       "statsmodels": "0.14.6",
       "xlrd": "2.0.2"
     },
     "modules": {
+      "anndata": ["anndata","h5py","zarr","numcodecs","natsort"],
+      "biopython": ["Bio","BioSQL"],
+      "gseapy": ["gseapy"],
       "ipykernel": ["ipykernel","IPython","traitlets","jupyter_client","jupyter_core","tornado","zmq","comm","debugpy"],
       "jupyterlab": ["jupyterlab","jupyter_server","nbformat","nbconvert","nbclient","notebook_shim","jupyter_lsp"],
+      "lifelines": ["lifelines","autograd","autograd_gamma","formulaic"],
       "matplotlib": ["matplotlib","mpl_toolkits","pylab","cycler","kiwisolver","pyparsing","dateutil","contourpy","fontTools"],
       "numpy": ["numpy"],
       "openpyxl": ["openpyxl","et_xmlfile"],
@@ -28,6 +38,8 @@
       "pillow": ["PIL"],
       "playwright": ["playwright","greenlet","pyee"],
       "pypdf": ["pypdf"],
+      "rdkit": ["rdkit"],
+      "scanpy": ["scanpy","numba","llvmlite","umap","pynndescent","seaborn","networkx","tqdm"],
       "scikit-learn": ["sklearn","joblib","threadpoolctl"],
       "scipy": ["scipy"],
       "statsmodels": ["statsmodels","patsy"],
@@ -1679,13 +1691,6 @@
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"agents/openai.yaml","sha256":"56cc41590230210038fa61b796d43e37f10aae1025006031e839bd56fb1fddb3"}],
       "dependencies": [
-        {
-          "kind": "python-package",
-          "name": "biopython",
-          "supply": "image",
-          "basis": "declared",
-          "evidence": "inventory.json: SKILL.md: Check Biopython or other dependencies before execution"
-        },
         {"kind":"python-package","name":"numpy","constraint":"==2.2.6","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"python-package","name":"pandas","constraint":"==2.2.3","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {
@@ -1829,13 +1834,6 @@
       "dependencies": [
         {"kind":"python-package","name":"numpy","constraint":"==2.2.6","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"python-package","name":"pandas","constraint":"==2.2.3","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
-        {
-          "kind": "python-package",
-          "name": "rdkit",
-          "supply": "image",
-          "basis": "declared",
-          "evidence": "inventory.json: SKILL.md: Check RDKit or other required dependencies before execution"
-        },
         {
           "kind": "python-package",
           "name": "scikit-learn",
@@ -2686,13 +2684,7 @@
         {"path":"references/interpretation.md","sha256":"b991dbcf2e1858817475131ebeeac6fca6478e91c27a071b07566ecb82473722"}
       ],
       "dependencies": [
-        {
-          "kind": "python-package",
-          "name": "gseapy",
-          "supply": "image",
-          "basis": "declared",
-          "evidence": "inventory.json: scripts/run_enrichment.py: Requires: gseapy; exits when it is not installed"
-        },
+        {"kind":"python-package","name":"gseapy","supply":"image","optional":true,"basis":"observed","evidence":"scripts/run_enrichment.py"},
         {"kind":"python-package","name":"numpy","constraint":"==2.2.6","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"python-package","name":"pandas","constraint":"==2.2.3","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {
@@ -3069,10 +3061,8 @@
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"agents/openai.yaml","sha256":"66860cec0e8bfc2696430758e8859b41e3a72c7cf19b985e64577551f67b71c6"}],
       "dependencies": [
-        {"kind":"python-package","name":"anndata","supply":"image","basis":"declared","evidence":"inventory.json: SKILL.md description: AnnData, Scanpy"},
         {"kind":"python-package","name":"numpy","constraint":"==2.2.6","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"python-package","name":"pandas","constraint":"==2.2.3","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
-        {"kind":"python-package","name":"scanpy","supply":"image","basis":"declared","evidence":"inventory.json: SKILL.md description: AnnData, Scanpy"},
         {
           "kind": "python-package",
           "name": "scikit-learn",
@@ -3175,14 +3165,6 @@
         {"path":"references/simulation_based_power.md","sha256":"5841de90e01a4e4617ce84c9ced9791f1ca3b3e0727c80f73f3ea5b9f339b469"}
       ],
       "dependencies": [
-        {
-          "kind": "python-package",
-          "name": "lifelines",
-          "supply": "image",
-          "optional": true,
-          "basis": "declared",
-          "evidence": "inventory.json: SKILL.md: uv pip install lifelines (survival; optional, add as needed)"
-        },
         {
           "kind": "python-package",
           "name": "matplotlib",

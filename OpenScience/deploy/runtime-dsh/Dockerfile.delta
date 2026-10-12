@@ -85,8 +85,10 @@ RUN set -eux; \
 # directory, or a package the base's pinned Python stack already installed
 # (`python_stack` in `install-runtime.sh`: numpy, scipy, pandas, Pillow, pypdf,
 # openpyxl, xlrd, matplotlib, scikit-learn, statsmodels, playwright and the
-# notebook pair): the base installed everything the server depends on, at the
-# versions that stack pins. A package that stack does not name is a full build,
+# notebook pair; and `python_methods` after it: RDKit, Biopython, gseapy, Scanpy,
+# AnnData and lifelines with the libraries they pull in): the base installed
+# everything the server depends on, at the versions those two phases pin. A
+# package neither phase names is a full build,
 # because it has to be installed at a pin and verified with the others. The
 # full build also generated `data/sider-4.1.sqlite` into this same tree from
 # pinned upstream bytes, a step that needs the network, so the tree is not
@@ -134,12 +136,22 @@ RUN set -eux; \
 # release manifest but not the runtime a run loads the skill from (2026-09-17,
 # citation-integrity). Any other file that differs from the base is a change
 # the base never tested, and the build stops: build the full Dockerfile.
+#
+# The inventory is not only a digest ledger: its `methodDependencies` says which
+# Python packages a skill's method needs that the image lacks, and the skill's
+# availability label is read from it. A package taken off that list is a claim
+# that the image carries it (`python_methods` in `install-runtime.sh` installs
+# them), so a base built before that phase cannot take such an inventory: the
+# check below stops the delta when the base lacks a package the new inventory
+# stopped declaring missing.
 COPY runtime/skills/curated-scientific /tmp/evimed-curated-source
 RUN set -eux; \
   live=/usr/local/share/evimed/skills/curated-scientific; \
   source=/tmp/evimed-curated-source; \
   moved="$(diff -rq -x __pycache__ -x '*.pyc' "${live}" "${source}" | grep -Ev '/SKILL\.md differ$|/(inventory\.json|digest-repins\.jsonl) differ$' || true)"; \
   if [ -n "${moved}" ]; then echo "curated skills changed beyond their prose; build the full Dockerfile:" >&2; echo "${moved}" >&2; exit 1; fi; \
+  settled="$(node -e 'const fs = require("fs"); const missing = (file) => new Set(Object.entries(JSON.parse(fs.readFileSync(file, "utf8")).policy.delivery.methodDependencies ?? {}).filter(([skill]) => !skill.startsWith("$")).flatMap(([, list]) => list.filter((entry) => entry.kind === "python-package").map((entry) => entry.name))); const now = missing(process.argv[2]); console.log([...missing(process.argv[1])].filter((name) => !now.has(name)).join(" "))' "${live}/inventory.json" "${source}/inventory.json")"; \
+  for name in ${settled}; do python3 -c 'import importlib.metadata, sys; importlib.metadata.version(sys.argv[1])' "${name}" || { echo "the curated inventory no longer lists ${name} as missing from the image and the base does not carry it; build the full Dockerfile" >&2; exit 1; }; done; \
   (cd "${source}" && find . -name __pycache__ -prune -o \( -name SKILL.md -o -name inventory.json -o -name digest-repins.jsonl \) -type f -print) \
     | while read -r file; do install -m 0644 "${source}/${file}" "${live}/${file}"; done; \
   diff -rq -x __pycache__ -x '*.pyc' "${live}" "${source}"; \

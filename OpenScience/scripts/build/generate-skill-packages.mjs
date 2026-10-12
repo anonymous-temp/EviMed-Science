@@ -79,8 +79,12 @@ const APT_COMMANDS = Object.freeze({
  */
 export function readImageRecipe(script) {
   const phases = definedInstallPhases(script);
+  // Two phases pin what a run can import: the scientific stack, and the
+  // libraries the curated skills' full methods add to it without moving it.
   const python = /** @type {Record<string, string>} */ ({});
-  for (const match of String(phases.get("python") ?? "").matchAll(/^\s+([A-Za-z0-9_.-]+)==([0-9][^\s\\]*)/gmu)) python[match[1].toLowerCase()] = match[2];
+  for (const phase of ["python", "python-methods"]) {
+    for (const match of String(phases.get(phase) ?? "").matchAll(/^\s+([A-Za-z0-9_.-]+)==([0-9][^\s\\]*)/gmu)) python[match[1].toLowerCase()] = match[2];
+  }
   if (!Object.keys(python).length) throw new Error("install-runtime.sh pins no python package in its python phase");
   const modules = /** @type {Record<string, string[]>} */ ({});
   for (const distribution of Object.keys(python)) {

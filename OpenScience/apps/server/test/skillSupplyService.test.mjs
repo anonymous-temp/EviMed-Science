@@ -31,17 +31,28 @@ const supply = (overrides = {}) => new SkillSupply({ config: config(overrides) }
 const skillCount = [...SKILL_PACKAGES.values()].filter((record) => !["capability", "extension"].includes(record.origin)).length;
 const byId = (/** @type {any[]} */ entries, /** @type {string} */ id) => entries.find((entry) => entry.id === id);
 
-test("a skill whose method needs software the image lacks is limited, with the software named and what still works said", () => {
+test("the curated skills whose methods name RDKit, Biopython, gseapy, Scanpy and AnnData read installed: the image carries them", () => {
   const entries = supply().skills(alice);
-  for (const [id, software] of [["curated/cheminformatics", "rdkit"], ["curated/pathway-enrichment", "gseapy"], ["curated/biosequence-analysis", "biopython"], ["curated/single-cell-analysis", "anndata"]]) {
+  // Until 2026-10-12 these four read limited, each with the library named; the image's python-methods phase installs them.
+  for (const id of ["curated/cheminformatics", "curated/pathway-enrichment", "curated/biosequence-analysis", "curated/single-cell-analysis", "curated/statistical-power"]) {
     const entry = byId(entries, id);
-    assert.equal(entry.state, "limited", id);
-    assert.equal(entry.reason.code, "dependency-software-missing");
-    assert.equal(entry.reason.detail, software);
-    assert.match(entry.text, new RegExp(software));
-    assert.match(entry.text, /其余部分照常/);
+    assert.equal(entry.state, "installed", id);
+    assert.equal(entry.reason.code, "no-successful-operation", id);
+    assert.equal(entry.also.length, 0, id);
+    assert.deepEqual(supply().view(/** @type {any} */ (SKILL_PACKAGES.get(id)), alice).notes, [], `${id}: not even a note`);
   }
-  assert.equal(byId(entries, "curated/single-cell-analysis").also.length, 1, "the second missing library is carried beside the deciding one");
+});
+
+test("a skill whose method needs software the image lacks is limited, with the software named and what still works said", () => {
+  const record = buildSkillPackageRecord({ id: "personal/needs-two", name: "needs-two", origin: "personal", files: [], dependencies: [
+    { kind: "python-package", name: "pysam" }, { kind: "python-package", name: "scvi-tools" }, { kind: "python-package", name: "numpy" },
+  ] });
+  const entry = supply().project(/** @type {any} */ (record), alice);
+  assert.equal(entry.state, "limited");
+  assert.equal(entry.reason.code, "dependency-software-missing");
+  assert.match(entry.text, new RegExp(entry.reason.detail));
+  assert.match(entry.text, /其余部分照常/);
+  assert.deepEqual([entry.reason.detail, ...entry.also.map((/** @type {any} */ reason) => reason.detail)].sort(), ["pysam", "scvi-tools"], "the second missing library is carried beside the deciding one; the installed one is no reason");
 });
 
 test("an installed skill with nothing missing reads installed, never executable: its use is not collected", () => {
@@ -57,7 +68,8 @@ test("an installed skill with nothing missing reads installed, never executable:
 test("software a skill only touches on a guarded path is a note beside an installed one, not a limit", () => {
   const view = supply().view(/** @type {any} */ (SKILL_PACKAGES.get("core/large-file")), alice);
   assert.equal(view.state, "installed");
-  assert.deepEqual(view.notes.map((note) => note.detail).sort(), ["astropy", "cfgrib", "h5py", "netCDF4", "pyarrow", "pygrib", "pysam", "uproot"].sort());
+  // h5py is not among them since 2026-10-12: AnnData installs it.
+  assert.deepEqual(view.notes.map((note) => note.detail).sort(), ["astropy", "cfgrib", "netCDF4", "pyarrow", "pygrib", "pysam", "uproot"].sort());
   assert.equal(view.package.origin, "core");
   assert.equal(view.package.scripts, 1);
   assert.ok(view.package.dependencies.every((dependency) => dependency.basis === "observed"));
@@ -109,7 +121,7 @@ test("the availability projection carries the skills and the capabilities' softw
   const body = await service.forAccount(alice);
   assert.equal(body.skills.length, skillCount);
   const cheminformatics = body.skills.find((entry) => entry.id === "curated/cheminformatics");
-  assert.equal(cheminformatics.state, "limited");
+  assert.equal(cheminformatics.state, "installed");
   assert.equal(cheminformatics.package.source.kind, "derived");
   assert.match(cheminformatics.package.sourceText, /提交未记录/, "the unrecorded commit is stated, not filled in");
   assert.ok(cheminformatics.package.unknown.some((entry) => entry.field === "source.commit"));
@@ -122,7 +134,7 @@ test("the availability projection carries the skills and the capabilities' softw
   assert.equal(JSON.stringify(body).includes("sha256\":\"" + "0".repeat(64)), false);
   // A capability whose own scripts need software the image lacks says so, and is still listed and still asked.
   const lacking = new SkillSupply({ config: config(), packages: new Map([["capability/meta-analysis", /** @type {any} */ (buildSkillPackageRecord({
-    id: "capability/meta-analysis", name: "meta-analysis", origin: "capability", version: "1", files: [{ path: "scripts/x.py", sha256: "a".repeat(64), text: "import lifelines\n" }],
+    id: "capability/meta-analysis", name: "meta-analysis", origin: "capability", version: "1", files: [{ path: "scripts/x.py", sha256: "a".repeat(64), text: "import pysam\n" }],
   }))]]) });
   const limited = await new AvailabilityService({ config: config(), registry, skillSupply: lacking }).capabilities(alice);
   const meta = limited.find((entry) => entry.id === "meta-analysis");
@@ -134,13 +146,18 @@ test("the availability projection carries the skills and the capabilities' softw
 test("the operator's export and the series count skills as a kind of their own", async () => {
   const service = new AvailabilityService({ config: config(), registry, skillSupply: supply(), now: () => new Date("2026-10-04T12:00:00.000Z") });
   const exported = await service.export();
-  assert.equal(exported.counts.skill.limited, 4);
+  assert.equal(exported.counts.skill.limited ?? 0, 0, "the shipped skills all find their libraries in the image");
   assert.ok(exported.counts.skill.installed >= 40);
   assert.equal(exported.states.filter((entry) => entry.kind === "skill").length, skillCount);
   const metrics = await service.metrics();
-  assert.equal(metrics.states.skill.limited, 4);
+  assert.equal(metrics.states.skill.limited ?? 0, 0);
   const without = await new AvailabilityService({ config: config(), registry }).metrics();
   assert.equal(without.states.skill, undefined, "no supply composed, no skill series");
+  // A skill that needs what the image lacks is counted as limited, in the export and in the series.
+  const gap = /** @type {any} */ (buildSkillPackageRecord({ id: "curated/needs-pysam", name: "needs-pysam", origin: "curated", files: [], dependencies: [{ kind: "python-package", name: "pysam" }] }));
+  const lacking = new AvailabilityService({ config: config(), registry, skillSupply: new SkillSupply({ config: config(), packages: new Map([...SKILL_PACKAGES, [gap.id, gap]]) }), now: () => new Date("2026-10-04T12:00:00.000Z") });
+  assert.equal((await lacking.export()).counts.skill.limited, 1);
+  assert.equal((await lacking.metrics()).states.skill.limited, 1);
 });
 
 test("the image recipe the labels read is the generated one", () => {

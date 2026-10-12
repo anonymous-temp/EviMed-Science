@@ -28,7 +28,7 @@ case "${target}" in docker|agentbay) ;; *) echo "EVIMED_RUNTIME_TARGET must be d
 
 # Invalid requests are rejected before reading or changing host state.
 case "${phase}" in
-  system|renderer|toolchain|kernel|pnpm|python|browser|verify-tools|curated-smoke|office-smoke|sider-cache|socket-client|preset-skills|preset-row|loopx|profile-seed|smoke|serve|session) ;;
+  system|renderer|toolchain|kernel|pnpm|python|browser|verify-tools|python-methods|curated-smoke|office-smoke|sider-cache|socket-client|preset-skills|preset-row|loopx|profile-seed|smoke|serve|session) ;;
   *) echo "unknown phase: ${phase}" >&2; exit 64 ;;
 esac
 if [ "${phase}" = session ] && [ "${target}" != agentbay ]; then
@@ -226,6 +226,94 @@ for package in ("ipykernel", "jupyterlab", "matplotlib", "numpy", "openpyxl", "x
     importlib.import_module(package)
 PY
   python /usr/local/lib/evimed/verify-legacy-spreadsheet.py
+}
+
+# The libraries the curated skills' full methods import and the stack above does
+# not carry: RDKit (cheminformatics), Biopython (biosequence-analysis), gseapy
+# (pathway-enrichment), Scanpy and AnnData (single-cell-analysis) and lifelines
+# (statistical-power's survival route). Until this phase existed each of those
+# skills was listed under `methodDependencies` in the curated inventory and its
+# availability label said the image lacked the package.
+#
+# A phase of its own rather than more lines in `python_stack`, for two reasons:
+#   - it sits after `verify-tools` and before the skill trees are copied in, so
+#     a SKILL.md edit (which invalidates the COPY below) never reinstalls
+#     ~470 MB of wheels, and a pin moved here leaves the stack, the browser and
+#     the tool checks above it cached. (The script itself is COPYed at the top
+#     of the Dockerfile, so editing it at all rebuilds every phase once; the
+#     placement pays on the builds after that.)
+#   - the install can be held to the one rule that matters here: it adds, and
+#     moves nothing the stack pinned. The stack is frozen into a constraints
+#     file first, so a library that wanted another numpy, pandas or matplotlib
+#     fails the build instead of quietly replacing the pin the rest of the image
+#     was tested against. `python_stack` stays the short list the CI renderer
+#     job copies its Pillow, playwright and pypdf pins from.
+#
+# Wheels only. RDKit, numba's llvmlite, h5py and gseapy ship manylinux wheels for
+# both architectures and for CPython 3.11 (Debian bookworm) and 3.12 (the
+# AgentBay Ubuntu 24.04 base); a source build would need a compiler this image
+# does not carry, so an sdist is a failed resolution, not a slow build. The six
+# pins are the newest releases that resolve together with the stack on 3.11:
+# Scanpy 1.12 and AnnData 0.13 need 3.12, and RDKit 2026.9.1 (published
+# 2026-10-09) opens a new release line, so the last patch of the previous one,
+# 2026.3.6, is the pin. Each library's own dependencies (numba, zarr, h5py,
+# seaborn, networkx, umap-learn ...) float within what these pins allow.
+#
+# The check runs the compiled paths an import never touches: a SMILES parse,
+# a translation, an enrichment test, Scanpy's PCA and neighbour graph (numba
+# compiles on first use, and a broken llvmlite imports fine) and a survival fit.
+# It also leaves the imported modules' bytecode in the layer: the runtime's
+# root is read-only, so a module nobody compiled at build time is compiled again
+# in every process.
+python_methods() {
+  set -x
+  stack="$(mktemp)"
+  uv pip freeze --python "${VIRTUAL_ENV}/bin/python" > "${stack}"
+  uv pip install --python "${VIRTUAL_ENV}/bin/python" --index-url "${PIP_INDEX_URL}" --no-cache \
+    --only-binary :all: --constraint "${stack}" \
+    anndata==0.12.19 \
+    biopython==1.88 \
+    gseapy==1.3.1 \
+    lifelines==0.30.3 \
+    rdkit==2026.3.6 \
+    scanpy==1.11.5
+  uv pip check --python "${VIRTUAL_ENV}/bin/python"
+  rm -f "${stack}"
+  python - <<'PY'
+import importlib
+
+for package in ("anndata", "Bio", "gseapy", "lifelines", "rdkit", "scanpy"):
+    importlib.import_module(package)
+
+from rdkit import Chem, RDLogger
+
+RDLogger.DisableLog("rdApp.*")
+assert Chem.MolToSmiles(Chem.MolFromSmiles("OCC")) == "CCO"
+assert Chem.MolFromSmiles("CC(C)(C)(C)C") is None
+
+from Bio.Seq import Seq
+
+assert str(Seq("ATGGCCTAA").translate()) == "MA*"
+
+import gseapy
+
+genes = ["G1", "G2", "G3", "G4"]
+enriched = gseapy.enrich(gene_list=genes, gene_sets={"SET_A": genes + ["G5"], "SET_B": ["G6", "G7"]}, background=[f"G{i}" for i in range(1, 41)], outdir=None)
+assert enriched.results["Term"].iloc[0] == "SET_A"
+
+import numpy
+import scanpy
+
+adata = scanpy.AnnData(numpy.random.default_rng(0).poisson(1.0, (60, 40)).astype("float32"))
+scanpy.pp.normalize_total(adata)
+scanpy.pp.log1p(adata)
+scanpy.pp.pca(adata, n_comps=5)
+scanpy.pp.neighbors(adata, n_neighbors=5)
+
+from lifelines import KaplanMeierFitter
+
+assert KaplanMeierFitter().fit([5, 6, 6, 2, 4, 4, 8, 9], event_observed=[1, 0, 1, 1, 1, 0, 1, 1]).median_survival_time_ == 6
+PY
 }
 
 # A browser that is not a snap. Debian's apt package is already in place; on
@@ -488,6 +576,7 @@ case "${phase}" in
   python) python_stack ;;
   browser) browser ;;
   verify-tools) verify_tools ;;
+  python-methods) python_methods ;;
   curated-smoke) curated_smoke ;;
   office-smoke) office_smoke ;;
   sider-cache) sider_cache ;;

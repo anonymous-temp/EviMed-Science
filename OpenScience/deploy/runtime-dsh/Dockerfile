@@ -96,6 +96,13 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh python
 RUN bash /usr/local/lib/evimed/install-runtime.sh browser
 RUN bash /usr/local/lib/evimed/install-runtime.sh verify-tools
 
+# The libraries the curated skills' full methods import (RDKit, Biopython,
+# gseapy, Scanpy, AnnData, lifelines), installed on top of the stack above
+# without moving any of its pins. It sits before the skill trees are copied so
+# a SKILL.md edit does not reinstall them, and before the smoke below so the
+# smoke runs in the environment the skills ship in.
+RUN bash /usr/local/lib/evimed/install-runtime.sh python-methods
+
 COPY runtime/skills/curated-scientific /usr/local/share/evimed/skills/curated-scientific
 COPY runtime/skills/office /usr/local/share/evimed/skills/office
 
