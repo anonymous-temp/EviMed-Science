@@ -96,6 +96,14 @@ Useful flags: `--kb-scope pooled --reuse-from <run-id>` (the sensitivity run, co
 
 In `summary.json`: `categories.<synthesis|single>.diffs["B-Aprime"]` is the number that decides (`mean`, `ciLow`, `ciHigh`, `n` questions). `citations.overall.<arm>.verifiedRate` is the code-checked citation rate; `compile.overall.heldShare` is the fraction of the compiler's sentences that the platform could not confirm and withheld from the pages. `decision.reasons` lists every check with `pass:` or `FAIL:`.
 
+## Runs on record (`results/`)
+
+| Run | What it is |
+|---|---|
+| `2026-10-12-three-arm` | **The formal run**: per-topic knowledge bases, 27 questions × 3 arms × 3 repetitions, a fresh compile per topic per repetition, judge sanity check. The verdict is read from its `summary.json`. |
+| `2026-10-12-three-arm-pooled` | The sensitivity run (`--kb-scope pooled --reuse-from 2026-10-12-three-arm`): one 24-document project. Its `compile` block repeats the formal run's compile statistics (nothing was compiled again, so its `calls.jsonl` has no compile spend). |
+| `2026-10-12-pilot` | The dress rehearsal: 9 questions, 1 repetition, used to measure cost and to find three defects before the formal run (Chinese pages for English documents, a lexical stemmer that did not meet "rate" and "rates", a repair loop that repeated an unfixable advisory). Not used in any verdict. |
+
 ## Known limits
 
 - **Only pages + `kb_search` against `kb_search` were compared.** The memory capsule's `sources` layer (document-summary facts) was **not** measured: no arm has summary facts. So the evidence bears on whether to open knowledge pages, and on whether a *summary layer* can be dropped only conditionally: if B passes, pages do the cross-document work that summaries might have done, which is a reason to stop writing document summaries but not a measurement of that; if B fails, nothing here says summaries help either. A capsule-layer arm (C: summaries + `kb_search`) is the missing control.
@@ -107,4 +115,5 @@ In `summary.json`: `categories.<synthesis|single>.diffs["B-Aprime"]` is the numb
 - **LLM judge.** One model family judges answers produced by another size of the same family. The judge sees only the prose and the key points and is checked by the sanity run, but it is still a model; key points were written by hand to be decidable (numbers, directions, populations).
 - **Question count.** Fifteen synthesis and twelve single-fact questions: the intervals are wide, and that is what the `ciLow > 0` threshold is for. Repetitions reduce answer noise, not question-sample noise.
 - **Citation rule is the platform's.** Quotes shorter than 10 characters or longer than 600 do not verify even if they are present in the document; a marker that names a page does not verify. That is deliberate (the reader could not use them) and applies to all arms.
+- **Run to run.** The compiles differ much between repetitions of the same topic (5 to 13 pages, 37 to 73 claims on the same eight documents), and a topic can move in opposite directions (per-topic means are in `summary.json`). Any verdict rests on three compiles per topic.
 - **Prompt effects.** The A′ sentence is one wording; a better one could close more of the gap. The B pages carry long marker comments, which cost tokens in every hit.

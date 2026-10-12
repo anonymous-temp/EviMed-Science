@@ -60,5 +60,8 @@ Data
   from Europe PMC under the license recorded per article in manifest.json,
   including CC BY-NC and CC BY-ND terms. Those articles are redistributed
   unmodified under their own licenses, which the MIT License does not override.
+- OpenScience/evals/knowledge-pages/corpus/: 24 PubMed abstracts (NCBI E-utilities) of published trials and meta-analyses, kept
+  only as the fixture of an offline comparison, with the copyright line PubMed returns recorded per article in each
+  manifest.json; the abstracts belong to their publishers.
 - 项目代码/knowledge-plugin/tests/fixtures/: captured public web pages and feeds,
   kept only to test parsing; their content belongs to the publishers.

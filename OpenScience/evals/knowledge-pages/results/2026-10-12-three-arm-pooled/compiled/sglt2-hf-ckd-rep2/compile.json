@@ -1,0 +1,52 @@
+{
+  "stats": {
+    "rounds": 2,
+    "promptTokens": 27532,
+    "completionTokens": 24110,
+    "cost": 0.19475744,
+    "patchPages": 12,
+    "unreadablePatch": false,
+    "finalRequired": 2,
+    "finalAdvisory": 0,
+    "documents": 8,
+    "pages": 12,
+    "claims": 67,
+    "kept": 65,
+    "held": 2,
+    "heldByReason": {
+      "quote_invalid": 2
+    },
+    "documentsCited": 8,
+    "skipped": [],
+    "verifyMismatch": 0,
+    "roundDetails": [
+      {
+        "round": 0,
+        "finish": "stop",
+        "promptTokens": 7678,
+        "completionTokens": 12055,
+        "cost": 0.09724496,
+        "required": 2,
+        "advisory": 0,
+        "issueMessages": [
+          "required: pages[1].sections[1].claims[0].evidence[0].quote must be 10-600 characters copied from the document.",
+          "required: pages[1].sections[2].claims[0].evidence[0].quote must be 10-600 characters copied from the document."
+        ]
+      },
+      {
+        "round": 1,
+        "finish": "stop",
+        "promptTokens": 19854,
+        "completionTokens": 12055,
+        "cost": 0.09751248,
+        "required": 2,
+        "advisory": 0,
+        "issueMessages": [
+          "required: pages[1].sections[1].claims[0].evidence[0].quote must be 10-600 characters copied from the document.",
+          "required: pages[1].sections[2].claims[0].evidence[0].quote must be 10-600 characters copied from the document."
+        ]
+      }
+    ]
+  },
+  "inputSha256": "dd56f272fa1075c067436e6c0526f0fc54844c8506164e2c1da26810f0403837"
+}

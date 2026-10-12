@@ -1,0 +1,52 @@
+{
+  "stats": {
+    "rounds": 2,
+    "promptTokens": 25758,
+    "completionTokens": 19074,
+    "cost": 0.15443376,
+    "patchPages": 6,
+    "unreadablePatch": false,
+    "finalRequired": 1,
+    "finalAdvisory": 1,
+    "documents": 8,
+    "pages": 6,
+    "claims": 45,
+    "kept": 44,
+    "held": 1,
+    "heldByReason": {
+      "quote_not_found": 1
+    },
+    "documentsCited": 8,
+    "skipped": [],
+    "verifyMismatch": 0,
+    "roundDetails": [
+      {
+        "round": 0,
+        "finish": "stop",
+        "promptTokens": 8020,
+        "completionTokens": 9537,
+        "cost": 0.07703232,
+        "required": 1,
+        "advisory": 1,
+        "issueMessages": [
+          "advisory: pages[1].sections[0].claims[2].evidence[0].quote is not in document src_8ff4bad2e9d926335b4de77ad1e41630 word for word: \"In the intention-to-treat analysis, the primary end point occurred in 269 patien\". Copy the passage again from the document, or leave this statement out.",
+          "required: pages[2].sections[1].heading must be 1-80 characters."
+        ]
+      },
+      {
+        "round": 1,
+        "finish": "stop",
+        "promptTokens": 17738,
+        "completionTokens": 9537,
+        "cost": 0.07740144,
+        "required": 1,
+        "advisory": 1,
+        "issueMessages": [
+          "advisory: pages[1].sections[0].claims[2].evidence[0].quote is not in document src_8ff4bad2e9d926335b4de77ad1e41630 word for word: \"In the intention-to-treat analysis, the primary end point occurred in 269 patien\". Copy the passage again from the document, or leave this statement out.",
+          "required: pages[2].sections[1].heading must be 1-80 characters."
+        ]
+      }
+    ]
+  },
+  "inputSha256": "2fbb335ae99b371be67d2f67e81cce374017704689881036d2233b67434e9ae1"
+}

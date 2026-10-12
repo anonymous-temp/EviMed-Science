@@ -1,0 +1,79 @@
+{
+  "stats": {
+    "rounds": 3,
+    "promptTokens": 55046,
+    "completionTokens": 29973,
+    "cost": 0.24400464,
+    "patchPages": 6,
+    "unreadablePatch": false,
+    "finalRequired": 1,
+    "finalAdvisory": 2,
+    "documents": 8,
+    "pages": 6,
+    "claims": 44,
+    "kept": 43,
+    "held": 1,
+    "heldByReason": {
+      "quote_not_found": 1
+    },
+    "documentsCited": 8,
+    "skipped": [],
+    "verifyMismatch": 0,
+    "roundDetails": [
+      {
+        "round": 0,
+        "finish": "stop",
+        "promptTokens": 8020,
+        "completionTokens": 10012,
+        "cost": 0.08083232000000001,
+        "required": 7,
+        "advisory": 2,
+        "issueMessages": [
+          "required: pages[0].related must be a list of at most 12 page slugs.",
+          "advisory: pages[1].sections[0].claims[1].evidence[0].quote is not in document src_8ff4bad2e9d926335b4de77ad1e41630 word for word: \"In the primary analysis, the primary end point occurred in 188 patients in the r\". Copy the passage again from the document, or leave this statement out.",
+          "required: pages[1].related must be a list of at most 12 page slugs.",
+          "required: pages[2].sections[1].heading must be 1-80 characters.",
+          "required: pages[2].related must be a list of at most 12 page slugs.",
+          "required: pages[3].related must be a list of at most 12 page slugs.",
+          "required: pages[4].related must be a list of at most 12 page slugs.",
+          "required: pages[5].slug must be 1-63 lowercase letters, digits or hyphens, and not \"index\".",
+          "advisory: lint[0] needs a kind (conflict, duplicate, gap, stale), a note of up to 400 characters and, optionally, page slugs."
+        ]
+      },
+      {
+        "round": 1,
+        "finish": "stop",
+        "promptTokens": 18360,
+        "completionTokens": 10003,
+        "cost": 0.08162080000000001,
+        "required": 6,
+        "advisory": 2,
+        "issueMessages": [
+          "required: pages[0].related must be a list of at most 12 page slugs.",
+          "advisory: pages[1].sections[0].claims[1].evidence[0].quote is not in document src_8ff4bad2e9d926335b4de77ad1e41630 word for word: \"In the primary analysis, the primary end point occurred in 188 patients in the r\". Copy the passage again from the document, or leave this statement out.",
+          "required: pages[1].related must be a list of at most 12 page slugs.",
+          "required: pages[2].sections[1].heading must be 1-80 characters.",
+          "required: pages[2].related must be a list of at most 12 page slugs.",
+          "required: pages[3].related must be a list of at most 12 page slugs.",
+          "required: pages[4].related must be a list of at most 12 page slugs.",
+          "advisory: lint[0] needs a kind (conflict, duplicate, gap, stale), a note of up to 400 characters and, optionally, page slugs."
+        ]
+      },
+      {
+        "round": 2,
+        "finish": "stop",
+        "promptTokens": 28666,
+        "completionTokens": 9958,
+        "cost": 0.08155152,
+        "required": 1,
+        "advisory": 2,
+        "issueMessages": [
+          "advisory: pages[1].sections[0].claims[1].evidence[0].quote is not in document src_8ff4bad2e9d926335b4de77ad1e41630 word for word: \"In the primary analysis, the primary end point occurred in 188 patients in the r\". Copy the passage again from the document, or leave this statement out.",
+          "required: pages[2].sections[1].heading must be 1-80 characters.",
+          "advisory: lint[0] needs a kind (conflict, duplicate, gap, stale), a note of up to 400 characters and, optionally, page slugs."
+        ]
+      }
+    ]
+  },
+  "inputSha256": "2fbb335ae99b371be67d2f67e81cce374017704689881036d2233b67434e9ae1"
+}
