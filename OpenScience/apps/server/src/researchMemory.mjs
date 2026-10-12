@@ -949,6 +949,84 @@ export class ResearchMemoryStore {
   }
 
   /**
+   * What the memory map draws (`memoryMap.mjs`, 2026-10-12): the account's memories, light, the most recently changed
+   * `limit` of them — those in force, pending and replaced; never a run summary, never a sensitive one (as it is never
+   * recalled, it is never drawn), never one the researcher forgot. `projectId` narrows to that project's own.
+   * @param {string} userId @param {{ projectId?: string | null, limit?: number }} [options]
+   */
+  async mapRecords(userId, { projectId = null, limit = 2000 } = {}) {
+    const owner = assertUserId(userId);
+    const bound = Math.max(1, Math.min(5000, Number(limit) || 2000));
+    const project = projectId == null || projectId === "" ? null : String(projectId);
+    const result = await this.#query(`SELECT ${LIGHT_RECORD_COLUMNS} FROM evimed_memory.records
+      WHERE user_id=$1 AND kind <> 'run_summary' AND sensitive = false AND status <> 'archived' AND scope IN ('user','project')
+        AND ($2::text IS NULL OR (scope='project' AND scope_id=$2))
+      ORDER BY updated_at DESC, id DESC LIMIT $3`, [owner, project, bound]);
+    return result.rows.map(publicRecord);
+  }
+
+  /**
+   * The relations of a set of memories, in three reads: what each rests on (with the state a check found), the
+   * disagreements still open, and how often each was handed to a run. Bounded; a memory not named is not read.
+   * @param {string} userId @param {readonly unknown[]} recordIds
+   * @returns {Promise<{ sources: { recordId: string, type: string, id: string, state: string, linkedAt: string | null }[],
+   *   conflicts: { recordId: string, otherId: string, recordStatus: string, otherStatus: string }[],
+   *   usage: Record<string, { count: number, lastUsedAt: string | null }> }>}
+   */
+  async mapLinks(userId, recordIds) {
+    const owner = assertUserId(userId);
+    const ids = [...new Set((recordIds ?? []).map(String).filter((id) => recordIdPattern.test(id)))].slice(0, 5000);
+    if (ids.length === 0) return { sources: [], conflicts: [], usage: {} };
+    const [sources, conflicts, usage] = await Promise.all([
+      this.#query(`SELECT record_id, source_type, source_id, state, linked_at FROM evimed_memory.record_sources
+        WHERE user_id=$1 AND record_id=ANY($2::text[]) ORDER BY record_id, source_type, source_id LIMIT 30000`, [owner, ids]),
+      this.#query(`SELECT c.record_id, c.other_id, r.status AS record_status, o.status AS other_status
+        FROM evimed_memory.record_conflicts c
+        JOIN evimed_memory.records r ON r.user_id=c.user_id AND r.id=c.record_id
+        JOIN evimed_memory.records o ON o.user_id=c.user_id AND o.id=c.other_id
+        WHERE c.user_id=$1 AND c.state='open' AND (c.record_id=ANY($2::text[]) OR c.other_id=ANY($2::text[])) LIMIT 5000`, [owner, ids]),
+      this.recordUsage(owner, ids),
+    ]);
+    return {
+      sources: sources.rows.map((/** @type {any} */ row) => ({
+        recordId: String(row.record_id), type: String(row.source_type), id: String(row.source_id), state: String(row.state),
+        linkedAt: memoryInstant(row.linked_at),
+      })),
+      conflicts: conflicts.rows.map((/** @type {any} */ row) => ({
+        recordId: String(row.record_id), otherId: String(row.other_id),
+        recordStatus: String(row.record_status), otherStatus: String(row.other_status),
+      })),
+      usage,
+    };
+  }
+
+  /**
+   * What one memory is next to, for the drawer's 关联: the memories it replaced, the one that replaced it, and the ones it
+   * disagrees with (open or settled). Light records; a sensitive neighbour is named by its id and carries no text.
+   * @param {string} userId @param {string} recordId
+   */
+  async recordNeighbours(userId, recordId) {
+    const owner = assertUserId(userId);
+    const id = assertRecordId(recordId);
+    const light = (/** @type {any} */ row) => {
+      const record = publicRecord(row);
+      return record.sensitive
+        ? { ...record, value: "", summary: "", evidence: [], revisions: [] }
+        : record;
+    };
+    const [replaced, successor, conflicts] = await Promise.all([
+      this.#query(`SELECT ${LIGHT_RECORD_COLUMNS} FROM evimed_memory.records WHERE user_id=$1 AND superseded_by=$2
+        ORDER BY created_at DESC, id DESC LIMIT 20`, [owner, id]),
+      this.#query(`SELECT ${LIGHT_RECORD_COLUMNS} FROM evimed_memory.records WHERE user_id=$1
+        AND id=(SELECT superseded_by FROM evimed_memory.records WHERE user_id=$1 AND id=$2)`, [owner, id]),
+      this.#query(`SELECT ${LIGHT_RECORD_COLUMNS} FROM evimed_memory.records WHERE user_id=$1 AND id IN (
+          SELECT other_id FROM evimed_memory.record_conflicts WHERE user_id=$1 AND record_id=$2
+          UNION SELECT record_id FROM evimed_memory.record_conflicts WHERE user_id=$1 AND other_id=$2) LIMIT 20`, [owner, id]),
+    ]);
+    return { replaced: replaced.rows.map(light), replacedBy: successor.rows[0] ? light(successor.rows[0]) : null, conflicts: conflicts.rows.map(light) };
+  }
+
+  /**
    * How many memories began to hold, and how many stopped, on each calendar
    * day in a zone: what the capsule page's growth line is drawn from. The
    * memories are the ones the page lists (the account's and its projects',
@@ -2204,6 +2282,8 @@ export class ResearchMemoryStore {
     // that no longer exists is a copy of deleted data, however small. Any the
     // records did not name (orphans from before 2026-09-27) go as well.
     await this.#query("DELETE FROM evimed_memory.record_usage WHERE user_id=$1", [owner]);
+    // The grouping a model made of those memories names what they were about: it goes with them.
+    await this.#query("DELETE FROM evimed_memory.topic_sets WHERE user_id=$1", [owner]);
     return { structured };
   }
 

@@ -2618,6 +2618,12 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   handbook_unavailable: '这条经验已不存在，刷新后再试。',
   handbook_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
+  // ——— 记忆地图 (memoryMap.mjs) ———
+  memory_map_disabled: '这个部署没有开放记忆地图；记忆本身照常可以在记忆页查看。',
+  memory_topic_not_found: '这个主题已经不在了，刷新后再看。',
+  memory_topic_invalid: '这个主题的修改不完整，请重新操作。',
+  memory_topics_unavailable: '主题暂时整理不了；已有的记忆和其他视图不受影响。',
+
   // ——— Tool-boundary codes that have no family and would otherwise be bare ———
   tool_disabled: '这个部署没有开放这项工具，运行会绕开它继续。',
   unknown_tool: '调用了一个不存在的工具。',

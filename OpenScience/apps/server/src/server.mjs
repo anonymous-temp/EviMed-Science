@@ -161,6 +161,17 @@ import { ResidentProfiles } from "./residentProfile.mjs";
 import { eraseRetiredMemos } from "./retiredMemos.mjs";
 import { sessionDispatchNotes, withTrialTitles } from "./memorySessions.mjs";
 import { createMemoryTimelineRoutes } from "./memoryTimeline.mjs";
+import { createMemoryMapRoutes } from "./memoryMap.mjs";
+import { MemoryTopics } from "./memoryTopics.mjs";
+import { createActivitySource } from "./memoryMapSources/activity.mjs";
+import { createDocumentsSource } from "./memoryMapSources/documents.mjs";
+import { createKnowledgeGraphSource } from "./memoryMapSources/knowledgeGraph.mjs";
+import { createMethodsSource } from "./memoryMapSources/methods.mjs";
+import { createNativeMemorySource } from "./memoryMapSources/nativeMemory.mjs";
+import { createRecordLinks } from "./memoryMapSources/recordLinks.mjs";
+import { createRecordsSource } from "./memoryMapSources/records.mjs";
+import { createRunsSource } from "./memoryMapSources/runs.mjs";
+import { createTopicsSource } from "./memoryMapSources/topics.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
@@ -4678,6 +4689,31 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // the records, the ledger, the methods and the researcher's own capsules.
   const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService,
     capsules: capsuleService, handbooks: handbookLibrary, context });
+  // 「记忆地图」: one read-only document assembled from independent sources, the topics a model groups the memories into, and the
+  // links the memory drawer shows. The native memory engine and the OpenViking knowledge graph are seams with no reader wired yet.
+  const memoryTopics = researchMemory.configured ? new MemoryTopics(config, researchMemory, { usageLedger }) : null;
+  const memoryMapProjectOf = (/** @type {any} */ user, /** @type {string} */ projectId) => store.requireProject(user, projectId);
+  const memoryMapRoutes = createMemoryMapRoutes({
+    config, researchMemory, store, context, decodeRouteComponent, audit, topics: memoryTopics,
+    isInternalProject: internalFor,
+    sources: [
+      createRecordsSource({ researchMemory }),
+      createNativeMemorySource(),
+      createDocumentsSource({ sources: sourceService, researchMemory }),
+      createMethodsSource({ learning: learningService }),
+      createKnowledgeGraphSource(),
+      createActivitySource({ agentRuns, projectOf: memoryMapProjectOf, learning: learningService, feedbackEvents }),
+      createRunsSource({
+        agentRuns, projectOf: memoryMapProjectOf,
+        isInternal: (/** @type {string} */ agentId) => (agentRuns.loadedAgentRegistry?.get?.(agentId)?.visibility ?? "public") === "internal",
+      }),
+      createTopicsSource({ topics: memoryTopics, researchMemory }),
+    ],
+    recordLinks: createRecordLinks({
+      researchMemory, sources: sourceService, agentRuns, projectOf: memoryMapProjectOf,
+      listProjects: async (/** @type {any} */ user) => (await store.listProjects(user)).filter((/** @type {any} */ project) => !internalFor(user.id, project.id)),
+    }),
+  });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
   const resultGatewayHandler = createResultGateway({ runtimeManager, store, service: resultReplays, agentRuns, lineage: resultLineage,
     resolveSession: (project, sessionId) => runtimeEventPump.sessionOwner(project, sessionId) });
@@ -6282,6 +6318,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return;
       }
 
+      if (await memoryMapRoutes(req, res)) return;
       if (await memoryRoutes(req, res)) return;
       if (await memoryTimelineRoutes(req, res)) return;
       if (await agentKeyRoutes(req, res)) return;

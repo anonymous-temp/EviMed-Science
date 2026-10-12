@@ -221,6 +221,21 @@ CREATE TABLE IF NOT EXISTS evimed_memory.record_reviews (
   PRIMARY KEY (user_id, record_id),
   FOREIGN KEY (user_id, record_id) REFERENCES evimed_memory.records(user_id, id) ON DELETE CASCADE
 );
+-- The topics a model grouped an account's memories into (\`memoryTopics.mjs\`, 2026-10-12): derived and rebuildable, one row per
+-- account. \`topics\` is the last grouping — open-vocabulary labels with the ids of the memories each holds — and \`overrides\` is
+-- what the researcher said about it (a rename, a merge, a topic they dismissed, a memory they took out), which is the stronger
+-- basis and is applied over every regrouping. \`memory_mark\` is the digest of the memories the grouping was made from, so a
+-- changed set is how a grouping is known to be stale; \`attempts\` counts the model calls of \`attempts_day\`, the account's own
+-- daily bound. The row goes with the account (the cascade) and with a reset (\`purgeUserMemory\`).
+CREATE TABLE IF NOT EXISTS evimed_memory.topic_sets (
+  user_id text PRIMARY KEY REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  topics jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(topics) = 'array' AND jsonb_array_length(topics) <= 60),
+  overrides jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(overrides) = 'object'),
+  memory_mark text NOT NULL DEFAULT '' CHECK (char_length(memory_mark) <= 128),
+  computed_at timestamptz(3),
+  attempts_day text NOT NULL DEFAULT '' CHECK (char_length(attempts_day) <= 10),
+  attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0)
+);
 -- The researcher's own switches over their memory. No row means every switch
 -- is off, which is how the platform behaved before the switches existed.
 CREATE TABLE IF NOT EXISTS evimed_memory.settings (
