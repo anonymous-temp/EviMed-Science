@@ -29,7 +29,9 @@ export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidat
   // produced (`availabilityCollector.mjs`), and the sweep that finds runs the finish hook missed.
   "availability-collect", ...EVOLUTION_JOB_KINDS, ...EXTENSION_JOB_KINDS,
   // The evidence programme's one decision a day (`evidenceProgramme.mjs`): the topic selector's run, leased like every other job.
-  "evidence-programme"]);
+  "evidence-programme",
+  // The compile of one project's documents into knowledge pages (`knowledgePageService.mjs`).
+  "wiki-compile"]);
 
 /**
  * What the researcher did, as a closed vocabulary.

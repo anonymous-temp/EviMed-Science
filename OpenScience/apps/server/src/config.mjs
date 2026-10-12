@@ -3228,6 +3228,30 @@ export function loadConfig(overrides = {}) {
     // data capabilities use reaches it through its own gateway; off, that tool answers `semantics_disabled` and every
     // analysis goes on from the files, as before. Needs the product ledger (Postgres).
     dataSemanticsEnabled: overrides.dataSemanticsEnabled ?? boolEnv("OPEN_SCIENCE_DATA_SEMANTICS_ENABLED", true),
+    // 「知识页」 (knowledgePageService.mjs, 2026-10-12): the project's documents compiled into linked pages in which every
+    // sentence quotes its document, by the internal `knowledge-compile` capability on Flash. OFF by default until the three-arm
+    // evaluation (evals/knowledge-pages) says it earns its place; off, nothing is compiled, no worker starts and the knowledge
+    // base is what it was. Needs the product ledger (Postgres). Compiled per project, driven by changes to the project's
+    // documents, after `knowledgePagesDebounceMs` of quiet and not before `knowledgePagesMinSources` documents are readable
+    // (below that `kb_search` reads the whole library anyway). Each round reads at most `knowledgePagesMaxSourcesPerRound`
+    // changed documents, each cut to `knowledgePagesSourceChars` and all together to `knowledgePagesInputChars`, beside at most
+    // `knowledgePagesPagesBytes` of the pages already written. Its own caps count `knowledge` spend only (CNY; 0 = no cap).
+    knowledgePagesEnabled: overrides.knowledgePagesEnabled ?? boolEnv("OPEN_SCIENCE_KNOWLEDGE_PAGES_ENABLED", false),
+    knowledgePagesMinSources: Math.max(1, Math.min(200, Math.trunc(Number(overrides.knowledgePagesMinSources ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_MIN_SOURCES ?? 5)) || 5)),
+    knowledgePagesDebounceMs: Math.max(0, Math.min(86_400_000, Math.trunc(Number(overrides.knowledgePagesDebounceMs ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_DEBOUNCE_MS ?? 600_000)) || 0)),
+    knowledgePagesMaxSourcesPerRound: Math.max(1, Math.min(30, Math.trunc(Number(overrides.knowledgePagesMaxSourcesPerRound ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_MAX_SOURCES_PER_ROUND ?? 8)) || 8)),
+    knowledgePagesSourceChars: Math.max(2_000, Math.min(400_000, Math.trunc(Number(overrides.knowledgePagesSourceChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_SOURCE_CHARS ?? 40_000)) || 40_000)),
+    knowledgePagesInputChars: Math.max(10_000, Math.min(1_500_000, Math.trunc(Number(overrides.knowledgePagesInputChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_INPUT_CHARS ?? 240_000)) || 240_000)),
+    knowledgePagesPagesBytes: Math.max(10_000, Math.min(2_000_000, Math.trunc(Number(overrides.knowledgePagesPagesBytes ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_PAGES_BYTES ?? 300_000)) || 300_000)),
+    knowledgePagesRunLimitCny: Number(overrides.knowledgePagesRunLimitCny ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_RUN_LIMIT_CNY ?? 2),
+    knowledgePagesDailyLimitCny: Number(overrides.knowledgePagesDailyLimitCny ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_DAILY_LIMIT_CNY ?? 10),
+    knowledgePagesWeeklyLimitCny: Number(overrides.knowledgePagesWeeklyLimitCny ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_WEEKLY_LIMIT_CNY ?? 40),
+    knowledgePagesPollMs: Math.max(100, Math.min(86_400_000, Math.trunc(Number(overrides.knowledgePagesPollMs ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_POLL_MS ?? 5_000)) || 5_000)),
+    knowledgePagesLeaseMs: Math.max(1_000, Math.min(3_600_000, Math.trunc(Number(overrides.knowledgePagesLeaseMs ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_LEASE_MS ?? 900_000)) || 900_000)),
+    // The summary and key claims of each readable document, written into the memory capsule's `sources` layer
+    // (libraryService.publishSourceUnderstanding). On, as it always was; the owner stops it once the knowledge pages are shown
+    // not to do worse (2026-10-12). Off stops new writes only: what was written stays until its document goes.
+    documentMemoryEnabled: overrides.documentMemoryEnabled ?? boolEnv("OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED", true),
     // Scheduled tasks made and changed from a conversation (`schedule_task` / `update_task`, taskToolsGateway.mjs, N-13): the
     // form's twin, with the platform's default budget and no step to approve. Off, the runtime is given no route and the tools
     // are not offered; the 定时任务 page is unchanged. `taskToolsMaxTasks` is the most tasks one project may hold before the

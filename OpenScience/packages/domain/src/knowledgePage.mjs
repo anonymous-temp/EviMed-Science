@@ -88,7 +88,7 @@ export const KNOWLEDGE_PAGE_LIMITS = Object.freeze({
 const SLUG = /^[\p{Ll}\p{Lo}\p{N}][\p{Ll}\p{Lo}\p{N}-]{0,62}$/u
 const SOURCE_ID = /^src_[a-f0-9]{32}$/
 const SOURCE_MARKER = /<!--\s*evimed-source:\s*(\{[^\n]{1,8000}?\})\s*-->/g
-const CLAIM_MARKER = /<!--\s*evimed-claim:\s*(\{[^\n]{1,400}?\})\s*-->/g
+const CLAIM_MARKER = /<!--\s*evimed-statement:\s*(\{[^\n]{1,400}?\})\s*-->/g
 const WIKILINK = /\[\[([^[\]|\n]{1,80})(?:\|[^[\]\n]{1,160})?\]\]/g
 const HAS_WORD = /[\p{L}\p{N}]/u
 
@@ -181,7 +181,7 @@ export function knowledgeSourceMarker(sourceId, quote) {
 export function renderKnowledgeClaim(claim) {
   const markers = claim.evidence.map((entry) => knowledgeSourceMarker(entry.sourceId, entry.quote))
   const across = new Set(claim.evidence.map((entry) => entry.sourceId)).size > 1
-  const kind = across ? [`<!-- evimed-claim:${commentJson({ kind: 'synthesized', ...(claim.confidence ? { confidence: claim.confidence } : {}) })} -->`] : []
+  const kind = across ? [`<!-- evimed-statement:${commentJson({ kind: 'synthesized', ...(claim.confidence ? { confidence: claim.confidence } : {}) })} -->`] : []
   return `- ${oneLine(claim.text)} ${[...markers, ...kind].join(' ')}`
 }
 
@@ -471,6 +471,8 @@ export function verifyKnowledgePage(page, resolve, { pages = null } = {}) {
  * @property {string} message
  * @property {'required' | 'advisory'} severity
  * @property {string} check  `knowledge-wiki-schema` for a patch that cannot be read, `knowledge-wiki-quote` for a quotation the input does not hold
+ * @property {number | null} [page]  the position of the page the finding is about, when it is about one
+ * @property {boolean} [claim]  true when the finding is about one sentence of a page: the page itself can still be written, with that sentence held
  */
 
 /** A patch the run cannot repair its way past without changing it. @param {string} message @returns {KnowledgePatchIssue} */
@@ -496,6 +498,15 @@ function quoteAdvice(message) {
  * @param {unknown} patch @param {unknown} input @returns {KnowledgePatchIssue[]}
  */
 export function knowledgePatchIssues(patch, input) {
+  return patchIssues(patch, input).map((found) => {
+    // Every finding about a page is worded `pages[n]…`, by this function and no other: the position is read back off that.
+    const position = /^pages\[(\d+)\]/.exec(found.message)
+    return position ? { ...found, page: Number(position[1]) } : { ...found, page: null }
+  })
+}
+
+/** @param {unknown} patch @param {unknown} input @returns {KnowledgePatchIssue[]} */
+function patchIssues(patch, input) {
   /** @type {KnowledgePatchIssue[]} */
   const issues = []
   if (!isRecord(patch)) return [schema('wiki-patch.json must be an object.')]
@@ -541,7 +552,7 @@ export function knowledgePatchIssues(patch, input) {
       if (!Array.isArray(section.claims) || section.claims.length > KNOWLEDGE_PAGE_LIMITS.claimsPerSection) { issues.push(schema(`${where}.claims must be a list of at most ${KNOWLEDGE_PAGE_LIMITS.claimsPerSection} claims.`)); return }
       section.claims.forEach((claim, claimPosition) => {
         claims += 1
-        issues.push(...claimIssues(claim, `${where}.claims[${claimPosition}]`, texts))
+        issues.push(...claimIssues(claim, `${where}.claims[${claimPosition}]`, texts).map((found) => ({ ...found, claim: true })))
       })
     })
     if (claims > KNOWLEDGE_PAGE_LIMITS.claimsPerPage) issues.push(schema(`${at} has ${claims} claims; a page holds at most ${KNOWLEDGE_PAGE_LIMITS.claimsPerPage}. Split it into pages of their own.`))
@@ -634,17 +645,24 @@ export function settleKnowledgePage(page, resolve) {
   for (const section of page.sections) {
     /** @type {KnowledgeClaim[]} */
     const stand = []
-    for (const claim of section.claims) {
+    for (const claim of Array.isArray(section.claims) ? section.claims : []) {
       total += 1
-      const checked = claim.evidence.map((entry) => checkKnowledgeEvidence(entry, resolve))
+      const text = isRecord(claim) ? oneLine(claim.text) : ''
+      // A claim that is not a sentence with a list of quotations, or whose words would break the page's markers, is held
+      // like one whose quotation does not stand: the page is not refused for it.
+      if (!isRecord(claim) || !text || !Array.isArray(claim.evidence) || text.includes('<!--') || text.includes('-->') || !HAS_WORD.test(text)) {
+        held.push({ page: page.slug, heading: section.heading, text, evidence: [], reasons: ['malformed'] })
+        continue
+      }
+      const checked = claim.evidence.map((entry) => checkKnowledgeEvidence(isRecord(entry) ? { sourceId: String(entry.sourceId), quote: /** @type {any} */ (entry.quote) } : { sourceId: '', quote: '' }, resolve))
       // The kind the compiler claimed is the one judged: a statement it called across documents that quotes one is held.
       const kind = claim.kind === 'synthesized' || claim.kind === 'direct' ? claim.kind : new Set(checked.map((entry) => entry.sourceId)).size > 1 ? 'synthesized' : 'direct'
       const judged = judgeKnowledgeEvidence(checked, kind, { confidence: claim.confidence, needsConfidence: true })
       if (judged.ok) {
         kept += 1
         for (const entry of checked) sources.add(entry.sourceId)
-        stand.push({ ...claim, kind, evidence: claim.evidence.map(({ sourceId, quote }) => ({ sourceId, quote })) })
-      } else held.push({ page: page.slug, heading: section.heading, text: oneLine(claim.text), evidence: checked, reasons: judged.reasons })
+        stand.push({ text, kind, ...(claim.confidence ? { confidence: claim.confidence } : {}), evidence: checked.map(({ sourceId, quote }) => ({ sourceId, quote })) })
+      } else held.push({ page: page.slug, heading: section.heading, text, evidence: checked, reasons: judged.reasons })
     }
     sections.push({ heading: section.heading, claims: stand })
   }
@@ -672,7 +690,7 @@ export function mergeUserEditedKnowledgePage(current, compiled) {
   const lines = fresh.map((unit) => {
     const markers = unit.evidence.map((entry) => knowledgeSourceMarker(entry.sourceId, entry.quote))
     const across = new Set(unit.evidence.map((entry) => entry.sourceId)).size > 1
-    const kind = across ? [`<!-- evimed-claim:${commentJson({ kind: 'synthesized', ...(unit.claimMeta?.confidence ? { confidence: unit.claimMeta.confidence } : {}) })} -->`] : []
+    const kind = across ? [`<!-- evimed-statement:${commentJson({ kind: 'synthesized', ...(unit.claimMeta?.confidence ? { confidence: unit.claimMeta.confidence } : {}) })} -->`] : []
     return `- ${unit.text} ${[...markers, ...kind].join(' ')}`
   })
   return { markdown: `${current.trimEnd()}\n\n## ${KNOWLEDGE_UPDATE_HEADING}\n\n${lines.join('\n')}\n`, added: fresh.length }

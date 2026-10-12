@@ -30,7 +30,7 @@
 
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { SOURCE_FOLDERS, sourceOriginOf } from "@evimed/domain";
+import { SOURCE_FOLDERS, knowledgePagePath, knowledgePageSlugOfPath, parseKnowledgePage, sourceOriginOf } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /** The longest title a note or a snapshot is filed under. */
@@ -139,9 +139,10 @@ const originalPath = (slug, extension) => `${SOURCE_FOLDERS.snapshots}/${slug}.$
  *   readFile: (project: any, rel: string) => Promise<Buffer>,
  *   readTimeoutMs?: number,
  *   now?: () => Date,
+ *   onPageEdited?: (request: { user: any, project: any, source: any }) => Promise<any>,
  * }} dependencies
  */
-export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, readTimeoutMs = 150_000, now = () => new Date() }) {
+export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, readTimeoutMs = 150_000, now = () => new Date(), onPageEdited = async () => null }) {
   /**
    * Retire the older versions of a document that was just written again: the live
    * sources of the same family other than the one that now stands. The replacement
@@ -240,7 +241,39 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
   /** @param {string} title @param {string} body */
   const noteMarkdown = (title, body) => `# ${title}\n\n${body.trim()}\n`;
 
+  /** A knowledge page's slug, or the refusal that this document is not one. @param {any} source */
+  function requirePage(source) {
+    const slug = knowledgePageSlugOfPath(source?.payload?.paths?.[0]);
+    if (!slug) throw new HttpError(409, "source_note_required", "This document is not a note or a knowledge page.");
+    return slug;
+  }
+
   return {
+    /**
+     * A knowledge page (「知识页」) the platform compiled: written under `knowledge-base/wiki/` the way a note is, so a rewrite is
+     * the next version of one document and the version it replaces goes. The text is the platform's (`knowledgePage.mjs`),
+     * not a researcher's: nothing here parses or judges it.
+     * @param {{ user: any, project: any, slug: string, markdown: string, title: string }} request
+     */
+    async writePage({ user, project, slug, markdown, title }) {
+      return writeEntry(user, project, knowledgePagePath(slug), Buffer.from(markdown, "utf8"), { title: String(title).slice(0, TITLE_MAX_CHARS) });
+    },
+
+    /** The text of a page, or null where there is none. @param {any} project @param {string} slug */
+    async readPage(project, slug) {
+      try { return (await readFile(project, knowledgePagePath(slug))).toString("utf8"); }
+      catch (error) {
+        const code = /** @type {any} */ (error)?.code;
+        if (code === "ENOENT" || code === "file_not_found" || /** @type {any} */ (error)?.status === 404) return null;
+        throw error;
+      }
+    },
+
+    /** Retire a page's document (the compiler merged it into another). @param {{ user: any, source: any }} request */
+    async retirePage({ user, source }) {
+      return sources.remove(user.id, source.id, { expectedRevision: source.revision, accountCreatedAt: user.accountCreatedAt });
+    },
+
     /**
      * 「添加网页链接」: read the page and keep a snapshot of it.
      * @param {{ user: any, project: any, url: unknown }} request
@@ -280,6 +313,13 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
      * @param {{ project: any, source: any }} request
      */
     async readNote({ project, source }) {
+      // A knowledge page opens in the same editor: the whole of its Markdown is the text.
+      if (sourceOriginOf({ connectorType: source?.payload?.connector?.type, path: source?.payload?.paths?.[0] }) === "wiki") {
+        const slug = requirePage(source);
+        const content = (await readFile(project, knowledgePagePath(slug))).toString("utf8");
+        const parsed = parseKnowledgePage(content);
+        return { title: parsed.title ?? source.payload?.title ?? slug, body: content.replace(/\n+$/, "") };
+      }
       const rel = requireNote(source);
       const content = (await readFile(project, rel)).toString("utf8");
       const title = typeof source.payload?.title === "string" && source.payload.title ? source.payload.title : path.posix.basename(rel, ".md");
@@ -293,6 +333,17 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
      * @param {{ user: any, project: any, source: any, title: unknown, body: unknown }} request
      */
     async saveNote({ user, project, source, title, body }) {
+      if (sourceOriginOf({ connectorType: source?.payload?.connector?.type, path: source?.payload?.paths?.[0] }) === "wiki") {
+        // A researcher's edit of a page: their text is kept as written, and from here their wording is the page's basis.
+        const slug = requirePage(source);
+        const text = noteBody(body);
+        if (!text.trim()) throw new HttpError(400, "source_note_invalid", "A page cannot be saved empty.");
+        const parsed = parseKnowledgePage(text);
+        const registered = await writeEntry(user, project, knowledgePagePath(slug), Buffer.from(`${text.trimEnd()}\n`, "utf8"),
+          { title: String(parsed.title ?? title ?? slug).slice(0, TITLE_MAX_CHARS) });
+        if (!registered.duplicate) await onPageEdited({ user, project, source: registered.source });
+        return { ...registered, changed: !registered.duplicate };
+      }
       const rel = requireNote(source);
       const heading = noteTitle(title);
       const registered = await writeEntry(user, project, rel, Buffer.from(noteMarkdown(heading, noteBody(body)), "utf8"), { title: heading });

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "note": "The three topics of the knowledge-pages evaluation. Each is one 'project' of eight public PubMed abstracts that can be compared and that disagree in places. Document ids are derived, not chosen: src_ + the first 32 hex characters of sha256('<topic>/<pmid>').",
+  "topics": [
+    {
+      "id": "af-doac-warfarin",
+      "title": "Direct oral anticoagulants versus warfarin in atrial fibrillation",
+      "pmids": ["19717844", "21830957", "21870978", "24251359", "21309657", "24315724", "32865374", "22664783"]
+    },
+    {
+      "id": "sglt2-hf-ckd",
+      "title": "SGLT2 inhibitors in heart failure and chronic kidney disease",
+      "pmids": ["31535829", "32865377", "34449189", "36027570", "36041474", "32970396", "36331190", "30990260"]
+    },
+    {
+      "id": "aspirin-primary-prevention",
+      "title": "Aspirin for the primary prevention of cardiovascular disease",
+      "pmids": ["30158069", "30146931", "30221597", "30221595", "25401325", "19482214", "30667501", "35471505"]
+    }
+  ]
+}

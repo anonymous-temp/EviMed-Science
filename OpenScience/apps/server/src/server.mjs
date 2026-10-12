@@ -32,6 +32,10 @@ import { ResultRevisionService } from "./resultRevision.mjs";
 import { ResultCorrectionService } from "./resultCorrection.mjs";
 import { createResultReuseRoutes } from "./resultReuseRoutes.mjs";
 import { KnowledgeChangeService, producingAgenda } from "./knowledgeChange.mjs";
+import { createKnowledgeCompileRuntime } from "./knowledgeCompileRuntime.mjs";
+import { KnowledgePageService } from "./knowledgePageService.mjs";
+import { createKnowledgePageRoutes } from "./knowledgePageRoutes.mjs";
+import { KnowledgePageWorker } from "./knowledgePageWorker.mjs";
 import { ResultImpactService } from "./resultImpact.mjs";
 import { createResultImpactRoutes } from "./resultImpactRoutes.mjs";
 import { createResultSourceUpdatesRoutes } from "./resultSourceUpdatesRoutes.mjs";
@@ -83,7 +87,7 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
-import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, LEARNING_PROJECT_ID, assertClientProject, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
+import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, KNOWLEDGE_PROJECT_ID, LEARNING_PROJECT_ID, assertClientProject, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
 import { createEvolutionPositiveEvidence } from "./evolutionPositiveEvidence.mjs";
@@ -1567,6 +1571,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const deleteAgentSubjects = (ownerId, only = null) => deleteSubjectAccounts(
     { apiKeys: agentApiKeys, store, memorySubstrate, memoryIndexing, capsuleTransfers: capsuleTransferService }, ownerId, { only });
   const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit });
+  // 「知识页」 (knowledgePageService.mjs): composed further down, once the run ledger and the runtime exist. The hooks below reach it
+  // through these, so a deployment without it (or with it switched off) behaves as it always did.
+  /** @type {KnowledgePageService | null} */
+  let knowledgePages = null;
+  /** @type {ReturnType<typeof createKnowledgeCompileRuntime> | null} */
+  let knowledgeCompileRuntime = null;
+  /** @type {KnowledgePageWorker | null} */
+  let knowledgePagesWorker = null;
+  /** @type {((req: any, res: any) => Promise<boolean>) | null} */
+  let knowledgePageRoutes = null;
   // A file that arrives with new bytes for one the project already held is a source change: what rests on the old
   // document is labelled and told (N15). `resultImpacts` is composed below; the hook runs only after boot.
   const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs, { evolutionSignals,
@@ -1575,10 +1589,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const outcomes = await Promise.allSettled([
         resultImpacts?.reconcileReplacement(event.userId, event),
         geoValueSourceReplaced(geo?.store, event),
+        // The pages that quote the document that was replaced are labelled and queued for a recompile.
+        knowledgePages?.noteSourcesChanged(event.userId, event.projectId, [{ sourceId: event.replaced.sourceId, reason: "changed" }]),
       ]);
       const failed = outcomes.find(outcome => outcome.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;
     },
+    afterRemove: async event => { await knowledgePages?.noteSourcesChanged(event.userId, event.projectId, [{ sourceId: event.sourceId, reason: "removed" }]); },
     report: code => { void securityAudit(config, "source.replacement", "failed", { code }).catch(() => {}); },
   }) : null;
   const documentParser = new DocumentParserClient({
@@ -1605,6 +1622,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     readWeb: (url, options) => webReader.read(url, options),
     readFile: (project, rel) => readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel)),
     readTimeoutMs: config.webReadTimeoutMs,
+    // A researcher's save of a knowledge page makes their wording the page's basis (knowledgePageService.pageEdited).
+    onPageEdited: async ({ user, project, source }) => { await knowledgePages?.pageEdited(user.id, project.id, source); },
   }) : null;
   // Which conversations used a document (N-16): recorded when a run finishes, read here with each conversation's title
   // from the ledger of the project it happened in. `agentRuns` and `kbIndex` are built further down; both are read only
@@ -1723,6 +1742,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     onPublished: (job) => {
       kbIndex?.wake();
       void libraryService?.refreshSource(job.userId, job.payload?.sourceId);
+      // A readable document is something new for the project's knowledge pages to take in (a page itself is ignored there).
+      void knowledgePages?.noteSourceReady(job.userId, job.projectId, job.payload?.sourceId);
       // What the platform read out of the document goes into the researcher's
       // capsule here, labelled 来自资料 and reversible — the replacement for
       // the 「放进胶囊」 button that used to ask them to do it once per file
@@ -1730,8 +1751,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // document is parsed and indexed whatever the capsule is doing, and the
       // publication is idempotent, so the next understanding of the same
       // document retries it.
-      void libraryService?.publishSourceUnderstanding(job.userId, job.payload?.sourceId)
-        .catch(() => securityAudit(config, "library.publish.failed", "failed", { target: job.payload?.sourceId }));
+      if (config.documentMemoryEnabled) {
+        void libraryService?.publishSourceUnderstanding(job.userId, job.payload?.sourceId)
+          .catch(() => securityAudit(config, "library.publish.failed", "failed", { target: job.payload?.sourceId }));
+      }
     },
     // The document's text is written out ahead of its understanding: the
     // index and the library's copy can take it now, so it is searchable and
@@ -2394,6 +2417,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // results that rest on it, each labelled (N15). And the one standing authorization a recheck may use: the running agenda
   // whose episode produced the result. A paused or not-started agenda is none, and nothing here asks for another approval.
   const knowledgeChange = new KnowledgeChangeService({ memory: researchMemory, methods: learningService, sourceChanges,
+    // The knowledge pages that quote a changed source; composed later, read at the moment a change is reconciled.
+    pages: { get enabled() { return Boolean(knowledgePages?.enabled); },
+      sourceIdsByDoi: (userId, projectId, doi) => knowledgePages ? knowledgePages.sourceIdsByDoi(userId, projectId, doi) : [],
+      noteSourcesChanged: (userId, projectId, changes) => knowledgePages ? knowledgePages.noteSourcesChanged(userId, projectId, changes) : { pages: 0 },
+      pagesQuoting: (userId, projectId, sourceId) => knowledgePages ? knowledgePages.pagesQuoting(userId, projectId, sourceId) : [] },
     evidence: productDatabase ? createEvidenceLinkStates(productDatabase) : null,
     report: code => { void securityAudit(config, "knowledge.change", "failed", { code }).catch(() => {}); } });
   const resultImpacts = resultProvenance ? new ResultImpactService({ documents: productDocuments, results: resultProvenance,
@@ -3219,6 +3247,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (autopilotService && verificationEpisodeId(run.dispatchId)) {
         return Promise.resolve(verificationRunProject(project, run.dispatchId));
       }
+      if (knowledgeCompileRuntime && project?.id === KNOWLEDGE_PROJECT_ID) return knowledgeCompileRuntime.resolveRunProject(project, run);
       return sourceUnderstandingRuntime
         ? sourceUnderstandingRuntime.resolveRunProject(project, run) : Promise.resolve(project);
     },
@@ -3375,6 +3404,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (sourceUnderstandingRuntime) {
         await sourceUnderstandingRuntime.complete(project, run).catch(async error => {
           await securityAudit(config, "source.runtime.release", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
+          });
+        });
+      }
+      if (knowledgeCompileRuntime) {
+        await knowledgeCompileRuntime.complete(project, run).catch(async error => {
+          await securityAudit(config, "knowledge.runtime.release", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
             code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
           });
@@ -3875,6 +3912,23 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         sourceId: match[1], generation: Number(match[2]), jobIds: [match[3]], attemptId: match[4] }));
     },
   });
+  // 「知识页」: the service is always composed with the ledger, so pages that exist stay readable and editable with the compile off; the
+  // compile itself (the runtime, the worker, every hook that queues a round) needs `OPEN_SCIENCE_KNOWLEDGE_PAGES_ENABLED`.
+  if (sourceService && knowledgeEntries && productDocuments && productJobs) {
+    if (config.knowledgePagesEnabled) {
+      knowledgeCompileRuntime = createKnowledgeCompileRuntime({
+        config, store, agentRuns, runtimeManager, researchSessions, registry: agentRegistry, usageLedger, prepareContext: prepareResearchContext,
+      });
+    }
+    knowledgePages = new KnowledgePageService({
+      config, documents: productDocuments, jobs: productJobs, sources: sourceService, store, entries: knowledgeEntries, runtime: knowledgeCompileRuntime,
+      report: code => { void securityAudit(config, "knowledge.pages", "failed", { code }).catch(() => {}); },
+    });
+    knowledgePageRoutes = createKnowledgePageRoutes({ store, service: knowledgePages, sources: sourceService, maxJsonBytes: config.maxJsonBytes });
+    if (config.knowledgePagesEnabled) {
+      knowledgePagesWorker = new KnowledgePageWorker({ jobs: productJobs, service: knowledgePages, pollMs: config.knowledgePagesPollMs, leaseMs: config.knowledgePagesLeaseMs });
+    }
+  }
   if (learningService && productJobs && config.learningEnabled) {
     const methodDescriber = new MethodDescriber(config, { usageLedger });
     learningRuntime = createLearningRuntime({
@@ -5287,6 +5341,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           memoryIndexWorker?.status?.().running,
           memoryIndexWorker?.reconciling,
           sourceWorker?.status?.().running,
+          knowledgePagesWorker?.status?.().running,
           autopilotWorker?.status?.().running,
           learningWorker?.status?.().running,
           evolution?.worker.status().running,
@@ -5711,6 +5766,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await handbookRoutes(req, res)) return;
       if (evolution && await evolution.routes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
+      if (knowledgePageRoutes && await knowledgePageRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
       if (await evidenceTopicRequestRoutes(req, res)) return;
@@ -6034,6 +6090,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // readiness uses. The last known answer is served at once and
             // refreshed behind it; an OpenList that cannot say is `false`.
             features: { frontier: Boolean(frontier) && frontierAudienceAllows(config, user), review: Boolean(review),
+              // 「知识页」: the compile is on for this deployment (the pages that exist are readable either way).
+              knowledgePages: Boolean(knowledgePages?.enabled),
               // Sharing a capsule with other accounts, and subscribing a project to an evidence zone: each its own switch, and the
               // second the frontier's audience too. The panels are drawn only where the server says so.
               capsuleShare: Boolean(capsuleSharing),
@@ -7660,7 +7718,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     void Promise.resolve(managedBrowser.pause?.()).catch(() => {
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
-    for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
+    for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, knowledgePagesWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
       geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker, evidenceProgramme?.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
@@ -7702,6 +7760,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       hostedExtensions?.worker.start();
       memoryIndexWorker?.start();
       sourceWorker?.start();
+      knowledgePagesWorker?.start();
       kbIndex?.start();
       autopilotWorker?.start();
       learningWorker?.start();
@@ -7808,6 +7867,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     memoryIndexWorker,
     sourceService,
     sourceWorker,
+    knowledgePages,
+    knowledgePagesWorker,
+    knowledgeCompileRuntime,
     // The one source-change record and the modules that read it (B5), returned so the composition can be asserted.
     sourceChanges,
     sourceUpdates,
@@ -7935,6 +7997,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await hostedExtensions?.worker.close();
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
+      await knowledgePagesWorker?.close();
       await kbIndex?.close();
       await autopilotWorker?.close();
       await learningWorker?.close();

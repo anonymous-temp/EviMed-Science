@@ -1,0 +1,448 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-10-12-pilot",
+  "generatedAt": "2026-10-12T13:43:25.297Z",
+  "config": {
+    "schemaVersion": 1,
+    "models": {
+      "answer": "deepseek-v4-flash",
+      "judge": "deepseek-v4-pro",
+      "compile": "deepseek-v4-flash"
+    },
+    "thinking": "disabled",
+    "temperature": {
+      "answer": 0.7,
+      "compile": 0.3,
+      "judge": 0
+    },
+    "retrieval": {
+      "engine": "bm25",
+      "topK": 5,
+      "maxToolCalls": 6
+    },
+    "prompts": {
+      "answerSystemSha256": "47ec74bd7e6c318042530c84e02be487abc2e909e6faf532cf9af51da15e0a24",
+      "decompositionSentence": "When a question spans several documents, first split it into sub-questions, search for each one separately, and then combine what you found into one answer.",
+      "judgeSystemSha256": "86679b886b48ce19dda39d5e4568c2bdbf6650cd9351d5e55f5aa726d6f7af58",
+      "compileUserMessageSha256": "ec5fe6a38d9986cf5ff014ec5a62b84ef80cbded3eb08ed112c2702ab4753365",
+      "repairUserMessageSha256": "f70e5a1633c0237a054bf5972d282e34b3ce167678ac475204e5bd053017d2b6",
+      "knowledgeCompileSkillSha256": "d4492d62cc5885e6887ab7c002ed7fc3346cfb9a67a0fc12acf78ae1ff0072b0"
+    },
+    "domainKnowledgePageSha256": "5aca780d61522a957165d2d9af78311e2cc607fbeb77ccded403533d76e7df02",
+    "thresholds": {
+      "minRepsPerCell": 3,
+      "synthesis": {
+        "bVsAprimeCiLowerAbove": 0,
+        "bVsAprimeMeanAtLeast": 0.05,
+        "bVsAMeanAbove": 0
+      },
+      "single": {
+        "meanAtLeast": -0.05,
+        "ciLowerAtLeast": -0.1
+      },
+      "citation": {
+        "verifiedRateDropAtMost": 0.03
+      },
+      "judgeSanity": {
+        "referenceMeanAtLeast": 0.9,
+        "emptyMeanAtMost": 0.1
+      }
+    },
+    "bootstrap": {
+      "iterations": 10000,
+      "seed": 20261012
+    },
+    "arms": {
+      "A": "kb_search only",
+      "Aprime": "kb_search + decomposition guidance",
+      "B": "knowledge pages + kb_search"
+    }
+  },
+  "thresholds": {
+    "minRepsPerCell": 3,
+    "synthesis": {
+      "bVsAprimeCiLowerAbove": 0,
+      "bVsAprimeMeanAtLeast": 0.05,
+      "bVsAMeanAbove": 0
+    },
+    "single": {
+      "meanAtLeast": -0.05,
+      "ciLowerAtLeast": -0.1
+    },
+    "citation": {
+      "verifiedRateDropAtMost": 0.03
+    },
+    "judgeSanity": {
+      "referenceMeanAtLeast": 0.9,
+      "emptyMeanAtMost": 0.1
+    }
+  },
+  "bootstrap": {
+    "iterations": 10000,
+    "seed": 20261012,
+    "unit": "question (mean over its repetitions)",
+    "interval": "percentile 95%"
+  },
+  "coverage": {
+    "expectedCells": 81,
+    "completeCells": 0,
+    "minRepsPerCell": 1,
+    "judgedRuns": 0,
+    "runsRecorded": 0
+  },
+  "categories": {
+    "synthesis": {
+      "questions": 15,
+      "arms": {
+        "A": {
+          "questions": 0,
+          "runs": 0,
+          "correctness": null,
+          "tokensPerRun": null,
+          "toolCallsPerRun": null,
+          "answerCostCnyPerRun": null
+        },
+        "Aprime": {
+          "questions": 0,
+          "runs": 0,
+          "correctness": null,
+          "tokensPerRun": null,
+          "toolCallsPerRun": null,
+          "answerCostCnyPerRun": null
+        },
+        "B": {
+          "questions": 0,
+          "runs": 0,
+          "correctness": null,
+          "tokensPerRun": null,
+          "toolCallsPerRun": null,
+          "answerCostCnyPerRun": null
+        }
+      },
+      "diffs": {
+        "B-Aprime": {
+          "n": 0,
+          "mean": null,
+          "ciLow": null,
+          "ciHigh": null
+        },
+        "B-A": {
+          "n": 0,
+          "mean": null,
+          "ciLow": null,
+          "ciHigh": null
+        },
+        "Aprime-A": {
+          "n": 0,
+          "mean": null,
+          "ciLow": null,
+          "ciHigh": null
+        }
+      }
+    },
+    "single": {
+      "questions": 12,
+      "arms": {
+        "A": {
+          "questions": 0,
+          "runs": 0,
+          "correctness": null,
+          "tokensPerRun": null,
+          "toolCallsPerRun": null,
+          "answerCostCnyPerRun": null
+        },
+        "Aprime": {
+          "questions": 0,
+          "runs": 0,
+          "correctness": null,
+          "tokensPerRun": null,
+          "toolCallsPerRun": null,
+          "answerCostCnyPerRun": null
+        },
+        "B": {
+          "questions": 0,
+          "runs": 0,
+          "correctness": null,
+          "tokensPerRun": null,
+          "toolCallsPerRun": null,
+          "answerCostCnyPerRun": null
+        }
+      },
+      "diffs": {
+        "B-Aprime": {
+          "n": 0,
+          "mean": null,
+          "ciLow": null,
+          "ciHigh": null
+        },
+        "B-A": {
+          "n": 0,
+          "mean": null,
+          "ciLow": null,
+          "ciHigh": null
+        },
+        "Aprime-A": {
+          "n": 0,
+          "mean": null,
+          "ciLow": null,
+          "ciHigh": null
+        }
+      }
+    }
+  },
+  "citations": {
+    "overall": {
+      "A": {
+        "answers": 0,
+        "answersWithMarkers": 0,
+        "answersWithMarkersRate": null,
+        "markerCount": 0,
+        "verified": 0,
+        "verifiedRate": null,
+        "markersPerAnswer": null,
+        "pageCited": 0,
+        "byStatus": {}
+      },
+      "Aprime": {
+        "answers": 0,
+        "answersWithMarkers": 0,
+        "answersWithMarkersRate": null,
+        "markerCount": 0,
+        "verified": 0,
+        "verifiedRate": null,
+        "markersPerAnswer": null,
+        "pageCited": 0,
+        "byStatus": {}
+      },
+      "B": {
+        "answers": 0,
+        "answersWithMarkers": 0,
+        "answersWithMarkersRate": null,
+        "markerCount": 0,
+        "verified": 0,
+        "verifiedRate": null,
+        "markersPerAnswer": null,
+        "pageCited": 0,
+        "byStatus": {}
+      }
+    },
+    "synthesis": {
+      "A": {
+        "answers": 0,
+        "answersWithMarkers": 0,
+        "answersWithMarkersRate": null,
+        "markerCount": 0,
+        "verified": 0,
+        "verifiedRate": null,
+        "markersPerAnswer": null,
+        "pageCited": 0,
+        "byStatus": {}
+      },
+      "Aprime": {
+        "answers": 0,
+        "answersWithMarkers": 0,
+        "answersWithMarkersRate": null,
+        "markerCount": 0,
+        "verified": 0,
+        "verifiedRate": null,
+        "markersPerAnswer": null,
+        "pageCited": 0,
+        "byStatus": {}
+      },
+      "B": {
+        "answers": 0,
+        "answersWithMarkers": 0,
+        "answersWithMarkersRate": null,
+        "markerCount": 0,
+        "verified": 0,
+        "verifiedRate": null,
+        "markersPerAnswer": null,
+        "pageCited": 0,
+        "byStatus": {}
+      }
+    },
+    "single": {
+      "A": {
+        "answers": 0,
+        "answersWithMarkers": 0,
+        "answersWithMarkersRate": null,
+        "markerCount": 0,
+        "verified": 0,
+        "verifiedRate": null,
+        "markersPerAnswer": null,
+        "pageCited": 0,
+        "byStatus": {}
+      },
+      "Aprime": {
+        "answers": 0,
+        "answersWithMarkers": 0,
+        "answersWithMarkersRate": null,
+        "markerCount": 0,
+        "verified": 0,
+        "verifiedRate": null,
+        "markersPerAnswer": null,
+        "pageCited": 0,
+        "byStatus": {}
+      },
+      "B": {
+        "answers": 0,
+        "answersWithMarkers": 0,
+        "answersWithMarkersRate": null,
+        "markerCount": 0,
+        "verified": 0,
+        "verifiedRate": null,
+        "markersPerAnswer": null,
+        "pageCited": 0,
+        "byStatus": {}
+      }
+    },
+    "diffs": {
+      "B-Aprime": {
+        "n": 0,
+        "mean": null,
+        "ciLow": null,
+        "ciHigh": null
+      },
+      "B-A": {
+        "n": 0,
+        "mean": null,
+        "ciLow": null,
+        "ciHigh": null
+      },
+      "Aprime-A": {
+        "n": 0,
+        "mean": null,
+        "ciLow": null,
+        "ciHigh": null
+      }
+    }
+  },
+  "perTopic": {
+    "af-doac-warfarin": {
+      "A": {
+        "synthesis": null,
+        "single": null
+      },
+      "Aprime": {
+        "synthesis": null,
+        "single": null
+      },
+      "B": {
+        "synthesis": null,
+        "single": null
+      }
+    },
+    "sglt2-hf-ckd": {
+      "A": {
+        "synthesis": null,
+        "single": null
+      },
+      "Aprime": {
+        "synthesis": null,
+        "single": null
+      },
+      "B": {
+        "synthesis": null,
+        "single": null
+      }
+    },
+    "aspirin-primary-prevention": {
+      "A": {
+        "synthesis": null,
+        "single": null
+      },
+      "Aprime": {
+        "synthesis": null,
+        "single": null
+      },
+      "B": {
+        "synthesis": null,
+        "single": null
+      }
+    }
+  },
+  "compile": {
+    "perTopic": {
+      "af-doac-warfarin": {
+        "compiles": 1,
+        "meanCostCny": 0.2435,
+        "meanTokens": 81628,
+        "meanRounds": 3,
+        "meanPages": 7,
+        "meanClaimsWritten": 49,
+        "meanClaimsKept": 49,
+        "claimsWritten": 49,
+        "claimsHeld": 0,
+        "heldShare": 0,
+        "heldByReason": {},
+        "meanDocumentsCited": 8,
+        "documents": 8,
+        "unreadablePatches": 0
+      },
+      "sglt2-hf-ckd": {
+        "compiles": 1,
+        "meanCostCny": 0.2837,
+        "meanTokens": 90470,
+        "meanRounds": 3,
+        "meanPages": 13,
+        "meanClaimsWritten": 70,
+        "meanClaimsKept": 70,
+        "claimsWritten": 70,
+        "claimsHeld": 0,
+        "heldShare": 0,
+        "heldByReason": {},
+        "meanDocumentsCited": 8,
+        "documents": 8,
+        "unreadablePatches": 0
+      },
+      "aspirin-primary-prevention": {
+        "compiles": 1,
+        "meanCostCny": 0.2863,
+        "meanTokens": 91011,
+        "meanRounds": 3,
+        "meanPages": 9,
+        "meanClaimsWritten": 71,
+        "meanClaimsKept": 71,
+        "claimsWritten": 71,
+        "claimsHeld": 0,
+        "heldShare": 0,
+        "heldByReason": {},
+        "meanDocumentsCited": 8,
+        "documents": 8,
+        "unreadablePatches": 0
+      }
+    },
+    "overall": {
+      "compiles": 3,
+      "meanCostCny": 0.2712,
+      "meanTokens": 87703,
+      "meanRounds": 3,
+      "meanPages": 9.67,
+      "meanClaimsWritten": 63.3,
+      "meanClaimsKept": 63.3,
+      "claimsWritten": 190,
+      "claimsHeld": 0,
+      "heldShare": 0,
+      "heldByReason": {},
+      "meanDocumentsCited": 8,
+      "documents": 8,
+      "unreadablePatches": 0
+    }
+  },
+  "cost": {
+    "totalCny": 0.8135,
+    "byKind": {
+      "compile": 0.2916,
+      "repair": 0.5219
+    },
+    "calls": 9
+  },
+  "judgeSanity": null,
+  "decision": {
+    "open": false,
+    "inconclusive": true,
+    "reasons": [
+      "FAIL: insufficient data - 0 of 81 (question, arm) cells are complete at 1 judged repetitions (3 required for every cell); the decision is withheld, not made on part of the data"
+    ]
+  }
+}

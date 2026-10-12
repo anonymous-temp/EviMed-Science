@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "topic": "sglt2-hf-ckd",
+  "title": "SGLT2 inhibitors in heart failure and chronic kidney disease",
+  "source": "PubMed abstracts via NCBI E-utilities (efetch, retmode=xml)",
+  "fetchedAt": "2026-10-12",
+  "documents": [
+    {
+      "key": "pmid-31535829",
+      "sourceId": "src_3d8122c20e1cbc078636f036dbe476b7",
+      "pmid": "31535829",
+      "doi": "10.1056/NEJMoa1911303",
+      "title": "Dapagliflozin in Patients with Heart Failure and Reduced Ejection Fraction.",
+      "journal": "The New England journal of medicine",
+      "year": 2019,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/31535829/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=31535829&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Clinical Trial, Phase III",
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Copyright © 2019 Massachusetts Medical Society.",
+      "chars": 2401,
+      "truncatedFrom": null,
+      "textSha256": "15398184836e6aa8f23775110bc9981d158507bbe76f8591066082a30d87e465"
+    },
+    {
+      "key": "pmid-32865377",
+      "sourceId": "src_b5b2f2860d0e0ed2b6663cb104221791",
+      "pmid": "32865377",
+      "doi": "10.1056/NEJMoa2022190",
+      "title": "Cardiovascular and Renal Outcomes with Empagliflozin in Heart Failure.",
+      "journal": "The New England journal of medicine",
+      "year": 2020,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32865377/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=32865377&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Copyright © 2020 Massachusetts Medical Society.",
+      "chars": 2250,
+      "truncatedFrom": null,
+      "textSha256": "a870b5dd82b2820668e0e4f37842f7dacb4eb61d7b7847d77e1990e92baefa87"
+    },
+    {
+      "key": "pmid-34449189",
+      "sourceId": "src_343c67f35a2bf841907858fd63302653",
+      "pmid": "34449189",
+      "doi": "10.1056/NEJMoa2107038",
+      "title": "Empagliflozin in Heart Failure with a Preserved Ejection Fraction.",
+      "journal": "The New England journal of medicine",
+      "year": 2021,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34449189/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=34449189&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Copyright © 2021 Massachusetts Medical Society.",
+      "chars": 1883,
+      "truncatedFrom": null,
+      "textSha256": "042f6f5764640ed0d769149e85288fcd7fbe75079db830610737060fb10ca7ed"
+    },
+    {
+      "key": "pmid-36027570",
+      "sourceId": "src_e1fc1fa13a9a3fbf27de970c81e78bba",
+      "pmid": "36027570",
+      "doi": "10.1056/NEJMoa2206286",
+      "title": "Dapagliflozin in Heart Failure with Mildly Reduced or Preserved Ejection Fraction.",
+      "journal": "The New England journal of medicine",
+      "year": 2022,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36027570/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=36027570&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Copyright © 2022 Massachusetts Medical Society.",
+      "chars": 2256,
+      "truncatedFrom": null,
+      "textSha256": "f084d53d3d8b28afefca351316635b2e2061e3ff656db056c20a06b90f0fec14"
+    },
+    {
+      "key": "pmid-36041474",
+      "sourceId": "src_4b1be72f0031135f81e0915e571e919b",
+      "pmid": "36041474",
+      "doi": "10.1016/S0140-6736(22)01429-5",
+      "title": "SGLT-2 inhibitors in patients with heart failure: a comprehensive meta-analysis of five randomised controlled trials.",
+      "journal": "Lancet (London, England)",
+      "year": 2022,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36041474/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=36041474&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Meta-Analysis"
+      ],
+      "license": "Copyright © 2022 Published by Elsevier Ltd. All rights reserved. Published by Elsevier Ltd.. All rights reserved.",
+      "chars": 2578,
+      "truncatedFrom": 2873,
+      "textSha256": "4e1fc364e85f7310a668ebb2f6f7a828f782005455b3ae355b9b1638e9ac3153"
+    },
+    {
+      "key": "pmid-32970396",
+      "sourceId": "src_01c40038ab279aadbaf12401aadbad29",
+      "pmid": "32970396",
+      "doi": "10.1056/NEJMoa2024816",
+      "title": "Dapagliflozin in Patients with Chronic Kidney Disease.",
+      "journal": "The New England journal of medicine",
+      "year": 2020,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32970396/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=32970396&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Copyright © 2020 Massachusetts Medical Society.",
+      "chars": 2419,
+      "truncatedFrom": null,
+      "textSha256": "e5615a013c9ea72bd645099a53f116528f68b8284edcae4ebb7f0cead438a4de"
+    },
+    {
+      "key": "pmid-36331190",
+      "sourceId": "src_9babb063478831150659a9e2e6b0e443",
+      "pmid": "36331190",
+      "doi": "10.1056/NEJMoa2204233",
+      "title": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "journal": "The New England journal of medicine",
+      "year": 2023,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=36331190&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Randomized Controlled Trial",
+        "Journal Article",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Copyright © 2022 Massachusetts Medical Society.",
+      "chars": 2588,
+      "truncatedFrom": null,
+      "textSha256": "b73cfd0862787d2a79770c623332438ec337d9412c27e442488ee35c74a323c3"
+    },
+    {
+      "key": "pmid-30990260",
+      "sourceId": "src_57ce472296b677f0d08707b04c50a8f0",
+      "pmid": "30990260",
+      "doi": "10.1056/NEJMoa1811744",
+      "title": "Canagliflozin and Renal Outcomes in Type 2 Diabetes and Nephropathy.",
+      "journal": "The New England journal of medicine",
+      "year": 2019,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30990260/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=30990260&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Copyright © 2019 Massachusetts Medical Society.",
+      "chars": 2732,
+      "truncatedFrom": null,
+      "textSha256": "de8938e79c0f0769910dffccd9ab9c8716c61b3183db25574825ea687b9101ae"
+    }
+  ]
+}

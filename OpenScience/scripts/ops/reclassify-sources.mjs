@@ -40,7 +40,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { SOURCE_TYPES, sourceFirstPassType, sourceOriginOf } from "@evimed/domain";
+import { SOURCE_CHOICE_TYPES, SOURCE_TYPES, sourceFirstPassType, sourceOriginOf } from "@evimed/domain";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -110,7 +110,8 @@ export async function reclassifySources(database, { apply, userId, limit, judge 
       const payload = source.payload;
       item.before = typeof payload.docType === "string" ? payload.docType : null;
       const file = String(payload.paths?.[0] ?? "");
-      const note = sourceOriginOf({ connectorType: payload.connector?.type, path: file }) === "note";
+      // A note and a knowledge page are what the folder they are in says; the judge is not asked.
+      const note = ["note", "wiki"].includes(sourceOriginOf({ connectorType: payload.connector?.type, path: file }));
       let docType = null;
       if (judge && JUDGED_FORMAT.test(file) && !note) {
         const capture = await service.loadCapture(candidate.userId, source).catch(() => null);
@@ -118,7 +119,7 @@ export async function reclassifySources(database, { apply, userId, limit, judge 
         if (text) {
           const named = await judge({ ...candidate, filename: file, text: text.slice(0, 1500), docType: item.before ?? "other" });
           // The judge's 「其他」 only says it could not tell, which the format's own type says better.
-          if (named && SOURCE_TYPES.includes(named) && !(named === "other" && sourceFirstPassType(file).docType !== "other")) docType = named;
+          if (named && SOURCE_CHOICE_TYPES.includes(named) && !(named === "other" && sourceFirstPassType(file).docType !== "other")) docType = named;
         }
       }
       const by = docType ? "judge" : "format";
@@ -172,7 +173,7 @@ async function main() {
       const service = createJudgeService({ config: loadConfig(), usageLedger: new UsageLedger(database), database });
       judge = async (/** @type {any} */ request) => {
         try {
-          const result = await service.judge("J7", { filename: request.filename, text: request.text, types: [...SOURCE_TYPES] },
+          const result = await service.judge("J7", { filename: request.filename, text: request.text, types: [...SOURCE_CHOICE_TYPES] },
             { userId: request.userId, projectId: request.projectId, taskId: `reclassify-${request.sourceId}`, module: "source", regexBaseline: { docType: request.docType } });
           return ["settled", "escalated"].includes(result?.outcome) ? String(result.value?.docType ?? "") || null : null;
         } catch { return null; }

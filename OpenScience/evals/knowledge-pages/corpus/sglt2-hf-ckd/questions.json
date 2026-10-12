@@ -1,0 +1,283 @@
+{
+  "schemaVersion": 1,
+  "topic": "sglt2-hf-ckd",
+  "note": "Questions and key points are written by hand from the abstracts in docs/. `doc` is a document key from manifest.json. Every support quote is checked to be verbatim in its document by check_corpus.mjs.",
+  "questions": [
+    {
+      "id": "sg-s1",
+      "kind": "synthesis",
+      "question": "Across the four dedicated heart failure outcome trials of SGLT2 inhibitors (DAPA-HF, EMPEROR-Reduced, EMPEROR-Preserved, DELIVER), how large was the reduction in the primary composite outcome in each, and does the effect hold across the ejection fraction range?",
+      "reference": {
+        "keyPoints": [
+          {
+            "id": "kp1",
+            "text": "DAPA-HF (ejection fraction 40% or less): dapagliflozin reduced worsening heart failure or cardiovascular death, hazard ratio 0.74 (16.3% vs 21.2%).",
+            "support": [
+              { "doc": "pmid-31535829", "quote": "the primary outcome occurred in 386 of 2373 patients (16.3%) in the dapagliflozin group and in 502 of 2371 patients (21.2%) in the placebo group (hazard ratio, 0.74; 95% confidence interval [CI], 0.65 to 0.85; P<0.001)" }
+            ]
+          },
+          {
+            "id": "kp2",
+            "text": "EMPEROR-Reduced (ejection fraction 40% or less): empagliflozin reduced cardiovascular death or heart failure hospitalization, hazard ratio 0.75 (19.4% vs 24.7%).",
+            "support": [
+              { "doc": "pmid-32865377", "quote": "a primary outcome event occurred in 361 of 1863 patients (19.4%) in the empagliflozin group and in 462 of 1867 patients (24.7%) in the placebo group (hazard ratio for cardiovascular death or hospitalization for heart failure, 0.75; 95% confidence interval [CI], 0.65 to 0.86; P<0.001)" }
+            ]
+          },
+          {
+            "id": "kp3",
+            "text": "EMPEROR-Preserved (ejection fraction above 40%): empagliflozin reduced the primary outcome, hazard ratio 0.79 (13.8% vs 17.1%).",
+            "support": [
+              { "doc": "pmid-34449189", "quote": "a primary outcome event occurred in 415 of 2997 patients (13.8%) in the empagliflozin group and in 511 of 2991 patients (17.1%) in the placebo group (hazard ratio, 0.79; 95% confidence interval [CI], 0.69 to 0.90; P<0.001)" }
+            ]
+          },
+          {
+            "id": "kp4",
+            "text": "DELIVER (mildly reduced or preserved ejection fraction, above 40%): dapagliflozin reduced the primary outcome, hazard ratio 0.82 (16.4% vs 19.5%); results were similar for ejection fraction of 60% or more and less than 60%.",
+            "support": [
+              { "doc": "pmid-36027570", "quote": "the primary outcome occurred in 512 of 3131 patients (16.4%) in the dapagliflozin group and in 610 of 3132 patients (19.5%) in the placebo group (hazard ratio, 0.82; 95% confidence interval [CI], 0.73 to 0.92; P<0.001)" },
+              { "doc": "pmid-36027570", "quote": "Results were similar among patients with a left ventricular ejection fraction of 60% or more and those with a left ventricular ejection fraction of less than 60%" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "sg-s2",
+      "kind": "synthesis",
+      "question": "Did SGLT2 inhibitors reduce cardiovascular death on its own, as opposed to hospitalization for heart failure? Compare DAPA-HF, DELIVER, EMPEROR-Preserved and what the heart failure meta-analysis concluded.",
+      "reference": {
+        "keyPoints": [
+          {
+            "id": "kp1",
+            "text": "DAPA-HF: death from cardiovascular causes was significantly lower with dapagliflozin (hazard ratio 0.82; 95% CI 0.69 to 0.98).",
+            "support": [
+              { "doc": "pmid-31535829", "quote": "Death from cardiovascular causes occurred in 227 patients (9.6%) in the dapagliflozin group and in 273 patients (11.5%) in the placebo group (hazard ratio, 0.82; 95% CI, 0.69 to 0.98)" }
+            ]
+          },
+          {
+            "id": "kp2",
+            "text": "DELIVER: cardiovascular death alone was not significantly reduced (hazard ratio 0.88; 95% CI 0.74 to 1.05), while worsening heart failure was (hazard ratio 0.79).",
+            "support": [
+              { "doc": "pmid-36027570", "quote": "cardiovascular death occurred in 231 patients (7.4%) and 261 patients (8.3%), respectively (hazard ratio, 0.88; 95% CI, 0.74 to 1.05)" },
+              { "doc": "pmid-36027570", "quote": "(hazard ratio, 0.79; 95% CI, 0.69 to 0.91)" }
+            ]
+          },
+          {
+            "id": "kp3",
+            "text": "EMPEROR-Preserved: the effect on the primary outcome was mainly related to a lower risk of hospitalization for heart failure.",
+            "support": [
+              { "doc": "pmid-34449189", "quote": "This effect was mainly related to a lower risk of hospitalization for heart failure in the empagliflozin group." }
+            ]
+          },
+          {
+            "id": "kp4",
+            "text": "The meta-analysis of five trials concluded that SGLT2 inhibitors reduced cardiovascular death (hazard ratio 0.87; 95% CI 0.79 to 0.95) and first hospitalisation for heart failure (0.72); in DELIVER plus EMPEROR-Preserved alone cardiovascular death was 0.88 (0.77 to 1.00).",
+            "support": [
+              { "doc": "pmid-36041474", "quote": "cardiovascular death (0·87 [0·79-0·95]), first hospitalisation for heart failure (0·72 [0·67-0·78])" },
+              { "doc": "pmid-36041474", "quote": "cardiovascular death (0·88 [0·77-1·00]) and first hospitalisation for heart failure (0·74 [0·67-0·83])" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "sg-s3",
+      "kind": "synthesis",
+      "question": "How did the populations of the three chronic kidney disease trials (CREDENCE, DAPA-CKD, EMPA-KIDNEY) differ in kidney function, albuminuria and diabetes status, and was the effect consistent with and without diabetes?",
+      "reference": {
+        "keyPoints": [
+          {
+            "id": "kp1",
+            "text": "CREDENCE enrolled only patients with type 2 diabetes and albuminuric chronic kidney disease (eGFR 30 to <90, albumin-to-creatinine ratio >300 to 5000) on renin-angiotensin system blockade; it tested canagliflozin 100 mg daily.",
+            "support": [
+              { "doc": "pmid-30990260", "quote": "we assigned patients with type 2 diabetes and albuminuric chronic kidney disease to receive canagliflozin, an oral SGLT2 inhibitor, at a dose of 100 mg daily or placebo" },
+              { "doc": "pmid-30990260", "quote": "estimated glomerular filtration rate (GFR) of 30 to <90 ml per minute per 1.73 m2 of body-surface area and albuminuria (ratio of albumin [mg] to creatinine [g], >300 to 5000)" }
+            ]
+          },
+          {
+            "id": "kp2",
+            "text": "DAPA-CKD enrolled participants with an eGFR of 25 to 75 and a urinary albumin-to-creatinine ratio of 200 to 5000, with or without type 2 diabetes; the effects were similar in those with and without diabetes.",
+            "support": [
+              { "doc": "pmid-32970396", "quote": "estimated glomerular filtration rate (GFR) of 25 to 75 ml per minute per 1.73 m2 of body-surface area and a urinary albumin-to-creatinine ratio (with albumin measured in milligrams and creatinine measured in grams) of 200 to 5000" },
+              { "doc": "pmid-32970396", "quote": "The effects of dapagliflozin were similar in participants with type 2 diabetes and in those without type 2 diabetes." }
+            ]
+          },
+          {
+            "id": "kp3",
+            "text": "EMPA-KIDNEY was the broadest: eGFR of at least 20 but under 45, or eGFR of at least 45 but under 90 with an albumin-to-creatinine ratio of at least 200; results were consistent with or without diabetes and across eGFR ranges.",
+            "support": [
+              { "doc": "pmid-36331190", "quote": "estimated glomerular filtration rate (eGFR) of at least 20 but less than 45 ml per minute per 1.73 m2 of body-surface area, or who had an eGFR of at least 45 but less than 90 ml per minute per 1.73 m2 with a urinary albumin-to-creatinine ratio" },
+              { "doc": "pmid-36331190", "quote": "Results were consistent among patients with or without diabetes and across subgroups defined according to eGFR ranges." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "sg-s4",
+      "kind": "synthesis",
+      "question": "Which of the SGLT2 inhibitor trials or analyses reported a reduction in death from any cause, and which found no significant difference?",
+      "reference": {
+        "keyPoints": [
+          {
+            "id": "kp1",
+            "text": "DAPA-CKD: death from any cause was lower with dapagliflozin (4.7% vs 6.8%, hazard ratio 0.69, P=0.004).",
+            "support": [
+              { "doc": "pmid-32970396", "quote": "Death occurred in 101 participants (4.7%) in the dapagliflozin group and 146 participants (6.8%) in the placebo group (hazard ratio, 0.69; 95% CI, 0.53 to 0.88; P = 0.004)" }
+            ]
+          },
+          {
+            "id": "kp2",
+            "text": "EMPA-KIDNEY: no significant between-group difference in death from any cause (4.5% vs 5.1%).",
+            "support": [
+              { "doc": "pmid-36331190", "quote": "there were no significant between-group differences with respect to the composite outcome of hospitalization for heart failure or death from cardiovascular causes (which occurred in 4.0% in the empagliflozin group and 4.6% in the placebo group) or death from any cause (in 4.5% and 5.1%, respectively)" }
+            ]
+          },
+          {
+            "id": "kp3",
+            "text": "DAPA-HF: death from any cause was lower with dapagliflozin (11.6% vs 13.9%, hazard ratio 0.83).",
+            "support": [
+              { "doc": "pmid-31535829", "quote": "276 patients (11.6%) and 329 patients (13.9%), respectively, died from any cause (hazard ratio, 0.83; 95% CI, 0.71 to 0.97)" }
+            ]
+          },
+          {
+            "id": "kp4",
+            "text": "The five-trial heart failure meta-analysis found a reduction in all-cause mortality (hazard ratio 0.92; 95% CI 0.86 to 0.99).",
+            "support": [
+              { "doc": "pmid-36041474", "quote": "and all-cause mortality (0·92 [0·86-0·99])" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "sg-s5",
+      "kind": "synthesis",
+      "question": "What adverse events or safety signals did the SGLT2 inhibitor trials report in heart failure and in chronic kidney disease, and where did they find no difference from placebo?",
+      "reference": {
+        "keyPoints": [
+          {
+            "id": "kp1",
+            "text": "EMPEROR-Reduced: uncomplicated genital tract infection was reported more frequently with empagliflozin.",
+            "support": [
+              { "doc": "pmid-32865377", "quote": "Uncomplicated genital tract infection was reported more frequently with empagliflozin." }
+            ]
+          },
+          {
+            "id": "kp2",
+            "text": "EMPEROR-Preserved: uncomplicated genital and urinary tract infections and hypotension were reported more frequently with empagliflozin.",
+            "support": [
+              { "doc": "pmid-34449189", "quote": "Uncomplicated genital and urinary tract infections and hypotension were reported more frequently with empagliflozin." }
+            ]
+          },
+          {
+            "id": "kp3",
+            "text": "DAPA-HF: adverse events related to volume depletion, renal dysfunction and hypoglycemia did not differ between treatment groups.",
+            "support": [
+              { "doc": "pmid-31535829", "quote": "The frequency of adverse events related to volume depletion, renal dysfunction, and hypoglycemia did not differ between treatment groups." }
+            ]
+          },
+          {
+            "id": "kp4",
+            "text": "CREDENCE: no significant differences in rates of amputation or fracture with canagliflozin.",
+            "support": [
+              { "doc": "pmid-30990260", "quote": "There were no significant differences in rates of amputation or fracture." }
+            ]
+          },
+          {
+            "id": "kp5",
+            "text": "EMPA-KIDNEY: the rates of serious adverse events were similar in the two groups.",
+            "support": [
+              { "doc": "pmid-36331190", "quote": "The rates of serious adverse events were similar in the two groups." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "sg-f1",
+      "kind": "single",
+      "question": "In DAPA-CKD, what was the number needed to treat to prevent one primary outcome event?",
+      "reference": {
+        "keyPoints": [
+          {
+            "id": "kp1",
+            "text": "The number needed to treat to prevent one primary outcome event was 19 (95% CI 15 to 27).",
+            "support": [
+              { "doc": "pmid-32970396", "quote": "number needed to treat to prevent one primary outcome event, 19 [95% CI, 15 to 27]" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "sg-f2",
+      "kind": "single",
+      "question": "How many patients were randomly assigned in EMPEROR-Preserved, and what ejection fraction defined the population?",
+      "reference": {
+        "keyPoints": [
+          {
+            "id": "kp1",
+            "text": "5988 patients were randomly assigned.",
+            "support": [
+              { "doc": "pmid-34449189", "quote": "we randomly assigned 5988 patients with class II-IV heart failure" }
+            ]
+          },
+          {
+            "id": "kp2",
+            "text": "The population had an ejection fraction of more than 40%.",
+            "support": [
+              { "doc": "pmid-34449189", "quote": "an ejection fraction of more than 40% to receive empagliflozin (10 mg once daily) or placebo" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "sg-f3",
+      "kind": "single",
+      "question": "In EMPA-KIDNEY, what was the hazard ratio for progression of kidney disease or death from cardiovascular causes, and what were the event percentages in the two groups?",
+      "reference": {
+        "keyPoints": [
+          {
+            "id": "kp1",
+            "text": "The hazard ratio was 0.72 (95% CI 0.64 to 0.82).",
+            "support": [
+              { "doc": "pmid-36331190", "quote": "(hazard ratio, 0.72; 95% confidence interval [CI], 0.64 to 0.82; P<0.001)" }
+            ]
+          },
+          {
+            "id": "kp2",
+            "text": "The primary outcome occurred in 13.1% of the empagliflozin group and 16.9% of the placebo group.",
+            "support": [
+              { "doc": "pmid-36331190", "quote": "432 of 3304 patients (13.1%) in the empagliflozin group and in 558 of 3305 patients (16.9%) in the placebo group" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "sg-f4",
+      "kind": "single",
+      "question": "What canagliflozin dose was used in CREDENCE, and what was the median follow-up when the trial was stopped early?",
+      "reference": {
+        "keyPoints": [
+          {
+            "id": "kp1",
+            "text": "Canagliflozin was given at 100 mg daily.",
+            "support": [
+              { "doc": "pmid-30990260", "quote": "at a dose of 100 mg daily or placebo" }
+            ]
+          },
+          {
+            "id": "kp2",
+            "text": "The median follow-up at the interim analysis was 2.62 years (4401 patients had been randomized).",
+            "support": [
+              { "doc": "pmid-30990260", "quote": "4401 patients had undergone randomization, with a median follow-up of 2.62 years" }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

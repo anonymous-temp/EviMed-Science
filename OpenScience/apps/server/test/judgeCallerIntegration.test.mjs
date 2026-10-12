@@ -76,14 +76,14 @@ test('J22 adds blacklist evidence, keeps regex exclusions and rechecks persisted
 });
 
 test('J7 classifies parsed text before capture and respects manual overrides and generation changes', async () => {
-  const { SOURCE_TYPES } = await import('../src/sourceService.mjs');
+  const { SOURCE_CHOICE_TYPES } = await import('@evimed/domain');
   for (const scenario of ['classify', 'override', 'changed']) {
     // The first pass only knew the format: a PDF is a document, and the judge names it once the text is read.
     const source = { id: 'src_test', projectId: 'project', revision: 1, payload: { paths: ['upload.pdf'], generation: 1, docType: 'document', depth: 'structured', ...(scenario === 'override' ? { override: { docType: 'document' } } : {}) } };
     let saved, calls = 0;
     const documents = { get: async () => structuredClone(source), put: async (user, kind, id, payload) => { saved = payload; } };
     const service = new SourceService(documents, {}, { judgeService: { judge: async (site, input) => {
-      calls++; assert.equal(site, 'J7'); assert.equal(input.text.length, 1500); assert.deepEqual(input.types, [...SOURCE_TYPES]); return settled({ docType: 'research-protocol' });
+      calls++; assert.equal(site, 'J7'); assert.equal(input.text.length, 1500); assert.deepEqual(input.types, [...SOURCE_CHOICE_TYPES]); return settled({ docType: 'research-protocol' });
     } } });
     let leases = 0;
     service.withSourceLease = async (job, action) => { leases++; return action({ ...source, payload: { ...source.payload, generation: scenario === 'changed' && leases > 1 ? 2 : 1 } }, { query: async () => ({ rows: [] }) }); };

@@ -81,6 +81,19 @@ export class ProductJobs {
     return result.rowCount ?? 0;
   }
 
+  /**
+   * Make a queued job due now: the work was scheduled for later and a person asked for it. A job that is running, finished or
+   * not queued is left alone.
+   * @param {string} userId @param {string} idempotencyKey
+   * @returns {Promise<boolean>} whether a queued job was brought forward
+   */
+  async bringForward(userId, idempotencyKey) {
+    await migrateProductStore(this.database);
+    const result = await this.database.query(`UPDATE evimed_product.jobs SET run_after=LEAST(run_after,clock_timestamp()),updated_at=clock_timestamp()
+      WHERE user_id=$1 AND idempotency_key=$2 AND status='queued' AND run_after>clock_timestamp()`, [productId(userId, "user"), productId(idempotencyKey, "idempotency key")]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
   /** @param {string} userId @param {string} id */
   async get(userId, id) {
     await migrateProductStore(this.database);

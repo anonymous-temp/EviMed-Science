@@ -228,3 +228,17 @@ test("fenced code and rules are not sentences", () => {
   const parsed = parseKnowledgePage(markdown);
   assert.deepEqual(parsed.units.map((unit) => unit.text), ["A sentence."]);
 });
+
+test("a sentence that is malformed is held and tells the patch's reader it is about a sentence, not the page", () => {
+  const value = patch();
+  value.pages[0].sections[0].claims.push({ text: "see <!-- evimed-source:{} -->", kind: "direct", evidence: [{ sourceId: A, quote: QUOTE_A }] }, { text: "No quotations at all." }, null);
+  const found = knowledgePatchIssues(value, input()).filter((entry) => entry.severity === "required");
+  assert.ok(found.length >= 3 && found.every((entry) => entry.claim === true && entry.page === 0), "every one is about a sentence of the first page");
+  const settled = settleKnowledgePage(/** @type {any} */ ({ slug: "afib", type: "topic", title: "T", sections: value.pages[0].sections }), resolve);
+  assert.deepEqual(settled.counts, { claims: 4, kept: 1, held: 3 });
+  assert.deepEqual(settled.held.map((entry) => entry.reasons), [["malformed"], ["malformed"], ["malformed"]]);
+  assert.equal(parseKnowledgePage(renderKnowledgePage(settled.page)).units.length, 1);
+  // A page that cannot be read is another matter: it carries no claim flag.
+  value.pages[0].slug = "Bad Slug";
+  assert.ok(knowledgePatchIssues(value, input()).some((entry) => entry.severity === "required" && !entry.claim && entry.page === 0));
+});
