@@ -162,6 +162,8 @@ export function createEvolutionScout({ config, service, runs, registry, decision
       const dossier = previous ? await service.save("dossier", id, { ...previous.payload, ...data, status: "planned" }, previous) : await service.addDossier(data);
       await service.callbacks?.registerToolOpportunity?.(dossier, lead);
       if (!eligibility.eligible) {
+        // A wait for material is a silent state of the dossier (`resourceWait`), not a card or a line in the inbox: `propose` records it there for a `resourceOnly` input.
+        // The opportunity (`registerToolOpportunity`) carries the wake conditions and the weekly acquisition mission looks again; nobody is asked.
         await decisions.propose({ category: "resource", subjectId: id, resourceOnly: true, title: "研发线索等待资料", body: card.goal,
           options: [{ id: "wait", label: "等待所需资源" }, { id: "rescout", label: "重新检索" }], recommended: "wait", conservative: "wait" });
         return { dossierId: dossier.id, waiting: true };

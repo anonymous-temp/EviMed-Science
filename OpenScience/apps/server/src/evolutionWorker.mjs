@@ -69,7 +69,7 @@ export class EvolutionWorker {
       }, candidateAdmission: heavy ? async (client, candidate) => {
         if (await this.callbacks.canResume?.(candidate)) return true;
         const cost = await this.callbacks.dailyCost(client);
-        return cost < (this.config.evolutionDailyBudgetCny ?? 50) && this.callbacks.admitRuntime(client, { kinds, job: candidate });
+        return cost < (this.config.evolutionDailyBudgetCny ?? 100) && this.callbacks.admitRuntime(client, { kinds, job: candidate });
       } : null });
       // The polling worker leaves the heavy, model-intensive jobs to the night window; a caller that names the kinds it wants run is not held by it.
       const heavyAllowed = requestedKinds !== undefined || this.heavyWindowOpen();

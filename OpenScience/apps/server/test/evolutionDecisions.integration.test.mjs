@@ -153,10 +153,13 @@ test("an answer that arrives while the expiry is carrying out another option doe
 test("a digest over the inbox's limit is cut with a count and still delivered, and lists what was achieved, not what was used (F15)", options, async () => {
   const { decisions, service } = engine();
   day();
+  // A hundred and twenty waits for material leave no decision and no line (owner ruling of 2026-10-12); what overflows the digest is the day's evaluations.
   for (let index = 0; index < 120; index++) {
     await decisions.propose({ category: index % 2 ? "resource" : "worker-resource", subjectId: `wait-${index}`, resourceOnly: true, title: index % 2 ? "研发线索等待资料" : "进化任务等待资源",
       body: `${"需要新的公开数据。".repeat(30)}${index}`, options: [{ id: "wait", label: "等待", operation: "wait" }, { id: "rescout", label: "重新检索", operation: "rescout" }], recommended: "wait", conservative: "wait" });
   }
+  assert.equal((await service.list("decision")).length, 0);
+  for (let index = 0; index < 20; index++) await service.save("evaluation", `evolution-evaluation-overflow-${index}`, { at: new Date(clock.getTime() + 3600_000 - 60_000).toISOString(), units: [{ capabilityId: `capability-${index}`, type: "method", allStagesValid: true }] });
   await service.registerTool({ id: "new-today", track: "M", status: "active", name: "今日新工具", artifactDigest: "d1", toolKind: "workflow", smokePassed: true });
   const old = await service.registerTool({ id: "used-today", track: "M", status: "active", name: "早已上线的工具", artifactDigest: "d2", toolKind: "workflow", smokePassed: true });
   clock = new Date(clock.getTime() + 3600_000);
@@ -167,12 +170,11 @@ test("a digest over the inbox's limit is cut with a count and still delivered, a
   assert.match(notice.body, /另有 \d+ 项未列出/);
   assert.match(notice.body, /今日新工具/);
   assert.doesNotMatch(notice.body, /早已上线的工具/);
-  assert.doesNotMatch(notice.body, /worker-resource|任务类型|缺口类别/);
+  assert.doesNotMatch(notice.body, /worker-resource|任务类型|缺口类别|资源等待|等待资料/);
   assert.deepEqual(notice.source, { type: "system", id: digest.id }, "an evolution digest is not an autopilot digest and links to the inbox");
   assert.ok(JSON.stringify(digest.payload).length < 100_000, "the snapshot holds what the text says, not the documents it was read from");
-  // Every wait it counted is reported once; none is left to be reported again tomorrow.
-  const unreported = (await service.list("decision")).filter((row) => row.payload.decisionClass === "D" && !row.payload.resourceReportedAt);
-  assert.equal(unreported.length, 0);
+  // No wait is carried by a decision, so there is none left to report tomorrow.
+  assert.equal((await service.list("decision")).length, 0);
 });
 
 test("whatever a snapshot holds, the text of a digest fits the inbox and says what it left out (F15)", () => {

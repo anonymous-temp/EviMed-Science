@@ -106,6 +106,12 @@ export function evolutionOpsMetricFamilies(composed, snapshot, refusal = null) {
     help: "Fields of a stored research policy (or trial candidate) that the policy no longer has and that were ignored on reading it, since process start; each stored policy is counted once, however often it is read.",
     series: [{ value: Number(limits.policy.ignoredFields) || 0 }],
   });
+  if (limits.resourceWaits) families.push({
+    name: "open_science_evolution_resource_waits_total", type: "counter",
+    help: "Waits for material only an outside party can bring, since process start, by the category that used to ask about them: each is written on its dossier or failure record (resourceWait) and picked up again by the opportunity's wake conditions. No decision, card or inbox line is made for them; `unrecorded` counts the annotations that could not be written, which never fail the job.",
+    series: [...Object.entries(limits.resourceWaits.resourceWaits ?? {}).map(([category, value]) => ({ value: Number(value) || 0, labels: { category } })),
+      { value: Number(limits.resourceWaits.resourceWaitFailed) || 0, labels: { category: "unrecorded" } }],
+  });
   if (limits.heavyWindow) families.push({
     name: "open_science_evolution_heavy_window_open", type: "gauge", series: [{ value: limits.heavyWindow.open ? 1 : 0 }],
     help: "Whether the heavy, model-intensive evolution jobs may be claimed now: 1 inside OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW (22:00-07:00 China time by default) or when there is no window, 0 outside it.",

@@ -12,6 +12,21 @@ export function evolutionOpportunitySource(kind){
  if(['workflow-success','review-accepted','memory-accepted'].includes(kind))return 'success';
  return 'repair';
 }
+/**
+ * How many failures a platform record of a module counts: a module observation (a title-only edit, a number or unit the source does not have), or the aggregate of a
+ * signal of a kind that is a repair. One definition, read by the opportunity a record opens (`collect`) and by the proposal that answers it (`recordedModuleFailure`).
+ * Until 2026-10-12 the second counted only `counts.failed` and could not read a signal summary at all, so a repair opened by a number check that failed, or by a
+ * platform signal (all of autopilot's), was sent back `reproducible-failure-required` five times in a row, though the platform itself had recorded the failure.
+ * @param {any} payload
+ */
+export function evolutionRecordedFailures(payload){
+ if(payload?.recordType==='evolution-module-observation'){
+  const counts=payload.counts??{};
+  return Number(counts.failed??counts.rejected??counts.unsupported??0)+Number(counts.numberFailures??0)+Number(counts.unitMismatches??0);
+ }
+ if(payload?.recordType==='evolution-signal-summary'&&evolutionOpportunitySource(payload.kind)==='repair')return Number(payload.occurrences??0);
+ return 0;
+}
 /** @param {{service:any,opportunity:any,database:any,floors?:{user:number,operator:number},operatorIds?:()=>string[]}} deps */
 export function createEvolutionGrowth({service,opportunity,database,floors=evolutionAccountFloors(),operatorIds=()=>[]}){
  async function resource(id,kinds,payload){const prior=await service.get(id);return service.save('resource-asset',id,{...prior?.payload,...payload,kinds:[...new Set([...(prior?.payload.kinds??[]),...kinds])],scope:'public',at:service.now().toISOString()},prior);}
@@ -24,7 +39,7 @@ export function createEvolutionGrowth({service,opportunity,database,floors=evolu
   }
   for(const row of await service.list('module-observation')){
    const p=row.payload;if(!EVOLUTION_MODULE_IDS.includes(p.moduleId))continue;
-   const failures=Number(p.counts?.failed??p.counts?.rejected??p.counts?.unsupported??0)+Number(p.counts?.numberFailures??0)+Number(p.counts?.unitMismatches??0);
+   const failures=evolutionRecordedFailures(row.payload);
    if(failures<=0)continue;
    await opportunity({moduleId:p.moduleId,sources:['repair'],mechanismFamily:`observed-${p.kind}`,evidenceRoots:[row.id],features:{runtimeFailures:failures},cheapestNextStep:'reproduce-recorded-public-failure',failureHypotheses:['observed-module-defect']});
   }

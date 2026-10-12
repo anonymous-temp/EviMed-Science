@@ -26,15 +26,17 @@ function fixture() {
 }
 const proposal = (id, extra = {}) => ({ subjectId: id, category: 'research-direction', title: '选择研究方向', body: '已尝试两条路径', directional: true, attemptedPaths: ['first', 'second'], options: [{ id: 'go', label: '继续' }, { id: 'hold', label: '保留' }], recommended: 'go', conservative: 'hold', ...extra });
 
-test('digest retry freezes resources and reports actual engine denominators', async () => {
+test('digest retry freezes its text and reports actual engine denominators; a wait for material is no card and no line of it', async () => {
   const f = fixture(), d = new EvolutionDecisions({ service: f.service, notifications: f.service.notifications });
-  await d.propose(proposal('first-resource', { resourceOnly: true }));
+  assert.equal(await d.propose(proposal('first-resource', { resourceOnly: true })), null, 'a wait for material that no record carries makes no decision');
   await f.service.save('evaluation', 'actual-evaluation', { at: f.service.now().toISOString(), units: [{ capabilityId: 'meta-analysis', type: 'research', fullResearchReproductionValid: false, allStagesValid: true }, { capabilityId: 'meta-analysis', type: 'research', fullResearchReproductionValid: true }] });
   await d.digest(); const body = f.notices.at(-1).body;
   assert.match(body, /meta-analysis 完整研究复现：1\/2/); assert.match(body, /药物警戒体检：当日未运行/);
-  const late = await d.propose(proposal('late-resource', { resourceOnly: true }));
+  assert.doesNotMatch(body, /资源等待|等待资料/);
+  await d.propose(proposal('late-resource', { resourceOnly: true }));
   await d.digest(); assert.equal(f.notices.at(-1).body, body);
-  assert.equal((await f.service.get(late.id)).payload.resourceReportedAt, undefined);
+  assert.equal((await f.service.list('decision')).length, 0, 'neither wait became a decision');
+  assert.deepEqual(d.counters.resourceWaits, { 'research-direction': 2 }, 'both are counted for the ops view');
   assert.deepEqual(evolutionEvaluationDigest({ id: 'unknown', payload: {} }).capabilityIds, []);
 });
 
@@ -176,6 +178,7 @@ test('expiry rejects same-family review and resource ask appears once in digest'
   const waiting = await d.expire(card.id);
   assert.equal(waiting.payload.status, 'pending'); assert.equal(waiting.payload.expiry.state, 'review-unavailable'); assert.equal(waiting.payload.expiry.code, 'evolution_review_invalid');
   await d.propose(proposal('resource', { resourceOnly: true })); await d.digest(); f.advance(86400000); const next = await d.digest(); assert.equal(next.payload.resources.length, 0);
+  assert.equal((await f.service.list('decision')).filter(row => row.payload.decisionClass === 'D').length, 0, 'a wait for material never became a class D decision');
 });
 
 test('waiters require matching project and idempotent registration', async () => {
@@ -318,7 +321,9 @@ test('worker resource failures are bounded and deduplicated while unrelated dail
   await worker.resourceWait({id:'one-scout',kind:'evolution-scout',payload:{dependencyId:'one-dependency'}},Object.assign(new Error('private narrative'),{code:'provider_unavailable'}));
   await worker.resourceWait({id:'one-scout',kind:'evolution-scout',payload:{dependencyId:'one-dependency'}},Object.assign(new Error('private narrative'),{code:'provider_unavailable'}));
   await worker.housekeeping();await worker.housekeeping();
-  assert.equal((await f.service.list('failure')).length,1);assert.equal((await f.service.list('decision')).length,1);
+  const [failure]=await f.service.list('failure');
+  assert.equal((await f.service.list('failure')).length,1);assert.equal((await f.service.list('decision')).length,0,'a worker waiting for a resource asks nobody');
+  assert.equal(failure.payload.resourceWait.category,'worker-resource','the failure record carries the wait');assert.equal(decisions.counters.resourceWaits['worker-resource'],1,'the second report of the same wait is not counted again');
   assert.ok(!JSON.stringify(await f.service.list('failure')).includes('private narrative'));assert.equal(f.jobs.filter(job=>job.kind==='evolution-scout').length,1);
   assert.equal(f.jobs.filter(job=>job.payload.action==='release-replay').length,1);
 });

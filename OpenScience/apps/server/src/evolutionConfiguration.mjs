@@ -1,7 +1,9 @@
 /** Deployment-owned engineering limits. These settings never grant a research runtime credentials,
  * network access, evaluator visibility or permission to modify production source. */
 export const EVOLUTION_CONFIG_SCHEMA=Object.freeze({
-  evolutionDailyBudgetCny:{env:'OPEN_SCIENCE_EVOLUTION_DAILY_BUDGET_CNY',default:50,min:0.01,max:10000},
+  // 2026-10-12: raised from 50 to 100 with the owner's reallocation. The first six days spent 99% of 109 CNY on 37 paper-scouting runs that all ended
+  // "waiting for material"; the extra money is for the modules' own improvement loops (below), not for more scouting.
+  evolutionDailyBudgetCny:{env:'OPEN_SCIENCE_EVOLUTION_DAILY_BUDGET_CNY',default:100,min:0.01,max:10000},
   evolutionRunBudgetCny:{env:'OPEN_SCIENCE_EVOLUTION_RUN_BUDGET_CNY',default:10,min:0.01,max:1000},
   evolutionMaxConcurrency:{env:'OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY',default:1,min:1,max:4,integer:true},
   evolutionLightConcurrency:{env:'OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY',default:2,min:1,max:2,integer:true},
@@ -13,7 +15,16 @@ export const EVOLUTION_CONFIG_SCHEMA=Object.freeze({
   evolutionSelfResearchCardLimit:{env:'OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_CARD_LIMIT',default:8,min:1,max:50,integer:true},
   evolutionSourceRequestLapseDays:{env:'OPEN_SCIENCE_EVOLUTION_SOURCE_REQUEST_LAPSE_DAYS',default:30,min:1,max:365,integer:true},
   evolutionSelfResearchTextChars:{env:'OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_TEXT_CHARS',default:60000,min:5000,max:200000,integer:true},
-  evolutionMaxPaperScoutsPerDay:{env:'OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY',default:8,min:0,max:200,integer:true},
+  // 2026-10-12: eight to two. A scouting run costs about 2.7 CNY and, live, every one of 37 ended on a card nobody could act on.
+  evolutionMaxPaperScoutsPerDay:{env:'OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY',default:2,min:0,max:200,integer:true},
+  // The most of a day's budget that scouting runs of every origin (a paper, the daily scan, a lead, a re-scout) may hold. The count above bounds how many
+  // papers are admitted; this bounds what they and the other scouts may cost, so a scout can no longer borrow the money a module's loop is waiting for.
+  // Zero closes scouting by budget. 0.2 of 100 CNY is room for about seven runs at the live price.
+  evolutionScoutBudgetShare:{env:'OPEN_SCIENCE_EVOLUTION_SCOUT_BUDGET_SHARE',default:0.2,min:0,max:1},
+  // The share of a day's budget kept for the modules' own loops (their weekly research, repair and baseline missions and the transfer probes). Jobs of the
+  // platform (scouts, builds, evaluations, audits, self-research) cannot borrow the part of it the loops have not yet taken; the loops themselves may take
+  // more than the share when the day has money left. Together with the scout share it must leave room for the rest: the two may not exceed 1.
+  evolutionModuleLoopBudgetShare:{env:'OPEN_SCIENCE_EVOLUTION_MODULE_LOOP_BUDGET_SHARE',default:0.5,min:0,max:1},
   evolutionDecisionTimeoutMs:{env:'OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS',default:86400000,min:1000,max:7*86400000,integer:true},
   evolutionPollMs:{env:'OPEN_SCIENCE_EVOLUTION_POLL_MS',default:15000,min:100,max:3600000,integer:true},
   evolutionLeaseMs:{env:'OPEN_SCIENCE_EVOLUTION_LEASE_MS',default:120000,min:1000,max:86400000,integer:true},
@@ -41,6 +52,8 @@ export function validateEvolutionConfiguration(config){
     const value=config[key]??field.default;
     if(typeof value!=='number'||!Number.isFinite(value)||value<field.min||value>field.max||('integer'in field&&field.integer&&!Number.isInteger(value)))issues.push({code:'evolution_setting_invalid',key});
   }
+  if(issues.every(issue=>issue.key!=='evolutionScoutBudgetShare'&&issue.key!=='evolutionModuleLoopBudgetShare')
+    &&(config.evolutionScoutBudgetShare??EVOLUTION_CONFIG_SCHEMA.evolutionScoutBudgetShare.default)+(config.evolutionModuleLoopBudgetShare??EVOLUTION_CONFIG_SCHEMA.evolutionModuleLoopBudgetShare.default)>1+1e-9)issues.push({code:'evolution_setting_invalid',key:'evolutionModuleLoopBudgetShare'});
   const entries=config.evolutionDependencyAllowlist??[],ids=new Set();
   if(!Array.isArray(entries)||entries.length>64)return[...issues,{code:'evolution_dependency_allowlist_invalid',key:'evolutionDependencyAllowlist'}];
   for(const entry of entries){

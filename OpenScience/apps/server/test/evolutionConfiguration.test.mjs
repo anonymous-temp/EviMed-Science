@@ -37,7 +37,7 @@ test('job retry admission reads its bounded deployment environment setting',()=>
 test('the daily count of paper scouting runs reads its bounded deployment environment setting, and zero turns paper scouting off',()=>{
   const name='OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY',prior=process.env[name];
   try{
-    delete process.env[name];assert.equal(loadConfig().evolutionMaxPaperScoutsPerDay,8);
+    delete process.env[name];assert.equal(loadConfig().evolutionMaxPaperScoutsPerDay,2);
     process.env[name]='3';assert.equal(loadConfig().evolutionMaxPaperScoutsPerDay,3);
     process.env[name]='0';assert.deepEqual(validateEvolutionConfiguration(loadConfig()),[]);
     process.env[name]='201';assert.ok(validateEvolutionConfiguration(loadConfig()).some(issue=>issue.key==='evolutionMaxPaperScoutsPerDay'));
@@ -111,4 +111,29 @@ test('an API with a mangled evolution setting boots and has no evolution module'
     assert.equal(app.evolution ?? null, null);
     assert.equal(app.evaluationIsolation, null, 'and no gateway carries its exclusion layer');
   } finally { await app.close(); await rm(dataDir, { recursive: true, force: true }); }
+});
+
+// The budget reallocation of 2026-10-12: the day is 100 CNY, paper scouting is two runs and a fifth of the money at most, and the modules' own loops hold a reserve.
+test('the evolution day budget is 100 CNY, paper scouting 2 runs and a fifth of it, and the modules\' loops hold half of it', () => {
+  const saved = Object.fromEntries(Object.values(EVOLUTION_CONFIG_SCHEMA).map(field => [field.env, process.env[field.env]]));
+  try {
+    for (const field of Object.values(EVOLUTION_CONFIG_SCHEMA)) delete process.env[field.env];
+    const config = loadConfig({ localAutoConfig: false });
+    // The default written in config.mjs is the schema's, for every key the schema names.
+    for (const [key, field] of Object.entries(EVOLUTION_CONFIG_SCHEMA)) assert.equal(config[key], field.default, `${key} reads the default its schema states`);
+    assert.deepEqual([config.evolutionDailyBudgetCny, config.evolutionMaxPaperScoutsPerDay, config.evolutionScoutBudgetShare, config.evolutionModuleLoopBudgetShare], [100, 2, 0.2, 0.5]);
+    assert.deepEqual(validateEvolutionConfiguration(config), []);
+    process.env.OPEN_SCIENCE_EVOLUTION_SCOUT_BUDGET_SHARE = '0.1'; process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LOOP_BUDGET_SHARE = '0.6';
+    assert.deepEqual([loadConfig({ localAutoConfig: false }).evolutionScoutBudgetShare, loadConfig({ localAutoConfig: false }).evolutionModuleLoopBudgetShare], [0.1, 0.6]);
+  } finally {
+    for (const [name, value] of Object.entries(saved)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
+  }
+});
+test('the scout share and the loop share are bounded and may not take more than the whole day between them', () => {
+  assert.deepEqual(validateEvolutionConfiguration({ evolutionScoutBudgetShare: 0 }), [], 'zero closes scouting by budget');
+  assert.deepEqual(validateEvolutionConfiguration({ evolutionModuleLoopBudgetShare: 0.8 }), [], 'scouts 0.2 and loops 0.8 are exactly the day');
+  assert.deepEqual(validateEvolutionConfiguration({ evolutionModuleLoopBudgetShare: 0.9 }), [{ code: 'evolution_setting_invalid', key: 'evolutionModuleLoopBudgetShare' }]);
+  assert.deepEqual(validateEvolutionConfiguration({ evolutionScoutBudgetShare: 0.6 }), [{ code: 'evolution_setting_invalid', key: 'evolutionModuleLoopBudgetShare' }]);
+  assert.deepEqual(validateEvolutionConfiguration({ evolutionScoutBudgetShare: 1.1 }), [{ code: 'evolution_setting_invalid', key: 'evolutionScoutBudgetShare' }]);
+  assert.deepEqual(validateEvolutionConfiguration({ evolutionModuleLoopBudgetShare: -0.1 }), [{ code: 'evolution_setting_invalid', key: 'evolutionModuleLoopBudgetShare' }]);
 });
