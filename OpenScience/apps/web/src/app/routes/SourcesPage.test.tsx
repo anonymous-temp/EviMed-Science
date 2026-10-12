@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   getSourceUnderstanding: vi.fn(),
   browseOpenList: vi.fn(), importOpenListSource: vi.fn(), listSourceFolders: vi.fn(), registerSourceFolder: vi.fn(), syncSourceFolder: vi.fn(), setSourceFolderStatus: vi.fn(),
   listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), addToLibrary: vi.fn(), removeFromLibrary: vi.fn(),
-  pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), downloadArtifact: vi.fn(),
+  pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), downloadArtifact: vi.fn(), downloadKnowledgeVault: vi.fn(),
   listGeoProjects: vi.fn(), getVcrHome: vi.fn(),
   toastSuccess: vi.fn(), toastError: vi.fn(),
 }));
@@ -26,6 +26,7 @@ vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOrigi
   ["listSources", "retrySource", "removeSource", "refetchSource", "addSourceLink", "addSourceNote", "getSourceNote", "saveSourceNote", "getSourceUnderstanding",
     "browseOpenList", "importOpenListSource", "listSourceFolders", "registerSourceFolder", "syncSourceFolder", "setSourceFolderStatus",
     "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
+vi.mock("@/lib/knowledgeBaseClient", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadKnowledgeVault: mocks.downloadKnowledgeVault }));
 vi.mock("@/lib/backend", () => ({ pickFiles: mocks.pickFiles, uploadFilesToWorkspace: mocks.uploadFilesToWorkspace }));
 vi.mock("@/lib/artifactFile", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadArtifact: mocks.downloadArtifact }));
 vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
@@ -148,6 +149,7 @@ describe("知识库", () => {
     mocks.browseOpenList.mockResolvedValue({ entries: [], nextCursor: null });
     mocks.listSourceFolders.mockResolvedValue({ items: [], nextCursor: null });
     mocks.downloadArtifact.mockResolvedValue(undefined);
+    mocks.downloadKnowledgeVault.mockResolvedValue(undefined);
   });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -169,6 +171,40 @@ describe("知识库", () => {
       expect(intent.references).toEqual([{ id: sheet.id, title: sheet.display.title }]);
       expect(intent.draft).not.toMatch(/src_|knowledge-base|\.evimed-/);
       expect(intent.send).not.toBe(true);
+    });
+
+    // 2026-10-12: the library leaves as an Obsidian vault, from a menu beside the one primary button and not as a second one.
+    it("exports the project's documents to Obsidian from a menu beside 「添加」, which stays the one solid button", async () => {
+      renderPage();
+      const user = userEvent.setup();
+      const heading = await screen.findByRole("heading", { level: 1, name: "知识库" });
+      await user.click(await screen.findByRole("button", { name: "更多" }));
+      await user.click(await screen.findByRole("menuitem", { name: "导出到 Obsidian" }));
+      expect(mocks.downloadKnowledgeVault).toHaveBeenCalledTimes(1);
+      expect(mocks.downloadKnowledgeVault).toHaveBeenCalledWith("default");
+      expect(mocks.toastError).not.toHaveBeenCalled();
+      // One solid accent button in the header, as the page rules have it.
+      const solid = [...heading.closest("header")!.querySelectorAll("button")].filter((button) => button.classList.contains("bg-accent"));
+      expect(solid.map((button) => button.textContent)).toEqual(["添加"]);
+    });
+
+    it("names the size limit when the export is refused, and offers no export for the shared documents or an empty library", async () => {
+      mocks.downloadKnowledgeVault.mockRejectedValue(new WebApiError("too big", { status: 413, code: "archive_too_large" }));
+      renderPage();
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("button", { name: "更多" }));
+      await user.click(await screen.findByRole("menuitem", { name: "导出到 Obsidian" }));
+      await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("没能导出：资料太多，一次导不完。请先删掉一部分再导出。"));
+      cleanup();
+      renderPage("/app/files?scope=shared");
+      await screen.findByRole("heading", { level: 1, name: "知识库" });
+      await screen.findByRole("list", { name: "资料" });
+      expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
+      cleanup();
+      mocks.listSources.mockResolvedValue(listing([]));
+      renderPage();
+      await screen.findByText(/把文献、指南、方案/);
+      expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
     });
 
     it("is its title, the scope it lists, a search and one 「添加」 — and nothing under the title", async () => {

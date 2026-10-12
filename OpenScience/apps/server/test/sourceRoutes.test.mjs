@@ -8,7 +8,7 @@ import { createSourceRoutes } from "../src/sourceRoutes.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
 import { startFakeOpenList } from "./fakeOpenList.mjs";
 
-async function fixture(t, { withOpenList = false, connector = null, withKnowledge = true, uses = null, passages = null, dependents = null } = {}) {
+async function fixture(t, { withOpenList = false, connector = null, withKnowledge = true, uses = null, passages = null, dependents = null, vault = null } = {}) {
   const calls = [];
   const service = {
     list: async (userId, options) => { calls.push({ method: "list", userId, options }); return { items: [], nextCursor: null }; },
@@ -62,7 +62,7 @@ async function fixture(t, { withOpenList = false, connector = null, withKnowledg
     saveNote: async (input) => { calls.push({ method: "saveNote", sourceId: input.source.id, title: input.title, body: input.body }); return { source: { id: "src_note_2", kind: "source", payload: { status: "queued", paths: [], reasons: [] } }, duplicate: false, changed: true, job: null }; },
     refetchLink: async (input) => { calls.push({ method: "refetchLink", sourceId: input.source.id }); return { source: { id: "src_link", kind: "source", payload: { status: "queued", paths: [], reasons: [] } }, duplicate: true, changed: false, job: null }; },
   } : null;
-  const route = createSourceRoutes({ store, service, openList, knowledge, uses, passages, dependents, maxJsonBytes: 64 * 1024 });
+  const route = createSourceRoutes({ store, service, openList, knowledge, uses, passages, dependents, vault, maxJsonBytes: 64 * 1024 });
   const server = createServer((req, res) => {
     route(req, res).then((handled) => { if (!handled) { res.writeHead(404); res.end(); } }).catch((error) => sendError(res, error));
   });
@@ -251,6 +251,35 @@ test("what rests on a document is read through the account that holds it, in the
 test("without the stores that know, a document's page is told there is nothing that rests on it", async t => {
   const { base, headers } = await fixture(t);
   assert.deepEqual((await (await fetch(`${base}/api/sources/src_one/dependents`, { headers })).json()).data, { memories: [], methods: [], results: [] });
+});
+
+test("the knowledge base downloads as a vault from a project the caller owns, and from no other", async t => {
+  const asked = [];
+  const vault = { export: async (userId, project) => { asked.push([userId, project.id]); return { bytes: new Uint8Array([80, 75, 3, 4]), filename: "evimed-knowledge-base.zip", mimeType: "application/zip" }; } };
+  const { base, headers } = await fixture(t, { vault });
+  const response = await fetch(`${base}/api/sources/export/vault?projectId=owned-project`, { headers });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/zip");
+  assert.equal(response.headers.get("content-disposition"), 'attachment; filename="evimed-knowledge-base.zip"');
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [80, 75, 3, 4]);
+  assert.deepEqual(asked, [["owner", "owned-project"]]);
+  // A project is named, it is the caller's own, and the caller is signed in; nothing is built before all three.
+  assert.equal((await fetch(`${base}/api/sources/export/vault`, { headers })).status, 400);
+  assert.equal((await fetch(`${base}/api/sources/export/vault?projectId=other-project`, { headers })).status, 404);
+  assert.equal((await fetch(`${base}/api/sources/export/vault?projectId=owned-project`)).status, 401);
+  assert.equal(asked.length, 1);
+});
+
+test("without the source storage the vault says the export is unavailable, and a refusal of the size is passed on", async t => {
+  const { base, headers } = await fixture(t);
+  const unavailable = await fetch(`${base}/api/sources/export/vault?projectId=owned-project`, { headers });
+  assert.equal(unavailable.status, 503);
+  assert.equal((await unavailable.json()).code, "source_state_unavailable");
+  const big = await fixture(t, { vault: { export: async () => { throw new HttpError(413, "archive_too_large", "The knowledge base export exceeded 10 entries."); } } });
+  const refused = await fetch(`${big.base}/api/sources/export/vault?projectId=owned-project`, { headers: big.headers });
+  assert.equal(refused.status, 413);
+  assert.equal((await refused.json()).code, "archive_too_large");
 });
 
 test("the box's search of the documents' text decides which documents the list holds, and says where each match is", async t => {

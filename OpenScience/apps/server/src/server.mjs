@@ -235,6 +235,7 @@ import { CapsuleScanner } from "./capsuleScan.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceUses, nameConversations, recordSourceUsesOfRun } from "./sourceUses.mjs";
 import { createSourceDependents } from "./sourceDependents.mjs";
+import { KnowledgeVaultExport } from "./knowledgeVaultExport.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
 import { createSourceMaterials } from "./sourceMaterials.mjs";
@@ -1642,8 +1643,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     report: code => { void securityAudit(config, "source.dependents", "failed", { code }).catch(() => {}); },
   });
+  // 「导出到 Obsidian」: the project's documents as notes in one zip, under the archive limits the project and account exports obey.
+  const knowledgeVault = sourceService && productDocuments ? new KnowledgeVaultExport({
+    sources: sourceService, documents: productDocuments,
+    readText: async (project, rel) => String(await readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel), "utf8")),
+    maxEntries: config.maxArchiveEntries, maxBytes: config.maxArchiveBytes,
+    report: code => { void securityAudit(config, "source.vault", "failed", { code }).catch(() => {}); },
+  }) : null;
   const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, knowledge: knowledgeEntries, uses: sourceUsesReader,
-    passages: { find: (request) => kbIndex ? kbIndex.passages(request) : Promise.resolve(null) }, dependents: sourceDependents, maxJsonBytes: config.maxJsonBytes });
+    passages: { find: (request) => kbIndex ? kbIndex.passages(request) : Promise.resolve(null) }, dependents: sourceDependents, vault: knowledgeVault, maxJsonBytes: config.maxJsonBytes });
   // One admission for every way a file reaches `knowledge-base/`: the upload
   // route and the upload command both refuse a format the knowledge base
   // cannot read before a byte is written, and both register what they wrote.

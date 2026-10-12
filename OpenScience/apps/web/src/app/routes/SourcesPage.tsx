@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useLocation, useNavigate, useNavigationType, useSearchParams } from "react-router";
-import { Cloud, FileUp, Folder, Globe, Plus, Search, StickyNote, Upload } from "lucide-react";
+import { Cloud, Download, FileUp, Folder, Globe, Plus, Search, StickyNote, Upload } from "lucide-react";
 import { SOURCE_KINDS } from "@evimed/domain";
 import { fetchWebMe, getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
+import { downloadKnowledgeVault, vaultErrorMessage } from "@/lib/knowledgeBaseClient";
 import { projectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
@@ -148,6 +149,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const [folderRefresh, setFolderRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   // 从网盘导入 is offered only when there is a drive to open: OpenList configured and a storage mounted under its tenant
   // root (`/api/me` `features.openList`). An entry that led to a drive with nothing in it answered every browse with an
   // error (audit I3-4). Off until `/api/me` says so, and when it cannot.
@@ -421,6 +423,15 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     </Menu>
   );
 
+  // 「导出到 Obsidian」: the documents of the project the page lists, as a vault. Beside the one primary button, in a menu of its own.
+  const exportVault = async () => {
+    if (!scopeProjectId) return;
+    setExporting(true);
+    try { await downloadKnowledgeVault(scopeProjectId); }
+    catch (failure) { toast.error(`没能导出：${vaultErrorMessage(failure)}`); }
+    finally { setExporting(false); }
+  };
+
   return (
     <div {...dropProps} ref={pageRoot} className="relative h-full">
       {dragging && (
@@ -437,6 +448,9 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
         actions={<>
           <SearchInput label="搜索资料和内容" value={query} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-60" />
           {!firstRun && addMenu}
+          {!shared && !firstRun && (
+            <Menu label="更多" items={[{ label: exporting ? "正在导出…" : "导出到 Obsidian", icon: Download, disabled: exporting || !hasWebApi, onSelect: () => void exportVault() }]} />
+          )}
         </>}
       >
         {(kindsPresent >= 2 || kind !== null) && (
