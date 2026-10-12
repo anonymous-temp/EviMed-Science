@@ -1424,12 +1424,12 @@ function validateMethodCandidatePackage(input) {
 function handbookLengthIssues(skill, candidate) {
   if (!isRecord(candidate) || candidate.signal !== 'reviewer' || candidate.operation === 'no_change') return []
   const parsed = parseSkillFrontmatter(skill)
-  const text = handbookText(parsed.frontmatter, parsed.body)
-  if (handbookTextFits(text)) return []
-  const over = text.length - HANDBOOK_TEXT_LIMITS.max
+  const measured = handbookText(parsed.frontmatter, parsed.body)
+  if (handbookTextFits(measured)) return []
+  const over = measured.length - HANDBOOK_TEXT_LIMITS.max
   return [issue('deliverable_rejected',
     `${METHOD_SKILL_FILE}: this lesson is filed as an account handbook, whose text (name, description and body together) is at most ${HANDBOOK_TEXT_LIMITS.max} characters; `
-    + `it is ${text.length}, ${over} too many. Shorten it in place: keep the steps that carry the lesson, cut the worked examples and anything specific to this one package, `
+    + `it is ${measured.length}, ${over} too many. Shorten it in place: keep the steps that carry the lesson, cut the worked examples and anything specific to this one package, `
     + 'and put nothing in a file to get around it.', { path: METHOD_SKILL_FILE, check: 'method-skill-rules' })]
 }
 

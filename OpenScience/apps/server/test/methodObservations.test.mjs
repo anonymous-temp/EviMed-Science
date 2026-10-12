@@ -348,13 +348,15 @@ test("a method file printed through the shell is opened; one only listed, counte
   assert.deepEqual([...(found.get("s") ?? [])].sort(), [`file:${dir}`, `file:${other}`]);
 });
 
-test("the 2026-09-28 incident: carrying is not using, and opening the card's file is", async () => {
-  // evals/method-quality/incidents/2026-09-28-learned-method-invoked-zero.json:
-  // production recorded `loaded` 34 and `invoked` 0 while the model visibly
-  // worked by the inlined methods. The case's scenarios are the production
-  // shape and the card shape; each must attribute exactly what it says.
-  const { learnedMethodDirectoryName } = await import("../src/learnedMethodMount.mjs");
-  const incident = JSON.parse(await readFile(new URL("../../../evals/method-quality/incidents/2026-09-28-learned-method-invoked-zero.json", import.meta.url), "utf8"));
+/**
+ * Run every scenario of an incident case through the reader and hold it to what the case says. A scenario names the sessions' tool calls (with
+ * `{method-name}` standing for that method's directory), the delegations, the deliverables and what the runtime mounted; each session also
+ * carries one assistant message, as every real session does.
+ * @param {string} file the case, under evals/method-quality/incidents
+ * @returns {Promise<number>} how many scenarios were held
+ */
+async function holdIncident(file) {
+  const incident = JSON.parse(await readFile(new URL(`../../../evals/method-quality/incidents/${file}`, import.meta.url), "utf8"));
   assert.ok(incident.scenarios.length >= 3, "the case carries its scenarios");
   const digestOf = (/** @type {string} */ name) => `sha256:${Buffer.from(name).toString("hex").padEnd(64, "0").slice(0, 64)}`;
   const idOf = (/** @type {string} */ name) => `method:learned:${name}`;
@@ -364,10 +366,13 @@ test("the 2026-09-28 incident: carrying is not using, and opening the card's fil
     const methods = names.map((name) => ({ id: idOf(name), name, digest: digestOf(name) }));
     const sessions = scenario.sessions.map((/** @type {any} */ entry) => ({
       sessionId: entry.sessionId,
-      transcript: { messages: entry.tools.map((/** @type {any} */ call, /** @type {number} */ index) => ({ role: "tool", turn: 0, parts: [{
-        type: "tool", tool: call.tool, callId: `c${index}`, status: "completed",
-        input: JSON.parse(fill(JSON.stringify(call.input))), output: "", error: null,
-      }] })) },
+      transcript: { messages: [
+        { role: "assistant", turn: 0, parts: [{ type: "text", text: "Let me check my notes." }] },
+        ...entry.tools.map((/** @type {any} */ call, /** @type {number} */ index) => ({ role: "tool", turn: 0, parts: [{
+          type: "tool", tool: call.tool, callId: `c${index}`, status: "completed",
+          input: JSON.parse(fill(JSON.stringify(call.input))), output: "", error: null,
+        }] })),
+      ] },
     }));
     const derived = runMethodObservations({
       run: { id: "run_incident", sessionId: "root" },
@@ -380,7 +385,16 @@ test("the 2026-09-28 incident: carrying is not using, and opening the card's fil
       methods,
       sessions,
     });
-    assert.deepEqual(derived.methodsInvoked.map((entry) => entry.name).sort(), [...scenario.expect.invoked].sort(), scenario.name);
+    assert.deepEqual(derived.methodsInvoked.map((entry) => entry.name).sort(), [...scenario.expect.invoked].sort(), `${scenario.name}: the run's row`);
+    if (scenario.expect.read) {
+      assert.deepEqual(derived.invokedWithoutMount.map((entry) => entry.name).sort(), [...scenario.expect.read].sort(), `${scenario.name}: opened and credited to no deliverable`);
+    }
+    if (scenario.expect.carried) {
+      assert.deepEqual(derived.carried.map((id) => id.replace("method:learned:", "")).sort(), [...scenario.expect.carried].sort(), `${scenario.name}: carried`);
+    }
+    if (scenario.expect.answered !== undefined) assert.equal(derived.answered, scenario.expect.answered, `${scenario.name}: answered`);
+    // A case that expects no observation at all expects none: a run with no verdict is evidence of nothing.
+    if (Object.keys(scenario.expect.observations).length === 0) assert.deepEqual(derived.observations, [], `${scenario.name}: no verdict, no observation`);
     for (const [name, expected] of Object.entries(scenario.expect.observations)) {
       const found = derived.observations.filter((entry) => entry.methodId === idOf(name));
       assert.equal(found.length, 1, `${scenario.name}: one observation for ${name}`);
@@ -388,6 +402,19 @@ test("the 2026-09-28 incident: carrying is not using, and opening the card's fil
       assert.equal(found[0].observation.invoked, /** @type {any} */ (expected).invoked, `${scenario.name}: ${name} invoked`);
     }
   }
+  return incident.scenarios.length;
+}
+
+test("the 2026-09-28 incident: carrying is not using, and opening the card's file is", async () => {
+  // evals/method-quality/incidents/2026-09-28-learned-method-invoked-zero.json: production recorded `loaded` 34 and `invoked` 0 while the model
+  // visibly worked by the inlined methods. The case's scenarios are the production shape and the card shape; each must attribute exactly what it says.
+  assert.equal(await holdIncident("2026-09-28-learned-method-invoked-zero.json"), 3);
+});
+
+test("the 2026-10-12 incident: a method the run opened is in its ledger row whether or not a deliverable could be credited with it", async () => {
+  // evals/method-quality/incidents/2026-10-12-learned-method-opened-not-recorded.json: four runs opened a mounted method's file and the ledger named
+  // one of them. Held against the case's own scenarios, which the tests below it restate on the wire's shape.
+  assert.equal(await holdIncident("2026-10-12-learned-method-opened-not-recorded.json"), 4);
 });
 
 // 2026-10-12: the run ledger named a method as opened in one run of the four whose transcripts show a mounted method's
