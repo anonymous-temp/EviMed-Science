@@ -1919,3 +1919,31 @@ function describe_window() {
     assert.match(users[0].text, /^Execute this authorized bounded local verification task/);
   });
 }
+
+test("after a run's own writes, what it wrote is noted as read under today's rules and one batch of older memories is read again", async () => {
+  const store = new MemoryStoreDouble();
+  const old = await store.upsertRecord("user_1", { scope: "project", scopeId: "project_1", kind: "project_fact", key: "project.fact.packs",
+    value: "平台现有三份病种知识包。", summary: "平台现有三份病种知识包。", origin: "system", status: "active" });
+  /** @type {any[]} */ const noted = [];
+  Object.assign(store, {
+    async unreviewedRecords() { return [...store.records.values()].filter((record) => record.id === old.id && record.status === "active"); },
+    async noteReviewed(/** @type {string} */ _user, /** @type {string} */ rules, /** @type {any[]} */ verdicts) { noted.push({ rules, verdicts }); return verdicts.length; },
+  });
+  const text = "以后回答请优先引用原始研究。";
+  const extraction = modelFetch((sources) => [{ scope: "user", kind: "preference", key: "response.primary_evidence", value: "优先引用原始研究。",
+    summary: "优先引用原始研究。", origin: "explicit", importance: 0.9, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: text }]);
+  let calls = 0;
+  const fetchImpl = /** @type {typeof fetch} */ (async (/** @type {any} */ url, /** @type {any} */ init) => {
+    calls += 1;
+    if (calls === 1) return extraction(url, init);
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ forget: [{ id: old.id, reason: "platform" }] }) } }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 } }), { status: 200 });
+  });
+  const result = await new MemoryIntelligence(config, store, { fetchImpl }).recordRun(project(), run("run_review"), [message("user_1", text)]);
+  assert.equal(result.extracted, 1);
+  assert.deepEqual(result.reviewed, { read: 1, forgotten: [{ id: old.id, kind: "project_fact", scope: "project", reason: "platform" }] });
+  assert.equal([...store.records.values()].find((record) => record.id === old.id).status, "archived");
+  const preference = [...store.records.values()].find((record) => record.kind === "preference");
+  assert.deepEqual(noted[0].verdicts, [{ id: preference.id, kept: true }], "what the run wrote needs no second reading");
+  assert.deepEqual(noted[1].verdicts, [{ id: old.id, kept: false, reason: "platform" }]);
+});

@@ -725,3 +725,34 @@ test("an inference recorded again as the researcher's own statement keeps what i
   });
   assert.equal(again.revisions.length, 1);
 });
+
+test("a review reads only what the platform wrote and nobody has touched, once per version of its rules, and its note goes with the memory", options, async () => {
+  const rules = "0123456789abcdef";
+  const platform = await store.upsertRecord(alpha, record({ scope: "project", scopeId: "prj_r", kind: "project_fact", key: "project.fact.packs",
+    value: "平台现有三份病种知识包。", summary: "平台现有三份病种知识包。", origin: "system", status: "active" }));
+  const inferred = await store.upsertRecord(alpha, record({ key: "preference.length", origin: "inferred", status: "active" }));
+  const stated = await store.upsertRecord(alpha, record({ key: "preference.language", value: "报告一律用中文", origin: "explicit", status: "active" }));
+  // Changed by the researcher: theirs from then on, whatever wrote it first.
+  const touched = await store.upsertRecord(alpha, record({ key: "preference.tables", origin: "inferred", status: "active" }));
+  await store.upsertRecord(alpha, { ...touched, value: "表格优先" }, null, { expectedVersion: touched.version, reason: "user updated structured memory", by: "user" });
+  const summary = await store.upsertRecord(alpha, record({ scope: "project", scopeId: "prj_r", kind: "run_summary", key: "run.question.r",
+    value: "{}", summary: "一次研究", origin: "system", status: "active" }));
+
+  const first = (await store.unreviewedRecords(alpha, rules)).map((item) => item.id);
+  assert.deepEqual(first.sort(), [platform.id, inferred.id].sort());
+  assert.ok(!first.includes(stated.id) && !first.includes(touched.id) && !first.includes(summary.id));
+  assert.deepEqual(await store.unreviewedRecords(beta, rules), [], "another account's memories are never read");
+
+  assert.equal(await store.noteReviewed(alpha, rules, [{ id: platform.id, kept: false, reason: "platform" }, { id: inferred.id, kept: true },
+    { id: "rec_gone", kept: true }]), 2, "a memory deleted in between is skipped, not an error");
+  assert.deepEqual(await store.unreviewedRecords(alpha, rules), [], "read once under these rules");
+  assert.deepEqual((await store.unreviewedRecords(alpha, "fedcba9876543210")).map((item) => item.id).sort(), [platform.id, inferred.id].sort(),
+    "and again under new ones");
+  await assert.rejects(() => store.unreviewedRecords(alpha, "not-a-digest"), { code: "memory_review_rules_invalid" });
+
+  await store.deleteRecord(alpha, platform.id);
+  const left = await database.query("SELECT record_id FROM evimed_memory.record_reviews WHERE user_id=$1", [alpha]);
+  assert.deepEqual(left.rows.map((row) => row.record_id), [inferred.id], "the note goes with its memory");
+  await store.purgeUserMemory(alpha);
+  assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_memory.record_reviews WHERE user_id=$1", [alpha])).rows[0].n, 0);
+});

@@ -3753,6 +3753,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           `pending=${memoryResult.pending ?? 0}`,
           `conflicts=${memoryResult.conflicts?.length ?? 0}`,
           `upgraded=${memoryResult.upgraded ?? 0}`,
+          ...(memoryResult.reviewed?.read ? [`reviewed=${memoryResult.reviewed.read}:${memoryResult.reviewed.forgotten.length}`] : []),
           ...(memoryResult.pendingReasons?.length
             ? [`parked=${memoryResult.pendingReasons.map((item) => `${item.reason}:${item.count}`).join("|")}`]
             : []),

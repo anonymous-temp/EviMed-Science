@@ -41,6 +41,8 @@ import { projectMemoryUri, researchMemoryRoots, sessionMemoryUri } from "./openV
  */
 
 const recordIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
+/** A digest of the rules a review read memories under (`memoryReview.mjs`). */
+const reviewRulesPattern = /^[a-f0-9]{16}$/;
 const memoryKeyPattern = /^[a-z0-9][a-z0-9._/-]{0,254}$/;
 /** The fingerprint separator, written as an escape. A raw control byte in a
  *  source file is invisible to every reader and to every grep that would
@@ -2282,6 +2284,48 @@ export class ResearchMemoryStore {
       usage[String(row.record_id)] = { count: Number(row.used_count) || 0, lastUsedAt: memoryInstant(row.last_used_at) };
     }
     return usage;
+  }
+
+  // ----------------------------------------------------------------- review
+
+  /**
+   * Memories the platform wrote, still in force and not yet read again under
+   * `rules` (`memoryReview.mjs`), oldest first. Only the platform's own: a
+   * memory the researcher stated, wrote or ever changed is theirs (origin
+   * `explicit`/`manual`, or a revision `by` the user — a restore from
+   * 「已忘记的内容」 is one), and a review never reads it.
+   * @param {string} userId @param {string} rules @param {{ limit?: number }} [options]
+   */
+  async unreviewedRecords(userId, rules, { limit = 24 } = {}) {
+    const owner = assertUserId(userId);
+    if (!reviewRulesPattern.test(String(rules))) throw new HttpError(400, "memory_review_rules_invalid", "The review rules digest is invalid.");
+    const result = await this.#query(`SELECT r.* FROM evimed_memory.records r
+      WHERE r.user_id=$1 AND r.status='active' AND r.kind <> 'run_summary' AND r.origin IN ('system','inferred')
+        AND NOT (r.revisions @> '[{"by":"user"}]'::jsonb)
+        AND NOT EXISTS (SELECT 1 FROM evimed_memory.record_reviews v WHERE v.user_id=r.user_id AND v.record_id=r.id AND v.rules=$2)
+      ORDER BY r.created_at, r.id LIMIT $3`, [owner, rules, Math.max(1, Math.min(100, Number(limit) || 24))]);
+    return result.rows.map(publicRecord);
+  }
+
+  /**
+   * What reading these memories again under `rules` found. A memory deleted in
+   * between is skipped rather than failing the note.
+   * @param {string} userId @param {string} rules
+   * @param {readonly { id: string, kept: boolean, reason?: string }[]} verdicts
+   */
+  async noteReviewed(userId, rules, verdicts) {
+    const owner = assertUserId(userId);
+    if (!reviewRulesPattern.test(String(rules))) throw new HttpError(400, "memory_review_rules_invalid", "The review rules digest is invalid.");
+    const rows = (verdicts ?? []).filter((item) => recordIdPattern.test(String(item?.id ?? ""))).slice(0, 100);
+    if (rows.length === 0) return 0;
+    const result = await this.#query(`INSERT INTO evimed_memory.record_reviews AS v (user_id, record_id, rules, kept, reason)
+      SELECT $1, given.id, $2, given.kept, given.reason FROM unnest($3::text[], $4::boolean[], $5::text[]) AS given(id, kept, reason)
+      WHERE EXISTS (SELECT 1 FROM evimed_memory.records r WHERE r.user_id=$1 AND r.id=given.id)
+      ON CONFLICT (user_id, record_id) DO UPDATE
+        SET rules=EXCLUDED.rules, kept=EXCLUDED.kept, reason=EXCLUDED.reason, reviewed_at=date_trunc('second', clock_timestamp())`,
+    [owner, rules, rows.map((item) => String(item.id)), rows.map((item) => item.kept === true),
+      rows.map((item) => (/^[a-z_]{1,40}$/.test(String(item.reason ?? "")) ? String(item.reason) : ""))]);
+    return Number(result.rowCount ?? 0);
   }
 
   // ----------------------------------------------------------------- search

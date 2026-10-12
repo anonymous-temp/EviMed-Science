@@ -207,6 +207,20 @@ CREATE TABLE IF NOT EXISTS evimed_memory.record_usage (
   last_used_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp()),
   PRIMARY KEY (user_id, record_id)
 );
+-- Which rules a memory the platform wrote was last read again under
+-- (\`memoryReview.mjs\`), and whether that reading kept it. Derived, and holds
+-- no text: losing it costs one more reading, never a memory, and it goes with
+-- the memory it is about.
+CREATE TABLE IF NOT EXISTS evimed_memory.record_reviews (
+  user_id text NOT NULL,
+  record_id text NOT NULL,
+  rules text NOT NULL CHECK (rules ~ '^[a-f0-9]{16}$'),
+  kept boolean NOT NULL,
+  reason text NOT NULL DEFAULT '' CHECK (reason ~ '^[a-z_]{0,40}$'),
+  reviewed_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp()),
+  PRIMARY KEY (user_id, record_id),
+  FOREIGN KEY (user_id, record_id) REFERENCES evimed_memory.records(user_id, id) ON DELETE CASCADE
+);
 -- The researcher's own switches over their memory. No row means every switch
 -- is off, which is how the platform behaved before the switches existed.
 CREATE TABLE IF NOT EXISTS evimed_memory.settings (

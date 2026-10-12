@@ -9,6 +9,7 @@ import {
 import { HttpError } from "./security.mjs";
 import { searchTokens } from "./memoryRecallPolicy.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
+import { MEMORY_REVIEW_RULES, MemoryReview } from "./memoryReview.mjs";
 import { recordInferenceUpgraded, recordSkippedBeforeReset } from "./memoryMetrics.mjs";
 import { endedBeforeReset, memoryPausedFor, sourceLinkOf } from "./researchMemory.mjs";
 
@@ -976,6 +977,8 @@ export class MemoryIntelligence {
     // the time the pro model takes.
     this.model = String(config.memoryExtractionModel || config.deepseekModel || "");
     this.runSummaryTtlMs = Math.max(0, Number(config.memoryRunSummaryTtlDays ?? 90)) * 24 * 60 * 60 * 1_000;
+    // What older rules let the platform write, read again under today's after each run (`memoryReview.mjs`).
+    this.review = new MemoryReview(config, memoryStore, { fetchImpl, usageLedger, audit: (event, error) => this.audit(event, error) });
     // How long an inference lives after it was last observed (see recordRun).
     this.inferredTtlMs = Math.max(0, Number(config.memoryInferredTtlDays ?? 90)) * 24 * 60 * 60 * 1_000;
     this.excludedProjectPrefixes = Array.isArray(config.memoryExtractionExcludedProjectPrefixes)
@@ -1196,6 +1199,17 @@ export class MemoryIntelligence {
         `forget "${String(request?.key ?? "")}": an outside agent's episode cannot forget a memory`));
     }
     const forgotten = holdForOwner ? [] : await this.#forget(project, run, forgetRequests ?? [], known, sources, rejections);
+    // One batch of what the platform wrote under older rules, read again under today's (`memoryReview.mjs`): after this run's own
+    // writes, so a memory it just observed again is read as it now stands, and never at the cost of them — a failed reading is
+    // audited and the run's memory stands. Not from an outside agent's episode, which may not change a memory in force.
+    // What this run wrote was written under today's rules and needs no second reading.
+    if (!holdForOwner && written.length && typeof this.memoryStore.noteReviewed === "function") {
+      await this.memoryStore.noteReviewed(project.userId, MEMORY_REVIEW_RULES, written.map((/** @type {any} */ entry) => ({ id: entry.id, kept: true })))
+        .catch((/** @type {any} */ error) => this.audit("memory.review.note", error));
+    }
+    const reviewed = holdForOwner || extractionError ? { read: 0, forgotten: [] }
+      : await this.review.review(project.userId, { projectId: project.id, runId: run.id ?? null })
+        .catch(async (/** @type {any} */ error) => { await this.audit("memory.review", error); return { read: 0, forgotten: [] }; });
     // No inbox item for what was simply written (plan 2026-09-23 §5.8): the
     // memory page and the conversation's own prompt (`/api/memory/changes`)
     // show it where the researcher is, and a 「刚记住了 N 条」 line per run was
@@ -1224,6 +1238,8 @@ export class MemoryIntelligence {
         .map((entry) => ({ recordId: entry.id, key: entry.key, scope: entry.scope })),
       // What the researcher asked, in the conversation, to forget, and was.
       forgotten,
+      // What reading older memories again under today's rules found: how many were read, and which it forgot.
+      reviewed,
       extractionError,
       // What never reached the extractor. Rides the result rather than only the
       // security ledger, because "the transcript was almost entirely our own
