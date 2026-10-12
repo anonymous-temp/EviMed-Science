@@ -95,7 +95,9 @@ test("a request that waits longer than the gate allows is refused, and its place
   const running = gate.run("a", first.task);
   await assert.rejects(gate.run("b", async () => 1), (error) => error.code === "capsule_password_busy" && error.reason === "waited_out");
   assert.deepEqual(gate.load, { running: 1, waiting: 0 });
-  // The account that waited out can ask again, and the one that held the slot is unaffected.
+  // The account that waited out can ask again, and the one that held the slot is unaffected. The second wait gets room: at
+  // 20 ms a loaded run (a parallel suite, 2026-10-12) waited it out too before the slot was freed, which is not the property.
+  gate.configure({ maxWaitMs: 10_000 });
   const next = manual();
   const again = gate.run("b", next.task);
   assert.equal(await pending(again), true);

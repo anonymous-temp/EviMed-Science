@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { completeOwnedAutopilotRun } from "../src/autopilotRunCompletion.mjs";
+import { completeOwnedAutopilotRun, sweepAutopilotOrphans } from "../src/autopilotRunCompletion.mjs";
 
 function fixture() {
   const calls = [];
@@ -128,3 +128,29 @@ test("an expired worker's proven unsent lease loss records facts without science
   await completeOwnedAutopilotRun(f.dependencies,f.project,f.run);
   assert.deepEqual(f.calls.map(call=>call[0]),["unsent"]);
 });
+
+test("an episode whose run ended while its fold failed is folded by the sweep; one still working is left alone (2026-10-05 EAI_AGAIN)", async () => {
+  const rows = [
+    { user_id: "u1", project_id: "p1", run_id: "run-failed" },
+    { user_id: "u1", project_id: "p1", run_id: "run-still-working" },
+    { user_id: "u1", project_id: "p-gone", run_id: "run-of-a-deleted-project" },
+    { user_id: "u1", project_id: "p1", run_id: "run-unreadable" },
+  ];
+  const queries = [];
+  const database = { query: async (sql) => { queries.push(sql); return { rows }; } };
+  const runs = { "run-failed": { id: "run-failed", status: "failed" }, "run-still-working": { id: "run-still-working", status: "running" } };
+  const folded = [];
+  const result = await sweepAutopilotOrphans({
+    database,
+    readRun: async ({ projectId, runId }) => {
+      if (runId === "run-unreadable") throw new Error("EAI_AGAIN");
+      return projectId === "p-gone" ? null : { project: { id: projectId }, run: runs[runId] };
+    },
+    fold: async (project, run) => { folded.push([project.id, run.id]); },
+  });
+  assert.deepEqual(folded, [["p1", "run-failed"]]);
+  assert.deepEqual(result, { looked: 4, folded: 1 });
+  assert.match(queries[0], /payload->>'status'='running'/);
+  assert.match(queries[0], /interval '15 minutes'/, "a record that moved recently is not swept");
+});
+

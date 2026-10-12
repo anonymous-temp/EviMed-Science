@@ -1956,13 +1956,17 @@ export function loadConfig(overrides = {}) {
     maxProjectsPerUser: Number(
       overrides.maxProjectsPerUser ?? process.env.OPEN_SCIENCE_MAX_PROJECTS_PER_USER ?? 20,
     ) || 20,
+    // How many entries a scan of one project may visit. 10,000 was below a real research project: on 2026-10-12 the
+    // owner's default project held 10,874 (6,628 of them preserved sources), and every capacity check in it — an upload,
+    // a result version — failed `project_scan_too_large`. The bound protects the server from a pathological tree, not a
+    // project from its own sources; a 100,000-entry walk is about two seconds.
     maxWorkspaceScanEntries: Number(
-      overrides.maxWorkspaceScanEntries ?? process.env.OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES ?? 10_000,
+      overrides.maxWorkspaceScanEntries ?? process.env.OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES ?? 100_000,
     ),
-    maxArchiveEntries: Number(overrides.maxArchiveEntries ?? process.env.OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES ?? 10_000),
+    maxArchiveEntries: Number(overrides.maxArchiveEntries ?? process.env.OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES ?? 100_000),
     maxArchiveBytes: Number(overrides.maxArchiveBytes ?? process.env.OPEN_SCIENCE_MAX_ARCHIVE_BYTES ?? 1024 * 1024 * 1024),
     maxProjectUsageScanEntries: Number(
-      overrides.maxProjectUsageScanEntries ?? process.env.OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES ?? 10_000,
+      overrides.maxProjectUsageScanEntries ?? process.env.OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES ?? 100_000,
     ),
     maxLogReadBytes: Number(overrides.maxLogReadBytes ?? process.env.OPEN_SCIENCE_MAX_LOG_READ_BYTES ?? 1024 * 1024),
     maxLogFileBytes: Number(overrides.maxLogFileBytes ?? process.env.OPEN_SCIENCE_MAX_LOG_FILE_BYTES ?? 10 * 1024 * 1024),
@@ -2585,11 +2589,13 @@ export function loadConfig(overrides = {}) {
     // recall into a run, where a greeting was handed its eight nearest
     // neighbours. Measured on the pinned embedder (qwen3.7-text-embedding,
     // 2026-09-14): relevant hits score 0.71–0.87, unrelated ones fall to about
-    // 0.21. The durable kinds (profile, preference, behavior, correction) are
+    // 0.21 — as cosines. From OpenViking v0.4.22 a score is (cosine + 1) / 2
+    // (re-measured on v0.4.23, 2026-10-12: the same memory 0.712 → 0.861), so the
+    // same cut is 0.75: relevant hits 0.86–0.94, unrelated about 0.6. The durable kinds (profile, preference, behavior, correction) are
     // not looked up under it: they are the standing profile, handed to a
     // conversation up front whatever they would score (`memoryProfileMaxRecords`).
     memorySearchMinScore: Number(
-      overrides.memorySearchMinScore ?? process.env.OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE ?? 0.5,
+      overrides.memorySearchMinScore ?? process.env.OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE ?? 0.75,
     ),
     // Which component decides *which* memories a question sees. `builtin` is
     // the term matcher inside the research-memory store and needs nothing

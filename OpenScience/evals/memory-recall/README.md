@@ -141,3 +141,22 @@ queries' ordering, two better and two worse. That is one fact of twenty on
 sixteen questions, which is not enough to change a default on — the reranker
 stays on for both paths and this table is the number a later decision can start
 from rather than an argument for one now.
+
+## 2026-10-12, OpenViking v0.4.23 — the pin moved, the rankings did not
+
+Rehearsed before moving the pin, on an isolated v0.4.23 started with the
+production `ov.conf` unchanged (its own network and empty volume, an ephemeral
+root key) — same corpora, same queries, same embedder:
+
+| | v0.4.19 (2026-09-14) | v0.4.23 |
+|---|---|---|
+| research recall@5 / MRR | 0.933 / 1.000 | 0.933 / 1.000 |
+| + control-plane rerank | 1.000 / 0.958 | 1.000 / 1.000 |
+| capsule recall@5 / MRR | 0.900 / 0.828 | 0.900 / 0.828 |
+| + control-plane rerank | 0.850 / 0.802 | 0.800 / 0.833 (one gold fact of twenty) |
+
+What changed is the scale: from v0.4.22 a `find` score is (cosine + 1) / 2, so
+the same memory and query scored 0.861 where v0.4.19 said 0.712. The search
+floor `OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE` moved from 0.5 to 0.75 with the
+pin — the same cut on the new scale. Latency here runs through an ssh tunnel
+from the dev box, so it is not comparable with the September rows.

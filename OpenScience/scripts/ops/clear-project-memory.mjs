@@ -40,25 +40,20 @@ export function parseArguments(argv) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const [{ loadConfig }, { createStore }, { ResearchMemoryStore }, { OpenVikingClient }, { MemorySubstrate, selectedMemoryIndexProvider }, { ProductJobs }] = await Promise.all([
+  const [{ loadConfig }, { createStore }, { memoryStoreForOps }, { MemorySubstrate }] = await Promise.all([
     import("../../apps/server/src/config.mjs"),
     import("../../apps/server/src/store.mjs"),
-    import("../../apps/server/src/researchMemory.mjs"),
-    import("../../apps/server/src/openVikingClient.mjs"),
+    import("./memory-store.mjs"),
     import("../../apps/server/src/memorySubstrate.mjs"),
-    import("../../apps/server/src/productJobs.mjs"),
   ]);
   const config = loadConfig();
   const store = createStore(config);
   const database = "database" in store ? store.database : null;
   try {
     if (!database) throw new Error("no control-plane database is configured");
-    const openViking = new OpenVikingClient(config);
     // The store enqueues index deletes exactly when the server's does: when
     // this deployment has an index for a worker to apply them to.
-    const indexed = selectedMemoryIndexProvider(config) === "openviking" && Boolean(openViking.configured);
-    const jobs = indexed ? new ProductJobs(database) : null;
-    const researchMemory = new ResearchMemoryStore(config, { database, jobs });
+    const { researchMemory, openViking, jobs, indexed } = memoryStoreForOps(config, database);
     const substrate = new MemorySubstrate(config, { store: researchMemory, openViking, jobs });
     const held = (await researchMemory.listAllRecords(options.user))
       .filter((/** @type {any} */ record) => record.scope === "project" && record.scopeId === options.project);

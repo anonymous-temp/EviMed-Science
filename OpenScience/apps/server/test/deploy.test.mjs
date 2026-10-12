@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { lstat, readdir, readFile } from "node:fs/promises";
+import { lstat, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import YAML from "yaml";
 import { createCommandRegistry } from "../src/commands.mjs";
+
+const execFileAsync = promisify(execFile);
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -750,10 +754,10 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(compose, /OPEN_SCIENCE_MAX_JSON_BYTES:\s+\$\{OPEN_SCIENCE_MAX_JSON_BYTES:-12582912\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_FILE_BYTES:\s+\$\{OPEN_SCIENCE_MAX_FILE_BYTES:-52428800\}/);
   assert.match(compose, /OPEN_SCIENCE_PROXY_MAX_BODY_SIZE:\s+\$\{OPEN_SCIENCE_PROXY_MAX_BODY_SIZE:-73408512\}/);
-  assert.match(compose, /OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES:-10000\}/);
-  assert.match(compose, /OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES:-10000\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES:-100000\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES:-100000\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_ARCHIVE_BYTES:\s+\$\{OPEN_SCIENCE_MAX_ARCHIVE_BYTES:-1073741824\}/);
-  assert.match(compose, /OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES:-10000\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES:-100000\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_LOG_READ_BYTES:\s+\$\{OPEN_SCIENCE_MAX_LOG_READ_BYTES:-1048576\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_LOG_FILE_BYTES:\s+\$\{OPEN_SCIENCE_MAX_LOG_FILE_BYTES:-10485760\}/);
   assert.match(compose, /OPEN_SCIENCE_EXAMPLES_DIR:\s+\/app\/examples/);
@@ -1171,10 +1175,10 @@ test("web deployment env example documents required hosted settings", async () =
   assert.match(env, /^OPEN_SCIENCE_RUNTIME_SKILL_DIRS=runtime\/skills\/core,runtime\/skills\/curated-scientific,runtime\/skills\/office$/m);
   assert.match(env, /OPEN_SCIENCE_ALLOW_DIRECT_SHELL=false/);
   assert.match(env, /OPEN_SCIENCE_PROXY_MAX_BODY_SIZE=73408512/);
-  assert.match(env, /OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES=10000/);
-  assert.match(env, /OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES=10000/);
+  assert.match(env, /OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES=100000/);
+  assert.match(env, /OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES=100000/);
   assert.match(env, /OPEN_SCIENCE_MAX_ARCHIVE_BYTES=1073741824/);
-  assert.match(env, /OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES=10000/);
+  assert.match(env, /OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES=100000/);
   assert.match(env, /OPEN_SCIENCE_MAX_LOG_FILE_BYTES=10485760/);
   assert.match(env, /OPEN_SCIENCE_MAX_CONCURRENT_TASKS_PER_PROJECT=1/);
   assert.match(env, /OPEN_SCIENCE_MAX_QUEUED_TASKS=100/);
@@ -1643,6 +1647,25 @@ test("the immutable public profile is readable and the actual build boot drops r
 // have already started. `dsh --profile web --patch x.yml --no-open --port 0`
 // is the only ordering that boots. A container that got this wrong would fail
 // this exact way on every single start.
+test("the kernel's start line reaches the container log without its token (2026-10-12 audit)", async () => {
+  // The launch line as the entrypoint writes it, run against a stub `dsh` that prints what 0.1.7 prints at start.
+  const entrypoint = await readFile(path.join(repoRoot, "deploy/runtime-dsh/open-science-dsh-serve.sh"), "utf8");
+  const lines = entrypoint.split("\n");
+  const start = lines.findIndex((line) => line.trimStart().startsWith("dsh --profile"));
+  const launch = lines.slice(start, start + 2).join("\n").replace(/&\s*$/, "");
+  const dir = await mkdtemp(path.join(os.tmpdir(), "dsh-token-"));
+  try {
+    await writeFile(path.join(dir, "dsh"), "#!/usr/bin/env bash\necho 'dsh web: http://127.0.0.1:4096/?token=Abc-123_secretValue'\necho 'ready' >&2\n", { mode: 0o755 });
+    const script = `set -euo pipefail\nprofile=evimed-runtime; port=4096; authority=dsh.runtime; patch_args=()\n${launch}\nwait`;
+    const { stdout } = await execFileAsync("bash", ["-c", script], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    assert.match(stdout, /dsh web: http:\/\/127\.0\.0\.1:4096\/\?token=\[redacted\]/);
+    assert.doesNotMatch(stdout, /secretValue/);
+    assert.match(stdout, /ready/, "the kernel's other output, stderr included, still reaches the log");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("the entrypoint places --patch before the web app's own arguments", async () => {
   const entrypoint = await readFile(path.join(repoRoot, "deploy/runtime-dsh/open-science-dsh-serve.sh"), "utf8");
   const invocation = entrypoint.split("\n").find((line) => line.trimStart().startsWith("dsh --profile"));

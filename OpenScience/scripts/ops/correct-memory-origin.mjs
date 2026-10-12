@@ -66,17 +66,17 @@ export async function correctMemoryOrigin(researchMemory, options) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const [{ loadConfig }, { createStore }, { ResearchMemoryStore }] = await Promise.all([
+  const [{ loadConfig }, { createStore }, { memoryStoreForOps }] = await Promise.all([
     import("../../apps/server/src/config.mjs"),
     import("../../apps/server/src/store.mjs"),
-    import("../../apps/server/src/researchMemory.mjs"),
+    import("./memory-store.mjs"),
   ]);
   const config = loadConfig();
   const store = createStore(config);
   const database = "database" in store ? store.database : null;
   try {
     if (!database) throw new Error("no control-plane database is configured");
-    const result = await correctMemoryOrigin(new ResearchMemoryStore(config, { database }), options);
+    const result = await correctMemoryOrigin(memoryStoreForOps(config, database).researchMemory, options);
     process.stdout.write(`${JSON.stringify({ user: options.user, key: options.key, from: options.from, to: options.to, ...result }, null, 2)}\n`);
   } finally {
     await store.close?.();
