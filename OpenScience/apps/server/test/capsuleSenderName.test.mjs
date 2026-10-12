@@ -93,3 +93,24 @@ test("a trial conversation is handed no pack that has been taken down since the 
     { expectedRevision: current.revision });
   assert.equal(await service.trialContext("u1", pack.id), "", "taken down: out of force everywhere, trials included (plan §7)");
 });
+
+test("a shared method opens with its name and purpose in the researcher's words, so a preview never shows the text written for the model", async () => {
+  const methodRow = { id: "method:learned:beta", revision: 3, payload: {
+    recordType: "learned-method", status: "approved", provenance: {},
+    display: { title: "证据分级先看设计再看偏倚", summary: "先按研究设计定起点，再逐项降级。" },
+    frontmatter: { name: "grade-design-first", description: "Grades evidence by design first.", whenToUse: "When grading." }, body: "## Steps\n1. Read the design.",
+  } };
+  const client = { async query(/** @type {string} */ sql) {
+    if (/kind='method'/.test(sql)) return { rows: [methodRow], rowCount: 1 };
+    if (/kind='capsule' AND id=/.test(sql)) return { rows: [{ revision: 1 }], rowCount: 1 };
+    return { rows: [], rowCount: 0 };
+  } };
+  const database = { ...client, async transaction(/** @type {(client: any) => Promise<any>} */ work) { return work(client); } };
+  const service = new CapsuleTransferService({ documents: /** @type {any} */ ({ database }),
+    capsules: /** @type {any} */ ({ async get() { return { payload: { imported: false } }; } }), identities: /** @type {any} */ (null), dataDir: "/nonexistent" });
+  const preview = await service.exportPreview("alice", "capsule-1", {});
+  const method = preview.entries.find((/** @type {any} */ entry) => entry.factKind === "method_preference");
+  assert.ok(method, "the learned method is in the pack");
+  assert.match(method.content, /^# 证据分级先看设计再看偏倚\n\n先按研究设计定起点，再逐项降级。\n\n/);
+  assert.match(method.content, /Grades evidence by design first\.[\s\S]*## Steps/, "the model still receives the method it runs");
+});

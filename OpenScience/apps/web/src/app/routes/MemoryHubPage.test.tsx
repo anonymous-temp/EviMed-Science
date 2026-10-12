@@ -343,7 +343,8 @@ describe("记忆胶囊", () => {
     // Since when, and nothing of whose words it is (owner ruling of 2026-10-10).
     expect(within(drawer).getByText("9月12日")).toBeInTheDocument();
     expect(within(drawer).getByText("“我是临床药师”")).toBeInTheDocument();
-    expect(within(drawer).getByRole("button", { name: "来源对话" })).toBeInTheDocument();
+    // The conversation it came from, by what that conversation was about.
+    expect(within(drawer).getByRole("button", { name: "来源对话：《阿司匹林一级预防》" })).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "编辑" })).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "忘记" })).toBeInTheDocument();
     // The list is still there behind it.

@@ -72,10 +72,12 @@ export function memorySource(record: WebStructuredMemory): { sessionId: string; 
  * back and 已忘记的内容 restores; 不再记这条 deletes and stops the extractor
  * inferring it again, so it is the one that asks first.
  */
-export function FactDrawer({ item, projectName, onClose, onChanged }: {
+export function FactDrawer({ item, projectName, conversations, onClose, onChanged }: {
   item: FactItem;
   /** The project a project's fact belongs to, when the shell knows its name. */
   projectName: string | null;
+  /** What each conversation was about, by its id (the memory profile's `conversations`): the 《…》 the source link names. */
+  conversations?: Record<string, string>;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -268,12 +270,14 @@ export function FactDrawer({ item, projectName, onClose, onChanged }: {
             <DrawerSection label="出处">
               {record.evidence.slice(-3).reverse().map((evidence) => (
                 <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
-                  <p className="text-ui text-text-2">“{evidence.quote}”</p>
+                  <p className="text-ui text-text-2">“{memoryExcerpt(evidence.quote, 200)}”</p>
                   {evidence.observedAt && <p className="text-caption text-text-3">{when(evidence.observedAt)}</p>}
                 </div>
               ))}
               {source && (
-                <ConversationLink projectId={record.scope === "project" ? record.scopeId : null} sessionId={source.sessionId}>来源对话</ConversationLink>
+                <ConversationLink projectId={record.scope === "project" ? record.scopeId : null} sessionId={source.sessionId}>
+                  {conversations?.[source.sessionId] ? `来源对话：《${memoryExcerpt(conversations[source.sessionId], 40)}》` : "来源对话"}
+                </ConversationLink>
               )}
             </DrawerSection>
           )}

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { CAPSULE_FACT_ORIGINS } from "@evimed/domain";
+import { CAPSULE_FACT_ORIGINS, cleanMethodDisplay } from "@evimed/domain";
 import { packCapsule, openCapsule, verifyCapsule } from "./capsuleContainer.mjs";
 import { capsuleAccountHash, protectedCapsuleDirectory, readProtectedCapsuleFile, writeProtectedCapsuleFile, unlinkCapsuleFile, syncCapsuleDirectory } from "./capsuleIdentityStore.mjs";
 import { buildAgentSkillsPack } from "./capsuleMethodPack.mjs";
@@ -132,11 +132,18 @@ function renderedFiles(snapshotId, entries) {
  * The recipient mounts it as a capsule method (`renderCapsuleMethod`), so the
  * sharer's frontmatter is not carried — its digest and learning counters
  * describe the sharer's library, not the recipient's.
+ *
+ * The heading and the paragraph under it are the method in the researcher's
+ * words (`display`) when it has them: they are what the sender's preview, the
+ * recipient's preview and its shelf show of a method, and the name and
+ * description written for the model follow them with the body (2026-10-12:
+ * every preview read `# claim-verdict-audit` and an English SKILL body).
  * @param {any} payload
  */
 function learnedMethodText(payload) {
   const front = payload?.frontmatter ?? {};
-  const head = [`# ${String(front.name ?? "method")}`, String(front.description ?? "").trim(),
+  const display = cleanMethodDisplay(payload?.display);
+  const head = [`# ${display?.title || String(front.name ?? "method")}`, display?.summary ?? "", String(front.description ?? "").trim(),
     front.whenToUse ? `适用：${String(front.whenToUse).trim()}` : ""].filter(Boolean).join("\n\n");
   return `${head}\n\n${String(payload?.body ?? "").trim()}`.slice(0, 20_000);
 }

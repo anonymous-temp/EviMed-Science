@@ -76,6 +76,16 @@ function inertText(value) {
   return stripPlatformTags(String(value ?? "")).replace(/<(\s*\/?\s*evimed)/gi, "＜$1");
 }
 
+/**
+ * What the shelf names a received method by: the heading its text opens with — the method's name in its sharer's words
+ * (`learnedMethodText`) — and never the text written for the model under it.
+ * @param {unknown} content
+ */
+function methodHeading(content) {
+  const first = String(content ?? "").trimStart().split("\n", 1)[0].trim();
+  return (first.startsWith("# ") ? first.slice(2).trim() : first).slice(0, 60);
+}
+
 export class CapsuleService {
   /** @param {import('./productStore.mjs').ProductDocuments} documents
    *  @param {{indexing?:any,strictIndex?:boolean,scanner?:import('./capsuleScan.mjs').CapsuleScanner|null}} [options] */
@@ -351,7 +361,7 @@ export class CapsuleService {
         if (entry.payload.status === "candidate") waiting += 1;
         if (entry.payload.status !== "approved") continue;
         counts[entry.payload.factKind] = (counts[entry.payload.factKind] ?? 0) + 1;
-        if (entry.payload.factKind === "method_preference" && methods.length < 5) methods.push(String(entry.payload.content).slice(0, 120));
+        if (entry.payload.factKind === "method_preference" && methods.length < 5) methods.push(methodHeading(entry.payload.content));
       }
       result.push({
         id: capsule.id, revision: capsule.revision, title: capsule.payload.title, description: capsule.payload.description ?? "",

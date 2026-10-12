@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/Input";
 import {
   declineDelivery, importDelivery, importShareLink, openDelivery, openShareLink, type SharedPreview,
 } from "@/lib/capsuleShareClient";
-import { capsuleEntryLabel, fromSender, takenEntries } from "@/lib/capsuleText";
+import { capsuleEntryPreview, fromSender, takenEntries } from "@/lib/capsuleText";
 import { announceMemoryChanged, enableReceivedCapsule, startCapsuleTrial } from "@/lib/memoryClient";
 import { productErrorMessage, type CapsuleRecord } from "@/lib/productClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
@@ -113,11 +113,11 @@ export function SharedCapsulePage() {
             {shared?.link && <p className="text-caption text-text-3">这个链接还能用 {shared.link.usesLeft} 次。</p>}
           </div>
           <ul className="space-y-1">
-            {taken.map((entry) => <li key={entry.id}>
-              <Disclosure summary={capsuleEntryLabel(entry.factKind)}>
-                <p className="max-w-measure whitespace-pre-wrap text-ui text-text">{entry.content}</p>
+            {taken.map((entry) => { const shown = capsuleEntryPreview(entry); return <li key={entry.id}>
+              <Disclosure summary={shown.summary}>
+                <p className="max-w-measure whitespace-pre-wrap text-ui text-text">{shown.text}</p>
               </Disclosure>
-            </li>)}
+            </li>; })}
           </ul>
           {error && <p role="alert" className="text-ui text-error">{error}</p>}
           {imported ? (

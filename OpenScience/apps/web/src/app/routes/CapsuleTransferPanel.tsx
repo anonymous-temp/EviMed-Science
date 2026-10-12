@@ -7,7 +7,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { Tabs } from "@/components/ui/Tabs";
-import { CAPSULE_SIGNATURE_MAX_CHARS, capsuleEntryLabel, fromSender, takenEntries } from "@/lib/capsuleText";
+import { CAPSULE_SIGNATURE_MAX_CHARS, capsuleEntryPreview, fromSender, takenEntries } from "@/lib/capsuleText";
 import { takeDownSnapshot } from "@/lib/capsuleShareClient";
 import { useCapsuleShareFeature } from "@/lib/capsuleShareFeature";
 import { formatDateTime } from "@/lib/format";
@@ -173,12 +173,12 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
       ) : outgoing?.card?.summary ? (
         <Disclosure summary={`对方会看到：${outgoing.card.summary}`}>
           <ul className="space-y-2">
-            {outgoing.entries.map((entry, index) => (
+            {outgoing.entries.map((entry, index) => { const shown = capsuleEntryPreview(entry); return (
               <li key={index} className="text-ui">
-                <span className="text-text-3">{capsuleEntryLabel(entry.factKind)}</span>
-                <p className="max-w-measure whitespace-pre-wrap text-text">{entry.content}</p>
+                <span className="text-text-3">{shown.summary}</span>
+                {shown.text && <p className="max-w-measure whitespace-pre-wrap text-text">{shown.text}</p>}
               </li>
-            ))}
+            ); })}
           </ul>
         </Disclosure>
       ) : null}
@@ -284,11 +284,11 @@ export function ImportPanel({ onImported }: { onImported: (capsule: CapsuleRecor
         </p>}
         <p className="text-ui text-text">{status}</p>
         <ul className="space-y-1">
-          {taken.map(entry => <li key={entry.id}>
-            <Disclosure summary={capsuleEntryLabel(entry.factKind)}>
-              <p className="max-w-measure whitespace-pre-wrap text-ui text-text">{entry.content}</p>
+          {taken.map(entry => { const shown = capsuleEntryPreview(entry); return <li key={entry.id}>
+            <Disclosure summary={shown.summary}>
+              <p className="max-w-measure whitespace-pre-wrap text-ui text-text">{shown.text}</p>
             </Disclosure>
-          </li>)}
+          </li>; })}
         </ul>
         {!upgrading && <Input label="收下后的胶囊名称" value={title} disabled={busy} maxLength={150} onChange={event => setTitle(event.target.value)} />}
         <Button disabled={busy || !preview.canImport || (!upgrading && !title.trim())} onClick={() => void perform(async () => {

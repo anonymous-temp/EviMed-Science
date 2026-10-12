@@ -18,6 +18,20 @@ export function capsuleEntryLabel(factKind: string): string {
 }
 
 /**
+ * What a preview shows of one entry: a line naming it and the text under that line. A shared method opens with its name and a paragraph
+ * saying what it is for, in its sharer's words, and goes on in the text written for the model that runs it; a preview shows the name and
+ * that paragraph and never the rest (design reference §14.1: no model-written body on a screen). Any other entry is its own text, whole.
+ */
+export function capsuleEntryPreview(entry: { factKind: string; content: string }): { summary: string; text: string } {
+  const label = capsuleEntryLabel(entry.factKind);
+  if (entry.factKind !== "method_preference") return { summary: label, text: entry.content };
+  const [first = "", ...rest] = entry.content.trim().split(/\n\s*\n/);
+  const heading = first.trim();
+  if (!heading.startsWith("# ")) return { summary: label, text: heading };
+  return { summary: `${label}：${heading.slice(2).trim()}`, text: (rest[0] ?? "").trim() };
+}
+
+/**
  * The entries of a previewed pack that come in. The automatic scan still decides, on the server, what is mounted; the screen shows what
  * comes in and neither lists, counts nor explains what the scan left out (owner ruling 2026-10-10: a scan result, a trust verdict and a
  * model-written reason are the back office's).

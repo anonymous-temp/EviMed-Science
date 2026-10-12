@@ -107,6 +107,8 @@ export function MemoryHubPage() {
   const { value: openKey, open: setOpenKey, close } = useAddressOpen("open");
   const [drawer, setDrawer] = useState<"share" | "forgotten" | null>(null);
   const [found, setFound] = useState<WebStructuredMemory[] | null>(null);
+  // What the conversations behind a search's hits were about, for the drawer's source link.
+  const [searchConversations, setSearchConversations] = useState<Record<string, string>>({});
   const [searching, setSearching] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
   const [searchAttempt, setSearchAttempt] = useState(0);
@@ -131,7 +133,7 @@ export function MemoryHubPage() {
     setSearching(true);
     const timer = setTimeout(() => {
       void searchMemories(text).then(
-        (page) => { setFound(page.items); setSearchFailed(false); },
+        (page) => { setFound(page.items); setSearchConversations(page.conversations ?? {}); setSearchFailed(false); },
         () => setSearchFailed(true),
       ).finally(() => setSearching(false));
     }, 250);
@@ -328,6 +330,7 @@ export function MemoryHubPage() {
           key={opened.key}
           item={opened}
           projectName={opened.group === "project" ? projectName(opened.projectId) : null}
+          conversations={{ ...data?.profile?.conversations, ...searchConversations }}
           onClose={close}
           onChanged={reload}
         />
