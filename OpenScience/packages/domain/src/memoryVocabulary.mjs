@@ -289,3 +289,73 @@ export function runBookkeepingIn(text) {
   }
   return found
 }
+
+/** GB 11643-1999: whether an 18-character resident ID number carries a valid check digit. @param {string} text */
+function residentIdValid(text) {
+  const weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
+  let sum = 0
+  for (let index = 0; index < 17; index += 1) sum += Number(text[index]) * weights[index]
+  return '10X98765432'[sum % 11] === text[17].toUpperCase()
+}
+
+/** Whether a run of digits passes the Luhn check a bank card carries. @param {string} digits */
+function luhnValid(digits) {
+  let sum = 0
+  let double = false
+  for (let index = digits.length - 1; index >= 0; index -= 1) {
+    let digit = Number(digits[index])
+    if (double) { digit *= 2; if (digit > 9) digit -= 9 }
+    sum += digit
+    double = !double
+  }
+  return sum % 10 === 0
+}
+
+const RESIDENT_ID = /(?<![0-9A-Za-z])[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?![0-9A-Za-z])/g
+const MOBILE = /(?<![0-9])(?:\+?86[- ]?)?1[3-9]\d{9}(?![0-9])/g
+const CARD = /(?<![0-9])(?:\d[ -]?){15,18}\d(?![0-9])/g
+const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
+const KEY_FORMAT = /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{30,}|\bBearer\s+[A-Za-z0-9._~+/-]{20,}/g
+const KEY_ASSIGNMENT = /(?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌)\s*(?:is|为|是|[:=：])\s*\S{6,}/i
+const LONG_TOKEN = /(?<![A-Za-z0-9_-])[A-Fa-f0-9]{32,}(?![A-Za-z0-9_-])|(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{40,}(?![A-Za-z0-9_-])/g
+
+/**
+ * The credentials and personal identifiers a text carries, by their shape: a
+ * resident ID number with a valid check digit, a mobile number, a card number
+ * that passes Luhn, an e-mail address, a provider key's format, a secret
+ * assigned to a name, a long bare token. Format checks, like a DOI or a PMID —
+ * decidable from the token itself (principle 5) — and the only part of 「never
+ * keep a patient's or anyone's identifiers, or a credential」 code can hold; the
+ * rest is the extraction model's (2026-10-12 replay: a patient's ID card,
+ * phone and admission details reached project facts, and a regex over words
+ * like 「我患有」 had been standing in for the judgement).
+ * @param {unknown} text @returns {string[]} the kinds found, in a fixed order
+ */
+export function identifierShapesIn(text) {
+  const value = String(text ?? '')
+  /** @type {string[]} */
+  const found = []
+  if ([...value.matchAll(RESIDENT_ID)].some((match) => residentIdValid(match[0]))) found.push('resident_id')
+  if (new RegExp(MOBILE.source).test(value)) found.push('mobile')
+  if ([...value.matchAll(CARD)].some((match) => { const digits = match[0].replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) })) found.push('card')
+  if (new RegExp(EMAIL.source).test(value)) found.push('email')
+  if (new RegExp(KEY_FORMAT.source).test(value) || KEY_ASSIGNMENT.test(value) || new RegExp(LONG_TOKEN.source).test(value)) found.push('credential')
+  return found
+}
+
+/**
+ * A text with the identifier-shaped spans `identifierShapesIn` finds replaced
+ * by 「[已省略]」, and otherwise untouched: what a quote or a conversation's
+ * opening question keeps once it is stored.
+ * @param {unknown} text @returns {string}
+ */
+export function maskIdentifiers(text) {
+  const masked = '[已省略]'
+  return String(text ?? '')
+    .replace(RESIDENT_ID, (match) => (residentIdValid(match) ? masked : match))
+    .replace(MOBILE, masked)
+    .replace(CARD, (match) => { const digits = match.replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) ? masked : match })
+    .replace(EMAIL, masked)
+    .replace(KEY_FORMAT, masked)
+    .replace(LONG_TOKEN, masked)
+}

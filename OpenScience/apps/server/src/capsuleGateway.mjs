@@ -1,4 +1,4 @@
-import { CAPSULE_FACT_KINDS, SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
+import { CAPSULE_FACT_KINDS, SOURCE_SCOPE_UNAVAILABLE_CONTEXT, identifierShapesIn } from "@evimed/domain";
 import { recordRecallTool } from "./memoryMetrics.mjs";
 import { recallAcrossMemory } from "./memoryRecall.mjs";
 import { HttpError, readJson, sendError, sendJson } from "./security.mjs";
@@ -189,6 +189,14 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         sendJson(res, 200, {
           entry: null, reviewRequired: false, takesEffect: false, contextOnly: true, status: "memory_paused",
           notice: "用户已暂停记忆（整个账号或本项目）：这条没有记下。需要记住的话，请用户先在记忆设置里恢复记忆。",
+        });
+      } else if (identifierShapesIn(body.content).length) {
+        // A credential or anyone's identifier — an ID-card number, a phone, a card, an e-mail, a key — is not kept even when the
+        // researcher asks: the conversation has it and the memory never does, and the model is told so to say it in its own
+        // words (2026-10-12 review: this path checked nothing, while extraction refused the same text).
+        sendJson(res, 200, {
+          entry: null, reviewRequired: false, takesEffect: false, contextOnly: true, status: "not_kept",
+          notice: "这条含有密钥、证件号、手机号、卡号或邮箱这类信息，没有记下。可以只记住不含这些信息的部分。",
         });
       } else {
         // A model's claim that its input was explicit is not the researcher's

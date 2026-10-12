@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import {
   carriesPlatformContext,
+  identifierShapesIn,
+  maskIdentifiers,
   mcpToolBaseName,
   platformIdentifiersIn,
   runBookkeepingIn,
@@ -38,7 +40,6 @@ const candidateKinds = new Set([
 const candidateScopes = new Set(["user", "project", "session"]);
 const candidateOrigins = new Set(["explicit", "inferred", "system"]);
 const memoryKeyPattern = /^[a-z0-9][a-z0-9._/-]{0,254}$/;
-const sensitivePattern = /(?:password|passcode|api[ _-]?key|access[ _-]?token|secret|\btoken\b|密码|口令|密钥|令牌|身份证|手机号|银行卡|病历号|患者姓名|家庭住址|我(?:患有|诊断为|正在服用))/i;
 
 /**
  * The memories that steer every later run, whatever the question is.
@@ -582,14 +583,26 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
   // halves of the check are closed or structural — our own Chinese jargon, and
   // identifier shapes — so the judgement about whether a sentence is *about*
   // the machinery stays with the extraction instructions (principle 5).
-  const bookkeeping = runBookkeepingIn(`${value}\n${summary}`);
+  //
+  // A word the researcher typed in the message the memory cites is theirs, not the run's: 「检索一律用 PubMed 和 Embase」 and a
+  // dataset they named themselves were refused as bookkeeping (2026-10-12 replay, 3 of 3 each).
+  const bookkeeping = runBookkeepingIn(`${value}\n${summary}`)
+    .filter((token) => !(source.role === "user" && source.text.includes(token)));
   if (bookkeeping.length) return reject(`"${key}" is the run's own bookkeeping (${bookkeeping.slice(0, 3).join(", ")})`);
+  // A credential or anyone's identifier, by its shape — an ID-card number with its check digit, a phone, a card, an e-mail, a
+  // key's format — is never kept, whatever the model meant (2026-10-12 replay: a patient's identifiers reached project facts).
+  const shapes = identifierShapesIn(`${value}\n${summary}`);
+  if (shapes.length) return reject(`"${key}" carries a credential or a personal identifier (${shapes.join(", ")})`);
+  // The model's own judgement that a candidate is sensitive — the researcher's health or private life, a person's details — is
+  // carried out by not keeping it. Stored and flagged, such a memory was never recalled and stayed on the page: a risk with no use
+  // (PIPL art. 28-29), where every major assistant keeps it out unless the person asks; a researcher who wants it kept says
+  // 「记住…」 and the note tool records it (2026-10-12 review).
+  if (candidate.sensitive === true) return reject(`"${key}" is sensitive: extraction does not keep it`);
   // Any scope: a session-scoped follow-up in the catch-all project is the same
   // to-do with a narrower address, and a user-scoped one would be worse.
   if (PROJECT_SUBJECT_KINDS.has(kind) && project?.id === CATCH_ALL_PROJECT_ID) {
     return reject(`"${key}" is a ${kind} about the catch-all project, which has no single subject`);
   }
-  const sensitive = Boolean(candidate.sensitive) || sensitivePattern.test(`${value}\n${summary}\n${quote}`);
   return {
     scope,
     scopeId: candidateScopeId({ scope }, project, run),
@@ -614,12 +627,13 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
     sourceLinks: sourceLinksOfCandidate(candidate.sources, source.text, toolResultIds(sourceMap.values())),
     confidence: ORIGIN_CONFIDENCE[origin],
     importance: boundedScore(candidate.importance, 0.6),
-    sensitive,
+    sensitive: false,
     lastConfirmedAt: origin === "explicit" ? new Date().toISOString() : null,
     evidence: {
       sourceType: "conversation_message",
       sourceRef,
-      quote,
+      // Checked verbatim above; stored with any identifier in it left out.
+      quote: maskIdentifiers(quote),
       // The run, not the clock: see runObservationStamp.
       observedAt: runObservationStamp(run),
       weight: source.role === "user" ? 1 : 0.8,
@@ -1475,7 +1489,9 @@ export class MemoryIntelligence {
   async #recordRunSummary(project, run, sources, holdForOwner = false) {
     const lastUser = [...sources].reverse().find((source) => source.role === "user") ?? null;
     const lastAssistant = [...sources].reverse().find((source) => source.role === "assistant") ?? null;
-    const question = lastUser?.text.slice(0, 4_000) ?? "";
+    // What a conversation is remembered by keeps no identifier: a pasted case's ID number or phone is the conversation's, not
+    // the episode's (2026-10-12 review).
+    const question = maskIdentifiers(lastUser?.text.slice(0, 4_000) ?? "");
     // No question, no episode. A run whose transcript holds no user message —
     // a prompt that never landed, a transcript the runtime took with it, work
     // the platform dispatched — has nothing a researcher asked, and its record
@@ -1483,8 +1499,8 @@ export class MemoryIntelligence {
     // recorded.」 on the memory page (2026-09-21 walk). The run itself stays on
     // the timeline, from the run ledger.
     if (!question) return null;
-    const answer = lastAssistant?.text.slice(0, 8_000) ?? "";
-    const sensitive = sensitivePattern.test(`${question}\n${answer}`);
+    const answer = maskIdentifiers(lastAssistant?.text.slice(0, 8_000) ?? "");
+    const sensitive = identifierShapesIn(`${lastUser?.text ?? ""}\n${lastAssistant?.text ?? ""}`).length > 0;
     // One summary per conversation (2026-09-20). It was keyed by run once, so
     // every attempt at the same question stayed a separate record until its
     // TTL and the model was handed its own earlier answers several deep; then
@@ -1646,7 +1662,7 @@ export class MemoryIntelligence {
                 // standing preference or scopes the task in hand is a judgment
                 // about language, so it is stated here rather than matched in
                 // code (principle 1).
-                "A condition the user puts on the task at hand is not a preference: 「这次只看亚洲人群」, 「只依据我上传的资料回答」, 「这次不要图表」 scope one request. Record such a constraint as a project_fact or follow_up of that work, and make it a preference only when the user says it is how they always want work done, or when the same constraint has appeared across separate tasks.",
+                "A condition the user puts on the task at hand is not a preference: 「这次只看亚洲人群」, 「只依据我上传的资料回答」, 「这次不要图表」 scope one request. Do not file such a constraint as a standing project fact: if it matters for the rest of this conversation, record it as a follow_up with scope session, otherwise record nothing; make it a preference only when the user says it is how they always want work done, or when the same constraint has appeared across separate tasks.",
                 // The other direction of the same judgement, and the reason the
                 // page never has to ask anyone to write a method: a standing
                 // instruction said in conversation is how a method is taught.
@@ -1656,7 +1672,7 @@ export class MemoryIntelligence {
                 // and a translated quote is not verbatim, so the candidate would
                 // be refused (the commonest rejection already).
                 "evidenceQuote must be a short exact substring of the referenced source, copied character for character in the source's own language, never translated. Do not infer identity, health, beliefs, demographics, or preferences without direct evidence.",
-                "Store durable facts and compact analytical essentials: dataset or artifact reference, population/filter, parameter, unit, method, result, decision, and unresolved follow-up.",
+                "Store durable facts and compact analytical essentials: which dataset the work is on, population/filter, parameter, unit, method, decision, and unresolved follow-up.",
                 // The two write-quality classes only language can judge
                 // (2026-09-26 audit, M-9; evals/memory-write-quality replays
                 // both): a summary that names fields instead of stating them,
@@ -1664,6 +1680,19 @@ export class MemoryIntelligence {
                 "summary is the one sentence the researcher reads on their memory page: it states the fact itself (「GLORY-1 为 3 期试验，每周一次皮下注射」), never a list of what the value contains (「GLORY-1 的注册号、剂量与人群」).",
                 "Store nothing that is true of this run only: the date it searched, a snapshot it refreshed, what a status field read, what a tool could or could not reach, or that something was compiled for later use. Those describe the work in progress, not the research, and are stale by the next conversation.",
                 "Do not store greetings, transient requests, chain-of-thought, secrets, full documents, or unsupported conclusions.",
+                // What to keep and what never to keep, as replayed on 2026-10-12 against DeepSeek on fourteen synthetic
+                // conversations (a pasted patient case, the researcher's own health, a colleague's contact details, a mood,
+                // a pasted abstract, a one-off condition, a correction): each class went from 0–2 of 3 to 3 of 3, with the six
+                // incident classes of evals/memory-write-quality unchanged. A correction is named as always kept because the
+                // document rule below suppressed it in half the replays until it was.
+                "What is worth keeping is what the researcher would expect the assistant to still know next month, in another conversation, without being told again: who they are professionally (role, specialty, research direction), how they want work done (methods, statistics, reporting standards, evidence grading, language, format, tools), the standing shape of their projects (population, data source, criteria, comparator, decisions taken, what is still open), and what they corrected.",
+                "A single question is not a description of a project: record the shape of a project only when the researcher describes their study or decides something about it, never from a question or from a document they ask about. Choose each evidenceQuote as the shortest span that supports the fact and leave identifiers out of it.",
+                "Never store, even when the researcher quotes it or asks you to remember it: (a) anything that identifies or describes an individual patient or any other person — names, ID-card, medical-record, admission, phone, e-mail, WeChat or address details, exact dates of care, or one person's diagnosis, medication or course (「患者张某某，住院号 ZY…」, 「67 岁男性，服华法林，INR 波动」). Case material is worked on in the conversation and then forgotten; a project may remember the shape of a cohort (who is eligible, which years, how many, what source, which kinds of variables) and never a member of it. (b) Credentials and account numbers: passwords, API keys, tokens, ID-card and bank-card numbers.",
+                "Do not store the researcher's own health, medication, religion, politics, ethnicity, sexual orientation, finances or private life, and do not infer them from a question: asking about a disease or a drug is a topic, not a fact about the person. If such a statement still seems worth proposing, set sensitive true on it: the platform does not keep sensitive candidates. A researcher who wants something like this remembered says 「记住…」 and the note tool records it, not extraction.",
+                "Do not store personal details of colleagues, co-authors, supervisors, family or participants (contact details, health, private life). A working fact about the project that names a collaborator's role (「统计分析由合作者负责」) may be kept as a project_fact, without contact details.",
+                "Do not store moods or passing states (frustrated, tired, in a hurry, worried about a review), and never turn one bad day into a trait of the researcher.",
+                "When the researcher tells you something you said or did was wrong, always record a correction (kind correction), written as the rule to follow next time (「引用研究结果时写明终点定义」) rather than as the content of a study; the rule below about documents does not apply to it.",
+                "What a document, abstract, protocol or pasted paper says stays in the knowledge base and in the report, not in memory: do not copy its text, numbers or conclusions here. Describe a dataset by what it is (cohort, years, size, source, kinds of variables), never by its rows, and not by its file or column names.",
                 // Production, 2026-09-19: 30 of the acceptance account's 54
                 // records were about the platform — gates, quotes, artifacts,
                 // deliverables. Code refuses the platform's identifiers (tool

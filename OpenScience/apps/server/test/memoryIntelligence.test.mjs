@@ -646,28 +646,34 @@ test("nothing but the researcher's own new message upgrades an inference", async
   assert.equal(upgradeCounter(), 0, "none of the three was an upgrade");
 });
 
-test("a sensitive memory is kept in force and flagged, never parked behind a confirmation that changes nothing", async () => {
-  // Both recall paths drop a sensitive record whatever its status, so parking
-  // it as "pending until confirmed" only ever implied that a confirmation would
-  // make it recallable — and none did. It is stored, flagged, and says so.
+test("a methods rule that names a record kind is kept, and a candidate the model judged sensitive or that carries an identifier is not", async () => {
+  // 「按病历号去重」 is a methods rule that holds no record number: the word list that flagged it sensitive was a regex reading
+  // language (2026-10-12 review). What is not kept is decided by the model's own `sensitive` judgement and by identifier shapes.
   const client = new MemoryStoreDouble();
+  const statement = "请记住：这批分析统一按病历号去重，不要按姓名。我自己有 2 型糖尿病。患者手机 13812345678 已随访。";
   const intelligence = new MemoryIntelligence(config, client, {
-    fetchImpl: modelFetch((sources) => [{
-      scope: "project", kind: "project_fact", key: "project.fact.dedup_rule",
-      value: "按病历号去重", summary: "去重口径", origin: "explicit",
-      importance: 0.8, sensitive: false,
-      sourceRef: sources[0].sourceRef, evidenceQuote: "按病历号去重",
-    }]),
+    fetchImpl: modelFetch((sources) => [
+      { scope: "project", kind: "project_fact", key: "project.fact.dedup_rule", value: "按病历号去重", summary: "这批分析统一按病历号去重",
+        origin: "explicit", importance: 0.8, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: "按病历号去重" },
+      { scope: "user", kind: "profile", key: "profile.health.diabetes", value: "研究者本人有 2 型糖尿病", summary: "研究者本人有 2 型糖尿病",
+        origin: "explicit", importance: 0.5, sensitive: true, sourceRef: sources[0].sourceRef, evidenceQuote: "我自己有 2 型糖尿病" },
+      { scope: "project", kind: "follow_up", key: "project.follow_up.patient", value: "患者手机 13812345678 已随访", summary: "患者已随访",
+        origin: "explicit", importance: 0.5, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: "患者手机 13812345678 已随访" },
+    ]),
   });
-  const result = await intelligence.recordRun(project(), run("run_sensitive"), [
-    message("u1", "请记住：这批分析统一按病历号去重，不要按姓名。"),
-  ]);
+  const result = await intelligence.recordRun(project(), run("run_sensitive"), [message("u1", statement)]);
+  const keys = (await client.listRecords()).filter((record) => record.kind !== "run_summary").map((record) => record.key);
+  assert.deepEqual(keys, ["project.fact.dedup_rule"]);
   const stored = (await client.listRecords()).find((record) => record.key === "project.fact.dedup_rule");
   assert.equal(stored.status, "active");
-  assert.equal(stored.sensitive, true);
-  assert.equal(result.pending, 0);
-  assert.equal(result.sensitive, 1, "the run can say how many it kept out of recall");
-  assert.doesNotMatch(client.reasons.find((entry) => entry.key === "project.fact.dedup_rule").reason, /pending|held/);
+  assert.equal(stored.sensitive, false);
+  assert.equal(result.rejected, 2);
+  assert.match(result.rejectionReasons.join(" "), /sensitive: extraction does not keep it/);
+  assert.match(result.rejectionReasons.join(" "), /personal identifier \(mobile\)/);
+  // What the conversation is remembered by keeps no identifier either.
+  const summary = (await client.listRecords()).find((record) => record.kind === "run_summary");
+  assert.doesNotMatch(summary.value, /13812345678/);
+  assert.match(summary.summary, /\[已省略\]/);
 });
 
 // Review R12 (owner ruling of 2026-10-10): the medicine-safety hold is retired. It parked a lasting preference that named a

@@ -1130,9 +1130,10 @@ export {
   sourceMaterialsCoverage,
   sourceMaterialsCoverageIssues,
 } from './src/sourceMaterialsLocate.mjs'
-// memoryVocabulary — 7 exports: the tags the platform writes into a
-// conversation, the identifiers it calls its own machinery by, and the words
-// and shapes a run uses to talk about its own bookkeeping — what a memory
+// memoryVocabulary — 9 exports: the tags the platform writes into a
+// conversation, the identifiers it calls its own machinery by, the words
+// and shapes a run uses to talk about its own bookkeeping, and the shapes of
+// credentials and personal identifiers no memory may hold — what a memory
 // write is checked against in code.
 export {
   PLATFORM_CONTEXT_TAGS,
@@ -1140,6 +1141,8 @@ export {
   carriesPlatformContext,
   platformIdentifiersIn,
   runBookkeepingIn,
+  identifierShapesIn,
+  maskIdentifiers,
   stripPlatformTags,
   unwrapUserWrappers,
 } from './src/memoryVocabulary.mjs'

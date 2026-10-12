@@ -462,3 +462,17 @@ test("a note answers takesEffect from what the service says is in force, and say
     "a note the researcher already undid is not in force by being noted again");
   assert.equal(undone.calls.filter((call) => call.action === "inForce").length, 0, "nothing to ask about a note that is not approved");
 });
+
+test("a note that carries a credential or anyone's identifier is not kept, even asked for, and says so; the rest of what is asked is", async (t) => {
+  const f = await fixture(t);
+  for (const content of ["记住我的 NCBI API key：sk-abcdef1234567890abcd", "记住：联系人王老师手机 13812345678", "患者身份证 11010519491231002X 的随访放在周三"]) {
+    const refused = await (await f.request("note", { factKind: "preference", content })).json();
+    assert.equal(refused.entry, null, content);
+    assert.equal(refused.takesEffect, false);
+    assert.equal(refused.status, "not_kept");
+    assert.match(refused.notice, /没有记下/);
+  }
+  assert.equal(f.calls.filter((call) => call.action === "note").length, 0, "nothing was written");
+  const taken = await (await f.request("note", { factKind: "preference", content: "记住：随访统一放在周三" })).json();
+  assert.equal(taken.takesEffect, true);
+});
