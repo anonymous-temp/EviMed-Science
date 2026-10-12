@@ -1219,6 +1219,19 @@ export {
   FRONTIER_NOTICE_KINDS,
   frontierUpdateKind,
 } from './src/frontierVocabulary.mjs'
+// projectCard — the slots a project's memory is read in (population, intervention,
+// comparator, outcome, design, data source, stage, and the specialty drawn from the
+// frontier feed's closed list) and the one check on a value: a project's field.
+export {
+  PROJECT_CARD_KEY_PREFIX,
+  PROJECT_CARD_SLOTS,
+  PROJECT_CARD_SLOT_LABELS_ZH,
+  PROJECT_FIELD_LABELS_ZH,
+  PROJECT_FIELD_MAX,
+  canonicalProjectField,
+  projectCardKey,
+  projectCardSlotOfKey,
+} from './src/projectCard.mjs'
 // frontierSourceNames — 2 exports: what a reader calls a source — the
 // institution, by the registry's owner entity, never the feed or interface the
 // plugin reads it through (the table is `frontier-source-names.json`).

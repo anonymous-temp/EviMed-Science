@@ -21,7 +21,7 @@
  *
  * - `decided` — a structural fact code can settle: an id string appears or it
  *   does not, a record of a kind was written in a project or it was not, how
- *   many records one restated fact produced (at most, or at least, per kind),
+ *   many records one restated fact produced (at most, or at least, per kind), which keys they were written under,
  *   whether a tagged brief ever reached the extractor, whether the code that
  *   refuses identifier shapes sees the identifiers a replay carries.
  * - `needs-judgement` — whether a summary states a fact, whether a sentence is
@@ -73,12 +73,15 @@ export const REQUIRED_CLASSES = Object.freeze([
   "transient-emotion",
   "pasted-document-content",
   "patient-religion",
+  // The project card (2026-10-12): a described study is kept under the card's own keys, a question is not read as a study.
+  "project-card-slots",
+  "project-card-not-guessed",
 ]);
 
 /** The fields a decided case may use in `expect`; a misspelt one would otherwise decide nothing and read as `not-run`. */
 export const EXPECT_FIELDS = Object.freeze([
   "noTextContains", "noRecordOfKinds", "atMostRecords", "requireKinds", "requireTextContains",
-  "briefRefusedWhenTagged", "identifierShapes",
+  "briefRefusedWhenTagged", "identifierShapes", "requireKeys", "keyValues",
 ]);
 
 /** @returns {Promise<any[]>} */
@@ -108,6 +111,15 @@ export function caseIssues(item) {
   if (required !== undefined && !(required && typeof required === "object" && !Array.isArray(required)
     && Object.values(required).every((count) => Number.isInteger(count) && count > 0))) {
     issues.push(`${item.file}: expect.requireKinds is not a map from a record kind to a positive count`);
+  }
+  const keys = item.expect?.requireKeys;
+  if (keys !== undefined && !(Array.isArray(keys) && keys.length > 0 && keys.every((key) => typeof key === "string" && key))) {
+    issues.push(`${item.file}: expect.requireKeys is not a list of memory keys`);
+  }
+  const values = item.expect?.keyValues;
+  if (values !== undefined && !(values && typeof values === "object" && !Array.isArray(values)
+    && Object.values(values).every((allowed) => Array.isArray(allowed) && allowed.length > 0 && allowed.every((value) => typeof value === "string")))) {
+    issues.push(`${item.file}: expect.keyValues is not a map from a memory key to the values it may hold`);
   }
   if (!item.decidable && typeof item.judge !== "string") issues.push(`${item.file}: an undecidable case names no judge question`);
   return issues;
@@ -149,6 +161,19 @@ export function decidedVerdicts(item, written) {
     for (const [kind, least] of Object.entries(expect.requireKinds)) {
       const found = written.filter((record) => record.kind === kind);
       verdicts.push({ check: `at least ${least} ${kind} record(s)`, passed: found.length >= least, detail: `${found.length} written` });
+    }
+  }
+  // Which keys the records were written under, and what a key holds when it closes its values: both are read off the record,
+  // never off its prose.
+  if (Array.isArray(expect.requireKeys)) {
+    for (const key of expect.requireKeys) {
+      verdicts.push({ check: `some record is written under ${key}`, passed: written.some((record) => record.key === key), detail: written.map((record) => record.key).join(", ") });
+    }
+  }
+  if (expect.keyValues && typeof expect.keyValues === "object") {
+    for (const [key, allowed] of Object.entries(expect.keyValues)) {
+      const held = written.filter((record) => record.key === key);
+      verdicts.push({ check: `${key} holds only ${allowed.join(" / ")}`, passed: held.every((record) => allowed.includes(record.value)), detail: held.map((record) => record.value).join(" | ") });
     }
   }
   if (Array.isArray(expect.requireTextContains)) {
