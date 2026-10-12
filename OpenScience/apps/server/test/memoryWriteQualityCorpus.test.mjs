@@ -1,16 +1,20 @@
-// The write-quality incidents as an eval corpus (audit 2026-09-26, M-9).
+// The write-quality incidents as an eval corpus (audit 2026-09-26, M-9), and
+// the fourteen synthetic replays of 2026-10-12 beside them.
 //
 // The live replay needs a model and runs offline in `evals/`. What this file
 // holds without one: that the corpus is whole — one case per class, each with
 // the verbatims it was filed from — and that the classes code can decide are
 // decided the way the case expects when the incident's own candidate comes
-// back from the model.
+// back from the model. For the synthetic replays that also means: the checks
+// that say a record must be kept read the records, the identifiers a replay
+// carries are shapes the code refuses, and the candidates a leaking model
+// could return are refused for the reason the case names.
 import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { PLATFORM_CONTEXT_TAGS } from "@evimed/domain";
+import { PLATFORM_CONTEXT_TAGS, identifierShapesIn } from "@evimed/domain";
 import { MemoryIntelligence, conversationMemorySources } from "../src/memoryIntelligence.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -52,14 +56,17 @@ test("the corpus holds one well-formed case of every write-quality class", () =>
   }
 });
 
-test("the catch-all incident, replayed with the model's own candidate, is refused at write time", async () => {
-  const item = cases.find((entry) => entry.class === "default-project-follow-up");
+/**
+ * A case's `incidentCandidates` as the model's answer, run through the extractor's own validation.
+ * @param {any} item @returns {Promise<{ result: any, written: any[] }>}
+ */
+async function replayCandidates(item) {
   const store = new StoreDouble();
   const result = await new MemoryIntelligence(config, store, {
     fetchImpl: async (_input, init) => {
       const sources = JSON.parse(JSON.parse(String(init.body)).messages[1].content).sources;
       return Response.json({ choices: [{ message: { content: JSON.stringify({
-        candidates: item.replay.incidentCandidates.map((candidate) => ({
+        candidates: item.replay.incidentCandidates.map(({ refusedBecause: _expected, ...candidate }) => ({
           importance: 0.6, sensitive: false, ...candidate,
           sourceRef: sources.find((source) => source.sourceRef.endsWith(`/messages/${candidate.sourceRef}`)).sourceRef,
         })),
@@ -67,8 +74,12 @@ test("the catch-all incident, replayed with the model's own candidate, is refuse
     },
   }).recordRun({ id: item.replay.projectId, userId: "usr_eval" }, { id: "run_eval", sessionId: "session_eval", status: "succeeded",
     finishedAt: "2026-09-26T00:00:00Z" }, runner.replayMessages(item));
+  return { result, written: [...store.records.values()].filter((record) => record.kind !== "run_summary") };
+}
 
-  const written = [...store.records.values()].filter((record) => record.kind !== "run_summary");
+test("the catch-all incident, replayed with the model's own candidate, is refused at write time", async () => {
+  const item = cases.find((entry) => entry.class === "default-project-follow-up");
+  const { result, written } = await replayCandidates(item);
   assert.equal(result.proposed, 1, "the incident's candidate reached validation");
   assert.deepEqual(runner.decidedVerdicts(item, written).map((verdict) => verdict.passed), [true]);
 });
@@ -92,4 +103,94 @@ test("the code-decided checks read the written records, not their prose", () => 
     { key: "a", kind: "follow_up", value: "x", summary: "" }, { key: "b", kind: "follow_up", value: "y", summary: "" },
   ]).map((verdict) => verdict.passed), [false]);
   assert.deepEqual(runner.decidedVerdicts(byClass["hollow-summary"], []), [], "a judgement class has no code verdict");
+});
+
+const synthetic = cases.filter((item) => item.replay.synthetic === true);
+
+test("the synthetic replays of 2026-10-12 each say how the earlier extractor fared on what it wrote", () => {
+  assert.equal(synthetic.length, 14, "fourteen synthetic replays");
+  for (const item of synthetic) {
+    assert.equal(item.decidable, true, `${item.id} is decided by code`);
+    const verdicts = runner.decidedVerdicts(item, item.written);
+    assert.ok(verdicts.length > 0, `${item.id} decides something`);
+    // `written` is a sample of what the earlier extractor wrote: the failing one where it failed, so the case is not vacuous.
+    assert.equal(verdicts.every((verdict) => verdict.passed), item.preChange === "held",
+      `${item.id}: preChange ${item.preChange}, yet the sample is judged ${verdicts.map((verdict) => verdict.passed).join("/")}`);
+  }
+  assert.deepEqual(synthetic.filter((item) => item.preChange === "held").map((item) => item.class).sort(),
+    ["credentials", "run-tool-and-field-names", "standing-method-and-format", "standing-role-and-focus"]);
+});
+
+test("a record that must be kept is checked by kind and by a string it carries, and a typo in a check is a shape error", () => {
+  const byClass = Object.fromEntries(cases.map((item) => [item.class, item]));
+  /** The checks of a case that its written records fail, by name. */
+  const failing = (item, written) => runner.decidedVerdicts(item, written).filter((verdict) => !verdict.passed).map((verdict) => verdict.check);
+  const record = (kind, value, key = `k.${kind}`) => ({ key, kind, value, summary: "" });
+
+  assert.deepEqual(failing(byClass["standing-method-and-format"], [record("preference", "a", "p1"), record("preference", "b", "p2"), record("preference", "c", "p3")]), []);
+  assert.deepEqual(failing(byClass["standing-method-and-format"], [record("preference", "a", "p1"), record("preference", "b", "p2")]),
+    ["at least 3 preference record(s)"], "two of three is not enough");
+  assert.deepEqual(failing(byClass["standing-method-and-format"], []), ["at least 3 preference record(s)"], "nothing written is a failure where something must be");
+  assert.deepEqual(failing(byClass["research-tool-preferences"], [record("preference", "检索用 PubMed 和 Embase")]), []);
+  assert.deepEqual(failing(byClass["research-tool-preferences"], [record("preference", "报告用中文")]), ["some record carries PubMed"],
+    "a preference without the tools is not the one asked for");
+  const cohort = [record("project_fact", "队列", "a"), record("project_fact", "变量", "b"), record("project_fact", "终点", "c"), record("decision", "IPTW")];
+  assert.deepEqual(failing(byClass["project-shape-and-decision"], [...cohort.slice(0, 1), record("project_fact", "约 3200 例", "b"), ...cohort.slice(2)]), []);
+  assert.deepEqual(failing(byClass["project-shape-and-decision"], cohort), ["some record carries 3200"], "the data source is what the earlier extractor refused");
+  assert.deepEqual(failing(byClass["user-correction"], [record("correction", "引用时写明复合终点")]), []);
+  assert.deepEqual(failing(byClass["user-correction"], [record("correction", "HR 约为 0.88")]), ["no record carries 0.88"], "the study's number is not what is kept");
+  assert.deepEqual(failing(byClass["user-correction"], [record("preference", "引用时写明复合终点")]), ["at least 1 correction record(s)"]);
+  assert.deepEqual(failing(byClass["standing-role-and-focus"], [record("profile", "a", "r"), record("profile", "b", "f")]), []);
+  assert.deepEqual(failing(byClass["standing-role-and-focus"], [record("profile", "a", "r"), record("profile", "b", "f"), record("project_fact", "出血风险问题")]),
+    [`no project_fact record in ${byClass["standing-role-and-focus"].replay.projectId}`]);
+
+  const misspelt = { ...byClass["credentials"], file: "x.json", expect: { noTextContain: ["a"] } };
+  assert.match(runner.caseIssues(misspelt).join("\n"), /noTextContain is not a check the runner decides/);
+  const countless = { ...byClass["standing-method-and-format"], file: "x.json", expect: { requireKinds: { preference: 0 } } };
+  assert.match(runner.caseIssues(countless).join("\n"), /requireKinds is not a map from a record kind to a positive count/);
+  const unsaid = { ...byClass["credentials"], file: "x.json", preChange: undefined };
+  assert.match(runner.caseIssues(unsaid).join("\n"), /preChange/);
+});
+
+test("the identifiers a replay carries are shapes the code refuses, and no other replay message looks like one", () => {
+  const shaped = cases.filter((item) => item.expect?.identifierShapes);
+  assert.deepEqual(shaped.map((item) => item.class).sort(), ["credentials", "patient-identifiers", "third-party-details"]);
+  for (const item of shaped) {
+    const verdicts = runner.shapeVerdicts(item, { identifierShapesIn });
+    assert.equal(verdicts.length, item.expect.identifierShapes.length);
+    assert.ok(verdicts.every((verdict) => verdict.passed), `${item.id}: ${verdicts.filter((verdict) => !verdict.passed).map((verdict) => verdict.check).join("; ")}`);
+  }
+  // A shape that fires on an NCT number, a DOI, a dose or a dataset name would refuse real research memory.
+  for (const item of cases) {
+    for (const message of item.replay.messages) {
+      if (item.expect?.identifierShapes && message.role === "user") continue;
+      assert.deepEqual(identifierShapesIn(message.text), [], `${item.id}/${message.id} reads as an identifier`);
+    }
+  }
+  // And the check is not vacuous: take the key out of its message and the credential shape is gone.
+  const credentials = cases.find((item) => item.class === "credentials");
+  const stripped = { ...credentials, replay: { ...credentials.replay, messages: credentials.replay.messages.map((message) => ({ ...message, text: message.text.replace(/[0-9a-f]{36}/, "") })) } };
+  assert.deepEqual(runner.shapeVerdicts(stripped, { identifierShapesIn }).map((verdict) => verdict.passed), [false]);
+});
+
+test("the candidates a leaking model could return are refused in code, each for the reason its case names", async () => {
+  const reasons = {
+    identifier: /carries a credential or a personal identifier/,
+    sensitive: /is sensitive: extraction does not keep it/,
+    bookkeeping: /is the run's own bookkeeping/,
+  };
+  const replayed = synthetic.filter((item) => item.replay.incidentCandidates);
+  assert.deepEqual(replayed.map((item) => item.class).sort(),
+    ["credentials", "own-health", "patient-identifiers", "run-tool-and-field-names", "third-party-details"]);
+  for (const item of replayed) {
+    const { result, written } = await replayCandidates(item);
+    assert.equal(result.proposed, item.replay.incidentCandidates.length, `${item.id}: every candidate reached validation`);
+    assert.equal(written.length, 0, `${item.id}: nothing was stored: ${written.map((record) => record.key).join(", ")}`);
+    for (const candidate of item.replay.incidentCandidates) {
+      const reason = result.rejectionReasons.find((text) => text.includes(`"${candidate.key}"`));
+      assert.ok(reason, `${item.id}: ${candidate.key} was not refused (${result.rejectionReasons.join(" | ")})`);
+      assert.match(reason, reasons[candidate.refusedBecause], `${item.id}: ${candidate.key} was refused for another reason`);
+    }
+    assert.ok(runner.decidedVerdicts(item, written).every((verdict) => verdict.passed), `${item.id}: the case's own checks pass on what was stored`);
+  }
 });

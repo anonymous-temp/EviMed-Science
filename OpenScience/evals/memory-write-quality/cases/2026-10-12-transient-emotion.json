@@ -1,0 +1,25 @@
+{
+  "id": "2026-10-12-transient-emotion",
+  "class": "transient-emotion",
+  "observedIn": "synthetic replay of 2026-10-12 (memory-extraction replay, case C12), deepseek-flash, temperature 0; the extractor as it stood before the 2026-10-12 change passed 1 of 3 samples",
+  "written": [
+    { "kind": "follow_up", "scope": "project", "key": "project.reviewer2_statistics_comments", "value": "Reviewer 2 的统计学意见共三条：缺失数据处理、多重比较校正、倾向评分的平衡性诊断。", "summary": "Reviewer 2 提出三条统计学意见：缺失数据处理、多重比较校正、倾向评分的平衡性诊断。" }
+  ],
+  "whyItIsWrong": "A bad day, then a request to carry on. In 2 of 3 samples the extractor filed the reviewer's statistical comments, a list the assistant had just produced, as a follow-up, so it came back as the researcher's to-do. A mood is not kept, and a one-off request is answered in the conversation.",
+  "expected": "Nothing is written from this exchange: no profile or behaviour from the mood, and the comments are not filed as a to-do.",
+  "decidable": true,
+  "preChange": "failed",
+  "replay": {
+    "synthetic": true,
+    "projectId": "proj_af_rwe",
+    "messages": [
+      { "id": "u1", "role": "user", "text": "今天被审稿人怼惨了，心情特别差，真的不想改了，先随便聊聊。" },
+      { "id": "a1", "role": "assistant", "text": "审稿意见看着确实让人沮丧，想先歇一会儿也很正常。等你想回头看的时候，我们可以把意见逐条拆开。" },
+      { "id": "u2", "role": "user", "text": "好吧，还是帮我把 Reviewer 2 的统计学意见列一下。" },
+      { "id": "a2", "role": "assistant", "text": "Reviewer 2 的统计学意见共三条：缺失数据处理、多重比较校正、倾向评分的平衡性诊断。" }
+    ]
+  },
+  "expect": {
+    "atMostRecords": 0
+  }
+}
