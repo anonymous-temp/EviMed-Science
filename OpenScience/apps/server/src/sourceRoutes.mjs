@@ -20,9 +20,12 @@ async function bodyOf(req, limit, allowed) {
  * `uses` reads which conversations used a document (`GET /api/sources/:id/uses`, N-16) and `passages` finds where a search
  * of the page's box matches inside the documents' own text (N-16); each is absent where its store is, and the route then
  * answers as though there were none — a list without passages is the list it always was.
+ * `dependents` reads what rests on a document — the memories, learned methods and results that name it
+ * (`GET /api/sources/:id/dependents`, `sourceDependents.mjs`); absent, the lists are empty.
  * @param {{store:any,service:any,openList?:any,knowledge?:any,uses?:{list:(user:any,sourceId:string)=>Promise<any[]>}|null,
- *   passages?:{find:(request:{userId:string,projectId:string|null,shared:boolean,q:string})=>Promise<any>}|null,maxJsonBytes:number}} dependencies */
-export function createSourceRoutes({ store, service, openList = null, knowledge = null, uses = null, passages = null, maxJsonBytes }) {
+ *   passages?:{find:(request:{userId:string,projectId:string|null,shared:boolean,q:string})=>Promise<any>}|null,
+ *   dependents?:((request:{user:any,project:any,source:any})=>Promise<any>)|null,maxJsonBytes:number}} dependencies */
+export function createSourceRoutes({ store, service, openList = null, knowledge = null, uses = null, passages = null, dependents = null, maxJsonBytes }) {
   // The composition builds one OpenList connector for the browser's namespace and
   // shares this SourceService instance with the ingestion worker. Handing the
   // connector to the service here is what lets the leased folder sync page the
@@ -175,7 +178,7 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
     if (parts.length < 1 || parts.length > 3) throw new HttpError(404, "not_found", "Source route not found.");
     const [sourceId, action] = parts;
     const source = await service.get(user.id, sourceId, { includeDeleted: method === "DELETE" });
-    await store.requireProject(user, source.projectId);
+    const sourceProject = await store.requireProject(user, source.projectId);
     if (action === "locate" && method === "POST" && parts.length === 2) {
       const input = await bodyOf(req, maxJsonBytes, ["quote"]);
       return reply(await locateSourceQuote(service, user.id, source, input.quote));
@@ -212,6 +215,11 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
     // The conversations that used this document, newest first. The document was asked for through the account that holds it
     // (`service.get` above), and the store lists only that account's rows.
     if (action === "uses" && parts.length === 2 && method === "GET") return reply({ items: uses ? await uses.list(user, sourceId) : [] });
+    // What rests on this document: the account's own memories, learned methods and results that name it, in the document's
+    // project. The document was asked for through the account that holds it, and every read below is under that account.
+    if (action === "dependents" && parts.length === 2 && method === "GET") {
+      return reply(dependents ? await dependents({ user, project: sourceProject, source }) : { memories: [], methods: [], results: [] });
+    }
     if (parts.length > 2) throw new HttpError(404, "not_found", "Source route not found.");
     // One document, as the reader page opens it: the row's own `shared` (whether the account library holds the bytes) is a
     // column of the list query, so a single read asks for it here.
