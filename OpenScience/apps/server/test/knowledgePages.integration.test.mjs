@@ -117,6 +117,9 @@ test("the compile writes the sentences that stand as documents of the knowledge 
   const indexed = await app.app.store.database.query("SELECT count(*)::int AS n FROM evimed_kb.documents WHERE user_id=$1 AND sha256=$2 AND text_sha256=$3",
     [app.user.id, ready.payload.fingerprint.sha256, ready.payload.analysis.textSha256]);
   assert.equal(indexed.rows[0].n, 1, "the page is searched with the rest of the knowledge base");
+  const found = await app.app.kbIndex.search({ userId: app.user.id, projectId, query: "指南把口服抗凝作为非瓣膜性房颤卒中预防的基础", limit: 8 });
+  assert.ok(found.hits.some((hit) => hit.compiled === true && hit.sourceId === page.id), "a search finds the page and says it is one");
+  assert.match(found.note, /compiled from the documents[^]*cite that document, never the page/, "and the answer says what a page is for");
 
   // The researcher's edit: their line is added, and from here a recompile only adds to the page.
   const saved = await call(`/api/sources/${page.id}/note`, { method: "PUT", body: { title: "抗凝治疗", body: `${file}\n\n## 我的补充\n\n我自己的一句话，没有引文。\n` } });
@@ -129,6 +132,11 @@ test("the compile writes the sentences that stand as documents of the knowledge 
   const editedView = (await call(`/api/knowledge-pages/page?sourceId=${newPage.id}`)).body.data;
   assert.deepEqual(editedView.counts, { claims: 3, verified: 2, unverified: 0, unsupported: 1 });
   assert.equal(editedView.basis, "user");
+
+  // A page stays in its project: sharing it would put sentences where the documents they quote are not.
+  const shared = await call("/api/library", { method: "POST", body: { sourceId: newPage.id } });
+  assert.equal(shared.status, 409);
+  assert.equal(shared.body.code, "library_source_invalid");
 
   // A document the page quotes goes: the page is labelled and the project queued; nothing is hidden.
   const removal = await call(`/api/sources/${kidney.id}`, { method: "DELETE", body: { expectedRevision: (await app.app.sourceService.get(app.user.id, kidney.id)).revision } });

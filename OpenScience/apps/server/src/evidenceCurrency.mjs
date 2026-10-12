@@ -592,8 +592,13 @@ export function createEvidenceUpkeep({
                JOIN unnest($1::text[]) doi ON right(lower(i->>'id'),length(doi))=doi) ORDER BY user_id,project_id`, [dois])).rows : [];
         const memories = knowledgeChange ? (await database.query(
           `SELECT DISTINCT user_id FROM evimed_memory.record_sources WHERE source_type='doi' AND source_id=ANY($1::text[]) ORDER BY user_id`, [dois]).catch(() => ({ rows: [] }))).rows : [];
+        // The projects whose own documents carry a changed DOI: the knowledge pages that quote them are labelled (`labelSince`).
+        const documents = knowledgeChange ? (await database.query(
+          `SELECT DISTINCT user_id,project_id FROM evimed_product.documents WHERE kind='source' AND deleted_at IS NULL AND project_id IS NOT NULL
+             AND lower(payload->'metadata'->>'doi')=ANY($1::text[]) ORDER BY user_id,project_id`, [dois]).catch(() => ({ rows: [] }))).rows : [];
         accounts = [...results.map((row) => ({ userId: row.user_id, projectId: row.project_id })),
-          ...memories.filter((row) => !results.some((result) => result.user_id === row.user_id)).map((row) => ({ userId: row.user_id, projectId: null }))];
+          ...documents.filter((row) => !results.some((result) => result.user_id === row.user_id && result.project_id === row.project_id)).map((row) => ({ userId: row.user_id, projectId: row.project_id })),
+          ...memories.filter((row) => !results.some((result) => result.user_id === row.user_id) && !documents.some((document) => document.user_id === row.user_id)).map((row) => ({ userId: row.user_id, projectId: null }))];
       }
       const start = Number(state.payload?.offset) || 0;
       for (const account of accounts.slice(start, start + L.downstreamAccounts)) {

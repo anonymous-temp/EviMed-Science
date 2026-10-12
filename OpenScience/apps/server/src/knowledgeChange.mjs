@@ -119,6 +119,8 @@ export class KnowledgeChangeService {
       const status = sourceUpdateStatusOfFact(fact);
       if (!doi || status.state !== "changed") continue;
       const found = await this.memories(ownerId, projectId, { id: doi, doi }, status);
+      // The knowledge pages that quote a document of this project carrying the same DOI; a position with no project names none.
+      if (projectId !== "-") await this.pages(ownerId, projectId, { id: doi, doi }, status);
       if (found.items?.length) items.push({ identifier: fact.identifier, memories: found.items });
     }
     return { items, cursor: page.cursor, hasMore: page.hasMore };

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { workspaceLayout } from "@evimed/domain";
+import { sourceOriginOf, workspaceLayout } from "@evimed/domain";
 import { chunkDocument, embeddingText, estimateTokens, passageQuery, trigramTerms, tsqueryLiteral, tsvectorLiteral } from "./kbChunker.mjs";
 import { migrateKnowledgeBaseIndex } from "./kbPersistence.mjs";
 import { searchTokens } from "./memoryRecallPolicy.mjs";
@@ -385,6 +385,8 @@ export class KnowledgeBaseIndex {
       const analysis = payload.analysis ?? {};
       return {
         sourceId: row.id, origin: "project",
+        // A page compiled from the project's documents (`knowledgePage.mjs`): an index into them, which the answer says.
+        compiled: sourceOriginOf({ connectorType: payload.connector?.type, path: payload.paths?.[0] }) === "wiki",
         title: String(payload.metadata?.title || path.posix.basename(String(payload.paths?.[0] ?? row.id))),
         status: payload.status, path: readPath,
         searchable: sourceReadable(payload) && typeof analysis.textSha256 === "string" && Boolean(readPath),
@@ -616,10 +618,14 @@ export class KnowledgeBaseIndex {
       const page = Number.isSafeInteger(row.page) ? row.page : null;
       hits.push({ sourceId: owner.sourceId, title: owner.title, ...(page ? { page } : {}), start: window.start, end: window.end,
         snippet: window.snippet, score: Math.round(score * 10_000) / 10_000, path: owner.path, origin: owner.origin,
+        ...(owner.compiled ? { compiled: true } : {}),
         ...(row.context_prefix ? { section: row.context_prefix } : {}) });
     }
     return { mode, query, library, legs: legCounts, reranked, hits, waiting: [...waiting, ...indexing],
       ...(vectorNote ? { vectorSkipped: vectorNote } : {}),
-      note: "Each snippet is the exact text at start–end (UTF-16 offsets) of the document's parsed text; quote it verbatim and read the document at `path` for context." };
+      note: "Each snippet is the exact text at start–end (UTF-16 offsets) of the document's parsed text; quote it verbatim and read the document at `path` for context."
+        // A compiled page is an index into the documents it quotes, never evidence of its own (`knowledgePage.mjs`).
+        + (hits.some((hit) => hit.compiled === true)
+          ? " A hit marked compiled is a page compiled from the documents: each sentence of it carries the quotation and the document it comes from in an evimed-source comment; cite that document, never the page." : "") };
   }
 }

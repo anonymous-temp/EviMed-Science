@@ -407,7 +407,9 @@ class RealLedgerTests(unittest.TestCase):
         # Delivery acceptance does not imply an unqualified scientific-quality pass.
         # The two internal 循证进化 packages (tool-builder, evolution-scout) are not-run too: the module has never been
         # switched on in production. They are not public, so the coverage notice below does not count them.
-        self.assertEqual(statuses.count("not-run"), 8)
+        # knowledge-compile (2026-10-12) is the ninth: the internal compile of 「知识页」, switched off by default until the
+        # three-arm evaluation (evals/knowledge-pages) says it earns its place, so no production run is on record.
+        self.assertEqual(statuses.count("not-run"), 9)
         self.assertEqual(statuses.count("accepted"), 22)
         self.assertEqual(statuses.count("failed"), 0)
         self.assertEqual(

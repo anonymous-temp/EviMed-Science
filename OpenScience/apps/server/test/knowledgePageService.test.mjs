@@ -428,3 +428,33 @@ test("an immediate request brings the queued round forward and offers the docume
   assert.equal((await t.service.summary("u1", "p1")).pending, 3);
   assert.equal(t.enqueued[0].options.runAfter.getTime(), Date.parse("2026-10-12T08:00:00Z"));
 });
+
+test("a retraction or correction recorded for a work reaches the pages that quote a document carrying it, by recorded id and DOI only", async () => {
+  const { KnowledgeChangeService } = await import("../src/knowledgeChange.mjs");
+  const t = fixture();
+  for (const sourceId of [A, B, C]) t.addSource(sourceId);
+  await t.service.noteSourceReady("u1", "p1", A);
+  t.advance(600_001);
+  t.calls.patch = patchOf(topic("afib", claim("Rivaroxaban was non-inferior to warfarin.", A, QUOTE_A)));
+  await t.service.runJob(t.job());
+  t.enqueued.length = 0;
+  // The document carrying the DOI is found by the project's list of documents, never by what a page says.
+  t.sources.documents.list = async (userId, kind, { filter }) => ({ items: filter.metadata.doi === "10.1000/afib" ? [{ id: A }] : [] });
+  const knowledge = new KnowledgeChangeService({ pages: t.service, report: (code) => t.reports.push(code) });
+
+  const current = await knowledge.pages("u1", "p1", { id: "10.1000/afib", doi: "10.1000/afib" }, { state: "no_update" });
+  assert.deepEqual(current, { items: [], total: 0 });
+  assert.equal(t.enqueued.length, 0, "a work with nothing recorded against it changes nothing");
+
+  const changed = await knowledge.pages("u1", "p1", { id: "10.1000/afib", doi: "10.1000/afib" }, { state: "changed", updates: [{ kind: "retraction" }] });
+  assert.deepEqual(changed.items.map((item) => item.slug), ["afib"]);
+  assert.equal((await t.service.summary("u1", "p1")).stale, 1);
+  assert.ok(t.enqueued.some((entry) => entry.kind === "wiki-compile"));
+  const record = [...t.rows.values()].find((row) => row.payload.recordType === "wiki-page");
+  assert.equal(record.payload.stale.sources[0].reason, "retracted");
+
+  assert.deepEqual(await knowledge.pages("u1", "p1", { id: A }, { state: "changed", updates: [{ kind: "correction" }] }), { total: 1, items: [{ slug: "afib", title: "Title afib", sourceId: record.payload.pageSourceId }] });
+  assert.deepEqual(await new KnowledgeChangeService({}).pages("u1", "p1", { id: A }, { state: "changed" }), { unknown: "unavailable" });
+  const off = fixture({ config: { knowledgePagesEnabled: false } });
+  assert.deepEqual(await new KnowledgeChangeService({ pages: off.service }).pages("u1", "p1", { id: A }, { state: "changed" }), { unknown: "unavailable" });
+});
