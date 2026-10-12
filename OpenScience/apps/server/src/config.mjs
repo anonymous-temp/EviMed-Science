@@ -1956,13 +1956,17 @@ export function loadConfig(overrides = {}) {
     maxProjectsPerUser: Number(
       overrides.maxProjectsPerUser ?? process.env.OPEN_SCIENCE_MAX_PROJECTS_PER_USER ?? 20,
     ) || 20,
+    // How many entries a scan of one project may visit. 10,000 was below a real research project: on 2026-10-12 the
+    // owner's default project held 10,874 (6,628 of them preserved sources), and every capacity check in it — an upload,
+    // a result version — failed `project_scan_too_large`. The bound protects the server from a pathological tree, not a
+    // project from its own sources; a 100,000-entry walk is about two seconds.
     maxWorkspaceScanEntries: Number(
-      overrides.maxWorkspaceScanEntries ?? process.env.OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES ?? 10_000,
+      overrides.maxWorkspaceScanEntries ?? process.env.OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES ?? 100_000,
     ),
-    maxArchiveEntries: Number(overrides.maxArchiveEntries ?? process.env.OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES ?? 10_000),
+    maxArchiveEntries: Number(overrides.maxArchiveEntries ?? process.env.OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES ?? 100_000),
     maxArchiveBytes: Number(overrides.maxArchiveBytes ?? process.env.OPEN_SCIENCE_MAX_ARCHIVE_BYTES ?? 1024 * 1024 * 1024),
     maxProjectUsageScanEntries: Number(
-      overrides.maxProjectUsageScanEntries ?? process.env.OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES ?? 10_000,
+      overrides.maxProjectUsageScanEntries ?? process.env.OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES ?? 100_000,
     ),
     maxLogReadBytes: Number(overrides.maxLogReadBytes ?? process.env.OPEN_SCIENCE_MAX_LOG_READ_BYTES ?? 1024 * 1024),
     maxLogFileBytes: Number(overrides.maxLogFileBytes ?? process.env.OPEN_SCIENCE_MAX_LOG_FILE_BYTES ?? 10 * 1024 * 1024),

@@ -754,10 +754,10 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(compose, /OPEN_SCIENCE_MAX_JSON_BYTES:\s+\$\{OPEN_SCIENCE_MAX_JSON_BYTES:-12582912\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_FILE_BYTES:\s+\$\{OPEN_SCIENCE_MAX_FILE_BYTES:-52428800\}/);
   assert.match(compose, /OPEN_SCIENCE_PROXY_MAX_BODY_SIZE:\s+\$\{OPEN_SCIENCE_PROXY_MAX_BODY_SIZE:-73408512\}/);
-  assert.match(compose, /OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES:-10000\}/);
-  assert.match(compose, /OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES:-10000\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES:-100000\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES:-100000\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_ARCHIVE_BYTES:\s+\$\{OPEN_SCIENCE_MAX_ARCHIVE_BYTES:-1073741824\}/);
-  assert.match(compose, /OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES:-10000\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES:-100000\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_LOG_READ_BYTES:\s+\$\{OPEN_SCIENCE_MAX_LOG_READ_BYTES:-1048576\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_LOG_FILE_BYTES:\s+\$\{OPEN_SCIENCE_MAX_LOG_FILE_BYTES:-10485760\}/);
   assert.match(compose, /OPEN_SCIENCE_EXAMPLES_DIR:\s+\/app\/examples/);
@@ -1175,10 +1175,10 @@ test("web deployment env example documents required hosted settings", async () =
   assert.match(env, /^OPEN_SCIENCE_RUNTIME_SKILL_DIRS=runtime\/skills\/core,runtime\/skills\/curated-scientific,runtime\/skills\/office$/m);
   assert.match(env, /OPEN_SCIENCE_ALLOW_DIRECT_SHELL=false/);
   assert.match(env, /OPEN_SCIENCE_PROXY_MAX_BODY_SIZE=73408512/);
-  assert.match(env, /OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES=10000/);
-  assert.match(env, /OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES=10000/);
+  assert.match(env, /OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES=100000/);
+  assert.match(env, /OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES=100000/);
   assert.match(env, /OPEN_SCIENCE_MAX_ARCHIVE_BYTES=1073741824/);
-  assert.match(env, /OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES=10000/);
+  assert.match(env, /OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES=100000/);
   assert.match(env, /OPEN_SCIENCE_MAX_LOG_FILE_BYTES=10485760/);
   assert.match(env, /OPEN_SCIENCE_MAX_CONCURRENT_TASKS_PER_PROJECT=1/);
   assert.match(env, /OPEN_SCIENCE_MAX_QUEUED_TASKS=100/);
