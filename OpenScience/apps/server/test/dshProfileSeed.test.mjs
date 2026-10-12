@@ -204,3 +204,20 @@ test("Linux flock serializes the real helper against a read-only image seed", { 
   assert.deepEqual(JSON.parse(result), { nativeClient: true, unchanged: true });
   assert.equal(readFileSync(path.join(f.profile, "cordis.patch.yml"), "utf8"), f.userPatch);
 });
+
+test("a volume's bundles follow the image's order, so a patch always finds the rows it targets (LoopX, 2026-10-12)", async () => {
+  const { mergeProfileBundles } = await import(helperUrl);
+  const image = ["@deepseek-ai/dsh-base", "@changfenhuang/dsh-annotation", "@deepseek-ai/dsh-web-app", "dsh-loopx-plugin", "@evimed/dsh-socket", "dsh-cite", "dsh-mermaid"];
+  const beforeLoopx = image.filter((name) => name !== "dsh-loopx-plugin");
+  // A volume made before LoopX shipped: the new bundle goes before the socket whose patch disables its rows.
+  assert.deepEqual(mergeProfileBundles(beforeLoopx, image), image);
+  // A volume an earlier sync appended it to (production): put right.
+  assert.deepEqual(mergeProfileBundles([...beforeLoopx, "dsh-loopx-plugin"], image), image);
+  // An operator's own bundle keeps its slot, before or between the image's.
+  assert.deepEqual(mergeProfileBundles(["user-plugin", ...beforeLoopx, "dsh-loopx-plugin"], image), ["user-plugin", ...image]);
+  assert.deepEqual(mergeProfileBundles(["@deepseek-ai/dsh-base", "user-plugin", "@evimed/dsh-socket"], ["@deepseek-ai/dsh-base", "dsh-loopx-plugin", "@evimed/dsh-socket"]),
+    ["@deepseek-ai/dsh-base", "user-plugin", "dsh-loopx-plugin", "@evimed/dsh-socket"]);
+  // An image bundle the image no longer lists is the operator's to remove; a second sync changes nothing.
+  assert.deepEqual(mergeProfileBundles([...image, "retired-bundle"], image), [...image, "retired-bundle"]);
+  assert.deepEqual(mergeProfileBundles(mergeProfileBundles(beforeLoopx, image), image), image);
+});

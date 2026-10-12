@@ -152,7 +152,33 @@ function recover(profile, managedPackages) {
   return true;
 }
 
-/** Reconcile managed package roots only; all user files and package order survive. */
+/**
+ * A volume's bundle list after the image's: the image's own bundles in the image's order, every other bundle where the
+ * operator put it.
+ *
+ * Order is not cosmetic. A bundle's patch can only target a row an earlier bundle made, and the socket's patch disables
+ * upstream LoopX rows (`loopx-init-command`, `loopx-goalbar`, `loopx-driver`). A new bundle used to be appended at the end,
+ * so on every project volume made before LoopX shipped (release 15, 2026-10-11) `dsh-loopx-plugin` came after
+ * `@evimed/dsh-socket`: the socket's patch found none of those rows, LoopX then added them enabled, upstream `/loopx-init`
+ * registered first and `evimed-loopx-bootstrap` failed on the name — no EviMed LoopX prompt section, an upstream
+ * initializer that may pip-install, and a deployment switch that no longer turned LoopX off (production, 2026-10-12).
+ * A missing bundle goes before the first image bundle it precedes, and a list an earlier sync left out of order is put
+ * right; the slots the operator's bundles hold do not move.
+ * @param {readonly string[]} current @param {readonly string[]} wanted @returns {string[]}
+ */
+export function mergeProfileBundles(current, wanted) {
+  const bundles = [...current];
+  for (const [at, bundle] of wanted.entries()) {
+    if (bundles.includes(bundle)) continue;
+    const next = wanted.slice(at + 1).find((name) => bundles.includes(name));
+    bundles.splice(next === undefined ? bundles.length : bundles.indexOf(next), 0, bundle);
+  }
+  const slots = bundles.flatMap((bundle, at) => (wanted.includes(bundle) ? [at] : []));
+  for (const [n, at] of slots.entries()) bundles[at] = wanted[n];
+  return bundles;
+}
+
+/** Reconcile managed package roots only; all user files and the operator's own bundles survive. */
 export function migrateProfileSeed(seedHome, targetHome, profile, { checkpoint = (_step) => {} } = {}) {
   const seed = path.resolve(seedHome);
   const home = path.resolve(targetHome);
@@ -170,8 +196,7 @@ export function migrateProfileSeed(seedHome, targetHome, profile, { checkpoint =
   const original = stat(path.join(dir, "package.json")) ? readObject(path.join(dir, "package.json")) : desired;
   if (!record(original.dependencies ?? {}) || !record(original.dsh ?? {}) || !record(original.dsh?.profile ?? {})
     || !Array.isArray(original.dsh?.profile?.bundles ?? [])) fail("invalid profile manifest");
-  const bundles = [...(original.dsh?.profile?.bundles ?? [])];
-  for (const bundle of desired.dsh?.profile?.bundles ?? []) if (!bundles.includes(bundle)) bundles.push(bundle);
+  const bundles = mergeProfileBundles(original.dsh?.profile?.bundles ?? [], desired.dsh?.profile?.bundles ?? []);
   const merged = { ...original, dependencies: { ...original.dependencies, ...desired.dependencies },
     dsh: { ...original.dsh, profile: { ...original.dsh?.profile, bundles } } };
   const markerPath = path.join(dir, MARKER);

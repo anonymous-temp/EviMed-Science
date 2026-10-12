@@ -209,6 +209,9 @@ for _ in $(seq 1 90); do
   sleep 2
 done
 grep -q "failed to apply loader entry" "${log}" && fail "an entry did not apply"
+# The same failure in the kernel's other words: a row that applied but threw on activation (2026-10-12: the LoopX
+# bootstrap row on every project volume older than LoopX, `command "loopx-init" is already registered`).
+grep -q "did not activate" "${log}" && fail "an entry did not activate"
 # A patch row naming a target the composition does not have is a WARNING in the
 # kernel and the boot continues without it. That is the exact shape of "a plugin
 # is silently absent": the row was written, the image was built, the container
