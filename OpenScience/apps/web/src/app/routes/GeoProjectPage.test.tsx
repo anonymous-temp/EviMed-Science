@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { GEO_PROJECT } from "@/components/geo/__fixtures__/geoProjects";
@@ -349,6 +349,34 @@ describe("a GEO project's page", () => {
     expect(await screen.findByText(/还没有测过各家 AI 怎么回答这个产品/)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "品牌提及率" })).toHaveTextContent("—");
     expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();
+  });
+
+  it("starts over on a switch to another project: nothing of the first one is shown, or acted on, while the second is read", async () => {
+    let answer: (project: typeof GEO_PROJECT) => void = () => undefined;
+    client.getGeoProject.mockImplementation((id: string) => (id === "geo_masi"
+      ? Promise.resolve(GEO_PROJECT)
+      : new Promise((resolve) => { answer = resolve; })));
+    function Switch() {
+      const navigate = useNavigate();
+      return <button type="button" onClick={() => navigate("/app/geo/geo_other/visibility")}>另一个项目</button>;
+    }
+    render(
+      <MemoryRouter initialEntries={["/app/geo/geo_masi/visibility"]}>
+        <Routes>
+          <Route path="/app/geo/:geoId/:tab?" element={<><GeoProjectPage /><Switch /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId("visibility-tab")).toHaveTextContent("geo_masi:玛仕度肽注射液");
+
+    await userEvent.click(screen.getByRole("button", { name: "另一个项目" }));
+    expect(screen.queryByRole("heading", { level: 1, name: "玛仕度肽注射液" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("visibility-tab")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "更多操作" })).not.toBeInTheDocument();
+
+    answer({ ...GEO_PROJECT, id: "geo_other", projectId: "p-other", name: "另一个产品" });
+    expect(await screen.findByRole("heading", { level: 1, name: "另一个产品" })).toBeInTheDocument();
+    expect(screen.getByTestId("visibility-tab")).toHaveTextContent("geo_other:另一个产品");
   });
 
   it("says a project that is gone is gone", async () => {

@@ -77,7 +77,14 @@ type Loaded =
  * to be one beside every number.
  */
 export function GeoProjectPage() {
-  const { geoId = "", tab: tabParam } = useParams();
+  const { geoId = "" } = useParams();
+  // Everything the page holds — the project it read, an open dialog, a busy button — belongs to one project: a switch to another
+  // starts the page over, so a header still showing A never acts on B (rename, pause, export, delete all name `geoId`).
+  return <GeoProjectView key={geoId} geoId={geoId} />;
+}
+
+function GeoProjectView({ geoId }: { geoId: string }) {
+  const { tab: tabParam } = useParams();
   const navigate = useNavigate();
   const feature = useGeoFeature();
   const openConversation = useOpenGeoConversation();
