@@ -32,6 +32,16 @@ function titleKey(value) {
     .replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
+/**
+ * The year a publication date names, in the shapes the parser records (`2021`, `2021-03-05`, `Mar 2021`), or null for a date
+ * with no year in it. A format, not a reading of language.
+ * @param {unknown} value @returns {number | null}
+ */
+export function publicationYear(value) {
+  const match = /(?:^|[^0-9])((?:19|20)[0-9]{2})(?:[^0-9]|$)/.exec(String(value ?? ""));
+  return match ? Number(match[1]) : null;
+}
+
 /** @param {string} value */
 const hasCjk = (value) => /[㐀-鿿]/.test(value);
 

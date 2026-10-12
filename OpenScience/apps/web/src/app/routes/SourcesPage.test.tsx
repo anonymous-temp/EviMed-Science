@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   getSourceUnderstanding: vi.fn(),
   browseOpenList: vi.fn(), importOpenListSource: vi.fn(), listSourceFolders: vi.fn(), registerSourceFolder: vi.fn(), syncSourceFolder: vi.fn(), setSourceFolderStatus: vi.fn(),
   listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), addToLibrary: vi.fn(), removeFromLibrary: vi.fn(),
-  pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), downloadArtifact: vi.fn(), downloadKnowledgeVault: vi.fn(), listProjectOutputs: vi.fn(),
+  pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), downloadArtifact: vi.fn(), downloadKnowledgeVault: vi.fn(), listProjectOutputs: vi.fn(), getSourceComposition: vi.fn(),
   listGeoProjects: vi.fn(), getVcrHome: vi.fn(),
   toastSuccess: vi.fn(), toastError: vi.fn(),
 }));
@@ -26,7 +26,7 @@ vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOrigi
   ["listSources", "retrySource", "removeSource", "refetchSource", "addSourceLink", "addSourceNote", "getSourceNote", "saveSourceNote", "getSourceUnderstanding",
     "browseOpenList", "importOpenListSource", "listSourceFolders", "registerSourceFolder", "syncSourceFolder", "setSourceFolderStatus",
     "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
-vi.mock("@/lib/knowledgeBaseClient", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadKnowledgeVault: mocks.downloadKnowledgeVault, listProjectOutputs: mocks.listProjectOutputs }));
+vi.mock("@/lib/knowledgeBaseClient", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadKnowledgeVault: mocks.downloadKnowledgeVault, listProjectOutputs: mocks.listProjectOutputs, getSourceComposition: mocks.getSourceComposition }));
 vi.mock("@/lib/backend", () => ({ pickFiles: mocks.pickFiles, uploadFilesToWorkspace: mocks.uploadFilesToWorkspace }));
 vi.mock("@/lib/artifactFile", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadArtifact: mocks.downloadArtifact }));
 vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
@@ -151,6 +151,7 @@ describe("知识库", () => {
     mocks.downloadArtifact.mockResolvedValue(undefined);
     mocks.downloadKnowledgeVault.mockResolvedValue(undefined);
     mocks.listProjectOutputs.mockResolvedValue([]);
+    mocks.getSourceComposition.mockResolvedValue({ total: 0, dated: 0, keyworded: 0, years: [], keywords: [] });
   });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -728,6 +729,66 @@ describe("知识库", () => {
       await user.click(screen.getByRole("button", { name: "重试" }));
       expect(await screen.findByRole("list", { name: "对话产出" })).toBeInTheDocument();
       expect(mocks.listProjectOutputs).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // 2026-10-12 (knowledge base P0, report 01 V14): what the library is made of, folded at the top of the project's list.
+  describe("资料组成", () => {
+    const composition = {
+      total: 5, dated: 4, keyworded: 3,
+      years: [{ year: 2021, count: 3 }, { year: 2019, count: 1 }],
+      keywords: [{ keyword: "房颤", count: 3 }, { keyword: "华法林", count: 1 }],
+    };
+
+    it("is a fold at the top of a project's list, closed, with a ranked table and a bar in the row for the years and for the keywords", async () => {
+      mocks.getSourceComposition.mockResolvedValue(composition);
+      renderPage();
+      const fold = await screen.findByText("资料组成");
+      expect(fold.closest("details")).not.toHaveAttribute("open");
+      expect(mocks.getSourceComposition).toHaveBeenCalledWith("default");
+      // Above the types and the list, under the header.
+      expect(fold.compareDocumentPosition(await screen.findByRole("group", { name: "资料类型" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      await userEvent.click(fold);
+      const years = screen.getByRole("table", { name: "按发表年份的资料数" });
+      expect(within(years).getAllByRole("row").map((row) => row.textContent)).toEqual(["发表年份数量份数", "20213", "20191"]);
+      expect(within(years).getByRole("img", { name: "2021：3 份" })).toBeInTheDocument();
+      const keywords = screen.getByRole("table", { name: "按关键词的资料数" });
+      expect(within(keywords).getAllByRole("row").map((row) => row.textContent)).toEqual(["关键词数量份数", "房颤3", "华法林1"]);
+      // It counts and does not filter: nothing in it is a control.
+      expect(within(years).queryByRole("button")).not.toBeInTheDocument();
+      expect(within(keywords).queryByRole("link")).not.toBeInTheDocument();
+    });
+
+    it("draws only the table that three documents stand behind, and nothing where the library is smaller than that", async () => {
+      mocks.getSourceComposition.mockResolvedValue({ ...composition, keyworded: 2 });
+      renderPage();
+      await screen.findByText("资料组成");
+      expect(document.querySelector("[data-composition='years']")).not.toBeNull();
+      expect(document.querySelector("[data-composition='keywords']")).toBeNull();
+      cleanup();
+      mocks.getSourceComposition.mockResolvedValue({ ...composition, total: 2, dated: 2, keyworded: 2 });
+      renderPage();
+      await screen.findByRole("list", { name: "资料" });
+      expect(screen.queryByText("资料组成")).not.toBeInTheDocument();
+      cleanup();
+      // A read that fails leaves the page as it was, and the shared documents (no project) and the delivered files have none.
+      mocks.getSourceComposition.mockRejectedValue(new WebApiError("down", { status: 503 }));
+      renderPage();
+      await screen.findByRole("list", { name: "资料" });
+      expect(screen.queryByText("资料组成")).not.toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      cleanup();
+      mocks.getSourceComposition.mockReset();
+      mocks.getSourceComposition.mockResolvedValue(composition);
+      renderPage("/app/files?scope=shared");
+      await screen.findByRole("list", { name: "资料" });
+      expect(mocks.getSourceComposition).not.toHaveBeenCalled();
+      expect(screen.queryByText("资料组成")).not.toBeInTheDocument();
+      cleanup();
+      mocks.listProjectOutputs.mockResolvedValue([{ runId: "run_1", title: "综述", path: "deliverables/a/report.md", at: "2020-10-10T08:00:00.000Z" }]);
+      renderPage("/app/files?view=outputs");
+      await screen.findByRole("list", { name: "对话产出" });
+      expect(screen.queryByText("资料组成")).not.toBeInTheDocument();
     });
   });
 

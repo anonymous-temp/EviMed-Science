@@ -3,7 +3,7 @@ import { Navigate, useLocation, useNavigate, useNavigationType, useSearchParams 
 import { Cloud, Download, FileUp, Folder, Globe, Plus, Search, StickyNote, Upload } from "lucide-react";
 import { SOURCE_KINDS } from "@evimed/domain";
 import { fetchWebMe, getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
-import { downloadKnowledgeVault, listProjectOutputs, vaultErrorMessage, type ProjectOutput } from "@/lib/knowledgeBaseClient";
+import { downloadKnowledgeVault, getSourceComposition, listProjectOutputs, vaultErrorMessage, type LibraryComposition as Composition, type ProjectOutput } from "@/lib/knowledgeBaseClient";
 import { projectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
@@ -30,6 +30,7 @@ import { AddLinkDialog, NewNoteDialog } from "@/components/sources/AddEntryDialo
 import { DriveImportDrawerBody } from "@/components/sources/DriveImport";
 import { DuplicateGroups } from "@/components/sources/DuplicateGroups";
 import { KnowledgeScopeMenu } from "@/components/sources/KnowledgeScopeMenu";
+import { LibraryComposition } from "@/components/sources/LibraryComposition";
 import { ProjectOutputsList } from "@/components/sources/ProjectOutputsList";
 import { SourceRow } from "@/components/sources/SourceRow";
 import { isReading, isUsable } from "@/components/sources/sourceView";
@@ -187,6 +188,20 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     return () => { active = false; };
   }, [scopeProjectId, outputsAttempt]);
   const outputsView = listState.view === "outputs" && scopeProjectId !== null;
+  // 「资料组成」: what the project's library is made of, counted by the control plane over the whole project and read again when the
+  // number of documents moves. An addition to the page: a read that fails leaves the page without it.
+  const [composition, setComposition] = useState<Composition | null>(null);
+  const documentCount = counts?.all ?? null;
+  useEffect(() => {
+    setComposition(null);
+    if (!scopeProjectId || documentCount === null) return undefined;
+    let active = true;
+    getSourceComposition(scopeProjectId).then(
+      (value) => { if (active) setComposition(value); },
+      () => { /* the page stands without it */ },
+    );
+    return () => { active = false; };
+  }, [scopeProjectId, documentCount]);
   // Where a new document goes: the project the page lists, or — in the shared scope, which belongs to no project —
   // the project the tab is in.
   const addProjectId = scopeProjectId ?? currentProjectId;
@@ -479,6 +494,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
           )}
         </>}
       >
+        {composition && !outputsView && <LibraryComposition composition={composition} />}
         {kindOptions.length > 0 && (kindsPresent >= 2 || kind !== null || outputsChip) && (
           <FilterChips label="资料类型" className="mb-4" options={chipOptions} maxVisible={narrow ? 3 : chipOptions.length} value={outputsView ? "outputs" : kind ?? "all"} onChange={chooseChip} />
         )}

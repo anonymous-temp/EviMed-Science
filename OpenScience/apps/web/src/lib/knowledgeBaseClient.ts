@@ -32,6 +32,22 @@ export async function listProjectOutputs(projectId: string): Promise<ProjectOutp
   return Array.isArray(page.items) ? page.items : [];
 }
 
+/**
+ * What a project's library is made of (`GET /api/sources/composition`): how many documents it holds, how many of them say a year and
+ * keywords, and the two tables — years newest first, keywords most first. Counted by the control plane over the whole project.
+ */
+export interface LibraryComposition {
+  total: number;
+  dated: number;
+  keyworded: number;
+  years: Array<{ year: number; count: number }>;
+  keywords: Array<{ keyword: string; count: number }>;
+}
+
+export function getSourceComposition(projectId: string) {
+  return productRequest<LibraryComposition>(`/sources/composition?${new URLSearchParams({ projectId })}`);
+}
+
 /** The memory page, with one memory's drawer open (`?record=`, the address an inbox notice carries). */
 export const memoryRecordPath = (recordId: string) => `/app/memory?record=${encodeURIComponent(recordId)}`;
 /** The memory page, with one learned method's drawer open (`?method=`). */

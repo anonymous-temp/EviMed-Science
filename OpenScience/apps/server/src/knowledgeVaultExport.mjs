@@ -26,6 +26,7 @@
 import { zipSync } from "fflate";
 import { HttpError } from "./security.mjs";
 import { sourceDisplayOf } from "./sourceDisplay.mjs";
+import { publicationYear } from "./sourceMetadata.mjs";
 import { sourceReadable } from "./sourceService.mjs";
 
 /** Where the compiled pages live, relative to the project's base folder. */
@@ -66,12 +67,6 @@ export function frontMatter(fields) {
     else if (clean(value)) lines.push(`${key}: ${quoted(clean(value))}`);
   }
   return `---\n${lines.join("\n")}\n---\n`;
-}
-
-/** The year a publication date names, when it names one in the usual shapes (`2021`, `2021-03-05`, `Mar 2021`). @param {unknown} value */
-function yearOf(value) {
-  const match = /(?:^|[^0-9])((?:19|20)[0-9]{2})(?:[^0-9]|$)/.exec(String(value ?? ""));
-  return match ? Number(match[1]) : null;
 }
 
 /** A quotation as a blockquote under its claim: every line the document's own, prefixed and nothing else changed. @param {string} quote */
@@ -229,7 +224,7 @@ export class KnowledgeVaultExport {
       const { metadata, source, display, authored, understanding } = entry;
       const authors = (metadata.authors ?? []).map(clean).filter(Boolean);
       const front = frontMatter([
-        ["title", entry.title], ["authors", authors], ["year", yearOf(metadata.publicationDate)], ["doi", metadata.doi],
+        ["title", entry.title], ["authors", authors], ["year", publicationYear(metadata.publicationDate)], ["doi", metadata.doi],
         ["source", metadata.source || source.payload?.link?.site || null], ["url", source.payload?.link?.url || null],
         ["type", display.typeLabel], ["keywords", (metadata.keywords ?? []).map(clean).filter(Boolean)],
       ]);
@@ -248,7 +243,7 @@ export class KnowledgeVaultExport {
 
     const meta = (/** @type {typeof entries[number]} */ entry) => {
       const authors = (entry.metadata.authors ?? []).map(clean).filter(Boolean);
-      return [authors.length > 0 ? `${authors.slice(0, 2).join("、")}${authors.length > 2 ? " 等" : ""}` : "", yearOf(entry.metadata.publicationDate) ?? ""].filter(Boolean).join(" · ");
+      return [authors.length > 0 ? `${authors.slice(0, 2).join("、")}${authors.length > 2 ? " 等" : ""}` : "", publicationYear(entry.metadata.publicationDate) ?? ""].filter(Boolean).join(" · ");
     };
     add("index.md", [frontMatter([["title", clean(project.name) || "知识库"]]),
       `# ${clean(project.name) || "知识库"}`, "",

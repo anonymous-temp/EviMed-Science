@@ -237,6 +237,7 @@ import { SourceUses, nameConversations, recordSourceUsesOfRun } from "./sourceUs
 import { createSourceDependents } from "./sourceDependents.mjs";
 import { KnowledgeVaultExport } from "./knowledgeVaultExport.mjs";
 import { projectDeliverables } from "./projectDeliverables.mjs";
+import { projectComposition } from "./sourceComposition.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
 import { createSourceMaterials } from "./sourceMaterials.mjs";
@@ -1661,6 +1662,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         isInternal: agent => registry?.get?.(agent)?.visibility === "internal",
       });
     },
+    // 资料组成: the library counted by year and keyword, in SQL over the account's documents of the project.
+    composition: productDatabase ? (userId, project) => projectComposition(productDatabase, userId, project.id) : null,
     maxJsonBytes: config.maxJsonBytes });
   // One admission for every way a file reaches `knowledge-base/`: the upload
   // route and the upload command both refuse a format the knowledge base
