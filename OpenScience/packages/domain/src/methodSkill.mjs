@@ -33,7 +33,7 @@
  * test walks that list, because an issue code that no test constructs is a
  * rule nobody has ever seen fire.
  */
-import { SKILL_AUTHORING_LIMITS } from './constants.mjs'
+import { HANDBOOK_TEXT_LIMITS, SKILL_AUTHORING_LIMITS } from './constants.mjs'
 import { RUNTIME_SKILL_ROOTS } from './skillRoots.mjs'
 import { unmountedToolReferences, MOUNTED_TOOL_NAMES } from './toolNames.mjs'
 import { hasSensitiveText, sensitiveTextTokens } from './sensitiveText.mjs'
@@ -386,6 +386,25 @@ export function renderSkillFrontmatter(frontmatter) {
 /** @param {Record<string, unknown>} frontmatter @param {string} body @returns {string} */
 export function renderMethodSkill(frontmatter, body) {
   return `${renderSkillFrontmatter(frontmatter)}\n\n${String(body ?? '').trim()}\n`
+}
+
+/**
+ * The text of a lesson as a platform handbook carries it, and its length: name, description and body, the description on one line and the body
+ * trimmed. The control plane's field check (`handbookFieldChecks`) and the `method-candidate` contract read the length from here, so the run is
+ * held to the number it will be judged by.
+ * @param {{name?: unknown, description?: unknown} | null | undefined} frontmatter @param {unknown} body
+ * @returns {{ name: string, description: string, body: string, length: number }}
+ */
+export function handbookText(frontmatter, body) {
+  const name = String(frontmatter?.name ?? '').trim()
+  const description = String(frontmatter?.description ?? '').replace(/\s+/g, ' ').trim()
+  const text = typeof body === 'string' ? body.trim() : ''
+  return { name, description, body: text, length: `${name}\n${description}\n${text}`.length }
+}
+
+/** Whether a lesson's text is within what the platform's handbooks take. @param {{ length: number }} text @returns {boolean} */
+export function handbookTextFits(text) {
+  return text.length <= HANDBOOK_TEXT_LIMITS.max
 }
 
 /* -------------------------------------------------------------------- cards */

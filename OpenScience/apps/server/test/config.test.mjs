@@ -631,6 +631,23 @@ test("a third of the finished deliveries queue a distillation by default, the sh
   }
 });
 
+test("the loop learns nothing from a repaired delivery by default, and stops a method its model never opens after twenty loads (owner, 2026-10-12)", () => {
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn" }).learningRepairDistillShare, 0);
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn", learningRepairDistillShare: 1 }).learningRepairDistillShare, 1, "every repaired delivery, as before");
+  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: "0.25" }).learningRepairDistillShare, 0.25);
+  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: "" }).learningRepairDistillShare, 0, "an empty value is unset, as .env.example and compose leave it");
+  for (const bad of ["2", "-1", "some"]) {
+    assert.throws(() => configUnder({ OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: bad }), /OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE must be a number from 0 to 1/, bad);
+  }
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn" }).learningUnusedRetireLoads, 20);
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn", learningUnusedRetireLoads: 0 }).learningUnusedRetireLoads, 0, "zero is the switch, not an error");
+  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS: "35" }).learningUnusedRetireLoads, 35);
+  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS: "" }).learningUnusedRetireLoads, 20, "an empty value is unset");
+  for (const bad of ["-1", "2.5", "many"]) {
+    assert.throws(() => configUnder({ OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS: bad }), /OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS must be a whole number of at least 0/, bad);
+  }
+});
+
 test("the agent run monitor outlasts a systematic review by default", () => {
   // A day since 2026-09-21: no time ceiling may end a run that is working
   // while the product is being tested (owner ruling).

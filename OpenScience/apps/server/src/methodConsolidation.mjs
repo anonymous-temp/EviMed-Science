@@ -291,6 +291,7 @@ export class MethodConsolidation {
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any,
    *          jobs?: any, judgeService?: any, screenBaseline?: any, handbookConsolidation?: any, platformTools?: () => Promise<any[]>,
    *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date,
+   *          unusedAfterLoads?: number, onRetirement?: ((code: string) => void) | null,
    *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>,
    *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null}} dependencies
    */
@@ -298,6 +299,7 @@ export class MethodConsolidation {
     dispatch, readResult, learning, jobs = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     describe = null, handbookConsolidation = null, platformTools = async () => [], judgeService = null, screenBaseline = null,
+    unusedAfterLoads = undefined, onRetirement = null,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
@@ -325,6 +327,10 @@ export class MethodConsolidation {
     // Optional: the line a researcher reads for a method that came without one
     // (`methodDisplay.mjs`). A pass without it still consolidates.
     this.describe = describe;
+    // Answered runs that may carry a method's card without one opening it before the method is stopped (`OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS`);
+    // undefined is the domain's own default. `onRetirement` is told the branch (`retirementProposal`'s code) of each method this pass stopped.
+    this.unusedAfterLoads = unusedAfterLoads;
+    this.onRetirement = onRetirement;
   }
 
   /**
@@ -447,20 +453,25 @@ export class MethodConsolidation {
     // pass's result (`retirements`), and nothing is posted to the inbox — the
     // library's housekeeping used to arrive there as quiet records, in
     // engineering words, under the 「自动运行」 fold (plan 2026-09-23 §5.8).
-    const retirements = await this.learning.retirementProposals(job.userId, { nowMs: this.now().getTime() });
+    const retirements = await this.learning.retirementProposals(job.userId, {
+      nowMs: this.now().getTime(),
+      ...(this.unusedAfterLoads !== undefined ? { unusedAfterLoads: this.unusedAfterLoads } : {}),
+    });
     for (const entry of retirements) {
       if (!entry.proposal.immediate) continue;
       // The results produced under the body it holds were found wrong more often than its predecessors': the answer is
       // the exact earlier body when there is a sound one, a stop when there is not (`scientificRegression`), and the
       // link that says why stays on the record either way.
       if (entry.proposal.code === "scientific_regression") {
-        await this.learning.applyRegression(job.userId, entry.document, entry.proposal, { retire: retirementSentence(entry.proposal) }).catch(() => null);
+        const applied = await this.learning.applyRegression(job.userId, entry.document, entry.proposal, { retire: retirementSentence(entry.proposal) }).catch(() => null);
+        if (applied) this.#told(entry.proposal.code);
         continue;
       }
-      await this.learning.retire(job.userId, entry.document.id, {
+      const stopped = await this.learning.retire(job.userId, entry.document.id, {
         expectedRevision: entry.document.revision,
         reason: retirementSentence(entry.proposal),
       }).catch(() => null);
+      if (stopped) this.#told(entry.proposal.code);
     }
 
     // Last, so no write above races these revisions: every method a researcher
@@ -497,6 +508,11 @@ export class MethodConsolidation {
       graphIssues: graph.issues.map((issue) => issue.code),
       described,
     };
+  }
+
+  /** A counter is told, never asked. @param {unknown} code */
+  #told(code) {
+    try { this.onRetirement?.(String(code ?? "")); } catch { /* a counter never decides what is stopped */ }
   }
 
   /**
@@ -793,6 +809,7 @@ export function retirementSentence(proposal) {
     harm: `用上它的 ${proposal.runs ?? "几"} 次研究里有 ${proposal.rejected ?? "多"} 次交付被退回，明显多于平常`,
     scientific_regression: `用上它后做出的 ${proposal.runs ?? "几"} 个结果里，有 ${proposal.rejected ?? "多"} 个没能被重算复现或被你改正过，明显多于它之前的版本（只说明相伴出现，不证明因果）`,
     contribution: `用上它的 ${proposal.runs ?? "多"} 次研究，整体结果偏差`,
+    never_opened: `它跟着你做了 ${proposal.runs ?? "多"} 次研究，一次也没被用上`,
     superseded: "它已经很久没被用到，而且已有新的做法取代它",
   }[String(proposal.code ?? "")] ?? "它最近没有帮上忙";
   return proposal.immediate

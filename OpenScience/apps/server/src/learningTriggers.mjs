@@ -56,6 +56,13 @@
  * so a run is in or out for good however often its completion is replayed; the others are skipped and counted. A correction and a repeated routine are
  * explicit signals and are never sampled.
  *
+ * A delivery that needed repairs inside its own run is not read by default (owner ruling of 2026-10-12: the loop learns the researcher's research methods
+ * from their corrections and edits, no longer how to pass the delivery gate). Since 2026-09-17 a verdict of the gate withholds nothing, so a repair is the
+ * platform's own bookkeeping — 21 of the 28 lessons read by 2026-10-12 were of that kind, 14 of 17 handbooks they became failed on length, and the methods
+ * the merging pass then built from them were rewordings of two lessons about anchors and recorded scope. Its share is
+ * `OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE` (0), hashed apart from the delivery sample and counted the same way. What a researcher corrects in
+ * the result (`result-corrected`, `afterCorrection`), says in the running turn, or has the extractor record as a `correction` memory stays unsampled.
+ *
  * What this module still refuses is work that is not the researcher's: an
  * automated run (an evaluation cell, a probe, an audit or acceptance harness —
  * `automated`, set by the dispatch body or the `x-evimed-automated` header),
@@ -86,6 +93,9 @@ const DELIVERY_TRIGGERS = Object.freeze(["delivered", "repair_accepted"]);
 
 /** What the delivery sample is hashed with, so it is independent of the platform handbooks' probation sample over the same runs. */
 export const DELIVERY_SAMPLE_PURPOSE = "learning-distill-delivery";
+
+/** What the repaired-delivery sample is hashed with: its own, so that a run in the delivery sample is not thereby in (or out of) this one. */
+export const REPAIR_SAMPLE_PURPOSE = "learning-distill-repair";
 
 const DAY_MS = 86_400_000;
 
@@ -374,13 +384,15 @@ export class LearningTriggers {
    *   projects?: ((userId: string) => Promise<readonly any[]>) | null, routinePeriodDays?: number,
    *   guestInfluence?: { assess: (userId: string, run: any) => Promise<{ guest: any[], uncorroborated: string[] }>,
    *     mark: (project: any, run: any, assessment: any) => Promise<unknown>, count?: (assessment: any) => void } | null,
-   *   deliveryShare?: number, onDeliverySample?: ((distilled: boolean) => void) | null }} dependencies
+   *   deliveryShare?: number, onDeliverySample?: ((distilled: boolean) => void) | null,
+   *   repairShare?: number, onRepairSample?: ((distilled: boolean) => void) | null }} dependencies
    *   `deliveryShare`: the share (0 to 1) of finished deliveries that queue a lesson; 1, the default, is every one. `onDeliverySample` is told, for
-   *   each delivery that would have queued one, whether the sample took it.
+   *   each delivery that would have queued one, whether the sample took it. `repairShare`: the same for a delivery that needed repairs inside its
+   *   own run; 0, the default, is none (`OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE`), and `onRepairSample` is told as above.
    */
   constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {},
     projects = null, routinePeriodDays = ROUTINE_PERIOD_DAYS, guestInfluence = null, canReuseRun = null, canReuseRuns = null,
-    deliveryShare = 1, onDeliverySample = null }) {
+    deliveryShare = 1, onDeliverySample = null, repairShare = 0, onRepairSample = null }) {
     if (!jobs || !agentRuns) throw new TypeError("Learning triggers need the job queue and the run ledger.");
     this.jobs = jobs;
     this.agentRuns = agentRuns;
@@ -395,21 +407,30 @@ export class LearningTriggers {
     this.guestInfluence = guestInfluence;
     this.deliveryShare = deliveryShare;
     this.onDeliverySample = onDeliverySample;
+    this.repairShare = repairShare;
+    this.onRepairSample = onRepairSample;
   }
 
   /**
-   * The lessons that stand once the delivery sample has been applied: the lesson a finished delivery queues (`delivered` or `repair_accepted`) goes only
-   * for the share of runs the hash of the run id selects, and is counted either way; every other lesson is untouched.
+   * The lessons that stand once the samples have been applied: the lesson a finished delivery queues goes only for the share of runs the hash of the
+   * run id selects, and is counted either way. A delivery accepted on its first submission (`delivered`) is sampled by `deliveryShare`; one that needed
+   * repairs inside its own run (`repair_accepted`) by `repairShare`, none by default: what a run repaired against the gate is the gate's bookkeeping
+   * (a verdict withholds nothing since 2026-09-17), and the loop is to learn the researcher's research methods. Every other lesson is untouched.
    * @param {any} run @param {readonly { trigger: string }[]} lessons
    * @returns {{ lessons: readonly any[], sampledOut: string[] }}
    */
   #sampled(run, lessons) {
-    const delivery = lessons.filter((lesson) => DELIVERY_TRIGGERS.includes(lesson.trigger));
-    if (!delivery.length) return { lessons, sampledOut: [] };
-    const taken = sampledByHash(run.id, this.deliveryShare, DELIVERY_SAMPLE_PURPOSE);
-    try { this.onDeliverySample?.(taken); } catch { /* a counter never decides what is learned */ }
-    return taken ? { lessons, sampledOut: [] }
-      : { lessons: lessons.filter((lesson) => !DELIVERY_TRIGGERS.includes(lesson.trigger)), sampledOut: delivery.map((lesson) => lesson.trigger) };
+    /** @type {string[]} */
+    const sampledOut = [];
+    const kept = lessons.filter((lesson) => {
+      if (!DELIVERY_TRIGGERS.includes(lesson.trigger)) return true;
+      const repair = lesson.trigger === "repair_accepted";
+      const taken = sampledByHash(run.id, repair ? this.repairShare : this.deliveryShare, repair ? REPAIR_SAMPLE_PURPOSE : DELIVERY_SAMPLE_PURPOSE);
+      try { (repair ? this.onRepairSample : this.onDeliverySample)?.(taken); } catch { /* a counter never decides what is learned */ }
+      if (!taken) sampledOut.push(lesson.trigger);
+      return taken;
+    });
+    return { lessons: kept, sampledOut };
   }
 
   /**

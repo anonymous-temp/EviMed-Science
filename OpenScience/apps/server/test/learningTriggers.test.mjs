@@ -11,7 +11,7 @@ import test from "node:test";
 import { METHOD_INDUCTION_MIN_TRAJECTORIES } from "@evimed/domain";
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
-  DELIVERY_SAMPLE_PURPOSE, LearningTriggers, ROUTINE_PERIOD_DAYS, correctionLessonFor, learningTriggersFor, lessonPeers, routinePeriodMs,
+  DELIVERY_SAMPLE_PURPOSE, LearningTriggers, REPAIR_SAMPLE_PURPOSE, ROUTINE_PERIOD_DAYS, correctionLessonFor, learningTriggersFor, lessonPeers, routinePeriodMs,
 } from "../src/learningTriggers.mjs";
 import { sampledByHash } from "../src/runSampling.mjs";
 import { DISTILLATION_TRIGGERS, buildDistillationInput, distillationDispatchId, lessonSignal } from "../src/methodDistillationRuns.mjs";
@@ -379,9 +379,10 @@ test("only a share of the finished deliveries queue a lesson, chosen by a hash o
   assert.deepEqual(await triggersFor([outside]).afterRun(project, outside), { queued: [], skipped: null, sampledOut: ["delivered"] });
   assert.deepEqual(enqueued.length, 1);
 
-  // The lesson of a delivery that needed repairs is the delivery's lesson and is sampled with it.
-  const repaired = sampledRun(0.33, false, { repairRounds: { content: 1, structural: 0 } });
-  assert.deepEqual(await triggersFor([repaired]).afterRun(project, repaired), { queued: [], skipped: null, sampledOut: ["repair_accepted"] });
+  // The lesson of a delivery that needed repairs is a share of its own (none by default), not the delivery's: see the test below.
+  const repaired = sampledRun(0.33, true, { repairRounds: { content: 1, structural: 0 } });
+  assert.deepEqual(await triggersFor([repaired]).afterRun(project, repaired), { queued: [], skipped: null, sampledOut: ["repair_accepted"] },
+    "a run the delivery sample would take is not thereby in the repair sample");
 
   // A correction is an explicit signal: a run the sample left out still queues it, and only the delivery lesson goes.
   const corrected = sampledRun(0.33, false, { corrections: 1 });
@@ -504,4 +505,50 @@ test("two corrections of one run are two dispatches, and a lesson with no discri
   assert.notEqual(first, second, "the second correction does not adopt the first one's bounded run");
   assert.equal(distillationDispatchId("run_1", "correction"), distillationDispatchId("run_1", "correction", ""));
   assert.match(first, /^method-distillation-[a-f0-9]{32}$/);
+});
+
+/** A run id the hash of the repair sample puts in (or out of) a share. @param {number} share @param {boolean} taken @param {Record<string, any>} [overrides] */
+function repairSampledRun(share, taken, overrides = {}) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    const candidate = run({ repairRounds: { content: 1, structural: 0 }, ...overrides });
+    if (sampledByHash(candidate.id, share, REPAIR_SAMPLE_PURPOSE) === taken) return candidate;
+  }
+  throw new Error("no run id found for the repair sample");
+}
+
+test("a delivery that needed repairs inside its run queues no lesson by default: the gate's bookkeeping is not the researcher's method (owner, 2026-10-12)", async () => {
+  const project = { id: "project_1", userId: "user_1" };
+  /** @type {any[]} */ const enqueued = [];
+  const jobs = { enqueue: async (_userId, _kind, payload, options) => { enqueued.push({ trigger: payload.trigger, key: options.idempotencyKey }); return { id: "job" }; } };
+  const counted = { repair: /** @type {boolean[]} */ ([]), delivery: /** @type {boolean[]} */ ([]) };
+  const triggersFor = (/** @type {any[]} */ ledger, /** @type {any} */ options = {}) => new LearningTriggers({
+    jobs, agentRuns: { list: async () => ledger, runWorkflowProjection: async () => ({ plan: { items: [{ id: "d1", attempts: 3 }] } }) },
+    onRepairSample: (distilled) => counted.repair.push(distilled), onDeliverySample: (distilled) => counted.delivery.push(distilled), ...options });
+
+  // The classification is the same pure one it always was; what changed is the share that goes on to cost a run.
+  const repaired = run();
+  assert.deepEqual(triggers(learningTriggersFor({ run: repaired, runs: [repaired], projection: { plan: { items: [{ id: "d1", attempts: 3 }] } } })), ["repair_accepted"]);
+
+  // Default: none, whichever way the delivery sample falls, and the skipped one is a number.
+  assert.deepEqual(await triggersFor([repaired]).afterRun(project, repaired), { queued: [], skipped: null, sampledOut: ["repair_accepted"] });
+  assert.deepEqual(enqueued, []);
+  assert.deepEqual(counted, { repair: [false], delivery: [] }, "heard by the repair counter, and not mistaken for a clean delivery");
+
+  // A researcher's correction in that same run is still a lesson, and a clean delivery is still the delivery sample's.
+  const corrected = run({ corrections: 1 });
+  assert.deepEqual(await triggersFor([corrected]).afterRun(project, corrected), { queued: ["correction"], skipped: null, sampledOut: ["repair_accepted"] });
+  const clean = run();
+  const cleanTriggers = new LearningTriggers({ jobs, agentRuns: { list: async () => [clean], runWorkflowProjection: async () => null } });
+  assert.deepEqual(await cleanTriggers.afterRun(project, clean), { queued: ["delivered"], skipped: null });
+
+  // The lever: every repaired delivery restores the old behaviour; a share is a hash of the run id, as the delivery's is.
+  const every = triggersFor([repaired], { repairShare: 1 });
+  assert.deepEqual(await every.afterRun(project, repaired), { queued: ["repair_accepted"], skipped: null });
+  const inside = repairSampledRun(0.5, true);
+  const outside = repairSampledRun(0.5, false);
+  const half = (/** @type {any} */ subject) => triggersFor([subject], { repairShare: 0.5 }).afterRun(project, subject);
+  assert.deepEqual(await half(inside), { queued: ["repair_accepted"], skipped: null });
+  assert.deepEqual(await half(outside), { queued: [], skipped: null, sampledOut: ["repair_accepted"] });
+  assert.deepEqual(await half(outside), { queued: [], skipped: null, sampledOut: ["repair_accepted"] }, "the same run, the same answer");
+  assert.notEqual(REPAIR_SAMPLE_PURPOSE, DELIVERY_SAMPLE_PURPOSE);
 });

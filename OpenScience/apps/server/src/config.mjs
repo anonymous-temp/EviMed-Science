@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
-import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, SIMULATED_START_CREDITS, VCR_MIN_CELL_SIZE } from "@evimed/domain";
+import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, METHOD_UNUSED_RETIRE_LOADS, SIMULATED_START_CREDITS, VCR_MIN_CELL_SIZE } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
@@ -519,6 +519,18 @@ function evidenceUpkeepSettings(overrides) {
     evidenceVerifyReadsPerDay: whole("evidenceVerifyReadsPerDay", "OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", 60, 1, 1000),
     evidenceChallengeDailyBudgetCny: cny("evidenceChallengeDailyBudgetCny", "OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", 5, 0, 1000),
   };
+}
+
+/**
+ * A non-negative whole number from the overrides or the environment; anything else is a misconfiguration that stops the process by name.
+ * @param {Record<string, any>} overrides @param {string} key @param {string} name @param {number} fallback
+ * @returns {number}
+ */
+function countSetting(overrides, key, name, fallback) {
+  const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
+  const value = raw == null || raw === "" ? fallback : Number(raw);
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${name} must be a whole number of at least 0, got ${JSON.stringify(raw)}.`);
+  return value;
 }
 
 /**
@@ -2926,6 +2938,17 @@ export function loadConfig(overrides = {}) {
     // distillation run, and "no change" is the common answer. The share is chosen by a hash of the run id (`runSampling.mjs`), so a run is in or out for good;
     // corrections and routines are explicit signals and are not sampled. 1 is every delivery, as before; 0 distils none from a clean delivery.
     learningDistillSampleShare: shareSetting(overrides, "learningDistillSampleShare", "OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE", 0.33),
+    // How many answered runs may carry a learned method's card without one of them opening the method before it is stopped, with the
+    // count written on it as the reason (owner ruling of 2026-10-12, live audit §4: eight cards in a run on average, one run in fifty
+    // opening any). The card costs prompt room in every research run, and the harm test cannot see a method nobody opens. Restoring a
+    // stopped method starts its count again. Zero never stops one for this. Stated beside the rule it feeds: `METHOD_UNUSED_RETIRE_LOADS`.
+    learningUnusedRetireLoads: countSetting(overrides, "learningUnusedRetireLoads", "OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS", METHOD_UNUSED_RETIRE_LOADS),
+    // The share of repaired deliveries that queue a distillation. Zero by default (owner ruling of 2026-10-12: the loop is to learn the
+    // researcher's research methods from their corrections and edits, not how to pass the delivery gate). Since 2026-09-17 a verdict of the
+    // gate withholds nothing, so what a run repaired inside its turn is the platform's own bookkeeping, and 21 of the 28 lessons the loop
+    // had read by 2026-10-12 were of that kind, filed as account handbooks that 14 of 17 platform candidates then failed on length.
+    // Chosen by a hash of the run id like the delivery sample, independent of it; 1 restores every repaired delivery.
+    learningRepairDistillShare: shareSetting(overrides, "learningRepairDistillShare", "OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE", 0),
     // Who sees the operations page.
     //
     // An id list, empty by default, no new role and no approval flow. It gates one surface — the

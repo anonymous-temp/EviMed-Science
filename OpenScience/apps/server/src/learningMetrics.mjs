@@ -34,7 +34,9 @@ import { OPEN_COST_VALUE } from "./usageLedger.mjs";
 const METHOD_STATUSES = Object.freeze(["candidate", "approved", "retired"]);
 const JOB_STATUSES = Object.freeze(["queued", "running", "succeeded", "failed", "canceled"]);
 const RESULT_OPERATIONS = Object.freeze(["create", "amend", "merge", "no_change", "handbook"]);
-const USE_KINDS = Object.freeze(["loaded", "invoked", "succeeded", "read"]);
+const USE_KINDS = Object.freeze(["loaded", "invoked", "succeeded", "read", "carried"]);
+/** The branches of `retirementProposal` that stop a method on their own, as the counter of stops labels them. */
+const RETIREMENT_CODES = Object.freeze(["incident", "harm", "scientific_regression", "never_opened"]);
 
 /** @param {unknown} value @param {readonly string[]} allowed @returns {string} */
 const closed = (value, allowed) => (allowed.includes(String(value ?? "")) ? String(value) : "other");
@@ -55,6 +57,23 @@ export class LearningMetrics {
     this.runMethodsLoaded = 0;
     this.runMethodsInvoked = 0;
     this.deliveries = { distilled: 0, sampledOut: 0 };
+    this.repairs = { distilled: 0, sampledOut: 0 };
+    /** @type {Record<string, number>} */
+    this.retirements = Object.fromEntries([...RETIREMENT_CODES, "other"].map((code) => [code, 0]));
+  }
+
+  /** One repaired delivery that would have queued a lesson: whether the repair sample took it (`OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE`).
+   *  @param {boolean} distilled */
+  observeRepairSample(distilled) {
+    if (distilled) this.repairs.distilled += 1;
+    else this.repairs.sampledOut += 1;
+  }
+
+  /** One method the consolidation pass stopped on its own, by the branch that decided.
+   *  @param {string} code */
+  observeRetirement(code) {
+    const label = closed(code, RETIREMENT_CODES);
+    this.retirements[label] = (this.retirements[label] ?? 0) + 1;
   }
 
   /** One finished delivery that would have queued a lesson: whether the delivery sample took it (`LearningTriggers`).
@@ -102,6 +121,15 @@ export class LearningMetrics {
           { value: this.deliveries.distilled, labels: { outcome: "distilled" } },
           { value: this.deliveries.sampledOut, labels: { outcome: "sampled_out" } },
         ] },
+      { name: "open_science_learning_repair_lessons_total", type: "counter",
+        help: "Repaired deliveries that would have queued a distillation (OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE, none by default), by whether the sample took them.",
+        series: [
+          { value: this.repairs.distilled, labels: { outcome: "distilled" } },
+          { value: this.repairs.sampledOut, labels: { outcome: "sampled_out" } },
+        ] },
+      { name: "open_science_learning_method_retirements_total", type: "counter",
+        help: "Methods the consolidation pass stopped on its own, by the branch that decided; never_opened is the card that rode in OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS answered runs and was never opened.",
+        series: Object.entries(this.retirements).map(([code, value]) => ({ value, labels: { code } })) },
       { name: "open_science_learning_run_methods_total", help: "Learned methods finished runs carried, and the ones they used.", type: "counter", series: [
         { value: this.runMethodsLoaded, labels: { kind: "loaded" } },
         { value: this.runMethodsInvoked, labels: { kind: "invoked" } },
@@ -124,7 +152,8 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
       coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,loaded}')::numeric END),0) AS loaded,
       coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,invoked}')::numeric END),0) AS invoked,
       coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,succeeded}')::numeric END),0) AS succeeded,
-      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,read}')::numeric END),0) AS read
+      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,read}')::numeric END),0) AS read,
+      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,carried}')::numeric END),0) AS carried
     FROM evimed_product.documents
     WHERE kind='method' AND deleted_at IS NULL AND payload->>'recordType' = ANY($1::text[]) AND ($2::text IS NULL OR user_id=$2)
     GROUP BY 1,2`, [[LEARNED_METHOD_RECORD_TYPE, HANDBOOK_CANDIDATE_RECORD_TYPE], owner]);
@@ -223,7 +252,7 @@ export function learningMetricFamilies(enabled, ledger, counters) {
         series: METHOD_STATUSES.map((status) => ({ value: ledger.methods[status] ?? 0, labels: { status } })) },
       { name: "open_science_learning_handbook_candidates", help: "Lessons taught by the platform reviewer alone, awaiting or consumed by the capability handbook loop.", type: "gauge",
         series: [{ value: ledger.handbookCandidates }] },
-      { name: "open_science_learning_method_uses", help: "What effective methods' current bodies have been used for: mounted with a verdict, used, in a succeeded delivery, read without one.", type: "gauge",
+      { name: "open_science_learning_method_uses", help: "What effective methods' current bodies have been used for: mounted with a verdict, used, in a succeeded delivery, read without one, carried as a card by an answered run.", type: "gauge",
         series: USE_KINDS.map((kind) => ({ value: ledger.uses[kind] ?? 0, labels: { kind } })) },
       { name: "open_science_learning_distill_jobs", help: "Distillation lessons queued, by trigger and job status.", type: "gauge",
         series: Object.entries(ledger.lessons).flatMap(([trigger, statuses]) => JOB_STATUSES.map((status) => ({ value: statuses[status] ?? 0, labels: { trigger, status } }))) },

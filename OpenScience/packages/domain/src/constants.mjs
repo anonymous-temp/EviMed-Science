@@ -89,6 +89,21 @@ export const METHOD_CONTRIBUTION_RETIRE_AT = -0.1
 export const METHOD_HARM_TEST = Object.freeze({ baseRate: 0.1, harmRate: 0.4, alpha: 0.05, beta: 0.2, minRuns: 3, maxRuns: 40 })
 
 /**
+ * How many runs may carry a learned method's card without one of them opening its file before the method is stopped
+ * (`retirementProposal`, code `never_opened`).
+ *
+ * A card is in the prompt of every research run the method's family reaches, and a run weighs it against the question in
+ * front of it and opens the file only when it applies. A method that has been weighed twenty times and never opened is
+ * not being chosen by the work this researcher does; it costs prompt room in every run (the audit of 2026-10-12 found a
+ * run carrying 8.6 cards on average, 22 of the 35 on file rewordings of two lessons) and earns nothing, and the harm test
+ * cannot retire it because it reads only runs that opened the method. Twenty is the same count `METHOD_CONTRIBUTION_MIN_TRIALS`
+ * asks before a method's outcomes may stop it. A load counts only when the model had a turn to weigh the card in
+ * (`runMethodObservations`, `answered`). Stopping is a status: the method stays on its page with the reason written on it,
+ * and restoring it gives it a fresh count. Zero turns the rule off (`OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS`).
+ */
+export const METHOD_UNUSED_RETIRE_LOADS = 20
+
+/**
  * The same test over the other axis: the results produced while a revision of a method was read, each bad when a trusted
  * recalculation did not reproduce it or the researcher corrected it, good when a trusted recalculation did
  * (`scientificRegression`, N14).
@@ -193,6 +208,17 @@ export const SKILL_AUTHORING_LIMITS = Object.freeze({
   maxReferenceDepth: 1,
   referenceTocLineThreshold: 100,
 })
+
+/**
+ * How long the text of a general lesson may be to leave its account for the platform's handbooks: name, description and body together, in
+ * characters (`handbookFieldChecks` in the control plane applies it; `min` is the shortest that says anything).
+ *
+ * Written here, beside the authoring limits, because the step that writes the lesson has to be told it and held to it: on 2026-10-12 sixteen
+ * account handbooks averaged 9.5 KB and 14 of the 17 platform candidates made from them failed this one check, which is a defect of telling
+ * the writer nothing, not of the lesson. A lesson filed as an account handbook (`signal: "reviewer"`) is handed this as
+ * `authoringLimits.maxHandbookChars` and the `method-candidate` contract returns an over-long one to be shortened in place.
+ */
+export const HANDBOOK_TEXT_LIMITS = Object.freeze({ min: 80, max: 6000 })
 
 /** Tool-result pruning thresholds mirrored from the preset row, in Unicode code points. */
 export const TOOL_RESULT_PRUNER = Object.freeze({ thresholdChars: 8192, headChars: 4096, tailChars: 1024 })

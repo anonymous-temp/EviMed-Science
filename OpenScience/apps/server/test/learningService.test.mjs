@@ -643,3 +643,53 @@ test("each earlier version of a method can be read, and the runs that taught eac
   assert.ok(versions[0].body.includes("Second body."), "and the text when there are none");
   assert.deepEqual(await f.learning.sourceRuns("alice", created.id), [{ projectId: "meta", runId: "run_2" }, { projectId: "meta", runId: "run_1" }]);
 });
+
+/* ----------------------------------------------- carried and never opened */
+
+test("a run that carried a card is counted without a revision, concurrent loads all survive, and a stopped method is not counted", async () => {
+  const { learning, documents } = realisticService();
+  const created = await create(learning);
+  const rows = (await documents.history("u1", "method", created.id)).length;
+  await Promise.all([1, 2, 3, 4].map(() => learning.recordCarried("u1", created.id)));
+  const counted = await learning.getMethod("u1", created.id);
+  assert.equal(counted.payload.learning.counts.carried, 4, "a conflict between two counter writes is made again, not lost");
+  assert.deepEqual(counted.payload.learning.observations, [], "a load is not a verdict");
+  assert.equal(counted.payload.learning.counts.loaded, 0);
+  assert.equal((await documents.history("u1", "method", created.id)).length, rows, "telemetry: no history row");
+
+  const stopped = await learning.retire("u1", created.id, { expectedRevision: counted.revision, reason: "by hand" });
+  await learning.recordCarried("u1", created.id);
+  assert.equal((await learning.getMethod("u1", created.id)).payload.learning.counts.carried, 4);
+  assert.equal(stopped.payload.status, "retired");
+});
+
+test("a method whose card rode in enough answered runs and was never opened is stopped with its count; the limit is the caller's", async () => {
+  const { learning } = realisticService();
+  const created = await create(learning);
+  for (let load = 0; load < 5; load += 1) await learning.recordCarried("u1", created.id);
+  const nowMs = Date.parse("2026-09-27T00:00:00.000Z");
+  assert.deepEqual(await learning.retirementProposals("u1", { nowMs }), [], "five loads is far short of the default");
+  const [entry, ...rest] = await learning.retirementProposals("u1", { nowMs, unusedAfterLoads: 5 });
+  assert.equal(rest.length, 0);
+  assert.deepEqual({ id: entry.document.id, code: entry.proposal.code, immediate: entry.proposal.immediate, runs: entry.proposal.runs },
+    { id: created.id, code: "never_opened", immediate: true, runs: 5 });
+  assert.deepEqual(await learning.retirementProposals("u1", { nowMs, unusedAfterLoads: 0 }), [], "zero is the switch");
+
+  // One opening, by a run that answered directly, keeps it.
+  await learning.recordRead("u1", created.id, "2026-09-26T00:00:00.000Z");
+  assert.deepEqual(await learning.retirementProposals("u1", { nowMs, unusedAfterLoads: 5 }), []);
+});
+
+test("giving back a method that was stopped for never being opened starts its count of loads again, and keeps the rest", async () => {
+  const { learning } = realisticService();
+  const created = await create(learning);
+  for (let load = 0; load < 6; load += 1) await learning.recordCarried("u1", created.id);
+  await learning.recordEligible("u1", created.id);
+  const before = await learning.getMethod("u1", created.id);
+  const stopped = await learning.retire("u1", created.id, { expectedRevision: before.revision, reason: "它跟着你做了 6 次研究，一次也没被用上" });
+  const restored = await learning.rollback("u1", created.id, { expectedRevision: stopped.revision, targetRevision: before.revision });
+  assert.equal(restored.payload.status, "approved");
+  assert.equal(restored.payload.learning.counts.carried, 0, "else the next hourly pass would stop it before one run had carried it");
+  assert.equal(restored.payload.learning.counts.eligible, 1, "what else was counted about this body stays");
+  assert.deepEqual(await learning.retirementProposals("u1", { nowMs: Date.parse("2026-09-27T00:00:00.000Z"), unusedAfterLoads: 6 }), []);
+});

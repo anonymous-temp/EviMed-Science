@@ -369,3 +369,12 @@ test("the composition root hands the lesson queue the configured delivery share 
   const call = serverSource.slice(serverSource.indexOf("learningTriggers = new LearningTriggers({"), serverSource.indexOf("learningWorker = new LearningWorker({"));
   assert.match(call, /deliveryShare: config\.learningDistillSampleShare, onDeliverySample: \(distilled\) => learningMetrics\.observeDeliverySample\(distilled\),/);
 });
+
+test("the 2026-10-12 learning levers reach the parts that read them: the unused-method stop, its denominator, and the repair sample", () => {
+  // Constructed with the option is not fed: `recordCarried` is the only writer of the count the stop reads, and a
+  // `MethodConsolidation` built without the limit would fall back to the domain's default and ignore the deployment's.
+  const record = serverSource.slice(serverSource.indexOf("const recordMethodUse = async"), serverSource.indexOf("// Constructed after the runtime exists"));
+  assert.match(record, /if \(derived\.answered\) \{\s*for \(const methodId of derived\.carried\) \{\s*await learningService\.recordCarried\(project\.userId, methodId\)/);
+  assert.match(serverSource, /unusedAfterLoads: config\.learningUnusedRetireLoads, onRetirement: \(code\) => learningMetrics\.observeRetirement\(code\)/);
+  assert.match(serverSource, /repairShare: config\.learningRepairDistillShare, onRepairSample: \(distilled\) => learningMetrics\.observeRepairSample\(distilled\)/);
+});

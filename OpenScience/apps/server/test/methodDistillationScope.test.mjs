@@ -54,7 +54,7 @@ test("the input says which methods the run read, what became of their results an
       scientific: { entries: [{ id: `sf_${"1".repeat(32)}`, signal: "analytic_corrected", at: "2026-10-04T00:00:00.000Z", digest: `sha256:${hex("a")}`, used: "invoked", runId: "run_1",
         result: { versionId: version(1), digest: hex("a") }, successor: null, replay: null, event: { id: EVENT.id }, kind: "analytic", applicability: { state: "unknown", basis: "none", codes: [] } }] } } },
       { id: "method:learned:plain", payload: { status: "approved", contentDigest: `sha256:${hex("c")}`, frontmatter: { name: "plain" }, body: "p" } }] });
-  assert.equal(input.extractorVersion, "5");
+  assert.equal(input.extractorVersion, "6");
   assert.equal(input.methodsUsed.known, true);
   assert.equal(input.methodsUsed.invoked[0].name, "quote-first");
   assert.deepEqual(input.methodsUsed.passedOver.map((item) => item.name), ["sweep"]);
@@ -65,8 +65,19 @@ test("the input says which methods the run read, what became of their results an
   assert.equal("scientific" in plain, false, "a method with nothing recorded says nothing, which is not 'nothing happened'");
   assert.equal("scope" in plain, false);
   // A lesson queued under the old rules is a different job from the same lesson under these.
-  assert.equal(DISTILLATION_EXTRACTOR_VERSION, "5");
+  assert.equal(DISTILLATION_EXTRACTOR_VERSION, "6");
   assert.notEqual(distillationDispatchId("run_1", "correction", EVENT.id), `method-distillation-${"0".repeat(32)}`);
+});
+
+test("the input states the text limit of a lesson filed as an account handbook, the number the platform's field check applies", async () => {
+  const { HANDBOOK_TEXT_LIMITS, handbookFieldChecks } = await import("../src/learningPlatformHandbooks.mjs");
+  const input = buildDistillationInput({ run: { id: "run_1", effectiveAgentId: "meta-analysis" }, trigger: "repair_accepted", transcript: null });
+  assert.equal(input.signal, "reviewer");
+  assert.equal(input.authoringLimits.maxHandbookChars, HANDBOOK_TEXT_LIMITS.max);
+  // One number, measured one way: a lesson one character over what the run is told is refused on length by the check that follows it.
+  const lesson = (/** @type {number} */ total) => ({ frontmatter: { name: "n", description: "d" }, body: "x".repeat(total - "n\nd\n".length) });
+  assert.ok(!handbookFieldChecks(lesson(HANDBOOK_TEXT_LIMITS.max)).failed.includes("too_long"));
+  assert.ok(handbookFieldChecks(lesson(HANDBOOK_TEXT_LIMITS.max + 1)).failed.includes("too_long"));
 });
 
 test("a deployment that cannot say which methods the run read says it does not know, and that is not an empty list", () => {

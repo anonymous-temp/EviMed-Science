@@ -40,6 +40,7 @@ import {
   METHOD_CONTRIBUTION_RETIRE_AT,
   METHOD_HARM_TEST,
   METHOD_SCIENTIFIC_HARM_TEST,
+  METHOD_UNUSED_RETIRE_LOADS,
 } from './constants.mjs'
 import { isMethodDigest } from './methodSkill.mjs'
 import { scientificOutcomes } from './methodFeedback.mjs'
@@ -66,10 +67,17 @@ export const METHOD_SUCCESS_OUTCOMES = Object.freeze(['accepted', 'repaired'])
 /** Where a method came from, which is what decides whether it needs a gate. */
 export const METHOD_ORIGINS = Object.freeze(['explicit', 'inferred'])
 
-/** The five counters, kept apart on purpose: "was available", "was mounted",
- *  "was actually invoked", "was in a run that succeeded" and "was read with
- *  nothing to attribute it to" are five different claims and collapsing them is
- *  how a library of unused methods looks busy.
+/** The six counters, kept apart on purpose: "was available", "was mounted",
+ *  "was actually invoked", "was in a run that succeeded", "was read with
+ *  nothing to attribute it to" and "was carried as a card by a run the model
+ *  answered" are six different claims and collapsing them is how a library of
+ *  unused methods looks busy.
+ *
+ *  `carried` is the run-level load: one per finished run whose runtime put the
+ *  method's card in front of a model that then answered. `loaded` is the
+ *  deliverable-level one (an observation), so it is zero for a method that only
+ *  ever rode in runs that delivered nothing — the open-domain answer line — and
+ *  cannot say how often a card was weighed and passed over.
  *
  *  `read` is the one that carries no outcome. A run that delegates nothing —
  *  the whole open-domain answer line — can still call the `skill` tool and read
@@ -79,7 +87,7 @@ export const METHOD_ORIGINS = Object.freeze(['explicit', 'inferred'])
  *  verdict entering a success rate would move the rate without evidence, in
  *  whichever direction the arithmetic happened to fall. What it does support is
  *  the one claim it is: the method was not passed over. */
-export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked', 'succeeded', 'read'])
+export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked', 'succeeded', 'read', 'carried'])
 
 /**
  * @typedef {object} MethodObservation
@@ -102,7 +110,7 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
 /**
  * @typedef {object} MethodLearning
  * @property {string} digest
- * @property {{eligible: number, loaded: number, invoked: number, succeeded: number, read: number}} counts
+ * @property {{eligible: number, loaded: number, invoked: number, succeeded: number, read: number, carried?: number}} counts
  * @property {MethodObservation[]} observations
  * @property {MethodRelation[]} relations
  * @property {number} level
@@ -245,6 +253,33 @@ export function foldRead(learning, at) {
     counts: { ...current.counts, read: Number(current.counts?.read ?? 0) + 1 },
     lastReadAt: Number.isNaN(previous) || readAt > previous ? new Date(readAt).toISOString() : current.lastReadAt,
   }
+}
+
+/**
+ * Count a finished run that carried the method's card to a model that answered.
+ *
+ * Not an observation and never a verdict: it is the denominator of one question only — how many times was this card
+ * weighed — which `retirementProposal` sets against the opens (`invoked` and `read`). A method record from before the
+ * counter existed has none, and starts from zero rather than from a guess about its past.
+ * @param {MethodLearning | undefined} learning
+ * @returns {MethodLearning}
+ */
+export function foldCarried(learning) {
+  const current = learning ?? emptyLearning('')
+  return { ...current, counts: { ...current.counts, carried: Number(current.counts?.carried ?? 0) + 1 } }
+}
+
+/**
+ * Start the count of loads again, for a method that was stopped for never being opened and has been given back.
+ * Everything else measured about the body stays: it is the same body, and only the verdict "carried twenty times and
+ * not opened" was already spent on it. Without this the first hourly pass after a restore would stop it again.
+ * @param {MethodLearning | undefined} learning
+ * @returns {MethodLearning}
+ */
+export function restartCarried(learning) {
+  const current = learning ?? emptyLearning('')
+  if (!Number(current.counts?.carried ?? 0)) return current
+  return { ...current, counts: { ...current.counts, carried: 0 } }
 }
 
 /**
@@ -570,6 +605,7 @@ export function promotionVerdict(method, options = {}) {
  * @property {(id: string) => boolean} [isApproved]  whether a superseding method is effective
  * @property {number} [minTrials]   trajectories before contribution may retire it
  * @property {number} [retireAt]    the contribution at or below which it is proposed
+ * @property {number} [unusedAfterLoads]   runs that may carry the card without one opening the method before it is stopped; 0 never (`METHOD_UNUSED_RETIRE_LOADS`)
  */
 
 /**
@@ -640,6 +676,26 @@ export function retirementProposal(method, options) {
       runs: harm.runs,
       rejected: harm.bad,
       reason: `${harm.bad} of the ${harm.runs} runs that mounted this revision were rejected, which the sequential test reads as worse than working without it`,
+      strength,
+    }
+  }
+  // Carried again and again, never opened (owner ruling of 2026-10-12 after the live audit: eight cards in a run, one run in fifty
+  // opening any). The harm test above reads only runs that opened the method and the outcome clause below only deliveries, so
+  // a method the work never reaches for is invisible to both and rides in every prompt for good. It is stopped on the one fact
+  // that says so: `carried` runs the model answered in, and not one open (`invoked` or `read`). The reason is written on the
+  // method and a restore starts the count again, so a method that was merely waiting for its kind of question costs the
+  // researcher one click. A method the researcher stated is only proposed, a safety method is exempt as it is from disuse, and
+  // counts about another body of the method say nothing about this one.
+  const unusedAfter = options.unusedAfterLoads ?? METHOD_UNUSED_RETIRE_LOADS
+  const carriedRuns = Number(learning.counts?.carried ?? 0)
+  const opens = Number(learning.counts?.invoked ?? 0) + Number(learning.counts?.read ?? 0)
+  if (unusedAfter > 0 && carriedRuns >= unusedAfter && opens === 0 && learning.digest === method?.digest && !method?.provenance?.safetyRelated) {
+    return {
+      propose: true,
+      immediate: method?.provenance?.origin !== 'explicit',
+      code: 'never_opened',
+      runs: carriedRuns,
+      reason: `its card was in front of the model in ${carriedRuns} runs and no run opened the method (limit ${unusedAfter})`,
       strength,
     }
   }

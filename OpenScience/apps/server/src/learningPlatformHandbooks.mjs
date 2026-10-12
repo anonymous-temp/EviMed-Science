@@ -49,6 +49,7 @@
  */
 import { createHash } from "node:crypto";
 import path from "node:path";
+import { HANDBOOK_TEXT_LIMITS, handbookText } from "@evimed/domain";
 import { handbookRetirementReason, rankHandbookEntries } from "./handbookUtility.mjs";
 import { pickByHash, sampledByHash } from "./runSampling.mjs";
 
@@ -59,7 +60,8 @@ export const HANDBOOK_LESSON_CLASSES = Object.freeze([
 export const HANDBOOK_CANDIDATE_STATES = Object.freeze(["rejected", "judge_pending", "awaiting_corroboration", "candidate", "probation", "effective", "retired"]);
 /** The field checks, by the code a rejection carries. */
 export const HANDBOOK_FIELD_CHECKS = Object.freeze(["has_attachments", "identifier_format", "data_number", "project_fact", "too_long", "too_short"]);
-export const HANDBOOK_TEXT_LIMITS = Object.freeze({ min: 80, max: 6000 });
+// Written in the domain (`HANDBOOK_TEXT_LIMITS`), where the `method-candidate` contract holds the run that writes a handbook to the same number.
+export { HANDBOOK_TEXT_LIMITS };
 export const HANDBOOK_JUDGE_ATTEMPTS = 3;
 export const HANDBOOK_DEFAULT_PER_DAY = 3;
 /** The share of a researcher's dispatches that carry one probation entry (`OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE`). */
@@ -89,11 +91,8 @@ const sha = (value) => createHash("sha256").update(typeof value === "string" ? v
  * @returns {{ ok: boolean, failed: string[], text: { name: string, description: string, body: string } }}
  */
 export function handbookFieldChecks(handbook, facts = {}) {
-  const text = {
-    name: String(handbook?.frontmatter?.name ?? "").trim(),
-    description: String(handbook?.frontmatter?.description ?? "").replace(/\s+/g, " ").trim(),
-    body: typeof handbook?.body === "string" ? handbook.body.trim() : "",
-  };
+  const { name, description, body } = handbookText(handbook?.frontmatter, handbook?.body);
+  const text = { name, description, body };
   const whole = `${text.name}\n${text.description}\n${text.body}`;
   /** @type {string[]} */
   const failed = [];

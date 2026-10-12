@@ -17,7 +17,7 @@ function ledger({ usageFails = false } = {}) {
       queries.push({ sql, values });
       if (sql.includes("FROM evimed_product.documents")) {
         return { rows: [
-          { record_type: "learned-method", status: "approved", n: 2, loaded: 9, invoked: 3, succeeded: 8, read: 1 },
+          { record_type: "learned-method", status: "approved", n: 2, loaded: 9, invoked: 3, succeeded: 8, read: 1, carried: 41 },
           { record_type: "learned-method", status: "retired", n: 1, loaded: 0, invoked: 0, succeeded: 0, read: 0 },
           { record_type: "handbook-candidate", status: "candidate", n: 2, loaded: 0, invoked: 0, succeeded: 0, read: 0 },
         ] };
@@ -50,7 +50,7 @@ test("the durable counts come from the ledger in closed vocabularies, across eve
   const database = ledger();
   const counts = await learningLedgerCounts(database, { now: new Date("2026-09-27T00:00:00.000Z") });
   assert.deepEqual(counts.methods, { candidate: 0, approved: 2, retired: 1 });
-  assert.deepEqual(counts.uses, { loaded: 9, invoked: 3, succeeded: 8, read: 1 });
+  assert.deepEqual(counts.uses, { loaded: 9, invoked: 3, succeeded: 8, read: 1, carried: 41 });
   assert.equal(counts.handbookCandidates, 2, "the reviewer's lessons are counted apart from the researcher's methods");
   assert.equal(counts.lessons.delivered.queued, 1);
   assert.equal(counts.lessons.delivered.succeeded, 3);
@@ -88,6 +88,13 @@ test("launches and runs count what they carried, and the families expose all of 
   counters.observeDeliverySample(true);
   counters.observeDeliverySample(false);
   counters.observeDeliverySample(false);
+  counters.observeRepairSample(false);
+  counters.observeRepairSample(false);
+  counters.observeRepairSample(true);
+  counters.observeRetirement("never_opened");
+  counters.observeRetirement("never_opened");
+  counters.observeRetirement("harm");
+  counters.observeRetirement("superseded");
   const counts = await learningLedgerCounts(ledger());
   const families = learningMetricFamilies(true, counts, counters);
   const byName = new Map(families.map((family) => [family.name, family]));
@@ -97,7 +104,16 @@ test("launches and runs count what they carried, and the families expose all of 
     "open_science_learning_distill_results", "open_science_learning_spend_cny", "open_science_learning_mounts_total",
     "open_science_learning_mounted_methods_total", "open_science_learning_mounted_bytes_total",
     "open_science_learning_runs_with_methods_total", "open_science_learning_run_methods_total", "open_science_learning_delivery_lessons_total",
+    "open_science_learning_repair_lessons_total", "open_science_learning_method_retirements_total",
   ]) assert.ok(byName.has(name), `${name} is exposed`);
+  assert.deepEqual(byName.get("open_science_learning_repair_lessons_total")?.series, [
+    { value: 1, labels: { outcome: "distilled" } }, { value: 2, labels: { outcome: "sampled_out" } },
+  ], "the repaired deliveries the loop no longer reads are a number, not a silence");
+  assert.deepEqual(byName.get("open_science_learning_method_retirements_total")?.series, [
+    { value: 0, labels: { code: "incident" } }, { value: 1, labels: { code: "harm" } }, { value: 0, labels: { code: "scientific_regression" } },
+    { value: 2, labels: { code: "never_opened" } }, { value: 1, labels: { code: "other" } },
+  ], "a method stopped for never being opened is counted apart from the ones the harm test stopped");
+  assert.equal(byName.get("open_science_learning_method_uses")?.series.find((sample) => sample.labels?.kind === "carried")?.value, 41);
   assert.deepEqual(byName.get("open_science_learning_delivery_lessons_total")?.series, [
     { value: 1, labels: { outcome: "distilled" } }, { value: 2, labels: { outcome: "sampled_out" } },
   ], "a delivery the sample left out is a number, not a silence");
