@@ -10,7 +10,11 @@ import test from "node:test";
 
 import { toSkillName } from "@evimed/harness-port";
 
-import { deliverableOutcome, invokedSkillsBySession, methodFilesReadByCommand, runMethodObservations } from "../src/methodObservations.mjs";
+import { normalizeTranscript } from "../src/dshRuntimeAdapter.mjs";
+import { learnedMethodDirectoryName } from "../src/learnedMethodMount.mjs";
+import {
+  deliverableOutcome, invokedSkillsBySession, methodFilesReadByCommand, methodObservationSessionsForRun, runMethodObservations,
+} from "../src/methodObservations.mjs";
 
 const DIGEST_A = `sha256:${"a".repeat(64)}`;
 const DIGEST_B = `sha256:${"b".repeat(64)}`;
@@ -384,4 +388,131 @@ test("the 2026-09-28 incident: carrying is not using, and opening the card's fil
       assert.equal(found[0].observation.invoked, /** @type {any} */ (expected).invoked, `${scenario.name}: ${name} invoked`);
     }
   }
+});
+
+// 2026-10-12: the run ledger named a method as opened in one run of the four whose transcripts show a mounted method's
+// file being opened (`read` three times, `bash` once), while the method's own counters held `read` 3 and `invoked` 1.
+// The other three were runs that opened the file and delivered nothing a verdict could be attributed to: the open-domain
+// answer line, which delegates nothing, and a root session that read a method while a child made the deliverable. Each
+// reached the `read` counter and no further, and `methodsInvoked` — the list a later correction is joined to
+// (`methodFeedback.mjs`) — was the deliverable-attributed subset of what the run opened.
+
+/** One native turn of the open-domain answer line as the DSH 0.1.7 wire records it: the model opens a mounted method's
+ *  card file with `read` (arguments are a JSON string on the wire) and answers. @param {{file?: string, tool?: string, args?: any}} [opened] */
+function answerLineTranscript(opened = {}) {
+  const event = (/** @type {string} */ type, /** @type {number} */ seq, /** @type {any} */ data) => ({ event: { type, seq, time: 1_000 + seq, data } });
+  const calls = opened.file === undefined ? [] : [
+    event("tool/call", 3, { turn: 1, step: 1, callId: "toolu_1", name: opened.tool ?? "read",
+      arguments: JSON.stringify(opened.args ?? { file_path: opened.file, offset: 1, limit: 200 }) }),
+    event("tool/result", 4, { turn: 1, step: 1, message: { role: "tool", source: { kind: "tool", callId: "toolu_1" }, toolCallId: "toolu_1",
+      content: [{ type: "text", text: "<path>/runtime/capsule-methods/m/SKILL.md</path>\n<type>file</type>\n<content>\n1: ---\n</content>" }], isError: false } }),
+  ];
+  return normalizeTranscript("root", [
+    event("turn/start", 0, { turn: 1 }),
+    event("user/message", 1, { turn: 1, step: 0, source: { kind: "user", rpcId: "req-1" }, content: [{ type: "text", text: "How should I handle a zero cell in a 2x2 table?" }] }),
+    event("assistant/message", 2, { turn: 1, step: 1, message: { role: "assistant", content: [{ type: "text", text: "Let me check my notes." }] } }),
+    ...calls,
+    event("assistant/message", 5, { turn: 1, step: 2, message: { role: "assistant", content: [{ type: "text", text: "Add 0.5 to each cell, or use an exact method." }] } }),
+    event("turn/end", 6, { turn: 1, kind: "completed" }),
+  ]);
+}
+
+const OPENED = learnedMethodDirectoryName("method:learned:triage");
+const ledgerRun = { id: "run_answer", sessionId: "root", kernelRequestIds: ["req-1"] };
+const carriedBoth = { plan: { items: [] }, subagents: [], mountedMethods: [{ name: "triage", digest: DIGEST_A }, { name: "quoting", digest: DIGEST_B }] };
+const observeAnswerLine = (/** @type {any} */ transcript, /** @type {any} */ state = carriedBoth, /** @type {any} */ methods = METHODS) => {
+  const sessions = methodObservationSessionsForRun({ run: ledgerRun, projection: state, sessions: [{ sessionId: "root", transcript }] });
+  return runMethodObservations({ run: ledgerRun, projection: state, methods, sessions });
+};
+
+test("an answer-line run that opened a carried method's card file names it in the run's ledger row, as the wire records it", () => {
+  const derived = observeAnswerLine(answerLineTranscript({ file: `/runtime/capsule-methods/${OPENED}/SKILL.md` }));
+  assert.deepEqual(derived.methodsInvoked, [{ name: "triage", digest: DIGEST_A }],
+    "the digest is the one the file was carried as, which is what a later correction resolves to a revision");
+  assert.deepEqual(derived.methodsLoaded.map((entry) => entry.name), ["triage", "quoting"]);
+  assert.deepEqual(derived.invokedWithoutMount, [{ id: "method:learned:triage", name: "triage" }], "still the `read` count: there is no verdict to credit");
+  assert.deepEqual(derived.observations, [], "and still no observation: nothing was delivered");
+  assert.deepEqual(derived.eligible, ["method:learned:quoting"], "the card nobody opened was passed over");
+  assert.deepEqual(derived.carried, ["method:learned:triage", "method:learned:quoting"]);
+  assert.equal(derived.answered, true);
+});
+
+test("a run that carried cards and opened none names none, and a conversation the model never answered is not a pass-over", () => {
+  const passed = observeAnswerLine(answerLineTranscript());
+  assert.deepEqual(passed.methodsInvoked, []);
+  assert.deepEqual(passed.carried, ["method:learned:triage", "method:learned:quoting"]);
+  assert.equal(passed.answered, true, "the model answered and chose not to open them");
+  const unseen = observeAnswerLine({ sessionId: "root", messages: [], turns: [], subagents: [] });
+  assert.equal(unseen.answered, false, "no readable turn: the cards were not passed over, they were never weighed");
+  const deadOnStart = observeAnswerLine(normalizeTranscript("root", [
+    { event: { type: "turn/start", seq: 0, time: 1, data: { turn: 1 } } },
+    { event: { type: "user/message", seq: 1, time: 2, data: { turn: 1, source: { kind: "user", rpcId: "req-1" }, content: [{ type: "text", text: "q" }] } } },
+  ]));
+  assert.equal(deadOnStart.answered, false, "a run whose runtime died before the model's first message");
+});
+
+test("every way the model opens the file reaches the ledger row: read, grep aimed at it, a printing shell program, a relative path", () => {
+  for (const [label, opened] of /** @type {[string, any][]} */ ([
+    ["read, absolute", { file: `/runtime/capsule-methods/${OPENED}/SKILL.md` }],
+    ["read, relative to the methods directory", { file: `${OPENED}/SKILL.md` }],
+    ["grep aimed at the file", { tool: "grep", file: "x", args: { pattern: "Workflow", path: `/runtime/capsule-methods/${OPENED}/SKILL.md` } }],
+    ["cat through bash", { tool: "bash", file: "x", args: { command: `cat /runtime/capsule-methods/${OPENED}/SKILL.md`, description: "Read the method" } }],
+    ["sed through bash after a cd", { tool: "bash", file: "x", args: { command: `cd /runtime/capsule-methods && sed -n '1,160p' ${OPENED}/SKILL.md` } }],
+  ])) {
+    assert.deepEqual(observeAnswerLine(answerLineTranscript(opened)).methodsInvoked, [{ name: "triage", digest: DIGEST_A }], label);
+  }
+  for (const [label, opened] of /** @type {[string, any][]} */ ([
+    ["a listing of the directory", { tool: "bash", file: "x", args: { command: `ls -la /runtime/capsule-methods/${OPENED}/` } }],
+    ["a line count of the file", { tool: "bash", file: "x", args: { command: `wc -l /runtime/capsule-methods/${OPENED}/SKILL.md` } }],
+    ["another method's directory", { file: `/runtime/capsule-methods/${learnedMethodDirectoryName("method:learned:other")}/SKILL.md` }],
+    ["a file of the researcher's own workspace", { file: "/workspace/notes/SKILL.md" }],
+  ])) {
+    assert.deepEqual(observeAnswerLine(answerLineTranscript(opened)).methodsInvoked, [], label);
+  }
+});
+
+test("a method the root session opened while a child made the deliverable is in the ledger row and the `read` count, and credited to no deliverable", () => {
+  const delegated = {
+    plan: { items: [{ id: "d1", status: "accepted", attempts: 1 }] },
+    subagents: [{ deliverableId: "d1", childSessionId: "child", methods: [{ name: "triage", digest: DIGEST_A }, { name: "quoting", digest: DIGEST_B }] }],
+    mountedMethods: [{ name: "triage", digest: DIGEST_A }, { name: "quoting", digest: DIGEST_B }],
+  };
+  const sessions = [
+    { sessionId: "root", transcript: { messages: [{ role: "tool", parts: [{ type: "tool", tool: "read", callId: "r", status: "completed", input: { file_path: `/runtime/capsule-methods/${OPENED}/SKILL.md` }, output: "", error: null }] }] } },
+    { sessionId: "child", transcript: { messages: [{ role: "assistant", parts: [{ type: "text", text: "done" }] }] } },
+  ];
+  const derived = runMethodObservations({ run: { id: "run_1", sessionId: "root" }, projection: delegated, methods: METHODS, sessions });
+  assert.deepEqual(derived.methodsInvoked, [{ name: "triage", digest: DIGEST_A }]);
+  assert.deepEqual(derived.invokedWithoutMount, [{ id: "method:learned:triage", name: "triage" }],
+    "before: the child's receipt had the method, so the root's opening was counted nowhere");
+  assert.equal(derived.observations.find((entry) => entry.methodId === "method:learned:triage")?.observation.invoked, false,
+    "the deliverable is still not credited with a method its own session never opened");
+  assert.deepEqual(derived.eligible, [], "both were in the room, and one was opened");
+});
+
+test("a child that opened the method in a deliverable that never reached a verdict still leaves the open in the ledger row and the `read` count", () => {
+  const unfinished = {
+    plan: { items: [{ id: "d1", status: "delegated", attempts: 0 }] },
+    subagents: [{ deliverableId: "d1", childSessionId: "child", methods: [{ name: "triage", digest: DIGEST_A }] }],
+  };
+  const derived = runMethodObservations({ run: { id: "run_1", sessionId: "root" }, projection: unfinished, methods: METHODS,
+    sessions: [session("child", [toSkillName("triage", "capsule")])] });
+  assert.deepEqual(derived.observations, []);
+  assert.deepEqual(derived.methodsInvoked, [{ name: "triage", digest: DIGEST_A }]);
+  assert.deepEqual(derived.invokedWithoutMount, [{ id: "method:learned:triage", name: "triage" }]);
+});
+
+test("a method opened but never carried is read, not recorded under a digest the run cannot vouch for", () => {
+  const derived = observeAnswerLine(answerLineTranscript({ file: `/runtime/capsule-methods/${OPENED}/SKILL.md` }), { plan: { items: [] }, subagents: [] });
+  assert.deepEqual(derived.methodsInvoked, []);
+  assert.deepEqual(derived.invokedWithoutMount, [{ id: "method:learned:triage", name: "triage" }]);
+  assert.deepEqual(derived.carried, []);
+});
+
+test("a method amended since it was carried is in the ledger row under the digest the model read, and is not a reading of the body it holds now", () => {
+  const amended = METHODS.map((method) => (method.name === "triage" ? { ...method, digest: `sha256:${"c".repeat(64)}` } : method));
+  const derived = observeAnswerLine(answerLineTranscript({ file: `/runtime/capsule-methods/${OPENED}/SKILL.md` }), carriedBoth, amended);
+  assert.deepEqual(derived.methodsInvoked, [{ name: "triage", digest: DIGEST_A }]);
+  assert.deepEqual(derived.invokedWithoutMount, [], "crediting the new text with the old text's reading is the confusion `(method, digest)` keying exists to prevent");
+  assert.ok(!derived.eligible.includes("method:learned:triage"), "and it was not passed over either");
 });

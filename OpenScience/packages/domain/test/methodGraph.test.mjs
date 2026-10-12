@@ -8,11 +8,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { METHOD_COUNT_KINDS, METHOD_UNUSED_RETIRE_LOADS } from "../index.mjs";
 import {
   METHOD_GRAPH_ISSUE_CODES,
   METHOD_RELATION_TYPES,
   computeMethodLevels,
   emptyLearning,
+  foldCarried,
   foldEligible,
   foldObservation,
   foldRead,
@@ -537,4 +539,68 @@ test("the cap ranks a safety method by its contribution like any other", () => {
   ];
   const over = libraryEvictions(methods, { cap: 1 });
   assert.deepEqual(over.map((entry) => entry.id), ["m_safety", "m_a"]);
+});
+
+/* ------------------------------------------------- carried and never opened */
+
+/** A learning record that rode in `carried` answered runs, and was opened `invoked` times by runs with a verdict and `read` times by runs without. */
+const carriedRecord = (/** @type {number} */ carried, /** @type {{invoked?: number, read?: number, digest?: string}} */ { invoked = 0, read = 0, digest = DIGEST_A } = {}) => {
+  let learning = emptyLearning(digest);
+  for (let index = 0; index < carried; index += 1) learning = foldCarried(learning);
+  for (let index = 0; index < read; index += 1) learning = foldRead(learning, daysAgo(1));
+  if (invoked > 0) learning = { ...learning, counts: { ...learning.counts, invoked } };
+  return learning;
+};
+
+test("a run that carried the card is its own counter, and a record from before it starts at zero rather than at a guess", () => {
+  assert.ok(METHOD_COUNT_KINDS.includes("carried"));
+  assert.equal(emptyLearning(DIGEST_A).counts.carried, undefined, "it appears with the first load, so every record that never had one keeps the shape it was stored in");
+  assert.equal(foldCarried(foldCarried(emptyLearning(DIGEST_A))).counts.carried, 2);
+  const legacy = { digest: DIGEST_A, counts: { eligible: 4, loaded: 3, invoked: 0, succeeded: 3, read: 0 }, observations: [], relations: [], level: 0 };
+  const folded = foldCarried(legacy);
+  assert.equal(folded.counts.carried, 1, "no counter existed, so none is invented");
+  assert.equal(folded.counts.loaded, 3, "and nothing else moves");
+  assert.equal(foldCarried(undefined).counts.carried, 1);
+});
+
+test("a method whose card rode in twenty answered runs and was never opened is stopped now, with the count as its reason", () => {
+  assert.equal(METHOD_UNUSED_RETIRE_LOADS, 20);
+  const unused = method({ status: "approved", learning: carriedRecord(20) });
+  const proposal = retirementProposal(unused, { nowMs: NOW });
+  assert.deepEqual({ propose: proposal.propose, immediate: proposal.immediate, code: proposal.code, runs: proposal.runs }, { propose: true, immediate: true, code: "never_opened", runs: 20 });
+  assert.match(proposal.reason, /20 runs and no run opened the method/);
+  assert.equal(retirementProposal(method({ status: "approved", learning: carriedRecord(19) }), { nowMs: NOW }).code, "no_replacement",
+    "one load short of the limit, the question falls through to the clauses that were always there");
+});
+
+test("one opening of any kind keeps the card in the library: a run with a verdict, or one that answered directly", () => {
+  for (const opened of [{ invoked: 1 }, { read: 1 }]) {
+    const proposal = retirementProposal(method({ status: "approved", learning: carriedRecord(200, opened) }), { nowMs: NOW });
+    assert.notEqual(proposal.code, "never_opened", JSON.stringify(opened));
+  }
+});
+
+test("the limit is a parameter, zero turns the rule off, and a deployment may ask for more", () => {
+  const unused = method({ status: "approved", learning: carriedRecord(8) });
+  assert.equal(retirementProposal(unused, { nowMs: NOW, unusedAfterLoads: 8 }).code, "never_opened");
+  assert.notEqual(retirementProposal(unused, { nowMs: NOW, unusedAfterLoads: 9 }).code, "never_opened");
+  assert.notEqual(retirementProposal(method({ status: "approved", learning: carriedRecord(500) }), { nowMs: NOW, unusedAfterLoads: 0 }).code, "never_opened");
+});
+
+test("a stated method is only proposed, a safety method is exempt from disuse, and counts about another body decide nothing", () => {
+  const stated = method({ status: "approved", learning: carriedRecord(20), provenance: { origin: "explicit" } });
+  const proposal = retirementProposal(stated, { nowMs: NOW });
+  assert.deepEqual({ propose: proposal.propose, immediate: proposal.immediate, code: proposal.code }, { propose: true, immediate: false, code: "never_opened" });
+  const safety = method({ status: "approved", learning: carriedRecord(60), provenance: { origin: "inferred", safetyRelated: true } });
+  assert.notEqual(retirementProposal(safety, { nowMs: NOW }).code, "never_opened", "rarely needed is what a safety check looks like when it works");
+  const amended = method({ status: "approved", digest: DIGEST_B, learning: carriedRecord(60, { digest: DIGEST_A }) });
+  assert.notEqual(retirementProposal(amended, { nowMs: NOW }).code, "never_opened");
+});
+
+test("harm and incident are decided before disuse, and an already stopped method is left alone", () => {
+  const hurting = method({ status: "approved", learning: { ...runs("rrr"), counts: { ...runs("rrr").counts, carried: 40, invoked: 3 } } });
+  assert.equal(retirementProposal(hurting, { nowMs: NOW }).code, "harm");
+  const incident = method({ status: "approved", learning: carriedRecord(40), provenance: { origin: "inferred", incident: true } });
+  assert.equal(retirementProposal(incident, { nowMs: NOW }).code, "incident");
+  assert.equal(retirementProposal(method({ status: "retired", learning: carriedRecord(40) }), { nowMs: NOW }).code, "already_retired");
 });

@@ -11,7 +11,9 @@ import test from "node:test";
 
 import { METHOD_RELATION_TYPES, METHOD_SKILL_SCHEMA, renderMethodSkill } from "@evimed/domain";
 
-import { CONSOLIDATE_ACTIONS, MethodConsolidation, candidatePairs, groupPairs, screenedPairs, unprovenMerge } from "../src/methodConsolidation.mjs";
+import { LearningService } from "../src/learningService.mjs";
+import { CONSOLIDATE_ACTIONS, MethodConsolidation, candidatePairs, groupPairs, retirementSentence, screenedPairs, unprovenMerge } from "../src/methodConsolidation.mjs";
+import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
 const SECTIONS = (extra = "") => [
   "## Purpose", "Do a thing.", "",
@@ -696,3 +698,46 @@ test("a merge nobody has used yet is not built on again: the hourly pass made on
   assert.deepEqual(open.dispatched.map((call) => call.input.action), ["decide", "build"]);
 });
 
+
+test("the hourly pass stops a method whose card rode in enough answered runs and was never opened, says why in the researcher's words, and counts the stop", async () => {
+  const documents = productDocumentsDouble();
+  const learning = new LearningService({ documents, now: () => new Date("2026-10-12T00:00:00.000Z") });
+  const make = (name) => learning.createCandidate("u1", { projectId: "p1", frontmatter: frontmatter(name), body: SECTIONS(), provenance: { origin: "inferred", runId: "run_1" } });
+  const unused = await make("never-reached-for");
+  const opened = await make("reached-for-once");
+  for (let load = 0; load < 25; load += 1) { await learning.recordCarried("u1", unused.id); await learning.recordCarried("u1", opened.id); }
+  await learning.recordRead("u1", opened.id, "2026-10-11T00:00:00.000Z");
+
+  const told = [];
+  const pass = new MethodConsolidation({
+    dispatch: async () => { throw new Error("no model step is needed to stop a method"); }, readResult: async () => null,
+    learning, unusedAfterLoads: 20, onRetirement: (code) => told.push(code), now: () => new Date("2026-10-12T00:00:00.000Z"),
+  });
+  const result = await pass.run({ job: { userId: "u1", projectId: "p1", id: "job_1", payload: { action: "sleep" } } });
+  assert.deepEqual(result.retirements, [unused.id]);
+  assert.deepEqual(told, ["never_opened"]);
+  const stopped = await learning.getMethod("u1", unused.id);
+  assert.equal(stopped.payload.status, "retired");
+  assert.match(stopped.payload.statusReason, /^它跟着你做了 25 次研究，一次也没被用上，已先停用。/);
+  assert.match(stopped.payload.statusReason, /回到上一版/, "and how to have it back");
+  assert.equal((await learning.getMethod("u1", opened.id)).payload.status, "approved", "one opening, by any kind of run, keeps a card in the library");
+
+  // The limit is the deployment's: raised, the same library keeps both.
+  const lenient = new MethodConsolidation({
+    dispatch: async () => { throw new Error("no model"); }, readResult: async () => null, learning: new LearningService({ documents, now: () => new Date("2026-10-12T00:00:00.000Z") }),
+    unusedAfterLoads: 0, now: () => new Date("2026-10-12T00:00:00.000Z"),
+  });
+  assert.deepEqual((await lenient.run({ job: { userId: "u1", projectId: "p1", id: "job_2", payload: { action: "sleep" } } })).retirements, []);
+});
+
+test("a method that only a proposal can stop stays in force: the researcher's own is asked about, never silently stopped", async () => {
+  const documents = productDocumentsDouble();
+  const learning = new LearningService({ documents, now: () => new Date("2026-10-12T00:00:00.000Z") });
+  const stated = await learning.createCandidate("u1", { projectId: "p1", frontmatter: frontmatter("stated-by-hand"), body: SECTIONS(), provenance: { origin: "explicit" } });
+  for (let load = 0; load < 30; load += 1) await learning.recordCarried("u1", stated.id);
+  const pass = new MethodConsolidation({ dispatch: async () => null, readResult: async () => null, learning, unusedAfterLoads: 20, now: () => new Date("2026-10-12T00:00:00.000Z") });
+  const result = await pass.run({ job: { userId: "u1", projectId: "p1", id: "job_3", payload: { action: "sleep" } } });
+  assert.deepEqual(result.retirements, [stated.id], "proposed on the result of the pass");
+  assert.equal((await learning.getMethod("u1", stated.id)).payload.status, "approved");
+  assert.match(retirementSentence({ code: "never_opened", immediate: false, runs: 30 }), /建议停用/);
+});

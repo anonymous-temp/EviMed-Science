@@ -57,6 +57,7 @@ import {
   cleanMethodScope,
   cleanMethodSteps,
   emptyLearning,
+  foldCarried,
   foldEligible,
   foldMethodFeedback,
   foldObservation,
@@ -70,6 +71,7 @@ import {
   promotionVerdict,
   relationIssues,
   resetLearningForDigest,
+  restartCarried,
   retirementProposal,
   unresolvedConflicts,
   validateMethodSkill,
@@ -793,7 +795,11 @@ export class LearningService {
       ...(target.payload.files ? { files: target.payload.files } : { files: undefined }),
       dependencies: target.payload.dependencies ?? [],
       contentDigest: digestOf(target),
-      learning: sameBody ? current.payload.learning : resetLearningForDigest(current.payload.learning, digestOf(target)),
+      // Given back, the same body starts its count of loads again: it was stopped on that count (`never_opened`), and the
+      // next hourly pass would otherwise stop it again before a single run had carried it.
+      learning: sameBody
+        ? (current.payload.status === "retired" ? restartCarried(current.payload.learning) : current.payload.learning)
+        : resetLearningForDigest(current.payload.learning, digestOf(target)),
       provenance: { ...target.payload.provenance, ...(sourceProjectId ? { sourceProjectId } : {}) },
       ...(sameBody ? {} : {
         ...(cleanMethodDisplay(target.payload.display) ? { display: cleanMethodDisplay(target.payload.display) } : {}),
@@ -898,6 +904,25 @@ export class LearningService {
       }
     }
     throw new HttpError(409, "product_revision_conflict", "Concurrent method observations did not settle.");
+  }
+
+  /**
+   * Count a finished run that carried the method's card to a model that answered (`foldCarried`): the denominator of "was it
+   * ever opened" that the unused-method retirement reads. A stopped method is not counted, and a write that lost a race to
+   * another counter write is made again on the fresh record, because this is the one counter a verdict is later drawn from.
+   * @param {string} userId @param {string} methodId
+   */
+  async recordCarried(userId, methodId) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const document = await this.getMethod(userId, methodId);
+      if (document.payload.status === "retired") return document;
+      try {
+        return await this.#saveLearning(userId, methodId, document, foldCarried(document.payload.learning));
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 7) throw error;
+      }
+    }
+    throw new HttpError(409, "product_revision_conflict", "Concurrent method counters did not settle.");
   }
 
   /** @param {string} userId @param {string} methodId */
@@ -1069,7 +1094,7 @@ export class LearningService {
   /**
    * Which effective methods should be proposed for retirement tonight.
    * A proposal, not an action: the caller sends a notice with a rollback target.
-   * @param {string} userId @param {{projectId?: string|null, nowMs?: number, cap?: number}} [options]
+   * @param {string} userId @param {{projectId?: string|null, nowMs?: number, cap?: number, unusedAfterLoads?: number}} [options]
    */
   async retirementProposals(userId, options = {}) {
     const page = await this.listMethods(userId, { ...options, limit: 100 });
@@ -1090,6 +1115,7 @@ export class LearningService {
       const proposal = retirementProposal(/** @type {any} */ (records.get(document.id)), {
         nowMs: options.nowMs ?? this.now().getTime(),
         isApproved: (id) => approved.has(id),
+        ...(options.unusedAfterLoads !== undefined ? { unusedAfterLoads: options.unusedAfterLoads } : {}),
       });
       if (proposal.propose) proposals.push({ document, proposal });
     }

@@ -236,9 +236,11 @@ export function invokedSkillsBySession(sessions) {
  * @property {{methodId: string, observation: {runId: string, family: string, outcome: string, at: string, invoked: boolean}}[]} observations
  * @property {string[]} eligible   approved methods that were available and not mounted
  * @property {{name: string, digest: string}[]} methodsLoaded
- * @property {{name: string, digest: string}[]} methodsInvoked
+ * @property {{name: string, digest: string}[]} methodsInvoked   every approved method the run opened, with the digest of the file it was carried as
  * @property {{name: string, mounted: string, current: string}[]} mismatched
- * @property {{id: string, name: string}[]} invokedWithoutMount
+ * @property {{id: string, name: string}[]} invokedWithoutMount   opened, and credited to no deliverable's observation
+ * @property {string[]} carried   ids of the approved methods the run carried a card for
+ * @property {boolean} answered   the model got to act in the run's own session, so a card it did not open was passed over rather than unseen
  */
 
 /**
@@ -354,7 +356,8 @@ export function runMethodObservations(input) {
     }
   }
 
-  // Read in a session that produced no deliverable.
+  // Read in a session that produced no deliverable, or by one that did not
+  // credit it.
   //
   // The mount is recorded on the delegation receipt, so a run that never
   // delegates has no receipt and every loop above skips it — while the root
@@ -372,34 +375,68 @@ export function runMethodObservations(input) {
   // credit it with. It is a name that was read, which is enough to say the
   // method was not passed over — and enough, through `foldRead`, to keep the
   // retirement rule from reading a method the answer line uses daily as idle.
+  //
+  // "Credited" is what an observation of this run says was used. A method the
+  // root session opened while a child made the deliverable, or one a child
+  // opened in a deliverable that never reached a verdict, is opened and
+  // credited to nothing, and used to be counted nowhere: 2026-10-12, three of
+  // the four production runs whose transcripts show a mounted method's file
+  // being opened left no trace of it in the run's ledger row.
   const invokedAnywhere = new Set([...invokedBySession.values()].flatMap((names) => [...names]));
-  // Carries the id as well as the name, because the name is what the receipt
-  // speaks and the id is what the ledger is keyed by. Returning only the name
-  // is why this signal reached an audit line and stopped there.
-  const invokedWithoutMount = (input.methods ?? [])
-    .filter((method) => !loaded.has(method.name) && usedIn(invokedAnywhere, method))
-    .map((method) => ({ id: method.id, name: method.name }));
+  const credited = new Set(observations.filter((entry) => entry.observation.invoked).map((entry) => entry.methodId));
+  const opened = (input.methods ?? []).filter((method) => usedIn(invokedAnywhere, method));
 
-  // Available and not chosen. Counted once per run, because the mount is a
-  // property of the run — every child of a run is handed the same directory —
-  // so "not chosen" is a decision the selection made once, not per deliverable.
-  const used = new Set([...loaded.keys(), ...invokedWithoutMount.map((entry) => entry.name)]);
-  const eligible = (input.methods ?? [])
-    .filter((method) => !used.has(method.name))
-    .map((method) => method.id);
-
-  // The root session's own receipt: the methods the runtime put in front of
-  // every session, reported by the capsule plugin (`mountedMethods`). Part of
-  // what the run carried, so part of `methodsLoaded`; not a choice, so it
-  // moves neither an observation nor the denominator above. A run that did
-  // its work without delegating had no record of its methods at all, and every
-  // paired-evaluation cell was excluded as `arm_not_applied` (2026-09-21).
+  // What the run carried: the delegation receipts' methods, and the methods the
+  // runtime put in front of every session, reported by the capsule plugin
+  // (`mountedMethods`). Part of what the run carried, so part of
+  // `methodsLoaded`; not a choice, so it moves neither an observation nor the
+  // denominator above. A run that did its work without delegating had no
+  // record of its methods at all, and every paired-evaluation cell was excluded
+  // as `arm_not_applied` (2026-09-21).
   const carried = new Map(loaded);
   for (const entry of Array.isArray(input.projection?.mountedMethods) ? input.projection.mountedMethods : []) {
     const name = String(entry?.name ?? "");
     const digest = String(entry?.digest ?? "");
     if (name && digest && !carried.has(name)) carried.set(name, digest);
   }
+
+  // The run's own record of what it opened, whole: every approved method whose
+  // file the run opened in any of its sessions, under the digest it was carried
+  // as. This is `methodsInvoked`, the list the scientific record joins a later
+  // correction to (`methodFeedback.mjs`), and it was only the deliverable-
+  // attributed subset of it. A method opened but never carried has no digest
+  // the run can vouch for, so it stays in the audit line and the `read` count
+  // and out of this list rather than be recorded under a guess.
+  for (const method of opened) {
+    const digest = carried.get(method.name);
+    if (digest && !invoked.has(method.name)) invoked.set(method.name, digest);
+  }
+
+  // A file read as an older body than the one the ledger holds now is not a
+  // reading of that body (the same refusal as a stale receipt above).
+  const stale = (/** @type {{name: string, digest: string}} */ method) => {
+    const mounted = carried.get(method.name);
+    return Boolean(mounted) && mounted !== method.digest;
+  };
+  const invokedWithoutMount = opened
+    .filter((method) => !credited.has(method.id) && !stale(method))
+    .map((method) => ({ id: method.id, name: method.name }));
+
+  // Available and not chosen. Counted once per run, because the mount is a
+  // property of the run — every child of a run is handed the same directory —
+  // so "not chosen" is a decision the selection made once, not per deliverable.
+  const used = new Set([...loaded.keys(), ...opened.map((method) => method.name)]);
+  const eligible = (input.methods ?? [])
+    .filter((method) => !used.has(method.name))
+    .map((method) => method.id);
+
+  // Whether the model got to act in the run's own sessions at all. A card the
+  // model was handed and did not open is a method passed over only if there
+  // was a model turn to pass it over in: a run whose runtime died on the first
+  // step, or whose conversation could not be read, shows nothing either way
+  // (`counts.carried`, the unused-method retirement).
+  const answered = (input.sessions ?? []).some((session) => (session?.transcript?.messages ?? [])
+    .some((message) => message?.role === "assistant"));
 
   return {
     observations,
@@ -408,6 +445,8 @@ export function runMethodObservations(input) {
     methodsInvoked: [...invoked.entries()].map(([name, digest]) => ({ name, digest })),
     mismatched,
     invokedWithoutMount,
+    carried: (input.methods ?? []).filter((method) => carried.has(method.name)).map((method) => method.id),
+    answered,
   };
 }
 
