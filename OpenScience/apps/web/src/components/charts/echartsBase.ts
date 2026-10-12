@@ -192,6 +192,11 @@ export function motionOption(option: EChartsCoreOption, reduced: boolean): EChar
   } as EChartsCoreOption;
 }
 
+/** The events a chart forwards to its page, by the library's own names. */
+export type ChartEvents = Partial<Record<"click" | "dblclick" | "datazoom" | "mouseover" | "mouseout", (params: any) => void>>;
+
+const FORWARDED = ["click", "dblclick", "datazoom", "mouseover", "mouseout"] as const;
+
 /**
  * Mounts one chart into the returned element and keeps it in step with the
  * container's width, the page's scheme, and the reader's motion and contrast
@@ -199,18 +204,30 @@ export function motionOption(option: EChartsCoreOption, reduced: boolean): EChar
  * “there is no reading to draw” without unmounting its card. `decal: true`
  * is for a chart with three or more categories and no direct label, which
  * needs its patterns whatever the reader's settings.
+ *
+ * `on` forwards the chart's events to the page (a mark clicked, the time window moved). The handlers are read when an event
+ * arrives, not when the chart is built, so a handler that changes with the page's state never rebuilds the chart. `chart`, when
+ * given, holds the live instance for the page to dispatch actions to (highlighting the marks a search matched); it is null
+ * wherever nothing is painted.
  */
-export function useEChart(option: EChartsCoreOption | null, { decal = false }: { decal?: boolean } = {}): React.RefObject<HTMLDivElement | null> {
+export function useEChart(
+  option: EChartsCoreOption | null,
+  { decal = false, on, chart: instance }: { decal?: boolean; on?: ChartEvents; chart?: React.MutableRefObject<echarts.ECharts | null> } = {},
+): React.RefObject<HTMLDivElement | null> {
   const host = useRef<HTMLDivElement | null>(null);
   const scheme = useColorScheme();
   const reduced = useReducedMotion();
   const patterned = useContrastSetting() || decal;
+  const handlers = useRef<ChartEvents | undefined>(on);
+  handlers.current = on;
   useEffect(() => {
     const node = host.current;
     if (!node || !option || !canPaintChart()) return undefined;
     registerCharts();
     const chart = echarts.init(node, scheme === "dark" ? CHART_THEMES.dark : CHART_THEMES.light, { renderer: "canvas" });
     chart.setOption(decalOption(motionOption(option, reduced), patterned));
+    for (const name of FORWARDED) chart.on(name, (...args: unknown[]) => { handlers.current?.[name]?.(args[0]); });
+    if (instance) instance.current = chart;
     const resize = () => chart.resize();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
     observer?.observe(node);
@@ -218,10 +235,19 @@ export function useEChart(option: EChartsCoreOption | null, { decal = false }: {
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", resize);
+      if (instance) instance.current = null;
       chart.dispose();
     };
-  }, [option, scheme, reduced, patterned]);
+  }, [option, scheme, reduced, patterned, instance]);
   return host;
+}
+
+/**
+ * Text that reaches a tooltip. A tooltip is HTML, and what a memory says is the researcher's own words (ECharts itself had a
+ * tooltip injection before 6.1.0): every tooltip built from a record, a label or a title goes through here.
+ */
+export function escapeTooltip(text: unknown): string {
+  return String(text ?? "").replace(/[&<>"']/gu, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 }
 
 /**

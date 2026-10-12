@@ -19,6 +19,7 @@ import { Tag } from "@/components/ui/Tag";
 import { Textarea } from "@/components/ui/Input";
 import { ConversationLink } from "./ConversationLink";
 import { DrawerSection } from "./DrawerSection";
+import { RelatedSection } from "./RelatedSection";
 import { heldFrom, type FactItem } from "./memoryItems";
 import { ValidityBar, validitySpan } from "./ValidityBar";
 
@@ -76,7 +77,7 @@ export function memorySource(record: WebStructuredMemory): { sessionId: string; 
  * back and 已忘记的内容 restores; 不再记这条 deletes and stops the extractor
  * inferring it again, so it is the one that asks first.
  */
-export function FactDrawer({ item, projectName, conversations, onClose, onChanged }: {
+export function FactDrawer({ item, projectName, conversations, onClose, onChanged, onOpenRecord, canOpenRecord }: {
   item: FactItem;
   /** The project a project's fact belongs to, when the shell knows its name. */
   projectName: string | null;
@@ -84,6 +85,9 @@ export function FactDrawer({ item, projectName, conversations, onClose, onChange
   conversations?: Record<string, string>;
   onClose: () => void;
   onChanged: () => void;
+  /** Opens another memory in this drawer, from its 关联 section; absent where the page cannot. */
+  onOpenRecord?: (recordId: string) => void;
+  canOpenRecord?: (recordId: string) => boolean;
 }) {
   const record = item.kind === "record" ? item.record : null;
   const entry: OwnCapsuleEntry | null = item.kind === "entry" ? item.entry : null;
@@ -318,6 +322,8 @@ export function FactDrawer({ item, projectName, conversations, onClose, onChange
               ))}
             </DrawerSection>
           )}
+
+          {record && <RelatedSection recordId={record.id} onOpenRecord={onOpenRecord} canOpen={canOpenRecord} />}
 
           {(formerly.length > 0 || revisions.length > 0) && (
             <DrawerSection label="以前的版本">

@@ -133,6 +133,11 @@
   },
   "packageManager": "pnpm@9.4.0",
   "pnpm": {
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "echarts-wordcloud>echarts": "6"
+      }
+    },
     "overrides": {
       "@deepseek-ai/dsh": "0.1.7-rc.2",
       "@deepseek-ai/dsh-agent": "0.1.7-rc.2",

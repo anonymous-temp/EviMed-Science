@@ -29,12 +29,14 @@ import { Switch } from "@/components/ui/Switch";
  * the researcher's own capsule), and none of what it does not (对话, 报告, 知识库
  * and the capsules others shared).
  */
-export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten }: {
+export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten, onMap }: {
   onReset: () => void;
   /** A switch was changed: 项目 says 「本项目已暂停记忆」 from the same setting. */
   onSettingsChanged?: () => void;
   onShare: () => void;
   onForgotten: () => void;
+  /** Opens 记忆地图, the explorable picture of the same memories. */
+  onMap: () => void;
 }) {
   const [settings, setSettings] = useState<WebMemorySettings | null>(null);
   const [failed, setFailed] = useState(false);
@@ -95,6 +97,7 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
       <Menu
         label="记忆设置"
         items={[
+          { label: "记忆地图", onSelect: onMap },
           { label: "分享与导入", onSelect: onShare },
           { label: "已忘记的内容", onSelect: onForgotten },
           "separator",

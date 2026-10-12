@@ -27,6 +27,7 @@ const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({
 const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
+const MemoryMapPage = lazy(() => import("./routes/MemoryMapPage").then((m) => ({ default: m.MemoryMapPage })));
 const SharedCapsulePage = lazy(() => import("./routes/SharedCapsulePage").then((m) => ({ default: m.SharedCapsulePage })));
 const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ default: m.AccountPage })));
 const SimulatedWalletPage = lazy(() => import("./routes/SimulatedWalletPage").then((m) => ({ default: m.SimulatedWalletPage })));
@@ -119,6 +120,8 @@ export const routes: RouteObject[] = [
         // by `SessionFrameHost`). `?task=` and `?digest=` are the old addresses and are resolved by the page.
         { path: "autopilot/:taskId?", element: <AutopilotPage /> },
         { path: "memory", element: <MemoryHubPage /> },
+        // 「记忆地图」: the explorable picture of the memory page's contents, a data page of its own (DESIGN.md 「页面结构」).
+        { path: "memory/map", element: <MemoryMapPage /> },
         // A share link and a delivery from the inbox (flywheel F17): the same preview, trial and import a file has, with no file.
         { path: "memory/shared/:token", element: <SharedCapsulePage /> },
         { path: "memory/delivered/:deliveryId", element: <SharedCapsulePage /> },

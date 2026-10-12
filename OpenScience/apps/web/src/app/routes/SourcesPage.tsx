@@ -492,7 +492,10 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
           <SearchInput label="搜索资料和内容" value={query} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-60" />
           {!firstRun && addMenu}
           {!shared && !firstRun && (
-            <Menu label="更多" items={[{ label: exporting ? "正在导出" : "导出到 Obsidian", icon: Download, disabled: exporting || !hasWebApi, onSelect: () => void exportVault() }]} />
+            <Menu label="更多" items={[
+              { label: "在记忆地图中查看", onSelect: () => navigate("/app/memory/map") },
+              { label: exporting ? "正在导出" : "导出到 Obsidian", icon: Download, disabled: exporting || !hasWebApi, onSelect: () => void exportVault() },
+            ]} />
           )}
         </>}
       >

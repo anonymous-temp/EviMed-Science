@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useAddressOpen, useAddressText, withParam } from "@/lib/addressState";
 import { usePageScroll } from "@/lib/pageScroll";
 import { Brain } from "lucide-react";
@@ -99,6 +99,7 @@ const SOURCES_OF: Record<MemoryTab, readonly ("profile" | "mine" | "methods" | "
  */
 export function MemoryHubPage() {
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const projects = useProjectStore((state) => state.projects);
   const currentProjectId = useProjectStore((state) => state.currentId);
   // The tab the address names, else the one the page picked for the researcher once the data was in (below).
@@ -329,7 +330,7 @@ export function MemoryHubPage() {
   return (
     <PageShell
       title="记忆胶囊"
-      actions={<MemoryControls onReset={reload} onSettingsChanged={reloadOverview} onShare={() => setDrawer("share")} onForgotten={() => setDrawer("forgotten")} />}
+      actions={<MemoryControls onReset={reload} onSettingsChanged={reloadOverview} onShare={() => setDrawer("share")} onForgotten={() => setDrawer("forgotten")} onMap={() => navigate("/app/memory/map")} />}
     >
       <span ref={scrollAnchor} hidden />
       {/* One row: the tabs, and the search box at its end; on a phone the box takes its own line. */}
@@ -353,6 +354,8 @@ export function MemoryHubPage() {
           conversations={{ ...data?.profile?.conversations, ...searchConversations }}
           onClose={close}
           onChanged={reload}
+          onOpenRecord={(recordId) => setOpenKey(`record:${recordId}`)}
+          canOpenRecord={(recordId) => everyFact.some((fact) => fact.key === `record:${recordId}`)}
         />
       ) : opened?.kind === "method" ? (
         <MethodDrawer key={opened.key} method={opened.method} onClose={close} onChanged={reload} />

@@ -209,6 +209,25 @@ function shownMemory(record) {
   return { id: record.id, scope: record.scope === "user" ? "account" : "project", text: excerpt(record.summary || record.value, TOPIC_LIMITS.excerpt) };
 }
 
+/**
+ * The body of the one request a grouping makes. Exported so `evals/memory-topics` runs the very prompt the platform runs.
+ * @param {string} model
+ * @param {{ existing?: { id: string, label: string, fixed?: boolean }[], dismissed?: string[], memories: readonly any[] }} input
+ */
+export function topicsRequestBody(model, { existing = [], dismissed = [], memories }) {
+  return {
+    model, thinking: { type: "disabled" }, temperature: 0, max_tokens: 4_000, response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: INSTRUCTIONS },
+      { role: "user", content: JSON.stringify({
+        existing: existing.map(({ id, label, fixed }) => ({ id, label, ...(fixed ? { fixed: true } : {}) })),
+        dismissed,
+        memories: memories.map(shownMemory),
+      }) },
+    ],
+  };
+}
+
 /** @param {any} value @returns {TopicOverrides} */
 function overridesOf(value) {
   const object = value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -343,17 +362,9 @@ export class MemoryTopics {
       }));
       const body = await this.callModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
         userId, projectId, runId, purpose: "memory-extraction", signal: controller.signal,
-        body: {
-          model: this.model, thinking: { type: "disabled" }, temperature: 0, max_tokens: 4_000, response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: INSTRUCTIONS },
-            { role: "user", content: JSON.stringify({
-              existing: old.map(({ id, label, fixed }) => ({ id, label, ...(fixed ? { fixed: true } : {}) })),
-              dismissed: (row.overrides.dismissed ?? []).map((/** @type {any} */ item) => item.label),
-              memories: eligible.map(shownMemory),
-            }) },
-          ],
-        },
+        body: topicsRequestBody(this.model, {
+          existing: old, dismissed: (row.overrides.dismissed ?? []).map((/** @type {any} */ item) => item.label), memories: eligible,
+        }),
       });
       const made = parseTopics(body?.choices?.[0]?.message?.content, eligible.map((record) => record.id), old);
       if (made.length === 0) {

@@ -1175,6 +1175,21 @@ kernel PID only if the process command line still matches the configured kernel
 command. This is a cleanup aid, not a replacement for a
 container or worker sandbox.
 
+### The memory map (记忆地图)
+
+`/app/memory/map` draws what the platform remembers and knows about a researcher from one read-only document,
+`GET /api/memory/map`, derived when read from the memory store, the knowledge base, the run ledger and the learned methods; it
+writes nothing. It follows `OPEN_SCIENCE_MEMORY_ENABLED` unless `OPEN_SCIENCE_MEMORY_MAP_ENABLED` is set; off, its routes answer 503
+`memory_map_disabled` and the page is hidden. A source that cannot be read costs its own part of the map and is named in the
+document's `missing`.
+
+Its 主题 view is the one part that calls a model: one Flash call (charged to the account as memory extraction, caps included)
+groups the account's memories into topics when they changed. `OPEN_SCIENCE_MEMORY_TOPICS_ENABLED` switches that off,
+`OPEN_SCIENCE_MEMORY_TOPICS_DAILY_RUNS` (default 4) is the most groupings one account may have made in a day, and
+`OPEN_SCIENCE_MEMORY_TOPICS_MIN_MEMORIES` (default 12) is how many memories there must be before there is anything to group. A
+researcher's rename, merge or dismissal of a topic costs no call and is kept through every regrouping; the grouping lives in
+`evimed_memory.topic_sets` and goes with the account and with a memory reset.
+
 ## Data Backup and Restore
 
 For the current single-node hosted slice, all durable server state is under

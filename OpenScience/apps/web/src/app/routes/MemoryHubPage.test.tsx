@@ -219,17 +219,33 @@ describe("记忆胶囊", () => {
     }
   });
 
-  it("keeps sharing, forgotten content, this project and the reset in the header's 「⋯」, in that order", async () => {
+  it("keeps the map, sharing, forgotten content, this project and the reset in the header's 「⋯」, in that order, and the map opens on its own page", async () => {
     const user = userEvent.setup();
     open();
     await screen.findByRole("switch", { name: "记忆" });
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     const menu = await screen.findByRole("menu", { name: "记忆设置" });
-    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
+    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["记忆地图", "分享与导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
     const project = within(menu).getByRole("menuitemcheckbox", { name: "本项目不使用记忆" });
     expect(project).toHaveAttribute("aria-checked", "false");
     await user.click(project);
     await waitFor(() => expect(updateMemorySettings).toHaveBeenCalledWith({ pausedProjects: ["prj_1"] }));
+  });
+
+  it("opens the memory map from the header's 「⋯」", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/app/memory"]}>
+        <Routes>
+          <Route path="/app/memory" element={<MemoryHubPage />} />
+          <Route path="/app/memory/map" element={<p>地图页</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByRole("switch", { name: "记忆" });
+    await user.click(screen.getByRole("button", { name: "记忆设置" }));
+    await user.click(await screen.findByRole("menuitem", { name: "记忆地图" }));
+    expect(await screen.findByText("地图页")).toBeInTheDocument();
   });
 
   it("asks before the reset deletes anything, and says exactly what it clears and what it leaves", async () => {

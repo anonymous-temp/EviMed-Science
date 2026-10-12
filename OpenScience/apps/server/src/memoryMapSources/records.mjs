@@ -111,8 +111,16 @@ export function lanesOf(records, conflicted = new Set()) {
   const lanes = [];
   for (const [root, members] of chains) {
     if (members.length < 2) continue;
-    const ordered = [...members].sort((left, right) => String(left.validFrom ?? left.createdAt ?? "").localeCompare(String(right.validFrom ?? right.createdAt ?? ""))
-      || left.id.localeCompare(right.id));
+    // Oldest version first: by how many replacements precede it, then by when it began — two versions written in one second are still in order.
+    const depth = (/** @type {any} */ record, /** @type {number} */ guard = 0) => {
+      const before = members.filter((other) => other.supersededBy === record.id);
+      return before.length === 0 || guard > members.length ? 0 : 1 + Math.max(...before.map((other) => depth(other, guard + 1)));
+    };
+    const ordered = members.map((record) => ({ record, depth: depth(record) }))
+      .sort((left, right) => left.depth - right.depth
+        || String(left.record.validFrom ?? left.record.createdAt ?? "").localeCompare(String(right.record.validFrom ?? right.record.createdAt ?? ""))
+        || left.record.id.localeCompare(right.record.id))
+      .map((entry) => entry.record);
     const current = ordered.findLast((record) => record.status !== "superseded") ?? ordered.at(-1);
     lanes.push({
       moved: ordered.map((record) => instant(record.invalidSince) ?? instant(record.updatedAt) ?? "").sort().at(-1) ?? "",

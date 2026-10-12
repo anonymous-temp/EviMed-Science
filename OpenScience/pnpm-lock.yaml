@@ -140,6 +140,9 @@ importers:
       echarts:
         specifier: ^6.1.0
         version: 6.1.0
+      echarts-wordcloud:
+        specifier: 2.1.0
+        version: 2.1.0(echarts@6.1.0)
       exceljs:
         specifier: ^4.4.0
         version: 4.4.0
@@ -2300,6 +2303,11 @@ packages:
 
   duplexer2@0.1.4:
     resolution: {integrity: sha512-asLFVfWWtJ90ZyOUHMqk7/S2w2guQKxUI2itj3d92ADHhxUSbCMGi1f1cBcJ7xM1To+pE/Khbwo1yuNbMEPKeA==}
+
+  echarts-wordcloud@2.1.0:
+    resolution: {integrity: sha512-Kt1JmbcROgb+3IMI48KZECK2AP5lG6bSsOEs+AsuwaWJxQom31RTNd6NFYI01E/YaI1PFZeueaupjlmzSQasjQ==}
+    peerDependencies:
+      echarts: ^5.0.1
 
   echarts@6.1.0:
     resolution: {integrity: sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==}
@@ -6380,6 +6388,10 @@ snapshots:
   duplexer2@0.1.4:
     dependencies:
       readable-stream: 2.3.8
+
+  echarts-wordcloud@2.1.0(echarts@6.1.0):
+    dependencies:
+      echarts: 6.1.0
 
   echarts@6.1.0:
     dependencies:
