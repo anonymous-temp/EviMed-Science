@@ -743,6 +743,12 @@ function nativeInputIdentity(source) {
   return typeof source?.rpcId === "string" ? source.rpcId : null;
 }
 
+/** The LoopX goal an automatic turn works on, so the ledger can find the turn that set it. @param {any} source @returns {string|null} */
+function loopxGoalIdentity(source) {
+  const id = source?.kind === "loopx-continuation" ? source.goalId : null;
+  return typeof id === "string" && /^[A-Za-z0-9_.:-]{1,256}$/.test(id) ? id : null;
+}
+
 /**
  * Turns a page of history entries into the transcript the gate reads.
  *
@@ -794,6 +800,7 @@ export function normalizeTranscript(sessionId, entries) {
           // user typed — the difference the injection is logged for.
           source: /** @type {any} */ (String(data?.source?.kind ?? "user")),
           sourceRequestId: nativeInputIdentity(data.source),
+          ...(loopxGoalIdentity(data.source) ? { loopxGoalId: loopxGoalIdentity(data.source) } : {}),
           turnStartSeq: activeTurn?.startSeq ?? null,
           seq,
           time,

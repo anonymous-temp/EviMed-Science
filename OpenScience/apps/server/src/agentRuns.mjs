@@ -177,6 +177,55 @@ const routeReasonPattern = /^[a-z][a-z0-9_.:-]{0,63}$/;
 // `reserveRun` both look at.
 const adoptedRouteReason = "adopted:runtime-ui";
 
+/** A LoopX goal id as the kernel's continuation source carries it. */
+const loopxGoalIdPattern = /^[A-Za-z0-9_.:-]{1,256}$/;
+
+/**
+ * Which goal an automatic turn works on and which run set that goal, read by shape like the fields around it.
+ * @param {any} value @returns {{ id: string, runId: string | null } | null}
+ */
+function normalizeRunGoal(value) {
+  if (!value || typeof value !== "object" || typeof value.id !== "string" || !loopxGoalIdPattern.test(value.id)) return null;
+  return { id: value.id, runId: typeof value.runId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value.runId) ? value.runId : null };
+}
+
+/** Whether a transcript message names a LoopX goal id as a whole token — the `loopx` command that creates a goal prints it. */
+function mentionsGoal(message, goalId) {
+  // The id's own alphabet is letters, digits and `_.:-`; only the dot means anything to a pattern.
+  const token = new RegExp(`(?<![A-Za-z0-9_.:-])${goalId.replace(/\./g, "\\.")}(?![A-Za-z0-9_.:-])`);
+  return (message.parts ?? []).some((part) => part.type === "tool"
+    ? token.test(part.output ?? "") || token.test(JSON.stringify(part.input ?? {}))
+    : token.test(part.text ?? ""));
+}
+
+/**
+ * The run a LoopX goal's automatic turn continues: the researcher's turn that set the goal, never merely the last turn — a
+ * question asked between two automatic turns is a run of its own, and a continuation that took its question and contract would
+ * be listed, routed and charged as that question. In order: an earlier automatic turn of the same goal (it names the goal's run);
+ * the earliest turn of the session whose messages carry the goal's id (the `loopx` command that created the goal prints it); and,
+ * when neither is there, the latest turn the researcher asked before this one.
+ * @param {any[]} knownRuns @param {import('@evimed/domain').RunTranscript} transcript @param {string} sessionId
+ * @param {{ startSeq: number, time: number }} turn @param {string | null} goalId
+ */
+function goalAnchorRun(knownRuns, transcript, sessionId, turn, goalId) {
+  const own = knownRuns.filter((item) => item.sessionId === sessionId);
+  const asked = (item) => item && !item.automated ? item : null;
+  if (goalId) {
+    const recorded = own.find((item) => item.goal?.id === goalId && item.goal.runId);
+    const setter = recorded ? asked(own.find((item) => item.id === recorded.goal.runId)) : null;
+    if (setter) return setter;
+    const named = (transcript.turns ?? [])
+      .filter((candidate) => candidate.startSeq < turn.startSeq)
+      .sort((left, right) => left.startSeq - right.startSeq)
+      .find((candidate) => transcript.messages.some((message) => message.turnStartSeq === candidate.startSeq
+        && message.source !== "loopx-continuation" && mentionsGoal(message, goalId)));
+    const creator = named ? asked(own.find((item) => item.nativeTurn?.startSeq === named.startSeq)) : null;
+    if (creator) return creator;
+  }
+  return own.filter((item) => !item.automated && Date.parse(item.startedAt) <= turn.time)
+    .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))[0] ?? null;
+}
+
 /**
  * How many mid-run corrections one run accepts.
  *
@@ -513,6 +562,8 @@ function foldEvents(events) {
         // a ledger written before it lists the same way.
         question: typeof event.question === "string" && event.question ? questionPreview(event.question) : null,
         ...(event.automated === true ? { automated: true } : {}),
+        // The LoopX goal an automatic turn works on and the run that set it, so the next automatic turn finds that run again.
+        ...(normalizeRunGoal(event.goal) ? { goal: normalizeRunGoal(event.goal) } : {}),
         ...(normalizeRunEstimate(event.estimatedMinutes) ? { estimatedMinutes: normalizeRunEstimate(event.estimatedMinutes) } : {}),
         // The session this run's session was forked from (C3), so a branch
         // can be followed back to the conversation it came from.
@@ -4580,6 +4631,7 @@ export class AgentRunStore {
     kernelRequestIds = null,
     legacyRunId = null,
     startedAt = null,
+    goal = null,
   } = {}) {
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
@@ -4673,6 +4725,7 @@ export class AgentRunStore {
         model: this.model,
         question,
         ...(automated === true ? { automated: true } : {}),
+        ...(normalizeRunGoal(goal) ? { goal: normalizeRunGoal(goal) } : {}),
         ...(normalizeRunEstimate(estimatedMinutes) ? { estimatedMinutes: normalizeRunEstimate(estimatedMinutes) } : {}),
         ...(typeof forkedFrom === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(forkedFrom) ? { forkedFrom } : {}),
         ...(typeof originCardId === "string" && originCardIdPattern.test(originCardId) ? { originCardId } : {}),
@@ -7471,8 +7524,8 @@ export class AgentRunStore {
           && String(item.effectiveRouteReason ?? "").startsWith(adoptedRouteReason)) : null;
         const question = first.parts.map((part) => part.type === "text" ? part.text : "").join(" ").trim();
         const continuation = first.source === "loopx-continuation";
-        const previous = continuation ? knownRuns.filter(item => item.sessionId === sessionId
-          && Date.parse(item.startedAt) <= turn.time).sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))[0] : null;
+        const goalId = continuation && typeof first.loopxGoalId === "string" && loopxGoalIdPattern.test(first.loopxGoalId) ? first.loopxGoalId : null;
+        const previous = continuation ? goalAnchorRun(knownRuns, transcript, sessionId, turn, goalId) : null;
         // Keep the initiating research contract; heartbeat text is not a new specialty request.
         const routed = legacy ? {} : continuation ? { ...previous, effectiveRouteReason: "loopx-continuation" }
           : await routeTurn(question, { requestIds });
@@ -7486,6 +7539,7 @@ export class AgentRunStore {
           legacyRunId: legacy?.id,
           question: continuation && previous?.question ? previous.question : questionPreview(question),
           automated: continuation,
+          ...(goalId ? { goal: { id: goalId, runId: previous?.id ?? null } } : {}),
           estimatedMinutes: routed.estimatedMinutes ?? null,
           forkedFrom: source,
           effectiveAgentId: routed.effectiveAgentId ?? binding?.agentId ?? null,

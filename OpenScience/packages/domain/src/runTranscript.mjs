@@ -51,6 +51,7 @@ import { isEviMedToolName } from './toolNames.mjs'
  * @property {number} turn
  * @property {number|null} [turnStartSeq]
  * @property {string|null} [sourceRequestId]
+ * @property {string} [loopxGoalId]      the LoopX goal an automatic (`loopx-continuation`) turn works on
  * @property {number} step
  * @property {readonly TranscriptPart[]} parts
  * @property {{ input: number, output: number, cacheHit: number, cacheMiss: number } | null} usage

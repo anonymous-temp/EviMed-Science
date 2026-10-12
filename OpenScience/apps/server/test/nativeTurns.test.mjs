@@ -34,6 +34,68 @@ test("LoopX continuation inherits the research contract and replay never creates
   assert.equal(transcript.messages.find(message => message.sourceRequestId === "loopx:dsh-loopx-turn-2").source, "loopx-continuation");
 });
 
+/** One more turn shaped like the fixture's second, `shift` sequence numbers later, asking `text` from `source`. */
+function anotherTurn(turn, shift, text, source) {
+  const frames = structuredClone(fixture.events.slice(6));
+  for (const frame of frames) {
+    frame.seq += shift;
+    frame.time += shift * 1000;
+    if (frame.data.turn !== undefined) frame.data.turn = turn;
+  }
+  const input = frames.find((frame) => frame.type === "user/message");
+  input.data.content = [{ type: "text", text }];
+  input.data.source = source;
+  return frames;
+}
+
+/** Routes A and B to different capabilities, so a continuation shows whose contract it kept. */
+const routeByQuestion = async (text) => text.startsWith("Goal A")
+  ? { effectiveAgentId: "clinical-evidence-synthesis", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis" }
+  : { effectiveAgentId: "open-domain-answer", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-open-domain-answer" };
+
+test("an automatic turn after an unrelated question keeps the goal's first question and contract, found by the goal's id", async (t) => {
+  const events = structuredClone(fixture.events);
+  events[1].data.content = [{ type: "text", text: "Goal A: complete the longitudinal study protocol." }];
+  // The turn that set the goal ran the `loopx` command, whose answer names the goal.
+  events[4].data.message.content.push({ type: "text", text: '{"ok":true,"goal_id":"goal-A1"}' });
+  events[7].data.content = [{ type: "text", text: "Unrelated question B: explain a gene expression plot." }];
+  events.push(...anotherTurn(3, 200, "Continue the goal.", { kind: "loopx-continuation", goalId: "goal-A1", agentId: "agent-1", turnInstanceId: "loopx-turn-3" }));
+  const f = await setup(t, events);
+  await f.adopt(routeByQuestion);
+  const runs = await f.runs();
+  const goal = runs.find((run) => run.question?.startsWith("Goal A") && !run.automated);
+  const automatic = runs.find((run) => run.automated);
+  assert.equal(runs.length, 3);
+  assert.equal(automatic.question, goal.question);
+  assert.equal(automatic.effectiveAgentId, "clinical-evidence-synthesis");
+  assert.deepEqual(automatic.goal, { id: "goal-A1", runId: goal.id });
+  assert.equal(automatic.effectiveRouteReason, "adopted:runtime-ui:loopx-continuation");
+});
+
+test("a later automatic turn of the same goal finds the goal's run through the one before it, not through the last question", async (t) => {
+  const events = structuredClone(fixture.events);
+  events[1].data.content = [{ type: "text", text: "Goal A: complete the longitudinal study protocol." }];
+  events[7].data.content = [{ type: "text", text: "Continue the goal." }];
+  events[7].data.source = { kind: "loopx-continuation", goalId: "goal-A1", agentId: "agent-1", turnInstanceId: "loopx-turn-2" };
+  events.push(...anotherTurn(3, 200, "Unrelated question B: explain a gene expression plot.", { kind: "user", rpcId: "b-question" }));
+  events.push(...anotherTurn(4, 400, "Continue the goal.", { kind: "loopx-continuation", goalId: "goal-A1", agentId: "agent-1", turnInstanceId: "loopx-turn-4" }));
+  const f = await setup(t, events);
+  await f.adopt(routeByQuestion);
+  const runs = await f.runs();
+  const goal = runs.find((run) => run.question?.startsWith("Goal A") && !run.automated);
+  const automatic = runs.filter((run) => run.automated);
+  assert.equal(runs.length, 4);
+  assert.equal(automatic.length, 2);
+  for (const run of automatic) {
+    assert.equal(run.question, goal.question);
+    assert.equal(run.effectiveAgentId, "clinical-evidence-synthesis");
+    assert.deepEqual(run.goal, { id: "goal-A1", runId: goal.id });
+  }
+  // Replay finds the same rows.
+  f.restart(); await f.adopt(routeByQuestion);
+  assert.deepEqual((await f.runs()).map((run) => run.id).sort(), runs.map((run) => run.id).sort());
+});
+
 async function setup(t, initial = fixture.events) {
   const root = await mkdtemp(path.join(tmpdir(), "native-turns-"));
   const project = { id: "p1", userId: "u1", rootDir: root, metaDir: path.join(root, ".openscience"), workspaceDir: path.join(root, "workspace") };
