@@ -11,7 +11,7 @@ import test from "node:test";
 
 import { METHOD_RELATION_TYPES, METHOD_SKILL_SCHEMA, renderMethodSkill } from "@evimed/domain";
 
-import { CONSOLIDATE_ACTIONS, MethodConsolidation, candidatePairs, groupPairs, screenedPairs } from "../src/methodConsolidation.mjs";
+import { CONSOLIDATE_ACTIONS, MethodConsolidation, candidatePairs, groupPairs, screenedPairs, unprovenMerge } from "../src/methodConsolidation.mjs";
 
 const SECTIONS = (extra = "") => [
   "## Purpose", "Do a thing.", "",
@@ -671,3 +671,28 @@ test("a merge retires its originals when the canonical method has cleared the ha
   assert.equal(rows.get("source").payload.status, "retired");
   assert.deepEqual(await service.completePendingMerges({ userId: "user" }), []);
 });
+
+test("a merge nobody has used yet is not built on again: the hourly pass made one lesson into five on production (2026-10-12)", async () => {
+  const taught = doc("m1", "resolve-claim-span", { status: "approved", provenance: { origin: "inferred", runId: "run_1", trigger: "repair_accepted" } });
+  const merged = doc("m2", "resolve-claim-anchor", { status: "approved", provenance: { origin: "inferred", consolidatedBy: "consolidate:job_0", pendingRetirements: [] } });
+  // A taught method a pass amended carries the pass's mark too, and is not a merge.
+  const amended = doc("m3", "resolve-claim-quote", { status: "approved", provenance: { origin: "inferred", runId: "run_3", consolidatedBy: "consolidate:job_0" } });
+  assert.deepEqual([taught, merged, amended].map(unprovenMerge), [false, true, false]);
+
+  const answer = async (/** @type {any} */ identity) => (String(identity.dispatchId ?? "").includes("screen")
+    ? { status: "succeeded", output: { pairs: [{ a: "m1", b: "m2" }] } }
+    : { status: "succeeded", output: { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "merge", SKILLS: ["m1", "m2"] }] } });
+  const blocked = consolidation({ learning: fakeLearning([taught, merged]), readResult: answer });
+  const result = await blocked.instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
+  assert.deepEqual(blocked.dispatched.map((call) => call.input.action), [], "neither decided nor rebuilt");
+  assert.equal(result.builds, 0);
+
+  // Once it has cleared the harm test on runs that invoked it, it is a method like any other and may be grouped again.
+  const runs = Array.from({ length: 4 }, (_, index) => ({ runId: `run-${index}`, family: `family-${index}`, outcome: "accepted", invoked: true, at: `2026-09-0${index + 1}T00:00:00.000Z` }));
+  const cleared = { ...merged, payload: { ...merged.payload, learning: { ...merged.payload.learning, digest: merged.payload.contentDigest, observations: runs } } };
+  assert.equal(unprovenMerge(cleared), false);
+  const open = consolidation({ learning: fakeLearning([taught, cleared]), readResult: answer });
+  await open.instance.sleep({ job: { id: "job_2", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
+  assert.deepEqual(open.dispatched.map((call) => call.input.action), ["decide", "build"]);
+});
+

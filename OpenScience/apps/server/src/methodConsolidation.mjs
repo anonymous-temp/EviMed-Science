@@ -270,6 +270,19 @@ function mergeCleared(method) {
     && methodHarmTest(learning).state === "clear";
 }
 
+/**
+ * A method a consolidation pass wrote, rather than one a run taught it or one a pass amended, that has not cleared the harm
+ * test yet. Its originals stay in force beside it (`mergeCleared`), so building on it again only adds another version of the
+ * same lesson: on production between 2026-10-07 and 10-12 the hourly pass built 27 such methods out of three taught ones —
+ * 「从记录中读取带范围的值」 five times, 「就地修改已有文件」 three — none of them used once, every one shown on the 做法 page and
+ * packed into a share.
+ * @param {any} method
+ */
+export function unprovenMerge(method) {
+  const provenance = method?.payload?.provenance ?? {};
+  return String(provenance.consolidatedBy ?? "").startsWith("consolidate:") && !provenance.runId && !mergeCleared(method);
+}
+
 export class MethodConsolidation {
   /**
    * No inbox: what a pass did rides on its job result, and a refusal on the
@@ -401,6 +414,8 @@ export class MethodConsolidation {
     for (const group of groups) {
       const members = group.map((id) => byId.get(id)).filter(Boolean);
       if (members.length < CONSOLIDATION_LIMITS.minGroupSize) continue;
+      // A merge nobody has used yet is not a base for another (`unprovenMerge`): the group waits until it has cleared or gone.
+      if (members.some(unprovenMerge)) continue;
       // One group's failure is not the pass's, but a step that could not start
       // is not a failure: the worker defers the job and the pass resumes,
       // adopting the steps it already ran.
