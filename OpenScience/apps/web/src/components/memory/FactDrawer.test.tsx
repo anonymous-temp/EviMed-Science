@@ -14,9 +14,11 @@ vi.mock("@/lib/apiClient", async () => ({
 }));
 const client = vi.hoisted(() => ({
   announceMemoryChanged: vi.fn(), archiveMemoryRecord: vi.fn(), undoMemoryRecord: vi.fn(), settleMemoryConflict: vi.fn(),
-  retireCapsuleEntry: vi.fn(), undoCapsuleEntry: vi.fn(),
+  retireCapsuleEntry: vi.fn(), undoCapsuleEntry: vi.fn(), fetchMemorySources: vi.fn(),
 }));
 vi.mock("@/lib/memoryClient", () => client);
+const sources = vi.hoisted(() => ({ getSource: vi.fn() }));
+vi.mock("@/lib/sourceClient", () => sources);
 const product = vi.hoisted(() => ({ updateCapsuleEntry: vi.fn() }));
 vi.mock("@/lib/productClient", async () => ({
   ...(await vi.importActual<typeof import("@/lib/productClient")>("@/lib/productClient")),
@@ -65,7 +67,7 @@ async function openMenu() {
 }
 
 describe("one memory, opened from its row", () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => { vi.clearAllMocks(); client.fetchMemorySources.mockResolvedValue([]); });
   afterEach(cleanup);
 
   // Owner ruling of 2026-10-10 (review R9): whose words a memory is, is not said on the page — not for what the researcher said,
@@ -103,7 +105,8 @@ describe("one memory, opened from its row", () => {
     // Never the store's own references.
     expect(screen.queryByText(/conversation_message|sessions\/ses_9/)).not.toBeInTheDocument();
     expect(screen.getByTestId("where")).toHaveTextContent("/app/memory");
-    await userEvent.click(screen.getByRole("button", { name: "来源对话" }));
+    // The conversation is dated by the observation that named it.
+    await userEvent.click(screen.getByRole("button", { name: "来源对话（9月12日）" }));
     // A user-scope memory opens its conversation in the project the shell is in, and only when the link is clicked.
     expect(screen.getByTestId("where")).toHaveTextContent("/app/chat/ses_9");
     expect(navigation.select).not.toHaveBeenCalled();
@@ -113,7 +116,7 @@ describe("one memory, opened from its row", () => {
     navigation.select.mockImplementation(async (_id: string, land: () => void) => { land(); });
     open(fact({ scope: "project", scopeId: "prj_9", kind: "project_fact",
       evidence: [{ fingerprint: "f1", sourceType: "conversation_message", sourceRef: "sessions/ses_9/messages/m1", quote: "q", observedAt: null, weight: 1 }] }));
-    await userEvent.click(screen.getByRole("button", { name: "来源对话" }));
+    await userEvent.click(screen.getByRole("button", { name: /^来源对话/ }));
     expect(navigation.select).toHaveBeenCalledWith("prj_9", expect.any(Function));
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/chat/ses_9"));
   });
@@ -122,9 +125,57 @@ describe("one memory, opened from its row", () => {
     navigation.select.mockRejectedValue(new Error("gone"));
     open(fact({ scope: "project", scopeId: "prj_gone", kind: "project_fact",
       evidence: [{ fingerprint: "f1", sourceType: "conversation_message", sourceRef: "sessions/ses_9/messages/m1", quote: "q", observedAt: null, weight: 1 }] }));
-    await userEvent.click(screen.getByRole("button", { name: "来源对话" }));
+    await userEvent.click(screen.getByRole("button", { name: /^来源对话/ }));
     await waitFor(() => expect(toasts.error).toHaveBeenCalledWith("原始研究暂不可用"));
     expect(screen.getByTestId("where")).toHaveTextContent("/app/memory");
+  });
+
+  it("draws how long a memory held when there is something to say: a version behind it, or an end", () => {
+    // Made today, never changed: the date under the title is all there is to say.
+    open(fact({ createdAt: new Date().toISOString() }));
+    expect(screen.queryByRole("img", { name: /^有效期/ })).not.toBeInTheDocument();
+    cleanup();
+    // Replaced on 10-03 after one change on 09-20: begun 09-12, ended 10-03, one tick between.
+    open(fact({
+      status: "superseded", invalidSince: "2026-10-03T02:00:00Z", version: 2,
+      revisions: [{ version: 1, value: "旧", summary: "旧", status: "active", changedAt: "2026-09-20T02:00:00Z", reason: "x" }],
+    }, []));
+    const bar = screen.getByRole("img", { name: "有效期：9月12日起，10月3日止，中间改过 1 次" });
+    expect(within(bar.parentElement!).getByText("9月12日")).toBeInTheDocument();
+    expect(within(bar.parentElement!).getByText("10月3日")).toBeInTheDocument();
+    expect(bar.querySelectorAll("span")).toHaveLength(2);
+    cleanup();
+    // Still holding, changed once: it runs to today.
+    open(fact({ revisions: [{ version: 1, value: "旧", summary: "旧", status: "active", changedAt: "2026-09-20T02:00:00Z", reason: "x" }], version: 2 }));
+    const holding = screen.getByRole("img", { name: /^有效期：9月12日起，至今/ });
+    expect(within(holding.parentElement!).getByText("至今")).toBeInTheDocument();
+  });
+
+  it("names the knowledge-base documents a memory rests on and opens them on their own page", async () => {
+    client.fetchMemorySources.mockResolvedValue([
+      { type: "doi", id: "10.1000/x", state: "current" },
+      { type: "knowledge_source", id: "src_abc", state: "current" },
+      { type: "knowledge_source", id: "src_gone", state: "current" },
+    ]);
+    sources.getSource.mockImplementation(async (id: string) => {
+      if (id === "src_gone") throw new Error("404");
+      return { id, display: { title: "ARISTOTLE 试验全文" } };
+    });
+    open(fact({ evidence: [{ fingerprint: "f1", sourceType: "conversation_message", sourceRef: "sessions/ses_9/messages/m1", quote: "q", observedAt: null, weight: 1 }] }));
+    const link = await screen.findByRole("link", { name: "依据的资料：《ARISTOTLE 试验全文》" });
+    expect(link).toHaveAttribute("href", "/app/files/src_abc");
+    expect(client.fetchMemorySources).toHaveBeenCalledWith("mem_1");
+    // A document the reader cannot open is not offered, and a published work is not a document of theirs.
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(sources.getSource).toHaveBeenCalledTimes(2);
+  });
+
+  it("stands without the sources when they cannot be read", async () => {
+    client.fetchMemorySources.mockRejectedValue(new Error("503"));
+    open(fact());
+    await waitFor(() => expect(client.fetchMemorySources).toHaveBeenCalled());
+    expect(screen.getByText("证据先用表格")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("finds the conversation a memory came out of from its first evidence", () => {

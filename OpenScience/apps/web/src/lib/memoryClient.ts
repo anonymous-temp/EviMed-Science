@@ -142,11 +142,12 @@ export interface MemoryGrowthMoment {
 
 /**
  * How much of the researcher the capsule has held over time: one point per
- * week (a short history) or month, each what the page listed at its end.
+ * day (a new account's first two weeks), week (a short history) or month,
+ * each what the page listed at its end.
  * Counted by the server over every row, never from the page's capped lists.
  */
 export interface MemoryGrowth {
-  unit: "week" | "month" | null;
+  unit: "day" | "week" | "month" | null;
   /** The day the first row began to hold. */
   first: string | null;
   /** The first point is the zero before the first memory. */
@@ -181,6 +182,39 @@ export interface MemoryLearned {
 export function fetchMemoryLearned(timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
   const query = new URLSearchParams(timeZone ? { timeZone } : {});
   return productRequest<MemoryLearned>(`/memory/learned?${query.toString()}`);
+}
+
+/**
+ * One project, read from above (the 项目 tab's top): the card its memories were written under, what its conversations did, and the
+ * files they delivered by month. Every list is empty when the control plane could not read the run ledger, and the card stands.
+ */
+export interface ProjectOverview {
+  projectId: string;
+  /** This project's own switch (「本项目不使用记忆」). */
+  paused: boolean;
+  /** The slots the project holds, in the order the card reads (`PROJECT_CARD_SLOTS`); a slot nobody stated is absent. */
+  card: Array<{ slot: string; recordId: string; text: string; updatedAt: string | null }>;
+  /** The capabilities that answered the researcher's own conversations in it, the most used first, by their product name. */
+  capabilities: Array<{ id: string; title: string; count: number }>;
+  /** Delivered files, newest month first (`month` is YYYY-MM in the researcher's zone). */
+  works: Array<{ month: string; items: Array<{ runId: string; title: string; path: string; name: string; at: string }> }>;
+  timeZone: string;
+}
+
+export function fetchProjectOverview(projectId: string, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
+  const query = new URLSearchParams(timeZone ? { timeZone } : {});
+  return productRequest<ProjectOverview>(`/memory/projects/${encodeURIComponent(projectId)}/overview?${query.toString()}`);
+}
+
+/** What a memory rests on, as recorded: a knowledge-base document (`src_…`), a published work, an evidence card. */
+export interface MemorySourceLink {
+  type: "knowledge_source" | "doi" | "evidence_card" | "frontier_item" | string;
+  id: string;
+  state: string;
+}
+
+export function fetchMemorySources(recordId: string) {
+  return productRequest<MemorySourceLink[]>(`/memory/records/${encodeURIComponent(recordId)}/sources`);
 }
 
 /** A pack someone shared, as the received shelf shows it. */

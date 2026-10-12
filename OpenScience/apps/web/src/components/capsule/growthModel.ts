@@ -18,9 +18,12 @@ import type { MemoryGrowth, MemoryGrowthMoment } from "@/lib/memoryClient";
  *    that lists them and handed in (`practices`), never inferred from the
  *    moments on the line — the first count read 79 over tabs that held 5 and 15. No tile, no percentage, nothing about
  *    how a memory is written or used.
- *  - **Only once there is a line.** A capsule whose whole history fits in one
- *    week or one month is a list, not a trend: the chart stays away until its
- *    history spans two, so it never opens as a stub.
+ *  - **Only once there is a line.** A capsule whose first memory is today is a
+ *    list, not a trend: the chart stays away until two days of its history
+ *    hold something, so it never opens as a stub (a line through two points
+ *    reads as a broken one). The first two weeks are drawn by the day, the
+ *    weeks after them by the week, then by the month — the server picks the
+ *    unit, and a new account used to wait out a whole week for its first line.
  *  - **At most three moments, named.** A method learned, a capsule received —
  *    the two things on the page a researcher did not type — kept apart so their
  *    labels never meet; the rest are rows below.
@@ -52,16 +55,16 @@ export function growthDay(day: string, withYear = false): string {
 }
 
 /**
- * The axis: “9月15日” per week, “9月” per month. When the line crosses a year,
+ * The axis: “9月15日” per day or week, “9月” per month. When the line crosses a year,
  * its first label and the first point of each new year carry the year — the
  * landmark tick of spec §32.5 rule 6.
  */
-export function growthLabels(unit: "week" | "month", starts: readonly string[]): string[] {
+export function growthLabels(unit: "day" | "week" | "month", starts: readonly string[]): string[] {
   const years = new Set(starts.map((start) => ymd(start).year));
   return starts.map((start, index) => {
     const { year, month } = ymd(start);
     const landmark = years.size > 1 && (index === 0 || ymd(starts[index - 1]).year !== year);
-    return unit === "week" ? growthDay(start, landmark) : `${landmark ? `${year}年` : ""}${month}月`;
+    return unit === "month" ? `${landmark ? `${year}年` : ""}${month}月` : growthDay(start, landmark);
   });
 }
 
@@ -160,7 +163,7 @@ export function growthView(
     const lastYear = ymd(starts[starts.length - 1]).year;
     title = `${growthDay(growth.first, ymd(growth.first).year !== lastYear)}开始记住你，现在有 ${growthCount(last)} 条记忆${tail}`;
   } else {
-    const span = growth.unit === "week" ? `近 ${points.length - 1} 周` : `近 ${points.length - 1} 个月`;
+    const span = growth.unit === "month" ? `近 ${points.length - 1} 个月` : growth.unit === "week" ? `近 ${points.length - 1} 周` : `近 ${points.length - 1} 天`;
     const from = points[0].known;
     title = last === from
       ? `${span}记忆保持在 ${growthCount(last)} 条${tail}`

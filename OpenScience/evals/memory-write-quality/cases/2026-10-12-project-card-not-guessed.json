@@ -1,7 +1,7 @@
 {
   "id": "2026-10-12-project-card-not-guessed",
   "class": "project-card-not-guessed",
-  "observedIn": "synthetic replay of 2026-10-12 (project card replay, cases P8 and the standing-role case), deepseek-flash, temperature 0; the first wording of the card's instruction wrote a population, an intervention and an endpoint for the bleeding question of the 'standing-role-and-focus' case in 1 of 3 samples",
+  "observedIn": "synthetic replay of 2026-10-12 (project card replay, cases P8 and the standing-role case), deepseek-flash, temperature 0; the first wording of the card's instruction wrote a population, an intervention and an endpoint for the bleeding question of the 'standing-role-and-focus' case in 3 of 3 samples, the second in 1 of 3, the final one in 0 of 16",
   "written": [],
   "whyItIsWrong": "Nothing was wrong before the card existed; the case holds the line the card must not cross. A researcher asking what two published trials found has not described a study of their own, and the card is the researcher's description of it: the elements of the question (a drug, an age group, an endpoint) are the topic of the conversation, not the shape of a project. Filing them would put a trial's population on a project card as if it were the project's.",
   "expected": "No project_fact, decision or follow_up is written, and no key of the project card.",

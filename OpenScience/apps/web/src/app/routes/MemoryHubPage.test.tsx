@@ -14,6 +14,7 @@ const resetMemory = vi.fn();
 const fetchMyCapsule = vi.fn();
 const fetchMemoryGrowth = vi.fn();
 const fetchMemoryLearned = vi.fn();
+const fetchProjectOverview = vi.fn();
 const archiveMemoryRecord = vi.fn();
 const settleMemoryConflict = vi.fn();
 const restoreCapsuleEntry = vi.fn();
@@ -51,6 +52,7 @@ vi.mock("@/lib/memoryClient", async () => {
     restoreCapsuleEntry: (...args: unknown[]) => restoreCapsuleEntry(...args),
     fetchMemoryGrowth: (...args: unknown[]) => fetchMemoryGrowth(...args),
     fetchMemoryLearned: (...args: unknown[]) => fetchMemoryLearned(...args),
+    fetchProjectOverview: (...args: unknown[]) => fetchProjectOverview(...args),
   };
 });
 vi.mock("@/lib/methodsClient", async () => {
@@ -188,6 +190,8 @@ describe("记忆胶囊", () => {
     handbookDetail.mockResolvedValue({ ...handbook, body: "model body", steps: "1. 对应每个引用。", sources: [] });
     handbookVersions.mockResolvedValue({ items: [{ version: 1, revision: 5, at: "2026-09-23T02:00:00Z", title: null, current: true }] });
     searchMemories.mockResolvedValue({ items: [], query: "", semantic: 0, conversations: {}, usage: {} });
+    // Most tests are about the memories; the overview above them has tests of its own and is unreadable by default.
+    fetchProjectOverview.mockRejectedValue(new Error("not read"));
     fetchMemoryGrowth.mockResolvedValue({
       unit: "week", first: "2026-09-12", fromStart: true, timeZone: "Asia/Shanghai",
       points: [
@@ -344,7 +348,7 @@ describe("记忆胶囊", () => {
     expect(within(drawer).getByText("9月12日")).toBeInTheDocument();
     expect(within(drawer).getByText("“我是临床药师”")).toBeInTheDocument();
     // The conversation it came from, by what that conversation was about.
-    expect(within(drawer).getByRole("button", { name: "来源对话：《阿司匹林一级预防》" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "来源对话：《阿司匹林一级预防》（9月12日）" })).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "编辑" })).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "忘记" })).toBeInTheDocument();
     // The list is still there behind it.
@@ -794,6 +798,110 @@ describe("记忆胶囊", () => {
     openInHistory("?record=rec_6");
     await screen.findByRole("dialog", { name: "项目事实" });
     expect(where()).toBe("/app/memory?tab=project&project=prj_2&open=record%3Arec_6");
+  });
+
+  describe("the top of 项目", () => {
+    const overview = (patch: Record<string, unknown> = {}) => ({
+      projectId: "prj_1", paused: false, timeZone: "Asia/Shanghai",
+      card: [
+        { slot: "field", recordId: "rec_f", text: "心血管", updatedAt: "2026-09-13T02:00:00Z" },
+        { slot: "population", recordId: "rec_3", text: "75 岁以上非瓣膜性房颤患者", updatedAt: "2026-09-13T02:00:00Z" },
+        { slot: "outcome", recordId: "rec_o", text: "大出血", updatedAt: "2026-09-13T02:00:00Z" },
+      ],
+      capabilities: [{ id: "statistical-analysis", title: "统计分析", count: 6 }, { id: "meta-analysis", title: "自动化 Meta 分析", count: 2 }],
+      works: [
+        { month: "2026-10", items: [{ runId: "run_9", title: "阿司匹林二级预防", path: "deliverables/clinical-evidence/report.md", name: "report.md", at: "2026-10-10T02:30:00.000Z" }] },
+        { month: "2025-12", items: [{ runId: "run_1", title: "旧研究", path: "deliverables/old/report.docx", name: "report.docx", at: "2025-12-20T02:30:00.000Z" }] },
+      ],
+      ...patch,
+    });
+
+    it("shows the card, what the project did and what it delivered above its memories, for the project the dropdown names", async () => {
+      fetchProjectOverview.mockImplementation(async (id: string) => overview({ projectId: id }));
+      const user = userEvent.setup();
+      open("?tab=project");
+      const card = await screen.findByRole("list", { name: "项目卡" });
+      await waitFor(() => expect(fetchProjectOverview).toHaveBeenCalledWith("prj_1"));
+      // Only what was stated, under the names a researcher uses for it.
+      expect(within(card).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
+        "专科心血管", "人群75 岁以上非瓣膜性房颤患者", "结局大出血",
+      ].map((text) => expect.stringContaining(text)));
+      expect(screen.getByRole("heading", { name: "项目卡" })).toBeInTheDocument();
+      // A ranking is a table with a bar in the row; the numbers are the bar's labels.
+      const table = screen.getByRole("table", { name: "这个项目做过" });
+      expect(within(table).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual(["统计分析6", "自动化 Meta 分析2"]);
+      expect(within(table).getAllByRole("img").map((bar) => bar.getAttribute("aria-label"))).toEqual(["统计分析 6", "自动化 Meta 分析 2"]);
+      // The works, by month, each a link to the file; the file's name and the day are all it says of itself.
+      expect(screen.getByRole("heading", { name: "10月" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "2025年12月" })).toBeInTheDocument();
+      const work = screen.getByRole("link", { name: /阿司匹林二级预防/ });
+      expect(work).toHaveAttribute("href", "/app/runs/run_9/files/deliverables/clinical-evidence/report.md");
+      expect(within(work.closest("li")!).getByText("report.md")).toBeInTheDocument();
+      expect(within(work.closest("li")!).getByText("10月10日")).toBeInTheDocument();
+      // And the memories under it, with a name of their own now that something sits above them.
+      expect(screen.getByRole("heading", { name: "记忆" })).toBeInTheDocument();
+      expect(screen.getByText("纳入范围覆盖疳证与小儿厌食症。")).toBeInTheDocument();
+      expect(document.body.textContent).not.toMatch(/已交付|用过|次运行|token|置信/);
+      // The dropdown moves the whole of it to the other project.
+      await user.click(screen.getByRole("button", { name: "项目：疳证 Meta 文献检索" }));
+      await user.click(within(await screen.findByRole("menu", { name: "项目" })).getByRole("menuitemradio", { name: "信尔美" }));
+      await waitFor(() => expect(fetchProjectOverview).toHaveBeenCalledWith("prj_2"));
+    });
+
+    it("opens the memory a slot was written from in the drawer, and does not offer one the page does not hold", async () => {
+      fetchProjectOverview.mockResolvedValue(overview());
+      const user = userEvent.setup();
+      openInHistory("?tab=project");
+      const card = await screen.findByRole("list", { name: "项目卡" });
+      // rec_f and rec_o are not memories this page holds (a stale card is a row without a door, not a silent button).
+      expect(within(card).queryByRole("button", { name: /心血管/ })).toBeNull();
+      await user.click(within(card).getByRole("button", { name: /75 岁以上非瓣膜性房颤患者/ }));
+      expect(await screen.findByRole("dialog", { name: "项目事实" })).toBeInTheDocument();
+      expect(where()).toContain("open=record%3Arec_3");
+    });
+
+    it("says so, in one line, when the project has memory switched off", async () => {
+      fetchProjectOverview.mockResolvedValue(overview({ paused: true, card: [], capabilities: [], works: [] }));
+      open("?tab=project");
+      expect(await screen.findByText("本项目已暂停记忆")).toBeInTheDocument();
+      cleanup();
+      fetchProjectOverview.mockResolvedValue(overview({ paused: false }));
+      open("?tab=project");
+      await screen.findByRole("list", { name: "项目卡" });
+      expect(screen.queryByText("本项目已暂停记忆")).toBeNull();
+    });
+
+    it("reads the overview again when the project's switch is changed in the header", async () => {
+      fetchProjectOverview.mockResolvedValue(overview({ paused: false }));
+      const user = userEvent.setup();
+      open("?tab=project");
+      await screen.findByRole("list", { name: "项目卡" });
+      const before = fetchProjectOverview.mock.calls.length;
+      fetchProjectOverview.mockResolvedValue(overview({ paused: true }));
+      await user.click(await screen.findByRole("button", { name: "记忆设置" }));
+      await user.click(await screen.findByRole("menuitemcheckbox", { name: "本项目不使用记忆" }));
+      expect(await screen.findByText("本项目已暂停记忆")).toBeInTheDocument();
+      expect(fetchProjectOverview.mock.calls.length).toBeGreaterThan(before);
+    });
+
+    it("leaves the memories alone when the overview cannot be read, draws nothing for a project with nothing to say, and steps aside for a search", async () => {
+      const user = userEvent.setup();
+      open("?tab=project");
+      expect(await screen.findByText("纳入范围覆盖疳证与小儿厌食症。")).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "项目卡" })).toBeNull();
+      expect(screen.queryByRole("heading", { name: "记忆" })).toBeNull();
+      cleanup();
+      fetchProjectOverview.mockResolvedValue(overview({ card: [], capabilities: [], works: [] }));
+      open("?tab=project");
+      expect(await screen.findByText("纳入范围覆盖疳证与小儿厌食症。")).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "记忆" })).toBeNull();
+      cleanup();
+      fetchProjectOverview.mockResolvedValue(overview());
+      open("?tab=project");
+      await screen.findByRole("list", { name: "项目卡" });
+      await user.type(screen.getByRole("searchbox", { name: "搜索记忆" }), "疳证");
+      await waitFor(() => expect(screen.queryByRole("list", { name: "项目卡" })).toBeNull());
+    });
   });
 
   it("does not write when it is read: the capsule is made when 分享与导入 opens", async () => {

@@ -29,8 +29,10 @@ import { Switch } from "@/components/ui/Switch";
  * the researcher's own capsule), and none of what it does not (对话, 报告, 知识库
  * and the capsules others shared).
  */
-export function MemoryControls({ onReset, onShare, onForgotten }: {
+export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten }: {
   onReset: () => void;
+  /** A switch was changed: 项目 says 「本项目已暂停记忆」 from the same setting. */
+  onSettingsChanged?: () => void;
   onShare: () => void;
   onForgotten: () => void;
 }) {
@@ -53,6 +55,7 @@ export function MemoryControls({ onReset, onShare, onForgotten }: {
     try {
       setSettings(await updateMemorySettings(patch));
       toast.success(done);
+      onSettingsChanged?.();
     } catch (error) {
       toast.error(`没有改成：${webErrorMessage(error, { fallback: "请稍后重试。" })}`);
     } finally {

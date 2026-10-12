@@ -32,6 +32,8 @@ owner's ruling that a researcher's own 「记住…」 about their health is kep
 | `transient-emotion` | the reviewer's comments, listed after a bad-day message, filed as a follow-up (2 of 3) | code (record count) |
 | `pasted-document-content` | a pasted abstract's comparison, population and outcome as inferred project facts (3 of 3) | code (record count) |
 | `patient-religion` | a patient's religion kept as an interest of the researcher (3 of 3) | code (record count) |
+| `project-card-slots` | a described study kept under keys the model made up for the occasion (`project.af_cohort.exposure_comparator`, `project.primary_outcome` …), the specialty and the stage not at all (5 of 5) | code (the keys written; the specialty is one of the closed list) |
+| `project-card-not-guessed` | nothing, before and after; holds the line the card must not cross (the first wording of its instruction filed a bleeding question as a study in 3 of 3, the second in 1 of 3) | code (record count) |
 
 `written` is copied from the audit's captures, never paraphrased. A `replay` is
 the conversation the case is run against; one marked `reconstructed` was
@@ -48,7 +50,9 @@ The decided checks, all over the records one replay wrote (`expect`):
 `noTextContains` (a string appears in none), `noRecordOfKinds`, `atMostRecords`,
 `requireKinds` (a map from a record kind to the least number of that kind —
 the other direction: something worth keeping was kept), `requireTextContains`
-(some record carries the string), `briefRefusedWhenTagged`, and
+(some record carries the string), `requireKeys` (some record is written under
+each key) and `keyValues` (a closed key holds only the values listed),
+`briefRefusedWhenTagged`, and
 `identifierShapes` (offline: the code that refuses identifiers by their shape
 sees each kind in the researcher's message). A misspelt field is a shape error,
 not a silent pass. A case may carry `incidentCandidates`, what a leaking model
@@ -147,3 +151,27 @@ role-level project fact); `standing-method-and-format` unchanged. A first wordin
 ("the researcher's own explicit request") also kept the allergy said inside a
 question (`own-health-in-passing`, 3/3); naming that case in the instruction
 brought it back to 0/3.
+
+## 2026-10-12, deepseek-flash — the project card's keys, before and after
+
+The extraction instructions gained the card's keys (`project.field`, `population`, `intervention`, `comparator`, `outcome`,
+`design`, `data_source`, `stage`), a closed list for the specialty (the frontier feed's twenty-one, checked in code) and a
+rule that only the researcher's own message fills a slot. Replayed at temperature 0, five samples each, on the corpus (the
+nineteen decided cases) and on ten synthetic studies in different fields and wordings (a cohort, a phase III trial, a
+pharmacoepidemiology study, a cross-sectional audit, a Mendelian randomisation, a meta-analysis, a study off the specialty
+list, a question and not a study, an English description, a stage that moves). "Before" is `main@2ac4a3045`.
+
+| | before | after |
+|---|---|---|
+| stated slots written under a card key (population … stage) | 122 / 240 | 235 / 240 |
+| project facts written under a key of the model's own | 86 / 213 | 0 / 281 |
+| the specialty written, and on the closed list | 0 / 30 | 30 / 30 (none off the list) |
+| decided corpus cases passed (19 cases × 5) | 93 / 95 (`project-shape-and-decision` 3 of 5) | 95 / 95 |
+| `standing-role-and-focus` (the bleeding question beside a role) | 5 / 5 | 5 / 5 — the first wording of the instruction failed 3 of 3 and the second 1 of 3, before 「a research direction is a profile, and what they ask you to look up is a question」 |
+| `hollow-summary` (judged) | 1 project fact | 0 — three slot candidates cited the assistant's summary of a trial and were refused in code |
+
+Never-keep classes (patient identifiers, credentials, the researcher's own health unless asked to remember it, a
+colleague's details, a mood, a pasted document, a one-off condition, the run's own tools and fields): unchanged, 5 of 5 each.
+A first thin message about the stage (「今天开始跑数据」) is still not kept; one that states it (「课题进入数据分析阶段」) moves
+`project.stage` under the same key, 2 of 2. The replay driver and raw results are kept outside the tree
+(`.evimed-local/acceptance/memory-project-card-20261012/`).

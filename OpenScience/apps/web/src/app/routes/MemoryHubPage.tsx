@@ -28,9 +28,11 @@ import { GrowthPanel } from "@/components/memory/GrowthPanel";
 import { MemoryControls } from "@/components/memory/MemoryControls";
 import { GroupHeader, MemoryListRow } from "@/components/memory/MemoryRows";
 import { HandbookDrawer, MethodDrawer } from "@/components/memory/PracticeDrawer";
+import { ProjectOverview } from "@/components/memory/ProjectOverview";
 import { ProjectScope } from "@/components/memory/ProjectScope";
 import { factItems, factRowTitle, factsOfProject, practiceItems, projectChoices, type FactItem, type PracticeItem } from "@/components/memory/memoryItems";
 import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
+import { useProjectOverview } from "@/components/memory/useProjectOverview";
 import { ShareDrawer } from "./CapsuleTransferPanel";
 
 /** The four tabs: each is one list, or — 成长 — the line and the days under it. */
@@ -63,7 +65,10 @@ const SOURCES_OF: Record<MemoryTab, readonly ("profile" | "mine" | "methods" | "
  *    and write — under small headers.
  *  - 项目: a project's facts, one project at a time (the one the shell is in to
  *    begin with), the studies and projects of the modules in a group of their
- *    own in the dropdown.
+ *    own in the dropdown. Above them, for that project (2026-10-12, the owner's
+ *    choice A — nothing of the kind is the account's, and none has a page): the
+ *    card its facts were written under, what its conversations did and what they
+ *    delivered, and a line when the project has memory switched off.
  *  - 做法: what the platform learned — for every study, and for one research
  *    tool each — read, stopped, or taken back to the version before. Never
  *    typed in: methods are learned, not written (owner ruling 2026-09-20).
@@ -161,6 +166,10 @@ export function MemoryHubPage() {
   const scope = choices.some((choice) => choice.id === projectChoice) ? projectChoice
     : choices.some((choice) => choice.id === currentProjectId) ? currentProjectId : choices[0]?.id ?? null;
   const projectFacts = factsOfProject(facts, scope, knownProjects);
+  // Every memory the page holds, whatever the search shows: the project card opens its memories from here.
+  const everyFact = useMemo(() => factItems(records, entries), [records, entries]);
+  // The top of the 项目 tab: the card, what the project did and what it delivered. Not while a search is on — that is a list of hits.
+  const { overview, reload: reloadOverview } = useProjectOverview(tab === "project" && !query.trim() ? scope : null);
 
   // An inbox notice names a memory (`?record=`) or a method (`?method=`): its drawer opens, and the address is cleared so a reload does not open it again.
   const handled = useRef(false);
@@ -229,7 +238,7 @@ export function MemoryHubPage() {
   const tabs: TabItem<MemoryTab>[] = (Object.keys(TAB_NAMES) as MemoryTab[]).map((value) => ({ value, label: TAB_NAMES[value], count: counts[value] || undefined }));
 
   const opened: FactItem | PracticeItem | null = openKey
-    ? [...facts, ...everyPractice.methods, ...everyPractice.handbooks].find((item) => item.key === openKey) ?? null
+    ? [...facts, ...everyFact, ...everyPractice.methods, ...everyPractice.handbooks].find((item) => item.key === openKey) ?? null
     : null;
   const setProjectChoice = (id: string) => setParams((current) => withParam(current, "project", id), { replace: true });
   const chooseTab = (next: MemoryTab) => { landed.current = true; setParams((current) => withParam(current, "tab", next)); };
@@ -274,10 +283,21 @@ export function MemoryHubPage() {
       );
     }
     if (tab === "project") {
+      const above = overview !== null && (overview.paused || overview.card.length + overview.capabilities.length + overview.works.length > 0);
       return (
         <div className="space-y-4">
           {choices.length > 0 && <ProjectScope choices={choices} value={scope} onChange={setProjectChoice} />}
-          {projectFacts.length === 0 ? empty("这个项目还没有记忆", "项目里的研究范围、数据来源和已定的决策会出现在这里。") : factRows(projectFacts, "项目的记忆")}
+          {overview && (
+            <ProjectOverview
+              overview={overview}
+              canOpen={(recordId) => everyFact.some((fact) => fact.key === `record:${recordId}`)}
+              onOpen={(recordId) => setOpenKey(`record:${recordId}`)}
+            />
+          )}
+          {projectFacts.length === 0 ? empty("这个项目还没有记忆", "项目里的研究范围、数据来源和已定的决策会出现在这里。")
+            // Under the card, the ranking and the works, the list needs its own name; alone, the tab names it.
+            : above ? <section><GroupHeader>记忆</GroupHeader>{factRows(projectFacts, "项目的记忆")}</section>
+              : factRows(projectFacts, "项目的记忆")}
         </div>
       );
     }
@@ -309,7 +329,7 @@ export function MemoryHubPage() {
   return (
     <PageShell
       title="记忆胶囊"
-      actions={<MemoryControls onReset={reload} onShare={() => setDrawer("share")} onForgotten={() => setDrawer("forgotten")} />}
+      actions={<MemoryControls onReset={reload} onSettingsChanged={reloadOverview} onShare={() => setDrawer("share")} onForgotten={() => setDrawer("forgotten")} />}
     >
       <span ref={scrollAnchor} hidden />
       {/* One row: the tabs, and the search box at its end; on a phone the box takes its own line. */}

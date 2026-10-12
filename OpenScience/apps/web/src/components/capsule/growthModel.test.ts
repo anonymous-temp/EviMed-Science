@@ -52,9 +52,27 @@ describe("the capsule's growth line", () => {
   it("stays away until there is a line: nothing, one week, or a failed read draws no chart", () => {
     expect(growthView(null)).toBeNull();
     expect(growthView(growth({ unit: null, first: null, fromStart: false, points: [], moments: [] }))).toBeNull();
-    // A capsule a few days old is its list; a line from zero to five would read as a stub.
+    // A capsule whose first day is today is its list; a line from zero to five would read as a stub.
+    expect(growthView(growth({ first: "2026-09-28", unit: "day", points: [{ start: "2026-09-27", known: 0 }, { start: "2026-09-28", known: 5 }] }))).toBeNull();
+    // Weekly points are still the rule beyond the first two weeks: one week that holds something is not a line.
     expect(growthView(growth({ first: "2026-09-26", points: [{ start: "2026-09-21", known: 0 }, { start: "2026-09-28", known: 5 }] }))).toBeNull();
     expect(growthView(growth({ points: [{ start: "2026-09-21", known: 0 }, { start: "2026-09-28", known: 0 }] }))).toBeNull();
+  });
+
+  it("draws a new account's line by the day once two days of it hold something, and not before", () => {
+    const days = (known: number[], first = "2026-09-26") => growth({
+      unit: "day", first, fromStart: true, moments: [],
+      points: known.map((count, index) => ({ start: `2026-09-${String(25 + index).padStart(2, "0")}`, known: count })),
+    });
+    // The zero before the first day, then two days that hold something: a line of three points, not a stub of two.
+    const view = growthView(days([0, 2, 5]))!;
+    expect(view.title).toBe("9月26日开始记住你，现在有 5 条记忆");
+    expect(view.input.labels).toEqual(["9月25日", "9月26日", "9月27日"]);
+    expect(view.input.own.values).toEqual([0, 2, 5]);
+    // Today is the first day: one point that holds something, and the page keeps to its list.
+    expect(growthView(days([0, 3], "2026-09-26"))).toBeNull();
+    expect(growthView(days([0, 0, 0]))).toBeNull();
+    expect(growthLabels("day", ["2026-12-30", "2026-12-31", "2027-01-01"])).toEqual(["2026年12月30日", "12月31日", "2027年1月1日"]);
   });
 
   it("dates the axis per week or per month, and marks the year where the line crosses one", () => {
