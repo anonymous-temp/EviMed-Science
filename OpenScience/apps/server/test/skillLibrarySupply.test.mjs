@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
+import { SKILL_PACKAGES } from "@evimed/domain/skill-packages";
 import { SkillLibraryService } from "../src/skillLibraryService.mjs";
 import { SkillSupply } from "../src/skillSupplyService.mjs";
 
@@ -99,17 +100,18 @@ test("an import of a repository preview names the repository and commit the cont
 
 test("what a script imports is observed and labelled: software the image lacks limits the skill, which is still saved and listed", async () => {
   const { service, upload } = fixture();
-  upload("upload:" + "d".repeat(64), { instructions: "Enrich.", metadata: { requires: { python: ["gseapy"] }, version: "2.1" }, files: { "scripts/e.py": "import numpy\ntry:\n    import h5py\nexcept ImportError:\n    pass\n" } });
+  // pysam and scvi-tools are not in the image; gseapy and h5py were named here until 2026-10-12, when the image began to carry them.
+  upload("upload:" + "d".repeat(64), { instructions: "Enrich.", metadata: { requires: { python: ["scvi-tools"] }, version: "2.1" }, files: { "scripts/e.py": "import numpy\ntry:\n    import pysam\nexcept ImportError:\n    pass\n" } });
   const row = await importAs(service, "upload:" + "d".repeat(64));
   const by = Object.fromEntries(row.payload.package.dependencies.map((dependency) => [dependency.name, dependency]));
-  assert.equal(by.gseapy.basis, "declared");
+  assert.equal(by["scvi-tools"].basis, "declared");
   assert.equal(by.numpy.basis, "observed");
-  assert.equal(by.h5py.optional, true);
+  assert.equal(by.pysam.optional, true);
   assert.equal(row.payload.package.version, "2.1");
   const supply = await service.supplyOf(owner, row.id);
   assert.equal(supply.availability.state, "limited");
-  assert.equal(supply.availability.reason.detail, "gseapy");
-  assert.deepEqual(supply.availability.notes.map((note) => note.detail), ["h5py"]);
+  assert.equal(supply.availability.reason.detail, "scvi-tools");
+  assert.deepEqual(supply.availability.notes.map((note) => note.detail), ["pysam"]);
   assert.equal((await service.get(owner, row.id)).id, row.id, "the skill is still there to read, edit and select");
 });
 
@@ -261,14 +263,20 @@ test("the session catalogue labels each skill with its package and never filters
   const catalogue = await service.effectiveCatalogue(owner, project, "s");
   assert.equal(catalogue.items.length, 5, "nothing is hidden");
   const by = Object.fromEntries(catalogue.items.map((item) => [item.name, item.supply]));
-  assert.equal(by.cheminformatics.state, "limited");
-  assert.match(by.cheminformatics.text, /rdkit/);
+  assert.equal(by.cheminformatics.state, "installed", "RDKit is in the image");
   assert.match(by.cheminformatics.sourceText, /scientific-agent-skills/);
   assert.equal(by["stats-integrity"].state, "installed");
   assert.match(by["dsh-ppt"].sourceText, /STARDUSTLC666\/dsh-ppt @ 0db836e8251a/);
   assert.equal(by["dsh-ppt"].licenceText, "MIT");
   assert.equal(by["nobody-ships-this"], null, "a name no shipped package carries is unknown, not fine");
   assert.equal(by[skill.payload.nativeName].state, "installed");
+  // The label follows the package: the same item reads limited, with the software named, when its package needs what the image lacks.
+  const needy = structuredClone(SKILL_PACKAGES.get("curated/cheminformatics"));
+  needy.dependencies.push({ kind: "python-package", name: "pysam", supply: "image", optional: false, basis: "declared", evidence: "a test" });
+  service.supply = new SkillSupply({ config, packages: new Map([...SKILL_PACKAGES, ["curated/cheminformatics", needy]]) });
+  const limited = Object.fromEntries((await service.effectiveCatalogue(owner, project, "s")).items.map((item) => [item.name, item.supply]));
+  assert.equal(limited.cheminformatics.state, "limited");
+  assert.match(limited.cheminformatics.text, /pysam/);
 });
 
 test("a record that does not fit beside the instructions loses its lists first and its baseline second, and then fails as an oversized save always did", () => {
@@ -301,7 +309,7 @@ test("a built-in skill's detail carries how to run it, written from its package'
   assert.match(help, /32 MiB/);
   assert.match(help, /示例：python _runtime\/execute_skill.py --skill cheminformatics --output-dir <output-dir>/);
   assert.ok([...help].length <= 1800 + 40, "bounded");
-  assert.equal(detail.skill.supply.state, "limited");
+  assert.equal(detail.skill.supply.state, "installed");
   // A skill with no declared operation is not described: nothing is made up.
   service.nativeCatalogue.read = async () => ({ state: "available", runtimeGeneration: "g1", sessionId: "s", skill: { ...item, name: "stats-integrity", instructions: "x", metadata: {}, whenToUse: null, resources: [], scripts: [], findings: [], digest: "sha256:" + "1".repeat(64) }, findings: [] });
   assert.equal((await service.effectiveDetail(owner, { id: "p", userId: owner.id }, { sessionId: "s", key: "skill:" + "a".repeat(64), expectedRuntimeGeneration: "g1" })).skill.operationHelp, null);

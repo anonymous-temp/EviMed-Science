@@ -8,7 +8,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { normalizeSkillPackageRecord, skillDependencyReasons } from "@evimed/domain";
+import { imageProvides, normalizeSkillPackageRecord, skillDependencyReasons } from "@evimed/domain";
 import { IMAGE_RECIPE, SKILL_PACKAGES, skillPackage, skillPackagesNamed } from "@evimed/domain/skill-packages";
 import { collectSkillPackages, prune, readArgparse, readImageRecipe, renderSkillPackagesTable, stringify, SKILL_PACKAGES_TABLE } from "../../../scripts/build/generate-skill-packages.mjs";
 import { digestDirectory } from "../src/releaseManifest.mjs";
@@ -104,7 +104,7 @@ test("the platform's own packages say they came with the release and name a lice
   assert.equal(record("extension/cowork-portable").source.commit, "2ae5cf755c4294a1e988eebf3b12dd062425d84c");
 });
 
-test("no package's declared pin differs from what the image installs, and what it does not carry is named", () => {
+test("no package's declared pin differs from what the image installs, and no curated method is left without its library", async () => {
   /** @type {Record<string, string[]>} */ const required = {};
   for (const entry of SKILL_PACKAGES.values()) {
     for (const reason of skillDependencyReasons(entry, facts)) {
@@ -113,30 +113,40 @@ test("no package's declared pin differs from what the image installs, and what i
       if (!reason.optional) (required[entry.id] ??= []).push(`${reason.code}:${reason.detail}`);
     }
   }
-  assert.deepEqual(required, {
-    "curated/biosequence-analysis": ["dependency-software-missing:biopython"],
-    "curated/cheminformatics": ["dependency-software-missing:rdkit"],
-    "curated/pathway-enrichment": ["dependency-software-missing:gseapy"],
-    "curated/single-cell-analysis": ["dependency-software-missing:anndata", "dependency-software-missing:scanpy"],
-  });
+  // Nothing a package needs is missing from the image. Until 2026-10-12 four curated skills read `limited` for want of
+  // RDKit, Biopython, gseapy and Scanpy/AnnData; the image's python-methods phase installs them, and a package that comes
+  // to need a library the image lacks must either get it there or be declared in the curated inventory's methodDependencies.
+  assert.deepEqual(required, {});
+  // The libraries those skills' methods name are in the image, at the version its install script pins.
+  const pinned = readImageRecipe(await read("deploy/runtime-dsh/install-runtime.sh")).python;
+  for (const name of ["rdkit", "biopython", "gseapy", "scanpy", "anndata", "lifelines"]) {
+    const provided = imageProvides(IMAGE_RECIPE, /** @type {any} */ ({ kind: "python-package", name }));
+    assert.equal(provided.present, true, `${name} is in the image`);
+    assert.equal(provided.version, pinned[name], `${name} is the version the install script pins`);
+  }
   // Software read from a script's own guarded import or an instruction's code fence is a note, not a block.
   const largeFile = skillDependencyReasons(record("core/large-file"), facts);
   assert.ok(largeFile.length >= 5 && largeFile.every((reason) => reason.optional));
   assert.ok(record("core/large-file").dependencies.every((/** @type {any} */ dependency) => dependency.basis === "observed" && dependency.evidence));
 });
 
-test("every method dependency a curated skill declares quotes a mention that is in that skill's own files", async () => {
+test("every method dependency a curated skill declares quotes a mention that is in that skill's own files, and names software the image lacks", async () => {
   const inventory = JSON.parse(await read("runtime/skills/curated-scientific/inventory.json"));
   const declared = inventory.policy.delivery.methodDependencies;
+  assert.equal(typeof declared.$comment, "string", "the list says what it is for even while it is empty");
   const names = Object.keys(declared).filter((name) => !name.startsWith("$"));
-  assert.ok(names.length >= 5);
+  const skills = new Set(inventory.skills.map((/** @type {any} */ skill) => skill.name));
   for (const name of names) {
+    assert.ok(skills.has(name), `${name} is a curated skill`);
     const dir = path.join(repoRoot, "runtime/skills/curated-scientific", name);
     const text = (await Promise.all((await fs.readdir(dir, { recursive: true })).map((file) => fs.readFile(path.join(dir, file), "utf8").catch(() => "")))).join("\n").toLowerCase();
     for (const dependency of declared[name]) {
       assert.ok(text.includes(dependency.mention.toLowerCase()), `${name} declares ${dependency.name} but never mentions ${dependency.mention}`);
       assert.ok(dependency.evidence.length > 20);
       assert.ok(record(`curated/${name}`).dependencies.some((/** @type {any} */ entry) => entry.name === dependency.name && entry.basis === "declared"));
+      // A gap the image has since closed is not a gap: the entry is removed when the library is installed (the list was
+      // five entries long until 2026-10-12), or the label would keep saying the image lacks what it carries.
+      assert.equal(imageProvides(IMAGE_RECIPE, dependency).present, false, `${name} declares ${dependency.name} as missing, and the image installs it`);
     }
   }
 });

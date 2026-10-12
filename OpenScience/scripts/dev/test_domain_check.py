@@ -135,6 +135,17 @@ class Biology(unittest.TestCase):
 
 
 class Chemistry(unittest.TestCase):
+    """The stdlib bond-counter, which judges a SMILES literal when RDKit is not
+    importable. The runtime image carries RDKit (its python-methods phase), where
+    the real verdict would override the counter and `[C](C)(C)(C)(C)C` would be
+    flagged, so these tests pin the counter itself and hold on either machine;
+    `ChemistryRealRDKit` below is the other half."""
+
+    def setUp(self):
+        patcher = unittest.mock.patch.object(dc, "_rdkit_verdict", lambda s: None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_five_bond_carbon_in_smiles_literal(self):
         # The C&EN caffeine-test failure class: a carbon with 5 bonds. Here a
         # neopentane-like center written with one bond too many.
@@ -193,6 +204,20 @@ class ChemistryRDKit(unittest.TestCase):
         with unittest.mock.patch.object(dc, "_rdkit_verdict", lambda s: None):
             self.assertIn("chem · valence", tags('smiles = "C(C)(C)(C)(C)C"\n'))
             self.assertNotIn("chem · valence", tags('smiles = "CC(=O)O"\n'))
+
+
+@unittest.skipUnless(importlib.util.find_spec("rdkit"), "RDKit is not installed")
+class ChemistryRealRDKit(unittest.TestCase):
+    """With the real library importable, as it is in the runtime image."""
+
+    def test_rdkit_judges_what_the_static_counter_leaves_alone(self):
+        # A bracket atom the counter bails on: five bonds on a neutral carbon.
+        self.assertIn("chem · valence", tags('smiles = "[C](C)(C)(C)(C)C"\n'))
+        self.assertIn("chem · valence", tags('smiles = "c1ccc"\n'))
+
+    def test_rdkit_clears_valid_molecules(self):
+        self.assertNotIn("chem · valence", tags('smiles = "Cn1cnc2c1c(=O)n(C)c(=O)n2C"\n'))
+        self.assertNotIn("chem · valence", tags('smi = "CC(=O)Oc1ccccc1C(=O)O"\n'))
 
 
 class SocialScience(unittest.TestCase):

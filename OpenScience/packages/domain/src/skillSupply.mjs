@@ -553,6 +553,13 @@ export const PYTHON_DISTRIBUTION_MODULES = Object.freeze({
   'scikit-learn': ['sklearn', 'joblib', 'threadpoolctl'],
   scipy: ['scipy'],
   statsmodels: ['statsmodels', 'patsy'],
+  // The libraries the curated skills' full methods add (`python_methods` in install-runtime.sh).
+  anndata: ['anndata', 'h5py', 'zarr', 'numcodecs', 'natsort'],
+  biopython: ['Bio', 'BioSQL'],
+  gseapy: ['gseapy'],
+  lifelines: ['lifelines', 'autograd', 'autograd_gamma', 'formulaic'],
+  rdkit: ['rdkit'],
+  scanpy: ['scanpy', 'numba', 'llvmlite', 'umap', 'pynndescent', 'seaborn', 'networkx', 'tqdm'],
 })
 
 /**

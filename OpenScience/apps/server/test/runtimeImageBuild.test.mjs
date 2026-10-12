@@ -6,6 +6,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { SESSION_PATHS } from "../src/agentbay/runtimeProvider.mjs";
 import { COMMUNITY_CLIENT_BUNDLE_ROWS, renderProfilePatch } from "../src/dshProfilePatch.mjs";
+import { PYTHON_DISTRIBUTION_MODULES } from "@evimed/domain";
 import { dshProfileInput } from "../src/runtimeManager.mjs";
 import { definedInstallPhases, expandInstallPhases, installPhaseCalls } from "../../../scripts/ops/runtime-install-phases.mjs";
 
@@ -50,6 +51,33 @@ test("the Docker and AgentBay images run the same install phases in the same ord
   assert.deepEqual([...new Set(agentbayPhases)].sort(), [...defined].sort());
   assert.doesNotThrow(() => expandInstallPhases(docker, script));
   assert.doesNotThrow(() => expandInstallPhases(agentbay, script));
+});
+
+test("the python-methods phase adds the curated skills' libraries once, after the stack and before the skills are smoke-tested, and moves no pin of the stack", async () => {
+  const { docker, agentbay, script } = await sources();
+  for (const dockerfile of [docker, agentbay]) {
+    const calls = installPhaseCalls(dockerfile);
+    assert.ok(calls.indexOf("verify-tools") < calls.indexOf("python-methods") && calls.indexOf("python-methods") < calls.indexOf("curated-smoke"));
+    // Before the skill trees are copied in: a SKILL.md edit invalidates that COPY, and everything after it with it.
+    assert.ok(dockerfile.indexOf("install-runtime.sh python-methods") < dockerfile.indexOf("COPY runtime/skills/curated-scientific"));
+  }
+  const phases = definedInstallPhases(script);
+  const phase = phases.get("python-methods") ?? "";
+  const pin = /^\s+([A-Za-z0-9_.-]+)==([0-9][^\s\\]*)/gmu;
+  const added = [...phase.matchAll(pin)].map((match) => match[1]);
+  assert.deepEqual([...added].sort(), ["anndata", "biopython", "gseapy", "lifelines", "rdkit", "scanpy"]);
+  const stack = [...String(phases.get("python")).matchAll(pin)].map((match) => match[1]);
+  assert.ok(stack.length >= 10 && added.every((name) => !stack.includes(name)), "a library is pinned in one phase");
+  // Exact pins, wheels only (the image has no compiler), the stack frozen as constraints so nothing it pinned can move,
+  // and the environment checked for consistency afterwards.
+  assert.match(phase, /uv pip freeze --python "\$\{VIRTUAL_ENV\}\/bin\/python" > "\$\{stack\}"/);
+  assert.match(phase, /--only-binary :all: --constraint "\$\{stack\}"/);
+  assert.match(phase, /uv pip check --python/);
+  // Every library it pins is imported by the phase's own check, by a module the domain's table says it provides.
+  for (const name of added) assert.ok(phase.includes(`"${PYTHON_DISTRIBUTION_MODULES[name][0]}"`), `${name} is imported by the phase's check`);
+  // The phase runs wherever the image runs it: the script accepts it and dispatches it.
+  assert.match(script, /\|verify-tools\|python-methods\|curated-smoke\|/);
+  assert.equal(spawnSync("bash", [path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh"), "no-such-phase"], { encoding: "utf8" }).status, 64);
 });
 
 test("both images pin every shared tool to the same version, and the kernel to deps-version.json", async () => {

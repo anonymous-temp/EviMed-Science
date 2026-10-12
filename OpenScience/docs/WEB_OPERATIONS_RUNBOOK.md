@@ -1138,8 +1138,12 @@ from its own `argparse` calls) and `deploy/runtime-dsh/install-runtime.sh` into
 libraries needs the regenerated table in the same change. Software a skill's own text
 says its method needs, and that the image does not carry, is declared in
 `runtime/skills/curated-scientific/inventory.json` under `methodDependencies` with the
-mention that justifies it (a test holds each mention to the skill's own files); a
-personal skill declares its own in the `metadata.requires` map of its frontmatter.
+mention that justifies it (a test holds each mention to the skill's own files, and holds
+the list to software the image really lacks); the list has been empty since 2026-10-12,
+when the image's `python-methods` phase began to install RDKit, Biopython, gseapy,
+Scanpy, AnnData and lifelines at exact pins, so a curated skill that needs another
+library the image lacks is declared there again. A personal skill declares its own in
+the `metadata.requires` map of its frontmatter.
 
 "Installed" never implies runnable. A package whose method needs software, weights or a
 tool this deployment lacks (the library the image does not install, a pin that differs

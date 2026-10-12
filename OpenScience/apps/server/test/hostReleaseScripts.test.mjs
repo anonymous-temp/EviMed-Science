@@ -145,6 +145,34 @@ test("a delta may move the community skills but not a bundle pin the profile see
   }
 });
 
+test("a delta may move the curated inventory but not stop declaring a library the base lacks", async () => {
+  // The inventory's methodDependencies lists the Python packages a skill's method needs that the image does not carry, and
+  // the skill's availability label is read from it. Taking a package off the list says the image has it; a base built before
+  // the python-methods phase (2026-10-12) does not, and a delta would otherwise ship that claim over it.
+  const delta = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile.delta"), "utf8");
+  const script = delta.match(/node -e '([^']+)' "\$\{live\}\/inventory\.json" "\$\{source\}\/inventory\.json"/)?.[1];
+  assert.ok(script, "the inventory guard is in Dockerfile.delta");
+  assert.match(delta, /for name in \$\{settled\}; do python3 -c 'import importlib\.metadata, sys; importlib\.metadata\.version\(sys\.argv\[1\]\)' "\$\{name\}" \|\| \{ .*build the full Dockerfile.*exit 1; \}; done/);
+  const dir = await mkdtemp(path.join(tmpdir(), "delta-inventory-"));
+  try {
+    /** @param {string} name @param {Record<string, unknown>} methodDependencies */
+    const inventory = async (name, methodDependencies) => {
+      const file = path.join(dir, name);
+      await writeFile(file, JSON.stringify({ policy: { delivery: { methodDependencies } } }));
+      return file;
+    };
+    const entry = (kind, name) => ({ kind, name, mention: name, evidence: "SKILL.md: a quotation long enough" });
+    const base = await inventory("base.json", { $comment: "x", cheminformatics: [entry("python-package", "rdkit")], "pathway-enrichment": [entry("python-package", "gseapy")], "x-ray": [entry("system-tool", "samtools")] });
+    const settled = async (/** @type {string} */ next) => (await run(process.execPath, ["-e", script, base, next])).stdout.trim();
+    assert.equal(await settled(base), "", "nothing taken off the list, nothing to check");
+    assert.equal(await settled(await inventory("one.json", { $comment: "y", "pathway-enrichment": [entry("python-package", "gseapy")], "x-ray": [entry("system-tool", "samtools")] })), "rdkit");
+    assert.equal(await settled(await inventory("none.json", { $comment: "y" })), "rdkit gseapy", "a system tool is not a Python package and is not checked");
+    assert.equal(await settled(await inventory("empty.json", {})), "rdkit gseapy");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("MR full and delta images install the same pinned PLINK executable", async () => {
   const full = await readFile(path.join(repoRoot, "deploy/specialist-adapter/Dockerfile"), "utf8");
   const pin = full.match(/^ARG MR_PLINK_VERSION=(\S+)$/m)?.[1];
