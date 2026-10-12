@@ -2097,7 +2097,6 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
       ? (gateways ? `${String(config.runtimeGatewayPublicUrl).replace(/\/+$/, "")}/tooluniverse/v1/rpc` : String(config.toolUniverseGatewayInternalUrl ?? "")) : "",
     presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
-    answerPersonaDir: RUNTIME_ANSWER_PERSONA_DIR,
     capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,
     // The same rule the launch plan's `--env` list used, applied to the same
     // plan: the methods the container mounts and the methods the profile names
@@ -2721,7 +2720,6 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         ...Object.entries(runtimeEnvironment({
           presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
           capabilitiesDir: "/opt/evimed/capabilities",
-          answerPersonaDir: RUNTIME_ANSWER_PERSONA_DIR,
           capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,
           capsuleMethodsDir: capsuleMethodsRuntimeDir,
           extensionProjectionFile: extensionReference ? "/opt/evimed/extensions/projection.json" : "",
@@ -3062,17 +3060,6 @@ export const RUNTIME_KERNEL_NAME = "dsh";
  * deployment come to disagree with nothing able to notice.
  */
 export const RUNTIME_CAPABILITY_SKILLS_DIR = "/opt/evimed/capability-skills";
-/**
- * Where the image puts the answer line's persona package.
- *
- * The Dockerfile copies exactly this one package out of `runtime/skills/evimed`
- * (the specialists ship as capability bodies instead), and the guidance plugin
- * reads `SKILL.md` from here to put it in the session's own context. A path
- * that does not exist leaves the model to load the skill itself, which is what
- * it did before.
- */
-export const RUNTIME_ANSWER_PERSONA_DIR = "/opt/evimed/skills/evimed/open-domain-answer";
-
 /**
  * The authority the control plane sends as `Host` over the unix transport.
  *

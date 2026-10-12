@@ -104,7 +104,11 @@ test("every setting the runtime depends on still holds in the composition the im
   // kernel's subagent, subagent-control, workflow and workflow-worker tools)
   // left the preset; delegation is evimed_delegate over the host's subagent
   // service, and nothing called the workflow tool.
-  assert.equal(report.counts.presetRows, 22, "the preset includes core policy, grouped native tools and the trusted optional hosted extension shim");
+  // 26 since 2026-10-12: the kernel's step list (`tool-todo`), file hand-over
+  // (`present`), one-shot sub-agent (`tool-subagent`) and `/compact`
+  // (`command-compact`, inside the compaction group) are mounted for general
+  // multi-step work.
+  assert.equal(report.counts.presetRows, 26, "the preset includes core policy, grouped native tools and the trusted optional hosted extension shim");
   const preset = parseCordisDocument(await readFile(source("preset"), "utf8"));
   assert.equal(preset.rows.filter(row => row.id === "evimed-cowork-bridge").length, 1);
   assert.equal(preset.byId.get("evimed-cowork-bridge").name, "@evimed/dsh-socket/extensions/cowork");
@@ -215,12 +219,25 @@ test("the invariant list is read out of the composition, not retyped beside it",
 
   const absent = deriveFromAbsentList(presetText);
   const names = absent.map((invariant) => invariant.row);
+  // Nine since 2026-10-12. Four names left the list and none of them is a
+  // boundary: `tool-todo` and `tool-subagent` are mounted (a general multi-step
+  // task had no step list and nothing to delegate with), and `tool-lsp` /
+  // `code-runtime` were never rows of the pinned kernel — the entry banned a
+  // product direction (「this is not a coding agent」), not a row. What stays is
+  // what an uploaded file, an unrecorded egress or a second child-to-parent
+  // channel would cost.
   assert.deepEqual(
     names,
-    ["tool-todo", "agent-instructions", "str_replace_editor", "tool-web", "plan-mode", "tool-ralph", "tool-lsp", "code-runtime", "tool-goal",
-      "tool-subagent", "tool-subagent-control", "tool-workflow", "workflow-worker-thread"],
+    ["agent-instructions", "str_replace_editor", "tool-web", "plan-mode", "tool-ralph", "tool-goal",
+      "tool-subagent-control", "tool-workflow", "workflow-worker-thread"],
     "the preset's deliberately-absent block is the list; if it changed, this is where you notice",
   );
+  // The composition facts the retired entries are replaced by: the rows a
+  // general task works with are mounted, and code work has its tools.
+  for (const row of ["tool-todo", "tool-subagent", "present", "tool-ask-user", "command-compact", "tool-bash", "tool-fs", "tool-fs-search", "tool-jobs"]) {
+    assert.match(presetText, new RegExp(`^\\s*- id: ${row}$`, "m"), `${row} is not a row of the preset`);
+  }
+  assert.doesNotMatch(presetText, /not a coding agent/);
   // A reason that spans three comment lines has to arrive whole, or the entry
   // reads as an unexplained ban.
   const toolWeb = absent.find((invariant) => invariant.row === "tool-web");
@@ -518,7 +535,7 @@ test("losing one entry from the ban list is caught, not absorbed", async () => {
   const report = await checkKernelDefaults({ overrideFiles: { preset: presetPath } });
   const drift = report.problems.filter((problem) => problem.kind === "extraction-drift");
   assert.equal(drift.length, 1, "one demoted entry must be reported");
-  assert.match(drift[0].detail, /found 12, expected exactly 13/);
+  assert.match(drift[0].detail, /found 8, expected exactly 9/);
 });
 
 test("a row form the parser cannot read stops it, rather than shrinking the list", () => {

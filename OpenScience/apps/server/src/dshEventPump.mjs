@@ -866,6 +866,22 @@ export class RuntimeEventPump {
       this.runEvents.publish(entry.runId, `${entry.kind}/requested`, { eventId: decoded.eventId, status: "withdrawn", reason: "kernel_cancelled" });
       return;
     }
+    // A question is the kernel's own page's to answer, and it is handed back
+    // at once. This control plane is one client of the kernel among others: the
+    // person reads the conversation in the kernel's page, which draws the
+    // question and sends the answer itself, while nothing in the browser reads
+    // a run's stream any more (`streamTypesReachTheBrowser.test.mjs`). Held
+    // here, a question had no reader at all — with the ask-user tool on, the
+    // first `ask_user_question` of a dispatched run waited until the run was
+    // cancelled (reproduced on a real kernel, 2026-10-12). Declined, the kernel
+    // goes on to its other answerers: the page when one is attached, and with
+    // none an error the model reads (`no user-questions answerer accepted the
+    // request`) and works from — a turn nobody is watching never waits.
+    if (decoded.kind === "question") {
+      // isolated: evimed_runtime_interaction_unrouted_total
+      this.#decline(adapter, decoded.eventId);
+      return;
+    }
     const runId = state.rootSessions.get(decoded.sessionId) ?? state.childSessions.get(decoded.sessionId)?.runId;
     if (!runId) {
       // isolated: evimed_runtime_interaction_unrouted_total
