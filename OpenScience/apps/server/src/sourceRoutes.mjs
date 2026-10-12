@@ -24,11 +24,14 @@ async function bodyOf(req, limit, allowed) {
  * (`GET /api/sources/:id/dependents`, `sourceDependents.mjs`); absent, the lists are empty.
  * `vault` writes a project's knowledge base as an Obsidian vault (`GET /api/sources/export/vault?projectId=`,
  * `knowledgeVaultExport.mjs`); absent, that route answers that the export is unavailable.
+ * `outputs` lists the files a project's conversations delivered (`GET /api/sources/outputs?projectId=`,
+ * `projectDeliverables.mjs`): an index of the run ledger, absent where the ledger is.
  * @param {{store:any,service:any,openList?:any,knowledge?:any,uses?:{list:(user:any,sourceId:string)=>Promise<any[]>}|null,
  *   passages?:{find:(request:{userId:string,projectId:string|null,shared:boolean,q:string})=>Promise<any>}|null,
  *   dependents?:((request:{user:any,project:any,source:any})=>Promise<any>)|null,
- *   vault?:{export:(userId:string,project:any)=>Promise<{bytes:Uint8Array,filename:string,mimeType:string}>}|null,maxJsonBytes:number}} dependencies */
-export function createSourceRoutes({ store, service, openList = null, knowledge = null, uses = null, passages = null, dependents = null, vault = null, maxJsonBytes }) {
+ *   vault?:{export:(userId:string,project:any)=>Promise<{bytes:Uint8Array,filename:string,mimeType:string}>}|null,
+ *   outputs?:((project:any)=>Promise<any[]>)|null,maxJsonBytes:number}} dependencies */
+export function createSourceRoutes({ store, service, openList = null, knowledge = null, uses = null, passages = null, dependents = null, vault = null, outputs = null, maxJsonBytes }) {
   // The composition builds one OpenList connector for the browser's namespace and
   // shares this SourceService instance with the ingestion worker. Handing the
   // connector to the service here is what lets the leased folder sync page the
@@ -125,6 +128,13 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
         "Content-Disposition": `attachment; filename="${file.filename}"`, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
       res.end(Buffer.from(file.bytes));
       return true;
+    }
+    // The files the project's conversations delivered, for the page's 「对话产出」: read from the run ledger of a project the caller owns.
+    if (url.pathname === "/api/sources/outputs" && method === "GET") {
+      const projectId = url.searchParams.get("projectId");
+      if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
+      const owned = await store.requireProject(user, projectId);
+      return reply({ items: outputs ? await outputs(owned) : [] });
     }
     if (url.pathname === "/api/sources/duplicates" && method === "GET") {
       const projectId = url.searchParams.get("projectId");

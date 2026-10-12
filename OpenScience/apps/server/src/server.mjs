@@ -236,6 +236,7 @@ import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceUses, nameConversations, recordSourceUsesOfRun } from "./sourceUses.mjs";
 import { createSourceDependents } from "./sourceDependents.mjs";
 import { KnowledgeVaultExport } from "./knowledgeVaultExport.mjs";
+import { projectDeliverables } from "./projectDeliverables.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
 import { createSourceMaterials } from "./sourceMaterials.mjs";
@@ -1651,7 +1652,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     report: code => { void securityAudit(config, "source.vault", "failed", { code }).catch(() => {}); },
   }) : null;
   const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, knowledge: knowledgeEntries, uses: sourceUsesReader,
-    passages: { find: (request) => kbIndex ? kbIndex.passages(request) : Promise.resolve(null) }, dependents: sourceDependents, vault: knowledgeVault, maxJsonBytes: config.maxJsonBytes });
+    passages: { find: (request) => kbIndex ? kbIndex.passages(request) : Promise.resolve(null) }, dependents: sourceDependents, vault: knowledgeVault,
+    // 「对话产出」: what the project's runs delivered, as the run ledger says it. Built over the ledger and the registry further down.
+    outputs: async (project) => {
+      const registry = await agentRegistry;
+      return projectDeliverables(await agentRuns.list(project), {
+        describe: run => agentRuns.withArtifactKinds(run, registry),
+        isInternal: agent => registry?.get?.(agent)?.visibility === "internal",
+      });
+    },
+    maxJsonBytes: config.maxJsonBytes });
   // One admission for every way a file reaches `knowledge-base/`: the upload
   // route and the upload command both refuse a format the knowledge base
   // cannot read before a byte is written, and both register what they wrote.

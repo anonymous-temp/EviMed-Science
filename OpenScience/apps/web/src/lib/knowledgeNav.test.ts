@@ -19,6 +19,17 @@ describe("the knowledge base's address", () => {
     expect(readListState(params("kind=literature&kind=table")).kind).toBe("literature");
   });
 
+  it("writes the list of delivered files as a view of its own, which is not a type and belongs to a project", () => {
+    expect(listPath({ scope: "paper-1", kind: null, q: "", view: "outputs" })).toBe("/app/files?scope=paper-1&view=outputs");
+    expect(listPath({ scope: null, kind: "table", q: "疳证", view: "outputs" })).toBe("/app/files?view=outputs&q=%E7%96%B3%E8%AF%81");
+    expect(readListState(params("view=outputs&q=a"))).toEqual({ scope: null, kind: null, q: "a", view: "outputs" });
+    // A type beside the view is not read, and the shared documents have no delivered files to be a view of.
+    expect(readListState(params("view=outputs&kind=table")).kind).toBeNull();
+    expect(readListState(params("scope=shared&view=outputs"))).toEqual({ scope: "shared", kind: null, q: "" });
+    expect(readListState(params("view=elsewhere"))).toEqual(none);
+    expect(readerPath("src_abc", { scope: "paper-1", kind: null, q: "", view: "outputs" })).toBe("/app/files/src_abc?scope=paper-1&view=outputs");
+  });
+
   it("puts a document at its own address, carrying the list it was opened from and what it shows", () => {
     expect(readerPath("src_abc", none)).toBe("/app/files/src_abc");
     expect(readerPath("src_abc", { scope: "shared", kind: "literature", q: "共识" }, { tab: "original", page: 5 }))

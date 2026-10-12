@@ -3,7 +3,7 @@ import { Navigate, useLocation, useNavigate, useNavigationType, useSearchParams 
 import { Cloud, Download, FileUp, Folder, Globe, Plus, Search, StickyNote, Upload } from "lucide-react";
 import { SOURCE_KINDS } from "@evimed/domain";
 import { fetchWebMe, getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
-import { downloadKnowledgeVault, vaultErrorMessage } from "@/lib/knowledgeBaseClient";
+import { downloadKnowledgeVault, listProjectOutputs, vaultErrorMessage, type ProjectOutput } from "@/lib/knowledgeBaseClient";
 import { projectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
@@ -30,6 +30,7 @@ import { AddLinkDialog, NewNoteDialog } from "@/components/sources/AddEntryDialo
 import { DriveImportDrawerBody } from "@/components/sources/DriveImport";
 import { DuplicateGroups } from "@/components/sources/DuplicateGroups";
 import { KnowledgeScopeMenu } from "@/components/sources/KnowledgeScopeMenu";
+import { ProjectOutputsList } from "@/components/sources/ProjectOutputsList";
 import { SourceRow } from "@/components/sources/SourceRow";
 import { isReading, isUsable } from "@/components/sources/sourceView";
 
@@ -114,8 +115,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       return listParams(next);
     }, { replace: true });
   }, [setParams]);
-  const setScope = (next: SourceScope) => update({ scope: scopeParam(next, currentProjectId), kind: null });
-  const setKind = (next: SourceKind | null) => update({ kind: next });
+  const setScope = (next: SourceScope) => update({ scope: scopeParam(next, currentProjectId), kind: null, view: null });
   // What is typed is the box's own until the researcher stops; the address follows, and an address changed from outside
   // (the back button between two lists) moves the box.
   const [query, setQuery] = useState(listState.q);
@@ -170,6 +170,23 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const shared = scope.kind === "shared";
   const scopeProjectId = scope.kind === "project" ? scope.projectId : null;
   useEffect(() => setSelected(new Map()), [shared, scopeProjectId]);
+  // 「对话产出」: the files the listed project's conversations delivered, read once for the project — the row of filters needs to
+  // know whether there are any — and again on 重试. An index of the run ledger; nothing in it is a document of the library.
+  const [outputs, setOutputs] = useState<ProjectOutput[] | null>(null);
+  const [outputsFailed, setOutputsFailed] = useState(false);
+  const [outputsAttempt, setOutputsAttempt] = useState(0);
+  useEffect(() => {
+    setOutputs(null);
+    setOutputsFailed(false);
+    if (!scopeProjectId) return undefined;
+    let active = true;
+    listProjectOutputs(scopeProjectId).then(
+      (items) => { if (active) setOutputs(items); },
+      () => { if (active) { setOutputs([]); setOutputsFailed(true); } },
+    );
+    return () => { active = false; };
+  }, [scopeProjectId, outputsAttempt]);
+  const outputsView = listState.view === "outputs" && scopeProjectId !== null;
   // Where a new document goes: the project the page lists, or — in the shared scope, which belongs to no project —
   // the project the tab is in.
   const addProjectId = scopeProjectId ?? currentProjectId;
@@ -397,11 +414,20 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     ];
   }, [counts, kind]);
   const kindsPresent = kindOptions.length - 1;
+  // 「对话产出」 stands in the row of types, last, where the project's conversations have delivered something (or it is the view).
+  const outputsChip = (outputs !== null && outputs.length > 0) || outputsView;
+  const chipOptions: FilterOption<SourceKind | "all" | "outputs">[] = useMemo(
+    () => [...kindOptions, ...(outputsChip ? [{ value: "outputs" as const, label: "对话产出", ...(outputs ? { count: outputs.length } : {}) }] : [])],
+    [kindOptions, outputsChip, outputs]);
+  const chooseChip = (value: SourceKind | "all" | "outputs") => {
+    if (value === "outputs") update({ view: "outputs", kind: null });
+    else update({ kind: value === "all" ? null : value, view: null });
+  };
   const duplicateOpen = duplicatesFor ? groups.filter((group) => !group.decision && group.sourceIds.includes(duplicatesFor)) : [];
   const filtered = kind !== null || search !== "";
   // With nothing in the project's library the empty state offers 「添加」, so the header does not: one solid button on the page. It stays
   // wherever the empty state offers none — a search without a hit, the shared library — and while the list is read or failed.
-  const firstRun = items !== null && items.length === 0 && !error && !filtered && !shared;
+  const firstRun = items !== null && items.length === 0 && !error && !filtered && !shared && !outputsView;
 
   const rowActions = (source: SourceRecord) => ({
     busy,
@@ -449,15 +475,16 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
           <SearchInput label="搜索资料和内容" value={query} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-60" />
           {!firstRun && addMenu}
           {!shared && !firstRun && (
-            <Menu label="更多" items={[{ label: exporting ? "正在导出…" : "导出到 Obsidian", icon: Download, disabled: exporting || !hasWebApi, onSelect: () => void exportVault() }]} />
+            <Menu label="更多" items={[{ label: exporting ? "正在导出" : "导出到 Obsidian", icon: Download, disabled: exporting || !hasWebApi, onSelect: () => void exportVault() }]} />
           )}
         </>}
       >
-        {(kindsPresent >= 2 || kind !== null) && (
-          <FilterChips label="资料类型" className="mb-4" options={kindOptions} maxVisible={narrow ? 3 : kindOptions.length} value={kind ?? "all"} onChange={(value) => setKind(value === "all" ? null : value)} />
+        {kindOptions.length > 0 && (kindsPresent >= 2 || kind !== null || outputsChip) && (
+          <FilterChips label="资料类型" className="mb-4" options={chipOptions} maxVisible={narrow ? 3 : chipOptions.length} value={outputsView ? "outputs" : kind ?? "all"} onChange={chooseChip} />
         )}
-        {error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}
-        {items === null ? <FilesSkeleton /> : items.length === 0 ? (error ? null
+        {outputsView && <ProjectOutputsList items={outputs} failed={outputsFailed} query={search} onRetry={() => setOutputsAttempt((value) => value + 1)} />}
+        {!outputsView && error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}
+        {outputsView ? null : items === null ? <FilesSkeleton /> : items.length === 0 ? (error ? null
           : filtered ? <EmptyState icon={Search} title="没有找到相关资料" />
             : shared ? <EmptyState icon={Folder} title="还没有资料设为所有项目可用。" description="在资料的“⋯”菜单里选“设为所有项目可用”。" />
               : <EmptyState icon={Folder} title="把文献、指南、方案、数据表、网页或笔记放进来，对话里会读它们并标出处。" action={addMenu} />
@@ -478,7 +505,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
             )}
           </List>
         )}
-        {selected.size > 0 && (
+        {!outputsView && selected.size > 0 && (
           <div className="sticky bottom-0 mt-4 flex flex-wrap items-center gap-3 border-t border-border bg-surface pt-3 pb-4" style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }} role="region" aria-label="所选资料">
             <span className="text-caption text-text-2">已选 {selected.size} 份资料</span>
             <Button onClick={() => void openSelected()}>在对话中使用</Button>

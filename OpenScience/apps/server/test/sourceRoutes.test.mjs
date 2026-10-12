@@ -8,7 +8,7 @@ import { createSourceRoutes } from "../src/sourceRoutes.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
 import { startFakeOpenList } from "./fakeOpenList.mjs";
 
-async function fixture(t, { withOpenList = false, connector = null, withKnowledge = true, uses = null, passages = null, dependents = null, vault = null } = {}) {
+async function fixture(t, { withOpenList = false, connector = null, withKnowledge = true, uses = null, passages = null, dependents = null, vault = null, outputs = null } = {}) {
   const calls = [];
   const service = {
     list: async (userId, options) => { calls.push({ method: "list", userId, options }); return { items: [], nextCursor: null }; },
@@ -62,7 +62,7 @@ async function fixture(t, { withOpenList = false, connector = null, withKnowledg
     saveNote: async (input) => { calls.push({ method: "saveNote", sourceId: input.source.id, title: input.title, body: input.body }); return { source: { id: "src_note_2", kind: "source", payload: { status: "queued", paths: [], reasons: [] } }, duplicate: false, changed: true, job: null }; },
     refetchLink: async (input) => { calls.push({ method: "refetchLink", sourceId: input.source.id }); return { source: { id: "src_link", kind: "source", payload: { status: "queued", paths: [], reasons: [] } }, duplicate: true, changed: false, job: null }; },
   } : null;
-  const route = createSourceRoutes({ store, service, openList, knowledge, uses, passages, dependents, vault, maxJsonBytes: 64 * 1024 });
+  const route = createSourceRoutes({ store, service, openList, knowledge, uses, passages, dependents, vault, outputs, maxJsonBytes: 64 * 1024 });
   const server = createServer((req, res) => {
     route(req, res).then((handled) => { if (!handled) { res.writeHead(404); res.end(); } }).catch((error) => sendError(res, error));
   });
@@ -280,6 +280,24 @@ test("without the source storage the vault says the export is unavailable, and a
   const refused = await fetch(`${big.base}/api/sources/export/vault?projectId=owned-project`, { headers: big.headers });
   assert.equal(refused.status, 413);
   assert.equal((await refused.json()).code, "archive_too_large");
+});
+
+test("the files a project's conversations delivered are read for a project the caller owns, and for no other", async t => {
+  const asked = [];
+  const outputs = async (project) => { asked.push(project.id); return [{ runId: "run_1", title: "房颤抗凝综述", path: "deliverables/a/report.md", at: "2026-10-10T08:00:00.000Z" }]; };
+  const { base, headers } = await fixture(t, { outputs });
+  const response = await fetch(`${base}/api/sources/outputs?projectId=owned-project`, { headers });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data.items.map((item) => [item.runId, item.path]), [["run_1", "deliverables/a/report.md"]]);
+  assert.deepEqual(asked, ["owned-project"]);
+  assert.equal((await fetch(`${base}/api/sources/outputs`, { headers })).status, 400);
+  assert.equal((await fetch(`${base}/api/sources/outputs?projectId=other-project`, { headers })).status, 404);
+  assert.equal((await fetch(`${base}/api/sources/outputs?projectId=owned-project`)).status, 401);
+  assert.equal((await fetch(`${base}/api/sources/outputs?projectId=owned-project`, { method: "POST", headers, body: "{}" })).status, 404);
+  assert.equal(asked.length, 1);
+  // Where there is no ledger, there is no list — and no error.
+  const bare = await fixture(t);
+  assert.deepEqual((await (await fetch(`${bare.base}/api/sources/outputs?projectId=owned-project`, { headers: bare.headers })).json()).data, { items: [] });
 });
 
 test("the box's search of the documents' text decides which documents the list holds, and says where each match is", async t => {

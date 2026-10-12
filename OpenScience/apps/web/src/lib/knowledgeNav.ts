@@ -9,10 +9,13 @@ import type { SourceKind, SourceScope } from "./sourceClient";
  *
  * ```
  * /app/files?scope=<project id | shared>&kind=<kind>&q=<text>
+ * /app/files?scope=<project id>&view=outputs&q=<text>
  * /app/files/<source id>?<the same three>&tab=<content | original>&page=<n>
  * ```
  *
- * `scope` is absent for the project the tab is in. The document page carries the list's three so that its way back
+ * `scope` is absent for the project the tab is in. `view=outputs` is the list of files the project's conversations delivered
+ * (「对话产出」), which stands in the row of type filters and is not a type: when it is there `kind` is not. The document page
+ * carries the list's three so that its way back
  * (「知识库」) is the list it came from, and it reads the document by its own id, wherever that document lives.
  */
 
@@ -24,6 +27,8 @@ export interface KnowledgeListState {
   scope: string | null;
   kind: SourceKind | null;
   q: string;
+  /** `outputs`: the files the project's conversations delivered, in place of its documents. Absent for the documents. */
+  view?: "outputs" | null;
 }
 
 const KIND_IDS: readonly string[] = SOURCE_KINDS.map((kind) => kind.id);
@@ -36,10 +41,12 @@ const SOURCE_ID = /^[A-Za-z0-9_:.-]{1,200}$/;
 export function readListState(params: URLSearchParams): KnowledgeListState {
   const scope = (params.get("scope") ?? "").trim();
   const kind = params.get("kind") ?? "";
+  const outputs = params.get("view") === "outputs" && scope !== SHARED_SCOPE;
   return {
     scope: scope && scope.length <= MAX_SCOPE_CHARS ? scope : null,
-    kind: KIND_IDS.includes(kind) ? (kind as SourceKind) : null,
+    kind: !outputs && KIND_IDS.includes(kind) ? (kind as SourceKind) : null,
     q: (params.get("q") ?? "").trim().slice(0, MAX_QUERY_CHARS),
+    ...(outputs ? { view: "outputs" as const } : {}),
   };
 }
 
@@ -47,7 +54,8 @@ export function readListState(params: URLSearchParams): KnowledgeListState {
 export function listParams(state: KnowledgeListState): URLSearchParams {
   const params = new URLSearchParams();
   if (state.scope) params.set("scope", state.scope);
-  if (state.kind) params.set("kind", state.kind);
+  if (state.view === "outputs") params.set("view", "outputs");
+  else if (state.kind) params.set("kind", state.kind);
   if (state.q) params.set("q", state.q);
   return params;
 }

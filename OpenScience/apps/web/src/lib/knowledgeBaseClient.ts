@@ -18,6 +18,20 @@ export function getSourceDependents(sourceId: string) {
   return productRequest<SourceDependents>(`/sources/${encodeURIComponent(sourceId)}/dependents`);
 }
 
+/** A file a project's conversation delivered (`GET /api/sources/outputs`), newest first. */
+export interface ProjectOutput {
+  runId: string;
+  /** What the conversation it came out of is called; null where the ledger holds no name for it. */
+  title: string | null;
+  path: string;
+  at: string;
+}
+
+export async function listProjectOutputs(projectId: string): Promise<ProjectOutput[]> {
+  const page = await productRequest<{ items: ProjectOutput[] }>(`/sources/outputs?${new URLSearchParams({ projectId })}`);
+  return Array.isArray(page.items) ? page.items : [];
+}
+
 /** The memory page, with one memory's drawer open (`?record=`, the address an inbox notice carries). */
 export const memoryRecordPath = (recordId: string) => `/app/memory?record=${encodeURIComponent(recordId)}`;
 /** The memory page, with one learned method's drawer open (`?method=`). */
