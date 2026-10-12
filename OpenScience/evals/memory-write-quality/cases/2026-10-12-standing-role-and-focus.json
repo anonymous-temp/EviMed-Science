@@ -1,0 +1,25 @@
+{
+  "id": "2026-10-12-standing-role-and-focus",
+  "class": "standing-role-and-focus",
+  "observedIn": "synthetic replay of 2026-10-12 (memory-extraction replay, case C01), deepseek-flash, temperature 0; the extractor as it stood before the 2026-10-12 change passed 3 of 3 samples",
+  "written": [
+    { "kind": "profile", "scope": "user", "key": "profile.clinical_role", "value": "三甲医院心内科主治医师", "summary": "用户是三甲医院心内科主治医师。" },
+    { "kind": "profile", "scope": "user", "key": "profile.research_focus", "value": "房颤抗凝的真实世界研究", "summary": "用户主要做房颤抗凝的真实世界研究。" }
+  ],
+  "whyItIsWrong": "Nothing the extractor wrote here was wrong; the case holds the line. Who the researcher is professionally and what they work on is what they expect the assistant to still know next month, so it is kept. The bleeding-risk question in the same message is the topic of this conversation, not a standing fact about their project, so it is not filed as one.",
+  "expected": "At least two profile records are written (role, research direction) and no project_fact is filed from the question.",
+  "decidable": true,
+  "preChange": "held",
+  "replay": {
+    "synthetic": true,
+    "projectId": "proj_af_rwe",
+    "messages": [
+      { "id": "u1", "role": "user", "text": "我是三甲医院心内科的主治医师，主要做房颤抗凝的真实世界研究。帮我看看利伐沙班在 75 岁以上患者中的大出血风险证据。" },
+      { "id": "a1", "role": "assistant", "text": "好的。在 75 岁以上人群中，利伐沙班相对华法林的大出血风险在不同研究里并不一致，我先按研究设计分层给你整理。" }
+    ]
+  },
+  "expect": {
+    "requireKinds": { "profile": 2 },
+    "noRecordOfKinds": ["project_fact"]
+  }
+}

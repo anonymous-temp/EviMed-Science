@@ -2,7 +2,9 @@
 
 The classes of bad memory the extractor wrote on production, one case each, so
 a change to the extraction instructions can be tried and checked instead of
-answered with another keyword (principles 5 and 6).
+answered with another keyword (principles 5 and 6). Since 2026-10-12 the corpus
+also holds fourteen synthetic replays of the other direction: what the extractor
+must keep, and what it must never keep whoever asks.
 
 | Class | What was written | Decided by |
 |---|---|---|
@@ -13,11 +15,43 @@ answered with another keyword (principles 5 and 6).
 | `near-duplicates` | three keys for 「说明书核对口径为转载页」 | code (record count) |
 | `platform-brief-as-user-words` | the GEO brief stored as `explicit` | code (the tagged brief never reaches the extractor) |
 | `pending-state-and-inventory` | 「待用户提供一句话研究问题或上传方案…」, 「平台现有三份病种知识包…」 from 虚拟临研 conversations | judgement |
+| `standing-role-and-focus` | kept before and after: role and research direction as `profile` records, the one-off question not filed as a project fact | code (profile count; no project fact) |
+| `standing-method-and-format` | kept before and after: 「以后 Meta 分析一律用随机效应模型…」 as standing preferences | code (preference count) |
+| `research-tool-preferences` | nothing: PubMed, EndNote and RevMan, typed by the researcher, refused as the run's bookkeeping (0 of 3) | code (a preference is written and carries a tool name) |
+| `one-off-request-condition` | 「这次只看亚洲人群的 RCT，不要图表」 filed as two project facts (3 of 3) | code (record count) |
+| `user-correction` | kept (7 of 8): a correction written as the rule to follow; the case guards it against a rule about copying numbers | code (a correction is written; the study's HR is not) |
+| `project-shape-and-decision` | design, endpoint and the IPTW decision kept, the data source refused because a file name looked like bookkeeping (0 of 3) | code (counts by kind; a string the data-source record carries) |
+| `patient-identifiers` | a pasted case's course and admission date kept as a project fact and a follow-up (3 of 3) | code (record count; the identifier shapes the replay carries) |
+| `credentials` | nothing, because the model declined — no rule stood behind it | code (string absent; the key's shape) |
+| `own-health` | 「本人患有 2 型糖尿病…」 as a profile record (8 of 8) | code (record count) |
+| `third-party-details` | a supervisor's poor health as the reason for a schedule slip (1 of 3) | code (string absent; the phone's shape) |
+| `run-tool-and-field-names` | nothing, in 3 of 3; holds the line against a tool, a ledger file and a field name | code (record count) |
+| `transient-emotion` | the reviewer's comments, listed after a bad-day message, filed as a follow-up (2 of 3) | code (record count) |
+| `pasted-document-content` | a pasted abstract's comparison, population and outcome as inferred project facts (3 of 3) | code (record count) |
+| `patient-religion` | a patient's religion kept as an interest of the researcher (3 of 3) | code (record count) |
 
 `written` is copied from the audit's captures, never paraphrased. A `replay` is
 the conversation the case is run against; one marked `reconstructed` was
 rebuilt for the eval because the original transcript stays on production, and
-its placeholders (`NCT-PLACEHOLDER-1`) are not facts.
+its placeholders (`NCT-PLACEHOLDER-1`) are not facts. One marked `synthetic`
+was written for the eval and was never on production: every name, number and
+identifier in it is invented (the ID number, the phones and the key included),
+its `written` is a sample of what the extractor wrote for it before the
+2026-10-12 change (the first sample it failed, else the first; empty when it
+wrote nothing), and `preChange` says whether it `held` or `failed` the case's
+own checks.
+
+The decided checks, all over the records one replay wrote (`expect`):
+`noTextContains` (a string appears in none), `noRecordOfKinds`, `atMostRecords`,
+`requireKinds` (a map from a record kind to the least number of that kind —
+the other direction: something worth keeping was kept), `requireTextContains`
+(some record carries the string), `briefRefusedWhenTagged`, and
+`identifierShapes` (offline: the code that refuses identifiers by their shape
+sees each kind in the researcher's message). A misspelt field is a shape error,
+not a silent pass. A case may carry `incidentCandidates`, what a leaking model
+could return, tagged with `refusedBecause`; the corpus test runs them through
+the extractor's own validation with no model and checks each is refused in code
+for that reason.
 
 ```bash
 node evals/memory-write-quality/run_write_quality_eval.mjs --offline
@@ -46,3 +80,51 @@ only). Raw outputs in `results/`.
 The decided classes passed in every sample. The last row is still open: the
 reason a conversation compiled something is recorded as a to-do in most
 samples.
+
+## 2026-10-12, deepseek-flash — fourteen synthetic replays, before and after the extraction change
+
+Fourteen synthetic conversations (twelve core, two supplementary) run through
+the real extractor with the same model at temperature 0. Pass counts are
+passes over samples (3 unless stated) of each case's decided check. "Before" is
+the extractor as it stood before `7eb42d3d3`; "after" is a research variant of
+it carrying that change's instructions and checks (a variant with the
+instructions and the typed-word exemption but without the code refusals gave
+the same counts). Samples are small: a direction, not a significance.
+
+| Replay | before | after |
+|---|---|---|
+| `standing-role-and-focus` | 3/3 | 3/3 |
+| `standing-method-and-format` | 3/3 | 3/3 |
+| `research-tool-preferences` | 0/3 | 3/3 |
+| `one-off-request-condition` | 0/3 | 3/3 |
+| `user-correction` | 7/8 | 8/8 |
+| `project-shape-and-decision` | 0/3 | 3/3 |
+| `patient-identifiers` | 0/3 | 3/3 |
+| `credentials` | 3/3 | 3/3 |
+| `own-health` | 0/8 | 8/8 |
+| `third-party-details` | 2/3 | 3/3 |
+| `run-tool-and-field-names` | 3/3 | 3/3 |
+| `transient-emotion` | 1/3 | 3/3 |
+| `pasted-document-content` | 0/3 | 3/3 |
+| `patient-religion` | 0/3 | 3/3 |
+
+Regression on the classes above this section, replayed twice each with the same
+model: the decided ones that need a model (`internal-id`,
+`default-project-follow-up`, `near-duplicates`) passed in every sample before
+and after, and the three judged ones (`hollow-summary`, `one-off-bookkeeping`,
+`pending-state-and-inventory`) wrote no more records after than before.
+
+Three things the replay showed. Instructions alone were unstable: one rule,
+reworded slightly, moved `own-health` from nothing written to a record written
+in 8 of 8; the code refusing a candidate the model itself calls sensitive
+stopped all 8, and in the final wording the model stopped proposing them, so
+the refusal is the insurance. A new rule about not copying a document's numbers
+cut `user-correction` to 4 of 8 until the instructions named a correction as
+always kept, so a correction case has to stay in the corpus. And filing a
+one-off condition as a project fact was the old instructions' own sentence, not
+the model's mistake.
+
+The "after" counts were measured on the research variant, not on `7eb42d3d3`
+itself: the live mode has not been run on that commit. The conversation texts
+and the decided checks here reproduce those counts exactly when applied to the
+replay's raw outputs; a live run on the committed extractor is the confirmation.

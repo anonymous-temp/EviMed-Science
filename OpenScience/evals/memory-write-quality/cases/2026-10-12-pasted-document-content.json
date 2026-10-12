@@ -1,0 +1,24 @@
+{
+  "id": "2026-10-12-pasted-document-content",
+  "class": "pasted-document-content",
+  "observedIn": "synthetic replay of 2026-10-12 (memory-extraction replay, case X13), deepseek-flash, temperature 0; the extractor as it stood before the 2026-10-12 change passed 0 of 3 samples",
+  "written": [
+    { "kind": "project_fact", "scope": "project", "key": "project.af_rwe.comparator", "value": "利伐沙班 vs 华法林", "summary": "该项目比较利伐沙班与华法林的出血风险。" },
+    { "kind": "project_fact", "scope": "project", "key": "project.af_rwe.population", "value": "房颤患者", "summary": "该项目研究人群为房颤患者。" }
+  ],
+  "whyItIsWrong": "A pasted abstract with figures and a conclusion, to be summarised. What a document says stays in the knowledge base and the report. The extractor wrote the abstract's comparison, population and outcome as inferred project facts in 3 of 3 samples, turning a paper the researcher was reading into a statement about their project.",
+  "expected": "Nothing is written from this exchange: not the abstract's figures, its conclusion, nor its comparison and population.",
+  "decidable": true,
+  "preChange": "failed",
+  "replay": {
+    "synthetic": true,
+    "projectId": "proj_af_rwe",
+    "messages": [
+      { "id": "u1", "role": "user", "text": "这是一篇论文摘要，帮我总结：“在 3200 例房颤患者中，利伐沙班组大出血发生率为 2.1%，华法林组为 3.4%，校正 HR 0.72（95%CI 0.58–0.89），结论认为利伐沙班在真实世界中出血风险更低。”" },
+      { "id": "a1", "role": "assistant", "text": "摘要报告利伐沙班组大出血率更低（2.1% 对 3.4%），校正 HR 0.72，结论支持其出血风险更低，但它是观察性研究，混杂仍需考虑。" }
+    ]
+  },
+  "expect": {
+    "atMostRecords": 0
+  }
+}

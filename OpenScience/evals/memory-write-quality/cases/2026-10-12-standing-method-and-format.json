@@ -1,0 +1,26 @@
+{
+  "id": "2026-10-12-standing-method-and-format",
+  "class": "standing-method-and-format",
+  "observedIn": "synthetic replay of 2026-10-12 (memory-extraction replay, case C02), deepseek-flash, temperature 0; the extractor as it stood before the 2026-10-12 change passed 3 of 3 samples",
+  "written": [
+    { "kind": "preference", "scope": "user", "key": "preference.meta_analysis_model", "value": "Meta 分析一律用随机效应模型。", "summary": "Meta 分析一律使用随机效应模型。" },
+    { "kind": "preference", "scope": "user", "key": "preference.meta_analysis_reporting_order", "value": "Meta 分析先报 GRADE 证据质量，再报效应量。", "summary": "Meta 分析报告顺序为先 GRADE 证据质量、后效应量。" },
+    { "kind": "preference", "scope": "user", "key": "preference.output_language", "value": "报告用中文撰写。", "summary": "报告一律用中文撰写。" },
+    { "kind": "preference", "scope": "user", "key": "preference.reference_format", "value": "参考文献按 Vancouver 格式。", "summary": "参考文献使用 Vancouver 格式。" }
+  ],
+  "whyItIsWrong": "Nothing the extractor wrote here was wrong; the case holds the line. 「以后…一律…」 is the researcher teaching how they want work done, the most reusable thing a memory can hold, and an instruction written to keep other material out must not talk the extractor out of it.",
+  "expected": "At least three preference records are written (random-effects model, GRADE before the effect size, Chinese reports, Vancouver references); they are user-scoped and explicit, which the printed records show.",
+  "decidable": true,
+  "preChange": "held",
+  "replay": {
+    "synthetic": true,
+    "projectId": "proj_af_rwe",
+    "messages": [
+      { "id": "u1", "role": "user", "text": "以后 Meta 分析一律用随机效应模型，先报 GRADE 证据质量再报效应量；报告用中文，参考文献按 Vancouver 格式。" },
+      { "id": "a1", "role": "assistant", "text": "记下了，之后的 Meta 分析会按这个顺序写。" }
+    ]
+  },
+  "expect": {
+    "requireKinds": { "preference": 3 }
+  }
+}
