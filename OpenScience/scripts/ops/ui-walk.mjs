@@ -204,7 +204,7 @@ const LEAKS = [
  * a label a reader weighs the card by and is not that.
  */
 export const BACK_OFFICE = [
-  /(?<!\p{Script=Han})已交付(?!\p{Script=Han})/u, /核对\s*\d+\s*条/, /(?<!引文)已核对\s*\d+\s*[\/／]/, /用过\s*\d+\s*次/, /\d+月\d+日\s*起生效/, /缓存命中/, /tok\/s/,
+  /(?<!\p{Script=Han})已交付(?!\p{Script=Han})/u, /核对\s*\d+\s*条/, /(?<!引文)已核对\s*\d+\s*[\/／]/, /用过\s*\d+\s*次/, /(?<![\p{Script=Han}\d])\d+月\d+日\s*起生效/u, /缓存命中/, /tok\/s/,
   /\b\d[\d,.]*[KMk]?\s*tok(en)?s?\b/, /openFDA (药品召回|Drugs@FDA|器械)/, /理解遗漏/, /处理第\s*\d+\s*代/, /Unexpected Application Error/, /dynamically imported module/,
   // The owner's ruling of 2026-10-10 (「全平台都不要呈现给用户看」): a received pack is shown as what comes in, with no trust verdict and no
   // word of what the automatic scan left out. Specific shapes, because 「没有带上」 alone is a researcher's own sentence.
@@ -1680,6 +1680,9 @@ export function measure([leakSources, backOfficeSources, retiredSources = []]) {
     return r.width > 0 && r.height > 0 && !clipped && cs.visibility !== "hidden" && cs.display !== "none" && cs.opacity !== "0";
   };
   const text = document.body.innerText || "";
+  // What the vocabulary checks read: the page less what it quotes. A source's own words in a <blockquote> or <q> can say
+  // "undefined" (「…is undefined.」 in the DECLARE–TIMI 58 abstract a card quotes) or 「…起生效」 and are not the product talking.
+  const unquoted = [...document.querySelectorAll("blockquote, q")].reduce((rest, el) => rest.replace(el.innerText, " "), text);
   const kinds = (values) => new Set(values).size;
 
   // The style inventory of the 2026-09-23 walk (the plan's §3 numbers were
@@ -1830,11 +1833,11 @@ export function measure([leakSources, backOfficeSources, retiredSources = []]) {
     pageLefts,
     rowTitleLefts,
     subtitle: header ? [...header.querySelectorAll("p")].filter(visible).map((el) => el.textContent.trim().slice(0, 60)) : [],
-    backOfficeHits: backOffice.map((re) => text.match(re)?.[0]?.slice(0, 60)).filter(Boolean),
+    backOfficeHits: backOffice.map((re) => unquoted.match(re)?.[0]?.slice(0, 60)).filter(Boolean),
     retiredNameHits: retired.map((re) => everything.match(re)?.[0]?.slice(0, 60)).filter(Boolean),
     headerPrimaryActions,
     sectionShapes,
-    leakHits: leaks.map((re) => text.match(re)?.[0]?.slice(0, 60)).filter(Boolean),
+    leakHits: leaks.map((re) => unquoted.match(re)?.[0]?.slice(0, 60)).filter(Boolean),
     unnamedControls: unnamed.map((el) => el.outerHTML.slice(0, 90)),
     overflowX: document.documentElement.scrollWidth > window.innerWidth + 1,
     smallTargets: controls.filter((el) => { const r = el.getBoundingClientRect(); return r.width < 24 || r.height < 24; }).length,

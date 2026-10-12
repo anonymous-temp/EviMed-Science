@@ -210,6 +210,15 @@ test("the back-office list still catches a ledger count, and lets the evidence c
   assert.equal(caught("解读 · 综合 · 引文已核对 1/2 · AI 已评议"), true);
 });
 
+test("an effective date is the back office as a label, and a news item's own date when it stands in a sentence", () => {
+  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
+  assert.equal(caught("第 2 版 · 9月18日起生效"), true);
+  assert.equal(caught("9月18日起生效"), true);
+  // 前沿动态 on 2026-10-12: a regulation's own date failed the walk.
+  assert.equal(caught("新规将于2026年10月20日起生效"), false);
+  assert.equal(caught("自10月20日起生效"), false);
+});
+
 test("the back-office list catches what the 2026-10-10 ruling took off the screens, and not a researcher's own sentence", () => {
   const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
   // A received pack: no trust verdict, no word of what the automatic scan left out.
