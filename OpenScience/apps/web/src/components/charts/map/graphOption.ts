@@ -2,7 +2,7 @@ import type { EChartsCoreOption } from "echarts/core";
 import type { MapEdge, MapNode, MapReason } from "@/lib/memoryMapClient";
 import { REASON_TEXT, markKindWord } from "@/components/memory/map/mapModel";
 import { escapeTooltip } from "../echartsBase";
-import { LAYOUT_SIZE } from "./layout";
+import { LAYOUT_HEIGHT, LAYOUT_WIDTH } from "./layout";
 import type { MapPalette } from "./palette";
 
 /**
@@ -46,7 +46,7 @@ export function symbolOf(node: MapNode): { symbol: string; size: number } {
     case "method": return { symbol: "triangle", size: 14 };
     case "entity": return { symbol: "circle", size: 14 };
     case "page": return { symbol: "rect", size: 12 };
-    default: return { symbol: node.subtype === "decision" || node.subtype === "correction" ? "diamond" : "circle", size: 9 + weight * 9 };
+    default: return { symbol: node.subtype === "decision" || node.subtype === "correction" ? "diamond" : "circle", size: 8 + weight * 8 };
   }
 }
 
@@ -82,7 +82,7 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
   const searching = input.hits.size > 0;
   // The heaviest memories earn a label of their own; the rest are named on hover.
   const heavy = new Set([...input.nodes].filter((node) => node.type === "memory" || node.type === "document" || node.type === "entity")
-    .sort((left, right) => (right.weight ?? 0) - (left.weight ?? 0) || left.id.localeCompare(right.id)).slice(0, input.labelBudget ?? 12).map((node) => node.id));
+    .sort((left, right) => (right.weight ?? 0) - (left.weight ?? 0) || left.id.localeCompare(right.id)).slice(0, input.labelBudget ?? 8).map((node) => node.id));
 
   const data = input.nodes.map((node) => {
     const { symbol, size } = symbolOf(node);
@@ -91,7 +91,7 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
     const dimmed = searching && !input.hits.has(node.id) && !structure;
     const chosen = input.selected === node.id;
     const labelled = structure || node.state === "check" || chosen || input.hits.has(node.id) || heavy.has(node.id);
-    const [x, y] = input.positions.get(node.id) ?? [LAYOUT_SIZE / 2, LAYOUT_SIZE / 2];
+    const [x, y] = input.positions.get(node.id) ?? [LAYOUT_WIDTH / 2, LAYOUT_HEIGHT / 2];
     return {
       name: node.id, x, y, symbol, symbolSize: size,
       value: node.label,
@@ -104,17 +104,25 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
       },
       label: {
         show: labelled,
-        position: structure ? "inside" : "right",
+        position: node.type === "you" ? "inside" : structure ? "bottom" : "right",
         formatter: node.type === "cluster" ? `${node.group ?? ""}\n${node.count ?? 0}` : [...node.label].length > 14 ? `${[...node.label].slice(0, 13).join("")}…` : node.label,
         color: structure && node.type !== "cluster" ? palette.text : palette.text,
         fontSize: structure ? 11 : 12,
         fontWeight: structure || node.state === "check" ? 600 : 400,
         distance: 6,
+        // A label over a line or a neighbour stays legible on the page's own ground.
+        backgroundColor: palette.surface, padding: [1, 3], borderRadius: 3,
       },
     };
   });
 
-  const anchors = [[0, 0], [LAYOUT_SIZE, LAYOUT_SIZE]].map(([x, y], position) => ({
+  // The picture is fitted to the marks' extent. Two invisible anchors at the corners of the whole document's marks (not of what a
+  // replay or a narrowing shows) keep that extent, and so the scale, the same while marks come and go.
+  const every = [...input.positions.values()];
+  const margin = 50;
+  const box = every.length === 0 ? [0, 0, LAYOUT_WIDTH, LAYOUT_HEIGHT]
+    : [Math.min(...every.map(([x]) => x)) - margin, Math.min(...every.map(([, y]) => y)) - margin, Math.max(...every.map(([x]) => x)) + margin, Math.max(...every.map(([, y]) => y)) + margin];
+  const anchors = [[box[0], box[1]], [box[2], box[3]]].map(([x, y], position) => ({
     name: `anchor:${position}`, x, y, symbolSize: 0, silent: true, label: { show: false }, itemStyle: { opacity: 0 }, tooltip: { show: false },
   }));
 
@@ -125,8 +133,8 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
       source: index.get(edge.from), target: index.get(edge.to),
       symbol: ["none", edge.type === "replaces" ? "arrow" : "none"], symbolSize: 7,
       lineStyle: {
-        color: worried ? palette.check : palette.line, width: worried ? 1.6 : edge.type === "belongs-to" ? 0.8 : 1.1, type: dashed,
-        opacity: edge.type === "belongs-to" ? 0.55 : 0.9, curveness: edge.type === "replaces" ? 0.18 : 0.04,
+        color: worried ? palette.check : palette.line, width: worried ? 1.6 : edge.type === "belongs-to" ? 0.7 : 1.1, type: dashed,
+        opacity: edge.type === "belongs-to" ? 0.4 : 0.9, curveness: edge.type === "replaces" ? 0.18 : 0.04,
       },
       label: { show: edge.type === "relates" && Boolean(edge.label), formatter: edge.label ?? "", color: palette.textFaint, fontSize: 11 },
       tooltipText: edgeTooltip(edge, byId.get(edge.from)?.label ?? "", byId.get(edge.to)?.label ?? ""),
@@ -146,6 +154,9 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
     series: [{
       type: "graph",
       layout: "none",
+      // The picture fills the canvas: the library's default box leaves a margin on every side that, for a layout as wide as the
+      // canvas, cost a third of the width.
+      left: 12, right: 12, top: 12, bottom: 12,
       roam: true,
       draggable: true,
       scaleLimit: { min: 0.4, max: 8 },
@@ -165,6 +176,12 @@ export interface ChainInput {
   rests: ReadonlyArray<{ node: MapNode; state: MapEdge["state"] }>;
   replaced: readonly MapNode[];
   palette: MapPalette;
+}
+
+/** A name as a label carries it: cut at a length with an ellipsis. */
+function clip(text: unknown, max: number): string {
+  const chars = [...String(text ?? "")];
+  return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : chars.join("");
 }
 
 const SOURCE_STATE_WORDS: Record<NonNullable<MapEdge["state"]>, string> = {
@@ -191,11 +208,12 @@ export function chainOption({ root, rests, replaced, palette }: ChainInput): ECh
     },
     series: [{
       type: "tree", orient: "LR", layout: "orthogonal", roam: true, initialTreeDepth: 2, expandAndCollapse: false,
-      top: "6%", bottom: "6%", left: "6%", right: "30%",
+      top: "8%", bottom: "8%", left: "27%", right: "30%",
       symbolSize: 12,
       lineStyle: { color: palette.line, width: 1.2 },
-      label: { position: "left", verticalAlign: "middle", align: "right", color: palette.text, fontSize: 12 },
-      leaves: { label: { position: "right", verticalAlign: "middle", align: "left" } },
+      // The memory is named at its left in a line of its own length; each source is named at its right with what it is and what a check found.
+      label: { position: "left", verticalAlign: "middle", align: "right", color: palette.text, fontSize: 12, formatter: (params: { name?: string }) => clip(params.name, 18) },
+      leaves: { label: { position: "right", verticalAlign: "middle", align: "left", formatter: (params: { name?: string; value?: string }) => `${clip(params.name, 26)}${params.value ? `\n${params.value}` : ""}` } },
       data: [{
         name: root.label, id: root.id, value: markKindWord(root),
         itemStyle: { color: root.state === "check" ? palette.check : root.state === "replaced" ? palette.replaced : palette.current },

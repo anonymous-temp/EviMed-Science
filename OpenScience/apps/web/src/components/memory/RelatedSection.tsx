@@ -61,7 +61,7 @@ export function RelatedSection({ recordId, onOpenRecord, canOpen }: {
     <DrawerSection label="关联">
       <ul className="space-y-1.5">
         {links.rests.map((rest) => {
-          const title = rest.title ? `《${memoryExcerpt(rest.title, 60)}》` : `一份${sourceKind(rest.type)}`;
+          const title = rest.type === "doi" ? `论文 ${rest.id}` : rest.title ? `《${memoryExcerpt(rest.title, 60)}》` : `一份${sourceKind(rest.type)}`;
           const state = SOURCE_STATE_WORDS[rest.state];
           const text = `依据：${title}${state ? `（${state}）` : ""}`;
           return (

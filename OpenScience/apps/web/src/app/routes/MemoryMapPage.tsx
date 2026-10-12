@@ -70,7 +70,8 @@ export function MemoryMapPage() {
 
   const narrowed = useMemo(() => (doc ? narrowMap(doc, { ...selection, q: selection.q }) : null), [doc, selection]);
   const byId = useMemo(() => new Map((doc?.nodes ?? []).map((node) => [node.id, node])), [doc]);
-  const thin = doc ? isThin(doc) : false;
+  // A focus is a few marks round one: a picture of them is the point, however few. What is too little to draw is the whole map.
+  const thin = doc ? !doc.scope.focus && isThin(doc) : false;
 
   /** What pressing a mark does: the record's drawer, a page of its own, or — for a mark that is a group — narrow the map to it. */
   const openNode = useCallback((node: MapNode) => {
@@ -132,7 +133,7 @@ export function MemoryMapPage() {
           </div>
         );
       }
-      return <GraphView doc={doc} narrowed={narrowed} selected={selection.focus ?? (drawer.value?.startsWith("record:") ? `memory:${drawer.value.slice(7)}` : null)} actions={{ onOpen: openNode, onFocus: focusNode }} chain={chain} />;
+      return <GraphView doc={doc} narrowed={narrowed} selected={selection.focus ?? (drawer.value?.startsWith("record:") ? `memory:${drawer.value.slice(7)}` : null)} actions={{ onOpen: openNode, onFocus: focusNode }} chain={chain} focused={Boolean(doc.scope.focus)} />;
     }
     if (selection.view === "topics") {
       return (

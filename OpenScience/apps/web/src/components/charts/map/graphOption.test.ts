@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/memoryMapClient";
-import { LAYOUT_SIZE, layoutGraph, unitHash } from "./layout";
+import { LAYOUT_HEIGHT, LAYOUT_WIDTH, layoutGraph, unitHash } from "./layout";
 import { TEST_PALETTE } from "./palette";
 import { chainOption, edgeTooltip, graphOption, symbolOf, tooltipOf } from "./graphOption";
 
@@ -29,13 +29,34 @@ describe("the layout", () => {
     const first = layout(nodes);
     const second = layout([...nodes].reverse());
     expect([...first.entries()].sort()).toEqual([...second.entries()].sort());
-    expect(first.get("you:account")).toEqual([LAYOUT_SIZE / 2, LAYOUT_SIZE / 2]);
-    for (const [x, y] of first.values()) { expect(x).toBeGreaterThanOrEqual(20); expect(x).toBeLessThanOrEqual(LAYOUT_SIZE - 20); expect(y).toBeGreaterThanOrEqual(20); expect(y).toBeLessThanOrEqual(LAYOUT_SIZE - 20); }
+    expect(first.get("you:account")).toEqual([LAYOUT_WIDTH / 2, LAYOUT_HEIGHT / 2]);
+    for (const [x, y] of first.values()) { expect(x).toBeGreaterThanOrEqual(20); expect(x).toBeLessThanOrEqual(LAYOUT_WIDTH - 20); expect(y).toBeGreaterThanOrEqual(20); expect(y).toBeLessThanOrEqual(LAYOUT_HEIGHT - 20); }
   });
   it("keeps a mark where it is when more marks arrive that are not tied to it much", () => {
     expect(unitHash("a")).toBe(unitHash("a"));
     expect(unitHash("a")).not.toBe(unitHash("b"));
     expect(unitHash("a", 1)).not.toBe(unitHash("a", 2));
+  });
+  it("lays a hub's marks round it, the heaviest nearest, and never two on one spot", () => {
+    const crowd = [you, project, ...Array.from({ length: 30 }, (_, index) => memory(`m${index}`, { projectId: "p", weight: index / 30 }))];
+    const at = layoutGraph(crowd.map((node) => ({ id: node.id, type: node.type, home: node.projectId ?? null, weight: node.weight ?? 0 })), []);
+    const hub = at.get("project:p") as [number, number];
+    const distance = (id: string) => Math.hypot((at.get(id) as number[])[0] - hub[0], (at.get(id) as number[])[1] - hub[1]);
+    expect(distance("memory:m29")).toBeLessThan(distance("memory:m0"));
+    const spots = new Set([...at.values()].map(([x, y]) => `${Math.round(x / 8)}:${Math.round(y / 8)}`));
+    expect(spots.size).toBe(at.size);
+  });
+  it("stands a document beside the marks that rest on it, and sets what is tied to nothing on the outer ring", () => {
+    const withDocs = [you, project, memory("a", { projectId: "p" }), memory("b", { projectId: "p" }),
+      { id: "document:d", type: "document", label: "d" } as MapNode, { id: "entity:lonely", type: "entity", label: "e" } as MapNode];
+    const at = layoutGraph(withDocs.map((node) => ({ id: node.id, type: node.type, home: node.projectId ?? null, weight: 0 })), [
+      { from: "memory:a", to: "document:d" }, { from: "memory:b", to: "document:d" },
+    ]);
+    const a = at.get("memory:a") as number[];
+    const doc = at.get("document:d") as number[];
+    expect(Math.hypot(a[0] - doc[0], a[1] - doc[1])).toBeLessThan(200);
+    const lonely = at.get("entity:lonely") as number[];
+    expect(Math.hypot(lonely[0] - LAYOUT_WIDTH / 2, lonely[1] - LAYOUT_HEIGHT / 2)).toBeGreaterThan(300);
   });
   it("handles a map with a single mark, and none", () => {
     expect(layoutGraph([], []).size).toBe(0);
@@ -94,9 +115,13 @@ describe("the graph option", () => {
     expect(series(option).layout).toBe("none");
   });
 
-  it("holds the box with two invisible anchors, so the replay does not rescale the picture", () => {
+  it("holds the extent with two invisible anchors round every mark of the document, so a replay does not rescale the picture", () => {
     const anchors = series(graphOption(base) as any).data.filter((entry: any) => String(entry.name).startsWith("anchor:"));
-    expect(anchors.map((entry: any) => [entry.x, entry.y])).toEqual([[0, 0], [LAYOUT_SIZE, LAYOUT_SIZE]]);
+    const xs = [...positions.values()].map(([x]) => x);
+    const ys = [...positions.values()].map(([, y]) => y);
+    expect(anchors.map((entry: any) => [entry.x, entry.y])).toEqual([[Math.min(...xs) - 50, Math.min(...ys) - 50], [Math.max(...xs) + 50, Math.max(...ys) + 50]]);
+    const replayed = series(graphOption({ ...base, nodes: nodes.slice(0, 3) }) as any).data.filter((entry: any) => String(entry.name).startsWith("anchor:"));
+    expect(replayed.map((entry: any) => [entry.x, entry.y])).toEqual(anchors.map((entry: any) => [entry.x, entry.y]));
     expect(anchors.every((entry: any) => entry.symbolSize === 0 && entry.silent === true)).toBe(true);
   });
 

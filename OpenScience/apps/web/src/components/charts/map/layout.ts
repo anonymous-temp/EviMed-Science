@@ -1,19 +1,21 @@
 /**
- * Where the marks of the relation graph stand: worked out once, here, the same way every time.
+ * Where the marks of the relation graph stand: worked out once, here, the same way every time, and arranged so it can be read.
  *
- * Why not the library's own force layout: it starts from random positions, so the same data lands differently on every load —
- * the complaint Obsidian's users make above all others (spec §1.1) — and it animates for as long as it runs, which a researcher
- * reads as the map being unsettled. This is a small Fruchterman–Reingold over the marks the page holds (at most 300), started from
- * positions that depend only on the marks' ids, run for a fixed number of steps: the same marks give the same picture, a replay
- * never moves a mark that is already there, and a dragged mark is the reader's own act.
+ * Why not the library's own force layout, and not a force layout of our own (the first version of this file was one): a force
+ * layout starts from random positions, so the same data lands differently on every load — the complaint Obsidian's users make
+ * above all others (spec §1.1) — and, run on a few dozen marks hanging from a few hubs, it pushes each hub's marks into a line at
+ * the edge of the picture. A map a researcher reads is better served by a plan: the account in the middle, each project a hub
+ * around it, and each hub's marks laid round it on a spiral, the heaviest nearest. Positions depend only on the marks' ids and
+ * weights, so the same marks give the same picture, a replay never moves a mark that is already there, and a dragged mark is the
+ * reader's own act. A document, an outside source or an entity stands beside the marks it is tied to.
  *
- * Deletable if the library's layout takes a fixed seed.
+ * Deletable if the library's layout takes a fixed seed and learns to keep a hub's marks round it.
  */
 
 export interface LayoutNode {
   id: string;
   type: string;
-  /** Marks of one group start near each other: a project's, or the account's. */
+  /** The hub a mark belongs to: a project's id; null for the account's own. */
   home: string | null;
   weight: number;
 }
@@ -22,9 +24,15 @@ export interface LayoutEdge {
   to: string;
 }
 
-/** The box the positions are in. The library fits it to the canvas. */
-export const LAYOUT_SIZE = 1000;
-const STEPS = 160;
+/** The box the positions are in, wide like the canvas it is fitted to. */
+export const LAYOUT_WIDTH = 1800;
+export const LAYOUT_HEIGHT = 900;
+
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+/** How far apart neighbours on a hub's spiral stand, in the box's units. */
+const SPACING = 38;
+/** The spiral is a little flattened, like the box. */
+const SQUASH = 0.8;
 
 /** A number in [0, 1) that depends on the text only. */
 export function unitHash(text: string, salt = 0): number {
@@ -39,69 +47,67 @@ export function unitHash(text: string, salt = 0): number {
   return (hash >>> 0) / 4294967296;
 }
 
+type Point = { x: number; y: number };
+
+/** The i-th place on a sunflower spiral round a centre: even spacing, no two marks on one spot. */
+function spiral(index: number, centre: Point, spacing: number, turn: number): Point {
+  const radius = spacing * Math.sqrt(index + 1.4);
+  const angle = index * GOLDEN_ANGLE + turn;
+  return { x: centre.x + Math.cos(angle) * radius, y: centre.y + Math.sin(angle) * radius * SQUASH };
+}
+
 export function layoutGraph(nodes: readonly LayoutNode[], edges: readonly LayoutEdge[]): Map<string, [number, number]> {
-  const ordered = [...nodes].sort((left, right) => left.id.localeCompare(right.id));
-  const centre = LAYOUT_SIZE / 2;
-  const homes = [...new Set(ordered.map((node) => node.home).filter((home): home is string => Boolean(home)))].sort();
-  const place = new Map<string, { x: number; y: number }>();
-  for (const node of ordered) {
-    if (node.type === "you") { place.set(node.id, { x: centre, y: centre }); continue; }
-    const homeIndex = node.home ? homes.indexOf(node.home) : -1;
-    const homeAngle = homeIndex < 0 ? unitHash(node.id, 1) * Math.PI * 2 : (homeIndex / Math.max(1, homes.length)) * Math.PI * 2;
-    const around = node.type === "project" ? 0 : (unitHash(node.id, 2) - 0.5) * 1.2;
-    const radius = node.type === "project" ? LAYOUT_SIZE * 0.22 : LAYOUT_SIZE * (0.26 + 0.2 * unitHash(node.id, 3));
-    place.set(node.id, { x: centre + Math.cos(homeAngle + around) * radius, y: centre + Math.sin(homeAngle + around) * radius });
+  const centre: Point = { x: LAYOUT_WIDTH / 2, y: LAYOUT_HEIGHT / 2 };
+  const place = new Map<string, Point>();
+  const byImportance = (left: LayoutNode, right: LayoutNode) => right.weight - left.weight || left.id.localeCompare(right.id);
+  const hubs = nodes.filter((node) => node.type === "project").sort((left, right) => left.id.localeCompare(right.id));
+  const hubKey = (node: LayoutNode) => node.home ?? node.id.slice(node.id.indexOf(":") + 1);
+  const members = (key: string) => nodes.filter((node) => node.type !== "project" && node.type !== "you" && node.home === key && !node.id.startsWith("project:")).sort(byImportance);
+
+  // The account in the middle.
+  for (const node of nodes) if (node.type === "you") place.set(node.id, centre);
+
+  // Each hub on an ellipse round it, sharing the circle by how much it has to hold: a hub with more marks takes more of the way round.
+  const sizes = hubs.map((hub) => Math.sqrt(members(hubKey(hub)).length + 3));
+  const total = sizes.reduce((sum, size) => sum + size, 0) || 1;
+  let sweep = -Math.PI / 2 - (sizes[0] ?? 0) / total * Math.PI;
+  hubs.forEach((hub, index) => {
+    const share = (sizes[index] / total) * Math.PI * 2;
+    const angle = sweep + share / 2;
+    sweep += share;
+    const hubAt = { x: centre.x + Math.cos(angle) * LAYOUT_WIDTH * 0.335, y: centre.y + Math.sin(angle) * LAYOUT_HEIGHT * 0.29 };
+    place.set(hub.id, hubAt);
+    const turn = unitHash(hub.id, 4) * Math.PI * 2;
+    members(hubKey(hub)).forEach((node, order) => place.set(node.id, spiral(order, hubAt, SPACING, turn)));
+  });
+
+  // The account's own marks (and a mark whose hub is not drawn) ring the account, leaving its hexagon room.
+  const ringed = nodes.filter((node) => node.type !== "you" && node.type !== "project" && !place.has(node.id)
+    && (node.type === "memory" || node.type === "method" || node.type === "cluster") && (node.home === null || !hubs.some((hub) => hubKey(hub) === node.home))).sort(byImportance);
+  ringed.forEach((node, order) => place.set(node.id, spiral(order + 5, centre, SPACING * 0.92, 1.1)));
+
+  // Whatever is tied to marks stands beside them, pushed out from the middle so it does not cover them; what is tied to nothing is
+  // set on an outer ring by its name.
+  const tied = new Map<string, string[]>();
+  for (const edge of edges) {
+    tied.set(edge.from, [...(tied.get(edge.from) ?? []), edge.to]);
+    tied.set(edge.to, [...(tied.get(edge.to) ?? []), edge.from]);
   }
-  const links = edges.filter((edge) => place.has(edge.from) && place.has(edge.to) && edge.from !== edge.to);
-  const area = LAYOUT_SIZE * LAYOUT_SIZE;
-  const k = Math.sqrt(area / Math.max(1, ordered.length)) * 0.72;
-  const velocity = new Map(ordered.map((node) => [node.id, { x: 0, y: 0 }]));
-  let temperature = LAYOUT_SIZE / 9;
-  for (let step = 0; step < STEPS; step += 1) {
-    for (const node of velocity.values()) { node.x = 0; node.y = 0; }
-    for (let left = 0; left < ordered.length; left += 1) {
-      const a = place.get(ordered[left].id) as { x: number; y: number };
-      for (let right = left + 1; right < ordered.length; right += 1) {
-        const b = place.get(ordered[right].id) as { x: number; y: number };
-        let dx = a.x - b.x;
-        let dy = a.y - b.y;
-        let distance = Math.hypot(dx, dy);
-        if (distance < 0.01) { dx = unitHash(ordered[left].id, 7) - 0.5; dy = unitHash(ordered[right].id, 8) - 0.5; distance = Math.hypot(dx, dy) || 0.01; }
-        const push = (k * k) / distance;
-        const va = velocity.get(ordered[left].id) as { x: number; y: number };
-        const vb = velocity.get(ordered[right].id) as { x: number; y: number };
-        va.x += (dx / distance) * push; va.y += (dy / distance) * push;
-        vb.x -= (dx / distance) * push; vb.y -= (dy / distance) * push;
-      }
+  for (const node of [...nodes].sort((left, right) => left.id.localeCompare(right.id))) {
+    if (place.has(node.id)) continue;
+    const near = (tied.get(node.id) ?? []).map((id) => place.get(id)).filter((point): point is Point => point !== undefined);
+    if (near.length > 0) {
+      const mean = { x: near.reduce((sum, point) => sum + point.x, 0) / near.length, y: near.reduce((sum, point) => sum + point.y, 0) / near.length };
+      const away = Math.atan2(mean.y - centre.y, mean.x - centre.x) || unitHash(node.id, 5) * Math.PI * 2;
+      const wobble = (unitHash(node.id, 6) - 0.5) * 1.1;
+      place.set(node.id, { x: mean.x + Math.cos(away + wobble) * 64, y: mean.y + Math.sin(away + wobble) * 58 });
+    } else {
+      const angle = unitHash(node.id, 7) * Math.PI * 2;
+      place.set(node.id, { x: centre.x + Math.cos(angle) * LAYOUT_WIDTH * 0.42, y: centre.y + Math.sin(angle) * LAYOUT_HEIGHT * 0.4 });
     }
-    for (const link of links) {
-      const a = place.get(link.from) as { x: number; y: number };
-      const b = place.get(link.to) as { x: number; y: number };
-      const dx = a.x - b.x;
-      const dy = a.y - b.y;
-      const distance = Math.hypot(dx, dy) || 0.01;
-      const pull = (distance * distance) / k;
-      const va = velocity.get(link.from) as { x: number; y: number };
-      const vb = velocity.get(link.to) as { x: number; y: number };
-      va.x -= (dx / distance) * pull; va.y -= (dy / distance) * pull;
-      vb.x += (dx / distance) * pull; vb.y += (dy / distance) * pull;
-    }
-    for (const node of ordered) {
-      const p = place.get(node.id) as { x: number; y: number };
-      const v = velocity.get(node.id) as { x: number; y: number };
-      // A weak pull to the middle keeps the parts that are not tied to each other from drifting off the canvas.
-      v.x += (centre - p.x) * 0.05; v.y += (centre - p.y) * 0.05;
-      if (node.type === "you") continue;
-      const speed = Math.hypot(v.x, v.y) || 0.01;
-      const move = Math.min(speed, temperature);
-      p.x += (v.x / speed) * move; p.y += (v.y / speed) * move;
-      p.x = Math.max(20, Math.min(LAYOUT_SIZE - 20, p.x));
-      p.y = Math.max(20, Math.min(LAYOUT_SIZE - 20, p.y));
-    }
-    temperature *= 0.965;
   }
-  return new Map(ordered.map((node) => {
-    const p = place.get(node.id) as { x: number; y: number };
-    return [node.id, [Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10] as [number, number]];
-  }));
+
+  return new Map([...place.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([id, point]) => [id, [
+    Math.round(Math.max(24, Math.min(LAYOUT_WIDTH - 24, point.x)) * 10) / 10, Math.round(Math.max(24, Math.min(LAYOUT_HEIGHT - 24, point.y)) * 10) / 10,
+  ] as [number, number]]));
 }

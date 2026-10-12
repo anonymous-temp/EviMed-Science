@@ -38,6 +38,8 @@ describe("the polygon", () => {
     expect(now.value).toEqual([4, 12, 3, 1]);
     expect(now.label.show).toBe(true);
     expect(now.label.formatter({ value: 12 })).toBe("12");
+    expect(now.label.formatter({ value: 1 })).toBe("");
+    expect(option.radar.indicator.map((entry: any) => entry.name)).toEqual(["背景\n4", "偏好\n12", "习惯\n3", "纠正\n1"]);
   });
   it("prints a share as a percent, and scales it to the larger period", () => {
     const shares = work([axis("普通问答", 0.5, 0.25), axis("写作与传播", 0.3, 0.5), axis("研究设计与数据", 0.2, 0.25)], 10);

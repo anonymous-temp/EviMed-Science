@@ -44,7 +44,7 @@ export function wordCloudOption(topics: readonly CloudTopic[], { selected, palet
     },
     series: [{
       type: "wordCloud", shape: "circle", left: "center", top: "center", width: "96%", height: "94%",
-      sizeRange: [15, 42], rotationRange: [0, 0], rotationStep: 0, gridSize: 10, drawOutOfBound: false, layoutAnimation: false,
+      sizeRange: [15, 44], rotationRange: [0, 0], rotationStep: 0, gridSize: 16, drawOutOfBound: false, layoutAnimation: false,
       textStyle: { fontFamily, fontWeight: 500 },
       emphasis: { textStyle: { fontWeight: 700 } },
       data: words.map((topic) => ({

@@ -34,6 +34,9 @@ export function radarState(dimension: MapDimension): RadarState {
   };
 }
 
+/** A vertex nearer the middle than this share of the scale has no room for its number beside its neighbours'; the axis's name carries it. */
+export const VERTEX_ROOM = 0.22;
+
 /** A value as it is printed at its vertex. @param {MapDimension["scale"]} scale */
 export function radarValue(scale: MapDimension["scale"], value: number): string {
   return scale === "share" ? `${Math.round(value * 100)}%` : String(Math.round(value));
@@ -57,7 +60,9 @@ export function radarOption(dimension: MapDimension, palette: MapPalette): EChar
     },
     radar: {
       center: ["50%", "54%"], radius: "62%", shape: "polygon", splitNumber: 4, triggerEvent: true,
-      indicator: dimension.axes.map((axis) => ({ name: axis.label, max })),
+      // The number is at the end of every axis, in its name, where nothing can cover it; the polygon prints it again at its vertex
+      // where the vertex is far enough from the middle to have room.
+      indicator: dimension.axes.map((axis) => ({ name: `${axis.label}\n${printed(axis.value)}`, max })),
       axisName: { color: palette.text, fontSize: 12 },
       axisLine: { lineStyle: { color: palette.grid } },
       splitLine: { lineStyle: { color: palette.grid } },
@@ -72,7 +77,10 @@ export function radarOption(dimension: MapDimension, palette: MapPalette): EChar
         { name: "现在", value: dimension.axes.map((axis) => axis.value),
           lineStyle: { color: palette.current, width: 2.5 }, itemStyle: { color: palette.current }, symbol: "circle", symbolSize: 6,
           areaStyle: { color: palette.current, opacity: 0.16 },
-          label: { show: true, formatter: (params: { value?: number }) => printed(Number(params.value) || 0), color: palette.text, fontSize: 12, fontWeight: 600, distance: 4 }, z: 2 },
+          label: {
+            show: true, color: palette.text, fontSize: 12, fontWeight: 600, distance: 4,
+            formatter: (params: { value?: number }) => ((Number(params.value) || 0) >= max * VERTEX_ROOM ? printed(Number(params.value) || 0) : ""),
+          }, z: 2 },
       ],
     }],
   };

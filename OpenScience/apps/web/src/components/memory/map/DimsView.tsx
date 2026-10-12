@@ -17,13 +17,14 @@ function Radar({ dimension, selected, onAxis }: { dimension: MapDimension; selec
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const option = useMemo(() => (state.drawable ? radarOption(dimension, mapPalette()) : null), [dimension, state.drawable, scheme]);
   const byName = new Map(dimension.axes.map((axis) => [axis.label, axis]));
+  const axisOf = (name: unknown) => byName.get(String(name ?? "").split("\n")[0]);
   return (
     <figure className="m-0 min-w-0 space-y-2" data-radar={dimension.id}>
       <figcaption className="text-ui font-medium text-text">{dimension.title}</figcaption>
       {state.drawable ? (
         <MapChart
           kind={`radar-${dimension.id}`} option={option} height={300}
-          on={{ click: (params: { componentType?: string; name?: string }) => { const axis = byName.get(String(params?.name ?? "")); if (axis) onAxis(selected === axis.id ? null : axis.id); } }}
+          on={{ click: (params: { componentType?: string; name?: string }) => { const axis = axisOf(params?.name); if (axis) onAxis(selected === axis.id ? null : axis.id); } }}
           label={`${dimension.title}：${dimension.axes.map((axis) => `${axis.label} ${radarValue(dimension.scale, axis.value)}`).join("，")}。`}
           unpainted={dimension.axes.map((axis) => `${axis.label} ${radarValue(dimension.scale, axis.value)}`).join(" · ")}
         />

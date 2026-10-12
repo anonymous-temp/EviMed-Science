@@ -155,7 +155,7 @@ export function timeOption(input: TimeInput): EChartsCoreOption {
         return lane && typeof value?.[6] === "number" ? segmentTooltip(lane, value[6], input.formatDay) : "";
       },
     },
-    xAxis: { type: "time", min, max, axisLine: { lineStyle: { color: palette.grid } }, splitLine: { show: true, lineStyle: { color: palette.grid } }, axisLabel: { color: palette.textFaint } },
+    xAxis: { type: "time", min, max, axisLine: { lineStyle: { color: palette.grid } }, splitLine: { show: true, lineStyle: { color: palette.grid } }, axisLabel: { color: palette.textFaint, hideOverlap: true } },
     yAxis: {
       type: "category", inverse: true, data: input.rows.map((row) => row.label),
       axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: true, lineStyle: { color: palette.grid } },

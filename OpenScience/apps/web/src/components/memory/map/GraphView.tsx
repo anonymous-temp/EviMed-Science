@@ -17,7 +17,7 @@ export interface GraphActions {
   onFocus: (node: MapNode) => void;
 }
 
-const GRAPH_HEIGHT = 520;
+const GRAPH_HEIGHT = 560;
 
 /** The words under the picture that say what its shapes and colours are (spec §2: every encoding is in a legend). */
 function Legend() {
@@ -37,11 +37,13 @@ function Legend() {
  * mark), the picture the library draws from them, and under it the legend and the slider that grows the map from its first day.
  * Played, it adds the marks in the order they began, which is the nearest thing the map has to the sense of having built something.
  */
-export function GraphView({ doc, narrowed, selected, actions, chain }: {
+export function GraphView({ doc, narrowed, selected, actions, chain, focused }: {
   doc: Pick<MemoryMap, "nodes" | "edges" | "truncated">;
   narrowed: NarrowedMap;
   selected: string | null;
   actions: GraphActions;
+  /** The map is centred on one mark or one group, so what is left out is outside its reach and not folded. */
+  focused: boolean;
   /** The source chain of the focused memory, in place of the graph. */
   chain: { root: MapNode; rests: Array<{ node: MapNode; state: import("@/lib/memoryMapClient").MapEdge["state"] }>; replaced: MapNode[] } | null;
 }) {
@@ -110,7 +112,9 @@ export function GraphView({ doc, narrowed, selected, actions, chain }: {
           <span className="tabular-nums text-text-3">{moment ? `${formatDay(moment)} · ${count} 件记忆` : `现在 · ${count} 件记忆`}</span>
         </div>
       )}
-      {!chain && doc.truncated.nodes > 0 && <p className="text-caption text-text-3">{`还有 ${doc.truncated.nodes} 个标记折叠在“一组”里，点一组可以展开。`}</p>}
+      {!chain && doc.truncated.nodes > 0 && (
+        <p className="text-caption text-text-3">{focused ? `还有 ${doc.truncated.nodes} 个标记不在这个范围里。` : `还有 ${doc.truncated.nodes} 个标记折叠在“一组”里，点一组可以展开。`}</p>
+      )}
     </div>
   );
 }
