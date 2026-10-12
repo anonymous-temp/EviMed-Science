@@ -1,5 +1,6 @@
 """Interpretation and usable figures are required before reporting completion."""
 import json
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -52,6 +53,31 @@ def test_unchanged_old_primary_file_is_not_copied_as_a_failed_retries_partial_re
     target = tmp_path / "output"; target.mkdir()
     copied = _copy_release_artifacts(target, SimpleNamespace(output_dir=raw), [result], include_reports=False)
     assert not any(path.endswith("mr_results.csv") for path in copied)
+
+
+def test_a_same_size_rewrite_inside_one_timestamp_tick_is_this_attempts_result(tmp_path, monkeypatch):
+    from mr_agent.tools import mr_executor
+    raw = tmp_path / "raw"; raw.mkdir()
+    earlier = "method,nsnp,b,se,pval\nIVW,8,0.3,0.04,0.001\n"
+    rewritten = "method,nsnp,b,se,pval\nIVW,8,0.5,0.04,0.002\n"
+    assert len(earlier) == len(rewritten)
+    (raw / "mr_results.csv").write_text(earlier)
+    tick = (raw / "mr_results.csv").stat().st_mtime_ns
+    # A clock coarser than the rerun on a filesystem that tells files apart by size and time only: the rewrite lands on the
+    # earlier write's time.
+    monkeypatch.setattr(mr_executor, "_output_identities", lambda root: {
+        path.name: (path.stat().st_size, path.stat().st_mtime_ns) for path in root.iterdir() if path.is_file()})
+
+    def rewrite(script, output):
+        with open(output / "mr_results.csv", "r+", encoding="utf-8") as handle:
+            handle.write(rewritten)
+        os.utime(output / "mr_results.csv", ns=(tick, tick))
+        return True
+
+    monkeypatch.setattr(mr_executor, "_execute_r_script", rewrite)
+    result = mr_executor.run_mr_analysis("x", "y", raw)
+    assert result.mr_results[0].beta == 0.5
+    assert result.module_status["primaryEstimate"]["status"] == "completed"
 
 
 @pytest.mark.parametrize("fresh_rows", [None, "empty", "populated"])

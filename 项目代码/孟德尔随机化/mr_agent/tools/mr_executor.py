@@ -210,7 +210,7 @@ def run_mr_analysis(
     r_script = _build_standard_script(
         exposure_id, outcome_id, output_dir, gwas_token, pval_thresholds
     )
-    previous = _output_identities(output_dir)
+    previous = _fence_previous_outputs(output_dir)
     success = _execute_r_script(r_script, output_dir)
     # A classified failure exits non-zero on purpose, so the error file must be
     # read before the exit code is treated as "nothing to parse".
@@ -333,7 +333,7 @@ def run_mr_local(
     output_dir.mkdir(parents=True, exist_ok=True)
     if pval_thresholds is None:
         pval_thresholds = DEFAULT_PVAL_THRESHOLDS
-    previous = _output_identities(output_dir)
+    previous = _fence_previous_outputs(output_dir)
     parsed_dir = output_dir
     exp_id = exposure_source.display_id()
     out_id = outcome_source.display_id()
@@ -411,6 +411,22 @@ def _empty_local_result(exp_src: DataSource, out_src: DataSource) -> MRAnalysisR
 def _output_identities(root: Path) -> dict:
     return {path.name: (info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
             for path in root.iterdir() if path.is_file() and not path.is_symlink() for info in [path.stat()]}
+
+
+def _fence_previous_outputs(root: Path) -> dict:
+    """The identities of what an earlier attempt left, dated to the epoch first.
+
+    A file this attempt rewrites in place with the same size inside one timestamp tick keeps its inode, size and both times, so
+    it would read as the earlier attempt's file. No write can date a file to the epoch: once the files already there carry that
+    modification time, anything this attempt writes differs from the snapshot whatever the clock's granularity.
+    """
+    for path in root.iterdir():
+        if path.is_file() and not path.is_symlink():
+            try:
+                os.utime(path, ns=(path.stat().st_atime_ns, 0))
+            except OSError as error:
+                logger.warning("Could not date the earlier output %s: %s", path.name, error)
+    return _output_identities(root)
 
 
 def _parse_results(
