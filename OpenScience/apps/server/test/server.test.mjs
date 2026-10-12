@@ -255,7 +255,8 @@ async function waitForRuntimeLogs(base, select) {
 }
 
 async function waitForRuntimeStatus(base, select) {
-  for (let i = 0; i < 50; i++) {
+  // At least three seconds: the idle-timeout test waits out an 800 ms timeout after its slot is released.
+  for (let i = 0; i < 150; i++) {
     const out = await command(base, "runtime_status");
     assert.equal(out.res.status, 200);
     const selected = select(out.json.data);
@@ -5807,16 +5808,16 @@ test("runtime idle timeout stops inactive project runtimes", async () => {
 test("runtime idle timeout waits for a call still in flight", async () => {
   await withApp(
     async ({ app, base }) => {
-      const started = await command(base, "start_runtime");
-      assert.equal(started.res.status, 200);
-
       // The pass-through is gone, so "an active proxied stream" is now a
       // control-plane call still in flight. The rule is unchanged and so is the
       // thing that enforces it: while the runtime has an active proxy slot the
       // idle stop must not fire, or a long read is cut off by its own idleness.
       const manager = app.runtimeManager;
+      // Looked up before the start, so nothing is awaited between the start and the slot (2026-10-12: CI failed here again).
       const user = await app.store.devUser();
       const project = await app.store.defaultProject(user);
+      const started = await command(base, "start_runtime");
+      assert.equal(started.res.status, 200);
       // The vulnerable window is between `start_runtime` returning and this
       // line: nothing holds the runtime open in it, so an idle timeout shorter
       // than the scheduling jitter of a loaded full-suite run lets the runtime
@@ -5827,10 +5828,12 @@ test("runtime idle timeout waits for a call still in flight", async () => {
       //
       // The property under test is unchanged, and so is its shape: the slot is
       // held for longer than the idle timeout, so the assertion still proves
-      // that holding it prevents the stop. Only the margin moved.
+      // that holding it prevents the stop. Only the margin moved: a 200 ms
+      // timeout lost to the HTTP round trip of the start on a loaded CI runner
+      // (2026-10-12), so the timeout is 800 ms and the slot is held for 1000.
       manager.beginProxy(project);
       try {
-        await new Promise((resolve) => setTimeout(resolve, 400));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         assert.ok(manager.activeProxyCount() > 0);
         const active = await command(base, "runtime_status");
         assert.equal(active.res.status, 200);
@@ -5843,7 +5846,7 @@ test("runtime idle timeout waits for a call still in flight", async () => {
       );
       assert.equal(status.kind, "mock");
     },
-    { runtimeIdleTimeoutMs: 200 },
+    { runtimeIdleTimeoutMs: 800 },
   );
 });
 
