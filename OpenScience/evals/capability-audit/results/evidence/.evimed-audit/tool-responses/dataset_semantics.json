@@ -1,0 +1,23 @@
+{
+  "status": "success",
+  "summary": "This project has no recorded dataset meaning yet.",
+  "data": {
+    "datasets": [],
+    "provenance": {
+      "tool": "dataset_semantics",
+      "arguments": {
+        "action": "read"
+      },
+      "scope": {
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "warnings": [],
+  "next_actions": [
+    "Profile the data, then write the observation unit, keys, units, codes and population you establish, with their basis."
+  ]
+}

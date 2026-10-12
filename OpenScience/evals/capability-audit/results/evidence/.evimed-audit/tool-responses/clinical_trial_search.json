@@ -75,10 +75,10 @@
         "limit": 2
       },
       "scope": {
-        "tenantId": "cdss-access",
-        "userId": "cdss-access",
-        "projectId": "audit-tool-probe",
-        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -86,7 +86,7 @@
     {
       "id": "nct01245166",
       "source": "evimed-clinical-trial",
-      "retrievedAt": "2026-09-28T08:34:41.451481Z",
+      "retrievedAt": "2026-10-12T07:16:46.034853Z",
       "url": "https://www.clinicaltrials.gov/ct2/show/nct01245166",
       "title": "A Phase III Randomized, Double-blind, Parallel-group Study to Evaluate the Efficacy and Safety of Acarmet (Metformin HCl 500 mg Plus Acarbose 50 mg Tablets) Versus Acarbose Alone in Subjects With Type 2 Diabetes Mellitus",
       "sourceType": "trial-registration"
@@ -94,7 +94,7 @@
     {
       "id": "nct04089280",
       "source": "evimed-clinical-trial",
-      "retrievedAt": "2026-09-28T08:34:41.451518Z",
+      "retrievedAt": "2026-10-12T07:16:46.034894Z",
       "url": "https://www.clinicaltrials.gov/ct2/show/nct04089280",
       "title": "Probiotics in Metformin Intolerant Patients With Type 2 Diabetes",
       "sourceType": "trial-registration"

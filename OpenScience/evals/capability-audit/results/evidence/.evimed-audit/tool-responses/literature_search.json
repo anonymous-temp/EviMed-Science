@@ -1,30 +1,56 @@
 {
   "status": "warning",
-  "summary": "Retrieved 2 traceable PubMed records.",
+  "summary": "Retrieved 2 traceable PubMed records of 2619 matching.",
   "data": {
     "items": [
       {
-        "id": "PMID:31196447",
-        "pmid": "31196447",
-        "title": "Aspirin for Primary Prevention of Cardiovascular Events.",
-        "journal": "Journal of the American College of Cardiology",
-        "publicationDate": "2019 Jun 18",
+        "id": "PMID:30158069",
+        "pmid": "30158069",
+        "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
+        "journal": "Lancet (London, England)",
+        "publicationDate": "2018 Sep 22",
         "authors": [
-          "Abdelaziz HK",
-          "Saad M",
-          "Pothineni NVK",
-          "Megaly M",
-          "Potluri R",
-          "Saleh M",
-          "Kon DLC",
-          "Roberts DH",
-          "Bhatt DL",
-          "Aronow HD",
-          "Abbott JD",
-          "Mehta JL"
+          "Gaziano JM",
+          "Brotons C",
+          "Coppolecchia R",
+          "Cricelli C",
+          "Darius H",
+          "Gorelick PB",
+          "Howard G",
+          "Pearson TA",
+          "Rothwell PM",
+          "Ruilope LM",
+          "Tendera M",
+          "Tognoni G",
+          "ARRIVE Executive Committee"
         ],
-        "doi": "10.1016/j.jacc.2019.03.501",
-        "url": "https://pubmed.ncbi.nlm.nih.gov/31196447/",
+        "doi": "10.1016/S0140-6736(18)31924-X",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/30158069/",
+        "publicationTypes": [
+          "Journal Article",
+          "Multicenter Study",
+          "Randomized Controlled Trial",
+          "Research Support, Non-U.S. Gov't"
+        ],
+        "hasAbstract": true,
+        "sourceType": "rct"
+      },
+      {
+        "id": "PMID:27341534",
+        "pmid": "27341534",
+        "title": "Aspirin and cardiovascular primary prevention in non-endstage chronic kidney disease: A meta-analysis.",
+        "journal": "Atherosclerosis",
+        "publicationDate": "2016 Aug",
+        "authors": [
+          "Major RW",
+          "Oozeerally I",
+          "Dawson S",
+          "Riddleston H",
+          "Gray LJ",
+          "Brunskill NJ"
+        ],
+        "doi": "10.1016/j.atherosclerosis.2016.06.013",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/27341534/",
         "publicationTypes": [
           "Journal Article",
           "Meta-Analysis",
@@ -32,29 +58,21 @@
         ],
         "hasAbstract": true,
         "sourceType": "meta-analysis"
-      },
-      {
-        "id": "PMID:31163982",
-        "pmid": "31163982",
-        "title": "Aspirin for Primary Prevention of Cardiovascular Disease.",
-        "journal": "Circulation. Cardiovascular quality and outcomes",
-        "publicationDate": "2019 Jun",
-        "authors": [
-          "Kheiri B",
-          "Barbarawi M",
-          "Bachuwa G",
-          "Shapiro MD"
-        ],
-        "doi": "10.1161/CIRCOUTCOMES.119.005846",
-        "url": "https://pubmed.ncbi.nlm.nih.gov/31163982/",
-        "publicationTypes": [
-          "Journal Article",
-          "Meta-Analysis"
-        ],
-        "hasAbstract": false,
-        "sourceType": "meta-analysis"
       }
     ],
+    "outcome": {
+      "state": "more_available",
+      "returned": 2,
+      "total": 2619,
+      "remaining": 2617,
+      "next": {
+        "arguments": {
+          "offset": 2
+        },
+        "how": "2 of 2619 matching records returned; call again with offset=2 for the next 2. PubMed's relevance order is not stable between pages, so a record can appear on two of them: drop repeats by PMID (evidence_deduplicate)."
+      }
+    },
+    "total": 2619,
     "provenance": {
       "tool": "literature_search",
       "arguments": {
@@ -66,28 +84,28 @@
         ]
       },
       "scope": {
-        "tenantId": "cdss-access",
-        "userId": "cdss-access",
-        "projectId": "audit-tool-probe",
-        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
   "sources": [
     {
-      "id": "PMID:31196447",
+      "id": "PMID:30158069",
       "source": "pubmed",
-      "retrievedAt": "2026-09-28T08:34:37.838154Z",
-      "url": "https://pubmed.ncbi.nlm.nih.gov/31196447/",
-      "title": "Aspirin for Primary Prevention of Cardiovascular Events.",
-      "sourceType": "meta-analysis"
+      "retrievedAt": "2026-10-12T07:16:11.490279Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30158069/",
+      "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
+      "sourceType": "rct"
     },
     {
-      "id": "PMID:31163982",
+      "id": "PMID:27341534",
       "source": "pubmed",
-      "retrievedAt": "2026-09-28T08:34:37.838185Z",
-      "url": "https://pubmed.ncbi.nlm.nih.gov/31163982/",
-      "title": "Aspirin for Primary Prevention of Cardiovascular Disease.",
+      "retrievedAt": "2026-10-12T07:16:11.490309Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/27341534/",
+      "title": "Aspirin and cardiovascular primary prevention in non-endstage chronic kidney disease: A meta-analysis.",
       "sourceType": "meta-analysis"
     }
   ],

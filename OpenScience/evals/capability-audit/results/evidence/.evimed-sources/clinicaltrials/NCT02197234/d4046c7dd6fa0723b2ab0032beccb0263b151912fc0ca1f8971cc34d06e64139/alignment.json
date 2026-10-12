@@ -1,0 +1,661 @@
+{
+ "adverseEvents": {
+  "groups": [
+   {
+    "deathsNumAffected": 5,
+    "deathsNumAtRisk": 52,
+    "otherNumAffected": 50,
+    "otherNumAtRisk": 52,
+    "seriousNumAffected": 11,
+    "seriousNumAtRisk": 52,
+    "title": "Overall Safety Population"
+   },
+   {
+    "deathsNumAffected": 0,
+    "deathsNumAtRisk": 52,
+    "otherNumAffected": 39,
+    "otherNumAtRisk": 52,
+    "seriousNumAffected": 4,
+    "seriousNumAtRisk": 52,
+    "title": "Part A Safety Population"
+   },
+   {
+    "deathsNumAffected": 8,
+    "deathsNumAtRisk": 50,
+    "otherNumAffected": 45,
+    "otherNumAtRisk": 50,
+    "seriousNumAffected": 8,
+    "seriousNumAtRisk": 50,
+    "title": "Part B Safety Population"
+   }
+  ],
+  "otherTerms": 47,
+  "seriousTerms": 14,
+  "timeFrame": "Approximately 1 month for Part A; up to approximately 14 months for Part B and approximately 15 months for Overall (Parts A and B combined)."
+ },
+ "endpoints": {
+  "joined": {
+   "matched": [
+    {
+     "measure": "Cmax of Simvastatin",
+     "registeredRole": "primary",
+     "reportedRole": "primary",
+     "roleAgrees": true
+    },
+    {
+     "measure": "AUC of Simvastatin",
+     "registeredRole": "primary",
+     "reportedRole": "primary",
+     "roleAgrees": true
+    },
+    {
+     "measure": "Tmax of Simvastatin and Simvastatin Acid",
+     "registeredRole": "secondary",
+     "reportedRole": "secondary",
+     "roleAgrees": true
+    },
+    {
+     "measure": "CL/F of Simvastatin",
+     "registeredRole": "secondary",
+     "reportedRole": "secondary",
+     "roleAgrees": true
+    },
+    {
+     "measure": "Cmax of Simvastatin Acid",
+     "registeredRole": "secondary",
+     "reportedRole": "secondary",
+     "roleAgrees": true
+    },
+    {
+     "measure": "AUC of Simvastatin Acid",
+     "registeredRole": "secondary",
+     "reportedRole": "secondary",
+     "roleAgrees": true
+    },
+    {
+     "measure": "AUC(0-t) of Simvastatin and Simvastatin Acid",
+     "registeredRole": "secondary",
+     "reportedRole": "secondary",
+     "roleAgrees": true
+    }
+   ],
+   "registeredOnly": [],
+   "reportedOnly": []
+  },
+  "registered": [
+   {
+    "description": "Pharmacokinetics of simvastatin by assessment of maximum plasma simvastatin concentration",
+    "measure": "Cmax of Simvastatin",
+    "role": "primary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A"
+   },
+   {
+    "description": "Pharmacokinetics of simvastatin by assessment of area under the plasma concentration time curve from zero to infinity",
+    "measure": "AUC of Simvastatin",
+    "role": "primary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A"
+   },
+   {
+    "description": "Pharmacokinetics of simvastatin and simvastatin acid by time to Cmax",
+    "measure": "Tmax of Simvastatin and Simvastatin Acid",
+    "role": "secondary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A"
+   },
+   {
+    "description": "Rate and extent of absorption of simvastatin by assessment of apparent clearance following oral administration",
+    "measure": "CL/F of Simvastatin",
+    "role": "secondary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A"
+   },
+   {
+    "description": "Pharmacokinetics of simvastatin acid by assessment of maximum plasma simvastatin acid concentration",
+    "measure": "Cmax of Simvastatin Acid",
+    "role": "secondary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A"
+   },
+   {
+    "description": "Pharmacokinetics of simvastatin acid by assessment of area under the plasma concentration time curve from zero to infinity",
+    "measure": "AUC of Simvastatin Acid",
+    "role": "secondary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A"
+   },
+   {
+    "description": "Pharmacokinetics of simvastatin and simvastatin acid by assessment of area under the plasma concentration time curve from time zero to last quantifiable dose",
+    "measure": "AUC(0-t) of Simvastatin and Simvastatin Acid",
+    "role": "secondary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A"
+   }
+  ],
+  "reported": [
+   {
+    "analyses": [
+     {
+      "ciLower": "63.41",
+      "ciPct": "90",
+      "ciUpper": "93.70",
+      "groups": [
+       "Simvastatin Alone",
+       "AZD9291 + Simvastatin"
+      ],
+      "paramType": "Geometric mean ratio",
+      "value": "77.08"
+     }
+    ],
+    "denominators": [
+     {
+      "count": "46",
+      "group": "Simvastatin Alone",
+      "units": "Participants"
+     },
+     {
+      "count": "43",
+      "group": "AZD9291 + Simvastatin",
+      "units": "Participants"
+     }
+    ],
+    "description": "Pharmacokinetics of simvastatin by assessment of maximum plasma simvastatin concentration",
+    "dispersion": "Full Range",
+    "paramType": "GEOMETRIC_MEAN",
+    "population": "Pharmacokinetic population - all patients who received at least 1 dose of simvastatin or AZD9291 and had at least 1 postdose PK measurement without important protocol deviations/violations.",
+    "reportingStatus": "POSTED",
+    "role": "primary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A",
+    "title": "Cmax of Simvastatin",
+    "unit": "ng/mL",
+    "values": [
+     {
+      "group": "Simvastatin Alone",
+      "lower": "2.69",
+      "upper": "75.5",
+      "value": "24.54"
+     },
+     {
+      "group": "AZD9291 + Simvastatin",
+      "lower": "3.87",
+      "upper": "141",
+      "value": "18.65"
+     }
+    ]
+   },
+   {
+    "analyses": [
+     {
+      "ciLower": "77.16",
+      "ciPct": "90",
+      "ciUpper": "108.41",
+      "groups": [
+       "Simvastatin Alone",
+       "AZD9291 + Simvastatin"
+      ],
+      "paramType": "Geometric mean ratio",
+      "value": "91.46"
+     }
+    ],
+    "denominators": [
+     {
+      "count": "46",
+      "group": "Simvastatin Alone",
+      "units": "Participants"
+     },
+     {
+      "count": "41",
+      "group": "AZD9291 + Simvastatin",
+      "units": "Participants"
+     }
+    ],
+    "description": "Pharmacokinetics of simvastatin by assessment of area under the plasma concentration time curve from zero to infinity",
+    "dispersion": "Full Range",
+    "paramType": "GEOMETRIC_MEAN",
+    "population": "Pharmacokinetic population - all patients who received at least 1 dose of simvastatin or AZD9291 and had at least 1 postdose PK measurement without important protocol deviations/violations.",
+    "reportingStatus": "POSTED",
+    "role": "primary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A",
+    "title": "AUC of Simvastatin",
+    "unit": "ng.h/mL",
+    "values": [
+     {
+      "group": "Simvastatin Alone",
+      "lower": "23.9",
+      "upper": "289",
+      "value": "80.25"
+     },
+     {
+      "group": "AZD9291 + Simvastatin",
+      "lower": "25.2",
+      "upper": "488",
+      "value": "73.54"
+     }
+    ]
+   },
+   {
+    "denominators": [
+     {
+      "count": "46",
+      "group": "Simvastatin Alone",
+      "units": "Participants"
+     },
+     {
+      "count": "43",
+      "group": "AZD9291 + Simvastatin",
+      "units": "Participants"
+     }
+    ],
+    "description": "Pharmacokinetics of simvastatin and simvastatin acid by time to Cmax",
+    "dispersion": "Full Range",
+    "paramType": "MEDIAN",
+    "population": "Pharmacokinetic population - all patients who received at least 1 dose of simvastatin or AZD9291 and had at least 1 postdose PK measurement without important protocol deviations/violations.",
+    "reportingStatus": "POSTED",
+    "role": "secondary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A",
+    "title": "Tmax of Simvastatin and Simvastatin Acid",
+    "unit": "hours",
+    "values": [
+     {
+      "class": "Simvastatin",
+      "group": "Simvastatin Alone",
+      "lower": "0.45",
+      "upper": "4.00",
+      "value": "1.50"
+     },
+     {
+      "class": "Simvastatin",
+      "group": "AZD9291 + Simvastatin",
+      "lower": "0.50",
+      "upper": "10.00",
+      "value": "1.50"
+     },
+     {
+      "class": "Simvastatin acid",
+      "group": "Simvastatin Alone",
+      "lower": "0.50",
+      "upper": "10.00",
+      "value": "3.08"
+     },
+     {
+      "class": "Simvastatin acid",
+      "group": "AZD9291 + Simvastatin",
+      "lower": "1.50",
+      "upper": "12.45",
+      "value": "3.08"
+     }
+    ]
+   },
+   {
+    "denominators": [
+     {
+      "count": "46",
+      "group": "Simvastatin Alone",
+      "units": "Participants"
+     },
+     {
+      "count": "41",
+      "group": "AZD9291 + Simvastatin",
+      "units": "Participants"
+     }
+    ],
+    "description": "Rate and extent of absorption of simvastatin by assessment of apparent clearance following oral administration",
+    "dispersion": "Full Range",
+    "paramType": "GEOMETRIC_MEAN",
+    "population": "Pharmacokinetic population - all patients who received at least 1 dose of simvastatin or AZD9291 and had at least 1 postdose PK measurement without important protocol deviations/violations.",
+    "reportingStatus": "POSTED",
+    "role": "secondary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A",
+    "title": "CL/F of Simvastatin",
+    "unit": "L/h",
+    "values": [
+     {
+      "group": "Simvastatin Alone",
+      "lower": "138",
+      "upper": "1670",
+      "value": "498.3"
+     },
+     {
+      "group": "AZD9291 + Simvastatin",
+      "lower": "82.0",
+      "upper": "1590",
+      "value": "543.9"
+     }
+    ]
+   },
+   {
+    "denominators": [
+     {
+      "count": "46",
+      "group": "Simvastatin Alone",
+      "units": "Participants"
+     },
+     {
+      "count": "43",
+      "group": "AZD9291 + Simvastatin",
+      "units": "Participants"
+     }
+    ],
+    "description": "Pharmacokinetics of simvastatin acid by assessment of maximum plasma simvastatin acid concentration",
+    "dispersion": "Full Range",
+    "paramType": "GEOMETRIC_MEAN",
+    "population": "Pharmacokinetic population - all patients who received at least 1 dose of simvastatin or AZD9291 and had at least 1 postdose PK measurement without important protocol deviations/violations.",
+    "reportingStatus": "POSTED",
+    "role": "secondary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A",
+    "title": "Cmax of Simvastatin Acid",
+    "unit": "ng/mL",
+    "values": [
+     {
+      "group": "Simvastatin Alone",
+      "lower": "0.482",
+      "upper": "68.5",
+      "value": "4.187"
+     },
+     {
+      "group": "AZD9291 + Simvastatin",
+      "lower": "0.849",
+      "upper": "66.9",
+      "value": "4.161"
+     }
+    ]
+   },
+   {
+    "denominators": [
+     {
+      "count": "42",
+      "group": "Simvastatin Alone",
+      "units": "Participants"
+     },
+     {
+      "count": "37",
+      "group": "AZD9291 + Simvastatin",
+      "units": "Participants"
+     }
+    ],
+    "description": "Pharmacokinetics of simvastatin acid by assessment of area under the plasma concentration time curve from zero to infinity",
+    "dispersion": "Full Range",
+    "paramType": "GEOMETRIC_MEAN",
+    "population": "Pharmacokinetic population - all patients who received at least 1 dose of simvastatin or AZD9291 and had at least 1 postdose PK measurement without important protocol deviations/violations.",
+    "reportingStatus": "POSTED",
+    "role": "secondary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A",
+    "title": "AUC of Simvastatin Acid",
+    "unit": "ng.h/mL",
+    "values": [
+     {
+      "group": "Simvastatin Alone",
+      "lower": "6.19",
+      "upper": "436",
+      "value": "31.18"
+     },
+     {
+      "group": "AZD9291 + Simvastatin",
+      "lower": "6.69",
+      "upper": "443",
+      "value": "30.16"
+     }
+    ]
+   },
+   {
+    "denominators": [
+     {
+      "count": "46",
+      "group": "Simvastatin Alone",
+      "units": "Participants"
+     },
+     {
+      "count": "43",
+      "group": "AZD9291 + Simvastatin",
+      "units": "Participants"
+     }
+    ],
+    "description": "Pharmacokinetics of simvastatin and simvastatin acid by assessment of area under the plasma concentration time curve from time zero to last quantifiable dose",
+    "dispersion": "Full Range",
+    "paramType": "GEOMETRIC_MEAN",
+    "population": "Pharmacokinetic population - all patients who received at least 1 dose of simvastatin or AZD9291 and had at least 1 postdose PK measurement without important protocol deviations/violations.",
+    "reportingStatus": "POSTED",
+    "role": "secondary",
+    "timeFrame": "Blood samples collected on Days 1 and 31 at pre-dose, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 24, 28, and 32 hours post simvastatin dose in Part A",
+    "title": "AUC(0-t) of Simvastatin and Simvastatin Acid",
+    "unit": "ng.h/mL",
+    "values": [
+     {
+      "class": "Simvastatin",
+      "group": "Simvastatin Alone",
+      "lower": "21.6",
+      "upper": "279",
+      "value": "77.97"
+     },
+     {
+      "class": "Simvastatin",
+      "group": "AZD9291 + Simvastatin",
+      "lower": "24.9",
+      "upper": "470",
+      "value": "70.17"
+     },
+     {
+      "class": "Simvastatin acid",
+      "group": "Simvastatin Alone",
+      "lower": "5.71",
+      "upper": "435",
+      "value": "29.25"
+     },
+     {
+      "class": "Simvastatin acid",
+      "group": "AZD9291 + Simvastatin",
+      "lower": "6.34",
+      "upper": "442",
+      "value": "29.60"
+     }
+    ]
+   }
+  ]
+ },
+ "nctId": "NCT02197234",
+ "population": {
+  "arms": [
+   {
+    "interventions": [
+     "Drug: AZD9291 tablet dosing",
+     "Drug: Simvastatin",
+     "Procedure: Pharmacokinetic sampling - AZ5140 and AZ7550",
+     "Procedure: Pharmacokinetic sampling - AZD9291",
+     "Procedure: Pharmacokinetic sampling - simvastatin"
+    ],
+    "label": "AZD9291 and simvastatin",
+    "type": "EXPERIMENTAL"
+   }
+  ],
+  "baseline": {
+   "denominators": [
+    {
+     "count": "52",
+     "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+     "units": "Participants"
+    }
+   ],
+   "measures": [
+    {
+     "paramType": "MEAN",
+     "title": "Age, Continuous",
+     "unit": "years",
+     "values": [
+      {
+       "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+       "spread": "11.28",
+       "value": "63.5"
+      }
+     ]
+    },
+    {
+     "paramType": "COUNT_OF_PARTICIPANTS",
+     "title": "Sex: Female, Male",
+     "unit": "Participants",
+     "values": [
+      {
+       "category": "Female",
+       "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+       "value": "37"
+      },
+      {
+       "category": "Male",
+       "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+       "value": "15"
+      }
+     ]
+    },
+    {
+     "paramType": "COUNT_OF_PARTICIPANTS",
+     "title": "Race (NIH/OMB)",
+     "unit": "Participants",
+     "values": [
+      {
+       "category": "American Indian or Alaska Native",
+       "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+       "value": "0"
+      },
+      {
+       "category": "Asian",
+       "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+       "value": "17"
+      },
+      {
+       "category": "Native Hawaiian or Other Pacific Islander",
+       "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+       "value": "0"
+      },
+      {
+       "category": "Black or African American",
+       "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+       "value": "0"
+      },
+      {
+       "category": "White",
+       "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+       "value": "35"
+      },
+      {
+       "category": "More than one race",
+       "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+       "value": "0"
+      },
+      {
+       "category": "Unknown or Not Reported",
+       "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+       "value": "0"
+      }
+     ]
+    }
+   ]
+  },
+  "eligibility": {
+   "criteriaSha256": "e4333ba0d329c9c09b405cd6840adce5fa2d5228ec78e6b5cb54e660a11909b3",
+   "healthyVolunteers": false,
+   "maximumAge": "130 Years",
+   "minimumAge": "18 Years",
+   "sex": "ALL",
+   "standardAges": [
+    "ADULT",
+    "OLDER_ADULT"
+   ]
+  },
+  "enrollment": {
+   "count": 52,
+   "type": "ACTUAL"
+  },
+  "flow": [
+   {
+    "count": "52",
+    "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+    "milestone": "STARTED",
+    "period": "Part A: Day 1-2 (Simvastatin Alone)"
+   },
+   {
+    "count": "52",
+    "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+    "milestone": "COMPLETED",
+    "period": "Part A: Day 1-2 (Simvastatin Alone)"
+   },
+   {
+    "count": "0",
+    "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+    "milestone": "NOT COMPLETED",
+    "period": "Part A: Day 1-2 (Simvastatin Alone)"
+   },
+   {
+    "count": "52",
+    "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+    "milestone": "STARTED",
+    "period": "Part A: Day 3-30 (AZD9291 Alone)"
+   },
+   {
+    "count": "50",
+    "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+    "milestone": "COMPLETED",
+    "period": "Part A: Day 3-30 (AZD9291 Alone)"
+   },
+   {
+    "count": "2",
+    "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+    "milestone": "NOT COMPLETED",
+    "period": "Part A: Day 3-30 (AZD9291 Alone)"
+   },
+   {
+    "count": "49",
+    "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+    "milestone": "STARTED",
+    "period": "Part A: Day 31-32 (Simvastatin+AZD9291)"
+   },
+   {
+    "count": "49",
+    "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+    "milestone": "COMPLETED",
+    "period": "Part A: Day 31-32 (Simvastatin+AZD9291)"
+   },
+   {
+    "count": "0",
+    "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+    "milestone": "NOT COMPLETED",
+    "period": "Part A: Day 31-32 (Simvastatin+AZD9291)"
+   },
+   {
+    "count": "50",
+    "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+    "milestone": "STARTED",
+    "period": "Part B: Day 33 to End Part B (AZD9291)"
+   },
+   {
+    "count": "20",
+    "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+    "milestone": "COMPLETED",
+    "period": "Part B: Day 33 to End Part B (AZD9291)"
+   },
+   {
+    "count": "30",
+    "group": "Simvastatin and AZD9291 (Part A); AZD9291 Alone (Part B)",
+    "milestone": "NOT COMPLETED",
+    "period": "Part B: Day 33 to End Part B (AZD9291)"
+   }
+  ]
+ },
+ "status": {
+  "overall": "COMPLETED"
+ },
+ "timepoints": {
+  "completion": {
+   "date": "2024-06-03",
+   "type": "ACTUAL"
+  },
+  "primaryCompletion": {
+   "date": "2015-04-30",
+   "type": "ACTUAL"
+  },
+  "start": {
+   "date": "2014-12-22",
+   "type": "ACTUAL"
+  }
+ },
+ "title": "Study to Assess the Effect of AZD9291 on the Blood Levels of Simvastatin in Patients With EGFRm+ NSCLC",
+ "version": {
+  "hasResults": true,
+  "lastUpdatePosted": "2025-11-20",
+  "lastUpdateSubmitted": "2025-11-13",
+  "resultsFirstPosted": "2016-06-22",
+  "statusVerified": "2025-11"
+ }
+}

@@ -1,18 +1,368 @@
 {
   "schemaVersion": 3,
-  "probedAt": "2026-09-28T08:35:09.007814Z",
-  "registered": 40,
+  "probedAt": "2026-10-12T07:17:09.479054Z",
+  "registered": 55,
   "notOffered": [
     "patent_search"
   ],
-  "executionCertified": 32,
-  "unverified": 8,
-  "operational": 32,
-  "errors": 2,
+  "sourceRegistry": [
+    "adr_case_query",
+    "adr_signal_analysis",
+    "bibliometric_analysis",
+    "biomedical_source_search",
+    "clinical_trial_search",
+    "clinical_trial_snapshot",
+    "comprehensive_drug_evaluation",
+    "curve_digitize",
+    "dailymed_label",
+    "data_source_catalog",
+    "dataset_semantics",
+    "drug_label_search",
+    "drug_safety_analysis",
+    "drug_selection_evaluation",
+    "drug_term_normalize",
+    "evidence_deduplicate",
+    "evidence_pool",
+    "frontier_search",
+    "gene_expression_differential",
+    "gene_expression_series",
+    "geo_read",
+    "geo_visibility_probe",
+    "geo_write",
+    "get_fred_series",
+    "get_space_weather_alerts",
+    "get_usgs_water_data",
+    "get_weather",
+    "guideline_search",
+    "health",
+    "identifier_resolve",
+    "kb_search",
+    "literature_search",
+    "locate_quote",
+    "mendelian_randomization",
+    "meta_analysis",
+    "offlabel_evidence_packet",
+    "open_access_full_text",
+    "patent_search",
+    "peer_review",
+    "pharmacy_reference_search",
+    "reference_list",
+    "research_calculate",
+    "research_topic_selection",
+    "schedule_task",
+    "search_biomedical_records",
+    "search_materials",
+    "search_papers",
+    "social_posts_search",
+    "term_normalize",
+    "trial_registry_record",
+    "update_task",
+    "vcr_read",
+    "vcr_simulate",
+    "vcr_write",
+    "web_read",
+    "web_search"
+  ],
+  "sourceIdentity": {
+    "schemaVersion": 1,
+    "mcpSource": {
+      "sha256": "f9004ba75f557ed89ea7ae48f101a1f6cc2e171b6cb2da8bdbbf7cbde2f09d29",
+      "files": 48
+    },
+    "toolNames": {
+      "sha256": "fdc1c63b0a8abc21a6ce4861500ec63feab3e86290eedaa46edc64cafd93648e"
+    }
+  },
+  "toolAvailability": [
+    {
+      "tool": "adr_case_query",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "adr_signal_analysis",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "bibliometric_analysis",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "biomedical_source_search",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "clinical_trial_search",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "clinical_trial_snapshot",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "comprehensive_drug_evaluation",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "curve_digitize",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "dailymed_label",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "data_source_catalog",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "dataset_semantics",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "drug_label_search",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "drug_safety_analysis",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "drug_selection_evaluation",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "drug_term_normalize",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "evidence_deduplicate",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "evidence_pool",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "frontier_search",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "gene_expression_differential",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "gene_expression_series",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "geo_read",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "geo_visibility_probe",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "geo_write",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "get_fred_series",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "get_space_weather_alerts",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "get_usgs_water_data",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "get_weather",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "guideline_search",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "health",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "identifier_resolve",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "kb_search",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "literature_search",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "locate_quote",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "mendelian_randomization",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "meta_analysis",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "offlabel_evidence_packet",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "open_access_full_text",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "patent_search",
+      "state": "notOffered",
+      "basis": "explicit-deployment-disable"
+    },
+    {
+      "tool": "peer_review",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "pharmacy_reference_search",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "reference_list",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "research_calculate",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "research_topic_selection",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "schedule_task",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "search_biomedical_records",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "search_materials",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "search_papers",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "social_posts_search",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "term_normalize",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "trial_registry_record",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "update_task",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "vcr_read",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "vcr_simulate",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "vcr_write",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "web_read",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    },
+    {
+      "tool": "web_search",
+      "state": "offered",
+      "basis": "runtime-list-tools"
+    }
+  ],
+  "executionCertified": 48,
+  "unverified": 7,
+  "operational": 48,
+  "errors": 0,
   "complete": false,
   "criteria": {
     "ordinaryTool": "A real task call must return success or warning and all declared artifacts must exist and be non-empty.",
-    "specialistTool": "A capabilities response never qualifies; a fresh terminal managed job and hashed non-empty artifacts are required. Operational execution and publication readiness are reported separately."
+    "specialistTool": "A capabilities response never qualifies; a terminal managed job whose recorded source is this tree's, and hashed non-empty artifacts, are required. Operational execution and publication readiness are reported separately."
   },
   "results": [
     {
@@ -23,14 +373,14 @@
       "operational": true,
       "summary": "EviMed Research MCP is ready.",
       "errorCode": null,
-      "elapsedMs": 4,
+      "elapsedMs": 3,
       "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/health.json",
-        "bytes": 6511,
-        "sha256": "ae34a520b65e118b3190660bea09dd3865d405f3d8f9f7f71dbac78c548fece6"
+        "bytes": 6494,
+        "sha256": "7a198601c5a2cd3eb96da9e2b37b69177930d4f023d701bc64cbd03e51fcee86"
       },
       "artifacts": [],
       "artifactError": null,
@@ -44,16 +394,16 @@
       "operation": "task",
       "status": "success",
       "operational": true,
-      "summary": "Matched 64 audited data sources.",
+      "summary": "Matched 63 audited data sources.",
       "errorCode": null,
-      "elapsedMs": 5,
+      "elapsedMs": 3,
       "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/data_source_catalog.json",
-        "bytes": 69155,
-        "sha256": "3a3041ae57a972fa5a5dda133f6776420f190138ab9307cda3133f83e5324cc1"
+        "bytes": 68062,
+        "sha256": "1a516875b02f2586c1ae35288e2024ee34c047f33268931c8bfafb7051d675f8"
       },
       "artifacts": [],
       "artifactError": null,
@@ -69,14 +419,14 @@
       "operational": true,
       "summary": "Retrieved 2 traceable records from pubmed.",
       "errorCode": null,
-      "elapsedMs": 3415,
+      "elapsedMs": 1933,
       "sourceCount": 2,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/biomedical_source_search.json",
-        "bytes": 3333,
-        "sha256": "9d138c184d058ab2780521441217c9528153e41f3490da69d2722f765601f555"
+        "bytes": 3138,
+        "sha256": "d7d56c9e9a4e53fad8d291669e6d45fc302e6baec7be0aa9c2ecf21bc99685b6"
       },
       "artifacts": [],
       "artifactError": null,
@@ -92,14 +442,14 @@
       "operational": true,
       "summary": "Read www.nice.org.uk and preserved it (page 1 of 1).",
       "errorCode": null,
-      "elapsedMs": 3599,
+      "elapsedMs": 3834,
       "sourceCount": 1,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/web_read.json",
-        "bytes": 10702,
-        "sha256": "674fadb77c8c338c6e477d3b92ceba276060ac303bd0868aaabf22be71af38b4"
+        "bytes": 10729,
+        "sha256": "fa51d42d8f8f6c6408f66c233d842f8bfc51153a592988903ecfc1d3a57b8c2f"
       },
       "artifacts": [
         {
@@ -122,14 +472,14 @@
       "operational": true,
       "summary": "Open-web search returned 2 result(s) for 'systematic review reporting guideline PRISMA 2020'.",
       "errorCode": null,
-      "elapsedMs": 1397,
+      "elapsedMs": 1902,
       "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/web_search.json",
-        "bytes": 2094,
-        "sha256": "fcfa6e443c3a114f18c1d5aa197827ebab38244ed2754b0ac8d2a07eda3f36e7"
+        "bytes": 2121,
+        "sha256": "b6c0a012cd8ffbed265592c01622c271bf50e4d2b72dd2bbdd9f271f84dd28ae"
       },
       "artifacts": [],
       "artifactError": null,
@@ -141,18 +491,18 @@
       "tool": "geo_visibility_probe",
       "probeType": "executed_tool_call",
       "operation": "task",
-      "status": "warning",
+      "status": "success",
       "operational": true,
-      "summary": "4 of 5 vendor(s) ready: doubao, kimi, qianwen, yuanbao.",
+      "summary": "5 of 5 vendor(s) ready: deepseek, doubao, kimi, qianwen, yuanbao.",
       "errorCode": null,
-      "elapsedMs": 1221,
+      "elapsedMs": 2854,
       "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/geo_visibility_probe.json",
-        "bytes": 1519,
-        "sha256": "f4ee97235c042eef26dabe77d3ad89c24d395688338d6253f002c92c84cc661e"
+        "bytes": 1316,
+        "sha256": "3b5940e7de7351923c71539580cdb72cb58f1920a81f3bc2064a7a5648ed5979"
       },
       "artifacts": [],
       "artifactError": null,
@@ -164,20 +514,39 @@
       "tool": "open_access_full_text",
       "probeType": "executed_tool_call",
       "operation": "task",
-      "status": "error",
-      "operational": false,
-      "summary": "Europe PMC full-text retrieval failed.",
-      "errorCode": "full_text_upstream_unavailable",
-      "elapsedMs": 911,
-      "sourceCount": 0,
+      "status": "success",
+      "operational": true,
+      "summary": "Retrieved the complete open-access article into the managed workspace.",
+      "errorCode": null,
+      "elapsedMs": 12480,
+      "sourceCount": 1,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/open_access_full_text.json",
-        "bytes": 435,
-        "sha256": "b7dd8a75f1ab0e20f12bcd87b592824b415d26ca0eff4c7ca68c6e051f1e5b87"
+        "bytes": 17846,
+        "sha256": "7a7ad9143a6d4fc8ec23978bc7c910ef0bb3627f9a3864bfc9b71bd2071a1a63"
       },
-      "artifacts": [],
+      "artifacts": [
+        {
+          "kind": "md",
+          "path": ".evimed-sources/PMC8010506/9f6a81519cb6c1edea07590bf4f1bf8d14b3829f0585bdab7fbb5caa5f15ff37/fulltext.md",
+          "bytes": 248587,
+          "sha256": "4aa0db21a40bdfe522856002c802e9a68322e10ef0676550834dbf83e18c62df"
+        },
+        {
+          "kind": "xml",
+          "path": ".evimed-sources/PMC8010506/9f6a81519cb6c1edea07590bf4f1bf8d14b3829f0585bdab7fbb5caa5f15ff37/fulltext.xml",
+          "bytes": 563646,
+          "sha256": "02aac151853ff9d5bb2ace17f90cf3efb70f30d42d158293659c8cdd9c1abb1b"
+        },
+        {
+          "kind": "json",
+          "path": ".evimed-sources/PMC8010506/9f6a81519cb6c1edea07590bf4f1bf8d14b3829f0585bdab7fbb5caa5f15ff37/tables.json",
+          "bytes": 23417,
+          "sha256": "f6b14518aeaf4d2d06afef20a864cd2c0016b8e413d5bf110b583128f2fe5531"
+        }
+      ],
       "artifactError": null,
       "assessmentType": null,
       "automaticDecision": null,
@@ -187,18 +556,18 @@
       "tool": "locate_quote",
       "probeType": "executed_tool_call",
       "operation": "task",
-      "status": "error",
-      "operational": false,
-      "summary": "No preserved source was found for PMC8010506 in this workspace. Pass the exact .evimed-sources/... path the preserving tool returned.",
-      "errorCode": "quote_source_not_found",
-      "elapsedMs": 0,
+      "status": "success",
+      "operational": true,
+      "summary": "The quotation is in the preserved source (exact match, 1 occurrence(s)); the delivery gate will accept it.",
+      "errorCode": null,
+      "elapsedMs": 382,
       "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/locate_quote.json",
-        "bytes": 564,
-        "sha256": "0147e46e397dd6ec6ef5c17b6f09d550e387d6e4330620080fcd103df410dbc0"
+        "bytes": 1583,
+        "sha256": "4905d87c1de0ced345f41c6eaffabfe30ff8e6a7b24f362b506c947d18becaf1"
       },
       "artifacts": [],
       "artifactError": null,
@@ -220,8 +589,8 @@
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/term_normalize.json",
-        "bytes": 702,
-        "sha256": "579ec41bd3b3be110a4dec57b089d4987253b4f0cad6169b0122148b5cf2c9a2"
+        "bytes": 729,
+        "sha256": "bce5d5eaec3b5b457ca1d539844aef798825486503be5cdbc49355b4bee602ba"
       },
       "artifacts": [],
       "artifactError": null,
@@ -237,14 +606,14 @@
       "operational": true,
       "summary": "Normalized the supplied term against the RxNorm vocabulary.",
       "errorCode": null,
-      "elapsedMs": 3042,
+      "elapsedMs": 2195,
       "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/drug_term_normalize.json",
-        "bytes": 5851,
-        "sha256": "feecf0fc8ddeb2b50ffaf26a838fa2e038e972dc5f98d8cac9c25af7357a09b4"
+        "bytes": 5878,
+        "sha256": "962f32e55205e55cbe0a7ec97e9d4e44469b4e1ac033bd59e0b9af04b6e3731e"
       },
       "artifacts": [],
       "artifactError": null,
@@ -266,8 +635,8 @@
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evidence_deduplicate.json",
-        "bytes": 1003,
-        "sha256": "91c046ad34785ecc9060f80c90a4cd05f54ba75f7b050e5c67013b1be5cd2ec5"
+        "bytes": 1390,
+        "sha256": "7c19842997601412d77878002c5b27ea25b29c046ddf2464306a79f9cadb9601"
       },
       "artifacts": [],
       "artifactError": null,
@@ -281,16 +650,16 @@
       "operation": "task",
       "status": "warning",
       "operational": true,
-      "summary": "Retrieved 2 traceable PubMed records.",
+      "summary": "Retrieved 2 traceable PubMed records of 2619 matching.",
       "errorCode": null,
-      "elapsedMs": 2450,
+      "elapsedMs": 2957,
       "sourceCount": 2,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/literature_search.json",
-        "bytes": 3166,
-        "sha256": "62eb99f3a4d078c8b755f7216a76adc4e8e371f6e6bc9370744f7b42775ba5b1"
+        "bytes": 4119,
+        "sha256": "1aa82f2701152b2ffca83320b6e15eaa55f88c098d2e4432e530d75d8cd85312"
       },
       "artifacts": [],
       "artifactError": null,
@@ -306,16 +675,130 @@
       "operational": true,
       "summary": "Retrieved 5 traceable records from europe-pmc-references.",
       "errorCode": null,
-      "elapsedMs": 1505,
+      "elapsedMs": 1060,
       "sourceCount": 5,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/reference_list.json",
-        "bytes": 6513,
-        "sha256": "d866dd2df892d1dfa1f14988f434067d3175b6f24406d0d4db15c96443cece98"
+        "bytes": 6540,
+        "sha256": "73604703dc78bc3ef2976ae92c610bfcfe3bce6f654a4addd5ae26f827a21ca7"
       },
       "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "identifier_resolve",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "Linked 3 of 3 identifier(s).",
+      "errorCode": null,
+      "elapsedMs": 2658,
+      "sourceCount": 2,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/identifier_resolve.json",
+        "bytes": 3924,
+        "sha256": "cb0880f067bd0a30ab300d396414128275b5f1114d900686c6cc3320a21b6bc8"
+      },
+      "artifacts": [
+        {
+          "kind": "json",
+          "path": ".evimed-sources/identifiers/c2a1ac3358c5d02f/fe3a777eceb5d16c85dd644514ea0289ce4905032a51a84d9d6729d4d40c6fea/links.json",
+          "bytes": 1437,
+          "sha256": "bd2a8ee97d455cf11fc3b2c7cc3795142f7dbdff77f78a8aee2fb42f9780836f"
+        }
+      ],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "clinical_trial_snapshot",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "Preserved the complete record of NCT02197234.",
+      "errorCode": null,
+      "elapsedMs": 1429,
+      "sourceCount": 1,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/clinical_trial_snapshot.json",
+        "bytes": 5980,
+        "sha256": "5a3fd78e0caed89f8b66253287147240cd93d6ae6b378bbde55a35025c87d639"
+      },
+      "artifacts": [
+        {
+          "kind": "md",
+          "path": ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/record.md",
+          "bytes": 37641,
+          "sha256": "926e5bb1172062ae225a55c21f0a12851f8dbfb2fdb157939cb359863751a8dc"
+        },
+        {
+          "kind": "json",
+          "path": ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/record.json",
+          "bytes": 81874,
+          "sha256": "b1f75e43b47cdfaad7696618b2bebd675c16b01df9ff29b6e050444f2c5ce188"
+        },
+        {
+          "kind": "json",
+          "path": ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/alignment.json",
+          "bytes": 20147,
+          "sha256": "24ef6b91c2e5ddbccdb4b6d30b8ac0725f399b3700233ba50b4332d9dbff9898"
+        }
+      ],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "dailymed_label",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "Preserved the current label of These highlights do not include all the information needed to use TAGRISSO safely and effectively. See full prescribing information for TAGRISSO. TAGRISSO ® (osimertinib) tablets, for oral use Initial U.S. Approval: 2015 (SPL version 37 of 37), a United States (FDA) label and compared it with version 36: 23 change(s).",
+      "errorCode": null,
+      "elapsedMs": 6711,
+      "sourceCount": 1,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/dailymed_label.json",
+        "bytes": 38707,
+        "sha256": "1587a39e177e8b944ce7275d070b126b12fd3a7cf366887ef55599e13d8fe845"
+      },
+      "artifacts": [
+        {
+          "kind": "md",
+          "path": ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/label.md",
+          "bytes": 109317,
+          "sha256": "e516235c1236c95de3cb2c1866321ab477863909af82604926865dfe34863d64"
+        },
+        {
+          "kind": "xml",
+          "path": ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/spl.xml",
+          "bytes": 513711,
+          "sha256": "32f7c00b72d42682c031a469009c0f397323bef75aac51624e6c1c5ef74fcd42"
+        },
+        {
+          "kind": "json",
+          "path": ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/label.json",
+          "bytes": 22525,
+          "sha256": "942a027820e827c678c36f51100fabd88a37fe6492cc80d49323b66108976746"
+        }
+      ],
       "artifactError": null,
       "assessmentType": null,
       "automaticDecision": null,
@@ -329,14 +812,14 @@
       "operational": true,
       "summary": "Retrieved 2 traceable EviMed guideline candidates (2 with preserved text).",
       "errorCode": null,
-      "elapsedMs": 1521,
+      "elapsedMs": 1963,
       "sourceCount": 2,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/guideline_search.json",
-        "bytes": 4835,
-        "sha256": "1a565e0f280f31df49218078223dc64bbb4d6b081392270bafaf0255742891bc"
+        "bytes": 4862,
+        "sha256": "9f6c30f91959d706461c2e645abd3a2266483d0400b08739aaaf6530354125a0"
       },
       "artifacts": [
         {
@@ -365,14 +848,14 @@
       "operational": true,
       "summary": "Retrieved 2 traceable EviMed trial records.",
       "errorCode": null,
-      "elapsedMs": 585,
+      "elapsedMs": 637,
       "sourceCount": 2,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/clinical_trial_search.json",
-        "bytes": 4959,
-        "sha256": "2d337b5b3a4ad1c6150097c2ab81c01ffa642e3afe159f8e96c3be4def41e834"
+        "bytes": 4986,
+        "sha256": "9a4b9bedb4eab602cd7a7a472f8b5271eb5105fb3ba408cc26a68d0271ff0ae0"
       },
       "artifacts": [],
       "artifactError": null,
@@ -394,8 +877,8 @@
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/pharmacy_reference_search.json",
-        "bytes": 3514,
-        "sha256": "594890f506ea11f38ef94c1d5f55e24d2366c2de2eeaa7874f4e15f8553b1809"
+        "bytes": 3541,
+        "sha256": "61078e1243bce70670cfbd493df3a06639c3cbc9d56dedfa824486a7f5428171"
       },
       "artifacts": [],
       "artifactError": null,
@@ -411,14 +894,14 @@
       "operational": true,
       "summary": "Retrieved 1 FDA label records.",
       "errorCode": null,
-      "elapsedMs": 5703,
+      "elapsedMs": 7472,
       "sourceCount": 1,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/drug_label_search.json",
-        "bytes": 8433,
-        "sha256": "ac650c5d6e60506e2c9fd86107e9e37a5a23fd1954cebf087bbcf1baef525c3c"
+        "bytes": 8460,
+        "sha256": "31ef4482cac5134fe033ab99e1dabfcbca5e51b8f1ad96fb064d8926e28263b7"
       },
       "artifacts": [],
       "artifactError": null,
@@ -434,14 +917,14 @@
       "operational": true,
       "summary": "Retrieved 2 de-identified FAERS reports.",
       "errorCode": null,
-      "elapsedMs": 9808,
+      "elapsedMs": 8714,
       "sourceCount": 2,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/adr_case_query.json",
-        "bytes": 2264,
-        "sha256": "dffeccccac9ad78504388cf45f55b8c2a3aa4cb5a473a7451b9613561e2c5d91"
+        "bytes": 2291,
+        "sha256": "0e0db98cb0da7eb79c76e5239ff784fae6feb0a36454e384ad8b950d6b44133c"
       },
       "artifacts": [],
       "artifactError": null,
@@ -457,14 +940,14 @@
       "operational": true,
       "summary": "Calculated traceable FAERS disproportionality screening metrics.",
       "errorCode": null,
-      "elapsedMs": 12035,
+      "elapsedMs": 7248,
       "sourceCount": 4,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/adr_signal_analysis.json",
-        "bytes": 2547,
-        "sha256": "841e1fae2dbe1c61210e4fa78f4b08d02f8dfae93ae7eb16dc13616a74db80f0"
+        "bytes": 2578,
+        "sha256": "37a5b88329c4bba8ff69345e85ab8c298e697b0cb061c76001fb310b46fc7c17"
       },
       "artifacts": [],
       "artifactError": null,
@@ -486,8 +969,8 @@
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/offlabel_evidence_packet.json",
-        "bytes": 4071,
-        "sha256": "4f70ecba44181bcfe48868128d2306adc3c46c05fe6d9a9b2738f838eb0dc266"
+        "bytes": 4098,
+        "sha256": "419e61d746455e9a86d8535c9053bd9125d268000f72ee4ca3046bce7967ac9e"
       },
       "artifacts": [],
       "artifactError": null,
@@ -509,8 +992,8 @@
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/comprehensive_drug_evaluation.json",
-        "bytes": 4023,
-        "sha256": "25f9e90f99e30758626e9469936e3b949b404fb5c037e6a958f1acba89e5c626"
+        "bytes": 4050,
+        "sha256": "eecf25e900cbec8aeac57c98772670cd354aa66b487f7fb6067bcda5c00bcb73"
       },
       "artifacts": [],
       "artifactError": null,
@@ -532,8 +1015,8 @@
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/drug_selection_evaluation.json",
-        "bytes": 7826,
-        "sha256": "19e79d037ddabaa8db83bf66dd7fbac2e4d7bb1108666dddd1a35ea98a6bbb36"
+        "bytes": 7853,
+        "sha256": "6c031f585b5e5410e00c3b37eb419897a5ec7159614519ca9b1bdf9701346bcd"
       },
       "artifacts": [],
       "artifactError": null,
@@ -547,7 +1030,7 @@
       "operation": "none",
       "status": "unverified",
       "operational": false,
-      "summary": "No fresh terminal managed job with verified artifacts was found.",
+      "summary": "No terminal managed job with verified artifacts and a recorded source equal to this tree's was found.",
       "artifacts": [],
       "artifactCount": 0
     },
@@ -557,7 +1040,7 @@
       "operation": "none",
       "status": "unverified",
       "operational": false,
-      "summary": "No fresh terminal managed job with verified artifacts was found.",
+      "summary": "No terminal managed job with verified artifacts and a recorded source equal to this tree's was found.",
       "artifacts": [],
       "artifactCount": 0
     },
@@ -567,7 +1050,7 @@
       "operation": "none",
       "status": "unverified",
       "operational": false,
-      "summary": "No fresh terminal managed job with verified artifacts was found.",
+      "summary": "No terminal managed job with verified artifacts and a recorded source equal to this tree's was found.",
       "artifacts": [],
       "artifactCount": 0
     },
@@ -577,7 +1060,7 @@
       "operation": "none",
       "status": "unverified",
       "operational": false,
-      "summary": "No fresh terminal managed job with verified artifacts was found.",
+      "summary": "No terminal managed job with verified artifacts and a recorded source equal to this tree's was found.",
       "artifacts": [],
       "artifactCount": 0
     },
@@ -587,7 +1070,7 @@
       "operation": "none",
       "status": "unverified",
       "operational": false,
-      "summary": "No fresh terminal managed job with verified artifacts was found.",
+      "summary": "No terminal managed job with verified artifacts and a recorded source equal to this tree's was found.",
       "artifacts": [],
       "artifactCount": 0
     },
@@ -597,7 +1080,7 @@
       "operation": "none",
       "status": "unverified",
       "operational": false,
-      "summary": "No fresh terminal managed job with verified artifacts was found.",
+      "summary": "No terminal managed job with verified artifacts and a recorded source equal to this tree's was found.",
       "artifacts": [],
       "artifactCount": 0
     },
@@ -609,14 +1092,14 @@
       "operational": true,
       "summary": "search_papers returned a result from https://api.crossref.org/works?query=aspirin+cardiovascular+prevention&rows=2&select=DOI%2Ctitle%2Cauthor%2Cpublished%2CURL%2Ctype.",
       "errorCode": null,
-      "elapsedMs": 1426,
+      "elapsedMs": 1042,
       "sourceCount": 1,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/search_papers.json",
-        "bytes": 2593,
-        "sha256": "e94b4a75bdc5f0a1a869cdc32206463a0f02182d42d58e802bcc7521a4bd7473"
+        "bytes": 2620,
+        "sha256": "bb99a77847867072350fb9064052136727709686083d961cd8d351cb547dad71"
       },
       "artifacts": [],
       "artifactError": null,
@@ -632,14 +1115,14 @@
       "operational": true,
       "summary": "search_biomedical_records returned a result from https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=2&term=metformin+type+2+diabetes&tool=evimed_research.",
       "errorCode": null,
-      "elapsedMs": 1072,
+      "elapsedMs": 1512,
       "sourceCount": 1,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/search_biomedical_records.json",
-        "bytes": 2069,
-        "sha256": "a0ecfbb07f14b54c47f1f3fb13cfdc5ce2a0393afa5a28f6636a785e74794b38"
+        "bytes": 2096,
+        "sha256": "c1dce2637aa44ef1fee37cea7c83c92ce7693e87cc8a70e4b888dc0a521d4b70"
       },
       "artifacts": [],
       "artifactError": null,
@@ -655,14 +1138,14 @@
       "operational": true,
       "summary": "search_materials returned a result from https://api.materialsproject.org/materials/summary/?_limit=1&formula=Fe2O3.",
       "errorCode": null,
-      "elapsedMs": 603,
+      "elapsedMs": 3332,
       "sourceCount": 1,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/search_materials.json",
-        "bytes": 1148,
-        "sha256": "49be0d2031ad9ee019db484fc3dcd7fca379f506891e484fa89bc1fdcc6e6213"
+        "bytes": 1175,
+        "sha256": "813f23c01fbade0a9d150f5d4b5d344ebb167af9914f81a867266033adacd7b9"
       },
       "artifacts": [],
       "artifactError": null,
@@ -678,14 +1161,14 @@
       "operational": true,
       "summary": "get_fred_series returned a result from https://fred.stlouisfed.org/graph/fredgraph.csv?id=GDP.",
       "errorCode": null,
-      "elapsedMs": 716,
+      "elapsedMs": 529,
       "sourceCount": 1,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/get_fred_series.json",
-        "bytes": 891,
-        "sha256": "e4c064d87a8673895704dd431073acc5b489d734dbd2c0afc897f0aaf2cd4994"
+        "bytes": 918,
+        "sha256": "3098745fb8bb4f28184111c139740c2151a1e63eabfbd598db83dc1a9968429d"
       },
       "artifacts": [],
       "artifactError": null,
@@ -701,14 +1184,14 @@
       "operational": true,
       "summary": "get_space_weather_alerts returned a result from https://services.swpc.noaa.gov/products/alerts.json.",
       "errorCode": null,
-      "elapsedMs": 1488,
+      "elapsedMs": 947,
       "sourceCount": 1,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/get_space_weather_alerts.json",
-        "bytes": 1635,
-        "sha256": "2b574444d2e1094f28bcb60e931e15a88f280220de8858f5012ba142f3d47404"
+        "bytes": 2748,
+        "sha256": "6c9484f74fcfb6f44d76553a1b542323acdc0e0767ecd920771ea777156cd973"
       },
       "artifacts": [],
       "artifactError": null,
@@ -724,14 +1207,14 @@
       "operational": true,
       "summary": "get_weather returned a result from https://api.open-meteo.com/v1/forecast?latitude=39.9042&longitude=116.4074&forecast_days=1&current=temperature_2m%2Crelative_humidity_2m%2Cprecipitation%2Cweather_code%2Cwind_speed_10m&daily=temperature_2m_max%2Ctemperature_2m_min%2Cprecipitation_sum.",
       "errorCode": null,
-      "elapsedMs": 784,
+      "elapsedMs": 723,
       "sourceCount": 1,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/get_weather.json",
-        "bytes": 2249,
-        "sha256": "fafa4276d167195ab2ef93126bfbbd0881697044a6e8063d5ed019aa64bc0eae"
+        "bytes": 2275,
+        "sha256": "1843a6b7a0c0df0ad9b8a58120dea0c55a9967c53e281b59b578ccd21b0e3264"
       },
       "artifacts": [],
       "artifactError": null,
@@ -747,14 +1230,14 @@
       "operational": true,
       "summary": "get_usgs_water_data returned a result from https://waterservices.usgs.gov/nwis/iv/?format=json&sites=01646500&period=P1D&siteStatus=all.",
       "errorCode": null,
-      "elapsedMs": 1584,
+      "elapsedMs": 1266,
       "sourceCount": 1,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/get_usgs_water_data.json",
-        "bytes": 531500,
-        "sha256": "ea73e1739afaf62acaa18e5643884ceffd40a2c4014534781f3d233d9b11124a"
+        "bytes": 536521,
+        "sha256": "f73811c7aefc62f8c57264ea69071a2a49b0bf88aff0a07de07743b56e119418"
       },
       "artifacts": [],
       "artifactError": null,
@@ -776,8 +1259,8 @@
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/kb_search.json",
-        "bytes": 872,
-        "sha256": "f66f9d744f3b2a893a9063e6edaaf3a5adb90038a36111f0bf22404425dfa13a"
+        "bytes": 899,
+        "sha256": "b7ae48828a599256b6221b3a54871b45ea465425fe29ecedb85d6930a060fd97"
       },
       "artifacts": [],
       "artifactError": null,
@@ -793,14 +1276,60 @@
       "operational": true,
       "summary": "Found 3 item(s) in 前沿动态 (all collected items, last 30d); more match.",
       "errorCode": null,
-      "elapsedMs": 11,
+      "elapsedMs": 14,
       "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/frontier_search.json",
-        "bytes": 2240,
-        "sha256": "a95be16741f6d52f1cf383c241d0c1c5e04726ff3fb15f88a35591e8cf079515"
+        "bytes": 2349,
+        "sha256": "a83749eb74b5b945472d96357b18e5eae4bb051f8dde480b530ffc20a32e0857"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "schedule_task",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "Scheduled “Release audit task” — 10月19日 · 仅一次 00:00（协调世界时）, next run 10月19日 00:00.",
+      "errorCode": null,
+      "elapsedMs": 19,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/schedule_task.json",
+        "bytes": 797,
+        "sha256": "3fa4e7055c31dcb1f053d209bc08d7f8edf54b85e485a02d46791dd3af1c21d2"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "update_task",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "Updated “Release audit task” (paused) — 10月19日 · 仅一次 00:00（协调世界时）, paused.",
+      "errorCode": null,
+      "elapsedMs": 17,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/update_task.json",
+        "bytes": 728,
+        "sha256": "e3cb4d8d8ade229a0f6be699227df912f7c7afd393d1690cd7b1ca5b597c4bdf"
       },
       "artifacts": [],
       "artifactError": null,
@@ -816,14 +1345,14 @@
       "operational": true,
       "summary": "This conversation is not in a 循证 GEO project, so there is no project to read.",
       "errorCode": null,
-      "elapsedMs": 3,
+      "elapsedMs": 4,
       "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/geo_read.json",
-        "bytes": 798,
-        "sha256": "0b6ab86ca359ad3917e69ec987df25d43105eacded0b43a1c3dd25ca4feb88f0"
+        "bytes": 825,
+        "sha256": "e30118a480fa5b33948c512015088a1eba91eea8b97b3436f515c71caec88028"
       },
       "artifacts": [],
       "artifactError": null,
@@ -845,8 +1374,8 @@
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/geo_write.json",
-        "bytes": 878,
-        "sha256": "ce698703502cf6dc84f599e14338469a3c23932c7dfb4b387149af4316600197"
+        "bytes": 905,
+        "sha256": "598a53b950a14ec6a97ad82b93081624e491e0b8d1152d20865128e9770d1937"
       },
       "artifacts": [],
       "artifactError": null,
@@ -862,16 +1391,307 @@
       "operational": true,
       "summary": "Collected 3 post(s) for \"降糖药\".",
       "errorCode": null,
-      "elapsedMs": 17932,
+      "elapsedMs": 34361,
       "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/social_posts_search.json",
-        "bytes": 6634,
-        "sha256": "733002dd35bbc6a3e8ee1c0bff74683f8e3b42893e9c2d2fce2fcb056549b265"
+        "bytes": 6928,
+        "sha256": "915a8a6055d19cdaaeae6be12a1aac9870003cdbc040bf2cc6d89d40d879d65f"
       },
       "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "vcr_read",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
+      "operational": true,
+      "summary": "There is no 虚拟临床研究 study in this conversation, so there is no study to read.",
+      "errorCode": null,
+      "elapsedMs": 8,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/vcr_read.json",
+        "bytes": 826,
+        "sha256": "e162a0b497cc27205c3cddb4becf96e3e1b696724177766e6393444dc326f1ea"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "vcr_write",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
+      "operational": true,
+      "summary": "There is no 虚拟临床研究 study in this conversation, so there is no step to write.",
+      "errorCode": null,
+      "elapsedMs": 9,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/vcr_write.json",
+        "bytes": 913,
+        "sha256": "e2ddb23f4a7054557c3a10ad6636458d493b5fec7259429a327ed55bd8d24c54"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "vcr_simulate",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
+      "operational": true,
+      "summary": "There is no 虚拟临床研究 study in this conversation, so there is no computation to queue.",
+      "errorCode": null,
+      "elapsedMs": 11,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/vcr_simulate.json",
+        "bytes": 890,
+        "sha256": "9fe81da39934f67ff399baf5b260f723a9ad9d2504cfbb828b62f01437ba6aac"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "trial_registry_record",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
+      "operational": true,
+      "summary": "There is no 虚拟临床研究 study in this conversation, so there is no trial registry to read.",
+      "errorCode": null,
+      "elapsedMs": 4,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/trial_registry_record.json",
+        "bytes": 869,
+        "sha256": "95e8248e885a204f8b18be208afe4edebea86f41d78edba5abf028ebae4e12d0"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "curve_digitize",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
+      "operational": true,
+      "summary": "There is no 虚拟临床研究 study in this conversation, so there is no figure to digitize.",
+      "errorCode": null,
+      "elapsedMs": 4,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/curve_digitize.json",
+        "bytes": 1385,
+        "sha256": "d833756c9d2e42c63c92cdd20742f2bb5da742b3c1e6a01bc9b5bb1825b3aace"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "evidence_pool",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
+      "operational": true,
+      "summary": "There is no 虚拟临床研究 study in this conversation, so there is no computation to queue.",
+      "errorCode": null,
+      "elapsedMs": 3,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/evidence_pool.json",
+        "bytes": 891,
+        "sha256": "608fd87366d96913b8823de3c637c2c0d2b0d70bddbd939b1f72b5df04331600"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "research_calculate",
+      "probeType": "no_owned_calculation_job",
+      "operation": "none",
+      "status": "unverified",
+      "operational": false,
+      "artifacts": [],
+      "artifactCount": 0,
+      "summary": "research_calculate is probed on a calculation the probe project already owns, because a calculation starts only from a native conversation turn. No job id was given: set EVIMED_RESULT_REPLAY_AUDIT_JOB_ID to the id (replay_<64 hex>) of a completed calculation in the probe project and run again."
+    },
+    {
+      "tool": "dataset_semantics",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "This project has no recorded dataset meaning yet.",
+      "errorCode": null,
+      "elapsedMs": 21,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/dataset_semantics.json",
+        "bytes": 678,
+        "sha256": "0028351c67c2a8902a301d146f546eb6aa4791d708b2bcf6706e0918a342202c"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "gene_expression_series",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
+      "operational": true,
+      "summary": "Preserved GEO series GSE5583 (Expression data from wild type versus HDAC knock out mouse embryonic stem cells; 6 samples, 12488 probes on GPL81) with the platform's probe annotation; identities agree.",
+      "errorCode": null,
+      "elapsedMs": 18660,
+      "sourceCount": 1,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/gene_expression_series.json",
+        "bytes": 9167,
+        "sha256": "b2af959c3da31c75d3fd753df5b53078f4d078d8bd77909f7598a2fa95b06aaa"
+      },
+      "artifacts": [
+        {
+          "kind": "gz",
+          "path": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/series_matrix.txt.gz",
+          "bytes": 216671,
+          "sha256": "bca34f9908a6f5ad4ef5b1b3fa5e0f017704dcfbd2bffea80d76abf42001e220"
+        },
+        {
+          "kind": "tsv",
+          "path": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/samples.tsv",
+          "bytes": 1599,
+          "sha256": "13ec3fda654351782c4bbcc3c61a903af6a4af1e7b922a462ed13861ee168cb7"
+        },
+        {
+          "kind": "tsv",
+          "path": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/probe-annotation.tsv",
+          "bytes": 888639,
+          "sha256": "86ffc98df3743d45b72d2b2668b4bfab04c9c27dcea087c27179fda6118862d5"
+        },
+        {
+          "kind": "gz",
+          "path": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/platform.soft.txt.gz",
+          "bytes": 3345945,
+          "sha256": "bfc84dd0a988fbc7dde4af79b1b01a96e1d0aa0364c26d6202d2435702b787ce"
+        },
+        {
+          "kind": "json",
+          "path": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/record.json",
+          "bytes": 9230,
+          "sha256": "a3f287976140298adefbc445843045f52624f7d8075c866b1349ef93b2fcf083"
+        }
+      ],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "gene_expression_differential",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "Welch t-test per probe on log2 values between wild type and HDAC1 knock out: 12488 probes tested, results and a rendered top table written (not limma).",
+      "errorCode": null,
+      "elapsedMs": 1412,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/gene_expression_differential.json",
+        "bytes": 7020,
+        "sha256": "8bb969b1d7635dfef214e838b68296740ee7e1d2c07cee74b1c243792a4c7bcb"
+      },
+      "artifacts": [
+        {
+          "kind": "json",
+          "path": "deliverables/release-audit-gene-expression/gene-expression-results.json",
+          "bytes": 8675,
+          "sha256": "03497d6b88c67d4dd79a34a2552548f484174a0ce7148adcd5a0eda20948d137"
+        },
+        {
+          "kind": "tsv",
+          "path": "deliverables/release-audit-gene-expression/gene-expression-de-table.tsv",
+          "bytes": 3063260,
+          "sha256": "653e4f6449222a7ae1b2c12a42d0ccf9075af022f9e33a97bdc83543cbde53c8"
+        },
+        {
+          "kind": "md",
+          "path": "deliverables/release-audit-gene-expression/gene-expression-top-table.md",
+          "bytes": 581,
+          "sha256": "d73ad792d337482efaef8b8a0762b3e35d2afc6aa509f10d7e69f9f5eded6c05"
+        },
+        {
+          "kind": "gz",
+          "path": "deliverables/release-audit-gene-expression/gene-expression-analysed-matrix.tsv.gz",
+          "bytes": 577967,
+          "sha256": "6af52898d470ed515e54e76a760d25c6c609f9b1c97997c103022daeb0c7884a"
+        },
+        {
+          "kind": "json",
+          "path": "deliverables/release-audit-gene-expression/gene-expression-request.json",
+          "bytes": 678,
+          "sha256": "2073f3b55d4165b8583799b2c581e1653869ecaa201b60021cb381227970ea2a"
+        },
+        {
+          "kind": "py",
+          "path": "deliverables/release-audit-gene-expression/gene_expression.py",
+          "bytes": 63602,
+          "sha256": "6f38595b8981812782a7051ce8762bb6e6008e1c4b9dd94afd6a9b1c5646aac3"
+        },
+        {
+          "kind": "json",
+          "path": "deliverables/release-audit-gene-expression/gene-expression-receipt.json",
+          "bytes": 2190,
+          "sha256": "05ee725bf322816c6b3b93204fe922cb4f761603ce72e99a2882c99e373578d6"
+        }
+      ],
       "artifactError": null,
       "assessmentType": null,
       "automaticDecision": null,

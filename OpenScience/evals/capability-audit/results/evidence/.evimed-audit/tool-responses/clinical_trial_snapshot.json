@@ -1,0 +1,141 @@
+{
+  "status": "success",
+  "summary": "Preserved the complete record of NCT02197234.",
+  "data": {
+    "nctId": "NCT02197234",
+    "title": "Study to Assess the Effect of AZD9291 on the Blood Levels of Simvastatin in Patients With EGFRm+ NSCLC",
+    "contentLevel": "registry_record_with_results",
+    "status": "COMPLETED",
+    "version": {
+      "lastUpdatePosted": "2025-11-20",
+      "lastUpdateSubmitted": "2025-11-13",
+      "resultsFirstPosted": "2016-06-22",
+      "statusVerified": "2025-11",
+      "hasResults": true
+    },
+    "results": {
+      "posted": true,
+      "firstPosted": "2016-06-22",
+      "outcomeMeasures": 7
+    },
+    "markdownPath": ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/record.md",
+    "recordPath": ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/record.json",
+    "alignmentPath": ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/alignment.json",
+    "artifactSha256s": {
+      ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/record.json": "b1f75e43b47cdfaad7696618b2bebd675c16b01df9ff29b6e050444f2c5ce188",
+      ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/record.md": "926e5bb1172062ae225a55c21f0a12851f8dbfb2fdb157939cb359863751a8dc",
+      ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/alignment.json": "24ef6b91c2e5ddbccdb4b6d30b8ac0725f399b3700233ba50b4332d9dbff9898",
+      ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/source.json": "cd525b78b9f423c8fae660e835e768b1fa5b7b7e4b0110ef3886c331ca69e6f8"
+    },
+    "registryDataVersion": {
+      "apiVersion": "2.0.5",
+      "dataTimestamp": "2026-10-09T09:00:05",
+      "recordLoadedOn": "2026-10-09"
+    },
+    "endpoints": {
+      "registered": 7,
+      "reported": 7,
+      "matched": [
+        {
+          "measure": "Cmax of Simvastatin",
+          "registeredRole": "primary",
+          "reportedRole": "primary",
+          "roleAgrees": true
+        },
+        {
+          "measure": "AUC of Simvastatin",
+          "registeredRole": "primary",
+          "reportedRole": "primary",
+          "roleAgrees": true
+        },
+        {
+          "measure": "Tmax of Simvastatin and Simvastatin Acid",
+          "registeredRole": "secondary",
+          "reportedRole": "secondary",
+          "roleAgrees": true
+        },
+        {
+          "measure": "CL/F of Simvastatin",
+          "registeredRole": "secondary",
+          "reportedRole": "secondary",
+          "roleAgrees": true
+        },
+        {
+          "measure": "Cmax of Simvastatin Acid",
+          "registeredRole": "secondary",
+          "reportedRole": "secondary",
+          "roleAgrees": true
+        },
+        {
+          "measure": "AUC of Simvastatin Acid",
+          "registeredRole": "secondary",
+          "reportedRole": "secondary",
+          "roleAgrees": true
+        },
+        {
+          "measure": "AUC(0-t) of Simvastatin and Simvastatin Acid",
+          "registeredRole": "secondary",
+          "reportedRole": "secondary",
+          "roleAgrees": true
+        }
+      ],
+      "registeredOnly": [],
+      "reportedOnly": []
+    },
+    "history": {
+      "source": "snapshots preserved by this tool in this project",
+      "snapshotsHeld": 1,
+      "held": [
+        {
+          "directory": "d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139",
+          "lastUpdatePosted": "2025-11-20",
+          "resultsFirstPosted": "2016-06-22",
+          "statusVerified": "2025-11",
+          "hasResults": true,
+          "current": true,
+          "alignmentPath": ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/alignment.json"
+        }
+      ],
+      "thisSnapshotIsNew": true,
+      "comparison": "not_requested",
+      "beforeFirstSnapshot": {
+        "available": false,
+        "reason": "not_in_documented_api",
+        "how": "ClinicalTrials.gov publishes a record's earlier versions on the study page's Record History tab, not in its documented API, and its internal history interface refused a programmatic read. Open https://clinicaltrials.gov/study/NCT02197234 in a browser to see versions older than the first snapshot."
+      }
+    },
+    "outcome": {
+      "state": "complete"
+    },
+    "provenance": {
+      "tool": "clinical_trial_snapshot",
+      "arguments": {
+        "nctId": "NCT02197234",
+        "compareTo": "none"
+      },
+      "scope": {
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "NCT02197234",
+      "title": "Study to Assess the Effect of AZD9291 on the Blood Levels of Simvastatin in Patients With EGFRm+ NSCLC",
+      "url": "https://clinicaltrials.gov/study/NCT02197234",
+      "source": "clinicaltrials.gov",
+      "retrievedAt": "2026-10-12T07:16:16.639242Z",
+      "evidenceAccess": "registry_record",
+      "artifactPath": ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/record.md",
+      "sourceType": "trial-registration"
+    }
+  ],
+  "artifacts": [
+    ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/record.md",
+    ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/record.json",
+    ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/alignment.json"
+  ]
+}

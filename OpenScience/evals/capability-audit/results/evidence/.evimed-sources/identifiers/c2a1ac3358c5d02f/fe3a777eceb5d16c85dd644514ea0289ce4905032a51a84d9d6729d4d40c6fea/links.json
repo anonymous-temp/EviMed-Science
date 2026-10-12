@@ -1,0 +1,70 @@
+{
+ "items": [
+  {
+   "doi": "10.1056/NEJMoa1800722",
+   "inPmc": true,
+   "input": "30221596",
+   "kind": "pmid",
+   "pmcVersions": [
+    {
+     "current": true,
+     "id": "PMC6426126.1"
+    }
+   ],
+   "pmcid": "PMC6426126",
+   "pmid": "30221596",
+   "resolvedBy": [
+    "ncbi-idconv",
+    "pubmed"
+   ],
+   "status": "resolved",
+   "title": "Effect of Aspirin on Disability-free Survival in the Healthy Elderly.",
+   "year": "2018"
+  },
+  {
+   "doi": "10.1038/s41467-018-05727-y",
+   "inPmc": true,
+   "input": "PMC6143516",
+   "kind": "pmcid",
+   "pmcVersions": [
+    {
+     "current": true,
+     "id": "PMC6143516.1"
+    }
+   ],
+   "pmcid": "PMC6143516",
+   "pmid": "30228269",
+   "resolvedBy": [
+    "ncbi-idconv",
+    "pubmed"
+   ],
+   "status": "resolved",
+   "title": "Implementation and benchmarking of a novel analytical framework to clinically evaluate tumor-specific fluorescent tracers.",
+   "year": "2018"
+  },
+  {
+   "doi": "10.1056/NEJMoa1800722",
+   "inPmc": true,
+   "input": "10.1056/NEJMoa1800722",
+   "kind": "doi",
+   "pmcVersions": [
+    {
+     "current": true,
+     "id": "PMC6426126.1"
+    }
+   ],
+   "pmcid": "PMC6426126",
+   "pmid": "30221596",
+   "resolvedBy": [
+    "ncbi-idconv",
+    "pubmed"
+   ],
+   "status": "resolved",
+   "title": "Effect of Aspirin on Disability-free Survival in the Healthy Elderly.",
+   "year": "2018"
+  }
+ ],
+ "schemaVersion": 1,
+ "tool": "identifier_resolve",
+ "unresolved": []
+}

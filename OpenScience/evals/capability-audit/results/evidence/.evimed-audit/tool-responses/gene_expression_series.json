@@ -1,0 +1,215 @@
+{
+  "status": "warning",
+  "summary": "Preserved GEO series GSE5583 (Expression data from wild type versus HDAC knock out mouse embryonic stem cells; 6 samples, 12488 probes on GPL81) with the platform's probe annotation; identities agree.",
+  "data": {
+    "accession": "GSE5583",
+    "title": "Expression data from wild type versus HDAC knock out mouse embryonic stem cells",
+    "series": {
+      "status": {
+        "stated": "Public on Sep 19 2006",
+        "date": "2006-09-19"
+      },
+      "submissionDate": {
+        "stated": "Aug 23 2006",
+        "date": "2006-08-23"
+      },
+      "lastUpdateDate": {
+        "stated": "Feb 18 2018",
+        "date": "2018-02-18"
+      },
+      "type": [
+        "Expression profiling by array"
+      ],
+      "pubmedIds": [
+        "16940178"
+      ],
+      "sampleCount": 6,
+      "platforms": [
+        "GPL81"
+      ]
+    },
+    "platform": {
+      "accession": "GPL81",
+      "title": "[MG_U74Av2] Affymetrix Murine Genome U74A Version 2 Array",
+      "organism": "Mus musculus",
+      "technology": "in situ oligonucleotide",
+      "lastUpdateDate": {
+        "stated": "Feb 18 2018",
+        "date": "2018-02-18"
+      },
+      "rowCount": 12488,
+      "annotationColumns": {
+        "symbol": "Gene Symbol",
+        "entrez": "ENTREZ_GENE_ID",
+        "title": "Gene Title",
+        "genbank": "GB_ACC",
+        "genomeBuild": null
+      },
+      "record": {
+        "available": true
+      }
+    },
+    "matrix": {
+      "file": "GSE5583_series_matrix.txt.gz",
+      "sha256": "bca34f9908a6f5ad4ef5b1b3fa5e0f017704dcfbd2bffea80d76abf42001e220",
+      "bytes": 216671,
+      "probes": 12488,
+      "samples": 6,
+      "cellsMissing": 0
+    },
+    "captureDir": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21",
+    "paths": {
+      "series_matrix.txt.gz": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/series_matrix.txt.gz",
+      "samples.tsv": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/samples.tsv",
+      "probe-annotation.tsv": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/probe-annotation.tsv",
+      "platform.soft.txt.gz": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/platform.soft.txt.gz",
+      "record.json": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/record.json"
+    },
+    "artifactSha256s": {
+      ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/series_matrix.txt.gz": "bca34f9908a6f5ad4ef5b1b3fa5e0f017704dcfbd2bffea80d76abf42001e220",
+      ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/samples.tsv": "13ec3fda654351782c4bbcc3c61a903af6a4af1e7b922a462ed13861ee168cb7",
+      ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/probe-annotation.tsv": "86ffc98df3743d45b72d2b2668b4bfab04c9c27dcea087c27179fda6118862d5",
+      ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/platform.soft.txt.gz": "bfc84dd0a988fbc7dde4af79b1b01a96e1d0aa0364c26d6202d2435702b787ce",
+      ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/record.json": "a3f287976140298adefbc445843045f52624f7d8075c866b1349ef93b2fcf083"
+    },
+    "samples": [
+      {
+        "accession": "GSM130365",
+        "title": "wild_type_embryonic_stem cells_biological_rep1",
+        "characteristics": {
+          "Genotype": "wild type",
+          "characteristics_2": "not differentiated"
+        }
+      },
+      {
+        "accession": "GSM130366",
+        "title": "wild_type_embryonic_stem cells_biological_rep2",
+        "characteristics": {
+          "Genotype": "wild type",
+          "characteristics_2": "not differentiated"
+        }
+      },
+      {
+        "accession": "GSM130367",
+        "title": "wild_type_embryonic_stem cells_biological_rep3",
+        "characteristics": {
+          "Genotype": "wild type",
+          "characteristics_2": "not differentiated"
+        }
+      },
+      {
+        "accession": "GSM130368",
+        "title": "HDAC1_knock_out_embryonic_stem_cells_biological_rep1",
+        "characteristics": {
+          "Genotype": "HDAC1 knock out",
+          "characteristics_2": "not differentiated"
+        }
+      },
+      {
+        "accession": "GSM130369",
+        "title": "HDAC1_knock_out_embryonic_stem_cells_biological_rep2",
+        "characteristics": {
+          "Genotype": "HDAC1 knock out",
+          "characteristics_2": "not differentiated"
+        }
+      },
+      {
+        "accession": "GSM130370",
+        "title": "HDAC1_knock_out_embryonic_stem_cells_biological_rep3",
+        "characteristics": {
+          "Genotype": "HDAC1 knock out",
+          "characteristics_2": "not differentiated"
+        }
+      }
+    ],
+    "sampleListing": {
+      "state": "complete",
+      "returned": 6,
+      "total": 6
+    },
+    "identity": {
+      "samples": {
+        "status": "ok",
+        "detail": "The table header's 6 samples are the series' declared samples."
+      },
+      "platform": {
+        "status": "ok",
+        "detail": "All samples are on one platform, GPL81."
+      },
+      "platformRecord": {
+        "status": "ok",
+        "detail": "12488 of 12488 matrix probes are in the platform record's table."
+      },
+      "organism": {
+        "status": "ok",
+        "detail": "The samples' taxon (10090) matches the platform's (10090)."
+      },
+      "genomeBuild": {
+        "status": "unknown",
+        "detail": "Neither the series matrix nor the platform record states a genome build; none is assumed."
+      },
+      "scale": {
+        "status": "ok",
+        "detail": "The values look linear (not log-scale); a transformation is applied before any statistic."
+      }
+    },
+    "computationReady": true,
+    "valueScale": {
+      "looksLinear": true,
+      "quantiles": {
+        "min": 0.2,
+        "q25": 51.3,
+        "median": 198.3,
+        "q75": 623.225,
+        "q99": 9060.30399999998,
+        "max": 51158.7
+      },
+      "statedProcessing": [
+        "The data were analyzed with Microarray Suite version 5.0 (MAS 5.0) using Affymetrix default analysis settings and global scaling as normalization method. The trimmed mean target intensity of each array was arbitrarily set to 500."
+      ]
+    },
+    "terms": "NCBI states that it places no restrictions on the use or distribution of the data in its databases, and that original submitters may claim patent, copyright or other rights in their contributions, which NCBI cannot assess. Cite the series accession and its publication, and read the record's own text before redistributing.",
+    "retrievedAt": "2026-10-12T07:16:42.010795Z",
+    "limits": {
+      "matrix_bytes": 67108864,
+      "annotation_bytes": 134217728,
+      "samples": 200,
+      "probes": 100000,
+      "memory": 2147483648,
+      "wall_clock": 120
+    },
+    "outcome": {
+      "state": "complete"
+    },
+    "downloadRoutes": {
+      "matrix": "direct",
+      "platformRecord": "direct"
+    }
+  },
+  "sources": [
+    {
+      "id": "GSE5583",
+      "title": "Expression data from wild type versus HDAC knock out mouse embryonic stem cells",
+      "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE5583",
+      "source": "ncbi-gene-expression-omnibus",
+      "retrievedAt": "2026-10-12T07:16:42.010795Z",
+      "evidenceAccess": "registry_record",
+      "artifactPath": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/record.json",
+      "sourceType": "other"
+    }
+  ],
+  "artifacts": [
+    ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/series_matrix.txt.gz",
+    ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/samples.tsv",
+    ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/probe-annotation.tsv",
+    ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/platform.soft.txt.gz",
+    ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/record.json"
+  ],
+  "next_actions": [
+    "Read samples.tsv to choose the two groups from the annotations, then call gene_expression_differential with captureDir.",
+    "Cite the series accession and the stated last-update date; GEO series are submitter-processed, so say what the series states about its own processing."
+  ],
+  "warnings": [
+    "Identity check genomeBuild is unknown: Neither the series matrix nor the platform record states a genome build; none is assumed."
+  ]
+}

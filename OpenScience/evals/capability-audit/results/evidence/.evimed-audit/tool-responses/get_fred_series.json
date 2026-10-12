@@ -15,10 +15,10 @@
         "limit": 3
       },
       "scope": {
-        "tenantId": "cdss-access",
-        "userId": "cdss-access",
-        "projectId": "audit-tool-probe",
-        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -27,7 +27,7 @@
       "id": "fred",
       "source": "fred",
       "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GDP",
-      "retrievedAt": "2026-09-28T08:34:28.458363Z",
+      "retrievedAt": "2026-10-12T07:16:03.380048Z",
       "sourceType": "other"
     }
   ]

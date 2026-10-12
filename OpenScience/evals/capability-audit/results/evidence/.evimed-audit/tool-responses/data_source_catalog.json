@@ -1,6 +1,6 @@
 {
   "status": "success",
-  "summary": "Matched 64 audited data sources.",
+  "summary": "Matched 63 audited data sources.",
   "data": {
     "items": [
       {
@@ -1421,31 +1421,6 @@
         "connectionState": "connected_public"
       },
       {
-        "id": "iuphar-bps-guide-to-pharmacology",
-        "index": 105,
-        "name": "IUPHAR/BPS Guide to Pharmacology",
-        "domain": "药物靶点",
-        "priority": "P2 扩展",
-        "status": "connected_public",
-        "accessClass": "public_api",
-        "connector": "iuphar-bps-guide-to-pharmacology",
-        "skill": null,
-        "credential": "无需通用 key",
-        "license": "数据许可",
-        "officialUrl": "https://www.guidetopharmacology.org/services/targets",
-        "blocker": "",
-        "validation": {
-          "contractTests": "pass",
-          "liveProbe": "pass",
-          "verifiedAt": "2026-07-19",
-          "productionRoute": "server_allowlisted_gateway",
-          "queryMode": "target_name",
-          "deploymentRequirement": "Production uses the authenticated EviMed server gateway with an official-host allowlist; the DSH agent runtime itself keeps arbitrary network egress disabled unless an internal runtime network is explicitly configured."
-        },
-        "catalogStatus": "active_tool",
-        "connectionState": "connected_public"
-      },
-      {
         "id": "sider",
         "index": 107,
         "name": "SIDER",
@@ -1571,20 +1546,20 @@
         "connectionState": "connected_public"
       }
     ],
-    "matched": 64,
+    "matched": 63,
     "catalogTotal": 123,
     "integrationSummary": {
       "reviewedTotal": 123,
-      "connectedPublic": 64,
+      "connectedPublic": 63,
       "skillGuidanceOnly": 13,
-      "notConnected": 46,
+      "notConnected": 47,
       "connectionStateCounts": {
         "adapter_credentials_required": 2,
         "blocked_approval": 4,
         "blocked_license": 18,
         "blocked_no_api": 11,
-        "connected_public": 64,
-        "ready_credentials": 8,
+        "connected_public": 63,
+        "ready_credentials": 9,
         "ready_private_adapter": 3,
         "skill_guidance": 13
       },
@@ -1603,10 +1578,10 @@
         "limit": 123
       },
       "scope": {
-        "tenantId": "cdss-access",
-        "userId": "cdss-access",
-        "projectId": "audit-tool-probe",
-        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   }

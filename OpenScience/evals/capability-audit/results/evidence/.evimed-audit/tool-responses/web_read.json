@@ -6,7 +6,7 @@
     "finalUrl": "https://www.nice.org.uk/guidance/ng136",
     "title": "Overview | Hypertension in adults: diagnosis and management | Guidance | NICE",
     "site": "www.nice.org.uk",
-    "fetchedAt": "2026-09-28T08:34:03.143Z",
+    "fetchedAt": "2026-10-12T07:15:04.872Z",
     "official": true,
     "rendered": false,
     "contentType": "html",
@@ -142,10 +142,10 @@
         "url": "https://www.nice.org.uk/guidance/ng136"
       },
       "scope": {
-        "tenantId": "cdss-access",
-        "userId": "cdss-access",
-        "projectId": "audit-tool-probe",
-        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -154,7 +154,7 @@
       "id": "web-page:2ff1a22d4cc69b18",
       "url": "https://www.nice.org.uk/guidance/ng136",
       "source": "web-page",
-      "retrievedAt": "2026-09-28T08:34:03.143Z",
+      "retrievedAt": "2026-10-12T07:15:04.872Z",
       "artifactPath": ".evimed-sources/web-pages/2ff1a22d4cc69b18/e1cc3a4bdeab768dc4b4374ffa433927c9215a092e9efb1cc1ac26db521a255c/page.md",
       "title": "Overview | Hypertension in adults: diagnosis and management | Guidance | NICE",
       "sourceType": "guideline"

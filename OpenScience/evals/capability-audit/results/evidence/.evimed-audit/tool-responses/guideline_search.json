@@ -42,10 +42,10 @@
         "limit": 2
       },
       "scope": {
-        "tenantId": "cdss-access",
-        "userId": "cdss-access",
-        "projectId": "audit-tool-probe",
-        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -57,7 +57,7 @@
     {
       "id": "EVIMED-GUIDE:0",
       "source": "evimed-guideline",
-      "retrievedAt": "2026-09-28T08:34:40.858415Z",
+      "retrievedAt": "2026-10-12T07:16:45.386667Z",
       "title": "中国高血压临床实践指南",
       "artifactPath": ".evimed-sources/evimed-guidelines/2160946d60faa052/d20a5013e52b3ea553a28fe2c3b12bace38593fce0453261b1837dc32552177f/guideline.md",
       "sourceType": "guideline"
@@ -65,7 +65,7 @@
     {
       "id": "EVIMED-GUIDE:1",
       "source": "evimed-guideline",
-      "retrievedAt": "2026-09-28T08:34:40.865634Z",
+      "retrievedAt": "2026-10-12T07:16:45.397364Z",
       "title": "中国高血压临床实践指南计划书",
       "artifactPath": ".evimed-sources/evimed-guidelines/03b1277e9f4128d7/328323c0fd5012ef6d12bc32f11190557d9e7b3535eddf4e8a4abff4bda6c798/guideline.md",
       "sourceType": "guideline"

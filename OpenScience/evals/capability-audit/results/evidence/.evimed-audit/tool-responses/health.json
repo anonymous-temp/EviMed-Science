@@ -153,16 +153,16 @@
     ],
     "dataSourceCatalog": {
       "reviewedTotal": 123,
-      "connectedPublic": 64,
+      "connectedPublic": 63,
       "skillGuidanceOnly": 13,
-      "notConnected": 46,
+      "notConnected": 47,
       "connectionStateCounts": {
         "adapter_credentials_required": 2,
         "blocked_approval": 4,
         "blocked_license": 18,
         "blocked_no_api": 11,
-        "connected_public": 64,
-        "ready_credentials": 8,
+        "connected_public": 63,
+        "ready_credentials": 9,
         "ready_private_adapter": 3,
         "skill_guidance": 13
       },
@@ -205,7 +205,6 @@
         "human-protein-atlas-hpa",
         "interpro",
         "isrctn",
-        "iuphar-bps-guide-to-pharmacology",
         "jaspar",
         "medrxiv",
         "mesh",
@@ -250,10 +249,10 @@
       "tool": "health",
       "arguments": {},
       "scope": {
-        "tenantId": "cdss-access",
-        "userId": "cdss-access",
-        "projectId": "audit-tool-probe",
-        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   }

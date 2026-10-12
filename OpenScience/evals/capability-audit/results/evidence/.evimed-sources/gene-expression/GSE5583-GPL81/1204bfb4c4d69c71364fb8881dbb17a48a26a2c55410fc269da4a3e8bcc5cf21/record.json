@@ -1,0 +1,244 @@
+{
+ "schemaVersion": 1,
+ "kind": "gene-expression-series-capture",
+ "engineVersion": "1.0.0",
+ "series": {
+  "accession": "GSE5583",
+  "title": "Expression data from wild type versus HDAC knock out mouse embryonic stem cells",
+  "type": [
+   "Expression profiling by array"
+  ],
+  "status": {
+   "stated": "Public on Sep 19 2006",
+   "date": "2006-09-19"
+  },
+  "submissionDate": {
+   "stated": "Aug 23 2006",
+   "date": "2006-08-23"
+  },
+  "lastUpdateDate": {
+   "stated": "Feb 18 2018",
+   "date": "2018-02-18"
+  },
+  "pubmedIds": [
+   "16940178"
+  ],
+  "sampleCount": 6,
+  "platforms": [
+   "GPL81"
+  ],
+  "summary": "Histone deacetylase 1 (HDAC1) is an enzyme that promotes deacetylation of acetylated lysine residues in histones and other proteins. Histone acetylation is often associated with gene activation and expression. Los of HDAC1 leads to severe problems in development and proliferation. Moreover, it seems to be the major histone deacetylase in mouse embryonic stem cells. We used microarrays to identify putative HDAC1 target genes. Keywords: Fold change anaylsis between wild type nad HDAC KO ES cells",
+  "overallDesign": "Wild type and HDAC1 mouse embryonic stem cell, originating from same litter, were used for RNA extraction and hybridization on Affymetrix microarrays."
+ },
+ "platform": {
+  "accession": "GPL81",
+  "title": "[MG_U74Av2] Affymetrix Murine Genome U74A Version 2 Array",
+  "organism": "Mus musculus",
+  "taxId": "10090",
+  "technology": "in situ oligonucleotide",
+  "status": {
+   "stated": "Public on Mar 11 2002",
+   "date": "2002-03-11"
+  },
+  "submissionDate": {
+   "stated": "Feb 19 2002",
+   "date": "2002-02-19"
+  },
+  "lastUpdateDate": {
+   "stated": "Feb 18 2018",
+   "date": "2018-02-18"
+  },
+  "rowCount": 12488,
+  "duplicateProbeIds": 0,
+  "bytes": 22564953,
+  "sha256": "be1521a21990ada3dac89e2c855d493e9831612913cb3228f35f9d571a7b22d0",
+  "annotationColumns": {
+   "symbol": "Gene Symbol",
+   "entrez": "ENTREZ_GENE_ID",
+   "title": "Gene Title",
+   "genbank": "GB_ACC",
+   "genomeBuild": null
+  },
+  "record": {
+   "available": true
+  },
+  "storedFile": "platform.soft.txt.gz",
+  "storedSha256": "bfc84dd0a988fbc7dde4af79b1b01a96e1d0aa0364c26d6202d2435702b787ce"
+ },
+ "matrix": {
+  "file": "GSE5583_series_matrix.txt.gz",
+  "sha256": "bca34f9908a6f5ad4ef5b1b3fa5e0f017704dcfbd2bffea80d76abf42001e220",
+  "bytes": 216671,
+  "probes": 12488,
+  "samples": 6,
+  "cellsMissing": 0
+ },
+ "source": {
+  "matrixUrl": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE5nnn/GSE5583/matrix/GSE5583_series_matrix.txt.gz",
+  "platformUrl": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL81&targ=self&form=text&view=full",
+  "terms": "NCBI states that it places no restrictions on the use or distribution of the data in its databases, and that original submitters may claim patent, copyright or other rights in their contributions, which NCBI cannot assess. Cite the series accession and its publication, and read the record's own text before redistributing."
+ },
+ "samples": [
+  {
+   "accession": "GSM130365",
+   "characteristics": {
+    "Genotype": "wild type",
+    "characteristics_2": "not differentiated"
+   },
+   "title": "wild_type_embryonic_stem cells_biological_rep1",
+   "sourceName": "Mus musculus embryonic stem cells derived from wild type embryos",
+   "organism": "Mus musculus",
+   "platform": "GPL81",
+   "molecule": "total RNA",
+   "type": "RNA",
+   "status": "Public on Sep 19 2006",
+   "submissionDate": "Aug 23 2006",
+   "lastUpdateDate": "Sep 19 2006",
+   "taxId": "10090",
+   "dataProcessing": "The data were analyzed with Microarray Suite version 5.0 (MAS 5.0) using Affymetrix default analysis settings and global scaling as normalization method. The trimmed mean target intensity of each array was arbitrarily set to 500."
+  },
+  {
+   "accession": "GSM130366",
+   "characteristics": {
+    "Genotype": "wild type",
+    "characteristics_2": "not differentiated"
+   },
+   "title": "wild_type_embryonic_stem cells_biological_rep2",
+   "sourceName": "Mus musculus embryonic stem cells derived from wild type embryos",
+   "organism": "Mus musculus",
+   "platform": "GPL81",
+   "molecule": "total RNA",
+   "type": "RNA",
+   "status": "Public on Sep 19 2006",
+   "submissionDate": "Aug 23 2006",
+   "lastUpdateDate": "Sep 19 2006",
+   "taxId": "10090",
+   "dataProcessing": "The data were analyzed with Microarray Suite version 5.0 (MAS 5.0) using Affymetrix default analysis settings and global scaling as normalization method. The trimmed mean target intensity of each array was arbitrarily set to 500."
+  },
+  {
+   "accession": "GSM130367",
+   "characteristics": {
+    "Genotype": "wild type",
+    "characteristics_2": "not differentiated"
+   },
+   "title": "wild_type_embryonic_stem cells_biological_rep3",
+   "sourceName": "Mus musculus embryonic stem cells derived from wild type embryos",
+   "organism": "Mus musculus",
+   "platform": "GPL81",
+   "molecule": "total RNA",
+   "type": "RNA",
+   "status": "Public on Sep 19 2006",
+   "submissionDate": "Aug 23 2006",
+   "lastUpdateDate": "Sep 19 2006",
+   "taxId": "10090",
+   "dataProcessing": "The data were analyzed with Microarray Suite version 5.0 (MAS 5.0) using Affymetrix default analysis settings and global scaling as normalization method. The trimmed mean target intensity of each array was arbitrarily set to 500."
+  },
+  {
+   "accession": "GSM130368",
+   "characteristics": {
+    "Genotype": "HDAC1 knock out",
+    "characteristics_2": "not differentiated"
+   },
+   "title": "HDAC1_knock_out_embryonic_stem_cells_biological_rep1",
+   "sourceName": "Mus musculus embryonic stem cells derived from HDAC1 knock out embryos",
+   "organism": "Mus musculus",
+   "platform": "GPL81",
+   "molecule": "total RNA",
+   "type": "RNA",
+   "status": "Public on Sep 19 2006",
+   "submissionDate": "Aug 23 2006",
+   "lastUpdateDate": "Sep 19 2006",
+   "taxId": "10090",
+   "dataProcessing": "The data were analyzed with Microarray Suite version 5.0 (MAS 5.0) using Affymetrix default analysis settings and global scaling as normalization method. The trimmed mean target intensity of each array was arbitrarily set to 500."
+  },
+  {
+   "accession": "GSM130369",
+   "characteristics": {
+    "Genotype": "HDAC1 knock out",
+    "characteristics_2": "not differentiated"
+   },
+   "title": "HDAC1_knock_out_embryonic_stem_cells_biological_rep2",
+   "sourceName": "Mus musculus embryonic stem cells derived from HDAC1 knock out embryos",
+   "organism": "Mus musculus",
+   "platform": "GPL81",
+   "molecule": "total RNA",
+   "type": "RNA",
+   "status": "Public on Sep 19 2006",
+   "submissionDate": "Aug 23 2006",
+   "lastUpdateDate": "Sep 19 2006",
+   "taxId": "10090",
+   "dataProcessing": "The data were analyzed with Microarray Suite version 5.0 (MAS 5.0) using Affymetrix default analysis settings and global scaling as normalization method. The trimmed mean target intensity of each array was arbitrarily set to 500."
+  },
+  {
+   "accession": "GSM130370",
+   "characteristics": {
+    "Genotype": "HDAC1 knock out",
+    "characteristics_2": "not differentiated"
+   },
+   "title": "HDAC1_knock_out_embryonic_stem_cells_biological_rep3",
+   "sourceName": "Mus musculus embryonic stem cells derived from HDAC1 knock out embryos",
+   "organism": "Mus musculus",
+   "platform": "GPL81",
+   "molecule": "total RNA",
+   "type": "RNA",
+   "status": "Public on Sep 19 2006",
+   "submissionDate": "Aug 23 2006",
+   "lastUpdateDate": "Sep 19 2006",
+   "taxId": "10090",
+   "dataProcessing": "The data were analyzed with Microarray Suite version 5.0 (MAS 5.0) using Affymetrix default analysis settings and global scaling as normalization method. The trimmed mean target intensity of each array was arbitrarily set to 500."
+  }
+ ],
+ "identity": {
+  "checks": {
+   "samples": {
+    "status": "ok",
+    "detail": "The table header's 6 samples are the series' declared samples.",
+    "count": 6
+   },
+   "platform": {
+    "status": "ok",
+    "detail": "All samples are on one platform, GPL81.",
+    "platform": "GPL81"
+   },
+   "platformRecord": {
+    "status": "ok",
+    "detail": "12488 of 12488 matrix probes are in the platform record's table.",
+    "probesFound": 12488,
+    "probes": 12488
+   },
+   "organism": {
+    "status": "ok",
+    "detail": "The samples' taxon (10090) matches the platform's (10090).",
+    "sampleTaxIds": [
+     "10090"
+    ],
+    "platformTaxIds": [
+     "10090"
+    ]
+   },
+   "genomeBuild": {
+    "status": "unknown",
+    "detail": "Neither the series matrix nor the platform record states a genome build; none is assumed.",
+    "values": []
+   },
+   "scale": {
+    "status": "ok",
+    "detail": "The values look linear (not log-scale); a transformation is applied before any statistic.",
+    "looksLinear": true,
+    "quantiles": {
+     "min": 0.2,
+     "q25": 51.3,
+     "median": 198.3,
+     "q75": 623.225,
+     "q99": 9060.30399999998,
+     "max": 51158.7
+    },
+    "statedProcessing": [
+     "The data were analyzed with Microarray Suite version 5.0 (MAS 5.0) using Affymetrix default analysis settings and global scaling as normalization method. The trimmed mean target intensity of each array was arbitrarily set to 500."
+    ]
+   }
+  },
+  "computationReady": true,
+  "wantedPlatform": "GPL81"
+ }
+}

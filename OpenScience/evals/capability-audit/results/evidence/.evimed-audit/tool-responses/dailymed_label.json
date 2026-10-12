@@ -1,0 +1,1269 @@
+{
+  "status": "success",
+  "summary": "Preserved the current label of These highlights do not include all the information needed to use TAGRISSO safely and effectively. See full prescribing information for TAGRISSO. TAGRISSO ® (osimertinib) tablets, for oral use Initial U.S. Approval: 2015 (SPL version 37 of 37), a United States (FDA) label and compared it with version 36: 23 change(s).",
+  "data": {
+    "setId": "5e81b4a7-b971-45e1-9c31-29cea8c87ce7",
+    "version": 37,
+    "currentVersion": 37,
+    "isCurrent": true,
+    "publishedDate": "2026-09-25",
+    "effectiveDate": "2026-09-14",
+    "contentLevel": "regulatory_label_full_text",
+    "jurisdiction": {
+      "country": "US",
+      "authority": "FDA",
+      "basis": "the approval in the document names the territory USA",
+      "note": "This is the United States label. It is not the label of China (NMPA), the EU (EMA), Japan (PMDA) or any other jurisdiction, whose products, indications and wording differ."
+    },
+    "title": "These highlights do not include all the information needed to use TAGRISSO safely and effectively. See full prescribing information for TAGRISSO. TAGRISSO ® (osimertinib) tablets, for oral use Initial U.S. Approval: 2015",
+    "labeler": "AstraZeneca Pharmaceuticals LP",
+    "documentType": {
+      "code": "34391-3",
+      "name": "HUMAN PRESCRIPTION DRUG LABEL"
+    },
+    "marketing": [
+      {
+        "category": "NDA",
+        "number": "NDA208065",
+        "territory": "USA"
+      }
+    ],
+    "activeIngredients": [
+      {
+        "name": "osimertinib",
+        "unii": "3C06JJ0Z2O",
+        "activeMoiety": "osimertinib",
+        "activeMoietyUnii": "3C06JJ0Z2O"
+      }
+    ],
+    "products": [
+      {
+        "name": "TAGRISSO",
+        "ndcProduct": "0310-1349",
+        "form": "TABLET, FILM COATED",
+        "genericName": "osimertinib",
+        "routes": [
+          "ORAL"
+        ],
+        "activeIngredients": [
+          {
+            "name": "osimertinib",
+            "unii": "3C06JJ0Z2O",
+            "activeMoiety": "osimertinib",
+            "activeMoietyUnii": "3C06JJ0Z2O",
+            "strength": {
+              "numerator": {
+                "value": "40",
+                "unit": "mg"
+              },
+              "denominator": {
+                "value": "1",
+                "unit": "1"
+              }
+            }
+          }
+        ],
+        "inactiveIngredients": [
+          {
+            "name": "mannitol",
+            "unii": "3OWL53L36A"
+          },
+          {
+            "name": "microcrystalline cellulose",
+            "unii": "OP1R32D61U"
+          },
+          {
+            "name": "sodium stearyl fumarate",
+            "unii": "7CV7WJK4UI"
+          },
+          {
+            "name": "polyvinyl alcohol, unspecified",
+            "unii": "532B59J990"
+          },
+          {
+            "name": "titanium dioxide",
+            "unii": "15FIX9V2JP"
+          },
+          {
+            "name": "polyethylene glycol 3350",
+            "unii": "G2M7P15E5P"
+          },
+          {
+            "name": "talc",
+            "unii": "7SEV7J4R1U"
+          },
+          {
+            "name": "ferric oxide yellow",
+            "unii": "EX438O2MRT"
+          },
+          {
+            "name": "ferric oxide red",
+            "unii": "1K09F3G675"
+          },
+          {
+            "name": "ferrosoferric oxide",
+            "unii": "XM0M87F357"
+          },
+          {
+            "name": "low-substituted hydroxypropyl cellulose, unspecified",
+            "unii": "2165RE0K14"
+          }
+        ],
+        "ndcPackages": [
+          "0310-1349-30"
+        ]
+      },
+      {
+        "name": "TAGRISSO",
+        "ndcProduct": "0310-1350",
+        "form": "TABLET, FILM COATED",
+        "genericName": "osimertinib",
+        "routes": [
+          "ORAL"
+        ],
+        "activeIngredients": [
+          {
+            "name": "osimertinib",
+            "unii": "3C06JJ0Z2O",
+            "activeMoiety": "osimertinib",
+            "activeMoietyUnii": "3C06JJ0Z2O",
+            "strength": {
+              "numerator": {
+                "value": "80",
+                "unit": "mg"
+              },
+              "denominator": {
+                "value": "1",
+                "unit": "1"
+              }
+            }
+          }
+        ],
+        "inactiveIngredients": [
+          {
+            "name": "mannitol",
+            "unii": "3OWL53L36A"
+          },
+          {
+            "name": "microcrystalline cellulose",
+            "unii": "OP1R32D61U"
+          },
+          {
+            "name": "sodium stearyl fumarate",
+            "unii": "7CV7WJK4UI"
+          },
+          {
+            "name": "polyvinyl alcohol, unspecified",
+            "unii": "532B59J990"
+          },
+          {
+            "name": "titanium dioxide",
+            "unii": "15FIX9V2JP"
+          },
+          {
+            "name": "polyethylene glycol 3350",
+            "unii": "G2M7P15E5P"
+          },
+          {
+            "name": "talc",
+            "unii": "7SEV7J4R1U"
+          },
+          {
+            "name": "ferric oxide yellow",
+            "unii": "EX438O2MRT"
+          },
+          {
+            "name": "ferric oxide red",
+            "unii": "1K09F3G675"
+          },
+          {
+            "name": "ferrosoferric oxide",
+            "unii": "XM0M87F357"
+          },
+          {
+            "name": "low-substituted hydroxypropyl cellulose, unspecified",
+            "unii": "2165RE0K14"
+          }
+        ],
+        "ndcPackages": [
+          "0310-1350-30",
+          "0310-1350-95",
+          "0310-1350-99"
+        ]
+      },
+      {
+        "name": "TAGRISSO",
+        "ndcProduct": "0310-1248",
+        "form": "TABLET, FILM COATED",
+        "genericName": "osimertinib",
+        "routes": [
+          "ORAL"
+        ],
+        "activeIngredients": [
+          {
+            "name": "osimertinib",
+            "unii": "3C06JJ0Z2O",
+            "activeMoiety": "osimertinib",
+            "activeMoietyUnii": "3C06JJ0Z2O",
+            "strength": {
+              "numerator": {
+                "value": "40",
+                "unit": "mg"
+              },
+              "denominator": {
+                "value": "1",
+                "unit": "1"
+              }
+            }
+          }
+        ],
+        "inactiveIngredients": [
+          {
+            "name": "mannitol",
+            "unii": "3OWL53L36A"
+          },
+          {
+            "name": "microcrystalline cellulose",
+            "unii": "OP1R32D61U"
+          },
+          {
+            "name": "sodium stearyl fumarate",
+            "unii": "7CV7WJK4UI"
+          },
+          {
+            "name": "polyvinyl alcohol, unspecified",
+            "unii": "532B59J990"
+          },
+          {
+            "name": "titanium dioxide",
+            "unii": "15FIX9V2JP"
+          },
+          {
+            "name": "polyethylene glycol 3350",
+            "unii": "G2M7P15E5P"
+          },
+          {
+            "name": "talc",
+            "unii": "7SEV7J4R1U"
+          },
+          {
+            "name": "ferric oxide yellow",
+            "unii": "EX438O2MRT"
+          },
+          {
+            "name": "ferric oxide red",
+            "unii": "1K09F3G675"
+          },
+          {
+            "name": "ferrosoferric oxide",
+            "unii": "XM0M87F357"
+          },
+          {
+            "name": "low-substituted hydroxypropyl cellulose, unspecified",
+            "unii": "2165RE0K14"
+          }
+        ],
+        "ndcPackages": [
+          "0310-1248-30"
+        ]
+      },
+      {
+        "name": "TAGRISSO",
+        "ndcProduct": "0310-1251",
+        "form": "TABLET, FILM COATED",
+        "genericName": "osimertinib",
+        "routes": [
+          "ORAL"
+        ],
+        "activeIngredients": [
+          {
+            "name": "osimertinib",
+            "unii": "3C06JJ0Z2O",
+            "activeMoiety": "osimertinib",
+            "activeMoietyUnii": "3C06JJ0Z2O",
+            "strength": {
+              "numerator": {
+                "value": "80",
+                "unit": "mg"
+              },
+              "denominator": {
+                "value": "1",
+                "unit": "1"
+              }
+            }
+          }
+        ],
+        "inactiveIngredients": [
+          {
+            "name": "mannitol",
+            "unii": "3OWL53L36A"
+          },
+          {
+            "name": "microcrystalline cellulose",
+            "unii": "OP1R32D61U"
+          },
+          {
+            "name": "sodium stearyl fumarate",
+            "unii": "7CV7WJK4UI"
+          },
+          {
+            "name": "polyvinyl alcohol, unspecified",
+            "unii": "532B59J990"
+          },
+          {
+            "name": "titanium dioxide",
+            "unii": "15FIX9V2JP"
+          },
+          {
+            "name": "polyethylene glycol 3350",
+            "unii": "G2M7P15E5P"
+          },
+          {
+            "name": "talc",
+            "unii": "7SEV7J4R1U"
+          },
+          {
+            "name": "ferric oxide yellow",
+            "unii": "EX438O2MRT"
+          },
+          {
+            "name": "ferric oxide red",
+            "unii": "1K09F3G675"
+          },
+          {
+            "name": "ferrosoferric oxide",
+            "unii": "XM0M87F357"
+          },
+          {
+            "name": "low-substituted hydroxypropyl cellulose, unspecified",
+            "unii": "2165RE0K14"
+          }
+        ],
+        "ndcPackages": [
+          "0310-1251-30"
+        ]
+      }
+    ],
+    "sections": [
+      {
+        "code": "48780-1",
+        "name": "spl_product_data_elements",
+        "title": null,
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 0
+      },
+      {
+        "code": "43683-2",
+        "name": "nonclinical_toxicology",
+        "title": null,
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 0
+      },
+      {
+        "code": "34067-9",
+        "name": "indications_and_usage",
+        "title": "1 INDICATIONS AND USAGE",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 0
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "1.1 Adjuvant Treatment of EGFR Mutation-Positive Non-Small Cell Lung Cancer (NSCLC)",
+        "depth": 1,
+        "occurrence": 1,
+        "chars": 302
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "1.2 Locally Advanced, Unresectable (Stage III) EGFR Mutation-Positive NSCLC",
+        "depth": 1,
+        "occurrence": 2,
+        "chars": 376
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "1.3 First-line Treatment of EGFR Mutation-Positive Metastatic NSCLC",
+        "depth": 1,
+        "occurrence": 3,
+        "chars": 235
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "1.4 First-line Treatment of EGFR Mutation-Positive Locally Advanced or Metastatic NSCLC",
+        "depth": 1,
+        "occurrence": 4,
+        "chars": 319
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "1.5 Previously Treated EGFR T790M Mutation-Positive Metastatic NSCLC",
+        "depth": 1,
+        "occurrence": 5,
+        "chars": 273
+      },
+      {
+        "code": "34068-7",
+        "name": "dosage_and_administration",
+        "title": "2 DOSAGE AND ADMINISTRATION",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 0
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "2.1 Recommended Evaluation and Testing Before Initiating TAGRISSO",
+        "depth": 1,
+        "occurrence": 6,
+        "chars": 784
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "2.2 Patient Selection",
+        "depth": 1,
+        "occurrence": 7,
+        "chars": 1430
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "2.3 Recommended Dosage and Administration",
+        "depth": 1,
+        "occurrence": 8,
+        "chars": 1672
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "2.4 Administration to Patients Who Have Difficulty Swallowing Solids",
+        "depth": 1,
+        "occurrence": 9,
+        "chars": 936
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "2.5 Dosage Modifications for Adverse Reactions",
+        "depth": 1,
+        "occurrence": 10,
+        "chars": 2869
+      },
+      {
+        "code": "43678-2",
+        "name": "dosage_forms_and_strengths",
+        "title": "3 DOSAGE FORMS AND STRENGTHS",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 210
+      },
+      {
+        "code": "34070-3",
+        "name": "contraindications",
+        "title": "4 CONTRAINDICATIONS",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 5
+      },
+      {
+        "code": "43685-7",
+        "name": "warnings_and_precautions",
+        "title": "5 WARNINGS AND PRECAUTIONS",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 0
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "5.1 Interstitial Lung Disease/Pneumonitis",
+        "depth": 1,
+        "occurrence": 11,
+        "chars": 2234
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "5.2 QTc Interval Prolongation",
+        "depth": 1,
+        "occurrence": 12,
+        "chars": 1048
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "5.3 Cardiomyopathy",
+        "depth": 1,
+        "occurrence": 13,
+        "chars": 2032
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "5.4 Keratitis",
+        "depth": 1,
+        "occurrence": 14,
+        "chars": 296
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "5.5 Erythema Multiforme Major, Stevens-Johnson Syndrome, and Toxic Epidermal Necrolysis",
+        "depth": 1,
+        "occurrence": 15,
+        "chars": 308
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "5.6 Cutaneous Vasculitis",
+        "depth": 1,
+        "occurrence": 16,
+        "chars": 439
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "5.7 Aplastic Anemia",
+        "depth": 1,
+        "occurrence": 17,
+        "chars": 668
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "5.8 Myalgia or Myositis with Creatine Phosphokinase Elevation",
+        "depth": 1,
+        "occurrence": 18,
+        "chars": 840
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "5.9 Embryo-Fetal Toxicity",
+        "depth": 1,
+        "occurrence": 19,
+        "chars": 1018
+      },
+      {
+        "code": "34084-4",
+        "name": "adverse_reactions",
+        "title": "6 ADVERSE REACTIONS",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 680
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "6.1 Clinical Trials Experience",
+        "depth": 1,
+        "occurrence": 20,
+        "chars": 26936
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "6.2 Postmarketing Experience",
+        "depth": 1,
+        "occurrence": 21,
+        "chars": 601
+      },
+      {
+        "code": "34073-7",
+        "name": "drug_interactions",
+        "title": "7 DRUG INTERACTIONS",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 0
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "7.1 Effect of Other Drugs on Osimertinib",
+        "depth": 1,
+        "occurrence": 22,
+        "chars": 565
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "7.2 Effect of Osimertinib on Other Drugs",
+        "depth": 1,
+        "occurrence": 23,
+        "chars": 464
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "7.3 Drugs That Prolong the QTc Interval",
+        "depth": 1,
+        "occurrence": 24,
+        "chars": 411
+      },
+      {
+        "code": "43684-0",
+        "name": "use_in_specific_populations",
+        "title": "8 USE IN SPECIFIC POPULATIONS",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 0
+      },
+      {
+        "code": "42228-7",
+        "name": "pregnancy",
+        "title": "8.1 Pregnancy",
+        "depth": 1,
+        "occurrence": 1,
+        "chars": 1787
+      },
+      {
+        "code": "77290-5",
+        "name": "recent_major_changes",
+        "title": "8.2 Lactation",
+        "depth": 1,
+        "occurrence": 1,
+        "chars": 559
+      },
+      {
+        "code": "77291-3",
+        "name": "77291-3",
+        "title": "8.3 Females and Males of Reproductive Potential",
+        "depth": 1,
+        "occurrence": 1,
+        "chars": 1053
+      },
+      {
+        "code": "34081-0",
+        "name": "pediatric_use",
+        "title": "8.4 Pediatric Use",
+        "depth": 1,
+        "occurrence": 1,
+        "chars": 89
+      },
+      {
+        "code": "34082-8",
+        "name": "geriatric_use",
+        "title": "8.5 Geriatric Use",
+        "depth": 1,
+        "occurrence": 1,
+        "chars": 1964
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "8.6 Renal Impairment",
+        "depth": 1,
+        "occurrence": 25,
+        "chars": 265
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "8.7 Hepatic Impairment",
+        "depth": 1,
+        "occurrence": 26,
+        "chars": 375
+      },
+      {
+        "code": "34089-3",
+        "name": "description",
+        "title": "11 DESCRIPTION",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 823
+      },
+      {
+        "code": "34090-1",
+        "name": "clinical_pharmacology",
+        "title": "12 CLINICAL PHARMACOLOGY",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 0
+      },
+      {
+        "code": "43679-0",
+        "name": "mechanism_of_action",
+        "title": "12.1 Mechanism of Action",
+        "depth": 1,
+        "occurrence": 1,
+        "chars": 1452
+      },
+      {
+        "code": "43681-6",
+        "name": "pharmacokinetics",
+        "title": "12.2 Pharmacodynamics",
+        "depth": 1,
+        "occurrence": 1,
+        "chars": 1057
+      },
+      {
+        "code": "43682-4",
+        "name": "pharmacogenomics",
+        "title": "12.3 Pharmacokinetics",
+        "depth": 1,
+        "occurrence": 1,
+        "chars": 4482
+      },
+      {
+        "code": "43680-8",
+        "name": "pharmacodynamics",
+        "title": "13 NONCLINICAL TOXICOLOGY",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 0
+      },
+      {
+        "code": "34083-6",
+        "name": "carcinogenesis_and_mutagenesis",
+        "title": "13.1 Carcinogenesis, Mutagenesis, Impairment of Fertility",
+        "depth": 1,
+        "occurrence": 1,
+        "chars": 2230
+      },
+      {
+        "code": "34091-9",
+        "name": "animal_pharmacology",
+        "title": "13.2 Animal Toxicology and/or Pharmacology",
+        "depth": 1,
+        "occurrence": 1,
+        "chars": 415
+      },
+      {
+        "code": "34092-7",
+        "name": "clinical_studies",
+        "title": "14 CLINICAL STUDIES",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 0
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "14.1 Adjuvant Treatment of Early-Stage EGFR Mutation-Positive Non-Small Cell Lung Cancer (NSCLC)",
+        "depth": 1,
+        "occurrence": 27,
+        "chars": 4306
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "14.2 Locally Advanced, Unresectable (Stage III) EGFR Mutation Positive NSCLC",
+        "depth": 1,
+        "occurrence": 28,
+        "chars": 4403
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "14.3 Previously Untreated EGFR Mutation-Positive Metastatic NSCLC",
+        "depth": 1,
+        "occurrence": 29,
+        "chars": 5530
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "14.4 Previously Untreated EGFR Mutation-Positive Locally Advanced or Metastatic NSCLC",
+        "depth": 1,
+        "occurrence": 30,
+        "chars": 5448
+      },
+      {
+        "code": "42229-5",
+        "name": "spl_unclassified",
+        "title": "14.5 Previously Treated EGFR T790M Mutation-Positive Metastatic NSCLC",
+        "depth": 1,
+        "occurrence": 31,
+        "chars": 4685
+      },
+      {
+        "code": "34069-5",
+        "name": "how_supplied",
+        "title": "16 HOW SUPPLIED/STORAGE AND HANDLING",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 438
+      },
+      {
+        "code": "34076-0",
+        "name": "information_for_patients",
+        "title": "17 PATIENT COUNSELING INFORMATION",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 3531
+      },
+      {
+        "code": "68498-5",
+        "name": "patient_medication_information",
+        "title": "Patient Medication Information",
+        "depth": 1,
+        "occurrence": 1,
+        "chars": 10448
+      },
+      {
+        "code": "51945-4",
+        "name": "package_label_principal_display_panel",
+        "title": "PACKAGE/LABEL PRINCIPAL DISPLAY PANEL – 40 mg",
+        "depth": 0,
+        "occurrence": 1,
+        "chars": 99
+      },
+      {
+        "code": "51945-4",
+        "name": "package_label_principal_display_panel",
+        "title": "PACKAGE/LABEL PRINCIPAL DISPLAY PANEL – 80 mg",
+        "depth": 0,
+        "occurrence": 2,
+        "chars": 99
+      },
+      {
+        "code": "51945-4",
+        "name": "package_label_principal_display_panel",
+        "title": "PACKAGE/LABEL PRINCIPAL DISPLAY PANEL",
+        "depth": 0,
+        "occurrence": 3,
+        "chars": 99
+      },
+      {
+        "code": "51945-4",
+        "name": "package_label_principal_display_panel",
+        "title": "PACKAGE/LABEL PRINCIPAL DISPLAY PANEL",
+        "depth": 0,
+        "occurrence": 4,
+        "chars": 99
+      }
+    ],
+    "versions": [
+      {
+        "version": 37,
+        "publishedDate": "2026-09-25"
+      },
+      {
+        "version": 36,
+        "publishedDate": "2026-04-22"
+      },
+      {
+        "version": 35,
+        "publishedDate": "2025-02-28"
+      },
+      {
+        "version": 33,
+        "publishedDate": "2024-10-07"
+      },
+      {
+        "version": 32,
+        "publishedDate": "2024-05-06"
+      },
+      {
+        "version": 31,
+        "publishedDate": "2024-02-20"
+      },
+      {
+        "version": 30,
+        "publishedDate": "2024-02-07"
+      },
+      {
+        "version": 29,
+        "publishedDate": "2023-06-29"
+      },
+      {
+        "version": 27,
+        "publishedDate": "2022-10-31"
+      },
+      {
+        "version": 26,
+        "publishedDate": "2022-10-05"
+      },
+      {
+        "version": 24,
+        "publishedDate": "2022-01-26"
+      },
+      {
+        "version": 22,
+        "publishedDate": "2021-08-06"
+      },
+      {
+        "version": 21,
+        "publishedDate": "2021-05-14"
+      },
+      {
+        "version": 20,
+        "publishedDate": "2021-02-16"
+      },
+      {
+        "version": 19,
+        "publishedDate": "2021-01-28"
+      },
+      {
+        "version": 18,
+        "publishedDate": "2020-12-24"
+      },
+      {
+        "version": 17,
+        "publishedDate": "2020-12-22"
+      },
+      {
+        "version": 16,
+        "publishedDate": "2020-12-18"
+      },
+      {
+        "version": 15,
+        "publishedDate": "2020-12-14"
+      },
+      {
+        "version": 14,
+        "publishedDate": "2020-06-08"
+      },
+      {
+        "version": 13,
+        "publishedDate": "2020-06-05"
+      },
+      {
+        "version": 12,
+        "publishedDate": "2019-12-23"
+      },
+      {
+        "version": 11,
+        "publishedDate": "2019-02-21"
+      },
+      {
+        "version": 10,
+        "publishedDate": "2018-11-19"
+      },
+      {
+        "version": 9,
+        "publishedDate": "2018-09-07"
+      },
+      {
+        "version": 8,
+        "publishedDate": "2018-04-20"
+      },
+      {
+        "version": 7,
+        "publishedDate": "2018-04-19"
+      },
+      {
+        "version": 6,
+        "publishedDate": "2017-11-07"
+      },
+      {
+        "version": 5,
+        "publishedDate": "2017-04-06"
+      },
+      {
+        "version": 4,
+        "publishedDate": "2017-04-05"
+      },
+      {
+        "version": 3,
+        "publishedDate": "2016-10-05"
+      },
+      {
+        "version": 2,
+        "publishedDate": "2016-08-23"
+      },
+      {
+        "version": 1,
+        "publishedDate": "2015-11-16"
+      }
+    ],
+    "heldVersions": [
+      36,
+      37
+    ],
+    "thisVersionIsNew": true,
+    "markdownPath": ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/label.md",
+    "xmlPath": ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/spl.xml",
+    "labelPath": ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/label.json",
+    "artifactSha256s": {
+      ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/spl.xml": "32f7c00b72d42682c031a469009c0f397323bef75aac51624e6c1c5ef74fcd42",
+      ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/label.md": "e516235c1236c95de3cb2c1866321ab477863909af82604926865dfe34863d64",
+      ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/label.json": "942a027820e827c678c36f51100fabd88a37fe6492cc80d49323b66108976746",
+      ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/source.json": "2c10cb6b1d60bf383174c635de3133f68cd84495c7c9a8b3786898fcc922523e"
+    },
+    "outcome": {
+      "state": "complete"
+    },
+    "comparison": {
+      "againstVersion": 36,
+      "againstEffectiveDate": "2024-09-25",
+      "againstPublishedDate": "2026-04-22",
+      "againstPath": ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/38de9a830b044bf0deaab43f1268f18ea78fac4f1fba12523cf80e3b74de6c31/label.md",
+      "unchanged": false,
+      "counts": {
+        "section_changed": 22,
+        "section_added": 1
+      },
+      "changes": [
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "1.2 Locally Advanced, Unresectable (Stage III) EGFR Mutation-Positive NSCLC",
+          "beforeChars": 375,
+          "afterChars": 376,
+          "beforeSha256": "1a64568b417e62130c312a3b50255d67a07da7659929024902bc58346e0ff12f",
+          "afterSha256": "72ca8f8d6d9557943438720c4ef27137624a2ebadc817dc280f1240c14f3eee3"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "1.4 First-line Treatment of EGFR Mutation-Positive Locally Advanced or Metastatic NSCLC",
+          "beforeChars": 318,
+          "afterChars": 319,
+          "beforeSha256": "ee7f63104090d88029c928721e21a6cf7e2f219794fe98e2d9c77f367c543968",
+          "afterSha256": "04cf06bf16235bc639d1ed82e479b475ea176f38dbc848004e67a3a71ae63612"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "2.1 Recommended Evaluation and Testing Before Initiating TAGRISSO",
+          "beforeChars": 783,
+          "afterChars": 784,
+          "beforeSha256": "43839c03c06af1f2ad4626ede301e159b986dd5caf60fa3576d9c16cecba6228",
+          "afterSha256": "b928a331f1038608c782ff4fe049b914f7f4f3ba9c6c81a5183b5a8e1c4afd3a"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "2.5 Dosage Modifications for Adverse Reactions",
+          "beforeChars": 2816,
+          "afterChars": 2869,
+          "beforeSha256": "ae468a9bced73361c7fd45017c2e8fc89a5471231ff0c488e4510d8c3594c080",
+          "afterSha256": "e38ae9d040f0dfb88fda8bf479b641b00c2fa52c896aa4ace2b0c4ce1ef20032"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "5.8 Embryo-Fetal Toxicity",
+          "beforeChars": 1018,
+          "afterChars": 840,
+          "beforeSha256": "5c02d42731a371b27f52140b432cae7afa9ec42e3081a9c7f087ed0b1a0fb156",
+          "afterSha256": "b9007025f1e71bd25871409325cc251e3f798085994e9a7282122e12aa3c3263"
+        },
+        {
+          "kind": "section_changed",
+          "code": "34084-4",
+          "name": "adverse_reactions",
+          "title": "6 ADVERSE REACTIONS",
+          "beforeChars": 582,
+          "afterChars": 680,
+          "beforeSha256": "9ed409847c2f9cb27a2923c7c92bcf498f41e2a5a15ca042dd71e7a3ef6aefc4",
+          "afterSha256": "a58c924636294e900e4ea9c20b194d857d1da1098ea4cab49faa2c06bf8e16c3"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "6.1 Clinical Trials Experience",
+          "beforeChars": 26952,
+          "afterChars": 1018,
+          "beforeSha256": "c3a9caf71a30221205b1025836af8ad2d0debb33de252075636d9f21d34da870",
+          "afterSha256": "5c02d42731a371b27f52140b432cae7afa9ec42e3081a9c7f087ed0b1a0fb156"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "6.2 Postmarketing Experience",
+          "beforeChars": 533,
+          "afterChars": 26936,
+          "beforeSha256": "4eb127b5dca2ecbd574dd1765d27a036976ccbfcc77a38c2035d43b78e542e76",
+          "afterSha256": "157babb74cabd01c5a8ad2791ea0f5407de8d6d17ad10e63f676f4b64966cad7"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "7.1 Effect of Other Drugs on Osimertinib",
+          "beforeChars": 565,
+          "afterChars": 601,
+          "beforeSha256": "575ff3d8dba488f4ad6925cc703b9bff832068622c5eeb8bc066443284051aa3",
+          "afterSha256": "aaf01e87a6f61c07609c5228eb0026b44507a9eb37179dba45c8e8415fbfe54f"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "7.2 Effect of Osimertinib on Other Drugs",
+          "beforeChars": 464,
+          "afterChars": 565,
+          "beforeSha256": "07f781f1e86245bfdc55a925352b6e007b02258cb8fe84322e98329fc9ccc015",
+          "afterSha256": "575ff3d8dba488f4ad6925cc703b9bff832068622c5eeb8bc066443284051aa3"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "7.3 Drugs That Prolong the QTc Interval",
+          "beforeChars": 411,
+          "afterChars": 464,
+          "beforeSha256": "1056b92ae4fc4bb61b549f0608e745746df50c158e9f449d13fd33711758c5fc",
+          "afterSha256": "07f781f1e86245bfdc55a925352b6e007b02258cb8fe84322e98329fc9ccc015"
+        },
+        {
+          "kind": "section_changed",
+          "code": "34082-8",
+          "name": "geriatric_use",
+          "title": "8.5 Geriatric Use",
+          "beforeChars": 1962,
+          "afterChars": 1964,
+          "beforeSha256": "a93077a2b1cd4a2cc094b55fd0472ab8d7f17f61037ef6c65138f71cba52b520",
+          "afterSha256": "556fdc93ad93b2a159ae9875f7ba7241eb019d6363f940efbb3f825cd74cd278"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "8.6 Renal Impairment",
+          "beforeChars": 265,
+          "afterChars": 411,
+          "beforeSha256": "4445f3954a1a6016dcf60fe596cbe140c6600cecdc9cd20aba4a506fc78edb98",
+          "afterSha256": "3bf88358b60a4ce65ac5fecdacf3e721cba491a0ce58ca977787136565ed16ba"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "8.7 Hepatic Impairment",
+          "beforeChars": 375,
+          "afterChars": 265,
+          "beforeSha256": "4fdc9b2978ef1ea9027d76b6c1e7525f730030a2286068288da641e6b6858944",
+          "afterSha256": "4445f3954a1a6016dcf60fe596cbe140c6600cecdc9cd20aba4a506fc78edb98"
+        },
+        {
+          "kind": "section_changed",
+          "code": "43679-0",
+          "name": "mechanism_of_action",
+          "title": "12.1 Mechanism of Action",
+          "beforeChars": 1453,
+          "afterChars": 1452,
+          "beforeSha256": "4e789dc1490777ca0c2a9852f6ae8773149d65128c3c7c1d95813f9291c34e01",
+          "afterSha256": "c4854812d10de6a2774676234ccb24e7814383af60d2a6fdcc31bdddc5ec076c"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "14.1 Adjuvant Treatment of Early-Stage EGFR Mutation-Positive Non-Small Cell Lung Cancer (NSCLC)",
+          "beforeChars": 4306,
+          "afterChars": 375,
+          "beforeSha256": "6a832be10a1327ff53e81d53bda00fad01bc960a15d473bd53555d47ef2a1958",
+          "afterSha256": "4fdc9b2978ef1ea9027d76b6c1e7525f730030a2286068288da641e6b6858944"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "14.2 Locally Advanced, Unresectable (Stage III) EGFR Mutation Positive NSCLC",
+          "beforeChars": 4403,
+          "afterChars": 4306,
+          "beforeSha256": "9612bb3482a26ca6a72b1a397121293d6de4c4a804d4f5c83b9ec1f8f10eb0b1",
+          "afterSha256": "6a832be10a1327ff53e81d53bda00fad01bc960a15d473bd53555d47ef2a1958"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "14.3 Previously Untreated EGFR Mutation-Positive Metastatic NSCLC",
+          "beforeChars": 5528,
+          "afterChars": 4403,
+          "beforeSha256": "ef5d4106557b4fedd0e2b13a8dac5433cd5ecd5f50eee104711f3ffdb9fcb389",
+          "afterSha256": "9612bb3482a26ca6a72b1a397121293d6de4c4a804d4f5c83b9ec1f8f10eb0b1"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "14.4 Previously Untreated EGFR Mutation-Positive Locally Advanced or Metastatic NSCLC",
+          "beforeChars": 5067,
+          "afterChars": 5530,
+          "beforeSha256": "a3902721225bfe33e3393166ee6f4da04ef4ef9ed8a3b0ad1d4e5d26392c8ae7",
+          "afterSha256": "cd1c6a9c32b55aa096b8a060af751e27b9c3f6724c3a759bde42a1df502e2634"
+        },
+        {
+          "kind": "section_changed",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "14.5 Previously Treated EGFR T790M Mutation-Positive Metastatic NSCLC",
+          "beforeChars": 4686,
+          "afterChars": 5448,
+          "beforeSha256": "9cba00810c3c4f43229cadaca1b123b54d96a2db159903005053796bd766df3a",
+          "afterSha256": "e3e82fda31c7416e26333c348e2b29087eb977ef1cafff2bab01f0524f552a52"
+        },
+        {
+          "kind": "section_changed",
+          "code": "34076-0",
+          "name": "information_for_patients",
+          "title": "17 PATIENT COUNSELING INFORMATION",
+          "beforeChars": 3266,
+          "afterChars": 3531,
+          "beforeSha256": "f524962bd7192873d9847c23c7fde8d989b6b58e66a6fcbe8995bf818a2fd8f7",
+          "afterSha256": "e9a377b5fc0cd5dc3cd35fba74ab01f33ec57718841ce1e272237332af4de286"
+        },
+        {
+          "kind": "section_changed",
+          "code": "68498-5",
+          "name": "patient_medication_information",
+          "title": "Patient Medication Information",
+          "beforeChars": 11642,
+          "afterChars": 10448,
+          "beforeSha256": "428e154dcc3a3038575e99686feb58301b71c640238d306e6db7064cecaae032",
+          "afterSha256": "da69765f2d28ab0b55de64a2c0400546a7406b6b4d56fc70cc15ae28fdc48bd4"
+        },
+        {
+          "kind": "section_added",
+          "code": "42229-5",
+          "name": "spl_unclassified",
+          "title": "14.5 Previously Treated EGFR T790M Mutation-Positive Metastatic NSCLC"
+        }
+      ]
+    },
+    "provenance": {
+      "tool": "dailymed_label",
+      "arguments": {
+        "setid": "5e81b4a7-b971-45e1-9c31-29cea8c87ce7",
+        "compareVersion": 36
+      },
+      "scope": {
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "5e81b4a7-b971-45e1-9c31-29cea8c87ce7",
+      "title": "These highlights do not include all the information needed to use TAGRISSO safely and effectively. See full prescribing information for TAGRISSO. TAGRISSO ® (osimertinib) tablets, for oral use Initial U.S. Approval: 2015",
+      "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=5e81b4a7-b971-45e1-9c31-29cea8c87ce7",
+      "source": "dailymed",
+      "retrievedAt": "2026-10-12T07:16:23.350992Z",
+      "evidenceAccess": "regulatory_record",
+      "artifactPath": ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/label.md",
+      "sourceType": "label"
+    }
+  ],
+  "artifacts": [
+    ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/label.md",
+    ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/spl.xml",
+    ".evimed-sources/dailymed/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/6a7135e5c99d11cf1b7c88dfaa656467458644abe29283411294087aab087574/label.json"
+  ],
+  "next_actions": [
+    "Quote the label through its markdownPath; cite the SPL version and effective date, and say it is the United States (FDA) label: it states nothing about approval or wording in any other jurisdiction."
+  ]
+}

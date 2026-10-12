@@ -1,0 +1,52 @@
+{
+  "status": "warning",
+  "summary": "There is no 虚拟临床研究 study in this conversation, so there is no figure to digitize.",
+  "data": {
+    "what": "figure",
+    "code": "vcr_no_study",
+    "provenance": {
+      "tool": "curve_digitize",
+      "arguments": {
+        "imageArtifactId": "release-audit-probe.png",
+        "calibration": {
+          "x": {
+            "min": 0,
+            "max": 60,
+            "unit": "months"
+          },
+          "y": {
+            "min": 0,
+            "max": 1,
+            "scale": "fraction"
+          }
+        },
+        "arms": [
+          {
+            "riskTable": [
+              {
+                "time": 0,
+                "atRisk": 100
+              },
+              {
+                "time": 60,
+                "atRisk": 10
+              }
+            ]
+          }
+        ]
+      },
+      "scope": {
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "warnings": [
+    "This conversation is not in a 虚拟临床研究 study; open the study's own conversation to read or write its data."
+  ],
+  "next_actions": [
+    "Go on without the platform's study data, or work in the study's own conversation."
+  ]
+}

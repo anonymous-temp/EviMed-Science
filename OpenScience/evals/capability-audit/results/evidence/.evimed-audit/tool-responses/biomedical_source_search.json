@@ -20,14 +20,14 @@
         "sourceType": "rct"
       },
       {
-        "id": "36718966",
-        "title": "Acetylsalicylic Acid (Aspirin) for Primary Prevention of Cardiovascular Events in Patients with Diabetes: A Systematic Review and Meta-Analysis of Randomized Controlled Trials.",
-        "url": "https://www.ncbi.nlm.nih.gov/pubmed/36718966/",
-        "description": "Acetylsalicylic Acid (Aspirin) for Primary Prevention of Cardiovascular Events in Patients with Diabetes: A Systematic Review and Meta-Analysis of Randomized Controlled Trials.",
+        "id": "27341534",
+        "title": "Aspirin and cardiovascular primary prevention in non-endstage chronic kidney disease: A meta-analysis.",
+        "url": "https://www.ncbi.nlm.nih.gov/pubmed/27341534/",
+        "description": "Aspirin and cardiovascular primary prevention in non-endstage chronic kidney disease: A meta-analysis.",
         "publicationTypes": [
-          "Systematic Review",
+          "Journal Article",
           "Meta-Analysis",
-          "Journal Article"
+          "Systematic Review"
         ],
         "hasAbstract": true,
         "evidenceLevel": "metadata",
@@ -42,10 +42,10 @@
         "limit": 2
       },
       "scope": {
-        "tenantId": "cdss-access",
-        "userId": "cdss-access",
-        "projectId": "audit-tool-probe",
-        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -53,17 +53,17 @@
     {
       "id": "30158069",
       "source": "pubmed",
-      "retrievedAt": "2026-09-28T08:33:59.554015Z",
+      "retrievedAt": "2026-10-12T07:15:01.050522Z",
       "url": "https://www.ncbi.nlm.nih.gov/pubmed/30158069/",
       "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
       "sourceType": "rct"
     },
     {
-      "id": "36718966",
+      "id": "27341534",
       "source": "pubmed",
-      "retrievedAt": "2026-09-28T08:33:59.554089Z",
-      "url": "https://www.ncbi.nlm.nih.gov/pubmed/36718966/",
-      "title": "Acetylsalicylic Acid (Aspirin) for Primary Prevention of Cardiovascular Events in Patients with Diabetes: A Systematic Review and Meta-Analysis of Randomized Controlled Trials.",
+      "retrievedAt": "2026-10-12T07:15:01.050563Z",
+      "url": "https://www.ncbi.nlm.nih.gov/pubmed/27341534/",
+      "title": "Aspirin and cardiovascular primary prevention in non-endstage chronic kidney disease: A meta-analysis.",
       "sourceType": "meta-analysis"
     }
   ],

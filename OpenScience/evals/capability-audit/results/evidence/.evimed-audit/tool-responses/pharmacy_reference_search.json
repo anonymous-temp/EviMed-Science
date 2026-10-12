@@ -55,10 +55,10 @@
         "limit": 2
       },
       "scope": {
-        "tenantId": "cdss-access",
-        "userId": "cdss-access",
-        "projectId": "audit-tool-probe",
-        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -67,7 +67,7 @@
       "id": "PHARMACY:allergy-skin-test:6",
       "title": "allergy-skin-test row 6",
       "source": "evimed-private-pharmacy-reference",
-      "retrievedAt": "2026-09-28T08:34:41.456040Z",
+      "retrievedAt": "2026-10-12T07:16:46.038842Z",
       "evidenceAccess": "user_provided_other",
       "sourceType": "other"
     },
@@ -75,7 +75,7 @@
       "id": "PHARMACY:drug-name-map:140",
       "title": "drug-name-map row 140",
       "source": "evimed-private-pharmacy-reference",
-      "retrievedAt": "2026-09-28T08:34:41.456072Z",
+      "retrievedAt": "2026-10-12T07:16:46.038875Z",
       "evidenceAccess": "user_provided_other",
       "sourceType": "other"
     }

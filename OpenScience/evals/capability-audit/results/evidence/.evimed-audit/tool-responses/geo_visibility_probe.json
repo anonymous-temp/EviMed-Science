@@ -1,12 +1,12 @@
 {
-  "status": "warning",
-  "summary": "4 of 5 vendor(s) ready: doubao, kimi, qianwen, yuanbao.",
+  "status": "success",
+  "summary": "5 of 5 vendor(s) ready: deepseek, doubao, kimi, qianwen, yuanbao.",
   "data": {
     "providers": [
       {
         "provider": "deepseek",
-        "state": "tab_missing",
-        "ready": false
+        "state": "tab_found",
+        "ready": true
       },
       {
         "provider": "doubao",
@@ -30,6 +30,7 @@
       }
     ],
     "ready": [
+      "deepseek",
       "doubao",
       "kimi",
       "qianwen",
@@ -41,17 +42,14 @@
         "op": "providers"
       },
       "scope": {
-        "tenantId": "cdss-access",
-        "userId": "cdss-access",
-        "projectId": "audit-tool-probe",
-        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "tool-probe-1cb73eaa",
+        "userId": "tool-probe-1cb73eaa",
+        "projectId": "tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
-  "warnings": [
-    "A vendor that is not ready was never asked; that is not evidence the brand is absent from it.",
-    "Not ready: deepseek. These were never asked. Do not record them as vendors that did not mention the brand, and do not put them in a denominator."
-  ],
+  "warnings": [],
   "next_actions": [
     "Log in to any vendor listed as not ready before starting a batch; a run against an unready vendor produces failures, not findings."
   ]

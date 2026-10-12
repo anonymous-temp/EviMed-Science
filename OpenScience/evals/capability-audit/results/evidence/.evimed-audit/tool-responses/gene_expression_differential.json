@@ -1,0 +1,196 @@
+{
+  "status": "success",
+  "summary": "Welch t-test per probe on log2 values between wild type and HDAC1 knock out: 12488 probes tested, results and a rendered top table written (not limma).",
+  "data": {
+    "resultsPath": "deliverables/release-audit-gene-expression/gene-expression-results.json",
+    "receiptPath": "deliverables/release-audit-gene-expression/gene-expression-receipt.json",
+    "tablePath": "deliverables/release-audit-gene-expression/gene-expression-de-table.tsv",
+    "topTablePath": "deliverables/release-audit-gene-expression/gene-expression-top-table.md",
+    "analysedMatrixPath": "deliverables/release-audit-gene-expression/gene-expression-analysed-matrix.tsv.gz",
+    "codePath": "deliverables/release-audit-gene-expression/gene_expression.py",
+    "files": {
+      "results": {
+        "path": "deliverables/release-audit-gene-expression/gene-expression-results.json",
+        "sha256": "03497d6b88c67d4dd79a34a2552548f484174a0ce7148adcd5a0eda20948d137",
+        "bytes": 8675
+      },
+      "table": {
+        "path": "deliverables/release-audit-gene-expression/gene-expression-de-table.tsv",
+        "sha256": "653e4f6449222a7ae1b2c12a42d0ccf9075af022f9e33a97bdc83543cbde53c8",
+        "bytes": 3063260
+      },
+      "topTable": {
+        "path": "deliverables/release-audit-gene-expression/gene-expression-top-table.md",
+        "sha256": "d73ad792d337482efaef8b8a0762b3e35d2afc6aa509f10d7e69f9f5eded6c05",
+        "bytes": 581
+      },
+      "analysedMatrix": {
+        "path": "deliverables/release-audit-gene-expression/gene-expression-analysed-matrix.tsv.gz",
+        "sha256": "6af52898d470ed515e54e76a760d25c6c609f9b1c97997c103022daeb0c7884a",
+        "bytes": 577967
+      },
+      "request": {
+        "path": "deliverables/release-audit-gene-expression/gene-expression-request.json",
+        "sha256": "2073f3b55d4165b8583799b2c581e1653869ecaa201b60021cb381227970ea2a",
+        "bytes": 678
+      },
+      "code": {
+        "path": "deliverables/release-audit-gene-expression/gene_expression.py",
+        "sha256": "6f38595b8981812782a7051ce8762bb6e6008e1c4b9dd94afd6a9b1c5646aac3",
+        "bytes": 63602
+      },
+      "receipt": {
+        "path": "deliverables/release-audit-gene-expression/gene-expression-receipt.json",
+        "sha256": "05ee725bf322816c6b3b93204fe922cb4f761603ce72e99a2882c99e373578d6",
+        "bytes": 2190
+      }
+    },
+    "method": {
+      "id": "welch-bh-log2",
+      "isLimma": false,
+      "statement": "This is not limma. It runs a Welch t-test per probe on log2 values with Benjamini-Hochberg adjustment and does no empirical-Bayes moderation of the variances, so with small groups the per-probe variances are less stable and the top table can differ from a limma analysis of the same series, in order as well as in p-values.",
+      "contrast": "HDAC1 knock out minus wild type",
+      "randomness": "none"
+    },
+    "series": {
+      "accession": "GSE5583",
+      "platform": "GPL81",
+      "lastUpdateDate": {
+        "stated": "Feb 18 2018",
+        "date": "2018-02-18"
+      },
+      "matrixSha256": "bca34f9908a6f5ad4ef5b1b3fa5e0f017704dcfbd2bffea80d76abf42001e220"
+    },
+    "design": {
+      "reference": "wild type",
+      "comparison": "HDAC1 knock out",
+      "groups": [
+        {
+          "label": "wild type",
+          "n": 3,
+          "samples": [
+            "GSM130365",
+            "GSM130366",
+            "GSM130367"
+          ]
+        },
+        {
+          "label": "HDAC1 knock out",
+          "n": 3,
+          "samples": [
+            "GSM130368",
+            "GSM130369",
+            "GSM130370"
+          ]
+        }
+      ]
+    },
+    "transformation": {
+      "requested": "auto",
+      "applied": "log2",
+      "reason": "auto: the values look linear by GEO2R's rule.",
+      "valuesSetMissing": 0,
+      "warnings": []
+    },
+    "diagnostics": {
+      "groupSizes": {
+        "reference": 3,
+        "comparison": 3
+      },
+      "probesInMatrix": 12488,
+      "probesTested": 12488,
+      "probesDropped": {
+        "tooFewValues": 0,
+        "zeroVariance": 0
+      },
+      "probesDroppedTotal": 0,
+      "missingValueCells": 0,
+      "multiGeneProbes": 521,
+      "multiGeneHandling": "A probe annotated with several genes stays one row, listed with all its symbols and flagged; it is not copied to each gene, and nothing is collapsed to a gene level, so a gene with several probes has several rows.",
+      "unannotatedProbes": 531,
+      "genesWithSeveralProbes": 2568,
+      "probesSignificantAtFdr05": 29,
+      "probesSignificantAtFdr01": 0,
+      "probesPBelow05": 1287,
+      "sampleMedians": {
+        "min": 7.543418498109817,
+        "max": 7.692092375427572,
+        "range": 0.14867387731775494
+      },
+      "limits": {
+        "matrix_bytes": 67108864,
+        "annotation_bytes": 134217728,
+        "samples": 200,
+        "probes": 100000,
+        "memory": 2147483648,
+        "wall_clock": 120
+      }
+    },
+    "topGenes": [
+      {
+        "rank": 1,
+        "probe": "101451_at",
+        "geneSymbols": [
+          "Peg3"
+        ],
+        "multiGene": false
+      },
+      {
+        "rank": 2,
+        "probe": "98525_f_at",
+        "geneSymbols": [
+          "Erdr1"
+        ],
+        "multiGene": false
+      },
+      {
+        "rank": 3,
+        "probe": "102670_at",
+        "geneSymbols": [
+          "Vps54"
+        ],
+        "multiGene": false
+      },
+      {
+        "rank": 4,
+        "probe": "160520_at",
+        "geneSymbols": [
+          "Yap1"
+        ],
+        "multiGene": false
+      },
+      {
+        "rank": 5,
+        "probe": "102332_at",
+        "geneSymbols": [
+          "Ulk1"
+        ],
+        "multiGene": false
+      }
+    ],
+    "renderKeys": [
+      "top[0].logFC",
+      "top[0].pValue",
+      "top[0].adjPValue",
+      "diagnostics.probesTested",
+      "diagnostics.probesSignificantAtFdr05",
+      "diagnostics.groupSizes.reference"
+    ],
+    "outcome": {
+      "state": "complete"
+    }
+  },
+  "artifacts": [
+    "deliverables/release-audit-gene-expression/gene-expression-results.json",
+    "deliverables/release-audit-gene-expression/gene-expression-de-table.tsv",
+    "deliverables/release-audit-gene-expression/gene-expression-top-table.md",
+    "deliverables/release-audit-gene-expression/gene-expression-analysed-matrix.tsv.gz",
+    "deliverables/release-audit-gene-expression/gene-expression-request.json",
+    "deliverables/release-audit-gene-expression/gene_expression.py",
+    "deliverables/release-audit-gene-expression/gene-expression-receipt.json"
+  ],
+  "next_actions": [
+    "Write the report as a template whose numbers are {{n:alias.key|format}} references (keys such as top[0].logFC, diagnostics.probesTested) and call research_calculate action=render with calculations {alias: {resultsPath, receiptPath}} from data; do not type a statistic.",
+    "Paste gene-expression-top-table.md into the report as it is, and say in the Methods that this is a Welch test with Benjamini-Hochberg adjustment and not limma."
+  ]
+}

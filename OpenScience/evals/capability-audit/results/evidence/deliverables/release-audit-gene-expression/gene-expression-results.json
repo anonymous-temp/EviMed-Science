@@ -1,0 +1,272 @@
+{
+  "schemaVersion": 1,
+  "kind": "gene-expression-differential",
+  "engineVersion": "1.0.0",
+  "method": {
+    "id": "welch-bh-log2",
+    "name": "Welch two-sample t-test per probe on log2 expression values with Benjamini-Hochberg adjustment",
+    "isLimma": false,
+    "statement": "This is not limma. It runs a Welch t-test per probe on log2 values with Benjamini-Hochberg adjustment and does no empirical-Bayes moderation of the variances, so with small groups the per-probe variances are less stable and the top table can differ from a limma analysis of the same series, in order as well as in p-values.",
+    "contrast": "HDAC1 knock out minus wild type",
+    "randomness": "none",
+    "seed": null,
+    "interval": "95% confidence interval of the difference in log2 means, Welch-Satterthwaite degrees of freedom",
+    "multipleTesting": "Benjamini-Hochberg over the 12488 probes that could be tested"
+  },
+  "series": {
+    "accession": "GSE5583",
+    "title": "Expression data from wild type versus HDAC knock out mouse embryonic stem cells",
+    "status": {
+      "stated": "Public on Sep 19 2006",
+      "date": "2006-09-19"
+    },
+    "submissionDate": {
+      "stated": "Aug 23 2006",
+      "date": "2006-08-23"
+    },
+    "lastUpdateDate": {
+      "stated": "Feb 18 2018",
+      "date": "2018-02-18"
+    },
+    "platform": "GPL81",
+    "platformTitle": "[MG_U74Av2] Affymetrix Murine Genome U74A Version 2 Array",
+    "organism": "Mus musculus",
+    "captureDirectory": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21",
+    "matrixSha256": "bca34f9908a6f5ad4ef5b1b3fa5e0f017704dcfbd2bffea80d76abf42001e220",
+    "matrixBytes": 216671,
+    "platformSha256": "be1521a21990ada3dac89e2c855d493e9831612913cb3228f35f9d571a7b22d0"
+  },
+  "design": {
+    "reference": "wild type",
+    "comparison": "HDAC1 knock out",
+    "groups": [
+      {
+        "label": "wild type",
+        "n": 3,
+        "samples": [
+          "GSM130365",
+          "GSM130366",
+          "GSM130367"
+        ]
+      },
+      {
+        "label": "HDAC1 knock out",
+        "n": 3,
+        "samples": [
+          "GSM130368",
+          "GSM130369",
+          "GSM130370"
+        ]
+      }
+    ]
+  },
+  "transformation": {
+    "requested": "auto",
+    "applied": "log2",
+    "reason": "auto: the values look linear by GEO2R's rule.",
+    "valuesSetMissing": 0,
+    "distribution": {
+      "count": 74928,
+      "quantiles": {
+        "min": 0.2,
+        "q25": 51.3,
+        "median": 198.3,
+        "q75": 623.225,
+        "q99": 9060.30399999998,
+        "max": 51158.7
+      },
+      "looksLinear": true,
+      "rule": "geo2r-logc",
+      "ruleText": "Values are taken as linear (not yet log-scale) when their 99th percentile is above 100, or their range is above 50 with a positive 25th percentile: the rule GEO2R applies before it takes log2."
+    },
+    "statedProcessing": [
+      "The data were analyzed with Microarray Suite version 5.0 (MAS 5.0) using Affymetrix default analysis settings and global scaling as normalization method. The trimmed mean target intensity of each array was arbitrarily set to 500."
+    ],
+    "warnings": []
+  },
+  "identity": {
+    "samples": {
+      "status": "ok",
+      "detail": "The table header's 6 samples are the series' declared samples."
+    },
+    "platform": {
+      "status": "ok",
+      "detail": "All samples are on one platform, GPL81."
+    },
+    "platformRecord": {
+      "status": "ok",
+      "detail": "12488 of 12488 matrix probes are in the platform record's table."
+    },
+    "organism": {
+      "status": "ok",
+      "detail": "The samples' taxon (10090) matches the platform's (10090)."
+    },
+    "genomeBuild": {
+      "status": "unknown",
+      "detail": "Neither the series matrix nor the platform record states a genome build; none is assumed."
+    },
+    "scale": {
+      "status": "ok",
+      "detail": "The values look linear (not log-scale); a transformation is applied before any statistic."
+    }
+  },
+  "diagnostics": {
+    "groupSizes": {
+      "reference": 3,
+      "comparison": 3
+    },
+    "probesInMatrix": 12488,
+    "probesTested": 12488,
+    "probesDropped": {
+      "tooFewValues": 0,
+      "zeroVariance": 0
+    },
+    "probesDroppedTotal": 0,
+    "missingValueCells": 0,
+    "multiGeneProbes": 521,
+    "multiGeneHandling": "A probe annotated with several genes stays one row, listed with all its symbols and flagged; it is not copied to each gene, and nothing is collapsed to a gene level, so a gene with several probes has several rows.",
+    "unannotatedProbes": 531,
+    "genesWithSeveralProbes": 2568,
+    "probesSignificantAtFdr05": 29,
+    "probesSignificantAtFdr01": 0,
+    "probesPBelow05": 1287,
+    "sampleMedians": {
+      "min": 7.543418498109817,
+      "max": 7.692092375427572,
+      "range": 0.14867387731775494
+    },
+    "limits": {
+      "matrix_bytes": 67108864,
+      "annotation_bytes": 134217728,
+      "samples": 200,
+      "probes": 100000,
+      "memory": 2147483648,
+      "wall_clock": 120
+    }
+  },
+  "top": [
+    {
+      "rank": 1,
+      "probe": "101451_at",
+      "geneSymbols": [
+        "Peg3"
+      ],
+      "entrezIds": [
+        "18616"
+      ],
+      "geneTitle": "paternally expressed 3",
+      "multiGene": false,
+      "nReference": 3,
+      "nComparison": 3,
+      "meanReference": 8.09459108558722,
+      "meanComparison": 9.564452421037396,
+      "logFC": 1.469861335450176,
+      "ciLow": 1.3753081556114175,
+      "ciHigh": 1.5644145152889344,
+      "t": 43.59582298330341,
+      "df": 3.9010860754667553,
+      "pValue": 2.1620940956422215e-06,
+      "adjPValue": 0.02365305936430387
+    },
+    {
+      "rank": 2,
+      "probe": "98525_f_at",
+      "geneSymbols": [
+        "Erdr1"
+      ],
+      "entrezIds": [
+        "170942"
+      ],
+      "geneTitle": "erythroid differentiation regulator 1",
+      "multiGene": false,
+      "nReference": 3,
+      "nComparison": 3,
+      "meanReference": 14.720527526849546,
+      "meanComparison": 13.01033501765204,
+      "logFC": -1.7101925091975065,
+      "ciLow": -1.8394858095847555,
+      "ciHigh": -1.5808992088102576,
+      "t": -37.01607838739267,
+      "df": 3.921594063627638,
+      "pValue": 3.880155753408774e-06,
+      "adjPValue": 0.02365305936430387
+    },
+    {
+      "rank": 3,
+      "probe": "102670_at",
+      "geneSymbols": [
+        "Vps54"
+      ],
+      "entrezIds": [
+        "245944"
+      ],
+      "geneTitle": "vacuolar protein sorting 54 (yeast)",
+      "multiGene": false,
+      "nReference": 3,
+      "nComparison": 3,
+      "meanReference": 9.18152031773658,
+      "meanComparison": 9.861153539707537,
+      "logFC": 0.679633221970958,
+      "ciLow": 0.6190624502312565,
+      "ciHigh": 0.7402039937106595,
+      "t": 31.62110956787126,
+      "df": 3.854867804260407,
+      "pValue": 8.427026409368003e-06,
+      "adjPValue": 0.02365305936430387
+    },
+    {
+      "rank": 4,
+      "probe": "160520_at",
+      "geneSymbols": [
+        "Yap1"
+      ],
+      "entrezIds": [
+        "22601"
+      ],
+      "geneTitle": "yes-associated protein 1",
+      "multiGene": false,
+      "nReference": 3,
+      "nComparison": 3,
+      "meanReference": 11.196094634223108,
+      "meanComparison": 10.676108773355187,
+      "logFC": -0.5199858608679211,
+      "ciLow": -0.5707248897818151,
+      "ciHigh": -0.4692468319540271,
+      "t": -28.46023285827857,
+      "df": 3.9976667239864763,
+      "pValue": 9.118666909228207e-06,
+      "adjPValue": 0.02365305936430387
+    },
+    {
+      "rank": 5,
+      "probe": "102332_at",
+      "geneSymbols": [
+        "Ulk1"
+      ],
+      "entrezIds": [
+        "22241"
+      ],
+      "geneTitle": "unc-51 like kinase 1",
+      "multiGene": false,
+      "nReference": 3,
+      "nComparison": 3,
+      "meanReference": 9.640656079178397,
+      "meanComparison": 10.509617449741356,
+      "logFC": 0.8689613705629586,
+      "ciLow": 0.7923930493620679,
+      "ciHigh": 0.9455296917638494,
+      "t": 32.26520946566517,
+      "df": 3.774689946408319,
+      "pValue": 9.470315248359973e-06,
+      "adjPValue": 0.02365305936430387
+    }
+  ],
+  "files": {
+    "table": "deliverables/release-audit-gene-expression/gene-expression-de-table.tsv",
+    "topTable": "deliverables/release-audit-gene-expression/gene-expression-top-table.md",
+    "analysedMatrix": "deliverables/release-audit-gene-expression/gene-expression-analysed-matrix.tsv.gz",
+    "request": "deliverables/release-audit-gene-expression/gene-expression-request.json",
+    "code": "deliverables/release-audit-gene-expression/gene_expression.py",
+    "receipt": "deliverables/release-audit-gene-expression/gene-expression-receipt.json"
+  }
+}
