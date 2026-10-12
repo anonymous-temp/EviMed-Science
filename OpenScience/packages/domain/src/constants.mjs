@@ -209,5 +209,16 @@ export const SKILL_AUTHORING_LIMITS = Object.freeze({
   referenceTocLineThreshold: 100,
 })
 
+/**
+ * How long the text of a general lesson may be to leave its account for the platform's handbooks: name, description and body together, in
+ * characters (`handbookFieldChecks` in the control plane applies it; `min` is the shortest that says anything).
+ *
+ * Written here, beside the authoring limits, because the step that writes the lesson has to be told it and held to it: on 2026-10-12 sixteen
+ * account handbooks averaged 9.5 KB and 14 of the 17 platform candidates made from them failed this one check, which is a defect of telling
+ * the writer nothing, not of the lesson. A lesson filed as an account handbook (`signal: "reviewer"`) is handed this as
+ * `authoringLimits.maxHandbookChars` and the `method-candidate` contract returns an over-long one to be shortened in place.
+ */
+export const HANDBOOK_TEXT_LIMITS = Object.freeze({ min: 80, max: 6000 })
+
 /** Tool-result pruning thresholds mirrored from the preset row, in Unicode code points. */
 export const TOOL_RESULT_PRUNER = Object.freeze({ thresholdChars: 8192, headChars: 4096, tailChars: 1024 })

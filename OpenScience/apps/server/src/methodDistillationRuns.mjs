@@ -32,7 +32,7 @@
 import { createHash } from "node:crypto";
 
 import {
-  carriesPlatformContext, METHOD_OPERATIONS, methodScientific, parseSkillFrontmatter, projectMethodResultLinks, SKILL_AUTHORING_LIMITS, unwrapUserWrappers,
+  carriesPlatformContext, HANDBOOK_TEXT_LIMITS, METHOD_OPERATIONS, methodScientific, parseSkillFrontmatter, projectMethodResultLinks, SKILL_AUTHORING_LIMITS, unwrapUserWrappers,
 } from "@evimed/domain";
 import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { readRunTranscript, transcriptExcerpt } from "./runTranscripts.mjs";
@@ -70,7 +70,10 @@ export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepte
 // the results produced under its revision and the scope it declared — and the related methods carry the same — so a
 // lesson drawn from a correction narrows the method that was read instead of writing a near-duplicate beside it, and a
 // lesson read under the old shape would be learnt without them (N14).
-export const DISTILLATION_EXTRACTOR_VERSION = "5";
+// "6" since 2026-10-12: the input states the text limit of a lesson filed as an account handbook (`authoringLimits.maxHandbookChars`), and the
+// capability learns the researcher's research methods, not the delivery gate's bookkeeping; a lesson re-queued under the new rules is a new
+// dispatch and does not adopt the run that wrote an over-long handbook under the old ones.
+export const DISTILLATION_EXTRACTOR_VERSION = "6";
 
 /**
  * How many messages of context each trigger is worth.
@@ -292,6 +295,9 @@ export function buildDistillationInput(input) {
       maxBodyLines: SKILL_AUTHORING_LIMITS.maxBodyLines,
       maxDescriptionChars: SKILL_AUTHORING_LIMITS.maxDescriptionChars,
       minTestScenarios: SKILL_AUTHORING_LIMITS.minTestScenarios,
+      // A `reviewer` lesson is filed as an account handbook and offered to the platform's, whose text (name, description and body together) is at
+      // most this many characters; the contract returns a longer one to be shortened in place.
+      maxHandbookChars: HANDBOOK_TEXT_LIMITS.max,
     },
     mountedTools: input.mountedTools ?? [],
     // The other successful runs of the same capability a `routine` induction
