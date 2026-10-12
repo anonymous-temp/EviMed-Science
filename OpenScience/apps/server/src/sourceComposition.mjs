@@ -10,7 +10,8 @@
  *   reader knows a table of three years is the composition of three documents and not of the library.
  * - **A year is a year the date names** in the usual shapes (`2021`, `2021-03-05`, `Mar 2021`): a format, not a reading of
  *   language. A date with no year in it is no year.
- * - **Keywords are one keyword whatever their case**, shown as the spelling met first; a keyword longer than a keyword is a
+ * - **Keywords are one keyword whatever their case**, shown as the spelling met first (the oldest document's: rows come in the
+ *   order the documents were added, so the spelling does not depend on the database's row order); a keyword longer than a keyword is a
  *   sentence the parser took for one and is left out.
  * - **The documents of the library, not its derived pages**: a compiled knowledge page (`knowledge-base/wiki/`) is neither
  *   counted nor read.
@@ -72,6 +73,7 @@ export async function projectComposition(database, userId, projectId) {
       CASE WHEN jsonb_typeof(d.payload->'metadata'->'keywords')='array' THEN d.payload->'metadata'->'keywords' END AS keywords
     FROM evimed_product.documents d
     WHERE d.user_id=$1 AND d.kind='source' AND d.deleted_at IS NULL AND d.project_id=$2
-      AND coalesce(d.payload->'paths'->>0,'') NOT LIKE 'knowledge-base/wiki/%'`, [userId, projectId]);
+      AND coalesce(d.payload->'paths'->>0,'') NOT LIKE 'knowledge-base/wiki/%'
+    ORDER BY d.created_at, d.id`, [userId, projectId]);
   return composeLibrary(result.rows);
 }
