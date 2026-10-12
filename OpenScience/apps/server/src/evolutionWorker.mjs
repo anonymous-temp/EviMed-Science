@@ -69,7 +69,7 @@ export class EvolutionWorker {
       }, candidateAdmission: heavy ? async (client, candidate) => {
         if (await this.callbacks.canResume?.(candidate)) return true;
         const cost = await this.callbacks.dailyCost(client);
-        return cost < (this.config.evolutionDailyBudgetCny ?? 50) && this.callbacks.admitRuntime(client, { kinds, job: candidate });
+        return cost < (this.config.evolutionDailyBudgetCny ?? 100) && this.callbacks.admitRuntime(client, { kinds, job: candidate });
       } : null });
       // The polling worker leaves the heavy, model-intensive jobs to the night window; a caller that names the kinds it wants run is not held by it.
       const heavyAllowed = requestedKinds !== undefined || this.heavyWindowOpen();
@@ -185,6 +185,8 @@ export class EvolutionWorker {
     // existed): the operators hear of it within the minute.
     await this.every('engine-reviews', { ms: MINUTE }, async () => { await this.service.callbacks?.announceEngineReviews?.(); });
     // The sources the platform asked the knowledge-source plugin for: those it has taken leave the list, and those it keeps declining lapse.
+    // The records the loops write by the thousand and read once are folded into counts of their day (`evolutionRetention.mjs`); it counts its own failure.
+    await this.every('retention', { ms: DAY, key: day }, async () => { await this.service.callbacks?.compactRecords?.(); });
     await this.every('source-requests', { ms: 6 * 60 * MINUTE }, async () => { await this.service.callbacks?.reconcileSourceRequests?.(); });
     await this.every('release', { ms: DAY }, async () => {
       const releaseId = String(this.config.releaseId ?? ''), sourceRevision = String(this.config.sourceRevision ?? '');

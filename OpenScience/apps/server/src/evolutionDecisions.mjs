@@ -27,8 +27,6 @@ export function evolutionRetirementNotice({ name, reason }) {
   const label = /** @type {Record<string, string>} */ (RETIREMENT_REASONS)[reason] ?? '不再满足验证要求';
   return { title: '科研工具已更新状态', body: `先前结果使用的“${clip(name ?? '科研工具', 60)}”已停用，原因：${label}。原始结果和工具版本保留，可重新检查。` };
 }
-/** The categories whose own goal sentence is a reader's sentence (the others carry codes) and is shown beside the wait. */
-const GOAL_SHOWN_CATEGORIES = Object.freeze(['resource', 'validation-resource']);
 /** @param {unknown} value @param {number} max */
 const clip = (value, max) => { const text = String(value ?? ''); return text.length > max ? `${text.slice(0, Math.max(0, max - 1))}…` : text; };
 
@@ -66,9 +64,36 @@ export function evolutionDecisionReviewProof(config,result) {
 /** Delivery, expiry, and overrides retain every branch decision in the revision ledger. */
 export class EvolutionDecisions {
   /** @param {any} dependencies */
-  constructor({ service, notifications = service.notifications, callbacks = {}, now = service.now, config = service.config }) { this.service = service; this.notifications = notifications; this.callbacks = callbacks; this.now = now; this.config = config; }
+  constructor({ service, notifications = service.notifications, callbacks = {}, now = service.now, config = service.config }) {
+    this.service = service; this.notifications = notifications; this.callbacks = callbacks; this.now = now; this.config = config;
+    /** Waits recorded on their subject without a card, by decision category, and the annotations that could not be written; the ops metrics read it. */
+    this.counters = { resourceWaits: /** @type {Record<string, number>} */ ({}), resourceWaitFailed: 0 };
+  }
   /** @param {any} input */
-  async propose(input) { return this.service.withLock('decisions', () => this.proposeLocked(input)); }
+  async propose(input) { return input?.resourceOnly === true ? this.recordResourceWait(input) : this.service.withLock('decisions', () => this.proposeLocked(input)); }
+  /**
+   * A wait on something only an outside party can bring (a dataset, an independent reference, a dependency, a model release) is a state of what waits and not a
+   * question for anyone: it writes no decision, no card and no line in the digest, and the platform picks the work up again by itself when the resource arrives
+   * (the opportunity's wake conditions, `EvolutionMissions.wake`). Until 2026-10-12 each one became a class D decision that the daily report listed and that
+   * expired into the same `wait` it recommended: 37 in six days, every one a request for material the owner had ruled not to ask for again (2026-09-29).
+   * The subject (the dossier, the failure record) carries the state the operators read in the ops view; the annotation is best effort, because a wait that
+   * could not be written down must not fail the job that found it.
+   * @param {any} input
+   */
+  async recordResourceWait(input) {
+    const category = String(input.category ?? 'resource');
+    const count = () => { this.counters.resourceWaits[category] = (this.counters.resourceWaits[category] ?? 0) + 1; };
+    try {
+      const subject = typeof input.subjectId === 'string' ? await this.service.get(input.subjectId) : null;
+      const kind = /** @type {Record<string, string>} */ ({ 'evolution-dossier': 'dossier', 'evolution-failure': 'failure' })[subject?.payload?.recordType];
+      // A wait with no record of its own to carry it (a release's replay) is counted and nothing more.
+      if (!subject || !kind) { count(); return null; }
+      const branch = input.materialVersion ?? 1, known = subject.payload.resourceWait;
+      if (known?.category === category && known.branch === branch) return subject;
+      count();
+      return await this.service.save(kind, subject.id, { ...subject.payload, resourceWait: { category, branch, goal: clip(input.body, 300), since: this.now().toISOString() } }, subject);
+    } catch { this.counters.resourceWaitFailed++; return null; }
+  }
   /** @param {any} input */
   async proposeLocked(input) {
     const id = `evolution-decision-${evolutionKey([input.category, input.subjectId, input.materialVersion ?? 1])}`;
@@ -222,8 +247,10 @@ export class EvolutionDecisions {
           .map(row => ({ id: row.id, title: clip(row.payload.title, 150) })),
         autonomous: today.filter(row => row.payload.status === 'executed' && row.payload.source !== 'user').slice(0, 200)
           .map(row => ({ id: row.id, category: row.payload.category ?? null, title: clip(row.payload.title, 150), selected: clip(label(row), 80) })),
+        // Waits for material are not reported (`recordResourceWait`). A class D decision written before 2026-10-12 and not yet reported is still carried through once,
+        // so that its expiry is scheduled and it closes; its line is no longer drawn.
         resources: all.filter(row => row.payload.decisionClass === 'D' && !row.payload.resourceReportedAt).slice(0, 200)
-          .map(row => ({ id: row.id, category: row.payload.category ?? null, title: clip(row.payload.title, 150), ...(GOAL_SHOWN_CATEGORIES.includes(row.payload.category) ? { goal: clip(row.payload.body, 300) } : {}) })),
+          .map(row => ({ id: row.id, category: row.payload.category ?? null })),
         // New tools that went live in the window. A tool's `updatedAt` moves on every call anyone makes of it, which is use and not an achievement.
         achievements: (await this.service.tools()).filter(row => inWindow(row.payload.createdAt) && ['active', 'alias'].includes(row.payload.status)).slice(0, 100)
           .map(row => ({ id: row.id, name: clip(row.payload.name ?? row.payload.description ?? row.id, 100), level: row.payload.validationLevel ?? 'V0' })),
@@ -235,7 +262,7 @@ export class EvolutionDecisions {
     const notice = await this.notifications.create(await this.service.owner(), { noticeType:'notify',title:'进化日报',body:renderEvolutionDigest(snapshot),
       source:{type:'system',id},idempotencyKey:id });
     const deliveredAt = notice.createdAt ?? this.now().toISOString();
-    for (const captured of snapshot.resources) {
+    for (const captured of snapshot.resources ?? []) {
       let row = await this.service.get(captured.id);
       if (!row) continue;
       if (!row.payload.resourceReportedAt) row = await this.service.save('decision',row.id,{...row.payload,resourceReportedAt:deliveredAt,deliveredAt,dueAt:new Date(Date.parse(deliveredAt)+(this.config.evolutionDecisionTimeoutMs ?? 86400000)).toISOString(),notificationId:notice.id},row);
@@ -260,9 +287,6 @@ export function renderEvolutionDigest(snapshot, limit = EVOLUTION_NOTICE_LIMITS.
   const counts = new Map();
   for (const row of autonomous) { const label = EVOLUTION_CATEGORY_LABELS[/** @type {keyof typeof EVOLUTION_CATEGORY_LABELS} */ (row.category)] ?? '其他事项'; counts.set(label, (counts.get(label) ?? 0) + 1); }
   const autonomousLines = [...counts].sort(([left], [right]) => left.localeCompare(right, 'zh')).map(([label, count]) => `${label}：${count} 项`);
-  const waits = new Map();
-  for (const row of snapshot.resources ?? []) { const text = row.goal ? `${row.title}：${row.goal}` : row.title; waits.set(text, (waits.get(text) ?? 0) + 1); }
-  const waitLines = [...waits].map(([text, count]) => count > 1 ? `${text}（${count} 项）` : text);
   const summaries = snapshot.evaluationSummaries ?? [];
   const engineNames = [['meta-analysis', 'Meta'], ['adr-analysis', '药物警戒'], ['mendelian-randomization', '孟德尔随机化']];
   const assessmentLines = bounded(summaries.flatMap((/** @type {any} */ summary) => summary.lines), 12);
@@ -271,7 +295,6 @@ export function renderEvolutionDigest(snapshot, limit = EVOLUTION_NOTICE_LIMITS.
     renderEvolutionProgress(snapshot.progress),
     `待你裁决\n${(snapshot.decisions ?? []).map((/** @type {any} */ row) => row.title).join('\n') || '暂无'}`,
     `已自主处理\n${bounded(autonomousLines, 10).join('\n') || '暂无'}\n${autonomous.slice(0, 3).map((/** @type {any} */ row) => `${row.title}：${row.selected}`).join('\n') || '暂无'}`,
-    `资源等待\n${bounded(waitLines, 8).join('\n') || '暂无新增'}`,
     `当日成果\n${bounded((snapshot.achievements ?? []).map((/** @type {any} */ row) => `${row.name} ${row.level}`), 10).join('\n') || '暂无新工具'}\n${assessmentLines.join('\n') || '评测：当日未运行，分数未知'}\n${healthLines.join('\n')}`,
   ];
   const body = sections.join('\n\n');

@@ -256,3 +256,62 @@ test('a mission opened for a job ends with the job whatever kind the job has, an
   assert.equal((await missions.recordJob(other,{jobFailed:true,code:'evolution_job_failed'})).payload.status,'ready',`${kind} after a job that failed`);
  }
 });
+
+// The budget reallocation of 2026-10-12. Live (2026-10-06 to 12) every job mission borrowed what the policy's category shares had not used: 99% of 109 CNY went to 37
+// scouting runs that all ended waiting for material, and the loops of frontier, geo and autopilot together spent 0.38.
+const budgeted=(config={})=>{
+ const f=evolutionServiceFixture(),P=DEFAULT_EVOLUTION_POLICY;
+ const missions=createEvolutionMissions({service:f.service,policy:{assignedPolicy:async()=>({id:'P',policy:P}),current:async()=>({policy:P})},map:{rebuild:async()=>({counts:{}})},taskPool:{},signals:{aggregate:async()=>[]},
+  config:{evolutionDailyBudgetCny:100,evolutionRunBudgetCny:10,evolutionScoutBudgetShare:0.2,evolutionModuleLoopBudgetShare:0.5,...config},adapters:{}});
+ const job=(n,kind,category)=>missions.create({id:`job-${kind}-${n}`,moduleId:'tools',kind,category,borrowUnused:true,jobId:`job-${kind}-${n}`});
+ const loop=n=>missions.create({id:`loop-${n}`,moduleId:'tools',kind:'research',category:'research',borrowUnused:true});
+ return{f,missions,job,loop};
+};
+test('scouting runs of every origin together hold at most their share of the day, and the one over it waits for budget',async()=>{
+ const {missions,job}=budgeted();
+ const reserved=async n=>(await job(n,'scout','exploration')).payload;
+ assert.equal((await reserved(1)).budget.reservedCny,10);assert.equal((await reserved(2)).budget.reservedCny,10);
+ const third=await reserved(3);assert.equal(third.status,'waiting_budget','a third scout would take the day past a fifth of it');
+ assert.equal((await missions.create({id:'job-scout-3',moduleId:'tools',kind:'scout',category:'exploration',borrowUnused:true,jobId:'job-scout-3'})).id,null,'the worker reads no mission as a budget wait and tries the job again in an hour');
+ const {missions:closed,job:closedJob}=budgeted({evolutionScoutBudgetShare:0,evolutionModuleLoopBudgetShare:0.5});
+ assert.equal((await closedJob(1,'scout','exploration')).id,null,'a scout share of zero closes scouting by budget');
+ assert.ok(closed);
+});
+test('a finished scout holds what it spent, so the day fits more of them',async()=>{
+ const {f,job}=budgeted();
+ const one=await job(1,'scout','exploration');await job(2,'scout','exploration');
+ assert.equal((await job(3,'scout','exploration')).id,null);
+ await f.service.save('mission',one.id,{...one.payload,status:'complete',researchCostCny:2.7},one);
+ assert.ok(Math.abs((await job(3,'scout','exploration')).payload.budget.reservedCny-7.3)<1e-9,'2.7 held by the finished run and 10 by the running one leave 7.3 of the 20');
+});
+test('the jobs of the platform cannot borrow the loops\' reserve, and the loops can take the rest of the day',async()=>{
+ const {job,loop}=budgeted();
+ for(const n of [1,2,3,4,5])assert.equal((await job(n,'build','research')).payload.budget.reservedCny,10,`job ${n} is inside the half of the day the jobs may use`);
+ assert.equal((await job(6,'build','research')).id,null,'the sixth would take the half held for the loops');
+ for(const n of [1,2,3,4,5])assert.equal((await loop(n)).payload.budget.reservedCny,10,`loop ${n} draws on the reserve`);
+ assert.equal((await loop(6)).id,null,'the day is spent');
+});
+test('loops that have taken less than their reserve leave the difference held; loops over it take from the jobs',async()=>{
+ const {job,loop}=budgeted();
+ await loop(1);await loop(2);
+ // 20 taken of the 50 held: the jobs may use the 50 outside the reserve, and nothing of the 30 left in it.
+ for(const n of [1,2,3,4,5])assert.equal((await job(n,'evaluate','confirmation')).payload.budget.reservedCny,10);
+ assert.equal((await job(6,'evaluate','confirmation')).id,null);
+ for(const n of [3,4,5])assert.equal((await loop(n)).payload.budget.reservedCny,10);
+ assert.equal((await loop(6)).id,null);
+});
+test('a mission funded for a new day follows the same scouting share as a new one',async()=>{
+ const {f,missions,job}=budgeted();
+ const a=await job(1,'scout','exploration'),b=await job(2,'scout','exploration');
+ f.advance(86400000);
+ await job(3,'scout','exploration');
+ const funded=await missions.fund(a);assert.equal(funded.payload.budget.tranches.length,2,'the next day has room for the second scout in the share');
+ const refused=await missions.fund(b);assert.equal(refused.payload.status,'waiting_budget');assert.equal(refused.payload.reason,'daily-funding-unavailable');
+});
+test('the weekly plan pays each module out of the loops\' reserve in equal parts, so every enabled module can be funded in one pass',async()=>{
+ const {f,missions}=planner(Object.fromEntries(['tools','frontier','geo','autopilot','sources','evidence','memory','runtime'].map(id=>[id,{enabled:true}])),{config:{evolutionScoutBudgetShare:0.2,evolutionModuleLoopBudgetShare:0.5,evolutionDailyBudgetCny:100}});
+ const planned=await missions.plan({week:'2026-10-05'});
+ assert.equal(planned.missions.length,8,'all eight modules get their mission');
+ const rows=await Promise.all(planned.missions.map(id=>f.service.get(id)));
+ assert.ok(rows.every(row=>row.payload.budget.reservedCny===6.25),'a half of 100 CNY over eight modules is 6.25 each');
+});

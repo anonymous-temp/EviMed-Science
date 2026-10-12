@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { evolutionMechanismLimit, evolutionNoiseBand, selectEvolutionCandidate, selectEvolutionParent } from '../src/evolutionSelection.mjs'
+import { evolutionMechanismLimit, evolutionNoiseBand, selectEvolutionCandidate, selectEvolutionParent, evolutionProposalIssues, evolutionNormalizeProposal, evolutionProposalDescriptionLength, EVOLUTION_PROPOSAL_DESCRIPTION_LIMIT } from '../src/evolutionSelection.mjs'
 test('mechanisms tighten to one and deterministic noise has a two-percent floor', () => {
   assert.deepEqual(Array.from({length:10}, (_,i) => evolutionMechanismLimit(i+1)), [3,3,3,3,2,2,2,1,1,1])
   assert.equal(evolutionNoiseBand([[0.8,0.9],[0.8,0.9],[0.8,0.9]]),0.02)
@@ -46,4 +46,44 @@ test('a model-scored promotion needs a calibrated scorer and deterministic check
   const checklist={...model,evidenceTier:'checklist',anchorCalibrated:false,modelScoredLabel:false,deterministicChecksPassed:undefined}
   assert.deepEqual([selectEvolutionCandidate(checklist).outcome,selectEvolutionCandidate(checklist).promote],['improved',true])
   assert.equal(selectEvolutionCandidate({...checklist,score:0.6}).outcome,'regressed','a checklist candidate worse than the incumbent beyond the noise band is a regression')
+})
+
+// Live, 2026-10-07 to 12: six of fifteen rejected proposals were refused for `description-too-long` alone, five attempts in a row for one mission.
+// The proposals below have the shapes of the ledger's rejection records (`proposal-metadata`, the issue codes only).
+const proposed = (extra = {}) => ({ components: ['selectionThreshold'], mechanisms: ['raise-threshold-gate'], change: 'Raise the selection threshold.', reason: 'Fewer borderline items pass.',
+  rollbackVersion: 'default:1', predictedBenefits: ['precision'], possibleHarms: ['recall'], costChange: 0, ...extra })
+test('the description limit counts characters of change and reason together, Chinese and English alike', () => {
+  assert.equal(evolutionProposalDescriptionLength({ change: 'a'.repeat(100), reason: 'b'.repeat(99) }), 200)
+  assert.deepEqual(evolutionProposalIssues(proposed({ change: 'a'.repeat(100), reason: 'b'.repeat(99) })), [])
+  assert.deepEqual(evolutionProposalIssues(proposed({ change: 'a'.repeat(100), reason: 'b'.repeat(100) })), ['description-too-long'])
+  assert.deepEqual(evolutionProposalIssues(proposed({ change: '把前沿编辑指令里的数字核对规则写得更明确。'.repeat(6), reason: '数字核对失败是最常见的退回原因。'.repeat(8) })), ['description-too-long'])
+})
+test('an account over the limit is shortened by code to fit it, says so, and the proposal is otherwise untouched', () => {
+  for (const [change, reason] of [['c'.repeat(300), 'r'.repeat(60)], ['c'.repeat(40), 'r'.repeat(400)], ['c'.repeat(500), 'r'.repeat(500)], ['把阈值提高。'.repeat(40), '因为边界条目太多。'.repeat(40)]]) {
+    const before = proposed({ change, reason }), after = evolutionNormalizeProposal(before)
+    assert.deepEqual(evolutionProposalIssues(before), ['description-too-long'])
+    assert.deepEqual(evolutionProposalIssues(after), [], 'the contract reads the shortened account')
+    assert.ok(evolutionProposalDescriptionLength(after) <= EVOLUTION_PROPOSAL_DESCRIPTION_LIMIT)
+    assert.equal(after.descriptionShortened.fromCharacters, evolutionProposalDescriptionLength(before))
+    assert.deepEqual({ ...after, change: 0, reason: 0, descriptionShortened: 0 }, { ...before, change: 0, reason: 0, descriptionShortened: 0 })
+    assert.ok(after.change.length > 0 && after.reason.length > 0, 'neither field is cut to nothing')
+  }
+  const short = proposed()
+  assert.deepEqual(evolutionNormalizeProposal(short), short, 'a proposal inside the limit is returned as it was')
+  assert.equal(evolutionNormalizeProposal(short).descriptionShortened, undefined)
+})
+test('a cut ends at a sentence where one fits in the second half, and otherwise at an ellipsis', () => {
+  const sentences = evolutionNormalizeProposal(proposed({ change: '第一句很短。第二句也不长。第三句就太长了，一直写下去超过了限额。'.repeat(8), reason: '理由。' }))
+  assert.match(sentences.change, /。$/)
+  const run = evolutionNormalizeProposal(proposed({ change: 'x'.repeat(300), reason: 'y' }))
+  assert.match(run.change, /…$/)
+})
+test('the plain forms of a list of one and of the cost figure are read as the contract expects, and a missing prediction is still the proposer\'s to supply', () => {
+  const plain = evolutionNormalizeProposal(proposed({ predictedBenefits: 'precision', possibleHarms: 'recall', costChange: '0.2', change: '  Raise it.  ' }))
+  assert.deepEqual([plain.predictedBenefits, plain.possibleHarms, plain.costChange, plain.change], [['precision'], ['recall'], 0.2, 'Raise it.'])
+  assert.deepEqual(evolutionProposalIssues(plain), [])
+  const missing = evolutionNormalizeProposal(proposed({ predictedBenefits: undefined, costChange: 'cheap' }))
+  assert.deepEqual(evolutionProposalIssues(missing), ['prediction-required'])
+  assert.equal(evolutionNormalizeProposal(null), null)
+  assert.deepEqual(evolutionNormalizeProposal([1]), [1])
 })

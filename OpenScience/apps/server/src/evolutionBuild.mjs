@@ -1,4 +1,4 @@
-import { evolutionProposalIssues } from '../../../packages/domain/src/evolutionSelection.mjs';
+import { evolutionProposalIssues, evolutionNormalizeProposal } from '../../../packages/domain/src/evolutionSelection.mjs';
 import { validatePlatformSkillPackage } from './platformSkillPackage.mjs';
 import {createHash} from 'node:crypto';
 import {canonicalJson} from '@evimed/domain';
@@ -24,7 +24,8 @@ export function createEvolutionBuilder({dispatch,verification,evaluator,publishe
     const leakage=forbidden.some(value=>sourceText.includes(value))||/(?:evaluation-control|candidate-cases|candidate-evaluations|absoluteTolerance|evaluatorHash|frozenSourceDigest|paper-gold\/evaluator)/.test(sourceText);
     if(leakage)return{status:'repair',feedback:{passed:false,failedCaseIds:[],issueCodes:['candidate-evaluation-leakage']}};
     if(screenCandidate){const screen=await screenCandidate(snapshot,input,{signal});if(screen?.ok!==true)return{status:screen?.resourcePending?'waiting_resource':'repair',feedback:{passed:false,failedCaseIds:[],issueCodes:screen?.issueCodes??['candidate-screening-failed']}};}
-    const proposal=snapshot.proposal??input.proposal;
+    // The form of the proposal (its description length, a list of one written as a string) is put right by code before it is judged, as for a module's proposal.
+    const proposal=evolutionNormalizeProposal(snapshot.proposal??input.proposal);if(snapshot.proposal)snapshot.proposal=proposal;
     if(evaluator.freezeCandidate&&!proposal)return{status:'repair',feedback:{passed:false,failedCaseIds:[],issueCodes:['candidate-proposal-required']}};
     if(proposal){const issueCodes=evolutionProposalIssues(proposal);if(issueCodes.length)return{status:'repair',feedback:{passed:false,failedCaseIds:[],issueCodes}};}
     stage='static-verification';

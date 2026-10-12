@@ -2818,7 +2818,8 @@ export function loadConfig(overrides = {}) {
     // `OPEN_SCIENCE_EVOLUTION_ENABLED=false` turns it off.
     evolutionEnabled: overrides.evolutionEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_ENABLED", true),
     evolutionEvaluationNetwork: overrides.evolutionEvaluationNetwork ?? process.env.OPEN_SCIENCE_EVOLUTION_EVALUATION_NETWORK ?? '',
-    evolutionDailyBudgetCny: Number(overrides.evolutionDailyBudgetCny ?? process.env.OPEN_SCIENCE_EVOLUTION_DAILY_BUDGET_CNY ?? 50),
+    // Defaults live in `evolutionConfiguration.mjs`'s schema, with the reasons and the bounds; the defaults written here must equal it (`evolutionConfiguration.test.mjs` holds them equal).
+    evolutionDailyBudgetCny: Number(overrides.evolutionDailyBudgetCny ?? process.env.OPEN_SCIENCE_EVOLUTION_DAILY_BUDGET_CNY ?? 100),
     evolutionRunBudgetCny: Number(overrides.evolutionRunBudgetCny ?? process.env.OPEN_SCIENCE_EVOLUTION_RUN_BUDGET_CNY ?? 10),
     evolutionMaxConcurrency: Number(overrides.evolutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY ?? 1),
     evolutionLightConcurrency: Number(overrides.evolutionLightConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY ?? 2),
@@ -2844,7 +2845,11 @@ export function loadConfig(overrides = {}) {
     // has not taken after a month is one it declines, and it must not hold one of the twenty-five places for ever.
     evolutionSourceRequestLapseDays: Number(overrides.evolutionSourceRequestLapseDays ?? process.env.OPEN_SCIENCE_EVOLUTION_SOURCE_REQUEST_LAPSE_DAYS ?? 30),
     evolutionSelfResearchTextChars: Number(overrides.evolutionSelfResearchTextChars ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_TEXT_CHARS ?? 60_000),
-    evolutionMaxPaperScoutsPerDay: Number(overrides.evolutionMaxPaperScoutsPerDay ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY ?? 8),
+    evolutionMaxPaperScoutsPerDay: Number(overrides.evolutionMaxPaperScoutsPerDay ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY ?? 2),
+    evolutionScoutBudgetShare: Number(overrides.evolutionScoutBudgetShare ?? process.env.OPEN_SCIENCE_EVOLUTION_SCOUT_BUDGET_SHARE ?? 0.2),
+    evolutionModuleLoopBudgetShare: Number(overrides.evolutionModuleLoopBudgetShare ?? process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LOOP_BUDGET_SHARE ?? 0.5),
+    evolutionRecordRetentionDays: Number(overrides.evolutionRecordRetentionDays ?? process.env.OPEN_SCIENCE_EVOLUTION_RECORD_RETENTION_DAYS ?? 14),
+    evolutionRetentionBatchRows: Number(overrides.evolutionRetentionBatchRows ?? process.env.OPEN_SCIENCE_EVOLUTION_RETENTION_BATCH_ROWS ?? 5000),
     evolutionDecisionTimeoutMs: Number(overrides.evolutionDecisionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS ?? 86_400_000),
     evolutionPollMs: Number(overrides.evolutionPollMs ?? process.env.OPEN_SCIENCE_EVOLUTION_POLL_MS ?? 15_000),
     evolutionLeaseMs: Number(overrides.evolutionLeaseMs ?? process.env.OPEN_SCIENCE_EVOLUTION_LEASE_MS ?? 120_000),

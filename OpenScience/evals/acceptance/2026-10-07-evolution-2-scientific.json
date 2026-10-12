@@ -60,16 +60,16 @@
    "requirement": "Actual post-freeze public confirmation cohorts at the required per-module size; old corpus and generated checks are not substituted for new scientific evidence.",
    "status": "running",
    "howItConcludes": "a module candidate freezes after its development smoke; the curator adds only papers whose earliest exact public date is after the freeze, each extracted and independently reviewed (Qwen); minimums frontier 30, geo 30, autopilot 20, runtime 10, tools 2 hidden + 1 fresh published case; then a paired first-attempt evaluation and a verdict",
-   "observed": "geo and autopilot baseline audits completed on development tasks (4 and 9); the first frontier mission (a repair of a recorded edit-verification failure) was rejected at the proposal-metadata stage, a defect fixed in 1bc1d8ae2; no candidate frozen yet. The plan gives a module one mission per opportunity per week, so the next frontier research mission is created by the plan of the week of 2026-10-12",
-   "earliest": "a frontier freeze in the week of 2026-10-12; papers dated the day after the freeze are the first that count, and with 500-1,500 fresh DOI entries a day a cohort of 30 is expected 2-5 days later"
+   "observed": "geo and autopilot baseline audits completed on development tasks (4 and 9); the first frontier mission (a repair of a recorded edit-verification failure) was rejected at the proposal-metadata stage, a defect fixed in 1bc1d8ae2; no candidate frozen yet. The plan gives a module one mission per opportunity per week, so the next frontier research mission is created by the plan of the week of 2026-10-12; 2026-10-12 live audit: three research missions (frontier twice, autopilot once) used fifteen proposal rounds and none passed the proposal gate (reproducible-failure-required on the autopilot mission's five, description-too-long on three of the frontier's, three model-reviewer refusals); no candidate frozen, no confirmation-ledger directory yet. Fixes on branch wp/evo: the failure the platform recorded is read from number-check failures and repair-signal summaries, a description over the limit is shortened by code, and a frontier repair whose failure no public case reproduces gets a receipt written by code from the production observations (basis platform-observation)",
+   "earliest": "slipped at least one week: the week of 2026-10-12 had its frontier and autopilot research missions rejected, so the next ones are created by the plan of the week of 2026-10-19 and only if the release carrying wp/evo is live by then; the 30-paper cohort follows the freeze by 2-5 days as before"
   },
   {
    "id": 2,
    "requirement": "The plan's live growth-chain and cross-module transfer/pruning outcomes, including denominator preservation promoted in two modules and nonregression in a third.",
    "status": "running",
    "howItConcludes": "growth chains (paper to capability, demand and data to resumed research, success to a new opportunity) run from the worker; transfer needs promotions in two modules and an audit-only verdict within the noise band in a third (frontier, geo, autopilot or tools; runtime, sources, evidence and memory go through reviewed engine PRs and never produce a verdict); pruning runs monthly and needs four observations",
-   "observed": "paper-to-capability chain started: scout dossiers for a trial fragility calculator wait for resources",
-   "earliest": "promotions need item 1 first; monthly pruning first evaluates on 2026-11-01"
+   "observed": "paper-to-capability chain started: scout dossiers for a trial fragility calculator wait for resources; 2026-10-12: the tools module's scouting runs ended waiting for material 37 times (33 of the 34 method proposals are engine PRs for a person to write); the day budget and the scouting share are now set so that the modules' own loops hold half of it",
+   "earliest": "follows item 1 (promotions need a frozen candidate); monthly pruning first evaluates on 2026-11-01"
   },
   {
    "id": 3,
@@ -91,5 +91,21 @@
  "alsoLive": {
   "jevJudge": "PR #9 merged; J4 (backstage-prose notice after delivery) settled 252 calls for CNY 0.03 on its first afternoon; J2 has no Feishu traffic on this host",
   "toolProbe": "45 of 53 tools execution-certified live on evimed-23be13a63176-1 (six specialists without a receipt on the rebuilt engines, USGS water 403 from this host, research_calculate needs an owned calculation)"
- }
+ },
+ "updates": [
+  {
+   "recordedAt": "2026-10-12T00:00:00Z",
+   "branch": "wp/evo",
+   "basis": "live audit of 2026-10-12 (.evimed-local/acceptance/memory-kb-evolution-review-20261012/04-self-improvement-live-audit.md section 5): six days, CNY 109 spent, 99% on 37 paper-scouting runs, no candidate frozen or promoted",
+   "ownerDecision": "2026-10-12 decision 3: budget moves from paper scouting to the modules' own loops; a wait for material makes no decision card and no inbox line; the day budget may rise",
+   "changes": [
+    "OPEN_SCIENCE_EVOLUTION_DAILY_BUDGET_CNY 50 -> 100; OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY 8 -> 2; OPEN_SCIENCE_EVOLUTION_SCOUT_BUDGET_SHARE 0.2 (scouts of every origin together); OPEN_SCIENCE_EVOLUTION_MODULE_LOOP_BUDGET_SHARE 0.5 (a reserve platform jobs cannot borrow; the weekly plan splits it evenly over the enabled modules)",
+    "waits for material (研发线索等待资料 and its three siblings) are recorded as resourceWait on their dossier or failure record and counted on the ops metrics; no decision, card or digest line; the opportunity's wake conditions resume the work",
+    "proposal gate: one definition of a recorded failure for the opportunity and the proposal; description length put right by code; a sent-back proposal carries its own text, the limits and its measured length; a repair receipt written by code from deterministic production observations when no public case reproduces the failure",
+    "retention: module observations that counted no failure and processed routine events older than OPEN_SCIENCE_EVOLUTION_RECORD_RETENTION_DAYS (14) are folded into per-day counts; observations that counted a failure, dataset-ready events, queued events and every other event type are kept"
+   ],
+   "scientificItemsTouched": "none of the four reads what retention folds: the confirmation ledger is files on disk, the time holdout reads evolution-observation rows, the audit pool reads tasks and resource assets, the monthly metrics read the missions' own observation lists. No evaluator, safety rule, delivery gate, budget cap of a tenant or authentication path is changed",
+   "status": "in the branch, not deployed; the four items stay as recorded above (wholeScientificPlanAccepted remains false)"
+  }
+ ]
 }

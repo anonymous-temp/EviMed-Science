@@ -1,18 +1,24 @@
 import {policyPriority,EVOLUTION_STAGNANT_ROUNDS} from './evolutionPolicy.mjs';
 import {evolutionOpportunitySource} from './evolutionGrowth.mjs';
 import { createHash } from 'node:crypto';
-import { canonicalJson, selectEvolutionCandidate, evolutionNoiseBand, evolutionProposalIssues, selectEvolutionParent } from '@evimed/domain';
+import { canonicalJson, selectEvolutionCandidate, evolutionNoiseBand, evolutionProposalIssues, evolutionNormalizeProposal, evolutionMechanismLimit, evolutionProposalDescriptionLength, EVOLUTION_PROPOSAL_DESCRIPTION_LIMIT, EVOLUTION_PROPOSAL_FIELD_BUDGET, selectEvolutionParent } from '@evimed/domain';
 import { evolutionKey, evolutionToolArchiveId } from './evolutionService.mjs';
 import { evolutionPriorityBreakdown } from './evolutionScout.mjs';
 import { EVOLUTION_MODULE_IDS } from './evolutionUsage.mjs';
 import { validateModuleEvolutionPolicy } from './moduleEvolutionPolicies.mjs';
 import { evolutionAccountFloors } from './evolutionAccountClasses.mjs';
+import { EVOLUTION_CONFIG_SCHEMA } from './evolutionConfiguration.mjs';
 
 export const EVOLUTION_OPPORTUNITY_SOURCES = Object.freeze(['demand', 'method', 'data', 'success', 'combination', 'contradiction', 'self-research', 'repair']);
 /** `deferred`: parked on a resource that did not come within its window. Terminal, so the module goes on; the opportunity keeps its
  * wake conditions (`defer`) and comes back when one of them is met (`wake`). `failed`: the job a mission was opened for did not succeed
  * (`recordJob`). */
 const TERMINAL = new Set(['complete', 'rejected', 'impossible', 'cancelled', 'deferred', 'failed']);
+/** A mission opened for a job (a scout, a build, an evaluation, an audit, the self-research week ...) carries the job's id; a module's own loop missions (the
+ * weekly plan's research, repair and baseline missions and the transfer probes) do not. The day's budget is shared out along that line (`budgetRoom`). */
+const isJobMission = row => typeof row.payload?.jobId === 'string';
+const isScoutMission = row => isJobMission(row) && row.payload.kind === 'scout';
+const shareOf = (value, key) => Number.isFinite(value) && value >= 0 && value <= 1 ? value : EVOLUTION_CONFIG_SCHEMA[key].default;
 /** What a mission waits for, named in the mission's vocabulary, and the event that meets it. */
 const WAKE_EVENT_TYPES = Object.freeze({ 'new-data': 'dataset-ready', 'new-tool': 'tool-ready', 'new-method': 'method-ready', 'new-model': 'environment-changed' });
 const DEFERRED_WAKE_CONDITIONS = Object.freeze(['new-data', 'new-method', 'new-tool', 'new-model']);
@@ -68,8 +74,13 @@ export function evolutionDeterministicChecks(candidate, baselines) {
 export function evolutionFailureReproductionHash(payload){
   return digest(Object.fromEntries(Object.entries(payload).filter(([key])=>!['recordType','receiptHash'].includes(key))));
 }
+/** The kinds of module observation whose verdict is a deterministic check of the production pipeline on a public input (a frontier edit's numbers, units, links and
+ * language, decided by code, never by a model), and so a failure the platform itself observed and could decide again: the basis of a receipt written by code from the
+ * observation (`basis: 'platform-observation'`) when no public development case fails on the baseline. A model-judged observation is not among them. */
+export const EVOLUTION_OBSERVED_FAILURE_KINDS = Object.freeze(['edit-verification']);
 /** @param {any} payload @param {any} identity */
 export function validEvolutionFailureReproduction(payload,identity){
+  if(payload?.basis!==undefined&&!(payload.basis==='executed-baseline'||payload.basis==='platform-observation'&&EVOLUTION_OBSERVED_FAILURE_KINDS.includes(payload.observationKind)&&Array.isArray(payload.observationIds)&&payload.observationIds.length>0))return false;
   return payload?.recordType==='evolution-failure-reproduction'&&payload.missionId===identity.missionId&&payload.moduleId===identity.moduleId&&payload.baselineHash===digest(identity.baseline??{})&&['public','generated'].includes(payload.scope)&&payload.independent===true&&payload.executed===true&&payload.baselineFailed===true&&payload.referenceVerified===true&&typeof payload.taskId==='string'&&typeof payload.sourceRoot==='string'&&/^[a-f0-9]{64}$/.test(payload.sourceHash??'')&&/^[a-f0-9]{64}$/.test(payload.executionReceiptHash??'')&&payload.receiptHash===evolutionFailureReproductionHash(payload);
 }
 /** Exact frozen unit identities, source versions and equivalent variants must all be measured once. @param {any[]} batch @param {any} measurement */
@@ -117,6 +128,22 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
 
   const tranches = row => row.payload.budget?.tranches ?? [{day:row.payload.budget?.day,reservedCny:row.payload.budget?.reservedCny??0,spentBefore:0}];
   const dailyCharge = (row,day) => tranches(row).filter(t=>t.day===day).reduce((sum,t)=>sum+(TERMINAL.has(row.payload.status)?Math.min(t.reservedCny,Math.max(0,Number(row.payload.researchCostCny??0)-t.spentBefore)):t.reservedCny),0);
+  /**
+   * What the day has left for one more mission, by who is asking. The day's budget is shared three ways: the modules' own loops hold a reserve
+   * (`evolutionModuleLoopBudgetShare`) that a job of the platform cannot borrow while the loops have not taken it; scouting runs of every origin together hold at most
+   * their share (`evolutionScoutBudgetShare`); everything else draws on what is left, and the loops themselves on all of it. Live (2026-10-06 to 12) every job mission
+   * borrowed whatever the policy's category shares had not used: 99% of 109 CNY went to 37 scouting runs that all ended waiting for material, and the loops of
+   * 前沿动态, 循证 GEO and autopilot together spent 0.38. A mission not yet counted today (a new one, or one funded for a new day) asks before it is counted.
+   * @param {any[]} all every mission @param {string} day
+   * @param {{job:boolean,scout:boolean}} asking
+   */
+  function budgetRoom(all,day,{job,scout}){
+    const daily=config.evolutionDailyBudgetCny,charged=all.map(item=>({item,charge:dailyCharge(item,day)}));
+    const sum=rows=>rows.reduce((total,row)=>total+row.charge,0);
+    const held=job?Math.max(0,daily*shareOf(config.evolutionModuleLoopBudgetShare,'evolutionModuleLoopBudgetShare')-sum(charged.filter(row=>!isJobMission(row.item)))):0;
+    const room=Math.max(0,daily-sum(charged)-held);
+    return scout?Math.min(room,Math.max(0,daily*shareOf(config.evolutionScoutBudgetShare,'evolutionScoutBudgetShare')-sum(charged.filter(row=>isScoutMission(row.item))))):room;
+  }
   async function fund(row) {
     if(!row?.payload.budget||TERMINAL.has(row.payload.status))return row;
     return service.withLock('mission-allocation',async()=>{
@@ -124,9 +151,8 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const day=localDay(service.now()),spent=await cost(row.id);
       if(tranches(row).some(t=>t.day===day))return row;
       const all=await service.list('mission'),P=row.payload.policySnapshot??(await policy.current()).policy,category=row.payload.budget.category;
-      const committed=all.reduce((sum,item)=>sum+dailyCharge(item,day),0);
       const categoryCommitted=all.filter(item=>item.payload.budget?.category===category).reduce((sum,item)=>sum+dailyCharge(item,day),0);
-      const amount=Math.min(config.evolutionRunBudgetCny,Math.max(0,config.evolutionDailyBudgetCny-committed),Math.max(0,config.evolutionDailyBudgetCny*P.budgetShares[category]-categoryCommitted));
+      const amount=Math.min(config.evolutionRunBudgetCny,budgetRoom(all,day,{job:isJobMission(row),scout:isScoutMission(row)}),Math.max(0,config.evolutionDailyBudgetCny*P.budgetShares[category]-categoryCommitted));
       if(amount<=0)return update(row,{status:'waiting_budget',reason:'daily-funding-unavailable',researchCostCny:spent});
       return update(row,{budget:{...row.payload.budget,day,reservedCny:spent+amount,fundedCny:Number(row.payload.budget.fundedCny??row.payload.budget.reservedCny)+amount,tranches:[...tranches(row).map(t=>({...t,releasedCny:t.releasedCny??Math.max(0,Number(row.payload.budget.reservedCny)-spent)})),{day,reservedCny:amount,spentBefore:spent,fundedAt:service.now().toISOString()}]},researchCostCny:spent,status:row.payload.status==='waiting_budget'?'ready':row.payload.status});
     });
@@ -140,11 +166,10 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const P = await policy.assignedPolicy(id), environment = await epoch();
       const day = localDay(service.now()), all = await service.list('mission');
       const today = all.filter(row => tranches(row).some(t=>t.day===day));
-      const reserved = today.reduce((sum, row) => sum + dailyCharge(row,day), 0);
       const category = Object.hasOwn(P.policy.budgetShares, input.category) ? input.category : 'research';
       const share = config.evolutionDailyBudgetCny * P.policy.budgetShares[category];
       const categoryReserved = today.filter(row => row.payload.budget.category === category).reduce((sum, row) => sum + dailyCharge(row,day), 0);
-      const remaining = Math.max(0, config.evolutionDailyBudgetCny - reserved);
+      const remaining = budgetRoom(all, day, { job: isJobMission({ payload: input }), scout: isScoutMission({ payload: input }) });
       // Unused shares can be borrowed by the ready queue head, never carried to another day.
       const nominal = Math.max(0, share - categoryReserved);
       const amount = Math.min(input.budgetCny ?? config.evolutionRunBudgetCny, config.evolutionRunBudgetCny, remaining,
@@ -209,6 +234,9 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       .filter(row => row.payload.opportunity === true && !['published', 'impossible', 'review', 'adopted', 'declined'].includes(row.payload.status) && !row.payload.deferred);
     const created = [];
     const busy = new Set(all.filter(row => !TERMINAL.has(row.payload.status)).map(row => `${row.payload.moduleId}:${row.payload.opportunityId}`));
+    // The modules' weekly missions are paid out of the loops' reserve of the day (`budgetRoom`), shared out evenly: with every module enabled each can be funded
+    // from the reserve alone, instead of the first few taking the whole run budget and the rest waiting for the next week's pass.
+    const weeklyBudget = Math.min(config.evolutionRunBudgetCny, Math.max(1, config.evolutionDailyBudgetCny * shareOf(config.evolutionModuleLoopBudgetShare, 'evolutionModuleLoopBudgetShare') / Math.max(1, enabled.length)));
     // Modules missing their weekly allocation go first; measured priority orders opportunities inside a module.
     enabled.sort((a,b) => Number(thisWeek.some(row => row.payload.moduleId === a)) - Number(thisWeek.some(row => row.payload.moduleId === b)));
     for (const moduleId of enabled) {
@@ -229,7 +257,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const pending = selected?.payload.prerequisites?.length > 0;
       const row = await create({ id:missionId, decisions:[{id:`${missionId}:priority`,policyField:'weights',opportunities:structuredClone(choices),choice:selected?.id ?? `baseline-${moduleId}`,at:service.now().toISOString()}], opportunityId: selected?.id ?? `baseline-${moduleId}`, moduleId, week,
         cycle: `${week}:${selected?.revision ?? 0}`, kind: pending ? 'acquire-resource' : selected ? 'research' : 'baseline-audit',
-        category: pending ? 'exploration' : selected ? 'research' : 'maintenance', borrowUnused: true,
+        category: pending ? 'exploration' : selected ? 'research' : 'maintenance', borrowUnused: true, budgetCny: weeklyBudget,
         taskFamily: selected?.payload.taskFamily ?? null, mechanismFamily:selected?.payload.mechanismFamily??null,sources: selected?.payload.sources ?? [],
         wakeConditions: pending ? [] : selected?.payload.wakeConditions ?? [], prerequisites: selected?.payload.prerequisites ?? [],
         cheapestNextStep: selected?.payload.cheapestNextStep, baseline: await service.get(`evolution-module-policy-${moduleId}`) });
@@ -301,11 +329,27 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     if(continueSearch)await queue(row);
     return row;
   }
+  /**
+   * What a proposer is told when its proposal is sent back: the issues, its own proposal as it stood and the limits it was measured against. A repair patches in place
+   * (principle 3); until 2026-10-12 the model was told only the issue codes and wrote the next proposal without seeing its last, so a length it could not count
+   * stayed wrong round after round.
+   * @param {any} mission @param {any} candidate
+   */
+  function proposalFeedbackFacts(mission,candidate){
+    const proposal=candidate?.proposal,text=(/** @type {any} */ value)=>typeof value==='string'?Array.from(value).slice(0,400).join(''):null;
+    return{
+      limits:{descriptionCharacters:EVOLUTION_PROPOSAL_DESCRIPTION_LIMIT,changeCharacters:EVOLUTION_PROPOSAL_FIELD_BUDGET.change,reasonCharacters:EVOLUTION_PROPOSAL_FIELD_BUDGET.reason,
+        mechanisms:evolutionMechanismLimit(Math.min(Math.max(1,Number(mission.payload.round??1)),Number(mission.payload.maxRounds??10)),Number(mission.payload.maxRounds??10))},
+      ...(proposal&&typeof proposal==='object'?{previous:{change:text(proposal.change),reason:text(proposal.reason),components:Array.isArray(proposal.components)?proposal.components.slice(0,3):null,
+        mechanisms:Array.isArray(proposal.mechanisms)?proposal.mechanisms.slice(0,6):null,descriptionCharacters:evolutionProposalDescriptionLength(proposal)}}:{}),
+    };
+  }
   async function retryProposal(mission,candidate,reason,detail){
     const attempt=Number(mission.payload.proposalAttempts??0)+1;
     const id=`evolution-proposal-rejection-${evolutionKey([mission.id,attempt,digest(candidate??{})])}`;
-    if(!await service.get(id))await service.save('proposal-rejection',id,{missionId:mission.id,candidateHash:digest(candidate??{}),attempt,reason,detail,at:service.now().toISOString()});
-    const row=await update(await service.get(mission.id),{preparedCandidateState:null,smokeCaseIds:null,proposalAttempts:attempt,status:attempt>=5?'rejected':'ready',completed:attempt>=5,proposalFeedback:{reason,detail},result:attempt>=5?{outcome:'invalid-evidence',reason:'five-screen-repairs-exhausted'}:null});
+    if(!await service.get(id))await service.save('proposal-rejection',id,{missionId:mission.id,candidateHash:digest(candidate??{}),attempt,reason,detail,at:service.now().toISOString(),
+      ...(candidate?.proposal&&typeof candidate.proposal==='object'?{descriptionCharacters:evolutionProposalDescriptionLength(candidate.proposal)}:{})});
+    const row=await update(await service.get(mission.id),{preparedCandidateState:null,smokeCaseIds:null,proposalAttempts:attempt,status:attempt>=5?'rejected':'ready',completed:attempt>=5,proposalFeedback:{reason,detail,...proposalFeedbackFacts(mission,candidate)},result:attempt>=5?{outcome:'invalid-evidence',reason:'five-screen-repairs-exhausted'}:null});
     if(attempt<5)await queue(row);
     return row;
   }
@@ -380,6 +424,8 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const parent = selectEvolutionParent(archive.filter(row=>row.payload.moduleId===mission.payload.moduleId&&sameFamily(row.payload.taskFamily,mission.payload.taskFamily)).map(row => ({ id: row.id, ...row.payload })));
       candidate = await adapter.propose({ ...mission.payload, id: mission.id, history: history.map(row => row.payload), parent });
       if (candidate?.status === 'unavailable') return update(mission, { status: 'waiting_resource', reason: candidate.reason });
+      // The form of the proposal is put right by code before it is judged (`evolutionNormalizeProposal`); what remains is what only the proposer can supply.
+      if (candidate?.proposal) candidate = { ...candidate, proposal: evolutionNormalizeProposal(candidate.proposal) };
       const issues = evolutionProposalIssues({ ...candidate.proposal, round: mission.payload.round, rounds: mission.payload.maxRounds });
       if(issues.length)return retryProposal(mission,candidate,'proposal-metadata',issues);
       const previous = (await service.list('archive')).find(row => row.payload.candidateHash === digest(candidate.policy ?? candidate.files));
