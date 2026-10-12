@@ -1,3 +1,4 @@
+import { kindTitle } from "@/lib/memoryGroups";
 import type { MapEdge, MapNode, MapReason, MemoryMap } from "@/lib/memoryMapClient";
 import type { MapSelection } from "./useMapSelection";
 
@@ -110,13 +111,22 @@ export function isThin(doc: Pick<MemoryMap, "nodes" | "edges">): boolean {
   return doc.nodes.length < MIN_NODES || doc.edges.length < MIN_EDGES;
 }
 
+/**
+ * What a group of marks is called: a kind of memory is called what the memory page calls it (`kindTitle`, the drawer's own title),
+ * and anything else what its source called it.
+ */
+export function groupWord(node: Pick<MapNode, "type" | "subtype" | "group" | "memberType">): string {
+  if ((node.type === "memory" || node.memberType === "memory") && node.subtype) return kindTitle(node.subtype);
+  return node.group || node.subtype || "标记";
+}
+
 /** What kind of thing a mark is, in a word. */
 export function markKindWord(node: MapNode): string {
   switch (node.type) {
-    case "memory": return node.group || "记忆";
+    case "memory": return groupWord(node) || "记忆";
     case "document": return "资料";
     case "method": return "做法";
-    case "cluster": return `${node.group || "标记"}（${node.count ?? 0} 个）`;
+    case "cluster": return `${groupWord(node)}（${node.count ?? 0} 个）`;
     case "reference": return node.subtype === "doi" ? "论文" : node.subtype === "evidence_card" ? "证据卡" : "前沿动态";
     case "entity": return "实体";
     case "page": return "知识页";

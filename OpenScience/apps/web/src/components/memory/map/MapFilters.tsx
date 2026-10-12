@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { FilterChip, FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
+import { kindTitle } from "@/lib/memoryGroups";
 import { SearchInput } from "@/components/ui/SearchInput";
 import type { MemoryMap } from "@/lib/memoryMapClient";
 import type { MapSelection } from "./useMapSelection";
@@ -31,7 +32,7 @@ export function MapFilters({ selection, doc, topicName, aspectName, focusLabel, 
   onClear: () => void;
   search: { draft: string; setDraft: (value: string) => void; clear: () => void; composition: object };
 }) {
-  const kinds: FilterOption<string>[] = doc.facets.kinds.map((kind) => ({ value: kind.id, label: kind.label, count: kind.count }));
+  const kinds: FilterOption<string>[] = doc.facets.kinds.map((kind) => ({ value: kind.id, label: kindTitle(kind.id), count: kind.count }));
   const narrowed = Boolean(selection.topic || selection.kind || selection.dimension || selection.look || selection.focus || selection.project || selection.range !== "all" || search.draft);
   const customRange = selection.range !== "all" && !RANGES.some((range) => range.value === selection.range);
   return (

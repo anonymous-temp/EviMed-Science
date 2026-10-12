@@ -1,6 +1,6 @@
 import type { EChartsCoreOption } from "echarts/core";
 import type { MapEdge, MapNode, MapReason } from "@/lib/memoryMapClient";
-import { REASON_TEXT, markKindWord } from "@/components/memory/map/mapModel";
+import { REASON_TEXT, groupWord, markKindWord } from "@/components/memory/map/mapModel";
 import { escapeTooltip } from "../echartsBase";
 import { LAYOUT_HEIGHT, LAYOUT_WIDTH } from "./layout";
 import type { MapPalette } from "./palette";
@@ -32,6 +32,8 @@ export interface GraphInput {
   palette: MapPalette;
   /** How many of the heaviest memories carry a label of their own. */
   labelBudget?: number;
+  /** A canvas a phone's width: the same picture in smaller marks, with a label for the structure and what needs a look only. */
+  compact?: boolean;
 }
 
 /** The shape of a mark and its size, in the library's pixels. */
@@ -81,8 +83,9 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
   const byId = new Map(input.nodes.map((node) => [node.id, node]));
   const searching = input.hits.size > 0;
   // The heaviest memories earn a label of their own; the rest are named on hover.
+  const shrink = input.compact ? 0.5 : 1;
   const heavy = new Set([...input.nodes].filter((node) => node.type === "memory" || node.type === "document" || node.type === "entity")
-    .sort((left, right) => (right.weight ?? 0) - (left.weight ?? 0) || left.id.localeCompare(right.id)).slice(0, input.labelBudget ?? 8).map((node) => node.id));
+    .sort((left, right) => (right.weight ?? 0) - (left.weight ?? 0) || left.id.localeCompare(right.id)).slice(0, input.labelBudget ?? (input.compact ? 0 : 8)).map((node) => node.id));
 
   const data = input.nodes.map((node) => {
     const { symbol, size } = symbolOf(node);
@@ -93,7 +96,7 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
     const labelled = structure || node.state === "check" || chosen || input.hits.has(node.id) || heavy.has(node.id);
     const [x, y] = input.positions.get(node.id) ?? [LAYOUT_WIDTH / 2, LAYOUT_HEIGHT / 2];
     return {
-      name: node.id, x, y, symbol, symbolSize: size,
+      name: node.id, x, y, symbol, symbolSize: Math.max(4, size * shrink),
       value: node.label,
       itemStyle: {
         // A hexagon of the structure is hollow: an outline in the state's colour on the page's own surface.
@@ -105,9 +108,9 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
       label: {
         show: labelled,
         position: node.type === "you" ? "inside" : structure ? "bottom" : "right",
-        formatter: node.type === "cluster" ? `${node.group ?? ""}\n${node.count ?? 0}` : [...node.label].length > 14 ? `${[...node.label].slice(0, 13).join("")}…` : node.label,
+        formatter: node.type === "cluster" ? `${groupWord(node)}\n${node.count ?? 0}` : [...node.label].length > 14 ? `${[...node.label].slice(0, 13).join("")}…` : node.label,
         color: structure && node.type !== "cluster" ? palette.text : palette.text,
-        fontSize: structure ? 11 : 12,
+        fontSize: input.compact ? 10 : structure ? 11 : 12,
         fontWeight: structure || node.state === "check" ? 600 : 400,
         distance: 6,
         // A label over a line or a neighbour stays legible on the page's own ground.

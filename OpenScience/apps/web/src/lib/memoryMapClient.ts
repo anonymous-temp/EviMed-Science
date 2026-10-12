@@ -30,8 +30,9 @@ export interface MapNode {
   projectId?: string | null;
   topics?: string[];
   open?: MapOpen | null;
-  /** A cluster's size. */
+  /** A cluster's size, and the kind of mark it stands for. */
   count?: number;
+  memberType?: MapNodeType;
   description?: string;
 }
 

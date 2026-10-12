@@ -125,6 +125,17 @@ describe("the graph option", () => {
     expect(anchors.every((entry: any) => entry.symbolSize === 0 && entry.silent === true)).toBe(true);
   });
 
+  it("draws the same marks smaller on a phone, and names only the structure and what needs a look", () => {
+    const wide: any = graphOption({ ...base, labelBudget: 3 });
+    const small: any = graphOption({ ...base, compact: true });
+    const size = (option: any, name: string) => series(option).data.find((entry: any) => entry.name === name).symbolSize;
+    expect(size(small, "memory:a")).toBeLessThan(size(wide, "memory:a"));
+    expect(size(small, "project:p")).toBe(size(wide, "project:p") / 2);
+    const labelled = (option: any) => series(option).data.filter((entry: any) => entry.label?.show).map((entry: any) => entry.name).sort();
+    expect(labelled(small)).toEqual(["cluster:memory:p:preference", "memory:b", "project:p", "you:account"]);
+    expect(series(small).data.length).toBe(series(wide).data.length);
+  });
+
   it("sizes a memory by its weight and a cluster by how many it stands for", () => {
     expect(symbolOf(memory("x", { weight: 1 })).size).toBeGreaterThan(symbolOf(memory("y", { weight: 0 })).size);
     expect(symbolOf({ id: "cluster:a", type: "cluster", label: "x", count: 100 }).size).toBeGreaterThan(symbolOf({ id: "cluster:b", type: "cluster", label: "x", count: 4 }).size);
@@ -142,7 +153,7 @@ describe("what the tooltip says, escaped", () => {
   it("says why a mark needs a look, and what it is", () => {
     const html = tooltipOf(memory("b", { state: "check", reason: "conflict", group: "决定", at: "2026-09-20T00:00:00.000Z" }));
     expect(html).toContain("和另一条说法不一致");
-    expect(html).toContain("决定 · 2026-09-20");
+    expect(html).toContain("偏好 · 2026-09-20");
   });
 });
 

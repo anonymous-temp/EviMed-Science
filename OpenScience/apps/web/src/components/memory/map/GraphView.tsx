@@ -19,6 +19,22 @@ export interface GraphActions {
 
 const GRAPH_HEIGHT = 560;
 
+/** Whether the page is a phone's width, kept current: the picture is drawn in smaller marks there. */
+function useCompact(): boolean {
+  const query = "(max-width: 639px)";
+  const read = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(query).matches;
+  const [compact, setCompact] = useState(read);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia(query);
+    const update = () => setCompact(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return compact;
+}
+
 /** The words under the picture that say what its shapes and colours are (spec §2: every encoding is in a legend). */
 function Legend() {
   return (
@@ -49,6 +65,7 @@ export function GraphView({ doc, narrowed, selected, actions, chain, focused }: 
 }) {
   const scheme = useColorScheme();
   const reduced = useReducedMotion();
+  const compact = useCompact();
   const positions = useMemo(() => layoutGraph(doc.nodes.map((node) => ({
     id: node.id, type: node.type, home: node.projectId ?? (node.type === "project" ? node.id.slice("project:".length) : null), weight: node.weight ?? 0,
   })), doc.edges), [doc.nodes, doc.edges]);
@@ -76,10 +93,10 @@ export function GraphView({ doc, narrowed, selected, actions, chain, focused }: 
 
   const option = useMemo(() => (chain
     ? chainOption({ ...chain, palette: mapPalette() })
-    : graphOption({ nodes: shown.nodes, edges: shown.edges, positions, hits: narrowed.hits, selected, palette: mapPalette() }
+    : graphOption({ nodes: shown.nodes, edges: shown.edges, positions, hits: narrowed.hits, selected, palette: mapPalette(), compact }
   // The palette is read from the live document, so a theme flip is a reason to build the option again.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  )), [chain, shown, positions, narrowed.hits, selected, scheme]);
+  )), [chain, shown, positions, narrowed.hits, selected, scheme, compact]);
 
   const byId = useMemo(() => new Map(doc.nodes.map((node) => [node.id, node])), [doc.nodes]);
   const nodeOf = (params: { name?: string; data?: { id?: string; name?: string } }) => byId.get(String(params?.data?.id ?? params?.name ?? params?.data?.name ?? ""));
@@ -92,7 +109,7 @@ export function GraphView({ doc, narrowed, selected, actions, chain, focused }: 
   return (
     <div className="space-y-2">
       <MapChart
-        kind={chain ? "source-chain" : "relations"} option={option} height={chain ? 360 : GRAPH_HEIGHT} on={on}
+        kind={chain ? "source-chain" : "relations"} option={option} height={chain ? 360 : compact ? 440 : GRAPH_HEIGHT} on={on}
         label={chain ? `这条记忆依据的资料链，共 ${chain.rests.length} 项。` : `记忆、资料和项目之间的关系图，共 ${shown.nodes.length} 个标记，列表在下方。`}
         unpainted={`${shown.nodes.length} 个标记、${shown.edges.length} 条连线。`}
       />

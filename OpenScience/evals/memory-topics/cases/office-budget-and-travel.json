@@ -1,0 +1,272 @@
+{
+  "id": "office-budget-and-travel",
+  "class": "general",
+  "description": "An office worker with no medical content at all: budget, suppliers, meetings, a trip and hiring. The topics are the account's own words; nothing here may be sorted into a specialty or a kind of note.",
+  "memories": [
+    {
+      "id": "m01",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "第四季度科室预算总额 120 万元"
+    },
+    {
+      "id": "m02",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "其中设备 45 万、耗材 30 万、差旅 15 万、其他 30 万"
+    },
+    {
+      "id": "m03",
+      "kind": "correction",
+      "scope": "project",
+      "summary": "预算汇报的金额单位统一用万元"
+    },
+    {
+      "id": "m04",
+      "kind": "decision",
+      "scope": "project",
+      "summary": "单笔采购超过 80 万才要科主任审批"
+    },
+    {
+      "id": "m05",
+      "kind": "decision",
+      "scope": "project",
+      "summary": "采购必须有三家报价，特殊设备除外"
+    },
+    {
+      "id": "m06",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "主要供应商是 A 公司，合同到明年三月到期"
+    },
+    {
+      "id": "m07",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "付款周期是验收后 45 天"
+    },
+    {
+      "id": "m08",
+      "kind": "follow_up",
+      "scope": "project",
+      "summary": "十月底前要核对 A 公司的发票"
+    },
+    {
+      "id": "m09",
+      "kind": "decision",
+      "scope": "project",
+      "summary": "每周五下午发预算执行周报，只写偏差超过 5% 的项"
+    },
+    {
+      "id": "m10",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "季度复盘会定在十一月第一周"
+    },
+    {
+      "id": "m11",
+      "kind": "preference",
+      "scope": "user",
+      "summary": "会议纪要只写决定和负责人"
+    },
+    {
+      "id": "m12",
+      "kind": "preference",
+      "scope": "user",
+      "summary": "汇报幻灯片每页一个结论，不放大段文字"
+    },
+    {
+      "id": "m13",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "年会在杭州，十一月 14 日到 16 日"
+    },
+    {
+      "id": "m14",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "往返机票报销上限 2500 元"
+    },
+    {
+      "id": "m15",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "酒店订在会场旁边，三晚"
+    },
+    {
+      "id": "m16",
+      "kind": "behavior",
+      "scope": "user",
+      "summary": "出差前一天整理好行程和报销单据"
+    },
+    {
+      "id": "m17",
+      "kind": "follow_up",
+      "scope": "project",
+      "summary": "同行的博士生要办邀请函"
+    },
+    {
+      "id": "m18",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "下季度只批了一个编制"
+    },
+    {
+      "id": "m19",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "招聘面试安排在下周二和周四"
+    },
+    {
+      "id": "m20",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "新人入职第一周先看数据管道的 README"
+    }
+  ],
+  "existing": [],
+  "dismissed": [],
+  "truth": {
+    "预算与采购": [
+      "m01",
+      "m02",
+      "m03",
+      "m04",
+      "m05"
+    ],
+    "供应商与合同": [
+      "m06",
+      "m07",
+      "m08"
+    ],
+    "会议与汇报": [
+      "m09",
+      "m10",
+      "m11",
+      "m12"
+    ],
+    "出差与报销": [
+      "m13",
+      "m14",
+      "m15",
+      "m16",
+      "m17"
+    ],
+    "人员与招聘": [
+      "m18",
+      "m19",
+      "m20"
+    ]
+  },
+  "expect": {
+    "topics": {
+      "min": 4,
+      "max": 30
+    },
+    "pairRecall": 0.6,
+    "neverTogether": [
+      [
+        "m14",
+        "m02"
+      ],
+      [
+        "m19",
+        "m13"
+      ]
+    ],
+    "noKindWords": true,
+    "noSpecialtyWords": true
+  },
+  "fixtures": {
+    "good": {
+      "topics": [
+        {
+          "id": "",
+          "label": "预算与采购",
+          "members": [
+            "m01",
+            "m02",
+            "m03",
+            "m04",
+            "m05"
+          ]
+        },
+        {
+          "id": "",
+          "label": "供应商与合同",
+          "members": [
+            "m06",
+            "m07",
+            "m08"
+          ]
+        },
+        {
+          "id": "",
+          "label": "会议与汇报",
+          "members": [
+            "m09",
+            "m10",
+            "m11",
+            "m12"
+          ]
+        },
+        {
+          "id": "",
+          "label": "出差与报销",
+          "members": [
+            "m13",
+            "m14",
+            "m15",
+            "m16",
+            "m17"
+          ]
+        },
+        {
+          "id": "",
+          "label": "人员与招聘",
+          "members": [
+            "m18",
+            "m19",
+            "m20"
+          ]
+        }
+      ]
+    },
+    "bad": {
+      "topics": [
+        {
+          "id": "",
+          "label": "决定",
+          "members": [
+            "m04",
+            "m05",
+            "m09"
+          ]
+        },
+        {
+          "id": "",
+          "label": "偏好",
+          "members": [
+            "m11",
+            "m12"
+          ]
+        },
+        {
+          "id": "",
+          "label": "出差与预算",
+          "members": [
+            "m01",
+            "m02",
+            "m13",
+            "m14"
+          ]
+        }
+      ]
+    },
+    "badFails": [
+      "pairRecall",
+      "neverTogether",
+      "noKindWords"
+    ]
+  }
+}

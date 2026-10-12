@@ -1,0 +1,46 @@
+{
+  "id": "too-few-to-group",
+  "class": "bounds",
+  "description": "Five memories are not enough to find themes in: nothing is grouped and no model is called; the map says so in a sentence.",
+  "memories": [
+    {
+      "id": "m01",
+      "kind": "preference",
+      "scope": "user",
+      "summary": "回答先给结论"
+    },
+    {
+      "id": "m02",
+      "kind": "preference",
+      "scope": "user",
+      "summary": "日期写成 2026-10-12 这种格式"
+    },
+    {
+      "id": "m03",
+      "kind": "profile",
+      "scope": "user",
+      "summary": "在医院做临床研究"
+    },
+    {
+      "id": "m04",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "三家门诊中心入组"
+    },
+    {
+      "id": "m05",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "报表要每周五发"
+    }
+  ],
+  "existing": [],
+  "dismissed": [],
+  "truth": {},
+  "expect": {
+    "groupable": 5,
+    "minMemories": 12,
+    "noModelCall": true
+  },
+  "fixtures": null
+}

@@ -100,7 +100,7 @@ describe("the same marks as a list", () => {
   it("skips the structure, puts what needs a look first and what was replaced last, and says why", () => {
     const rows = markRows(nodes, { formatDay });
     expect(rows.map((row) => row.id)).toEqual(["memory:c", "memory:b", "document:src_1", "method:m1", "memory:a", "reference:doi:10.1/x", "memory:d"]);
-    expect(rows[0]).toMatchObject({ id: "memory:c", state: "check", note: "依据的资料已撤回", kind: "决定 · 09-20", open: { kind: "record", id: "c" } });
+    expect(rows[0]).toMatchObject({ id: "memory:c", state: "check", note: "依据的资料已撤回", kind: "已定的决策 · 09-20", open: { kind: "record", id: "c" } });
     expect(rows.at(-1)).toMatchObject({ id: "memory:d", state: "replaced", note: "已被后来的说法替代" });
     expect(rows.some((row) => row.id.startsWith("project:") || row.id.startsWith("you:"))).toBe(false);
   });

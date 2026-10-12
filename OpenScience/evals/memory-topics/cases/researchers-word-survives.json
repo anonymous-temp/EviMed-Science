@@ -1,0 +1,213 @@
+{
+  "id": "researchers-word-survives",
+  "class": "stability",
+  "description": "The grouping already exists and the researcher has renamed one topic (「我们组的人手」, kept as fixed) and dismissed another (「周末出行」). A regrouping after a new memory keeps the first one's id and name and does not bring the second back — under that name or another one of the same meaning.",
+  "memories": [
+    {
+      "id": "m01",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "招聘面试安排在下周二和周四"
+    },
+    {
+      "id": "m02",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "面试题偏重 SQL 调优和排查线上问题"
+    },
+    {
+      "id": "m03",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "新人入职第一周先看数据管道的 README"
+    },
+    {
+      "id": "m04",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "年会在杭州，十一月 14 日到 16 日"
+    },
+    {
+      "id": "m05",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "往返机票报销上限 2500 元"
+    },
+    {
+      "id": "m06",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "酒店订在会场旁边，三晚"
+    },
+    {
+      "id": "m07",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "慢查询集中在随访报表的三张大表联查"
+    },
+    {
+      "id": "m08",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "报表大表加覆盖索引，不拆表"
+    },
+    {
+      "id": "m09",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "连接池上限定为 200，超出排队不拒绝"
+    },
+    {
+      "id": "m10",
+      "kind": "preference",
+      "scope": "user",
+      "summary": "回答先给结论，再给依据，不要超过三段"
+    },
+    {
+      "id": "m11",
+      "kind": "preference",
+      "scope": "user",
+      "summary": "对比类的内容用表格，不要长段落"
+    },
+    {
+      "id": "m12",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "周末的徒步路线定在西山"
+    }
+  ],
+  "existing": [
+    {
+      "id": "topic:1111111111",
+      "label": "我们组的人手",
+      "fixed": true
+    },
+    {
+      "id": "topic:2222222222",
+      "label": "数据库与性能"
+    }
+  ],
+  "dismissed": [
+    "周末出行"
+  ],
+  "truth": {
+    "招聘": [
+      "m01",
+      "m02",
+      "m03"
+    ],
+    "出差": [
+      "m04",
+      "m05",
+      "m06"
+    ],
+    "数据库与性能": [
+      "m07",
+      "m08",
+      "m09"
+    ],
+    "回答风格": [
+      "m10",
+      "m11"
+    ]
+  },
+  "expect": {
+    "topics": {
+      "min": 3,
+      "max": 30
+    },
+    "pairRecall": 0.6,
+    "neverTogether": [
+      [
+        "m01",
+        "m07"
+      ]
+    ],
+    "noKindWords": true,
+    "keeps": [
+      {
+        "id": "topic:1111111111",
+        "label": "我们组的人手"
+      }
+    ],
+    "dismissedAbsent": [
+      "周末出行",
+      "户外活动"
+    ]
+  },
+  "fixtures": {
+    "good": {
+      "topics": [
+        {
+          "id": "topic:1111111111",
+          "label": "我们组的人手",
+          "members": [
+            "m01",
+            "m02",
+            "m03"
+          ]
+        },
+        {
+          "id": "",
+          "label": "出差",
+          "members": [
+            "m04",
+            "m05",
+            "m06"
+          ]
+        },
+        {
+          "id": "topic:2222222222",
+          "label": "数据库与性能",
+          "members": [
+            "m07",
+            "m08",
+            "m09"
+          ]
+        },
+        {
+          "id": "",
+          "label": "回答风格",
+          "members": [
+            "m10",
+            "m11"
+          ]
+        }
+      ]
+    },
+    "bad": {
+      "topics": [
+        {
+          "id": "",
+          "label": "招聘",
+          "members": [
+            "m01",
+            "m02",
+            "m03"
+          ]
+        },
+        {
+          "id": "",
+          "label": "户外活动",
+          "members": [
+            "m12",
+            "m04"
+          ]
+        },
+        {
+          "id": "",
+          "label": "杂项",
+          "members": [
+            "m07",
+            "m01"
+          ]
+        }
+      ]
+    },
+    "badFails": [
+      "keeps",
+      "dismissedAbsent",
+      "neverTogether"
+    ]
+  }
+}

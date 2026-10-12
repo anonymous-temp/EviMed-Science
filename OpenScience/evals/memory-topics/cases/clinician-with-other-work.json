@@ -1,0 +1,299 @@
+{
+  "id": "clinician-with-other-work",
+  "class": "general",
+  "description": "One account, three kinds of work: a trial, the database behind its reports, and the department's budget. The medical memories are grouped as readily as the others, and a medical topic never absorbs a database one for sharing the word 随访报表.",
+  "memories": [
+    {
+      "id": "m01",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "成人慢性心衰患者，射血分数低于 40%"
+    },
+    {
+      "id": "m02",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "SGLT2 抑制剂联合标准治疗，对照组为标准治疗加安慰剂"
+    },
+    {
+      "id": "m03",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "主要终点为心衰再入院或心血管死亡"
+    },
+    {
+      "id": "m04",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "起始剂量 10 mg 每日一次"
+    },
+    {
+      "id": "m05",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "研究设计改为双盲，由独立统计师揭盲"
+    },
+    {
+      "id": "m06",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "主分析采用意向性治疗人群"
+    },
+    {
+      "id": "m07",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "用 Cox 比例风险模型，协变量按预先指定的清单"
+    },
+    {
+      "id": "m08",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "缺失数据用多重插补，不做末次观测结转"
+    },
+    {
+      "id": "m09",
+      "kind": "follow_up",
+      "scope": "project",
+      "summary": "统计分析计划要在下月前交给伦理委员会"
+    },
+    {
+      "id": "m10",
+      "kind": "correction",
+      "scope": "user",
+      "summary": "p 值不要写成 p=0.000，应写 p<0.001"
+    },
+    {
+      "id": "m11",
+      "kind": "correction",
+      "scope": "user",
+      "summary": "风险比要同时给 95% 置信区间"
+    },
+    {
+      "id": "m12",
+      "kind": "preference",
+      "scope": "user",
+      "summary": "引用文献要给 DOI 和年份"
+    },
+    {
+      "id": "m13",
+      "kind": "behavior",
+      "scope": "user",
+      "summary": "读文献时先抄结论再抄方法"
+    },
+    {
+      "id": "m14",
+      "kind": "behavior",
+      "scope": "user",
+      "summary": "论文初稿写完后会隔一天再通读一遍"
+    },
+    {
+      "id": "m15",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "摘要已于上周投出，等待通知"
+    },
+    {
+      "id": "m16",
+      "kind": "follow_up",
+      "scope": "project",
+      "summary": "病例报告表要补一栏用药依从性"
+    },
+    {
+      "id": "m17",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "数据来自医院信息系统和随访问卷"
+    },
+    {
+      "id": "m18",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "慢查询集中在随访报表的三张大表联查"
+    },
+    {
+      "id": "m19",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "报表大表加覆盖索引，不拆表"
+    },
+    {
+      "id": "m20",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "连接池上限定为 200，超出排队不拒绝"
+    },
+    {
+      "id": "m21",
+      "kind": "project_fact",
+      "scope": "project",
+      "summary": "第四季度科室预算总额 120 万元"
+    },
+    {
+      "id": "m22",
+      "kind": "decision",
+      "scope": "project",
+      "summary": "单笔采购超过 80 万才要科主任审批"
+    }
+  ],
+  "existing": [],
+  "dismissed": [],
+  "truth": {
+    "心衰随访研究": [
+      "m01",
+      "m02",
+      "m03",
+      "m04",
+      "m05"
+    ],
+    "统计分析": [
+      "m06",
+      "m07",
+      "m08",
+      "m09",
+      "m10",
+      "m11"
+    ],
+    "论文与文献": [
+      "m12",
+      "m13",
+      "m14",
+      "m15"
+    ],
+    "数据管理": [
+      "m16",
+      "m17"
+    ],
+    "数据库与性能": [
+      "m18",
+      "m19",
+      "m20"
+    ],
+    "预算与采购": [
+      "m21",
+      "m22"
+    ]
+  },
+  "expect": {
+    "topics": {
+      "min": 5,
+      "max": 30
+    },
+    "pairRecall": 0.6,
+    "neverTogether": [
+      [
+        "m01",
+        "m18"
+      ],
+      [
+        "m02",
+        "m21"
+      ],
+      [
+        "m06",
+        "m20"
+      ]
+    ],
+    "noKindWords": true
+  },
+  "fixtures": {
+    "good": {
+      "topics": [
+        {
+          "id": "",
+          "label": "心衰随访研究",
+          "members": [
+            "m01",
+            "m02",
+            "m03",
+            "m04",
+            "m05"
+          ]
+        },
+        {
+          "id": "",
+          "label": "统计分析",
+          "members": [
+            "m06",
+            "m07",
+            "m08",
+            "m09",
+            "m10",
+            "m11"
+          ]
+        },
+        {
+          "id": "",
+          "label": "论文与文献",
+          "members": [
+            "m12",
+            "m13",
+            "m14",
+            "m15"
+          ]
+        },
+        {
+          "id": "",
+          "label": "数据管理",
+          "members": [
+            "m16",
+            "m17"
+          ]
+        },
+        {
+          "id": "",
+          "label": "数据库与性能",
+          "members": [
+            "m18",
+            "m19",
+            "m20"
+          ]
+        },
+        {
+          "id": "",
+          "label": "预算与采购",
+          "members": [
+            "m21",
+            "m22"
+          ]
+        }
+      ]
+    },
+    "bad": {
+      "topics": [
+        {
+          "id": "",
+          "label": "随访",
+          "members": [
+            "m01",
+            "m17",
+            "m18",
+            "m19"
+          ]
+        },
+        {
+          "id": "",
+          "label": "纠正",
+          "members": [
+            "m10",
+            "m11"
+          ]
+        },
+        {
+          "id": "",
+          "label": "杂项",
+          "members": [
+            "m06",
+            "m20",
+            "m21"
+          ]
+        }
+      ]
+    },
+    "badFails": [
+      "pairRecall",
+      "neverTogether",
+      "noKindWords"
+    ]
+  }
+}
