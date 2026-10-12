@@ -9,7 +9,7 @@ import { sourceAttemptId } from "./sourceFiles.mjs";
 import { HttpError, assertProjectCapacity, normalizeWorkspaceRelativePath, openScopedDirectoryNoFollow, openScopedFileNoFollow,
   resolveScopedPath, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
-const MAX_INPUT_BYTES = 8 * 1024 * 1024;
+export const MAX_INPUT_BYTES = 8 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 400_000;
 const CAPABILITY = "source-understanding";
 const INPUT_FILE = "source-understanding-input.json";
@@ -82,7 +82,7 @@ async function pruneRunWorkspaces(home, keep) {
 
 /** A bounded read cannot grow without limit after the initial file stat.
  * @param {any} project @param {string} relative @param {number} limit */
-async function readOwnedJson(project, relative, limit) {
+export async function readOwnedJson(project, relative, limit) {
   const normalized = normalizeWorkspaceRelativePath(relative, "source artifact");
   // Anchor at the trusted project base, not the customer-replaceable derived
   // directory: every source-directory ancestor must also pass no-follow checks.
@@ -105,7 +105,7 @@ async function readOwnedJson(project, relative, limit) {
 }
 
 /** A scoped read that found nothing, as opposed to one the path guard refused. @param {any} error */
-function isMissing(error) {
+export function isMissing(error) {
   return error?.code === "ENOENT" || error?.code === "file_not_found" || error?.status === 404;
 }
 
@@ -120,7 +120,7 @@ function isMissing(error) {
  * @param {number} formatVersion @param {string | null} deliverableId @param {Set<string>} listed
  * @returns {Promise<string[]>}
  */
-async function packageCandidates(project, name, file, formatVersion, deliverableId, listed) {
+export async function packageCandidates(project, name, file, formatVersion, deliverableId, listed) {
   /** @type {string[]} */
   const named = [];
   if (file) {
@@ -143,20 +143,21 @@ async function packageCandidates(project, name, file, formatVersion, deliverable
 }
 
 /**
- * The understanding a succeeded run left, and whether its delivery receipt
- * vouches for it.
+ * The files a succeeded run's package left, and whether its delivery receipt vouches for them.
  *
- * The understanding is what is on disk: `source-understanding.json`. The
- * receipt is our own record of what was graded, and it labels what is read here
- * (`verified`); it does not decide whether anything is (2026-10-04). A receipt
- * that is missing, malformed, names another package, or names bytes the file no
- * longer has leaves the understanding **unverified** — and it still goes through
- * `validateSourceUnderstanding` against the frozen input, which is the check
- * that guards what the document is understood to say. Only a file that is not
- * there is a failure.
- * @param {any} project @param {any} run @returns {Promise<{ output: any, verified: boolean }>}
+ * The package is what is on disk. The receipt is our own record of what was graded, and it labels what is read here
+ * (`verified`); it does not decide whether anything is (2026-10-04). A receipt that is missing, malformed, names another
+ * package, or names bytes a file no longer has leaves the package **unverified** — and the caller still validates what it
+ * read against its own frozen input, which is the check that guards what the document is understood to say. Only the
+ * `required` file not being there is a failure.
+ *
+ * Shared by the source understanding and the knowledge-page compile (`knowledgeCompileRuntime.mjs`): the same receipt, the
+ * same places a package is looked for, the same path guard.
+ * @param {any} project @param {any} run
+ * @param {{ capability: string, contractKind?: string, files: Array<{ name: string, limit: number }>, required: string, missingCode: string, missingMessage: string }} spec
+ * @returns {Promise<{ values: Record<string, any>, verified: boolean }>}
  */
-async function readUnderstanding(project, run) {
+export async function readRunPackage(project, run, spec) {
   const listed = new Set([...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])]);
   /** @type {any} */
   let entry = null;
@@ -174,13 +175,13 @@ async function readUnderstanding(project, run) {
       }
     }
     const checked = validateDeliveryReceipt(value);
-    const entries = checked.ok ? checked.receipt.entries.filter(item => item.contractKind === CAPABILITY && item.capability === CAPABILITY) : [];
+    const entries = checked.ok ? checked.receipt.entries.filter(item => item.contractKind === (spec.contractKind ?? spec.capability) && item.capability === spec.capability) : [];
     if (entries.length === 1) { entry = entries[0]; formatVersion = checked.receipt.formatVersion; }
   } catch { /* no receipt, or none that can be read: the files are read all the same, and the path guard speaks for them below */ }
   let verified = Boolean(entry);
-  /** @type {any} */
-  let output = null;
-  for (const name of [OUTPUT_FILE, INPUT_FILE]) {
+  /** @type {Record<string, any>} */
+  const values = {};
+  for (const { name, limit } of spec.files) {
     const recorded = entry?.files.filter((/** @type {any} */ file) => path.posix.basename(file.path) === name) ?? [];
     const file = recorded.length === 1 ? recorded[0] : null;
     if (!file) verified = false;
@@ -188,24 +189,35 @@ async function readUnderstanding(project, run) {
     let loaded = null;
     for (const relative of await packageCandidates(project, name, file, formatVersion, entry?.deliverableId ?? null, listed)) {
       try {
-        loaded = { relative, ...await readOwnedJson(project, relative, name === INPUT_FILE ? MAX_INPUT_BYTES : MAX_OUTPUT_BYTES) };
+        loaded = { relative, ...await readOwnedJson(project, relative, limit) };
         break;
       } catch (error) {
         if (!isMissing(error)) throw error;
       }
     }
     if (!loaded) {
-      // The understanding itself is the one file that cannot be done without.
-      // The preserved copy of the input is bookkeeping: the control plane
-      // validates the output against its own frozen input, never the copy.
-      if (name === OUTPUT_FILE) throw new HttpError(409, "source_understanding_output_missing", "The run left no source understanding to read.");
+      // The required file is the one that cannot be done without. The others
+      // are bookkeeping: the control plane validates the output against its own
+      // frozen input, never the copy.
+      if (name === spec.required) throw new HttpError(409, spec.missingCode, spec.missingMessage);
       verified = false;
       continue;
     }
     if (file && (loaded.bytes.length !== file.bytes || createHash("sha256").update(loaded.bytes).digest("hex") !== file.sha256)) verified = false;
-    if (name === OUTPUT_FILE) output = loaded.value;
+    values[name] = loaded.value;
   }
-  return { output, verified };
+  return { values, verified };
+}
+
+/**
+ * The understanding a succeeded run left, and whether its delivery receipt vouches for it.
+ * @param {any} project @param {any} run @returns {Promise<{ output: any, verified: boolean }>}
+ */
+async function readUnderstanding(project, run) {
+  const { values, verified } = await readRunPackage(project, run, { capability: CAPABILITY,
+    files: [{ name: OUTPUT_FILE, limit: MAX_OUTPUT_BYTES }, { name: INPUT_FILE, limit: MAX_INPUT_BYTES }], required: OUTPUT_FILE,
+    missingCode: "source_understanding_output_missing", missingMessage: "The run left no source understanding to read." });
+  return { output: values[OUTPUT_FILE] ?? null, verified };
 }
 
 /** Existing bounded DSH admission, run recovery, receipt and cancellation.

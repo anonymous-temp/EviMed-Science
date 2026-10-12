@@ -15,7 +15,7 @@
  * `other` — bookkeeping never fails a model call.
  */
 
-/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'autopilot'|'frontier'|'review'|'geo'|'vcr'|'web-search'|'evolution'|'evidence'|'evidence-upkeep'|'other'} UsagePurpose */
+/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'knowledge'|'learning'|'autopilot'|'frontier'|'review'|'geo'|'vcr'|'web-search'|'evolution'|'evidence'|'evidence-upkeep'|'other'} UsagePurpose */
 
 /** Every purpose, in report order. `frontier` is the frontier feed reading
  *  the literature for everyone (screening, editing, the daily issue): one
@@ -45,7 +45,10 @@
  *  behalf, booked to it, counted against its caps and charged to it through
  *  the research allowance like a run's model calls. The platform's budget
  *  pays for official zones only; until 2026-10-05 any account's zone ran on
- *  the frontier budget (plan §3.3). */
+ *  the frontier budget (plan §3.3). `knowledge` is the platform compiling a
+ *  researcher's own documents into their knowledge pages (`knowledgePage.mjs`):
+ *  made for the account that owns the documents, counted against its caps like
+ *  the understanding of a document, and held by the compile's own budget. */
 export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.freeze([
   'kernel',
   'memory-extraction',
@@ -55,6 +58,7 @@ export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.fre
   'capsule-scan',
   'channel-intent',
   'source-understanding',
+  'knowledge',
   'learning',
   'autopilot',
   'frontier',
@@ -78,6 +82,7 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   'capsule-scan': '胶囊扫描',
   'channel-intent': '渠道意图',
   'source-understanding': '资料理解',
+  knowledge: '知识页编译',
   learning: '学习做法',
   autopilot: '定时任务规划',
   frontier: '前沿动态',
@@ -145,6 +150,7 @@ export function usagePurposeOfRun(run) {
   const agent = String(run?.effectiveAgentId ?? '')
   if (['evolution-scout', 'tool-builder'].includes(agent)) return 'evolution'
   if (agent === 'source-understanding') return 'source-understanding'
+  if (agent === 'knowledge-compile') return 'knowledge'
   if (LEARNING_AGENT_IDS.includes(agent)) return 'learning'
   return 'kernel'
 }

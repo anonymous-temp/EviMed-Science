@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { sourceFileFormat } from "@evimed/domain";
+import { sourceFileFormat, sourceOriginOf } from "@evimed/domain";
 import { DOCUMENT_MEMORY_LAYER, SOURCE_PUBLICATION_RECORD_TYPE, withdrawDerivedMemory } from "./derivedMemory.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { HttpError, assertNoSymlinkPath, readJson, safeId, sendJson, writeFileAtomicNoFollow } from "./security.mjs";
@@ -294,6 +294,10 @@ export class LibraryService {
   async add(userId, sourceId) {
     const source = await this.documents.get(userId, "source", librarySourceId(sourceId));
     if (!source) throw new HttpError(404, "library_source_invalid", "The source is unavailable.");
+    // A knowledge page quotes the documents of its own project; in another project those documents are not there to check it against.
+    if (sourceOriginOf({ connectorType: source.payload.connector?.type, path: source.payload.paths?.[0] }) === "wiki") {
+      throw new HttpError(409, "library_source_invalid", "A knowledge page belongs to its project; share the documents it quotes instead.");
+    }
     const sha256 = String(source.payload.fingerprint?.sha256 ?? "");
     if (!SHA256.test(sha256)) throw new HttpError(409, "library_source_invalid", "The source has no content digest.");
     const id = `library:${sha256}`;

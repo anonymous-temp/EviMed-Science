@@ -7,7 +7,7 @@ import { normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstan
   sourceUnderstandingAuditSample, sourceUnderstandingOmissionNotice } from "@evimed/domain";
 // What a document is, said once (`sourceVocabulary.mjs`): the types the judge chooses among, the chip each is counted
 // under, and the format-only first guess made before anyone has read a word.
-import { SOURCE_DOC_TYPES, SOURCE_KINDS, SOURCE_TYPES, sourceDocTypeIsDeep, sourceFirstPassType, sourceOriginOf } from "@evimed/domain";
+import { SOURCE_CHOICE_TYPES, SOURCE_DOC_TYPES, SOURCE_KINDS, SOURCE_TYPES, sourceDocTypeIsDeep, sourceFirstPassType, sourceOriginOf } from "@evimed/domain";
 import { sourceDisplayOf } from "./sourceDisplay.mjs";
 // The knowledge base's format list and page arithmetic, shared with the
 // browser so the picker and this refusal cannot disagree (2026-09-20).
@@ -518,8 +518,9 @@ export class SourceService {
    * one is labelled, `ResultImpactService.reconcileReplacement`). It records and never decides: whatever it does or fails
    * to do leaves the registration exactly as it is.
    * @param {any} documents @param {any} jobs
-   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any}} options */
-  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, report = () => {}, evolutionSignals = null, judgeService = null } = {}) {
+   * `afterRemove` is told once a document is recorded as going, so what rests on it can be labelled.
+   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,afterRemove?:((event:{userId:string,projectId:string,sourceId:string,source:any})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any}} options */
+  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, afterRemove = null, report = () => {}, evolutionSignals = null, judgeService = null } = {}) {
     if (!documents || !jobs) throw new TypeError("SourceService requires product documents and jobs.");
     this.judgeService = judgeService;
     this.documents = documents;
@@ -527,6 +528,7 @@ export class SourceService {
     this.extractorVersion = text(extractorVersion, "extractor version", 80);
     this.now = now;
     this.afterReplace = afterReplace;
+    this.afterRemove = afterRemove;
     this.report = report;
     this.evolutionSignals = evolutionSignals;
     /** @type {Map<string,any>} */
@@ -633,7 +635,8 @@ export class SourceService {
       version: Number(previous.payload.version) || 1 }, by: { sourceId, version: Number(payload.version) || 1, at: payload.createdAt } } : null };
     });
     // Outside the registration locks: it reads results and memories, and the registration is complete without it.
-    if (replaces && this.afterReplace) {
+    // A knowledge page is rewritten by the compile and by the researcher; nothing a result or a memory rests on is the page.
+    if (replaces && this.afterReplace && sourceOriginOf({ connectorType: sourceConnector.type, path: file }) !== "wiki") {
       try { await this.afterReplace({ userId, projectId, ...replaces }); }
       catch (error) { this.report(typeof error?.code === "string" ? error.code : "source_replacement_unrecorded"); }
     }
@@ -738,10 +741,10 @@ export class SourceService {
    */
   async judgeDocumentType(job, source, parsedText) {
     try {
-      const result = await this.judgeService.judge("J7", { filename: source.payload.paths?.[0] ?? "", text: String(parsedText ?? "").slice(0, 1500), types: [...SOURCE_TYPES] },
+      const result = await this.judgeService.judge("J7", { filename: source.payload.paths?.[0] ?? "", text: String(parsedText ?? "").slice(0, 1500), types: [...SOURCE_CHOICE_TYPES] },
         { userId: job.userId, projectId: job.projectId, taskId: job.id, module: "source", regexBaseline: { docType: source.payload.docType } });
       const docType = result?.value?.docType;
-      if (!["settled", "escalated"].includes(result?.outcome) || !SOURCE_TYPES.includes(docType)) return null;
+      if (!["settled", "escalated"].includes(result?.outcome) || !SOURCE_CHOICE_TYPES.includes(docType)) return null;
       return docType === "other" && source.payload.docType !== "other" ? null : docType;
     } catch { return null; }
   }
@@ -755,7 +758,7 @@ export class SourceService {
     // judge that fails, or does not settle, leaves the document what its format says — read with the general slots,
     // never as a paper. A note is the researcher's own writing and is not asked.
     const classification = snapshot && !snapshot.payload.override && snapshot.payload.analysis?.generation !== snapshot.payload.generation
-      && sourceOriginOf({ connectorType: snapshot.payload.connector?.type, path: snapshot.payload.paths?.[0] }) !== "note"
+      && !["note", "wiki"].includes(sourceOriginOf({ connectorType: snapshot.payload.connector?.type, path: snapshot.payload.paths?.[0] }))
       && /\.(?:pdf|docx?|odt|rtf|md|txt|html?|epub)$/i.test(snapshot.payload.paths?.[0] ?? "")
       ? await this.judgeDocumentType(job, snapshot, parsed.text) : null;
     return this.withSourceLease(job, async (source, client) => {
@@ -1199,7 +1202,7 @@ export class SourceService {
     if (input.expectedRevision !== current.revision) throw new HttpError(409, "source_revision_conflict", "The source changed; reload before overriding it.");
     const docType = text(input.docType, "document type", 80);
     const depth = text(input.depth, "source depth", 32);
-    if (!SOURCE_TYPES.includes(docType) || !SOURCE_DEPTHS.includes(depth)) throw new HttpError(400, "source_override_invalid", "Source type or depth is invalid.");
+    if (!SOURCE_CHOICE_TYPES.includes(docType) || !SOURCE_DEPTHS.includes(depth)) throw new HttpError(400, "source_override_invalid", "Source type or depth is invalid.");
     const reason = text(input.reason, "override reason", 1000);
     const updated = await this.documents.put(userId, "source", sourceId, {
       ...current.payload, docType, depth, status: "queued", generation: (Number(current.payload.generation) || 1) + 1,
@@ -1764,8 +1767,22 @@ export class SourceService {
     return updated;
   }
 
-  /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number,accountCreatedAt?:string}} input */
+  /**
+   * Remove a document. Once it is recorded as going, `afterRemove` is told (the knowledge pages that quote it are labelled): a
+   * hand-off that fails is reported and is never a reason the removal did not happen.
+   * @param {string} userId @param {string} sourceId @param {{expectedRevision:number,accountCreatedAt?:string}} input
+   */
   async remove(userId, sourceId, input) {
+    const removed = await this.#remove(userId, sourceId, input);
+    if (this.afterRemove && removed?.projectId) {
+      try { await this.afterRemove({ userId, projectId: removed.projectId, sourceId, source: removed }); }
+      catch (error) { this.report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "source_removal_unrecorded"); }
+    }
+    return removed;
+  }
+
+  /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number,accountCreatedAt?:string}} input */
+  async #remove(userId, sourceId, input) {
     const database = this.documents.database;
     if (!database) throw new HttpError(503, "source_state_unavailable", "Source deletion requires durable shared storage.");
     productInteger(input.expectedRevision, 1, 2_147_483_646);

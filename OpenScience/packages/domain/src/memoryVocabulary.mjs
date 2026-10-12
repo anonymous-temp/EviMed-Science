@@ -81,6 +81,8 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   // words). `apps/server/test/platformDispatchTags.test.mjs` walks every
   // dispatch site and holds each to a tag like these or to a named reason.
   { tag: 'evimed-source-understanding', role: 'injected', emitters: ['apps/server/src/sourceUnderstandingRuntime.mjs'] },
+  // The knowledge-page compile's brief (「知识页」), dispatched into the account's knowledge project.
+  { tag: 'evimed-knowledge-compile', role: 'injected', emitters: ['apps/server/src/knowledgeCompileRuntime.mjs'] },
   // The delivery gate's repair round, sent back into the researcher's own
   // conversation: the gate's words, never theirs.
   { tag: 'evimed-repair', role: 'injected', emitters: ['apps/server/src/server.mjs'] },

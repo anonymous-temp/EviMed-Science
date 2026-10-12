@@ -62,11 +62,13 @@ export class KnowledgeChangeService {
    * (`methodsLinkedTo`, `recordSourceChange`). Either absent, its class is reported unknown, never none.
    * `sourceChanges` is the one record of what was published about a work after it was published (`sourceChanges.mjs`).
    * `evidence` reads the state of an evidence card or a frontier item by id (`createEvidenceLinkStates`); absent, the two kinds are not looked at.
-   * @param {{ memory?: any, methods?: any, sourceChanges?: any, evidence?: { cardStates: (ids: readonly string[]) => Promise<Map<string, any>>, itemStates: (ids: readonly string[]) => Promise<Map<string, any>> } | null,
+   * `pages` is the knowledge pages' service (`knowledgePageService.mjs`): the pages that quote a source are found by the
+   * `dependsOn` their records hold and labelled stale, and the project is queued for a recompile; absent, the class is unknown.
+   * @param {{ memory?: any, methods?: any, pages?: any, sourceChanges?: any, evidence?: { cardStates: (ids: readonly string[]) => Promise<Map<string, any>>, itemStates: (ids: readonly string[]) => Promise<Map<string, any>> } | null,
    *   report?: (code: string) => void, now?: () => Date }} dependencies
    */
-  constructor({ memory = null, methods = null, sourceChanges = null, evidence = null, report = () => {}, now = () => new Date() }) {
-    this.memory = memory; this.methods = methods; this.sourceChanges = sourceChanges; this.evidence = evidence; this.report = report; this.now = now;
+  constructor({ memory = null, methods = null, pages = null, sourceChanges = null, evidence = null, report = () => {}, now = () => new Date() }) {
+    this.memory = memory; this.methods = methods; this.wiki = pages; this.sourceChanges = sourceChanges; this.evidence = evidence; this.report = report; this.now = now;
   }
 
   /**
@@ -117,6 +119,8 @@ export class KnowledgeChangeService {
       const status = sourceUpdateStatusOfFact(fact);
       if (!doi || status.state !== "changed") continue;
       const found = await this.memories(ownerId, projectId, { id: doi, doi }, status);
+      // The knowledge pages that quote a document of this project carrying the same DOI; a position with no project names none.
+      if (projectId !== "-") await this.pages(ownerId, projectId, { id: doi, doi }, status);
       if (found.items?.length) items.push({ identifier: fact.identifier, memories: found.items });
     }
     return { items, cursor: page.cursor, hasMore: page.hasMore };
@@ -146,6 +150,35 @@ export class KnowledgeChangeService {
         && (row.scope === "user" || row.scope === "organization" || (row.scope === "project" && row.scopeId === projectId)));
       return { total: shown.length, items: shown.map((/** @type {any} */ row) => ({ recordId: row.recordId, scope: row.scope, kind: row.kind,
         state: moved.has(row.recordId) ? next : row.state })) };
+    } catch (error) {
+      this.report(codeOf(error));
+      return { unknown: "lookup_failed" };
+    }
+  }
+
+  /**
+   * The knowledge pages that quote a source, labelled with what a check found and queued for a recompile. A label and a queue
+   * entry, never a verdict: no page is hidden, withheld or rewritten here, and a check that could not answer changes nothing.
+   * Found by the recorded document id only — a knowledge-base document by its `src_` id, a published work by the DOI the
+   * project's documents carry.
+   * @param {string} ownerId @param {string} projectId @param {{ id: string, doi?: string }} ref
+   * @param {{ state: string, reason?: string, updates?: any[] }} checked
+   * @returns {Promise<{ total?: number, items?: any[], unknown?: string }>}
+   */
+  async pages(ownerId, projectId, ref, checked) {
+    if (!this.wiki?.enabled) return { unknown: "unavailable" };
+    const state = linkStateOf(checked);
+    if (state !== "changed" && state !== "retracted") return { items: [], total: 0 };
+    try {
+      const ids = new Set(/^src_[a-f0-9]{32}$/.test(String(ref?.id)) ? [String(ref.id)] : []);
+      const doi = doiOf(ref?.doi ?? ref?.id);
+      if (doi) for (const id of await this.wiki.sourceIdsByDoi(ownerId, projectId, doi)) ids.add(id);
+      if (!ids.size) return { items: [], total: 0 };
+      await this.wiki.noteSourcesChanged(ownerId, projectId, [...ids].map((sourceId) => ({ sourceId, reason: state })));
+      /** @type {any[]} */
+      const items = [];
+      for (const sourceId of ids) items.push(...await this.wiki.pagesQuoting(ownerId, projectId, sourceId));
+      return { total: items.length, items };
     } catch (error) {
       this.report(codeOf(error));
       return { unknown: "lookup_failed" };

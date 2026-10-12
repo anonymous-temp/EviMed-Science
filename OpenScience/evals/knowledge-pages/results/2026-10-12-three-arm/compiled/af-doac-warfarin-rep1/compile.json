@@ -1,0 +1,70 @@
+{
+  "stats": {
+    "rounds": 3,
+    "promptTokens": 55383,
+    "completionTokens": 30580,
+    "cost": 0.24853112,
+    "patchPages": 7,
+    "unreadablePatch": false,
+    "finalRequired": 1,
+    "finalAdvisory": 2,
+    "documents": 8,
+    "pages": 7,
+    "claims": 47,
+    "kept": 46,
+    "held": 1,
+    "heldByReason": {
+      "quote_not_found": 1
+    },
+    "documentsCited": 8,
+    "skipped": [],
+    "verifyMismatch": 0,
+    "roundDetails": [
+      {
+        "round": 0,
+        "finish": "stop",
+        "promptTokens": 8020,
+        "completionTokens": 10202,
+        "cost": 0.08235232,
+        "required": 3,
+        "advisory": 2,
+        "issueMessages": [
+          "required: pages[1].sections[0].heading must be 1-80 characters.",
+          "advisory: pages[1].sections[0].claims[2].evidence[0].quote is not in document src_8ff4bad2e9d926335b4de77ad1e41630 word for word: \"In the intention-to-treat analysis, the primary end point occurred in 269 patien\". Copy the passage again from the document, or leave this statement out.",
+          "required: pages[5].sections[0].heading must be 1-80 characters.",
+          "required: pages[6].slug must be 1-63 lowercase letters, digits or hyphens, and not \"index\".",
+          "advisory: lint[0] needs a kind (conflict, duplicate, gap, stale), a note of up to 400 characters and, optionally, page slugs."
+        ]
+      },
+      {
+        "round": 1,
+        "finish": "stop",
+        "promptTokens": 18480,
+        "completionTokens": 10189,
+        "cost": 0.08284704,
+        "required": 1,
+        "advisory": 2,
+        "issueMessages": [
+          "advisory: pages[1].sections[0].claims[2].evidence[0].quote is not in document src_8ff4bad2e9d926335b4de77ad1e41630 word for word: \"In the intention-to-treat analysis, the primary end point occurred in 269 patien\". Copy the passage again from the document, or leave this statement out.",
+          "required: pages[5].sections[0].heading must be 1-80 characters.",
+          "advisory: lint[0] needs a kind (conflict, duplicate, gap, stale), a note of up to 400 characters and, optionally, page slugs."
+        ]
+      },
+      {
+        "round": 2,
+        "finish": "stop",
+        "promptTokens": 28883,
+        "completionTokens": 10189,
+        "cost": 0.08333175999999999,
+        "required": 1,
+        "advisory": 2,
+        "issueMessages": [
+          "advisory: pages[1].sections[0].claims[2].evidence[0].quote is not in document src_8ff4bad2e9d926335b4de77ad1e41630 word for word: \"In the intention-to-treat analysis, the primary end point occurred in 269 patien\". Copy the passage again from the document, or leave this statement out.",
+          "required: pages[5].sections[0].heading must be 1-80 characters.",
+          "advisory: lint[0] needs a kind (conflict, duplicate, gap, stale), a note of up to 400 characters and, optionally, page slugs."
+        ]
+      }
+    ]
+  },
+  "inputSha256": "2fbb335ae99b371be67d2f67e81cce374017704689881036d2233b67434e9ae1"
+}

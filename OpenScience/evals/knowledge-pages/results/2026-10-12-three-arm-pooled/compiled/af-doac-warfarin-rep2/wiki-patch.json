@@ -1,0 +1,634 @@
+{
+  "schemaVersion": 1,
+  "pages": [
+    {
+      "op": "create",
+      "slug": "dabigatran",
+      "type": "entity",
+      "title": "Dabigatran",
+      "sections": [
+        {
+          "heading": "Efficacy and safety versus warfarin in atrial fibrillation",
+          "claims": [
+            {
+              "text": "In the RE-LY noninferiority trial, 18,113 patients with atrial fibrillation and a risk of stroke were randomly assigned to fixed doses of dabigatran 110 mg or 150 mg twice daily, in a blinded fashion, or to adjusted-dose warfarin, in an unblinded fashion, with a median follow-up of 2.0 years.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_8a669b066c4cb002e5224ef48c9a8550",
+                  "quote": "In this noninferiority trial, we randomly assigned 18,113 patients who had atrial fibrillation and a risk of stroke to receive, in a blinded fashion, fixed doses of dabigatran--110 mg or 150 mg twice daily--or, in an unblinded fashion, adjusted-dose warfarin. The median duration of the follow-up period was 2.0 years."
+                }
+              ]
+            },
+            {
+              "text": "The rate of stroke or systemic embolism was 1.69% per year with warfarin, 1.53% per year with dabigatran 110 mg (relative risk 0.91; 95% CI 0.74 to 1.11; P<0.001 for noninferiority) and 1.11% per year with dabigatran 150 mg (relative risk 0.66; 95% CI 0.53 to 0.82; P<0.001 for superiority).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_8a669b066c4cb002e5224ef48c9a8550",
+                  "quote": "Rates of the primary outcome were 1.69% per year in the warfarin group, as compared with 1.53% per year in the group that received 110 mg of dabigatran (relative risk with dabigatran, 0.91; 95% confidence interval [CI], 0.74 to 1.11; P<0.001 for noninferiority) and 1.11% per year in the group that received 150 mg of dabigatran (relative risk, 0.66; 95% CI, 0.53 to 0.82; P<0.001 for superiority)."
+                }
+              ]
+            },
+            {
+              "text": "Major bleeding occurred at 3.36% per year with warfarin, 2.71% per year with dabigatran 110 mg (P=0.003) and 3.11% per year with dabigatran 150 mg (P=0.31).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_8a669b066c4cb002e5224ef48c9a8550",
+                  "quote": "The rate of major bleeding was 3.36% per year in the warfarin group, as compared with 2.71% per year in the group receiving 110 mg of dabigatran (P=0.003) and 3.11% per year in the group receiving 150 mg of dabigatran (P=0.31)."
+                }
+              ]
+            },
+            {
+              "text": "Hemorrhagic stroke occurred at 0.38% per year with warfarin, 0.12% per year with dabigatran 110 mg (P<0.001) and 0.10% per year with dabigatran 150 mg (P<0.001).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_8a669b066c4cb002e5224ef48c9a8550",
+                  "quote": "The rate of hemorrhagic stroke was 0.38% per year in the warfarin group, as compared with 0.12% per year with 110 mg of dabigatran (P<0.001) and 0.10% per year with 150 mg of dabigatran (P<0.001)."
+                }
+              ]
+            },
+            {
+              "text": "Mortality was 4.13% per year with warfarin, 3.75% per year with dabigatran 110 mg (P=0.13) and 3.64% per year with dabigatran 150 mg (P=0.051).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_8a669b066c4cb002e5224ef48c9a8550",
+                  "quote": "The mortality rate was 4.13% per year in the warfarin group, as compared with 3.75% per year with 110 mg of dabigatran (P=0.13) and 3.64% per year with 150 mg of dabigatran (P=0.051)."
+                }
+              ]
+            },
+            {
+              "text": "In patients with atrial fibrillation, dabigatran 110 mg was associated with rates of stroke and systemic embolism similar to warfarin and lower rates of major hemorrhage, whereas dabigatran 150 mg was associated with lower rates of stroke and systemic embolism but similar rates of major hemorrhage.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_8a669b066c4cb002e5224ef48c9a8550",
+                  "quote": "In patients with atrial fibrillation, dabigatran given at a dose of 110 mg was associated with rates of stroke and systemic embolism that were similar to those associated with warfarin, as well as lower rates of major hemorrhage. Dabigatran administered at a dose of 150 mg, as compared with warfarin, was associated with lower rates of stroke and systemic embolism but similar rates of major hemorrhage."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "related": [
+        "doac-vs-warfarin-af",
+        "warfarin"
+      ]
+    },
+    {
+      "op": "create",
+      "slug": "rivaroxaban",
+      "type": "entity",
+      "title": "Rivaroxaban",
+      "sections": [
+        {
+          "heading": "ROCKET AF: rivaroxaban versus warfarin in nonvalvular atrial fibrillation",
+          "claims": [
+            {
+              "text": "In the double-blind ROCKET AF trial, 14,264 patients with nonvalvular atrial fibrillation at increased risk for stroke were randomly assigned to rivaroxaban 20 mg daily or dose-adjusted warfarin, with a per-protocol, as-treated primary analysis designed to determine noninferiority for stroke or systemic embolism.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_8ff4bad2e9d926335b4de77ad1e41630",
+                  "quote": "In a double-blind trial, we randomly assigned 14,264 patients with nonvalvular atrial fibrillation who were at increased risk for stroke to receive either rivaroxaban (at a daily dose of 20 mg) or dose-adjusted warfarin. The per-protocol, as-treated primary analysis was designed to determine whether rivaroxaban was noninferior to warfarin for the primary end point of stroke or systemic embolism."
+                }
+              ]
+            },
+            {
+              "text": "In the primary analysis the primary end point occurred in 188 rivaroxaban patients (1.7% per year) and 241 warfarin patients (2.2% per year) (hazard ratio 0.79; 95% CI 0.66 to 0.96; P<0.001 for noninferiority); in the intention-to-treat analysis it occurred in 269 rivaroxaban patients (2.1% per year) and 306 warfarin patients (2.4% per year) (hazard ratio 0.88; 95% CI 0.74 to 1.03; P<0.001 for noninferiority; P=0.12 for superiority).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_8ff4bad2e9d926335b4de77ad1e41630",
+                  "quote": "In the primary analysis, the primary end point occurred in 188 patients in the rivaroxaban group (1.7% per year) and in 241 in the warfarin group (2.2% per year) (hazard ratio in the rivaroxaban group, 0.79; 95% confidence interval [CI], 0.66 to 0.96; P<0.001 for noninferiority). In the intention-to-treat analysis, the primary end point occurred in 269 patients in the rivaroxaban group (2.1% per year) and 306 patients in the warfarin group (2.4% per year) (hazard ratio, 0.88; 95% CI, 0.74 to 1.03; P<0.001 for noninferiority; P=0.12 for superiority)."
+                }
+              ]
+            },
+            {
+              "text": "Major and nonmajor clinically relevant bleeding occurred in 1475 rivaroxaban patients (14.9% per year) and 1449 warfarin patients (14.5% per year) (hazard ratio 1.03; 95% CI 0.96 to 1.11; P=0.44), with significant reductions in intracranial hemorrhage (0.5% vs. 0.7%, P=0.02) and fatal bleeding (0.2% vs. 0.5%, P=0.003) in the rivaroxaban group.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_8ff4bad2e9d926335b4de77ad1e41630",
+                  "quote": "Major and nonmajor clinically relevant bleeding occurred in 1475 patients in the rivaroxaban group (14.9% per year) and in 1449 in the warfarin group (14.5% per year) (hazard ratio, 1.03; 95% CI, 0.96 to 1.11; P=0.44), with significant reductions in intracranial hemorrhage (0.5% vs. 0.7%, P=0.02) and fatal bleeding (0.2% vs. 0.5%, P=0.003) in the rivaroxaban group."
+                }
+              ]
+            },
+            {
+              "text": "In patients with atrial fibrillation, rivaroxaban was noninferior to warfarin for prevention of stroke or systemic embolism, with no significant between-group difference in major bleeding, although intracranial and fatal bleeding occurred less frequently with rivaroxaban.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_8ff4bad2e9d926335b4de77ad1e41630",
+                  "quote": "In patients with atrial fibrillation, rivaroxaban was noninferior to warfarin for the prevention of stroke or systemic embolism. There was no significant between-group difference in the risk of major bleeding, although intracranial and fatal bleeding occurred less frequently in the rivaroxaban group."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "heading": "J-ROCKET AF: a Japan-specific rivaroxaban dose",
+          "claims": [
+            {
+              "text": "J-ROCKET AF was a prospective, randomized, double-blind, phase III trial in which 1,280 Japanese patients with non-valvular atrial fibrillation at increased risk for stroke were randomized to rivaroxaban 15 mg once daily or warfarin dose-adjusted according to Japanese guidelines.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_81808a7c4c3bf0e34bac1c720768f46d",
+                  "quote": "J-ROCKET AF was a prospective, randomized, double-blind, phase III trial. Patients (n=1,280) with non-valvular AF at increased risk for stroke were randomized to receive 15 mg once-daily rivaroxaban or warfarin dose-adjusted according to Japanese guidelines."
+                }
+              ]
+            },
+            {
+              "text": "Noninferiority of rivaroxaban to warfarin was confirmed for the principal safety outcome of major and non-major clinically relevant bleeding, at 18.04% per year with rivaroxaban and 16.42% per year with warfarin (hazard ratio 1.11; 95% CI 0.87-1.42; P<0.001 for noninferiority).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_81808a7c4c3bf0e34bac1c720768f46d",
+                  "quote": "Non-inferiority of rivaroxaban to warfarin was confirmed; the rate of the principal safety outcome was 18.04% per year in rivaroxaban-treated patients and 16.42% per year in warfarin-treated patients (hazard ratio [HR] 1.11; 95% confidence interval 0.87-1.42; P<0.001 [non-inferiority])."
+                }
+              ]
+            },
+            {
+              "text": "Intracranial hemorrhage rates were 0.8% with rivaroxaban and 1.6% with warfarin, and there was a strong trend for a reduction in stroke or systemic embolism with rivaroxaban versus warfarin (hazard ratio 0.49; P=0.050).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_81808a7c4c3bf0e34bac1c720768f46d",
+                  "quote": "Intracranial hemorrhage rates were 0.8% with rivaroxaban and 1.6% with warfarin. There was a strong trend for a reduction in the rate of stroke/systemic embolism with rivaroxaban vs. warfarin (HR, 0.49; P=0.050)."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "related": [
+        "doac-vs-warfarin-af",
+        "warfarin"
+      ]
+    },
+    {
+      "op": "create",
+      "slug": "apixaban",
+      "type": "entity",
+      "title": "Apixaban",
+      "sections": [
+        {
+          "heading": "ARISTOTLE: apixaban versus warfarin in atrial fibrillation",
+          "claims": [
+            {
+              "text": "In the randomized, double-blind ARISTOTLE trial, apixaban 5 mg twice daily was compared with warfarin (target international normalized ratio 2.0 to 3.0) in 18,201 patients with atrial fibrillation and at least one additional risk factor for stroke, with a median follow-up of 1.8 years.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_81e343c146c92d15d7c2f15b65748ce1",
+                  "quote": "In this randomized, double-blind trial, we compared apixaban (at a dose of 5 mg twice daily) with warfarin (target international normalized ratio, 2.0 to 3.0) in 18,201 patients with atrial fibrillation and at least one additional risk factor for stroke. The primary outcome was ischemic or hemorrhagic stroke or systemic embolism."
+                }
+              ]
+            },
+            {
+              "text": "The rate of the primary outcome was 1.27% per year with apixaban and 1.60% per year with warfarin (hazard ratio 0.79; 95% CI 0.66 to 0.95; P<0.001 for noninferiority; P=0.01 for superiority).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_81e343c146c92d15d7c2f15b65748ce1",
+                  "quote": "The rate of the primary outcome was 1.27% per year in the apixaban group, as compared with 1.60% per year in the warfarin group (hazard ratio with apixaban, 0.79; 95% confidence interval [CI], 0.66 to 0.95; P<0.001 for noninferiority; P=0.01 for superiority)."
+                }
+              ]
+            },
+            {
+              "text": "Major bleeding occurred at 2.13% per year with apixaban and 3.09% per year with warfarin (hazard ratio 0.69; 95% CI 0.60 to 0.80; P<0.001), and death from any cause at 3.52% and 3.94%, respectively (hazard ratio 0.89; 95% CI 0.80 to 0.99; P=0.047).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_81e343c146c92d15d7c2f15b65748ce1",
+                  "quote": "The rate of major bleeding was 2.13% per year in the apixaban group, as compared with 3.09% per year in the warfarin group (hazard ratio, 0.69; 95% CI, 0.60 to 0.80; P<0.001), and the rates of death from any cause were 3.52% and 3.94%, respectively (hazard ratio, 0.89; 95% CI, 0.80 to 0.99; P=0.047)."
+                }
+              ]
+            },
+            {
+              "text": "Hemorrhagic stroke occurred at 0.24% per year with apixaban and 0.47% per year with warfarin (hazard ratio 0.51; 95% CI 0.35 to 0.75; P<0.001), while ischemic or uncertain type of stroke occurred at 0.97% and 1.05% per year, respectively (hazard ratio 0.92; 95% CI 0.74 to 1.13; P=0.42).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_81e343c146c92d15d7c2f15b65748ce1",
+                  "quote": "The rate of hemorrhagic stroke was 0.24% per year in the apixaban group, as compared with 0.47% per year in the warfarin group (hazard ratio, 0.51; 95% CI, 0.35 to 0.75; P<0.001), and the rate of ischemic or uncertain type of stroke was 0.97% per year in the apixaban group and 1.05% per year in the warfarin group (hazard ratio, 0.92; 95% CI, 0.74 to 1.13; P=0.42)."
+                }
+              ]
+            },
+            {
+              "text": "In patients with atrial fibrillation, apixaban was superior to warfarin in preventing stroke or systemic embolism, caused less bleeding, and resulted in lower mortality.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_81e343c146c92d15d7c2f15b65748ce1",
+                  "quote": "In patients with atrial fibrillation, apixaban was superior to warfarin in preventing stroke or systemic embolism, caused less bleeding, and resulted in lower mortality."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "heading": "AVERROES: apixaban versus aspirin when vitamin K antagonist therapy is unsuitable",
+          "claims": [
+            {
+              "text": "In a double-blind study, 5599 patients with atrial fibrillation at increased risk for stroke for whom vitamin K antagonist therapy was unsuitable were randomly assigned to apixaban 5 mg twice daily or aspirin 81 to 324 mg per day, with a mean follow-up of 1.1 years.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_ee77d1914d18a5ece9857b4e40a81405",
+                  "quote": "In a double-blind study, we randomly assigned 5599 patients with atrial fibrillation who were at increased risk for stroke and for whom vitamin K antagonist therapy was unsuitable to receive apixaban (at a dose of 5 mg twice daily) or aspirin (81 to 324 mg per day), to determine whether apixaban was superior. The mean follow up period was 1.1 years."
+                }
+              ]
+            },
+            {
+              "text": "The study was terminated early on the recommendation of the data and safety monitoring board because of a clear benefit in favor of apixaban; there were 51 primary outcome events (1.6% per year) with apixaban and 113 (3.7% per year) with aspirin (hazard ratio 0.45; 95% CI 0.32 to 0.62; P<0.001).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_ee77d1914d18a5ece9857b4e40a81405",
+                  "quote": "The data and safety monitoring board recommended early termination of the study because of a clear benefit in favor of apixaban. There were 51 primary outcome events (1.6% per year) among patients assigned to apixaban and 113 (3.7% per year) among those assigned to aspirin (hazard ratio with apixaban, 0.45; 95% confidence interval [CI], 0.32 to 0.62; P<0.001)."
+                }
+              ]
+            },
+            {
+              "text": "Death occurred at 3.5% per year with apixaban and 4.4% per year with aspirin (hazard ratio 0.79; 95% CI 0.62 to 1.02; P=0.07), and major bleeding in 44 cases (1.4% per year) with apixaban and 39 (1.2% per year) with aspirin (hazard ratio 1.13; 95% CI 0.74 to 1.75; P=0.57).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_ee77d1914d18a5ece9857b4e40a81405",
+                  "quote": "The rates of death were 3.5% per year in the apixaban group and 4.4% per year in the aspirin group (hazard ratio, 0.79; 95% CI, 0.62 to 1.02; P=0.07). There were 44 cases of major bleeding (1.4% per year) in the apixaban group and 39 (1.2% per year) in the aspirin group (hazard ratio with apixaban, 1.13; 95% CI, 0.74 to 1.75; P=0.57)"
+                }
+              ]
+            },
+            {
+              "text": "In patients with atrial fibrillation for whom vitamin K antagonist therapy was unsuitable, apixaban reduced the risk of stroke or systemic embolism without significantly increasing the risk of major bleeding or intracranial hemorrhage.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_ee77d1914d18a5ece9857b4e40a81405",
+                  "quote": "In patients with atrial fibrillation for whom vitamin K antagonist therapy was unsuitable, apixaban reduced the risk of stroke or systemic embolism without significantly increasing the risk of major bleeding or intracranial hemorrhage."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "related": [
+        "doac-vs-warfarin-af",
+        "warfarin"
+      ]
+    },
+    {
+      "op": "create",
+      "slug": "edoxaban",
+      "type": "entity",
+      "title": "Edoxaban",
+      "sections": [
+        {
+          "heading": "ENGAGE AF-TIMI 48: edoxaban versus warfarin in atrial fibrillation",
+          "claims": [
+            {
+              "text": "In a randomized, double-blind, double-dummy trial, two once-daily regimens of edoxaban were compared with warfarin in 21,105 patients with moderate-to-high-risk atrial fibrillation, with a median follow-up of 2.8 years.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_1bcbd58b429315ec591b7e167517461a",
+                  "quote": "We conducted a randomized, double-blind, double-dummy trial comparing two once-daily regimens of edoxaban with warfarin in 21,105 patients with moderate-to-high-risk atrial fibrillation (median follow-up, 2.8 years)."
+                }
+              ]
+            },
+            {
+              "text": "The annualized rate of stroke or systemic embolism during treatment was 1.50% with warfarin (median time in the therapeutic range 68.4%), 1.18% with high-dose edoxaban (hazard ratio 0.79; 97.5% CI 0.63 to 0.99; P<0.001 for noninferiority) and 1.61% with low-dose edoxaban (hazard ratio 1.07; 97.5% CI 0.87 to 1.31; P=0.005 for noninferiority).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_1bcbd58b429315ec591b7e167517461a",
+                  "quote": "The annualized rate of the primary end point during treatment was 1.50% with warfarin (median time in the therapeutic range, 68.4%), as compared with 1.18% with high-dose edoxaban (hazard ratio, 0.79; 97.5% confidence interval [CI], 0.63 to 0.99; P<0.001 for noninferiority) and 1.61% with low-dose edoxaban (hazard ratio, 1.07; 97.5% CI, 0.87 to 1.31; P=0.005 for noninferiority)."
+                }
+              ]
+            },
+            {
+              "text": "The annualized rate of major bleeding was 3.43% with warfarin versus 2.75% with high-dose edoxaban (hazard ratio 0.80; 95% CI 0.71 to 0.91; P<0.001) and 1.61% with low-dose edoxaban (hazard ratio 0.47; 95% CI 0.41 to 0.55; P<0.001).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_1bcbd58b429315ec591b7e167517461a",
+                  "quote": "The annualized rate of major bleeding was 3.43% with warfarin versus 2.75% with high-dose edoxaban (hazard ratio, 0.80; 95% CI, 0.71 to 0.91; P<0.001) and 1.61% with low-dose edoxaban (hazard ratio, 0.47; 95% CI, 0.41 to 0.55; P<0.001)."
+                }
+              ]
+            },
+            {
+              "text": "Annualized rates of death from cardiovascular causes were 3.17% with warfarin versus 2.74% with high-dose edoxaban (hazard ratio 0.86; 95% CI 0.77 to 0.97; P=0.01) and 2.71% with low-dose edoxaban (hazard ratio 0.85; 95% CI 0.76 to 0.96; P=0.008).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_1bcbd58b429315ec591b7e167517461a",
+                  "quote": "The corresponding annualized rates of death from cardiovascular causes were 3.17% versus 2.74% (hazard ratio, 0.86; 95% CI, 0.77 to 0.97; P=0.01), and 2.71% (hazard ratio, 0.85; 95% CI, 0.76 to 0.96; P=0.008)"
+                }
+              ]
+            },
+            {
+              "text": "Both once-daily regimens of edoxaban were noninferior to warfarin for prevention of stroke or systemic embolism and were associated with significantly lower rates of bleeding and death from cardiovascular causes.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_1bcbd58b429315ec591b7e167517461a",
+                  "quote": "Both once-daily regimens of edoxaban were noninferior to warfarin with respect to the prevention of stroke or systemic embolism and were associated with significantly lower rates of bleeding and death from cardiovascular causes."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "heading": "ELDERCARE-AF: low-dose edoxaban in very elderly patients",
+          "claims": [
+            {
+              "text": "ELDERCARE-AF was a phase 3, multicenter, randomized, double-blind, placebo-controlled, event-driven trial of once-daily edoxaban 15 mg versus placebo in elderly Japanese patients (≥80 years of age) with nonvalvular atrial fibrillation who were not considered appropriate candidates for oral anticoagulant therapy at approved stroke-prevention doses.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_0e9d75e95b4aa172897de8e3f4333228",
+                  "quote": "We conducted a phase 3, multicenter, randomized, double-blind, placebo-controlled, event-driven trial to compare a once-daily 15-mg dose of edoxaban with placebo in elderly Japanese patients (≥80 years of age) with nonvalvular atrial fibrillation who were not considered to be appropriate candidates for oral anticoagulant therapy at doses approved for stroke prevention."
+                }
+              ]
+            },
+            {
+              "text": "A total of 984 patients were randomly assigned 1:1 to edoxaban 15 mg daily (492 patients) or placebo (492 patients); 681 completed the trial and 303 discontinued (158 withdrew, 135 died, and 10 had other reasons), with similar numbers discontinuing in the two groups.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_0e9d75e95b4aa172897de8e3f4333228",
+                  "quote": "A total of 984 patients were randomly assigned in a 1:1 ratio to receive a daily dose of 15 mg of edoxaban (492 patients) or placebo (492 patients). A total of 681 patients completed the trial, and 303 discontinued (158 withdrew, 135 died, and 10 had other reasons); the numbers of patients who discontinued the trial were similar in the two groups."
+                }
+              ]
+            },
+            {
+              "text": "The annualized rate of stroke or systemic embolism was 2.3% with edoxaban and 6.7% with placebo (hazard ratio 0.34; 95% CI 0.19 to 0.61; P<0.001), and the annualized rate of major bleeding was 3.3% with edoxaban and 1.8% with placebo (hazard ratio 1.87; 95% CI 0.90 to 3.89; P=0.09).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_0e9d75e95b4aa172897de8e3f4333228",
+                  "quote": "The annualized rate of stroke or systemic embolism was 2.3% in the edoxaban group and 6.7% in the placebo group (hazard ratio, 0.34; 95% confidence interval [CI], 0.19 to 0.61; P<0.001), and the annualized rate of major bleeding was 3.3% in the edoxaban group and 1.8% in the placebo group (hazard ratio, 1.87; 95% CI, 0.90 to 3.89; P = 0.09)."
+                }
+              ]
+            },
+            {
+              "text": "There were substantially more events of gastrointestinal bleeding in the edoxaban group than in the placebo group, and no substantial between-group difference in death from any cause (9.9% with edoxaban and 10.2% with placebo; hazard ratio 0.97; 95% CI 0.69 to 1.36).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_0e9d75e95b4aa172897de8e3f4333228",
+                  "quote": "There were substantially more events of gastrointestinal bleeding in the edoxaban group than in the placebo group. There was no substantial between-group difference in death from any cause (9.9% in the edoxaban group and 10.2% in the placebo group; hazard ratio, 0.97; 95% CI, 0.69 to 1.36)."
+                }
+              ]
+            },
+            {
+              "text": "In very elderly Japanese patients with nonvalvular atrial fibrillation who were not appropriate candidates for standard doses of oral anticoagulants, once-daily edoxaban 15 mg was superior to placebo in preventing stroke or systemic embolism and did not result in a significantly higher incidence of major bleeding than placebo.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_0e9d75e95b4aa172897de8e3f4333228",
+                  "quote": "In very elderly Japanese patients with nonvalvular atrial fibrillation who were not appropriate candidates for standard doses of oral anticoagulants, a once-daily 15-mg dose of edoxaban was superior to placebo in preventing stroke or systemic embolism and did not result in a significantly higher incidence of major bleeding than placebo."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "related": [
+        "doac-vs-warfarin-af",
+        "warfarin"
+      ]
+    },
+    {
+      "op": "create",
+      "slug": "warfarin",
+      "type": "entity",
+      "title": "Warfarin",
+      "sections": [
+        {
+          "heading": "Role as the comparator in atrial fibrillation trials",
+          "claims": [
+            {
+              "text": "Warfarin reduces the risk of stroke in patients with atrial fibrillation but increases the risk of hemorrhage and is difficult to use.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_8a669b066c4cb002e5224ef48c9a8550",
+                  "quote": "Warfarin reduces the risk of stroke in patients with atrial fibrillation but increases the risk of hemorrhage and is difficult to use."
+                }
+              ]
+            },
+            {
+              "text": "The use of warfarin reduces the rate of ischemic stroke in patients with atrial fibrillation but requires frequent monitoring and dose adjustment.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_8ff4bad2e9d926335b4de77ad1e41630",
+                  "quote": "The use of warfarin reduces the rate of ischemic stroke in patients with atrial fibrillation but requires frequent monitoring and dose adjustment."
+                }
+              ]
+            },
+            {
+              "text": "Vitamin K antagonists are highly effective in preventing stroke in patients with atrial fibrillation but have several limitations.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_81e343c146c92d15d7c2f15b65748ce1",
+                  "quote": "Vitamin K antagonists are highly effective in preventing stroke in patients with atrial fibrillation but have several limitations."
+                }
+              ]
+            },
+            {
+              "text": "Vitamin K antagonists have been shown to prevent stroke in patients with atrial fibrillation, but many patients are not suitable candidates for or are unwilling to receive vitamin K antagonist therapy, and these patients have a high risk of stroke.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_ee77d1914d18a5ece9857b4e40a81405",
+                  "quote": "Vitamin K antagonists have been shown to prevent stroke in patients with atrial fibrillation. However, many patients are not suitable candidates for or are unwilling to receive vitamin K antagonist therapy, and these patients have a high risk of stroke."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "related": [
+        "dabigatran",
+        "rivaroxaban",
+        "apixaban",
+        "edoxaban",
+        "doac-vs-warfarin-af"
+      ]
+    },
+    {
+      "op": "create",
+      "slug": "doac-vs-warfarin-af",
+      "type": "comparison",
+      "title": "Direct oral anticoagulants versus warfarin in atrial fibrillation",
+      "sections": [
+        {
+          "heading": "Pooled efficacy and safety across four trials",
+          "claims": [
+            {
+              "text": "A prespecified meta-analysis pooled all 71,683 participants of the RE-LY, ROCKET AF, ARISTOTLE, and ENGAGE AF-TIMI 48 trials, of whom 42,411 received a new oral anticoagulant and 29,272 received warfarin.",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_68f0cec57cbc9a18bfbd4cfce07d3b63",
+                  "quote": "42,411 participants received a new oral anticoagulant and 29,272 participants received warfarin."
+                }
+              ]
+            },
+            {
+              "text": "New oral anticoagulants significantly reduced stroke or systemic embolic events by 19% compared with warfarin (RR 0.81, 95% CI 0.73-0.91; p<0.0001), mainly driven by a reduction in haemorrhagic stroke (0.49, 0.38-0.64; p<0.0001).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_68f0cec57cbc9a18bfbd4cfce07d3b63",
+                  "quote": "New oral anticoagulants significantly reduced stroke or systemic embolic events by 19% compared with warfarin (RR 0·81, 95% CI 0·73-0·91; p<0·0001), mainly driven by a reduction in haemorrhagic stroke (0·49, 0·38-0·64; p<0·0001)."
+                }
+              ]
+            },
+            {
+              "text": "New oral anticoagulants also significantly reduced all-cause mortality (0.90, 0.85-0.95; p=0.0003) and intracranial haemorrhage (0.48, 0.39-0.59; p<0.0001), but increased gastrointestinal bleeding (1.25, 1.01-1.55; p=0.04).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_68f0cec57cbc9a18bfbd4cfce07d3b63",
+                  "quote": "New oral anticoagulants also significantly reduced all-cause mortality (0·90, 0·85-0·95; p=0·0003) and intracranial haemorrhage (0·48, 0·39-0·59; p<0·0001), but increased gastrointestinal bleeding (1·25, 1·01-1·55; p=0·04)."
+                }
+              ]
+            },
+            {
+              "text": "There was no heterogeneity for stroke or systemic embolic events in important subgroups, but the relative reduction in major bleeding with new oral anticoagulants was greater when centre-based time in therapeutic range was less than 66% than when it was 66% or more (0.69, 0.59-0.81 vs 0.93, 0.76-1.13; p for interaction 0.022).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_68f0cec57cbc9a18bfbd4cfce07d3b63",
+                  "quote": "We noted no heterogeneity for stroke or systemic embolic events in important subgroups, but there was a greater relative reduction in major bleeding with new oral anticoagulants when the centre-based time in therapeutic range was less than 66% than when it was 66% or more (0·69, 0·59-0·81 vs 0·93, 0·76-1·13; p for interaction 0·022)."
+                }
+              ]
+            },
+            {
+              "text": "Low-dose new oral anticoagulant regimens showed similar overall reductions in stroke or systemic embolic events to warfarin (1.03, 0.84-1.27; p=0.74) and a more favourable bleeding profile (0.65, 0.43-1.00; p=0.05), but significantly more ischaemic strokes (1.28, 1.02-1.60; p=0.045).",
+              "kind": "direct",
+              "evidence": [
+                {
+                  "sourceId": "src_68f0cec57cbc9a18bfbd4cfce07d3b63",
+                  "quote": "Low-dose new oral anticoagulant regimens showed similar overall reductions in stroke or systemic embolic events to warfarin (1·03, 0·84-1·27; p=0·74), and a more favourable bleeding profile (0·65, 0·43-1·00; p=0·05), but significantly more ischaemic strokes (1·28, 1·02-1·60; p=0·045)."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "heading": "Trial-by-trial results against warfarin",
+          "claims": [
+            {
+              "text": "Across the four trials, the direct oral anticoagulants were each noninferior to warfarin for stroke or systemic embolism, and apixaban and dabigatran 150 mg were also superior, while the pooled analysis found a 19% relative reduction in stroke or systemic embolic events.",
+              "kind": "synthesized",
+              "confidence": "high",
+              "evidence": [
+                {
+                  "sourceId": "src_8a669b066c4cb002e5224ef48c9a8550",
+                  "quote": "In patients with atrial fibrillation, dabigatran given at a dose of 110 mg was associated with rates of stroke and systemic embolism that were similar to those associated with warfarin, as well as lower rates of major hemorrhage. Dabigatran administered at a dose of 150 mg, as compared with warfarin, was associated with lower rates of stroke and systemic embolism but similar rates of major hemorrhage."
+                },
+                {
+                  "sourceId": "src_8ff4bad2e9d926335b4de77ad1e41630",
+                  "quote": "In patients with atrial fibrillation, rivaroxaban was noninferior to warfarin for the prevention of stroke or systemic embolism."
+                },
+                {
+                  "sourceId": "src_81e343c146c92d15d7c2f15b65748ce1",
+                  "quote": "In patients with atrial fibrillation, apixaban was superior to warfarin in preventing stroke or systemic embolism, caused less bleeding, and resulted in lower mortality."
+                },
+                {
+                  "sourceId": "src_1bcbd58b429315ec591b7e167517461a",
+                  "quote": "Both once-daily regimens of edoxaban were noninferior to warfarin with respect to the prevention of stroke or systemic embolism and were associated with significantly lower rates of bleeding and death from cardiovascular causes."
+                },
+                {
+                  "sourceId": "src_68f0cec57cbc9a18bfbd4cfce07d3b63",
+                  "quote": "New oral anticoagulants significantly reduced stroke or systemic embolic events by 19% compared with warfarin (RR 0·81, 95% CI 0·73-0·91; p<0·0001)"
+                }
+              ]
+            },
+            {
+              "text": "Intracranial haemorrhage was consistently reduced with the direct oral anticoagulants relative to warfarin, as shown by the pooled reduction (0.48, 0.39-0.59; p<0.0001) and by the individual trials.",
+              "kind": "synthesized",
+              "confidence": "high",
+              "evidence": [
+                {
+                  "sourceId": "src_68f0cec57cbc9a18bfbd4cfce07d3b63",
+                  "quote": "New oral anticoagulants also significantly reduced all-cause mortality (0·90, 0·85-0·95; p=0·0003) and intracranial haemorrhage (0·48, 0·39-0·59; p<0·0001)"
+                },
+                {
+                  "sourceId": "src_8ff4bad2e9d926335b4de77ad1e41630",
+                  "quote": "with significant reductions in intracranial hemorrhage (0.5% vs. 0.7%, P=0.02) and fatal bleeding (0.2% vs. 0.5%, P=0.003) in the rivaroxaban group"
+                },
+                {
+                  "sourceId": "src_81e343c146c92d15d7c2f15b65748ce1",
+                  "quote": "The rate of hemorrhagic stroke was 0.24% per year in the apixaban group, as compared with 0.47% per year in the warfarin group (hazard ratio, 0.51; 95% CI, 0.35 to 0.75; P<0.001)"
+                },
+                {
+                  "sourceId": "src_8a669b066c4cb002e5224ef48c9a8550",
+                  "quote": "The rate of hemorrhagic stroke was 0.38% per year in the warfarin group, as compared with 0.12% per year with 110 mg of dabigatran (P<0.001) and 0.10% per year with 150 mg of dabigatran (P<0.001)."
+                }
+              ]
+            },
+            {
+              "text": "The pooled increase in gastrointestinal bleeding with new oral anticoagulants (1.25, 1.01-1.55; p=0.04) is consistent with the substantially more gastrointestinal bleeding events seen with low-dose edoxaban than with placebo in very elderly patients.",
+              "kind": "synthesized",
+              "confidence": "moderate",
+              "evidence": [
+                {
+                  "sourceId": "src_68f0cec57cbc9a18bfbd4cfce07d3b63",
+                  "quote": "but increased gastrointestinal bleeding (1·25, 1·01-1·55; p=0·04)"
+                },
+                {
+                  "sourceId": "src_0e9d75e95b4aa172897de8e3f4333228",
+                  "quote": "There were substantially more events of gastrointestinal bleeding in the edoxaban group than in the placebo group."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "related": [
+        "dabigatran",
+        "rivaroxaban",
+        "apixaban",
+        "edoxaban",
+        "warfarin"
+      ]
+    }
+  ],
+  "lint": [
+    {
+      "kind": "conflict",
+      "slugs": [
+        "edoxaban"
+      ],
+      "note": "In ENGAGE AF-TIMI 48 the low-dose edoxaban regimen was noninferior to warfarin for stroke or systemic embolism (1.61% vs 1.50% per year; HR 1.07), whereas the meta-analysis reports that low-dose new oral anticoagulant regimens were associated with significantly more ischaemic strokes than warfarin (1.28, 1.02-1.60; p=0.045); the two statements concern the same low-dose regimens and are kept separately."
+    },
+    {
+      "kind": "conflict",
+      "slugs": [
+        "edoxaban"
+      ],
+      "note": "The 15-mg once-daily edoxaban dose is a Japan-specific regimen for very elderly patients in ELDERCARE-AF and a low-dose arm in ENGAGE AF-TIMI 48; the populations and comparators (placebo versus warfarin) differ, so the results are not pooled."
+    },
+    {
+      "kind": "gap",
+      "slugs": [
+        "dabigatran",
+        "rivaroxaban",
+        "apixaban",
+        "edoxaban"
+      ],
+      "note": "No document reports head-to-head comparisons among the direct oral anticoagulants; all efficacy and safety statements are against warfarin, aspirin or placebo."
+    }
+  ]
+}

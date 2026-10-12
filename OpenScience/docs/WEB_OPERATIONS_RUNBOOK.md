@@ -996,6 +996,23 @@ re-runs an understanding, never reads a file again and never changes a depth, a 
 researcher or the judge already typed is left alone, and a second run reports nothing to do. Run it once after the release and read the
 report's `format` count: those documents were not named by the judge, and a 「重新读取」 on one reads it under its new type.
 
+### Knowledge pages (「知识页」), off until the evaluation says otherwise
+
+`OPEN_SCIENCE_KNOWLEDGE_PAGES_ENABLED` (default off, needs Postgres) turns on the compile of a project's documents into linked
+pages in which every sentence quotes its document (`knowledgePageService.mjs`; the internal `knowledge-compile` capability on
+Flash, run in the account's hidden `evimed-knowledge` project). A round runs per project, ten minutes after the last change to its
+documents (`..._DEBOUNCE_MS`) and only once five documents are readable (`..._MIN_SOURCES`); a changed, replaced, removed or
+retracted document labels the pages that quote it and queues the next round. The pages are documents of the knowledge base under
+`knowledge-base/wiki/` and the 知识页 filter of 知识库; the compile's spend is the `knowledge` purpose, with its own caps
+(`..._RUN_LIMIT_CNY` 2, `..._DAILY_LIMIT_CNY` 10, `..._WEEKLY_LIMIT_CNY` 40; 0 = no cap) beside the account's. Off, nothing is queued, no worker
+starts and pages that exist stay readable and editable. Whether to switch it on is decided by `evals/knowledge-pages` (three arms:
+`kb_search`; `kb_search` with a decomposition instruction; the pages with `kb_search`), not by this runbook. To read it: `GET
+/api/knowledge-pages?projectId=` (state), the `wiki-compile` jobs and the `knowledge` purpose in the usage report.
+
+`OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED` (default on) is the other switch of this change: whether each readable document's summary and
+key claims are still written into the memory capsule's `sources` layer. Turning it off stops new writes only; what was written goes
+when its document does. Flip it only after the evaluation shows the pages do not do worse.
+
 ### Specialist job slots on a small host
 
 The six engines (MR, bibliometric, research-topic, peer-review, drug-safety

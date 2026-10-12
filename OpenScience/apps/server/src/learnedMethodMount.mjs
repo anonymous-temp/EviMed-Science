@@ -32,7 +32,7 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
 import { METHOD_FILE_PREFIXES, learnedMethodCardEntry, mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
-import { EVIDENCE_PROJECT_ID, FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "./internalProjects.mjs";
+import { EVIDENCE_PROJECT_ID, FRONTIER_PROJECT_ID, KNOWLEDGE_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "./internalProjects.mjs";
 
 /** @param {string} text @returns {string} */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -72,7 +72,7 @@ export function methodFamily(capabilityId) {
  * @returns {"geo" | "research" | null}
  */
 export function learnedMethodFamilyForRuntime({ projectId, boundedRunId = null }) {
-  if ([LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, FRONTIER_PROJECT_ID, EVIDENCE_PROJECT_ID].includes(String(projectId ?? ""))) return null;
+  if ([LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, KNOWLEDGE_PROJECT_ID, FRONTIER_PROJECT_ID, EVIDENCE_PROJECT_ID].includes(String(projectId ?? ""))) return null;
   return String(boundedRunId ?? "").startsWith("geo-") ? "geo" : "research";
 }
 

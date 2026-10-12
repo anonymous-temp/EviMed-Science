@@ -114,7 +114,7 @@ test("the chips count by what a document is, and choosing one narrows the page w
   await add(owner, "default", "i.png", { docType: "image-figure" });
   await add(owner, "default", "j.pdf", { docType: "audio-recording" });
   const all = await sources.list(owner, { projectId: "default" });
-  assert.deepEqual(all.counts, { all: 10, literature: 2, table: 2, document: 3, page: 1, note: 1, image: 1 });
+  assert.deepEqual(all.counts, { all: 10, literature: 2, table: 2, document: 3, page: 1, note: 1, image: 1, wiki: 0 });
   const tables = await sources.list(owner, { projectId: "default", kind: "table" });
   assert.deepEqual(names(tables).sort(), ["c.xlsx", "d.csv"]);
   assert.deepEqual(tables.counts, all.counts, "choosing a chip does not change the inventory");
@@ -151,7 +151,7 @@ test("the shared scope lists one document per entry of the account library, whic
   const page = await sources.list(owner, { shared: true });
   assert.deepEqual(page.items.map((item) => item.id), [shared.id], "one row for the document, the one it was added from; nothing private, nothing of another account's");
   assert.equal(page.items[0].projectId, "default");
-  assert.deepEqual(page.counts, { all: 1, literature: 1, table: 0, document: 0, page: 0, note: 0, image: 0 });
+  assert.deepEqual(page.counts, { all: 1, literature: 1, table: 0, document: 0, page: 0, note: 0, image: 0, wiki: 0 });
   assert.equal(page.items[0].shared, true);
   assert.equal(projectSourceManifestRecord(page.items[0]).display.shared, true);
   // The project's own list says which of its documents are shared, without a second request.

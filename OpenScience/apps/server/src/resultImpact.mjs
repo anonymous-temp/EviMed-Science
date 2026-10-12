@@ -381,6 +381,8 @@ export class ResultImpactService {
     const checked = await this.#withRecorded(ref, statusProjection(status));
     // Memories rest on the source whether or not a result of this project does; the label is about the source.
     const memories = this.knowledge ? await this.knowledge.memories(ownerId, projectId, ref, checked) : { unknown: "unavailable" };
+    // The knowledge pages that quote it are labelled and queued the same way; the impact record does not list them.
+    if (this.knowledge?.pages) await this.knowledge.pages(ownerId, projectId, ref, checked).catch(() => null);
     if (checked.state === "no_update") return { items: [], scanned: 0 };
     const { ids, scanned } = await this.#naming(userId, projectId, ref, exact, scan);
     const changeKey = hash([ref, checked.state, checked.reason ?? null, checked.updates]);

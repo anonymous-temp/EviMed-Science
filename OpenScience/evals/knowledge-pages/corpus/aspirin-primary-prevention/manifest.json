@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "topic": "aspirin-primary-prevention",
+  "title": "Aspirin for the primary prevention of cardiovascular disease",
+  "source": "PubMed abstracts via NCBI E-utilities (efetch, retmode=xml)",
+  "fetchedAt": "2026-10-12",
+  "documents": [
+    {
+      "key": "pmid-30158069",
+      "sourceId": "src_a80cd40ea6db9ff8486b4ad6e10638d2",
+      "pmid": "30158069",
+      "doi": "10.1016/S0140-6736(18)31924-X",
+      "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
+      "journal": "Lancet (London, England)",
+      "year": 2018,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30158069/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=30158069&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Copyright © 2018 Elsevier Ltd. All rights reserved.",
+      "chars": 2748,
+      "truncatedFrom": 3229,
+      "textSha256": "2dacb96dd352c3cd77ceb3b672d6d84bc2c50ff63d5dd475abbab9318ebcdec7"
+    },
+    {
+      "key": "pmid-30146931",
+      "sourceId": "src_98e15daeb7feed7b008fd69ffce6745f",
+      "pmid": "30146931",
+      "doi": "10.1056/NEJMoa1804988",
+      "title": "Effects of Aspirin for Primary Prevention in Persons with Diabetes Mellitus.",
+      "journal": "The New England journal of medicine",
+      "year": 2018,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30146931/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=30146931&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Abstract as indexed by PubMed (NLM). Copyright remains with the publisher; kept here only as a short excerpt for offline evaluation, with the citation above.",
+      "chars": 2428,
+      "truncatedFrom": null,
+      "textSha256": "25a6196e12a96cd8eccc2a1357f1314dc5e6c06816cecf947ce77d10c1ba7a50"
+    },
+    {
+      "key": "pmid-30221597",
+      "sourceId": "src_e9c7fb4c1ac80a88d29e42eb4e27608e",
+      "pmid": "30221597",
+      "doi": "10.1056/NEJMoa1805819",
+      "title": "Effect of Aspirin on Cardiovascular Events and Bleeding in the Healthy Elderly.",
+      "journal": "The New England journal of medicine",
+      "year": 2018,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30221597/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=30221597&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, N.I.H., Extramural",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Abstract as indexed by PubMed (NLM). Copyright remains with the publisher; kept here only as a short excerpt for offline evaluation, with the citation above.",
+      "chars": 2071,
+      "truncatedFrom": null,
+      "textSha256": "e74c753e715b4477608940bbc2f2fb576260986b1670c430bc0a351d515a7326"
+    },
+    {
+      "key": "pmid-30221595",
+      "sourceId": "src_400696c0380783b1753ade39d010ccba",
+      "pmid": "30221595",
+      "doi": "10.1056/NEJMoa1803955",
+      "title": "Effect of Aspirin on All-Cause Mortality in the Healthy Elderly.",
+      "journal": "The New England journal of medicine",
+      "year": 2018,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30221595/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=30221595&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, N.I.H., Extramural",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Abstract as indexed by PubMed (NLM). Copyright remains with the publisher; kept here only as a short excerpt for offline evaluation, with the citation above.",
+      "chars": 2347,
+      "truncatedFrom": null,
+      "textSha256": "34ea7a8a5e22d2604972ba8d16755d25d730dbd97388e2789627a728ba38e534"
+    },
+    {
+      "key": "pmid-25401325",
+      "sourceId": "src_8c085ce86e8550efe8d1ab710dba800f",
+      "pmid": "25401325",
+      "doi": "10.1001/jama.2014.15690",
+      "title": "Low-dose aspirin for primary prevention of cardiovascular events in Japanese patients 60 years or older with atherosclerotic risk factors: a randomized clinical trial.",
+      "journal": "JAMA",
+      "year": 2014,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/25401325/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=25401325&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Abstract as indexed by PubMed (NLM). Copyright remains with the publisher; kept here only as a short excerpt for offline evaluation, with the citation above.",
+      "chars": 2306,
+      "truncatedFrom": 3218,
+      "textSha256": "35dbcad2cbe595e3e18a119519eeff6151c3296030cd601642d332af4fea30b3"
+    },
+    {
+      "key": "pmid-19482214",
+      "sourceId": "src_8d9ae273169bf27b347ca66421434090",
+      "pmid": "19482214",
+      "doi": "10.1016/S0140-6736(09)60503-1",
+      "title": "Aspirin in the primary and secondary prevention of vascular disease: collaborative meta-analysis of individual participant data from randomised trials.",
+      "journal": "Lancet (London, England)",
+      "year": 2009,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/19482214/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=19482214&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Meta-Analysis",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Abstract as indexed by PubMed (NLM). Copyright remains with the publisher; kept here only as a short excerpt for offline evaluation, with the citation above.",
+      "chars": 2554,
+      "truncatedFrom": null,
+      "textSha256": "b1d1942bd285333b93fcfda273b61e99a935abac13f367dc45c3751f9e9771a9"
+    },
+    {
+      "key": "pmid-30667501",
+      "sourceId": "src_64f23983bfe8fd167aa6725f288d7375",
+      "pmid": "30667501",
+      "doi": "10.1001/jama.2018.20578",
+      "title": "Association of Aspirin Use for Primary Prevention With Cardiovascular Events and Bleeding Events: A Systematic Review and Meta-analysis.",
+      "journal": "JAMA",
+      "year": 2019,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30667501/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=30667501&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Meta-Analysis",
+        "Systematic Review"
+      ],
+      "license": "Abstract as indexed by PubMed (NLM). Copyright remains with the publisher; kept here only as a short excerpt for offline evaluation, with the citation above.",
+      "chars": 2644,
+      "truncatedFrom": null,
+      "textSha256": "b342969465d5ffcb031e529e3542212c695b1ea373944ce3a878096f7f13f2bc"
+    },
+    {
+      "key": "pmid-35471505",
+      "sourceId": "src_4634e2a7a07fd8375f49298d2fb101f7",
+      "pmid": "35471505",
+      "doi": "10.1001/jama.2022.4983",
+      "title": "Aspirin Use to Prevent Cardiovascular Disease: US Preventive Services Task Force Recommendation Statement.",
+      "journal": "JAMA",
+      "year": 2022,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/35471505/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=35471505&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Journal Article",
+        "Practice Guideline",
+        "Systematic Review"
+      ],
+      "license": "Abstract as indexed by PubMed (NLM). Copyright remains with the publisher; kept here only as a short excerpt for offline evaluation, with the citation above.",
+      "chars": 2450,
+      "truncatedFrom": null,
+      "textSha256": "50943dfe686130fb7c6d6231f4a135863caa70a6c36a0712aa40063b882e708d"
+    }
+  ]
+}

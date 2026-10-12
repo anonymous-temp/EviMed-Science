@@ -127,8 +127,8 @@ export interface SourceMetadata {
   };
 }
 /** The chip a document is counted under (`SOURCE_KINDS` in `@evimed/domain`), and where it came from (`SOURCE_ORIGINS`). */
-export type SourceKind = "literature" | "table" | "document" | "page" | "note" | "image";
-export type SourceOrigin = "upload" | "drive" | "link" | "note" | "frontier" | "conversation";
+export type SourceKind = "literature" | "table" | "document" | "page" | "note" | "image" | "wiki";
+export type SourceOrigin = "upload" | "drive" | "link" | "note" | "frontier" | "conversation" | "wiki";
 /**
  * What a row says about its document, worked out by the control plane (`sourceDisplayOf`) so the page computes
  * nothing about content: what it is called, one line of what it says (once it is understood), its type, the chip it
@@ -470,4 +470,46 @@ export function addToLibrary(sourceId: string) {
 }
 export function removeFromLibrary(sourceId: string) {
   return productRequest<{ sourceId: string; removed: true }>(`/library/${encodeURIComponent(sourceId)}`, "DELETE");
+}
+
+/* ------------------------------------------------------- knowledge pages -- */
+
+/** What one quotation of a knowledge page rests on, checked now against the document it names. */
+export interface KnowledgePageEvidence {
+  sourceId: string;
+  /** The document's title; null where the document is no longer readable. */
+  title: string | null;
+  quote: string;
+  status: "verified" | "quote_not_found" | "source_unavailable" | "quote_invalid";
+}
+export type KnowledgePageItem =
+  | { kind: "nav"; links: Array<{ slug: string; title: string | null; sourceId: string | null }> }
+  | { kind: "claim"; text: string; status: "verified" | "unverified" | "unsupported"; claimKind: "direct" | "synthesized"; confidence: string | null; evidence: KnowledgePageEvidence[] };
+/** One knowledge page as the reader shows it (`GET /api/knowledge-pages/page`): every sentence with what it rests on. */
+export interface KnowledgePageViewData {
+  sourceId: string;
+  slug: string;
+  type: string;
+  title: string;
+  sections: Array<{ heading: string; items: KnowledgePageItem[] }>;
+  counts: { claims: number; verified: number; unverified: number; unsupported: number };
+  basis: "compiler" | "user";
+  /** The documents this page quotes that have changed, were removed or were retracted since it was written. */
+  stale: Array<{ sourceId: string; reason: "changed" | "retracted" | "removed" }>;
+  /** Sentences the compile could not confirm in the document: shown, never part of the page's text. */
+  held: Array<{ heading: string; text: string; reasons: string[] }>;
+  heldCount: number;
+  sources: Array<{ sourceId: string; title: string | null; available: boolean }>;
+}
+export function getKnowledgePage(sourceId: string) {
+  return productRequest<KnowledgePageViewData>(`/knowledge-pages/page?${new URLSearchParams({ sourceId })}`);
+}
+/** Whether the deployment compiles knowledge pages (`features.knowledgePages`); the pages that exist are readable either way. */
+export function knowledgePagesOffered(me: WebMe | null): boolean {
+  const features = (me as (WebMe & { features?: unknown }) | null)?.features;
+  return !!features && typeof features === "object" && (features as Record<string, unknown>).knowledgePages === true;
+}
+/** 「重新整理」: ask for a round now. */
+export function requestKnowledgeCompile(projectId: string) {
+  return productRequest<{ enabled: boolean; pages: number; pending: number }>("/knowledge-pages/compile", "POST", { projectId });
 }

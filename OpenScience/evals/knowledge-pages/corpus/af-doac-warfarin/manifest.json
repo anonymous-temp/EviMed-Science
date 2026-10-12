@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "topic": "af-doac-warfarin",
+  "title": "Direct oral anticoagulants versus warfarin in atrial fibrillation",
+  "source": "PubMed abstracts via NCBI E-utilities (efetch, retmode=xml)",
+  "fetchedAt": "2026-10-12",
+  "documents": [
+    {
+      "key": "pmid-19717844",
+      "sourceId": "src_8a669b066c4cb002e5224ef48c9a8550",
+      "pmid": "19717844",
+      "doi": "10.1056/NEJMoa0905561",
+      "title": "Dabigatran versus warfarin in patients with atrial fibrillation.",
+      "journal": "The New England journal of medicine",
+      "year": 2009,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/19717844/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=19717844&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Comparative Study",
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "2009 Massachusetts Medical Society",
+      "chars": 2208,
+      "truncatedFrom": null,
+      "textSha256": "6bda26ba4820d21162bbdec0921a06baf71980d4d30735b483499dd12f794517"
+    },
+    {
+      "key": "pmid-21830957",
+      "sourceId": "src_8ff4bad2e9d926335b4de77ad1e41630",
+      "pmid": "21830957",
+      "doi": "10.1056/NEJMoa1009638",
+      "title": "Rivaroxaban versus warfarin in nonvalvular atrial fibrillation.",
+      "journal": "The New England journal of medicine",
+      "year": 2011,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/21830957/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=21830957&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Comparative Study",
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Abstract as indexed by PubMed (NLM). Copyright remains with the publisher; kept here only as a short excerpt for offline evaluation, with the citation above.",
+      "chars": 2177,
+      "truncatedFrom": null,
+      "textSha256": "0948ec1dfe2b305e153d63b316f22a0f9edb0625916cf3c1704f494f67c491e1"
+    },
+    {
+      "key": "pmid-21870978",
+      "sourceId": "src_81e343c146c92d15d7c2f15b65748ce1",
+      "pmid": "21870978",
+      "doi": "10.1056/NEJMoa1107039",
+      "title": "Apixaban versus warfarin in patients with atrial fibrillation.",
+      "journal": "The New England journal of medicine",
+      "year": 2011,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/21870978/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=21870978&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Comparative Study",
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Abstract as indexed by PubMed (NLM). Copyright remains with the publisher; kept here only as a short excerpt for offline evaluation, with the citation above.",
+      "chars": 2256,
+      "truncatedFrom": null,
+      "textSha256": "c360de2f6e3a1437f427fbf86824068a17b170d824e80e2872bfa1c1ffd50d57"
+    },
+    {
+      "key": "pmid-24251359",
+      "sourceId": "src_1bcbd58b429315ec591b7e167517461a",
+      "pmid": "24251359",
+      "doi": "10.1056/NEJMoa1310907",
+      "title": "Edoxaban versus warfarin in patients with atrial fibrillation.",
+      "journal": "The New England journal of medicine",
+      "year": 2013,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/24251359/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=24251359&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Comparative Study",
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Abstract as indexed by PubMed (NLM). Copyright remains with the publisher; kept here only as a short excerpt for offline evaluation, with the citation above.",
+      "chars": 2533,
+      "truncatedFrom": null,
+      "textSha256": "8b6b5a410229c1287491eafb4bf3b0725ba053178989a831437b46deee9cf836"
+    },
+    {
+      "key": "pmid-21309657",
+      "sourceId": "src_ee77d1914d18a5ece9857b4e40a81405",
+      "pmid": "21309657",
+      "doi": "10.1056/NEJMoa1007432",
+      "title": "Apixaban in patients with atrial fibrillation.",
+      "journal": "The New England journal of medicine",
+      "year": 2011,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/21309657/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=21309657&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Comparative Study",
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Abstract as indexed by PubMed (NLM). Copyright remains with the publisher; kept here only as a short excerpt for offline evaluation, with the citation above.",
+      "chars": 2341,
+      "truncatedFrom": null,
+      "textSha256": "55c13f82a2c635bd8b0b7a473da9d0c1742d708aa36aa9d82ed9437acf409be7"
+    },
+    {
+      "key": "pmid-24315724",
+      "sourceId": "src_68f0cec57cbc9a18bfbd4cfce07d3b63",
+      "pmid": "24315724",
+      "doi": "10.1016/S0140-6736(13)62343-0",
+      "title": "Comparison of the efficacy and safety of new oral anticoagulants with warfarin in patients with atrial fibrillation: a meta-analysis of randomised trials.",
+      "journal": "Lancet (London, England)",
+      "year": 2014,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/24315724/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=24315724&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Comparative Study",
+        "Journal Article",
+        "Meta-Analysis"
+      ],
+      "license": "Copyright © 2014 Elsevier Ltd. All rights reserved.",
+      "chars": 2679,
+      "truncatedFrom": 3441,
+      "textSha256": "cf9c945d5d7ca0f609b331686499d62c1ab3e753cfd69f9d8cdd8c79cf772adf"
+    },
+    {
+      "key": "pmid-32865374",
+      "sourceId": "src_0e9d75e95b4aa172897de8e3f4333228",
+      "pmid": "32865374",
+      "doi": "10.1056/NEJMoa2012883",
+      "title": "Low-Dose Edoxaban in Very Elderly Patients with Atrial Fibrillation.",
+      "journal": "The New England journal of medicine",
+      "year": 2020,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32865374/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=32865374&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Clinical Trial, Phase III",
+        "Comparative Study",
+        "Journal Article",
+        "Multicenter Study",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Copyright © 2020 Massachusetts Medical Society.",
+      "chars": 2391,
+      "truncatedFrom": null,
+      "textSha256": "e8e0ad1e61e260339e1eee10eef30e20e84629bfc6341192c22c119b15c32e3e"
+    },
+    {
+      "key": "pmid-22664783",
+      "sourceId": "src_81808a7c4c3bf0e34bac1c720768f46d",
+      "pmid": "22664783",
+      "doi": "10.1253/circj.cj-12-0454",
+      "title": "Rivaroxaban vs. warfarin in Japanese patients with atrial fibrillation – the J-ROCKET AF study –.",
+      "journal": "Circulation journal : official journal of the Japanese Circulation Society",
+      "year": 2012,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/22664783/",
+      "retrievedFrom": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=22664783&rettype=abstract&retmode=xml",
+      "publicationTypes": [
+        "Clinical Trial, Phase III",
+        "Comparative Study",
+        "Journal Article",
+        "Randomized Controlled Trial",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "license": "Abstract as indexed by PubMed (NLM). Copyright remains with the publisher; kept here only as a short excerpt for offline evaluation, with the citation above.",
+      "chars": 1820,
+      "truncatedFrom": null,
+      "textSha256": "cffda12d9d10bf675e7f56f922c8806c335cf27544405a816bdb99f807f14f78"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "stats": {
+    "rounds": 1,
+    "promptTokens": 7552,
+    "completionTokens": 6588,
+    "cost": 0.053507839999999994,
+    "patchPages": 7,
+    "unreadablePatch": false,
+    "finalRequired": 0,
+    "finalAdvisory": 0,
+    "documents": 8,
+    "pages": 7,
+    "claims": 37,
+    "kept": 37,
+    "held": 0,
+    "heldByReason": {},
+    "documentsCited": 8,
+    "skipped": [],
+    "verifyMismatch": 0,
+    "roundDetails": [
+      {
+        "round": 0,
+        "finish": "stop",
+        "promptTokens": 7552,
+        "completionTokens": 6588,
+        "cost": 0.053507839999999994,
+        "required": 0,
+        "advisory": 0,
+        "issueMessages": []
+      }
+    ]
+  },
+  "inputSha256": "7de0b4909680b8d2cefacd0d04541af756c13d35a87edc82d12f8f7adeba9f36"
+}

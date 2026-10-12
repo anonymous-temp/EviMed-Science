@@ -1,0 +1,77 @@
+{
+  "core": {
+    "schemaVersion": 1,
+    "models": {
+      "answer": "deepseek-v4-flash",
+      "judge": "deepseek-v4-pro",
+      "compile": "deepseek-v4-flash"
+    },
+    "thinking": "disabled",
+    "kbScope": "topic",
+    "temperature": {
+      "answer": 0.7,
+      "compile": 0.3,
+      "judge": 0
+    },
+    "retrieval": {
+      "engine": "bm25",
+      "topK": 5,
+      "maxToolCalls": 6
+    },
+    "prompts": {
+      "answerSystemSha256": "47ec74bd7e6c318042530c84e02be487abc2e909e6faf532cf9af51da15e0a24",
+      "decompositionSentence": "When a question spans several documents, first split it into sub-questions, search for each one separately, and then combine what you found into one answer.",
+      "judgeSystemSha256": "86679b886b48ce19dda39d5e4568c2bdbf6650cd9351d5e55f5aa726d6f7af58",
+      "compileUserMessageSha256": "ec5fe6a38d9986cf5ff014ec5a62b84ef80cbded3eb08ed112c2702ab4753365",
+      "repairUserMessageSha256": "f70e5a1633c0237a054bf5972d282e34b3ce167678ac475204e5bd053017d2b6",
+      "knowledgeCompileSkillSha256": "d4492d62cc5885e6887ab7c002ed7fc3346cfb9a67a0fc12acf78ae1ff0072b0"
+    },
+    "domainKnowledgePageSha256": "5aca780d61522a957165d2d9af78311e2cc607fbeb77ccded403533d76e7df02",
+    "thresholds": {
+      "minRepsPerCell": 3,
+      "synthesis": {
+        "bVsAprimeCiLowerAbove": 0,
+        "bVsAprimeMeanAtLeast": 0.05,
+        "bVsAMeanAbove": 0
+      },
+      "single": {
+        "meanAtLeast": -0.05,
+        "ciLowerAtLeast": -0.1
+      },
+      "citation": {
+        "verifiedRateDropAtMost": 0.03
+      },
+      "judgeSanity": {
+        "referenceMeanAtLeast": 0.9,
+        "emptyMeanAtMost": 0.1
+      }
+    },
+    "bootstrap": {
+      "iterations": 10000,
+      "seed": 20261012
+    },
+    "arms": {
+      "A": "kb_search only",
+      "Aprime": "kb_search + decomposition guidance",
+      "B": "knowledge pages + kb_search"
+    }
+  },
+  "plan": {
+    "reps": 3,
+    "arms": [
+      "A",
+      "Aprime",
+      "B"
+    ],
+    "topics": [
+      "af-doac-warfarin",
+      "sglt2-hf-ckd",
+      "aspirin-primary-prevention"
+    ],
+    "questionsPerTopic": null,
+    "budgetCny": 11,
+    "totalCapCny": 20,
+    "concurrency": 4
+  },
+  "startedAt": "2026-10-12T13:48:14.235Z"
+}
