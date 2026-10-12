@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import { deleteStructuredMemory, updateStructuredMemory, webErrorMessage, type WebMemoryCaveat, type WebStructuredMemory } from "@/lib/apiClient";
 import { formatDateTime, formatDay } from "@/lib/format";
 import { kindTitle } from "@/lib/memoryGroups";
+import { readerPath } from "@/lib/knowledgeNav";
 import {
-  announceMemoryChanged, archiveMemoryRecord, retireCapsuleEntry, settleMemoryConflict, undoCapsuleEntry, undoMemoryRecord, type OwnCapsuleEntry,
+  announceMemoryChanged, archiveMemoryRecord, fetchMemorySources, retireCapsuleEntry, settleMemoryConflict, undoCapsuleEntry, undoMemoryRecord, type OwnCapsuleEntry,
 } from "@/lib/memoryClient";
 import { memoryExcerpt } from "@/lib/memoryText";
 import { productErrorMessage, updateCapsuleEntry } from "@/lib/productClient";
+import { getSource } from "@/lib/sourceClient";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -17,6 +20,7 @@ import { Textarea } from "@/components/ui/Input";
 import { ConversationLink } from "./ConversationLink";
 import { DrawerSection } from "./DrawerSection";
 import { heldFrom, type FactItem } from "./memoryItems";
+import { ValidityBar, validitySpan } from "./ValidityBar";
 
 /** Why a memory in force is uncertain, as a few small words. 「有冲突」 comes first, as it does in the control plane. */
 const CAVEAT_BADGE: Record<WebMemoryCaveat, string> = {
@@ -93,6 +97,31 @@ export function FactDrawer({ item, projectName, conversations, onClose, onChange
   // 编辑 was a button a moment ago, so the field it opens takes the focus.
   const field = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (editing) field.current?.focus(); }, [editing]);
+  // The knowledge-base documents the memory was written from, named by their titles: read when the drawer opens, because the
+  // profile does not carry the sources of every row. A document the reader cannot open is not offered, and a failed read
+  // leaves the drawer as it was (principle 19).
+  const [materials, setMaterials] = useState<{ id: string; title: string }[]>([]);
+  const recordId = record?.id ?? "";
+  useEffect(() => {
+    if (!recordId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const links = await fetchMemorySources(recordId);
+        const ids = links.filter((link) => link.type === "knowledge_source").map((link) => link.id).slice(0, 3);
+        const found = await Promise.all(ids.map(async (id) => {
+          try {
+            const title = (await getSource(id)).display?.title?.trim();
+            return title ? { id, title } : null;
+          } catch { return null; }
+        }));
+        const named = found.filter((item): item is { id: string; title: string } => item !== null);
+        // Nothing to name is nothing to draw again.
+        if (!cancelled && named.length > 0) setMaterials(named);
+      } catch { /* the drawer stands without them */ }
+    })();
+    return () => { cancelled = true; };
+  }, [recordId]);
 
   const run = async (operation: () => Promise<void>, error: (reason: unknown) => string = failed) => {
     setBusy(true);
@@ -234,6 +263,8 @@ export function FactDrawer({ item, projectName, conversations, onClose, onChange
             <p className="whitespace-pre-wrap text-body text-text">{former ? `曾经如此：${sentence}${record ? heldFrom(record) : ""}` : sentence}</p>
           )}
 
+          {record && <ValidityBar span={validitySpan(record)} />}
+
           {(pending || badges.length > 0) && (
             <div className="flex flex-wrap items-center gap-2">
               {pending && <Tag>待确认</Tag>}
@@ -266,7 +297,7 @@ export function FactDrawer({ item, projectName, conversations, onClose, onChange
             );
           })}
 
-          {record && (record.evidence.length > 0 || source) && (
+          {record && (record.evidence.length > 0 || source || materials.length > 0) && (
             <DrawerSection label="出处">
               {record.evidence.slice(-3).reverse().map((evidence) => (
                 <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
@@ -277,8 +308,14 @@ export function FactDrawer({ item, projectName, conversations, onClose, onChange
               {source && (
                 <ConversationLink projectId={record.scope === "project" ? record.scopeId : null} sessionId={source.sessionId}>
                   {conversations?.[source.sessionId] ? `来源对话：《${memoryExcerpt(conversations[source.sessionId], 40)}》` : "来源对话"}
+                  {formatDay(source.at) ? `（${formatDay(source.at)}）` : ""}
                 </ConversationLink>
               )}
+              {materials.map((material) => (
+                <Link key={material.id} to={readerPath(material.id, { scope: null, kind: null, q: "" })} className="block max-w-measure text-left text-ui text-accent hover:underline">
+                  {`依据的资料：《${memoryExcerpt(material.title, 60)}》`}
+                </Link>
+              ))}
             </DrawerSection>
           )}
 

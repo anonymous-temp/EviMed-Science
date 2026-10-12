@@ -1,10 +1,15 @@
 import { createHash } from "node:crypto";
 import {
+  PROJECT_FIELD_LABELS_ZH,
+  PROJECT_FIELD_MAX,
+  canonicalProjectField,
   carriesPlatformContext,
   identifierShapesIn,
   maskIdentifiers,
   mcpToolBaseName,
   platformIdentifiersIn,
+  projectCardKey,
+  projectCardSlotOfKey,
   runBookkeepingIn,
   unwrapUserWrappers,
 } from "@evimed/domain";
@@ -40,6 +45,18 @@ const candidateKinds = new Set([
 const candidateScopes = new Set(["user", "project", "session"]);
 const candidateOrigins = new Set(["explicit", "inferred", "system"]);
 const memoryKeyPattern = /^[a-z0-9][a-z0-9._/-]{0,254}$/;
+
+/** The project card's keys as the extraction instructions state them (`projectCard.mjs` holds the slots; this is their wording). */
+const PROJECT_CARD_PROMPT_SLOTS = [
+  `${projectCardKey("field")} (the specialty: one to ${PROJECT_FIELD_MAX} of ${PROJECT_FIELD_LABELS_ZH.join("、")}, copied from this list, joined by 、)`,
+  `${projectCardKey("population")} (who is studied)`,
+  `${projectCardKey("intervention")} (the intervention or exposure)`,
+  `${projectCardKey("comparator")}`,
+  `${projectCardKey("outcome")} (the endpoints)`,
+  `${projectCardKey("design")} (the study design)`,
+  `${projectCardKey("data_source")} (where the data come from, described by what it is)`,
+  `${projectCardKey("stage")} (where the work stands now)`,
+].join(", ");
 
 /**
  * The memories that steer every later run, whatever the question is.
@@ -529,7 +546,7 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
   const scope = boundedText(candidate.scope, 32).toLowerCase();
   const origin = boundedText(candidate.origin, 32).toLowerCase();
   const key = boundedText(candidate.key, 255).toLowerCase();
-  const value = boundedText(candidate.value, 100_000);
+  let value = boundedText(candidate.value, 100_000);
   const summary = boundedText(candidate.summary, 2_000);
   const sourceRef = boundedText(candidate.sourceRef, 500);
   const quote = boundedText(candidate.evidenceQuote, 4_000);
@@ -541,11 +558,23 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
   if (!candidateOrigins.has(origin)) return reject(`unknown origin "${origin}"`);
   if (!memoryKeyPattern.test(key)) return reject(`malformed key "${key}"`);
   if (!value) return reject(`empty value for "${key}"`);
+  // The one closed value on a project's card: its specialty is on the frontier feed's list of twenty-one, or it is no field (a
+  // format check, principle 5; the card groups by it).
+  if (scope === "project" && projectCardSlotOfKey(key) === "field") {
+    const field = canonicalProjectField(value);
+    if (!field) return reject(`"${key}" must name one to ${PROJECT_FIELD_MAX} specialties from the closed list (got "${value.slice(0, 40)}")`);
+    value = field;
+  }
   if (!source) return reject(`sourceRef "${sourceRef}" matches no supplied source`);
   if (!quote) return reject(`no evidence quote for "${key}"`);
   // The most common rejection by far: the model paraphrases instead of copying,
   // so the quote is true but not verbatim.
   if (!source.text.includes(quote)) return reject(`evidence quote for "${key}" is not verbatim in ${sourceRef}`);
+  // The project card is the researcher's own description of their study: an assistant's summary of a trial, or a tool's result,
+  // is the trial's and the tool's — it may be a project fact under a key of its own, and fills no slot of the card.
+  if (projectCardSlotOfKey(key) && source.role !== "user") {
+    return reject(`"${key}" is a slot of the project card, which only the researcher's own message fills (got role "${source.role}")`);
+  }
   if (["profile", "preference", "behavior"].includes(kind) && scope !== "user") {
     return reject(`${kind} must be user-scoped (got scope "${scope}")`);
   }
@@ -1689,6 +1718,9 @@ export class MemoryIntelligence {
                 // where every project reads it — the note tool had filed it as a note only the one project read.
                 "What is worth keeping is what the researcher would expect the assistant to still know next month, in another conversation, without being told again: who they are professionally (role, specialty, research direction), how they want work done (methods, statistics, reporting standards, evidence grading, language, format, tools), the standing shape of their projects (population, data source, criteria, comparator, decisions taken, what is still open), and what they corrected.",
                 "A single question is not a description of a project: record the shape of a project only when the researcher describes their study or decides something about it, never from a question or from a document they ask about. Choose each evidenceQuote as the shortest span that supports the fact and leave identifiers out of it.",
+                // The project card (2026-10-12): the page reads a project off these keys, so the same study is the same keys
+                // whatever the conversation says. Only the specialty has a closed value, and code checks it.
+                `When the researcher describes one particular study of their own (who is enrolled, what is compared, which endpoint, from which data), record what they said about it under these keys, each as a project_fact at scope project and only the ones they stated: ${PROJECT_CARD_PROMPT_SLOTS}. A research direction is a profile, and what they ask you to look up or answer is a question; neither gets these keys. A decision stays a decision, and anything else about the project keeps a key of its own.`,
                 "Never store, even when the researcher quotes it or asks you to remember it: (a) anything that identifies or describes an individual patient or any other person — names, ID-card, medical-record, admission, phone, e-mail, WeChat or address details, exact dates of care, or one person's diagnosis, medication or course (「患者张某某，住院号 ZY…」, 「67 岁男性，服华法林，INR 波动」). Case material is worked on in the conversation and then forgotten; a project may remember the shape of a cohort (who is eligible, which years, how many, what source, which kinds of variables) and never a member of it. (b) Credentials and account numbers: passwords, API keys, tokens, ID-card and bank-card numbers.",
                 "Do not store the researcher's own health, medication, religion, politics, ethnicity, sexual orientation, finances or private life, and do not infer them from a question: asking about a disease or a drug is a topic, not a fact about the person. If such a statement still seems worth proposing, set sensitive true on it: the platform does not keep sensitive candidates. The one exception is a message in which the researcher asks you to remember such a fact about themselves (「记住我对青霉素过敏」): that is their choice, so propose it as a profile memory at user scope in their own words, with sensitive false and their request as the evidenceQuote. The same fact said in passing or inside a question, with no request to remember it (「我对青霉素过敏，术后抗生素怎么选？」), is not that request.",
                 "Do not store personal details of colleagues, co-authors, supervisors, family or participants (contact details, health, private life). A working fact about the project that names a collaborator's role (「统计分析由合作者负责」) may be kept as a project_fact, without contact details.",

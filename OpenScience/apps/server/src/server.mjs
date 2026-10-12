@@ -150,6 +150,7 @@ import { createLearningRoutes } from "./learningRoutes.mjs";
 import { HandbookLibrary } from "./handbookLibrary.mjs";
 import { createHandbookRoutes } from "./handbookRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
+import { capabilityUse, projectWorks } from "./projectOverview.mjs";
 import { memoryMetricFamilies, recordExtractionEmpty, recordMethodsRetired } from "./memoryMetrics.mjs";
 import { resetLearnedMemory } from "./memoryReset.mjs";
 import { ResidentProfiles } from "./residentProfile.mjs";
@@ -1558,6 +1559,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
     // A pause for recall turned on under a live runtime: the methods it mounted at launch leave with the idle ones.
     releasePausedRuntimes: userId => runtimeManager.releasePausedMethodRuntimes(userId),
+    // 项目 tab: what a project's own runs did and delivered, read from its ledger like the usage 明细 reads the month's.
+    projectWork: async (_user, project, { timeZone }) => {
+      const registry = await agentRegistry;
+      const isInternal = (/** @type {string} */ agent) => registry?.get?.(agent)?.visibility === "internal";
+      const runs = await agentRuns.list(project);
+      return {
+        capabilities: capabilityUse(runs, isInternal),
+        works: projectWorks(runs, { describe: run => agentRuns.withArtifactKinds(run, registry), isInternal, timeZone }),
+      };
+    },
   });
   const agentApiKeys = productDatabase ? new AgentApiKeyStore(productDatabase) : null;
   /** The accounts an integration key of `ownerId` made for the people behind

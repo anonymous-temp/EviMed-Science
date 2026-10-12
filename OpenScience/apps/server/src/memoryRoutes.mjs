@@ -1,4 +1,6 @@
 import { recordResetRemoved } from "./memoryMetrics.mjs";
+import { timeZoneOrDefault } from "./memoryTimeline.mjs";
+import { projectCard } from "./projectOverview.mjs";
 import { MEMORY_KINDS, conversationTitlesIn } from "./researchMemory.mjs";
 import {
   HttpError,
@@ -48,6 +50,7 @@ import {
  *   memoryIndexWorker?: { drainWithdrawals?: () => Promise<any> } | null,
  *   resetProduct?: ((userId: string) => Promise<{ methods: number, handbooks: number, entries: number, jobs: number, feedback: number }>) | null,
  *   releasePausedRuntimes?: ((userId: string) => Promise<unknown>) | null,
+ *   projectWork?: ((user: any, project: any, options: { timeZone: string }) => Promise<{ capabilities: any[], works: any[] }>) | null,
  *   feedbackEvents: any,
  *   store: any,
  *   context: (req: any, res: any) => Promise<any>,
@@ -58,7 +61,8 @@ import {
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createMemoryRoutes({
-  config, researchMemory, memorySubstrate = null, memoryIndexWorker = null, resetProduct = null, releasePausedRuntimes = null, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
+  config, researchMemory, memorySubstrate = null, memoryIndexWorker = null, resetProduct = null, releasePausedRuntimes = null, projectWork = null,
+  feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
 }) {
   const enabled = config.memoryEnabled !== false;
 
@@ -230,6 +234,53 @@ export function createMemoryRoutes({
           ? await researchMemory.recordUsage(ctx.user.id, ids).catch(() => ({}))
           : {},
       } });
+      return true;
+    }
+
+    /**
+     * One project, read from above (2026-10-12): the card its facts were written under, what was done in it and what it delivered.
+     *
+     * The project is the account's own or it is a 404 — the memories are read only after that is settled, and the run ledger
+     * is the project's own. The card is the memories' (`projectCard`), the rest is the ledger's (`projectOverview.mjs`); a ledger
+     * that cannot be read leaves its two lists empty and the card stands (principle 19). `paused` is this project's switch
+     * (`pausedProjects`), so the page can say so without asking the settings route a second time.
+     */
+    const overview = /^\/api\/memory\/projects\/([^/]+)\/overview$/.exec(pathname);
+    if (overview && req.method === "GET") {
+      const ctx = await context(req, res);
+      const projectId = decodeRouteComponent(overview[1], "project id");
+      const project = await store.requireProject(ctx.user, projectId);
+      const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
+      const timeZone = timeZoneOrDefault(url.searchParams.get("timeZone"));
+      const listFilters = { scopes: ["project"], kinds: ["project_fact", "decision"], statuses: ["active"], scopeId: project.id };
+      const [records, settings, work] = await Promise.all([
+        typeof researchMemory.listAllRecords === "function" ? researchMemory.listAllRecords(ctx.user.id, listFilters) : researchMemory.listRecords(ctx.user.id, listFilters),
+        typeof researchMemory.settings === "function" ? researchMemory.settings(ctx.user.id).catch(() => null) : null,
+        projectWork ? Promise.resolve(projectWork(ctx.user, project, { timeZone })).catch(() => null) : null,
+      ]);
+      sendJson(res, 200, { data: {
+        projectId: project.id,
+        paused: Array.isArray(settings?.pausedProjects) && settings.pausedProjects.includes(project.id),
+        card: projectCard(records),
+        capabilities: work?.capabilities ?? [],
+        works: work?.works ?? [],
+        timeZone,
+      } });
+      return true;
+    }
+
+    /**
+     * The sources a memory rests on: the knowledge-base documents, published works and evidence it was written from, each with
+     * the state it is in now. The memory drawer reads this when it opens, so the profile does not carry it for every row.
+     */
+    const sourcesOf = /^\/api\/memory\/records\/([^/]+)\/sources$/.exec(pathname);
+    if (sourcesOf && req.method === "GET") {
+      const ctx = await context(req, res);
+      const recordId = decodeRouteComponent(sourcesOf[1], "structured memory id");
+      // The record first: a record of another account is a 404, as everywhere in this module.
+      await researchMemory.getRecord(ctx.user.id, recordId);
+      const links = typeof researchMemory.sourceLinks === "function" ? await researchMemory.sourceLinks(ctx.user.id, recordId) : [];
+      sendJson(res, 200, { data: links.map((/** @type {any} */ link) => ({ type: link.type, id: link.id, state: link.state })) });
       return true;
     }
 

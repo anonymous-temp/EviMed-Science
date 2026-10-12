@@ -108,7 +108,7 @@ test("the code-decided checks read the written records, not their prose", () => 
 const synthetic = cases.filter((item) => item.replay.synthetic === true);
 
 test("the synthetic replays of 2026-10-12 each say how the earlier extractor fared on what it wrote", () => {
-  assert.equal(synthetic.length, 16, "fourteen synthetic replays, and the two of the owner's R9 ruling");
+  assert.equal(synthetic.length, 18, "fourteen synthetic replays, the two of the owner's R9 ruling, and the two of the project card");
   for (const item of synthetic) {
     assert.equal(item.decidable, true, `${item.id} is decided by code`);
     const verdicts = runner.decidedVerdicts(item, item.written);
@@ -118,7 +118,7 @@ test("the synthetic replays of 2026-10-12 each say how the earlier extractor far
       `${item.id}: preChange ${item.preChange}, yet the sample is judged ${verdicts.map((verdict) => verdict.passed).join("/")}`);
   }
   assert.deepEqual(synthetic.filter((item) => item.preChange === "held").map((item) => item.class).sort(),
-    ["credentials", "own-health-in-passing", "run-tool-and-field-names", "standing-method-and-format", "standing-role-and-focus"]);
+    ["credentials", "own-health-in-passing", "project-card-not-guessed", "run-tool-and-field-names", "standing-method-and-format", "standing-role-and-focus"]);
 });
 
 test("a record that must be kept is checked by kind and by a string it carries, and a typo in a check is a shape error", () => {
@@ -144,8 +144,25 @@ test("a record that must be kept is checked by kind and by a string it carries, 
   assert.deepEqual(failing(byClass["standing-role-and-focus"], [record("profile", "a", "r"), record("profile", "b", "f"), record("project_fact", "出血风险问题")]),
     [`no project_fact record in ${byClass["standing-role-and-focus"].replay.projectId}`]);
 
+  // The project card: the keys a record was written under, and what a closed key may hold.
+  const slots = ["population", "intervention", "comparator", "outcome", "design", "data_source", "stage"].map((slot) => record("project_fact", slot, `project.${slot}`));
+  assert.deepEqual(failing(byClass["project-card-slots"], [record("project_fact", "心血管", "project.field"), ...slots]), []);
+  assert.deepEqual(failing(byClass["project-card-slots"], [...slots]), ["some record is written under project.field"], "the specialty is a slot like the rest");
+  assert.deepEqual(failing(byClass["project-card-slots"], [record("project_fact", "心血管", "project.field"), ...slots.slice(0, 6)]),
+    ["some record is written under project.stage"]);
+  assert.deepEqual(failing(byClass["project-card-slots"], [record("project_fact", "心血管、肿瘤", "project.field"), ...slots]),
+    ["project.field holds only 心血管"], "a key the model made up (project.primary_outcome) satisfies nothing, and a value off the case's list fails");
+  assert.deepEqual(failing(byClass["project-card-slots"], [record("project_fact", "队列", "project.af_cohort.design")]).length, 8,
+    "the keys of the earlier extractor are no slot");
+  assert.deepEqual(failing(byClass["project-card-not-guessed"], []), []);
+  assert.deepEqual(failing(byClass["project-card-not-guessed"], [record("project_fact", "75 岁以上", "project.population")]).length, 2);
+
   const misspelt = { ...byClass["credentials"], file: "x.json", expect: { noTextContain: ["a"] } };
   assert.match(runner.caseIssues(misspelt).join("\n"), /noTextContain is not a check the runner decides/);
+  const keyless = { ...byClass["project-card-slots"], file: "x.json", expect: { requireKeys: [] } };
+  assert.match(runner.caseIssues(keyless).join("\n"), /requireKeys is not a list of memory keys/);
+  const valueless = { ...byClass["project-card-slots"], file: "x.json", expect: { keyValues: { "project.field": [] } } };
+  assert.match(runner.caseIssues(valueless).join("\n"), /keyValues is not a map from a memory key to the values it may hold/);
   const countless = { ...byClass["standing-method-and-format"], file: "x.json", expect: { requireKinds: { preference: 0 } } };
   assert.match(runner.caseIssues(countless).join("\n"), /requireKinds is not a map from a record kind to a positive count/);
   const unsaid = { ...byClass["credentials"], file: "x.json", preChange: undefined };

@@ -179,13 +179,13 @@ export function feedbackTimelineEvents(event) {
 }
 
 /** The calendar day of an instant in a zone, as YYYY-MM-DD. @param {string} at @param {Intl.DateTimeFormat} format */
-function dayOf(at, format) {
+export function dayOf(at, format) {
   const parts = Object.fromEntries(format.formatToParts(new Date(at)).map((part) => [part.type, part.value]));
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 /** @param {unknown} value */
-function timeZoneOrDefault(value) {
+export function timeZoneOrDefault(value) {
   const zone = typeof value === "string" && value.trim() ? value.trim() : DEFAULT_TIME_ZONE;
   try {
     new Intl.DateTimeFormat("en-CA", { timeZone: zone });
@@ -287,6 +287,8 @@ export async function memoryTimeline({ researchMemory, agentRuns = null, feedbac
  * capsule missing would look exactly like a true one.
  */
 
+/** Daily points while the history is shorter than this many days; weekly after that (a new account has no week to draw). */
+export const MEMORY_GROWTH_DAYS = 14;
 /** Weekly points while the history is at most this many weeks long; months after that. */
 export const MEMORY_GROWTH_WEEKS = 26;
 /** The furthest back the line reaches, in months. */
@@ -321,15 +323,30 @@ function weeksBetween(from, to) {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / (7 * 86_400_000));
 }
 
+/** Whole days between two days. @param {string} from @param {string} to */
+function daysBetween(from, to) {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
 /**
- * Where each point of the line starts: weeks for a short history, months for
- * a long one, and — when the whole history fits — one point before the first
- * memory, at zero, so a capsule a week old is a line that starts somewhere
- * rather than a lone dot.
+ * Where each point of the line starts: days for the first two weeks, weeks
+ * for a short history, months for a long one, and — when the whole history
+ * fits — one point before the first memory, at zero, so a capsule a week old
+ * is a line that starts somewhere rather than a lone dot.
+ *
+ * Days exist for the account that is new: its whole history fits one or two
+ * weekly points, and the page draws no line for fewer than two points that
+ * hold something (a two-point line reads as broken). By the day it has two
+ * days of memories there is a line to draw.
  * @param {string} first the day the first row began @param {string} today
- * @returns {{ unit: "week" | "month", starts: string[] }}
+ * @returns {{ unit: "day" | "week" | "month", starts: string[] }}
  */
 export function growthBuckets(first, today) {
+  if (daysBetween(first, today) < MEMORY_GROWTH_DAYS) {
+    const starts = [];
+    for (let start = addDays(first, -1); start <= today; start = addDays(start, 1)) starts.push(start);
+    return { unit: "day", starts };
+  }
   const firstWeek = weekOf(first);
   const thisWeek = weekOf(today);
   if (weeksBetween(firstWeek, thisWeek) < MEMORY_GROWTH_WEEKS) {
@@ -363,7 +380,7 @@ async function everyDocument(documents, userId, kind, { filter = {}, fields } = 
  * @param {{ researchMemory: any, learning?: any, capsules?: any, now?: () => Date }} sources
  * @param {{ id: string }} user
  * @param {{ timeZone?: string | null }} [options]
- * @returns {Promise<{ unit: "week" | "month" | null, first: string | null, fromStart: boolean, points: Array<{ start: string, known: number }>,
+ * @returns {Promise<{ unit: "day" | "week" | "month" | null, first: string | null, fromStart: boolean, points: Array<{ start: string, known: number }>,
  *   moments: Array<{ day: string, kind: "method" | "capsule", title: string }>, timeZone: string }>}
  */
 export async function memoryGrowth({ researchMemory, learning = null, capsules = null, now = () => new Date() }, user, { timeZone = null } = {}) {
