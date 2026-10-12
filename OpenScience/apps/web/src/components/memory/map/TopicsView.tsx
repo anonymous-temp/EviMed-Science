@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ListRow, List } from "@/components/ui/ListRow";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Input } from "@/components/ui/Input";
@@ -34,6 +34,10 @@ export function TopicsView({ topics, selected, grouping, status, onChoose, onCha
 }) {
   const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // 改名 was a menu item a moment ago, so the field it opens takes the focus (the drawer's 编辑 does the same).
+  const renameField = useRef<HTMLInputElement>(null);
+  const renamingId = renaming?.id;
+  useEffect(() => { if (renamingId) renameField.current?.focus(); }, [renamingId]);
   const ranked = useMemo(() => [...topics].sort((left, right) => right.weight - left.weight || left.id.localeCompare(right.id)), [topics]);
   const widest = Math.max(1, ...ranked.map((topic) => topic.weight));
 
@@ -55,7 +59,7 @@ export function TopicsView({ topics, selected, grouping, status, onChoose, onCha
   if (ranked.length === 0) {
     return (
       <p role="status" className="text-ui text-text-2">
-        {grouping || status === "stale" ? "正在把记忆整理成主题……" : status === "off" ? "这里还没有开通主题。" : "记下的内容还不多，再多聊几次，这里会长出你关心的主题。"}
+        {grouping || status === "stale" ? "正在把记忆整理成主题。" : status === "off" ? "这里还没有开通主题。" : "记下的内容还不多，再多聊几次，这里会长出你关心的主题。"}
       </p>
     );
   }
@@ -79,7 +83,7 @@ export function TopicsView({ topics, selected, grouping, status, onChoose, onCha
           renaming?.id === topic.id ? (
             <li key={topic.id} className="px-2 py-2">
               <form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); if (renaming.text.trim()) void edit(topic.id, { label: renaming.text.trim() }, "已改名"); }}>
-                <Input aria-label="主题的新名字" autoFocus maxLength={20} value={renaming.text} onChange={(event) => setRenaming({ id: topic.id, text: event.target.value })} />
+                <Input ref={renameField} aria-label="主题的新名字" maxLength={20} value={renaming.text} onChange={(event) => setRenaming({ id: topic.id, text: event.target.value })} />
                 <Button type="submit" size="sm" loading={busy} disabled={!renaming.text.trim()}>保存</Button>
                 <Button size="sm" variant="text" onClick={() => setRenaming(null)}>取消</Button>
               </form>

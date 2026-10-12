@@ -163,6 +163,8 @@ export const ROUTES = [
   ["memory-project", "/app/memory?tab=project"],
   ["memory-methods", "/app/memory?tab=methods"],
   ["memory-growth", "/app/memory?tab=growth"],
+  // 记忆地图 (2026-10-12): a data page of its own, one view at a time over one selection (DESIGN.md 「页面结构」, the data-page exception).
+  ["memory-map", "/app/memory/map"],
   ["autopilot", "/app/autopilot"],
   ["inbox", "/app/inbox"],
   ["account", "/app/account"],
@@ -394,6 +396,8 @@ export function budgetKey(name) {
 export const SECTION_SHAPES_BY_PAGE = {
   files: 2,
   memory: 2, "memory-project": 2, "memory-methods": 2, "memory-growth": 2,
+  // 记忆地图 is a data page: the sentence over its switch and filters, the one canvas of the view, and the list of the same marks.
+  "memory-map": 3,
   frontier: 3, "frontier-hot": 3, "frontier-daily": 3, "frontier-all": 3, "frontier-following": 3,
   capabilities: 2,
   "extensions-plugins": 2, "extensions-skills": 2,
@@ -410,7 +414,7 @@ export const SECTION_SHAPES_BY_PAGE = {
  * it, and not a failure (principle 4: a check ships as a notice until it has a distribution). The pages of the table above that are not
  * named here keep failing, as they have since R10.
  */
-export const NOTICE_SECTION_PAGES = new Set(["inbox", "geo", "frontier-zones", "autopilot", "account"]);
+export const NOTICE_SECTION_PAGES = new Set(["inbox", "geo", "frontier-zones", "autopilot", "account", "memory-map"]);
 
 /**
  * The pages whose lists are clicked: the first row of each list must show
@@ -420,7 +424,7 @@ export const NOTICE_SECTION_PAGES = new Set(["inbox", "geo", "frontier-zones", "
  * minus the study's own tabs, whose rows are results, not a place to go.
  */
 export const ROW_CLICK_PAGES = new Set([
-  "files", "memory", "memory-project", "memory-methods", "memory-growth",
+  "files", "memory", "memory-project", "memory-methods", "memory-growth", "memory-map",
   "frontier", "frontier-hot", "frontier-daily", "frontier-all",
   "extensions-plugins", "extensions-skills", "virtual-research",
   // R11 (re-aimed in R13, V-11): a source row opens a drawer (it opened its three conditions in place), a scheduled-task row goes to the
@@ -1043,6 +1047,16 @@ export function pageProbe([kind, arg]) {
     const names = all("a, button").map(words);
     return { title: text.includes("这个分享不能打开"), back: names.includes("回到记忆胶囊"), retry: names.includes("重试") };
   }
+  if (kind === "memoryMap") {
+    const text = words(main);
+    return {
+      radios: all("[role='radio']").filter(visible).map(words),
+      figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
+      lists: all("main ul[aria-label]").filter(visible).map((el) => ({ label: el.getAttribute("aria-label"), rows: el.querySelectorAll(":scope > li").length })),
+      thin: text.includes("再多聊几次，这里会长出你的地图"),
+      empty: text.includes("还没有记住什么"),
+    };
+  }
   if (kind === "inboxSafety") {
     const heading = all("h2").map(words).map((text) => /^涉及临床安全 · 未读 (\d+) 条$/.exec(text)).find(Boolean);
     const bell = [...document.querySelectorAll("button[aria-label], a[aria-label]")].map((el) => el.getAttribute("aria-label") ?? "").find((label) => label.startsWith("收件箱"));
@@ -1116,6 +1130,7 @@ export const PAGE_PROBES = {
   "memory-methods": [["memoryTabs", ["desktop"]]],
   "memory-growth": [["memoryTabs", ["desktop"]]],
   "memory-shared-missing": [["sharedMissing", ["desktop", "phone"]]],
+  "memory-map": [["memoryMap", ["desktop", "phone"]]],
   inbox: [["inboxSafety", ["desktop"]]],
   account: [["feishuRows", ["desktop"]]],
   "account-notifications": [["feishuRows", ["desktop"]]],
@@ -1134,6 +1149,33 @@ export const MISSING_RECORDS = {
   "extensions-plugin-missing": { sentence: "找不到这个插件，它可能已被移除。", back: "回到插件列表", to: "/app/extensions/plugins" },
   "extensions-skill-missing": { sentence: "找不到这个技能，它可能已被移除。", back: "回到技能列表", to: "/app/extensions/skills" },
 };
+
+/** The five views of 记忆地图, in the order its one row of switches shows them. */
+export const MEMORY_MAP_VIEWS = Object.freeze(["关系", "主题", "维度", "时间", "活跃"]);
+
+/**
+ * What 记忆地图's first mark did, and what the drawer's closing did: the click opens the memory page's own drawer and writes the mark into
+ * the address (`open=`), and closing it takes both away. A page with no mark to press says so; it is not a pass.
+ * @param {string} name the report's page name
+ * @param {{ rows: number, opened: { dialog: boolean, address: boolean } | null, closed: { dialog: boolean, address: boolean } | null }} read
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function memoryMapFindings(name, read) {
+  const current = `${name}@desktop`;
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (read.rows === 0 || !read.opened) {
+    notices.push(`${current}: not observable: the page lists no mark that opens, so the drawer was not tried`);
+    return { failures, notices };
+  }
+  if (!read.opened.dialog) failures.push(`${current}: pressing the first mark opened no drawer`);
+  if (!read.opened.address) failures.push(`${current}: the open drawer is not in the address (a reload or Back would lose it)`);
+  if (read.closed) {
+    if (read.closed.dialog) failures.push(`${current}: the drawer did not close`);
+    if (read.closed.address) failures.push(`${current}: the drawer closed and its mark is still in the address`);
+  } else if (read.opened.dialog) failures.push(`${current}: the drawer has no 关闭 button to press`);
+  return { failures, notices };
+}
 
 /** The tabs a memory address names, and the one it must open on. */
 const MEMORY_TAB_OF = { "memory-project": "项目", "memory-methods": "做法", "memory-growth": "成长" };
@@ -1187,6 +1229,14 @@ export function probeFindings(name, viewportName, kind, r) {
         failures.push(`${current}: the page opens on an empty 关于你 while 项目 holds ${count("项目")} and 做法 ${count("做法")}`);
       }
       if (r.headline && r.headline.practices !== count("做法")) failures.push(`${current}: the growth line counts ${r.headline.practices} 做法 and the tab ${count("做法")}`);
+      break;
+    }
+    case "memoryMap": {
+      // The five views are one row of radios, every figure has a name, and a figure has the same marks as a list under it.
+      if (r.radios.join(",") !== MEMORY_MAP_VIEWS.join(",")) failures.push(`${current}: the view switch reads “${r.radios.join("、")}” (${MEMORY_MAP_VIEWS.join("、")})`);
+      for (const figure of r.figures) if (!figure.named) failures.push(`${current}: the ${figure.kind} figure has no accessible name`);
+      if (r.figures.some((figure) => figure.kind === "relations") && !r.lists.some((list) => list.label === "标记" && list.rows > 0)) failures.push(`${current}: the graph has no list of the same marks under it`);
+      if (r.thin && r.figures.some((figure) => figure.kind === "relations")) failures.push(`${current}: the page says there is too little to draw and draws the graph`);
       break;
     }
     case "sharedMissing":
@@ -2153,6 +2203,47 @@ async function walkRowClicks(page, base, route, name, popups) {
   return { rows, failures, notices };
 }
 
+/** The marks of 记忆地图's list that open the drawer (a button; a document is a link to a page of its own, which is another walk's). */
+function drawerMarks() {
+  return [...document.querySelectorAll("main ul[aria-label='标记'] > li button[data-row-title]")].filter((el) => el.getBoundingClientRect().width > 0 && !el.closest("[role='dialog']"));
+}
+
+/** How many marks 记忆地图's list shows that open the drawer. */
+export function markRowsProbe() {
+  return drawerMarks().length;
+}
+
+/** Presses the first mark that opens the drawer. */
+export function clickFirstMarkProbe() {
+  const mark = drawerMarks()[0];
+  if (!mark) return false;
+  mark.click();
+  return true;
+}
+
+/** Whether a drawer is open, and whether the address says so (`open=`). */
+export function drawerStateProbe() {
+  return { dialog: [...document.querySelectorAll("[role='dialog']")].some((el) => el.getBoundingClientRect().width > 0), address: new URLSearchParams(location.search).has("open") };
+}
+
+/**
+ * 记忆地图's mark and its drawer: the first mark of the list is pressed, the drawer is read as open and in the address, and its own 关闭
+ * is pressed and read again. Pressing a mark opens a drawer and reads; nothing here writes.
+ */
+async function walkMemoryMap(page, base, route) {
+  await openRoute(page, base, route);
+  const rows = await page.evaluate(markRowsProbe);
+  if (rows === 0) return { ...memoryMapFindings("memory-map", { rows: 0, opened: null, closed: null }), read: { rows } };
+  await page.evaluate(clickFirstMarkProbe);
+  await page.waitForTimeout(1_500);
+  const opened = await page.evaluate(drawerStateProbe);
+  const pressed = opened.dialog ? await page.evaluate(clickNamed, ["button", "关闭", "[role='dialog']"]) : false;
+  await page.waitForTimeout(800);
+  const closed = pressed ? await page.evaluate(drawerStateProbe) : null;
+  const judged = memoryMapFindings("memory-map", { rows, opened, closed });
+  return { ...judged, read: { rows, opened, closed } };
+}
+
 /**
  * The new-skill drawer: opened from the 新建技能 menu, it says what its fields are for and offers to use the skill in this project,
  * and 保存 with every field empty names what is missing in place. The save button writes, so every request that is not a read is
@@ -2425,6 +2516,7 @@ async function main() {
             // A08 on the knowledge base: a search, a document opened from it, and both ways back (only where there is a document to open).
             if (name === "files" && clicked.rows.length > 0) await recordStep(report, failures, notices, "files-return", () => walkKnowledgeReturn(page, base, route));
             if (name === "extensions-skills") await recordStep(report, failures, notices, "extensions-skills-create", () => walkSkillDrawer(page, base, route));
+            if (name === "memory-map") await recordStep(report, failures, notices, "memory-map-drawer", () => walkMemoryMap(page, base, route));
           }
         } catch (error) {
           failures.push(`${current}: did not load (${String(error).slice(0, 120)})`);

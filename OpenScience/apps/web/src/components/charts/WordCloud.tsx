@@ -37,9 +37,9 @@ export function WordCloud({ topics, selected, onChoose, label, height = 340 }: {
   const scheme = useColorScheme();
   const ready = useWordCloudPlugin();
   // The palette is read from the live document, so a theme flip is a reason to build the option again.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const option = useMemo(() => (!ready || topics.length === 0 ? null : wordCloudOption(topics, {
     selected, palette: mapPalette(), fontFamily: typeof document === "undefined" ? "sans-serif" : getComputedStyle(document.body).fontFamily || "sans-serif",
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   })), [topics, selected, scheme, ready]);
   const host = useEChart(option, { on: { click: (params: { data?: { id?: string } }) => { if (params?.data?.id) onChoose(params.data.id); } } });
   return (

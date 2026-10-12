@@ -133,7 +133,7 @@ export function lanesOf(records, conflicted = new Set()) {
           text: excerpt(recordText(record), 60),
           from: instant(record.validFrom) ?? instant(record.createdAt),
           to: record.status === "superseded" ? instant(record.invalidSince) ?? instant(record.updatedAt) : null,
-          state: record.status === "superseded" ? "replaced" : "current",
+          state: /** @type {"current" | "replaced"} */ (record.status === "superseded" ? "replaced" : "current"),
           conflict: conflicted.has(record.id),
         })),
       },

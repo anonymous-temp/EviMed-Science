@@ -330,7 +330,7 @@ export class MemoryTopics {
    * Group the account's memories again if they changed and the day's bound allows. Concurrent calls for one account are one.
    * A failed call leaves the last grouping as it was (principle 19) and is counted against the day.
    * @param {string} userId @param {{ projectId: string, runId?: string | null }} options the project the call is charged to
-   * @returns {Promise<{ status: "off" | "empty" | "stale" | "ready", made: boolean, bounded?: boolean }>}
+   * @returns {Promise<{ status: string, made: boolean, bounded?: boolean }>} `status` as `read` says it
    */
   async refresh(userId, { projectId, runId = null }) {
     if (!this.available) return { status: this.configured ? "stale" : "off", made: false };

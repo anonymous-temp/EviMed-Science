@@ -82,14 +82,15 @@ export function createActivitySource({ agentRuns = null, projectOf = null, learn
         learning ? attempt("methods", async () => (await learning.listMethods(request.user.id, { limit: 100 })).items ?? []) : [],
         feedbackEvents ? attempt("feedback", async () => (await feedbackEvents.list(request.user.id, { limit: 200 })).items ?? []) : [],
       ]);
-      const methodMarks = request.projectId ? [] : methods.flatMap(methodEvents).map((event) => ({
+      const methodMarks = request.projectId ? [] : /** @type {any[]} */ (methods.flatMap(methodEvents)).map((event) => ({
         id: event.id, at: event.at, type: /** @type {const} */ ("method"), change: event.change, kind: "method",
         ref: nodeId("method", event.methodId), lane: "account", text: excerpt(event.name ?? "", 80),
       }));
+      /** @type {{ at: string, type: string }[]} */
       const counted = [
-        ...methods.flatMap(methodEvents),
-        ...runs.filter((run) => run.deleted !== true).flatMap(runEvents),
-        ...feedback.flatMap(feedbackTimelineEvents),
+        ...methods.flatMap((/** @type {any} */ method) => methodEvents(method)),
+        ...runs.filter((/** @type {any} */ run) => run.deleted !== true).flatMap((/** @type {any} */ run) => runEvents(run)),
+        ...feedback.flatMap((/** @type {any} */ event) => /** @type {any[]} */ (feedbackTimelineEvents(event))),
       ];
       return { events: methodMarks, buckets: bucketsOf(counted, request.timeZone, request.now), missing };
     },

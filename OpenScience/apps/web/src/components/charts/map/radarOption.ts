@@ -56,7 +56,7 @@ export function radarOption(dimension: MapDimension, palette: MapPalette): EChar
     animation: false,
     tooltip: {
       confine: true,
-      formatter: () => dimension.axes.map((axis) => `<div>${escapeTooltip(axis.label)}　${escapeTooltip(printed(axis.value))}　<span>${escapeTooltip(dimension.previous)} ${escapeTooltip(printed(axis.previousValue))}</span></div>`).join(""),
+      formatter: () => dimension.axes.map((axis) => `<div>${escapeTooltip(axis.label)} ${escapeTooltip(printed(axis.value))} <span>${escapeTooltip(dimension.previous)} ${escapeTooltip(printed(axis.previousValue))}</span></div>`).join(""),
     },
     radar: {
       center: ["50%", "54%"], radius: "62%", shape: "polygon", splitNumber: 4, triggerEvent: true,

@@ -117,7 +117,9 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   a single brand line whose heading is the sentence it proves, with at most three moments; it has no
   tile, legend or metric rung, and it is not drawn until the history spans two weeks. No peer's
   memory page has a chart, so a second chart there, or a first on another list page, needs the same
-  argument.
+  argument. The explorable picture of the same memories is a data page of its own, 记忆地图 (see 「页面结构」
+  rule 1), reached from the memory page's 「⋯」; it draws in the brand blue, the warn amber and one grey, tells a
+  mark's kind by shape and words, and prints a radar's numbers at its axes.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
 - **No colour outside the table.** `designTokens.test.ts` fails on a hex literal or a colour
@@ -364,7 +366,10 @@ pages after every release.
    own page, never above or below. The walk reads a page body's top-level sections by shape (a
    `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
    budget (`SECTION_SHAPES_BY_PAGE`); groups of one shape — a group per use, a group per day — are
-   one kind.
+   one kind. **The one exception is a data page** (记忆地图, `/app/memory/map`, the owner's formal requirement of
+   2026-10-12): one view at a time over one shared selection, switched by one row, with the same marks listed under
+   the canvas, and every mark opening the record's own drawer — so its three shapes (the sentence with its switch
+   and filters, the canvas, the list) are its budget, and the memory page itself stays a list with one line.
 2. **A row opens by the nature of what it is** (adopted 2026-10-08 with release 13, from the owner's
    screenshots of the scheduled-task and knowledge-base pages):
    - a **record** — a memory entry, an inbox message, a frontier item, an evidence-matrix row, a GEO

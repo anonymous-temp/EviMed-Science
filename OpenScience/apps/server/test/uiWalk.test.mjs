@@ -27,7 +27,7 @@ import {
   rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
   addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
-  handoffFindings, handoffProbe, HANDOFF_FIELDS, navigateForWalk, NOTICE_SECTION_PAGES, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  handoffFindings, handoffProbe, HANDOFF_FIELDS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, NOTICE_SECTION_PAGES, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -638,6 +638,8 @@ function probe(kind, arg, search) {
       return { tabs: [["关于你", 0], ["项目", 2], ["做法", 3], ["成长", 0]].map(([name, count]) => ({ name, count, selected: name === selected })), headline: { memories: 5, practices: wrong ? 9 : 3 } };
     }
     case "sharedMissing": return wrong ? { title: true, back: true, retry: true } : { title: true, back: true, retry: false };
+    case "memoryMap": return wrong ? { radios: ["关系"], figures: [{ kind: "relations", named: false }], lists: [], thin: false, empty: false }
+      : { radios: ["关系", "主题", "维度", "时间", "活跃"], figures: [{ kind: "relations", named: true }], lists: [{ label: "标记", rows: 3 }], thin: false, empty: false };
     case "inboxSafety": return wrong ? { heading: 2, bell: 5 } : { heading: 2, bell: 2 };
     case "feishuRows": return { rows: wrong ? 2 : search.includes("notifications") ? 1 : 0 };
     case "connectorRows": return { rows: arg.map((title) => ({ title, found: true, optional: !wrong, configured: false, missing: wrong })) };
@@ -797,12 +799,18 @@ function context() {
         if (typeof fn === "function" && fn.name === "clickNamed") {
           const [role, name] = arg;
           log({ clickNamed: name });
+          if (name === "关闭" && process.env.FAKE_CLOSE !== "stuck") dialogOpen = false;
           if (name === "保存" && process.env.FAKE_SKILL_WRITE) for (const [, handler] of pageRoutes) handler({ request: () => ({ method: () => "POST", url: () => "https://evimed.example.org/api/personal-skills" }), abort: async () => log({ aborted: "POST" }), continue: async () => {}, fallback: async () => {} });
           if (name === "回到插件列表") url = new URL("/app/extensions/plugins", url).href;
           if (name === "回到技能列表") url = new URL(process.env.FAKE_BACK === "stay" ? "/app/extensions/skills/impeccable-audit-missing" : "/app/extensions/skills", url).href;
           return true;
         }
         if (typeof fn === "function" && fn.name === "clickRowTitled") return true;
+        // 记忆地图: a list of marks (FAKE_ROWS=none: an account with none), the drawer the first mark opened and the address that says so;
+        // FAKE_CLOSE=stuck: a drawer that stays open when its 关闭 is pressed.
+        if (typeof fn === "function" && fn.name === "markRowsProbe") return process.env.FAKE_ROWS === "none" ? 0 : 3;
+        if (typeof fn === "function" && fn.name === "clickFirstMarkProbe") { dialogOpen = process.env.FAKE_ROWS !== "dead"; log({ markClick: new URL(url).pathname }); return true; }
+        if (typeof fn === "function" && fn.name === "drawerStateProbe") return { dialog: dialogOpen, address: dialogOpen };
         if (typeof fn === "function" && fn.name === "addressAct") {
           log({ act: arg });
           if (arg[0] === "link") { previousUrl = url; url = new URL(arg[1], url).href; }
@@ -1024,7 +1032,9 @@ test("a row that shows nothing when clicked fails the page it is on — except t
     assert.ok(!report.failures.includes(sentence(name)), `${name} fails on a click that shows nothing; the click is new, so it is a notice`);
     assert.ok(report.notices.includes(sentence(name)), `${name} says so as a notice`);
   }
-  assert.equal(report.failures.length, failing.length);
+  // The failing pages, and 记忆地图's own step that presses its first mark and reads a drawer that did not open.
+  assert.ok(report.failures.includes("memory-map@desktop: pressing the first mark opened no drawer"));
+  assert.equal(report.failures.length, failing.length + 2);
   // The pages R10 and R11 clicked keep failing; the R13 additions are exactly the ones the reference named.
   assert.deepEqual([...NOTICE_ROW_CLICK_PAGES].sort(), ["account", "frontier-zones", "geo", "geo-accuracy", "geo-questions", "inbox"]);
   for (const name of ["geo-sources", "autopilot", "files"]) assert.ok(failing.includes(name), name);
@@ -1763,7 +1773,7 @@ test("the walk opens the pages whose ids the deployment's lists name: both studi
   const routeAt = log.findLastIndex((entry, index) => index < pressedAt && entry.route === String("**/api/**"));
   assert.ok(pressedAt >= 0 && routeAt >= 0 && log.findIndex((entry, index) => index > pressedAt && entry.unroute) > pressedAt);
   assert.equal(log.filter((entry) => entry.aborted).length, 0);
-  assert.deepEqual(Object.keys(report.steps).sort(), ["address-state", "evidence-matrix@desktop", "evidence-matrix@phone", "extensions-skills-create", "files-pdf", "files-return", "frontier-event-handoff"]);
+  assert.deepEqual(Object.keys(report.steps).sort(), ["address-state", "evidence-matrix@desktop", "evidence-matrix@phone", "extensions-skills-create", "files-pdf", "files-return", "frontier-event-handoff", "memory-map-drawer"]);
 });
 
 test("a page that regresses on what R11 fixed fails the walk and names the page and the defect", async () => {
@@ -2342,4 +2352,46 @@ test("with the chat asked for, the walk answers a start with the cleanup refusal
   assert.ok(quota.report.failures.includes("chat@desktop: a start refused for cleanup offers 查看科研额度"));
   // Without the chat page, the walk does not open it and does not wait.
   assert.equal((await walk()).report.steps?.["chat-cleanup-cover"], undefined);
+});
+
+test("记忆地图 is a data page: three kinds of section, a notice first, and its first mark and drawer are checked", () => {
+  assert.equal(SECTION_SHAPES_BY_PAGE["memory-map"], 3);
+  assert.ok(NOTICE_SECTION_PAGES.has("memory-map"), "a budget no walk has measured is a notice first (principle 4)");
+  assert.ok(ROW_CLICK_PAGES.has("memory-map") && !NOTICE_ROW_CLICK_PAGES.has("memory-map"), "a mark that opens nothing fails the page");
+  assert.ok(ROUTES.some(([name, route]) => name === "memory-map" && route === "/app/memory/map"));
+  assert.deepEqual(PAGE_PROBES["memory-map"], [["memoryMap", ["desktop", "phone"]]]);
+  // The sentence, the canvas and the list are three shapes; a fourth is one too many, as a notice.
+  const sentence = ["section>p+div", "canvas>", "ul>li"];
+  assert.deepEqual(pageFindings("memory-map", "desktop", clean({ sectionShapes: sentence }), []), { failures: [], notices: [] });
+  const stacked = pageFindings("memory-map", "desktop", clean({ sectionShapes: [...sentence, "table>thead+tbody"] }), []);
+  assert.deepEqual(stacked.failures, []);
+  assert.match(stacked.notices[0], /memory-map@desktop: the page stacks 4 kinds of section \(budget 3\)/u);
+  // A mark pressed that shows nothing is a failure; an account with no mark is "not observable", never a pass.
+  assert.deepEqual(rowClickVerdict("memory-map", [{ label: "标记", shown: false }]).failures, ["memory-map@desktop: clicking the first row of the list “标记” showed nothing — no drawer, no page, no opened row"]);
+  assert.deepEqual(rowClickVerdict("memory-map", [{ label: "标记", shown: true }]), { failures: [], notices: [] });
+});
+
+test("记忆地图's probe judges the view switch, the names of its figures and the list under the graph", () => {
+  const one = (name, viewport, kind, result) => probeFindings(name, viewport, kind, result);
+  const read = (over = {}) => ({ radios: [...MEMORY_MAP_VIEWS], figures: [{ kind: "relations", named: true }], lists: [{ label: "标记", rows: 12 }], thin: false, empty: false, ...over });
+  assert.deepEqual(one("memory-map", "desktop", "memoryMap", read()), { failures: [], notices: [] });
+  assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ radios: ["关系", "主题"] })).failures, ["memory-map@desktop: the view switch reads “关系、主题” (关系、主题、维度、时间、活跃)"]);
+  assert.deepEqual(one("memory-map", "phone", "memoryMap", read({ figures: [{ kind: "relations", named: false }] })).failures, ["memory-map@phone: the relations figure has no accessible name"]);
+  assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ lists: [] })).failures, ["memory-map@desktop: the graph has no list of the same marks under it"]);
+  assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ thin: true })).failures, ["memory-map@desktop: the page says there is too little to draw and draws the graph"]);
+  assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ figures: [], thin: true, lists: [{ label: "标记", rows: 3 }] })).failures, []);
+  assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ figures: [], empty: true, lists: [] })).failures, []);
+});
+
+test("记忆地图's drawer is read open and in the address, then closed and gone from it", () => {
+  const was = (dialog, address) => ({ dialog, address });
+  assert.deepEqual(memoryMapFindings("memory-map", { rows: 5, opened: was(true, true), closed: was(false, false) }), { failures: [], notices: [] });
+  assert.deepEqual(memoryMapFindings("memory-map", { rows: 5, opened: was(false, false), closed: null }).failures,
+    ["memory-map@desktop: pressing the first mark opened no drawer", "memory-map@desktop: the open drawer is not in the address (a reload or Back would lose it)"]);
+  assert.deepEqual(memoryMapFindings("memory-map", { rows: 5, opened: was(true, true), closed: was(true, true) }).failures,
+    ["memory-map@desktop: the drawer did not close", "memory-map@desktop: the drawer closed and its mark is still in the address"]);
+  assert.deepEqual(memoryMapFindings("memory-map", { rows: 5, opened: was(true, true), closed: null }).failures, ["memory-map@desktop: the drawer has no 关闭 button to press"]);
+  const none = memoryMapFindings("memory-map", { rows: 0, opened: null, closed: null });
+  assert.deepEqual(none.failures, []);
+  assert.match(none.notices[0], /not observable/u, "an account with no mark proves nothing");
 });

@@ -26,10 +26,11 @@ export function TimeView({ doc, range, projectName, onRange, onOpen }: {
   // `now` is the end of today's axis, so a version still in force runs to the edge.
   const now = useMemo(() => Date.parse(`${today}T23:59:59Z`), [today]);
   const window = windowOfRange(range);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const option = useMemo(() => (rows.length === 0 ? null : timeOption({
     lanes: doc.lanes, events: doc.events, rows, extent, window, timeZone, now, palette: mapPalette(),
     formatDay: (iso) => formatDay(iso),
+    // The palette is read from the live document, so a theme flip is a reason to build the option again; the window is read by its days.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   })), [doc.lanes, doc.events, rows, extent, window?.from, window?.to, timeZone, now, scheme]);
 
   // The slider reports many positions while it is dragged; the map is asked once it has settled.
@@ -61,7 +62,7 @@ export function TimeView({ doc, range, projectName, onRange, onOpen }: {
         unpainted={`${doc.lanes.length} 条沿革，${doc.events.length} 件记下的事。`}
       />
       <p className="text-caption text-text-3">
-        {`◆ 决定　✕ 纠正　▲ 学会一个做法　● 记下一条　蓝条是一直成立的说法，灰条和灰点是后来被替代的，条上的琥珀小标是和另一条不一致。拖下面的滑块可以选一段时间。`}
+        {`◆ 决定 ✕ 纠正 ▲ 学会一个做法 ● 记下一条 蓝条是一直成立的说法，灰条和灰点是后来被替代的，条上的琥珀小标是和另一条不一致。拖下面的滑块可以选一段时间。`}
         {window ? `现在看的是 ${window.from} 到 ${window.to}。` : ""}
       </p>
       <span className="sr-only">{`按 ${timeZone} 的日期`}</span>

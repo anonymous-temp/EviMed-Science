@@ -93,13 +93,13 @@ export function requestMemo() {
  * @property {string[]} [topics] topic ids; set by the aggregator from the topics source
  * @property {{ kind: string, id?: string, href?: string } | null} [open] what a click opens: `record` (the memory drawer), `method`,
  *   or `page` (an address of its own)
- * @property {number} [count] a cluster's size
+ * @property {number} [count] a cluster's size @property {string} [description] an entity's one sentence
  *
  * @typedef {object} MapEdge
  * @property {string} from @property {string} to
  * @property {string} type one of `MAP_EDGE_TYPES`
  * @property {string} [state] `current | changed | retracted | expired | unknown` for `rests-on`
- * @property {string | null} [at] @property {string} [label] a typed relation's display name
+ * @property {string | null} [at] @property {string} [label] a typed relation's display name @property {string} [relation] its stable predicate
  *
  * @typedef {object} MapLaneSegment
  * @property {string} recordId @property {string} text @property {string | null} from @property {string | null} to

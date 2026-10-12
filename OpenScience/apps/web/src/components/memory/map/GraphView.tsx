@@ -74,10 +74,12 @@ export function GraphView({ doc, narrowed, selected, actions, chain, focused }: 
   }, [playing, stops.length]);
   useEffect(() => { setCursor(null); setPlaying(false); }, [stops.length]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const option = useMemo(() => (chain
     ? chainOption({ ...chain, palette: mapPalette() })
-    : graphOption({ nodes: shown.nodes, edges: shown.edges, positions, hits: narrowed.hits, selected, palette: mapPalette() })), [chain, shown, positions, narrowed.hits, selected, scheme]);
+    : graphOption({ nodes: shown.nodes, edges: shown.edges, positions, hits: narrowed.hits, selected, palette: mapPalette() }
+  // The palette is read from the live document, so a theme flip is a reason to build the option again.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  )), [chain, shown, positions, narrowed.hits, selected, scheme]);
 
   const byId = useMemo(() => new Map(doc.nodes.map((node) => [node.id, node])), [doc.nodes]);
   const nodeOf = (params: { name?: string; data?: { id?: string; name?: string } }) => byId.get(String(params?.data?.id ?? params?.name ?? params?.data?.name ?? ""));
