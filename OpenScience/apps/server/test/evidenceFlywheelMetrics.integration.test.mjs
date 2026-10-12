@@ -101,6 +101,9 @@ test("verified cards used: counted once however many ways name them, and only a 
   await origins.runStarted({ userId: "bob", id: "p1" }, { id: "r1", originCardId: both.id });
   await origins.runStarted({ userId: "bob", id: "p1" }, { id: "r2", originCardId: researched.id });
   await origins.runStarted({ userId: "alice", id: "p1" }, { id: "r3", originCardId: own.id });
+  // A run is stamped with the real clock; the figures are read for a fixed week, so the runs are placed in it (the test began
+  // failing the moment that week ended, 2026-10-11 16:00 UTC).
+  await db.query("UPDATE evimed_frontier.evidence_card_runs SET started_at=$1", [WEDNESDAY]);
   const view = await metrics().snapshot({ weeks: 2 });
   const star = view.northStar[0];
   assert.equal(star.week, MONDAY);

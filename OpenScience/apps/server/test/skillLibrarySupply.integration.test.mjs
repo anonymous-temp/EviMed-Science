@@ -43,11 +43,11 @@ after(async () => {
 });
 
 test("a repository preview names its commit for those bytes only, the package is read back from PostgreSQL, and an update keeps the edit", options, async () => {
-  uploads.v1 = [skillFile("Check sources", "Version one body.", "metadata:\n  version: \"1.0\"\n  requires:\n    python: [gseapy]\n"), file("scripts/check.py", "import numpy\nprint('v1')\n"), file("references/note.md", "note")];
+  uploads.v1 = [skillFile("Check sources", "Version one body.", "metadata:\n  version: \"1.0\"\n  requires:\n    python: [scvi-tools]\n"), file("scripts/check.py", "import numpy\nprint('v1')\n"), file("references/note.md", "note")];
   const commit = "d".repeat(40);
   const preview = await service.previewImport(owner, { resourceId: "v1" }, { source: { kind: "repository", repository: "owner/checker", commit, path: null } });
   assert.equal(preview.supply.package.source.commit, commit);
-  assert.equal(preview.supply.state, "limited", "gseapy is declared and the image lacks it");
+  assert.equal(preview.supply.state, "limited", "scvi-tools is declared and the image lacks it (gseapy was, until the image began to carry it on 2026-10-12)");
   const first = await service.import(owner, { resourceId: "v1", title: "Checker" });
   const stored = (await new SkillLibraryService(database, { artifacts, supply: new SkillSupply({ config }) }).get(owner, first.id)).payload;
   assert.equal(stored.package.source.repository, "owner/checker");
@@ -57,13 +57,13 @@ test("a repository preview names its commit for those bytes only, the package is
   assert.ok(stored.baseline.parts.instructions);
   const supply = await service.supplyOf(owner, first.id);
   assert.equal(supply.availability.state, "limited");
-  assert.equal(supply.availability.reason.detail, "gseapy");
+  assert.equal(supply.availability.reason.detail, "scvi-tools");
   // The researcher edits; a project pins that revision.
   const edited = await service.update(owner, first.id, { expectedRevision: 1, title: "Checker", description: "Check sources", instructions: "My own instructions." });
   const project = { id: "p1", userId: owner.id };
   await service.saveProjectSelections(owner, project, { expectedRevision: 0, skills: [{ skillId: first.id, revision: 2 }] });
   // A newer upstream: another body, a changed script, and a new reference.
-  uploads.v2 = [skillFile("Check sources", "Version two body.", "metadata:\n  version: \"1.0\"\n  requires:\n    python: [gseapy]\n"), file("scripts/check.py", "import numpy\nprint('v2')\n"), file("references/note.md", "note"), file("references/new.md", "new")];
+  uploads.v2 = [skillFile("Check sources", "Version two body.", "metadata:\n  version: \"1.0\"\n  requires:\n    python: [scvi-tools]\n"), file("scripts/check.py", "import numpy\nprint('v2')\n"), file("references/note.md", "note"), file("references/new.md", "new")];
   const plan = await service.updatePreview(owner, first.id, { resourceId: "v2" });
   const decision = (/** @type {string} */ name) => plan.entries.find((/** @type {any} */ entry) => entry.name === name).decision;
   assert.equal(decision("instructions"), "conflict", "both the researcher and the upstream changed the body");

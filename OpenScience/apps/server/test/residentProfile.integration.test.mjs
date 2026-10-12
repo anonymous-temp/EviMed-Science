@@ -119,6 +119,10 @@ test("the recall tool's reading returns what the question reaches and never pads
   }
 });
 
+// Each event a few milliseconds after the one before: the times are kept to the millisecond, and two calls inside one
+// millisecond are the same instant, which says neither came first.
+const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+
 test("a conversation's state says what it was last handed and when the kernel compacted it", options, async () => {
   const digest = "a".repeat(64);
   assert.deepEqual(await store.residentState(owner, "prj_state", "ses_state"), { digest: null, deliveredAt: null, compactedAt: null, compactedSince: false });
@@ -127,11 +131,13 @@ test("a conversation's state says what it was last handed and when the kernel co
   assert.equal(compactedFirst.digest, null, "a conversation never handed the profile has nothing to lose to a compaction");
   assert.ok(compactedFirst.compactedAt);
 
+  await tick();
   await store.noteResidentDelivered(owner, "prj_state", "ses_state", digest);
   const handed = await store.residentState(owner, "prj_state", "ses_state");
   assert.equal(handed.digest, digest);
   assert.ok(Date.parse(handed.deliveredAt) >= Date.parse(compactedFirst.compactedAt));
   assert.equal(handed.compactedSince, false, "a hand-over after the compaction puts the profile back in the history");
+  await tick();
   await store.noteCompaction(owner, "prj_state", "ses_state");
   const compacted = await store.residentState(owner, "prj_state", "ses_state");
   assert.ok(Date.parse(compacted.compactedAt) >= Date.parse(handed.deliveredAt), "the compaction came after the hand-over");
@@ -174,6 +180,7 @@ test("a real store drives the whole decision: first, unchanged, changed, compact
     assert.deepEqual([changed.due, changed.reason], [true, "changed"]);
     await changed.delivered();
 
+    await tick();
     await store.noteCompaction(user, scope.projectId, scope.sessionId);
     const compacted = await profiles.forDispatch(user, scope);
     assert.deepEqual([compacted.due, compacted.reason], [true, "compacted"]);
