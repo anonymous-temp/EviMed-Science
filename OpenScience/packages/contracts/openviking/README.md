@@ -15,3 +15,30 @@ with the documentation about — most importantly that trusted mode requires the
 key on every request once a root key is set, not only when asserting a role.
 
 Run: `pnpm test:contracts`.
+
+## What of OpenViking this deployment uses, and what it leaves off
+
+Reconciled against the upstream capability list on 2026-10-12, when the owner
+asked whether EviMed had switched OpenViking's own abilities off. It had not
+patched or forked anything; it uses a narrow part, and each part it does not use
+is either a decision recorded here or a version it does not run yet.
+
+| Upstream capability | Here | Why |
+|---|---|---|
+| `content/write`, `DELETE fs`, `fs/ls`, `search/find`, `/health` | **used** — the only five routes `openVikingClient.mjs` calls | the derived recall index: every hit is hydrated from PostgreSQL and re-checked there |
+| session memory extraction (`memory.extraction_enabled`) | **off** in the rendered `ov.conf` (`configure-production-state.mjs`) | the profile has one writer, `memoryIntelligence.mjs`, which knows the platform's injected context and the explicit/inferred/system origins; a second writer would duplicate records outside PostgreSQL |
+| VikingBot (`OPENVIKING_WITH_BOT`) | **off** (`deploy/web/docker-compose.yml`) | a second agent runtime with shell and web tools, not sandboxed for many users |
+| VLM, L0/L1 directory abstracts, native `search` | **not configured** | recall needs only the embedder (recall@5 1.0 with the control-plane rerank, `evals/memory-recall`); a VLM would be model spend outside the model gateway and the usage ledger. Re-evaluate only if `find` degrades on a large library |
+| rerank | **in the control plane** (`memoryRerank.mjs`) | scores the record PostgreSQL holds now, not an index copy that may lag |
+| Resources, Compile (`llm-wiki`), Skills, Agent Evolution, memory consolidation, MCP, Gateway, Studio | **not wired** | compiled pages without verbatim-quote checks, artifacts owned by the index volume, an LLM outside the gateway, and `viking://resources` shared by every user of a single-account deployment. The knowledge pages borrow the `llm-wiki` page types (Apache-2.0) and are built inside EviMed (`capabilities/knowledge-compile`); method and run ledgers are EviMed's |
+| Compile, Studio memory policies (v0.4.20), BM25 and the unified retrieval core (v0.4.23), Gateway (v0.5.0) | **not in the pinned version** | see the upgrade note below |
+
+**Moving the pin past v0.4.21:** from v0.4.22 the local cosine score is reported
+as `(cos+1)/2`, so `OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE` (0.5, read as a cosine)
+has to move to about 0.75 in the same change, from the distribution of the
+re-recorded `find.json`, or the memory page's search lists unrelated memories
+again (2026-09-26 audit, M-4). From v0.4.22 an unknown `ov.conf` key only warns,
+so a renamed `extraction_enabled` would fall back silently to upstream's default
+(on): grep the start log for warnings when rehearsing. A rollback is a rebuild —
+an empty volume and `pnpm rebuild:memory-index --all` — never a downgrade of the
+volume (v0.4.20 task records are unreadable by older releases).
