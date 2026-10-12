@@ -284,8 +284,8 @@ export function ImportPanel({ onImported }: { onImported: (capsule: CapsuleRecor
         </p>}
         <p className="text-ui text-text">{status}</p>
         <ul className="space-y-1">
-          {taken.map(entry => { const shown = capsuleEntryPreview(entry); return <li key={entry.id}>
-            <Disclosure summary={shown.summary}>
+          {taken.map((entry, index) => { const shown = capsuleEntryPreview(entry); return <li key={entry.id}>
+            <Disclosure summary={shown.summary} defaultOpen={index === 0}>
               <p className="max-w-measure whitespace-pre-wrap text-ui text-text">{shown.text}</p>
             </Disclosure>
           </li>; })}

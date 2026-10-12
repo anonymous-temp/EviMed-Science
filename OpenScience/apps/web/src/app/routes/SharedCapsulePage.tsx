@@ -113,8 +113,9 @@ export function SharedCapsulePage() {
             {shared?.link && <p className="text-caption text-text-3">这个链接还能用 {shared.link.usesLeft} 次。</p>}
           </div>
           <ul className="space-y-1">
-            {taken.map((entry) => { const shown = capsuleEntryPreview(entry); return <li key={entry.id}>
-              <Disclosure summary={shown.summary}>
+            {taken.map((entry, index) => { const shown = capsuleEntryPreview(entry); return <li key={entry.id}>
+              {/* The first entry open: what was sent is read before it is taken, not guessed from a list of kinds. */}
+              <Disclosure summary={shown.summary} defaultOpen={index === 0}>
                 <p className="max-w-measure whitespace-pre-wrap text-ui text-text">{shown.text}</p>
               </Disclosure>
             </li>; })}
