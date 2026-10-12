@@ -263,6 +263,9 @@ test("a capsule finished by another worker is waited for, not reported as a fail
     if (!queued) await sleep(50);
   }
   assert.ok(queued, "the command never enqueued the capsule job");
+  // The command makes one claim right after it enqueues, refused while the lease holds, and then only waits. The lease is lifted
+  // once that claim has had time to happen: lifted at once, a slow runner's claim came after it and took the job (CI, 2026-10-12).
+  await sleep(1500);
 
   await database.query("DELETE FROM evimed_product.maintenance_lease WHERE singleton=true");
   const claimed = await jobs.claim(["memory-index"], `test-worker-${randomUUID()}`, { leaseMs: 60_000 });
