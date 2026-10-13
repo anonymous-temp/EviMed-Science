@@ -99,7 +99,7 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.7-rc.2",
-  sha256: "6ed3093df38b50a6d595170fff5adce908fdc5d5937eb0b28a26cfcdf9bf2f00",
+  sha256: "595b0921c153fe47de12352e13ae888aff7c1584b69de876391fdb4694348eca",
   recordedBy: "Pinned DSH --profile evimed-runtime --dump-config from the isolated seeded native profile on 2026-10-12, with the official LoopX bundle followed by EviMed; the same seeding reproduced the 2026-10-11 record byte for byte before the preset changed (general persona, tool-todo, present, tool-subagent, command-compact). Real sessions booted this profile. The runtime image build compares its own fresh dump byte for byte before sealing.",
   // The complete recipe booted its seeded composition and an evimed-universal
   // session. A second read-only, network-isolated UID65534 boot passed after

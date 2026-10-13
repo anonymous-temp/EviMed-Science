@@ -144,7 +144,7 @@ function searchEndpoint(value) {
     throw gatewayError(
       503,
       "web_search_unconfigured",
-      "Open-web search is not configured for this deployment. The bibliographic channels remain available.",
+      "Open-web search is not configured for this deployment. A page whose address is known can still be read; the bibliographic channels remain available.",
     );
   }
   let base;
@@ -460,7 +460,7 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
         throw gatewayError(
           503,
           "web_search_unconfigured",
-          "Open-web search is not configured for this deployment. The bibliographic channels remain available.",
+          "Open-web search is not configured for this deployment. A page whose address is known can still be read; the bibliographic channels remain available.",
         );
       }
       const searx = localUrl || edgeUrl ? (async () => {

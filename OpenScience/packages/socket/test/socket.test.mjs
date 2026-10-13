@@ -111,6 +111,36 @@ test("the composition mounts every agent plugin we own, the kernel's own pieces 
   assert.equal(PRESET_NAME, "evimed-universal");
 });
 
+test("the kernel's own sub-agent is under the run's child budgets, like a delegation", async () => {
+  // `subagent` is mounted for general work (2026-10-12): parallel pieces of a
+  // task that is not a capability deliverable. A child is a child whichever
+  // tool starts it, so the two limits a delegation is held to hold it too.
+  const { NATIVE_SUBAGENT_TOOL } = await import("../src/runPolicy.mjs");
+  assert.equal(NATIVE_SUBAGENT_TOOL, "subagent");
+  const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
+  assert.match(preset, new RegExp(`toolName: ${NATIVE_SUBAGENT_TOOL}\\b`), "the policy counts the tool the preset mounts");
+  const state = (/** @type {Record<string, any>} */ over) => ({
+    budget: { steps: 0, tokens: 0, children: 0 }, limits: { maxSteps: 0, maxTokens: 0, maxChildren: 3, maxConcurrentChildren: 2 },
+    submitAttempts: 0, deliveryAttemptLimit: 3, runningChildren: 0, ...over,
+  });
+  const call = { name: NATIVE_SUBAGENT_TOOL, args: { description: "d", prompt: "p" } };
+  assert.equal(toolPolicy(call, state({})).allow, true);
+  const spent = toolPolicy(call, state({ budget: { steps: 0, tokens: 0, children: 3 } }));
+  assert.deepEqual([spent.allow, /** @type {any} */ (spent).code], [false, "budget_exhausted"]);
+  const busy = toolPolicy(call, state({ runningChildren: 2 }));
+  assert.deepEqual([busy.allow, /** @type {any} */ (busy).code], [false, "delegation_concurrency_limit"]);
+  assert.match(/** @type {any} */ (busy).reason, /已有 2 个子代理在运行/);
+  // No limit configured is no limit, as for a delegation.
+  assert.equal(toolPolicy(call, state({ limits: { maxSteps: 0, maxTokens: 0, maxChildren: 0, maxConcurrentChildren: 0 }, budget: { steps: 0, tokens: 0, children: 99 }, runningChildren: 99 })).allow, true);
+  // A foreground, one-level child: its call is its life, which is what makes counting calls counting children.
+  const row = preset.slice(preset.indexOf("- id: tool-subagent\n"));
+  assert.match(row.slice(0, row.indexOf("\n\n")), /enableRunInBackground: false/);
+  assert.match(row.slice(0, row.indexOf("\n\n")), /- present\b/, "the parent hands files to the user, not a child");
+  const policy = await readFile(new URL("../plugins/run-policy.mjs", import.meta.url), "utf8");
+  assert.match(policy, /if \(decision\.allow && call\.name === NATIVE_SUBAGENT_TOOL\) \{\n\s+entry\.budget\.children \+= 1/, "an admitted call is counted against the run's total");
+  assert.match(policy, /nativeChildCalls\?\.delete\(String\(call\.callId/, "and released when it settles");
+});
+
 test("a child cannot interrupt its parent's synthesis by choosing how its report is delivered", async () => {
   // This used to be `assert.match(preset, /reportDelivery: quiet/)`, and that
   // string has not been a setting since 0.1.2-alpha.4 — the row carrying it was
@@ -1192,6 +1222,12 @@ test("what every task is told carries no rule of one kind of work", () => {
     assert.ok(!root.includes(medical), `the root guidance still says 「${medical}」 to every task`);
   }
   assert.match(root, /读者用得上的文件名、命令和网址照常写/);
+  // A short piece of writing is the reply; a file is produced when a file is what was asked for. Measured on a real
+  // session: asked for 「写一份本周周报」, the first wording of this text delivered a Word file and a reply that read
+  // 「文档已放在上方两张卡片里」, which says nothing where no card is drawn (an IM channel, the dispatch route).
+  assert.match(root, /邮件、周报、文案这类短文稿，成品直接写在回答里/);
+  assert.match(root, /用户要的是文件（文档、表格、幻灯片、脚本、图表），或者内容长到不适合放进对话时，才产出文件/);
+  assert.match(root, /在回答里说清结果和要点，不要只说「见文件」/);
   // The evidence method is a skill the model loads when the question calls for it, named once.
   assert.match(root, /先用 `skill` 加载 `open-domain-answer`（循证问答方法）再作答/);
   assert.match(root, /教科书层面的常识直接、简明地回答，不检索、不列参考文献/, "a plain medical fact stays a zero-tool answer (principle 12)");

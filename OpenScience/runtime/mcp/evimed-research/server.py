@@ -2131,7 +2131,7 @@ def _dispatch(name, arguments, execution_context=None):
                 "retry" if error.retryable else "unsupported",
                 [
                     "Retry once the backend recovers." if error.retryable
-                    else "Continue with the bibliographic channels; do not read an unavailable web search as an empty field.",
+                    else "Read a page whose address you know with web_read, or continue with the bibliographic channels; say that search was unavailable, and do not read an unavailable web search as an empty field.",
                 ],
             )
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())

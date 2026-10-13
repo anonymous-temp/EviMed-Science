@@ -624,6 +624,33 @@ test("a new project's first open is told there is no default workspace to make, 
   }
 });
 
+test("the page's question whether the host has a desktop is answered here, and the routes that would act on a yes stay refused", { timeout: 5000 }, async (t) => {
+  // The kernel's page asks `GET /api/present.host` before it draws the cards of
+  // the files a turn handed over with `present`. It is not a
+  // `<namespace>/<method>` path, so the method gate refused it as malformed and
+  // every reply with a handed-over file carried 「无法读取主机桌面信息 · 重试」
+  // (seen on a real kernel behind this proxy, 2026-10-12). The answer is this
+  // surface's and it is the true one: no desktop, so the card previews the file
+  // in the page's own sidebar. The kernel is not asked — its answer names the
+  // runtime container's host.
+  const f = await fixture(t);
+  const forwarded = [];
+  f.manager.proxy = async (req, res) => { forwarded.push(new URL(req.url, "http://ui.local").pathname); res.writeHead(200); res.end("{}"); };
+  const host = await fetch(`${f.base}/api/present.host`, { headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
+  assert.equal(host.status, 200);
+  assert.deepEqual(await host.json(), { name: "EviMed", available: false, fileManager: null });
+  // Opening a file or a folder with an application of the serving host is the
+  // `open-in-app` class of action: still not a method, still refused.
+  for (const [method, route] of [["POST", "/api/present.open"], ["POST", "/api/changes.open"], ["POST", "/api/present.host"], ["GET", "/api/present%2Ehost"]]) {
+    const response = await fetch(`${f.base}${route}`, { method, headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
+    assert.equal(response.status, 400, `${method} ${route} answered ${response.status}`);
+    // A call is told the named refusal; a page navigation is shown a notice document instead.
+    if (method === "POST") assert.match(await response.text(), /runtime_ui_endpoint_invalid/, `${method} ${route}`);
+  }
+  assert.deepEqual(forwarded, [], "nothing reached the runtime");
+  assert.deepEqual(f.started, [], "and nothing started one");
+});
+
 test("a kernel route that is not a method is refused by path, and ordinary assets still pass", { timeout: 5000 }, async (t) => {
   // 0.1.5 mounted `/open-in-app/{apps,icon,open}` on the kernel's web server.
   // They are not `/api/<namespace>/<name>`, so the method gate never sees them,

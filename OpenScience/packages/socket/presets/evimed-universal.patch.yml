@@ -221,18 +221,21 @@
 
           # The kernel's own sub-agent for general work: several independent pieces in
           # parallel, or a side task whose reading the root will not need again. One
-          # level deep, and a child that asks for the background is a plain job the
-          # parent collects with the job tools — there is no messaging row, so a child's
-          # only channel to its parent is still its result. A capability deliverable is
-          # delegated with `evimed_delegate`, which hands the child that capability's
-          # method, tools and gate; a child started here is handed none of them, and
-          # none of the tools that plan, delegate or submit.
+          # level deep and one-shot in the foreground: a child lives exactly as long as
+          # the call that started it, which is what lets the run policy hold it to the
+          # run's two child budgets (EVIMED_MAX_CHILDREN_TOTAL, _CONCURRENT_CHILDREN) by
+          # counting calls, and there is no messaging row, so a child's only channel to
+          # its parent is still its result. A capability deliverable is delegated with
+          # `evimed_delegate`, which hands the child that capability's method, tools and
+          # gate; a child started here is handed none of them, and none of the tools
+          # that plan, delegate, submit or hand a file to the user.
           - id: tool-subagent
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
               provider: spawn
               toolName: subagent
               backgroundMode: one-shot
+              enableRunInBackground: false
               maxDepth: 1
               toolFilter:
                 deny:
@@ -243,6 +246,7 @@
                   - evimed_package_check
                   - evimed_revise_deliverable
                   - evimed_screen_batch
+                  - present
 
           # Skills ship with the preset and are found by relative path. Default root
           # discovery is off: it would treat `.dsh/skills` in the *workspace* as a skill

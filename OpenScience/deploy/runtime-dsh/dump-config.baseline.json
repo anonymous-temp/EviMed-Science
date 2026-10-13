@@ -1438,6 +1438,7 @@
           provider: spawn
           toolName: subagent
           backgroundMode: one-shot
+          enableRunInBackground: false
           maxDepth: 1
           toolFilter:
             deny:
@@ -1448,6 +1449,7 @@
               - evimed_package_check
               - evimed_revise_deliverable
               - evimed_screen_batch
+              - present
       - id: skill-filesystem
         name: '@deepseek-ai/dsh-skill-filesystem'
         config:
