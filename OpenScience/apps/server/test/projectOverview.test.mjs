@@ -243,3 +243,18 @@ test("the server composes the overview from the memory store and the project's o
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("the works of an ordinary conversation are each of its files, named by what the person opens", () => {
+  const files = ["预算表.xlsx", "rename.py", "会议纪要.docx"];
+  const describe = () => ({ artifactKinds: {}, artifactRoles: { "rename.py": "draft" }, outputFiles: files });
+  const ordinary = { id: "r1", status: "succeeded", effectiveAgentId: "open-domain-answer", title: "月度预算", finishedAt: "2026-10-10T02:30:00.000Z", artifacts: files };
+  const unrouted = { ...ordinary, id: "r2", effectiveAgentId: undefined, title: undefined, question: "整理一下会议纪要", finishedAt: "2026-10-11T02:30:00.000Z" };
+  const months = projectWorks([ordinary, unrouted], { describe, timeZone: "Asia/Shanghai" });
+  assert.deepEqual(months.map((group) => group.month), ["2026-10"]);
+  const items = months[0].items;
+  assert.equal(items.length, 6);
+  assert.deepEqual(items.filter((item) => item.runId === "r1").map((item) => item.name).sort(), [...files].sort());
+  assert.equal(items.find((item) => item.runId === "r2")?.title, "整理一下会议纪要", "a conversation no capability took is still the person's");
+  // Without files an unrouted conversation is not a work.
+  assert.deepEqual(projectWorks([unrouted], { describe: () => ({ artifactKinds: {}, artifactRoles: {} }) }), []);
+});

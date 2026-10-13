@@ -64,6 +64,29 @@ test('the cards are the run\'s files once it finished — accepted or not, each 
   assert.equal(hasReport({ artifacts: ['a/screening.xlsx'] }), false);
 });
 
+test('an ordinary conversation hands over its script, workbook and document; a capability\'s scripts stay in the file tree', () => {
+  // GA16 (2026-10-12): the control plane declares `draft` for a script the person asked for; without a declaration a script is work.
+  const ordinary = { runId: 'run-9', sessionId: 'session-a', state: 'succeeded', artifacts: ['rename.py', 'output/sales-summary.xlsx', '道歉邮件.docx', 'tmp/helper.py'],
+    artifactRoles: { 'rename.py': 'draft', 'output/sales-summary.xlsx': 'data', '道歉邮件.docx': 'document', 'tmp/helper.py': 'work' } };
+  const model = /** @type {any} */ (fileCardsModel(ordinary));
+  assert.deepEqual(model.files.map((/** @type {any} */ file) => file.path).sort(), ['output/sales-summary.xlsx', 'rename.py', '道歉邮件.docx']);
+  assert.equal(model.files.some((/** @type {any} */ file) => file.path === 'tmp/helper.py'), false, 'a helper script that is not an output is not a card');
+  const capability = { ...ordinary, artifacts: ['deliverables/mr/fit.py'], artifactRoles: { 'deliverables/mr/fit.py': 'work' } };
+  assert.equal(fileCardsModel(capability), null);
+});
+
+test('a file the run handed over with present is left to the kernel\'s own card, and the rest still gets one', () => {
+  const run = { runId: 'run-9', sessionId: 'session-a', state: 'succeeded', artifacts: ['会议纪要.docx', '会议纪要.md'], artifactRoles: { '会议纪要.docx': 'document', '会议纪要.md': 'document' } };
+  assert.deepEqual(/** @type {any} */ (fileCardsModel(run)).files.map((/** @type {any} */ file) => file.path), ['会议纪要.docx', '会议纪要.md']);
+  assert.deepEqual(/** @type {any} */ (fileCardsModel({ ...run, presentedFiles: ['会议纪要.md'] })).files.map((/** @type {any} */ file) => file.path), ['会议纪要.docx']);
+  assert.equal(fileCardsModel({ ...run, presentedFiles: ['会议纪要.docx', '会议纪要.md'] }), null, 'every file presented: nothing is drawn twice');
+  // What the run did not hand over (the script that built the workbook it did) waits behind the fold instead of leading.
+  const built = { ...run, artifacts: ['预算表.xlsx', 'make.py'], artifactRoles: { '预算表.xlsx': 'data', 'make.py': 'draft' } };
+  assert.equal(/** @type {any} */ (fileCardsModel(built)).deferred, false);
+  const rest = /** @type {any} */ (fileCardsModel({ ...built, presentedFiles: ['预算表.xlsx'] }));
+  assert.deepEqual([rest.files.map((/** @type {any} */ file) => file.path), rest.deferred], [['make.py'], true]);
+});
+
 test('a completed reporting checklist is never taken for the report: it follows the section it lists', () => {
   // manuscript-support delivers `manuscript-section.md` beside its CONSORT
   // checklist; only the checklist's name contains `report`.

@@ -57,6 +57,8 @@ export interface FrameRunState {
   claimSummary?: Record<string, unknown> | null;
   artifacts?: string[];
   unverifiedArtifacts?: string[];
+  /** The files the run handed over with the kernel's `present` tool, which the kernel's own page draws as cards. */
+  presentedFiles?: string[];
   updatedAt?: string;
 }
 
@@ -135,6 +137,7 @@ export function runStateFromRecord(run: WebAgentRun): FrameRunState {
     artifacts: [...(run.artifacts ?? [])],
     artifactRoles: run.artifactRoles ?? {},
     unverifiedArtifacts: [...(run.unverifiedArtifacts ?? [])],
+    ...(run.presentedFiles?.length ? { presentedFiles: [...run.presentedFiles] } : {}),
     updatedAt: run.finishedAt ?? run.lastProgressAt ?? run.startedAt,
   };
 }

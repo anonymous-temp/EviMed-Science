@@ -176,6 +176,16 @@ export {
   isRegulatedContractKind,
 } from './src/contractKinds.mjs'
 
+// fileDeliverable — 6 exports: an ordinary file as a deliverable (exists, not empty, opens as its format).
+export {
+  FILE_DELIVERABLE_KIND,
+  FILE_FORMAT_CHECK,
+  FILE_FORMAT_CODES,
+  fileFormatIssues,
+  fileFormatOf,
+  zipEntryNames,
+} from './src/fileDeliverable.mjs'
+
 // workspaceLayout — 25 exports
 export {
   BRIEF_DIR,

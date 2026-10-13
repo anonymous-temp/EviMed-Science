@@ -110,7 +110,9 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'citations-resolvable': '引用链接读者打不开',
   'deliverable-json-parse': '交付文件不是有效的 JSON',
   'structured-output': '结构化产物格式有误',
-  'clinical-content-trigger': '非临床交付物含临床内容',
+  'clinical-content-trigger': '文件提到药品，用药内容仅供参考',
+  // `fileDeliverable.mjs`: an ordinary file that exists, is not empty and opens as its format. Advice, never a withholding.
+  'file-format': '文件可能无法正常打开',
   'clinical-high-risk-entity': '提及高警示药品，请核对',
   'package-vocabulary-in-prose': '正文写了数据字段名',
   // What a caution is called when its rule's own title is not at hand (see
@@ -193,7 +195,10 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   deliverable_run_degraded: '分析引擎有步骤未完成',
   runtime_leakage: '报告写入了检索或工具过程',
   citation_integrity: '引用编号或文献条目有误',
-  clinical_content_without_clinical_contract: '非临床交付物含临床内容',
+  clinical_content_without_clinical_contract: '文件提到药品，用药内容仅供参考',
+  file_deliverable_missing: '没有找到交付的文件',
+  file_empty: '文件是空的',
+  file_unreadable: '文件可能无法正常打开',
   clinical_high_risk_entity_notice: '提及高警示药品，请核对',
   report_package_vocabulary: '正文写了数据字段名',
   clinical_safety_rule_notice: '命中临床安全规则，请核对',
