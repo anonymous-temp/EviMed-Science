@@ -168,6 +168,9 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     assert.deepEqual([status.body.data.state, status.body.data.pages, status.body.data.graphFiles, status.body.data.typedPages, status.body.data.language],
       ["compiled", 3, 3, { wiki: 3, kg: 2 }, "zh-cn"]);
     assert.ok(status.body.data.compiledAt && status.body.data.lastRound.wiki.tokens === 65_000 && status.body.data.lastRound.wiki.cost > 0);
+    // A document is announced again when its understanding ends (`onPublished`); the round that read its text has taken it in.
+    await app.knowledgePages.noteSourceReady(user.id, project.id, ids["alpha.md"]);
+    assert.equal((await api(`/api/knowledge-pages?projectId=${project.id}`)).body.data.pending, 0, "a document already taken into a round does not queue another");
     assert.deepEqual(status.body.data.quotations, { present: 3, absent: 1, none: 1 });
 
     // ---- 3. the routes the reader and the graph are built on -------------------------------------------------------

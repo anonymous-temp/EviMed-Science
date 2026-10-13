@@ -141,7 +141,7 @@ export class KnowledgePageService {
   async #state(userId, projectId) {
     const row = await this.documents.get(userId, "knowledge", stateId(projectId));
     const base = { recordType: STATE_RECORD, projectId, round: 1, pending: {}, lastChangeAt: null, compiledAt: null, lastRound: null, lastError: null,
-      run: null, language: null, pages: { wiki: 0, kg: 0 }, limited: { wiki: false, kg: false }, writeBacks: [] };
+      run: null, language: null, pages: { wiki: 0, kg: 0 }, limited: { wiki: false, kg: false }, writeBacks: [], taken: {} };
     return { row, value: { ...base, ...(row?.payload ?? {}) } };
   }
 
@@ -213,8 +213,12 @@ export class KnowledgePageService {
     try {
       const source = await this.sources.get(userId, sourceId);
       if (!source || source.projectId !== projectId || KnowledgePageService.isPage(source)) return;
+      // A document is announced when its text is in and again when its understanding ends: the second says nothing the
+      // round that read the text has not already taken in.
+      const textSha = String(source.payload?.analysis?.textSha256 ?? "");
       const changed = await this.#updateState(userId, projectId, (value) => {
         if (value.pending[sourceId]) return null;
+        if (textSha && value.taken?.[sourceId] === textSha) return null;
         value.pending[sourceId] = "added";
         value.lastChangeAt = this.now().toISOString();
         return value;
@@ -653,6 +657,7 @@ export class KnowledgePageService {
       if (quiet > 1000) return defer("knowledge_waiting_for_quiet", Math.min(quiet, 3_600_000));
       const readable = await this.#readableSources(userId, projectId);
       const pages = await this.#pageRecords(userId, projectId);
+      const taken = Object.fromEntries(readable.map((/** @type {any} */ item) => [item.id, String(item.payload?.analysis?.textSha256 ?? "")]).filter(([, sha]) => sha));
       // Below the threshold a wiki would index nothing a search does not already read — unless pages exist, which a change must still reach.
       if (readable.length < this.config.knowledgePagesMinSources && !pages.length) {
         // The round is closed, so the next document asks for a new one (a finished job is never run again under its key).
@@ -672,6 +677,7 @@ export class KnowledgePageService {
       const submitted = await this.#submit(user, project, "wiki", state, mirrored.typed, 0);
       await this.#updateState(userId, projectId, (value) => {
         value.pages = { ...value.pages, wiki: mirrored.typed };
+        value.taken = taken;
         value.limited = { ...value.limited, wiki: submitted.limited };
         value.run = { step: submitted.limited ? "kg-start" : "wiki", startedAt: this.now().toISOString(), changeAt: value.lastChangeAt, wiki: submitted.limited ? null : submitted, kg: null, summary: {} };
         return value;
