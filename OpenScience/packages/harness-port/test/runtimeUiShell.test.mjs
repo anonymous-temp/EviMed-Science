@@ -188,7 +188,7 @@ test('a page the control plane served is branded whether or not it is embedded',
   const f = fixture({ embedded: false });
   apply(f.ctx, {}, f.target, undefined, f.kit);
   assert.ok(Object.keys(f.occupants()).length > 0);
-  assert.equal(f.target.document.title, 'EviMed 研究会话');
+  assert.equal(f.target.document.title, 'EviMed 对话');
   const icon = f.target.document.head.children.find((/** @type {any} */ node) => node.attributes?.rel === 'icon');
   assert.ok(icon, "the document's icon is replaced, not left as the kernel's whale");
   assert.equal(icon.attributes.href, EVIMED_FAVICON);

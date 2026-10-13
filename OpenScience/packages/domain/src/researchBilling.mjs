@@ -83,10 +83,10 @@ export function allowanceRefusalSentence({ simulated = false, balanceCny = null,
   // short of.
   const have = lingdou(balanceCny, { rounding: 'down' })
   const need = lingdou(estimateCny, { rounding: 'up' })
-  const lead = simulated ? `${SIMULATED_WALLET_LABEL}额度不足，这次没有开始` : '科研额度不足，这次没有开始'
+  const lead = simulated ? `${SIMULATED_WALLET_LABEL}额度不足，这次没有开始` : '额度不足，这次没有开始'
   const held = simulated ? `可用${SIMULATED_WALLET_LABEL}额度 ${have}` : `可用 ${have}`
   const amounts = have ? `：${held}${need ? `，这件事预计至少需要 ${need}` : ''}` : ''
-  return `${lead}${amounts}。到“设置 → 科研额度”${simulated ? '做一次模拟充值' : '充值'}后即可继续。`
+  return `${lead}${amounts}。到“设置 → 额度”${simulated ? '做一次模拟充值' : '充值'}后即可继续。`
 }
 
 /**
@@ -111,7 +111,7 @@ export function stepWaitingFor(code) {
 
 /** The short word under a waiting step in a rail. @param {unknown} waiting */
 export function allowanceWaitingNote(waiting) {
-  return waiting === 'simulated_allowance' ? `等${SIMULATED_WALLET_LABEL}额度` : '等科研额度'
+  return waiting === 'simulated_allowance' ? `等${SIMULATED_WALLET_LABEL}额度` : '等额度'
 }
 
 /**

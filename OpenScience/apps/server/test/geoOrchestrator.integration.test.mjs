@@ -546,7 +546,7 @@ test("a step the allowance refuses stays queued and says what it waits on; once 
   world.failures.push(new HttpError(402, "credits_exhausted", "This account holds 0 credits."));
   await world.orchestrator.runStep(other.user, other.project, "evidence");
   const real = (await q(`SELECT steps -> 'evidence' AS step FROM evimed_geo.projects WHERE id = $1`, [other.project.id]))[0].step;
-  assert.deepEqual([real.status, real.waiting, real.note], ["queued", "allowance", "等科研额度"]);
+  assert.deepEqual([real.status, real.waiting, real.note], ["queued", "allowance", "等额度"]);
   const third = await newProject();
   world.failures.push(new HttpError(429, "runtime_limit_exceeded", "Too many running runtimes for this user."));
   await world.orchestrator.runStep(third.user, third.project, "evidence");

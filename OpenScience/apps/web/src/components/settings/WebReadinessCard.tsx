@@ -45,7 +45,7 @@ const CHECK_LABELS: Record<string, string> = {
   jev: "独立评审",
   review: "评审服务",
   geo: "循证 GEO",
-  credits: "科研额度",
+  credits: "额度",
   vcr: "虚拟临床研究",
 };
 

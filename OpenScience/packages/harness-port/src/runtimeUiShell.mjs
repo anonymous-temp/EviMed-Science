@@ -312,7 +312,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     // permission and impose no attribution duty, so carrying their mark is the
     // wrong default rather than the polite one.
     try {
-      doc.title = 'EviMed 研究会话';
+      doc.title = 'EviMed 对话';
       const icon = doc.querySelector('link[rel~="icon"]') ?? doc.createElement('link');
       icon.setAttribute('rel', 'icon');
       icon.setAttribute('type', 'image/svg+xml');

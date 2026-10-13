@@ -89,9 +89,9 @@ export function allowanceSimulated(allowance: WebResearchAllowance | null): bool
  *
  * Research billing is a deployment switch and it is off by default. A page for
  * a subsystem that is switched off must not present it, so the surfaces that
- * name billing follow the answer: 设置's tab (用量, or 科研额度 where billing is
+ * name billing follow the answer: 设置's tab (用量, or 额度 where billing is
  * on), the section behind it (the month's usage, or the allowance), the chat
- * frame's button when a spend ceiling refused a conversation, 科研工具 (the
+ * frame's button when a spend ceiling refused a conversation, 工具 (the
  * low-allowance notice and each tool's estimate) and the simulated wallet's own
  * pages. They ask the same question of `/api/account/allowance`, so they share
  * one read the way `fetchWebMe` shares `/api/me`: a read already on its way is
@@ -101,7 +101,7 @@ export function allowanceSimulated(allowance: WebResearchAllowance | null): bool
  * Unknown reads as off. While the first read is on its way, and when it could
  * not be read, `enabled` is false: the wording that is true on every
  * deployment is the one that does not name billing, so a deployment without it
- * never sees 科研额度 flash, and one with it shows 用量 for a moment.
+ * never sees 额度 flash, and one with it shows 用量 for a moment.
  * `simulated` follows the same rule (`allowanceSimulated`): nothing is drawn as
  * a simulated wallet's until the deployment has said it is one.
  *

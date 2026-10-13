@@ -214,7 +214,7 @@ export function ConnectorsSection() {
       {pendingRemoval && createPortal(
         <ConfirmDialog
           title={`移除你的 ${pendingRemoval.title} 凭据？`}
-          body={`移除后，需要 ${pendingRemoval.title} 的研究会跳过这部分，直到你重新填写；已经完成的研究不受影响。`}
+          body={`移除后，需要 ${pendingRemoval.title} 的任务会跳过这部分，直到你重新填写；已经完成的任务不受影响。`}
           confirmLabel="移除凭据"
           onConfirm={() => { const connector = pendingRemoval; setPendingRemoval(null); void remove(connector); }}
           onCancel={() => setPendingRemoval(null)}

@@ -109,7 +109,7 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     for (const item of listedFromSecond) assert.ok(Date.parse(item.createdAt), `${item.id} carries the day it was made`);
     assert.deepEqual(listedFromSecond.map((item) => withoutCreatedAt(item)), [
       { id: "paper1", name: "Paper 1", archivedAt: null, runCount: 0, lastActivityAt: null },
-      { id: "default", name: "我的研究", archivedAt: null, runCount: 0, lastActivityAt: null },
+      { id: "default", name: "我的项目", archivedAt: null, runCount: 0, lastActivityAt: null },
     ]);
     const sessionsFromSecond = await fetch(`${second.base}/api/research-sessions`, {
       headers: { Cookie: alice.cookie, "X-Open-Science-Project": "paper1" },
@@ -167,7 +167,7 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     const bob = await login(second.base, "bob", "abc123");
     assert.equal(bob.response.status, 200);
     const bobProjects = await fetch(`${second.base}/api/projects`, { headers: { Cookie: bob.cookie } });
-    assert.deepEqual((await bobProjects.json()).data.map((item) => withoutCreatedAt(item)), [{ id: "default", name: "我的研究", archivedAt: null, runCount: 0, lastActivityAt: null }]);
+    assert.deepEqual((await bobProjects.json()).data.map((item) => withoutCreatedAt(item)), [{ id: "default", name: "我的项目", archivedAt: null, runCount: 0, lastActivityAt: null }]);
     const bobCannotSeeAlice = await fetch(`${second.base}/api/research-sessions`, {
       headers: { Cookie: bob.cookie, "X-Open-Science-Project": "paper1" },
     });
@@ -437,7 +437,7 @@ test("a stored English default is renamed once, and a rename and an archive are 
     const alice = await login(first.base, "alice", "correct horse battery staple");
     const headers = { Cookie: alice.cookie, "X-Open-Science-CSRF": alice.csrf, "Content-Type": "application/json" };
     const listed = await (await fetch(`${first.base}/api/projects`, { headers })).json();
-    assert.equal(listed.data.find((item) => item.id === "default").name, "我的研究");
+    assert.equal(listed.data.find((item) => item.id === "default").name, "我的项目");
     const created = await (await fetch(`${first.base}/api/projects`, { method: "POST", headers, body: JSON.stringify({ name: "二甲双胍与乳酸酸中毒" }) })).json();
     assert.match(created.data.id, /^p-[0-9a-f]{8}$/);
     const renamed = await fetch(`${first.base}/api/projects/${created.data.id}`, { method: "PATCH", headers, body: JSON.stringify({ name: "二甲双胍（肾功能不全）" }) });

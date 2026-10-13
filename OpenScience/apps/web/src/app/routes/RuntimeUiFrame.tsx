@@ -49,7 +49,7 @@ interface FrameFailure {
    * tasks. Absent for a failure this surface observed itself, which has no
    * cause to act on but a retry. Until 2026-10-07 every refusal the control
    * plane classed as a ceiling or a hold read as a spending one, and a
-   * conversation held by a cleanup offered only 「查看科研额度」 (audit B03).
+   * conversation held by a cleanup offered only 「查看额度」 (audit B03).
    */
   recovery?: StartRecovery;
 }
@@ -122,7 +122,7 @@ function failureFor(recovery: StartRecovery, text: string, code: string | null |
  *  which is done in the conversation itself, from its own composer or from the
  *  menu on its row in the sidebar. The frame's own notice page says the same
  *  words (`runtimeUiServer.mjs`). */
-const RUNTIME_SLOT_CAP_TEXT = "你同时进行的研究已达上限，先结束一个再试。";
+const RUNTIME_SLOT_CAP_TEXT = "你同时进行的任务已达上限，先结束一个再试。";
 
 /**
  * The previous task's runtime is still being cleaned up (`runtime_cleanup_required`), or is stopping
@@ -130,7 +130,7 @@ const RUNTIME_SLOT_CAP_TEXT = "你同时进行的研究已达上限，先结束�
  * Said on the cover, never as an alert: nothing has failed. The opening asks again by itself, at the pace
  * the control plane named and then 3, 5, 8 and 15 seconds, for two minutes; past that the cleanup is taking
  * longer than a wait is worth, and the alert says so with 重试 and the way to what the project already holds.
- * Until 2026-10-07 this arrived as 「查看科研额度」 and nothing else, for as long as the hold stood (audit B03).
+ * Until 2026-10-07 this arrived as 「查看额度」 and nothing else, for as long as the hold stood (audit B03).
  */
 const CLEANUP_LINE = "正在清理上一次任务的运行环境，完成后自动继续";
 const CLEANUP_RETRY_MS = [3_000, 5_000, 8_000, 15_000] as const;
@@ -138,7 +138,7 @@ const CLEANUP_WAIT_MS = 120_000;
 const CLEANUP_GAVE_UP_TEXT = "运行环境还没有清理完成，暂时不能继续这个对话。稍后再试，已有成果可以先阅读。";
 
 /** The project's own scheduled research holds its runtime: it ends by itself, and the page that lists it is 定时任务. */
-const AUTOPILOT_HOLD_TEXT = "这个项目正在执行你设定的定时研究，结束后即可继续。";
+const AUTOPILOT_HOLD_TEXT = "这个项目正在执行你设定的定时任务，结束后即可继续。";
 
 /**
  * Every research environment of the deployment is taken (2026-10-05).
@@ -151,7 +151,7 @@ const AUTOPILOT_HOLD_TEXT = "这个项目正在执行你设定的定时研究，
  * here, for as long as the reader stays on this conversation; it starts when a
  * slot frees. Said on the cover, never as an alert: nothing has failed.
  */
-const ROOM_FULL_LINE = "所有研究环境都在使用中，空出后会自动开始。";
+const ROOM_FULL_LINE = "所有运行环境都在使用中，空出后会自动开始。";
 const ROOM_RETRY_MS = [5_000, 8_000, 12_000, 15_000] as const;
 
 /** Which wait a refused start is, when it is one: the code decides (`runtimeStartRecovery`). */
@@ -286,7 +286,7 @@ export function FrameSkeleton({ title = null, line = "正在打开" }: { title?:
 
 /**
  * The way from a refused conversation to the page that states the ceiling:
- * 设置's usage section, which a deployment that bills research calls 科研额度
+ * 设置's usage section, which a deployment that bills research calls 额度
  * and every other calls 用量, so the button says what the page is called
  * (`useResearchBilling`; unknown reads as the usage wording, which is true
  * everywhere). Its own component so that the allowance is read only when a
@@ -295,7 +295,7 @@ export function FrameSkeleton({ title = null, line = "正在打开" }: { title?:
 function UsageButton() {
   const navigate = useNavigate();
   const { enabled } = useResearchBilling();
-  return <Button variant="ghost" onClick={() => navigate("/app/account?tab=usage")}>{enabled ? "查看科研额度" : "查看用量"}</Button>;
+  return <Button variant="ghost" onClick={() => navigate("/app/account?tab=usage")}>{enabled ? "查看额度" : "查看用量"}</Button>;
 }
 
 /**
@@ -744,7 +744,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         if (navigated) {
           setReady(false);
           if (!recoveryAttempted.current) { recoveryAttempted.current = true; renewBinding.current?.(); }
-          else setNativeError("研究连接暂时无法恢复，请重试");
+          else setNativeError("连接暂时无法恢复，请重试");
         } else setError(frameFailure("对话没有完成初始化，请重试。"));
       } else if (message.type === "evimed.runtime-ui.shell-navigate") {
         // The rail inside the frame asking the shell to move. A closed

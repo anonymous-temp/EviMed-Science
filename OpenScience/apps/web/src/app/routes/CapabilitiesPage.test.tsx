@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CAPABILITY_DISPLAY, SIMULATED_WALLET_LABEL, SIMULATED_WALLET_PAGES } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, GENERAL_TOOLS, SIMULATED_WALLET_LABEL, SIMULATED_WALLET_PAGES } from "@evimed/domain";
 import { CapabilitiesPage } from "./CapabilitiesPage";
 import { WebApiError } from "@/lib/apiClient";
 import { forgetResearchBilling } from "@/lib/useResearchBilling";
@@ -201,7 +201,7 @@ describe("CapabilitiesPage", () => {
   // sentence under the title explained how the page worked, and was wrong.
   it("has a title and a search box in its header, and no sentence under the title", async () => {
     renderPage();
-    const heading = await screen.findByRole("heading", { level: 1, name: "科研工具" });
+    const heading = await screen.findByRole("heading", { level: 1, name: "工具" });
     expect(screen.getByRole("searchbox", { name: "搜索工具" })).toHaveAttribute("placeholder", "搜索工具");
     expect(heading.closest("header")?.querySelectorAll("p")).toHaveLength(0);
     expect(screen.queryByText(/选一项工具/)).not.toBeInTheDocument();
@@ -218,14 +218,23 @@ describe("CapabilitiesPage", () => {
     for (const gone of ["能力地图", "进化工具", "循证进化", "尚未验证", "待明确"]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
   });
 
-  it("groups the tools in the product's order, each card one sentence and how long it usually takes", async () => {
+  // 2026-10-13: the shell is a general work platform first. The general tools come before the medical capabilities, and they are
+  // there without waiting for the catalogue.
+  it("lists the general tools first and the medical capabilities after, each card one sentence and how long it usually takes", async () => {
     renderPage();
     await screen.findByRole("button", { name: /药品安全性分析/ });
-    // Evidence before pharmacy before writing, not the sort order of the names;
-    // and no 「N 项」 after a group's name.
-    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["临床证据", "药学评价", "写作与传播"]);
-    const pharmacy = screen.getByRole("heading", { level: 2, name: "药学评价" }).closest("section")!;
-    const safety = within(pharmacy).getByRole("button", { name: "用“药品安全性分析”开始一次对话" });
+    // No 「N 项」 after a group's name.
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["通用", "医学专业"]);
+    const general = screen.getByRole("heading", { level: 2, name: "通用" }).closest("section")!;
+    expect(within(general).getAllByRole("button").map((button) => button.getAttribute("aria-label")))
+      .toEqual(["文档", "表格", "幻灯片", "数据分析", "网页调研", "代码"].map((title) => `用“${title}”开始一次对话`));
+    expect(general).toHaveTextContent(GENERAL_TOOLS[0].description);
+    expect(general).not.toHaveTextContent(/分钟|灵豆/);
+    const professional = screen.getByRole("heading", { level: 2, name: "医学专业" }).closest("section")!;
+    // Inside the medical group, evidence before pharmacy before writing, not the order the catalogue came in.
+    expect(within(professional).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(
+      ["自动化 Meta 分析", "药品安全性分析", "超说明书用药分析", "论文审稿"].map((title) => `用“${title}”开始一次对话`));
+    const safety = within(professional).getByRole("button", { name: "用“药品安全性分析”开始一次对话" });
     // The whole sentence, never cut to 「…」 by the card.
     expect(safety).toHaveTextContent(CAPABILITY_DISPLAY["adr-analysis"].description);
     expect(safety).toHaveTextContent("约 20～40 分钟");
@@ -236,7 +245,7 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByText("Drug Safety Analysis")).not.toBeInTheDocument();
   });
 
-  it("filters by search, including example questions, and by category, in one row of chips", async () => {
+  it("filters by search, including example questions, and by group, in one row of chips", async () => {
     renderPage();
     await screen.findByRole("button", { name: /药品安全性分析/ });
 
@@ -245,15 +254,55 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "不存在的工具");
-    expect(await screen.findByText("没有符合条件的科研工具")).toBeInTheDocument();
+    expect(await screen.findByText("没有符合条件的工具")).toBeInTheDocument();
 
     await userEvent.clear(screen.getByRole("searchbox", { name: "搜索工具" }));
     const filters = screen.getByRole("group", { name: "分类" });
-    expect(within(filters).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "临床证据", "药学评价", "写作与传播"]);
-    await userEvent.click(within(filters).getByRole("button", { name: "药学评价" }));
-    expect(within(filters).getByRole("button", { name: "药学评价" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(filters).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "通用", "医学专业"]);
+    await userEvent.click(within(filters).getByRole("button", { name: "医学专业" }));
+    expect(within(filters).getByRole("button", { name: "医学专业" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /药品安全性分析/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /自动化 Meta 分析/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "用“文档”开始一次对话" })).not.toBeInTheDocument();
+    await userEvent.click(within(filters).getByRole("button", { name: "通用" }));
+    expect(screen.getByRole("button", { name: "用“文档”开始一次对话" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
+  });
+
+  it("finds a general tool by what it does or by a sentence to start from", async () => {
+    renderPage();
+    await screen.findByRole("button", { name: /药品安全性分析/ });
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "合同");
+    expect(card("文档")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "用“代码”开始一次对话" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "医学专业" })).not.toBeInTheDocument();
+  });
+
+  // A general tool is not a capability: choosing it binds nothing (no session is written) and fills the composer with a sentence the
+  // reader can change; it is never sent.
+  it("opens a general tool as an ordinary conversation with its first sentence in the composer, bound to nothing", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/capabilities"]}>
+        <Routes>
+          <Route path="/app/capabilities" element={<CapabilitiesPage />} />
+          <Route path="/app/chat" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "用“表格”开始一次对话" }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+    expect(mocks.putWebResearchSession).not.toHaveBeenCalled();
+    expect(screen.getByTestId("capability")).toHaveTextContent("");
+    const intent = JSON.parse(screen.getByTestId("intent").textContent ?? "{}");
+    expect(intent).toMatchObject({ kind: "create", draft: GENERAL_TOOLS[1].starterPrompts[0] });
+  });
+
+  it("keeps the general tools when the medical catalogue could not be read", async () => {
+    mocks.listWebResearchAgents.mockRejectedValue(new WebApiError("later", { status: 503, code: "service_unavailable" }));
+    renderPage();
+    expect(await screen.findByRole("alert")).toHaveTextContent("无法加载工具目录");
+    expect(card("文档")).toBeInTheDocument();
+    expect(screen.queryByText("没有符合条件的工具")).not.toBeInTheDocument();
   });
 
   // The two module names the owner replaced on 2026-10-07 keep finding the tools that carry the new ones until
@@ -402,7 +451,7 @@ describe("CapabilitiesPage", () => {
           </Routes>
         </MemoryRouter>,
       );
-      expect(await screen.findAllByRole("listitem")).toHaveLength(4);
+      expect(within((await screen.findByRole("heading", { level: 2, name: "医学专业" })).closest("section")!).getAllByRole("listitem")).toHaveLength(4);
       expect(card("自动化 Meta 分析")).toBeEnabled();
       await userEvent.click(card("自动化 Meta 分析"));
       await waitFor(() => expect(mocks.putWebResearchSession).toHaveBeenCalledWith(
@@ -519,7 +568,7 @@ describe("CapabilitiesPage", () => {
       await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "氨甲环酸");
       expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
       await userEvent.clear(screen.getByRole("searchbox", { name: "搜索工具" }));
-      await userEvent.click(within(screen.getByRole("group", { name: "分类" })).getByRole("button", { name: "药学评价" }));
+      await userEvent.click(within(screen.getByRole("group", { name: "分类" })).getByRole("button", { name: "医学专业" }));
       // The card comes back with the price it had.
       expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 4～8 灵豆");
       await act(async () => {});
@@ -594,7 +643,7 @@ describe("CapabilitiesPage", () => {
       mocks.allowance.mockResolvedValue({ ...simulatedWallet, available: 5 });
       renderPage();
       const prompt = await screen.findByRole("status");
-      expect(prompt).toHaveTextContent("科研额度即将用完，还剩 5.00 灵豆。");
+      expect(prompt).toHaveTextContent("额度即将用完，还剩 5.00 灵豆。");
       expect(within(prompt).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
       expect(within(prompt).getByRole("link", { name: "去模拟充值" })).toHaveAttribute("href", SIMULATED_WALLET_PAGES.recharge);
       await settled();
@@ -606,7 +655,7 @@ describe("CapabilitiesPage", () => {
     it("says an empty allowance is used up", async () => {
       mocks.allowance.mockResolvedValue({ ...simulatedWallet, available: 0 });
       renderPage();
-      expect(await screen.findByRole("status")).toHaveTextContent("科研额度已用完，模拟充值后可以继续研究。");
+      expect(await screen.findByRole("status")).toHaveTextContent("额度已用完，模拟充值后可以继续使用。");
       await settled();
     });
 

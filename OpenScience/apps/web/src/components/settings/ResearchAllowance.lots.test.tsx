@@ -47,7 +47,7 @@ function open(allowance: WebResearchAllowance) {
 }
 /** The allowance group itself: 「充值」 is also the name of a commerce row further down. */
 const header = () => {
-  const found = screen.getByRole("heading", { name: "科研额度" }).closest("section");
+  const found = screen.getByRole("heading", { name: "额度" }).closest("section");
   if (!found) throw new Error("no allowance group");
   return found;
 };
@@ -57,7 +57,7 @@ function panelRow(label: string): HTMLElement {
   if (!found) throw new Error(`no row labelled ${label}`);
   return found;
 }
-const rows = async () => within(await screen.findByRole("list", { name: "研究消费记录" })).getAllByRole("listitem");
+const rows = async () => within(await screen.findByRole("list", { name: "消费记录" })).getAllByRole("listitem");
 const rowOf = async (title: string) => {
   const found = (await rows()).find((item) => within(item).queryByText(title));
   if (!found) throw new Error(`no statement line titled ${title}`);
@@ -72,9 +72,9 @@ beforeEach(() => {
 describe("the allowance header on the platform's wallet", () => {
   it("shows 可用 with the 充值, 赠送 and 冻结 it is made of, and says 模拟 once — in the group's header, not on each row", async () => {
     open(lots);
-    expect(within(panelRow("可用科研额度")).getByText("7.80 灵豆")).toBeInTheDocument();
+    expect(within(panelRow("可用额度")).getByText("7.80 灵豆")).toBeInTheDocument();
     expect(within(header()).getByText("充值 ＋ 赠送 − 冻结")).toBeInTheDocument();
-    for (const [label, amount] of [["可用科研额度", "7.80 灵豆"], ["充值", "6.10 灵豆"], ["赠送", "3.20 灵豆"], ["冻结", "1.50 灵豆"]] as const) {
+    for (const [label, amount] of [["可用额度", "7.80 灵豆"], ["充值", "6.10 灵豆"], ["赠送", "3.20 灵豆"], ["冻结", "1.50 灵豆"]] as const) {
       expect(within(panelRow(label)).getByText(amount), label).toBeInTheDocument();
       expect(within(panelRow(label)).queryByText(SIMULATED_WALLET_LABEL), label).not.toBeInTheDocument();
     }
@@ -92,7 +92,7 @@ describe("the allowance header on the platform's wallet", () => {
 
   it("draws what is held rounded down, and a small amount with its first two significant digits, never as 0.00", async () => {
     open({ ...lots, available: "12.34999999", balances: { purchased: "0.00430000", gifted: "12.34569999" }, held: "0.00000000", nextExpiry: null });
-    expect(within(panelRow("可用科研额度")).getByText("12.34 灵豆")).toBeInTheDocument();
+    expect(within(panelRow("可用额度")).getByText("12.34 灵豆")).toBeInTheDocument();
     expect(within(panelRow("充值")).getByText("0.0043 灵豆")).toBeInTheDocument();
     expect(within(panelRow("赠送")).getByText("12.34 灵豆")).toBeInTheDocument();
     expect(within(panelRow("冻结")).getByText("0.00 灵豆")).toBeInTheDocument();
@@ -102,14 +102,14 @@ describe("the allowance header on the platform's wallet", () => {
 
   it("shows no 充值/赠送/冻结 breakdown for a wallet that says only one number", async () => {
     open({ ...lots, simulated: false, available: 120, held: null, balances: null, nextExpiry: null, low: null, lowThreshold: null });
-    expect(within(panelRow("可用科研额度")).getByText("120.00 灵豆")).toBeInTheDocument();
+    expect(within(panelRow("可用额度")).getByText("120.00 灵豆")).toBeInTheDocument();
     for (const gone of ["充值", "赠送", "冻结", "充值 ＋ 赠送 − 冻结"]) expect(within(header()).queryByText(gone)).not.toBeInTheDocument();
     mocks.statements.mockResolvedValue({ simulated: false, items: [], nextCursor: null });
   });
 
   it("keeps the nothing-available prompt for an allowance the control plane says is low", async () => {
     open({ ...lots, available: "0.00000000", balances: { purchased: "0.00000000", gifted: "0.00000000" }, held: "0.00000000", nextExpiry: null, low: true });
-    expect(screen.getByRole("status")).toHaveTextContent("科研额度已用完，模拟充值后可以继续研究。");
+    expect(screen.getByRole("status")).toHaveTextContent("额度已用完，模拟充值后可以继续使用。");
     await rows();
   });
 });

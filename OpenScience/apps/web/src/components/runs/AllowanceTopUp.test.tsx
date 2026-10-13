@@ -66,9 +66,9 @@ describe("a step waiting on the allowance", () => {
 
   it("is what a 循证 GEO step's tab says instead of 「正在进行」", () => {
     const project = geoProject({ evidence: "queued" });
-    project.steps.evidence = { status: "queued", requested: true, waiting: "allowance", note: "等科研额度" };
+    project.steps.evidence = { status: "queued", requested: true, waiting: "allowance", note: "等额度" };
     draw(<StepPending geoId="geo_1" project={project} step="evidence" />);
-    expect(screen.getByText("「证据」这一步在等科研额度，充值后会自动开始。")).toBeInTheDocument();
+    expect(screen.getByText("「证据」这一步在等额度，充值后会自动开始。")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "去充值" })).toBeInTheDocument();
     expect(screen.queryByText("正在进行，做完会显示在这里。")).not.toBeInTheDocument();
   });

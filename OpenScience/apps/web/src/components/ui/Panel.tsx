@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
  * card holding a bordered row holding a bordered confirmation, and two card
  * recipes with 4 px of padding between them (inventory §2.3). No hint under
  * the group's name either — a row may carry one short line under its label
- * when the label alone would be ambiguous (「研究完成和每日前沿推送到飞书」).
+ * when the label alone would be ambiguous (「任务完成的通知推送到飞书」).
  */
 export function Panel({
   title,

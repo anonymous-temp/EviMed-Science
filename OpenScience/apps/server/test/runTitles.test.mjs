@@ -135,7 +135,7 @@ test("a card's naming line never reaches the question, and every run has a title
     assert.equal(runs.get("run_old").question, "原来的问题");
     assert.equal(runs.get("run_long").title, `${"长".repeat(39)}…`);
     assert.equal(runs.get("run_routed").title, "临床证据深度分析", "no question: the capability it was routed to");
-    assert.equal(runs.get("run_blank").title, "未命名的研究");
+    assert.equal(runs.get("run_blank").title, "未命名的任务");
     for (const run of runs.values()) assert.equal(run.titleSource, "question");
   });
 });
@@ -235,7 +235,7 @@ test("a run adopted before its first message could be read learns what it asked,
   await withStore(async ({ store, project }) => {
     const adopted = await store.adoptRuntimeSession(project, "ses_kernel_ui");
     assert.equal(adopted.question, null);
-    assert.equal(adopted.title, "未命名的研究");
+    assert.equal(adopted.title, "未命名的任务");
     store.backfillQuestions(project, [adopted]);
     store.backfillQuestions(project, [adopted]);
     await Promise.allSettled([...store.backgroundLabels]);

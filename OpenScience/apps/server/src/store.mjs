@@ -78,8 +78,13 @@ function externalAuthType(value) {
  * Stores older than this carry the English name until their one-time
  * migration (the database's schema version 2; `defaultNameMigrated` in a
  * filesystem project's project.json).
+ *
+ * 「我的项目」 since 2026-10-13: the shell is a general work platform first,
+ * and a person writing reports or scripts is not doing research. An account
+ * that already has a project called 「我的研究」 keeps it — this is only the
+ * name a new account is seeded with, and the migration above still lands on it.
  */
-export const DEFAULT_PROJECT_NAME = "我的研究";
+export const DEFAULT_PROJECT_NAME = "我的项目";
 const legacyDefaultProjectName = "Default Project";
 const maxProjectName = 40;
 

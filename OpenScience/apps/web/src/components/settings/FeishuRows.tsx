@@ -171,7 +171,7 @@ export function FeishuRow({ im }: { im: ImState }) {
   const dialog = confirmUnbind && createPortal(
     <ConfirmDialog
       title="解除飞书机器人的绑定？"
-      body="解除后，飞书里的消息不再派发研究任务，通知也不再推送到飞书；已经完成的研究不受影响。机器人应用仍在你的飞书里，不再需要时可以在飞书开发者后台删除。"
+      body="解除后，飞书里的消息不再派发任务，通知也不再推送到飞书；已经完成的任务不受影响。机器人应用仍在你的飞书里，不再需要时可以在飞书开发者后台删除。"
       confirmLabel="解除绑定"
       onConfirm={() => { setConfirmUnbind(false); void unbind(); }}
       onCancel={() => setConfirmUnbind(false)}
@@ -195,7 +195,7 @@ export function FeishuRow({ im }: { im: ImState }) {
     return (
       <PanelRow
         label="飞书"
-        description={`${binding.botName ?? "EviMed 研究助手"} · 绑定于 ${formatDate(binding.boundAt, "iso")}`}
+        description={`${binding.botName ?? "EviMed 助手"} · 绑定于 ${formatDate(binding.boundAt, "iso")}`}
         control={(
           <>
             <span className={state.healthy ? undefined : "text-warn-strong"}>{state.text}</span>
@@ -266,7 +266,7 @@ export function FeishuRow({ im }: { im: ImState }) {
       label="飞书"
       description={ended?.error
         ? <span role="alert" className="text-error">{ended.error.message}</span>
-        : "绑定后，研究完成和每日前沿也会推送到飞书"}
+        : "绑定后，任务完成的通知也会推送到飞书"}
       control={<Button variant="secondary" onClick={() => void start()} loading={busy === "start"}>{ended ? "重新绑定" : "绑定"}</Button>}
     />
   );

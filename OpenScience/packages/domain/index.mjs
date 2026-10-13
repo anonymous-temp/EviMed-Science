@@ -363,6 +363,14 @@ export {
   capabilityTitle,
 } from './src/capabilityDisplay.mjs'
 
+// generalTools — 4 exports: the tools page's general group and the blank conversation's example prompts
+export {
+  BLANK_EXAMPLES,
+  GENERAL_TOOL_GROUP,
+  GENERAL_TOOLS,
+  PROFESSIONAL_TOOL_GROUP,
+} from './src/generalTools.mjs'
+
 // retiredNames — 4 exports: the two module names replaced on 2026-10-07, and the search alias that reads them as the
 // new names until 2027-01-07
 export {

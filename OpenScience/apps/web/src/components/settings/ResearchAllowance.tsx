@@ -23,7 +23,7 @@ const statusLabels = { pending: "结算中", settled: "已结算", failed: "结�
 const COMMERCE = [["rechargeUrl", "充值"], ["membershipUrl", "会员"], ["ordersUrl", "订单"], ["refundsUrl", "退款"]] as const;
 
 /**
- * 「科研额度」 in 设置: the allowance, the month's research spend and its
+ * 「额度」 in 设置: the allowance, the month's research spend and its
  * statements, for a deployment that bills research. The allowance is the
  * deployment's answer, read once for the tab, the section and the chat frame
  * (`useResearchBilling`) and handed in here; a deployment without billing never
@@ -55,9 +55,9 @@ export function ResearchAllowance({ allowance }: { allowance: WebResearchAllowan
       <SimulatedDataLine />
       <SimulatedAllowanceNotice allowance={allowance} />
     </div>}
-    <Panel title="科研额度" action={simulated && (allowance.status === "ready" || month) ? <SimulatedMark /> : undefined}>
-      {allowance.status !== "ready" ? <PanelRow label={{ disabled: "科研额度尚未启用", unavailable: "科研额度暂不可用", unlinked: "尚未关联科研额度账户", ready: "" }[allowance.status]} /> : <>
-        <PanelRow label="可用科研额度" description={allowance.balances ? "充值 ＋ 赠送 − 冻结" : undefined} control={<AllowanceAmount value={allowance.available} simulated={simulated} mark={false} className="text-title font-semibold" />} />
+    <Panel title="额度" action={simulated && (allowance.status === "ready" || month) ? <SimulatedMark /> : undefined}>
+      {allowance.status !== "ready" ? <PanelRow label={{ disabled: "额度尚未启用", unavailable: "额度暂不可用", unlinked: "尚未关联额度账户", ready: "" }[allowance.status]} /> : <>
+        <PanelRow label="可用额度" description={allowance.balances ? "充值 ＋ 赠送 − 冻结" : undefined} control={<AllowanceAmount value={allowance.available} simulated={simulated} mark={false} className="text-title font-semibold" />} />
         {/* The platform's wallet says what it holds in each kind, and which of the gift ends next. EviMed's says one number, and a hold only if it reports one. */}
         {allowance.balances && <>
           <PanelRow label="充值" description="不会过期" control={<AllowanceAmount value={allowance.balances.purchased} simulated={simulated} mark={false} />} />
@@ -65,7 +65,7 @@ export function ResearchAllowance({ allowance }: { allowance: WebResearchAllowan
         </>}
         {allowance.held !== null && (allowance.balances || Number(allowance.held) > 0) && <PanelRow label={allowance.balances ? "冻结" : "占用额度"} description={allowance.balances ? "正在进行的研究暂时占用，结束后按实际用量结算" : undefined} control={<AllowanceAmount value={allowance.held} simulated={simulated} mark={false} />} />}
       </>}
-      {month && <PanelRow label="本月研究消费" control={<AllowanceAmount value={month.paid} simulated={simulated} mark={false} rounding="nearest" />} />}
+      {month && <PanelRow label="本月消费" control={<AllowanceAmount value={month.paid} simulated={simulated} mark={false} rounding="nearest" />} />}
       {month && month.pending > 0 && <PanelRow label="本月待结算" control={<AllowanceAmount value={month.pending} simulated={simulated} mark={false} rounding="nearest" />} />}
     </Panel>
     {(allowance.membership || commerce.length > 0) && <Panel title={commerceTitle(allowance, commerce.map(({ key }) => key))} action={simulated ? <SimulatedMark /> : undefined}>
@@ -104,12 +104,12 @@ function StatementList({ simulated }: { simulated: boolean }) {
   // The list says 「模拟」 once, in its header, when every line is; a list that mixes real lines with simulated ones marks the simulated ones itself.
   const allSimulated = rows.length > 0 && rows.every(marked);
   const mixed = rows.some(marked) && !allSimulated;
-  return <section aria-label="研究消费明细">
+  return <section aria-label="消费明细">
     <div className="mb-2 flex items-center gap-2">
-      <h2 className="text-ui font-semibold">研究消费明细</h2>
+      <h2 className="text-ui font-semibold">消费明细</h2>
       {allSimulated && <SimulatedMark />}
     </div>
-    {page === null && !error ? <RunsSkeleton filter={false} /> : page?.items.length === 0 ? <EmptyState icon={Gauge} title="还没有研究消费记录" /> : page && <List label="研究消费记录" divided>
+    {page === null && !error ? <RunsSkeleton filter={false} /> : page?.items.length === 0 ? <EmptyState icon={Gauge} title="还没有消费记录" /> : page && <List label="消费记录" divided>
       {page.items.map((item) => <StatementRow key={item.id} item={item} simulated={marked(item)} marked={mixed} />)}
     </List>}
     {error && <LoadError message={error} onRetry={() => load(page?.nextCursor ?? undefined)} />}
@@ -152,7 +152,7 @@ function StatementRow({ item, simulated, marked }: { item: WebResearchStatement;
     kind === "charge" && item.status !== "waived" && Number(item.waivedCny) > 0 && !item.paidBy ? `已减免 ${money(Number(item.waivedCny))}` : "",
   ].filter(Boolean).join(' · ');
   const detailable = kind === "charge" && item.runId !== null && (item.status === "settled" || item.status === "absorbed");
-  return <ListRow title={item.title || (credit ? "额度入账" : '未命名的研究')}
+  return <ListRow title={item.title || (credit ? "额度入账" : '未命名的任务')}
     to={!credit && item.runId ? `/app/runs?run=${encodeURIComponent(item.runId)}` : undefined}
     meta={<>{notes || undefined}{detailable && open && <StatementDetail id={item.id} />}</>}
     expanded={detailable ? open : undefined}

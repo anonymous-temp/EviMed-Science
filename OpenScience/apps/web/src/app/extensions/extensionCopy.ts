@@ -1,4 +1,4 @@
-import { BookOpen, BookText, Calculator, FlaskConical, Globe, Network, PenLine, Quote, Radar, Sparkles, Stethoscope, Wand2, type LucideIcon } from "lucide-react";
+import { BookOpen, BookText, Calculator, FlaskConical, Globe, Lightbulb, Network, PenLine, Quote, Radar, Sparkles, Wand2, Wrench, type LucideIcon } from "lucide-react";
 
 /**
  * The words the plugins page uses for what a conversation has to work with:
@@ -18,14 +18,14 @@ export const PLUGIN_COPY = {
     does: "回答或报告里出现参考文献时，按 DOI、PMID 查回原始书目记录，标出查不到或信息不一致的条目，再按你要的格式排版。",
   },
   "research-tools": {
-    title: "医学研究工具集", icon: Stethoscope,
-    use: "PubMed、ClinicalTrials.gov、openFDA、药品说明书等检索与计算工具",
-    does: "对话里的研究都从这里取数和计算：检索文献、指南和试验登记，查药品说明书与不良反应，读取公开网页，并交给后台的计算引擎做统计。",
+    title: "内置工具集", icon: Wrench,
+    use: "网页、知识库、定时任务，以及文献、药品说明书、试验登记等检索与计算工具",
+    does: "对话里取数和计算都从这里来：读取和搜索公开网页，检索知识库，安排定时任务；医学和科研问题还可以检索文献、指南和试验登记，查药品说明书与不良反应，并交给后台的计算引擎做统计。",
   },
   "web-read": {
     title: "网页阅读", icon: Globe,
     use: "读取公开网页和 PDF，遵守网站的抓取规则",
-    does: "你给出一个网址，或研究需要某个公开页面时，读取它的正文并保存成可引用的快照；遵守网站的抓取规则，按站点限速。",
+    does: "你给出一个网址，或任务需要某个公开页面时，读取它的正文并保存成可引用的快照；遵守网站的抓取规则，按站点限速。",
   },
   "dsh-annotation": {
     title: "划词批注", icon: PenLine,
@@ -34,8 +34,8 @@ export const PLUGIN_COPY = {
   },
   "dsh-mermaid": {
     title: "Mermaid 图表", icon: Network,
-    use: "把回答里的流程图代码画成图，例如 PRISMA 流程图",
-    does: "回答里的流程图代码会画成图，可以在图和代码之间切换，适合 PRISMA 流程图、研究路线和分类图。",
+    use: "把回答里的流程图代码画成图，例如流程图、架构图",
+    does: "回答里的流程图代码会画成图，可以在图和代码之间切换，适合流程图、架构图、路线图和分类图，医学研究里也可以画 PRISMA 流程图。",
   },
 } as const satisfies Record<string, PluginCopy>;
 export type PluginCopyId = keyof typeof PLUGIN_COPY;
@@ -69,6 +69,7 @@ export const ENGINE_COPY: readonly EngineCopy[] = [
  */
 export const SKILL_GROUP_ICON: Readonly<Record<string, LucideIcon>> = {
   我的技能: BookOpen,
+  通用: Lightbulb,
   科研分析: FlaskConical,
   写作与核查: BookText,
   办公文档: Wand2,

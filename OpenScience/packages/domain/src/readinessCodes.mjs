@@ -99,8 +99,8 @@ export const READINESS_ERROR_MESSAGES_ZH = Object.freeze({
   operator_metrics_token_placeholder: '运维指标的访问令牌还是示例里的占位值，请换掉。',
   operator_metrics_token_too_short: '运维指标的访问令牌太短，请加长。',
   // Modules whose own invariants are red and whose outside services are warnings.
-  evimed_credits_unavailable: '科研额度模块没有就绪（数据库或模块没有接入），请查看日志。',
-  evimed_credits_wallet_not_wired: '科研额度的钱包还没有接通，暂时不会扣费；接通后自动恢复。',
+  evimed_credits_unavailable: '额度模块没有就绪（数据库或模块没有接入），请查看日志。',
+  evimed_credits_wallet_not_wired: '额度的钱包还没有接通，暂时不会扣费；接通后自动恢复。',
   frontier_migration_failed: '前沿动态的数据库升级没有完成，请查看日志。',
   frontier_unavailable: '前沿动态模块没有就绪，请查看日志。',
   frontier_project_missing: '前沿动态使用的内部项目不存在。',

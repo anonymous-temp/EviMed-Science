@@ -67,7 +67,7 @@ let switchGeneration = 0;
 let loadGeneration = 0;
 
 /**
- * The order every project list shows: the account's own 「我的研究」 first,
+ * The order every project list shows: the account's own default project first,
  * then by name as a Chinese reader sorts (pinyin). The server's own order
  * depends on its database collation, which is not a reading order.
  */

@@ -67,7 +67,7 @@ beforeEach(() => {
 
 /** Everything the allowance page says: a deployment without billing must show none of it, and no placeholder row for what does not exist. */
 function expectNoResearchBilling() {
-  for (const gone of [/科研额度/, /充值/, /会员/, /订单/, /退款/, /尚未开放/, /尚未启用/, /尚未关联/, /研究消费/, /平台运行成本/, /模拟/]) {
+  for (const gone of [/额度/, /充值/, /会员/, /订单/, /退款/, /尚未开放/, /尚未启用/, /尚未关联/, /消费/, /平台运行成本/, /模拟/]) {
     expect(screen.queryAllByText(gone)).toEqual([]);
   }
 }
@@ -79,9 +79,9 @@ describe("用量 on a deployment without research billing", () => {
     expect(screen.getByRole("heading", { name: "本月用量" })).toBeInTheDocument();
     expect(screen.getByText("9 月 · 9,040 次模型调用")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "明细" })).toBeInTheDocument();
-    // 「科研额度尚未启用」 and four 「尚未开放」 rows, for things that do not exist, were the regression.
+    // 「额度尚未启用」 and four 「尚未开放」 rows, for things that do not exist, were the regression.
     expectNoResearchBilling();
-    expect(screen.queryByRole("heading", { name: "科研额度" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "额度" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "充值与会员" })).not.toBeInTheDocument();
     // The allowance's statements are not this page's data, and the detail is read only when asked for.
     expect(mocks.statements).not.toHaveBeenCalled();
@@ -104,7 +104,7 @@ describe("用量 on a deployment without research billing", () => {
     expect(within(rows[0]).getByText("9月22日")).toBeInTheDocument();
     expect(within(rows[0]).getByRole("link", { name: "中医药治疗儿童疳证的 Meta 分析检索" })).toHaveAttribute("href", "/app/runs?run=run_b");
     expect(within(rows[0]).getByText("4.81 灵豆")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("未命名的研究")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("未命名的任务")).toBeInTheDocument();
     expect(within(rows[1]).getByText("不足 0.01 灵豆")).toBeInTheDocument();
     expect(within(rows[2]).getByText("其他")).toBeInTheDocument();
     expect(within(rows[2]).getByText("1.23 灵豆")).toBeInTheDocument();
@@ -186,7 +186,7 @@ describe("用量 on a deployment without research billing", () => {
   });
 });
 
-describe("科研额度 on a deployment that bills research", () => {
+describe("额度 on a deployment that bills research", () => {
   beforeEach(() => {
     mocks.allowance.mockResolvedValue(allowance);
     // What the supplier-cost panel reads: a figure of its own, not the usage page's.
@@ -195,11 +195,11 @@ describe("科研额度 on a deployment that bills research", () => {
 
   it("separates tiny confirmed charges, pending and supplier charges", async () => {
     open(); expect(await screen.findByText("20.00 灵豆")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "科研额度" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "额度" })).toBeInTheDocument();
     expect(screen.queryByText("占用额度")).not.toBeInTheDocument();
     expect(screen.getByText("本月待结算")).toBeInTheDocument();
     expect(screen.getByText("1.23 灵豆")).toBeInTheDocument();
-    const rows = within(await screen.findByRole("list", { name: "研究消费记录" })).getAllByRole("listitem");
+    const rows = within(await screen.findByRole("list", { name: "消费记录" })).getAllByRole("listitem");
     expect(within(rows[0]).getByText("0.004 灵豆")).toBeInTheDocument(); // a charge under a cent is drawn with its first significant digits, never as nothing
     expect(within(rows[1]).getByText("结算中")).toBeInTheDocument();
     expect(screen.queryByText("99.00 灵豆")).not.toBeInTheDocument(); expect(mocks.usage).not.toHaveBeenCalled();
@@ -217,7 +217,7 @@ describe("科研额度 on a deployment that bills research", () => {
   // checkout this deployment does not have: what is not there is not drawn.
   it("does not invent commerce or membership: no row, and no group, for what the deployment does not have", async () => {
     open(); expect(await screen.findByText("20.00 灵豆")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "科研额度" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "额度" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "充值与会员" })).not.toBeInTheDocument();
     for (const gone of [/尚未开放/, /充值/, /会员/, /订单/, /退款/]) expect(screen.queryAllByText(gone)).toEqual([]);
     expect(screen.queryByRole("link", { name: /^查看/ })).not.toBeInTheDocument();
@@ -225,7 +225,7 @@ describe("科研额度 on a deployment that bills research", () => {
 
   it("keeps confirmed monthly charges readable when the wallet is unavailable", async () => {
     mocks.allowance.mockResolvedValue({ ...allowance, status: "unavailable", available: null, month: { ...allowance.month, paid: 4.27 } });
-    open(); expect(await screen.findByText("科研额度暂不可用")).toBeInTheDocument();
+    open(); expect(await screen.findByText("额度暂不可用")).toBeInTheDocument();
     expect(screen.getByText("4.27 灵豆")).toBeInTheDocument();
     expect(screen.queryByText("20.00 灵豆")).not.toBeInTheDocument();
   });
@@ -234,9 +234,9 @@ describe("科研额度 on a deployment that bills research", () => {
   // is not zero: no spend row is drawn, and no statement list either.
   it("draws no month and no statements when the ledger could not be read", async () => {
     mocks.allowance.mockResolvedValue({ ...allowance, status: "unavailable", available: null, month: null });
-    open(); expect(await screen.findByText("科研额度暂不可用")).toBeInTheDocument();
-    for (const gone of [/本月研究消费/, /本月待结算/, /研究消费明细/, /还没有研究消费记录/]) expect(screen.queryAllByText(gone)).toEqual([]);
-    expect(screen.queryByRole("list", { name: "研究消费记录" })).not.toBeInTheDocument();
+    open(); expect(await screen.findByText("额度暂不可用")).toBeInTheDocument();
+    for (const gone of [/本月消费/, /本月待结算/, /消费明细/, /还没有消费记录/]) expect(screen.queryAllByText(gone)).toEqual([]);
+    expect(screen.queryByRole("list", { name: "消费记录" })).not.toBeInTheDocument();
     expect(screen.queryByText(/灵豆/)).not.toBeInTheDocument();
     await act(async () => {});
     expect(mocks.statements).not.toHaveBeenCalled();
@@ -288,11 +288,11 @@ describe("科研额度 on a deployment that bills research", () => {
 
   it("shows an empty statement list", async () => {
     mocks.statements.mockResolvedValue({ items: [], nextCursor: null });
-    open(); expect(await screen.findByText("还没有研究消费记录")).toBeInTheDocument();
+    open(); expect(await screen.findByText("还没有消费记录")).toBeInTheDocument();
   });
 
   // With billing on, `status` says how far this account's wallet is linked.
-  it.each([["unlinked", "尚未关联科研额度账户"], ["unavailable", "科研额度暂不可用"]])("states %s honestly", async (status, copy) => {
+  it.each([["unlinked", "尚未关联额度账户"], ["unavailable", "额度暂不可用"]])("states %s honestly", async (status, copy) => {
     mocks.allowance.mockResolvedValue({ ...allowance, status }); open();
     expect(await screen.findByText(copy)).toBeInTheDocument(); expect(screen.queryByText("20.00 灵豆")).not.toBeInTheDocument();
   });

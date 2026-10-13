@@ -10,7 +10,7 @@ import { SKILL_GROUP_ICON, SKILL_PACK_ICON } from "./extensionCopy";
 
 /** Rows a group shows before 「展开其余 N 个」. */
 const SHOWN = 4;
-/** The group of the curated research tools: the platform's own, the same ones 科研工具 lists. */
+/** The group of the curated research tools: the platform's own, the same ones 工具 lists. */
 const TOOLS_GROUP = "平台内置";
 
 /** The set of open groups with one group toggled. */
@@ -40,13 +40,13 @@ function Group({ name, count, children }: { name: string; count: number; childre
 export function SkillsList({ personal, platform, tools, query, hasMore, loadingMore, onMore, onOpenPlatform, onOpenPersonal, onOpenTool, onResume }: {
   personal: readonly PersonalSkill[];
   platform: PlatformSkillList | null;
-  /** The curated research tools, already filtered as 科研工具 filters them; null until they are read. */
+  /** The curated research tools, already filtered as 工具 filters them; null until they are read. */
   tools: readonly CapabilityUi[] | null;
   query: string;
   hasMore: boolean; loadingMore: boolean; onMore: () => void;
   onOpenPlatform: (skill: PlatformSkill) => void;
   onOpenPersonal: (skill: PersonalSkill) => void;
-  /** Opens the conversation a tool starts, as its 科研工具 card does. */
+  /** Opens the conversation a tool starts, as its 工具 card does. */
   onOpenTool: (tool: CapabilityUi) => void;
   onResume: (entry: PendingSkillTransfer) => void;
 }) {

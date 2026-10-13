@@ -45,7 +45,7 @@ const citePlugin = {
 };
 
 // The curated tools the catalogue lists, as `GET /api/agents` returns them, and the module-only one it leaves out (`display.listed:
-// false`): the same records 科研工具 reads.
+// false`): the same records 工具 reads.
 const toolRecord = (id: string) => ({
   id, version: "1.0.0", title: id, category: "", description: "", skill: id, estimatedMinutes: [20, 40] as [number, number],
   starterPrompts: [], requiredInputs: [], optionalInputs: [], requiredTools: [], optionalTools: [], dataSources: [], outputs: [],
@@ -115,7 +115,7 @@ it("is one page titled for both tabs, with the counts, and has no runtime sectio
   expect(skills.listPlatformSkills).toHaveBeenCalledTimes(1);
 });
 
-// The header says what the page holds in its search box, the way 科研工具 does, and carries no sentence under the title:
+// The header says what the page holds in its search box, the way 工具 does, and carries no sentence under the title:
 // PageHeader has no place for one (DESIGN.md, 页头).
 it("names its search box for what the page holds, and the header has no sentence under the title", async () => {
   open("/app/extensions/skills");
@@ -124,7 +124,7 @@ it("names its search box for what the page holds, and the header has no sentence
   expect(screen.getByRole("heading", { level: 1, name: "插件与技能" }).closest("header")?.querySelectorAll("p")).toHaveLength(0);
 });
 
-// 2026-10-10 ruling: 科研工具 is the platform's own curated set and 插件与技能 holds everything, so the tools 科研工具 lists are a group
+// 2026-10-10 ruling: 工具 is the platform's own curated set and 插件与技能 holds everything, so the tools 工具 lists are a group
 // here too — the same records and filter, and a row opens the conversation its card opens.
 it("lists the curated research tools as a 平台内置 group on the skills tab, four to a group, and counts them with the skills", async () => {
   api.listWebResearchAgents.mockResolvedValue(catalogue);
@@ -134,11 +134,11 @@ it("lists the curated research tools as a 平台内置 group on the skills tab, 
   await userEvent.click(within(group).getByRole("button", { name: "展开其余 2 个" }));
   expect(within(group).getAllByRole("listitem")).toHaveLength(6);
   for (const id of TOOL_IDS) expect(within(group).getByRole("button", { name: toolTitle(id) })).toBeInTheDocument();
-  // Nine platform skills and six tools: the module-only capability is left out, as 科研工具 leaves it out, and the tab counts what it lists.
+  // Nine platform skills and six tools: the module-only capability is left out, as 工具 leaves it out, and the tab counts what it lists.
   expect(await screen.findByRole("tab", { name: /^技能\s*15$/ })).toBeInTheDocument();
 });
 
-it("a tool row opens a new conversation bound to that tool, as its 科研工具 card does", async () => {
+it("a tool row opens a new conversation bound to that tool, as its 工具 card does", async () => {
   api.listWebResearchAgents.mockResolvedValue(catalogue);
   openWithChat("/app/extensions/skills");
   const group = await screen.findByRole("region", { name: "平台内置" });

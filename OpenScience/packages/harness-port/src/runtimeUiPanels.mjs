@@ -261,7 +261,7 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
     return h('div', { role: 'status', 'data-evimed-stall-notice': true,
       style: { ...meta, display: 'flex', alignItems: 'center', gap: '8px', width: 'calc(100% - 32px)',
         maxWidth: 'var(--dsh-chat-user-width,var(--dsh-chat-content-width,920px))', margin: '0 auto 8px' } },
-      h('span', null, '这项研究暂时没有新进展，仍在继续。'),
+      h('span', null, '这项任务暂时没有新进展，仍在继续。'),
       stoppable ? h('button', { type: 'button', style: { ...textButton, ...meta }, onClick: () => kit.hub.send('stop-run', { runId: live.runId }) }, '停止') : null);
   }
   kit.guarded('stall notice', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-stall', order: 10 }, StallNotice));

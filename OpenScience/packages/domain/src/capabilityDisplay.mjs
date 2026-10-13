@@ -73,7 +73,7 @@ export function capabilityTitle(id) {
 
 /**
  * Whether a capability belongs in the lists a researcher picks a tool from —
- * 科研工具 and the kernel frame's tool list.
+ * 工具 and the kernel frame's tool list.
  *
  * Everything is, except a capability whose display block says `listed: false`:
  * the 「循证 GEO」 capabilities are opened by their own module and bound to a

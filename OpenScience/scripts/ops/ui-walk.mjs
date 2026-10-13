@@ -419,7 +419,7 @@ export const NOTICE_SECTION_PAGES = new Set(["inbox", "geo", "frontier-zones", "
 /**
  * The pages whose lists are clicked: the first row of each list must show
  * something where the reader is looking (DESIGN.md 「页面结构」 rule 6). The
- * same pages as the section budget, minus 科研工具, whose grid is cards that
+ * same pages as the section budget, minus 工具, whose grid is cards that
  * start a conversation — a click there would write to the deployment — and
  * minus the study's own tabs, whose rows are results, not a place to go.
  */
@@ -1584,7 +1584,7 @@ export function cleanupProbe() {
   return {
     cover: cover ? words(cover) : null,
     booted: Boolean(frame) && !cover,
-    quotaButtons: [...document.querySelectorAll("button")].map(words).filter((text) => text === "查看科研额度" || text === "查看用量"),
+    quotaButtons: [...document.querySelectorAll("button")].map(words).filter((text) => text === "查看额度" || text === "查看用量"),
     alertButtons: alert ? [...alert.querySelectorAll("button, a")].map(words) : null,
   };
 }
@@ -1787,7 +1787,7 @@ export function measure([leakSources, backOfficeSources, retiredSources = []]) {
       return around ? `text+${Math.round(around)}` : "text";
     }
     // A card whose CSS sets a minimum height and lets its text grow it past
-    // that is one kind at every height its text gives it: the tools of 科研工具
+    // that is one kind at every height its text gives it: the tools of 工具
     // (`min-h-32`) drew 136, 162 and 182 px for descriptions of three lengths
     // and failed the walk as three kinds (2026-10-06). At its minimum it is
     // measured like any other control.
@@ -3111,7 +3111,7 @@ export function composerProbe([options] = [{}]) {
  * a conversation that runs a tool draws exactly one chip in the toolbar and none in the dock; a researcher sees neither the session
  * statistics nor the context ring; at 390 px the toolbar's row is one line and the page does not scroll sideways. Every verdict is a
  * NOTICE (new in R13). Each says "not observable" and why when what it looks at is not there: the walk's conversation runs no tool (a
- * tool is bound by the 科研工具 page, whose cards write), may be the blank conversation, and may belong to an operator.
+ * tool is bound by the 工具 page, whose cards write), may be the blank conversation, and may belong to an operator.
  * @param {"desktop" | "phone"} viewportName @param {any} r what `composerProbe` returned
  * @returns {{ failures: string[], notices: string[] }}
  */
@@ -3126,7 +3126,7 @@ export function composerFindings(viewportName, r) {
   if (r.hero) notices.push(`${current}: not observable: the conversation is the blank one, whose composer is centred with no dock under it, so the room under it was not judged`);
   else if (r.gapLowest === null) notices.push(`${current}: not observable: the composer holds no control, so the room under it was not judged`);
   else if (r.gapLowest < COMPOSER_BOTTOM_PX) notices.push(`${current}: the lowest control of the composer is ${r.gapLowest} px above the bottom of the window (at least ${COMPOSER_BOTTOM_PX})`);
-  if (r.chips.total === 0) notices.push(`${current}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 科研工具, whose cards write)`);
+  if (r.chips.total === 0) notices.push(`${current}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 工具, whose cards write)`);
   else {
     if (r.chips.bar !== 1) notices.push(`${current}: ${r.chips.bar} tool chip(s) are drawn in the toolbar (exactly one)`);
     if (r.chips.inTools !== r.chips.bar) notices.push(`${current}: ${r.chips.bar} chip(s) say they are in the toolbar and ${r.chips.inTools} are inside it`);

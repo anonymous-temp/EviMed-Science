@@ -2377,15 +2377,15 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   source_duplicate: '这份资料已经存在。',
   source_missing: '原始库里找不到这份资料了，派生内容已保留。',
   credits_exhausted: '额度已用尽，充值后即可继续。',
-  simulated_credits_exhausted: '模拟额度不足，这次没有开始。到“设置 → 科研额度”做一次模拟充值后即可继续。',
+  simulated_credits_exhausted: '模拟额度不足，这次没有开始。到“设置 → 额度”做一次模拟充值后即可继续。',
   credits_daily_limit_reached: '今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在“设置 → 用量”调高上限。',
   credits_weekly_limit_reached: '本周额度上限已到，这次请求没有开始。下一个计费周期自动恢复，也可以在“设置 → 用量”调高上限。',
   // 灵豆 settlement (fusion plan §9.6). A deployment that has not joined
   // EviMed's billing shows no balance at all, so the first of these is normally
   // read by a client that asked anyway rather than by a person.
   evimed_credits_not_enabled: '这个部署还没有接入灵豆计费，因此没有余额和预计消耗可看。',
-  evimed_credits_request_invalid: '这次查询的参数不对，没有得到预计消耗。换一个科研工具再看即可。',
-  evimed_credits_unreachable: '科研额度的记录暂时读不出来，稍后再试。',
+  evimed_credits_request_invalid: '这次查询的参数不对，没有得到预计消耗。换一个工具再看即可。',
+  evimed_credits_unreachable: '额度的记录暂时读不出来，稍后再试。',
   simulated_wallet_not_enabled: '这个部署没有开启模拟额度，没有可以充值的内容。',
   simulated_wallet_request_invalid: '这次模拟充值的内容不对，没有入账。换一个充值额度再试。',
   credit_grant_forbidden: '只有运营账号可以赠送灵豆，这次没有入账。',
@@ -2396,7 +2396,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // The platform's publishing account and the upkeep of an account's own zone (2026-10-05).
   platform_account_protected: '这是平台出版方账号，不能删除或导出。',
   platform_account_reserved: '这个账号名或显示名留给平台出版方，请换一个。',
-  evidence_upkeep_no_allowance: '科研额度不足，这个专区的 AI 更新先放着，充值后会自动继续；平台不会替你付这笔费用。',
+  evidence_upkeep_no_allowance: '额度不足，这个专区的 AI 更新先放着，充值后会自动继续；平台不会替你付这笔费用。',
   // The platform's own evidence programme (2026-10-05): what an operator reads on a day's topic decision.
   evidence_programme_decision_required: '这张卡没有对应的选题记录，没有写入：平台只为选题器当天选定的题目发布结论。',
   evidence_programme_budget_spent: '证据中心今天的预算已经用完，这次研究顺延到预算恢复后再做。',
@@ -2535,7 +2535,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   agent_run_active: '这个研究会话已经有一次运行在进行中。等它结束，或先取消它，再发起新的。',
   agent_run_limit_reached: '这个项目同时进行的研究运行已达上限。等其中一次结束后再发起。',
   project_limit_reached: '这个账户的项目数已达上限。每个项目都有独立的存储空间和研究运行时，上限用来保证服务器资源够用。可以先导出并删除不再需要的项目，再新建。',
-  default_project_protected: '“我的研究”是账户的默认项目，不能归档或删除。可以改名，或把不再需要的内容移到别的项目。',
+  default_project_protected: '默认项目不能归档或删除。可以改名，或把不再需要的内容移到别的项目。',
 
   // ——— The autopilot's independent-check episode ———
   //

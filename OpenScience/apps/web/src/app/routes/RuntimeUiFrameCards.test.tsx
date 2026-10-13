@@ -271,7 +271,7 @@ describe("the tools on a blank conversation", () => {
     expect(view.container.textContent).toBe("");
     act(() => kit.hub.deliver("capability", { capabilityId: "clinical-evidence-synthesis", sessionId: "session-a" }));
     expect(screen.getByText("临床证据深度分析")).toBeInTheDocument();
-    // The tool's name alone: how long it takes was said on 科研工具.
+    // The tool's name alone: how long it takes was said on 工具.
     expect(view.container.textContent).toBe("临床证据深度分析×");
     expect(screen.queryByRole("button", { name: "≥70 岁人群阿司匹林一级预防的获益与出血风险。" })).toBeNull();
     // The blank conversation of a session has this toolbar too: the hero seat

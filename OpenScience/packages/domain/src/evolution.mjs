@@ -157,7 +157,7 @@ export const EVOLUTION_ERROR_MESSAGES = Object.freeze({
   'evolution_owner_missing': '这条研究记录已变化，请刷新后重试。',
   'evolution_path_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_refresh_unavailable': '这项研究工作暂时无法完成，请稍后重试。',
-  'evolution_requirements_invalid': '科研工具的数据要求需要补全。',
+  'evolution_requirements_invalid': '工具的数据要求需要补全。',
   'evolution_review_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_review_unavailable': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_route_missing': '这条研究记录已变化，请刷新后重试。',

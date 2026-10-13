@@ -303,7 +303,7 @@ function derivedRunTitle(run) {
   if (question.length) {
     return question.length > maxDerivedTitle ? `${question.slice(0, maxDerivedTitle - 1).join("")}…` : question.join("");
   }
-  return capabilityTitle(run.effectiveAgentId) ?? "未命名的研究";
+  return capabilityTitle(run.effectiveAgentId) ?? "未命名的任务";
 }
 
 const maxEffectiveProducts = 8;

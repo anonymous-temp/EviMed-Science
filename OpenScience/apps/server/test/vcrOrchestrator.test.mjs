@@ -1318,7 +1318,7 @@ test("a step the allowance refuses stays queued and says what it waits on; once 
   // The real wallet's refusal is the same wait, unmarked.
   const real = studyInMemory({ dispatch: async () => { throw Object.assign(new Error("credits"), { code: "credits_exhausted" }); } });
   await real.orchestrator.advance("std_live");
-  assert.deepEqual([real.steps().evidence.waiting, real.steps().evidence.note], ["allowance", "等科研额度"]);
+  assert.deepEqual([real.steps().evidence.waiting, real.steps().evidence.note], ["allowance", "等额度"]);
 
   // Anything else that defers is a queued step and nothing more: no wait on the allowance is invented for it.
   const busy = studyInMemory({ dispatch: async () => { throw Object.assign(new Error("cap"), { code: "runtime_limit_exceeded" }); } });
