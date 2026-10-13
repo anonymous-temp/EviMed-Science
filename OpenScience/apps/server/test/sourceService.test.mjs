@@ -1111,6 +1111,22 @@ test("a document is usable once its text is written out for the generation it is
   assert.equal(projectSourceManifestRecord({ id: "src_one", revision: 1, payload: { status: "queued", paths: [], reasons: [] } }).readable, false);
 });
 
+test("a document kept as an original is finished, listed and opened, and not readable: there is no text of it to use", () => {
+  const original = { status: "complete", generation: 2, depth: "skip", analysis: { generation: 2, phase: "skipped", run: null }, outputs: {},
+    original: { generation: 2, code: "source_original_media", at: "2026-10-13T00:00:00.000Z" }, understanding: null };
+  assert.deepEqual([sourceReadable(original), sourceStateOf(original), understandingPending(original)], [false, "unavailable", false],
+    "not 「读取中」, not something to fix, and nothing for search, 「@知识库」, the engine or a compile to take");
+  assert.equal(readCopyOf({ payload: original }), null);
+  const card = projectSourceManifestRecord({ id: "src_one", revision: 4, payload: { ...original, paths: ["knowledge-base/查房录音.m4a"], reasons: [] } });
+  assert.equal(card.readable, false);
+  assert.deepEqual(card.payload.original, { generation: 2, code: "source_original_media", at: "2026-10-13T00:00:00.000Z" }, "the reason travels to the page");
+  assert.equal(card.payload.error, undefined, "and it is not an error");
+  // The reason belongs to the generation that was kept as it is: read again, the document is what that reading makes of it.
+  assert.equal(sourceReadable({ ...original, generation: 3, status: "queued" }), false);
+  assert.equal(sourceReadable({ ...original, generation: 3, analysis: { generation: 3, readAt: "2026-10-13T01:00:00.000Z" } }), true);
+  assert.equal(sourceReadable({ ...original, original: null }), true, "a null reason is no reason");
+});
+
 test("a list filters by what the page says or by the pipeline's status, never both", async () => {
   const service = new SourceService(new MemoryDocuments(), new MemoryJobs());
   assert.deepEqual([...SOURCE_STATES], ["reading", "ready", "attention"]);

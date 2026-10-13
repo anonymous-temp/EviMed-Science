@@ -369,6 +369,8 @@ test("parse() decides where a file is read from its first bytes, and holds it to
   assert.deepEqual([parsed.text, parsed.extractor.parser, sizes], ["transcript", "engine", [2000]]);
   // A size limit is still a refusal with its own reason, and the engine is not sent what is over it.
   await assert.rejects(parser.parse({ ...(await write("big.bin", Buffer.alloc(5000, 0x00))), engine }), { code: "source_parser_input_too_large" });
+  // With no engine to read it, nothing reads it whatever its size: that is the answer, not "split it".
+  await assert.rejects(parser.parse(await write("bigger.bin", Buffer.alloc(5000, 0x00))), (error) => error.code === "source_format_unsupported" && error.status === 415);
   await assert.rejects(parser.parseBytes({ bytes: Buffer.alloc(5000, 0x00), filename: "big.bin", engine }), (error) => error.code === "source_parser_payload_too_large" && error.status === 413);
   assert.deepEqual(sizes, [2000]);
 });

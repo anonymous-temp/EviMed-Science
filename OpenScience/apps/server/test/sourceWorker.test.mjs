@@ -298,6 +298,17 @@ test("a file nothing here reads is kept as an original with the reason, never fa
   assert.deepEqual(empty.calls.map((call) => call.method), ["beginIngestion", "resolve", "parse", "publishUnderstanding"]);
   assert.deepEqual(empty.calls.at(-1).args.slice(1), [null, null, null, { original: "source_original_no_text" }]);
 
+  // A scan whose OCR failed on every page is not that: it is a text read only in part, captured and said as such.
+  const scan = fixture({ file: "knowledge-base/scan.pdf" });
+  scan.worker.parser.parse = async (...args) => {
+    scan.calls.push({ method: "parse", args });
+    return { extractor: { name: "evimed-extract", version: "evimed-extract@0.5.0", parser: "api" }, text: "", summary: "",
+      units: [{ id: "page-1", unitType: "page", status: "failed", itemIds: [] }], facts: [], methods: [] };
+  };
+  await scan.worker.tick();
+  assert.deepEqual(scan.calls.map((call) => call.method), ["beginIngestion", "resolve", "parse", "materialize", "publishUnderstanding"]);
+  assert.deepEqual(scan.calls.at(-1).args.length, 4, "published as the capture it is, with no reason to be an original");
+
   // The same code without the parser's 415 is a failure of something else (a path that is not a file), and stays one.
   const broken = fixture({ parseError: Object.assign(new Error("The source is not a regular file."), { code: "source_format_unsupported", status: 400 }) });
   await broken.worker.tick();

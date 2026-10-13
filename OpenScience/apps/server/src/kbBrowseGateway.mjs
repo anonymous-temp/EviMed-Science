@@ -66,7 +66,8 @@ const answerBudgetMs = 20_000;
 const SOURCE_ID = /^src_[a-f0-9]{32}$/;
 const SOURCE_ADDRESS = /viking:\/\/[^\s"'`()<>[\]]*?\/(src_[a-f0-9]{32})(?:\.md)?(?![A-Za-z0-9_])/g;
 const ANY_ADDRESS = /viking:\/\/[^\s"'`()<>[\]]*/g;
-const SOURCE_MENTION = /\bsource:(src_[a-f0-9]{32})\b/g;
+/** A document named in a text: `source:<id>` once rewritten, or the bare id a graph entity cites in its body. */
+const SOURCE_MENTION = /\b(src_[a-f0-9]{32})\b/g;
 const OMITTED_ADDRESS = "(internal address omitted)";
 
 const UNAVAILABLE = "Knowledge-base browsing is unavailable; use kb_search, or read and grep the knowledge-base files instead.";
@@ -245,13 +246,15 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
   }
 
   /**
-   * Text as the runtime may see it: every address rewritten or dropped (see the module comment).
+   * Text as the runtime may see it: every address rewritten or dropped (see the module comment). A root counts only
+   * whole: `…/wiki` followed by `/` or nothing, never as the prefix of a longer name.
    * @param {unknown} text @param {Record<string, string>} roots
    */
   function neutral(text, roots) {
-    let out = String(text ?? "").replace(SOURCE_ADDRESS, "source:$1");
-    for (const name of ["wiki", "kg", "sources", "library"]) out = out.replaceAll(`${roots[name]}/`, `${name}:`).replaceAll(roots[name], `${name}:`);
-    return out.replace(ANY_ADDRESS, OMITTED_ADDRESS);
+    return String(text ?? "").replace(SOURCE_ADDRESS, "source:$1").replace(ANY_ADDRESS, (address) => {
+      const name = ROOTS.find((root) => address === roots[root] || address.startsWith(`${roots[root]}/`));
+      return name ? `${name}:${address.slice(roots[name].length + 1)}` : OMITTED_ADDRESS;
+    });
   }
 
   /** The documents a text names, with their titles. @param {{ userId: string, projectId: string }} identity @param {string} text */
@@ -328,8 +331,10 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
 
     if (op === "list" || (op === "overview" && !compiled)) {
       // Directories first, then by name: an order that holds from one page of a long listing to the next.
+      // Only children of the directory asked for: whatever the engine answers for a path that is a file is not a listing.
       const listed = (await resources.listAll(userId, uri))
-        .map((/** @type {any} */ entry) => ({ name: String(entry.uri ?? "").split("/").pop() ?? "", kind: entry.isDir === true ? "dir" : "file", size: Number(entry.size) || 0 }))
+        .filter((/** @type {any} */ entry) => relativeTo(String(entry.uri ?? ""), uri)?.split("/").length === 1)
+        .map((/** @type {any} */ entry) => ({ name: String(entry.uri).slice(uri.length + 1), kind: entry.isDir === true ? "dir" : "file", size: Number(entry.size) || 0 }))
         .filter((/** @type {{ name: string }} */ entry) => entry.name && !entry.name.startsWith("."))
         .sort((/** @type {{ name: string, kind: string }} */ left, /** @type {{ name: string, kind: string }} */ right) => (left.kind === right.kind ? (left.name < right.name ? -1 : 1) : left.kind === "dir" ? -1 : 1));
       if (!listed.length) await nothingAt();

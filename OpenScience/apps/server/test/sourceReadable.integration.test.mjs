@@ -1,13 +1,15 @@
-// A knowledge-base document can be used as soon as it is read (2026-09-24).
+// A knowledge-base document can be used as soon as it is read (2026-09-24),
+// and is finished then (2026-10-13).
 //
-// Until then a PDF — structured depth by default — stayed `parsing` for the
-// whole understanding run that follows its few-second parse: one to four
+// Until 2026-09-24 a PDF — structured depth by default — stayed `parsing` for
+// the whole understanding run that follows its few-second parse: one to four
 // minutes, one document at a time per account. Its text was captured after the
 // parse but written out, and so searchable, only once the understanding ended;
-// every stage showed the same spinner. These tests drive the real worker, the
-// real source service, the real index and the real routes over PostgreSQL,
-// with the understanding run held back, and read what the page and the search
-// see in between.
+// every stage showed the same spinner. Until 2026-10-13 its record still said
+// `parsing` for all that time, and `failed` when the understanding could not
+// run. These tests drive the real worker, the real source service, the real
+// index and the real routes over PostgreSQL, with the understanding run held
+// back, and read what the record, the page and the search see in between.
 import assert from "node:assert/strict";
 import { access } from "node:fs/promises";
 import path from "node:path";
@@ -51,7 +53,10 @@ test("a document is searchable and listed as read while its understanding still 
       if (source.payload.analysis?.readAt) break;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
-    assert.equal(source.payload.status, "parsing", "the pipeline still has the understanding to do");
+    assert.equal(source.payload.status, "complete", "the document's outcome is decided when its text is in");
+    assert.equal(source.payload.error, null);
+    assert.deepEqual([source.payload.understanding.state, source.payload.understanding.generation], ["pending", source.payload.generation],
+      "the understanding is still to come, as a fact of its own");
     assert.equal(typeof source.payload.analysis.readAt, "string");
     assert.match(source.payload.outputs.artifactPath, /^knowledge-base\/\.evimed-derived\/src_[a-f0-9]{32}\/read-1-.+\/index\.md$/);
     await access(path.join(project.baseDir, source.payload.outputs.artifactPath));
@@ -74,18 +79,23 @@ test("a document is searchable and listed as read while its understanding still 
     assert.equal(found.hits[0]?.sourceId, registered.id, JSON.stringify(found));
     assert.match(found.hits[0].path, /\/read-1-.+\/index\.md$/);
 
-    // The understanding fails for good: the document was read, and stays usable.
+    // The understanding fails for good: the document was read, stays usable and is not failed; what failed is said where
+    // it belongs, on the understanding.
     app.sourceWorker.understandingRuns = { execute: async () => { throw Object.assign(new Error("invalid"), { code: "source_understanding_invalid" }); } };
     await app.store.database.query(`UPDATE evimed_product.jobs SET run_after=clock_timestamp() WHERE user_id=$1 AND kind='ingest' AND status='queued'`, [user.id]);
     let failed;
     for (let attempt = 0; attempt < 40; attempt += 1) {
       await app.sourceWorker.tick();
       failed = await app.sourceService.get(user.id, registered.id);
-      if (failed.payload.status === "failed") break;
+      if (failed.payload.understanding?.state === "failed") break;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
-    assert.equal(failed.payload.status, "failed");
-    assert.equal(failed.payload.error.code, "source_understanding_invalid");
+    assert.equal(failed.payload.status, "complete");
+    assert.equal(failed.payload.error, null);
+    assert.deepEqual([failed.payload.understanding.state, failed.payload.understanding.code], ["failed", "source_understanding_invalid"]);
+    assert.equal(failed.payload.currentUnderstandingId, null);
+    const job = await app.store.database.query(`SELECT status FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest' AND payload->>'sourceId'=$2`, [user.id, registered.id]);
+    assert.deepEqual(job.rows.map((row) => row.status), ["succeeded"], "the job ended with the document, not as a failure");
     assert.deepEqual((await listed(base, headers, project.id, "ready")).map((item) => item.id), [registered.id]);
     assert.deepEqual(await listed(base, headers, project.id, "attention"), [], "a failed understanding is not a document that needs the researcher");
     await access(path.join(project.baseDir, failed.payload.outputs.artifactPath));

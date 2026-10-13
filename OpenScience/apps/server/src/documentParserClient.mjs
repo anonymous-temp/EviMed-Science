@@ -330,7 +330,11 @@ export class DocumentParserClient {
       // a position of their own, they leave the whole-file read below where it starts.
       const sample = Buffer.alloc(Math.min(stat.size, SOURCE_TEXT_SAMPLE_BYTES));
       await handle.read(sample, 0, sample.length, 0);
-      const limit = sourceReadRoute(filename, sample) === "local" ? this.maxTextBytes : this.maxUploadBytes;
+      const route = sourceReadRoute(filename, sample);
+      // Nothing to read it with is the answer whatever its size: a file no parser here takes is not made readable by
+      // being split.
+      if (route === "engine" && typeof input.engine !== "function") throw parserError(415, "source_format_unsupported", "Nothing here parses this document format.");
+      const limit = route === "local" ? this.maxTextBytes : this.maxUploadBytes;
       if (stat.size > limit) throw parserError(413, "source_parser_input_too_large", "The source exceeds the parser's size limit.");
       bytes = await handle.readFile();
     } finally { await handle.close(); }

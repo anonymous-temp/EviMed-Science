@@ -263,7 +263,9 @@ export class SourceIngestionWorker {
             // is an engine: staged under the document's own id, read back as Markdown, removed.
             engine: this.engineParser ? (/** @type {any} */ document) => this.engineParser(job.userId, { ...document, token: processing.id }) : null,
           });
-          if (!String(result.text ?? "").trim()) original = "source_original_no_text";
+          // Read, and nothing in it. A parse that says it could not read a page (a scan whose OCR failed) is not that:
+          // it is a text read only in part, captured and said as such (`needs_attention`), with a retry that may do better.
+          if (!String(result.text ?? "").trim() && !result.units?.some((/** @type {any} */ unit) => unit?.status === "failed")) original = "source_original_no_text";
           // The tables, cells and pages of what was just parsed, under the same
           // cancellation and lease checks as the parse. A failure here is the
           // ledger's (`coverage.materials`), never the ingestion's: only the

@@ -37,7 +37,7 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
     stateStore: "postgres", requireSharedStateStore: true, databaseUrl, sourceIngestionEnabled: true, sourceIngestionPollMs: 100, sourceIngestionLeaseMs: 5000,
     memoryIndexProvider: "builtin", ovKnowledgeEnabled: true, openVikingClient: client, knowledgePagesDebounceMs: 0, knowledgePagesMinSources: 2, knowledgePagesPollMs: 100,
-    kbSearchEnabled: false });
+    kbSearchEnabled: false, operatorMetricsToken: "knowledge-metrics-token" });
   const username = `kp${randomUUID().slice(0, 8)}`;
   let user;
   let listening = false;
@@ -300,6 +300,17 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     await syncSources();
     assert.ok(engine.text(`${roots.sources}/${offline}.md`));
     assert.ok(app.knowledgePages.status().rounds >= 5);
+
+    // ---- 10. what readiness and the operator metrics say of it ----------------------------------------------------------
+    const ready = await (await fetch(`${base}/api/ready`)).json();
+    const knowledge = ready.data.checks.memoryIndex.knowledge;
+    assert.ok(knowledge.pages.enabled && knowledge.pages.rounds >= 5 && knowledge.pages.pagesMirrored >= 6 && knowledge.pages.limited >= 1);
+    assert.ok(knowledge.sources.enabled && knowledge.sources.pushed >= 5 && knowledge.sources.removed >= 2);
+    assert.ok(knowledge.resources.configured && knowledge.resources.compiles >= 5);
+    const metrics = await (await fetch(`${base}/api/ops/metrics`, { headers: { authorization: "Bearer knowledge-metrics-token" } })).text();
+    for (const line of [/^open_science_knowledge_compile_total\{event="round"\} [5-9]/m, /^open_science_knowledge_compile_total\{event="page_limit"\} [1-9]/m,
+      /^open_science_knowledge_source_sync_total\{outcome="pushed"\} [5-9]/m, /^open_science_knowledge_mirror_total\{event="blocks_restored"\} [1-9]/m,
+      /^open_science_knowledge_compile_tokens_total [1-9]/m]) assert.match(metrics, line);
   } finally {
     // The account goes with everything filed under it, its queued jobs included (a job left behind is claimed by the next
     // run's worker, which takes jobs of any account) — before the app closes its database pool.

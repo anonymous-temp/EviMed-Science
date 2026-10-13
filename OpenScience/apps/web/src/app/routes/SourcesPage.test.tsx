@@ -532,18 +532,20 @@ describe("知识库", () => {
       expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["上传文件", "添加网页链接", "新建笔记"]);
     });
 
-    it("uploads into the project the page lists, says the formats only to a file it refuses, and reads what it uploaded", async () => {
+    it("uploads into the project the page lists whatever each file is, refuses none by its name, and reads what it uploaded", async () => {
+      // 2026-10-13: a recording is kept as an original like any other file; until then it was refused here by its name.
       const files = [new File(["x"], "a.pdf"), new File(["x"], "b.wav")];
       mocks.pickFiles.mockResolvedValue(files);
-      mocks.uploadFilesToWorkspace.mockResolvedValue(["knowledge-base/a.pdf"]);
+      mocks.uploadFilesToWorkspace.mockResolvedValue(["knowledge-base/a.pdf", "knowledge-base/b.wav"]);
       renderPage();
       await userEvent.click(await screen.findByRole("button", { name: "范围：我的研究" }));
       await userEvent.click(await screen.findByRole("menuitemradio", { name: "疳证 Meta 文献检索" }));
       await userEvent.click(await screen.findByRole("button", { name: "添加" }));
       await userEvent.click(await screen.findByRole("menuitem", { name: "上传文件" }));
-      await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith([files[0]], "knowledge-base", "base", "paper-1"));
-      expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("b.wav（音视频暂不支持）"));
-      expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 1 个文件");
+      await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith(files, "knowledge-base", "base", "paper-1"));
+      expect(mocks.pickFiles).toHaveBeenCalledWith("");
+      expect(mocks.toastError).not.toHaveBeenCalled();
+      expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 2 个文件");
     });
 
     it("adds to the project the tab is in from the shared scope, and shows it there", async () => {

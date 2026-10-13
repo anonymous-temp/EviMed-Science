@@ -33,14 +33,19 @@ import { materialsRecordIds, materialsRecords } from "./sourceMaterials.mjs";
  * the text is in, and the understanding is a background enhancement with a
  * state of its own (`payload.understanding`) that holds nothing back.
  *
- * The second clause reads the records written before that: text in, status
+ * The last clause reads the records written before that: text in, status
  * still the understanding's. The repair cycle moves them over
  * (`reconcileJobs`). A generation the source has moved past (retry, override,
  * cancel) is not readable until it is read again.
+ *
+ * A document kept as an original (`payload.original`, `SOURCE_ORIGINAL_CODES`)
+ * is finished and is not readable: it is listed and opened, and there is no
+ * text of it to search, to name with 「@知识库」, to push or to compile.
  * @param {any} payload a source record's payload
  */
 export function sourceReadable(payload) {
   const status = payload?.status;
+  if (payload?.original && payload.original.generation === payload.generation) return false;
   if (status === "complete" || status === "needs_attention") return true;
   return (status === "parsing" || status === "failed") && typeof payload?.analysis?.readAt === "string"
     && payload.analysis.generation === payload.generation;
@@ -72,8 +77,8 @@ const UNDERSTANDING_PENDING_SQL = `(d.payload->>'status' IN ('complete','needs_a
 
 /**
  * A document's state in the page's three words, or `unavailable` for one that
- * cannot be used and is not going to be read (canceled, removed at its origin).
- * The JS twin of `SOURCE_STATE_SQL` for a caller that already holds the record;
+ * cannot be used and is not going to be read (canceled, removed at its origin,
+ * kept as an original with no text). The JS twin of `SOURCE_STATE_SQL` for a caller that already holds the record;
  * a document read in part is `attention`, as the page says it, even though its
  * text is usable.
  * @param {any} payload a source record's payload
@@ -90,10 +95,11 @@ export function sourceStateOf(payload) {
 
 /** The SQL twin of `sourceReadable`, over a source row aliased `d`. A document that failed before its text was captured has
  *  no `analysis` at all, so each comparison is held to false rather than left unknown: an unknown under `NOT` is unknown,
- *  and that document was in none of the page's states. */
-export const SOURCE_READABLE_SQL = `(d.payload->>'status' IN ('complete','needs_attention')
+ *  and that document was in none of the page's states. A record with no `original` (or a null one) is held the same way. */
+export const SOURCE_READABLE_SQL = `((d.payload->>'status' IN ('complete','needs_attention')
   OR (d.payload->>'status' IN ('parsing','failed') AND coalesce(jsonb_typeof(d.payload->'analysis'->'readAt')='string',false)
-    AND coalesce(d.payload->'analysis'->'generation'=d.payload->'generation',false)))`;
+    AND coalesce(d.payload->'analysis'->'generation'=d.payload->'generation',false)))
+  AND NOT coalesce(d.payload->'original'->'generation'=d.payload->'generation',false))`;
 
 /**
  * What the knowledge base page filters by, in the words a row says it:
@@ -2172,8 +2178,9 @@ export class SourceService {
         { expectedRevision: row.revision, projectId: row.project_id });
       } catch (error) { if (!isConflict(error)) throw error; }
     }
+    // A document being read, or read and waiting for its understanding, that no job of its generation names any more.
     const result = await database.query(`SELECT user_id,id,project_id,payload,revision FROM evimed_product.documents d
-      WHERE kind='source' AND deleted_at IS NULL AND payload->>'status'=ANY($1::text[])
+      WHERE kind='source' AND deleted_at IS NULL AND (payload->>'status'=ANY($1::text[]) OR ${UNDERSTANDING_PENDING_SQL})
       AND NOT EXISTS (SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=d.user_id AND j.kind='ingest'
         AND j.payload->>'action' IS NULL
         AND j.payload->>'sourceId'=d.id AND j.payload->>'sourceGeneration'=d.payload->>'generation')

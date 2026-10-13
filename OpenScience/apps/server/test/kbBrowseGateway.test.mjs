@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { knowledgeGraphToGraph } from "@evimed/domain";
 
-import { KB_BROWSE_GATEWAY_PATH, createKbBrowseGatewayHandler, kbBrowseGatewayProviderUrl } from "../src/kbBrowseGateway.mjs";
+import { KB_BROWSE_GATEWAY_PATH, KB_BROWSE_OPS, KB_BROWSE_ROOTS, createKbBrowseGatewayHandler, kbBrowseGatewayProviderUrl } from "../src/kbBrowseGateway.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { openVikingUserId } from "../src/openVikingLayout.mjs";
 import { OpenVikingResources } from "../src/openVikingResources.mjs";
@@ -247,6 +247,14 @@ test("read gives a page by lines, its documents by id and title, and no address"
   const links = await ok({ op: "read", path: "entity/links.md" });
   assert.match(links.text, /\[协议\]\(wiki:concept\/盘点差异率\.md\)/);
   assert.match(links.text, /\[别处\]\(\(internal address omitted\)\)/);
+  // A root counts whole: a tree whose name merely begins like one is not that root.
+  stub.put(`${roots.wiki}/entity/older.md`, `---\ntype: entity\ntitle: 旧版\n---\n\n见 [旧页](${roots.wiki}-q1/concept/x.md)。\n`);
+  assert.match((await ok({ op: "read", path: "entity/older.md" })).text, /\[旧页\]\(\(internal address omitted\)\)/);
+  // A graph entity cites documents in its front matter by address and in its body by bare id: both are named.
+  const person = await ok({ op: "read", root: "kg", path: "entities/周岚.md" });
+  assert.equal(person.title, "周岚");
+  assert.ok(person.documents.some((document) => document.sourceId === "src_df149068671ff3e8a5ee48080b0c967a"), "the id only the body cites");
+  assert.ok(person.documents.some((document) => document.sourceId === KICKOFF && document.title === TITLES[KICKOFF]));
 
   const missing = await call({ op: "read", path: "concept/不存在.md" });
   assert.deepEqual([missing.status, missing.body.code], [404, "kb_browse_not_found"]);
@@ -447,4 +455,13 @@ test("the runtime learns the route only when the knowledge switch is on, an engi
   assert.equal(kbBrowseGatewayProviderUrl({ ...on, openVikingUrl: "" }), "");
   assert.equal(kbBrowseGatewayProviderUrl({ ...on, kbSearchGatewayInternalUrl: "http://user:fake@host/internal/kb/v1/search" }), "");
   assert.equal(kbBrowseGatewayProviderUrl({ ...on, kbSearchGatewayInternalUrl: "not a url" }), "");
+});
+
+test("the runtime's tool offers exactly the operations and roots this gateway takes", async () => {
+  const tool = await readFile(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../runtime/mcp/evimed-research/kb_browse.py"), "utf8");
+  /** @param {string} name */
+  const tuple = (name) => [...(new RegExp(`^${name} = \\(([^)]*)\\)`, "m").exec(tool)?.[1] ?? "").matchAll(/"([a-z]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(tuple("OPS"), [...KB_BROWSE_OPS]);
+  assert.deepEqual(tuple("ROOTS"), [...KB_BROWSE_ROOTS]);
+  assert.match(tool, /EVIMED_KB_BROWSE_GATEWAY_URL/);
 });

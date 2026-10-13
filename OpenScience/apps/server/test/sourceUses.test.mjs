@@ -66,6 +66,22 @@ test("a search and a read of one document are two kinds of use, and what is not 
   assert.deepEqual(uses.map((use) => [use.sourceId, use.kind]).sort(), [[A, "read"], [A, "search"]].sort());
 });
 
+test("a document read through kb_browse is a read and its grep lines are passages; a page, the graph or a listing names documents without using them", () => {
+  const uses = sourceUsesFromMessages([
+    tool("mcp__evimed__kb_browse", { op: "read", root: "sources", path: `${A}.md` }, searchOutput({ op: "read", root: "sources", path: `${A}.md`, sourceId: A, text: "利伐沙班" }), { completedAt: 2_000 }),
+    tool("mcp__evimed__kb_browse", { op: "read", root: "library", path: `${B}.md` }, searchOutput({ op: "read", root: "library", path: `${B}.md`, sourceId: B, text: "x" }), { completedAt: 3_000 }),
+    tool("mcp__evimed__kb_browse", { op: "grep", root: "sources", pattern: "20 mg" }, searchOutput({ op: "grep", root: "sources",
+      matches: [{ path: `${A}.md`, sourceId: A, line: 3, text: "20 mg" }, { path: `${A}.md`, sourceId: A, line: 9, text: "20 mg qd" }] }), { completedAt: 4_000 }),
+    tool("mcp__evimed__kb_browse", { op: "read", path: "concept/x.md" }, searchOutput({ op: "read", root: "wiki", path: "concept/x.md", text: `[纪要](source:${C})`, documents: [{ sourceId: C }] })),
+    tool("mcp__evimed__kb_browse", { op: "grep", pattern: "x" }, searchOutput({ op: "grep", root: "wiki", matches: [{ path: "concept/x.md", line: 1, text: `source:${C}` }], documents: [{ sourceId: C }] })),
+    tool("mcp__evimed__kb_browse", { op: "overview", root: "sources" }, searchOutput({ op: "overview", root: "sources", documents: [{ sourceId: C, path: `${C}.md` }] })),
+    tool("mcp__evimed__kb_browse", { op: "list", root: "sources" }, searchOutput({ op: "list", root: "sources", entries: [{ sourceId: C, path: `${C}.md`, kind: "file" }] })),
+    tool("mcp__evimed__kb_browse", { op: "read", root: "sources", path: `${C}.md` }, "unavailable"),
+  ]);
+  assert.deepEqual(uses.map((use) => [use.sourceId, use.kind, use.count, use.firstUsedAt]).sort(),
+    [[A, "read", 1, 2_000], [A, "search", 1, 4_000], [B, "read", 1, 3_000]].sort());
+});
+
 test("a call with no time of its own takes the message's, then the one the caller gives", () => {
   const [byMessage] = sourceUsesFromMessages([{ role: "assistant", time: 4_000, parts: [{ type: "tool", tool: "read", status: "completed", input: { file_path: derived(A) } }] }], 99);
   assert.equal(byMessage.firstUsedAt, 4_000);

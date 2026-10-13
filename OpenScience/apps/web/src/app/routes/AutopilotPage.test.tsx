@@ -723,12 +723,17 @@ describe("scheduled tasks", () => {
       expect(mocks.startAgenda).not.toHaveBeenCalled(); expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
       await waitFor(() => expect(mocks.getResearchState.mock.calls.length).toBeGreaterThan(1));
     });
-    it("says a format the knowledge base cannot read is not added, and adds nothing", async () => {
-      files.pickFiles.mockResolvedValue([new File(["x"], "talk.mp4", { type: "video/mp4" })]);
+    it("adds a recording as material like any other file: nothing is refused for its format", async () => {
+      // 2026-10-13: the knowledge base keeps every file — a recording as an original — so none is turned away here by its name.
+      const file = new File(["x"], "talk.mp4", { type: "video/mp4" });
+      files.pickFiles.mockResolvedValue([file]); files.uploadFilesToWorkspace.mockResolvedValue(["knowledge-base/talk.mp4"]); files.sha256Hex.mockResolvedValue("b".repeat(64));
+      mocks.addAgendaMaterials.mockResolvedValue({ ...agenda, revision: 3, payload: { ...agenda.payload, materials: [{ sourceId: "src_b", addedAt: "2026-10-04T01:00:00Z" }] } });
       render(); await choose(await within(await barElement()).findByRole("button", { name: "更多" }), "研究进展");
       await userEvent.click(await within(await screen.findByRole("dialog", { name: "研究进展" })).findByRole("button", { name: "添加材料" }));
-      expect(await within(bar()).findByRole("alert")).toHaveTextContent("没有添加：talk.mp4");
-      expect(files.uploadFilesToWorkspace).not.toHaveBeenCalled(); expect(mocks.addAgendaMaterials).not.toHaveBeenCalled();
+      await waitFor(() => expect(mocks.addAgendaMaterials).toHaveBeenCalledWith(agenda.id, { sha256: ["b".repeat(64)] }));
+      expect(files.pickFiles).toHaveBeenCalledWith("");
+      expect(files.uploadFilesToWorkspace).toHaveBeenCalledWith([file], "knowledge-base", "base");
+      expect(bar()).not.toHaveTextContent("没有添加");
     });
   });
 

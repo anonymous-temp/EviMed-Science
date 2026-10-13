@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  ERROR_CODE_MESSAGES,
   SOURCE_API_FORMATS,
   SOURCE_CODE_FORMATS,
   SOURCE_LOCAL_TEXT_FORMATS,
   SOURCE_MEDIA_FORMATS,
   SOURCE_ORIGINAL_CODES,
   SOURCE_TEXT_SAMPLE_BYTES,
+  knownErrorCodeMessage,
   normalizeSourcePageMap,
   normalizeSourceText,
   sourceBytesAreText,
@@ -96,11 +96,12 @@ test("the first pass names code as code, a message as a message, and reads nothi
 test("every reason a document is kept without text has a sentence a person can read", () => {
   assert.deepEqual([...SOURCE_ORIGINAL_CODES], ["source_original_media", "source_original_unread", "source_original_engine_failed", "source_original_no_text"]);
   for (const code of SOURCE_ORIGINAL_CODES) {
-    assert.match(ERROR_CODE_MESSAGES[code] ?? "", /原件/, code);
-    assert.doesNotMatch(ERROR_CODE_MESSAGES[code], /[「」]/, code);
+    const sentence = knownErrorCodeMessage(code) ?? "";
+    assert.match(sentence, /原件/, code);
+    assert.doesNotMatch(sentence, /[「」]/, code);
   }
   // The upload refusal that named recordings is gone with the refusal.
-  assert.equal(ERROR_CODE_MESSAGES.source_media_unsupported, undefined);
+  assert.equal(knownErrorCodeMessage("source_media_unsupported"), null);
 });
 
 test("a page map moves with the characters normalization removes, and only those", () => {

@@ -4,10 +4,12 @@
  * The knowledge base never knew. A run consults a document in two ways and neither left a record against it:
  *
  *  - **A search hit.** `kb_search` answers with passages, each naming the document it came from. Only when the library is
- *    large enough to search: a small one is answered with the files to read, which is the second way.
+ *    large enough to search: a small one is answered with the files to read, which is the second way. The lines
+ *    `kb_browse` finds in documents with `grep` are passages of them too.
  *  - **A direct read.** A run opens the document's parsed text itself — `read`, `grep` or a shell command on
  *    `.evimed-knowledge/.evimed-derived/<source id>/…` (a project's document) or `library/<source id>/…` (the personal
- *    library's copy). This is what every run over a small library does, and no gateway sees it.
+ *    library's copy). This is what every run over a small library does, and no gateway sees it. Or it reads the document
+ *    through `kb_browse`, whose answer names it.
  *
  * Both are read off the run's own transcript at the moment the run finishes, from the same collected sessions the
  * transcript file, the pages-read list and the method counters are written from. The gateway cannot do it alone: its token
@@ -16,7 +18,8 @@
  * transcript (`sourceUsesFromMessages`) and why recording it twice is the same as recording it once.
  *
  * What is NOT counted, on purpose: a source listed in a small-library answer (a list of files is an offer, not a use), a
- * directory listing, and a `grep -r` over the whole knowledge-base directory (it names no document). A document a run read
+ * directory listing, and a `grep -r` over the whole knowledge-base directory (it names no document); nor a compiled page or
+ * the graph read through `kb_browse`, which name documents the way a list does. A document a run read
  * but whose path never named it is missed; the page says what it has, never that nothing used the document.
  *
  * @module sourceUses
@@ -109,6 +112,20 @@ export function sourceUsesFromMessages(messages, fallbackAt = Date.now()) {
           if (SOURCE_ID_EXACT.test(id)) named.add(id);
         }
         for (const id of named) note(id, "search", at);
+        continue;
+      }
+      if (mcpToolBaseName(tool) === "kb_browse") {
+        // A document read through the browse tool answers with its id; a page of the wiki or the graph has none.
+        const data = parsedResult(part.output)?.data;
+        if (data?.op === "read" && SOURCE_ID_EXACT.test(String(data.sourceId ?? ""))) note(data.sourceId, "read", at);
+        if (data?.op === "grep") {
+          const named = new Set();
+          for (const match of Array.isArray(data.matches) ? data.matches : []) {
+            const id = typeof match?.sourceId === "string" ? match.sourceId : "";
+            if (SOURCE_ID_EXACT.test(id)) named.add(id);
+          }
+          for (const id of named) note(id, "search", at);
+        }
         continue;
       }
       if (!READ_TOOLS.has(tool)) continue;
