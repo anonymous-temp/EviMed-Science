@@ -58,7 +58,7 @@ export interface EpisodePayload {
   artifactRefs?: AutopilotArtifactRef[]; claims?: DigestClaim[];
   resourceDeferrals?: Record<string, { code: string; status: "waiting" | "exhausted"; retryAt?: string | null } | null>;
   /** What the episode was chosen to do: by the model from the progress, or by the date rotation when the model could not be asked. */
-  selection?: { source: "model" | "date-rotation"; taskType: string; focus?: string; reason?: string; fallbackReason?: string; priority?: "normal" | "reduced" } | null;
+  selection?: { source: "model" | "date-rotation" | "only-choice"; taskType: string; focus?: string; reason?: string; fallbackReason?: string; priority?: "normal" | "reduced" } | null;
   error?: { code: string } | null; createdAt: string; updatedAt: string }
 export type EpisodeRecord = ProductRecord<EpisodePayload> & { projectId: string };
 export type AgendaRecord = ProductRecord<AgendaPayload> & { projectId: string };
