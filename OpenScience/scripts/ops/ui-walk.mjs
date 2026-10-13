@@ -1058,9 +1058,9 @@ export function pageProbe([kind, arg]) {
     };
   }
   if (kind === "inboxSafety") {
-    const heading = all("h2").map(words).map((text) => /^涉及临床安全 · 未读 (\d+) 条$/.exec(text)).find(Boolean);
+    const heading = all("h2").map(words).map((text) => /^需要优先查看 · 未读 (\d+) 条$/.exec(text)).find(Boolean);
     const bell = [...document.querySelectorAll("button[aria-label], a[aria-label]")].map((el) => el.getAttribute("aria-label") ?? "").find((label) => label.startsWith("收件箱"));
-    return { heading: heading ? Number(heading[1]) : null, bell: bell === undefined ? null : Number(/其中 (\d+) 条涉及临床安全/.exec(bell)?.[1] ?? 0) };
+    return { heading: heading ? Number(heading[1]) : null, bell: bell === undefined ? null : Number(/其中 (\d+) 条需要优先查看/.exec(bell)?.[1] ?? 0) };
   }
   if (kind === "feishuRows") {
     return { rows: all("*").filter((el) => ownText(el) === "飞书").length };

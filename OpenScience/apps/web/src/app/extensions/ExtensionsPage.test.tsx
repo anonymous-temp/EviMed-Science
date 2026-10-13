@@ -245,7 +245,7 @@ it("a list that cannot be read says so with a way to try again, and the reader's
 it("the plugins tab lists what a conversation works with and the engines, each with only what is true of it", async () => {
   open("/app/extensions/plugins");
   const tools = await screen.findByRole("region", { name: "对话里的工具" });
-  for (const name of ["文献引用核对", "医学研究工具集", "网页阅读", "划词批注", "Mermaid 图表"]) expect(within(tools).getByText(name)).toBeInTheDocument();
+  for (const name of ["文献引用核对", "内置工具集", "网页阅读", "划词批注", "Mermaid 图表"]) expect(within(tools).getByText(name)).toBeInTheDocument();
   expect(within(tools).getAllByText("始终开启")).toHaveLength(4);
   expect(within(tools).getByRole("switch", { name: "在当前项目里使用文献引用核对" })).toBeChecked();
   const engines = screen.getByRole("region", { name: "计算引擎" });
@@ -291,8 +291,8 @@ it("a citation setting that took, or is still on its way, says nothing of the ki
 
 it("the research tool set opens on its tools by group, one sentence each, with no tool name", async () => {
   open("/app/extensions/plugins");
-  await userEvent.click(await screen.findByRole("button", { name: "医学研究工具集" }));
-  const drawer = await screen.findByRole("dialog", { name: "医学研究工具集" });
+  await userEvent.click(await screen.findByRole("button", { name: "内置工具集" }));
+  const drawer = await screen.findByRole("dialog", { name: "内置工具集" });
   expect(within(drawer).getByText("提供的工具 · 54 个")).toBeInTheDocument();
   expect(within(drawer).getByText("文献与指南检索")).toBeInTheDocument();
   expect(within(drawer).getByText("按关键词在 PubMed 里查论文。")).toBeInTheDocument();

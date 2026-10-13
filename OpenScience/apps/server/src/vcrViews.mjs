@@ -368,7 +368,7 @@ export function attentionOf({ comparators, results, allResults, stale, jobs, ste
     lines.push({ kind: "allowance_waiting", tone: "attention", tab: null, waiting: wallet,
       text: allowanceWaiting.length === 1
         ? allowanceWaitingSentence(label(allowanceWaiting[0]), wallet)
-        : `${allowanceWaiting.length} 个步骤在等${wallet === "simulated_allowance" ? "模拟" : "科研"}额度，${wallet === "simulated_allowance" ? "模拟充值" : "充值"}后会自动开始。`,
+        : `${allowanceWaiting.length} 个步骤在等${wallet === "simulated_allowance" ? "模拟" : ""}额度，${wallet === "simulated_allowance" ? "模拟充值" : "充值"}后会自动开始。`,
       items: allowanceWaiting.map(label) });
   }
   // An export that ended with no document is said the way a step that did not finish is: its row alone read

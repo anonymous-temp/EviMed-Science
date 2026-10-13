@@ -104,7 +104,7 @@ describe("the web app manifest", () => {
   });
 
   it("describes the product in words it still uses (appendix E #19)", () => {
-    expect(manifest.description).toBe("向 EviMed 提问、发起研究，在手机上查看报告");
+    expect(manifest.description).toBe("向 EviMed 提问、交办任务，在手机上查看结果");
     expect(manifest.description).not.toContain("运行记录");
   });
 });

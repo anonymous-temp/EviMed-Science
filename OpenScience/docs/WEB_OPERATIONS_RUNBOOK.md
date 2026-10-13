@@ -1617,7 +1617,7 @@ finds). A refused billing configuration (including a simulated wallet without
 `/api/ready`, never a red one.
 
 What a researcher sees, every amount marked 「模拟」: the balance and month on 设置 →
-科研额度; an estimate on each tool of 科研工具; a charge per finished task and the
+额度; an estimate on each tool of 工具; a charge per finished task and the
 allowance and top-ups in the statements; a low-balance prompt at or below 20 credits;
 and recharge, membership, orders and refunds pages of the platform itself
 (`/app/account/simulated/*`; a top-up is one of four fixed packages, applied once per

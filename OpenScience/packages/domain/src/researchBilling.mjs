@@ -123,7 +123,7 @@ export function allowanceWaitingNote(waiting) {
  */
 export function allowanceWaitingSentence(stepName, waiting) {
   const simulated = waiting === 'simulated_allowance'
-  return `「${stepName}」这一步在等${simulated ? SIMULATED_WALLET_LABEL : '科研'}额度，${simulated ? '模拟充值' : '充值'}后会自动开始。`
+  return `「${stepName}」这一步在等${simulated ? SIMULATED_WALLET_LABEL : ''}额度，${simulated ? '模拟充值' : '充值'}后会自动开始。`
 }
 
 export const RESEARCH_MONEY_SCALE = 100_000_000n;

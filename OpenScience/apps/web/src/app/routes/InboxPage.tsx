@@ -194,7 +194,7 @@ export function InboxPage() {
       announceInboxChanged();
       // Safety findings are not read by a sweep: the sentence says so, and where they are.
       const kept = result?.safetyKept ?? 0;
-      toast.success(kept > 0 ? `已读 ${result?.updated ?? 0} 条；涉及临床安全的 ${kept} 条请逐条查看。` : `已读 ${result?.updated ?? 0} 条。`);
+      toast.success(kept > 0 ? `已读 ${result?.updated ?? 0} 条；另有 ${kept} 条需要优先查看，请逐条处理。` : `已读 ${result?.updated ?? 0} 条。`);
       await reload();
     } catch (caught) {
       setError(inboxErrorMessage(caught));
@@ -306,11 +306,11 @@ export function InboxPage() {
                 {order.pinned.length > 0 && (
                   <section aria-labelledby="inbox-pinned" className="mb-4">
                     <h2 id="inbox-pinned" className="mb-1 flex items-center gap-1.5 px-2 text-caption font-medium text-danger-strong">
-                      <ShieldAlert size={16} aria-hidden="true" />涉及临床安全 · 未读 {safetyUnread} 条
+                      <ShieldAlert size={16} aria-hidden="true" />需要优先查看 · 未读 {safetyUnread} 条
                     </h2>
-                    <List label="涉及临床安全">{order.pinned.map(row)}</List>
+                    <List label="需要优先查看">{order.pinned.map(row)}</List>
                     {safety?.cursor && (
-                      <Button variant="text" className="mt-1" loading={loadingSafety} onClick={() => void loadMoreSafety()}>显示更多涉及临床安全的消息</Button>
+                      <Button variant="text" className="mt-1" loading={loadingSafety} onClick={() => void loadMoreSafety()}>显示更多需要优先查看的消息</Button>
                     )}
                   </section>
                 )}

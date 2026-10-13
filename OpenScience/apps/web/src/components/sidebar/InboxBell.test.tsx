@@ -39,7 +39,7 @@ describe("the inbox bell", () => {
   it("changes shape and says so when an unread item is a clinical-safety finding", async () => {
     mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 3, safetyUnread: 1 });
     render(<MemoryRouter><InboxBell /></MemoryRouter>);
-    const bell = await screen.findByRole("button", { name: "收件箱，3 条未读，其中 1 条涉及临床安全" });
+    const bell = await screen.findByRole("button", { name: "收件箱，3 条未读，其中 1 条需要优先查看" });
     expect(bell).toHaveAttribute("data-safety", "true");
     expect(inboxBellLabel({ unreadTotal: 3, safetyUnread: 0 })).toBe("收件箱，3 条未读");
   });

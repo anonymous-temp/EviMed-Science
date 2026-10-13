@@ -1379,9 +1379,9 @@ test("the page probes read what a fix left behind: the folded rail, the empty �
 
   assert.deepEqual(read([node("a", { text: "回到记忆胶囊" }), node("h2", { text: "x" })], "sharedMissing"), { title: false, back: true, retry: false });
 
-  const bell = node("button", { attrs: { "aria-label": "收件箱，8 条未读，其中 3 条涉及临床安全" } });
+  const bell = node("button", { attrs: { "aria-label": "收件箱，8 条未读，其中 3 条需要优先查看" } });
   const bare = node("button", { attrs: { "aria-label": "收件箱，8 条未读" } });
-  const inbox = (button, count) => inPage(node("body", {}, [node("aside", {}, [button]), node("main", {}, [node("h2", { text: `涉及临床安全 · 未读 ${count} 条` })])]), () => pageProbe(["inboxSafety"]));
+  const inbox = (button, count) => inPage(node("body", {}, [node("aside", {}, [button]), node("main", {}, [node("h2", { text: `需要优先查看 · 未读 ${count} 条` })])]), () => pageProbe(["inboxSafety"]));
   assert.deepEqual(inbox(bell, 3), { heading: 3, bell: 3 });
   assert.deepEqual(inbox(bare, 0), { heading: 0, bell: 0 });
   assert.deepEqual(read([node("h2", { text: "收件箱" })], "inboxSafety"), { heading: null, bell: null });
