@@ -22,6 +22,7 @@ import { RouteError } from "./routes/RouteError";
 const SessionRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.SessionRoute })));
 const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({ default: m.KnowledgePage })));
 const SourceReaderPage = lazy(() => import("./routes/SourceReaderPage").then((m) => ({ default: m.SourceReaderPage })));
+const KnowledgeOpenPage = lazy(() => import("./routes/KnowledgeOpenPage").then((m) => ({ default: m.KnowledgeOpenPage })));
 const GalleryPage = lazy(() => import("./routes/GalleryPage").then((m) => ({ default: m.GalleryPage })));
 const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({ default: m.AutopilotPage })));
 const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
@@ -114,6 +115,8 @@ export const routes: RouteObject[] = [
         // (`files/:sourceId`) — the original beside what it says. A link by `?source=<id>` is answered by the list, which
         // sends it to the document's page.
         { path: "files", element: <KnowledgePage /> },
+        // A compiled file named by its place (a mark of the memory map, a link from outside): it goes to the document's page.
+        { path: "files/open", element: <KnowledgeOpenPage /> },
         { path: "files/:sourceId", element: <SourceReaderPage /> },
         // 「定时任务」: the list at `/app/autopilot`, one task and its conversation at `/app/autopilot/:taskId`. One route, with or
         // without the id, so opening a task from the list is not a remount (the kernel's frame is placed over the task's pane

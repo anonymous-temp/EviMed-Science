@@ -19,6 +19,7 @@ import { headline, isThin, markRows, narrowMap, STRUCTURE } from "@/components/m
 import { useMapSelection } from "@/components/memory/map/useMapSelection";
 import { useMemoryMap } from "@/components/memory/map/useMemoryMap";
 import { formatDay } from "@/lib/format";
+import { knowledgeNodeAddress } from "@/lib/knowledgeNav";
 import { MAP_VIEWS, type MapEvent, type MapNode, type MapView } from "@/lib/memoryMapClient";
 import { useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
@@ -78,10 +79,15 @@ export function MemoryMapPage() {
     if (node.open?.kind === "record") drawer.open(`record:${node.open.id}`);
     else if (node.open?.kind === "method") drawer.open(`method:${node.open.id}`);
     else if (node.open?.kind === "page") navigate(node.open.href);
+    else if (node.type === "entity" || node.type === "page") {
+      // An entity or a page of the project's knowledge graph opens in the knowledge base's reader; a double press still centres the map on it.
+      const address = knowledgeNodeAddress(node.id, doc?.scope.projectId ?? selection.project);
+      if (address) navigate(address); else narrow({ focus: node.id });
+    }
     else if (node.type === "project") narrow({ project: node.projectId && node.projectId !== "__other" ? node.projectId : null });
     else if (node.type === "you") clear();
     else narrow({ focus: node.id });
-  }, [drawer, navigate, narrow, clear]);
+  }, [drawer, navigate, narrow, clear, doc, selection.project]);
   const focusNode = useCallback((node: MapNode) => { if (!STRUCTURE.has(node.type)) narrow({ focus: node.id }); }, [narrow]);
 
   const topicName = selection.topic ? doc?.facets.topics.find((topic) => topic.id === selection.topic)?.label ?? null : null;

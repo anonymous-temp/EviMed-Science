@@ -8,13 +8,15 @@ import { useProjectStore } from "@/lib/projects";
 import type { SourceDisplay, SourceRecord } from "@/lib/sourceClient";
 import type { SourceMaterialsLedger } from "@/lib/sourceMaterials";
 import { TWO_COLUMN_MIN_WIDTH } from "@/components/sources/useReaderBox";
+import knowledgePage from "@/components/sources/knowledgeFixtures/page-analysis-mine.json";
+import knowledgeStatus from "@/components/sources/knowledgeFixtures/status-compiled.json";
 import { SourceReaderPage } from "./SourceReaderPage";
 
 const mocks = vi.hoisted(() => ({
   getSource: vi.fn(), getSourceUnderstanding: vi.fn(), getSourceMaterials: vi.fn(), getSourceFamily: vi.fn(), getSourceUses: vi.fn(), getSourceDependents: vi.fn(),
   retrySource: vi.fn(), removeSource: vi.fn(), refetchSource: vi.fn(), getSourceNote: vi.fn(), saveSourceNote: vi.fn(),
   listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), addToLibrary: vi.fn(), removeFromLibrary: vi.fn(),
-  downloadArtifact: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(),
+  downloadArtifact: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(), getKnowledgePage: vi.fn(), getKnowledgeStatus: vi.fn(),
 }));
 const context = vi.hoisted(() => ({ projectId: "default" }));
 /** The width the page's own box reports, and the observers told when it changes: jsdom lays nothing out. */
@@ -22,7 +24,7 @@ const layout = vi.hoisted(() => ({ width: 1200, observers: new Set<() => void>()
 
 vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), ...Object.fromEntries(
   ["getSource", "getSourceUnderstanding", "getSourceMaterials", "getSourceFamily", "getSourceUses", "retrySource", "removeSource", "refetchSource", "getSourceNote", "saveSourceNote",
-    "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
+    "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary", "getKnowledgePage", "getKnowledgeStatus"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
 vi.mock("@/lib/knowledgeBaseClient", async (importOriginal) => ({ ...(await importOriginal<object>()), getSourceDependents: mocks.getSourceDependents }));
 vi.mock("@/lib/artifactFile", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadArtifact: mocks.downloadArtifact }));
 vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
@@ -265,6 +267,22 @@ describe("a document's page", () => {
       expect(intent.draft).toContain(`资料：${guideline.display.title}（src_guideline.pdf）`);
       expect(intent.draft.endsWith("我的问题：")).toBe(true);
       expect(intent.draft).not.toMatch(/src_guideline(?!\.pdf)|knowledge-base|\.evimed-derived|workspace/);
+    });
+
+    it("takes a knowledge page into a conversation together with the documents it cites", async () => {
+      const wiki = makeSource(knowledgePage.sourceId, { title: knowledgePage.title, origin: "wiki", kind: "wiki", format: "md", pages: null }, { paths: [`knowledge-base/wiki/${knowledgePage.path}`] });
+      mocks.getSource.mockResolvedValue({ ...wiki, projectId: "paper-1" });
+      mocks.getKnowledgePage.mockResolvedValue(knowledgePage);
+      mocks.getKnowledgeStatus.mockResolvedValue(knowledgeStatus);
+      renderReader(readerAt(knowledgePage.sourceId));
+      await screen.findByRole("heading", { name: "事实时间线" });
+      await userEvent.click(screen.getByRole("button", { name: "在对话中使用" }));
+      await waitFor(() => expect(selectSpy).toHaveBeenCalledWith("paper-1", expect.any(Function)));
+      const where = await screen.findByText("/app/chat");
+      const intent = JSON.parse(where.getAttribute("data-state")!).runtimeUiIntent;
+      expect(intent.draft).toContain("请阅读知识库里的这一页和它引用的资料");
+      expect(intent.draft).toContain(`页面：${knowledgePage.title}`);
+      expect(intent.references.map((entry: { id: string }) => entry.id)).toEqual([knowledgePage.sourceId, ...knowledgePage.sources.map((entry) => entry.sourceId)]);
     });
 
     it("uses a document opened from the shared scope in the project the tab is in", async () => {

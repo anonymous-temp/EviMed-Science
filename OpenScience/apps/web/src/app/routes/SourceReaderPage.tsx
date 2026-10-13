@@ -10,7 +10,7 @@ import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import {
   addToLibrary, decideDuplicateGroup, getSource, listDuplicateCandidates, refetchSource, removeFromLibrary, removeSource, retrySource,
-  type DuplicateGroup, type SourceRecord,
+  type DuplicateGroup, type KnowledgePage, type SourceRecord,
 } from "@/lib/sourceClient";
 import { toast } from "@/lib/toast";
 import { Button, buttonClasses } from "@/components/ui/Button";
@@ -28,6 +28,7 @@ import { SourceOriginal } from "@/components/sources/SourceOriginal";
 import { SourceQuotation } from "@/components/sources/SourceQuotation";
 import { sourceMenuItems } from "@/components/sources/SourceRow";
 import { KnowledgePageView } from "@/components/sources/KnowledgePageView";
+import { conversationReferences, knowledgeConversationDraft } from "@/components/sources/knowledgeView";
 import { conversationDraft, isEditableNote, isKnowledgePage, isReading, isUsable, originalPathOf, readerMeta } from "@/components/sources/sourceView";
 import { COLUMN_GAP, fitsTwoColumns, MIN_PANE_HEIGHT, POINTS_WIDTH, useReaderBox } from "@/components/sources/useReaderBox";
 
@@ -76,6 +77,8 @@ function SourceReader({ sourceId }: { sourceId: string }) {
   const [deleting, setDeleting] = useState(false);
   const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
+  // A knowledge page's cited documents, once the page is read: they go into a conversation with it.
+  const [knowledgePage, setKnowledgePage] = useState<KnowledgePage | null>(null);
   const { rootRef, bodyRef, box } = useReaderBox();
   const twoColumns = fitsTwoColumns(box.width);
 
@@ -164,9 +167,11 @@ function SourceReader({ sourceId }: { sourceId: string }) {
   const useInConversation = () => {
     if (!source) return;
     const target = listState.scope === SHARED_SCOPE ? currentProjectId : source.projectId;
+    const page = isKnowledgePage(source) ? knowledgePage : null;
     void select(target, () => {
       navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: {
-        ...newRuntimeUiIntent(conversationDraft(source)), references: [{ id: source.id, title: source.display.title }],
+        ...newRuntimeUiIntent(page ? knowledgeConversationDraft(source.display.title) : conversationDraft(source)),
+        references: conversationReferences({ id: source.id, title: source.display.title }, page?.sources ?? []),
       } } });
     }).catch((failure) => toast.error(webErrorMessage(failure)));
   };
@@ -241,7 +246,7 @@ function SourceReader({ sourceId }: { sourceId: string }) {
               action={<Link to={back} className={buttonClasses({ variant: "secondary" })}>回到知识库</Link>} />
           )}
           {loaded.phase === "error" && <LoadError message={loaded.message} onRetry={() => void load(false)} />}
-          {source && isKnowledgePage(source) && <KnowledgePageView source={source} onSaved={noteSaved} />}
+          {source && isKnowledgePage(source) && <KnowledgePageView source={source} onPage={setKnowledgePage} />}
           {source && !isKnowledgePage(source) && twoColumns && (
             <div className="flex h-full min-h-0" style={{ gap: COLUMN_GAP }}>
               <section aria-label="原文" data-reader-column="original" className="min-w-0 flex-1 overflow-hidden rounded-card border border-border bg-surface">{original}</section>

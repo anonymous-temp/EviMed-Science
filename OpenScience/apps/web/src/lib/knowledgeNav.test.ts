@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { legacySourceParam, listPath, readListState, readReaderView, readerPath, recallListPosition, rememberListPosition, scopeOf, scopeParam } from "./knowledgeNav";
+import { knowledgeNodeAddress, knowledgePath, legacySourceParam, listPath, readKnowledgeAddress, readListState, readReaderView, readerPath, recallListPosition, rememberListPosition, scopeOf, scopeParam } from "./knowledgeNav";
 
 const params = (search: string) => new URLSearchParams(search);
 const none = { scope: null, kind: null, q: "" } as const;
@@ -28,6 +28,20 @@ describe("the knowledge base's address", () => {
     expect(readListState(params("scope=shared&view=outputs"))).toEqual({ scope: "shared", kind: null, q: "" });
     expect(readListState(params("view=elsewhere"))).toEqual(none);
     expect(readerPath("src_abc", { scope: "paper-1", kind: null, q: "", view: "outputs" })).toBe("/app/files/src_abc?scope=paper-1&view=outputs");
+  });
+
+  it("writes the graph as a view of the 知识页, with the mark in focus and how far it reaches, and reads it back as untrusted", () => {
+    expect(listPath({ scope: "paper-1", kind: "wiki", q: "", view: "graph" })).toBe("/app/files?scope=paper-1&kind=wiki&view=graph");
+    expect(listPath({ scope: null, kind: "wiki", q: "", view: "graph", graph: "kg", focus: "trial-rocket-af", depth: 2 }))
+      .toBe("/app/files?kind=wiki&view=graph&graph=kg&focus=trial-rocket-af&depth=2");
+    expect(readListState(params("view=graph&graph=kg&focus=trial-rocket-af&depth=2")))
+      .toEqual({ scope: null, kind: "wiki", q: "", view: "graph", graph: "kg", focus: "trial-rocket-af", depth: 2 });
+    // The graph is always of the 知识页, wiki unless said otherwise, and a depth means something only beside a focus.
+    expect(readListState(params("view=graph&kind=table&graph=odd&depth=2"))).toEqual({ scope: null, kind: "wiki", q: "", view: "graph" });
+    expect(readListState(params("view=graph&focus=a&depth=9"))).toEqual({ scope: null, kind: "wiki", q: "", view: "graph", focus: "a" });
+    // The shared documents have no pages to draw.
+    expect(readListState(params("scope=shared&view=graph"))).toEqual({ scope: "shared", kind: null, q: "" });
+    expect(readerPath("src_abc", { scope: null, kind: "wiki", q: "", view: "graph", graph: "kg", focus: "x", depth: 3 })).toBe("/app/files/src_abc?kind=wiki&view=graph&graph=kg&focus=x&depth=3");
   });
 
   it("puts a document at its own address, carrying the list it was opened from and what it shows", () => {
@@ -95,5 +109,18 @@ describe("where the list was left", () => {
     } finally {
       Object.defineProperty(window, "sessionStorage", original);
     }
+  });
+
+  it("names a compiled file by its place, and a mark of the memory map by the file it comes from", () => {
+    expect(knowledgePath({ projectId: "p1", tree: "kg", path: "entities/trial-rocket-af.md" })).toBe("/app/files/open?project=p1&tree=kg&path=entities%2Ftrial-rocket-af.md");
+    expect(readKnowledgeAddress(params("project=p1&tree=wiki&path=concept%2FA.md"))).toEqual({ projectId: "p1", tree: "wiki", path: "concept/A.md" });
+    for (const bad of ["tree=kg&path=a.md", "project=p1&tree=other&path=a.md", "project=p1&tree=kg&path=..%2Fa.md", "project=p1&tree=kg&path=%2Fa.md", "project=p1&tree=kg&path="]) {
+      expect(readKnowledgeAddress(params(bad))).toBeNull();
+    }
+    expect(knowledgeNodeAddress("entity:trial-rocket-af", "p1")).toBe("/app/files/open?project=p1&tree=kg&path=entities%2Ftrial-rocket-af.md");
+    expect(knowledgeNodeAddress("page:concept/Alpha 协议.md", "p1")).toBe("/app/files/open?project=p1&tree=wiki&path=concept%2FAlpha+%E5%8D%8F%E8%AE%AE.md");
+    expect(knowledgeNodeAddress("entity:x", null)).toBeNull();
+    expect(knowledgeNodeAddress("memory:abc", "p1")).toBeNull();
+    expect(knowledgeNodeAddress("page:../secret.md", "p1")).toBeNull();
   });
 });

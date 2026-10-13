@@ -1,0 +1,304 @@
+{
+ "sourceId": "src_6d46b0d467d014b135346abcac8faaab",
+ "tree": "wiki",
+ "path": "concept/盘点差异率.md",
+ "type": "concept",
+ "title": "盘点差异率",
+ "description": "盘点差异率的定义、册数与金额两种口径的分歧、总部目标值，以及 2026-04-02 演练中的实测值。",
+ "tags": [
+  "盘点",
+  "差异率",
+  "验收指标",
+  "口径"
+ ],
+ "markdown": "---\ntype: concept\ntitle: 盘点差异率\ndescription: 盘点差异率的定义、册数与金额两种口径的分歧、总部目标值，以及 2026-04-02 演练中的实测值。\ntags: [盘点, 差异率, 验收指标, 口径]\n---\n\n# 盘点差异率\n\n盘点差异率是衡量门店盘点准确性的核心指标，也是甲方总部考核与验收的关键数字。本项目对该指标存在两个未完全统一的口径问题（按册还是按金额），并在 2026-04-02 演练中出现了异常实测值。\n\n## 定义\n\n系统约定：盘点差异 = 盘点数 − 账面数；差异率 = Σ|差异| / Σ账面数（按册），见 [README（shiye-inventory）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_ce053ae449b5d6cb58d055fb6d81ccb8.md \"盘点差异 = 盘点数 − 账面数；差异率 = Σ|差异| / Σ账面数（按册）。\")。\n\n演练笔记本中使用了另一种等价于册数口径的算法：差异率 = 有差异的 SKU 数 / 盘点的 SKU 总数，见 [盘点差异率复算笔记本](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_9a04e58de8db2da499a5f862c88ba2c7.md \"差异率 = 有差异的 SKU 数 / 盘点的 SKU 总数。0402 演练：约 310 个 SKU 被旧值覆盖，差异率从约 1% 升到 14.3%。\")。两种算法都以册数为基础，但分母口径不同（账面总数 vs 盘点 SKU 数），来源未说明两者如何统一。\n\n## 口径分歧\n\n- 启动会记录总部要求把差异率压到 1.5% 以内，但当时未说清是金额口径还是册数口径，纪要标注为「待确认」，见 [启动会纪要（2026-03-04）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_c53f8f5a751a74feafd092e43d97256c.md \"去年双十一后盘点差异率 4.7%，总部要求今年压到 1.5% 以内（哪个口径？金额还是册数没说清，**待确认**）\")\n- 周会再次把「确认差异率口径（金额 or 册数）」列为待办，并注明上次就没确认，见 [周会纪要（2026-03-18）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_eb507004ef4535b77fb6f081520932d4.md \"周岚 跟卢经理确认试点门店 + 盘点差异率口径(金额 or 册数) ← 上次就没确认\")\n- 后续在周岚待办中记录：卢经理说按册数、与 README 一致，但老板的 PPT 里写的是金额，决定先按册数并写进验收标准，见 [待办（周岚个人记录）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_7d75dab6efef1e417adb941b8963879f.md \"差异率口径：卢经理说按**册数**，和 README 一致。但老板 PPT 里写的是金额…… 先按册数，写进验收标准里\")\n\n因此该分歧属于不同相关方（门店运营部与总部管理层）之间的口径差异，尚未以书面验收文件最终确定。\n\n## 门店基线数据\n\n2026-03-15 门店快照记录了各店上次盘点日期与差异率，范围从 2.4% 到 7.8%，见 [门店清单与库存快照（0315）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_51afd64bd0be23f6f4b7537d8526c1dd.md \"SY04,北站店,杭州,2F,营业,3980,12110,2025-12-30,2.4%,蓝牙,试点候选\")。其中 SY10 柯桥店因上次盘点数据丢失而没有差异率数值，见 [门店清单与库存快照（0315）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_51afd64bd0be23f6f4b7537d8526c1dd.md \"SY10,柯桥店,绍兴,2F,营业,4120,13650,,蓝牙,上次盘点数据丢失\")。\n\n## 演练中的实测值\n\n2026-04-02 大学城店演练中，约 310 个 SKU 的盘点数被旧值覆盖，差异率从预期的约 1% 变为 14.3%，见 [复盘：4 月 2 日大学城店盘点演练数据错乱](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_d10acf082ea02d28aa7a1f2e12b6a561.md \"4/2 下午在大学城店（SY03，地下一层）用 2 台设备做离线盘点演练。联网同步后，约 310 个 SKU 的盘点数被旧值覆盖，差异率从预期的 1% 左右变成 14.3%。\")。\n\n复算笔记本给出了该数字的计算过程：`skus_total = 2168`、`skus_wrong = 310`，输出 14.3，见 [盘点差异率复算笔记本](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_9a04e58de8db2da499a5f862c88ba2c7.md \"skus_total = 2168\")。该笔记本中以 SKU 数而非册数为分子分母，与 README 的册数口径存在差异，属于来源间的口径不一致。\n\n## 关系\n\n- 该指标用于 [拾页书店门店库存系统](entity/拾页书店门店库存系统.md) 的验收，定义依赖 [库存流水模型](concept/库存流水模型.md) 中的账面数概念。\n- 总部目标由 [拾页文化发展有限公司（甲方）](entity/拾页文化发展有限公司.md) 提出，验收条款见 [服务协议 QM-2026-017](entity/服务协议-QM-2026-017.md)。\n- 指标异常的原因分析见 [2026-04-02 盘点演练事故复盘](analysis/2026-04-02-盘点演练事故复盘.md)。\n\n## 来源\n\n- [README（shiye-inventory）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_ce053ae449b5d6cb58d055fb6d81ccb8.md)\n- [盘点差异率复算笔记本](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_9a04e58de8db2da499a5f862c88ba2c7.md)\n- [启动会纪要（2026-03-04）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_c53f8f5a751a74feafd092e43d97256c.md)\n- [周会纪要（2026-03-18）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_eb507004ef4535b77fb6f081520932d4.md)\n- [待办（周岚个人记录）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_7d75dab6efef1e417adb941b8963879f.md)\n- [复盘：4 月 2 日大学城店盘点演练数据错乱](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_d10acf082ea02d28aa7a1f2e12b6a561.md)\n",
+ "sha256": "3f4b7f14b4c3829791bd234c705dd8b55d874907707c93292b820fe19b621f37",
+ "body": "\n# 盘点差异率\n\n盘点差异率是衡量门店盘点准确性的核心指标，也是甲方总部考核与验收的关键数字。本项目对该指标存在两个未完全统一的口径问题（按册还是按金额），并在 2026-04-02 演练中出现了异常实测值。\n\n## 定义\n\n系统约定：盘点差异 = 盘点数 − 账面数；差异率 = Σ|差异| / Σ账面数（按册），见 [README（shiye-inventory）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_ce053ae449b5d6cb58d055fb6d81ccb8.md \"盘点差异 = 盘点数 − 账面数；差异率 = Σ|差异| / Σ账面数（按册）。\")。\n\n演练笔记本中使用了另一种等价于册数口径的算法：差异率 = 有差异的 SKU 数 / 盘点的 SKU 总数，见 [盘点差异率复算笔记本](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_9a04e58de8db2da499a5f862c88ba2c7.md \"差异率 = 有差异的 SKU 数 / 盘点的 SKU 总数。0402 演练：约 310 个 SKU 被旧值覆盖，差异率从约 1% 升到 14.3%。\")。两种算法都以册数为基础，但分母口径不同（账面总数 vs 盘点 SKU 数），来源未说明两者如何统一。\n\n## 口径分歧\n\n- 启动会记录总部要求把差异率压到 1.5% 以内，但当时未说清是金额口径还是册数口径，纪要标注为「待确认」，见 [启动会纪要（2026-03-04）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_c53f8f5a751a74feafd092e43d97256c.md \"去年双十一后盘点差异率 4.7%，总部要求今年压到 1.5% 以内（哪个口径？金额还是册数没说清，**待确认**）\")\n- 周会再次把「确认差异率口径（金额 or 册数）」列为待办，并注明上次就没确认，见 [周会纪要（2026-03-18）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_eb507004ef4535b77fb6f081520932d4.md \"周岚 跟卢经理确认试点门店 + 盘点差异率口径(金额 or 册数) ← 上次就没确认\")\n- 后续在周岚待办中记录：卢经理说按册数、与 README 一致，但老板的 PPT 里写的是金额，决定先按册数并写进验收标准，见 [待办（周岚个人记录）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_7d75dab6efef1e417adb941b8963879f.md \"差异率口径：卢经理说按**册数**，和 README 一致。但老板 PPT 里写的是金额…… 先按册数，写进验收标准里\")\n\n因此该分歧属于不同相关方（门店运营部与总部管理层）之间的口径差异，尚未以书面验收文件最终确定。\n\n## 门店基线数据\n\n2026-03-15 门店快照记录了各店上次盘点日期与差异率，范围从 2.4% 到 7.8%，见 [门店清单与库存快照（0315）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_51afd64bd0be23f6f4b7537d8526c1dd.md \"SY04,北站店,杭州,2F,营业,3980,12110,2025-12-30,2.4%,蓝牙,试点候选\")。其中 SY10 柯桥店因上次盘点数据丢失而没有差异率数值，见 [门店清单与库存快照（0315）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_51afd64bd0be23f6f4b7537d8526c1dd.md \"SY10,柯桥店,绍兴,2F,营业,4120,13650,,蓝牙,上次盘点数据丢失\")。\n\n## 演练中的实测值\n\n2026-04-02 大学城店演练中，约 310 个 SKU 的盘点数被旧值覆盖，差异率从预期的约 1% 变为 14.3%，见 [复盘：4 月 2 日大学城店盘点演练数据错乱](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_d10acf082ea02d28aa7a1f2e12b6a561.md \"4/2 下午在大学城店（SY03，地下一层）用 2 台设备做离线盘点演练。联网同步后，约 310 个 SKU 的盘点数被旧值覆盖，差异率从预期的 1% 左右变成 14.3%。\")。\n\n复算笔记本给出了该数字的计算过程：`skus_total = 2168`、`skus_wrong = 310`，输出 14.3，见 [盘点差异率复算笔记本](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_9a04e58de8db2da499a5f862c88ba2c7.md \"skus_total = 2168\")。该笔记本中以 SKU 数而非册数为分子分母，与 README 的册数口径存在差异，属于来源间的口径不一致。\n\n## 关系\n\n- 该指标用于 [拾页书店门店库存系统](entity/拾页书店门店库存系统.md) 的验收，定义依赖 [库存流水模型](concept/库存流水模型.md) 中的账面数概念。\n- 总部目标由 [拾页文化发展有限公司（甲方）](entity/拾页文化发展有限公司.md) 提出，验收条款见 [服务协议 QM-2026-017](entity/服务协议-QM-2026-017.md)。\n- 指标异常的原因分析见 [2026-04-02 盘点演练事故复盘](analysis/2026-04-02-盘点演练事故复盘.md)。\n\n## 来源\n\n- [README（shiye-inventory）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_ce053ae449b5d6cb58d055fb6d81ccb8.md)\n- [盘点差异率复算笔记本](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_9a04e58de8db2da499a5f862c88ba2c7.md)\n- [启动会纪要（2026-03-04）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_c53f8f5a751a74feafd092e43d97256c.md)\n- [周会纪要（2026-03-18）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_eb507004ef4535b77fb6f081520932d4.md)\n- [待办（周岚个人记录）](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_7d75dab6efef1e417adb941b8963879f.md)\n- [复盘：4 月 2 日大学城店盘点演练数据错乱](viking://user/u-0686cf26f3b384fb9c9062fe/resources/p/p-b826dc3203309a89865e283b/sources/src_d10acf082ea02d28aa7a1f2e12b6a561.md)\n",
+ "links": [
+  {
+   "kind": "source",
+   "text": "README（shiye-inventory）",
+   "sourceId": "src_ce053ae449b5d6cb58d055fb6d81ccb8",
+   "title": "README.md",
+   "available": true,
+   "quote": "盘点差异 = 盘点数 − 账面数；差异率 = Σ|差异| / Σ账面数（按册）。",
+   "status": "present",
+   "inSourceList": false,
+   "index": 161,
+   "end": 358
+  },
+  {
+   "kind": "source",
+   "text": "盘点差异率复算笔记本",
+   "sourceId": "src_9a04e58de8db2da499a5f862c88ba2c7",
+   "title": "stocktake-variance.ipynb",
+   "available": true,
+   "quote": "差异率 = 有差异的 SKU 数 / 盘点的 SKU 总数。0402 演练：约 310 个 SKU 被旧值覆盖，差异率从约 1% 升到 14.3%。",
+   "status": "present",
+   "inSourceList": false,
+   "index": 416,
+   "end": 634
+  },
+  {
+   "kind": "source",
+   "text": "启动会纪要（2026-03-04）",
+   "sourceId": "src_c53f8f5a751a74feafd092e43d97256c",
+   "title": "2026-03-04-启动会纪要.md",
+   "available": true,
+   "quote": "去年双十一后盘点差异率 4.7%，总部要求今年压到 1.5% 以内（哪个口径？金额还是册数没说清，**待确认**）",
+   "status": "present",
+   "inSourceList": false,
+   "index": 753,
+   "end": 961
+  },
+  {
+   "kind": "source",
+   "text": "周会纪要（2026-03-18）",
+   "sourceId": "src_eb507004ef4535b77fb6f081520932d4",
+   "title": "周会-0318.md",
+   "available": true,
+   "quote": "周岚 跟卢经理确认试点门店 + 盘点差异率口径(金额 or 册数) ← 上次就没确认",
+   "status": "present",
+   "inSourceList": false,
+   "index": 1005,
+   "end": 1197
+  },
+  {
+   "kind": "source",
+   "text": "待办（周岚个人记录）",
+   "sourceId": "src_7d75dab6efef1e417adb941b8963879f",
+   "title": "待办-乱记.md",
+   "available": true,
+   "quote": "差异率口径：卢经理说按**册数**，和 README 一致。但老板 PPT 里写的是金额…… 先按册数，写进验收标准里",
+   "status": "present",
+   "inSourceList": false,
+   "index": 1263,
+   "end": 1466
+  },
+  {
+   "kind": "source",
+   "text": "门店清单与库存快照（0315）",
+   "sourceId": "src_51afd64bd0be23f6f4b7537d8526c1dd",
+   "title": "门店清单与库存快照-0315.csv",
+   "available": true,
+   "quote": "SY04,北站店,杭州,2F,营业,3980,12110,2025-12-30,2.4%,蓝牙,试点候选",
+   "status": "present",
+   "inSourceList": false,
+   "index": 1577,
+   "end": 1778
+  },
+  {
+   "kind": "source",
+   "text": "门店清单与库存快照（0315）",
+   "sourceId": "src_51afd64bd0be23f6f4b7537d8526c1dd",
+   "title": "门店清单与库存快照-0315.csv",
+   "available": true,
+   "quote": "SY10,柯桥店,绍兴,2F,营业,4120,13650,,蓝牙,上次盘点数据丢失",
+   "status": "absent",
+   "inSourceList": false,
+   "index": 1810,
+   "end": 2000
+  },
+  {
+   "kind": "source",
+   "text": "复盘：4 月 2 日大学城店盘点演练数据错乱",
+   "sourceId": "src_d10acf082ea02d28aa7a1f2e12b6a561",
+   "title": "复盘-0402盘点演练事故.md",
+   "available": true,
+   "quote": "4/2 下午在大学城店（SY03，地下一层）用 2 台设备做离线盘点演练。联网同步后，约 310 个 SKU 的盘点数被旧值覆盖，差异率从预期的 1% 左右变成 14.3%。",
+   "status": "present",
+   "inSourceList": false,
+   "index": 2079,
+   "end": 2322
+  },
+  {
+   "kind": "source",
+   "text": "盘点差异率复算笔记本",
+   "sourceId": "src_9a04e58de8db2da499a5f862c88ba2c7",
+   "title": "stocktake-variance.ipynb",
+   "available": true,
+   "quote": "skus_total = 2168",
+   "status": "present",
+   "inSourceList": false,
+   "index": 2391,
+   "end": 2552
+  },
+  {
+   "kind": "page",
+   "text": "拾页书店门店库存系统",
+   "path": "entity/拾页书店门店库存系统.md",
+   "sourceId": "src_d08b4b159a1984daf4f58d35714d9784",
+   "title": "拾页书店门店库存系统",
+   "exists": true,
+   "index": 2623,
+   "end": 2657
+  },
+  {
+   "kind": "page",
+   "text": "库存流水模型",
+   "path": "concept/库存流水模型.md",
+   "sourceId": "src_0840f87ce1803e83ac2f1199bb97d72e",
+   "title": "库存流水模型",
+   "exists": true,
+   "index": 2667,
+   "end": 2694
+  },
+  {
+   "kind": "page",
+   "text": "拾页文化发展有限公司（甲方）",
+   "path": "entity/拾页文化发展有限公司.md",
+   "sourceId": "src_b6235bf02fdb6c66dbe74aee6fcde294",
+   "title": "拾页文化发展有限公司（甲方）",
+   "exists": true,
+   "index": 2712,
+   "end": 2750
+  },
+  {
+   "kind": "page",
+   "text": "服务协议 QM-2026-017",
+   "path": "entity/服务协议-QM-2026-017.md",
+   "sourceId": "src_4acb6d775583bd950c74a42c073d8769",
+   "title": "服务协议 QM-2026-017",
+   "exists": true,
+   "index": 2760,
+   "end": 2806
+  },
+  {
+   "kind": "page",
+   "text": "2026-04-02 盘点演练事故复盘",
+   "path": "analysis/2026-04-02-盘点演练事故复盘.md",
+   "sourceId": "src_30316d9867c2420d01c734541c5cb537",
+   "title": "2026-04-02 盘点演练事故复盘",
+   "exists": true,
+   "index": 2821,
+   "end": 2875
+  },
+  {
+   "kind": "source",
+   "text": "README（shiye-inventory）",
+   "sourceId": "src_ce053ae449b5d6cb58d055fb6d81ccb8",
+   "title": "README.md",
+   "available": true,
+   "quote": null,
+   "status": "no_quotation",
+   "inSourceList": true,
+   "index": 2887,
+   "end": 3041
+  },
+  {
+   "kind": "source",
+   "text": "盘点差异率复算笔记本",
+   "sourceId": "src_9a04e58de8db2da499a5f862c88ba2c7",
+   "title": "stocktake-variance.ipynb",
+   "available": true,
+   "quote": null,
+   "status": "no_quotation",
+   "inSourceList": true,
+   "index": 3044,
+   "end": 3185
+  },
+  {
+   "kind": "source",
+   "text": "启动会纪要（2026-03-04）",
+   "sourceId": "src_c53f8f5a751a74feafd092e43d97256c",
+   "title": "2026-03-04-启动会纪要.md",
+   "available": true,
+   "quote": null,
+   "status": "no_quotation",
+   "inSourceList": true,
+   "index": 3188,
+   "end": 3336
+  },
+  {
+   "kind": "source",
+   "text": "周会纪要（2026-03-18）",
+   "sourceId": "src_eb507004ef4535b77fb6f081520932d4",
+   "title": "周会-0318.md",
+   "available": true,
+   "quote": null,
+   "status": "no_quotation",
+   "inSourceList": true,
+   "index": 3339,
+   "end": 3486
+  },
+  {
+   "kind": "source",
+   "text": "待办（周岚个人记录）",
+   "sourceId": "src_7d75dab6efef1e417adb941b8963879f",
+   "title": "待办-乱记.md",
+   "available": true,
+   "quote": null,
+   "status": "no_quotation",
+   "inSourceList": true,
+   "index": 3489,
+   "end": 3630
+  },
+  {
+   "kind": "source",
+   "text": "复盘：4 月 2 日大学城店盘点演练数据错乱",
+   "sourceId": "src_d10acf082ea02d28aa7a1f2e12b6a561",
+   "title": "复盘-0402盘点演练事故.md",
+   "available": true,
+   "quote": null,
+   "status": "no_quotation",
+   "inSourceList": true,
+   "index": 3633,
+   "end": 3786
+  }
+ ],
+ "sources": [
+  {
+   "sourceId": "src_ce053ae449b5d6cb58d055fb6d81ccb8",
+   "title": "README.md",
+   "available": true
+  },
+  {
+   "sourceId": "src_9a04e58de8db2da499a5f862c88ba2c7",
+   "title": "stocktake-variance.ipynb",
+   "available": true
+  },
+  {
+   "sourceId": "src_c53f8f5a751a74feafd092e43d97256c",
+   "title": "2026-03-04-启动会纪要.md",
+   "available": true
+  },
+  {
+   "sourceId": "src_eb507004ef4535b77fb6f081520932d4",
+   "title": "周会-0318.md",
+   "available": true
+  },
+  {
+   "sourceId": "src_7d75dab6efef1e417adb941b8963879f",
+   "title": "待办-乱记.md",
+   "available": true
+  },
+  {
+   "sourceId": "src_51afd64bd0be23f6f4b7537d8526c1dd",
+   "title": "门店清单与库存快照-0315.csv",
+   "available": true
+  },
+  {
+   "sourceId": "src_d10acf082ea02d28aa7a1f2e12b6a561",
+   "title": "复盘-0402盘点演练事故.md",
+   "available": true
+  }
+ ],
+ "quotations": {
+  "present": 8,
+  "absent": 1,
+  "none": 0,
+  "sourceMissing": 0
+ },
+ "userEdited": false,
+ "userBlocks": [],
+ "restored": null,
+ "editable": true,
+ "updatedAt": "2026-10-13T04:19:21.253Z",
+ "basis": "compiler",
+ "stale": [
+  {
+   "reason": "changed",
+   "sourceId": "src_ce053ae449b5d6cb58d055fb6d81ccb8"
+  }
+ ]
+}

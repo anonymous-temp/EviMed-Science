@@ -29,11 +29,14 @@ import { PageShell } from "@/components/layout/PageShell";
 import { AddLinkDialog, NewNoteDialog } from "@/components/sources/AddEntryDialogs";
 import { DriveImportDrawerBody } from "@/components/sources/DriveImport";
 import { DuplicateGroups } from "@/components/sources/DuplicateGroups";
+import { KnowledgePanel } from "@/components/sources/KnowledgePanel";
 import { KnowledgeScopeMenu } from "@/components/sources/KnowledgeScopeMenu";
+import { KnowledgeStatusLine } from "@/components/sources/KnowledgeStatusLine";
 import { LibraryComposition } from "@/components/sources/LibraryComposition";
 import { ProjectOutputsList } from "@/components/sources/ProjectOutputsList";
 import { SourceRow } from "@/components/sources/SourceRow";
 import { isReading, isUsable } from "@/components/sources/sourceView";
+import { roundKey, useKnowledgeStatus } from "@/components/sources/useKnowledge";
 
 /** The folder an upload lands in, under the project's base folder. */
 const KNOWLEDGE_ROOT = "knowledge-base";
@@ -155,8 +158,9 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   // root (`/api/me` `features.openList`). An entry that led to a drive with nothing in it answered every browse with an
   // error (audit I3-4). Off until `/api/me` says so, and when it cannot.
   const [driveOffered, setDriveOffered] = useState(false);
-  // 「重新整理」 on the 知识页 filter, only where the deployment compiles them (`features.knowledgePages`).
+  // Where the project's pages stand, and 「重新整理」, only where the deployment compiles them (`features.knowledgePages`).
   const [pagesOffered, setPagesOffered] = useState(false);
+  const [compileAsking, setCompileAsking] = useState(false);
   useEffect(() => {
     let active = true;
     fetchWebMe().then((me) => { if (active) { setDriveOffered(openListOffered(me)); setPagesOffered(knowledgePagesOffered(me)); } }).catch(() => { /* not offered */ });
@@ -172,6 +176,15 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
 
   const shared = scope.kind === "shared";
   const scopeProjectId = scope.kind === "project" ? scope.projectId : null;
+  const { status: knowledge, setStatus: setKnowledge } = useKnowledgeStatus(scopeProjectId, pagesOffered && scopeProjectId !== null);
+  const knowledgeRound = roundKey(knowledge);
+  const compileNow = async () => {
+    if (!scopeProjectId) return;
+    setCompileAsking(true);
+    try { setKnowledge(await requestKnowledgeCompile(scopeProjectId)); toast.success("已开始重新整理，稍后回来即可看到"); }
+    catch (failure) { toast.error(productErrorMessage(failure)); }
+    finally { setCompileAsking(false); }
+  };
   useEffect(() => setSelected(new Map()), [shared, scopeProjectId]);
   // 「对话产出」: the files the listed project's conversations delivered, read once for the project — the row of filters needs to
   // know whether there are any — and again on 重试. An index of the run ledger; nothing in it is a document of the library.
@@ -263,6 +276,14 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     }
   }, [scope, kind, search]);
   useEffect(() => { void load(); return () => { generation.current += 1; }; }, [load]);
+  // A round that ends brings pages: the chips' counts and the list are read again, once, when what it left changes.
+  const lastRound = useRef(knowledgeRound);
+  useEffect(() => {
+    if (lastRound.current === knowledgeRound) return;
+    const first = lastRound.current === "";
+    lastRound.current = knowledgeRound;
+    if (!first) void load(true);
+  }, [knowledgeRound, load]);
   useEffect(() => { loaded.current = items?.length ?? 0; }, [items]);
   // The place a list is brought back to is set once its rows are on the page: before, there is nothing to scroll.
   useLayoutEffect(() => {
@@ -466,6 +487,31 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     </Menu>
   );
 
+  // The 知识页 filter browses the project's compiled files (a tree, or the graph); everywhere else, and wherever the tree cannot be
+  // read, the page is the list of documents.
+  const knowledgeBrowse = kind === "wiki" && !shared && !outputsView;
+  const documentList = outputsView ? null : items === null ? <FilesSkeleton /> : items.length === 0 ? (error ? null
+    : filtered ? <EmptyState icon={Search} title="没有找到相关资料" />
+      : shared ? <EmptyState icon={Folder} title="还没有资料设为所有项目可用。" description="在资料的“⋯”菜单里选“设为所有项目可用”。" />
+        : <EmptyState icon={Folder} title="把文献、指南、方案、数据表、网页或笔记放进来，对话里会读它们并标出处。" action={addMenu} />
+  ) : (
+    <List label="资料">
+      {items.map((source) => (
+        <SourceRow key={source.id} source={source} showShared={!shared} {...rowActions(source)}
+          projectName={shared ? projectNames.get(source.projectId) ?? null : null}
+          to={readerLink(source)} onOpen={keepPlace}
+          selected={selected.has(source.id)} onSelect={() => toggleSelected(source)}
+          passages={passages[source.id]} query={search}
+          passageTo={(passage) => readerPath(source.id, listState, passage.page ? { tab: "original", page: passage.page } : { tab: null, page: null })} />
+      ))}
+      {nextCursor && (
+        <li ref={sentinel} className="flex justify-center py-3">
+          <Button variant="text" loading={loadingMore} onClick={() => void loadMore()}>加载更多</Button>
+        </li>
+      )}
+    </List>
+  );
+
   // 「导出到 Obsidian」: the documents of the project the page lists, as a vault. Beside the one primary button, in a menu of its own.
   const exportVault = async () => {
     if (!scopeProjectId) return;
@@ -503,35 +549,12 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
         {kindOptions.length > 0 && (kindsPresent >= 2 || kind !== null || outputsChip) && (
           <FilterChips label="资料类型" className="mb-4" options={chipOptions} maxVisible={narrow ? 3 : chipOptions.length} value={outputsView ? "outputs" : kind ?? "all"} onChange={chooseChip} />
         )}
-        {kind === "wiki" && pagesOffered && !shared && (
-          <div className="mb-4">
-            <Button variant="secondary" size="sm" disabled={busy}
-              onClick={() => void mutate(async () => { await requestKnowledgeCompile(scopeProjectId ?? currentProjectId); toast.success("已开始重新整理，稍后刷新即可看到"); })}>重新整理</Button>
-          </div>
-        )}
+        {pagesOffered && !shared && !outputsView && <KnowledgeStatusLine status={knowledge} asking={compileAsking} onCompile={() => void compileNow()} />}
         {outputsView && <ProjectOutputsList items={outputs} failed={outputsFailed} query={search} onRetry={() => setOutputsAttempt((value) => value + 1)} />}
         {!outputsView && error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}
-        {outputsView ? null : items === null ? <FilesSkeleton /> : items.length === 0 ? (error ? null
-          : filtered ? <EmptyState icon={Search} title="没有找到相关资料" />
-            : shared ? <EmptyState icon={Folder} title="还没有资料设为所有项目可用。" description="在资料的“⋯”菜单里选“设为所有项目可用”。" />
-              : <EmptyState icon={Folder} title="把文献、指南、方案、数据表、网页或笔记放进来，对话里会读它们并标出处。" action={addMenu} />
-        ) : (
-          <List label="资料">
-            {items.map((source) => (
-              <SourceRow key={source.id} source={source} showShared={!shared} {...rowActions(source)}
-                projectName={shared ? projectNames.get(source.projectId) ?? null : null}
-                to={readerLink(source)} onOpen={keepPlace}
-                selected={selected.has(source.id)} onSelect={() => toggleSelected(source)}
-                passages={passages[source.id]} query={search}
-                passageTo={(passage) => readerPath(source.id, listState, passage.page ? { tab: "original", page: passage.page } : { tab: null, page: null })} />
-            ))}
-            {nextCursor && (
-              <li ref={sentinel} className="flex justify-center py-3">
-                <Button variant="text" loading={loadingMore} onClick={() => void loadMore()}>加载更多</Button>
-              </li>
-            )}
-          </List>
-        )}
+        {knowledgeBrowse && scopeProjectId
+          ? <KnowledgePanel projectId={scopeProjectId} listState={listState} version={knowledgeRound} onChange={update} fallback={documentList} />
+          : documentList}
         {!outputsView && selected.size > 0 && (
           <div className="sticky bottom-0 mt-4 flex flex-wrap items-center gap-3 border-t border-border bg-surface pt-3 pb-4" style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }} role="region" aria-label="所选资料">
             <span className="text-caption text-text-2">已选 {selected.size} 份资料</span>

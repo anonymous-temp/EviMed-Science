@@ -183,6 +183,8 @@ export interface SourcePayload {
   outputs: { summary?: string; facts?: number; methods?: number; artifactPath?: string };
   /** Set once the document's understanding is in; `outputs.summary` is then its summary. */
   currentUnderstandingId?: string | null;
+  /** Why the document has no text, when it has none (a recording, a file nothing reads): it is kept as the original it was. */
+  original?: { generation: number; code: string; at: string } | null;
   // `message` is the control plane's own English literal — `recordFailure` is
   // called with "Source analysis failed." for every failure, so it carries no
   // information and cannot be shown. `code` is the fact; `@evimed/domain` is
@@ -474,42 +476,156 @@ export function removeFromLibrary(sourceId: string) {
 
 /* ------------------------------------------------------- knowledge pages -- */
 
-/** What one quotation of a knowledge page rests on, checked now against the document it names. */
-export interface KnowledgePageEvidence {
-  sourceId: string;
-  /** The document's title; null where the document is no longer readable. */
-  title: string | null;
-  quote: string;
-  status: "verified" | "quote_not_found" | "source_unavailable" | "quote_invalid";
+/**
+ * 「知识页」: what OpenViking's wiki and knowledge-graph compile wrote for a project, mirrored by the control plane
+ * (`/api/knowledge-pages/*`). The shapes are the routes' own; the words they are shown in are the page's.
+ */
+export type KnowledgeTreeName = "wiki" | "kg";
+export type KnowledgeState = "disabled" | "idle" | "below_threshold" | "queued" | "compiling" | "compiled" | "page_limit" | "engine_unavailable" | "failed";
+export type KnowledgeStaleReason = "changed" | "retracted" | "removed";
+export interface KnowledgeQuotationCounts { present: number; absent: number; none: number; sourceMissing?: number }
+export interface KnowledgeRoundTree { status: string; seconds: number; tokens: number; cost: number; files: number; typed: number; created: number; updated: number; unchanged: number; retired: number; restored: number }
+/** `GET /api/knowledge-pages?projectId=`: where the compile is, in the fields the header puts into words. */
+export interface KnowledgeStatus {
+  enabled: boolean;
+  state: KnowledgeState;
+  engine: { ok: boolean; code: string | null } | null;
+  /** While compiling: which tree and which step of the round. */
+  stage: { tree: KnowledgeTreeName; step: "wiki" | "kg-start" | "kg" | "finish" | string; task: string | null; status: string | null; startedAt: string } | null;
+  pages: number;
+  graphFiles: number;
+  typedPages: { wiki: number; kg: number };
+  pageLimit: number;
+  engineLimit: number;
+  limited: { wiki: boolean; kg: boolean };
+  stale: number;
+  userEdited: number;
+  quotations: KnowledgeQuotationCounts;
+  pending: number;
+  readable: number;
+  minSources: number;
+  round: number;
+  language: string | null;
+  compiledAt: string | null;
+  lastRound: ({ at: string; startedAt?: string } & Partial<Record<KnowledgeTreeName, KnowledgeRoundTree>>) | null;
+  lastError: { code: string; detail?: string; at?: string; round?: number } | null;
+  writeBacksQueued: number;
+  held: number;
 }
-export type KnowledgePageItem =
-  | { kind: "nav"; links: Array<{ slug: string; title: string | null; sourceId: string | null }> }
-  | { kind: "claim"; text: string; status: "verified" | "unverified" | "unsupported"; claimKind: "direct" | "synthesized"; confidence: string | null; evidence: KnowledgePageEvidence[] };
-/** One knowledge page as the reader shows it (`GET /api/knowledge-pages/page`): every sentence with what it rests on. */
-export interface KnowledgePageViewData {
+/** What a compiled file carries beside its text, for a row of the tree and a page's head. */
+export interface KnowledgeLabels {
+  stale: Array<{ sourceId: string; reason: KnowledgeStaleReason }>;
+  userEdited: boolean;
+  userBlocks: number;
+  /** When a compile dropped the person's own blocks and the platform put them back. */
+  restored: { at: string; count: number; round?: number } | null;
+  quotations: KnowledgeQuotationCounts | null;
+}
+export interface KnowledgeTreeRow {
+  /** The mirrored file's own document id: opening it is `/app/files/<sourceId>`. */
   sourceId: string;
-  slug: string;
+  tree: KnowledgeTreeName;
+  path: string;
+  /** Upstream's page types (`index entity concept method comparison analysis summary`); the graph's are `entity` and `relations`. */
   type: string;
   title: string;
-  sections: Array<{ heading: string; items: KnowledgePageItem[] }>;
-  counts: { claims: number; verified: number; unverified: number; unsupported: number };
-  basis: "compiler" | "user";
-  /** The documents this page quotes that have changed, were removed or were retracted since it was written. */
-  stale: Array<{ sourceId: string; reason: "changed" | "retracted" | "removed" }>;
-  /** Sentences the compile could not confirm in the document: shown, never part of the page's text. */
-  held: Array<{ heading: string; text: string; reasons: string[] }>;
-  heldCount: number;
+  updatedAt: string;
+  labels: KnowledgeLabels;
+}
+export interface KnowledgeTree {
+  pages: KnowledgeTreeRow[];
+  counts: Record<KnowledgeTreeName, number>;
+}
+/** A link of a page's body, found by the control plane: `index`/`end` are offsets into `body`, of the whole `[text](address "title")`. */
+export type KnowledgePageLink =
+  | { kind: "page"; text: string; path: string; sourceId: string | null; title: string | null; exists: boolean; index: number; end: number }
+  | { kind: "source"; text: string; sourceId: string; title: string | null; available: boolean; quote: string | null;
+      status: "present" | "absent" | "no_quotation" | "source_missing"; inSourceList: boolean; index: number; end: number }
+  | { kind: "external"; text: string; href: string; index: number; end: number };
+export interface KnowledgePage {
+  sourceId: string;
+  tree: KnowledgeTreeName;
+  path: string;
+  type: string;
+  title: string;
+  description: string;
+  tags: string[];
+  /** The whole file, front matter included; `sha256` is of this text and goes back as `baseSha256` when it is saved. */
+  markdown: string;
+  sha256: string;
+  body: string;
+  links: KnowledgePageLink[];
+  /** The documents the page cites. */
   sources: Array<{ sourceId: string; title: string | null; available: boolean }>;
+  quotations: KnowledgeQuotationCounts | null;
+  userEdited: boolean;
+  userBlocks: Array<{ id: string; text: string; heading: string }>;
+  restored: { at: string; count: number; round?: number } | null;
+  editable: boolean;
+  updatedAt: string;
+  basis: "compiler" | "user";
+  stale: Array<{ sourceId: string; reason: KnowledgeStaleReason }>;
+}
+export interface KnowledgeGraphSource { sourceId: string; title: string | null }
+/** One mark of either graph. A wiki node has a `type`, a graph node an `entityType` (open, snake_case upstream). */
+export interface KnowledgeGraphNode {
+  id: string;
+  path: string;
+  title: string;
+  description: string;
+  degree: number;
+  sourceId: string | null;
+  stale: Array<{ sourceId: string; reason: KnowledgeStaleReason }>;
+  sources: KnowledgeGraphSource[];
+  type?: string;
+  entityType?: string;
+  tags?: string[];
+  aliases?: string[];
+  userEdited?: boolean;
+}
+export interface KnowledgeGraphLink {
+  source: string;
+  target: string;
+  label: string;
+  /** For the entity graph: the stable predicate. */
+  relation?: string;
+  /** For the entity graph: the documents the relation was read from. */
+  evidence?: KnowledgeGraphSource[];
+}
+export interface KnowledgeGraph {
+  kind: KnowledgeTreeName;
+  nodes: KnowledgeGraphNode[];
+  links: KnowledgeGraphLink[];
+  relations?: Array<{ relation: string; label: string; count: number }>;
+  unresolved: number;
+  problems: Array<{ kind: string; line?: number | null; path?: string | null }>;
+}
+export function getKnowledgeStatus(projectId: string) {
+  return productRequest<KnowledgeStatus>(`/knowledge-pages?${new URLSearchParams({ projectId })}`);
+}
+export function getKnowledgeTree(projectId: string) {
+  return productRequest<KnowledgeTree>(`/knowledge-pages/tree?${new URLSearchParams({ projectId })}`);
 }
 export function getKnowledgePage(sourceId: string) {
-  return productRequest<KnowledgePageViewData>(`/knowledge-pages/page?${new URLSearchParams({ sourceId })}`);
+  return productRequest<KnowledgePage>(`/knowledge-pages/page?${new URLSearchParams({ sourceId })}`);
+}
+/** A page by its place in the tree: how an address from outside (a map's mark, a link inside a page) names it. */
+export function getKnowledgePageAt(projectId: string, tree: KnowledgeTreeName, path: string) {
+  return productRequest<KnowledgePage>(`/knowledge-pages/page?${new URLSearchParams({ projectId, tree, path })}`);
+}
+export function getKnowledgeGraph(projectId: string, kind: KnowledgeTreeName) {
+  return productRequest<KnowledgeGraph>(`/knowledge-pages/graph?${new URLSearchParams({ projectId, kind })}`);
+}
+/** 「保存」 on a page: the whole text, against the version the reader loaded. The saved page is a new document, so its `sourceId` is new. */
+export function saveKnowledgePage(input: { sourceId: string; markdown: string; baseSha256: string }) {
+  return productRequest<{ changed: boolean; writeBack: "written" | "queued" | string; userBlocks: number; page: KnowledgePage }>("/knowledge-pages/page", "PUT", input);
 }
 /** Whether the deployment compiles knowledge pages (`features.knowledgePages`); the pages that exist are readable either way. */
 export function knowledgePagesOffered(me: WebMe | null): boolean {
   const features = (me as (WebMe & { features?: unknown }) | null)?.features;
   return !!features && typeof features === "object" && (features as Record<string, unknown>).knowledgePages === true;
 }
-/** 「重新整理」: ask for a round now. */
+/** 「重新整理」: ask for a round now. The page language is the browser's, which the control plane has already recorded. */
 export function requestKnowledgeCompile(projectId: string) {
-  return productRequest<{ enabled: boolean; pages: number; pending: number }>("/knowledge-pages/compile", "POST", { projectId });
+  return productRequest<KnowledgeStatus>("/knowledge-pages/compile", "POST", { projectId });
 }
