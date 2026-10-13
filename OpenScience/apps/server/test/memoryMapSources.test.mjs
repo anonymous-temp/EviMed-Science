@@ -115,9 +115,11 @@ test("the learned methods are marks hanging from the account, named as the memor
 test("the first radar counts the researcher's own finished conversations by the kind of work, and shows a medical axis only when it was used", () => {
   const run = (id, agent, finishedAt, extra = {}) => ({ id, status: "succeeded", effectiveAgentId: agent, finishedAt, automated: false, ...extra });
   const runs = [
-    run("1", "open-domain-answer", "2026-10-05T00:00:00Z"), run("2", "open-domain-answer", "2026-10-06T00:00:00Z"),
+    run("1", "open-domain-answer", "2026-10-05T00:00:00Z", { taskType: "web-research" }), run("2", "open-domain-answer", "2026-10-06T00:00:00Z", { taskType: "web-research" }),
     run("3", "manuscript-support", "2026-10-07T00:00:00Z"), run("4", "statistical-analysis", "2026-09-20T00:00:00Z"),
-    run("5", "open-domain-answer", "2026-09-01T00:00:00Z"),
+    run("5", "open-domain-answer", "2026-09-01T00:00:00Z", { taskType: "web-research" }),
+    // Not judged yet: counted under nothing, however recent.
+    run("y1", "open-domain-answer", "2026-10-09T00:00:00Z"),
     run("x1", "open-domain-answer", "2026-10-08T00:00:00Z", { automated: true }),
     run("x2", "open-domain-answer", "2026-10-08T00:00:00Z", { status: "failed" }),
     run("x3", "open-domain-answer", "2026-10-08T00:00:00Z", { deleted: true }),
@@ -126,20 +128,21 @@ test("the first radar counts the researcher's own finished conversations by the 
     run("x6", "no-such-capability", "2026-10-08T00:00:00Z"),
   ];
   const work = workOf(runs, (agent) => agent === "source-understanding" || agent === "evolution-scout");
-  assert.deepEqual(work.map((item) => item.label).sort(), ["普通问答", "普通问答", "普通问答", "研究设计与数据", "写作与传播"].sort());
+  assert.deepEqual(work.map((item) => item.label).sort(), ["查资料与调研", "查资料与调研", "查资料与调研", "表格与数据分析", "写作"].sort());
   const dimension = workDimension(work, NOW);
-  assert.deepEqual(dimension.axes.map((axis) => axis.label), ["普通问答", "写作与传播", "研究设计与数据"], "no clinical axis for an account that never used one");
+  assert.deepEqual(dimension.axes.map((axis) => axis.label), ["写作", "文档与演示", "表格与数据分析", "代码", "查资料与调研", "其他"], "no medical axis for an account that never used one");
   const byLabel = Object.fromEntries(dimension.axes.map((axis) => [axis.label, axis]));
-  assert.deepEqual([byLabel["普通问答"].count, byLabel["普通问答"].value, byLabel["普通问答"].previousValue], [2, 0.5, 1]);
+  assert.deepEqual([byLabel["查资料与调研"].count, byLabel["查资料与调研"].value, byLabel["查资料与调研"].previousValue], [2, 0.5, 1]);
   assert.deepEqual([dimension.total, dimension.previousTotal, dimension.scale], [4, 1, "share"]);
-  assert.equal(byLabel["研究设计与数据"].previousValue, 0, "a month ago the account only asked questions");
+  assert.equal(byLabel["表格与数据分析"].previousValue, 0, "a month ago the account only looked things up");
+  assert.deepEqual(dimension.axes.map((axis) => axis.id), ["kind:writing", "kind:documents", "kind:data", "kind:code", "kind:web-research", "kind:other"]);
   const clinical = workDimension(workOf([run("c", "clinical-evidence-synthesis", "2026-10-09T00:00:00Z")]), NOW);
-  assert.ok(clinical.axes.some((axis) => axis.label === "临床证据"));
+  assert.ok(clinical.axes.some((axis) => axis.label === "医学证据"));
 });
 
 test("the runs source reads each project's ledger once, shared with the activity source, and fails only when every ledger did", async () => {
   let reads = 0;
-  const agentRuns = { researcherRuns: async (project) => { reads += 1; return [{ id: `r-${project.id}`, status: "succeeded", effectiveAgentId: "open-domain-answer", finishedAt: "2026-10-05T00:00:00Z", sessionId: "s", title: "t" }]; } };
+  const agentRuns = { researcherRuns: async (project) => { reads += 1; return [{ id: `r-${project.id}`, status: "succeeded", effectiveAgentId: "open-domain-answer", finishedAt: "2026-10-05T00:00:00Z", sessionId: "s", title: "t", taskType: "code" }]; } };
   const projectOf = async (_user, id) => ({ id });
   const asked = request({ projects: [{ id: "p1", name: "一" }, { id: "p2", name: "二" }] });
   const dimension = (await createRunsSource({ agentRuns, projectOf }).read(asked)).facets.dimensions[0];

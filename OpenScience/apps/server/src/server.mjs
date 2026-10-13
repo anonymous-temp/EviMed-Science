@@ -137,6 +137,7 @@ import {
 import { SpecialistClassifier } from "./specialistClassifier.mjs";
 import { ROUTING_DECISION_PATH, createRoutingDecisionRoutes } from "./routingDecision.mjs";
 import { RunTitleScheduler, RunTitler } from "./runTitles.mjs";
+import { TaskTyper, TaskTypeScheduler } from "./runTaskType.mjs";
 import { runEstimate } from "./runRoute.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
@@ -3022,6 +3023,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     titler: new RunTitler(config, { usageLedger, fetchImpl: overrides.runTitleFetch ?? globalThis.fetch }),
     recordTitle: (project, runId, title) => agentRuns.recordRunLabels(project, runId, { title, titleSource: "auto" }),
   });
+  // What kind of work a finished conversation was, for the memory map's radar: one metered flash call per conversation, recorded once
+  // on the ledger, off the critical path (runTaskType.mjs).
+  const taskTypes = new TaskTypeScheduler({
+    typer: new TaskTyper(config, { usageLedger, fetchImpl: overrides.taskTypeFetch ?? globalThis.fetch }),
+    recordType: (project, runId, taskType) => agentRuns.recordRunLabels(project, runId, { taskType }),
+    dailyCalls: () => config.taskTypeDailyCalls, usageLedger,
+  });
   // One fan-out per live run. The browser subscribes here, never to a kernel.
   const runEvents = new RunEventHub();
   // The kernel's own live stream, decoded onto the same fan-out. The flag is
@@ -3491,6 +3499,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // it, and a finished run's stops being routed at all.
       runtimeEventPump.noteRun(project, run);
       if (usagePurposeOfRun(run) !== "evolution") independentProductWork(() => runTitles.consider(project, run));
+      // A researcher's conversation that has just finished: what kind of work it was, once.
+      independentProductWork(() => taskTypes.consider(project, run));
       // A run started or ended: which one a model request belongs to may
       // have changed.
       runAttribution.delete(`${project.userId}\0${project.id}`);
@@ -4811,7 +4821,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       createKnowledgeGraphSource({ fetchProducts: (request) => (knowledgePages ? knowledgePages.fetchProducts(request) : Promise.resolve(null)) }),
       createActivitySource({ agentRuns, projectOf: memoryMapProjectOf, learning: learningService, feedbackEvents }),
       createRunsSource({
-        agentRuns, projectOf: memoryMapProjectOf,
+        agentRuns, projectOf: memoryMapProjectOf, taskTypes,
         isInternal: (/** @type {string} */ agentId) => (agentRuns.loadedAgentRegistry?.get?.(agentId)?.visibility ?? "public") === "internal",
       }),
       createTopicsSource({ topics: memoryTopics, researchMemory }),
@@ -8295,6 +8305,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // following makes it reconnect to a kernel that is going away.
       await runtimeEventPump.closeAll();
       await runTitles.settle();
+      await taskTypes.settle();
       await agentRuns.closeAll();
       // After the run store, before the runtimes — and that order is the whole
       // point rather than a detail.

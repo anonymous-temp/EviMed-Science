@@ -15,7 +15,7 @@
  * `other` — bookkeeping never fails a model call.
  */
 
-/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'knowledge'|'learning'|'autopilot'|'frontier'|'review'|'geo'|'vcr'|'web-search'|'evolution'|'evidence'|'evidence-upkeep'|'other'} UsagePurpose */
+/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'task-type'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'knowledge'|'learning'|'autopilot'|'frontier'|'review'|'geo'|'vcr'|'web-search'|'evolution'|'evidence'|'evidence-upkeep'|'other'} UsagePurpose */
 
 /** Every purpose, in report order. `frontier` is the frontier feed reading
  *  the literature for everyone (screening, editing, the daily issue): one
@@ -51,12 +51,18 @@
  *  them by the bearer the engine's Compile agent carries, to the platform's
  *  internal `evimed-openviking` project and under the engine's own daily
  *  budget. What a compile used of its account's `knowledge` caps is counted
- *  separately, by the page service, from the tokens each task reports. */
+ *  separately, by the page service, from the tokens each task reports.
+ *  `task-type` is the one small call that says what kind of work a finished
+ *  conversation was (writing, a spreadsheet, code, …) so the memory map's
+ *  「在做什么」 radar can be drawn for any account, not only for the ones that
+ *  used a named capability: made on the researcher's own conversation, counted
+ *  against their caps like a run title, and held by its own daily bound. */
 export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.freeze([
   'kernel',
   'memory-extraction',
   'routing',
   'title',
+  'task-type',
   'engine',
   'capsule-scan',
   'channel-intent',
@@ -81,6 +87,7 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   'memory-extraction': '记忆提取',
   routing: '路由分类',
   title: '运行标题',
+  'task-type': '任务类型判断',
   engine: '专科引擎',
   'capsule-scan': '胶囊扫描',
   'channel-intent': '渠道意图',
