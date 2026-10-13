@@ -667,6 +667,49 @@ test("fresh files without witnessed workflow tools cannot silently bypass an una
     "the one gate notice a researcher could see is Chinese now (2026-09-16 walk, U4)");
 });
 
+test("an ordinary turn that wrote a file is not told its acceptance cannot be confirmed because the session holds another turn's projection", async (t) => {
+  // GA16 (2026-10-12): the second turn of a conversation found the first turn's run-state projection, could not attribute it
+  // to itself, and — having written a file with the write tool — went out 「未核验」 with 「无法确认交付是否通过验收」. That is
+  // the rule for a turn that planned a deliverable. This one planned nothing: its file is what it was asked for.
+  const events = structuredClone(fixture.events.filter((event) => event.seq >= 137));
+  const start = inputs[1].time;
+  const written = "# 周报\n";
+  events.push({ type: "tool/call", seq: 145, time: start + 10, data: { turn: 2, step: 1, callId: "call_145", name: "write", arguments: { file_path: "weekly.md", content: written } } });
+  events.push({ type: "tool/result", seq: 146, time: start + 15, data: { turn: 2, step: 1,
+    message: { source: { callId: "call_145" }, content: [{ type: "tool-result", content: [{ type: "text", text: kernelToolText({ ok: true }) }] }] } } });
+  const f = await setup(t, events.sort((a, b) => a.seq - b.seq));
+  await writeFile(path.join(f.project.workspaceDir, "weekly.md"), written);
+  await utimes(path.join(f.project.workspaceDir, "weekly.md"), new Date(start + 50), new Date(start + 50));
+  const answerLine = { id: "open-domain-answer", version: "1.0.0", runtimeAgent: "evimed-open-domain-answer", completionChecks: ["skillsLoaded"], outputs: [] };
+  f.store.agentRegistry = Promise.resolve(new Map([["open-domain-answer", answerLine]]));
+  await mkdir(path.join(f.project.workspaceDir, ".evimed-run", "sessions"), { recursive: true });
+  await mkdir(path.join(f.project.workspaceDir, ".evimed-run", "sessions", fixture.sessionId), { recursive: true });
+  await writeFile(path.join(f.project.workspaceDir, ".evimed-run", "sessions", fixture.sessionId, "state.json"), JSON.stringify({
+    formatVersion: 1, runId: "native_an_earlier_turn_of_this_session", sessionId: fixture.sessionId,
+    plan: { revision: 1, items: [{ id: "old", status: "accepted", attempts: 1 }] }, qualityNotices: [], gateRuns: [], subagents: [],
+  }));
+  await f.adopt(async () => ({ effectiveAgentId: "open-domain-answer", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-open-domain-answer" }));
+  const run = (await f.runs())[0];
+  assert.equal(run.status, "succeeded", noticeTexts(run).join(" | "));
+  assert.deepEqual(run.artifacts, ["weekly.md"]);
+  assert.equal(run.verification ?? null, null, "a file nobody planned is not an unaccepted package");
+  assert.ok(!noticeTexts(run).some((notice) => notice.includes("无法确认交付是否通过验收")), noticeTexts(run).join(" | "));
+  // The control: a turn a capability owes files to is still held to it (the test above this one's neighbour).
+  const owed = await setup(t, events.sort((a, b) => a.seq - b.seq));
+  await writeFile(path.join(owed.project.workspaceDir, "weekly.md"), written);
+  await utimes(path.join(owed.project.workspaceDir, "weekly.md"), new Date(start + 50), new Date(start + 50));
+  owed.store.agentRegistry = Promise.resolve(new Map([["clinical-evidence-synthesis", { id: "clinical-evidence-synthesis", version: "1.0.0", runtimeAgent: "evimed-clinical-evidence-synthesis",
+    completionChecks: ["requiredOutputsExist"], outputs: [{ path: "report.md", required: true }] }]]));
+  await mkdir(path.join(owed.project.workspaceDir, ".evimed-run", "sessions", fixture.sessionId), { recursive: true });
+  await writeFile(path.join(owed.project.workspaceDir, ".evimed-run", "sessions", fixture.sessionId, "state.json"), JSON.stringify({
+    formatVersion: 1, runId: "native_an_earlier_turn_of_this_session", sessionId: fixture.sessionId, plan: { revision: 1, items: [{ id: "old", status: "accepted", attempts: 1 }] }, qualityNotices: [], gateRuns: [], subagents: [],
+  }));
+  await owed.adopt(async () => ({ effectiveAgentId: "clinical-evidence-synthesis", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis" }));
+  const held = (await owed.runs())[0];
+  assert.ok(noticeTexts(held).some((notice) => notice.includes("无法确认交付是否通过验收")) || held.verification === "unverified" || held.status === "failed",
+    `a capability's turn is judged as before: ${held.status} ${held.verification} ${noticeTexts(held).join(" | ")}`);
+});
+
 test("a current native receipt with a legacy basename survives offline recovery from the actual nested path", async (t) => {
   const f = await setupWorkflow(t, true, false);
   const rootFile = path.join(f.project.workspaceDir, "report.md");

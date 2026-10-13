@@ -80,6 +80,11 @@ test('a file the run handed over with present is left to the kernel\'s own card,
   assert.deepEqual(/** @type {any} */ (fileCardsModel(run)).files.map((/** @type {any} */ file) => file.path), ['会议纪要.docx', '会议纪要.md']);
   assert.deepEqual(/** @type {any} */ (fileCardsModel({ ...run, presentedFiles: ['会议纪要.md'] })).files.map((/** @type {any} */ file) => file.path), ['会议纪要.docx']);
   assert.equal(fileCardsModel({ ...run, presentedFiles: ['会议纪要.docx', '会议纪要.md'] }), null, 'every file presented: nothing is drawn twice');
+  // What the run did not hand over (the script that built the workbook it did) waits behind the fold instead of leading.
+  const built = { ...run, artifacts: ['预算表.xlsx', 'make.py'], artifactRoles: { '预算表.xlsx': 'data', 'make.py': 'draft' } };
+  assert.equal(/** @type {any} */ (fileCardsModel(built)).deferred, false);
+  const rest = /** @type {any} */ (fileCardsModel({ ...built, presentedFiles: ['预算表.xlsx'] }));
+  assert.deepEqual([rest.files.map((/** @type {any} */ file) => file.path), rest.deferred], [['make.py'], true]);
 });
 
 test('a completed reporting checklist is never taken for the report: it follows the section it lists', () => {

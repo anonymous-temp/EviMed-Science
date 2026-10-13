@@ -2225,6 +2225,19 @@ async function existingArtifacts(project, candidates, run = null, endTime = null
 }
 
 /**
+ * Whether a run is an ordinary conversation (`isOrdinaryConversation`): read from the run's own plan, its capability's declared
+ * outputs in the registry, and nothing about what it wrote.
+ * @param {any} run @param {any} registry the loaded agent registry
+ */
+function isOrdinaryRun(run, registry) {
+  const plan = Array.isArray(run.deliverables) && run.deliverables.length ? run.deliverables : (run.nativeWorkflow?.plan?.items ?? []);
+  const agentId = run.effectiveAgentId ? String(run.effectiveAgentId) : "";
+  const outputs = agentId ? registry?.get?.(agentId)?.outputs : null;
+  const declared = Array.isArray(outputs) ? new Set(outputs.map((/** @type {any} */ output) => String(output?.path ?? ""))) : null;
+  return isOrdinaryConversation(run, declared, Array.isArray(plan) ? plan : []);
+}
+
+/**
  * What an ordinary conversation produced, by what the workspace and the transcript both witness: the files that are new or
  * changed in the workspace since the run began (`runWorkspaceChanges.mjs` — whichever tool wrote them, `bash` and a Python
  * script included) and the files it handed over with `present`, with the generic file contract's checks run over each (they
@@ -2240,11 +2253,7 @@ async function existingArtifacts(project, candidates, run = null, endTime = null
  */
 async function ordinaryConversationOutputs({ project, run, registry, assistants, runtimeWorkspaceRoot, endTime }) {
   const none = { files: [], presented: [], notices: [] };
-  const plan = Array.isArray(run.deliverables) && run.deliverables.length ? run.deliverables : (run.nativeWorkflow?.plan?.items ?? []);
-  const agentId = run.effectiveAgentId ? String(run.effectiveAgentId) : "";
-  const outputs = agentId ? registry?.get?.(agentId)?.outputs : null;
-  const declared = Array.isArray(outputs) ? new Set(outputs.map((/** @type {any} */ output) => String(output?.path ?? ""))) : null;
-  if (!isOrdinaryConversation(run, declared, Array.isArray(plan) ? plan : [])) return none;
+  if (!isOrdinaryRun(run, registry)) return none;
   const startedAt = Date.parse(String(run.startedAt ?? ""));
   const until = typeof endTime === "number" && Number.isFinite(endTime) ? endTime : Date.now();
   const changed = Number.isFinite(startedAt) ? await workspaceChangedFiles(project.workspaceDir, { since: startedAt, until }) : [];
@@ -6369,7 +6378,12 @@ export class AgentRunStore {
         // A conversation turn ending is the run ending; what a run delivered is
         // what its receipt names.
         const incomplete = Boolean(requiresAcceptance && !currentReceipt);
-        if (incomplete || (projection.state === "unattributed" && artifacts.length > 0 && !currentReceipt)) {
+        // A projection the kernel cannot attribute to this turn (the session's earlier turn wrote it) hides nothing when this
+        // turn planned nothing: an ordinary conversation's files are not an unaccepted package, and the person who asked for
+        // a script is not told that its acceptance cannot be confirmed.
+        const unattributedPackage = projection.state === "unattributed" && artifacts.length > 0 && !currentReceipt
+          && (requiresAcceptance || !isOrdinaryRun(run, await this.agentRegistry));
+        if (incomplete || unattributedPackage) {
           await unaccepted([...nativeWorkflowNotices(proof),
             ...(projection.state === "unattributed" ? [unattributedNotice()] : []),
           ]);

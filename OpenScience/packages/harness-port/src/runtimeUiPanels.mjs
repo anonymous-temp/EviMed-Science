@@ -131,7 +131,7 @@ export function documentNameOf(path) {
  * per deliverable — say which deliverable's folder each is in (`where`), the
  * folder the answer names them by.
  * @param {any} live
- * @returns {{ runId: string, files: { path: string, name: string, label: string, type: string, icon: string, rank: number, where: string | null }[] } | null}
+ * @returns {{ runId: string, files: { path: string, name: string, label: string, type: string, icon: string, rank: number, where: string | null }[], deferred: boolean } | null}
  */
 export function fileCardsModel(live) {
   const state = String(live?.state ?? '');
@@ -156,7 +156,10 @@ export function fileCardsModel(live) {
     if ((named.get(file.label) ?? 0) > 1 && folders.length > 1) file.where = folders[folders.length - 2];
   }
   files.sort(compareArtifacts);
-  return files.length ? { runId: String(live.runId), files } : null;
+  // Where the run presented some of its files, what is left is what it did not choose to hand over — the helper scripts
+  // beside the workbook it presented — and waits behind the fold.
+  const deferred = Array.isArray(live.presentedFiles) && live.presentedFiles.length > 0;
+  return files.length ? { runId: String(live.runId), files, deferred } : null;
 }
 
 /**
@@ -350,14 +353,14 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
     // behind 「显示全部」 with everything else (production, 2026-09-24: two
     // scripts took half the cards of a finished review).
     const readable = model.files.filter((/** @type {any} */ file) => file.rank <= 4);
-    const lead = (readable.length ? readable : model.files).slice(0, 4);
+    const lead = model.deferred ? [] : (readable.length ? readable : model.files).slice(0, 4);
     const shown = all ? model.files : lead;
     return h('div', { 'data-evimed-files': model.runId, style: { marginTop: '16px', minWidth: 0 } },
       h('div', { style: { display: 'grid', gridTemplateColumns: model.files.length > 1 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)', gap: '8px' } },
         shown.map((file) => h(FileCard, { key: file.path, file, runId: model.runId, sessionId, useResource }))),
       model.files.length > lead.length
         ? h('button', { type: 'button', 'aria-expanded': all, onClick: () => setAll(!all), style: { ...textButton, ...meta, marginTop: '4px' } },
-          all ? '收起' : `显示全部 ${model.files.length} 个文件`)
+          all ? '收起' : model.deferred ? `显示其余 ${model.files.length} 个文件` : `显示全部 ${model.files.length} 个文件`)
         : null);
   };
 
