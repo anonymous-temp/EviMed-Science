@@ -143,6 +143,47 @@ export function scopeParam(scope: SourceScope, currentProjectId: string): string
   return scope.projectId === currentProjectId ? null : scope.projectId;
 }
 
+/* ----------------------------------------------- a compiled file by place -- */
+
+/**
+ * A compiled file named by its place rather than its document id — how an address from outside names it (a mark of the memory
+ * map, a link someone shared): `/app/files/open?project=<id>&tree=<wiki | kg>&path=<path inside the tree>`. The page reads the
+ * file and goes to the document's own page, so a version saved since does not break the link.
+ */
+export interface KnowledgeAddress { projectId: string; tree: "wiki" | "kg"; path: string }
+
+const MAX_PATH_CHARS = 300;
+
+/** The place an address names, read as untrusted. */
+export function readKnowledgeAddress(params: URLSearchParams): KnowledgeAddress | null {
+  const projectId = (params.get("project") ?? "").trim();
+  const tree = params.get("tree");
+  const path = (params.get("path") ?? "").trim();
+  if (!projectId || projectId.length > MAX_SCOPE_CHARS || (tree !== "wiki" && tree !== "kg")) return null;
+  if (!path || path.length > MAX_PATH_CHARS || path.startsWith("/") || path.split("/").some((part) => part === ".." || part === "")) return null;
+  return { projectId, tree, path };
+}
+
+/** The address of a compiled file. */
+export function knowledgePath(address: KnowledgeAddress): string {
+  return `/app/files/open?${new URLSearchParams({ project: address.projectId, tree: address.tree, path: address.path })}`;
+}
+
+/**
+ * Where a mark of the memory map that comes from the knowledge graph opens: an entity (`entity:<id>`, the graph's file
+ * `entities/<id>.md`) or a page (`page:<path>`), in the project the map is of. Null for any other mark, and for a map of no
+ * one project, whose entities are not told apart.
+ */
+export function knowledgeNodeAddress(nodeId: string, projectId: string | null | undefined): string | null {
+  if (!projectId) return null;
+  const cut = nodeId.indexOf(":");
+  const type = cut > 0 ? nodeId.slice(0, cut) : "";
+  const rest = cut > 0 ? nodeId.slice(cut + 1) : "";
+  const address: KnowledgeAddress | null = type === "entity" ? { projectId, tree: "kg", path: `entities/${rest}.md` }
+    : type === "page" ? { projectId, tree: "wiki", path: rest } : null;
+  return address && readKnowledgeAddress(new URLSearchParams({ project: address.projectId, tree: address.tree, path: address.path })) ? knowledgePath(address) : null;
+}
+
 /* ------------------------------------------------------------ position -- */
 
 /** How far the list was scrolled and how many documents it had loaded, when a document was opened from it. */

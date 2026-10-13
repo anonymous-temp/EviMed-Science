@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { legacySourceParam, listPath, readListState, readReaderView, readerPath, recallListPosition, rememberListPosition, scopeOf, scopeParam } from "./knowledgeNav";
+import { knowledgeNodeAddress, knowledgePath, legacySourceParam, listPath, readKnowledgeAddress, readListState, readReaderView, readerPath, recallListPosition, rememberListPosition, scopeOf, scopeParam } from "./knowledgeNav";
 
 const params = (search: string) => new URLSearchParams(search);
 const none = { scope: null, kind: null, q: "" } as const;
@@ -109,5 +109,18 @@ describe("where the list was left", () => {
     } finally {
       Object.defineProperty(window, "sessionStorage", original);
     }
+  });
+
+  it("names a compiled file by its place, and a mark of the memory map by the file it comes from", () => {
+    expect(knowledgePath({ projectId: "p1", tree: "kg", path: "entities/trial-rocket-af.md" })).toBe("/app/files/open?project=p1&tree=kg&path=entities%2Ftrial-rocket-af.md");
+    expect(readKnowledgeAddress(params("project=p1&tree=wiki&path=concept%2FA.md"))).toEqual({ projectId: "p1", tree: "wiki", path: "concept/A.md" });
+    for (const bad of ["tree=kg&path=a.md", "project=p1&tree=other&path=a.md", "project=p1&tree=kg&path=..%2Fa.md", "project=p1&tree=kg&path=%2Fa.md", "project=p1&tree=kg&path="]) {
+      expect(readKnowledgeAddress(params(bad))).toBeNull();
+    }
+    expect(knowledgeNodeAddress("entity:trial-rocket-af", "p1")).toBe("/app/files/open?project=p1&tree=kg&path=entities%2Ftrial-rocket-af.md");
+    expect(knowledgeNodeAddress("page:concept/Alpha 协议.md", "p1")).toBe("/app/files/open?project=p1&tree=wiki&path=concept%2FAlpha+%E5%8D%8F%E8%AE%AE.md");
+    expect(knowledgeNodeAddress("entity:x", null)).toBeNull();
+    expect(knowledgeNodeAddress("memory:abc", "p1")).toBeNull();
+    expect(knowledgeNodeAddress("page:../secret.md", "p1")).toBeNull();
   });
 });
