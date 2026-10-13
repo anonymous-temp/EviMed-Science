@@ -58,15 +58,12 @@ export function readUpstreamTrees(root, topicId) {
  * The trees a run searches for a topic. The first time the run finds any under `from`, it copies their pages into its own
  * directory (`to`, the same layout) and from then on reads only that copy: a run that is resumed after the export
  * directory changed still searches the pages its earlier answers searched, and the run directory holds what it measured.
- * With `write: false` nothing is copied and the answer is the trees a run would search.
- * @param {{ from: string, to: string | null, topicId: string, write?: boolean }} options
+ * @param {{ from: string, to: string, topicId: string }} options
  */
-export function adoptUpstreamTrees({ from, to, topicId, write = true }) {
-  const held = to ? readUpstreamTrees(to, topicId) : []
+export function adoptUpstreamTrees({ from, to, topicId }) {
+  const held = readUpstreamTrees(to, topicId)
   if (held.length) return held
-  const found = readUpstreamTrees(from, topicId)
-  if (!write || !to) return found
-  for (const tree of found) {
+  for (const tree of readUpstreamTrees(from, topicId)) {
     for (const page of tree.pages) {
       const target = join(to, topicId, tree.name, page.path)
       mkdirSync(dirname(target), { recursive: true })
@@ -90,8 +87,9 @@ export function treeForRep(trees, rep) {
  * comment. So each source link becomes its words followed by that comment — the same document id, the same quotation —
  * and a page tells the model what a page of arm B told it: which document to cite, and with which sentence.
  *  - a source link with no quotation keeps its words and names the document id in plain text, so it can still be searched;
- *  - a link to an address that is not one of the topic's documents keeps its words only;
- *  - links between pages, and links out of the engine, stay as written.
+ *  - any other `viking://` link — a document of no topic here, a page addressed by its absolute address — keeps its words only;
+ *  - relative links between pages and links out of the engine stay as written, and so does anything the platform's link
+ *    reader does not read as a link to a `viking://` address (it is not counted as a source link either).
  * @param {string} markdown @param {ReadonlySet<string>} documentIds
  */
 export function rewriteSourceLinks(markdown, documentIds) {

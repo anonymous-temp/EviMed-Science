@@ -1,22 +1,24 @@
 // Pure logic of the knowledge-pages evaluation. No network: every model is a scripted fake.
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { KNOWLEDGE_PAGE_LIMITS, parseKnowledgePage, sourceCitationReferences, verifyKnowledgePage } from '@evimed/domain'
+import { fileURLToPath } from 'node:url'
+import { sourceCitationReferences } from '@evimed/domain'
 import { answerQuestion, renderHits } from '../lib/answer.mjs'
-import { checkAnswerCitations, parseMarkers, stripMarkers } from '../lib/citations.mjs'
-import { buildCompileInput, compileTopic, settlePatch } from '../lib/compile.mjs'
-import { QUESTIONS_PER_TOPIC, checkCorpus, checkTopic, collapse, loadCorpus, loadTopic, sourceIdFor } from '../lib/corpus.mjs'
-import { THRESHOLDS, decide } from '../lib/decide.mjs'
+import { QUOTE_LIMITS, checkAnswerCitations, checkCitation, parseMarkers, sourceMarker, stripMarkers } from '../lib/citations.mjs'
+import { QUESTIONS_PER_TOPIC, checkCorpus, checkTopic, collapse, loadCorpus, loadRunCorpus, loadTopic, sourceIdFor } from '../lib/corpus.mjs'
+import { PAGE_ARM_IDS, THRESHOLDS, decide } from '../lib/decide.mjs'
 import { judgeAnswer, parseJudgement, scoreJudgement } from '../lib/judge.mjs'
-import { buildKnowledgeBase, pageRecords } from '../lib/kb.mjs'
+import { buildKnowledgeBase, treesFor } from '../lib/kb.mjs'
 import { BudgetExceeded, PRICES, createLlm, ledgerTotal, priceCall, readUsage } from '../lib/llm.mjs'
-import { ANSWER_SYSTEM, ARMS, DECOMPOSITION_GUIDANCE } from '../lib/prompts.mjs'
+import { ANSWER_SYSTEM, ARMS, ARM_B_REMOVED, DECOMPOSITION_GUIDANCE, JUDGE_SYSTEM, sha256 } from '../lib/prompts.mjs'
 import { Bm25Index, buildIndex, chunkText, stem, tokenize } from '../lib/retrieval.mjs'
 import { BOOTSTRAP_SEED, mean, pairedBootstrap, percentile, seededRandom } from '../lib/stats.mjs'
-import { summarize } from '../lib/summary.mjs'
+import { summarizeRunDirectory } from '../lib/store.mjs'
+import { ARM_IDS, RUNNABLE_ARM_IDS, renderTable, summarize } from '../lib/summary.mjs'
+import { adoptUpstreamTrees, readUpstreamTrees, rewriteSourceLinks, treeForRep, upstreamPageRecords, upstreamTreeStats } from '../lib/upstream.mjs'
 
 const A = `src_${'a'.repeat(32)}`
 const B = `src_${'b'.repeat(32)}`
@@ -46,6 +48,14 @@ test('a chunk is a slice of the text at its offsets, and a page line is never cu
   const page = `# Page\n\n- ${'a long claim '.repeat(80)} <!-- evimed-source:{"sourceId":"${A}","quote":"x"} -->\n- short`
   const pieces = chunkText(page, { maxChars: 400, splitLongLines: false })
   assert.ok(pieces.some((piece) => piece.text.includes('<!-- evimed-source') && piece.text.includes('-->')), 'a marker stays whole')
+})
+
+test('a page read by blocks keeps a sentence with the source link under it, a table and a list each whole', () => {
+  const text = '# Page\n\nA sentence written over\ntwo lines\n([Doc](viking://x "the quote")).\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\n- one\n- two\n'
+  const blocks = chunkText(text, { maxChars: 40, splitLongLines: false, blocks: true })
+  for (const chunk of blocks) assert.equal(text.slice(chunk.start, chunk.end), chunk.text)
+  assert.deepEqual(blocks.map((chunk) => chunk.text), ['# Page', 'A sentence written over\ntwo lines\n([Doc](viking://x "the quote")).', '| a | b |\n| --- | --- |\n| 1 | 2 |', '- one\n- two'])
+  assert.ok(chunkText(text, { maxChars: 40, splitLongLines: false }).some((chunk) => chunk.text.includes('two lines') && !chunk.text.includes('the quote')), 'by lines, the sentence and its source part')
 })
 
 test('BM25 ranks the passage that holds the rare query terms first, deterministically', () => {
@@ -156,6 +166,17 @@ test('the marker parser agrees with the platform parser on well-formed markers, 
   const answer = `One. ${marker(A, 'Apixaban reduced major bleeding compared with warfarin')}\nTwo. ${marker(B, 'Edoxaban was noninferior to warfarin')}`
   assert.deepEqual(parseMarkers(answer), sourceCitationReferences(answer))
   assert.equal(stripMarkers(answer), 'One.\nTwo.')
+})
+
+test('a marker the harness writes reads back as written, and the quotation limits are the ones the recorded runs used', () => {
+  const quote = 'A quotation with "quotes", <angle> brackets and an arrow --> inside.'
+  const written = sourceMarker(A, quote)
+  assert.ok(!written.slice(4, -3).includes('-->') && !written.slice(4, -3).includes('<'))
+  assert.deepEqual(parseMarkers(`Fact. ${written}`), [{ sourceId: A, quote }])
+  assert.deepEqual(QUOTE_LIMITS, { minChars: 10, maxChars: 600 })
+  assert.equal(checkCitation({ sourceId: A, quote: 'x'.repeat(601) }, resolve).status, 'quote_invalid')
+  assert.equal(checkCitation({ sourceId: A, quote: '   Apixaban   ' }, resolve).status, 'quote_invalid')
+  assert.equal(checkCitation({ sourceId: A, quote: 'Apixaban reduced major bleeding' }, resolve).status, 'verified')
 })
 
 // --- scoring -------------------------------------------------------------------------------------------------------------
@@ -308,6 +329,34 @@ test('incomplete data is inconclusive, not a verdict', () => {
   assert.equal(decide(noSanity).open, false)
 })
 
+/** The passing summary with its page arm renamed: what a run of A, A′ and `arm` hands `decide`. */
+function passingSummaryFor(arm) {
+  const summary = passingSummary()
+  for (const kind of ['synthesis', 'single']) {
+    summary.categories[kind].diffs = Object.fromEntries(Object.entries(summary.categories[kind].diffs).map(([name, value]) => [name.replace(/^B-/, `${arm}-`), value]))
+  }
+  const { A: a, Aprime, B: page } = summary.citations.overall
+  summary.citations.overall = { A: a, Aprime, [arm]: page }
+  return summary
+}
+
+test('the same rule, with the same constants, decides arm C on its own comparisons and citation rate', () => {
+  assert.deepEqual(PAGE_ARM_IDS, ['B', 'C'])
+  const verdict = decide(passingSummaryFor('C'), 'C')
+  assert.equal(verdict.open, true, verdict.reasons.join('\n'))
+  assert.ok(verdict.reasons.some((reason) => reason.startsWith("pass: synthesis C - A' lower bound")))
+  const trivial = passingSummaryFor('C')
+  trivial.categories.synthesis.diffs['C-Aprime'] = diff(0.04, 0.01, 0.07)
+  assert.ok(decide(trivial, 'C').reasons.some((reason) => /^FAIL: synthesis C - A' mean 0\.040 is below 0\.05/.test(reason)))
+  const citing = passingSummaryFor('C')
+  citing.citations.overall.C.verifiedRate = 0.87
+  assert.ok(decide(citing, 'C').reasons.some((reason) => /citation verified rate C 0\.870 is more than 0\.03 below A' 0\.910/.test(reason)))
+  // B's numbers say nothing about C, nor C's about B; and the rule is about an arm that searches pages.
+  assert.equal(decide(passingSummaryFor('C'), 'B').inconclusive, true)
+  assert.equal(decide(passingSummary(), 'C').inconclusive, true)
+  assert.throws(() => decide(passingSummary(), 'Aprime'), /arm that searches pages/)
+})
+
 // --- aggregation ---------------------------------------------------------------------------------------------------------
 
 function syntheticRuns() {
@@ -352,6 +401,72 @@ test('a cell with fewer than three judged repetitions is left out of the pairing
   assert.equal(summary.coverage.completeCells, 14)
   assert.equal(summary.categories.synthesis.diffs['B-A'].n, 2)
   assert.equal(summary.decision.inconclusive, true)
+})
+
+const TREE_STATS = Object.freeze({ pages: 3, typedPages: 3, sourceLinks: 6, inSourceList: 1, besideClaims: 5, besideClaimsWithQuotation: 4, present: 2, absent: 1, noQuotation: 0, sourceMissing: 2 })
+
+/** Runs of A, A′ and C on two topics, three repetitions; `withTree`: the topics C has a tree for (C's cells of the others were not asked). */
+function upstreamRuns(withTree) {
+  const corpus = [
+    { id: 't', questions: [{ id: 's1', kind: 'synthesis' }, { id: 's2', kind: 'synthesis' }, { id: 'f1', kind: 'single' }] },
+    { id: 'u', questions: [{ id: 's3', kind: 'synthesis' }, { id: 's4', kind: 'synthesis' }, { id: 'f2', kind: 'single' }] },
+  ]
+  const scores = { A: 0.6, Aprime: 0.6, C: 0.8 }
+  const runs = []
+  for (const topic of corpus) for (const question of topic.questions) for (const arm of ['A', 'Aprime', 'C']) for (let rep = 1; rep <= 3; rep += 1) {
+    if (arm === 'C' && !withTree.includes(topic.id)) continue
+    runs.push({
+      key: `${topic.id}/${question.id}/${arm}/${rep}`, topic: topic.id, questionId: question.id, arm, rep, stage: 'judged', judge: { ok: true }, score: scores[arm],
+      tokens: { total: 1000 }, toolCalls: 2, cost: 0.01, citations: { markerCount: 2, verified: 2, byStatus: { verified: 2 }, pageCited: 0 },
+      // Two trees for a topic, three repetitions: the first tree is searched again by the third.
+      ...(arm === 'C' ? { pages: { [topic.id]: rep === 2 ? 'rep2' : 'rep1' } } : {}),
+    })
+  }
+  const upstreamTrees = withTree.flatMap((topic) => ['rep1', 'rep2'].map((tree) => ({ topic, tree, sha256: `${topic}-${tree}`, stats: TREE_STATS })))
+  return { corpus, runs, upstreamTrees }
+}
+
+test('a run of A, A prime and C is summarized with C\'s comparisons, C\'s verdict, and what each tree held and which repetitions searched it', () => {
+  const { corpus, runs, upstreamTrees } = upstreamRuns(['t', 'u'])
+  const summary = summarize({ runs, compiles: [], upstreamTrees, ledger: [], corpus, judgeSanity: { n: 6, referenceMean: 1, emptyMean: 0 }, iterations: 300, arms: ['A', 'Aprime', 'C'] })
+  assert.deepEqual(summary.arms, ['A', 'Aprime', 'C'])
+  assert.deepEqual(Object.keys(summary.categories.synthesis.diffs), ['C-Aprime', 'C-A', 'Aprime-A'])
+  assert.ok(Math.abs(summary.categories.synthesis.diffs['C-Aprime'].mean - 0.2) < 1e-9)
+  assert.deepEqual(Object.keys(summary.citations.diffs), ['C-Aprime', 'C-A', 'Aprime-A'])
+  assert.deepEqual(summary.coverageByArm, { A: { expectedCells: 6, completeCells: 6 }, Aprime: { expectedCells: 6, completeCells: 6 }, C: { expectedCells: 6, completeCells: 6 } })
+  assert.deepEqual(summary.upstreamPages.perTopic.t.trees.map((tree) => [tree.tree, tree.reps, tree.presentShare]), [['rep1', [1, 3], 0.5], ['rep2', [2], 0.5]])
+  assert.deepEqual(summary.upstreamPages.topicsWithoutTree, [])
+  assert.deepEqual([summary.upstreamPages.overall.trees, summary.upstreamPages.overall.besideClaims, summary.upstreamPages.overall.present], [4, 20, 8])
+  assert.deepEqual(Object.keys(summary.decisions), ['C'])
+  assert.equal(summary.decision, undefined, 'the field the 2026-10-12 summaries call decision is arm B\'s verdict, and this run has no B')
+  assert.equal(summary.decisions.C.open, true, summary.decisions.C.reasons.join('\n'))
+  assert.match(renderTable(summary), /DECISION for arm C \(upstream knowledge pages \+ kb_search\): the thresholds are met/)
+})
+
+test('a topic with no tree leaves arm C\'s cells there unasked: the topic is named, and the verdict on C is withheld, not made', () => {
+  const { corpus, runs, upstreamTrees } = upstreamRuns(['t'])
+  const summary = summarize({ runs, compiles: [], upstreamTrees, ledger: [], corpus, judgeSanity: { n: 6, referenceMean: 1, emptyMean: 0 }, iterations: 300, arms: ['A', 'Aprime', 'C'] })
+  assert.deepEqual(summary.coverageByArm.C, { expectedCells: 6, completeCells: 3 })
+  assert.deepEqual(summary.upstreamPages.topicsWithoutTree, ['u'])
+  assert.equal(summary.upstreamPages.perTopic.u, undefined)
+  const verdict = summary.decisions.C
+  assert.deepEqual([verdict.open, verdict.inconclusive], [false, true])
+  assert.ok(verdict.reasons.some((reason) => reason.includes('15 of 18 (question, arm) cells are complete')), verdict.reasons.join(' | '))
+  assert.ok(verdict.reasons.some((reason) => reason.includes('arm C has no upstream pages for u')), verdict.reasons.join(' | '))
+  assert.match(renderTable(summary), /u +no tree: arm C was not asked this topic's questions/)
+})
+
+test('summarizing a recorded run again reproduces its committed summary: every number, the verdict and the order of the fields', async () => {
+  for (const runId of ['2026-10-12-three-arm', '2026-10-12-three-arm-pooled', '2026-10-12-pilot']) {
+    const runDir = fileURLToPath(new URL(`../results/${runId}/`, import.meta.url))
+    const committed = JSON.parse(readFileSync(join(runDir, 'summary.json'), 'utf8'))
+    const { core, plan } = JSON.parse(readFileSync(join(runDir, 'config.json'), 'utf8'))
+    const again = summarizeRunDirectory({ runDir, runId, corpus: await loadRunCorpus(plan.topics, plan.questionsPerTopic), reps: plan.reps, arms: plan.arms, config: core })
+    for (const key of Object.keys(committed)) if (key !== 'generatedAt') assert.deepEqual(again[key], committed[key], `${runId}: ${key}`)
+    assert.deepEqual(Object.keys(again).filter((key) => key in committed), Object.keys(committed), `${runId}: the fields keep their order`)
+    assert.deepEqual(Object.keys(again).filter((key) => !(key in committed)), ['arms', 'coverageByArm', 'decisions'], `${runId}: fields are only added`)
+    assert.deepEqual(again.decisions.B, committed.decision)
+  }
 })
 
 // --- the client ----------------------------------------------------------------------------------------------------------
@@ -407,11 +522,25 @@ test('an API error never carries the key, and a retryable one is retried', async
 
 // --- answering -----------------------------------------------------------------------------------------------------------
 
-test('the three arms share one answering prompt, and only A prime adds the decomposition sentence', () => {
-  assert.equal(`${ANSWER_SYSTEM}${ARMS.A.systemSuffix}`, `${ANSWER_SYSTEM}${ARMS.B.systemSuffix}`)
+test('every arm shares one answering prompt, the recorded runs\' prompts unchanged, and only A prime adds the decomposition sentence', () => {
+  for (const arm of ['A', 'B', 'C']) assert.equal(`${ANSWER_SYSTEM}${ARMS[arm].systemSuffix}`, ANSWER_SYSTEM)
   assert.equal(`${ANSWER_SYSTEM}${ARMS.Aprime.systemSuffix}`, `${ANSWER_SYSTEM}\n\n${DECOMPOSITION_GUIDANCE}`)
   assert.ok(!ANSWER_SYSTEM.includes('sub-questions'))
   assert.ok(ANSWER_SYSTEM.includes('evimed-source') && ANSWER_SYSTEM.includes('never cite the page itself'))
+  // A run of arm C asks and grades exactly as the runs of 2026-10-12 did.
+  const recorded = JSON.parse(readFileSync(new URL('../results/2026-10-12-three-arm/config.json', import.meta.url), 'utf8')).core.prompts
+  assert.equal(sha256(ANSWER_SYSTEM), recorded.answerSystemSha256)
+  assert.equal(sha256(JUDGE_SYSTEM), recorded.judgeSystemSha256)
+  assert.equal(DECOMPOSITION_GUIDANCE, recorded.decompositionSentence)
+})
+
+test('arm B is on record only: a new run cannot ask it, and building its knowledge base says why', () => {
+  assert.deepEqual(ARM_IDS, ['A', 'Aprime', 'B', 'C'])
+  assert.deepEqual(RUNNABLE_ARM_IDS, ['A', 'Aprime', 'C'])
+  const topic = { id: 't', documents: [{ sourceId: A, title: 'T', text: 'alpha beta gamma.' }] }
+  assert.throws(() => buildKnowledgeBase({ scope: 'topic', arm: 'B', topic, corpus: [topic], rep: 1 }), (error) => error.message === ARM_B_REMOVED)
+  assert.match(ARM_B_REMOVED, /removed on 2026-10-13/)
+  assert.match(ARM_B_REMOVED, /results\/2026-10-12-\*/)
 })
 
 test('answering searches, reads the result and answers; at most six searches are served', async () => {
@@ -446,152 +575,119 @@ test('several calls in one reply are each served, those past the limit are refus
   assert.ok(tools.slice(6).every((message) => message.content.includes('limit of 6 searches')))
 })
 
-// --- compiling -----------------------------------------------------------------------------------------------------------
+// --- arm C: pages compiled upstream ---------------------------------------------------------------------------------------
 
-const QUOTE_A = 'Apixaban reduced major bleeding compared with warfarin'
-const QUOTE_B = 'Edoxaban was noninferior to warfarin for stroke prevention'
-const miniTopic = { id: 't', documents: [
-  { key: 'pmid-1', sourceId: A, title: 'Apixaban trial', text: `${TEXTS.get(A)}` },
-  { key: 'pmid-2', sourceId: B, title: 'Edoxaban trial', text: `${TEXTS.get(B)}` },
-] }
+const FIXTURE = fileURLToPath(new URL('./fixtures/upstream/', import.meta.url))
+const AF = 'af-doac-warfarin'
+const RELY = 'src_8a669b066c4cb002e5224ef48c9a8550'
+const documentsOf = (topic) => (id) => { const document = topic.documents.find((entry) => entry.sourceId === id); return document ? { text: document.text } : null }
 
-const goodPatch = () => ({
-  schemaVersion: 1,
-  pages: [
-    { op: 'create', slug: 'anticoagulants', type: 'topic', title: 'Anticoagulants in atrial fibrillation', related: ['apixaban', 'gone'],
-      sections: [{ heading: 'Bleeding and stroke', claims: [
-        { text: 'Apixaban lowered major bleeding versus warfarin.', kind: 'direct', evidence: [{ sourceId: A, quote: QUOTE_A }] },
-        { text: 'Edoxaban was not worse than warfarin.', kind: 'direct', evidence: [{ sourceId: B, quote: QUOTE_B }] },
-        { text: 'Both agents match or beat warfarin.', kind: 'synthesized', confidence: 'moderate', evidence: [{ sourceId: A, quote: QUOTE_A }, { sourceId: B, quote: QUOTE_B }] },
-        { text: 'Apixaban cut bleeding by 40%.', kind: 'direct', evidence: [{ sourceId: A, quote: 'Apixaban reduced major bleeding by 40% compared with warfarin' }] },
-        { text: 'A synthesis from one document.', kind: 'synthesized', confidence: 'low', evidence: [{ sourceId: A, quote: QUOTE_A }] },
-        { text: 'No evidence at all.', kind: 'direct', evidence: [] },
-      ] }] },
-    { op: 'create', slug: 'apixaban', type: 'entity', title: 'Apixaban', sections: [{ heading: 'Trial', claims: [{ text: 'A made-up claim.', kind: 'direct', evidence: [{ sourceId: A, quote: 'Apixaban cures everything in every patient' }] }] }] },
-    { op: 'create', slug: 'BAD SLUG', type: 'topic', title: 'x', sections: [] },
-  ],
+test('an exported tree is every Markdown file under it, hidden files and the engine\'s listing aside, in a fixed order', () => {
+  const trees = readUpstreamTrees(FIXTURE, AF)
+  assert.deepEqual(trees.map((tree) => tree.name), ['rep1', 'rep2'])
+  assert.deepEqual(trees[0].pages.map((page) => page.path), ['comparison/doac-vs-warfarin.md', 'entity/re-ly.md', 'index.md'])
+  assert.match(trees[0].sha256, /^[a-f0-9]{64}$/)
+  assert.deepEqual(readUpstreamTrees(FIXTURE, 'sglt2-hf-ckd'), [])
 })
 
-test('settling a patch keeps what the documents confirm, holds the rest with reasons and writes only pages that stand', () => {
-  const settled = settlePatch(goodPatch(), miniTopic.documents)
-  assert.deepEqual(settled.pages.map((page) => page.slug), ['anticoagulants'])
-  assert.equal(settled.counts.claims, 7)
-  assert.equal(settled.counts.kept, 3)
-  assert.equal(settled.counts.held, 4)
-  assert.equal(settled.counts.heldByReason.quote_not_found, 2)
-  assert.equal(settled.counts.heldByReason.single_document, 1)
-  assert.equal(settled.counts.heldByReason.no_evidence, 1)
-  assert.deepEqual(settled.skipped.map((entry) => `${entry.slug}:${entry.reason}`).sort(), ['BAD SLUG:invalid_slug', 'apixaban:no_claim_stands'])
-  const page = settled.pages[0]
-  assert.deepEqual(page.content.related, [], 'links to pages that were not written are dropped')
-  const parsed = parseKnowledgePage(page.markdown)
-  const verification = verifyKnowledgePage(parsed, (id) => ({ text: TEXTS.get(id) }), { pages: new Set(['anticoagulants']) })
-  assert.deepEqual(verification.counts, { claims: 3, verified: 3, unverified: 0, unsupported: 0 })
-  assert.ok(parseKnowledgePage(page.markdown).units.some((unit) => unit.claimMeta?.kind === 'synthesized' && unit.claimMeta.confidence === 'moderate'), 'the statement across documents carries its kind and confidence')
-  assert.match(settled.indexMarkdown, /\[\[anticoagulants\|Anticoagulants in atrial fibrillation\]\] · 3 条 · 2 份资料/)
-  assert.equal(page.verification.verified, 3)
+test('trees are the directories rep<N> with a page, in numeric order, reused in that order when repetitions outnumber them', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kp-trees-'))
+  try {
+    for (const name of ['rep10', 'rep2', 'rep1', 'rep0', 'drafts', 'rep3']) {
+      mkdirSync(join(dir, 't', name), { recursive: true })
+      if (name !== 'rep3') writeFileSync(join(dir, 't', name, 'index.md'), `# ${name}\n`)
+    }
+    const trees = readUpstreamTrees(dir, 't')
+    assert.deepEqual(trees.map((tree) => tree.name), ['rep1', 'rep2', 'rep10'], 'rep0 and drafts are not trees, an empty rep3 has no page')
+    assert.deepEqual([1, 2, 3, 4, 5, 6, 7].map((rep) => treeForRep(trees, rep).name), ['rep1', 'rep2', 'rep10', 'rep1', 'rep2', 'rep10', 'rep1'])
+    assert.equal(treeForRep([], 1), null)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('the compile input has the shape of the platform job', () => {
-  const input = buildCompileInput(miniTopic)
-  assert.equal(input.schemaVersion, 1)
-  assert.deepEqual(input.pages, [])
-  assert.deepEqual(input.limits, KNOWLEDGE_PAGE_LIMITS)
-  assert.deepEqual(Object.keys(input.sources[0]), ['sourceId', 'title', 'generation', 'textSha256', 'text'])
-  assert.match(input.sources[0].textSha256, /^[a-f0-9]{64}$/)
+test('a source link becomes its words and the citation marker an answer copies; other links lose only an address that means nothing to a reader', async () => {
+  const topic = await loadTopic(AF)
+  const ids = new Set(topic.documents.map((document) => document.sourceId))
+  const [comparison, entity] = readUpstreamTrees(FIXTURE, AF)[0].pages
+  const shown = rewriteSourceLinks(entity.content, ids)
+  assert.ok(shown.startsWith('---\ntype: entity\n'), 'the front matter stays as written')
+  assert.ok(shown.includes(`(Dabigatran versus warfarin in patients with atrial fibrillation ${sourceMarker(RELY, 'The primary outcome was stroke or systemic embolism.')}).`))
+  assert.ok(shown.includes(`- Dabigatran versus warfarin in patients with atrial fibrillation (document id: ${RELY})`), 'a link with no quotation names its document in words')
+  assert.ok(shown.includes('[comparison page](../comparison/doac-vs-warfarin.md)'), 'a relative link between pages stays')
+  const other = rewriteSourceLinks(comparison.content, ids)
+  assert.ok(!other.includes('viking://'))
+  assert.ok(other.includes('(Another record),'), 'a document of no topic here keeps its words only')
+  assert.ok(other.includes('and so is the RE-LY page when'), 'a page addressed absolutely keeps its words only')
+  assert.ok(other.includes('| Dabigatran | [RE-LY](../entity/re-ly.md) |'))
+  assert.deepEqual(parseMarkers(other).map((marker) => marker.quote), [
+    'In patients with atrial fibrillation, apixaban was superior to warfarin in preventing stroke or systemic embolism, caused less bleeding, and resulted in lower mortality.',
+    'Apixaban halved every bleeding event in every subgroup of the trial.',
+  ], 'a link without .md is a source link too, and a quotation wrapped over two lines is one line in the marker')
+  assert.ok(!rewriteSourceLinks(entity.content, new Set()).includes('evimed-source'), 'a document of another topic is not a source here')
 })
 
-test('compiling sends the method as the system prompt, repairs in place with the specific messages, then settles', async () => {
-  const flawed = goodPatch()
-  const llm = fakeLlm([{ content: JSON.stringify(flawed) }, (request) => {
-    const repair = request.messages.at(-1).content
-    assert.match(repair, /not in document/)
-    assert.match(repair, /Change only these places/)
-    const fixed = goodPatch()
-    fixed.pages[0].sections[0].claims[3].evidence[0].quote = QUOTE_A
-    return { content: JSON.stringify(fixed) }
-  }, { content: JSON.stringify(goodPatch()) }])
-  const result = await compileTopic({ llm, model: 'm', topic: miniTopic, skillText: 'SKILL TEXT', label: 'x' })
-  assert.equal(llm.log[0].messages[0].content, 'SKILL TEXT')
-  assert.equal(llm.log[0].json, true)
-  assert.ok(llm.log[0].messages[1].content.includes(`"sourceId":"${A}"`))
-  assert.equal(result.stats.rounds, 3, 'issues remain after each round, so both repair rounds are used and then it stops')
-  assert.equal(llm.log.length, 3)
-  assert.ok(result.stats.roundDetails[0].advisory >= 1)
-  assert.equal(result.stats.pages, 1)
-  assert.equal(result.stats.verifyMismatch, 0)
+test('a tree is counted after the fact as the platform counts it: pages, typed pages, links beside claims, quotations found', async () => {
+  const topic = await loadTopic(AF)
+  const [first, second] = readUpstreamTrees(FIXTURE, AF)
+  assert.deepEqual(upstreamTreeStats(first, topic.documents), {
+    ...TREE_STATS, characters: first.pages.reduce((sum, page) => sum + page.content.length, 0), documentsCited: 2, documents: 8,
+  })
+  const stats = upstreamTreeStats(second, topic.documents)
+  assert.deepEqual([stats.pages, stats.besideClaimsWithQuotation, stats.present, stats.documentsCited], [1, 1, 1, 1])
+  // Read against another topic's documents, no link names a document: the case a run refuses before it copies a tree.
+  const misplaced = upstreamTreeStats(first, (await loadTopic('sglt2-hf-ckd')).documents)
+  assert.deepEqual([misplaced.documentsCited, misplaced.present, misplaced.sourceMissing], [0, 0, 6])
+  // What a page shows the model checks out against the documents as the platform counted: two quotations found, one not.
+  const shown = upstreamPageRecords(first, { documentIds: new Set(topic.documents.map((document) => document.sourceId)) }).map((record) => record.text).join('\n')
+  assert.deepEqual(checkAnswerCitations(shown, documentsOf(topic)).byStatus, { verified: 2, quote_not_found: 1 })
 })
 
-test('a clean first patch needs no repair, and an unreadable reply is asked for again', async () => {
-  const clean = { schemaVersion: 1, pages: [{ op: 'create', slug: 'apixaban', type: 'entity', title: 'Apixaban', sections: [{ heading: 'Bleeding', claims: [{ text: 'Apixaban bled less.', kind: 'direct', evidence: [{ sourceId: A, quote: QUOTE_A }] }] }] }] }
-  const once = fakeLlm([{ content: JSON.stringify(clean) }])
-  const done = await compileTopic({ llm: once, model: 'm', topic: miniTopic, skillText: 's', label: 'x' })
-  assert.equal(once.log.length, 1)
-  assert.equal(done.stats.held, 0)
-  const twice = fakeLlm([{ content: '{ not json' }, { content: JSON.stringify(clean) }])
-  const recovered = await compileTopic({ llm: twice, model: 'm', topic: miniTopic, skillText: 's', label: 'x' })
-  assert.equal(twice.log.length, 2)
-  assert.match(twice.log[1].messages.at(-1).content, /not a single valid JSON object/)
-  assert.equal(recovered.stats.pages, 1)
-  const never = await compileTopic({ llm: fakeLlm([{ content: 'nope' }]), model: 'm', topic: miniTopic, skillText: 's', label: 'x' })
-  assert.equal(never.stats.unreadablePatch, true)
-  assert.equal(never.stats.pages, 0)
-})
-
-test('a repair round that leaves the same findings is not repeated', async () => {
-  const stubborn = goodPatch()
-  const llm = fakeLlm([{ content: JSON.stringify(stubborn) }])
-  const result = await compileTopic({ llm, model: 'm', topic: miniTopic, skillText: 's', label: 'x' })
-  assert.equal(llm.log.length, 2, 'one repair, then the identical findings end it')
-  assert.equal(result.stats.rounds, 2)
-})
-
-test('a compiled page is what the retrieval index serves for arm B: the markers survive whole in a search hit', () => {
-  const settled = settlePatch(goodPatch(), miniTopic.documents)
-  const index = buildIndex([
-    ...miniTopic.documents.map((document) => ({ id: document.sourceId, kind: 'document', title: document.title, text: document.text })),
-    { id: 'page:anticoagulants', kind: 'page', title: 'Anticoagulants in atrial fibrillation', text: settled.pages[0].markdown },
-  ])
-  const hits = index.search('Edoxaban noninferior warfarin', 5)
-  const pageHit = hits.find((hit) => hit.kind === 'page')
-  assert.ok(pageHit, 'the page is searchable')
-  assert.ok(pageHit.text.includes('<!-- evimed-source:') && pageHit.text.includes('-->'))
-})
-
-test('arm B searches the pages beside the documents; A and A prime never see a page; a pooled project holds every topic', () => {
-  const settled = settlePatch(goodPatch(), miniTopic.documents)
-  const compiledTopic = { pages: settled.pages.map((page) => ({ slug: page.slug, title: page.content.title, markdown: page.markdown })), indexMarkdown: settled.indexMarkdown }
-  const other = { id: 'u', documents: [{ key: 'pmid-9', sourceId: `src_${'d'.repeat(32)}`, title: 'Aspirin trial', text: 'Aspirin raised major bleeding in older adults.' }] }
-  const topic = { id: 't', ...miniTopic }
-  const compiled = new Map([['t/1', compiledTopic], ['u/1', { pages: [{ slug: 'anticoagulants', title: 'Aspirin page', markdown: '# Aspirin page\n\n- Aspirin bled. <!-- evimed-source:{"sourceId":"x","quote":"y"} -->\n' }], indexMarkdown: '' }]])
-  const kinds = (index) => [...new Set(index.chunks.map((chunk) => chunk.kind))].sort()
+test('arm C searches its tree\'s pages beside the documents, a sentence and its source in one passage; A and A prime never see a page', async () => {
+  const topic = await loadTopic(AF)
+  const trees = new Map([[AF, readUpstreamTrees(FIXTURE, AF)]])
   const idsOf = (index) => new Set(index.chunks.map((chunk) => chunk.docId))
-  assert.deepEqual(kinds(buildKnowledgeBase({ scope: 'topic', arm: 'A', topic, corpus: [topic, other], compiled, rep: 1 })), ['document'])
-  assert.deepEqual(kinds(buildKnowledgeBase({ scope: 'topic', arm: 'Aprime', topic, corpus: [topic, other], compiled, rep: 1 })), ['document'])
-  const b = buildKnowledgeBase({ scope: 'topic', arm: 'B', topic, corpus: [topic, other], compiled, rep: 1 })
-  assert.deepEqual(kinds(b), ['document', 'page'])
-  assert.ok(idsOf(b).has('page:anticoagulants') && idsOf(b).has('page:index') && idsOf(b).has(A) && !idsOf(b).has(`src_${'d'.repeat(32)}`))
-  const pooledA = buildKnowledgeBase({ scope: 'pooled', arm: 'A', topic, corpus: [topic, other], compiled, rep: 1 })
-  assert.ok(idsOf(pooledA).has(A) && idsOf(pooledA).has(`src_${'d'.repeat(32)}`) && kinds(pooledA).join() === 'document')
-  const pooledB = buildKnowledgeBase({ scope: 'pooled', arm: 'B', topic, corpus: [topic, other], compiled, rep: 1 })
-  assert.ok(idsOf(pooledB).has('page:t/anticoagulants') && idsOf(pooledB).has('page:u/anticoagulants'), 'two topics may each have a page of the same slug')
-  assert.deepEqual(pageRecords({ pages: [], indexMarkdown: '' }), [])
+  for (const arm of ['A', 'Aprime']) assert.deepEqual([...new Set(buildKnowledgeBase({ scope: 'topic', arm, topic, corpus: [topic], trees, rep: 1 }).chunks.map((chunk) => chunk.kind))], ['document'])
+  const first = buildKnowledgeBase({ scope: 'topic', arm: 'C', topic, corpus: [topic], trees, rep: 1 })
+  assert.deepEqual([...idsOf(first)].filter((id) => id.startsWith('page:')).sort(), ['page:comparison/doac-vs-warfarin.md', 'page:entity/re-ly.md', 'page:index.md'])
+  for (const document of topic.documents) assert.ok(idsOf(first).has(document.sourceId))
+  const hit = first.search('RE-LY composite end point primary outcome', 5).find((entry) => entry.kind === 'page')
+  assert.deepEqual([hit.docId, hit.title], ['page:entity/re-ly.md', 'RE-LY'])
+  assert.ok(hit.text.includes('The primary outcome was stroke or\nsystemic embolism') && hit.text.includes(sourceMarker(RELY, 'The primary outcome was stroke or systemic embolism.')), hit.text)
+  assert.match(renderHits('q', [hit], 1), /Knowledge page: RE-LY — page id: page:entity\/re-ly\.md/)
+  // The second repetition searches the second tree, the third the first again.
+  const second = buildKnowledgeBase({ scope: 'topic', arm: 'C', topic, corpus: [topic], trees, rep: 2 })
+  assert.ok(idsOf(second).has('page:concept/time-in-therapeutic-range.md') && !idsOf(second).has('page:entity/re-ly.md'))
+  assert.deepEqual(idsOf(buildKnowledgeBase({ scope: 'topic', arm: 'C', topic, corpus: [topic], trees, rep: 3 })), idsOf(first))
 })
 
-test('the briefs pack names the capability, carries its required inputs and points at the committed abstracts', async () => {
-  const pack = JSON.parse(readFileSync(new URL('../briefs.json', import.meta.url), 'utf8'))
-  assert.equal(pack.capability, 'knowledge-compile')
-  assert.equal(pack.briefs.length, 3)
-  const manifest = readFileSync(new URL('../../../capabilities/knowledge-compile/capability.yaml', import.meta.url), 'utf8')
-  const required = ['frozenSources', 'existingPages']
-  for (const name of required) assert.ok(manifest.includes(`- ${name}`), `the manifest declares ${name}`)
-  const corpus = await loadCorpus()
-  assert.equal(new Set(pack.briefs.map((brief) => brief.id)).size, 3)
-  for (const [position, brief] of pack.briefs.entries()) {
-    for (const field of ['id', 'title', 'why', 'gradedOn']) assert.ok(String(brief[field]).trim(), field)
-    for (const field of ['mustDo', 'mustNotDo']) assert.ok(brief[field].length >= 3 && brief[field].every((line) => line.trim()), field)
-    for (const name of required) assert.ok(brief.inputs[name] && Object.keys(brief.inputs[name]).length, `${brief.id} ${name}`)
-    assert.deepEqual(brief.inputs.frozenSources.map((source) => source.sourceId), corpus[position].documents.map((document) => document.sourceId))
-    for (const source of brief.inputs.frozenSources) assert.ok(readFileSync(new URL(`../${source.textPath}`, import.meta.url), 'utf8').length > 1000)
-  }
+test('a pooled project holds every topic\'s documents and pages, the topic in the page id; without a tree of every topic there is no arm C cell', async () => {
+  const af = await loadTopic(AF)
+  const other = { id: 'u', documents: [{ sourceId: `src_${'d'.repeat(32)}`, title: 'Aspirin trial', text: 'Aspirin raised major bleeding in older adults.' }] }
+  const otherTree = { name: 'rep1', pages: [{ path: 'entity/re-ly.md', content: '---\ntype: entity\ntitle: Aspirin\n---\n\n# Aspirin\n\nAspirin bled.\n' }] }
+  const trees = new Map([[AF, readUpstreamTrees(FIXTURE, AF)], ['u', [otherTree]]])
+  const pooled = buildKnowledgeBase({ scope: 'pooled', arm: 'C', topic: af, corpus: [af, other], trees, rep: 1 })
+  const ids = new Set(pooled.chunks.map((chunk) => chunk.docId))
+  assert.ok(ids.has(`page:${AF}/entity/re-ly.md`) && ids.has('page:u/entity/re-ly.md'), 'two topics may each have a page of the same path')
+  assert.ok(ids.has(other.documents[0].sourceId) && ids.has(RELY))
+  const chosen = treesFor({ scope: 'pooled', topic: af, corpus: [af, other], trees, rep: 2 })
+  assert.deepEqual([chosen[AF].name, chosen.u.name], ['rep2', 'rep1'], 'each topic reuses its own trees')
+  const missing = new Map([[AF, trees.get(AF)]])
+  assert.equal(buildKnowledgeBase({ scope: 'pooled', arm: 'C', topic: af, corpus: [af, other], trees: missing, rep: 1 }), null)
+  assert.equal(buildKnowledgeBase({ scope: 'topic', arm: 'C', topic: other, corpus: [af, other], trees: missing, rep: 1 }), null)
+  assert.ok(buildKnowledgeBase({ scope: 'topic', arm: 'A', topic: other, corpus: [af, other], trees: missing, rep: 1 }))
+})
+
+test('a run copies the trees it searches into its own directory once, and from then on reads only that copy', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kp-adopt-'))
+  try {
+    const exported = join(dir, 'export')
+    const runTrees = join(dir, 'run', 'upstream')
+    cpSync(FIXTURE, exported, { recursive: true })
+    const first = adoptUpstreamTrees({ from: exported, to: runTrees, topicId: AF })
+    assert.deepEqual(first.map((tree) => tree.name), ['rep1', 'rep2'])
+    assert.deepEqual(first.map((tree) => tree.sha256), readUpstreamTrees(FIXTURE, AF).map((tree) => tree.sha256))
+    rmSync(join(exported, AF, 'rep2'), { recursive: true })
+    writeFileSync(join(exported, AF, 'rep1', 'index.md'), '# changed\n')
+    assert.deepEqual(adoptUpstreamTrees({ from: exported, to: runTrees, topicId: AF }).map((tree) => tree.sha256), first.map((tree) => tree.sha256))
+    assert.deepEqual(adoptUpstreamTrees({ from: exported, to: runTrees, topicId: 'sglt2-hf-ckd' }), [])
+  } finally { rmSync(dir, { recursive: true, force: true }) }
 })

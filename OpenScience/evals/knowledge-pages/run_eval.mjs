@@ -9,19 +9,16 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node
 import { join, resolve as resolvePath } from 'node:path'
 import { answerQuestion, MAX_TOOL_CALLS, TOP_K } from './lib/answer.mjs'
 import { checkAnswerCitations } from './lib/citations.mjs'
-import { ROOT, checkCorpus, loadCorpus } from './lib/corpus.mjs'
+import { ROOT, checkCorpus, loadCorpus, loadRunCorpus } from './lib/corpus.mjs'
 import { THRESHOLDS } from './lib/decide.mjs'
 import { judgeAnswer } from './lib/judge.mjs'
 import { buildKnowledgeBase, treesFor } from './lib/kb.mjs'
 import { BudgetExceeded, createLlm, readKeyFile, ledgerTotal } from './lib/llm.mjs'
 import { ANSWER_SYSTEM, ARMS, ARM_B_REMOVED, DECOMPOSITION_GUIDANCE, JUDGE_SYSTEM, sha256 } from './lib/prompts.mjs'
-import { appendJsonl, latestByKey, readCompileStats, readJsonl, runKey, spentElsewhere } from './lib/store.mjs'
+import { RUN_TREES, appendJsonl, latestByKey, readJsonl, runKey, spentElsewhere, summarizeRunDirectory } from './lib/store.mjs'
 import { BOOTSTRAP_ITERATIONS, BOOTSTRAP_SEED } from './lib/stats.mjs'
-import { ARM_IDS, RUNNABLE_ARM_IDS, orderArms, renderTable, summarize } from './lib/summary.mjs'
+import { ARM_IDS, RUNNABLE_ARM_IDS, renderTable } from './lib/summary.mjs'
 import { adoptUpstreamTrees, readUpstreamTrees, upstreamTreeStats } from './lib/upstream.mjs'
-
-/** Where a run keeps the trees arm C searched, inside its own directory; the layout is the export directory's. */
-const RUN_TREES = 'upstream'
 
 /**
  * Rough per-unit spend (CNY), used only by --dry-run to print an upper bound. From the spend of the 2026-10-12 runs (an
@@ -75,19 +72,6 @@ function parseArgs(argv) {
   return { options, given }
 }
 
-/** The questions of a trial run: a deterministic slice with two synthesis questions for each single-fact one. */
-function selectQuestions(questions, perTopic) {
-  if (!perTopic || perTopic >= questions.length) return questions
-  const synthesis = questions.filter((question) => question.kind === 'synthesis')
-  const single = questions.filter((question) => question.kind === 'single')
-  const wantSynthesis = Math.min(synthesis.length, Math.ceil((perTopic * 2) / 3))
-  return [...synthesis.slice(0, wantSynthesis), ...single.slice(0, Math.min(single.length, perTopic - wantSynthesis))]
-}
-
-async function selectCorpus(topics, questionsPerTopic) {
-  return (await loadCorpus(topics)).map((topic) => ({ ...topic, questions: selectQuestions(topic.questions, questionsPerTopic) }))
-}
-
 function seedOf(key) {
   return Number.parseInt(createHash('sha256').update(key).digest('hex').slice(0, 7), 16)
 }
@@ -108,32 +92,10 @@ async function runPool(tasks, concurrency, work, shouldStop) {
   return failures
 }
 
-/**
- * From the records of a run directory to `summary.json` and the printed table. No model call: the records, arm B's
- * recorded compile statistics and the trees arm C searched are all in the directory.
- * @param {{ runDir: string, runId: string, corpus: any[], reps: number, arms: string[], config: any }} input
- */
-function writeSummary({ runDir, runId, corpus, reps, arms, config }) {
-  const records = [...latestByKey(readJsonl(join(runDir, 'runs.jsonl'))).values()]
-  const compiles = []
-  const upstreamTrees = []
-  for (const topic of corpus) {
-    for (let rep = 1; rep <= reps; rep += 1) {
-      const stats = readCompileStats(runDir, topic.id, rep)
-      if (stats) compiles.push({ topic: topic.id, rep, stats })
-    }
-    for (const tree of readUpstreamTrees(join(runDir, RUN_TREES), topic.id)) upstreamTrees.push({ topic: topic.id, tree: tree.name, sha256: tree.sha256, stats: upstreamTreeStats(tree, topic.documents) })
-  }
-  const sanityPath = join(runDir, 'judge-sanity.json')
-  const sanity = existsSync(sanityPath) ? JSON.parse(readFileSync(sanityPath, 'utf8')) : null
-  const summary = summarize({
-    runs: records, compiles, upstreamTrees, ledger: readJsonl(join(runDir, 'calls.jsonl')), corpus, config, runId,
-    // The arms the run was to ask and any other its records hold: an arm that was planned and never answered is missing data.
-    arms: orderArms([...arms, ...records.map((record) => record.arm)]),
-    judgeSanity: sanity ? { n: sanity.n, referenceMean: sanity.referenceMean, emptyMean: sanity.emptyMean } : null,
-    minReps: reps < THRESHOLDS.minRepsPerCell ? reps : THRESHOLDS.minRepsPerCell,
-  })
-  writeFileSync(join(runDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`, 'utf8')
+/** `summary.json` of a run directory, and the table on stdout. @param {Parameters<typeof summarizeRunDirectory>[0]} input */
+function writeSummary(input) {
+  const summary = summarizeRunDirectory(input)
+  writeFileSync(join(input.runDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`, 'utf8')
   console.log(`\n${renderTable(summary)}`)
 }
 
@@ -147,7 +109,7 @@ async function summarizeRecorded(options, given) {
   if (!existsSync(join(runDir, 'runs.jsonl')) && !existsSync(configPath)) throw new Error(`nothing is recorded under ${runDir}`)
   const recorded = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : null
   const planned = (name) => (given.has(name) || recorded?.plan?.[name] === undefined ? options[name] : recorded.plan[name])
-  const corpus = await selectCorpus(planned('topics'), planned('questionsPerTopic'))
+  const corpus = await loadRunCorpus(planned('topics'), planned('questionsPerTopic'))
   // With no arms named and none recorded, the summary covers the arms the records hold.
   const arms = given.has('arms') ? options.arms : recorded?.plan?.arms ?? []
   writeSummary({ runDir, runId: options.runId, corpus, reps: planned('reps'), arms, config: recorded?.core ?? null })
@@ -159,7 +121,7 @@ async function main() {
   if (corpusReport.issues.length) { for (const issue of corpusReport.issues) console.error(`corpus: ${issue}`); throw new Error('the corpus does not check out; run check_corpus.mjs') }
   if (options.stage === 'summarize') return summarizeRecorded(options, given)
 
-  const corpus = await selectCorpus(options.topics, options.questionsPerTopic)
+  const corpus = await loadRunCorpus(options.topics, options.questionsPerTopic)
   const fullCorpus = await loadCorpus()
   const questionTotal = fullCorpus.reduce((sum, topic) => sum + topic.questions.length, 0)
   const runDir = options.runId ? join(options.resultsDir, options.runId) : null
@@ -183,15 +145,34 @@ async function main() {
   if (otherSettings && !options.forceConfig && !options.dryRun) {
     throw new Error(`${configPath} was written with different models, prompts or settings; use a new --run-id (or --force-config to keep going on purpose)`)
   }
+  // Read before anything is written, so that a run that cannot start leaves no directory behind. The key stays in memory.
+  const apiKey = options.dryRun ? null : readKeyFile(process.env.OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE)
 
   // --- arm C's pages -------------------------------------------------------------------------------------------------------
   // A run that reuses another's judge check searches that run's trees too, unless told otherwise.
   const reusedTrees = options.reuseFrom ? join(options.resultsDir, options.reuseFrom, RUN_TREES) : null
   const exportDir = options.upstreamPages ?? (reusedTrees && existsSync(reusedTrees) ? reusedTrees : join(ROOT, 'upstream'))
+  const runTrees = runDir ? join(runDir, RUN_TREES) : null
   /** topic id -> the trees this run searches for it; empty when the topic has none. A dry run copies nothing. */
   const trees = new Map()
+  /** topic id -> what each of its trees holds, for the plan. */
+  const treeStats = new Map()
+  /** The topics whose trees the run already holds: it reads only those (see `adoptUpstreamTrees`). */
+  const heldByRun = []
   if (options.arms.includes('C')) {
-    for (const topic of corpus) trees.set(topic.id, adoptUpstreamTrees({ from: exportDir, to: runDir ? join(runDir, RUN_TREES) : null, topicId: topic.id, write: !options.dryRun }))
+    for (const topic of corpus) {
+      const held = runTrees ? readUpstreamTrees(runTrees, topic.id) : []
+      if (held.length) heldByRun.push(topic.id)
+      const candidates = held.length ? held : readUpstreamTrees(exportDir, topic.id)
+      // Checked before anything is copied. A tree compiled from documents pushed under other ids (a project of the product
+      // derives its own) names none of the topic's documents, and every source of every page would be a dead end.
+      const stats = candidates.map((tree) => ({ tree: tree.name, ...upstreamTreeStats(tree, topic.documents) }))
+      for (const entry of stats) {
+        if (entry.sourceLinks && !entry.documentsCited) throw new Error(`${topic.id}/${entry.tree}: none of its ${entry.sourceLinks} source links names one of the topic's ${topic.documents.length} documents, so it was compiled from documents pushed under other ids. Push corpus/${topic.id}/docs under the ids of its manifest.json (sources/<sourceId>.md) and compile again.`)
+      }
+      treeStats.set(topic.id, stats)
+      trees.set(topic.id, held.length || options.dryRun ? candidates : adoptUpstreamTrees({ from: exportDir, to: runTrees, topicId: topic.id }))
+    }
   }
   /** The trees an arm C cell searches, or null when the cell cannot be asked. */
   const cellTrees = (topic, rep) => treesFor({ scope: options.kbScope, topic, corpus, trees, rep })
@@ -221,7 +202,11 @@ async function main() {
     console.log(JSON.stringify({
       runId: options.runId, kbScope: options.kbScope, topics: corpus.map((topic) => topic.id), questions: cells, arms: options.arms, reps: options.reps,
       answerRuns: plain + withPages, judgeCalls: plain + withPages, judgeSanityCalls: sanityCalls,
-      ...(options.arms.includes('C') ? { upstreamPages: { trees: Object.fromEntries(corpus.map((topic) => [topic.id, trees.get(topic.id).map((tree) => tree.name)])), topicsSkipped: skippedTopics, answerRunsSkipped: skippedCells * options.reps } } : {}),
+      ...(options.arms.includes('C') ? { upstreamPages: {
+        exportDir, heldByRun,
+        trees: Object.fromEntries(corpus.map((topic) => [topic.id, treeStats.get(topic.id).map((entry) => `${entry.tree}: ${entry.pages} pages, ${entry.besideClaims} source links beside claims, ${entry.present}/${entry.besideClaimsWithQuotation} quotations found in the named document`)])),
+        topicsSkipped: skippedTopics, answerRunsSkipped: skippedCells * options.reps,
+      } } : {}),
       estimatedUpperBoundCny: Number(upper.toFixed(2)),
       spentInOtherRunsCny: Number(elsewhere.toFixed(2)),
       capForThisRunCny: Number(Math.min(options.budget, options.totalCap - elsewhere).toFixed(2)),
@@ -241,7 +226,7 @@ async function main() {
   const ledgerPath = join(runDir, 'calls.jsonl')
   const elsewhere = spentElsewhere(options.resultsDir, options.runId)
   const cap = Math.min(options.budget, options.totalCap - elsewhere)
-  const llm = createLlm({ apiKey: readKeyFile(process.env.OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE), ledgerPath, budget: cap })
+  const llm = createLlm({ apiKey, ledgerPath, budget: cap })
   console.log(`run ${options.runId}: spent so far CNY ${ledgerTotal(ledgerPath).toFixed(4)} here, ${elsewhere.toFixed(4)} in other runs; cap for this run CNY ${cap.toFixed(2)}`)
   let stopped = false
 

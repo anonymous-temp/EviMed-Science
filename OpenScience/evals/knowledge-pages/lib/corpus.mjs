@@ -50,6 +50,20 @@ export async function loadCorpus(only = null) {
   return loaded
 }
 
+/** The questions of a trial run (`--questions-per-topic`): a deterministic slice with two synthesis questions for each single-fact one. */
+export function selectQuestions(questions, perTopic) {
+  if (!perTopic || perTopic >= questions.length) return questions
+  const synthesis = questions.filter((question) => question.kind === 'synthesis')
+  const single = questions.filter((question) => question.kind === 'single')
+  const wantSynthesis = Math.min(synthesis.length, Math.ceil((perTopic * 2) / 3))
+  return [...synthesis.slice(0, wantSynthesis), ...single.slice(0, Math.min(single.length, perTopic - wantSynthesis))]
+}
+
+/** The corpus of a run: its topics (all by default) with the questions it asks. @param {string[] | null} topics @param {number | null} perTopic */
+export async function loadRunCorpus(topics, perTopic) {
+  return (await loadCorpus(topics)).map((topic) => ({ ...topic, questions: selectQuestions(topic.questions, perTopic) }))
+}
+
 /**
  * Check a loaded topic. Every finding is a message naming the document or question; an empty list is a corpus that stands.
  * @param {Awaited<ReturnType<typeof loadTopic>>} topic

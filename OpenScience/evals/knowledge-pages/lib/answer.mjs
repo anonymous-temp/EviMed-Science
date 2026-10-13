@@ -1,4 +1,4 @@
-// Answering one question with `kb_search` over an index, in one of the three arms.
+// Answering one question with `kb_search` over an index, in one of the arms.
 import { ARMS, ANSWER_SYSTEM, KB_SEARCH_TOOL } from './prompts.mjs'
 
 export const MAX_TOOL_CALLS = 6
