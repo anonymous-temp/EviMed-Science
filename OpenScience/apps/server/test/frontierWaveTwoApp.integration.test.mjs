@@ -254,9 +254,11 @@ test("中文摘要 without a model answers the original with a sentence, and the
   const body = (await upload.json()).data;
   assert.equal(body.path, "knowledge-base/notes/upload-check.md");
   assert.ok(body.source?.id, "an upload into the knowledge base is registered, as before the helper");
-  const refused = await fetch(`${base}/api/files/upload`, { method: "POST", headers: sessions.reader,
+  // No file is refused for its format since 2026-10-13: a recording nothing reads is kept as an original, and registered.
+  const recording = await fetch(`${base}/api/files/upload`, { method: "POST", headers: sessions.reader,
     body: JSON.stringify({ root: "base", path: "knowledge-base/clip.mp4", data: "AAAA", encoding: "base64" }) });
-  assert.equal(refused.status, 415, "the format admission still runs before a byte is written");
+  assert.equal(recording.status, 200, "a format nothing reads is kept as an original, not refused");
+  assert.ok((await recording.json()).data.source?.id, "and it is registered like any other upload");
   void now;
 });
 
