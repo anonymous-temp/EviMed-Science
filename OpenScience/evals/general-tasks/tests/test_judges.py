@@ -477,19 +477,23 @@ class OfficeChecks(unittest.TestCase):
         env.close()
 
 
-def make_pptx(path, slides, dark=False, chart=False):
-    """A minimal valid-enough deck: each slide is (title, [points])."""
+def make_pptx(path, slides, dark=False, chart=False, counter=False, ground="background"):
+    """A minimal valid-enough deck: each slide is (title, [points]). `counter` writes each slide's own page counter ("02 / 06") into it;
+    `ground="rectangle"` paints a dark slide the way a python-pptx script does, as a solid shape over the whole slide, with no background."""
     ns = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
     with zipfile.ZipFile(path, "w") as z:
         z.writestr("[Content_Types].xml", '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>')
         ids = "".join(f'<p:sldId id="{256 + i}" r:id="rId{i + 1}"/>' for i in range(len(slides)))
-        z.writestr("ppt/presentation.xml", f'<?xml version="1.0"?><p:presentation {ns}><p:sldIdLst>{ids}</p:sldIdLst></p:presentation>')
+        z.writestr("ppt/presentation.xml", f'<?xml version="1.0"?><p:presentation {ns}><p:sldIdLst>{ids}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/></p:presentation>')
         rels = "".join(f'<Relationship Id="rId{i + 1}" Type="x" Target="slides/slide{i + 1}.xml"/>' for i in range(len(slides)))
         z.writestr("ppt/_rels/presentation.xml.rels", f'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{rels}</Relationships>')
-        z.writestr("ppt/slideMasters/slideMaster1.xml", f'<?xml version="1.0"?><p:sldMaster {ns}><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="{"101820" if dark else "FFFFFF"}"/></a:solidFill></p:bgPr></p:bg></p:cSld><p:clrMap bg1="{"dk1" if dark else "lt1"}"/></p:sldMaster>')
+        painted = ground == "background"
+        z.writestr("ppt/slideMasters/slideMaster1.xml", f'<?xml version="1.0"?><p:sldMaster {ns}><p:cSld>{f"<p:bg><p:bgPr><a:solidFill><a:srgbClr val={chr(34)}{"101820" if dark else "FFFFFF"}{chr(34)}/></a:solidFill></p:bgPr></p:bg>" if painted else ""}</p:cSld><p:clrMap bg1="{"dk1" if dark and painted else "lt1"}"/></p:sldMaster>')
         for i, (title, points) in enumerate(slides):
-            body = "".join(f"<a:p><a:r><a:t>{p}</a:t></a:r></a:p>" for p in points)
-            z.writestr(f"ppt/slides/slide{i + 1}.xml", f'<?xml version="1.0"?><p:sld {ns}><p:cSld><p:spTree><p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>{title}</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:txBody>{body}</p:txBody></p:sp></p:spTree></p:cSld></p:sld>')
+            body = "".join(f"<a:p><a:r><a:t>{p}</a:t></a:r></a:p>" for p in points + ([f"{i + 1:02d} / {len(slides):02d}"] if counter else []))
+            rectangle = (f'<p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12192000" cy="6858000"/></a:xfrm><a:solidFill><a:srgbClr val="{"06171E" if dark else "FFFFFF"}"/></a:solidFill></p:spPr></p:sp>'
+                         if ground == "rectangle" else "")
+            z.writestr(f"ppt/slides/slide{i + 1}.xml", f'<?xml version="1.0"?><p:sld {ns}><p:cSld><p:spTree>{rectangle}<p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>{title}</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:txBody>{body}</p:txBody></p:sp></p:spTree></p:cSld></p:sld>')
         if chart:
             z.writestr("ppt/charts/chart1.xml", f'<?xml version="1.0"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"/>')
 
@@ -528,6 +532,30 @@ class PowerPointChecks(unittest.TestCase):
         make_pptx(env.put(1, "d.pptx"), edited, dark=False)
         self.assertEqual(ok_of(env.run(spec)), [False])
         make_pptx(env.put(1, "d.pptx"), self.deck(6), dark=True)  # redone: other slides' text changed? same text here, so only the split is wrong
+        env.close()
+
+
+    def test_pptx_edit_is_not_failed_for_what_adding_a_slide_necessarily_changes(self):
+        # G07's first baseline failed both arms: every slide carries "NN / 10", which a split turns into "NN / 11", and the dark
+        # deck of arm C was a solid shape over each slide (a python-pptx script's way), with no background to read.
+        env = Env("G07", [turn("x"), turn("y")], record_extra={"caseIds": ["G07"], "turnOffsets": {"G07": 1}})
+        base = self.deck(5)
+        make_pptx(env.put(0, "d.pptx"), base, counter=True)
+        edited = base[:2] + [("第3页上", ["要点 3-a"]), ("第3页下", ["要点 3-b"])] + base[3:]
+        make_pptx(env.put(1, "e.pptx"), edited, dark=True, counter=True, ground="rectangle")
+        spec = {"type": "pptx_edit", "base_turn": 0, "slides_delta": 1, "dark": True}
+        self.assertEqual(ok_of(env.run(spec)), [True], env.run(spec))
+        # Still a failure: the other slides were reworded, the deck is not dark, the split slide's sentences were replaced.
+        reworded = [base[0], ("第2页", ["完全不同的两句话", "另一句话"]), ("第3页上", ["要点 3-a"]), ("第3页下", ["要点 3-b"]), ("第4页", ["也被改写了", "不再是原话"]), base[4]]
+        make_pptx(env.put(1, "e.pptx"), reworded, dark=True, counter=True, ground="rectangle")
+        self.assertEqual(ok_of(env.run(spec)), [False])
+        make_pptx(env.put(1, "e.pptx"), edited, dark=False, counter=True, ground="rectangle")
+        self.assertEqual(ok_of(env.run(spec)), [False])
+        invented = base[:2] + [("第3页上", ["全新的一句话，原来没有", "又一句新增的论断"]), ("第3页下", ["另外新增的内容在这里"])] + base[3:]
+        make_pptx(env.put(1, "e.pptx"), invented, dark=True, counter=True, ground="rectangle")
+        failed = env.run(spec)
+        self.assertEqual(ok_of(failed), [False])
+        self.assertIn("split slide keeps", failed[0]["detail"])
         env.close()
 
 

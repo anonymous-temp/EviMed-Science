@@ -73,6 +73,7 @@ def pptx_info(path: Path) -> dict:
             if name.endswith(".xml") or name.endswith(".rels"):
                 ET.fromstring(archive.read(name))  # every XML part must parse
         order = _slide_order(archive)
+        slide_size = _slide_size(archive)
         slides = []
         for name in order:
             root = ET.fromstring(archive.read(name))
@@ -89,7 +90,7 @@ def pptx_info(path: Path) -> dict:
                 else:
                     texts += paragraphs
             tables = len(list(root.iter("{%s}tbl" % NS["a"])))
-            background = _background_rgb(root)
+            background = _background_rgb(root) or _full_bleed_rgb(root, slide_size)
             slides.append({
                 "part": name, "title": title, "texts": texts, "charts": rels.count("/chart"), "pictures": len(list(root.iter("{%s}pic" % NS["p"]))),
                 "tables": tables, "background": background,
@@ -133,6 +134,29 @@ def _rgb_of(element) -> str | None:
 def _background_rgb(root) -> str | None:
     bg = root.find(".//p:bg", NS)
     return _rgb_of(bg)
+
+
+def _slide_size(archive: zipfile.ZipFile) -> tuple[int, int] | None:
+    try:
+        size = ET.fromstring(archive.read("ppt/presentation.xml")).find("p:sldSz", NS)
+        return (int(size.get("cx")), int(size.get("cy"))) if size is not None else None
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
+def _full_bleed_rgb(root, size: tuple[int, int] | None) -> str | None:
+    """The ground of a slide that has no background of its own: a programmatic deck (python-pptx) draws the dark ground as a solid
+    rectangle over the whole slide, first in the shape tree, which is a dark slide to anyone who opens it."""
+    if size is None:
+        return None
+    for shape in root.iter("{%s}sp" % NS["p"]):
+        extent = shape.find(".//a:xfrm/a:ext", NS)
+        fill = shape.find("p:spPr/a:solidFill/a:srgbClr", NS)
+        if extent is None or fill is None:
+            return None  # the first shape is not a ground
+        covers = int(extent.get("cx", 0)) >= 0.95 * size[0] and int(extent.get("cy", 0)) >= 0.95 * size[1]
+        return fill.get("val") if covers else None
+    return None
 
 
 def _master_background(archive: zipfile.ZipFile) -> str | None:

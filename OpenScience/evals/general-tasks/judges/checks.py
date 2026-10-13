@@ -627,6 +627,22 @@ def _slide_dark(slide: dict, master_bg: str | None, theme_dark: bool | None) -> 
     return theme_dark
 
 
+# A slide's own page counter ("02 / 10") and the section number a slide counts itself by ("04 / 竞争"): adding a slide changes every one after
+# it and the total on all of them, and that is the edit done right, not a slide that was reworded.
+_PAGE_COUNTER = re.compile(r"\b\d{1,3}\b(?=\s*/)|(?<=/)\s*\d{1,3}\b")
+
+
+def _slide_words(text: str) -> str:
+    return squash(_PAGE_COUNTER.sub("", text))
+
+
+def _shingles(text: str, size: int = 2) -> set[str]:
+    """Overlapping runs of `size` characters of a slide's text. Chinese has no spaces, so `\\w+` made a whole sentence one word and one
+    changed character lose all of it."""
+    flat = squash(_PAGE_COUNTER.sub("", text))
+    return {flat[i:i + size] for i in range(max(0, len(flat) - size + 1))}
+
+
 def chk_pptx_edit(spec, ctx):
     base_turn = spec.get("base_turn", 0)
     base_files = [(rel, p) for rel, p in (ctx.snapshot(upto=base_turn).items()) if p.suffix.lower() == ".pptx"]
@@ -635,24 +651,26 @@ def chk_pptx_edit(spec, ctx):
         return [result("pptx_edit", False, "no .pptx before or after the edit")]
     base = textio.pptx_info(base_files[-1][1])
     best = "no candidate"
+    tried: list[str] = []  # every candidate's problems: the verdict names why each file failed, not only the last one examined
     for rel, path in reversed(final_files):
         final = textio.pptx_info(path)
         problems = []
         nb, nf = len(base["slides"]), len(final["slides"])
         if nf != nb + spec.get("slides_delta", 1):
             problems.append(f"{nf} slides after, {nb} before (expected +{spec.get('slides_delta', 1)})")
-        final_texts = [squash(s["all_text"]) for s in final["slides"]]
+        final_texts = [_slide_words(s["all_text"]) for s in final["slides"]]
         unchanged = 0
         others = [i for i in range(nb) if i != 2]
         for i in others:
-            want = squash(base["slides"][i]["all_text"])
+            want = _slide_words(base["slides"][i]["all_text"])
             if any(want and want == t for t in final_texts):
                 unchanged += 1
         if others and unchanged < len(others) - 1:
             problems.append(f"only {unchanged}/{len(others)} other slides keep their text")
         if nb >= 3 and nf >= 4:
-            words = set(re.findall(r"\w+", base["slides"][2]["all_text"]))
-            after = set(re.findall(r"\w+", final["slides"][2]["all_text"] + " " + final["slides"][3]["all_text"]))
+            # What the slide said (its body, not its title: a split gives the two halves titles of their own) must still be said.
+            words = _shingles(" ".join(base["slides"][2]["texts"]) or base["slides"][2]["all_text"])
+            after = _shingles(final["slides"][2]["all_text"] + " " + final["slides"][3]["all_text"])
             kept = len(words & after) / len(words) if words else 1
             if kept < 0.8:
                 problems.append(f"the split slide keeps {kept:.0%} of its words")
@@ -663,8 +681,8 @@ def chk_pptx_edit(spec, ctx):
                 problems.append(f"{dark}/{nf} slides read as dark (backgrounds {[s['background'] for s in final['slides']][:4]}, master {final['master_background']}, theme_dark {final['theme_dark']})")
         if not problems:
             return [result("pptx_edit", True, f"{rel}: {nb}->{nf} slides, {unchanged}/{len(others)} others unchanged, dark scheme")]
-        best = f"{rel}: " + "; ".join(problems)
-    return [result("pptx_edit", False, best)]
+        tried.append(f"{rel}: " + "; ".join(problems))
+    return [result("pptx_edit", False, " | ".join(tried) or best)]
 
 
 # ----------------------------------------------------------------------------------------------------------------------- code

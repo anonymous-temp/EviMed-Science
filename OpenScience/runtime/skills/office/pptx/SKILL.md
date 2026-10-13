@@ -47,7 +47,7 @@ python3 scripts/pptx_tool.py delete deck.pptx --slide 9
 python3 scripts/pptx_tool.py theme deck.pptx --mode dark                      # or --mode light; --recolor also fixes colours set explicitly on shapes
 ```
 
-To split a crowded slide: `outline`, `duplicate` it, `delete-shapes` the second half on the first slide and the first half on the copy, `set-text` both titles. `theme` swaps the scheme roles of the master and the palette, so text, backgrounds and charts follow; colours typed as RGB on a shape are listed for review (or fixed with `--recolor`). Other slides' content never changes in these operations - check with `outline` afterwards.
+To split a crowded slide: `outline`, `duplicate` it, `delete-shapes` the second half on the first slide and the first half on the copy, `set-text` both titles. `theme` swaps the scheme roles of the master and the palette, so text, backgrounds and charts follow; colours typed as RGB on a shape are listed for review (or fixed with `--recolor`). Other slides' content never changes in these operations - check with `outline` afterwards. A deck you built from a script of your own is no less an existing deck when the follow-up comes: change what the request reaches and nothing else, and a slide you split keeps its own sentences, moved to two slides as they are, never rewritten or added to (new wording and figures are new claims); keep the file's name.
 
 ## Check and deliver
 
