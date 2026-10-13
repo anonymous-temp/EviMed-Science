@@ -5629,7 +5629,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const routed = route.effectiveAgentId && route.effectiveAgentId !== OPEN_DOMAIN_ANSWER_AGENT_ID
       ? registry.get(route.effectiveAgentId) : null;
     const answerAgent = routed ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
-    const answerPackage = answerAgent ? registry.getPackage(OPEN_DOMAIN_ANSWER_AGENT_ID) : null;
     const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
     const dispatch = () => agentRuns.dispatch(project, {
       sessionId,
@@ -5657,7 +5656,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         query: text,
         resident,
         specialists: routableAgents,
-        mountableSkills: answerPackage?.skillText ? [{ name: answerPackage.manifest.skill, body: answerPackage.skillText }] : [],
+        // A person sent this from their channel and reads the reply there.
+        attended: true,
         routedSpecialist: routed
           ? { agentId: routed.id, agentVersion: routed.version, runtimeAgent: routed.runtimeAgent,
             skill: routed.skill, companionSkills: routed.companionSkills }
@@ -6749,19 +6749,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             : session.mode === "specialist"
               ? registry.get(session.agentId)
               : null;
-          // The answer line does not delegate, so nothing injects its persona
-          // the way a capability child gets one. Hand it the body the registry
-          // is already holding instead of instructing the model to fetch it.
-          const answerPackage = !contextSpecialist && !routedSpecialist && session.mode === "open-domain"
-            ? registry.getPackage(OPEN_DOMAIN_ANSWER_AGENT_ID)
-            : null;
           const prepared = await prepareOwnedResearchContext(ctx.project, session, {
             query: text,
             resident,
             specialists: session.mode === "open-domain" ? routableAgents : [],
-            mountableSkills: answerPackage?.skillText
-              ? [{ name: answerPackage.manifest.skill, body: answerPackage.skillText }]
-              : [],
+            // A dispatch a person sent is a conversation they are in; one a probe,
+            // an audit or an evaluation harness sent (`automated`) is watched by nobody.
+            attended: !automated,
             routedSpecialist: contextSpecialist
               ? {
                   agentId: contextSpecialist.id,

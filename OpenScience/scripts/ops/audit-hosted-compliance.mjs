@@ -727,6 +727,8 @@ async function checkScientificCapabilityDelivery() {
     /first-party clean-room/i.test(office.provenance ?? "") &&
     officeExecutable.length === 4 &&
     officeEntrypoints.every((entrypoint) => existsSync(entrypoint)) &&
+    // The libraries the Office skills tell a run to import are pinned in the image they ship in.
+    officeExecutable.every(([, contract]) => (contract.dependencies ?? []).filter((dependency) => dependency.includes("==")).every((dependency) => inRuntimeImage(dependency))) &&
     inRuntimeImage(/runtime\/skills\/office/) &&
     !/ANTHROPIC_SKILLS_(?:COMMIT|ARCHIVE|LICENSE)/.test(fetchSkills) &&
     /the four first-party Office skills execute independent artifact smoke tests/.test(skillTests)

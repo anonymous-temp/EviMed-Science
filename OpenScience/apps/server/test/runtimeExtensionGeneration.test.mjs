@@ -34,3 +34,16 @@ test('stale composite refuses new queued turns definitively, permits only verifi
   await assert.rejects(manager.assertPersonalSkillPromptGeneration(project,{sessionId:'idle-session',mode:'steer'}),{definitivelyRejected:true});
   runtime.extensionGeneration=baseline;await manager.assertPersonalSkillPromptGeneration(project,{sessionId:'ordinary',mode:'queue'});
 });
+
+test('a selected tool is admitted by the deployment descriptor it matches, whichever repository that is, and by nothing else',()=>{
+  const manager=new RuntimeManager({runtimeIdleTimeoutMs:0});
+  const coordinate={kind:'github',repository:'Some-Author/office-bridge',commit:'e'.repeat(40)};
+  const descriptor={id:'office-bridge',coordinate,integrity:'sha256:'+'1'.repeat(64),artifactDigest:'sha256:'+'2'.repeat(64)};
+  manager.extensionArtifacts=new Map([[descriptor.id,descriptor]]);
+  const row={extensionId:'office-bridge',enabled:true,executionClass:'isolated-tool',coordinate:{...coordinate},integrity:descriptor.integrity,artifactDigest:descriptor.artifactDigest,settings:{},connectionRefs:[]};
+  manager.assertSelectedBridge([row]);
+  manager.assertSelectedBridge([]);
+  for(const wrong of [{...row,extensionId:'unlisted'},{...row,artifactDigest:'sha256:'+'3'.repeat(64)},{...row,coordinate:{...coordinate,commit:'f'.repeat(40)}},{...row,settings:{a:1}},{...row,connectionRefs:['c']},{...row,executionClass:'managed-native'}])
+    assert.throws(()=>manager.assertSelectedBridge([wrong]),{code:'extension_contract_invalid'});
+  assert.throws(()=>manager.assertSelectedBridge([row,row]),{code:'extension_contract_invalid'},'one bridge row per runtime');
+});

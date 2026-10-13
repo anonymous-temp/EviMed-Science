@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "meta-analysis",
-  "version": "sha256:918336fee821b5c6a37eb7a883c4c91719ec2ac19bb3327e0ceb77b06ec2558c",
+  "version": "sha256:074af04e7f5baa6c494a38ecee9ad1b496409eb6346a92058cae049c4f6fb68c",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 17,
+    "nodes": 21,
     "edges": 3,
     "byVia": {
       "schema": 3,
@@ -35,6 +35,33 @@
         },
         "required": [
           "question"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "ask_user_question",
+      "source": "kernel",
+      "description": "Ask the person in the conversation a question and wait for the answer.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "questions": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "questions"
         ]
       },
       "outputSchema": {
@@ -506,6 +533,33 @@
       "stateEffect": "writes_ledger"
     },
     {
+      "name": "present",
+      "source": "kernel",
+      "description": "Declare existing workspace files as the final deliverables for the user.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "files": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "files"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
       "name": "read",
       "source": "kernel",
       "description": "Read a workspace file, paginated.",
@@ -570,6 +624,33 @@
       "stateEffect": "none"
     },
     {
+      "name": "subagent",
+      "source": "kernel",
+      "description": "Delegate to a child agent.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "task": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
       "name": "task",
       "source": "kernel",
       "description": "Run a scoped subtask in a fresh context.",
@@ -586,6 +667,33 @@
         },
         "required": [
           "prompt"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "todo_write",
+      "source": "kernel",
+      "description": "Record and update the step list of a multi-step task.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "todos": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "todos"
         ]
       },
       "outputSchema": {

@@ -137,6 +137,37 @@ export function canonicalExtensionCoordinate(value) {
   return reject('coordinate_kind')
 }
 
+/**
+ * The permission profile of the `isolated-tool` class: a tool that runs in a disposable container with no network, and
+ * is therefore selected with no settings of its own and no connections. A selection that carries either is a different
+ * class of extension, never an isolated tool.
+ * @param {any} plugin a row of a generation's projection
+ */
+export function isolatedToolProfileHolds(plugin) {
+  return plugin?.executionClass === 'isolated-tool' && DIGEST.test(plugin.artifactDigest ?? '') && DIGEST.test(plugin.integrity ?? '')
+    && Boolean(plugin.settings) && Object.keys(plugin.settings).length === 0
+    && Array.isArray(plugin.connectionRefs) && plugin.connectionRefs.length === 0
+}
+
+/**
+ * Whether a projection row is exactly the isolated tool the deployment admitted: the artifact digest and integrity of
+ * the admitted descriptor, the coordinate (commit included) that descriptor was admitted under, and the class's
+ * permission profile. The allow-list is the deployment's protected manifest, written by the acceptance pipeline that
+ * qualified each descriptor; no repository or package name is written into code, so admitting a second tool is a new
+ * row in that manifest and nothing else. The qualification record itself stays a label (owner ruling 2026-10-04): it
+ * says how far the package has been measured and never refuses an operation.
+ * @param {any} plugin a row of a generation's projection
+ * @param {any} descriptor the admitted descriptor with the same id, or nothing
+ * @returns {boolean}
+ */
+export function isolatedToolRowIsAdmitted(plugin, descriptor) {
+  if (!descriptor || !isolatedToolProfileHolds(plugin)) return false
+  try {
+    return descriptor.artifactDigest === plugin.artifactDigest && descriptor.integrity === plugin.integrity
+      && canonicalExtensionCoordinate(descriptor.coordinate) === canonicalExtensionCoordinate(plugin.coordinate)
+  } catch { return false }
+}
+
 /** No principal, credential, proof or executable can be imported as installation authority. @param {unknown} value @returns {ExtensionInstallRequest} */
 export function validateExtensionInstallRequest(value) {
   const item = record(value, ['coordinate', 'scope', 'projectId', 'idempotencyKey'], ['coordinate', 'scope', 'idempotencyKey'])

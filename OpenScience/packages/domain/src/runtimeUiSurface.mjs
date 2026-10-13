@@ -303,6 +303,25 @@ export const RUNTIME_UI_ANSWERED_METHODS = Object.freeze({
 });
 
 /**
+ * Kernel HTTP routes this surface answers itself, by method and exact path.
+ *
+ * `GET /api/present.host` is what the kernel's page asks before it draws the
+ * cards of the files a turn handed over (`present`, mounted 2026-10-12): the
+ * serving host's name, whether it has a desktop to open a file in, and which
+ * file manager. It is not a `<namespace>/<method>` path, so the gate below
+ * refused it as malformed, and every reply with a presented file carried
+ * 「无法读取主机桌面信息 · 重试」 (seen on a real kernel behind this proxy).
+ * The hosted answer is fixed and is the true one: no desktop — the file is
+ * previewed in the page's own sidebar, which reads through `workspaceFiles`.
+ * Never forwarded, so the runtime container's hostname stays where it is; the
+ * routes that act on that answer (`/api/present.open`, `/api/changes.open`)
+ * stay refused by the gate.
+ */
+export const RUNTIME_UI_ANSWERED_HOST_ROUTES = Object.freeze({
+  "GET /api/present.host": Object.freeze({ name: "EviMed", available: false, fileManager: null }),
+});
+
+/**
  * Kernel HTTP routes that are not method calls, and are refused by path.
  *
  * Everything above this classifies `/api/<namespace>/<method>`. That is not the

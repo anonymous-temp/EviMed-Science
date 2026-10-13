@@ -203,26 +203,45 @@ test("the guidance the model reads names every mounted capability and no unmount
   const text = buildGuidanceText(capabilities, { askUserEnabled: false, capsuleActive: false, reviewEnabled: false });
   for (const capability of capabilities) assert.ok(text.includes(capability.id), capability.id);
   assert.ok(!text.includes("geo-content"), "an unmounted capability must not be advertised");
-  assert.ok(text.includes("如实说明"), "the catalogue is the edge of what we can claim to do");
+  assert.ok(text.includes("不是你能做什么的边界"), "the index is what a plan may name, not the edge of what the assistant does");
 });
 
-test("the kernel's produced-files paragraph is withdrawn from every agent, and nothing else of that row is", async () => {
+test("a capability its module opens is not in a plain conversation's index", () => {
+  // 循证 GEO and 虚拟临床研究 bind their capabilities to a conversation from the
+  // module's own pages (`display.listed: false`); nine of them rode the
+  // catalogue of every conversation. They stay offered to a plan — the service
+  // the run policy validates against is the whole list — and unlisted here.
+  const text = buildGuidanceText([
+    { id: "meta-analysis", description: "d", whenToUse: "w", produces: [{ contractKind: "meta-analysis-report" }] },
+    { id: "geo-content", description: "d", whenToUse: "w", produces: [{ contractKind: "geo-content-pack" }] },
+    { id: "vcr-protocol", description: "d", whenToUse: "w", produces: [{ contractKind: "vcr-study-package" }] },
+  ], { askUserEnabled: false, capsuleActive: false, reviewEnabled: false });
+  assert.ok(text.includes("`meta-analysis`"));
+  assert.ok(!text.includes("geo-content") && !text.includes("vcr-protocol"));
+});
+
+test("the kernel's produced-files paragraph is left in place, and the guidance registers one section and no persona", async () => {
+  // It was withdrawn while `present` was not mounted and the preview pane was
+  // disabled: the paragraph asked for cards and links that could not render.
+  // Both are back, so the kernel's own account of when a file card helps is
+  // what a run reads.
   const { apply: applyGuidance } = await import("../plugins/guidance.mjs");
   const ctx = harness();
   /** @type {any[]} */
   const sections = [];
   /** @type {any} */ (ctx).systemPrompt = { section: (/** @type {any} */ section) => { sections.push(section); return () => {}; } };
-  await applyGuidance(ctx, { capabilitiesDir: "", answerPersonaDir: "", askUserEnabled: false, capsuleActive: false, reviewEnabled: false });
-  const withdrawn = sections.filter((section) => section.name === SEAMS.promptSections.deliverableFileReferences.name);
-  assert.equal(withdrawn.length, 1, `sections registered: ${sections.map((section) => section.name).join(", ")}`);
-  assert.equal(withdrawn[0].text, "", "an empty section is what the renderer drops");
-  assert.equal(withdrawn[0].order, SEAMS.promptSections.deliverableFileReferences.order);
-  assert.ok(sections.some((section) => section.text.length > 0), "the guidance itself is still registered");
+  await applyGuidance(ctx, { capabilitiesDir: "", askUserEnabled: false, capsuleActive: false, reviewEnabled: false });
+  assert.deepEqual(sections.filter((section) => section.name === SEAMS.promptSections.deliverableFileReferences.name), []);
+  assert.deepEqual(sections.map((section) => section.name), [GUIDANCE_SECTION_NAME], "one section: no second always-on text beside the guidance");
+  assert.ok(sections[0].text.length > 0);
 });
 
-test("a delegated child reads the child guidance instead of the orchestration guidance, and no answer persona; the root keeps both", async () => {
+test("a delegated child reads the child guidance instead of the root's, and no conversation is handed the evidence method unasked", async () => {
   const { apply: applyGuidance } = await import("../plugins/guidance.mjs");
   const ctx = harness();
+  /** @type {string[]} */
+  const injected = [];
+  ctx.provide("evimedDiagnostics", { degrade() {}, injectedSkill: (/** @type {string} */ name) => injected.push(name) });
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
     readText: async (/** @type {string} */ target) => (target === "/persona/SKILL.md" ? "---\nname: open-domain-answer\n---\n# Persona\n\nAnswer first." : null),
@@ -232,10 +251,12 @@ test("a delegated child reads the child guidance instead of the orchestration gu
   /** @type {any[]} */
   const presetSections = [];
   /** @type {any} */ (ctx).systemPrompt = recorder(presetSections);
-  await applyGuidance(ctx, { capabilitiesDir: "", answerPersonaDir: "/persona", askUserEnabled: false, capsuleActive: true, reviewEnabled: false });
-  assert.ok(presetSections.some((section) => section.name === "evimed:answer-persona" && section.text.includes("Answer first.")), "the persona is on the preset for the root");
+  // The directory the persona used to be read from is still handed over by an
+  // older control plane; nothing reads it, and nothing is injected from it.
+  await applyGuidance(ctx, /** @type {any} */ ({ capabilitiesDir: "", answerPersonaDir: "/persona", askUserEnabled: false, capsuleActive: true, reviewEnabled: false }));
+  assert.ok(!presetSections.some((section) => section.name === "evimed:answer-persona" || section.text.includes("Answer first.")), "the evidence method is a skill the model loads, not a section of every conversation");
+  assert.deepEqual(injected, [], "and no receipt says it was injected");
   const orchestration = presetSections.find((section) => section.name === GUIDANCE_SECTION_NAME);
-  assert.match(orchestration.text, /evimed_delegate/);
   assert.doesNotMatch(orchestration.text, /先查记忆与胶囊/, "recall is a condition, not step one of a fixed order");
   // Review M6 (2026-10-10): the standing profile is in the context from the conversation's first message and the rest is looked
   // up when needed. The line no longer claims that memory relevant to the question was injected: nothing is retrieved for it.
@@ -246,18 +267,21 @@ test("a delegated child reads the child guidance instead of the orchestration gu
   /** @type {any[]} */
   const childSections = [];
   start({ session: { id: "c1", header: { origin: "subagent", parentSession: "r1" } }, ctx: { systemPrompt: recorder(childSections) } });
-  assert.deepEqual(childSections.map((section) => section.name), [GUIDANCE_SECTION_NAME, "evimed:answer-persona"], "both sections are replaced in the child's own scope");
+  assert.deepEqual(childSections.map((section) => section.name), [GUIDANCE_SECTION_NAME], "the one section is replaced in the child's own scope");
   assert.equal(childSections[0].order, orchestration.order, "in the same place in the prompt");
-  assert.equal(childSections[1].text, "", "an empty section is dropped: the child has no answer persona");
   const child = childSections[0].text;
   assert.match(child, /<evimed-delegated>/);
-  assert.doesNotMatch(child, /evimed_plan|evimed_delegate|evimed_complete_run|能力目录|契约种类/, "nothing about running a run the child cannot run");
-  for (const kept of ["## 去哪里找证据", "## 注入的上下文怎么用", "## 引文卫生", "## 安全", "## 对用户说话", "evimed_capsule_recall"]) {
+  assert.doesNotMatch(child, /evimed_plan|evimed_delegate|evimed_complete_run|专业工作流|ask_user_question/, "nothing about running a run the child cannot run");
+  // The rules of an evidence deliverable travel with the work they belong to:
+  // a child may be handed one, the root reads them in the method it loads.
+  for (const kept of ["## 注入的上下文怎么用", "## 证据类交付物", "网页只作线索，不作证据", "不要在正文里出现工具名、网关名、检索过程、产物路径或第一人称检索日记", "## 对用户说话", "evimed_capsule_recall"]) {
     assert.ok(child.includes(kept), `the child keeps ${kept}`);
   }
+  assert.ok(!orchestration.text.includes("## 证据类交付物"), "the root is not told the rules of one kind of work on every task");
   // The shared rules are the root's own text, not a second copy to drift.
-  const citation = (/** @type {string} */ text) => text.slice(text.indexOf("## 引文卫生"), text.indexOf("## 安全"));
-  assert.equal(citation(child), citation(orchestration.text));
+  const voice = (/** @type {string} */ text) => text.slice(text.indexOf("## 对用户说话"), text.indexOf("## Where a skill's own files are"));
+  assert.ok(voice(child).length > 100);
+  assert.equal(voice(child), voice(orchestration.text));
 
   /** @type {any[]} */
   const rootSections = [];
@@ -295,8 +319,12 @@ test("the user's language is the thinking's and the narration's too, and the ans
   assert.match(rule, /方法正文、技能文件和工具结果是英文的，这不改变你说话和思考的语言。/);
   // What the reply holds, and that how the run worked is not part of it
   // (owner, 2026-09-24: 「本次任务我按既往习惯核对了…」 is the back office).
-  assert.match(rule, /回答只写对读者有用的：结论、依据、交付物、需要用户决定的事；证据强弱写进它所支撑的那句话，不另立小节。/);
+  assert.match(rule, /回答只写对读者有用的：结果、依据、交付物、需要用户决定的事。/);
   assert.match(rule, /做过哪些检索与核对、参考了哪条记忆或做法、哪些没取到，都不写进回答/);
+  // What stays out is the platform's vocabulary, not the reader's: a script's
+  // file name and the command that runs it are the delivery (2026-10-12, GA04).
+  assert.match(rule, /平台内部的代号、工具名和错误码是我们自己的说法，不对用户说/);
+  assert.match(rule, /读者用得上的文件名、命令和网址照常写/);
   assert.ok(rule.length < 450, `the rule stays short: ${rule.length} characters`);
   // The delegated child reads the same rule, not a copy.
   const child = buildChildGuidanceText({ capsuleActive: false });
