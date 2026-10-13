@@ -42,6 +42,8 @@ export class FakeAvailabilityDatabase {
       }] };
     }
     if (sql.includes("migrate") || sql.startsWith("CREATE") || sql.startsWith("SELECT 1")) return { rows: [] };
+    // The migration's last step reads the catalogue for vocabulary checks to refresh (`vocabularyChecks.mjs`); this double holds none.
+    if (sql.includes("FROM pg_constraint")) return { rows: [] };
     throw new Error(`the fake database was asked something it does not know: ${sql.slice(0, 120)}`);
   }
 
