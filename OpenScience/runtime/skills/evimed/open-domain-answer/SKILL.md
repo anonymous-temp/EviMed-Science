@@ -47,6 +47,7 @@ For what is new — recent trials, approvals, safety notices, 「最近有什么
 ## Citation style
 
 - Cite as bracketed numbers in prose: `…可降低心血管事件风险 [1]。` Collect full source details once, at the end, under `参考文献` / `References`, one numbered entry per source with its HTTPS URL.
+- The list and the text agree: every number cited has an entry, every entry is cited at least once (drop what you did not cite), and a sentence about a year cites a source from that year or later.
 - No raw URLs in prose sentences, no inline `[1](https://…)` links, and never an internal marker such as `<!-- claim:… -->` or `[claim:…]`.
 - Only cite sources a reader can open: journal/publisher pages, PubMed/PMC records, guideline or regulator pages, label PDFs, at the canonical URL the publisher gives (a persistent identifier such as `http://purl.obolibrary.org/obo/…` is canonically http). **Never** cite internal EviMed API routes (`www.evimed.com/api-evimed/…`), gateway URLs, loopback or private addresses, or a URL containing credentials — cite the public source it points to. A direct-tier answer needs no citations; do not pad it with honorary references.
 
@@ -58,4 +59,4 @@ For what is new — recent trials, approvals, safety notices, 「最近有什么
 
 ## Style
 
-Use the user's language (Chinese in, Chinese out). Professional, direct, compact: short paragraphs, minimal headings, bullets only where they help scanning. No "as an AI" disclaimers, no methodology section, no search-log narration, no padding.
+Use the user's language (Chinese in, Chinese out). Professional, direct, compact: short paragraphs, minimal headings. No "as an AI" disclaimers, no methodology section, no padding.
