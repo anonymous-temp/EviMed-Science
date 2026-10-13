@@ -450,9 +450,10 @@ export class OpenVikingClient {
    *  - **The deadline.** `timeoutMs`, defaulting to the client's (`OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS`).
    *  - **The error names.** A refusal is an `HttpError` whose `code` is one of `OPENVIKING_REQUEST_ERROR_CODES`
    *    and whose message is `<METHOD> <path> -> <status>: <the engine's own code and sentence>` — the path and the
-   *    upstream status, never the key and never a query string (a query carries URIs). `upstreamStatus` and
-   *    `upstreamCode` (the engine's `error.code`: `NOT_FOUND`, `PERMISSION_DENIED`, `ALREADY_EXISTS`, …) ride on
-   *    the error for a caller that must tell two refusals of one status apart.
+   *    upstream status, never the key and never a query string (a query carries URIs). `upstreamStatus`,
+   *    `upstreamCode` (the engine's `error.code`: `NOT_FOUND`, `PERMISSION_DENIED`, `ALREADY_EXISTS`, …) and
+   *    `upstreamDetails` (its `error.details`, e.g. `{ type: "account", resource }`) ride on the error for a
+   *    caller that must tell two refusals of one status apart.
    *
    * What comes back: for `responseType: "json"` (the default) the parsed body as the engine sent it — the
    * `{ status, result, … }` envelope, not its `result`, because some routes put what matters beside it (`has_more`
@@ -544,9 +545,13 @@ export class OpenVikingClient {
         // upstream explanation was replaced by the generic sentence below — which
         // is the same outage as having no reason at all.
         const failure = new HttpError(status, requestErrorCode(response.status), `${verb} ${route} -> ${response.status}: ${upstreamReason(parsed)}`);
+        const details = parsed?.error?.details;
         throw Object.assign(failure, {
           upstreamStatus: response.status,
           upstreamCode: typeof parsed?.error?.code === "string" ? parsed.error.code : null,
+          // What the refusal was about (`{ type: "account" | "user" | "file" | "directory" | …, resource }`): the one
+          // way to tell "this file is not there" from "this account is not registered yet", both 404 NOT_FOUND.
+          upstreamDetails: details && typeof details === "object" && !Array.isArray(details) ? details : null,
         });
       }
       if (responseType === "bytes") return { status: response.status, contentType, bytes };

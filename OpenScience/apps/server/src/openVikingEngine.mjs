@@ -62,6 +62,12 @@ const SHIM_PROBE_POLL_MS = 500;
 const sha256 = (/** @type {Buffer | string} */ bytes) => createHash("sha256").update(bytes).digest("hex");
 const codeOf = (/** @type {any} */ error) => (typeof error?.code === "string" && error.code ? error.code : "memory_index_unavailable");
 const sleep = (/** @type {number} */ ms) => new Promise((resolve) => { const timer = setTimeout(resolve, ms); timer.unref?.(); });
+/**
+ * Whether an admin route refused because the account or the user is not in the engine's registry yet. In trusted mode
+ * identities are registered in batches, up to five minutes after their first data request, and until then every admin
+ * route answers 404 about the account — on a new volume, that is the first minutes after the first start.
+ */
+const notRegisteredYet = (/** @type {any} */ error) => error?.upstreamStatus === 404 && ["account", "user"].includes(String(error?.upstreamDetails?.type ?? ""));
 
 /** @typedef {{ ok: boolean, code?: string, [detail: string]: unknown }} EngineFact */
 
@@ -169,12 +175,18 @@ export class OpenVikingEngine {
       try {
         await this.client.request({ path: `/api/v1/admin/accounts/${account}/memory-templates/${type}`, openVikingUser: OPENVIKING_ENGINE_USER });
       } catch (error) {
+        if (notRegisteredYet(error)) return { ok: false, code: "openviking_registration_pending" };
         if (/** @type {any} */ (error)?.upstreamStatus === 404) missing.push(type);
         else if (/** @type {any} */ (error)?.upstreamStatus !== 400) throw error;
       }
     }
     if (missing.length) return { ok: false, code: "openviking_memory_templates_missing", missing };
-    await this.#registerEngineUser();
+    try {
+      await this.#registerEngineUser();
+    } catch (error) {
+      if (notRegisteredYet(error)) return { ok: false, code: "openviking_registration_pending" };
+      throw error;
+    }
     const settings = await this.client.request({
       path: `/api/v1/admin/accounts/${account}/users/${OPENVIKING_ENGINE_USER}/settings`, openVikingUser: OPENVIKING_ENGINE_USER,
     });

@@ -120,6 +120,7 @@ export const READINESS_ERROR_MESSAGES_ZH = Object.freeze({
   // OpenViking as an engine (`openVikingEngine.mjs`, `memoryIndex.engine`): a fact that does not hold pauses the feature
   // built on it — native memory or knowledge compile — and never readiness or a conversation.
   openviking_engine_unchecked: '还没有读到 OpenViking 引擎的状态，稍后会自动再查。',
+  openviking_registration_pending: 'OpenViking 还没有登记平台的账户（新数据卷首次启动后最多约五分钟），稍后会自动再查。',
   openviking_version_mismatch: '正在运行的 OpenViking 不是本版本固定的那一版，请按发布清单更换镜像。',
   openviking_model_key_missing: '没有配置 OpenViking 调用模型网关的服务密钥，原生记忆和知识编译暂停；请重新运行 configure:production-state 并重建相关容器。',
   openviking_memory_templates_missing: 'OpenViking 没有加载平台的记忆模板目录，原生记忆暂停；请检查模板目录的挂载和权限。',
