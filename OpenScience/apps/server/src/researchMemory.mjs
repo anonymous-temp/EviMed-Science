@@ -739,6 +739,9 @@ export class ResearchMemoryStore {
    *
    * @param {any} config @param {{ database?: any, jobs?: any, withdrawals?: any }} options
    */
+  /** @type {{ at: number, value: any } | null} */
+  #walk = null;
+
   constructor(config, { database = null, jobs = null, withdrawals = null } = {}) {
     this.database = database ?? null;
     this.jobs = jobs ?? null;
@@ -1921,6 +1924,15 @@ export class ResearchMemoryStore {
     return result.rows.map((/** @type {any} */ row) => ({ userId: String(row.user_id), changedAt: row.engine_changed_at ? new Date(row.engine_changed_at).toISOString() : null }));
   }
 
+  /** `engineWalk`, at most once a minute: readiness is asked every few seconds. @returns {Promise<{ examined: { legacy: number, native: number, undecided: number }, both: number, accounts: { userId: string, engine: string, writes: number }[] }>} */
+  async engineWalkCached() {
+    if (this.#walk && Date.now() - this.#walk.at < 60_000) return this.#walk.value;
+    const walked = await this.engineWalk();
+    const value = { examined: walked.examined, both: walked.both.length, accounts: walked.both.slice(0, 10) };
+    this.#walk = { at: Date.now(), value };
+    return value;
+  }
+
   /**
    * The walk that holds 「one account, one path」: how many accounts were looked at, and which of them show writes of the
    * other path after the moment they moved — a native account whose records the legacy extraction still wrote, a legacy
@@ -1932,8 +1944,9 @@ export class ResearchMemoryStore {
     // The second query reads the overlay's ledger, which has a migration of its own.
     await this.#query("SELECT 1");
     await migrateNativeMemory(this.database).catch((/** @type {any} */ error) => { throw memoryDatabaseError(error); });
-    const counted = await this.#query(`SELECT COALESCE(engine, 'undecided') AS engine, count(*)::int AS accounts
-      FROM evimed_memory.settings GROUP BY 1`);
+    // Every account, however it came to have no row: an account nothing has asked about yet is undecided, and is counted.
+    const counted = await this.#query(`SELECT COALESCE(s.engine, 'undecided') AS engine, count(*)::int AS accounts
+      FROM evimed_control.users u LEFT JOIN evimed_memory.settings s ON s.user_id = u.id GROUP BY 1`);
     const examined = { legacy: 0, native: 0, undecided: 0 };
     for (const row of counted.rows) if (row.engine in examined) examined[/** @type {keyof typeof examined} */ (row.engine)] = Number(row.accounts);
     // A legacy write is one the extraction made (a run id on the newest revision's author is not kept as a column, so the

@@ -103,6 +103,11 @@ export class NativeMemoryWorker {
     return this.config.ovNativeMemoryEnabled === true && Boolean(this.sessions?.configured && this.overlay?.configured && this.researchMemory?.configured);
   }
 
+  /** What readiness reports: whether the worker applies here, whether it is running, and what its last pass did. */
+  status() {
+    return { applicable: this.applicable, running: Boolean(this.timer), last: { ...this.last } };
+  }
+
   start() {
     if (this.timer || !this.applicable) return;
     const every = Math.max(5_000, Number(this.config.nativeMemoryScanMs) || 60_000);

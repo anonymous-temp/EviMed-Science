@@ -257,6 +257,19 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     } catch { /* the worker registers what the gateway could not */ }
   }
 
+  /** Conversations whose project this process has already put in the overlay's ledger. @type {Set<string>} */
+  const noted = new Set();
+  /** @param {string} userId @param {string} sessionId @param {string} projectId */
+  async function noteSession(userId, sessionId, projectId) {
+    const key = `${userId}\u0000${sessionId}`;
+    if (noted.has(key) || !overlay?.configured) return;
+    try {
+      await overlay.noteSession(userId, sessionId, projectId);
+      if (noted.size > 5_000) noted.clear();
+      noted.add(key);
+    } catch { recordLedgerFailure(); }
+  }
+
   /**
    * A conversation read a patient record: what it had already sent the engine goes too. Its text is the study's, and the
    * messages still pending in its session would otherwise be archived by the engine's own idle commit. Asked once per
@@ -359,6 +372,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         answer = await /** @type {any} */ (sessions).addMessage(ctx.user.id, sessionId, decision.forward);
       }
       recordGatewayMessage("forwarded");
+      // Which project this conversation is held in, noted once: the engine's own idle commits never pass the gateway.
+      await noteSession(ctx.user.id, sessionId, ctx.project.id);
       return { status: 200, json: answer, outcome: "forwarded" };
     },
     async commit(ctx) {

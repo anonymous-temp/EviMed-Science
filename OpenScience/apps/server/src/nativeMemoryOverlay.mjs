@@ -380,16 +380,26 @@ export class NativeMemoryOverlay {
     return result.rows.map(publicFile);
   }
 
-  /** The project an engine session's earlier commits were made in, or null. @param {string} userId @param {string} engineSession */
+  /** The gateway forwarded a conversation's first message: the project it is held in is recorded, once. @param {string} userId @param {string} engineSession @param {string | null} projectId */
+  async noteSession(userId, engineSession, projectId) {
+    await this.#query(`INSERT INTO evimed_memory.native_sessions (user_id, engine_session, project_id) VALUES ($1, $2, $3)
+      ON CONFLICT (user_id, engine_session) DO UPDATE SET project_id = COALESCE(evimed_memory.native_sessions.project_id, EXCLUDED.project_id)`,
+    [owner(userId), String(engineSession), projectId]);
+  }
+
+  /** The project an engine session was held in: as noted when it began, else as its earlier commits recorded. @param {string} userId @param {string} engineSession */
   async projectOfSession(userId, engineSession) {
-    const result = await this.#query(`SELECT project_id FROM evimed_memory.native_commits WHERE user_id=$1 AND engine_session=$2 AND project_id IS NOT NULL
-      ORDER BY created_at DESC LIMIT 1`, [owner(userId), String(engineSession)]);
+    const result = await this.#query(`SELECT project_id FROM (
+        SELECT project_id, 0 AS rank, created_at FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session=$2
+        UNION ALL SELECT project_id, 1, created_at FROM evimed_memory.native_commits WHERE user_id=$1 AND engine_session=$2) found
+      WHERE project_id IS NOT NULL ORDER BY rank, created_at DESC LIMIT 1`, [owner(userId), String(engineSession)]);
     return result.rows[0]?.project_id ?? null;
   }
 
-  /** The engine sessions of one project, as the ledger saw them. @param {string} userId @param {string} projectId @returns {Promise<string[]>} */
+  /** The engine sessions of one project, as the gateway and the ledger saw them. @param {string} userId @param {string} projectId @returns {Promise<string[]>} */
   async projectSessions(userId, projectId) {
-    const result = await this.#query("SELECT DISTINCT engine_session FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2", [owner(userId), String(projectId)]);
+    const result = await this.#query(`SELECT engine_session FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2
+      UNION SELECT engine_session FROM evimed_memory.native_sessions WHERE user_id=$1 AND project_id=$2`, [owner(userId), String(projectId)]);
     return result.rows.map((/** @type {any} */ row) => String(row.engine_session));
   }
 
@@ -473,6 +483,7 @@ export class NativeMemoryOverlay {
     const files = await this.#query("DELETE FROM evimed_memory.native_files WHERE user_id=$1", [id]);
     const revisions = await this.#query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1", [id]);
     const commits = await this.#query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1", [id]);
+    await this.#query("DELETE FROM evimed_memory.native_sessions WHERE user_id=$1", [id]);
     await this.#query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1", [id]);
     await this.#query("DELETE FROM evimed_memory.native_rejections WHERE user_id=$1", [id]);
     return { files: files.rowCount ?? 0, revisions: revisions.rowCount ?? 0, commits: commits.rowCount ?? 0 };
@@ -488,6 +499,7 @@ export class NativeMemoryOverlay {
       await this.#query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
     }
     await this.#query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2", [id, String(projectId)]);
+    await this.#query("DELETE FROM evimed_memory.native_sessions WHERE user_id=$1 AND project_id=$2", [id, String(projectId)]);
     return { files: uris };
   }
 }

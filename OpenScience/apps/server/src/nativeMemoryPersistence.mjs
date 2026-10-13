@@ -76,6 +76,16 @@ ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS pending_text t
 CREATE INDEX IF NOT EXISTS native_commits_open_idx ON evimed_memory.native_commits (state, next_attempt_at)
   WHERE state IN ('pending', 'failed');
 CREATE INDEX IF NOT EXISTS native_commits_session_idx ON evimed_memory.native_commits (user_id, engine_session);
+-- Which project an engine session (a conversation) was held in, noted when the gateway forwards its first message: the
+-- engine's own idle commits never pass the gateway, and their project is read from here.
+CREATE TABLE IF NOT EXISTS evimed_memory.native_sessions (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  engine_session text NOT NULL CHECK (engine_session ~ '^[A-Za-z0-9_.@-]{1,200}$'),
+  project_id text CHECK (project_id IS NULL OR project_id ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$'),
+  created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (user_id, engine_session)
+);
+CREATE INDEX IF NOT EXISTS native_sessions_project_idx ON evimed_memory.native_sessions (user_id, project_id) WHERE project_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS evimed_memory.native_revisions (
   id bigserial PRIMARY KEY,
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,

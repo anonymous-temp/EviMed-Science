@@ -391,6 +391,8 @@ import { MEMORY_GATEWAY_PATH, createMemoryGatewayHandler, memoryGatewayRoutePatt
 import { createMemoryAdmission } from "./memoryAdmission.mjs";
 import { OpenVikingSessions } from "./openVikingSessions.mjs";
 import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
+import { NativeMemoryStore } from "./nativeMemoryStore.mjs";
+import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { nativeMemoryMetricFamilies } from "./nativeMemoryMetrics.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
 import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, extractionEmptyCause } from "./memoryIntelligence.mjs";
@@ -1321,6 +1323,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     timeoutMs: config.memoryGatewayTimeoutMs, fastTimeoutMs: Math.round(Number(config.memoryGatewayTimeoutMs ?? 4_000) / 3),
   });
   const nativeMemoryOverlay = overrides.nativeMemoryOverlay ?? new NativeMemoryOverlay({ database: productDatabase });
+  // The memory page, the map and the account's own operations for an account on that engine, and the worker that reads what
+  // the engine did into the overlay, replays what failed and carries a changed source's label into the files that name it.
+  const nativeMemory = new NativeMemoryStore({ sessions: openVikingSessions, overlay: nativeMemoryOverlay });
+  const nativeMemoryWorker = new NativeMemoryWorker({
+    config, researchMemory, sessions: openVikingSessions, overlay: nativeMemoryOverlay,
+    // The runtime manager is composed further down; the worker asks only after boot.
+    runtimeManager: { releaseMemoryEngineRuntimes: (/** @type {string | undefined} */ userId) => runtimeManager.releaseMemoryEngineRuntimes(userId) },
+    report: (line) => process.stderr.write(`${line}\n`),
+  });
+  /**
+   * Everything the engine holds of an account's memories, for the deletions that owe it: only where the account ever had
+   * any there (its row names the engine, or the overlay saw it registered), so a legacy account's deletion asks nothing of it.
+   * @param {string} userId
+   */
+  const nativeMemoryHeldBy = async (userId) => nativeMemory.configured && config.ovNativeMemoryEnabled === true
+    && (await researchMemory.memoryEngine(userId) === "native" || Boolean((await nativeMemoryOverlay.account(userId).catch(() => ({ registeredAt: null }))).registeredAt));
   // One reranker for both recall paths. It orders candidates that have already
   // been hydrated from the authoritative store, because the index's own
   // reranked endpoint navigates by directory abstracts that nothing generates
@@ -1612,7 +1630,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       userId: user.id, username: user.id, detail: JSON.stringify(details),
     }) });
   const memoryRoutes = createMemoryRoutes({
-    config, researchMemory, memorySubstrate, memoryIndexWorker, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
+    config, researchMemory, nativeMemory, memorySubstrate, memoryIndexWorker, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
     // 「重置记忆」 clears what the page shows: the methods, handbooks and capsule notes live in the product ledger.
     resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
     // A pause for recall turned on under a live runtime: the methods it mounted at launch leave with the idle ones.
@@ -1634,7 +1652,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *  (`deleteSubjectAccounts`).
    *  @param {string} ownerId @param {string | null} [only] */
   const deleteAgentSubjects = (ownerId, only = null) => deleteSubjectAccounts(
-    { apiKeys: agentApiKeys, store, memorySubstrate, memoryIndexing, capsuleTransfers: capsuleTransferService }, ownerId, { only });
+    { apiKeys: agentApiKeys, store, memorySubstrate, memoryIndexing, capsuleTransfers: capsuleTransferService,
+      nativeMemory: { erase: async (/** @type {string} */ userId) => { if (await nativeMemoryHeldBy(userId)) await nativeMemory.eraseAccount(userId); } } }, ownerId, { only });
   const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit });
   // 「知识页」 (knowledgePageService.mjs): composed further down, once the run ledger and the runtime exist. The hooks below reach it
   // through these, so a deployment without it (or with it switched off) behaves as it always did.
@@ -2521,7 +2540,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // What a changed source reaches besides result versions: the memories that name it and the learned methods linked to the
   // results that rest on it, each labelled (N15). And the one standing authorization a recheck may use: the running agenda
   // whose episode produced the result. A paused or not-started agenda is none, and nothing here asks for another approval.
-  const knowledgeChange = new KnowledgeChangeService({ memory: researchMemory, methods: learningService, sourceChanges,
+  const knowledgeChange = new KnowledgeChangeService({ memory: researchMemory, native: nativeMemoryWorker, methods: learningService, sourceChanges,
     // The knowledge pages that quote a changed source; composed later, read at the moment a change is reconciled.
     pages: { get enabled() { return Boolean(knowledgePages?.enabled); },
       sourceIdsByDoi: (userId, projectId, doi) => knowledgePages ? knowledgePages.sourceIdsByDoi(userId, projectId, doi) : [],
@@ -4688,6 +4707,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     overlay: nativeMemoryOverlay.configured ? nativeMemoryOverlay : null,
   });
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext, evaluationIsolation,
+    memoryEngine: (/** @type {string} */ userId) => researchMemory.memoryEngine(userId),
     // The recall tool answers with at most this many (review M6): five unless the model asks, and never more than the most.
     recallLimit: config.memoryRecallToolLimit, recallMaxLimit: config.memoryRecallToolMaxLimit,
     // A runtime's recall of a subscribed zone is the frontier's too: an account outside its audience is offered nothing, as every zone route answers it.
@@ -4741,10 +4761,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const memoryMapProjectOf = (/** @type {any} */ user, /** @type {string} */ projectId) => store.requireProject(user, projectId);
   const memoryMapRoutes = createMemoryMapRoutes({
     config, researchMemory, store, context, decodeRouteComponent, audit, topics: memoryTopics,
+    // An account on the native engine is drawn from the engine's files; the PostgreSQL sources stand aside for it.
+    memoryEngine: async (/** @type {string} */ userId) => (await researchMemory.memoryEngine(userId).catch(() => "legacy")) === "native" ? "native" : "postgres",
     isInternalProject: internalFor,
     sources: [
       createRecordsSource({ researchMemory }),
-      createNativeMemorySource(),
+      createNativeMemorySource({ readMemories: (request) => nativeMemory.mapMemories(request.user.id) }),
       createDocumentsSource({ sources: sourceService, researchMemory }),
       createMethodsSource({ learning: learningService }),
       createKnowledgeGraphSource(),
@@ -5130,6 +5152,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           if (await taskManager.hasActiveProject(project)) throw Object.assign(new Error("project_busy"), { code: "project_busy" });
           await runtimeManager.stop(project, { by: "platform" });
           if (researchMemory.configured) await researchMemory.deleteProjectMemory(owner.id, project.id, { sessionIds: await projectConversationIds(project) });
+          if (await nativeMemoryHeldBy(owner.id)) await nativeMemory.deleteProject(owner.id, project.id);
         }
         await removeStudyProject(owner, study.projectId).catch(async (error) => {
           // A project that is already gone leaves its draft behind: the row is the only thing left to remove.
@@ -5996,7 +6019,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService, capsuleService, { engine: openVikingEngine, modelCaller: openVikingModelCaller });
+        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService, capsuleService, { engine: openVikingEngine, modelCaller: openVikingModelCaller, nativeMemoryWorker });
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -6004,7 +6027,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (pathname === "/api/ops/metrics" && (req.method === "GET" || req.method === "HEAD")) {
         await sendOperatorMetrics(req, res, {
           judgeService,
-          openViking: { engine: openVikingEngine, modelCaller: openVikingModelCaller },
+          openViking: { engine: openVikingEngine, modelCaller: openVikingModelCaller, nativeMemoryWorker },
           config,
           store,
           taskManager,
@@ -7019,6 +7042,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // carry rather than an empty one to claim.
           const memory = researchMemory.configured ? await researchMemory.exportUserMemory(user.id) : null;
           let entries = appendMemoryArchiveEntry(await collectUserArchiveEntries(user, projects, config), memory, config);
+          // An account on the native engine also carries the engine's own pack of its memory files (a ZIP with a hash per file).
+          if (await nativeMemoryHeldBy(user.id)) entries = appendBinaryArchiveEntry(entries, "memory/native-memory.zip", await nativeMemory.exportPack(user.id), config);
           if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
           await securityAudit(config, "account.export", "completed", { userId: user.id });
           await sendUserArchive(res, user, entries);
@@ -7056,6 +7081,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // behind it go first: a subject's memory has no owner once its
         // institution is gone, and nothing else would ever delete it.
         const subjectsDeleted = await deleteAgentSubjects(user.id);
+        // What the memory engine holds of the account goes with it, before the rows that say it was there (a deletion that cannot
+        // reach the engine fails here, named, and is asked again — never an account gone with its memory left behind).
+        if (await nativeMemoryHeldBy(user.id)) await nativeMemory.eraseAccount(user.id);
         // The purge still runs first, for the counts the audit line carries.
         // Completeness no longer depends on it: the memory tables reference the
         // account with ON DELETE CASCADE, so `store.deleteUser` below removes
@@ -7229,6 +7257,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // it timed out (live: 503 `memory_index_timeout`, and the same request
           // succeeded two minutes later).
           if (researchMemory.configured) await researchMemory.deleteProjectMemory(user.id, project.id, { sessionIds: await projectConversationIds(project) });
+          // The engine's own memories of this project and the sessions of its conversations (`NativeMemoryStore.deleteProject`).
+          if (await nativeMemoryHeldBy(user.id)) await nativeMemory.deleteProject(user.id, project.id);
           // With no ledger to hand the withdrawal to (a test's store, a deployment
           // whose index is not composed) there is nothing durable to keep: one
           // attempt, never waited on.
@@ -7887,7 +7917,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     void Promise.resolve(managedBrowser.pause?.()).catch(() => {
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
-    for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, knowledgePagesWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
+    for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, nativeMemoryWorker, sourceWorker, knowledgePagesWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
       geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker, evidenceProgramme?.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
@@ -7928,6 +7958,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       hostedExtensions?.preparation.start();
       hostedExtensions?.worker.start();
       memoryIndexWorker?.start();
+      nativeMemoryWorker.start();
       openVikingEngine?.start();
       sourceWorker?.start();
       knowledgePagesWorker?.start();
@@ -8035,6 +8066,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     openVikingClient,
     memoryIndexing,
     memoryIndexWorker,
+    nativeMemory,
+    nativeMemoryWorker,
     sourceService,
     sourceWorker,
     knowledgePages,
@@ -8166,6 +8199,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await hostedExtensions?.preparation.close();
       await hostedExtensions?.worker.close();
       await memoryIndexWorker?.close();
+      nativeMemoryWorker.close();
       openVikingEngine?.close();
       await sourceWorker?.close();
       await knowledgePagesWorker?.close();
@@ -8369,6 +8403,14 @@ function appendMemoryArchiveEntry(entries, memory, config = null) {
     mode: 0o600,
     mtime: new Date(),
   };
+  assertArchiveEntryLimit(entries.length + 1, config?.maxArchiveEntries, "account");
+  assertArchiveByteLimit(archiveEntryBytes(entries) + entry.size, config?.maxArchiveBytes, "account");
+  return [...entries, entry];
+}
+
+/** One more file in an export archive, from bytes. */
+function appendBinaryArchiveEntry(entries, rel, data, config = null) {
+  const entry = { rel, type: "file", data, size: data.length, mode: 0o600, mtime: new Date() };
   assertArchiveEntryLimit(entries.length + 1, config?.maxArchiveEntries, "account");
   assertArchiveByteLimit(archiveEntryBytes(entries) + entry.size, config?.maxArchiveBytes, "account");
   return [...entries, entry];
@@ -9536,6 +9578,13 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // Memory on the native engine (nativeMemoryMetrics.mjs): what the memory gateway forwarded, withheld and refused, and what
   // the overlay's worker read, replayed and took back.
   if (config.ovNativeMemoryEnabled === true) for (const family of nativeMemoryMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // One account, one path: the accounts on each engine, and the accounts that show writes of the other path after they moved (zero is right).
+  const enginePaths = config.ovNativeMemoryEnabled === true && researchMemory?.configured ? await researchMemory.engineWalkCached().catch(() => null) : null;
+  if (enginePaths) {
+    addMetric(lines, "open_science_memory_engine_accounts", "Accounts by the engine that keeps their memory, as the last walk counted them.", "gauge",
+      ["legacy", "native", "undecided"].map((engine) => ({ value: enginePaths.examined[engine], labels: { engine } })));
+    addMetric(lines, "open_science_memory_engine_both_paths_accounts", "Accounts that show writes of the other memory engine after the moment they moved; zero is the only right value.", "gauge", { value: enginePaths.both });
+  }
   // Recalculation cards (evidenceRecalculation.mjs): the switch, and what became of each proof the evolution module recorded.
   for (const family of evidenceRecalculationMetricFamilies(evidenceRecalculation, config)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The prediction registry (predictionRegistry.mjs): the switch, registrations, scores and what each published paper that named a registered trial led to.
@@ -9741,7 +9790,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     publicUrl: await readinessCheck(() => readinessPublicUrl(config)),
     auth: await readinessCheck(async () => readinessAuth(config, store)),
     stateStore: await readinessCheck(async () => readinessStateStore(config, store)),
-    memory: await readinessCheck(async () => readinessMemory(researchMemory, config)),
+    memory: await readinessCheck(async () => readinessMemory(researchMemory, config, openViking?.nativeMemoryWorker ?? null)),
     memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memorySubstrate, memoryIndexWorker, capsules, openViking)),
     usageLedger: await readinessCheck(async () => readinessUsageLedger(config, usageLedger)),
     inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
@@ -9885,7 +9934,7 @@ async function readinessStateStore(config, store) {
  *  store rather than as a check of its own: an evaluation keeps `/api/ready`
  *  verbatim, and "memory off" has to be readable there as a setting, not
  *  inferred from runs that happened to recall nothing. */
-async function readinessMemory(researchMemory, config) {
+async function readinessMemory(researchMemory, config, nativeMemoryWorker = null) {
   const recallEnabled = config?.memoryRecallEnabled !== false;
   if (!researchMemory?.configured) return { required: false, configured: false, recallEnabled };
   const status = await researchMemory.status();
@@ -9896,7 +9945,13 @@ async function readinessMemory(researchMemory, config) {
       recallEnabled,
     });
   }
-  return { required: true, connected: true, recallEnabled };
+  // One account, one path: how many accounts were looked at, and the accounts that show writes of the other path after the
+  // moment they moved (zero of those is the assertion; `examined` is the proof that it looked). Reported, never required: a
+  // single account's stray write must not take the product offline, and the operator's counter carries the number.
+  const native = config?.ovNativeMemoryEnabled === true && typeof researchMemory.engineWalk === "function"
+    ? { enginePaths: await researchMemory.engineWalkCached(), ...(nativeMemoryWorker ? { worker: nativeMemoryWorker.status() } : {}) }
+    : null;
+  return { required: true, connected: true, recallEnabled, ...(native ? { native } : {}) };
 }
 
 /** Which component ranks a recall, whether it can be reached, and what the
