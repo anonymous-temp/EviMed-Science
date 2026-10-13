@@ -2397,10 +2397,6 @@ export class AutopilotService {
       digest = await this.getDigest(userId, digestId);
       if (digest.projectId !== agenda.projectId || digest.payload.agendaId !== agenda.id) throw new HttpError(409, "autopilot_digest_conflict", "Digest identity belongs to another agenda.");
     }
-    // The platform's own agendas have no reader to tell: their conclusions become cards, or stay in the internal project.
-    // Nor does a day that found nothing: 「0 条重点发现，0 条待验证线索」 every morning is an inbox item that asks to be
-    // opened and says nothing (2026-10-07 review). The digest above and the episode stay recorded — the 简报 is where a
-    // quiet day is written down — and only the notice is withheld, so a day with a finding or a lead notifies as before.
     // A routine execution that ran to its end tells the researcher once, in the words every finished task uses; one that did not
     // run is on the task's page (the run's state) and is not an inbox item of its own.
     if (this.notifications && input.routine === "succeeded" && !this.programme?.owns(userId, agenda.projectId)) await this.notifications.create(userId, {
@@ -2408,6 +2404,10 @@ export class AutopilotService {
       source: { type: "digest", id: digest.id }, idempotencyKey: `autopilot-routine:${digest.id}`,
       actions: [{ id: "open", label: "查看结果" }],
     });
+    // The platform's own agendas have no reader to tell: their conclusions become cards, or stay in the internal project.
+    // Nor does a day that found nothing: 「0 条重点发现，0 条待验证线索」 every morning is an inbox item that asks to be
+    // opened and says nothing (2026-10-07 review). The digest above and the episode stay recorded — the 简报 is where a
+    // quiet day is written down — and only the notice is withheld, so a day with a finding or a lead notifies as before.
     if (this.notifications && !this.programme?.owns(userId, agenda.projectId) && (headlines.length > 0 || leads.length > 0)) await this.notifications.create(userId, {
       noticeType: "review", title: `定时任务简报：${agenda.payload.title}`,
       body: `${headlines.length} 条重点发现，${leads.length} 条待验证线索。`, projectId: agenda.projectId,
