@@ -2354,10 +2354,11 @@ export function loadConfig(overrides = {}) {
     deepseekReasoningEffort: parseReasoningEffort(
       overrides.deepseekReasoningEffort ?? process.env.OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT ?? "high",
     ),
-    // LLM-augmented open-domain routing. On by default: the classifier only
-    // runs after the regex router returns no match and fails safe to
-    // open-domain on any error (see specialistClassifier.mjs). Set
-    // OPEN_SCIENCE_LLM_ROUTING_ENABLED=false to fall back to regex-only routing.
+    // LLM open-domain routing. On by default: the classifier decides which
+    // specialist, if any, an unrouted question commissions, and any error sends
+    // it to the ordinary conversation line (see specialistClassifier.mjs). Set
+    // OPEN_SCIENCE_LLM_ROUTING_ENABLED=false and only a structured choice or the
+    // high-risk-medicine report rule routes; everything else is conversation.
     llmRoutingEnabled:
       overrides.llmRoutingEnabled ?? boolEnv("OPEN_SCIENCE_LLM_ROUTING_ENABLED", true),
     llmRoutingConfidenceThreshold: Number(

@@ -122,7 +122,7 @@ test('what a decision takes with the site on counts the original path wherever t
   const again = hybridOf('J2', unsettled);
   assert.deepEqual([again.ms, again.asked], [900, true]);
   assert.ok(Math.abs(again.cost - 0.0017) < 1e-12);
-  // J3 hands an unsure answer to its regex net, which is no model call, and asks the original classifier only when Jev failed.
+  // J3 leaves an unsure answer on the ordinary line, which is no model call, and asks the original classifier only when Jev failed.
   assert.equal(hybridOf('J3', unsettled).asked, false);
   assert.equal(hybridOf('J3', failed).asked, true);
   // J4's original path is no notice at all.

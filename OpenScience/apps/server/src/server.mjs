@@ -132,7 +132,7 @@ import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
 import {
   OPEN_DOMAIN_ANSWER_AGENT_ID,
   classifierFailureReason,
-  routeNamedSpecialist,
+  routeOpenDomain,
 } from "./specialistRouting.mjs";
 import { SpecialistClassifier } from "./specialistClassifier.mjs";
 import { ROUTING_DECISION_PATH, createRoutingDecisionRoutes } from "./routingDecision.mjs";
@@ -5514,9 +5514,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /**
    * The contract an adopted session should be graded against.
    *
-   * The same two steps a dispatch takes -- the named/regex router and the model
-   * classifier, then the answer line for anything they do not claim -- reading
-   * the question out of the session's own transcript instead of a request body.
+   * The same decision a dispatch takes (`routeOpenDomain`: a slash command, the
+   * model classifier, then the answer line for anything they do not claim) --
+   * reading the question out of the session's own transcript instead of a
+   * request body.
    * @param {Record<string, any>} project @param {string} sessionId @param {string} text
    */
   /** Join only confirmed, current-input attachments to a kernel-owned run. */
@@ -5551,12 +5552,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       estimatedMinutes: runEstimate(registry.get(binding.agentId)),
     };
     const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
-    const named = routeNamedSpecialist(text, routableAgents);
-    /** @type {{ failure?: string, verdict?: string }} */
-    const trace = {};
-    const owner = { userId: project.userId, projectId: project.id };
-    const specialist = named ?? await specialistClassifier.classify(text, routableAgents, trace, owner)
-      ?? await specialistClassifier.net(text, routableAgents, trace, owner);
+    const { specialist } = await routeOpenDomain({
+      query: text, agents: routableAgents, classifier: specialistClassifier,
+      owner: { userId: project.userId, projectId: project.id },
+    });
     const answerAgent = specialist ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
     const effective = specialist ?? (answerAgent
       ? {
@@ -6635,15 +6634,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // Routing is a judgement about what deliverable the request commissions,
         // and a word list cannot make it. Deciding by regex first sent six real
         // requests for a clinical evidence review to other pipelines because
-        // they mentioned meta-analyses, adverse reactions, or a dataset — the
-        // classifier was never consulted, because a rule had already matched.
+        // they mentioned meta-analyses, adverse reactions, or a dataset; keeping
+        // the rules as a net under the model took a sales spreadsheet, a
+        // message-queue comparison and a pull request into medical pipelines.
         //
-        // So the model decides, and the regex keeps exactly one job: a safety
-        // net under the decision. It runs when the model declines or is not
-        // available, and it may only ADD a route, never replace one the model
-        // made. That preserves the property the old order was built for — a
-        // high-risk medicine asked about in a report request always reaches the
-        // clinical gate — without letting keyword matching outrank judgement.
+        // So a structured choice routes by name, the model decides everything
+        // else and its answer is final, and the only rule left is the data one:
+        // a high-risk medicine from the pharmacists' list asked about in a
+        // report request always reaches the clinical gate (specialistRouting.mjs).
         /** @type {{ agentId: string, agentVersion: string, runtimeAgent: string, reason: string } | null} */
         let routedSpecialist = chosenLine?.agent
           ? { agentId: chosenLine.agent.id, agentVersion: chosenLine.agent.version, runtimeAgent: chosenLine.agent.runtimeAgent, reason: `choice:${chosenLine.agent.id}` }
@@ -6651,22 +6649,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         /** @type {{ failure?: string, verdict?: string }} */
         const classifierTrace = {};
         if (boundSession?.mode === "open-domain" && !chosenLine) {
-          const named = routeNamedSpecialist(text, routableAgents);
-          // Naming the package is an instruction, not a guess at intent.
-          routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace,
-            { userId: ctx.project.userId, projectId: ctx.project.id });
-          if (!routedSpecialist) {
-            const net = await specialistClassifier.net(text, routableAgents, classifierTrace,
-              { userId: ctx.project.userId, projectId: ctx.project.id });
-            // The net catching a request is normal after the model has said "no
-            // specialist fits". It is a different event after the model never
-            // answered, and the two are the same string in the ledger unless
-            // this says so: one is the design working, the other is the design
-            // not running.
-            routedSpecialist = net && classifierTrace.failure
-              ? { ...net, reason: classifierFailureReason(net.reason, classifierTrace.failure) }
-              : net;
-          }
+          ({ specialist: routedSpecialist } = await routeOpenDomain({
+            query: text, agents: routableAgents, classifier: specialistClassifier, trace: classifierTrace,
+            owner: { userId: ctx.project.userId, projectId: ctx.project.id },
+          }));
         }
         // Unrouted open-domain questions still run on a managed EviMed agent
         // (persona + proportional quality floor) instead of the bare coding

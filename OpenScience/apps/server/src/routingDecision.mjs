@@ -1,11 +1,7 @@
 import { capabilityTitle, formatCredits } from "@evimed/domain";
 import { runEstimate } from "./runRoute.mjs";
 import { HttpError, assertObject, assertString, readJson, sendJson } from "./security.mjs";
-import {
-  OPEN_DOMAIN_ANSWER_AGENT_ID,
-  routeNamedSpecialist,
-  routeOpenDomainSpecialist,
-} from "./specialistRouting.mjs";
+import { OPEN_DOMAIN_ANSWER_AGENT_ID, routeOpenDomain } from "./specialistRouting.mjs";
 
 /**
  * What one question would do, told to the shell before it sends it.
@@ -28,22 +24,18 @@ import {
  *   「改为快速回答」 sends. Principles 2, 12 and 13: enforcement binds outputs,
  *   a plain question gets a zero-tool answer, and nothing about the shape of a
  *   question may hold it up.
- * - **There is no second classification path.** It calls the same two
- *   functions in the same order the dispatch does — `routeNamedSpecialist`, the
- *   `SpecialistClassifier`, then `routeOpenDomainSpecialist` as the net — so a
- *   prediction that disagreed with the dispatch would be a bug in one of them
- *   rather than a difference of opinion between two routers. Not one regex here
- *   (principles 2 and 5); widening the router's open-vocabulary matching to
- *   make a preview prettier is the failure mode that list already carries scars
- *   from.
+ * - **There is no second classification path.** It calls the function the
+ *   dispatch calls (`routeOpenDomain`), so a prediction that disagreed with the
+ *   dispatch would be a bug in one function rather than a difference of opinion
+ *   between two routers. Not one regex here (principles 2 and 5).
  * - **The model is optional and failing means `quick`.** `consultModel` is on
- *   by default because the dispatch consults the classifier first and a
- *   preview that skipped it would under-predict `deep` on every question the
- *   regex net misses. A caller that wants a free, instant answer while the user
+ *   by default because the dispatch consults the classifier, and a preview
+ *   that skipped it would under-predict `deep` on every question only the
+ *   model recognises. A caller that wants a free, instant answer while the user
  *   is still typing passes `consultModel: false` and gets the deterministic
- *   half. Either way, a classifier that is disabled, unconfigured, slow, broken
- *   or unsure lands on the net, and a net that claims nothing lands on `quick`
- *   — never on an error, and never on a guess.
+ *   half (a slash command, the medicine rule). Either way, a classifier that is
+ *   disabled, unconfigured, slow, broken or unsure lands on `quick` — never on
+ *   an error, and never on a guess.
  * - **`quick` carries no estimate.** A quick answer is EviMed's own line
  *   (§9.5 「沿用 EviMed AI 搜索的流式接口」); its seconds and its price belong
  *   to the engine that runs it, and quoting this platform's answer-line minutes
@@ -60,7 +52,7 @@ import {
 /** The one path this module answers. */
 export const ROUTING_DECISION_PATH = "/api/routing/decision";
 
-/** How the decision was reached, for a caller that logs or measures. */
+/** How the decision was reached, for a caller that logs or measures: a structured choice, the model, the one medicine rule, or no specialist. */
 export const ROUTING_DECIDED_BY = Object.freeze(["named", "model", "rules", "default"]);
 
 /**
@@ -127,7 +119,7 @@ function summaryText(mode, title, minutes, credits, simulated = false) {
  * @param {{
  *   question: string,
  *   agents: any[],
- *   classifier?: { available?: boolean, classify: Function, net?: Function } | null,
+ *   classifier?: { available?: boolean, classify: Function } | null,
  *   owner?: { userId: string, projectId: string } | null,
  *   consultModel?: boolean,
  *   estimateCredits?: ((input: { mode: 'deep', capabilityId: string, minutes: { min: number, max: number } | null }) => any) | null,
@@ -147,37 +139,17 @@ export async function decideRouting({
   question, agents, classifier = null, owner = null, consultModel = true, estimateCredits = null,
 }) {
   const routable = (Array.isArray(agents) ? agents : []).filter((agent) => agent?.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
-  // The dispatch's own order (server.mjs): naming a package is an instruction,
-  // the model decides what the question commissions, and the regex rules are
-  // the net under an absent decision — never over one.
-  let specialist = routeNamedSpecialist(question, routable);
-  /** @type {'named' | 'model' | 'rules' | 'default'} */
-  let decidedBy = specialist ? "named" : "default";
-  /** @type {{ failure?: string, verdict?: string }} */
-  const trace = {};
-  let modelConsulted = false;
-  if (!specialist && consultModel && classifier?.available === true) {
-    modelConsulted = true;
-    try {
-      specialist = await classifier.classify(question, routable, trace, owner);
-    } catch (error) {
-      // The classifier's own contract is that it resolves to null rather than
-      // throwing, and it records why in `trace`. This is the case that contract
-      // does not cover, and it is named rather than swallowed (principle 19):
-      // the net still gets its turn, and the caller is told the model was not
-      // the one that decided.
-      trace.failure = `error_${error?.code ?? "unknown"}`;
-      process.stderr.write(`routing decision: the classifier threw (${trace.failure})\n`);
-    }
-    if (specialist) decidedBy = "model";
-  }
-  if (!specialist) {
-    // The classifier's own net when there is one: it asks the model once more before a rule overrules its `none`.
-    specialist = typeof classifier?.net === "function" && modelConsulted
-      ? await classifier.net(question, routable, trace, owner)
-      : routeOpenDomainSpecialist(question, routable, { afterCleanNone: trace.verdict === "none" });
-    if (specialist) decidedBy = "rules";
-  }
+  // The dispatch's own function (specialistRouting.mjs `routeOpenDomain`), not a
+  // copy of its order: a structured choice routes by name, the model decides
+  // what the question commissions and its answer is final, and the one medicine
+  // rule is the only thing left under it.
+  const { specialist, decidedBy, modelConsulted } = await routeOpenDomain({
+    query: question,
+    agents: routable,
+    classifier: classifier?.available === true ? classifier : null,
+    consultModel,
+    owner,
+  });
   const capability = specialist ? routable.find((agent) => agent.id === specialist?.agentId) ?? null : null;
   if (!capability) {
     // No capability claimed it, so it is a question rather than a commission:
