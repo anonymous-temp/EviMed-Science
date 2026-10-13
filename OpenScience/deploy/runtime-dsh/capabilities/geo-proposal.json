@@ -12,7 +12,8 @@
   "tools": [
     "mcp__evimed__geo_read",
     "mcp__evimed__geo_write",
-    "mcp__evimed__kb_search"
+    "mcp__evimed__kb_search",
+    "mcp__evimed__kb_browse"
   ],
   "produces": [
     {

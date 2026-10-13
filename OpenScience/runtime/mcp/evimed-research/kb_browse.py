@@ -57,11 +57,10 @@ def tool_definitions():
         {
             "name": "kb_browse",
             "description": (
-                "Find your way through the researcher's knowledge base as a tree, when a question spans several documents or asks "
-                "what the knowledge base holds: op=overview (root wiki: its table of contents; kg: the graph's entity and relation "
-                "counts; sources or library: the documents by title), list or tree (a directory, a subtree), read (a page or a "
-                "document, by lines), grep (the lines holding a text). Pages are summaries compiled from the documents. "
-                "Not for a passage to quote -- that is kb_search -- and a question that needs no knowledge base needs no tool."
+                "Find your way through the researcher's knowledge base when a question spans several documents or asks what it "
+                "holds: op=overview gives the wiki's table of contents (root wiki), the graph's counts (kg) or the documents by "
+                "title (sources, library); list and tree a directory; read a page or a document by lines; grep the lines holding "
+                "a text. For a passage to quote use kb_search; a question that needs no knowledge base needs no tool."
             ),
             "inputSchema": {
                 "type": "object",
@@ -71,34 +70,16 @@ def tool_definitions():
                         "type": "string",
                         "enum": list(ROOTS),
                         "default": "wiki",
-                        "description": "wiki: compiled pages; kg: knowledge graph; sources: this project's documents; "
-                                       "library: the cross-project library.",
+                        "description": "wiki, kg: compiled pages and graph; sources: this project's documents; library: the cross-project ones.",
                     },
-                    "path": {
-                        "type": "string",
-                        "maxLength": MAX_PATH,
-                        "description": "Relative path inside the root, as a listing or a page's link gives it. "
-                                       "Required for read; default: the root. Not for overview.",
-                    },
-                    "pattern": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": MAX_PATTERN,
-                        "description": "grep only: plain text matched as written, case ignored; not a regular expression.",
-                    },
-                    "offset": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": MAX_OFFSET,
-                        "default": 0,
-                        "description": "read: lines to skip; list: entries to skip.",
-                    },
+                    "path": {"type": "string", "maxLength": MAX_PATH, "description": "Relative to the root, as a listing or a page link gives it. read needs one."},
+                    "pattern": {"type": "string", "minLength": 1, "maxLength": MAX_PATTERN, "description": "grep: plain text, case ignored."},
+                    "offset": {"type": "integer", "minimum": 0, "maximum": MAX_OFFSET, "default": 0},
                     "limit": {
                         "type": "integer",
                         "minimum": 1,
                         "maximum": MAX_LIMIT,
-                        "description": "read: lines (default 200, at most 400); list: entries (default 100, at most 200). "
-                                       "tree answers at most 300 entries, grep 50 lines.",
+                        "description": "read: lines (default 200); list: entries (default 100, at most 200).",
                     },
                 },
                 "required": ["op"],

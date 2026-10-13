@@ -31,6 +31,7 @@ tools:
 - mcp__evimed__clinical_trial_snapshot
 - mcp__evimed__dailymed_label
 - mcp__evimed__kb_search
+- mcp__evimed__kb_browse
 - mcp__evimed__pharmacy_reference_search
 - mcp__evimed__evidence_deduplicate
 produces:

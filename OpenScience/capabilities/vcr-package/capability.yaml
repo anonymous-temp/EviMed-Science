@@ -37,6 +37,7 @@ tools:
 - mcp__evimed__vcr_write
 - mcp__evimed__locate_quote
 - mcp__evimed__kb_search
+- mcp__evimed__kb_browse
 - mcp__evimed__literature_search
 - mcp__evimed__open_access_full_text
 produces:

@@ -13,7 +13,8 @@
     "mcp__evimed__data_source_catalog",
     "mcp__evimed__biomedical_source_search",
     "mcp__evimed__literature_search",
-    "mcp__evimed__kb_search"
+    "mcp__evimed__kb_search",
+    "mcp__evimed__kb_browse"
   ],
   "produces": [
     {

@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "off-label-analysis",
-  "version": "sha256:a2236b4d8441473b62e93dacd2f4dd4c0874fb8b0d45b490580a5ca5a1ac7781",
+  "version": "sha256:5789fc129b89226e0471b803e84f0804fdf9fd41195f6938f6ea2614db92152b",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 30,
+    "nodes": 31,
     "edges": 22,
     "byVia": {
       "schema": 22,
@@ -1126,6 +1126,74 @@
         "doi",
         "pmid"
       ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__kb_browse",
+      "source": "mcp",
+      "description": "Find your way through the researcher's knowledge base when a question spans several documents or asks what it holds: op=overview gives the wiki's table of contents (root wiki), the graph's counts (kg) or the documents by title (sources, library); list and tree a directory; read a page or a document by lines; grep the lines holding a text. For a passage to quote use kb_search; a question that needs no knowledge base needs no tool.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": [
+              "list",
+              "tree",
+              "overview",
+              "read",
+              "grep"
+            ]
+          },
+          "root": {
+            "type": "string",
+            "enum": [
+              "sources",
+              "wiki",
+              "kg",
+              "library"
+            ],
+            "default": "wiki",
+            "description": "wiki, kg: compiled pages and graph; sources: this project's documents; library: the cross-project ones."
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 480,
+            "description": "Relative to the root, as a listing or a page link gives it. read needs one."
+          },
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "grep: plain text, case ignored."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "default": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 400,
+            "description": "read: lines (default 200); list: entries (default 100, at most 200)."
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
       "stateEffect": "none"
     },
     {

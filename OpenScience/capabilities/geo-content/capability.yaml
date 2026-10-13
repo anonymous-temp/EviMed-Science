@@ -42,6 +42,7 @@ tools:
 - mcp__evimed__web_read
 - mcp__evimed__web_search
 - mcp__evimed__kb_search
+- mcp__evimed__kb_browse
 - mcp__evimed__frontier_search
 - mcp__evimed__geo_visibility_probe
 produces:

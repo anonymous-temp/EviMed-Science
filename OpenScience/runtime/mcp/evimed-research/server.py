@@ -38,6 +38,7 @@ import source_catalog
 import geo_probe
 import web_search
 import kb_search
+import kb_browse
 import frontier_search
 import task_tools
 import geo_platform
@@ -969,6 +970,9 @@ TOOL_DEFINITIONS = [
 # one is configured, and all eight hosts are on its allowlist.
 TOOL_DEFINITIONS.extend(science_connectors.tool_definitions())
 TOOL_DEFINITIONS.extend(kb_search.tool_definitions())
+# The same knowledge base as a tree (2026-10-13): the documents, the wiki compiled from them and the
+# knowledge graph, through the server's browse gateway (EVIMED_KB_BROWSE_GATEWAY_URL).
+TOOL_DEFINITIONS.extend(kb_browse.tool_definitions())
 # The feed of recent medical developments (「前沿动态」, 2026-09-22): leads a
 # model may look up when a question is about what is new, never evidence.
 TOOL_DEFINITIONS.extend(frontier_search.tool_definitions())
@@ -2150,6 +2154,21 @@ def _dispatch(name, arguments, execution_context=None):
                     else "Read or grep the knowledge-base files under .evimed-knowledge/ instead.",
                 ],
             )
+        result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
+        return result
+    if name == "kb_browse":
+        try:
+            result = kb_browse.browse(arguments)
+        except kb_browse.KbBrowseError as error:
+            # A call the run built wrongly, or a path that is not there, is the run's to correct; an outage may pass;
+            # a deployment without the knowledge engine still has the search and the files.
+            if error.code.endswith("_invalid") or error.code == "kb_browse_not_found":
+                stop_reason, next_action = "invalid_input", "Correct the named field (list the root for the paths there) and call again, or use kb_search."
+            elif error.retryable:
+                stop_reason, next_action = "retry", "Retry once, then use kb_search or read the knowledge-base files under .evimed-knowledge/."
+            else:
+                stop_reason, next_action = "unsupported", "Use kb_search, or read and grep the knowledge-base files under .evimed-knowledge/ instead."
+            return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
     if name == "frontier_search":
