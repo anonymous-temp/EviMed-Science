@@ -152,8 +152,8 @@ test("the researcher's switches pause learning and recall without deleting, and 
   const put = (body) => fetch(`${base}/api/memory/settings`, { method: "PUT", headers, body: JSON.stringify(body) });
   const read = async () => (await (await fetch(`${base}/api/memory/settings`, { headers })).json()).data;
 
-  assert.deepEqual(await read(), { learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null },
-    "an account that set nothing has every switch off");
+  assert.deepEqual(await read(), { learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null, engine: "legacy" },
+    "an account that set nothing has every switch off, and keeps its memory on the engine the deployment has (here: the legacy one)");
 
   // Two tabs flipping different switches at the same moment both win.
   const [learning, projects] = await Promise.all([put({ learningPaused: true }), put({ pausedProjects: ["default", "default"] })]);

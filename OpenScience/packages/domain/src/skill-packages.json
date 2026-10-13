@@ -1005,11 +1005,11 @@
       "id": "capability/source-understanding",
       "name": "source-understanding",
       "origin": "capability",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:e6a0d54691c93ec099fe474bca210735bd130e523e161c44cf7fb03e5d6855c1",
+      "digest": "sha256:bb55c19a3df7f818fefa53bdf93056cf72e9616addc83f9de08b6e3e8c4c05a1",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"ecf3a03bd9a5ff3822243b22649a97a306fbbe6bbd9a862cfbc75515de0ded05"}],
+      "references": [{"path":"capability.yaml","sha256":"8f2ce80fd424c2a18ea6ff52efc870f68c40c3ccb436f28740f6586bfab5493a"}],
       "operations": [
         {
           "name": "source-understanding",

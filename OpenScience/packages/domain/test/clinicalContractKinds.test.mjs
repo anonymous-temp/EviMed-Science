@@ -116,12 +116,14 @@ test("a clinical kind no longer rejects its own subject matter", () => {
     const wrong = verdict.issues.filter((entry) => entry.code === "clinical_content_without_clinical_contract");
     assert.deepEqual(wrong, [], `${kind} still rejects a mention of the medicine it is about`);
   }
-  // And the check still fires where it should: a research brief is not clinical.
+  // And the check still fires where it should: a research brief is not clinical. It is a notice since 2026-10-13: it says
+  // that the clinical safety rules apply to the file and asks nothing of the run (no resubmitting, no removing content), so
+  // there is nothing for a `required` verdict to make anyone do.
   const brief = gate("research-brief", { "brief.md": "速效救心丸的用法建议如下。\n" });
-  assert.ok(
-    brief.issues.some((entry) => entry.code === "clinical_content_without_clinical_contract" && entry.severity === "required"),
-    "the trigger must still block clinical content under a non-clinical contract",
-  );
+  const trigger = brief.issues.find((entry) => entry.code === "clinical_content_without_clinical_contract");
+  assert.ok(trigger, "the trigger must still name clinical content under a non-clinical contract");
+  assert.equal(trigger.severity, "advisory");
+  assert.doesNotMatch(trigger.message, /remove the clinical content|Deliver it as a clinical contract kind/);
 });
 
 /* --------------------------------- 2. the rules run on every clinical kind */

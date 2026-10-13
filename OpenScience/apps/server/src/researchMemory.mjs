@@ -19,6 +19,7 @@ import {
   migrateResearchMemory,
 } from "./researchMemoryPersistence.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
+import { migrateNativeMemory } from "./nativeMemoryPersistence.mjs";
 import { projectMemoryUri, researchMemoryRoots, sessionMemoryUri } from "./openVikingClient.mjs";
 
 /**
@@ -738,6 +739,9 @@ export class ResearchMemoryStore {
    *
    * @param {any} config @param {{ database?: any, jobs?: any, withdrawals?: any }} options
    */
+  /** @type {{ at: number, value: any } | null} */
+  #walk = null;
+
   constructor(config, { database = null, jobs = null, withdrawals = null } = {}) {
     this.database = database ?? null;
     this.jobs = jobs ?? null;
@@ -745,6 +749,9 @@ export class ResearchMemoryStore {
     this.contextLimit = Math.max(0, Math.min(20, Number(config?.memoryContextLimit ?? 8)));
     this.contextMaxChars = Math.max(0, Math.min(100_000, Number(config?.memoryContextMaxChars ?? 20_000)));
     this.inferredTtlMs = Math.max(0, Number(config?.memoryInferredTtlDays ?? 90)) * 24 * 60 * 60 * 1_000;
+    // `OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED`: whether the native engine exists in this deployment at all. Off, every account
+    // is on the legacy path whatever its row says, and a new account's row says `legacy`.
+    this.nativeEngineEnabled = config?.ovNativeMemoryEnabled === true;
   }
 
   /** The store exists exactly when the control-plane database does. There is no
@@ -1850,6 +1857,113 @@ export class ResearchMemoryStore {
     const result = await this.#query("SELECT reset_at FROM evimed_memory.settings WHERE user_id=$1", [assertUserId(userId)]);
     const at = result.rows[0]?.reset_at;
     return at ? new Date(at).toISOString() : null;
+  }
+
+  // ----------------------------------------------------------------- engine
+
+  /**
+   * Which engine keeps this account's memory: `legacy` (this store's records, the platform's own extraction) or `native`
+   * (OpenViking's engine through the memory plugin). Exactly one, always.
+   *
+   * The row decides, and a missing value is decided once and written: a new account takes the deployment's default the
+   * first time anything asks, so turning the default on or off later moves nobody — an account that has been learning on
+   * one path is only ever moved by `setMemoryEngine`, which is the operator's script. With the native engine off in this
+   * deployment the answer is `legacy` for everyone and nothing is rewritten, so turning it back on finds each account where
+   * it was. A deployment with no database has no memory and answers `legacy`.
+   * @param {string} userId @returns {Promise<"legacy" | "native">}
+   */
+  async memoryEngine(userId) {
+    if (!this.database) return "legacy";
+    const stored = await this.storedMemoryEngine(userId);
+    return this.nativeEngineEnabled && stored.engine === "native" ? "native" : "legacy";
+  }
+
+  /**
+   * The engine the account's row names, deciding and writing it when the row names none.
+   * @param {string} userId @returns {Promise<{ engine: "legacy" | "native", changedAt: string | null }>}
+   */
+  async storedMemoryEngine(userId) {
+    const owner = assertUserId(userId);
+    const held = await this.#query("SELECT engine, engine_changed_at FROM evimed_memory.settings WHERE user_id=$1", [owner]);
+    let row = held.rows[0];
+    if (!row?.engine) {
+      const decided = await this.#query(`INSERT INTO evimed_memory.settings AS s (user_id, engine, engine_changed_at)
+        VALUES ($1, $2, clock_timestamp())
+        ON CONFLICT (user_id) DO UPDATE SET engine = COALESCE(s.engine, EXCLUDED.engine),
+          engine_changed_at = COALESCE(s.engine_changed_at, EXCLUDED.engine_changed_at)
+        RETURNING engine, engine_changed_at`, [owner, this.nativeEngineEnabled ? "native" : "legacy"]);
+      row = decided.rows[0];
+    }
+    return { engine: row.engine === "native" ? "native" : "legacy", changedAt: row.engine_changed_at ? new Date(row.engine_changed_at).toISOString() : null };
+  }
+
+  /**
+   * Move an account to the other engine. Only the row moves here; what the move means for the account's memories is the
+   * caller's (`scripts/ops/memory-engine.mjs`: the migration, and the index copies the old path leaves behind).
+   * @param {string} userId @param {"legacy" | "native"} engine
+   * @returns {Promise<{ engine: "legacy" | "native", changedAt: string, changed: boolean }>}
+   */
+  async setMemoryEngine(userId, engine) {
+    if (engine !== "legacy" && engine !== "native") throw new HttpError(400, "memory_engine_invalid", "A memory engine is legacy or native.");
+    const owner = assertUserId(userId);
+    const before = await this.storedMemoryEngine(owner);
+    if (before.engine === engine) return { engine, changedAt: before.changedAt ?? new Date().toISOString(), changed: false };
+    const result = await this.#query(`UPDATE evimed_memory.settings SET engine=$2, engine_changed_at=clock_timestamp(),
+        updated_at=date_trunc('second', clock_timestamp()) WHERE user_id=$1 RETURNING engine_changed_at`, [owner, engine]);
+    return { engine, changedAt: new Date(result.rows[0].engine_changed_at).toISOString(), changed: true };
+  }
+
+  /**
+   * The accounts whose row names an engine, for the overlay's worker and the readiness walk.
+   * @param {"legacy" | "native"} engine @param {{ limit?: number }} [options]
+   * @returns {Promise<{ userId: string, changedAt: string | null }[]>}
+   */
+  async accountsOnEngine(engine, { limit = 10_000 } = {}) {
+    const result = await this.#query(`SELECT user_id, engine_changed_at FROM evimed_memory.settings WHERE engine=$1
+      ORDER BY user_id LIMIT $2`, [engine, Math.max(1, Math.min(100_000, Math.trunc(Number(limit)) || 10_000))]);
+    return result.rows.map((/** @type {any} */ row) => ({ userId: String(row.user_id), changedAt: row.engine_changed_at ? new Date(row.engine_changed_at).toISOString() : null }));
+  }
+
+  /** `engineWalk`, at most once a minute: readiness is asked every few seconds. @returns {Promise<{ examined: { legacy: number, native: number, undecided: number }, both: number, accounts: { userId: string, engine: string, writes: number }[] }>} */
+  async engineWalkCached() {
+    if (this.#walk && Date.now() - this.#walk.at < 60_000) return this.#walk.value;
+    const walked = await this.engineWalk();
+    const value = { examined: walked.examined, both: walked.both.length, accounts: walked.both.slice(0, 10) };
+    this.#walk = { at: Date.now(), value };
+    return value;
+  }
+
+  /**
+   * The walk that holds 「one account, one path」: how many accounts were looked at, and which of them show writes of the
+   * other path after the moment they moved — a native account whose records the legacy extraction still wrote, a legacy
+   * account whose conversations the native engine still committed. Zero of both is the assertion; `examined` is the proof
+   * that it looked.
+   * @returns {Promise<{ examined: { legacy: number, native: number, undecided: number }, both: { userId: string, engine: string, writes: number }[] }>}
+   */
+  async engineWalk() {
+    // The second query reads the overlay's ledger, which has a migration of its own.
+    await this.#query("SELECT 1");
+    await migrateNativeMemory(this.database).catch((/** @type {any} */ error) => { throw memoryDatabaseError(error); });
+    // Every account, however it came to have no row: an account nothing has asked about yet is undecided, and is counted.
+    const counted = await this.#query(`SELECT COALESCE(s.engine, 'undecided') AS engine, count(*)::int AS accounts
+      FROM evimed_control.users u LEFT JOIN evimed_memory.settings s ON s.user_id = u.id GROUP BY 1`);
+    const examined = { legacy: 0, native: 0, undecided: 0 };
+    for (const row of counted.rows) if (row.engine in examined) examined[/** @type {keyof typeof examined} */ (row.engine)] = Number(row.accounts);
+    // A legacy write is one the extraction made (a run id on the newest revision's author is not kept as a column, so the
+    // origin is what tells them apart: a person's own edit on the page is `manual` and belongs to either path's history).
+    const legacyWrites = await this.#query(`SELECT s.user_id, count(*)::int AS writes FROM evimed_memory.settings s
+      JOIN evimed_memory.records r ON r.user_id = s.user_id AND r.updated_at > s.engine_changed_at AND r.origin <> 'manual'
+      WHERE s.engine = 'native' AND s.engine_changed_at IS NOT NULL GROUP BY s.user_id ORDER BY s.user_id LIMIT 50`);
+    const nativeWrites = await this.#query(`SELECT s.user_id, count(*)::int AS writes FROM evimed_memory.settings s
+      JOIN evimed_memory.native_commits c ON c.user_id = s.user_id AND c.created_at > s.engine_changed_at AND c.origin IN ('gateway', 'tool', 'page')
+      WHERE s.engine = 'legacy' AND s.engine_changed_at IS NOT NULL GROUP BY s.user_id ORDER BY s.user_id LIMIT 50`);
+    return {
+      examined,
+      both: [
+        ...legacyWrites.rows.map((/** @type {any} */ row) => ({ userId: String(row.user_id), engine: "native", writes: Number(row.writes) })),
+        ...nativeWrites.rows.map((/** @type {any} */ row) => ({ userId: String(row.user_id), engine: "legacy", writes: Number(row.writes) })),
+      ],
+    };
   }
 
   // --------------------------------------------------------------- sessions

@@ -175,3 +175,32 @@ colleague's details, a mood, a pasted document, a one-off condition, the run's o
 A first thin message about the stage (「今天开始跑数据」) is still not kept; one that states it (「课题进入数据分析阶段」) moves
 `project.stage` under the same key, 2 of 2. The replay driver and raw results are kept outside the tree
 (`.evimed-local/acceptance/memory-project-card-20261012/`).
+
+## The native arm (2026-10-13)
+
+Memory on OpenViking's engine (`OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED`) is written by the engine's own extraction under the
+policy templates in `deploy/web/openviking/memory-templates/` (source and the one never-kept block in `memory-templates-src/`;
+`build.mjs` renders them). The same incidents are replayed the way a conversation reaches it — a session, the messages through
+the memory gateway's door (platform-tagged text and identifier shapes never reach the engine), one commit — and judged on the
+files the engine wrote, with the kinds counted by place (`run_native_eval.mjs` says where each kind lives). The eleven
+`cases-general/` cases are the other direction for people who are not clinicians: an engineer, a lawyer, a teacher, a product
+manager, a designer, and an English-speaking data engineer — what is kept (background, standing style, a project's shape and its decision, a correction, a
+remembered fact about themselves), and what never is (a password, a student's or a client's details, a mood).
+
+```bash
+node evals/memory-write-quality/run_native_eval.mjs --offline          # corpus shapes, no engine
+node evals/memory-write-quality/run_native_eval.mjs --url http://127.0.0.1:19330 --key-file <engine root key file> \
+  --out evals/memory-write-quality/results/$(date +%F)-native.json      # one extraction per case, about 12 minutes
+```
+
+| Run | Engine and model | Decidable cases | Pass | Need reading |
+|---|---|---|---|---|
+| `results/2026-10-13-native-v0.5.0.json` | OpenViking v0.5.0, DeepSeek Flash, thinking off, no output-language override (as the production configuration renders it), the templates as shipped (project card: 领域 line and 目标 / 范围或对象 / 材料与数据 / 已定事项 / 阶段 / 约束, 研究要素 only for a described study; English labels, named exactly, for an English conversation) | 41 (the 40 decidable cases + the bare run of the platform-brief case, which also runs tagged) | **41** | 3 (`hollow-summary`, `one-off-bookkeeping`, `pending-state-and-inventory`: language judgement, printed beside their `judge` question) |
+
+One sample per case at temperature 0. A change to a template is tried by running this and reading the failures; the lab run
+that chose the first wording (`lab/memory/RESULTS.md` §E-4, 33 of 33) was the same set on the earlier project-card headings. Two
+things this run taught: a lab engine still carrying `output_language_override: zh` remembers an English conversation in Chinese
+whatever the templates say (the check that caught it is `g11-english-engineer-project`), and the card's `约束` / `已定事项` /
+`阶段` sections need to say that a date or a budget is a limit and not a choice or a stage — the card cases of 2026-10-13 failed
+until they did. A case that passed once and failed once (`project-card-slots`: the comparator folded into the exposure line) is a
+sampling variance the template now closes; it passed three of three afterwards.

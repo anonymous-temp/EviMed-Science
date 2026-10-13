@@ -28,6 +28,43 @@ test("the card is the project's slots in the order it reads, only the ones state
   assert.ok(card.every((slot) => slot.recordId.startsWith("rec_")), "each slot names the memory it opens");
 });
 
+test("the card is for any kind of work: the general slots first, a study's elements only when stated, and the extras of another kind of work after them", () => {
+  const card = projectCard([
+    // A software refactor: general slots, a field no medical list holds, and extras with and without a word of their own.
+    memory("project.constraints", "十一月底前必须切完", { updatedAt: "2026-10-01T02:00:00Z" }),
+    memory("project.goal", "把单体拆成三个服务"),
+    memory("project.field", "后端架构、支付系统"),
+    memory("project.subject", "支付服务"),
+    memory("project.ext.interface", "对外接口保持不变", { updatedAt: "2026-10-03T02:00:00Z" }),
+    memory("project.ext.release_train", "每两周一个发布窗口", { updatedAt: "2026-10-02T02:00:00Z", summary: "团队每两周一个发布窗口。" }),
+    // Not extras: a name of the wrong shape, a nested key, a user-scoped fact.
+    memory("project.ext.Bad Name", "x"),
+    memory("project.ext.a.b", "x"),
+    memory("project.ext.audience", "读者", { scope: "user", scopeId: "" }),
+  ]);
+  assert.deepEqual(card.map((row) => [row.slot, row.label, row.text]), [
+    ["field", "领域", "后端架构、支付系统"],
+    ["goal", "目标", "把单体拆成三个服务"],
+    ["subject", "范围或对象", "支付服务"],
+    ["constraints", "约束", "十一月底前必须切完"],
+    // An extra the card has a word for is that word and the value; one it has none for is the sentence its memory states.
+    ["ext.release_train", null, "团队每两周一个发布窗口。"],
+    ["ext.interface", "接口", "对外接口保持不变"],
+  ]);
+  // A project that stated nothing has an empty card, and no clinical element is listed as missing.
+  assert.deepEqual(projectCard([memory("project.glory1.dose", "20 mg")]), []);
+});
+
+test("a study's elements are on the card only when the researcher stated them, in the order a study is described", () => {
+  const card = projectCard([
+    memory("project.design", "回顾性队列"),
+    memory("project.outcome", "大出血"),
+    memory("project.population", "75 岁以上非瓣膜性房颤患者"),
+    memory("project.goal", "比较新型口服抗凝药和华法林的大出血风险"),
+  ]);
+  assert.deepEqual(card.map((row) => [row.slot, row.label]), [["goal", "目标"], ["population", "人群"], ["outcome", "结局"], ["design", "设计"]]);
+});
+
 test("a replaced, forgotten or sensitive memory is not on the card, the newest of a fact and a decision is, and a text is bounded", () => {
   const card = projectCard([
     memory("project.design", "旧设计", { status: "superseded" }),
@@ -205,4 +242,19 @@ test("the server composes the overview from the memory store and the project's o
     await app.close?.();
     await rm(dataDir, { recursive: true, force: true });
   }
+});
+
+test("the works of an ordinary conversation are each of its files, named by what the person opens", () => {
+  const files = ["预算表.xlsx", "rename.py", "会议纪要.docx"];
+  const describe = () => ({ artifactKinds: {}, artifactRoles: { "rename.py": "draft" }, outputFiles: files });
+  const ordinary = { id: "r1", status: "succeeded", effectiveAgentId: "open-domain-answer", title: "月度预算", finishedAt: "2026-10-10T02:30:00.000Z", artifacts: files };
+  const unrouted = { ...ordinary, id: "r2", effectiveAgentId: undefined, title: undefined, question: "整理一下会议纪要", finishedAt: "2026-10-11T02:30:00.000Z" };
+  const months = projectWorks([ordinary, unrouted], { describe, timeZone: "Asia/Shanghai" });
+  assert.deepEqual(months.map((group) => group.month), ["2026-10"]);
+  const items = months[0].items;
+  assert.equal(items.length, 6);
+  assert.deepEqual(items.filter((item) => item.runId === "r1").map((item) => item.name).sort(), [...files].sort());
+  assert.equal(items.find((item) => item.runId === "r2")?.title, "整理一下会议纪要", "a conversation no capability took is still the person's");
+  // Without files an unrouted conversation is not a work.
+  assert.deepEqual(projectWorks([unrouted], { describe: () => ({ artifactKinds: {}, artifactRoles: {} }) }), []);
 });

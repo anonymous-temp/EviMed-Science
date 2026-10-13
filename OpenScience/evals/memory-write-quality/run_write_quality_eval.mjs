@@ -76,12 +76,21 @@ export const REQUIRED_CLASSES = Object.freeze([
   // The project card (2026-10-12): a described study is kept under the card's own keys, a question is not read as a study.
   "project-card-slots",
   "project-card-not-guessed",
+  // The card made general (2026-10-13): any kind of work is kept under the general keys, the study's elements only when stated,
+  // and a task given to the assistant is not a project of the researcher's.
+  "project-card-software-refactor",
+  "project-card-launch-plan",
+  "project-card-history-thesis",
+  "project-card-market-analysis",
+  "project-card-clinical-rct",
+  "project-card-observational-database",
+  "project-card-task-not-a-project",
 ]);
 
 /** The fields a decided case may use in `expect`; a misspelt one would otherwise decide nothing and read as `not-run`. */
 export const EXPECT_FIELDS = Object.freeze([
   "noTextContains", "noRecordOfKinds", "atMostRecords", "requireKinds", "requireTextContains",
-  "briefRefusedWhenTagged", "identifierShapes", "requireKeys", "keyValues",
+  "briefRefusedWhenTagged", "identifierShapes", "requireKeys", "keyValues", "noKeys",
 ]);
 
 /** @returns {Promise<any[]>} */
@@ -115,6 +124,10 @@ export function caseIssues(item) {
   const keys = item.expect?.requireKeys;
   if (keys !== undefined && !(Array.isArray(keys) && keys.length > 0 && keys.every((key) => typeof key === "string" && key))) {
     issues.push(`${item.file}: expect.requireKeys is not a list of memory keys`);
+  }
+  const forbidden = item.expect?.noKeys;
+  if (forbidden !== undefined && !(Array.isArray(forbidden) && forbidden.length > 0 && forbidden.every((key) => typeof key === "string" && key))) {
+    issues.push(`${item.file}: expect.noKeys is not a list of memory keys`);
   }
   const values = item.expect?.keyValues;
   if (values !== undefined && !(values && typeof values === "object" && !Array.isArray(values)
@@ -168,6 +181,14 @@ export function decidedVerdicts(item, written) {
   if (Array.isArray(expect.requireKeys)) {
     for (const key of expect.requireKeys) {
       verdicts.push({ check: `some record is written under ${key}`, passed: written.some((record) => record.key === key), detail: written.map((record) => record.key).join(", ") });
+    }
+  }
+  // The keys a record must not be written under: a key of the card that the work described has no use of (the study's elements for
+  // a software refactor, a data source nobody stated).
+  if (Array.isArray(expect.noKeys)) {
+    for (const key of expect.noKeys) {
+      const found = written.filter((record) => record.key === key);
+      verdicts.push({ check: `no record is written under ${key}`, passed: found.length === 0, detail: found.map((record) => record.value).join(" | ") });
     }
   }
   if (expect.keyValues && typeof expect.keyValues === "object") {

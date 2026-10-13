@@ -72,10 +72,11 @@ export class KnowledgeChangeService {
    * `evidence` reads the state of an evidence card or a frontier item by id (`createEvidenceLinkStates`); absent, the two kinds are not looked at.
    * `pages` is the knowledge pages' service (`knowledgePageService.mjs`): the pages that quote a source are found by the
    * `dependsOn` their records hold and labelled stale, and the project is queued for a recompile; absent, the class is unknown.
-   * @param {{ memory?: any, methods?: any, pages?: any, sourceChanges?: any, evidence?: { cardStates: (ids: readonly string[]) => Promise<Map<string, any>>, itemStates: (ids: readonly string[]) => Promise<Map<string, any>> } | null,
+   * @param {{ memory?: any, native?: { labelSource: (userId: string, source: { type: string, id: string }, state: string) => Promise<number> } | null, methods?: any, pages?: any, sourceChanges?: any, evidence?: { cardStates: (ids: readonly string[]) => Promise<Map<string, any>>, itemStates: (ids: readonly string[]) => Promise<Map<string, any>> } | null,
    *   report?: (code: string) => void, now?: () => Date }} dependencies
    */
-  constructor({ memory = null, methods = null, pages = null, sourceChanges = null, evidence = null, report = () => {}, now = () => new Date() }) {
+  constructor({ memory = null, native = null, methods = null, pages = null, sourceChanges = null, evidence = null, report = () => {}, now = () => new Date() }) {
+    this.native = native;
     this.memory = memory; this.methods = methods; this.wiki = pages; this.sourceChanges = sourceChanges; this.evidence = evidence; this.report = report; this.now = now;
   }
 
@@ -144,6 +145,9 @@ export class KnowledgeChangeService {
     const link = memoryLinkOf(ref);
     if (!link) return { items: [], total: 0 };
     if (!this.memory || this.memory.configured === false) return { unknown: "unavailable" };
+    // An account whose memory is the native engine's: the memory files that name the source gain (or lose) the label line.
+    // Besides, never instead — the PostgreSQL records a switched account keeps for its fallback window are labelled as ever.
+    if (this.native) await this.native.labelSource(ownerId, link, linkStateOf(checked)).catch((/** @type {unknown} */ error) => this.report(codeOf(error)));
     try {
       const dependents = await this.memory.dependentsOfSource(ownerId, link);
       if (!dependents.length) return { items: [], total: 0 };

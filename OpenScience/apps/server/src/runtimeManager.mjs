@@ -2021,6 +2021,30 @@ export function capsuleGatewayProviderUrl(config) {
   return capsuleGatewayEndpointUrl(config);
 }
 
+/**
+ * The memory gateway's base, as a runtime may know it (`memoryGateway.mjs`): the unmodified memory plugin's endpoint is a
+ * loopback bridge in the runtime, and the bridge's upstream is this address with the engine's own paths behind it
+ * (`<base>/health`, `<base>/api/v1/…`, `<base>/mcp`). Only trusted configuration selects the origin.
+ * @param {any} config @returns {string}
+ */
+export function memoryGatewayEndpointUrl(config) {
+  const url = new URL(modelGatewayProviderUrl(config)); url.pathname = "/internal/memory/v1"; url.search = ""; url.hash = ""; return url.href.replace(/\/$/, "");
+}
+
+/**
+ * Empty when this deployment has no native memory engine to reach: the lever is off, there is no product database to keep
+ * the account's engine in, or no workload token to know a caller by. Whether one account's runtime is given the address is
+ * the account's own engine (`RuntimeManager.memoryGatewayUrlFor`).
+ * @param {any} config @returns {string}
+ */
+export function memoryGatewayProviderUrl(config) {
+  if (config.ovNativeMemoryEnabled !== true || config.memoryEnabled === false || config.stateStore !== "postgres" || !config.evimedWorkloadSigningSecret) return "";
+  return memoryGatewayEndpointUrl(config);
+}
+
+/** The name a runtime reads the memory gateway's base under; present and empty for an account on the legacy engine. */
+export const MEMORY_GATEWAY_URL_ENV = "EVIMED_MEMORY_GATEWAY_URL";
+
 /** Only trusted configuration selects the internal origin, never a tool argument. @param {any} config */
 export function evolutionGatewayEndpointUrl(config) {
   const url = new URL(modelGatewayProviderUrl(config)); url.pathname = "/internal/evolution/v1"; url.search = ""; url.hash = ""; return url.href.replace(/\/$/, "");
@@ -2496,6 +2520,9 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   revisionGatewayUrl = revisionGatewayProviderUrl(config),
   publicSourceGatewayUrl = publicSourceGatewayProviderUrl(config),
   webSearchGatewayUrl = webSearchGatewayProviderUrl(config),
+  // The account's memory engine, as an address: the memory gateway's base for an account on the native engine, empty for
+  // one on the legacy path. Never a default — only the caller that read the account's engine knows it.
+  memoryGatewayUrl = "",
   pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } },
   platformSkillGeneration = null,
   personalSkillGeneration = null,
@@ -2717,6 +2744,12 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         // accepts nothing, while looking perfectly healthy.
         "--env",
         `OPEN_SCIENCE_RUNTIME_AUTHORITY=${RUNTIME_AUTHORITY}`,
+        // Which engine keeps this account's memory, as the one thing the runtime needs to act on it: the memory gateway's
+        // base for an account on the native engine (the memory plugin's bridge forwards there, and the platform's own
+        // recall and note tools stand aside), empty for one on the legacy path. Always sent, so "legacy" is a value the
+        // runtime reads rather than a name it failed to find.
+        "--env",
+        `${MEMORY_GATEWAY_URL_ENV}=${memoryGatewayUrl}`,
         // Every deployment-owned setting of the plugins the preset
         // mounts. A profile patch cannot reach a preset's rows —
         // DSH reports the target as unmatched on stderr and drops
@@ -2783,6 +2816,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
       cwd: project.workspaceDir,
       env: process.env,
       proxyWorkspaceDir: "/workspace",
+      // The other half of the `--env` above, for the profile patch (`dshProfileInput` reads the plan).
+      memoryGatewayUrl,
       runtimeUrl: `http://${RUNTIME_AUTHORITY}`,
       socketPath,
       socketTrustRoot: isolatedControlMount ? config.dataDir : project.rootDir,
@@ -3121,7 +3156,7 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
  *
  * @typedef {object} RuntimeProvider
  * @property {'docker'|'agentbay'} name
- * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?: any, extensionGeneration?: any }) => Promise<Record<string, any>>} prepare
+ * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?: any, extensionGeneration?: any, memoryGatewayUrl?: string }) => Promise<Record<string, any>>} prepare
  *   the launch plan: `sandboxMode`, `runtimeUrl`, `socketPath`, `proxyWorkspaceDir`, `containerName`, …
  * @property {(project: Record<string, any>, plan: Record<string, any>, options: { budgetScope?: any }) => Promise<Record<string, any>>} bootstrap
  *   writes the profile patch, the credentials and the tokens where the kernel reads them
@@ -3181,8 +3216,8 @@ export class DockerRuntimeProvider {
     if (checked.status !== 0 || checked.stdout.trim() !== imageId) throw new HttpError(503, 'runtime_image_unavailable', 'The pinned personal-skill runtime image is unavailable.');
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?:any, personalSkillGeneration?:any, extensionGeneration?:any }} input */
-  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, extensionGeneration = null }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?:any, personalSkillGeneration?:any, extensionGeneration?:any, memoryGatewayUrl?: string }} input */
+  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "" }) {
     const manager = this.manager;
     // Before the plan, for the same reason as the capsule methods: the
     // read-only view of the knowledge base is mounted when the directory
@@ -3200,7 +3235,7 @@ export class DockerRuntimeProvider {
     }
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, platformSkillGeneration: platformSkillGeneration?.reference ?? null, personalSkillGeneration: personal?.reference ?? null,
       personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extensionGeneration?.reference ?? null,
-      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null });
+      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl });
     plan.platformSkillGeneration = platformSkillGeneration;
     plan.personalSkillGeneration = personalSkillGeneration;
     plan.extensionGeneration = extensionGeneration;
@@ -3276,6 +3311,7 @@ export class DockerRuntimeProvider {
         plan.personalSkillGeneration?.reference ?? null,
         plan.extensionGeneration?.reference ?? null,
         plan.platformSkillGeneration?.reference ?? null,
+        String(plan.memoryGatewayUrl ?? ""),
       );
       child = new RemoteRuntimeProcess(
         manager.runtimeController,
@@ -3432,6 +3468,9 @@ export class RuntimeManager {
      * @type {any}
      */
     this.capsuleService = null;
+    /** Which engine keeps an account's memory (`ResearchMemoryStore.memoryEngine`); assigned by the composition root.
+     *  @type {((userId: string) => Promise<"legacy" | "native">) | null} */
+    this.memoryEngineOf = null;
     /** @type {any} the learning ledger, assigned by the composition root beside `capsuleService` */
     this.learningService = null;
     /** @type {any} the learning loop's counters (`learningMetrics.mjs`), assigned beside `learningService` */
@@ -3614,6 +3653,43 @@ export class RuntimeManager {
    * keeps its mount until it stops. Returns the ids of the projects released.
    * @param {string} userId @returns {Promise<string[]>}
    */
+  /**
+   * The memory gateway's base for this project's runtime, or empty: the deployment has the native engine and the account
+   * that owns the project is on it.
+   * @param {any} project @returns {Promise<string>}
+   */
+  async memoryGatewayUrlFor(project) {
+    const base = memoryGatewayProviderUrl(this.config);
+    if (!base || typeof this.memoryEngineOf !== "function") return "";
+    try { return await this.memoryEngineOf(String(project.userId)) === "native" ? base : ""; }
+    catch { return ""; }
+  }
+
+  /**
+   * Let go of the idle runtimes that were launched for the engine their account is no longer on, so the next dispatch
+   * launches one for the engine it is on now. A runtime mid-turn, or held open by a tab, keeps what it was launched with
+   * until it stops; the gateway withholds from it meanwhile (`memoryAdmission.mjs`).
+   * @param {string | null} [userId] one account, or every account when absent
+   * @returns {Promise<string[]>} the projects released
+   */
+  async releaseMemoryEngineRuntimes(userId = null) {
+    /** @type {string[]} */
+    const released = [];
+    const base = memoryGatewayProviderUrl(this.config);
+    for (const runtime of [...this.runtimes.values()]) {
+      const project = runtime?.project;
+      if (!project || (userId !== null && String(project.userId) !== String(userId))) continue;
+      try {
+        const now = await this.memoryGatewayUrlFor(project);
+        const launched = String(runtime.memoryGatewayUrl ?? "");
+        if (launched === now || (!base && !launched)) continue;
+        if (await this.idleVerdict(project) !== "idle") continue;
+        if (await this.stopIdleRuntime(project, { event: "memory_engine_changed" })) released.push(String(project.id));
+      } catch { /* a runtime that cannot be asked about is left to its idle timer */ }
+    }
+    return released;
+  }
+
   async releasePausedMethodRuntimes(userId) {
     /** @type {string[]} */
     const released = [];
@@ -4279,7 +4355,11 @@ export class RuntimeManager {
     // The provider's own preparation: a container's plan, directories and
     // orphan cleanup, or a cloud session with the project's files carried in.
     const platformSkillGeneration = this.platformSkillOverrides.has(key)?this.platformSkillOverrides.get(key):(await this.selectPlatformSkills(project,this.platformSkillScopes.get(key))).generation;
-    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration });
+    // Which engine keeps the account's memory, read once per launch: a runtime is the account's, and an account is on one
+    // engine. An engine that cannot be read launches the runtime on the legacy path — the gateway withholds from an
+    // account it finds on the other engine, so the worst of a wrong guess is a conversation without memory, never two.
+    const memoryGatewayUrl = await this.memoryGatewayUrlFor(project);
+    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration, memoryGatewayUrl });
 
     // Nothing is copied into a project any more: the image carries the skill
     // roots and the agent packages read-only, shared across every project. The
@@ -4423,6 +4503,8 @@ export class RuntimeManager {
       platformSkillGeneration,
       personalSkillGeneration,
       extensionGeneration,
+      // The memory engine this runtime was launched for, as the address it was given (`releaseMemoryEngineRuntimes`).
+      memoryGatewayUrl: String(plan.memoryGatewayUrl ?? ""),
       // The kernel that is actually running, from one binding. This was once
       // the literal `opencode` written out in twelve places, so every `exited`,
       // `cleaned_orphan` and state record a DSH container produced was labelled

@@ -830,8 +830,9 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   ctx.provide("evimedDiagnostics", { degrade() {}, notice() {} });
   ctx.provide("evimedCapabilities", capabilities ?? [{ id: "research-brief", skills: [], tools: [], persona: "Research analyst", produces: [{ contractKind: "research-brief", outputs: [{ path: "brief.md", required: true }] }] }]);
   // What the capsule row publishes on every mount, methods or not; a composition
-  // with that row switched off publishes nothing.
-  if (capsuleMounted) ctx.provide("evimedCapsuleMethods", []);
+  // with that row switched off publishes nothing. `evimedCapsuleMemory` is the
+  // recall and note tools alone: it is what lets a child be handed the recall tool.
+  if (capsuleMounted) { ctx.provide("evimedCapsuleMethods", []); ctx.provide("evimedCapsuleMemory", { tools: ["evimed_capsule_recall", "evimed_capsule_note"] }); }
   /** @type {any} */ (ctx).subagents = { start: subagentStart ?? (() => { throw new Error("unexpected subagent start"); }) };
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
@@ -1608,6 +1609,43 @@ test("a session that does the work itself is handed the capability's method, its
     deliverables: [{ id: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", title: "证据综合（修订）", dependsOn: [] }],
   });
   assert.deepEqual(injectedSkills, ["clinical-evidence-synthesis"]);
+});
+
+test("an ordinary file in a plan binds no capability and hands the root no method, whatever capability it names", async () => {
+  // GA02 / GA25 (2026-10-12): an ordinary file is planned with `file-deliverable`. A model that writes a capability beside it
+  // has not asked for that capability's method and tools, and a plan of files must not narrow or widen the root.
+  const { MCP_TOOL_NAMES: mcpNames } = await import("@evimed/domain");
+  const f = await nativePolicyFixture({
+    briefId: "ordinary-file-owner",
+    registered: [...mcpNames, "bash", "read", "skill"],
+    skills: { "clinical-evidence-synthesis": "# 临床证据综合\n" },
+    capabilities: [{
+      id: "clinical-evidence-synthesis", skills: ["clinical-evidence-synthesis"], tools: ["mcp__evimed__meta_analysis"], persona: "你是循证医学分析师。",
+      produces: [{ contractKind: "clinical-evidence-report", outputs: [{ path: "clinical-evidence-report.md", required: true }] }],
+    }],
+  });
+  f.start();
+  await f.step(1);
+  const before = f.filters.length;
+  const written = await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: [],
+    deliverables: [{ id: "rename-script", contractKind: "file-deliverable", capability: "clinical-evidence-synthesis", title: "rename.py", dependsOn: [] }],
+  });
+  assert.equal(written.value.ok, true, JSON.stringify(written.value));
+  const handed = f.injected.map((/** @type {any} */ message) => message.content?.[0]?.text ?? "").join("\n");
+  assert.doesNotMatch(handed, /<evimed-method capability="clinical-evidence-synthesis">/, "no method was handed over for a file");
+  assert.equal(f.filters.length, before, "the root's tools were neither narrowed nor widened by a plan of files");
+  assert.equal(f.filters.some((/** @type {any} */ filter) => filter.disposed), false);
+
+  // The control: the same capability on a professional item is the root's method, exactly as before.
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["成人人群"],
+    deliverables: [{ id: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", title: "证据综合", dependsOn: [] }],
+  });
+  const afterProfessional = f.injected.map((/** @type {any} */ message) => message.content?.[0]?.text ?? "").join("\n");
+  assert.match(afterProfessional, /<evimed-method capability="clinical-evidence-synthesis">/);
 });
 
 /** A routed capability with a managed engine tool, as its manifest reads. */

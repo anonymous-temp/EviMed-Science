@@ -1,0 +1,32 @@
+{
+  "id": "g01-engineer-background-and-stack",
+  "class": "standing-role-and-preferences",
+  "observedIn": "written for LAB-MEM on 2026-10-12; every name, number and identifier is invented",
+  "expected": "The role is kept in the profile and the standing stack choices as preferences (TypeScript among them).",
+  "decidable": true,
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "我是后端工程师，在一家做跨境支付的公司，主要写 TypeScript 和 Go。代码示例请默认用 TypeScript，测试框架用 Vitest，缩进两个空格，这是我们组的规范。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，之后的示例默认 TypeScript、Vitest、两个空格缩进。"
+      }
+    ]
+  },
+  "expect": {
+    "requireKinds": {
+      "profile": 1,
+      "preference": 2
+    },
+    "requireTextContains": [
+      "TypeScript"
+    ]
+  }
+}

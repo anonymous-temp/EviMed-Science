@@ -125,17 +125,19 @@ export function documentNameOf(path) {
  * wrote nothing. Accepted and unchecked files are both the run's output (a
  * gate verdict never withholds a delivery), and neither says which it is.
  * Revision notes are the run's answer to its reviewer — a backstage file
- * (principle 10a) — and stay in the file tree. Two files of one name — one
+ * (principle 10a) — and stay in the file tree. A file the run handed over with
+ * the kernel's own `present` tool is not drawn twice: the kernel's page already
+ * shows it as a card, with the sentence the run wrote about it. Two files of one name — one
  * per deliverable — say which deliverable's folder each is in (`where`), the
  * folder the answer names them by.
  * @param {any} live
- * @returns {{ runId: string, files: { path: string, name: string, label: string, type: string, icon: string, rank: number, where: string | null }[] } | null}
+ * @returns {{ runId: string, files: { path: string, name: string, label: string, type: string, icon: string, rank: number, where: string | null }[], deferred: boolean } | null}
  */
 export function fileCardsModel(live) {
   const state = String(live?.state ?? '');
   if (!live || !live.runId || !['succeeded', 'failed', 'canceled', 'cancelled'].includes(state)) return null;
   /** @type {Set<string>} */
-  const seen = new Set();
+  const seen = new Set(Array.isArray(live.presentedFiles) ? live.presentedFiles : []);
   const files = [];
   for (const path of [...(Array.isArray(live.artifacts) ? live.artifacts : []), ...(Array.isArray(live.unverifiedArtifacts) ? live.unverifiedArtifacts : [])]) {
     // The shell opens what the bridge lets through: a relative path that climbs nowhere.
@@ -154,7 +156,10 @@ export function fileCardsModel(live) {
     if ((named.get(file.label) ?? 0) > 1 && folders.length > 1) file.where = folders[folders.length - 2];
   }
   files.sort(compareArtifacts);
-  return files.length ? { runId: String(live.runId), files } : null;
+  // Where the run presented some of its files, what is left is what it did not choose to hand over — the helper scripts
+  // beside the workbook it presented — and waits behind the fold.
+  const deferred = Array.isArray(live.presentedFiles) && live.presentedFiles.length > 0;
+  return files.length ? { runId: String(live.runId), files, deferred } : null;
 }
 
 /**
@@ -339,7 +344,7 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
   /**
    * The run's files, two to a row: its readable files first, at most four;
    * the rest behind one control, as the kernel's own delivery cards do.
-   * @param {{ model: { runId: string, files: any[] }, sessionId: string | null, useResource?: any }} props
+   * @param {{ model: { runId: string, files: any[], deferred?: boolean }, sessionId: string | null, useResource?: any }} props
    */
   const FileCards = ({ model, sessionId, useResource }) => {
     const [all, setAll] = React.useState(false);
@@ -348,14 +353,14 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
     // behind 「显示全部」 with everything else (production, 2026-09-24: two
     // scripts took half the cards of a finished review).
     const readable = model.files.filter((/** @type {any} */ file) => file.rank <= 4);
-    const lead = (readable.length ? readable : model.files).slice(0, 4);
+    const lead = model.deferred ? [] : (readable.length ? readable : model.files).slice(0, 4);
     const shown = all ? model.files : lead;
     return h('div', { 'data-evimed-files': model.runId, style: { marginTop: '16px', minWidth: 0 } },
       h('div', { style: { display: 'grid', gridTemplateColumns: model.files.length > 1 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)', gap: '8px' } },
         shown.map((file) => h(FileCard, { key: file.path, file, runId: model.runId, sessionId, useResource }))),
       model.files.length > lead.length
         ? h('button', { type: 'button', 'aria-expanded': all, onClick: () => setAll(!all), style: { ...textButton, ...meta, marginTop: '4px' } },
-          all ? '收起' : `显示全部 ${model.files.length} 个文件`)
+          all ? '收起' : model.deferred ? `显示其余 ${model.files.length} 个文件` : `显示全部 ${model.files.length} 个文件`)
         : null);
   };
 

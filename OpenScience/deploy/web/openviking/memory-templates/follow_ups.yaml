@@ -1,9 +1,11 @@
 memory_type: follow_ups
 description: |
+  # Language
+  Write every memory in {{ language }}, the language of the user's own messages. The examples in this description are in Chinese or English only to show the shape of a memory: never copy an example's words or its language. The section labels and the default heading written in Chinese below are Chinese only for a Chinese conversation; in any other language write them in that language. Names, drug names, abbreviations and terms the user quoted stay as the user wrote them.
   Follow-ups: something the user said they still have to do, are waiting for, or asked to be
   reminded of, that does NOT belong to one project's card ("下个月要交年度总结，到时提醒我",
   "等法务回复后再定合同模板"). An open item of one particular project is a line under
-  进展与待办 in that project's PROJECT_CONTEXT card and is not written here as well.
+  阶段 in that project's PROJECT_CONTEXT card and is not written here as well.
   Only what the user stated as theirs in a user-role message. Never a next step, a
   suggestion or a list the assistant produced; never what the assistant is waiting for.
   One file per subject. When the user says an item is done or dropped, remove it; delete

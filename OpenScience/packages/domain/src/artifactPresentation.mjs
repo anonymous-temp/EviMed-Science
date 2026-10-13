@@ -2,7 +2,8 @@
 export const ARTIFACT_ROLES = Object.freeze(['report', 'matrix', 'document', 'data', 'figure', 'draft', 'work']);
 
 /** Explicit runtime contract roles take precedence; old runs use this one compatibility classifier.
- * Self-contained because the native frame serializes this function. Executables are never reading material.
+ * Self-contained because the native frame serializes this function. Executables are never reading material
+ * unless their declared role is `draft`.
  * @param {string} path @param {string | null} [declaredRole]
  */
 export function artifactPresentation(path, declaredRole = null) {
@@ -20,13 +21,18 @@ export function artifactPresentation(path, declaredRole = null) {
     zip: ['压缩包', 'file'], gz: ['压缩数据', 'data'],
   };
   const [type, icon] = types[extension] ?? ['文件', 'file'];
-  const role = /^(py|r|mjs|cjs|js|ts|sh|bash|exe|bat|ps1)$/.test(extension) || /^revision-notes?\.md$/.test(lower) ? 'work'
+  // A script is work, except where it is what a conversation was asked for: the control plane declares `draft` for an
+  // ordinary conversation's own output (a rename script is the deliverable of "write me a script"), and a capability's
+  // scripts stay what they were. A script the conversation was asked for still comes after the documents, workbooks and
+  // pictures beside it (rank 5): the helper that built a workbook is not what the person opens first.
+  const executable = /^(py|r|mjs|cjs|js|ts|sh|bash|exe|bat|ps1)$/.test(extension)
+  const role = /^revision-notes?\.md$/.test(lower) || (executable && declaredRole !== 'draft') ? 'work'
     : ['report', 'matrix', 'document', 'data', 'figure', 'draft', 'work'].includes(declaredRole ?? '') ? declaredRole
       : /matrix.*\.json$/.test(lower) ? 'matrix'
         : icon === 'doc' ? (/report/.test(lower) && lower !== 'reporting-checklist.md' ? 'report' : 'document')
           : icon === 'sheet' ? 'data' : icon === 'image' ? 'figure' : 'work';
   const rank = role === 'report' ? 0 : role === 'matrix' ? 1
-    : lower === 'delivery-summary.md' ? 5 : role === 'document' ? 2 : role === 'data' ? 3 : role === 'figure' ? 4 : role === 'draft' ? 2 : 6;
+    : lower === 'delivery-summary.md' ? 5 : role === 'document' ? 2 : role === 'data' ? 3 : role === 'figure' ? 4 : role === 'draft' ? (executable ? 5 : 2) : 6;
   return { name, type, icon, role, rank, readable: role !== 'work' };
 }
 

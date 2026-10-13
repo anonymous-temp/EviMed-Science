@@ -615,6 +615,10 @@ export const SOCKET_PLUGIN_SWITCHES = Object.freeze({
   "evimed-run-policy": "EVIMED_RUN_POLICY_ENABLED",
   "evimed-evidence": "EVIMED_EVIDENCE_ENABLED",
   "evimed-capsule": "EVIMED_CAPSULE_ENABLED",
+  // The capsule's recall and note tools alone; the methods and the conversation's context stay with `evimed-capsule`.
+  // Whatever this says, an account on the native memory engine has no such tools (its runtime is given
+  // EVIMED_MEMORY_GATEWAY_URL, and the preset's row reads that too).
+  "evimed-capsule-memory": "EVIMED_CAPSULE_MEMORY_ENABLED",
   "evimed-screening": "EVIMED_SCREENING_ENABLED",
   "evimed-compaction": "EVIMED_COMPACTION_ENABLED",
 });

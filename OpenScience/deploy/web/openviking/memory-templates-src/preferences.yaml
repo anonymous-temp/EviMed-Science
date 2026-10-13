@@ -1,5 +1,6 @@
 memory_type: preferences
 description: |
+  __LANGUAGE__
   User preference memory: how the user wants work done, as a standing choice.
   Keep what the user states as a rule for future work, in a user-role message: methods and
   statistics they always use, reporting standards, evidence grading, structure and format

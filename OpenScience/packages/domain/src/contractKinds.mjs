@@ -32,6 +32,10 @@ export const CONTRACT_KINDS = Object.freeze([
   // NCBI Gene Expression Omnibus series to differential expression (2026-10-04, N17). Not the 「循证 GEO」 packs below.
   'gene-expression-analysis-package',
   'research-brief',
+  // An ordinary file (a document, a workbook, a deck, a script): the one kind no capability produces and no
+  // method is needed for. Its checks are the decidable three — exists, not empty, opens as its format
+  // (`fileDeliverable.mjs`) — and every one is advice.
+  'file-deliverable',
   // P2 — planned capabilities
   'appraisal-table',
   'manuscript-section',
@@ -153,6 +157,7 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'statistical-analysis-package': '统计分析',
   'gene-expression-analysis-package': '基因表达差异分析',
   'research-brief': '研究简报',
+  'file-deliverable': '文件',
   'appraisal-table': '证据质量评价表',
   'manuscript-section': '稿件章节',
   'grant-proposal-package': '课题申报包',

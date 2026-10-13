@@ -1,5 +1,5 @@
 // The knowledge base on OpenViking's Resources and Compile, end to end against PostgreSQL and an engine that holds its
-// files in memory (`helpers/openVikingStub.mjs`): documents pushed and reconciled both ways, a compile scheduled,
+// files in memory (`helpers/openVikingResourcesStub.mjs`): documents pushed and reconciled both ways, a compile scheduled,
 // polled and mirrored by content hash, the routes the reader and the graph view are built on, a person's edit that
 // survives a recompile that dropped it, a removed document labelling its pages, the page limit, and the engine down.
 import assert from "node:assert/strict";
@@ -9,7 +9,7 @@ import path from "node:path";
 import test from "node:test";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { createWebApiApp } from "../src/server.mjs";
-import { createOpenVikingStub } from "./helpers/openVikingStub.mjs";
+import { createOpenVikingStub } from "./helpers/openVikingResourcesStub.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {

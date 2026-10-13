@@ -11,7 +11,7 @@ import { KB_BROWSE_GATEWAY_PATH, KB_BROWSE_OPS, KB_BROWSE_ROOTS, createKbBrowseG
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { openVikingUserId } from "../src/openVikingLayout.mjs";
 import { OpenVikingResources } from "../src/openVikingResources.mjs";
-import { createOpenVikingStub } from "./helpers/openVikingStub.mjs";
+import { createOpenVikingStub } from "./helpers/openVikingResourcesStub.mjs";
 
 // A real compiled tree (lab/knowledge, 2026-10-12): eight project documents, the wiki `llm-wiki` wrote from them and
 // the graph `knowledge-graph` did. Its addresses are the lab's; a compile writes them under the project it ran for,

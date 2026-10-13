@@ -1,13 +1,17 @@
 import { createHash } from "node:crypto";
 import {
-  PROJECT_FIELD_LABELS_ZH,
+  PROJECT_CARD_EXTENSION_PREFIX,
+  PROJECT_CARD_EXTENSION_VALUE_MAX,
   PROJECT_FIELD_MAX,
   canonicalProjectField,
   carriesPlatformContext,
   identifierShapesIn,
+  isProjectCardKey,
   maskIdentifiers,
   mcpToolBaseName,
   platformIdentifiersIn,
+  projectCardExtensionOfKey,
+  projectCardExtensionValueFits,
   projectCardKey,
   projectCardSlotOfKey,
   runBookkeepingIn,
@@ -46,16 +50,24 @@ const candidateScopes = new Set(["user", "project", "session"]);
 const candidateOrigins = new Set(["explicit", "inferred", "system"]);
 const memoryKeyPattern = /^[a-z0-9][a-z0-9._/-]{0,254}$/;
 
-/** The project card's keys as the extraction instructions state them (`projectCard.mjs` holds the slots; this is their wording). */
+/**
+ * The project card's keys as the extraction instructions state them (`projectCard.mjs` holds the slots; this is their wording).
+ * The general ones apply to any kind of work; the clinical elements are written only for a study the researcher described.
+ */
 const PROJECT_CARD_PROMPT_SLOTS = [
-  `${projectCardKey("field")} (the specialty: one to ${PROJECT_FIELD_MAX} of ${PROJECT_FIELD_LABELS_ZH.join("、")}, copied from this list, joined by 、)`,
-  `${projectCardKey("population")} (who is studied)`,
+  `${projectCardKey("field")} (the field of the work in the researcher's own words: one to ${PROJECT_FIELD_MAX} short phrases joined by 、, such as 心血管流行病学 or 后端架构 — there is no list to choose from)`,
+  `${projectCardKey("goal")} (what the work is meant to find out, build or deliver)`,
+  `${projectCardKey("subject")} (who or what it is about)`,
+  `${projectCardKey("data_source")} (the material or data it works from, described by what it is)`,
+  `${projectCardKey("stage")} (where the work stands now)`,
+  `${projectCardKey("constraints")} (limits they stated: a deadline, a budget, standards to follow, things ruled out)`,
+].join(", ");
+const PROJECT_CARD_PROMPT_CLINICAL_SLOTS = [
+  `${projectCardKey("population")} (who is enrolled)`,
   `${projectCardKey("intervention")} (the intervention or exposure)`,
   `${projectCardKey("comparator")}`,
   `${projectCardKey("outcome")} (the endpoints)`,
   `${projectCardKey("design")} (the study design)`,
-  `${projectCardKey("data_source")} (where the data come from, described by what it is)`,
-  `${projectCardKey("stage")} (where the work stands now)`,
 ].join(", ");
 
 /**
@@ -558,21 +570,27 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
   if (!candidateOrigins.has(origin)) return reject(`unknown origin "${origin}"`);
   if (!memoryKeyPattern.test(key)) return reject(`malformed key "${key}"`);
   if (!value) return reject(`empty value for "${key}"`);
-  // The one closed value on a project's card: its specialty is on the frontier feed's list of twenty-one, or it is no field (a
-  // format check, principle 5; the card groups by it).
+  // The two values on a project's card that have a shape (format checks, principle 5; everything else on it is the researcher's
+  // own description). The field is one to three short phrases in the researcher's words, and a phrase the frontier feed does not
+  // know is kept; only a sentence is no field. An extension of the card, `project.ext.<name>`, is checked for the shape of its
+  // name and the length of its value and for nothing else.
   if (scope === "project" && projectCardSlotOfKey(key) === "field") {
     const field = canonicalProjectField(value);
-    if (!field) return reject(`"${key}" must name one to ${PROJECT_FIELD_MAX} specialties from the closed list (got "${value.slice(0, 40)}")`);
+    if (!field) return reject(`"${key}" must be one to ${PROJECT_FIELD_MAX} short phrases naming the field of the work, not a sentence (got "${value.slice(0, 40)}")`);
     value = field;
+  }
+  if (scope === "project" && key.startsWith(PROJECT_CARD_EXTENSION_PREFIX)) {
+    if (!projectCardExtensionOfKey(key)) return reject(`"${key}" is not a card extension: ${PROJECT_CARD_EXTENSION_PREFIX}<one lowercase word>`);
+    if (!projectCardExtensionValueFits(value)) return reject(`"${key}" is longer than a card shows (${PROJECT_CARD_EXTENSION_VALUE_MAX} characters)`);
   }
   if (!source) return reject(`sourceRef "${sourceRef}" matches no supplied source`);
   if (!quote) return reject(`no evidence quote for "${key}"`);
   // The most common rejection by far: the model paraphrases instead of copying,
   // so the quote is true but not verbatim.
   if (!source.text.includes(quote)) return reject(`evidence quote for "${key}" is not verbatim in ${sourceRef}`);
-  // The project card is the researcher's own description of their study: an assistant's summary of a trial, or a tool's result,
+  // The project card is the researcher's own description of their work: an assistant's summary of a trial, or a tool's result,
   // is the trial's and the tool's — it may be a project fact under a key of its own, and fills no slot of the card.
-  if (projectCardSlotOfKey(key) && source.role !== "user") {
+  if (isProjectCardKey(key) && source.role !== "user") {
     return reject(`"${key}" is a slot of the project card, which only the researcher's own message fills (got role "${source.role}")`);
   }
   if (["profile", "preference", "behavior"].includes(kind) && scope !== "user") {
@@ -971,7 +989,7 @@ function skippedResult(source, excluded, runSummary = null) {
  * `automated` is a run a script dispatched (see `recordRun`). `before_reset` is a
  * conversation that was over before the account's last memory reset.
  */
-export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "automated", "paused", "unconfigured", "trial", "clinical_context", "before_reset"]));
+export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "automated", "paused", "unconfigured", "trial", "clinical_context", "before_reset", "native_engine"]));
 
 /**
  * Why a run that was extracted from wrote nothing, as the closed word the operator's counter carries
@@ -1069,6 +1087,11 @@ export class MemoryIntelligence {
     // (`memoryEnabled`) and is deliberately untouched here.
     if (!this.enabled || this.#excludedProject(project)) {
       return skippedResult(this.enabled ? "project_excluded" : "disabled", excluded);
+    }
+    // One account, one path (2026-10-13): an account on the native engine is learned from by the engine, through the memory
+    // plugin; this extraction, its run summary and the review pass after it do not run for it.
+    if (typeof this.memoryStore.memoryEngine === "function" && await this.memoryStore.memoryEngine(project.userId) === "native") {
+      return skippedResult("native_engine", excluded);
     }
     if (this.canReuseRun && !await this.canReuseRun(project, run)) return skippedResult("clinical_context", excluded);
     // An automated run — a probe, an audit, an acceptance or evaluation
@@ -1182,6 +1205,15 @@ export class MemoryIntelligence {
       if (holdForOwner && previous && previous.status !== "pending"
         && normalizedValue(previous.value) !== normalizedValue(candidate.value)) {
         rejections.push(`"${candidate.key}" is already in force; an outside agent's episode cannot change it`);
+        continue;
+      }
+      // The card is the researcher's own description of their work, and a weaker basis never replaces a stronger one: what they
+      // edited on the memory page (`manual`) or said outright (`explicit`) is not overwritten by a reading of a later
+      // conversation that ranks below it (an inference, a tool's result). The same value seen again is evidence and is kept.
+      if (isProjectCardKey(candidate.key) && previous?.status === "active"
+        && normalizedValue(previous.value) !== normalizedValue(candidate.value)
+        && (ORIGIN_RANK[previous.origin] ?? 0) > (ORIGIN_RANK[candidate.origin] ?? 0)) {
+        rejections.push(`"${candidate.key}" was set by the researcher (${previous.origin}); a reading of a conversation (${candidate.origin}) does not replace it`);
         continue;
       }
       // Detected before the write and reported after it. The write itself is
@@ -1718,9 +1750,10 @@ export class MemoryIntelligence {
                 // where every project reads it — the note tool had filed it as a note only the one project read.
                 "What is worth keeping is what the researcher would expect the assistant to still know next month, in another conversation, without being told again: who they are professionally (role, specialty, research direction), how they want work done (methods, statistics, reporting standards, evidence grading, language, format, tools), the standing shape of their projects (population, data source, criteria, comparator, decisions taken, what is still open), and what they corrected.",
                 "A single question is not a description of a project: record the shape of a project only when the researcher describes their study or decides something about it, never from a question or from a document they ask about. Choose each evidenceQuote as the shortest span that supports the fact and leave identifiers out of it.",
-                // The project card (2026-10-12): the page reads a project off these keys, so the same study is the same keys
-                // whatever the conversation says. Only the specialty has a closed value, and code checks it.
-                `When the researcher describes one particular study of their own (who is enrolled, what is compared, which endpoint, from which data), record what they said about it under these keys, each as a project_fact at scope project and only the ones they stated: ${PROJECT_CARD_PROMPT_SLOTS}. A research direction is a profile, and what they ask you to look up or answer is a question; neither gets these keys. A decision stays a decision, and anything else about the project keeps a key of its own.`,
+                // The project card (2026-10-12; general since 2026-10-13): the page reads a project off these keys, so the same work is
+                // the same keys whatever the conversation says. The clinical elements are an extension for a described study, not the
+                // shape of every project; code checks only the field's shape and an extension's name and length.
+                `When the researcher describes a piece of work of their own that goes on over time, in any field (a study, a thesis, a launch plan, a software refactor, a market analysis), record what they said about it under these keys, each as a project_fact at scope project and only the ones they stated: ${PROJECT_CARD_PROMPT_SLOTS}. Only when they describe a clinical or epidemiological study of patients or participants, also record the elements of it they stated under ${PROJECT_CARD_PROMPT_CLINICAL_SLOTS}; an element they did not state is not written, and no slot is ever filled from the topic of a question. For any other work, the people or things it is about (an audience, a customer segment, a system, a body of sources) are its subject, never a population or an intervention. Another kind of work may add a slot of its own as ${PROJECT_CARD_EXTENSION_PREFIX}<one lowercase word> with a short value (a data analysis: variables, method; writing: audience, venue; software: interface, version). A research direction is a profile, and what they ask you to look up or answer is a question; neither gets these keys. A decision stays a decision, and anything else about the project keeps a key of its own.`,
                 "Never store, even when the researcher quotes it or asks you to remember it: (a) anything that identifies or describes an individual patient or any other person — names, ID-card, medical-record, admission, phone, e-mail, WeChat or address details, exact dates of care, or one person's diagnosis, medication or course (「患者张某某，住院号 ZY…」, 「67 岁男性，服华法林，INR 波动」). Case material is worked on in the conversation and then forgotten; a project may remember the shape of a cohort (who is eligible, which years, how many, what source, which kinds of variables) and never a member of it. (b) Credentials and account numbers: passwords, API keys, tokens, ID-card and bank-card numbers.",
                 "Do not store the researcher's own health, medication, religion, politics, ethnicity, sexual orientation, finances or private life, and do not infer them from a question: asking about a disease or a drug is a topic, not a fact about the person. If such a statement still seems worth proposing, set sensitive true on it: the platform does not keep sensitive candidates. The one exception is a message in which the researcher asks you to remember such a fact about themselves (「记住我对青霉素过敏」): that is their choice, so propose it as a profile memory at user scope in their own words, with sensitive false and their request as the evidenceQuote. The same fact said in passing or inside a question, with no request to remember it (「我对青霉素过敏，术后抗生素怎么选？」), is not that request.",
                 "Do not store personal details of colleagues, co-authors, supervisors, family or participants (contact details, health, private life). A working fact about the project that names a collaborator's role (「统计分析由合作者负责」) may be kept as a project_fact, without contact details.",

@@ -64,8 +64,8 @@ test("every <evimed-*> tag the platform writes is named, and every named tag is 
     .map((tag) => `${tag} (${[...(emitted.get(tag) ?? [])].join(", ")})`).join("; ")}`);
 
   for (const entry of PLATFORM_CONTEXT_TAGS) {
-    if (entry.legacy) {
-      assert.ok(entry.emitters.length === 0, `${entry.tag} is marked legacy and still names emitters`);
+    if (entry.legacy || entry.upstream) {
+      assert.ok(entry.emitters.length === 0, `${entry.tag} is marked legacy or upstream and still names emitters`);
       continue;
     }
     assert.ok(entry.emitters.length > 0, `${entry.tag} names no emitter and is not marked legacy`);

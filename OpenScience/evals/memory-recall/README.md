@@ -160,3 +160,31 @@ the same memory and query scored 0.861 where v0.4.19 said 0.712. The search
 floor `OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE` moved from 0.5 to 0.75 with the
 pin — the same cut on the new scale. Latency here runs through an ssh tunnel
 from the dev box, so it is not comparable with the September rows.
+
+## 2026-10-13, OpenViking's native engine — measured
+
+The `native` arm (`--arm native`): the same 300 records and 12 questions, recalled the way the memory plugin recalls — a
+`mode: context` search through the memory gateway (`memoryGateway.mjs` rewrites the plugin's request: `purpose` and `quotas`
+removed, `query_expansion: off`, the derived index and shared areas excluded) — against OpenViking v0.5.0 with the production
+embedder and the policy templates mounted. A hit is a returned memory file whose text carries the gold record's statement whole.
+
+Two ways of storing the corpus, because they ask different questions:
+
+| | term matcher | OpenViking v0.4.23 + qwen3.7 + rerank (2026-09-14) | **native, files written straight in** (retrieval only) | **native, stated in a conversation** (session → commit) |
+|---|---|---|---|---|
+| gold records the engine holds whole | 13 of 13 | 13 of 13 | **13 of 13** | **1 of 13** |
+| recall@5 | 0.667 | 1.000 | **0.933** | 0.067 |
+| mean reciprocal rank | 0.736 | 0.958 | **1.000** | 0.083 |
+| queries returning nothing relevant | 2 | 0 | **0** | 11 |
+| median latency of the search through the gateway | none | 467 ms | **328 ms** | 221 ms |
+
+(`results/2026-10-13-native-files-v0.5.0.json`, `results/2026-10-13-native-conversation-v0.5.0.json`; one run each.)
+
+Read the two native columns apart. **Retrieval** (third column): the engine's own search puts the right memory first for every
+question, and finds 14 of the 15 expected records in the first five — the same recall as the index arm without the
+reranker, in less time. **Writing** (fourth column): when the 300 records are *stated* to the engine, it keeps one of the thirteen
+gold ones. That is the write policy working, not retrieval failing: this corpus is the legacy store's, 292 of its 300 records are
+analysis findings ("what a paper or a method shows") that no person said about themselves, and the engine's templates keep only
+what the person stated and would expect to be known next month. Recall cannot rise above what is stored, so the fourth column is
+the answer to "does the engine keep what it should", which `evals/memory-write-quality` measures with cases written for it — not
+to "does it rank well". A corpus of a person's own standing facts for the native arm is the next case to write.

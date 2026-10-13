@@ -1,5 +1,6 @@
 memory_type: corrections
 description: |
+  __LANGUAGE__
   Corrections: what the user told the assistant it said or did wrong, kept as the rule to
   follow next time.
   Whenever a user-role message says that the assistant's answer, wording, reading, method or

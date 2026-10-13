@@ -1,0 +1,35 @@
+{
+  "id": "g11-english-engineer-project",
+  "class": "project-shape-and-decision",
+  "observedIn": "written for WP-OVMEM on 2026-10-13; every name, number and identifier is invented",
+  "expected": "A project card written in English for an English conversation (the section labels follow the conversation's language), with the goal, the decision and the open item the engineer named.",
+  "decidable": true,
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "I'm a data engineer migrating our nightly billing pipeline from cron jobs to Airflow. The goal is zero missed runs by the end of the quarter. We decided to move the invoice export first because finance depends on it. The retry policy is still undecided; I'm waiting for the platform team's proposal."
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "Understood: migrating the billing pipeline to Airflow, invoice export first, retry policy pending the platform team's proposal."
+      }
+    ]
+  },
+  "expect": {
+    "requireKinds": {
+      "decision": 1,
+      "follow_up": 1
+    },
+    "requireTextContains": [
+      "Airflow"
+    ],
+    "requireKeys": [
+      "project.goal"
+    ]
+  }
+}

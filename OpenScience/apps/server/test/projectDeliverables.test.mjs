@@ -60,3 +60,26 @@ test("the list is bounded and says nothing about how many it left out", () => {
   const lines = list(many, { limit: 5 });
   assert.deepEqual(lines.map((line) => line.runId), ["run_11", "run_10", "run_9", "run_8", "run_7"]);
 });
+
+test("an ordinary conversation's files are each a line: the workbook and the script, not only the document", () => {
+  const ordinary = (id, over = {}) => ({
+    id, status: "succeeded", effectiveAgentId: "open-domain-answer", title: "月度预算", finishedAt: "2026-10-12T08:00:00Z",
+    artifacts: ["预算表.xlsx", "rename.py", "会议纪要.docx", "tmp/scratch.py", "work/notes.md"], ...over,
+  });
+  const describeOrdinary = (current) => ({
+    ...describeRunArtifacts(current, () => []),
+    artifactRoles: describeRunArtifactRoles(current, () => undefined, describeRunArtifacts(current, () => [])?.outputFiles ?? null),
+  });
+  const lines = projectDeliverables([ordinary("run_a")], { describe: describeOrdinary });
+  assert.deepEqual(lines.map((line) => line.path).sort(), ["rename.py", "预算表.xlsx", "会议纪要.docx"].sort());
+  assert.ok(lines.every((line) => line.runId === "run_a" && line.title === "月度预算"));
+  // A typed-in turn that no capability took is an ordinary conversation too — and without files it is not a line.
+  const unrouted = ordinary("run_b", { effectiveAgentId: undefined, artifacts: ["summary.md"] });
+  assert.deepEqual(projectDeliverables([unrouted], { describe: describeOrdinary }).map((line) => line.path), ["summary.md"]);
+  assert.deepEqual(projectDeliverables([ordinary("run_c", { effectiveAgentId: undefined, artifacts: [] })], { describe: describeOrdinary }), []);
+  // The rest of the rules are unchanged: a failed run, a machine's and an internal capability's files are not listed.
+  assert.deepEqual(projectDeliverables([ordinary("failed", { status: "failed" }), ordinary("auto", { automated: true })], { describe: describeOrdinary }), []);
+  // And a professional package beside it is still one line.
+  const both = projectDeliverables([ordinary("run_a", { finishedAt: "2026-10-09T00:00:00Z" }), run("run_1")], { describe });
+  assert.equal(both.filter((line) => line.runId === "run_1").length, 1);
+});

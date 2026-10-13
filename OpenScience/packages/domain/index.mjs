@@ -125,7 +125,7 @@ export { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from './src/accountPolicy.m
 export { safeAppReturnPath } from './src/returnPath.mjs'
 
 
-// toolNames — 22 exports
+// toolNames — 28 exports
 export {
   MCP_MANAGED_JOB_BASE_NAMES,
   MCP_SERVER_NAME,
@@ -134,6 +134,10 @@ export {
   MCP_TOOL_PREFIX,
   OPENCODE_MCP_SERVER_NAME,
   OPENCODE_MCP_TOOL_PREFIX,
+  OPENVIKING_MCP_SERVER_NAME,
+  OPENVIKING_MCP_TOOL_PREFIX,
+  OPENVIKING_MEMORY_TOOL_BASE_NAMES,
+  OPENVIKING_MEMORY_TOOL_NAMES,
   KERNEL_MOUNTED_TOOL_NAMES,
   MOUNTED_TOOL_NAMES,
   RETIRED_MCP_TOOL_NAMES,
@@ -144,6 +148,8 @@ export {
   SOCKET_TOOL_NAME_LIST,
   isEviMedToolName,
   isMcpToolName,
+  isOpenVikingMemoryToolName,
+  isOpenVikingToolName,
   isSocketToolName,
   mcpToolBaseName,
   mcpToolName,
@@ -163,6 +169,16 @@ export {
   isContractKind,
   isRegulatedContractKind,
 } from './src/contractKinds.mjs'
+
+// fileDeliverable — 6 exports: an ordinary file as a deliverable (exists, not empty, opens as its format).
+export {
+  FILE_DELIVERABLE_KIND,
+  FILE_FORMAT_CHECK,
+  FILE_FORMAT_CODES,
+  fileFormatIssues,
+  fileFormatOf,
+  zipEntryNames,
+} from './src/fileDeliverable.mjs'
 
 // workspaceLayout — 25 exports
 export {
@@ -1261,16 +1277,27 @@ export {
   FRONTIER_NOTICE_KINDS,
   frontierUpdateKind,
 } from './src/frontierVocabulary.mjs'
-// projectCard — the slots a project's memory is read in (population, intervention,
-// comparator, outcome, design, data source, stage, and the specialty drawn from the
-// frontier feed's closed list) and the one check on a value: a project's field.
+// projectCard — the slots a project's memory is read in: six general ones for any kind of
+// work, the clinical elements as an extension written only when a study was described,
+// `project.ext.<name>` for the extras of other kinds of work, and the one check on a
+// value that has a shape: a project's field, an open vocabulary of up to three phrases.
 export {
+  PROJECT_CARD_CLINICAL_SLOTS,
+  PROJECT_CARD_EXTENSION_LABELS_ZH,
+  PROJECT_CARD_EXTENSION_NAME_MAX,
+  PROJECT_CARD_EXTENSION_PREFIX,
+  PROJECT_CARD_EXTENSION_ROWS_MAX,
+  PROJECT_CARD_EXTENSION_VALUE_MAX,
+  PROJECT_CARD_GENERAL_SLOTS,
   PROJECT_CARD_KEY_PREFIX,
   PROJECT_CARD_SLOTS,
   PROJECT_CARD_SLOT_LABELS_ZH,
-  PROJECT_FIELD_LABELS_ZH,
   PROJECT_FIELD_MAX,
+  PROJECT_FIELD_PHRASE_MAX,
   canonicalProjectField,
+  isProjectCardKey,
+  projectCardExtensionOfKey,
+  projectCardExtensionValueFits,
   projectCardKey,
   projectCardSlotOfKey,
 } from './src/projectCard.mjs'

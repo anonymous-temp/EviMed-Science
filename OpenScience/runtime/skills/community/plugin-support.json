@@ -8,6 +8,7 @@
     "evimed-plugin-probe",
     "evimed-engine-context",
     "evimed-loopx-bootstrap",
+    "evimed-memory-bridge",
     "evimed-seam-probe",
     "evimed-evidence-store",
     "evimed-web",
@@ -39,6 +40,23 @@
       "adaptation": "Image-build installation, read-only bootstrap, and a digest-bound DSH tool-result envelope compatibility patch; goal state and scheduling remain the upstream implementation.",
       "recordAuthority": "LoopX owns workspace goal state. EviMed records automated turns and usage; research memory remains in the control plane.",
       "contract": "packages/contracts/loopx/contract.test.mjs"
+    },
+    {
+      "name": "@openviking/dsh-memory-plugin",
+      "pin": "deps-version.json#openviking.plugin",
+      "management": "immutable-release",
+      "row": "openviking-memory-runtime",
+      "switch": "OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED and the account's memory engine, which reach the runtime as EVIMED_MEMORY_GATEWAY_URL (empty for every account not on the native engine)",
+      "activation": "The socket's patch enables the row only when that address is set, and points it at the loopback row evimed-memory-bridge, which forwards to the control plane's memory gateway with the workload token of the moment and answers only its own plugin's local key.",
+      "components": [
+        "startup-profile",
+        "capture-and-commit",
+        "mcp-tools",
+        "bundled-skills"
+      ],
+      "adaptation": "None: the archive is digest-checked when fetched and the installed files are compared with it byte for byte (deploy/runtime-dsh/install-openviking-plugin.mjs). Configured, not edited: autoRecall, captureToolResults, workspacePeer and skillCatalog off, skipSubagentSessions on, the default commit threshold, no key and no identity in the row; the same settings are stated as the plugin's environment so a workspace file cannot overrule them; two of its three bundled skills (openviking-skills, ov-experience-memory), which describe abilities this platform does not offer, are registered closed on both surfaces by the bridge row so the model's catalogue lists only openviking-memory.",
+      "recordAuthority": "OpenViking keeps a native account's long-term memory; the control plane's memory gateway fixes identity, routes, the five memory tools and who is learned from. The platform's own recall and note tools stand aside for such an account.",
+      "contract": "apps/server/test/openVikingMemoryPlugin.test.mjs"
     }
   ],
   "communitySkills": [

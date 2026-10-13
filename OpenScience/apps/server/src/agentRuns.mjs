@@ -4,7 +4,7 @@ import { reviewDeliveredRegister } from "./reportRegisterJudge.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { availableRunActions, availableRunStepActions, runIsStalled } from "@evimed/domain";
+import { FILE_DELIVERABLE_KIND, availableRunActions, availableRunStepActions, compareArtifacts, fileFormatIssues, runIsStalled } from "@evimed/domain";
 import {
   HttpError,
   assertNoSymlinkPath,
@@ -34,7 +34,8 @@ import {
   runNotice,
   runSideDegradedNotice,
 } from "./runNotices.mjs";
-import { describeRunArtifacts, describeRunArtifactRoles } from "./runArtifacts.mjs";
+import { describeRunArtifacts, describeRunArtifactRoles, isOrdinaryConversation } from "./runArtifacts.mjs";
+import { workspaceChangedFiles } from "./runWorkspaceChanges.mjs";
 import { normalizeRunEstimate } from "./runRoute.mjs";
 import {
   assembleRunProgress,
@@ -701,6 +702,13 @@ function foldEvents(events) {
         // would not have degraded one run, it would have made the whole ledger
         // unreadable the moment this shipped.
         unverifiedArtifacts: normalizeStoredArtifacts(event.unverifiedArtifacts ?? []),
+        // The files the run handed over with the kernel's `present` tool, which the kernel's own page draws as cards: the
+        // run card leaves those to it. Absent on every run recorded before it existed, and on a run that presented none.
+        ...(Array.isArray(event.presentedFiles) && event.presentedFiles.length ? { presentedFiles: normalizeStoredArtifacts(event.presentedFiles) } : {}),
+        // The files of an ordinary conversation (or of a turn that was an answer), as the run named them when it ended.
+        // Absent on a run that owed a capability's files, and on every run recorded before it existed — which the read
+        // side classifies by the registry as it always did.
+        ...(Array.isArray(event.outputFiles) && event.outputFiles.length ? { outputFiles: normalizeStoredArtifacts(event.outputFiles) } : {}),
         // A judgement can land either side of the delivery decision, so both
         // orders must fold to the same run. An admission already on the record
         // survives a terminal event that says nothing; a terminal finding
@@ -1256,12 +1264,22 @@ function firstUserText(run, history) {
     .map((part) => part.text).join(" ").trim();
 }
 
-/** Only completed control tools in the owned turn may establish workflow provenance. */
+/**
+ * Only completed control tools in the owned turn may establish workflow provenance.
+ *
+ * An ordinary file (`file-deliverable`) is not a workflow item. It names no capability, owes no acceptance and has no contract
+ * a turn could be judged by, so a plan of such files is, for everything that reads this proof, no plan: the turn is not
+ * "planned and never submitted", a conversation bound to a capability does not owe its files because the model also wrote a
+ * script, and nothing is marked unverified for a file nobody asked to have verified (course correction 2026-10-12, GA16).
+ * The files themselves are the ledger's through the workspace (`runWorkspaceChanges.mjs`).
+ */
 function nativeWorkflowEvidence(run, history) {
   let plan = null;
   let kernelRunId = null;
   const submissions = new Map();
   const delegates = new Set();
+  /** The ids of the current plan's ordinary files: what a submission of one of them is not evidence of. @type {Set<string>} */
+  let ordinaryFiles = new Set();
   for (const message of history) for (const part of message.parts ?? []) {
     if (part.type !== "tool" || part.state?.status !== "completed") continue;
     // The kernel's rendered text, not bare JSON: see `socketToolResult`.
@@ -1275,7 +1293,8 @@ function nativeWorkflowEvidence(run, history) {
     if (part.tool === "evimed_plan" && result.ok && ["write", "status"].includes(args.action)) {
       const items = args.action === "write" ? result.data?.deliverables : result.data?.items;
       if (!Number.isSafeInteger(result.data?.revision) || !Array.isArray(items)) continue;
-      const definitions = items.filter((item) => typeof item?.id === "string" && isContractKind(item.contractKind))
+      ordinaryFiles = new Set(items.filter((item) => typeof item?.id === "string" && item.contractKind === FILE_DELIVERABLE_KIND).map((item) => item.id));
+      const definitions = items.filter((item) => typeof item?.id === "string" && isContractKind(item.contractKind) && item.contractKind !== FILE_DELIVERABLE_KIND)
         .map((item) => ({ id: item.id, contractKind: item.contractKind, capability: String(item.capability ?? "") }));
       if (args.action === "write" && !definitions.every((item) => args.deliverables?.some((input) => input.id === item.id && input.contractKind === item.contractKind && input.capability === item.capability))) continue;
       if (typeof result.data?.runId !== "string" || !result.data.runId || result.data.runId.length > 256) continue;
@@ -1283,7 +1302,8 @@ function nativeWorkflowEvidence(run, history) {
       kernelRunId = result.data.runId;
       plan = { revision: result.data.revision, written: args.action === "write", items: definitions, ...span };
     }
-    if (part.tool === "evimed_submit_deliverable" && typeof args.deliverableId === "string") {
+    if (part.tool === "evimed_submit_deliverable" && typeof args.deliverableId === "string"
+      && !ordinaryFiles.has(args.deliverableId) && result.data?.contractKind !== FILE_DELIVERABLE_KIND) {
       const id = args.deliverableId;
       const entry = submissions.get(id) ?? { id, attempts: 0, accepted: null, rejected: null };
       entry.attempts++;
@@ -2144,7 +2164,6 @@ function clinicalEvidenceResubmitPrompt(deliverableIds) {
 
 function artifactCandidates(message, runtimeWorkspaceRoot) {
   const candidates = [];
-  const runtimeRoot = path.resolve(runtimeWorkspaceRoot);
   for (const part of message?.parts ?? []) {
     if (
       part?.type !== "tool" ||
@@ -2160,17 +2179,51 @@ function artifactCandidates(message, runtimeWorkspaceRoot) {
     //
     // The older spellings stay for the kernel on its way out.
     const input = part?.state?.input;
-    const value = input?.file_path ?? input?.filePath ?? input?.path;
-    if (typeof value !== "string") continue;
-    try {
-      const relative = path.isAbsolute(value)
-        ? path.relative(runtimeRoot, path.resolve(value)).replace(/\\/g, "/")
-        : value.replace(/\\/g, "/");
-      if (!relative || relative === ".." || relative.startsWith("../") || path.isAbsolute(relative)) continue;
-      candidates.push(normalizeWorkspaceRelativePath(relative, "artifact path"));
-    } catch { /* untrusted tool metadata is omitted */ }
+    const candidate = workspaceRelativeCandidate(input?.file_path ?? input?.filePath ?? input?.path, runtimeWorkspaceRoot);
+    if (candidate) candidates.push(candidate);
   }
   return [...new Set(candidates)].slice(0, maxArtifacts).sort();
+}
+
+/**
+ * The files a run handed to its person with the kernel's own `present` tool (mounted 2026-10-12): `{ files: [{ path,
+ * description }] }`, absolute or relative to the workspace. A presented file is the run's output whatever wrote it and
+ * whenever it was written — handing over an existing file is an answer too — so unlike a write, it is not held to the run's
+ * window (`existingArtifacts` is asked without the run for these).
+ * @param {any} message @param {string} runtimeWorkspaceRoot
+ * @returns {string[]}
+ */
+function presentedCandidates(message, runtimeWorkspaceRoot) {
+  const candidates = [];
+  for (const part of message?.parts ?? []) {
+    if (part?.type !== "tool" || part.tool !== "present" || part?.state?.status !== "completed") continue;
+    const files = part.state?.input?.files;
+    for (const file of Array.isArray(files) ? files : []) {
+      const candidate = workspaceRelativeCandidate(typeof file === "string" ? file : file?.path, runtimeWorkspaceRoot);
+      if (candidate) candidates.push(candidate);
+    }
+  }
+  return [...new Set(candidates)].slice(0, maxArtifacts).sort();
+}
+
+/**
+ * A path a tool received, as a workspace-relative artifact path, or null when it names nothing inside the workspace.
+ * Untrusted tool metadata: anything that does not normalise is omitted.
+ * @param {unknown} value @param {string} runtimeWorkspaceRoot
+ * @returns {string | null}
+ */
+function workspaceRelativeCandidate(value, runtimeWorkspaceRoot) {
+  if (typeof value !== "string") return null;
+  const runtimeRoot = path.resolve(runtimeWorkspaceRoot);
+  try {
+    const relative = path.isAbsolute(value)
+      ? path.relative(runtimeRoot, path.resolve(value)).replace(/\\/g, "/")
+      : value.replace(/\\/g, "/");
+    if (!relative || relative === ".." || relative.startsWith("../") || path.isAbsolute(relative)) return null;
+    return normalizeWorkspaceRelativePath(relative, "artifact path");
+  } catch {
+    return null;
+  }
 }
 
 async function existingArtifacts(project, candidates, run = null, endTime = null) {
@@ -2185,6 +2238,84 @@ async function existingArtifacts(project, candidates, run = null, endTime = null
     finally { await opened?.handle.close().catch(() => {}); }
   }
   return result;
+}
+
+/**
+ * Whether a run is an ordinary conversation (`isOrdinaryConversation`): read from the run's own plan, its capability's declared
+ * outputs in the registry, and nothing about what it wrote.
+ * @param {any} run @param {any} registry the loaded agent registry
+ */
+function isOrdinaryRun(run, registry) {
+  const plan = Array.isArray(run.deliverables) && run.deliverables.length ? run.deliverables : (run.nativeWorkflow?.plan?.items ?? []);
+  const agentId = run.effectiveAgentId ? String(run.effectiveAgentId) : "";
+  const outputs = agentId ? registry?.get?.(agentId)?.outputs : null;
+  const declared = Array.isArray(outputs) ? new Set(outputs.map((/** @type {any} */ output) => String(output?.path ?? ""))) : null;
+  return isOrdinaryConversation(run, declared, Array.isArray(plan) ? plan : []);
+}
+
+/**
+ * What an ordinary conversation produced, by what the workspace and the transcript both witness: the files that are new or
+ * changed in the workspace since the run began (`runWorkspaceChanges.mjs` — whichever tool wrote them, `bash` and a Python
+ * script included) and the files it handed over with `present`, with the generic file contract's checks run over each (they
+ * open as the format they claim — advice, never a verdict on the run).
+ *
+ * Only for a conversation with no capability contract (`isOrdinaryConversation`), or a turn that was an answer: a run that
+ * owes a capability's files is judged by that capability, and what it left in the workspace besides is its own scratch.
+ *
+ * These are the files the answer-mode contract delivers. They are named here and not inside `specialistCompletionOutcome`
+ * because a conversation with no capability at all never reaches that function, and because the files are known by the
+ * workspace and the transcript, which this is handed and that is not.
+ *
+ * `answered`: a turn of a conversation bound to a capability that took no contract on (it planned, delegated and submitted
+ * nothing and left none of the capability's files) is an answer, so its files are an ordinary conversation's.
+ *
+ * @param {{ project: any, run: any, registry: any, assistants: readonly any[], runtimeWorkspaceRoot: string, endTime: number | null | undefined, answered?: boolean }} input
+ * @returns {Promise<{ files: string[], presented: string[], notices: any[] }>}
+ */
+async function ordinaryConversationOutputs({ project, run, registry, assistants, runtimeWorkspaceRoot, endTime, answered = false }) {
+  const none = { files: [], presented: [], notices: [] };
+  if (!answered && !isOrdinaryRun(run, registry)) return none;
+  const startedAt = Date.parse(String(run.startedAt ?? ""));
+  const until = typeof endTime === "number" && Number.isFinite(endTime) ? endTime : Date.now();
+  const changed = Number.isFinite(startedAt) ? await workspaceChangedFiles(project.workspaceDir, { since: startedAt, until }) : [];
+  const handedOver = [...new Set(assistants.flatMap((message) => presentedCandidates(message, runtimeWorkspaceRoot)))].slice(0, maxArtifacts);
+  const files = [...new Set([
+    ...await existingArtifacts(project, changed, run, endTime),
+    // No run: a file handed over is the answer whenever it was written.
+    ...await existingArtifacts(project, handedOver),
+  ])].sort().slice(0, maxArtifacts);
+  // Only what is still a file of this run: a presented path that was not found is not recorded as handed over.
+  const presented = (await existingArtifacts(project, handedOver)).filter((file) => files.includes(file));
+  return { files, presented, notices: await outputFormatNotices(project, files) };
+}
+
+/** The files of an ordinary conversation that are read for the generic contract's format checks, and the largest one read. */
+const OUTPUT_FORMAT_CHECK_FILES = 12;
+const OUTPUT_FORMAT_CHECK_BYTES = 32 * 1024 * 1024;
+
+/**
+ * The generic file contract's checks, run over an ordinary conversation's own files: each opens as the format its name claims.
+ * One notice per file that does not (the model had its chance in its own turn; this tells the reader, in the platform's
+ * Chinese), nothing for one that does. Advice: a file that fails is still delivered.
+ * @param {any} project @param {readonly string[]} files
+ * @returns {Promise<any[]>}
+ */
+async function outputFormatNotices(project, files) {
+  const notices = [];
+  const ordered = [...files].sort((left, right) => compareArtifacts({ path: left }, { path: right })).slice(0, OUTPUT_FORMAT_CHECK_FILES);
+  for (const relative of ordered) {
+    let opened;
+    try {
+      opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative));
+      if (!opened.stat.isFile() || opened.stat.size > OUTPUT_FORMAT_CHECK_BYTES) continue;
+      const bytes = new Uint8Array(await opened.handle.readFile());
+      for (const found of fileFormatIssues(relative, bytes)) {
+        notices.push(runNotice(found.code, found.message, { check: found.check, file: relative, detail: found.message }));
+      }
+    } catch { /* unreadable, escaped or linked: the file is delivered unchecked */ }
+    finally { await opened?.handle.close().catch(() => {}); }
+  }
+  return notices;
 }
 
 async function readRequiredFile(project, relative, freshSince = null) {
@@ -2422,6 +2553,7 @@ function assistantProse(messages) {
  *   qualityUnverified?: boolean,
  *   qualityUnchecked?: boolean,
  *   qualityNotices?: StoredNotice[],
+ *   answered?: boolean,
  * }} SpecialistCompletionVerdict
  *
  * `qualityIssues` are the strings the repair loop hands back to the run,
@@ -2530,7 +2662,9 @@ async function requiredSpecialistArtifacts(
   // dispatched run always is.
   if (run.nativeTurn && (outcome.artifacts ?? []).length === 0 && NATIVE_ANSWER_WHEN_NOTHING_STARTED.has(String(outcome.errorCode))
     && !nativeTurnStartedDelivery(run)) {
-    return { artifacts: [], errorCode: null };
+    // `answered`: the turn took no contract on, so what it left in the workspace is the person's own file, not the
+    // capability's scratch — whichever capability the conversation happens to be bound to.
+    return { artifacts: [], errorCode: null, answered: true };
   }
   const unchecked = skippedChecks.length > 0 ? { qualityUnchecked: true } : {};
   // The structured twin of `qualityIssues`, for the reader. The strings stay
@@ -4279,7 +4413,7 @@ export class AgentRunStore {
         return Array.isArray(outputs) ? outputs.map((/** @type {any} */ output) => String(output?.path ?? "")).filter(Boolean) : null;
       });
     } catch { /* isolated: a record that cannot be described is still a record */ }
-    return { ...run, ...(described ?? {}), artifactRoles: describeRunArtifactRoles(run, id => registry?.get?.(id)?.outputs), stepActions: availableRunStepActions(run.deliverables ?? []), availableActions: availableRunActions(/** @type {any} */ (run),
+    return { ...run, ...(described ?? {}), artifactRoles: describeRunArtifactRoles(run, id => registry?.get?.(id)?.outputs, described?.outputFiles), stepActions: availableRunStepActions(run.deliverables ?? []), availableActions: availableRunActions(/** @type {any} */ (run),
       Boolean(registry?.get?.(run.effectiveAgentId ?? run.agentId))), stalled: runIsStalled(run) };
   }
 
@@ -4447,6 +4581,20 @@ export class AgentRunStore {
   async activeRuns(project) {
     const runs = foldEvents(parseEvents(await readLedgerText(project, this.maxBytes)));
     return [...runs.values()].filter((run) => run.status === "running").map((run) => ({ id: run.id, sessionId: run.sessionId }));
+  }
+
+  /**
+   * The runs of one conversation, newest first, as the ledger folds them (status, `automated`, the route's reason, the
+   * agent) — what the memory gateway asks to know whose turn a captured message belongs to: the person's, or one the
+   * platform started. A fold with no phase walk, because it is asked per request.
+   * @param {any} project @param {string} sessionId @returns {Promise<Record<string, any>[]>}
+   */
+  async conversationRuns(project, sessionId) {
+    const id = typeof sessionId === "string" ? sessionId.trim() : "";
+    if (!id) return [];
+    return [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()]
+      .filter((run) => run.sessionId === id)
+      .sort((left, right) => String(right.startedAt ?? "").localeCompare(String(left.startedAt ?? "")));
   }
 
   /**
@@ -5546,6 +5694,8 @@ export class AgentRunStore {
       /** Files the run wrote that no gate accepted. Empty is "none"; the field
        *  is always present so a reader never has to treat absent as unknown. */
       unverifiedArtifacts: normalizeArtifacts(terminal.unverifiedArtifacts),
+      ...(terminal.presentedFiles?.length ? { presentedFiles: normalizeArtifacts(terminal.presentedFiles) } : {}),
+      ...(terminal.outputFiles?.length ? { outputFiles: normalizeArtifacts(terminal.outputFiles) } : {}),
       verification: normalizeVerification(terminal.verification),
       qualityNotices: normalizeQualityNotices([...(await this.#reviewNoticesFor(project, runId)), ...(terminal.qualityNotices ?? [])]),
       ...(terminal.status === "canceled" && (terminal.canceledBy === "user" || terminal.canceledBy === "platform")
@@ -5608,6 +5758,29 @@ export class AgentRunStore {
           runNotice("run_unverified_delivery", notice, { detail: notice }),
         ]);
       }
+    }
+    // An ordinary conversation's files on every path that did not read them off the transcript and the workspace itself: the
+    // runtime gone and the record read from the host copy, a stop, a failure. It is one fact — what changed in the workspace
+    // while the run was going (`runWorkspaceChanges.mjs`) — and a run that is stopped halfway keeps what it had written, as a
+    // run that failed does (principle 19). On a run that did not succeed they are the unchecked files, not the accepted ones;
+    // nothing is said to the reader about it beyond the run's own reason.
+    if (terminal.ordinaryChecked !== true && normalized.artifacts.length === 0) {
+      try {
+        const current = (await this.list(project).catch(() => [])).find((item) => item.id === runId);
+        if (current) {
+          const endTime = terminal.finishedAt ? Date.parse(String(terminal.finishedAt)) : this.now().getTime();
+          const found = await ordinaryConversationOutputs({
+            project, run: current, registry: await this.agentRegistry.catch(() => null), assistants: [],
+            runtimeWorkspaceRoot: project.workspaceDir, endTime: Number.isFinite(endTime) ? endTime : this.now().getTime(),
+          });
+          if (found.files.length > 0) {
+            const key = normalized.status === "succeeded" ? "artifacts" : "unverifiedArtifacts";
+            normalized[key] = normalizeArtifacts([...new Set([...normalized[key], ...found.files])].slice(0, maxArtifacts));
+            /** @type {any} */ (normalized).outputFiles = normalizeArtifacts(found.files);
+            if (found.notices.length) normalized.qualityNotices = normalizeQualityNotices([...normalized.qualityNotices, ...found.notices]);
+          }
+        }
+      } catch { /* isolated: the files stay in the workspace; the record just does not list the ones only the workspace saw */ }
     }
     // The plan as the run ends it, what its claims came to, and its last
     // progress picture — computed before the terminal write and published
@@ -5672,7 +5845,7 @@ export class AgentRunStore {
       if (this.judgeService) {
         const agent = (await this.agentRegistry.catch(() => null))?.get?.(result.effectiveAgentId);
         const pending = this.independentWork(() => reviewDeliveredRegister({
-          project, run: result, judgeService: this.judgeService,
+          project, run: this.withArtifactKinds(result), judgeService: this.judgeService,
           maxLines: this.registerJudgeMaxLines,
           internalProject: this.internalProject(project), internalCapability: agent?.visibility === "internal",
           onNotices: notices => this.appendQualityNotices(project, runId, notices),
@@ -5923,6 +6096,8 @@ export class AgentRunStore {
     // bytes on disk and found nothing. Only then may a package the run never
     // got a receipt for go out without a mark.
     let serverGateClean = false;
+    // The turn was an answer, whatever capability the conversation is bound to (`requiredSpecialistArtifacts`).
+    let answeredTurn = false;
     if (terminal.status === "succeeded" && run.effectiveAgentId) {
       let completion;
       try {
@@ -5964,6 +6139,7 @@ export class AgentRunStore {
         };
       }
       artifacts = [...new Set([...artifacts, ...completion.artifacts])].sort();
+      answeredTurn = completion.answered === true;
       serverGateClean = !completion.errorCode && !completion.qualityUnchecked
         && (await this.agentRegistry)?.get?.(run.effectiveAgentId)?.completionChecks?.includes("evidenceClaimsTraceable") === true;
       if (completion.errorCode) {
@@ -6258,7 +6434,12 @@ export class AgentRunStore {
         // A conversation turn ending is the run ending; what a run delivered is
         // what its receipt names.
         const incomplete = Boolean(requiresAcceptance && !currentReceipt);
-        if (incomplete || (projection.state === "unattributed" && artifacts.length > 0 && !currentReceipt)) {
+        // A projection the kernel cannot attribute to this turn (the session's earlier turn wrote it) hides nothing when this
+        // turn planned nothing: an ordinary conversation's files are not an unaccepted package, and the person who asked for
+        // a script is not told that its acceptance cannot be confirmed.
+        const unattributedPackage = projection.state === "unattributed" && artifacts.length > 0 && !currentReceipt
+          && (requiresAcceptance || !isOrdinaryRun(run, await this.agentRegistry));
+        if (incomplete || unattributedPackage) {
           await unaccepted([...nativeWorkflowNotices(proof),
             ...(projection.state === "unattributed" ? [unattributedNotice()] : []),
           ]);
@@ -6429,7 +6610,23 @@ export class AgentRunStore {
         ? [...said, ...(terminal.qualityNotices ?? [])]
         : [...(terminal.qualityNotices ?? []), ...said];
     }
-    return this.finishInternal(project, run.id, { ...terminal, artifacts,
+    // An ordinary conversation's files (course correction 2026-10-12, GA16). Its own witness is the workspace and the
+    // transcript's `present` calls, joined to what its `write` calls named; a run that owes a capability's files is
+    // untouched. Held back until here so no verdict above reads a file this only adds.
+    let outputs = { files: /** @type {string[]} */ ([]), presented: /** @type {string[]} */ ([]), notices: /** @type {any[]} */ ([]) };
+    if (terminal.status === "succeeded") {
+      try {
+        outputs = await ordinaryConversationOutputs({ project, run, registry: await this.agentRegistry, assistants: allRunAssistants, runtimeWorkspaceRoot, endTime: ownEnd?.time, answered: answeredTurn });
+      } catch { /* isolated: the files stay in the workspace; the record just does not list the ones only the workspace saw */ }
+    }
+    return this.finishInternal(project, run.id, { ...terminal,
+      // Said to the funnel so it does not look twice: it reads the workspace itself for the paths that did not.
+      ordinaryChecked: terminal.status === "succeeded",
+      artifacts: outputs.files.length ? [...new Set([...artifacts, ...outputs.files])].sort().slice(0, maxArtifacts) : artifacts,
+      ...(outputs.notices.length ? { qualityNotices: [...(terminal.qualityNotices ?? []), ...outputs.notices] } : {}),
+      ...(outputs.presented.length ? { presentedFiles: outputs.presented } : {}),
+      // Recorded, so what a reader is shown does not depend on what the registry says on the day it is read.
+      ...(outputs.files.length ? { outputFiles: outputs.files } : {}),
       ...(run.nativeTurn && ownEnd?.time ? { finishedAt: new Date(ownEnd.time).toISOString() } : {}),
     });
   }

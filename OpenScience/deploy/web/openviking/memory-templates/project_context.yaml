@@ -1,5 +1,7 @@
 memory_type: project_context
 description: |
+  # Language
+  Write every memory in {{ language }}, the language of the user's own messages. The examples in this description are in Chinese or English only to show the shape of a memory: never copy an example's words or its language. The section labels and the default heading written in Chinese below are Chinese only for a Chinese conversation; in any other language write them in that language. Names, drug names, abbreviations and terms the user quoted stay as the user wrote them.
   Project context: one card for ONE piece of work the user is carrying out over time, in
   any field: a study, a manuscript, a product release, a system migration, a case, a course,
   a campaign. The card is the user's own description of that work and nothing else.
@@ -11,22 +13,28 @@ description: |
   scoped to one answer, and anything the assistant proposed are NOT a description of their
   project: they never create a card and never change one.
 
-  The card has up to five sections and every one is optional: write a section only when the
+  The card has up to six sections and every one is optional: write a section only when the
   user stated something for it, and never fill one from the topic of a question.
   - 目标: what the work is meant to find out, build or deliver.
+  - 范围或对象: what the work is about or aimed at: the subject, case, product, system,
+    audience or population it covers, and what the user said is outside it.
   - 材料与数据: what it works on: data sources, cohorts, corpora, systems, documents, their
     period and size. Describe a dataset by what it is (source, years, size, kinds of
     variables), not by its file or column names and never by its rows.
-  - 已定事项: decisions the user or their team took about this work, one line each, with
-    the reason when they gave one. A reversed decision replaces its line.
-  - 进展与待办: where the work stands, and what the user said is still open or pending on
-    their side. Remove an item once the user says it is done.
-  - 约束: limits the user stated: scope, deadline, budget, standards to follow, things
-    ruled out.
+  - 已定事项: choices the user or their team made between options for this work ("先做
+    Excel 导出", "use Airflow"), one line each, with the reason when they gave one. A reversed
+    decision replaces its line. A budget, a date or a standard is a limit, not a choice: it
+    belongs under 约束.
+  - 阶段: where the work stands now, and what the user said is still open or pending on
+    their side. Remove an item once the user says it is done. A due date is not a stage.
+  - 约束: limits the user stated: any deadline or due date ("周五前出初稿", "by the end of
+    the quarter"), budget, standards to follow, things ruled out.
   When, and only when, the user describes a clinical or epidemiological study, the section
   研究要素 may list the elements they stated, each on its own line and only those stated:
-  人群 / 干预或暴露 / 对照 / 结局 / 设计. Other kinds of work never get this section.
-  The line 领域 under the title names the field of the work in the user's own terms
+  人群 / 干预或暴露 / 对照 / 结局 / 设计. When the user compares one treatment or exposure with
+  another, the first is 干预或暴露 and the one it is compared with is 对照, each on its own
+  line. Other kinds of work never get this section.
+  The line 领域 ("Field" outside a Chinese conversation) under the title names the field of the work in the user's own terms
   (心血管流行病学, 后端架构, 劳动法, 初中数学教学 ...): an open description, never chosen from
   a fixed list; leave it out when the user did not make it clear.
 
@@ -74,16 +82,18 @@ fields:
       The card in Markdown, only with what the user stated:
 
       # <project name>
-      领域：<field of the work, in the user's terms>   (omit the line when unclear)
+      {% if language == 'zh-CN' %}领域：{% else %}Field: {% endif %}<field of the work, in the user's terms>   (omit the line when unclear)
       <one plain sentence saying what this work is>
 
-      ## 目标
+      {% if language == 'zh-CN' %}## 目标
+      - ...
+      ## 范围或对象
       - ...
       ## 材料与数据
       - ...
       ## 已定事项
       - ...
-      ## 进展与待办
+      ## 阶段
       - ...
       ## 约束
       - ...
@@ -92,7 +102,25 @@ fields:
       - 干预或暴露：...
       - 对照：...
       - 结局：...
-      - 设计：...
+      - 设计：...{% else %}## Goal
+      - ...
+      ## Scope
+      - ...
+      ## Materials and data
+      - ...
+      ## Decisions
+      - ...
+      ## Stage
+      - ...
+      ## Constraints
+      - ...
+      ## Study elements   (clinical or epidemiological studies only)
+      - Population: ...
+      - Intervention or exposure: ...
+      - Comparator: ...
+      - Outcome: ...
+      - Design: ...{% endif %}
+      A conversation in any language other than Chinese or English gets the English labels above translated into that language.
 
       Omit every section and line the user gave nothing for. Bullets are short and
       self-contained. About 1500 characters is a soft target: state what is current, merge

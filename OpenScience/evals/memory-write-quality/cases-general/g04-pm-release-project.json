@@ -1,0 +1,33 @@
+{
+  "id": "g04-pm-release-project",
+  "class": "project-shape-and-decision",
+  "observedIn": "written for LAB-MEM on 2026-10-12; every name, number and identifier is invented",
+  "expected": "A project card for the release with its decision (Excel export first) and the open item the manager named (waiting for the permission design).",
+  "decidable": true,
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "我是做 B 端 SaaS 的产品经理，负责报表模块。下个版本的范围我们已经定了：先做导出 Excel，不做在线图表，因为研发人手只够一个方向。权限设计还没定，等架构组的方案出来再说。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "明白：下个版本先做 Excel 导出、不做在线图表；权限设计待架构组方案。"
+      }
+    ]
+  },
+  "expect": {
+    "requireKinds": {
+      "decision": 1,
+      "follow_up": 1
+    },
+    "requireTextContains": [
+      "Excel",
+      "权限"
+    ]
+  }
+}

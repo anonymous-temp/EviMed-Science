@@ -304,6 +304,8 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   const sessionRuns = new Map();
   /** @type {Map<string, string>} */
   const files = new Map();
+  /** Files that are not text, by absolute target: what the kernel's `readBytes` returns and its `readText` refuses. @type {Map<string, Uint8Array>} */
+  const byteFiles = new Map();
   /** @type {any[]} */
   const gateRuns = [];
   /** What the run told the control plane about itself. @type {string[]} */
@@ -324,6 +326,17 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
       return files.get(target) ?? null;
     },
     writeText: async (/** @type {string} */ target, /** @type {string} */ text) => { files.set(target, text); },
+    // The kernel's directory listing and byte read, which the ordinary-file contract uses.
+    listDir: async (/** @type {string} */ target) => {
+      const prefix = `${target}/`;
+      const names = new Set([...files.keys(), ...byteFiles.keys()].filter((key) => key.startsWith(prefix)).map((key) => key.slice(prefix.length).split("/")[0]));
+      return [...names].map((name) => ({ name, isDirectory: [...files.keys(), ...byteFiles.keys()].some((key) => key.startsWith(`${prefix}${name}/`)) }));
+    },
+    readBytes: async (/** @type {string} */ target) => {
+      const found = byteFiles.get(target);
+      if (!found) throw new Error("FS_NOT_FOUND");
+      return found;
+    },
   });
   if (projected) {
     // The real store, on a storage medium double: the tables are Maps, but
@@ -372,6 +385,7 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   // Published by the capsule row on every mount; with that row switched off
   // a child is not handed the recall tool, so the composition here has it on.
   ctx.provide("evimedCapsuleMethods", []);
+  ctx.provide("evimedCapsuleMemory", { tools: ["evimed_capsule_recall", "evimed_capsule_note"] });
   /** @type {{ provider: any, options: any }[]} */
   const starts = [];
   /** @type {any} */ (ctx).subagents = {
@@ -418,6 +432,9 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   });
   const writeFiles = (/** @type {Map<string, string>} */ entries) => {
     for (const [path, text] of entries) files.set(path, text);
+  };
+  const writeBytes = (/** @type {Map<string, Uint8Array>} */ entries) => {
+    for (const [path, bytes] of entries) byteFiles.set(path, bytes);
   };
   const receipt = (/** @type {string} */ runId = COMBINED_RUN) => {
     const raw = files.get(`/workspace/${receiptFileFor(runId)}`);
@@ -481,6 +498,7 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
     execute,
     asChild,
     writeFiles,
+    writeBytes,
     receipt,
     plan,
     status,
@@ -2181,4 +2199,73 @@ test("missing session materials never inject another session or an unidentified 
     assert.equal(text.includes('LEGACY_BOUND_CONTEXT'),owned === true);
     assert.equal(text.includes('FOREIGN_SESSION_BRIEF'),false);
   }
+});
+
+
+/* ---------------------------------------------------- an ordinary file's plan */
+
+/** A Word file's zip directory, stored: the contract reads the directory and the parts' names, not the data. */
+function wordPackage(parts = ["[Content_Types].xml", "word/document.xml"]) {
+  const encoder = new TextEncoder();
+  const u16 = (/** @type {number} */ value) => [value & 0xff, (value >> 8) & 0xff];
+  const u32 = (/** @type {number} */ value) => [value & 0xff, (value >> 8) & 0xff, (value >> 16) & 0xff, (value >>> 24) & 0xff];
+  /** @type {number[]} */
+  const local = [];
+  /** @type {number[]} */
+  const central = [];
+  for (const name of parts) {
+    const nameBytes = [...encoder.encode(name)];
+    central.push(...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(0), ...u32(0), ...u16(nameBytes.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(local.length), ...nameBytes);
+    local.push(...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(0), ...u32(0), ...u16(nameBytes.length), ...u16(0), ...nameBytes);
+  }
+  return new Uint8Array([...local, ...central, ...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(parts.length), ...u16(parts.length), ...u32(central.length), ...u32(local.length), ...u16(0)]);
+}
+
+test("an ordinary file is planned with no capability and no clarification, submitted, and checked for opening — all as advice", async () => {
+  const f = await combinedFixture({ capabilities: [BIBLIOMETRIC, APPRAISAL] });
+  await f.step(1);
+  // The same plan the course-correction brief named: a rename script, no capability, nothing to clarify.
+  const written = await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: [],
+    deliverables: [{ id: "rename-script", contractKind: "file-deliverable", title: "rename.py" }, { id: "minutes", contractKind: "file-deliverable", capability: "", title: "会议纪要.docx" }],
+  });
+  assert.equal(written.value.ok, true, JSON.stringify(written.value));
+  assert.equal(written.value.data.deliverables.length, 2);
+
+  // The root writes it: there is no method to hand a child.
+  const refused = await f.execute("evimed_delegate", { deliverableId: "rename-script", inputs: {} });
+  assert.equal(refused.value.ok, false);
+  assert.equal(f.starts.length, 0);
+  assert.match(refused.value.issues[0].message, /普通文件/);
+
+  f.writeFiles(new Map([["/workspace/deliverables/rename-script/rename.py", "import sys\nprint(sys.argv)\n"]]));
+  const script = await f.execute("evimed_submit_deliverable", { deliverableId: "rename-script" });
+  assert.equal(script.value.ok, true, JSON.stringify(script.value));
+
+  // A Word file that cannot be opened is said, once, and still accepted: nothing about an ordinary file withholds it.
+  f.writeBytes(new Map([["/workspace/deliverables/minutes/会议纪要.docx", wordPackage(["[Content_Types].xml"])]]));
+  const broken = await f.execute("evimed_submit_deliverable", { deliverableId: "minutes" });
+  assert.equal(broken.value.ok, true, JSON.stringify(broken.value));
+  assert.ok(broken.value.data.notices.some((/** @type {string} */ notice) => /word\/document\.xml/.test(notice)), JSON.stringify(broken.value.data.notices));
+
+  // And the same file with its parts is clean.
+  f.writeBytes(new Map([["/workspace/deliverables/minutes/会议纪要.docx", wordPackage()]]));
+  const whole = await f.execute("evimed_submit_deliverable", { deliverableId: "minutes" });
+  assert.equal(whole.value.ok, true, JSON.stringify(whole.value));
+  assert.deepEqual(whole.value.data.notices, []);
+  assert.equal((await f.status())["minutes"].status, "accepted");
+
+  // The receipt freezes the text it can hash; a binary file is read for the gate and never digested.
+  const receipt = f.receipt();
+  assert.deepEqual(receipt.entries.find((/** @type {any} */ entry) => entry.deliverableId === "rename-script").files.map((/** @type {any} */ file) => file.path), ["deliverables/rename-script/rename.py"]);
+  assert.deepEqual(receipt.entries.find((/** @type {any} */ entry) => entry.deliverableId === "minutes").files, []);
+});
+
+test("a plan of ordinary files only finishes without a clarification, and one professional deliverable brings the rule back", async () => {
+  const { completionCheck } = await import("../src/runPolicy.mjs");
+  const files = [{ id: "a", contractKind: "file-deliverable", capability: "", status: "accepted" }];
+  assert.deepEqual(completionCheck({ plan: { clarifications: [] }, items: files, producedTexts: [], finalReplyText: "", partial: true }).issues, []);
+  const mixed = [...files, { id: "b", contractKind: "bibliometric-analysis-report", capability: "bibliometric-analysis", status: "accepted" }];
+  assert.ok(completionCheck({ plan: { clarifications: [] }, items: mixed, producedTexts: [], finalReplyText: "", partial: true }).issues.some((issue) => issue.code === "plan_missing_clarifications"));
 });

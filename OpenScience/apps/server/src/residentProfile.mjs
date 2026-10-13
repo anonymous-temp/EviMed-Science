@@ -110,6 +110,9 @@ export class ResidentProfiles {
     // The deployment's switch, then the researcher's own: nothing of the memory is handed over, and the profile a
     // conversation was given earlier is not taken back.
     if (this.config?.memoryRecallEnabled === false) return none("paused");
+    // An account on the native engine is handed its profile by the engine's memory plugin at the start of each session
+    // (2026-10-13): a second copy from here would be the same facts twice, from two stores.
+    if (typeof this.store.memoryEngine === "function" && await this.store.memoryEngine(userId) === "native") return none("native");
     const pause = await memoryPausedFor(this.store, userId, projectId, sessionId);
     if (pause.recall) return none("paused");
 

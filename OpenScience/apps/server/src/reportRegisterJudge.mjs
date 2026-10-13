@@ -48,6 +48,9 @@ export function reportProseLines(text) {
  */
 function registerJudgeReads(run, { internalProject, internalCapability }) {
   if (String(run.effectiveAgentId ?? run.agentId ?? "").startsWith("vcr-")) return false;
+  // An ordinary conversation's files (a README, a letter, a script) are not report prose: the register this judge holds
+  // lines to is a report's, and nobody asked it to read what the person wrote for themselves.
+  if (Array.isArray(run.outputFiles)) return false;
   return !internalProject && !internalCapability && isResearcherOwnedWork(run);
 }
 

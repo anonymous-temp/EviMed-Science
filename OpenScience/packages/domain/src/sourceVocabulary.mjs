@@ -19,10 +19,11 @@
  *   (principle 5: no regex over open vocabulary). After the text is read, the
  *   judge (J7) names the type from this table; a judge that fails leaves the
  *   first pass standing, which reads with the general schema.
- * - **Only a paper is read as a paper.** The paper slots (design, population,
- *   intervention, outcomes, effect, DOI) belong to `published-paper` and
- *   `preprint-manuscript`; every other type has purpose, key information and
- *   limitations (or its own procedure / notes slots). A slot that does not
+ * - **Only a paper is read as a paper.** The paper slots (question, method,
+ *   data or subjects, main results, DOI; and, for a clinical study, design,
+ *   population, intervention, outcomes, effect) belong to `published-paper`
+ *   and `preprint-manuscript`; every other type has purpose, key information
+ *   and limitations (or its own procedure / notes slots). A slot that does not
  *   belong to a type is never offered, so it is never shown as 「尚不明确」.
  *
  * Browser-safe and pure: the server, the capability contract and the page

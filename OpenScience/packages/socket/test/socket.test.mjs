@@ -5,6 +5,7 @@ import test from "node:test";
 import { SEAMS } from "@evimed/harness-port";
 import { CONTRACT_KINDS, MCP_TOOL_NAMES, ROOT_VISIBLE_MCP_BASE_NAMES, deliverySummaryFileFor, receiptFileFor, workspaceLayout, TOOL_RESULT_PRUNER } from "@evimed/domain";
 
+import { contentTriggerIssues } from "../src/runPolicy.mjs";
 import {
   AGENT_PLUGIN_IDS,
   HOST_PLUGIN_IDS,
@@ -26,6 +27,7 @@ import {
   guardedBashTarget,
   indexPlan,
   mergeEvidence,
+  planCapabilityIssues,
   projectRunState,
   rejectionEnvelope,
   rootHiddenMcpTools,
@@ -46,7 +48,9 @@ test("the bundle patch carries no deployment path and no address", async () => {
   const body = patch.split("\n").filter((line) => !line.trim().startsWith("#")).join("\n");
   assert.ok(!/\/opt\//.test(body), "a bundle row names an image path");
   assert.ok(!/\/runtime\//.test(body), "a bundle row names a container path");
-  assert.ok(!/https?:\/\//.test(body), "a bundle row names an address");
+  // The one address a bundle row may name is this process's own loopback: the OpenViking plugin's endpoint is the bridge
+  // (`evimed-memory-bridge`), which listens there in every deployment alike.
+  assert.ok(!/https?:\/\/(?!127\.0\.0\.1:)/.test(body), "a bundle row names an address");
   assert.match(body, /id: evimed-seam-probe/);
   // The web provider's endpoints are named as environment variables, not as
   // addresses: the `no address` assertion above is what holds that.
@@ -75,7 +79,7 @@ test("the composition mounts every agent plugin we own, the kernel's own pieces 
   assert.equal(AGENT_PLUGIN_IDS.length, 9, "add the row here when a plugin is added, so the count stays a fact");
   assert.deepEqual([...HOST_PLUGIN_IDS].sort(), [
     "evimed-runtime-ui", "evimed-skill-catalogue", "evimed-plugin-probe", "evimed-seam-probe",
-    "evimed-evidence-store", "evimed-web", "evimed-engine-context", "evimed-loopx-bootstrap",
+    "evimed-evidence-store", "evimed-web", "evimed-engine-context", "evimed-loopx-bootstrap", "evimed-memory-bridge",
   ].sort());
   assert.deepEqual([...patch.matchAll(/^\s+- id: (evimed-[\w-]+)\s*$/gm)].map(row => row[1]).sort(),
     [...HOST_PLUGIN_IDS].sort(), "the host patch must mount exactly the intended plugin identities");
@@ -1019,9 +1023,16 @@ test("a root copy of a clinical deliverable's own file is its transitional locat
     { path: "/workspace/自行建议.md", text: "速效救心丸可以多吃几粒。" },
   ];
   const accepted = [{ ...items[0], status: "accepted" }];
+  // Since 2026-10-13 the notice is one: it says the clinical safety rules apply to the file and asks for nothing (it used to
+  // tell the run to resubmit as a clinical deliverable or remove the content, which no e-mail that merely names a medicine
+  // can do), so there is no full completion for it to hold.
   const held = completionCheck({ plan: { clarifications: ["x"] }, items: accepted, producedTexts: strayTexts, finalReplyText: "", partial: false });
-  assert.equal(held.ok, false, "a genuine stray still withholds a full completion");
-  assert.ok(held.issues.some((issue) => issue.code === "clinical_content_without_clinical_contract" && issue.severity === "required"));
+  const heldNotice = held.issues.find((issue) => issue.code === "clinical_content_without_clinical_contract");
+  assert.equal(heldNotice?.severity, "advisory");
+  assert.doesNotMatch(String(heldNotice?.message), /重新提交|移除临床内容|请把它作为/);
+  assert.match(String(heldNotice?.message), /仅供参考，不替代医生或药师的意见/, "what is true of the file, and nothing it did not do");
+  assert.doesNotMatch(String(heldNotice?.message), /按临床用药安全规则处理|安全规则/, "it does not say rules were run over a file they do not run over");
+  assert.match(String(heldNotice?.message), /自行建议\.md/);
   const stray = completionCheck({ plan: { clarifications: ["x"] }, items, producedTexts: strayTexts, finalReplyText: "", partial: true });
   assert.equal(stray.ok, true, "the partial exit is never barred");
   const told = stray.issues.find((issue) => issue.code === "clinical_content_without_clinical_contract");
@@ -1044,6 +1055,34 @@ test("clinical content under a non-clinical contract is caught by scanning the o
     partial: false,
   });
   assert.ok(check.issues.some((issue) => issue.code === "clinical_content_without_clinical_contract"));
+});
+
+test("what counts as a clinical contract is the domain's list, not a substring of the kind's name", () => {
+  // `appraisal-table` and `meta-analysis-report` are clinical by their manifests and say none of clinical, drug or adr: an
+  // appraisal of a medicine's trials used to be told to resubmit as a clinical deliverable (GA26, 2026-10-12).
+  for (const contractKind of ["appraisal-table", "meta-analysis-report", "manuscript-section"]) {
+    const items = [{ id: "d1", contractKind, capability: "x", status: "accepted" }];
+    const found = contentTriggerIssues([{ path: "deliverables/d1/report.md", text: "速效救心丸的证据评价见下表。" }], "", items);
+    assert.deepEqual(found, [], `${contractKind} is a clinical contract; its own subject is not a stray`);
+  }
+  // A kind that is not clinical is told what happens, and nothing is asked of the reader.
+  const brief = contentTriggerIssues([{ path: "deliverables/d1/brief.md", text: "速效救心丸的推荐用法。" }], "", [{ id: "d1", contractKind: "research-brief", capability: "x", status: "accepted" }]);
+  assert.equal(brief.length, 1);
+  assert.equal(brief[0].code, "clinical_content_without_clinical_contract");
+  assert.match(brief[0].message, /速效救心丸/);
+  assert.match(brief[0].message, /仅供参考，不替代医生或药师的意见/);
+  assert.doesNotMatch(brief[0].message, /请把它作为|重新提交|移除临床内容|安全规则/);
+});
+
+test("an ordinary file in the plan names no capability and is not held to one", () => {
+  const catalogue = [{ id: "clinical-evidence-synthesis", visibility: "public", produces: [{ contractKind: "clinical-evidence-report", outputs: [] }] }];
+  const ordinary = [{ id: "rename-script", contractKind: "file-deliverable", capability: "", title: "rename.py" }, { id: "x", contractKind: "file-deliverable", capability: "no-such-capability", title: "x" }];
+  assert.deepEqual(planCapabilityIssues(ordinary, catalogue), []);
+  // The professional workflows keep the check.
+  const unknown = planCapabilityIssues([{ id: "r", contractKind: "clinical-evidence-report", capability: "no-such-capability", title: "r" }], catalogue);
+  assert.deepEqual(unknown.map((issue) => issue.code), ["capability_unknown"]);
+  const wrongKind = planCapabilityIssues([{ id: "r", contractKind: "research-brief", capability: "clinical-evidence-synthesis", title: "r" }], catalogue);
+  assert.deepEqual(wrongKind.map((issue) => issue.code), ["contract_kind_unknown"]);
 });
 
 test("a direct reply is scanned too, because it still said something about a medicine", () => {

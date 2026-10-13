@@ -58,6 +58,8 @@ export const COMPUTED_CONTRACT_KINDS = Object.freeze([
  * claim a reader acts on.
  */
 export const UNREVIEWED_CONTRACT_KINDS = Object.freeze([
+  // An ordinary file states no claim a reviewer could hold to a source.
+  'file-deliverable',
   'source-understanding',
   'method-candidate',
   'method-relations',

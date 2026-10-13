@@ -1,0 +1,35 @@
+{
+  "id": "g02-lawyer-style-and-a-question",
+  "class": "standing-role-and-preferences",
+  "observedIn": "written for LAB-MEM on 2026-10-12; every name, number and identifier is invented",
+  "expected": "Role and drafting style are kept; the statute the lawyer asks about creates no project card and no entity.",
+  "decidable": true,
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "我是做劳动法的律师，在一家中型律所。帮我起草文书时请用正式的法律文书语言，条款要编号，引用法条写明条、款、项。先帮我看一下：劳动合同法第四十七条的经济补偿年限怎么计算？"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "按该条规定，经济补偿按劳动者在本单位工作的年限计算，每满一年支付一个月工资；六个月以上不满一年的按一年计算，不满六个月的支付半个月工资。"
+      }
+    ]
+  },
+  "expect": {
+    "requireKinds": {
+      "profile": 1,
+      "preference": 1
+    },
+    "noRecordOfKinds": [
+      "project_fact",
+      "decision",
+      "follow_up",
+      "entity"
+    ]
+  }
+}

@@ -43,6 +43,9 @@ test("delivered reports receive advisory notices; revision notes, outside paths 
   assert.deepEqual(run, original);
   await reviewDeliveredRegister({ ...input, run: { ...run, effectiveAgentId: "vcr-analysis" } });
   assert.equal(calls.length, 2);
+  // An ordinary conversation's files (a letter, a README) are not report prose: the register is a report's.
+  await reviewDeliveredRegister({ ...input, run: { ...run, outputFiles: ["report.md"] } });
+  assert.equal(calls.length, 2);
 });
 
 /** A workspace holding the named files, removed with the test.
@@ -143,9 +146,14 @@ test("the run store applies the scope and the cap it was configured with when a 
     await mkdir(project.metaDir, { recursive: true });
     const judge = recordingJudge(line => line === "Line 3" || line === "Line 4");
     const binding = { sessionId: `ses-${projectId}`, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
-    const store = new AgentRunStore({ get: async () => binding }, { model: "deepseek/deepseek-v4-flash", judgeService: judge, ...options });
+    // A run is a report only where a capability owes one: a conversation no capability took is an ordinary one, and what it
+    // wrote is the person's own file (GA16, 2026-10-12), which this judge does not read. `bare` is that conversation.
+    const owed = dispatch.bare ? {} : { effectiveAgentId: "deep-research", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-deep-research", effectiveRouteReason: "choice:deep-research" };
+    const owes = dispatch.bare ? {} : { agentRegistry: { get: () => ({ visibility: "public", outputs: [{ path: "report.md", required: true }] }) } };
+    const { bare: _bare, ...rest } = dispatch;
+    const store = new AgentRunStore({ get: async () => binding }, { model: "deepseek/deepseek-v4-flash", judgeService: judge, ...owes, ...options });
     store.scheduleMonitor = () => {};
-    const started = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: `turn-${projectId}`, ...dispatch }, async () => ({ accepted: true }));
+    const started = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: `turn-${projectId}`, ...owed, ...rest }, async () => ({ accepted: true }));
     await mkdir(path.join(project.workspaceDir, "deliverables", "research"), { recursive: true });
     await writeFile(path.join(project.workspaceDir, "deliverables", "research", "report.md"), reports);
     await store.finishInternal(project, started.id, { status: "failed", errorCode: "runtime_not_running", artifacts: [] });
@@ -177,4 +185,8 @@ test("the run store applies the scope and the cap it was configured with when a 
   assert.equal(managed.judge.calls.length, 8, "a GEO step is a researcher's report");
   const proactive = await finishWith("proactive-run", {}, { automated: true, effectiveRouteReason: "autopilot:literature-sentinel" });
   assert.equal(proactive.judge.calls.length, 8, "a proactive episode is a researcher's report");
+  // A conversation no capability took wrote its own file, not a report.
+  const bare = await finishWith("bare-conversation", {}, { bare: true });
+  assert.deepEqual(bare.judge.calls, [], "an ordinary conversation's file is not read as report prose");
+  assert.deepEqual(bare.judge.skips, [["J4", "run_out_of_scope", 1]]);
 });

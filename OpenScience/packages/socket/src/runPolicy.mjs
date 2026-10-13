@@ -26,15 +26,19 @@
  */
 
 import {
+  FILE_DELIVERABLE_KIND,
   MAX_DELEGATION_DEPTH,
   MCP_TOOL_PREFIX,
   ROOT_VISIBLE_MCP_BASE_NAMES,
   errorCodeMessage,
   deliverableIdOfPath,
+  isOpenVikingMemoryToolName,
+  isOpenVikingToolName,
   isGateImplementationPath,
   PROTECTED_WRITE_PREFIXES,
   REPORTING_CHECKLIST_FILE,
   STUDY_TYPES,
+  isClinicalContractKind,
   isProtectedWritePath,
   layeredIssues,
   matchedClinicalTriggers,
@@ -353,7 +357,7 @@ export function stepPolicy(budget, limits) {
 export function planToolParameters() {
   return {
     action: { type: 'string', enum: ['write', 'status'], required: true, description: 'write 写下或修订计划，status 读回进度。' },
-    clarifications: { type: 'array', items: { type: 'string' }, description: '问过的问题或采用的假设，逐条写。' },
+    clarifications: { type: 'array', items: { type: 'string' }, description: '问过的问题或采用的假设，逐条写。只含普通文件（file-deliverable）的计划可以不写。' },
     deliverables: {
       type: 'array',
       description: '交付物清单。',
@@ -363,10 +367,10 @@ export function planToolParameters() {
         properties: {
           id: { type: 'string' },
           contractKind: { type: 'string' },
-          capability: { type: 'string' },
+          capability: { type: 'string', description: '专业工作流的能力 id；契约种类为 file-deliverable（普通文件：文档、表格、幻灯片、脚本）时不填。' },
           title: { type: 'string' },
           dependsOn: { type: 'array', items: { type: 'string' } },
-          acceptance: { type: 'array', items: { type: 'string' }, description: '5–10 条验收项：读者在报告正文里能核对到的具体内容（结论、数值、范围、局限）。不写关于文件清单、字段、哈希或检查过程的项——那些是平台自己的记录。' },
+          acceptance: { type: 'array', items: { type: 'string' }, description: '5–10 条验收项：读者在报告正文里能核对到的具体内容（结论、数值、范围、局限）。不写关于文件清单、字段、哈希或检查过程的项——那些是平台自己的记录。普通文件（file-deliverable）可以不写。' },
           studyType: {
             type: 'string',
             enum: [...STUDY_TYPES],
@@ -438,7 +442,8 @@ export function unmetDependencies(item, items, delivered) {
 /**
  * The registered research tools the root session is not shown.
  *
- * Every `mcp__evimed__*` name whose base is not on the root's list — read off
+ * Every `mcp__evimed__*` name whose base is not on the root's list, and every `mcp__openviking__*` name beyond the five memory
+ * tools — read off
  * what the registry actually holds rather than off the domain's list of known
  * tools, because a restriction naming a tool the registry does not have is
  * refused outright, and a tool the server gained after this build still
@@ -449,7 +454,10 @@ export function unmetDependencies(item, items, delivered) {
 export function rootHiddenMcpTools(registered) {
   const visible = new Set(ROOT_VISIBLE_MCP_BASE_NAMES)
   return [...new Set(registered)]
-    .filter((name) => name.startsWith(MCP_TOOL_PREFIX) && !visible.has(name.slice(MCP_TOOL_PREFIX.length)))
+    .filter((name) => (name.startsWith(MCP_TOOL_PREFIX) && !visible.has(name.slice(MCP_TOOL_PREFIX.length)))
+      // The OpenViking memory plugin's server advertises twenty tools and the memory gateway lists five; any other the
+      // registry holds is not admitted, whatever answered the listing.
+      || (isOpenVikingToolName(name) && !isOpenVikingMemoryToolName(name)))
     .sort()
 }
 
@@ -493,6 +501,8 @@ export function planCapabilityIssues(items, capabilities) {
   /** @type {{ code: string, severity: 'required', message: string, deliverableId: string }[]} */
   const issues = []
   for (const item of items) {
+    // An ordinary file has no capability behind it and none is checked; one named anyway is not held to producing it.
+    if (item.contractKind === FILE_DELIVERABLE_KIND) continue
     const manifest = byId.get(String(item.capability))
     if (!manifest) {
       issues.push({
@@ -609,6 +619,7 @@ export function childReport(outcome) {
  * @param {{
  *   contractKind: string,
  *   files: Map<string, string>,
+ *   fileBytes?: Map<string, Uint8Array>,
  *   packagePath?: string,
  *   expectedOutputs?: readonly {path: string, required: boolean}[],
  *   briefText?: string | null,
@@ -692,7 +703,9 @@ export function completionCheck(input) {
   /** @type {any[]} */
   const issues = []
   const clarifications = input.plan?.clarifications ?? []
-  if (input.plan && !clarifications.length) {
+  // A plan of ordinary files only has no assumption to record (`validateTaskPlan` says the same).
+  const ordinaryFilesOnly = input.items.length > 0 && input.items.every((item) => item.contractKind === FILE_DELIVERABLE_KIND)
+  if (input.plan && !clarifications.length && !ordinaryFilesOnly) {
     issues.push({ code: 'plan_missing_clarifications', severity: 'required', message: errorCodeMessage('plan_missing_clarifications') })
   }
   for (const item of input.items) {
@@ -745,8 +758,11 @@ export function completionCheck(input) {
  * @returns {any[]}
  */
 export function contentTriggerIssues(producedTexts, finalReplyText, items) {
+  // "Clinical" is the domain's own list (`CLINICAL_CONTRACT_KINDS`, derived from the manifests' safety class). This
+  // used to ask whether the kind's name contained clinical, drug or adr, which missed every clinical kind not named
+  // that way (an appraisal table, a manuscript section, a meta-analysis) and told those to resubmit as clinical.
   const clinicalPaths = new Set(
-    items.filter((item) => String(item.contractKind ?? '').includes('clinical') || String(item.contractKind ?? '').includes('drug') || String(item.contractKind ?? '').includes('adr'))
+    items.filter((item) => isClinicalContractKind(String(item.contractKind ?? '')))
       .map((item) => String(item.id)),
   )
   // Basenames already delivered under a clinical contract. The transition rule
@@ -771,10 +787,12 @@ export function contentTriggerIssues(producedTexts, finalReplyText, items) {
     const owner = segments[0] === 'deliverables' ? (segments[1] ?? '') : ''
     if (clinicalPaths.has(owner)) continue
     if (!owner && clinicalBasenames.has(segments.at(-1))) continue
+    // What is true, not what to do: the file names a medicine, and what it says about taking one is for reference and does
+    // not replace a clinician's advice. Nothing is removed, withheld or resubmitted for it, which is also why it is advice.
     issues.push({
       code: 'clinical_content_without_clinical_contract',
-      severity: 'required',
-      message: `${produced.path} 提到 ${triggers.slice(0, 3).join('、')}，但它不在临床契约下。请把它作为临床类交付物提交，或移除临床内容。`,
+      severity: 'advisory',
+      message: `${produced.path} 提到 ${triggers.slice(0, 3).join('、')}：其中涉及用药的内容仅供参考，不替代医生或药师的意见。这只是给读者的提示，文件不会因此被删减或退回。`,
       path: produced.path,
     })
   }

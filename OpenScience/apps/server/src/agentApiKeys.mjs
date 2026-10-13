@@ -358,11 +358,11 @@ export class AgentApiKeyStore {
  * `only` names one of them: the integrator forgetting one person
  * (`DELETE /api/agent-memory/v1/subject`), by the same path.
  *
- * @param {{ apiKeys: AgentApiKeyStore | null, store: any, memorySubstrate: any, memoryIndexing?: any, capsuleTransfers?: any }} services
+ * @param {{ apiKeys: AgentApiKeyStore | null, store: any, memorySubstrate: any, memoryIndexing?: any, capsuleTransfers?: any, nativeMemory?: { erase: (userId: string) => Promise<unknown> } | null }} services
  * @param {string} ownerId @param {{ only?: string | null }} [options]
  * @returns {Promise<number>} how many accounts were deleted
  */
-export async function deleteSubjectAccounts({ apiKeys, store, memorySubstrate, memoryIndexing = null, capsuleTransfers = null }, ownerId, { only = null } = {}) {
+export async function deleteSubjectAccounts({ apiKeys, store, memorySubstrate, memoryIndexing = null, capsuleTransfers = null, nativeMemory = null }, ownerId, { only = null } = {}) {
   if (!apiKeys) return 0;
   let deleted = 0;
   for (const { userId, accountCreatedAt } of await apiKeys.subjectAccounts(ownerId)) {
@@ -374,6 +374,8 @@ export async function deleteSubjectAccounts({ apiKeys, store, memorySubstrate, m
     // never waited on: the index holds derived copies only.
     await memoryIndexing?.withdrawals?.migrate();
     if (!memoryIndexing?.withdrawals) void Promise.resolve(memorySubstrate.forgetUser(userId)).catch(() => false);
+    // What the native memory engine holds of the subject goes before the rows that say it was there.
+    await nativeMemory?.erase(userId);
     await store.deleteUser(subject, {
       beforeLock: memoryIndexing ? (/** @type {string} */ id, /** @type {any} */ client) => memoryIndexing.lockAccountDeletion(id, client) : null,
       beforeDelete: async (/** @type {string} */ id, /** @type {any} */ client) => {

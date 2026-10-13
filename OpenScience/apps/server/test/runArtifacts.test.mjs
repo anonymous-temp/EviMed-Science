@@ -7,7 +7,12 @@ import path from "node:path";
 import test from "node:test";
 
 import { AgentRunStore } from "../src/agentRuns.mjs";
-import { ARTIFACT_KINDS, describeRunArtifacts } from "../src/runArtifacts.mjs";
+import { KNOWLEDGE_BASE_DIR } from "../src/researchContext.mjs";
+import { RUNTIME_LIBRARY_DIR } from "../src/runtimeManager.mjs";
+import {
+  ARTIFACT_KINDS, ORDINARY_OUTPUT_LIMIT, PLATFORM_ROOT_DIRECTORIES, SCRATCH_DIRECTORIES,
+  describeRunArtifactRoles, describeRunArtifacts, isOrdinaryConversation, ordinaryOutputPath, ordinaryRole,
+} from "../src/runArtifacts.mjs";
 
 const clinicalOutputs = ["clinical-evidence-report.md", "clinical-evidence-matrix.json", "agenda-delta.json"];
 const declaredOutputsOf = (/** @type {string} */ id) => (id === "clinical-evidence-synthesis" ? clinicalOutputs : null);
@@ -72,9 +77,11 @@ test("a run laid out before deliverable directories, or with a capability this b
     artifacts: ["deliverables/x/result.csv", "deliverables/x/work/tmp.py", "deliverables/x/.cache/a"],
   }, declaredOutputsOf);
   assert.deepEqual(unknown?.artifactKinds, { "deliverables/x/result.csv": "deliverable", "deliverables/x/work/tmp.py": "work", "deliverables/x/.cache/a": "work" });
-  // The answer line declares no files: whatever it wrote is scratch.
+  // The answer line declares no files, and that no longer makes what it wrote scratch: an ordinary conversation's file is
+  // what it was asked for (`outputFiles`), unless it sits where scratch goes (the next test).
   const answer = describeRunArtifacts({ effectiveAgentId: "open-domain-answer", artifacts: ["summary.md"] }, () => []);
-  assert.deepEqual(answer?.artifactCounts, { deliverable: 0, revisionNotes: 0, work: 1, superseded: 0 });
+  assert.deepEqual(answer?.artifactCounts, { deliverable: 1, revisionNotes: 0, work: 0, superseded: 0 });
+  assert.deepEqual(answer?.outputFiles, ["summary.md"]);
   assert.equal(describeRunArtifacts({ artifacts: [], unverifiedArtifacts: [] }, declaredOutputsOf), null);
 });
 
@@ -110,4 +117,86 @@ test("the ledger's runs carry their artifact kinds, old runs included, and the a
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("an ordinary conversation's files are its outputs unless they sit where scratch goes", () => {
+  const run = {
+    id: "run_ordinary", status: "succeeded", effectiveAgentId: "open-domain-answer",
+    artifacts: ["道歉邮件.docx", "rename.py", "output/sales-summary.xlsx", "chart.png", "tmp/a.py", "work/b.md", "__pycache__/c.pyc", "node_modules/x/y.js", "data/in.csv", "knowledge-base/doc.md", "task-plan.json", "delivery-receipt.json", ".evimed-run/state.json", "deliverables/deck/商业计划.pptx", "deliverables/deck/work/tmp.py"],
+  };
+  const described = describeRunArtifacts(run, () => []);
+  const kinds = described?.artifactKinds ?? {};
+  for (const path of ["道歉邮件.docx", "rename.py", "output/sales-summary.xlsx", "chart.png", "deliverables/deck/商业计划.pptx"]) assert.equal(kinds[path], "deliverable", path);
+  for (const path of ["tmp/a.py", "work/b.md", "__pycache__/c.pyc", "node_modules/x/y.js", "data/in.csv", "knowledge-base/doc.md", "task-plan.json", "delivery-receipt.json", ".evimed-run/state.json", "deliverables/deck/work/tmp.py"]) assert.equal(kinds[path], "work", path);
+  assert.equal(described?.outputFiles?.length, 5);
+  assert.deepEqual(described?.artifactCounts, { deliverable: 5, revisionNotes: 0, work: 10, superseded: 0 });
+  // The reading order puts what a person opens first: documents, then data, then pictures — and the script that may have built
+  // them last, because the helper that wrote a workbook is not what the person opens first.
+  assert.deepEqual(described?.outputFiles, ["deliverables/deck/商业计划.pptx", "道歉邮件.docx", "output/sales-summary.xlsx", "chart.png", "rename.py"]);
+  assert.equal(described?.outputFiles?.at(-1), "rename.py");
+  // The roles: a script the person asked for is a draft they open; nothing else changes.
+  const roles = describeRunArtifactRoles(run, () => undefined, described?.outputFiles);
+  assert.equal(roles["rename.py"], "draft");
+  assert.equal(roles["output/sales-summary.xlsx"], "data");
+  assert.equal(roles["tmp/a.py"], "work", "a script that is not an output stays work");
+  assert.equal(roles["work/b.md"], "document", "a path that is not an output keeps the role its name gave it");
+  assert.equal(ordinaryRole("revision-notes.md"), "work");
+  assert.equal(ordinaryRole("setup.exe"), "work");
+});
+
+test("a conversation with a capability behind it is judged by that capability, and a plan of ordinary files is the same conversation", () => {
+  const outputs = (id) => (id === "clinical-evidence-synthesis" ? ["clinical-evidence-report.md"] : null);
+  const clinical = describeRunArtifacts({ effectiveAgentId: "clinical-evidence-synthesis", artifacts: ["notes.md", "rename.py"] }, outputs);
+  assert.equal(clinical?.outputFiles, undefined);
+  assert.deepEqual(clinical?.artifactCounts, { deliverable: 0, revisionNotes: 0, work: 2, superseded: 0 });
+  // An answer-line turn whose plan names a capability is not ordinary: its files are the plan's.
+  assert.equal(isOrdinaryConversation({ effectiveAgentId: "open-domain-answer" }, new Set(), [{ id: "r", capability: "clinical-evidence-synthesis", contractKind: "clinical-evidence-report" }]), false);
+  // One of ordinary files only is.
+  const planned = describeRunArtifacts({
+    effectiveAgentId: "open-domain-answer",
+    deliverables: [{ id: "rename-script", capability: "", contractKind: "file-deliverable" }],
+    artifacts: ["deliverables/rename-script/rename.py", "deliverables/old-plan/x.py"],
+  }, () => []);
+  assert.equal(planned?.artifactKinds["deliverables/rename-script/rename.py"], "deliverable");
+  assert.equal(planned?.artifactKinds["deliverables/old-plan/x.py"], "superseded", "what a plan revision abandoned is still abandoned");
+  assert.deepEqual(planned?.outputFiles, ["deliverables/rename-script/rename.py"]);
+  // No capability at all (a turn typed into the page that nothing routed) is an ordinary conversation.
+  assert.equal(isOrdinaryConversation({}, null, []), true);
+  // A capability this build does not know is left as it was recorded.
+  assert.equal(isOrdinaryConversation({ effectiveAgentId: "from-the-future" }, null, []), false);
+});
+
+test("the list of a script's hundred pictures is bounded, and the closed lists agree with the code that owns them", () => {
+  const artifacts = Array.from({ length: 60 }, (_, index) => `plots/p-${String(index).padStart(2, "0")}.png`);
+  assert.equal(describeRunArtifacts({ effectiveAgentId: "open-domain-answer", artifacts }, () => [])?.outputFiles?.length, ORDINARY_OUTPUT_LIMIT);
+  // `researchContext.mjs` owns the constant and sits in an import cycle with this module, which is why it is spelled out here.
+  assert.ok(PLATFORM_ROOT_DIRECTORIES.has(KNOWLEDGE_BASE_DIR));
+  assert.ok(PLATFORM_ROOT_DIRECTORIES.has(RUNTIME_LIBRARY_DIR.replace(/^\/workspace\//, "")), "the account's library is a read-only view, never a conversation's");
+  assert.ok(PLATFORM_ROOT_DIRECTORIES.has("data"));
+  assert.ok(SCRATCH_DIRECTORIES.has("node_modules") && SCRATCH_DIRECTORIES.has("__pycache__"));
+  assert.equal(ordinaryOutputPath("a/../../etc/passwd"), false);
+  assert.equal(ordinaryOutputPath(""), false);
+});
+
+test("a run that recorded its outputs is read by its record, and an older one by the registry", () => {
+  const outputs = (/** @type {string} */ id) => (id === "clinical-evidence-synthesis" ? ["clinical-evidence-report.md"] : null);
+  // A turn of a capability-bound conversation that was an answer: its file is the person's, and its scratch is scratch.
+  const recorded = describeRunArtifacts({
+    effectiveAgentId: "clinical-evidence-synthesis", artifacts: ["weekly.md", "scratch.py"], outputFiles: ["weekly.md"],
+  }, outputs);
+  assert.equal(recorded?.artifactKinds["weekly.md"], "deliverable");
+  assert.equal(recorded?.artifactKinds["scratch.py"], "work");
+  assert.deepEqual(recorded?.outputFiles, ["weekly.md"]);
+  assert.deepEqual(recorded?.artifactCounts, { deliverable: 1, revisionNotes: 0, work: 1, superseded: 0 });
+  // A record from before the field existed is classified the way it always was.
+  const older = describeRunArtifacts({ effectiveAgentId: "clinical-evidence-synthesis", artifacts: ["weekly.md", "scratch.py"] }, outputs);
+  assert.deepEqual(older?.artifactKinds, { "weekly.md": "work", "scratch.py": "work" });
+  assert.equal(older?.outputFiles, undefined);
+  // The record is not asked about the registry at all: a capability this build has never heard of changes nothing.
+  const unknown = describeRunArtifacts({ effectiveAgentId: "from-the-future", artifacts: ["a.docx"], outputFiles: ["a.docx"] }, () => null);
+  assert.deepEqual(unknown?.outputFiles, ["a.docx"]);
+  // The roles follow the recorded files, so the script a person asked for is a draft.
+  const roles = describeRunArtifactRoles({ effectiveAgentId: "x", artifacts: ["rename.py", "tmp/a.py"], outputFiles: ["rename.py"] }, () => undefined, ["rename.py"]);
+  assert.equal(roles["rename.py"], "draft");
+  assert.equal(roles["tmp/a.py"], "work");
 });

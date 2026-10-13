@@ -187,7 +187,8 @@ const STATUS_BY_OUTCOME = Object.freeze({
  *          title?: string|null, question?: string|null,
  *          artifacts?: string[], unverifiedArtifacts?: string[], qualityNotices?: (string | Record<string, any>)[],
  *          claimSummary?: { total?: number, verified?: number, unverified?: number } | null,
- *          artifactCounts?: { deliverable?: number, revisionNotes?: number, work?: number, superseded?: number }}} run
+ *          artifactCounts?: { deliverable?: number, revisionNotes?: number, work?: number, superseded?: number },
+ *          outputFiles?: string[]}} run
  * @returns {{ outcome: string, status: string, title: string, body: string, severity: 'safety'|'attention'|'info',
  *   pending: number, counts: { safety: number, mustFix: number, advice: number } }}
  */
@@ -227,7 +228,11 @@ export function runFinishedNotice(run) {
     const files = counts && Number.isFinite(counts.deliverable)
       ? Number(counts.deliverable) + (Number(counts.revisionNotes) || 0)
       : [...(run?.artifacts ?? []), ...(run?.unverifiedArtifacts ?? [])].length;
-    const where = files > 0 ? `报告和 ${files} 个文件已在对话里` : "结果已在对话里";
+    // A conversation no capability took (an e-mail, a workbook, a deck, a script) has no report: what it produced is named, by
+    // the names the reader gave or will see, instead of 「结果已在对话里」 (`outputFiles`, runArtifacts.mjs).
+    const outputs = Array.isArray(run?.outputFiles) ? run.outputFiles : [];
+    const where = outputs.length > 0 ? outputFilesPhrase(outputs)
+      : files > 0 ? `报告和 ${files} 个文件已在对话里` : "结果已在对话里";
     body = pending > 0 ? `${where}，${pending} 处引用待核对` : where;
     // A finished run that left a source out says so, and that it can be added.
     if (leftOut) body += `；${leftOut}`;
@@ -240,6 +245,20 @@ export function runFinishedNotice(run) {
     outcome, status: summary.safety > 0 ? `有 ${summary.safety} 处用药安全提示` : status, title, body, severity, pending,
     counts: { safety: summary.safety, mustFix: summary.mustFix, advice: summary.advice },
   };
+}
+
+/**
+ * What an ordinary conversation's files are called in its inbox line: the first two by name, the rest counted.
+ * @param {readonly string[]} paths workspace-relative paths, in the order a reader looks for them
+ */
+function outputFilesPhrase(paths) {
+  const names = paths.map((value) => {
+    const name = String(value).slice(String(value).lastIndexOf("/") + 1);
+    const characters = [...name];
+    return characters.length > 28 ? `${characters.slice(0, 27).join("")}…` : name;
+  });
+  const shown = names.slice(0, 2).join("、");
+  return names.length > 2 ? `${shown} 等 ${names.length} 个文件已在对话里` : `${shown} 已在对话里`;
 }
 
 /**

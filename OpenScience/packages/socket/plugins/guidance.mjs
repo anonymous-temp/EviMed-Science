@@ -44,6 +44,8 @@ export const inject = ['systemPrompt']
  * @property {string} [disabledToolsFile]
  * @property {boolean} [runPolicyEnabled]
  * @property {boolean} [capsuleEnabled]
+ * @property {boolean} [capsuleMemoryEnabled]
+ * @property {boolean} [openVikingMemory]
  */
 
 export const Config = Schema.object({
@@ -69,6 +71,10 @@ export const Config = Schema.object({
     .description('Whether the run-policy row (plan, delegation, submission tools) is on; off, the guidance names none of its tools (EVIMED_RUN_POLICY_ENABLED).'),
   capsuleEnabled: Schema.boolean().default(true)
     .description('Whether the capsule row (evimed_capsule_recall) is on; off, the guidance does not name its tools (EVIMED_CAPSULE_ENABLED).'),
+  capsuleMemoryEnabled: Schema.boolean().default(true)
+    .description('Whether the capsule row\'s recall and note tools are mounted (EVIMED_CAPSULE_MEMORY_ENABLED, and not an account on the native memory engine); off, the guidance does not name them.'),
+  openVikingMemory: Schema.boolean().default(false)
+    .description('Whether this account\'s memory is kept by the official OpenViking plugin (EVIMED_MEMORY_GATEWAY_URL is set); the guidance then says how to read what the plugin injects and returns.'),
 })
 
 /**
@@ -84,7 +90,8 @@ export async function apply(ctx, config) {
     capsuleActive: config.capsuleActive,
     reviewEnabled: config.reviewEnabled,
     runPolicyEnabled: config.runPolicyEnabled !== false,
-    capsuleToolEnabled: config.capsuleEnabled !== false,
+    capsuleToolEnabled: config.capsuleEnabled !== false && config.capsuleMemoryEnabled !== false,
+    openVikingMemory: config.openVikingMemory === true,
   })
   ctx.provide('evimedCapabilities', capabilities, true)
   ctx.effect(() => registerSection(ctx, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text }))
@@ -108,7 +115,7 @@ export async function apply(ctx, config) {
   // the model loads it when the question is medical or asks what the
   // literature shows, and the control plane holds a reply to the method's
   // citation floor only when the run actually loaded it.
-  const childText = buildChildGuidanceText({ capsuleActive: config.capsuleActive, capsuleToolEnabled: config.capsuleEnabled !== false })
+  const childText = buildChildGuidanceText({ capsuleActive: config.capsuleActive, capsuleToolEnabled: config.capsuleEnabled !== false && config.capsuleMemoryEnabled !== false })
   ctx.effect(() => onSessionStart(ctx, (agent) => {
     if (!isSubagentSession(agent) || !agent?.ctx) return
     try {

@@ -6,9 +6,10 @@
  * Three readings of one project, none of them a counter of use:
  *
  *  - **the card** — the slots the project's facts were written under
- *    (`projectCard.mjs` in the domain: population, intervention, comparator,
- *    outcome, design, data source, stage, and the specialty), taken off the
- *    memories in force, by key and by nothing else;
+ *    (`projectCard.mjs` in the domain: field, goal, subject, material, stage and
+ *    constraints for any kind of work; the clinical elements and the extras of
+ *    other kinds of work only when they were stated), taken off the memories in
+ *    force, by key and by nothing else;
  *  - **what was done in it** — how many conversations each capability answered,
  *    as the researcher's own, in the capability's product name;
  *  - **the works** — the files its runs delivered, one per deliverable, by month.
@@ -29,7 +30,17 @@
  * @module projectOverview
  */
 
-import { PROJECT_CARD_SLOTS, artifactPresentation, capabilityTitle, deliverableIdOfPath, projectCardSlotOfKey } from "@evimed/domain";
+import {
+  PROJECT_CARD_EXTENSION_LABELS_ZH,
+  PROJECT_CARD_EXTENSION_ROWS_MAX,
+  PROJECT_CARD_SLOTS,
+  PROJECT_CARD_SLOT_LABELS_ZH,
+  artifactPresentation,
+  capabilityTitle,
+  deliverableIdOfPath,
+  projectCardExtensionOfKey,
+  projectCardSlotOfKey,
+} from "@evimed/domain";
 import { isResearcherRun } from "./agentRuns.mjs";
 import { dayOf, timeZoneOrDefault } from "./memoryTimeline.mjs";
 import { OPEN_DOMAIN_ANSWER_AGENT_ID } from "./specialistRouting.mjs";
@@ -51,11 +62,18 @@ function excerpt(value, max) {
 /**
  * The card: for each slot, the newest memory in force written under its key in this project.
  *
+ * The named slots come in their reading order (the general ones, then the clinical elements); the extras of other kinds of
+ * work (`project.ext.<name>`) follow, oldest first and no more than the card shows. A slot nobody stated is not in the answer —
+ * there is no row for a gap, and a project with nothing stated has an empty card.
+ *
  * A fact and a decision are both read — a researcher who decided on a design has decided the design — and where both exist
  * the later one is the card's. A sensitive record is never on a card, as it is never recalled.
  *
+ * Every named slot carries its label. An extra has one only for the names the instructions suggest; any other is shown as the
+ * sentence its memory states (`label` is null), because an English key cannot be turned into the researcher's word for it.
+ *
  * @param {readonly any[]} records the memories of one project
- * @returns {{ slot: string, recordId: string, text: string, updatedAt: string | null }[]}
+ * @returns {{ slot: string, label: string | null, recordId: string, text: string, updatedAt: string | null }[]}
  */
 export function projectCard(records) {
   /** @type {Map<string, any>} */
@@ -63,20 +81,30 @@ export function projectCard(records) {
   for (const record of records ?? []) {
     if (record?.scope !== "project" || record.status !== "active" || record.sensitive === true) continue;
     if (record.kind !== "project_fact" && record.kind !== "decision") continue;
-    const slot = projectCardSlotOfKey(record.key);
+    const extension = projectCardExtensionOfKey(record.key);
+    const slot = projectCardSlotOfKey(record.key) ?? (extension ? `ext.${extension}` : null);
     if (!slot || !String(record.value ?? record.summary ?? "").trim()) continue;
     const current = held.get(slot);
     if (!current || String(record.updatedAt ?? "") > String(current.updatedAt ?? "")) held.set(slot, record);
   }
-  return PROJECT_CARD_SLOTS.filter((slot) => held.has(slot)).map((slot) => {
+  /** @param {string} slot @param {string | null} label @param {string} text */
+  const row = (slot, label, text) => {
     const record = held.get(slot);
-    return {
-      slot,
-      recordId: String(record.id),
-      text: excerpt(record.value || record.summary, SLOT_TEXT_LIMIT),
-      updatedAt: record.updatedAt ?? record.createdAt ?? null,
-    };
+    return { slot, label, recordId: String(record.id), text: excerpt(text, SLOT_TEXT_LIMIT), updatedAt: record.updatedAt ?? record.createdAt ?? null };
+  };
+  const named = PROJECT_CARD_SLOTS.filter((slot) => held.has(slot)).map((slot) => {
+    const record = held.get(slot);
+    return row(slot, PROJECT_CARD_SLOT_LABELS_ZH[slot], record.value || record.summary);
   });
+  const extras = [...held.keys()].filter((slot) => slot.startsWith("ext."))
+    .sort((left, right) => String(held.get(left).updatedAt ?? "").localeCompare(String(held.get(right).updatedAt ?? "")) || left.localeCompare(right, "en"))
+    .slice(0, PROJECT_CARD_EXTENSION_ROWS_MAX)
+    .map((slot) => {
+      const record = held.get(slot);
+      const label = /** @type {Record<string, string>} */ (PROJECT_CARD_EXTENSION_LABELS_ZH)[slot.slice("ext.".length)] ?? null;
+      return row(slot, label, label ? record.value || record.summary : record.summary || record.value);
+    });
+  return [...named, ...extras];
 }
 
 /** What a capability is called to the researcher; null for an id this build has no name for (an id is not a name). @param {unknown} id */
@@ -87,14 +115,18 @@ export function capabilityName(id) {
 }
 
 /**
- * The runs that are the researcher's work in this project: their own turns, finished, of a capability they can name.
+ * The runs that are the researcher's work in this project: their own turns, finished, of a capability they can name — or, with
+ * `unnamed`, of none: a conversation no capability took (a typed-in turn the router had no line for) is still theirs, and
+ * `unnamed` says which of those have something to show.
  * @param {readonly any[]} runs @param {(agentId: string) => boolean} isInternal
+ * @param {(run: any) => boolean} [unnamed]
  */
-function ownRuns(runs, isInternal) {
+function ownRuns(runs, isInternal, unnamed = () => false) {
   return (runs ?? []).filter((run) => {
     if (!run?.id || run.deleted === true || run.status !== "succeeded" || !isResearcherRun(run)) return false;
     const agent = String(run.effectiveAgentId ?? run.agentId ?? "");
-    return Boolean(agent) && !isInternal(agent) && capabilityName(agent) !== null;
+    if (!agent) return unnamed(run);
+    return !isInternal(agent) && capabilityName(agent) !== null;
   });
 }
 
@@ -121,8 +153,11 @@ export function capabilityUse(runs, isInternal = () => false) {
  * One work per deliverable — the file a reader opens first (`artifactPresentation`'s rank) — so a package of a report, a
  * matrix and a summary is one line, named by the conversation it came out of.
  *
+ * A conversation with no capability behind it (an e-mail, a workbook, a deck, a script) has no package to open first: each file
+ * it produced is a work of its own (`outputFiles`, `runArtifacts.mjs`).
+ *
  * @param {readonly any[]} runs
- * @param {{ describe?: (run: any) => { artifactKinds?: Record<string, string>, artifactRoles?: Record<string, string> },
+ * @param {{ describe?: (run: any) => { artifactKinds?: Record<string, string>, artifactRoles?: Record<string, string>, outputFiles?: string[] },
  *   isInternal?: (agentId: string) => boolean, timeZone?: string | null, limit?: number }} [options]
  * @returns {{ month: string, items: { runId: string, title: string, path: string, name: string, at: string }[] }[]}
  */
@@ -131,10 +166,15 @@ export function projectWorks(runs, { describe = () => ({}), isInternal = () => f
   const format = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" });
   /** @type {{ runId: string, title: string, path: string, name: string, at: string }[]} */
   const works = [];
-  for (const run of ownRuns(runs, isInternal)) {
+  for (const run of ownRuns(runs, isInternal, (item) => Array.isArray(describe(item)?.outputFiles))) {
     const at = [run.finishedAt, run.startedAt, run.createdAt].find((value) => typeof value === "string" && Number.isFinite(Date.parse(value)));
     if (!at) continue;
-    const { artifactKinds = {}, artifactRoles = {} } = describe(run) ?? {};
+    const { artifactKinds = {}, artifactRoles = {}, outputFiles = null } = describe(run) ?? {};
+    const title = excerpt(run.title || run.question || capabilityName(run.effectiveAgentId ?? run.agentId) || capabilityName(OPEN_DOMAIN_ANSWER_AGENT_ID), 120);
+    if (Array.isArray(outputFiles)) {
+      for (const path of outputFiles) works.push({ runId: String(run.id), title, path, name: artifactPresentation(path, artifactRoles[path] ?? null).name, at: new Date(at).toISOString() });
+      continue;
+    }
     const paths = [...new Set([...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])].filter((path) => typeof path === "string" && path))];
     /** @type {Map<string, { path: string, rank: number, name: string }>} */
     const best = new Map();
@@ -148,7 +188,6 @@ export function projectWorks(runs, { describe = () => ({}), isInternal = () => f
         best.set(group, { path, rank: shown.rank, name: shown.name });
       }
     }
-    const title = excerpt(run.title || run.question || capabilityName(run.effectiveAgentId ?? run.agentId), 120);
     for (const work of [...best.values()].sort((left, right) => left.path.localeCompare(right.path, "en"))) {
       works.push({ runId: String(run.id), title, path: work.path, name: work.name, at: new Date(at).toISOString() });
     }

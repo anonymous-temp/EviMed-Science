@@ -287,3 +287,43 @@
 - id: web-runtime
   inject:
     - webStartup
+
+# The official OpenViking memory bundle (`@openviking/dsh-memory-plugin`, pinned
+# in deps-version.json `openviking.plugin`, not a byte of it edited) is installed
+# before this one, so this patch reaches the row its own patch inserts
+# (deploy/runtime-dsh/install-openviking-plugin.mjs `order`; profile-seed.mjs
+# keeps that order on every project volume). Left alone the row is ENABLED with
+# no configuration: the plugin then dials 127.0.0.1:1933, queues every message of
+# every conversation under the runtime's home, and mounts its tools and skills
+# for every account (booted so on the seeded kernel, 2026-10-13).
+#
+# So it is on only where the control plane gave this runtime a memory gateway:
+# EVIMED_MEMORY_GATEWAY_URL is that gateway's base for an account on the native
+# engine and empty for every other (apps/server/src/runtimeManager.mjs). Its
+# endpoint is this process's own loopback, where `evimed-memory-bridge` forwards
+# to that gateway with the workload token of the moment; the row names no key
+# and no identity. It waits on the bridge (`inject`), so it never dials before
+# something listens. The six settings are the measured ones; the bridge also
+# states them as the plugin's own environment, which outranks the files a
+# workspace may carry (`OPENVIKING_PLUGIN_SETTINGS` in @evimed/harness-port; a
+# test holds the two equal).
+- id: openviking-memory-runtime
+  disabled: !!js (process.env.EVIMED_MEMORY_GATEWAY_URL || '') === ''
+  inject:
+    - evimedMemoryBridge
+  config:
+    endpoint: !!js String('http://127.0.0.1:') + (process.env.EVIMED_MEMORY_BRIDGE_PORT || '19336')
+    autoRecall: false
+    captureToolResults: false
+    workspacePeer: false
+    skillCatalog: false
+    skipSubagentSessions: true
+    commitTokenThreshold: 20000
+- insert:
+    - id: evimed-memory-bridge
+      name: '@evimed/dsh-socket/plugins/memory-bridge'
+      config:
+        enabled: !!js (process.env.EVIMED_MEMORY_GATEWAY_URL || '') !== ''
+        gatewayUrl: !!js process.env.EVIMED_MEMORY_GATEWAY_URL || ''
+        tokenFile: !!js process.env.EVIMED_WORKLOAD_TOKEN_FILE || ''
+        port: !!js Number(process.env.EVIMED_MEMORY_BRIDGE_PORT || 19336)

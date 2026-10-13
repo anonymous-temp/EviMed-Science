@@ -16,7 +16,10 @@ import {
   onToolPolicy,
   onTurnEnd,
   parentSessionOf,
+  bundleSeamGaps,
   probeSeams,
+  readBytesAt,
+  readFileAt,
   registerAgentSection,
   registerAgentSkill,
   registerRightSidebarTab,
@@ -179,7 +182,7 @@ function fakeContext(overrides = {}) {
   const listeners = new Map();
   /** @type {Map<string, any>} */
   const services = new Map(Object.entries({
-    tools: {}, systemPrompt: {}, agents: {}, sessions: {}, subagents: {}, agentPresets: {}, shell: {},
+    tools: {}, systemPrompt: {}, agents: {}, sessions: { flush: async () => {} }, subagents: {}, agentPresets: {}, shell: {},
     storageDomain: {}, skills: {}, fs: {}, jobs: {}, workflowEngine: {}, commands: {},
     web: { registerSearchProvider: () => () => {}, registerFetchProvider: () => () => {} },
     ...overrides.services,
@@ -526,6 +529,26 @@ test("the startup probe crashes on a missing gate seam and degrades on a missing
   const degraded = await probeSeams(noStorage, { dshVersion: SEAMS.dsh });
   assert.deepEqual(degraded.fatal, []);
   assert.ok(degraded.degraded.some((line) => line.includes("ctx.storageDomain")));
+
+  // The awaited checkpoint a pinned bundle (the OpenViking memory plugin) drains its capture queue at: an enhancement's seam.
+  const noFlush = await probeSeams(fakeContext({ services: { sessions: {} } }), { dshVersion: SEAMS.dsh });
+  assert.deepEqual(noFlush.fatal, []);
+  assert.deepEqual(noFlush.degraded, ["optional seam missing: ctx.sessions.flush (session/flush)"]);
+  assert.ok(noFlush.checked.includes("bundle:sessions.flush"));
+});
+
+test("the agent half of what a pinned bundle reads is asked of the first agent, by the names the manifest gives", () => {
+  const agent = { inbox: { nextTurn: [], nextStep: [] }, session: { ownEvents: () => [] } };
+  assert.deepEqual(bundleSeamGaps(agent), []);
+  assert.deepEqual(bundleSeamGaps({ ...agent, inbox: { nextTurn: [] } }), ["agent.inbox.nextTurn/nextStep"]);
+  assert.deepEqual(bundleSeamGaps({ ...agent, session: {} }), ["session.ownEvents"]);
+  assert.deepEqual(bundleSeamGaps(undefined), ["agent.inbox.nextTurn/nextStep", "session.ownEvents"]);
+  const declared = SEAMS.bundleSeams["@openviking/dsh-memory-plugin"];
+  assert.ok(declared.agent.includes("inbox.nextTurn") && declared.agent.includes("inbox.nextStep"));
+  assert.ok(declared.session.includes("ownEvents"));
+  assert.deepEqual(declared.probed, ["sessions.flush", "agent.inbox.nextTurn", "agent.inbox.nextStep", "session.ownEvents"]);
+  assert.equal(declared.row, "openviking-memory-runtime");
+  assert.equal(SEAMS.events.sessionFlush, "session/flush");
 });
 
 test("a renamed event shows up as a silent seam, not as a passing probe", async () => {
@@ -749,4 +772,29 @@ test("a section and a skill registered for one agent go through that agent's own
     resourceBase: { kind: "directory", path: "/skills/demo" },
   });
   assert.equal(skills[1].resourceBase, undefined);
+});
+
+test("a file's bytes are read through the kernel's own fs service, bounded by the kernel, and absence is null", async () => {
+  /** @type {any[]} */
+  const calls = [];
+  const fs = {
+    resolve: async (/** @type {string} */ relative, /** @type {any} */ options) => `${options.cwd}/${relative}`,
+    readText: async (/** @type {string} */ target) => {
+      // The kernel refuses a binary file to its text reader: that is why the bytes have a door of their own.
+      if (target.endsWith(".docx")) throw new Error("FS_BINARY_FILE");
+      return "text";
+    },
+    readBytes: async (/** @type {string} */ target, /** @type {any} */ _signal, /** @type {number} */ maxBytes) => {
+      calls.push({ target, maxBytes });
+      if (target.endsWith("missing.docx")) throw new Error("FS_NOT_FOUND");
+      return Uint8Array.from([0x50, 0x4b, 3, 4]);
+    },
+  };
+  const ctx = { get: (/** @type {string} */ name) => (name === "fs" ? fs : undefined) };
+  assert.equal(await readFileAt(ctx, "/w", "a.docx"), null, "the text reader says nothing about a binary file");
+  assert.deepEqual([...(await readBytesAt(ctx, "/w", "a.docx", 1024) ?? [])], [0x50, 0x4b, 3, 4]);
+  assert.deepEqual(calls, [{ target: "/w/a.docx", maxBytes: 1024 }], "the bound is the kernel's: it is handed the cap");
+  assert.equal(await readBytesAt(ctx, "/w", "missing.docx", 1024), null);
+  assert.equal(await readBytesAt({ get: () => undefined }, "/w", "a.docx", 1024), null, "no fs service, no bytes");
+  assert.equal(await readBytesAt({ get: () => ({ resolve: fs.resolve }) }, "/w", "a.docx", 1024), null, "a kernel without the bytes door is not an error");
 });

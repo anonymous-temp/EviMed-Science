@@ -667,6 +667,118 @@ test("fresh files without witnessed workflow tools cannot silently bypass an una
     "the one gate notice a researcher could see is Chinese now (2026-09-16 walk, U4)");
 });
 
+test("an ordinary turn that wrote a file is not told its acceptance cannot be confirmed because the session holds another turn's projection", async (t) => {
+  // GA16 (2026-10-12): the second turn of a conversation found the first turn's run-state projection, could not attribute it
+  // to itself, and — having written a file with the write tool — went out 「未核验」 with 「无法确认交付是否通过验收」. That is
+  // the rule for a turn that planned a deliverable. This one planned nothing: its file is what it was asked for.
+  const events = structuredClone(fixture.events.filter((event) => event.seq >= 137));
+  const start = inputs[1].time;
+  const written = "# 周报\n";
+  events.push({ type: "tool/call", seq: 145, time: start + 10, data: { turn: 2, step: 1, callId: "call_145", name: "write", arguments: { file_path: "weekly.md", content: written } } });
+  events.push({ type: "tool/result", seq: 146, time: start + 15, data: { turn: 2, step: 1,
+    message: { source: { callId: "call_145" }, content: [{ type: "tool-result", content: [{ type: "text", text: kernelToolText({ ok: true }) }] }] } } });
+  const f = await setup(t, events.sort((a, b) => a.seq - b.seq));
+  await writeFile(path.join(f.project.workspaceDir, "weekly.md"), written);
+  await utimes(path.join(f.project.workspaceDir, "weekly.md"), new Date(start + 50), new Date(start + 50));
+  const answerLine = { id: "open-domain-answer", version: "1.0.0", runtimeAgent: "evimed-open-domain-answer", completionChecks: ["skillsLoaded"], outputs: [] };
+  f.store.agentRegistry = Promise.resolve(new Map([["open-domain-answer", answerLine]]));
+  await mkdir(path.join(f.project.workspaceDir, ".evimed-run", "sessions"), { recursive: true });
+  await mkdir(path.join(f.project.workspaceDir, ".evimed-run", "sessions", fixture.sessionId), { recursive: true });
+  await writeFile(path.join(f.project.workspaceDir, ".evimed-run", "sessions", fixture.sessionId, "state.json"), JSON.stringify({
+    formatVersion: 1, runId: "native_an_earlier_turn_of_this_session", sessionId: fixture.sessionId,
+    plan: { revision: 1, items: [{ id: "old", status: "accepted", attempts: 1 }] }, qualityNotices: [], gateRuns: [], subagents: [],
+  }));
+  await f.adopt(async () => ({ effectiveAgentId: "open-domain-answer", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-open-domain-answer" }));
+  const run = (await f.runs())[0];
+  assert.equal(run.status, "succeeded", noticeTexts(run).join(" | "));
+  assert.deepEqual(run.artifacts, ["weekly.md"]);
+  assert.equal(run.verification ?? null, null, "a file nobody planned is not an unaccepted package");
+  assert.ok(!noticeTexts(run).some((notice) => notice.includes("无法确认交付是否通过验收")), noticeTexts(run).join(" | "));
+  // The control: a turn a capability owes files to is still held to it (the test above this one's neighbour).
+  const owed = await setup(t, events.sort((a, b) => a.seq - b.seq));
+  await writeFile(path.join(owed.project.workspaceDir, "weekly.md"), written);
+  await utimes(path.join(owed.project.workspaceDir, "weekly.md"), new Date(start + 50), new Date(start + 50));
+  owed.store.agentRegistry = Promise.resolve(new Map([["clinical-evidence-synthesis", { id: "clinical-evidence-synthesis", version: "1.0.0", runtimeAgent: "evimed-clinical-evidence-synthesis",
+    completionChecks: ["requiredOutputsExist"], outputs: [{ path: "report.md", required: true }] }]]));
+  await mkdir(path.join(owed.project.workspaceDir, ".evimed-run", "sessions", fixture.sessionId), { recursive: true });
+  await writeFile(path.join(owed.project.workspaceDir, ".evimed-run", "sessions", fixture.sessionId, "state.json"), JSON.stringify({
+    formatVersion: 1, runId: "native_an_earlier_turn_of_this_session", sessionId: fixture.sessionId, plan: { revision: 1, items: [{ id: "old", status: "accepted", attempts: 1 }] }, qualityNotices: [], gateRuns: [], subagents: [],
+  }));
+  await owed.adopt(async () => ({ effectiveAgentId: "clinical-evidence-synthesis", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis" }));
+  const held = (await owed.runs())[0];
+  assert.ok(noticeTexts(held).some((notice) => notice.includes("无法确认交付是否通过验收")) || held.verification === "unverified" || held.status === "failed",
+    `a capability's turn is judged as before: ${held.status} ${held.verification} ${noticeTexts(held).join(" | ")}`);
+});
+
+/**
+ * The turn of the fixture's second input as it goes when the model plans an ordinary file with `file-deliverable` and submits it:
+ * the plan names no capability and no clarification, and the run-side gate accepted it.
+ */
+function ordinaryFilePlanEvents({ submit = true } = {}) {
+  const events = structuredClone(fixture.events.filter((event) => event.seq >= 137));
+  const start = inputs[1].time;
+  const item = { id: "rename-script", contractKind: "file-deliverable", capability: "", title: "rename.py", dependsOn: [] };
+  const pairs = [];
+  const add = (seq, name, args, result, at) => {
+    const callId = `call_${seq}`;
+    pairs.push({ type: "tool/call", seq, time: at, data: { turn: 2, step: 1, callId, name, arguments: args } });
+    pairs.push({ type: "tool/result", seq: seq + 1, time: at + 5, data: { turn: 2, step: 1,
+      message: { source: { callId }, content: [{ type: "tool-result", content: [{ type: "text", text: kernelToolText(result) }] }] },
+    } });
+  };
+  add(145, "evimed_plan", { action: "write", clarifications: [], deliverables: [{ id: item.id, contractKind: item.contractKind, title: item.title }] },
+    { ok: true, data: { revision: 1, runId: "ordinary_kernel_owner", deliverables: [{ ...item, status: "planned", attempts: 0 }] } }, start + 10);
+  if (submit) {
+    add(150, "evimed_submit_deliverable", { deliverableId: item.id },
+      { ok: true, data: { deliverableId: item.id, contractKind: "file-deliverable", notices: [] } }, start + 100);
+  }
+  return [...events, ...pairs].sort((a, b) => a.seq - b.seq);
+}
+
+test("an ordinary file planned with file-deliverable is no plan to the ledger: no acceptance is owed, nothing is marked, and a bound conversation is not asked for its capability's files", async (t) => {
+  // GA02 / GA16 (2026-10-12): the plan of a rename script used to be unwritable; once it can be written, the control plane
+  // must not read it as a professional workflow — a turn "planned and never submitted" is marked unverified, and in a
+  // conversation bound to a capability the plan used to make the turn owe that capability's required files.
+  for (const submit of [true, false]) {
+    const f = await setup(t, ordinaryFilePlanEvents({ submit }));
+    const start = inputs[1].time;
+    await mkdir(path.join(f.project.workspaceDir, "deliverables", "rename-script"), { recursive: true });
+    const script = path.join(f.project.workspaceDir, "deliverables", "rename-script", "rename.py");
+    await writeFile(script, "import sys\nprint(sys.argv)\n");
+    await utimes(script, new Date(start + 50), new Date(start + 50));
+    f.store.agentRegistry = Promise.resolve(new Map([
+      ["open-domain-answer", { id: "open-domain-answer", version: "1.0.0", runtimeAgent: "evimed-open-domain-answer", completionChecks: [], outputs: [] }],
+      ["clinical-evidence-synthesis", { id: "clinical-evidence-synthesis", version: "1.0.0", runtimeAgent: "evimed-clinical-evidence-synthesis",
+        completionChecks: ["requiredOutputsExist"], outputs: [{ path: "report.md", required: true }] }],
+    ]));
+    await f.adopt(async () => ({ effectiveAgentId: "open-domain-answer", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-open-domain-answer" }));
+    const ordinary = (await f.runs()).find((item) => item.nativeTurn?.userSeq === inputs[1].seq);
+    assert.ok(ordinary, "the turn was adopted");
+    assert.equal(ordinary.status, "succeeded", noticeTexts(ordinary).join(" | "));
+    assert.equal(ordinary.verification ?? null, null, `a file nobody asked to have verified is not marked (submitted: ${submit})`);
+    assert.deepEqual(ordinary.artifacts, ["deliverables/rename-script/rename.py"]);
+    assert.deepEqual(ordinary.outputFiles, ["deliverables/rename-script/rename.py"]);
+    assert.equal(ordinary.nativeWorkflow?.plan?.items?.length ?? 0, 0, "the proof holds no ordinary file as a workflow item");
+    assert.deepEqual(ordinary.nativeWorkflow?.submissions ?? [], []);
+    assert.ok(!noticeTexts(ordinary).some((notice) => /无法确认交付|从未提交|没有一件通过/.test(notice)), noticeTexts(ordinary).join(" | "));
+  }
+
+  // The same turn in a conversation bound to a capability that owes files: an answer, and the person's file is theirs.
+  const bound = await setup(t, ordinaryFilePlanEvents({ submit: false }));
+  const start = inputs[1].time;
+  const file = path.join(bound.project.workspaceDir, "weekly.md");
+  await writeFile(file, "# 周报\n");
+  await utimes(file, new Date(start + 50), new Date(start + 50));
+  bound.store.agentRegistry = Promise.resolve(new Map([["clinical-evidence-synthesis", { id: "clinical-evidence-synthesis", version: "1.0.0",
+    runtimeAgent: "evimed-clinical-evidence-synthesis", completionChecks: ["requiredOutputsExist"], outputs: [{ path: "report.md", required: true }] }]]));
+  await bound.adopt(async () => ({ effectiveAgentId: "clinical-evidence-synthesis", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis" }));
+  const turn = (await bound.runs()).find((item) => item.nativeTurn?.userSeq === inputs[1].seq);
+  assert.ok(turn, "the turn was adopted");
+  assert.equal(turn.status, "succeeded", `the capability's required files are not owed for a plan of files: ${turn.errorCode} ${noticeTexts(turn).join(" | ")}`);
+  assert.equal(turn.errorCode ?? null, null);
+  assert.deepEqual(turn.outputFiles, ["weekly.md"], "what it wrote is the person's own file");
+});
+
 test("a current native receipt with a legacy basename survives offline recovery from the actual nested path", async (t) => {
   const f = await setupWorkflow(t, true, false);
   const rootFile = path.join(f.project.workspaceDir, "report.md");
