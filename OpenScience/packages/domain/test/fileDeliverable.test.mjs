@@ -9,6 +9,7 @@ import {
   FILE_DELIVERABLE_KIND,
   GATE_CHECK_IDS,
   artifactPresentation,
+  compareArtifacts,
   contractKindLabel,
   deliverableReviewTier,
   fileFormatIssues,
@@ -180,4 +181,8 @@ test("a script the conversation was asked for is a draft the reader opens; a cap
   assert.equal(artifactPresentation("rename.py", "draft").readable, true);
   assert.equal(artifactPresentation("rename.py", "report").readable, false);
   assert.equal(artifactPresentation("revision-notes.md", "draft").role, "work");
+  // …and it comes after the documents, workbooks and pictures beside it, whose builder it may be.
+  const refs = [{ path: "make_budget.py", role: "draft" }, { path: "预算表.xlsx", role: "data" }, { path: "chart.png", role: "figure" }, { path: "纪要.docx", role: "document" }];
+  assert.deepEqual([...refs].sort(compareArtifacts).map((ref) => ref.path), ["纪要.docx", "预算表.xlsx", "chart.png", "make_budget.py"]);
+  assert.deepEqual([{ path: "rename.py", role: "draft" }].sort(compareArtifacts).map((ref) => ref.path), ["rename.py"], "alone, it is the whole answer");
 });

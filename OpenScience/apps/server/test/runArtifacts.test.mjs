@@ -129,8 +129,10 @@ test("an ordinary conversation's files are its outputs unless they sit where scr
   for (const path of ["tmp/a.py", "work/b.md", "__pycache__/c.pyc", "node_modules/x/y.js", "data/in.csv", "knowledge-base/doc.md", "task-plan.json", "delivery-receipt.json", ".evimed-run/state.json", "deliverables/deck/work/tmp.py"]) assert.equal(kinds[path], "work", path);
   assert.equal(described?.outputFiles?.length, 5);
   assert.deepEqual(described?.artifactCounts, { deliverable: 5, revisionNotes: 0, work: 10, superseded: 0 });
-  // The reading order puts what a person opens first: documents and drafts, then data, then pictures.
-  assert.equal(described?.outputFiles?.at(-1), "chart.png");
+  // The reading order puts what a person opens first: documents, then data, then pictures — and the script that may have built
+  // them last, because the helper that wrote a workbook is not what the person opens first.
+  assert.deepEqual(described?.outputFiles, ["deliverables/deck/商业计划.pptx", "道歉邮件.docx", "output/sales-summary.xlsx", "chart.png", "rename.py"]);
+  assert.equal(described?.outputFiles?.at(-1), "rename.py");
   // The roles: a script the person asked for is a draft they open; nothing else changes.
   const roles = describeRunArtifactRoles(run, () => undefined, described?.outputFiles);
   assert.equal(roles["rename.py"], "draft");

@@ -64,6 +64,17 @@ test('the cards are the run\'s files once it finished — accepted or not, each 
   assert.equal(hasReport({ artifacts: ['a/screening.xlsx'] }), false);
 });
 
+test('an ordinary conversation hands over its script, workbook and document; a capability\'s scripts stay in the file tree', () => {
+  // GA16 (2026-10-12): the control plane declares `draft` for a script the person asked for; without a declaration a script is work.
+  const ordinary = { runId: 'run-9', sessionId: 'session-a', state: 'succeeded', artifacts: ['rename.py', 'output/sales-summary.xlsx', '道歉邮件.docx', 'tmp/helper.py'],
+    artifactRoles: { 'rename.py': 'draft', 'output/sales-summary.xlsx': 'data', '道歉邮件.docx': 'document', 'tmp/helper.py': 'work' } };
+  const model = /** @type {any} */ (fileCardsModel(ordinary));
+  assert.deepEqual(model.files.map((/** @type {any} */ file) => file.path).sort(), ['output/sales-summary.xlsx', 'rename.py', '道歉邮件.docx']);
+  assert.equal(model.files.some((/** @type {any} */ file) => file.path === 'tmp/helper.py'), false, 'a helper script that is not an output is not a card');
+  const capability = { ...ordinary, artifacts: ['deliverables/mr/fit.py'], artifactRoles: { 'deliverables/mr/fit.py': 'work' } };
+  assert.equal(fileCardsModel(capability), null);
+});
+
 test('a completed reporting checklist is never taken for the report: it follows the section it lists', () => {
   // manuscript-support delivers `manuscript-section.md` beside its CONSORT
   // checklist; only the checklist's name contains `report`.

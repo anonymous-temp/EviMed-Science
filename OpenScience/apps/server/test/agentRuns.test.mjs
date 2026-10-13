@@ -8678,9 +8678,8 @@ test("a Word file a script wrote through bash, and a file a redirect wrote, are 
 
     const described = store.withArtifactKinds(run);
     assert.deepEqual(described.artifactCounts, { deliverable: 3, revisionNotes: 0, work: 0, superseded: 0 });
-    // The order a reader looks for them (`compareArtifacts`): documents and drafts before data.
-    assert.deepEqual([...described.outputFiles.slice(0, 2)].sort(), ["rename.py", "道歉邮件.docx"].sort());
-    assert.equal(described.outputFiles[2], "output/sales-summary.xlsx");
+    // The order a reader looks for them (`compareArtifacts`): documents, workbooks, then the script that may have built them.
+    assert.deepEqual(described.outputFiles, ["道歉邮件.docx", "output/sales-summary.xlsx", "rename.py"]);
     // The script is shown to the person who asked for it; a capability's scripts are not.
     assert.equal(described.artifactRoles["rename.py"], "draft");
     assert.equal(described.artifactRoles["output/sales-summary.xlsx"], "data");
