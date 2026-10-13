@@ -6,6 +6,10 @@ import { knownErrorCodeMessage } from "@evimed/domain";
 import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import type { SourceCounts, SourceDisplay, SourceKind, SourceRecord } from "@/lib/sourceClient";
+import statusCompiled from "@/components/sources/knowledgeFixtures/status-compiled.json";
+import treeMixed from "@/components/sources/knowledgeFixtures/tree-mixed.json";
+import graphKgMedical from "@/components/sources/knowledgeFixtures/graph-kg-medical.json";
+import graphWikiMedical from "@/components/sources/knowledgeFixtures/graph-wiki-medical.json";
 import { SourcesPage } from "./SourcesPage";
 
 const mocks = vi.hoisted(() => ({
@@ -15,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   browseOpenList: vi.fn(), importOpenListSource: vi.fn(), listSourceFolders: vi.fn(), registerSourceFolder: vi.fn(), syncSourceFolder: vi.fn(), setSourceFolderStatus: vi.fn(),
   listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), addToLibrary: vi.fn(), removeFromLibrary: vi.fn(),
   pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), downloadArtifact: vi.fn(), downloadKnowledgeVault: vi.fn(), listProjectOutputs: vi.fn(), getSourceComposition: vi.fn(),
-  listGeoProjects: vi.fn(), getVcrHome: vi.fn(), requestKnowledgeCompile: vi.fn(),
+  listGeoProjects: vi.fn(), getVcrHome: vi.fn(), requestKnowledgeCompile: vi.fn(), getKnowledgeStatus: vi.fn(), getKnowledgeTree: vi.fn(), getKnowledgeGraph: vi.fn(),
   toastSuccess: vi.fn(), toastError: vi.fn(),
 }));
 const context = vi.hoisted(() => ({ projectId: "default", features: { openList: true, geo: true, vcr: true } as Record<string, unknown> | undefined }));
@@ -25,7 +29,8 @@ const context = vi.hoisted(() => ({ projectId: "default", features: { openList: 
 vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), ...Object.fromEntries(
   ["listSources", "retrySource", "removeSource", "refetchSource", "addSourceLink", "addSourceNote", "getSourceNote", "saveSourceNote", "getSourceUnderstanding",
     "browseOpenList", "importOpenListSource", "listSourceFolders", "registerSourceFolder", "syncSourceFolder", "setSourceFolderStatus",
-    "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary", "requestKnowledgeCompile"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
+    "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary", "requestKnowledgeCompile",
+    "getKnowledgeStatus", "getKnowledgeTree", "getKnowledgeGraph"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
 vi.mock("@/lib/knowledgeBaseClient", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadKnowledgeVault: mocks.downloadKnowledgeVault, listProjectOutputs: mocks.listProjectOutputs, getSourceComposition: mocks.getSourceComposition }));
 vi.mock("@/lib/backend", () => ({ pickFiles: mocks.pickFiles, uploadFilesToWorkspace: mocks.uploadFilesToWorkspace }));
 vi.mock("@/lib/artifactFile", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadArtifact: mocks.downloadArtifact }));
@@ -131,6 +136,9 @@ describe("知识库", () => {
       projects: [{ id: "default", name: "我的研究" }, { id: "paper-1", name: "疳证 Meta 文献检索" }, { id: "study-1", name: "二甲双胍外部对照研究" }, { id: "geo-1", name: "波立维" }],
     });
     mocks.listSources.mockResolvedValue(listing([guideline, sheet]));
+    mocks.getKnowledgeStatus.mockResolvedValue(statusCompiled);
+    mocks.getKnowledgeTree.mockResolvedValue(treeMixed);
+    mocks.getKnowledgeGraph.mockImplementation(async (_project: string, kind: string) => (kind === "kg" ? graphKgMedical : graphWikiMedical));
     mocks.listDuplicateCandidates.mockResolvedValue({ items: [], scanned: 0, truncated: false });
     mocks.getSourceUnderstanding.mockResolvedValue(understanding());
     mocks.listGeoProjects.mockResolvedValue([{ projectId: "geo-1" }]);
@@ -401,18 +409,68 @@ describe("知识库", () => {
       expect(within(chips).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部11", "文献与指南4", "数据表2", "文档2", "网页1", "笔记1", "图片1"]);
     });
 
-    it("list 知识页 as a type of its own and offer 重新整理 on it only where the deployment compiles them", async () => {
+    it("list 知识页 as a type of its own, with the compile's state under the header and 重新整理 where the deployment compiles them", async () => {
       context.features = { knowledgePages: true };
       mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
-      mocks.requestKnowledgeCompile.mockResolvedValue({ enabled: true, pages: 2, pending: 1 });
+      mocks.requestKnowledgeCompile.mockResolvedValue({ ...statusCompiled, state: "compiling", stage: { tree: "wiki", step: "wiki", task: null, status: "running", startedAt: "2026-10-13T12:00:00Z" } });
       renderPage();
       const chips = await screen.findByRole("group", { name: "资料类型" });
       expect(within(chips).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部3", "文献与指南1", "知识页2"]);
-      expect(screen.queryByRole("button", { name: "重新整理" })).not.toBeInTheDocument();
-      await userEvent.click(within(chips).getByRole("button", { name: /知识页/ }));
-      await userEvent.click(await screen.findByRole("button", { name: "重新整理" }));
+      const line = await screen.findByRole("status", { name: "知识页的整理情况" });
+      expect(line).toHaveTextContent(/已整理 · 上次整理于 .+ · 13 页，53 个实体/);
+      await userEvent.click(within(line).getByRole("button", { name: "重新整理" }));
       await waitFor(() => expect(mocks.requestKnowledgeCompile).toHaveBeenCalledWith("default"));
       await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
+      expect(await screen.findByRole("status", { name: "知识页的整理情况" })).toHaveTextContent("整理中 · 正在整理页面");
+      expect(screen.queryByRole("button", { name: "重新整理" })).not.toBeInTheDocument();
+    });
+
+    it("say the page limit and a project short of documents in plain words, and a deployment without compiling says nothing", async () => {
+      context.features = { knowledgePages: true };
+      mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "page_limit" });
+      renderPage();
+      expect(await screen.findByRole("status", { name: "知识页的整理情况" })).toHaveTextContent("页数已到上限，不再整理新的内容");
+      cleanup();
+      mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "below_threshold", readable: 1, minSources: 3, pages: 0 });
+      renderPage();
+      expect(await screen.findByRole("status", { name: "知识页的整理情况" })).toHaveTextContent("资料不足 · 再放入 2 份资料");
+      cleanup();
+      context.features = { openList: true };
+      renderPage();
+      await screen.findByText(guideline.display.title);
+      expect(screen.queryByRole("status", { name: "知识页的整理情况" })).not.toBeInTheDocument();
+    });
+
+    it("browse the compiled files as a tree by type on the 知识页 filter, each opening in the reader, and fall back to the list where the tree cannot be read", async () => {
+      context.features = { knowledgePages: true };
+      mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
+      renderPage("/app/files?kind=wiki");
+      const tree = await screen.findByRole("tablist", { name: "知识页的视图" });
+      expect(within(tree).getByRole("tab", { name: "页面" })).toHaveAttribute("aria-selected", "true");
+      expect(await screen.findByText("概念")).toBeInTheDocument();
+      const opener = (await screen.findAllByRole("link", { name: "盘点差异率" }))[0]!;
+      expect(opener).toHaveAttribute("href", expect.stringMatching(/^\/app\/files\/src_[a-f0-9]{32}\?kind=wiki$/));
+      expect(screen.getAllByText("来源已更改").length).toBeGreaterThanOrEqual(3);
+      cleanup();
+      mocks.getKnowledgeTree.mockRejectedValue(new Error("down"));
+      renderPage("/app/files?kind=wiki");
+      expect(await screen.findByText(/知识页的目录暂时没能读取/)).toBeInTheDocument();
+      expect(screen.getByText(guideline.display.title)).toBeInTheDocument();
+    });
+
+    it("switch the 知识页 filter to its graph, the pages or the entities, and keep that in the address", async () => {
+      context.features = { knowledgePages: true };
+      mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
+      renderPage("/app/files?kind=wiki");
+      await userEvent.click(await screen.findByRole("tab", { name: "图谱" }));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?kind=wiki&view=graph"));
+      await waitFor(() => expect(mocks.getKnowledgeGraph).toHaveBeenCalledWith("default", "wiki"));
+      await userEvent.click(await screen.findByRole("button", { name: "实体和关系" }));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?kind=wiki&view=graph&graph=kg"));
+      await waitFor(() => expect(mocks.getKnowledgeGraph).toHaveBeenCalledWith("default", "kg"));
+      // The graph is also a list, and a mark of it opens its file in the reader.
+      const row = await screen.findByRole("link", { name: "2014 年《柳叶刀》新型口服抗凝药荟萃分析" });
+      expect(row).toHaveAttribute("href", "/app/files/src_c52267a68a26fb6c418a9e7a990cc89a?kind=wiki&view=graph&graph=kg");
     });
 
     it("do not offer 重新整理 where the deployment does not compile them", async () => {

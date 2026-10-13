@@ -10,6 +10,7 @@ import type { SourceKind, SourceScope } from "./sourceClient";
  * ```
  * /app/files?scope=<project id | shared>&kind=<kind>&q=<text>
  * /app/files?scope=<project id>&view=outputs&q=<text>
+ * /app/files?scope=<project id>&kind=wiki&view=graph&graph=<wiki | kg>&focus=<mark>&depth=<1-3>
  * /app/files/<source id>?<the same three>&tab=<content | original>&page=<n>
  * ```
  *
@@ -27,9 +28,18 @@ export interface KnowledgeListState {
   scope: string | null;
   kind: SourceKind | null;
   q: string;
-  /** `outputs`: the files the project's conversations delivered, in place of its documents. Absent for the documents. */
-  view?: "outputs" | null;
+  /** `outputs`: the files the project's conversations delivered, in place of its documents. `graph`: the 知识页 as a picture
+   *  (it is always the 知识页 type). Absent for the documents. */
+  view?: "outputs" | "graph" | null;
+  /** The graph's kind: the pages and their links (`wiki`, the default) or the entities and their relations (`kg`). */
+  graph?: "kg" | null;
+  /** The mark the graph is centred on, and how many steps from it it shows. */
+  focus?: string | null;
+  depth?: number | null;
 }
+
+/** How far from the focused mark the graph reaches. */
+export const GRAPH_DEPTHS = [1, 2, 3] as const;
 
 const KIND_IDS: readonly string[] = SOURCE_KINDS.map((kind) => kind.id);
 const MAX_SCOPE_CHARS = 200;
@@ -42,11 +52,18 @@ export function readListState(params: URLSearchParams): KnowledgeListState {
   const scope = (params.get("scope") ?? "").trim();
   const kind = params.get("kind") ?? "";
   const outputs = params.get("view") === "outputs" && scope !== SHARED_SCOPE;
+  const graph = params.get("view") === "graph" && scope !== SHARED_SCOPE;
+  const focus = (params.get("focus") ?? "").trim();
+  const depth = Number(params.get("depth"));
   return {
     scope: scope && scope.length <= MAX_SCOPE_CHARS ? scope : null,
-    kind: !outputs && KIND_IDS.includes(kind) ? (kind as SourceKind) : null,
+    kind: graph ? "wiki" : !outputs && KIND_IDS.includes(kind) ? (kind as SourceKind) : null,
     q: (params.get("q") ?? "").trim().slice(0, MAX_QUERY_CHARS),
     ...(outputs ? { view: "outputs" as const } : {}),
+    ...(graph ? { view: "graph" as const } : {}),
+    ...(graph && params.get("graph") === "kg" ? { graph: "kg" as const } : {}),
+    ...(graph && focus && focus.length <= MAX_SCOPE_CHARS ? { focus } : {}),
+    ...(graph && focus && GRAPH_DEPTHS.some((entry) => entry === depth) ? { depth } : {}),
   };
 }
 
@@ -55,7 +72,15 @@ export function listParams(state: KnowledgeListState): URLSearchParams {
   const params = new URLSearchParams();
   if (state.scope) params.set("scope", state.scope);
   if (state.view === "outputs") params.set("view", "outputs");
-  else if (state.kind) params.set("kind", state.kind);
+  else if (state.view === "graph") {
+    params.set("kind", "wiki");
+    params.set("view", "graph");
+    if (state.graph === "kg") params.set("graph", "kg");
+    if (state.focus) {
+      params.set("focus", state.focus);
+      if (state.depth) params.set("depth", String(state.depth));
+    }
+  } else if (state.kind) params.set("kind", state.kind);
   if (state.q) params.set("q", state.q);
   return params;
 }

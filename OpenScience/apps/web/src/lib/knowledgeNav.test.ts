@@ -30,6 +30,20 @@ describe("the knowledge base's address", () => {
     expect(readerPath("src_abc", { scope: "paper-1", kind: null, q: "", view: "outputs" })).toBe("/app/files/src_abc?scope=paper-1&view=outputs");
   });
 
+  it("writes the graph as a view of the 知识页, with the mark in focus and how far it reaches, and reads it back as untrusted", () => {
+    expect(listPath({ scope: "paper-1", kind: "wiki", q: "", view: "graph" })).toBe("/app/files?scope=paper-1&kind=wiki&view=graph");
+    expect(listPath({ scope: null, kind: "wiki", q: "", view: "graph", graph: "kg", focus: "trial-rocket-af", depth: 2 }))
+      .toBe("/app/files?kind=wiki&view=graph&graph=kg&focus=trial-rocket-af&depth=2");
+    expect(readListState(params("view=graph&graph=kg&focus=trial-rocket-af&depth=2")))
+      .toEqual({ scope: null, kind: "wiki", q: "", view: "graph", graph: "kg", focus: "trial-rocket-af", depth: 2 });
+    // The graph is always of the 知识页, wiki unless said otherwise, and a depth means something only beside a focus.
+    expect(readListState(params("view=graph&kind=table&graph=odd&depth=2"))).toEqual({ scope: null, kind: "wiki", q: "", view: "graph" });
+    expect(readListState(params("view=graph&focus=a&depth=9"))).toEqual({ scope: null, kind: "wiki", q: "", view: "graph", focus: "a" });
+    // The shared documents have no pages to draw.
+    expect(readListState(params("scope=shared&view=graph"))).toEqual({ scope: "shared", kind: null, q: "" });
+    expect(readerPath("src_abc", { scope: null, kind: "wiki", q: "", view: "graph", graph: "kg", focus: "x", depth: 3 })).toBe("/app/files/src_abc?kind=wiki&view=graph&graph=kg&focus=x&depth=3");
+  });
+
   it("puts a document at its own address, carrying the list it was opened from and what it shows", () => {
     expect(readerPath("src_abc", none)).toBe("/app/files/src_abc");
     expect(readerPath("src_abc", { scope: "shared", kind: "literature", q: "共识" }, { tab: "original", page: 5 }))
