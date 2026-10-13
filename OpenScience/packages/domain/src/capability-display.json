@@ -25,7 +25,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-27"
+        "lastRunAt": "2026-09-27",
+        "runs": 2,
+        "delivered": 1,
+        "typicalMinutes": 23
       }
     },
     "bibliometric-analysis": {
@@ -49,7 +52,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-09"
+        "lastRunAt": "2026-09-09",
+        "runs": 3,
+        "delivered": 3,
+        "typicalMinutes": 21
       }
     },
     "clinical-evidence-synthesis": {
@@ -76,7 +82,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-28"
+        "lastRunAt": "2026-09-28",
+        "runs": 2,
+        "delivered": 1,
+        "typicalMinutes": 27
       }
     },
     "comprehensive-drug-evaluation": {
@@ -101,7 +110,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-28"
+        "lastRunAt": "2026-09-28",
+        "runs": 2,
+        "delivered": 2,
+        "typicalMinutes": 20
       }
     },
     "dataset-research-scoping": {
@@ -150,7 +162,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-27"
+        "lastRunAt": "2026-09-27",
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 21
       }
     },
     "evidence-appraisal": {
@@ -175,7 +190,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-10"
+        "lastRunAt": "2026-09-10",
+        "runs": 4,
+        "delivered": 3,
+        "typicalMinutes": 15
       }
     },
     "gene-expression-analysis": {
@@ -229,7 +247,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-25"
+        "lastRunAt": "2026-09-25",
+        "runs": 5,
+        "delivered": 2,
+        "typicalMinutes": 16
       }
     },
     "geo-insight": {
@@ -257,7 +278,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-28"
+        "lastRunAt": "2026-09-28",
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 38
       }
     },
     "geo-proposal": {
@@ -282,7 +306,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-28"
+        "lastRunAt": "2026-09-28",
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 14
       }
     },
     "geo-strategy": {
@@ -308,7 +335,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-28"
+        "lastRunAt": "2026-09-28",
+        "runs": 2,
+        "delivered": 2,
+        "typicalMinutes": 19
       }
     },
     "manuscript-support": {
@@ -333,7 +363,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-09"
+        "lastRunAt": "2026-09-09",
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 17
       }
     },
     "mendelian-randomization": {
@@ -358,7 +391,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-28"
+        "lastRunAt": "2026-09-28",
+        "runs": 5,
+        "delivered": 3,
+        "typicalMinutes": 60
       }
     },
     "meta-analysis": {
@@ -383,7 +419,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-28"
+        "lastRunAt": "2026-09-28",
+        "runs": 5,
+        "delivered": 4,
+        "typicalMinutes": 60
       }
     },
     "off-label-analysis": {
@@ -408,7 +447,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-09"
+        "lastRunAt": "2026-09-09",
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 17
       }
     },
     "peer-review": {
@@ -432,7 +474,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-27"
+        "lastRunAt": "2026-09-27",
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 19
       }
     },
     "research-grant-development": {
@@ -457,7 +502,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-09"
+        "lastRunAt": "2026-09-09",
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 23
       }
     },
     "research-topic-selection": {
@@ -481,7 +529,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-28"
+        "lastRunAt": "2026-09-28",
+        "runs": 3,
+        "delivered": 3,
+        "typicalMinutes": 28
       }
     },
     "statistical-analysis": {
@@ -506,7 +557,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-30"
+        "lastRunAt": "2026-09-30",
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 20
       }
     },
     "vcr-analysis": {
