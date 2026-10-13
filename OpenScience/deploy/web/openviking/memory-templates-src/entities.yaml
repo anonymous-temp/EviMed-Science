@@ -1,0 +1,55 @@
+memory_type: entities
+description: |
+  Entity memory: stable cards for things the user's work keeps returning to and that the
+  user described in a user-role message: organisations and institutions, products, software
+  systems, datasets and registries, standards and guidelines, instruments, works, places and
+  concepts. Store what the entity is and its durable relation to the user's work.
+  Never a card for a person. No individual gets an entity card: not a patient, client,
+  student, colleague, supervisor, family member or public figure.
+  The user's own project is not an entity: it is described in PROJECT_CONTEXT. An entity
+  the user merely asked a question about (a trial, a drug, a law, a competitor's product)
+  gets no card; only what the user states about an entity as part of their own work does.
+  Entity identity is the referenced real-world object. Merge only explicit aliases of the
+  same object; distinct objects stay separate even when they share a theme.
+
+  __NEVER_KEEP__
+directory: "viking://user/{{ user_space }}/memories/entities"
+filename_template: "{{ category|lower }}/{{ name|lower }}.md"
+enabled: true
+embedding_template: |-
+  {{ category }}
+
+  {{ name }}
+
+  {{ content }}
+
+overview_template: |-
+  # Entities Overview
+  {% if items %}**Category:** {{ items[0].file_content.category|default(directory_name, true) }}{% endif %}
+  {% for item in items %}
+  - [{{ item.file_content.name|default(item.file_name, true) }}](./{{ item.file_name }})
+  {% endfor %}
+
+fields:
+  - name: category
+    type: string
+    description: |
+      Category written in {{ language }}, e.g. 机构, 产品, 系统, 数据集, 标准, 地点, 概念.
+      {% if language == 'en' %}Use lowercase with underscores, max 3 words.{% else %}Keep it concise and natural in {{ language }}.{% endif %}
+      Never a category of people.
+    merge_op: replace
+
+  - name: name
+    type: string
+    description: |
+      Entity name in the user's words. If English, use lowercase with underscores, max 3 words.
+    merge_op: replace
+
+  - name: content
+    type: string
+    description: |
+      Compact Markdown card: one H1 display name, one plain sentence saying what it is, then
+      1-3 H2 sections whose bodies are bullet lists (1-5 bullets each) of facts the user
+      stated about it. About 800 characters is a soft target. When updating, keep every
+      existing fact that is not contradicted and deduplicate paraphrases.
+    merge_op: patch

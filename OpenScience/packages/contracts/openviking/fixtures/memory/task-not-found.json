@@ -1,0 +1,29 @@
+{
+  "note": "A task id this user does not own or that has expired.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/tasks/00000000-0000-0000-0000-000000000000",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 404,
+  "contentType": "application/json",
+  "response": {
+    "status": "error",
+    "result": null,
+    "error": {
+      "code": "NOT_FOUND",
+      "message": "Task not found or expired",
+      "details": {
+        "resource": "00000000-0000-0000-0000-000000000000",
+        "type": "task"
+      }
+    },
+    "telemetry": null,
+    "profile": null
+  }
+}

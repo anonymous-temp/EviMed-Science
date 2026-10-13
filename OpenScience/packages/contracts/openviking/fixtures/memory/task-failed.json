@@ -1,0 +1,36 @@
+{
+  "note": "A commit whose extraction failed (the model endpoint answered 402): status failed, the provider error in `error`.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/tasks/96c111de-37e3-4c87-a684-2a73f58fe372",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": {
+      "task_id": "96c111de-37e3-4c87-a684-2a73f58fe372",
+      "task_type": "session_commit",
+      "status": "failed",
+      "created_at": 1791850678.4309473,
+      "updated_at": 1791850678.9143426,
+      "processing_seconds": 0.3204700530041009,
+      "resource_id": "dsh-session_fixture0000000000000000000000000001",
+      "meta": {},
+      "stage": "failed",
+      "result": null,
+      "error": "Error code: 402 - {'error': {'message': 'lab stub: forced 402', 'type': 'insufficient_balance', 'code': '402'}}",
+      "created_at_iso": "2026-10-13T00:17:58.430947+00:00",
+      "updated_at_iso": "2026-10-13T00:17:58.914343+00:00"
+    },
+    "error": null,
+    "telemetry": null,
+    "profile": null
+  }
+}

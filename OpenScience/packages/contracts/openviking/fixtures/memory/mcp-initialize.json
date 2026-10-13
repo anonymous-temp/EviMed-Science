@@ -1,0 +1,31 @@
+{
+  "note": "MCP initialize: the answer is a text/event-stream body with one message event; no session header.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "POST",
+    "path": "/mcp",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a",
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/event-stream"
+    },
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "initialize",
+      "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {
+          "name": "contract-recording",
+          "version": "0"
+        }
+      }
+    }
+  },
+  "status": 200,
+  "contentType": "text/event-stream",
+  "response": "event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"experimental\":{},\"prompts\":{\"listChanged\":false},\"resources\":{\"subscribe\":false,\"listChanged\":false},\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"openviking\",\"version\":\"1.27.0\"}}}\r\n\r\n"
+}

@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "result": {
+    "configured": true,
+    "can_create": true,
+    "reason_code": null
+  },
+  "error": null,
+  "telemetry": null,
+  "profile": null
+}

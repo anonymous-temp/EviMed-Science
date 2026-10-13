@@ -1,0 +1,37 @@
+{
+  "note": "This user's own token usage per day (LLM input/output, embedding input).",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/console/tokens?start_date=2026-10-12&end_date=2026-10-13&timezone=UTC",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": {
+      "start_date": "2026-10-12",
+      "end_date": "2026-10-13",
+      "bucket": "day",
+      "items": [
+        {
+          "date": "2026-10-12",
+          "vlm_input": 0,
+          "vlm_output": 0,
+          "embedding_input": 0
+        },
+        {
+          "date": "2026-10-13",
+          "vlm_input": 21788,
+          "vlm_output": 161,
+          "embedding_input": 218
+        }
+      ]
+    }
+  }
+}

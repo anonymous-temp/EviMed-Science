@@ -1,0 +1,121 @@
+{
+  "note": "Context mode without purpose or quotas, as the gateway rewrites it: flat retrieval, custom types reported under category \"memories\".",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/search/search",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "query": "项目的已定事项",
+      "mode": "context",
+      "score_threshold": 0.35,
+      "exclude_uris": [
+        "viking://resources",
+        "viking://agent"
+      ],
+      "query_expansion": "off"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": {
+      "entries": [
+        {
+          "uri": "viking://user/fx-user-a/memories/projects",
+          "category": "memories",
+          "score": 0.6797197461128235,
+          "detail": "overview",
+          "text": "# Projects Overview\n\n- [三跨预应力混凝土连续梁桥施工图设计](./三跨预应力混凝土连续梁桥施工图设计.md)",
+          "origin": "self"
+        },
+        {
+          "uri": "viking://user/fx-user-a/memories/preferences/self/回答结构.md",
+          "category": "preferences",
+          "score": 0.6625717282295227,
+          "detail": "abstract",
+          "text": "- 回答先给结论，再给依据，最后列出风险。",
+          "origin": "self"
+        },
+        {
+          "uri": "viking://user/fx-user-a/memories/preferences/self",
+          "category": "preferences",
+          "score": 0.6410132646560669,
+          "detail": "overview",
+          "text": "# Preferences Overview\n\n- [回答结构](./回答结构.md)",
+          "origin": "self"
+        },
+        {
+          "uri": "viking://user/fx-user-a/memories/projects/三跨预应力混凝土连续梁桥施工图设计.md",
+          "category": "memories",
+          "score": 0.6305961012840271,
+          "detail": "abstract",
+          "text": "# 三跨预应力混凝土连续梁桥施工图设计\n领域：桥梁结构设计\n一座三跨预应力混凝土连续梁桥的施工图设计。\n\n## 已定事项\n- 主梁采用 C55 混凝土。",
+          "origin": "self"
+        }
+      ],
+      "rendered": "<memory uri=\"viking://user/fx-user-a/memories/projects\" type=\"memories\" score=\"0.68\" detail=\"overview\">\n# Projects Overview\n\n- [三跨预应力混凝土连续梁桥施工图设计](./三跨预应力混凝土连续梁桥施工图设计.md)\n</memory>\n<memory uri=\"viking://user/fx-user-a/memories/preferences/self/回答结构.md\" type=\"preferences\" score=\"0.66\" detail=\"abstract\">\n- 回答先给结论，再给依据，最后列出风险。\n</memory>\n<memory uri=\"viking://user/fx-user-a/memories/preferences/self\" type=\"preferences\" score=\"0.64\" detail=\"overview\">\n# Preferences Overview\n\n- [回答结构](./回答结构.md)\n</memory>\n<memory uri=\"viking://user/fx-user-a/memories/projects/三跨预应力混凝土连续梁桥施工图设计.md\" type=\"memories\" score=\"0.63\" detail=\"abstract\">\n# 三跨预应力混凝土连续梁桥施工图设计\n领域：桥梁结构设计\n一座三跨预应力混凝土连续梁桥的施工图设计。\n\n## 已定事项\n- 主梁采用 C55 混凝土。\n</memory>",
+      "digest": "",
+      "stats": {
+        "searched": {
+          "all": 10
+        },
+        "candidates": 4,
+        "excluded": 0,
+        "origins": {
+          "actor_peer": 0,
+          "self": 4,
+          "other_peer": 0
+        },
+        "peer_scope": "all",
+        "quotas": null,
+        "max_tokens": 1600,
+        "used_tokens": 359,
+        "per_entry_cap": 800,
+        "returned": 4,
+        "dropped": 0,
+        "deduped": 0,
+        "detail": null,
+        "tier_counts": {
+          "overview": 2,
+          "abstract": 2
+        },
+        "fill": {
+          "floor_tokens": 359,
+          "overview_upgrades": 0,
+          "full_upgrades": 0,
+          "spare_upgrades": 0
+        },
+        "purpose": null,
+        "query_expansion": "off",
+        "planned_queries": [
+          "项目的已定事项"
+        ],
+        "score_threshold": 0.35,
+        "other_peer_penalties": {
+          "events": 0.1,
+          "entities": 0.1,
+          "preferences": 0.02,
+          "experiences": 0.02,
+          "resources": 0.02,
+          "skills": 0.02,
+          "memories": 0.1
+        },
+        "rewrite": "off",
+        "rewrite_usage": null,
+        "dedup": {
+          "turns": 0,
+          "status": "off",
+          "cooled": 0,
+          "turn": null
+        }
+      }
+    }
+  }
+}

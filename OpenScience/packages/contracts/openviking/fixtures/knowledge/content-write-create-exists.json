@@ -1,0 +1,14 @@
+{
+  "status": "error",
+  "result": null,
+  "error": {
+    "code": "ALREADY_EXISTS",
+    "message": "File already exists: viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md",
+    "details": {
+      "resource": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md",
+      "type": "file"
+    }
+  },
+  "telemetry": null,
+  "profile": null
+}

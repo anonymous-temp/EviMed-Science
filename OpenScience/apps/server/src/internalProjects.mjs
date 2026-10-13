@@ -78,6 +78,17 @@ export const EVIDENCE_PROJECT_ID = "evimed-evidence";
 export const EVIDENCE_PROJECT_NAME = "EviMed 证据中心";
 
 /**
+ * Where the OpenViking engine's own model calls are billed (v0.5.0, 2026-10-13): its memory extraction, its
+ * summaries and its Compile rounds reach the model gateway with a service bearer and name no user, so the usage
+ * ledger books them to the platform's publisher account — nobody's caps, nobody's bill — in a project of their own
+ * (`openVikingModelCaller.mjs`, held by `OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY`).
+ */
+export const OPENVIKING_PROJECT_ID = "evimed-openviking";
+
+/** What that project is called where an operator lists everything. */
+export const OPENVIKING_PROJECT_NAME = "EviMed 记忆与知识引擎";
+
+/**
  * The paired evaluation's cells, one short-lived project each. The evaluation was deleted on
  * 2026-10-10 and nothing makes one now; the name stays internal so that a cell an interrupted
  * evaluation left behind (its cleanup runs in a `finally`) is not offered to the researcher as a
@@ -125,6 +136,7 @@ export function isSelfMeasurementProject(projectId) {
 export function isInternalProject(projectId) {
   const id = String(projectId ?? "");
   return /^eval-paper-[a-zA-Z0-9_-]+$/.test(id) || id === EVOLUTION_PROJECT_ID || /^evolution-eval-[a-z0-9-]+$/.test(id) || id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === KNOWLEDGE_PROJECT_ID || id === FRONTIER_PROJECT_ID || id === EVIDENCE_PROJECT_ID
+    || id === OPENVIKING_PROJECT_ID
     || /^eval-method-[a-z0-9-]+$/.test(id) || EVALUATION_CELL_PROJECT.test(id)
     || SELF_MEASUREMENT_PROJECT.test(id);
 }
@@ -174,7 +186,8 @@ export function isInternalProjectOf(config, userId, projectId) {
  */
 export function isReservedProjectId(projectId) {
   const id = String(projectId ?? "");
-  return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === KNOWLEDGE_PROJECT_ID || id === FRONTIER_PROJECT_ID || id === EVIDENCE_PROJECT_ID || EVALUATION_CELL_PROJECT.test(id);
+  return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === KNOWLEDGE_PROJECT_ID || id === FRONTIER_PROJECT_ID || id === EVIDENCE_PROJECT_ID
+    || id === OPENVIKING_PROJECT_ID || EVALUATION_CELL_PROJECT.test(id);
 }
 
 /**
@@ -250,4 +263,27 @@ export async function ensureEvidenceProject(store, userId = PLATFORM_PUBLISHER_U
     }
   }
   return { userId: user.id, projectId: EVIDENCE_PROJECT_ID };
+}
+
+/**
+ * The publisher account's OpenViking project, made when missing: the owner every model call of the engine is booked to.
+ * @param {{ userById: (id: string) => Promise<any>, requireProject: (user: any, id: string) => Promise<any>,
+ *   createProject: (user: any, id: string, name: string) => Promise<any> }} store
+ * @returns {Promise<{ userId: string, projectId: string }>}
+ */
+export async function ensureOpenVikingProject(store) {
+  const user = await store.userById(PLATFORM_PUBLISHER_USER_ID);
+  if (!user) throw new HttpError(503, "openviking_model_owner_unavailable", "The platform account the engine's model calls are booked to does not exist.");
+  try {
+    await store.requireProject(user, OPENVIKING_PROJECT_ID);
+  } catch (error) {
+    if (/** @type {any} */ (error)?.code !== "project_not_found" && /** @type {any} */ (error)?.status !== 404) throw error;
+    try {
+      await store.createProject(user, OPENVIKING_PROJECT_ID, OPENVIKING_PROJECT_NAME);
+    } catch (conflict) {
+      // Another control plane made it first; that is the project we wanted.
+      if (/** @type {any} */ (conflict)?.code !== "project_exists") throw conflict;
+    }
+  }
+  return { userId: user.id, projectId: OPENVIKING_PROJECT_ID };
 }

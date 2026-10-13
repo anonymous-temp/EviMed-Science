@@ -1,0 +1,22 @@
+{
+  "note": "Its memory_diff.json: written all the same, with empty operations.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/content/read?uri=viking%3A%2F%2Fuser%2Ffx-user-a%2Fsessions%2Fdsh-session_fixture0000000000000000000000000001%2Fhistory%2Farchive_002%2Fmemory_diff.json",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": "{\n    \"archive_uri\": \"viking://user/fx-user-a/sessions/dsh-session_fixture0000000000000000000000000001/history/archive_002\",\n    \"trace_id\": null,\n    \"extracted_at\": \"2026-10-13T00:17:57.997142Z\",\n    \"operations\": {\n        \"adds\": [],\n        \"updates\": [],\n        \"deletes\": []\n    },\n    \"skipped_operations\": [],\n    \"summary\": {\n        \"total_adds\": 0,\n        \"total_updates\": 0,\n        \"total_deletes\": 0,\n        \"total_skipped\": 0\n    }\n}",
+    "error": null,
+    "telemetry": null,
+    "profile": null
+  }
+}

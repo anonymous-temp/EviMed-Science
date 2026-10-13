@@ -1,0 +1,27 @@
+{
+  "status": "ok",
+  "result": {
+    "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md",
+    "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
+    "context_type": "resource",
+    "mode": "create",
+    "written_bytes": 342,
+    "content_updated": true,
+    "semantic_status": "skipped",
+    "vector_status": "complete",
+    "queue_status": {
+      "Semantic": {
+        "processed": 0,
+        "requeue_count": 0,
+        "error_count": 0,
+        "errors": []
+      },
+      "Embedding": {
+        "processed": 1,
+        "requeue_count": 0,
+        "error_count": 0,
+        "errors": []
+      }
+    }
+  }
+}

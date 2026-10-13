@@ -308,7 +308,9 @@ export class OpenVikingClient {
 
   /** Delete a file or a whole subtree. A missing target is success: this is
    *  called to make the index agree with a store that has already forgotten,
-   *  and a 404 means it already does. */
+   *  and nothing there means it already does. Resolves false when there was
+   *  nothing to delete: a 404 (v0.4.x), or the 200 with
+   *  `estimated_deleted_count: 0` that v0.5.0 answers for a target already gone. */
   async remove(userId, uri, { recursive = false } = {}) {
     this.#assertConfigured();
     // Query parameters, not a body: `DELETE /api/v1/fs` reads `uri` and
@@ -316,8 +318,8 @@ export class OpenVikingClient {
     // by deleting against a running server, which is the only way this route's
     // shape was ever going to be confirmed.
     try {
-      await this.request({ method: "DELETE", path: "/api/v1/fs", query: { uri, recursive: recursive ? "true" : "false" }, userId });
-      return true;
+      const body = await this.request({ method: "DELETE", path: "/api/v1/fs", query: { uri, recursive: recursive ? "true" : "false" }, userId });
+      return body?.result?.estimated_deleted_count !== 0;
     } catch (error) {
       if (error instanceof HttpError && error.code === "memory_index_not_found") return false;
       throw error;

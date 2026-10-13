@@ -1,0 +1,33 @@
+{
+  "note": "The same create again: the plugin treats 409 ALREADY_EXISTS as success.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/sessions",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "session_id": "dsh-session_fixture0000000000000000000000000001"
+    }
+  },
+  "status": 409,
+  "contentType": "application/json",
+  "response": {
+    "status": "error",
+    "result": null,
+    "error": {
+      "code": "ALREADY_EXISTS",
+      "message": "Resource already exists: Session 'dsh-session_fixture0000000000000000000000000001' already exists",
+      "details": {
+        "resource": "Session 'dsh-session_fixture0000000000000000000000000001' already exists",
+        "type": "resource"
+      }
+    },
+    "telemetry": null,
+    "profile": null
+  }
+}

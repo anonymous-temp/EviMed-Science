@@ -1,0 +1,29 @@
+{
+  "note": "The same request a few seconds later: the id is usable again and has nothing.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/fs/ls?uri=viking%3A%2F%2Fuser%2Ffx-user-b%2Fmemories",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-b"
+    }
+  },
+  "status": 404,
+  "contentType": "application/json",
+  "response": {
+    "status": "error",
+    "result": null,
+    "error": {
+      "code": "NOT_FOUND",
+      "message": "Directory not found: viking://user/fx-user-b/memories",
+      "details": {
+        "type": "directory",
+        "resource": "viking://user/fx-user-b/memories"
+      }
+    },
+    "telemetry": null,
+    "profile": null
+  }
+}

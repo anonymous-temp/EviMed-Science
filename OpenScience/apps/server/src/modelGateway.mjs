@@ -251,6 +251,8 @@ function gatewayError(status, code, message) {
  * @returns {string | null}
  */
 function spendLimitRefusalMessage(error) {
+  // The service caller's own refusals (`openVikingModelCaller.mjs`) are written for the log the engine keeps them in.
+  if (typeof error?.code === "string" && error.code.startsWith("openviking_model_") && typeof error.message === "string") return error.message;
   if (error?.status !== 402 || error?.code !== "usage_budget_exceeded") return null;
   return error?.details?.window === "run"
     ? "The spending limit of this run refused the model call; nothing was sent to the provider."
@@ -932,7 +934,9 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
  * @param {{ fetchImpl?: typeof fetch, usageLedger?: any, assertModelAccess?: ((caller:any,body:any)=>Promise<void>)|null,
  *           attributeRun?: (caller: { userId: string, projectId: string, sessionId?: string | null }) => Promise<string | null>,
  *           runPurpose?: (request: { userId: string, projectId: string, runId: string | null }) => Promise<string>,
- *           runScope?: (request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null> }} [options]
+ *           runScope?: (request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null>,
+ *           serviceCaller?: { identify: (token: string) => { service: string, purpose: string, maxBodyBytes: number } | null,
+ *             admit: (caller: { purpose: string }, estimatedCost: number) => Promise<{ userId: string, projectId: string }> } | null }} [options]
  *   `attributeRun` names the ledger run an interactive runtime's request
  *   belongs to (see below); a bounded runtime's token already carries one.
  *   `runPurpose` says what that run's requests are for in the usage ledger:
@@ -945,9 +949,17 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
  *   never from the conversation's text — with the run id the spend is booked
  *   under and the limit it is held to, or null for an ordinary run. It may
  *   throw to refuse the call (a run whose cap cannot be read is not run).
+ *   `serviceCaller` is the one caller that is neither a runtime nor an engine job: the OpenViking service, whose own
+ *   extraction, summaries and Compile reach a model through this route with a static service bearer
+ *   (`openVikingModelCaller.mjs`, where the reasons are). It is asked first and only on the chat route; a bearer it
+ *   does not know falls through to the two checks every other caller has always met. Its calls carry no run, no
+ *   session and no budget marker — a marker in a conversation the engine is extracting from is text, never
+ *   authority — are booked to the platform's own account under the purpose its bearer names, and are held by the
+ *   module's daily budget instead of anyone's caps.
  */
 export function createModelGatewayHandler(config, runtimeManager, {
   fetchImpl = fetch, usageLedger = null, attributeRun = null, runPurpose = null, runScope = null, assertModelAccess = null,
+  serviceCaller = null,
 } = {}) {
   const prefixes = new PromptPrefixMemo();
   return async function modelGatewayHandler(req, res, onFailure) {
@@ -1039,23 +1051,36 @@ export function createModelGatewayHandler(config, runtimeManager, {
       }
       const token = route.token(req);
       /** @type {any} */
-      let caller;
-      try {
-        caller = runtimeManager.assertActiveModelGatewayToken(token);
-      } catch {
-        caller = engineCaller(token, route, config);
+      let caller = route.protocol === "chat" ? serviceCaller?.identify(token) ?? null : null;
+      if (!caller) {
+        try {
+          caller = runtimeManager.assertActiveModelGatewayToken(token);
+        } catch {
+          caller = engineCaller(token, route, config);
+        }
       }
-      const body = await readJsonBody(req, Math.max(1024, Number(config.modelGatewayMaxBodyBytes) || 1024 * 1024));
+      const body = await readJsonBody(req, caller.service ? caller.maxBodyBytes : Math.max(1024, Number(config.modelGatewayMaxBodyBytes) || 1024 * 1024));
       const requestConfig = caller.engine
-        ? { ...config, modelGatewayTrustedEffort: caller.reasoningEffort ?? config.deepseekReasoningEffort ?? "high" } : config;
+        ? { ...config, modelGatewayTrustedEffort: caller.reasoningEffort ?? config.deepseekReasoningEffort ?? "high" }
+        // The service caller that names no reasoning is held to none; one that names it is honoured (`reasoningFields`).
+        : caller.service && body?.thinking === undefined && body?.reasoning_effort === undefined ? { ...config, modelGatewayTrustedEffort: "off" }
+          : config;
       let normalized = route.normalize(body, requestConfig);
-      const scoped = caller.engine ? { request: normalized, scope: null } : consumeBudgetScope(normalized, caller, config);
+      const scoped = caller.engine || caller.service ? { request: normalized, scope: null } : consumeBudgetScope(normalized, caller, config);
       normalized = scoped.request;
-      if (assertModelAccess) await assertModelAccess({ ...caller, sessionId: kernelSessionId(req) }, normalized);
+      // The cloud-processing check is about a study's records in a researcher's session; the service caller has neither.
+      const assertAccess = caller.service ? null : assertModelAccess;
+      if (assertAccess) await assertAccess({ ...caller, sessionId: kernelSessionId(req) }, normalized);
       modelName = normalized.model;
       streamRequested = normalized.stream === true;
       if (config.requireDurableUsageLedger === true && !usageLedger) {
         throw gatewayError(503, "usage_ledger_unavailable", "Durable usage accounting is unavailable.");
+      }
+      if (caller.service) {
+        // Before anything is reserved: the account the call is booked to, and the module's own day. A day that is
+        // spent answers 402 here, with nothing sent and nothing held.
+        const estimate = estimateModelReservation(normalized, config, requestStartedAt, { cachedTokens: prefixes.cached(prefixes.key(token, normalized)) });
+        caller = { ...caller, ...(await serviceCaller.admit(caller, estimate.cost)), runId: null };
       }
       if (usageLedger) {
         const prefixKey = prefixes.key(token, normalized);
@@ -1083,7 +1108,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
         // An engine job's run was decided when the job was admitted and rides
         // in its credential; asking again now could name a run that started
         // after the job did.
-        const attributed = caller.runId == null && attributeRun && !caller.engine
+        const attributed = caller.runId == null && attributeRun && !caller.engine && !caller.service
           ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: kernelSessionId(req) }).catch(() => null)
           : null;
         let runId = caller.runId ?? attributed ?? null;
@@ -1107,28 +1132,31 @@ export function createModelGatewayHandler(config, runtimeManager, {
         // it is known (`UsageLedger.attributeSession`): the first calls of a
         // conversation typed into the kernel's own window, a subagent's first
         // calls. An engine job's calls never need it.
-        const sessionId = runId == null && !caller.engine ? kernelSessionId(req) : null;
+        const sessionId = runId == null && !caller.engine && !caller.service ? kernelSessionId(req) : null;
         // A runtime's request is the kernel's unless its run says otherwise.
         // Asking can fail (the run ledger is a file); the answer is a report
         // column, so a failure records `kernel` rather than costing the call.
         const evolutionEngine = caller.engine && config.evolutionEnabled === true && config.operatorUsers?.includes(caller.userId)
           && (caller.projectId === 'evimed-evolution' || /^eval-paper-[a-z0-9_-]+$/.test(caller.projectId));
         // Project/owner are authenticated signed engine-token claims, never request-body purpose.
-        const purpose = caller.engine ? (evolutionEngine ? "evolution" : "engine") : runPurpose
+        // The service caller's purpose is the one its bearer named; nothing in its request can change it.
+        const purpose = caller.service ? caller.purpose : caller.engine ? (evolutionEngine ? "evolution" : "engine") : runPurpose
           ? await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }).catch(() => "kernel")
           : "kernel";
         reservation = await usageLedger.reserveModel({
           id: randomUUID(), userId: caller.userId, projectId: caller.projectId, model: normalized.model,
           runId, sessionId, purpose,
+          ...(caller.service ? { module: caller.service } : {}),
           priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency, requestFingerprint: fingerprint,
           estimatedCost: estimate.cost,
-          dailyLimit: purpose === "evolution" ? minimumPositive(caller.dailyLimit, config.evolutionDailyBudgetCny) : minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
-          weeklyLimit: purpose === "evolution" ? 0 : minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
+          // The platform's account has no personal caps: the service caller was admitted against the module's own day.
+          dailyLimit: caller.service ? 0 : purpose === "evolution" ? minimumPositive(caller.dailyLimit, config.evolutionDailyBudgetCny) : minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
+          weeklyLimit: caller.service || purpose === "evolution" ? 0 : minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
           runLimit,
           now: requestStartedAt,
         });
       }
-      if (assertModelAccess) await assertModelAccess({ ...caller, sessionId: kernelSessionId(req) }, normalized);
+      if (assertAccess) await assertAccess({ ...caller, sessionId: kernelSessionId(req) }, normalized);
       let upstream;
       try {
         const providerUrl = route.upstream(config.deepseekBaseUrl, config.production);

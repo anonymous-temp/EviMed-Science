@@ -1,0 +1,18 @@
+{
+  "note": "Liveness. No key, no identity.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/health",
+    "headers": {}
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "healthy": true,
+    "version": "v0.5.0",
+    "auth_mode": "trusted",
+    "root_api_key_required": true
+  }
+}

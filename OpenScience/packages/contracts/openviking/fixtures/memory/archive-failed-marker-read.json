@@ -1,0 +1,22 @@
+{
+  "note": "The failed archive's marker; its messages.jsonl stays readable beside it.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/content/read?uri=viking%3A%2F%2Fuser%2Ffx-user-a%2Fsessions%2Fdsh-session_fixture0000000000000000000000000001%2Fhistory%2Farchive_003%2F.failed.json",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": "{\"stage\": \"memory_extraction\", \"error\": \"Error code: 402 - {'error': {'message': 'lab stub: forced 402', 'type': 'insufficient_balance', 'code': '402'}}\", \"failed_at\": \"2026-10-13T00:17:58.910Z\", \"skipped\": true, \"completed_memory_steps\": {}}",
+    "error": null,
+    "telemetry": null,
+    "profile": null
+  }
+}

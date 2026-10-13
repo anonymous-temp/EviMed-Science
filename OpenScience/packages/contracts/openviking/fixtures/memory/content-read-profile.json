@@ -1,0 +1,22 @@
+{
+  "note": "profile.md: what the plugin injects at session start.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/content/read?uri=viking%3A%2F%2Fuser%2Ffx-user-a%2Fmemories%2Fprofile.md",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": "# 用户\n- 结构设计工程师，在一家设计院工作 (as of 2026-10-12)",
+    "error": null,
+    "telemetry": null,
+    "profile": null
+  }
+}

@@ -1,0 +1,57 @@
+memory_type: preferences
+description: |
+  User preference memory: how the user wants work done, as a standing choice.
+  Keep what the user states as a rule for future work, in a user-role message: methods and
+  statistics they always use, reporting standards, evidence grading, structure and format
+  of documents, citation style, language and tone of the output, tools, software and
+  libraries they name as their own ("我检索一律用 PubMed 和 Embase", "测试都用 Vitest"),
+  conventions of their team. Signals: 以后、一律、默认、固定做法、我们组都、always, by default.
+  A tool or database the user names as theirs is their vocabulary and is kept by name.
+  Each preference file is about one specific topic; do not mix unrelated topics, and do not
+  split one topic over several files. When the user changes a preference, update the
+  existing file so that it states only the current choice.
+  Not a preference: a condition that scopes one request ("这次只看亚洲人群的 RCT，不要图表"),
+  a mood, a question, a fact about a project (-> PROJECT_CONTEXT), and something the user
+  said the assistant got wrong (-> CORRECTIONS).
+
+  __NEVER_KEEP__
+directory: "viking://user/{{ user_space }}/memories/preferences"
+filename_template: "{{ user|lower }}/{{ topic|lower }}.md"
+enabled: true
+embedding_template: |-
+  {{ topic }}
+
+  {{ content }}
+
+overview_template: |-
+  # Preferences Overview
+  {% for item in items %}
+  - [{{ item.file_content.topic|default(item.file_name, true) }}](./{{ item.file_name }})
+  {% endfor %}
+
+fields:
+  - name: user
+    type: string
+    description: |
+      Always the literal word self. Never a name, never a translation of it.
+    merge_op: immutable
+
+  - name: topic
+    type: string
+    description: |
+      Preference topic written in {{ language }}.
+      {% if language == 'en' %}Use lowercase with underscores, max 3 words.{% else %}Keep the topic concise and natural in {{ language }}.{% endif %}
+      It identifies this preference memory: one behavioural choice dimension such as
+      "Meta 分析方法", "参考文献格式", "代码风格", "需求文档结构". Reuse the topic of an
+      existing file when the conversation is about the same dimension.
+    merge_op: immutable
+
+  - name: content
+    type: string
+    description: |
+      Markdown bullets, one per distinct reusable preference, stating the specific choice
+      and any condition, exception or reason the user gave. No dates, events or plans.
+      Example:
+      - Meta 分析一律用随机效应模型。
+      - 报告先给结论，再给依据。
+    merge_op: patch

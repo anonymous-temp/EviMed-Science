@@ -1,0 +1,44 @@
+memory_type: corrections
+description: |
+  Corrections: what the user told the assistant it said or did wrong, kept as the rule to
+  follow next time.
+  Whenever a user-role message says that the assistant's answer, wording, reading, method or
+  format was wrong ("不对…", "你把 A 写成了 B", "这不是一回事") ALWAYS record it here,
+  written as a standing rule in the imperative ("引用研究结果时写明终点定义，不要笼统说成死亡").
+  The rule is what is kept. The numbers, names and conclusions of the study, case, document
+  or product that was being discussed are not part of it.
+  One file per subject of correction; a later correction on the same subject updates that
+  file. The never-kept rule about document content does not stop a correction from being
+  recorded.
+  Not a correction: the user changing their own preference ("以后改用 AMA 格式" -> PREFERENCES)
+  or changing a decision about their project (-> PROJECT_CONTEXT or DECISIONS).
+
+  __NEVER_KEEP__
+directory: "viking://user/{{ user_space }}/memories/corrections"
+filename_template: "{{ topic|lower }}.md"
+enabled: true
+embedding_template: |-
+  {{ topic }}
+
+  {{ content }}
+
+overview_template: |-
+  # Corrections Overview
+  {% for item in items %}
+  - [{{ item.file_content.topic|default(item.file_name, true) }}](./{{ item.file_name }})
+  {% endfor %}
+
+fields:
+  - name: topic
+    type: string
+    description: |
+      What the correction is about, written in {{ language }}, a few words
+      ("终点表述", "不良反应分级", "双写的含义"). It identifies this correction memory.
+    merge_op: immutable
+
+  - name: content
+    type: string
+    description: |
+      Markdown bullets, each one rule to follow from now on, stated as an instruction and
+      self-contained. No study results, no quoted numbers, no narrative of who said what.
+    merge_op: patch

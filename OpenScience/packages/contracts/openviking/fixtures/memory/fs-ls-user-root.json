@@ -1,0 +1,32 @@
+{
+  "note": "The plugin lists viking://user to find its space: only the caller's own.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/fs/ls?uri=viking%3A%2F%2Fuser&output=original",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": [
+      {
+        "name": "fx-user-a",
+        "size": 4096,
+        "mode": 493,
+        "modTime": "2026-10-13T00:17:42Z",
+        "isDir": true,
+        "uri": "viking://user/fx-user-a"
+      }
+    ],
+    "error": null,
+    "telemetry": null,
+    "profile": null,
+    "has_more": false
+  }
+}
