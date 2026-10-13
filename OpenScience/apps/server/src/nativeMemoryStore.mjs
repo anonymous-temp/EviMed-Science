@@ -363,6 +363,19 @@ export class NativeMemoryStore {
     return order.filter((slot) => card.has(slot)).map((slot) => card.get(slot));
   }
 
+  /**
+   * The memories the timeline derives its memory events from (`memoryTimeline`): the account's own and this project's, newest
+   * change first, each with the revisions the overlay holds as the page's 「以前的版本」.
+   * @param {string} userId @param {{ projectId?: string, limit?: number }} [options]
+   */
+  async timelineRecords(userId, { projectId = "", limit = 1000 } = {}) {
+    return (await this.records(userId))
+      .filter((record) => !record.sensitive && (record.scope === "user" || !projectId || record.scopeId === projectId))
+      .slice(0, Math.max(1, Math.min(5_000, Math.trunc(Number(limit)) || 1000)))
+      // A file's name is not what changed: the timeline says the words the file held, as a revision's own states do.
+      .map((record) => ({ ...record, summary: "" }));
+  }
+
   /** What the map draws (`createNativeMemorySource`): the records, the sources they rest on, no conflicts, no usage. @param {string} userId */
   async mapMemories(userId) {
     const files = await this.files(userId);
@@ -538,10 +551,11 @@ export class NativeMemoryStore {
   }
 
   /**
-   * The conversation's `forget` tool, through the memory gateway: the same forget as the page's, by URI.
+   * The conversation's `forget` tool, through the memory gateway (`memoryTool.forget`): the same forget as the page's, by URI,
+   * with its undo — what the person asked a conversation to forget they can bring back from the page.
    * @param {any} user @param {any} _project @param {string} uri
    */
-  async forgetByUri(user, _project, uri) {
+  async forget(user, _project, uri) {
     const files = await this.files(String(user.id));
     const file = files.find((candidate) => candidate.uri === uri);
     if (!file) return { removed: false };

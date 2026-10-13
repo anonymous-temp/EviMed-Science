@@ -4705,6 +4705,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const memoryGatewayHandler = createMemoryGatewayHandler({
     config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
     overlay: nativeMemoryOverlay.configured ? nativeMemoryOverlay : null,
+    // The conversation's `forget` tool is the page's own deletion, by URI: the file, its revision, the rejection that keeps it away.
+    memoryTool: nativeMemory,
   });
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext, evaluationIsolation,
     memoryEngine: (/** @type {string} */ userId) => researchMemory.memoryEngine(userId),
@@ -4754,7 +4756,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The timeline and the capsule page's growth line, derived when read from
   // the records, the ledger, the methods and the researcher's own capsules.
   const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService,
-    capsules: capsuleService, handbooks: handbookLibrary, context });
+    capsules: capsuleService, handbooks: handbookLibrary, context,
+    native: { store: nativeMemory, engine: (/** @type {string} */ userId) => researchMemory.memoryEngine(userId) } });
   // 「记忆地图」: one read-only document assembled from independent sources, the topics a model groups the memories into, and the
   // links the memory drawer shows. The native memory engine and the OpenViking knowledge graph are seams with no reader wired yet.
   const memoryTopics = researchMemory.configured ? new MemoryTopics(config, researchMemory, { usageLedger }) : null;

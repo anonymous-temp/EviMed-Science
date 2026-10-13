@@ -8,6 +8,7 @@ import path from "node:path";
 import test from "node:test";
 import { gunzipSync } from "node:zlib";
 
+import { nativeFileId } from "../src/nativeMemoryStore.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
 import { createWebApiApp } from "../src/server.mjs";
@@ -125,4 +126,32 @@ test("the drawer's links for a native memory are the sources it names; the other
   assert.equal(links.data.rests.length, 1);
   assert.equal(links.data.rests[0].href, "https://doi.org/10.1056/nejmoa0000001");
   assert.deepEqual([links.data.replaced, links.data.replacedBy, links.data.conflicts, links.data.usedIn], [[], null, [], []]);
+});
+
+test("the conversation's forget tool is the page's own deletion: the file leaves, its lines are rejected, and the page can bring it back", options, async (t) => {
+  const { app, user, engineUser, seed, sessions } = await fixture(t);
+  const uri = seed("preferences/units.md", "Metric units.", { type: "preferences" });
+  const forgotten = await app.nativeMemory.forget({ id: user.id }, { id: "p1" }, uri);
+  assert.deepEqual(forgotten, { removed: true });
+  assert.equal(await sessions.read(user.id, uri), null);
+  assert.ok((await app.nativeMemory.overlay.rejectedFingerprints(user.id, "preferences")).size >= 1);
+  const restored = await app.nativeMemory.undo(user.id, nativeFileId(uri), {});
+  assert.equal(restored.undone, "restored");
+  assert.equal(await sessions.read(user.id, uri), "Metric units.");
+  assert.deepEqual(await app.nativeMemory.forget({ id: user.id }, { id: "p1" }, `viking://user/${engineUser}/memories/preferences/none.md`), { removed: false });
+});
+
+test("the timeline of a native account is derived from the files' revisions, with the same events as another store's", options, async (t) => {
+  const { app, base, headers, user, seed } = await fixture(t);
+  const uri = seed("preferences/format.md", "Short answers.", { type: "preferences" });
+  const record = (await (await fetch(`${base}/api/memory/records`, { headers })).json()).data.find((item) => item.uri === uri);
+  const edited = await fetch(`${base}/api/memory/records/${encodeURIComponent(record.id)}`, { method: "PATCH", headers,
+    body: JSON.stringify({ value: "Short answers, then detail.", expectedVersion: record.version }) });
+  assert.equal(edited.status, 200);
+  const timeline = (await (await fetch(`${base}/api/memory/timeline`, { headers })).json()).data;
+  const memory = timeline.items.filter((item) => item.type === "memory");
+  assert.ok(memory.length >= 1, JSON.stringify(timeline.items.map((item) => item.type)));
+  assert.ok(memory.some((item) => item.change === "updated" && /Short answers/.test(item.before) && /then detail/.test(item.after)), JSON.stringify(memory));
+  assert.ok(timeline.density.some((day) => day.memory >= 1));
+  assert.ok(app);
 });

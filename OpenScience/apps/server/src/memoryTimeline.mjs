@@ -202,11 +202,14 @@ export function timeZoneOrDefault(value) {
  * newest methods and feedback. A source that cannot be read leaves its events
  * out and is named in `missing` rather than failing the page.
  *
- * @param {{ researchMemory: any, agentRuns?: any, feedbackEvents?: any, learning?: any, now?: () => Date }} sources
+ * `native` is the native memory engine's reader (`NativeMemoryStore.timelineRecords`) and the account's engine: an account on it has
+ * its memory events read from the files' revisions, the same events from another store.
+ * @param {{ researchMemory: any, agentRuns?: any, feedbackEvents?: any, learning?: any, now?: () => Date,
+ *   native?: { store: { timelineRecords: (userId: string, options: any) => Promise<any[]> }, engine: (userId: string) => Promise<string> } | null }} sources
  * @param {{ id: string }} user @param {any} project
  * @param {{ before?: string | null, limit?: number, timeZone?: string | null }} [options]
  */
-export async function memoryTimeline({ researchMemory, agentRuns = null, feedbackEvents = null, learning = null, now = () => new Date() },
+export async function memoryTimeline({ researchMemory, agentRuns = null, feedbackEvents = null, learning = null, native = null, now = () => new Date() },
   user, project, { before = null, limit = 50, timeZone = null } = {}) {
   const zone = timeZoneOrDefault(timeZone);
   const pageSize = Math.max(1, Math.min(MAX_PAGE, Number(limit) || 50));
@@ -218,7 +221,10 @@ export async function memoryTimeline({ researchMemory, agentRuns = null, feedbac
     try { return await operation(); } catch { missing.push(name); return fallback; }
   };
 
-  const records = await read("memory", () => researchMemory.timelineRecords(user.id, { projectId: project.id, limit: MEMORY_TIMELINE_RECORDS }), []);
+  const onNative = native ? await native.engine(user.id).then((engine) => engine === "native", () => false) : false;
+  const records = await read("memory", () => (onNative && native
+    ? native.store.timelineRecords(user.id, { projectId: project.id, limit: MEMORY_TIMELINE_RECORDS })
+    : researchMemory.timelineRecords(user.id, { projectId: project.id, limit: MEMORY_TIMELINE_RECORDS })), []);
   const byId = new Map(records.map((/** @type {any} */ record) => [record.id, record]));
   const runs = agentRuns ? await read("runs", () => agentRuns.list(project), []) : [];
   const methods = learning ? await read("methods", async () => (await learning.listMethods(user.id, { limit: 100 })).items ?? [], []) : [];
@@ -584,11 +590,11 @@ export async function memoryLearned({ researchMemory, learning = null, handbooks
  * `GET /api/memory/timeline?before=&limit=&timeZone=`,
  * `GET /api/memory/growth?timeZone=` and `GET /api/memory/learned?timeZone=`.
  *
- * @param {{ config: any, researchMemory: any, agentRuns?: any, feedbackEvents?: any, learning?: any, capsules?: any, handbooks?: any,
+ * @param {{ config: any, researchMemory: any, agentRuns?: any, feedbackEvents?: any, learning?: any, capsules?: any, handbooks?: any, native?: any,
  *   context: (req: any, res: any) => Promise<any> }} dependencies
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
-export function createMemoryTimelineRoutes({ researchMemory, agentRuns = null, feedbackEvents = null, learning = null, capsules = null, handbooks = null, context }) {
+export function createMemoryTimelineRoutes({ researchMemory, agentRuns = null, feedbackEvents = null, learning = null, capsules = null, handbooks = null, native = null, context }) {
   return async function memoryTimelineRoutes(req, res) {
     const url = new URL(req.url ?? "/", "http://evimed.local");
     if (url.pathname !== "/api/memory/timeline" && url.pathname !== "/api/memory/growth" && url.pathname !== "/api/memory/learned") return false;
@@ -605,7 +611,7 @@ export function createMemoryTimelineRoutes({ researchMemory, agentRuns = null, f
       }) });
       return true;
     }
-    sendJson(res, 200, { data: await memoryTimeline({ researchMemory, agentRuns, feedbackEvents, learning }, ctx.user, ctx.project, {
+    sendJson(res, 200, { data: await memoryTimeline({ researchMemory, agentRuns, feedbackEvents, learning, native }, ctx.user, ctx.project, {
       before: url.searchParams.get("before"),
       limit: Number(url.searchParams.get("limit") ?? 50),
       timeZone: url.searchParams.get("timeZone"),
