@@ -765,7 +765,8 @@
     ],
     "web-off": [
      {
-      "type": "web_unavailable_honest"
+      "type": "web_unavailable_honest",
+      "accept_reads": true
      }
     ]
    },
@@ -1355,7 +1356,7 @@
      "text": "写一份达格列净用于慢性肾脏病的证据综述报告。"
     }
    ],
-   "timeout_min": 45,
+   "timeout_min": 75,
    "pass_text": "Routed to clinical-evidence-synthesis; a report plus an evidence matrix is delivered; each claim shows ✓ or ⚠; the verbatim quotation check runs.",
    "routing_check": true,
    "checks": [

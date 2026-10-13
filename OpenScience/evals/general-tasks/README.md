@@ -34,6 +34,7 @@ Read `<dir>/summary.md` (one row per case) and `<dir>/summary.json`; do not read
 | `--port 48841` | harness port, in 48840–48859; check `ss -ltn` first |
 | `--pg-port 55657` | PostgreSQL for the control plane; a throwaway one is initialised and started under `/tmp/eval-pg-<port>` if nothing listens |
 | `--seed-from DIR` | a sealed DSH profile seed to copy instead of building one (see prerequisites) |
+| `--data-dir DIR` | where this run's kernels, workspaces and logs live (default `/tmp/eval/live/data-<arm>`); give two runs of the same arm different ones |
 | `--redo`, `--no-judge`, `--keep-data` | run again, skip the judges, keep each case's project directory |
 
 A shorter run: `--cases G01,G05,M01` is the smoke test.
@@ -41,7 +42,9 @@ A shorter run: `--cases G01,G05,M01` is the smoke test.
 ### Prerequisites on this box
 
 * `/tmp/evimed-openmed-dsh` (the pinned `dsh` CLI), `~/.cache/evimed-pg/BIN` (a PostgreSQL), `python3` with `openpyxl`, `python-docx`,
-  `pypdf`, `pandas`, `Pillow`, `numpy`, and `soffice` (LibreOffice) for the Office and PDF judges.
+  `pypdf`, `pandas`, `Pillow`, `numpy`, and `soffice` (LibreOffice Writer and Impress) for the Word, slide and PDF judges. A summary sheet
+  made of formulas (SUMIFS and the like) carries no values until a spreadsheet engine calculates it: with `libreoffice-calc` installed
+  the G05 judge calculates it, without it (this box) the check reports `unjudged` for such a workbook, never a pass or a fail.
 * A profile seed. `seed.sh` stages the tree's socket into a per-tree copy of a sealed DSH profile and seals it again, on every run,
   so an edited tree is what runs. The profile itself is **copied** from `--seed-from` or from any seed already staged under
   `/tmp/eval/live/trees/` (about 520 MB, `/tmp` only); only when there is none does it build one from the network (pnpm and the
@@ -106,7 +109,7 @@ Re-judging saved records costs no model time on the agent side: `python3 judges/
   (guidance, run-policy, evidence, capsule, screening, compaction, duplicate-lines), the citation tools are off (`EVIMED_CITE_ENABLED=0`
   in the kernel process), and the persona row of the preset is replaced by one neutral sentence in the runtime's own copy of the profile
   (`runner/persona.mjs`; the persona is a row of the kernel's own and no switch reaches it). The MCP server's tools are still mounted
-  (they are not socket plugins). With run-policy off the control plane's dispatch brief is not injected either, so the first
+  (they are not socket plugins); with run-policy off the root-tool filter is off too, so arm A's first request carries 55 tools against B's 41. With run-policy off the control plane's dispatch brief is not injected either, so the first
   model request carries the kernel's own prompt and one neutral sentence; each record keeps that request's size and a flag for
   whether it still names the medical persona.
 * Reading: the completion-rate gap B − A is the net effect of the platform's composition on general tasks; the target for C is
@@ -118,5 +121,9 @@ Re-judging saved records costs no model time on the agent side: `python3 judges/
   route decision and the run ledger (as the other course-correction packages did). On the native page the model is not told the route.
 * Document parsing: the in-house parser is an external service with a key; on this box it is not configured, so G22's `.docx` / `.pdf`
   knowledge files are accepted and registered but not parsed (the record's `sources` ledger says so); the plain-text files are.
+* The harness kernel runs as a host process **with network**; the production runtime container has none. With the web tools off
+  (G14 `web-off`) a run can still fetch pages through its shell, so that variant cannot force “nothing can be looked up”; its judge
+  accepts either an honest “I could not look this up” or an answer whose cited hosts appear in what the tools returned. The same
+  holds for every web task: results show what the platform does where fetching is possible.
 * The model judge is one DeepSeek flash call per case; run it twice (`--redo`) when a score decides something.
 * Link and Node.js LTS checks read the public internet from the host running the judges; offline they report `unjudged`.

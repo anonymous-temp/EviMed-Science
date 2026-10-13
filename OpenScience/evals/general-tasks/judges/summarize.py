@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 
@@ -40,6 +41,8 @@ def rows_of(run: Path) -> list[dict]:
         for case_id, entry in j["entries"].items():
             row = dict(entry)
             row["name"] = name
+            match = re.search(r"-r(\d+)$", name or "")
+            row["rep"] = int(match.group(1)) if match else 1
             row["model"] = model_scores((model.get(name) or {}).get("entries", {}).get(case_id))
             rows.append(row)
     return rows
@@ -61,16 +64,20 @@ def summarize(run: Path) -> dict:
         m = row.get("metrics", {})
         routes = ",".join(sorted({x.split("/")[0] for x in m.get("routes", [])})) or "-"
         lines.append("| {case} | {variant} | {status} | {passed}/{required} | {model} | {route} | {tools} | {wall} | {tin}/{tout} | {reg}/{new} | {unv} | {failed} |".format(
-            case=row.get("caseId"), variant=row.get("variant"), status=row.get("status"), passed=row.get("passed", "-"), required=row.get("required", "-"), model=row.get("model", "-"),
+            case=row.get("caseId"), variant=(row.get("variant") or "normal") + (f" r{row['rep']}" if row.get("rep", 1) > 1 else ""), status=row.get("status"), passed=row.get("passed", "-"), required=row.get("required", "-"), model=row.get("model", "-"),
             route=routes, tools=m.get("toolCalls", "-"), wall=m.get("wallSeconds", "-"), tin=m.get("inputTokens", "-"), tout=m.get("outputTokens", "-"),
             reg=m.get("filesRegistered", "-"), new=len(m.get("filesNew", [])), unv="yes" if m.get("unverifiedMarked") else "no", failed=", ".join(row.get("failedChecks", [])) or ""))
     def rate(kind: str):
-        pool = [r for r in rows if r.get("kind") == kind and r.get("status") in ("pass", "fail", "unjudged")]
+        # The headline counts each case once: its normal variant, first repetition. Fault variants and repeats are listed apart.
+        pool = [r for r in rows if r.get("kind") == kind and r.get("variant", "normal") == "normal" and r.get("rep", 1) == 1 and r.get("status") in ("pass", "fail", "unjudged")]
         passed = sum(1 for r in pool if r["status"] == "pass")
         return {"pass": passed, "of": len(pool)}
     totals = {"general": rate("general"), "medical": rate("medical")}
     routing = [{"case": r["caseId"], "variant": r["variant"], "status": r["status"], "routes": r.get("metrics", {}).get("routes")} for r in rows if r.get("routingCheck")]
+    others = [r for r in rows if (r.get("variant", "normal") != "normal" or r.get("rep", 1) > 1) and r.get("status") in ("pass", "fail", "unjudged")]
+    totals["variantsAndRepeats"] = [{"case": r["caseId"], "variant": r.get("variant"), "rep": r.get("rep", 1), "status": r["status"]} for r in others]
     lines += ["", f"General cases passed: {totals['general']['pass']}/{totals['general']['of']}. Medical controls passed: {totals['medical']['pass']}/{totals['medical']['of']}.", "",
+              "Fault variants and repeats: " + "; ".join(f"{r['caseId']}/{r.get('variant')}" + (f" r{r.get('rep')}" if r.get("rep", 1) > 1 else "") + f"={r['status']}" for r in others) + "", "",
               "Routing checks (deterministic, one miss is a miss): " + "; ".join(f"{r['case']}{'' if r['variant'] == 'normal' else '/' + r['variant']}={r['status']}" for r in routing), ""]
     (run / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     data = {"arm": manifest.get("arm"), "tree": tree, "totals": totals, "routing": routing, "rows": [{k: v for k, v in r.items() if k != "checks"} for r in rows]}

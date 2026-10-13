@@ -167,6 +167,19 @@ class LanguageChecks(unittest.TestCase):
         for e in (said, invented, read):
             e.close()
 
+    def test_web_off_but_the_shell_fetched_the_cited_pages(self):
+        import gzip
+
+        env = Env("G14", [turn("标准未变，见 https://fgk.chinatax.gov.cn/zcfgk/c102440/content.html")], variant="web-off")
+        tdir = env.files / "transcripts"
+        tdir.mkdir(parents=True)
+        with gzip.open(tdir / "t0-run_x.jsonl.gz", "wt", encoding="utf-8") as f:
+            f.write(json.dumps({"sessionId": "s"}) + "\n")
+            f.write(json.dumps({"role": "tool", "parts": [{"type": "tool", "tool": "bash", "output": "<html> fgk.chinatax.gov.cn 专项附加扣除 </html>"}]}) + "\n")
+        self.assertTrue(env.run({"type": "web_unavailable_honest", "accept_reads": True})[0]["ok"])
+        self.assertFalse(env.run({"type": "web_unavailable_honest"})[0]["ok"])
+        env.close()
+
     def test_translation_may_drop_a_thousands_separator(self):
         env = Env("G17", [turn("x"), turn("背景：远程办公。" * 30 + "9812 0.04 0.13 0.12 0.22 0.02 41% 58%")])
         spec = {"type": "translation", "turn": 1, "to": "zh", "min_chars": 150, "keep_numbers": ["9,812", "41%"]}
@@ -193,6 +206,16 @@ class LanguageChecks(unittest.TestCase):
         out = {r["id"]: r["ok"] for r in checks.chk_weekly({}, env.ctx())}
         self.assertFalse(out["final_contains_37_percent"])
         self.assertFalse(out["does_not_ask_again_for_given_information"])
+        env.close()
+
+    def test_weekly_reads_the_file_when_the_reply_only_points_at_it(self):
+        short = "1. 订阅页设计评审完成\n2. 转化率 3.4%，目标 4%\n3. 下周压测与灰度"
+        fixed = short.replace("3.4%", "37%")
+        env = Env("G19", [turn("全文" * 100), turn("[周报](<w.md>)"), turn("[周报](<w.md>)")])
+        env.put(1, "w.md", short)
+        env.put(2, "w.md", fixed)
+        out = {r["id"]: r["ok"] for r in checks.chk_weekly({}, env.ctx())}
+        self.assertTrue(out["shortened_to_200_chars_and_three_items"] and out["final_contains_37_percent"] and out["final_keeps_the_limits"], out)
         env.close()
 
     def test_opening_looks_only_at_the_first_characters(self):
@@ -331,6 +354,42 @@ class OfficeChecks(unittest.TestCase):
         self.assertEqual(ok_of(env.run(spec)), [False])
         book(env.put(0, "p.xlsx"), chart=False)
         self.assertEqual(ok_of(env.run(spec)), [False])
+        env.close()
+
+    def test_xlsx_pivot_with_formulas_and_no_spreadsheet_engine_is_unjudged_not_failed(self):
+        from openpyxl import Workbook
+        from unittest import mock
+
+        env = Env("G05", [turn("x")])
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "汇总"
+        ws["A1"] = "=1+1"
+        wb.save(env.put(0, "p.xlsx"))
+        with mock.patch.object(textio, "recalculated", side_effect=textio.NoSpreadsheetEngine("no Calc")):
+            result = env.run(CASES["G05"]["checks"][1])
+        self.assertIsNone(result[0]["ok"], result)
+        env.close()
+
+    @unittest.skipUnless(shutil.which("soffice") and (Path("/usr/lib/libreoffice/program/libsclo.so").exists()), "LibreOffice Calc is needed to calculate formulas")
+    def test_xlsx_pivot_calculates_formula_cells_that_have_no_cached_value(self):
+        from openpyxl import Workbook, load_workbook
+        from openpyxl.chart import BarChart, Reference
+
+        env = Env("G05", [turn("x")])
+        spec = CASES["G05"]["checks"][1]
+        wb = load_workbook(FIXTURES / "sales.xlsx")
+        src = wb["销售明细"]
+        ws = wb.create_sheet("汇总")
+        regions = sorted({r for r, _ in checks.sales_expected(FIXTURES)})
+        ws.append(["地区", *range(1, 13)])
+        for i, region in enumerate(regions, start=2):
+            ws.append([region] + [f'=SUMPRODUCT((销售明细!$C$2:$C$5001=$A{i})*(MONTH(销售明细!$B$2:$B$5001)={m})*销售明细!$G$2:$G$5001)' for m in range(1, 13)])
+        bar = BarChart()
+        bar.add_data(Reference(ws, min_col=2, max_col=13, min_row=1, max_row=7), titles_from_data=True)
+        ws.add_chart(bar, "O2")
+        wb.save(env.put(0, "p.xlsx"))
+        self.assertEqual(ok_of(env.run(spec)), [True], env.run(spec))
         env.close()
 
     def test_xlsx_table_matches_the_page_five_table_cell_for_cell(self):
@@ -542,8 +601,12 @@ class WholeRecord(unittest.TestCase):
         entry = {"caseId": "G05", "variant": "normal", "family": "data", "kind": "general", "routingCheck": True, "status": "fail", "required": 3, "passed": 2,
                  "failedChecks": ["route_not:dataset-research-scoping"], "checks": [], "metrics": {"routes": ["dataset-research-scoping/matched"], "toolCalls": 4, "wallSeconds": 90, "filesNew": ["a.xlsx"]}}
         (run / "judged" / "G05-r1.json").write_text(json.dumps({"name": "G05-r1", "entries": {"G05": entry}}), encoding="utf-8")
+        (run / "records" / "G16--classifier-timeout-r1.json").write_text(json.dumps({"name": "G16--classifier-timeout-r1", "cell": "G16", "variant": "classifier-timeout"}), encoding="utf-8")
+        fault = dict(entry, caseId="G16", variant="classifier-timeout", status="pass", routingCheck=True, failedChecks=[])
+        (run / "judged" / "G16--classifier-timeout-r1.json").write_text(json.dumps({"name": "G16--classifier-timeout-r1", "entries": {"G16": fault}}), encoding="utf-8")
         data = summarize.summarize(run)
-        self.assertEqual(data["totals"]["general"], {"pass": 0, "of": 1})
+        self.assertEqual(data["totals"]["general"], {"pass": 0, "of": 1}, "fault variants stay out of the headline")
+        self.assertEqual(data["totals"]["variantsAndRepeats"][0]["variant"], "classifier-timeout")
         self.assertIn("G05=fail", (run / "summary.md").read_text(encoding="utf-8"))
 
 
