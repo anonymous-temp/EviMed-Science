@@ -142,7 +142,7 @@ test("the conversation's forget tool is the page's own deletion: the file leaves
 });
 
 test("the timeline of a native account is derived from the files' revisions, with the same events as another store's", options, async (t) => {
-  const { app, base, headers, user, seed } = await fixture(t);
+  const { base, headers, seed } = await fixture(t);
   const uri = seed("preferences/format.md", "Short answers.", { type: "preferences" });
   const record = (await (await fetch(`${base}/api/memory/records`, { headers })).json()).data.find((item) => item.uri === uri);
   const edited = await fetch(`${base}/api/memory/records/${encodeURIComponent(record.id)}`, { method: "PATCH", headers,
@@ -153,5 +153,4 @@ test("the timeline of a native account is derived from the files' revisions, wit
   assert.ok(memory.length >= 1, JSON.stringify(timeline.items.map((item) => item.type)));
   assert.ok(memory.some((item) => item.change === "updated" && /Short answers/.test(item.before) && /then detail/.test(item.after)), JSON.stringify(memory));
   assert.ok(timeline.density.some((day) => day.memory >= 1));
-  assert.ok(app);
 });
