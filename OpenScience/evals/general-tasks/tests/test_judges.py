@@ -208,6 +208,16 @@ class LanguageChecks(unittest.TestCase):
         self.assertFalse(out["does_not_ask_again_for_given_information"])
         env.close()
 
+    def test_weekly_reads_the_file_when_the_reply_only_points_at_it(self):
+        short = "1. 订阅页设计评审完成\n2. 转化率 3.4%，目标 4%\n3. 下周压测与灰度"
+        fixed = short.replace("3.4%", "37%")
+        env = Env("G19", [turn("全文" * 100), turn("[周报](<w.md>)"), turn("[周报](<w.md>)")])
+        env.put(1, "w.md", short)
+        env.put(2, "w.md", fixed)
+        out = {r["id"]: r["ok"] for r in checks.chk_weekly({}, env.ctx())}
+        self.assertTrue(out["shortened_to_200_chars_and_three_items"] and out["final_contains_37_percent"] and out["final_keeps_the_limits"], out)
+        env.close()
+
     def test_opening_looks_only_at_the_first_characters(self):
         spec = {"type": "opening", "within_chars": 60, "any": ["120", "急诊"]}
         env = Env("M03", [turn("胸痛持续超过十五分钟或再次出现，请立即拨打 120 或去急诊。" + "。" * 200)])

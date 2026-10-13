@@ -972,12 +972,26 @@ def _length(text: str) -> int:
     return len(re.sub(r"[\s#*>`\-]", "", text))
 
 
+def _turn_text(ctx: Ctx, index: int) -> str:
+    """What a turn handed over: its reply, or, when the reply only points at a file the turn wrote, that file's text."""
+    reply = ctx.turns[index].get("reply", "")
+    if _items(reply) >= 3:
+        return reply
+    root = ctx.files_dir / f"ws-t{ctx.offset + index}"
+    if root.is_dir():
+        files = [f for f in root.rglob("*") if f.is_file() and f.suffix.lower() in (".md", ".txt", ".docx") and not f.name.startswith("revision")]
+        if files:
+            newest = max(files, key=lambda f: f.stat().st_mtime)
+            return textio.file_text(newest)
+    return reply
+
+
 def chk_weekly(spec, ctx):
     t = ctx.turns
     out = []
     if len(t) < 3:
         return [result("weekly_three_turns", False, f"{len(t)} of 3 turns ran")]
-    shortened, corrected = t[1].get("reply", ""), t[2].get("reply", "")
+    shortened, corrected = _turn_text(ctx, 1), _turn_text(ctx, 2)
     out.append(result("shortened_to_200_chars_and_three_items", _length(shortened) <= 240 and _items(shortened) == 3, f"{_length(shortened)} characters, {_items(shortened)} items"))
     out.append(result("final_contains_37_percent", "37%" in corrected or "37 %" in corrected, "37% present" if "37%" in corrected else "37% not in the final text"))
     out.append(result("final_keeps_the_limits", _length(corrected) <= 240 and _items(corrected) == 3, f"{_length(corrected)} characters, {_items(corrected)} items"))
