@@ -40,8 +40,17 @@ export function replacePersonaPrefix(text, sentence = NEUTRAL_PERSONA) {
  * @returns {Promise<string[]>} the files rewritten
  */
 export async function applyPersona(dshHome, sentence = NEUTRAL_PERSONA) {
-  const socket = await fs.realpath(path.join(dshHome, 'profiles', 'evimed-runtime', 'node_modules', '@evimed', 'dsh-socket'));
-  if (!socket.startsWith(`${await fs.realpath(dshHome)}${path.sep}`)) throw new Error(`socket copy is outside the runtime home: ${socket}`);
+  const link = path.join(dshHome, 'profiles', 'evimed-runtime', 'node_modules', '@evimed', 'dsh-socket');
+  const home = await fs.realpath(dshHome);
+  let socket = await fs.realpath(link);
+  if (!socket.startsWith(`${home}${path.sep}`)) {
+    // The profile sync links the socket package to the seed, which every case and every arm shares: a write through it would
+    // change the baseline for all of them. The runtime takes a private copy first (about 13 MB), and only the copy is edited.
+    await fs.unlink(link);
+    await fs.cp(socket, link, { recursive: true });
+    socket = await fs.realpath(link);
+    if (!socket.startsWith(`${home}${path.sep}`)) throw new Error(`socket copy is still outside the runtime home: ${socket}`);
+  }
   const presets = path.join(socket, 'presets');
   const written = [];
   for (const file of [path.join(presets, 'evimed-universal.patch.yml'), path.join(presets, 'evimed-universal', 'agent.cordis.yml')]) {

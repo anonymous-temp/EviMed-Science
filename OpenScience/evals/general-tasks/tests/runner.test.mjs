@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildPlan } from '../runner/run.mjs';
-import { replacePersonaPrefix, NEUTRAL_PERSONA } from '../runner/persona.mjs';
+import os from 'node:os';
+import { replacePersonaPrefix, applyPersona, NEUTRAL_PERSONA } from '../runner/persona.mjs';
 import { digestTranscript, normalizeTool } from '../runner/cell.mjs';
 
 const SUITE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -74,4 +75,26 @@ test('the transcript digest takes the last turn: its reply and its tool calls', 
   assert.equal(digest.reply, 'a2');
   assert.deepEqual(digest.tools.map((t) => t.name), ['web_search']);
   assert.equal(normalizeTool('mcp__evimed__literature_search'), 'literature_search');
+});
+
+test('applyPersona edits a private copy and never the shared seed the profile sync links to', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'persona-test-'));
+  try {
+    const seedSocket = path.join(root, 'seed/profiles/evimed-runtime/node_modules/@evimed/dsh-socket');
+    fs.mkdirSync(path.join(seedSocket, 'presets/evimed-universal'), { recursive: true });
+    const text = fs.readFileSync(path.join(OS, 'packages/socket/presets/evimed-universal/agent.cordis.yml'), 'utf8');
+    fs.writeFileSync(path.join(seedSocket, 'presets/evimed-universal/agent.cordis.yml'), text);
+    fs.writeFileSync(path.join(seedSocket, 'presets/evimed-universal.patch.yml'), fs.readFileSync(path.join(OS, 'packages/socket/presets/evimed-universal.patch.yml'), 'utf8'));
+    const nm = path.join(root, 'home/profiles/evimed-runtime/node_modules/@evimed');
+    fs.mkdirSync(nm, { recursive: true });
+    fs.symlinkSync(seedSocket, path.join(nm, 'dsh-socket'));
+    const written = await applyPersona(path.join(root, 'home'));
+    assert.equal(written.length, 2);
+    assert.ok(written.every((f) => f.startsWith(fs.realpathSync(path.join(root, 'home')))), 'only the runtime home is written');
+    assert.ok(fs.readFileSync(written[0], 'utf8').includes(NEUTRAL_PERSONA));
+    assert.equal(fs.readFileSync(path.join(seedSocket, 'presets/evimed-universal/agent.cordis.yml'), 'utf8'), text, 'the seed is untouched');
+    assert.ok(!fs.lstatSync(path.join(nm, 'dsh-socket')).isSymbolicLink(), 'the runtime now holds its own copy');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
