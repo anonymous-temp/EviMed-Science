@@ -1183,8 +1183,11 @@ test("the guidance offers the capability catalogue as an index of professional w
   assert.ok(CONTRACT_KINDS.includes("clinical-evidence-report"));
   // With the tool mounted, a question is for what changes the next step, never a ceremony (principle 17).
   const asking = buildGuidanceText(capabilities, { askUserEnabled: true, capsuleActive: true, reviewEnabled: false });
-  assert.match(asking, /默认不问：按最合理的理解先把事做出来，写明所作的假设/);
-  assert.match(asking, /只有缺的东西让事情没法开始.*才用 `ask_user_question` 问一次、一次问清/s);
+  assert.match(asking, /默认不问。按最合理的理解就能做的，直接做完、答完：有几种情形就把几种情形分开说清楚/);
+  assert.match(asking, /只有缺的东西让事情根本没法开始（要处理的文件或数据没给），或者动作不可撤回时，才用 `ask_user_question` 问一次、一次问清/);
+  // A question nobody answered is not the reply. On a real session a clinical question (「INR 3.8，今晚这顿还吃不吃」)
+  // was answered with two questions and nothing else once the card could not be drawn (2026-10-13).
+  assert.match(asking, /提问没有得到回答时，照最合理的理解做完，把还需要用户确认的点写在回答里，不提提问的事/);
   assert.match(asking, /自动续跑和定时触发的轮次不追问/);
   assert.doesNotMatch(asking, /本部署不接受运行中追问/);
 });
