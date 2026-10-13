@@ -389,3 +389,12 @@ test("the person's own words win over their deletion: a line they say again, wor
   assert.equal(await sessions.read(userId, `${root}/preferences/window.md`), "Release window is Wednesday night.", "said again by the person: it stays");
   assert.ok(!(await overlay.rejectedFingerprints(userId, "preferences")).has(lineFingerprint("Release window is Wednesday night.")), "and is theirs again");
 });
+
+test("the project tab's card reads the labels of an English conversation as well as a Chinese one", options, async (t) => {
+  const { userId, store, seed } = await fixture(t);
+  seed("projects/billing.md", "# Billing pipeline\nField: data engineering\n\n## Goal\n- Zero missed runs\n## Scope\n- The nightly billing jobs\n## Materials and data\n- Cron jobs, Airflow\n## Decisions\n- Invoice export first\n## Stage\n- Waiting for the retry proposal\n## Constraints\n- End of the quarter\n## Study elements\n- Design: not a study", { type: "project_context", tags: ["project=p_bill"] });
+  const card = await store.projectCard(userId, "p_bill");
+  assert.deepEqual(card.map((entry) => entry.slot), ["field", "goal", "subject", "data_source", "stage", "constraints", "design"]);
+  assert.equal(card.find((entry) => entry.slot === "field").text, "data engineering");
+  assert.equal(card.find((entry) => entry.slot === "stage").text, "Waiting for the retry proposal");
+});

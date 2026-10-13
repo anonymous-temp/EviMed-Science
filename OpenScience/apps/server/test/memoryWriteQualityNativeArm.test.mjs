@@ -18,7 +18,7 @@ test("both directories are replayed, and every case in them is shaped for this a
   const cases = (await Promise.all(NATIVE_CASE_DIRECTORIES.map(load))).flat();
   assert.deepEqual(cases.flatMap(nativeCaseIssues), []);
   const general = await load("cases-general");
-  assert.equal(general.length, 10, "the ten general cases (an engineer, a lawyer, a teacher, a product manager, a designer)");
+  assert.equal(general.length, 11, "the ten general cases (an engineer, a lawyer, a teacher, a product manager, a designer) and one English conversation");
   assert.ok(general.every((item) => item.replay.synthetic === true), "every name and number in them is invented");
   assert.ok(cases.length >= 35);
 });

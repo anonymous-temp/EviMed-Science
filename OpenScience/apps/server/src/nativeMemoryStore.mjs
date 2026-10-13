@@ -337,8 +337,14 @@ export class NativeMemoryStore {
    */
   async projectCard(userId, projectId) {
     const records = (await this.records(userId)).filter((record) => record.nativeType === "project_context" && record.scopeId === projectId);
-    const SLOT_OF_HEADING = { "目标": "goal", "范围或对象": "subject", "材料与数据": "data_source", "阶段": "stage", "约束": "constraints" };
-    const SLOT_OF_ELEMENT = { "人群": "population", "干预或暴露": "intervention", "对照": "comparator", "结局": "outcome", "设计": "design" };
+    // The labels the template has the engine write: Chinese in a Chinese conversation, these English ones in an English one
+    // (`project_context.yaml`). Any other language writes translations of them, which this closed list does not read: that card
+    // shows as the file it is, in full, on the memory page, and has no slots here.
+    const SLOT_OF_HEADING = { "目标": "goal", "范围或对象": "subject", "材料与数据": "data_source", "阶段": "stage", "约束": "constraints",
+      "goal": "goal", "scope": "subject", "materials and data": "data_source", "stage": "stage", "constraints": "constraints" };
+    const SLOT_OF_ELEMENT = { "人群": "population", "干预或暴露": "intervention", "对照": "comparator", "结局": "outcome", "设计": "design",
+      "population": "population", "intervention or exposure": "intervention", "comparator": "comparator", "outcome": "outcome", "design": "design" };
+    const ELEMENTS = new Set(["研究要素", "study elements"]);
     /** @type {Map<string, { slot: string, recordId: string, text: string, updatedAt: string | null }>} */
     const card = new Map();
     for (const record of records) {
@@ -346,15 +352,16 @@ export class NativeMemoryStore {
       for (const line of String(record.value).split("\n")) {
         const trimmed = line.trim();
         const heading = /^##\s+(.+)$/.exec(trimmed);
-        if (heading) { section = heading[1].replace(/[（(].*$/, "").trim(); continue; }
-        const field = /^领域[：:]\s*(.+)$/.exec(trimmed);
+        if (heading) { section = heading[1].replace(/[（(].*$/, "").trim().toLowerCase(); continue; }
+        const field = /^(?:领域|field)[：:]\s*(.+)$/i.exec(trimmed);
         if (field && !card.has("field")) { card.set("field", { slot: "field", recordId: record.id, text: field[1].trim(), updatedAt: record.updatedAt }); continue; }
         if (!/^[-*+]\s+\S/.test(trimmed)) continue;
         const item = trimmed.replace(/^[-*+]\s+/, "");
-        const element = /^([^：:]{1,8})[：:]\s*(.+)$/.exec(item);
-        const slot = section === "研究要素" && element ? /** @type {Record<string, string>} */ (SLOT_OF_ELEMENT)[element[1].trim()] : /** @type {Record<string, string>} */ (SLOT_OF_HEADING)[section];
+        const element = /^([^：:]{1,24})[：:]\s*(.+)$/.exec(item);
+        const inElements = ELEMENTS.has(section) && element;
+        const slot = inElements ? /** @type {Record<string, string>} */ (SLOT_OF_ELEMENT)[element[1].trim().toLowerCase()] : /** @type {Record<string, string>} */ (SLOT_OF_HEADING)[section];
         if (!slot) continue;
-        const value = section === "研究要素" && element ? element[2].trim() : item;
+        const value = inElements ? element[2].trim() : item;
         const held = card.get(slot);
         card.set(slot, held && held.recordId === record.id ? { ...held, text: `${held.text}；${value}`.slice(0, 600) } : held ?? { slot, recordId: record.id, text: value.slice(0, 600), updatedAt: record.updatedAt });
       }

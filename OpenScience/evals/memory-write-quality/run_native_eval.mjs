@@ -48,17 +48,17 @@ const FIELD_EXPECTATIONS = Object.freeze([
 
 /** What a project-card key looks like in the card's text. */
 export const CARD_PATTERNS = Object.freeze(/** @type {Record<string, RegExp>} */ ({
-  "project.field": /^领域[：:]\s*\S/m,
-  "project.goal": /##\s*目标\s*\n\s*[-*]\s+\S/,
-  "project.subject": /##\s*范围或对象\s*\n\s*[-*]\s+\S/,
-  "project.data_source": /##\s*材料与数据\s*\n\s*[-*]\s+\S/,
-  "project.stage": /##\s*阶段\s*\n\s*[-*]\s+\S/,
-  "project.constraints": /##\s*约束\s*\n\s*[-*]\s+\S/,
-  "project.population": /人群[：:]\s*\S/,
-  "project.intervention": /干预(?:或暴露)?[：:]\s*\S/,
-  "project.comparator": /对照[：:]\s*\S/,
-  "project.outcome": /结局[：:]\s*\S/,
-  "project.design": /设计[：:]\s*\S/,
+  "project.field": /^(?:领域|Field)[：:]\s*\S/im,
+  "project.goal": /##\s*(?:目标|Goal)\s*\n\s*[-*]\s+\S/i,
+  "project.subject": /##\s*(?:范围或对象|Scope)\s*\n\s*[-*]\s+\S/i,
+  "project.data_source": /##\s*(?:材料与数据|Materials and data)\s*\n\s*[-*]\s+\S/i,
+  "project.stage": /##\s*(?:阶段|Stage)\s*\n\s*[-*]\s+\S/i,
+  "project.constraints": /##\s*(?:约束|Constraints)\s*\n\s*[-*]\s+\S/i,
+  "project.population": /(?:人群|Population)[：:]\s*\S/i,
+  "project.intervention": /(?:干预(?:或暴露)?|Intervention(?: or exposure)?)[：:]\s*\S/i,
+  "project.comparator": /(?:对照|Comparator)[：:]\s*\S/i,
+  "project.outcome": /(?:结局|Outcome)[：:]\s*\S/i,
+  "project.design": /(?:设计|Design)[：:]\s*\S/i,
 }));
 
 const body = (/** @type {unknown} */ raw) => String(raw ?? "").replace(/<!-- MEMORY_FIELDS[\s\S]*?-->/g, "").trim();
@@ -85,10 +85,10 @@ export function kindsOf(files) {
       for (const line of text.split("\n")) {
         const heading = line.match(/^##\s+(.+)$/);
         if (heading) { section = heading[1].trim(); continue; }
-        if (/^领域[：:]/.test(line.trim())) { out.project_fact.push(line.trim()); continue; }
+        if (/^(?:领域|field)[：:]/i.test(line.trim())) { out.project_fact.push(line.trim()); continue; }
         if (!/^\s*[-*]\s+\S/.test(line)) continue;
-        if (section.startsWith("已定事项")) out.decision.push(line);
-        else if (section.startsWith("阶段")) out.follow_up.push(line);
+        if (/^(?:已定事项|decisions?)/i.test(section)) out.decision.push(line);
+        else if (/^(?:阶段|stage)/i.test(section)) out.follow_up.push(line);
         else out.project_fact.push(line);
       }
     } else out.other.push(rel);
