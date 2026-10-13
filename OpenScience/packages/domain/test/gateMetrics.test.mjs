@@ -48,6 +48,8 @@ const JSON_SHAPED = new Set([
 
 /** Kinds that measure something else entirely, and say so in their own metrics. */
 const OWN_METRICS = new Map([
+  // An ordinary file has no evidence matrix to cover; it counts its files and the ones that do not open.
+  ["file-deliverable", ["files", "unreadableFiles"]],
   ["grant-proposal-package", ["grantRequirements", "grantMilestones"]],
   // The four GEO contracts count what each of them is made of. A claim library
   // and a question map have no citation matrix; their own counts are what the

@@ -1039,6 +1039,25 @@ export async function readFileAt(ctx, baseDir, relativePath, signal) {
 }
 
 /**
+ * A file's raw bytes, for the one reader that needs them: the ordinary-file contract, which opens a Word file's zip
+ * directory and a PDF's header. `readText` refuses a binary file by design, so this is the second door, bounded by the
+ * kernel itself: a file over `maxBytes` fails there instead of being buffered. Null on any failure, like `readFileAt`.
+ *
+ * @param {any} ctx @param {string} baseDir @param {string} relativePath @param {number} maxBytes @param {AbortSignal} [signal]
+ * @returns {Promise<Uint8Array | null>}
+ */
+export async function readBytesAt(ctx, baseDir, relativePath, maxBytes, signal) {
+  const fs = ctx.get('fs')
+  if (!fs || typeof fs.readBytes !== 'function') return null
+  try {
+    const target = await fs.resolve(relativePath, { cwd: baseDir, signal })
+    return await fs.readBytes(target, signal, maxBytes)
+  } catch {
+    return null
+  }
+}
+
+/**
  * @param {any} ctx @param {string} baseDir @param {string} relativePath @param {AbortSignal} [signal]
  * @returns {Promise<{ name: string, directory: boolean }[]>}
  */

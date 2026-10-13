@@ -31,6 +31,7 @@ import {
   CLAIM_TOOLS,
   DOMAIN_VERSION,
   EVIDENCE_SNAPSHOT_FILE,
+  FILE_DELIVERABLE_KIND,
   MCP_TOOL_PREFIX,
   RECEIPT_FORMAT_VERSION,
   SOCKET_TOOL_NAMES,
@@ -42,6 +43,7 @@ import {
   deliverableDir,
   deliverablePath,
   errorCodeMessage,
+  fileFormatOf,
   mcpToolName,
   resolveContractKind,
   sourceTypeOfSidecar,
@@ -75,6 +77,7 @@ import {
   onToolWrap,
   onTurnEnd,
   onTurnStopping,
+  readBytesAt,
   readFileAt,
   registerTool,
   registeredToolNames,
@@ -1543,6 +1546,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             return refusal('delegation_concurrency_limit', `已有 ${concurrent} 个子代理在运行，达到本部署同时运行的上限 ${entry.limits.maxConcurrentChildren}。`
               + '用 evimed_await{mode:"any"} 等其中一个结束，再委派这一件。')
           }
+          // An ordinary file has no capability to hand a child: the root writes it, or starts a general sub-agent for a side task.
+          if (item.contractKind === FILE_DELIVERABLE_KIND) {
+            return refusal('capability_unknown', `交付物「${item.id}」是普通文件，没有可委派的专业能力：自己写进 deliverables/${item.id}/，再用 evimed_submit_deliverable 提交。`)
+          }
           const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
           if (!manifest) return refusal('capability_unknown', `能力目录里没有「${item.capability}」。`)
           if (manifest.visibility === 'internal') {
@@ -1974,6 +1981,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       staleEvidenceCount: 0,
       checks,
       ...(checks.includes('citedSourcesRecorded') ? { retrievedSources: retrievedSourcesOf(ctx, entry, call) } : {}),
+      ...(item.contractKind === FILE_DELIVERABLE_KIND ? { fileBytes: await readFileDeliverableBytes(ctx, entry.cwd || call.cwd, item.id) } : {}),
     })
     return { verdict, files, expectedOutputs }
   }
@@ -2798,6 +2806,17 @@ async function readDeliverableFiles(ctx, cwd, deliverableId, expectedOutputs, co
   /** @type {Map<string, string>} */
   const files = new Map()
   const base = deliverableDir(deliverableId)
+  // An ordinary file declares no outputs: its files are whatever its directory holds, text read as text (a receipt
+  // freezes what it can hash as text) and the rest by `readFileDeliverableBytes`, for the gate's eyes only.
+  if (contractKind === FILE_DELIVERABLE_KIND) {
+    for (const fileName of await listDeliverableFileNames(ctx, cwd, base)) {
+      const kind = fileFormatOf(fileName).kind
+      if (kind === 'office' || kind === 'pdf' || kind === 'image') continue
+      const text = await readFileAt(ctx, cwd, `${base}/${fileName}`)
+      if (text != null) files.set(fileName, text)
+    }
+    return files
+  }
   for (const output of expectedOutputs) {
     const text = await readFileAt(ctx, cwd, `${base}/${output.path}`)
     if (text != null) files.set(output.path, text)
@@ -2808,6 +2827,43 @@ async function readDeliverableFiles(ctx, cwd, deliverableId, expectedOutputs, co
     if (text != null) files.set(relative, text)
   }
   return files
+}
+
+/** The most files an ordinary deliverable's directory is read for, and the largest one read as bytes. */
+const FILE_DELIVERABLE_MAX_FILES = 64
+const FILE_DELIVERABLE_MAX_BYTES = 32 * 1024 * 1024
+
+/**
+ * The regular, visible files directly inside a deliverable's directory, by name.
+ * @param {any} ctx @param {string} cwd @param {string} base
+ * @returns {Promise<string[]>}
+ */
+async function listDeliverableFileNames(ctx, cwd, base) {
+  const entries = await listDirAt(ctx, cwd, base)
+  return entries
+    .filter((entry) => !entry.directory && !entry.name.startsWith('.') && !entry.name.includes('/'))
+    .map((entry) => entry.name)
+    .sort()
+    .slice(0, FILE_DELIVERABLE_MAX_FILES)
+}
+
+/**
+ * The bytes of an ordinary deliverable's files that are not text — a Word file, a workbook, a deck, a PDF, a picture —
+ * which is all the gate reads of them: whether the package opens. They are never digested into a receipt.
+ * @param {any} ctx @param {string} cwd @param {string} deliverableId
+ * @returns {Promise<Map<string, Uint8Array>>}
+ */
+async function readFileDeliverableBytes(ctx, cwd, deliverableId) {
+  /** @type {Map<string, Uint8Array>} */
+  const bytes = new Map()
+  const base = deliverableDir(deliverableId)
+  for (const fileName of await listDeliverableFileNames(ctx, cwd, base)) {
+    const kind = fileFormatOf(fileName).kind
+    if (kind !== 'office' && kind !== 'pdf' && kind !== 'image') continue
+    const read = await readBytesAt(ctx, cwd, `${base}/${fileName}`, FILE_DELIVERABLE_MAX_BYTES)
+    if (read) bytes.set(fileName, read)
+  }
+  return bytes
 }
 
 /**

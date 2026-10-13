@@ -38,6 +38,23 @@ test("a clean completion is the research's name and 已完成, and the body says
   assert.doesNotMatch(`${notice.title}${notice.body}`, /工作区|交付|已准备好|依据|核对/);
 });
 
+test("a conversation that produced files names them instead of pointing at the conversation", () => {
+  // An ordinary conversation has no report: the e-mail it wrote is a file, and the inbox says which (GA16, 2026-10-12).
+  const one = runFinishedNotice({ status: "succeeded", verification: null, title: "给客户写道歉邮件", artifacts: ["道歉邮件.docx"], outputFiles: ["道歉邮件.docx"],
+    artifactCounts: { deliverable: 1, revisionNotes: 0, work: 0, superseded: 0 } });
+  assert.equal(one.body, "道歉邮件.docx 已在对话里");
+  assert.equal(one.severity, "info");
+  const two = runFinishedNotice({ status: "succeeded", artifacts: ["a.xlsx", "out/b.py"], outputFiles: ["a.xlsx", "out/b.py"] });
+  assert.equal(two.body, "a.xlsx、b.py 已在对话里", "a path is shown by the name the person opens");
+  const many = runFinishedNotice({ status: "succeeded", artifacts: ["a.docx", "b.docx", "c.docx"], outputFiles: ["a.docx", "b.docx", "c.docx"] });
+  assert.equal(many.body, "a.docx、b.docx 等 3 个文件已在对话里");
+  const long = runFinishedNotice({ status: "succeeded", artifacts: ["很".repeat(40) + ".docx"], outputFiles: ["很".repeat(40) + ".docx"] });
+  assert.ok([...long.body.replace(" 已在对话里", "")].length <= 28, long.body);
+  // A failed one says why, and a specialist's report keeps its sentence.
+  assert.notEqual(runFinishedNotice({ status: "failed", errorCode: "runtime_session_error", outputFiles: ["a.docx"] }).body, "a.docx 已在对话里");
+  assert.equal(runFinishedNotice({ status: "succeeded", artifacts: ["deliverables/r/report.md"] }).body, "报告和 1 个文件已在对话里");
+});
+
 test("a run with nothing on disk points at the conversation, and an untitled one says 一项研究", () => {
   const notice = runFinishedNotice({ status: "succeeded", verification: null, artifacts: [] });
   assert.equal(notice.title, "一项研究 已完成");

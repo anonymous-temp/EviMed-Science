@@ -4,7 +4,7 @@ import { reviewDeliveredRegister } from "./reportRegisterJudge.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { availableRunActions, availableRunStepActions, runIsStalled } from "@evimed/domain";
+import { availableRunActions, availableRunStepActions, compareArtifacts, fileFormatIssues, runIsStalled } from "@evimed/domain";
 import {
   HttpError,
   assertNoSymlinkPath,
@@ -34,7 +34,8 @@ import {
   runNotice,
   runSideDegradedNotice,
 } from "./runNotices.mjs";
-import { describeRunArtifacts, describeRunArtifactRoles } from "./runArtifacts.mjs";
+import { describeRunArtifacts, describeRunArtifactRoles, isOrdinaryConversation } from "./runArtifacts.mjs";
+import { workspaceChangedFiles } from "./runWorkspaceChanges.mjs";
 import { normalizeRunEstimate } from "./runRoute.mjs";
 import {
   assembleRunProgress,
@@ -2144,7 +2145,6 @@ function clinicalEvidenceResubmitPrompt(deliverableIds) {
 
 function artifactCandidates(message, runtimeWorkspaceRoot) {
   const candidates = [];
-  const runtimeRoot = path.resolve(runtimeWorkspaceRoot);
   for (const part of message?.parts ?? []) {
     if (
       part?.type !== "tool" ||
@@ -2160,17 +2160,51 @@ function artifactCandidates(message, runtimeWorkspaceRoot) {
     //
     // The older spellings stay for the kernel on its way out.
     const input = part?.state?.input;
-    const value = input?.file_path ?? input?.filePath ?? input?.path;
-    if (typeof value !== "string") continue;
-    try {
-      const relative = path.isAbsolute(value)
-        ? path.relative(runtimeRoot, path.resolve(value)).replace(/\\/g, "/")
-        : value.replace(/\\/g, "/");
-      if (!relative || relative === ".." || relative.startsWith("../") || path.isAbsolute(relative)) continue;
-      candidates.push(normalizeWorkspaceRelativePath(relative, "artifact path"));
-    } catch { /* untrusted tool metadata is omitted */ }
+    const candidate = workspaceRelativeCandidate(input?.file_path ?? input?.filePath ?? input?.path, runtimeWorkspaceRoot);
+    if (candidate) candidates.push(candidate);
   }
   return [...new Set(candidates)].slice(0, maxArtifacts).sort();
+}
+
+/**
+ * The files a run handed to its person with the kernel's own `present` tool (mounted 2026-10-12): `{ files: [{ path,
+ * description }] }`, absolute or relative to the workspace. A presented file is the run's output whatever wrote it and
+ * whenever it was written — handing over an existing file is an answer too — so unlike a write, it is not held to the run's
+ * window (`existingArtifacts` is asked without the run for these).
+ * @param {any} message @param {string} runtimeWorkspaceRoot
+ * @returns {string[]}
+ */
+function presentedCandidates(message, runtimeWorkspaceRoot) {
+  const candidates = [];
+  for (const part of message?.parts ?? []) {
+    if (part?.type !== "tool" || part.tool !== "present" || part?.state?.status !== "completed") continue;
+    const files = part.state?.input?.files;
+    for (const file of Array.isArray(files) ? files : []) {
+      const candidate = workspaceRelativeCandidate(typeof file === "string" ? file : file?.path, runtimeWorkspaceRoot);
+      if (candidate) candidates.push(candidate);
+    }
+  }
+  return [...new Set(candidates)].slice(0, maxArtifacts).sort();
+}
+
+/**
+ * A path a tool received, as a workspace-relative artifact path, or null when it names nothing inside the workspace.
+ * Untrusted tool metadata: anything that does not normalise is omitted.
+ * @param {unknown} value @param {string} runtimeWorkspaceRoot
+ * @returns {string | null}
+ */
+function workspaceRelativeCandidate(value, runtimeWorkspaceRoot) {
+  if (typeof value !== "string") return null;
+  const runtimeRoot = path.resolve(runtimeWorkspaceRoot);
+  try {
+    const relative = path.isAbsolute(value)
+      ? path.relative(runtimeRoot, path.resolve(value)).replace(/\\/g, "/")
+      : value.replace(/\\/g, "/");
+    if (!relative || relative === ".." || relative.startsWith("../") || path.isAbsolute(relative)) return null;
+    return normalizeWorkspaceRelativePath(relative, "artifact path");
+  } catch {
+    return null;
+  }
 }
 
 async function existingArtifacts(project, candidates, run = null, endTime = null) {
@@ -2185,6 +2219,68 @@ async function existingArtifacts(project, candidates, run = null, endTime = null
     finally { await opened?.handle.close().catch(() => {}); }
   }
   return result;
+}
+
+/**
+ * What an ordinary conversation produced, by what the workspace and the transcript both witness: the files that are new or
+ * changed in the workspace since the run began (`runWorkspaceChanges.mjs` — whichever tool wrote them, `bash` and a Python
+ * script included) and the files it handed over with `present`, with the generic file contract's checks run over each (they
+ * open as the format they claim — advice, never a verdict on the run).
+ *
+ * Only for a conversation with no capability contract (`isOrdinaryConversation`): a run that owes a capability's files is
+ * judged by that capability, and what it left in the workspace besides is its own scratch. This is what the answer-mode
+ * contract of `specialistCompletionOutcome` returns for its files — it cannot name them itself, because a run with no
+ * capability at all never reaches that function.
+ *
+ * @param {{ project: any, run: any, registry: any, assistants: readonly any[], runtimeWorkspaceRoot: string, endTime: number | null | undefined }} input
+ * @returns {Promise<{ files: string[], notices: any[] }>}
+ */
+async function ordinaryConversationOutputs({ project, run, registry, assistants, runtimeWorkspaceRoot, endTime }) {
+  const none = { files: [], notices: [] };
+  const plan = Array.isArray(run.deliverables) && run.deliverables.length ? run.deliverables : (run.nativeWorkflow?.plan?.items ?? []);
+  const agentId = run.effectiveAgentId ? String(run.effectiveAgentId) : "";
+  const outputs = agentId ? registry?.get?.(agentId)?.outputs : null;
+  const declared = Array.isArray(outputs) ? new Set(outputs.map((/** @type {any} */ output) => String(output?.path ?? ""))) : null;
+  if (!isOrdinaryConversation(run, declared, Array.isArray(plan) ? plan : [])) return none;
+  const startedAt = Date.parse(String(run.startedAt ?? ""));
+  const until = typeof endTime === "number" && Number.isFinite(endTime) ? endTime : Date.now();
+  const changed = Number.isFinite(startedAt) ? await workspaceChangedFiles(project.workspaceDir, { since: startedAt, until }) : [];
+  const handedOver = [...new Set(assistants.flatMap((message) => presentedCandidates(message, runtimeWorkspaceRoot)))].slice(0, maxArtifacts);
+  const files = [...new Set([
+    ...await existingArtifacts(project, changed, run, endTime),
+    // No run: a file handed over is the answer whenever it was written.
+    ...await existingArtifacts(project, handedOver),
+  ])].sort().slice(0, maxArtifacts);
+  return { files, notices: await outputFormatNotices(project, files) };
+}
+
+/** The files of an ordinary conversation that are read for the generic contract's format checks, and the largest one read. */
+const OUTPUT_FORMAT_CHECK_FILES = 12;
+const OUTPUT_FORMAT_CHECK_BYTES = 32 * 1024 * 1024;
+
+/**
+ * The generic file contract's checks, run over an ordinary conversation's own files: each opens as the format its name claims.
+ * One notice per file that does not (the model had its chance in its own turn; this tells the reader, in the platform's
+ * Chinese), nothing for one that does. Advice: a file that fails is still delivered.
+ * @param {any} project @param {readonly string[]} files
+ * @returns {Promise<any[]>}
+ */
+async function outputFormatNotices(project, files) {
+  const notices = [];
+  const ordered = [...files].sort((left, right) => compareArtifacts({ path: left }, { path: right })).slice(0, OUTPUT_FORMAT_CHECK_FILES);
+  for (const relative of ordered) {
+    let opened;
+    try {
+      opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative));
+      if (!opened.stat.isFile() || opened.stat.size > OUTPUT_FORMAT_CHECK_BYTES) continue;
+      const bytes = new Uint8Array(await opened.handle.readFile());
+      for (const found of fileFormatIssues(relative, bytes)) {
+        notices.push(runNotice(found.code, found.message, { check: found.check, file: relative, detail: found.message }));
+      }
+    } catch { /* unreadable, escaped or linked: the file is delivered unchecked */ }
+    finally { await opened?.handle.close().catch(() => {}); }
+  }
+  return notices;
 }
 
 async function readRequiredFile(project, relative, freshSince = null) {
@@ -4288,7 +4384,7 @@ export class AgentRunStore {
         return Array.isArray(outputs) ? outputs.map((/** @type {any} */ output) => String(output?.path ?? "")).filter(Boolean) : null;
       });
     } catch { /* isolated: a record that cannot be described is still a record */ }
-    return { ...run, ...(described ?? {}), artifactRoles: describeRunArtifactRoles(run, id => registry?.get?.(id)?.outputs), stepActions: availableRunStepActions(run.deliverables ?? []), availableActions: availableRunActions(/** @type {any} */ (run),
+    return { ...run, ...(described ?? {}), artifactRoles: describeRunArtifactRoles(run, id => registry?.get?.(id)?.outputs, described?.outputFiles), stepActions: availableRunStepActions(run.deliverables ?? []), availableActions: availableRunActions(/** @type {any} */ (run),
       Boolean(registry?.get?.(run.effectiveAgentId ?? run.agentId))), stalled: runIsStalled(run) };
   }
 
@@ -5681,7 +5777,7 @@ export class AgentRunStore {
       if (this.judgeService) {
         const agent = (await this.agentRegistry.catch(() => null))?.get?.(result.effectiveAgentId);
         const pending = this.independentWork(() => reviewDeliveredRegister({
-          project, run: result, judgeService: this.judgeService,
+          project, run: this.withArtifactKinds(result), judgeService: this.judgeService,
           maxLines: this.registerJudgeMaxLines,
           internalProject: this.internalProject(project), internalCapability: agent?.visibility === "internal",
           onNotices: notices => this.appendQualityNotices(project, runId, notices),
@@ -6438,7 +6534,18 @@ export class AgentRunStore {
         ? [...said, ...(terminal.qualityNotices ?? [])]
         : [...(terminal.qualityNotices ?? []), ...said];
     }
-    return this.finishInternal(project, run.id, { ...terminal, artifacts,
+    // An ordinary conversation's files (course correction 2026-10-12, GA16). Its own witness is the workspace and the
+    // transcript's `present` calls, joined to what its `write` calls named; a run that owes a capability's files is
+    // untouched. Held back until here so no verdict above reads a file this only adds.
+    let outputs = { files: /** @type {string[]} */ ([]), notices: /** @type {any[]} */ ([]) };
+    if (terminal.status === "succeeded") {
+      try {
+        outputs = await ordinaryConversationOutputs({ project, run, registry: await this.agentRegistry, assistants: allRunAssistants, runtimeWorkspaceRoot, endTime: ownEnd?.time });
+      } catch { /* isolated: the files stay in the workspace; the record just does not list the ones only the workspace saw */ }
+    }
+    return this.finishInternal(project, run.id, { ...terminal,
+      artifacts: outputs.files.length ? [...new Set([...artifacts, ...outputs.files])].sort().slice(0, maxArtifacts) : artifacts,
+      ...(outputs.notices.length ? { qualityNotices: [...(terminal.qualityNotices ?? []), ...outputs.notices] } : {}),
       ...(run.nativeTurn && ownEnd?.time ? { finishedAt: new Date(ownEnd.time).toISOString() } : {}),
     });
   }

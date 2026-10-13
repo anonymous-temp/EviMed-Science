@@ -12,9 +12,16 @@
  * A plan with no deliverables is legal — most questions are answered directly —
  * but it must say why, so "I forgot to plan" and "this needed no artifact" stay
  * distinguishable.
+ *
+ * Both rules are the professional workflows', and an ordinary file is not one
+ * (course correction 2026-10-12, GA02 / GA25): a `file-deliverable` names no
+ * capability — there is no method behind a rename script — and a plan whose
+ * deliverables are all of that kind may have no clarifications, because a clear
+ * request has no assumption to record. Nothing else about a plan is relaxed.
  */
 
 import { isContractKind } from './contractKinds.mjs'
+import { FILE_DELIVERABLE_KIND } from './fileDeliverable.mjs'
 import { PLAN_ITEM_STATES } from './states.mjs'
 import { STUDY_TYPES, isStudyType } from './studyTypes.mjs'
 
@@ -74,7 +81,10 @@ export function validateTaskPlan(value) {
   const clarifications = Array.isArray(raw.clarifications)
     ? raw.clarifications.map((item) => String(item ?? '').trim()).filter(Boolean)
     : []
-  if (!clarifications.length) {
+  const rawEntries = Array.isArray(raw.deliverables) ? raw.deliverables : []
+  const ordinaryFilesOnly = rawEntries.length > 0 && rawEntries.every((entry) => (
+    entry && typeof entry === 'object' && String(/** @type {Record<string, unknown>} */ (entry).contractKind ?? '').trim() === FILE_DELIVERABLE_KIND))
+  if (!clarifications.length && !ordinaryFilesOnly) {
     issues.push({
       code: 'plan_missing_clarifications',
       message: 'clarifications[] must record the questions asked, or the assumptions taken instead.',
@@ -105,7 +115,7 @@ export function validateTaskPlan(value) {
       issues.push({ code: 'contract_kind_unknown', message: `unknown contract kind "${contractKind}".`, deliverableId: id })
     }
     const capability = String(item.capability ?? '').trim()
-    if (!capability) {
+    if (!capability && contractKind !== FILE_DELIVERABLE_KIND) {
       issues.push({ code: 'plan_invalid', message: 'each deliverable must name a capability.', deliverableId: id })
     }
     const dependsOn = Array.isArray(item.dependsOn)

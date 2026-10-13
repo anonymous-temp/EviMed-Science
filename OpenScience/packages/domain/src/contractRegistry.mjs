@@ -13,6 +13,7 @@
 
 import { checkIdOf, clinicalEvidenceAdvisoryNotes, clinicalEvidenceCheckIds, clinicalEvidencePackageErrorCode, clinicalSafetyRuleHits, reportSectionShares, validateClinicalEvidencePackage, citationIntegrityIssues, runtimeLeakageLine, verificationGateMetrics } from './clinicalEvidence.mjs'
 import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contractKinds.mjs'
+import { FILE_FORMAT_CODES, fileFormatIssues, fileFormatOf } from './fileDeliverable.mjs'
 import { clinicalSafetyCautionHits, matchedClinicalTriggers, matchedHighRiskEntities } from './safetyRules.mjs'
 import { appraisalTableFindings } from './appraisalContract.mjs'
 import { statisticalAnalysisFindings } from './statisticalAnalysisContract.mjs'
@@ -80,6 +81,8 @@ export const GATE_CHECK_IDS = Object.freeze([
   // into it would cost.
   'clinical-content-trigger',
   'clinical-high-risk-entity',
+  // An ordinary file that exists, is not empty and opens as its format (`fileDeliverable.mjs`): advice, always.
+  'file-format',
   // A report writing its own package's JSON keys and values as prose: advice,
   // measured before anything is asked of it (principle 4).
   'package-vocabulary-in-prose',
@@ -185,6 +188,8 @@ export const GATE_CHECK_IDS = Object.freeze([
  * @typedef {object} GateInput
  * @property {string} contractKind
  * @property {Map<string, string>} files          relative path inside the deliverable dir -> text
+ * @property {Map<string, Uint8Array>} [fileBytes]  the bytes of files that are not text (a Word file, a workbook, a PDF),
+ *   for the one kind whose checks read bytes (`file-deliverable`); absent where the caller reads text only
  * @property {string} [packagePath]              trusted workspace-relative deliverable directory
  * @property {readonly {path: string, required: boolean}[]} [expectedOutputs]
  * @property {string | null} [briefText]          the dispatcher's copy of the question
@@ -284,31 +289,44 @@ function proseHygieneIssues(input, proseFiles) {
         { path, line: named.line, severity: 'advisory', check: 'package-vocabulary-in-prose' },
       ))
     }
-    if (!isClinicalContractKind(input.contractKind)) {
-      const triggers = matchedClinicalTriggers(body)
-      if (triggers.length) {
-        issues.push(issue(
-          'clinical_content_without_clinical_contract',
-          `${path} discusses ${triggers.slice(0, 3).join('、')} but this deliverable is not under a clinical contract. Deliver it as a clinical contract kind, or remove the clinical content.`,
-          { path, check: 'clinical-content-trigger' },
-        ))
-      }
-      // The wide half of the same question, as a measurement. `routingEntities`
-      // holds two names and blocks; `highRiskEntities` holds a hundred and
-      // notices. A bibliometric study of metformin literature is legitimately
-      // about metformin and must not be withheld for saying so — but how often
-      // a non-clinical deliverable talks about a high-alert medicine is exactly
-      // the distribution principle 4 wants before any of those names is
-      // promoted into the blocking list.
-      const highRisk = matchedHighRiskEntities(body)
-      if (highRisk.length) {
-        issues.push(issue(
-          'clinical_high_risk_entity_notice',
-          `${path} names ${highRisk.slice(0, 3).join('、')}, a high-alert medicine, under a non-clinical contract. No action is required; if the file carries advice about taking it, deliver it as a clinical contract kind so the safety rules apply.`,
-          { path, severity: 'advisory', check: 'clinical-high-risk-entity' },
-        ))
-      }
-    }
+    if (!isClinicalContractKind(input.contractKind)) issues.push(...clinicalContentIssues(path, body))
+  }
+  return issues
+}
+
+/**
+ * What a file outside the clinical contracts says about medicine, as a notice.
+ *
+ * The first finding is the narrow trigger (`routingEntities`: two names) and the second the wide measurement
+ * (`highRiskEntities`: a hundred). Both are for the reader, and neither asks anything of them: until 2026-10-13 the first
+ * was `required` and told the run to "deliver it as a clinical contract kind, or remove the clinical content" — a
+ * sentence no run could act on for an e-mail that merely names a medicine, and a wrong one for a capability whose whole
+ * subject is that medicine. What it says now is what happens: the file mentions a medicine, the clinical safety rules
+ * apply to what it says about taking it, and nothing is withheld or removed.
+ *
+ * A bibliometric study of metformin literature is legitimately about metformin and must not be withheld for saying so — but
+ * how often a non-clinical deliverable talks about a high-alert medicine is exactly the distribution principle 4 wants
+ * before any of those names is promoted into the blocking list.
+ * @param {string} path @param {string} body @returns {GateIssue[]}
+ */
+function clinicalContentIssues(path, body) {
+  /** @type {GateIssue[]} */
+  const issues = []
+  const triggers = matchedClinicalTriggers(body)
+  if (triggers.length) {
+    issues.push(issue(
+      'clinical_content_without_clinical_contract',
+      `${path} mentions ${triggers.slice(0, 3).join('、')}: the clinical safety rules apply to what it says about taking it. This is a notice for the reader; no change to the file is asked for.`,
+      { path, severity: 'advisory', check: 'clinical-content-trigger' },
+    ))
+  }
+  const highRisk = matchedHighRiskEntities(body)
+  if (highRisk.length) {
+    issues.push(issue(
+      'clinical_high_risk_entity_notice',
+      `${path} names ${highRisk.slice(0, 3).join('、')}, a high-alert medicine, under a non-clinical contract. No action is required; if the file carries advice about taking it, deliver it as a clinical contract kind so the safety rules apply.`,
+      { path, severity: 'advisory', check: 'clinical-high-risk-entity' },
+    ))
   }
   return issues
 }
@@ -389,6 +407,36 @@ function statConsistencyIssues(input, proseFiles) {
     }
   }
   return issues
+}
+
+/**
+ * The generic file contract: every file of the deliverable exists, is not empty and opens as the format its name claims
+ * (`fileDeliverable.mjs`). Every finding is advice — the verdict is always `ok` — because nothing about an ordinary file is
+ * worth withholding it for, and a run that wrote a Word file that does not open is told while it can still write another.
+ * A text file is also read for the medicines it names, as any non-clinical file is.
+ * @param {GateInput} input @returns {GateVerdict}
+ */
+function validateFileDeliverable(input) {
+  /** @type {GateIssue[]} */
+  const issues = []
+  const encoder = new TextEncoder()
+  /** @type {Map<string, Uint8Array>} */
+  const entries = new Map()
+  for (const [path, body] of input.files) entries.set(path, encoder.encode(body))
+  // Where both read the file, the bytes are the file: the text of a binary one is not.
+  for (const [path, bytes] of input.fileBytes ?? []) entries.set(path, bytes)
+  if (entries.size === 0) {
+    issues.push(issue(FILE_FORMAT_CODES.missing, 'No file was found in this deliverable\'s directory.', { severity: 'advisory', check: 'file-format' }))
+  }
+  let unreadable = 0
+  for (const [path, bytes] of entries) {
+    const found = fileFormatIssues(path, bytes)
+    unreadable += found.length
+    for (const item of found) issues.push(issue(item.code, item.message, { severity: 'advisory', path, check: 'file-format' }))
+    const body = input.files.get(path)
+    if (body && fileFormatOf(path).kind === 'text') issues.push(...clinicalContentIssues(path, body))
+  }
+  return { ok: true, contractKind: input.contractKind, issues, metrics: { files: entries.size, unreadableFiles: unreadable }, errorCode: null }
 }
 
 /** @param {GateInput} input @returns {GateVerdict} */
@@ -839,6 +887,7 @@ const VALIDATORS = Object.freeze({
     datasetScopingFindings(input, proseFilesOf(input)),
   ),
   'research-brief': (input) => validateReportShaped(input, proseFilesOf(input)),
+  'file-deliverable': validateFileDeliverable,
   // Both compose rather than replace: the shared required-output pass and prose
   // hygiene stay in one place, and each capability adds only what it owns. The
   // findings they contribute are advisory by construction, so blocking for

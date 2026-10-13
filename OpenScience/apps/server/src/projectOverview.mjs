@@ -87,14 +87,18 @@ export function capabilityName(id) {
 }
 
 /**
- * The runs that are the researcher's work in this project: their own turns, finished, of a capability they can name.
+ * The runs that are the researcher's work in this project: their own turns, finished, of a capability they can name — or, with
+ * `unnamed`, of none: a conversation no capability took (a typed-in turn the router had no line for) is still theirs, and
+ * `unnamed` says which of those have something to show.
  * @param {readonly any[]} runs @param {(agentId: string) => boolean} isInternal
+ * @param {(run: any) => boolean} [unnamed]
  */
-function ownRuns(runs, isInternal) {
+function ownRuns(runs, isInternal, unnamed = () => false) {
   return (runs ?? []).filter((run) => {
     if (!run?.id || run.deleted === true || run.status !== "succeeded" || !isResearcherRun(run)) return false;
     const agent = String(run.effectiveAgentId ?? run.agentId ?? "");
-    return Boolean(agent) && !isInternal(agent) && capabilityName(agent) !== null;
+    if (!agent) return unnamed(run);
+    return !isInternal(agent) && capabilityName(agent) !== null;
   });
 }
 
@@ -121,8 +125,11 @@ export function capabilityUse(runs, isInternal = () => false) {
  * One work per deliverable — the file a reader opens first (`artifactPresentation`'s rank) — so a package of a report, a
  * matrix and a summary is one line, named by the conversation it came out of.
  *
+ * A conversation with no capability behind it (an e-mail, a workbook, a deck, a script) has no package to open first: each file
+ * it produced is a work of its own (`outputFiles`, `runArtifacts.mjs`).
+ *
  * @param {readonly any[]} runs
- * @param {{ describe?: (run: any) => { artifactKinds?: Record<string, string>, artifactRoles?: Record<string, string> },
+ * @param {{ describe?: (run: any) => { artifactKinds?: Record<string, string>, artifactRoles?: Record<string, string>, outputFiles?: string[] },
  *   isInternal?: (agentId: string) => boolean, timeZone?: string | null, limit?: number }} [options]
  * @returns {{ month: string, items: { runId: string, title: string, path: string, name: string, at: string }[] }[]}
  */
@@ -131,10 +138,15 @@ export function projectWorks(runs, { describe = () => ({}), isInternal = () => f
   const format = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" });
   /** @type {{ runId: string, title: string, path: string, name: string, at: string }[]} */
   const works = [];
-  for (const run of ownRuns(runs, isInternal)) {
+  for (const run of ownRuns(runs, isInternal, (item) => Array.isArray(describe(item)?.outputFiles))) {
     const at = [run.finishedAt, run.startedAt, run.createdAt].find((value) => typeof value === "string" && Number.isFinite(Date.parse(value)));
     if (!at) continue;
-    const { artifactKinds = {}, artifactRoles = {} } = describe(run) ?? {};
+    const { artifactKinds = {}, artifactRoles = {}, outputFiles = null } = describe(run) ?? {};
+    const title = excerpt(run.title || run.question || capabilityName(run.effectiveAgentId ?? run.agentId) || capabilityName(OPEN_DOMAIN_ANSWER_AGENT_ID), 120);
+    if (Array.isArray(outputFiles)) {
+      for (const path of outputFiles) works.push({ runId: String(run.id), title, path, name: artifactPresentation(path, artifactRoles[path] ?? null).name, at: new Date(at).toISOString() });
+      continue;
+    }
     const paths = [...new Set([...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])].filter((path) => typeof path === "string" && path))];
     /** @type {Map<string, { path: string, rank: number, name: string }>} */
     const best = new Map();
@@ -148,7 +160,6 @@ export function projectWorks(runs, { describe = () => ({}), isInternal = () => f
         best.set(group, { path, rank: shown.rank, name: shown.name });
       }
     }
-    const title = excerpt(run.title || run.question || capabilityName(run.effectiveAgentId ?? run.agentId), 120);
     for (const work of [...best.values()].sort((left, right) => left.path.localeCompare(right.path, "en"))) {
       works.push({ runId: String(run.id), title, path: work.path, name: work.name, at: new Date(at).toISOString() });
     }

@@ -8630,3 +8630,154 @@ test('a stall notice survives workspace-only movement and clears live after auth
   assert.equal(states.at(-1).stalled, false, 'the already connected browser receives the resumed state');
   store.monitors.get(started.id)?.cancel();
 });
+
+/* ----------------------------------------- an ordinary conversation's files */
+
+// Course correction 2026-10-12, GA16: a run's files were only those a `write` or `edit` tool call named, so a Word file built
+// by a Python script the model started with `bash` (the office skills' way), a file a shell redirect wrote and everything a
+// script printed to disk had left no trace in the ledger, and what was recorded was classed as the run's scratch. An ordinary
+// conversation's files are what is new or changed in the workspace during the run, whichever tool wrote them.
+
+/** A minimal Word package: the zip directory lists the two parts the format cannot open without. */
+function wordPackageBytes(parts = ["[Content_Types].xml", "word/document.xml"]) {
+  const encoder = new TextEncoder();
+  const u16 = (value) => [value & 0xff, (value >> 8) & 0xff];
+  const u32 = (value) => [value & 0xff, (value >> 8) & 0xff, (value >> 16) & 0xff, (value >>> 24) & 0xff];
+  const local = [];
+  const central = [];
+  for (const name of parts) {
+    const nameBytes = [...encoder.encode(name)];
+    central.push(...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(0), ...u32(0), ...u16(nameBytes.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(local.length), ...nameBytes);
+    local.push(...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(0), ...u32(0), ...u16(nameBytes.length), ...u16(0), ...nameBytes);
+  }
+  return Buffer.from([...local, ...central, ...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(parts.length), ...u16(parts.length), ...u32(central.length), ...u32(local.length), ...u16(0)]);
+}
+
+/** A `bash` call as the ledger reads it: the command text is never parsed, so what it says is beside the point. */
+const bashPart = (command) => ({ type: "tool", tool: "bash", state: { status: "completed", input: { command }, output: "" } });
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test("a Word file a script wrote through bash, and a file a redirect wrote, are the run's files — and its outputs, not its scratch", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    await dispatch("turn_ordinary_files");
+    await wait(20);
+    const workspace = project.workspaceDir;
+    await mkdir(path.join(workspace, "output"), { recursive: true });
+    await writeFile(path.join(workspace, "道歉邮件.docx"), wordPackageBytes());
+    await writeFile(path.join(workspace, "output", "sales-summary.xlsx"), Buffer.from("not read: this one is a stub"));
+    await writeFile(path.join(workspace, "rename.py"), "import sys\nprint(sys.argv)\n");
+    appendHistory([
+      skillLoadedPart,
+      bashPart("python3 make_docx.py  # writes 道歉邮件.docx"),
+      bashPart("cat > rename.py <<'PY'\nimport sys\nPY"),
+      { type: "text", text: "邮件已写好，见 道歉邮件.docx。" },
+    ]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "succeeded", noticeTexts(run).join(" | "));
+    assert.deepEqual(run.artifacts, ["output/sales-summary.xlsx", "rename.py", "道歉邮件.docx"]);
+
+    const described = store.withArtifactKinds(run);
+    assert.deepEqual(described.artifactCounts, { deliverable: 3, revisionNotes: 0, work: 0, superseded: 0 });
+    // The order a reader looks for them (`compareArtifacts`): documents and drafts before data.
+    assert.deepEqual([...described.outputFiles.slice(0, 2)].sort(), ["rename.py", "道歉邮件.docx"].sort());
+    assert.equal(described.outputFiles[2], "output/sales-summary.xlsx");
+    // The script is shown to the person who asked for it; a capability's scripts are not.
+    assert.equal(described.artifactRoles["rename.py"], "draft");
+    assert.equal(described.artifactRoles["output/sales-summary.xlsx"], "data");
+    assert.equal(described.artifactRoles["道歉邮件.docx"], "document");
+  });
+});
+
+test("scratch, dependencies, the data mount, the library and the platform's own files are not a conversation's outputs", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    await dispatch("turn_ordinary_scratch");
+    await wait(20);
+    const workspace = project.workspaceDir;
+    const put = async (relative, text = "x") => {
+      await mkdir(path.dirname(path.join(workspace, relative)), { recursive: true });
+      await writeFile(path.join(workspace, relative), text);
+    };
+    await put("summary.md", "# 摘要\n");
+    // Ignored, each for its own reason.
+    for (const relative of [
+      "tmp/step.py", "work/draft-1.md", "scratch/a.txt", "__pycache__/m.cpython-312.pyc", "node_modules/pkg/index.js", "venv/bin/python",
+      ".hidden/a.md", ".cache/b", `${workspaceLayout.runStateDir}/state.json`, `${workspaceLayout.briefDir}/research-brief.md`,
+      `${workspaceLayout.sourcesDir}/pubmed/1.json`, "data/ukb.csv", "knowledge-base/policy.md", workspaceLayout.receiptFile, workspaceLayout.planFile,
+      "deep/a/b/c/d/e/f/g/too-deep.md",
+    ]) await put(relative);
+    appendHistory([skillLoadedPart, bashPart("python3 run.py"), { type: "text", text: "完成。" }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "succeeded");
+    assert.deepEqual(run.artifacts, ["summary.md"]);
+  });
+});
+
+test("a file the run did not touch is not its output, however visible; one it only edited in place is", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    const workspace = project.workspaceDir;
+    await writeFile(path.join(workspace, "contract.docx"), wordPackageBytes());
+    await writeFile(path.join(workspace, "earlier-run.xlsx"), "an earlier conversation's");
+    const longAgo = new Date(Date.now() - 3_600_000);
+    await utimes(path.join(workspace, "contract.docx"), longAgo, longAgo);
+    await utimes(path.join(workspace, "earlier-run.xlsx"), longAgo, longAgo);
+    await dispatch("turn_ordinary_edit");
+    await wait(20);
+    // G03 / G07: the person's own file, changed in place.
+    await writeFile(path.join(workspace, "contract.docx"), wordPackageBytes());
+    appendHistory([skillLoadedPart, bashPart("python3 edit.py"), { type: "text", text: "已把付款期限改为 45 天。" }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.deepEqual(run.artifacts, ["contract.docx"]);
+  });
+});
+
+test("a file handed over with present is the run's output whatever its age, and the kernel's own spelling of the call is read", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    const workspace = project.workspaceDir;
+    await mkdir(path.join(workspace, "reports"), { recursive: true });
+    await writeFile(path.join(workspace, "reports", "q3.pdf"), "%PDF-1.7\n%%EOF\n");
+    const longAgo = new Date(Date.now() - 3_600_000);
+    await utimes(path.join(workspace, "reports", "q3.pdf"), longAgo, longAgo);
+    await dispatch("turn_ordinary_present");
+    appendHistory([
+      skillLoadedPart,
+      { type: "tool", tool: "present", state: { status: "completed", input: { files: [
+        { path: path.join(workspace, "reports", "q3.pdf"), description: "上季度报告" },
+        { path: "/etc/passwd", description: "outside the workspace is not an output" },
+        { path: "reports/missing.pdf" },
+      ] }, output: "Presented" } },
+      { type: "text", text: "报告在上面。" },
+    ]);
+    // The control plane reads the kernel's paths against the root the model sees; the harness runs without a container.
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.deepEqual(run.artifacts, ["reports/q3.pdf"]);
+  });
+});
+
+test("an output that does not open as its format is said once and still delivered", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    await dispatch("turn_ordinary_broken");
+    await wait(20);
+    await writeFile(path.join(project.workspaceDir, "minutes.docx"), wordPackageBytes(["[Content_Types].xml"]));
+    await writeFile(path.join(project.workspaceDir, "notes.json"), "{ this is not json");
+    await writeFile(path.join(project.workspaceDir, "fine.md"), "# 好的\n");
+    appendHistory([skillLoadedPart, bashPart("python3 make.py"), { type: "text", text: "做好了。" }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "succeeded", "a file that does not open never fails the run");
+    assert.deepEqual(run.artifacts, ["fine.md", "minutes.docx", "notes.json"]);
+    const unreadable = (run.qualityNotices ?? []).filter((notice) => notice.code === "file_unreadable");
+    assert.deepEqual(unreadable.map((notice) => notice.file).sort(), ["minutes.docx", "notes.json"]);
+    assert.ok(unreadable.every((notice) => notice.severity === "advice" && notice.check === "file-format"));
+    assert.match(unreadable.find((notice) => notice.file === "minutes.docx")?.detail ?? "", /word\/document\.xml/);
+  });
+});
+
+test("a conversation that wrote nothing has no outputs, and says so by saying nothing", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    await dispatch("turn_ordinary_none");
+    appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.deepEqual(run.artifacts, []);
+    const described = store.withArtifactKinds(run);
+    assert.equal(described.outputFiles, undefined);
+  });
+});
