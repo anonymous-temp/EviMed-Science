@@ -205,3 +205,12 @@ export function listedMarks(marks: readonly GraphMark[], hits: ReadonlySet<strin
 export function isThin(model: Pick<GraphModel, "marks" | "lines">): boolean {
   return model.marks.length < MIN_MARKS || model.lines.length === 0;
 }
+
+/**
+ * The lines of the overview with the index page's own left out: an index links to every page, so drawn it is a hub of lines
+ * that says nothing but "these are pages". A focus on the index itself keeps them.
+ */
+export function withoutIndexLines(lines: readonly GraphLine[], marks: readonly GraphMark[], focus: string | null): GraphLine[] {
+  const indexes = new Set(marks.filter((mark) => mark.type === "index" && mark.id !== focus).map((mark) => mark.id));
+  return indexes.size === 0 ? [...lines] : lines.filter((line) => !indexes.has(line.from) && !indexes.has(line.to));
+}

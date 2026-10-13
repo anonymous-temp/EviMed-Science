@@ -24,7 +24,9 @@ describe("knowledgeGraphOption", () => {
     const { plan, data, model } = build(kgMedical);
     const named = data.filter((item) => !item.name.startsWith("anchor:")).map((item) => item.name);
     expect(named).toEqual(plan.order);
-    expect(plan.order.filter(isHub)).toHaveLength(new Set(model.marks.map((mark) => mark.type)).size);
+    // Seven drugs, seven trials, six outcomes have a hub each; the two kinds with one mark share the last.
+    expect(plan.order.filter(isHub).sort()).toEqual(["project:__small", "project:drug", "project:outcome", "project:trial"]);
+    expect(model.marks).toHaveLength(22);
     expect(plan.order.filter((id) => !isHub(id))).toHaveLength(model.marks.length);
   });
 
@@ -35,6 +37,15 @@ describe("knowledgeGraphOption", () => {
     expect(grey.length).toBe(2);
     const stale = build({ ...kgMedical, nodes: (kgMedical as { nodes: object[] }).nodes.map((node, index) => (index === 0 ? { ...node, stale: [{ sourceId: "src_x", reason: "changed" }] } : node)) });
     expect(stale.data.filter((item) => item.itemStyle.color === TEST_PALETTE.check)).toHaveLength(1);
+  });
+
+  it("keeps a kind's colour when only a part of the graph is drawn", () => {
+    const whole = build(kgMedical);
+    const hues = new Map([["drug", 0], ["trial", 1], ["outcome", 2]]);
+    const part = knowledgeGraphOption({ kind: "kg", marks: whole.model.marks.filter((mark) => mark.type !== "drug"), lines: [], folded: [], hits: new Set(), focus: null, palette: TEST_PALETTE, scheme: "light", hues });
+    // Without drugs on the picture the trials are still the second hue and the legend has no drug in it.
+    expect([...part.hues.keys()]).toEqual(["trial", "outcome"]);
+    expect(part.hues.get("trial")).toBe(CHART_SERIES.light[2]);
   });
 
   it("sizes a mark by its degree and names a relation on hover, not along the line", () => {

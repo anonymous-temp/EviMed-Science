@@ -4,7 +4,7 @@ import kgMedical from "./knowledgeFixtures/graph-kg-medical.json";
 import kgMixed from "./knowledgeFixtures/graph-kg-mixed.json";
 import wikiMedical from "./knowledgeFixtures/graph-wiki-medical.json";
 import {
-  OVERVIEW_LIMIT, evidenceOf, foldId, hueOfTypes, isFold, isThin, linesBetween, listedMarks, modelOf, neighbourhood, overview, searchHits, typeLabelOf,
+  OVERVIEW_LIMIT, withoutIndexLines, evidenceOf, foldId, hueOfTypes, isFold, isThin, linesBetween, listedMarks, modelOf, neighbourhood, overview, searchHits, typeLabelOf,
 } from "./knowledgeGraph";
 
 const kg = modelOf(kgMedical as unknown as KnowledgeGraph);
@@ -132,5 +132,17 @@ describe("search, colour, lines and the list", () => {
   it("calls a graph with almost nothing in it thin", () => {
     expect(isThin(kg)).toBe(false);
     expect(isThin({ marks: kg.marks.slice(0, 2), lines: [] })).toBe(true);
+  });
+});
+
+describe("withoutIndexLines", () => {
+  it("leaves out the lines of the index page, which links to every page, unless it is the focus", () => {
+    const index = wiki.marks.find((mark) => mark.type === "index")!;
+    const touching = wiki.lines.filter((line) => line.from === index.id || line.to === index.id).length;
+    expect(touching).toBeGreaterThan(5);
+    const drawn = withoutIndexLines(wiki.lines, wiki.marks, null);
+    expect(drawn).toHaveLength(wiki.lines.length - touching);
+    expect(withoutIndexLines(wiki.lines, wiki.marks, index.id)).toHaveLength(wiki.lines.length);
+    expect(withoutIndexLines(kg.lines, kg.marks, null)).toHaveLength(kg.lines.length);
   });
 });

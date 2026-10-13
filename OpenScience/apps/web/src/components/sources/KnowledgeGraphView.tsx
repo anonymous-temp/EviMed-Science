@@ -14,7 +14,7 @@ import { readerPath, type KnowledgeListState } from "@/lib/knowledgeNav";
 import { productErrorMessage } from "@/lib/productClient";
 import { getKnowledgeGraph, type KnowledgeGraph } from "@/lib/sourceClient";
 import {
-  evidenceOf, foldId, isFold, isThin, linesBetween, listedMarks, modelOf, neighbourhood, overview, searchHits, type GraphMark,
+  evidenceOf, foldId, hueOfTypes, isFold, isThin, linesBetween, listedMarks, modelOf, neighbourhood, overview, searchHits, withoutIndexLines, type GraphMark,
 } from "./knowledgeGraph";
 import { isHub, knowledgeGraphOption } from "./knowledgeGraphOption";
 import { conversationReferences, knowledgeConversationDraft } from "./knowledgeView";
@@ -91,7 +91,7 @@ export function KnowledgeGraphView({ projectId, kind, listState, version, onChan
   const thin = scope ? isThin(scope) : false;
 
   const plan = useMemo(() => (view && !thin ? knowledgeGraphOption({
-    kind, marks: view.marks, lines: view.lines, folded: view.folded, hits, focus: focusMark?.id ?? null,
+    kind, marks: view.marks, lines: withoutIndexLines(view.lines, view.marks, focusMark?.id ?? null), folded: view.folded, hits, focus: focusMark?.id ?? null, hues: hueOfTypes(model?.marks ?? view.marks),
     // The palette is read from the live document, so a theme flip is a reason to build the option again.
     palette: mapPalette(), scheme, compact,
   }) : null), [view, thin, kind, hits, focusMark, scheme, compact]);

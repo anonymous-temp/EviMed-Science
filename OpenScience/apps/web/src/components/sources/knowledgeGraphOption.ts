@@ -35,6 +35,8 @@ export interface KnowledgeGraphInput {
   scheme: ColorScheme;
   /** A canvas a phone's width: smaller marks and fewer labels. */
   compact?: boolean;
+  /** Which kinds carry a hue, from the whole graph, so that a kind keeps its colour whatever part of the graph is drawn. */
+  hues?: ReadonlyMap<string, number>;
 }
 
 export interface KnowledgeGraphPlan {
@@ -46,25 +48,35 @@ export interface KnowledgeGraphPlan {
 }
 
 const hubId = (type: string) => `project:${type}`;
+/** A kind with fewer marks than this has no hub of its own: its marks stand round the hub of the small kinds. */
+const HUB_MIN_MARKS = 3;
+const SMALL_KINDS = "__small";
 export const isHub = (id: string) => id.startsWith("project:");
 
 export function knowledgeGraphOption(input: KnowledgeGraphInput): KnowledgeGraphPlan {
   const { marks, lines, folded, palette, kind } = input;
-  const hueOf = hueOfTypes(marks);
-  const colours = new Map<string, string>([...hueOf].map(([type, index]) => [type, CHART_SERIES[input.scheme][HUE_SLOTS[index]!]!]));
+  const hueOf = input.hues ?? hueOfTypes(marks);
+  const present = new Set([...marks.map((mark) => mark.type), ...folded.map((fold) => fold.type)]);
+  const colours = new Map<string, string>([...hueOf].filter(([type]) => present.has(type)).map(([type, index]) => [type, CHART_SERIES[input.scheme][HUE_SLOTS[index]!]!]));
   const neutral = palette.replaced;
   const maxDegree = Math.max(1, ...marks.map((mark) => mark.degree));
-  const types = [...new Map([...marks.map((mark) => [mark.type, mark.typeLabel] as const), ...folded.map((fold) => [fold.type, fold.label] as const)])];
+  const size = new Map<string, number>();
+  for (const mark of marks) size.set(mark.type, (size.get(mark.type) ?? 0) + 1);
+  for (const fold of folded) size.set(fold.type, (size.get(fold.type) ?? 0) + fold.count);
+  // A kind with a mark or two would be a hexagon for nothing: the small kinds share one hub, unless the graph is itself small.
+  const homeOf = (type: string) => (marks.length <= 12 || (size.get(type) ?? 0) >= HUB_MIN_MARKS ? type : SMALL_KINDS);
+  const labelOfKind = new Map([...marks.map((mark) => [mark.type, mark.typeLabel] as const), ...folded.map((fold) => [fold.type, fold.label] as const)]);
+  const homes = [...new Set([...labelOfKind.keys()].map(homeOf))];
 
-  const hubs: MapNode[] = types.map(([type, label]) => ({ id: hubId(type), type: "project", label, state: "current" }));
+  const hubs: MapNode[] = homes.map((home) => ({ id: hubId(home), type: "project", label: home === SMALL_KINDS ? "其他" : labelOfKind.get(home) ?? home, state: "current" }));
   const nodes: MapNode[] = marks.map((mark) => ({
     id: mark.id, type: kind === "kg" ? "entity" : "page", subtype: mark.type, group: mark.typeLabel, label: mark.title,
     weight: mark.degree / maxDegree, state: mark.stale.length > 0 ? "check" : "current", reason: mark.stale.length > 0 ? "source-changed" : null,
-    description: mark.description, projectId: mark.type,
+    description: mark.description, projectId: homeOf(mark.type),
   }));
   const clusters: MapNode[] = folded.map((fold) => ({
     id: foldId(fold.type), type: "cluster", subtype: fold.type, group: fold.label, label: `${fold.count} 个${fold.label}`, count: fold.count,
-    memberType: kind === "kg" ? "entity" : "page", state: "current", projectId: fold.type,
+    memberType: kind === "kg" ? "entity" : "page", state: "current", projectId: homeOf(fold.type),
   }));
   const all = [...hubs, ...nodes, ...clusters];
   const edges: MapEdge[] = lines.map((line) => (kind === "kg" && line.label
@@ -75,7 +87,7 @@ export function knowledgeGraphOption(input: KnowledgeGraphInput): KnowledgeGraph
     id: node.id, type: node.type, home: node.type === "project" ? null : node.projectId ?? null, weight: node.type === "project" ? 1 : node.weight ?? 0.2,
   })), edges);
   const base = graphOption({ nodes: all, edges, positions, hits: input.hits, selected: input.focus, palette, labelBudget: 0, compact: input.compact }) as {
-    tooltip: Record<string, unknown>; series: Array<{ data: Array<Record<string, any>>; links: Array<Record<string, any>> }>;
+    tooltip: Record<string, unknown>; series: Array<{ data: Array<Record<string, any>>; links: Array<Record<string, any>>; left?: number; right?: number }>;
   };
 
   const byId = new Map(marks.map((mark) => [mark.id, mark]));
@@ -88,7 +100,7 @@ export function knowledgeGraphOption(input: KnowledgeGraphInput): KnowledgeGraph
     const mark = byId.get(id);
     if (mark) {
       const colour = mark.stale.length > 0 ? palette.check : colourOf(mark.type);
-      const size = (input.compact ? 7 : 9) + 17 * Math.sqrt(mark.degree / maxDegree) + (id === input.focus ? 4 : 0);
+      const size = (input.compact ? 4 : 9) + (input.compact ? 8 : 17) * Math.sqrt(mark.degree / maxDegree) + (id === input.focus ? 3 : 0);
       return {
         ...item, symbolSize: size,
         itemStyle: { ...item.itemStyle, color: colour },
@@ -96,13 +108,15 @@ export function knowledgeGraphOption(input: KnowledgeGraphInput): KnowledgeGraph
       };
     }
     if (isHub(id)) {
-      const type = id.slice("project:".length);
-      return { ...item, itemStyle: { ...item.itemStyle, borderColor: colourOf(type) }, label: { ...item.label, color: colourOf(type) === neutral ? palette.text : palette.text } };
+      const home = id.slice("project:".length);
+      return { ...item, itemStyle: { ...item.itemStyle, borderColor: colourOf(home) } };
     }
     return item;
   });
+  // Room at the sides for the labels of the marks that stand at the edge of the picture.
+  Object.assign(series!, { left: 40, right: 120 });
   // A relation is named when the line is hovered, not drawn along every line: the list of relations would be a hairball of words.
-  series!.links = series!.links.map((link) => ({ ...link, label: { show: false }, emphasis: { label: { show: true } } }));
+  series!.links = series!.links.map((link) => ({ ...link, lineStyle: { ...link.lineStyle, opacity: 0.45, width: 0.9 }, label: { show: false }, emphasis: { label: { show: true } } }));
 
   const labelOf = new Map(all.map((node) => [node.id, node]));
   base.tooltip.formatter = (params: { dataType?: string; name?: string; data?: { tooltipText?: string } }) => {
