@@ -159,6 +159,7 @@ export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
   "evimed_memory.record_sources": "carried by the archive as memory/memory.json under `links`, beside the records: the sources each memory rests on, by recorded identifier, with what a later check found",
   "evimed_memory.record_usage": "how often each memory was recalled: derived from the records that are themselves exported, rebuilt by use, and meaningless in another deployment",
   "evimed_memory.record_reviews": "which version of the memory rules each memory was last read again under: derived, holds no text, and meaningless in another deployment, whose rules are its own",
+  "evimed_memory.topic_sets": "how the exported memories were last grouped into topics for the memory map, with the names the researcher gave those groups: derived from the records, regrouped on demand, and keyed by group ids that mean nothing in another deployment",
 });
 
 function tooLarge() { return new HttpError(413, "archive_too_large", "Account export exceeds its complete customer-state row or byte limit."); }

@@ -6,7 +6,7 @@ import { createDocumentRenderController } from "./documentRenderController.mjs";
 import { createVcrIntakeController } from "./vcrIntakeController.mjs";
 import { createSkillValidationController } from "./skillValidationController.mjs";
 import { verifyExtensionGeneration, extensionGenerationRoot } from "./extensionGenerationService.mjs";
-import { canonicalJson } from "@evimed/domain";
+import { canonicalJson, isolatedToolRowIsAdmitted } from "@evimed/domain";
 import { verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 import { validatePluginConfig } from "./pluginService.mjs";
 import { spawn, spawnSync } from "node:child_process";
@@ -577,11 +577,9 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
       const legacy = extension.projection.plugins.find(plugin => plugin.compatibility === 'legacy-citation-v1');
       if (legacy && canonicalJson({ revision: legacy.configRevision, enabled: legacy.enabled, settings: legacy.settings }) !== canonicalJson(pluginConfig)) throw controllerFailure(400, 'extension_contract_invalid', 'Selected citation configuration does not match.');
       const external = extension.projection.plugins.filter(plugin => plugin.compatibility !== 'legacy-citation-v1');
-      if (!extensionTools || external.length > 1 || external.some(plugin => {
-        const descriptor = extensionTools.descriptors.get(plugin.extensionId);
-        return !descriptor || descriptor.artifactDigest !== plugin.artifactDigest || descriptor.integrity !== plugin.integrity || plugin.executionClass !== 'isolated-tool'
-          || plugin.coordinate?.kind !== 'github' || plugin.coordinate.repository !== 'Jesse-njx/dsh-cowork' || !plugin.settings || Object.keys(plugin.settings).length !== 0 || !Array.isArray(plugin.connectionRefs) || plugin.connectionRefs.length !== 0;
-      })) throw controllerFailure(400, 'extension_contract_invalid', 'Selected tool bridge is unavailable.');
+      if (!extensionTools || external.length > 1 || external.some(plugin => !isolatedToolRowIsAdmitted(plugin, extensionTools.descriptors.get(plugin.extensionId)))) {
+        throw controllerFailure(400, 'extension_contract_invalid', 'Selected tool bridge is unavailable.');
+      }
     }
     const platform = payload.platformSkillGeneration ? await verifyPlatformSkillGeneration(config, payload.platformSkillGeneration) : null;
     const personal = payload.personalSkillGeneration ? await verifyPersonalSkillGeneration(config, project, payload.personalSkillGeneration) : null;
