@@ -74,7 +74,7 @@
       "xz-utils",
       "zlib1g"
     ],
-    "tools": ["R","Rscript","bash","chromium","curl","git","gzip","node","pandoc","pnpm","python","python3","rg","socat","tar","uv"],
+    "tools": ["R","Rscript","bash","chromium","curl","git","gzip","libreoffice-kit","node","pandoc","pnpm","python","python3","rg","socat","tar","uv"],
     "rPackages": [
       "base",
       "boot",
@@ -3405,11 +3405,11 @@
       "origin": "office",
       "source": {"kind":"release"},
       "licence": {"id":"MIT","basis":"inventory"},
-      "digest": "sha256:2cd47e048cc9de4cbe816e0a309a931e60504bf0474df467470ea8ddce216a5b",
+      "digest": "sha256:6b511044e4d1c407b883d8e7d250bc674f39aea8cebc11dab00f954b269826fc",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/create_docx.py","sha256":"41c84714d99790a78a2842500e6240ab2a72028a2cc078026e94602e22692eb6"},
-        {"path":"scripts/docx_tool.py","sha256":"8de3d80071f357ea30717b576d747963bbe1aa077367a4b5c9aa2c4a451af419"}
+        {"path":"scripts/docx_tool.py","sha256":"edf0b689f22eb3219fe0c9e9cd00b442cccc97290823a336ca1a41034e44fbda"}
       ],
       "dependencies": [
         {"kind":"python-package","name":"lxml","supply":"image","basis":"observed","evidence":"scripts/docx_tool.py"},
@@ -3486,7 +3486,7 @@
       "origin": "office",
       "source": {"kind":"release"},
       "licence": {"id":"MIT","basis":"inventory"},
-      "digest": "sha256:47b406074698b1df0b6d62cdbe920f6f589f417d83acf3722cf24a7cf04d17b7",
+      "digest": "sha256:f4b74159a03d450f4c7411ff72a3bbc5308181a765e1cfebdcac1d8134907144",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/create_pptx.py","sha256":"2025a5217bf12f21a8c8e193d5c7c7b9782f43d71f7e3d819b33e8af36ed5683"},
@@ -3529,7 +3529,7 @@
       "origin": "office",
       "source": {"kind":"release"},
       "licence": {"id":"MIT","basis":"inventory"},
-      "digest": "sha256:2cc89c51bd623eaacaac3e272f1682bbfdccfb79ebfcfe565df5c729040f85d6",
+      "digest": "sha256:d7c303b068330895e9cd55f415b0b5b1f7718522c30fc2fd2c8e7c19f0d22c6e",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/create_xlsx.py","sha256":"6035b7d828d9efe7c5cd8eee9b473705db449fe2256841a88d98ea7de417107c"},

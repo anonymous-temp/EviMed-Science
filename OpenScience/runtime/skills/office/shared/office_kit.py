@@ -61,6 +61,9 @@ def find_cli() -> Path:
         if path.is_file():
             return path
         raise KitError(f"{CLI_ENV} names {explicit}, which is not a file")
+    named = shutil.which("libreoffice-kit")  # the image links the kernel's copy under this name
+    if named:
+        return Path(named).resolve()
     found = _find(_RELATIVE)
     if not found:
         raise KitError("the LibreOffice Kit CLI is not installed here; set " + CLI_ENV + " to its cli.js")

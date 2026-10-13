@@ -181,6 +181,14 @@ kernel() {
   ' "${DSH_VERSION}"
   cordis="$(node -p "require('/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/package.json').version" 2>/dev/null || node -p "require('@deepseek-ai/cordis/package.json').version")"
   test "${cordis}" = "${DSH_CORDIS_VERSION}" || { echo "resolved cordis ${cordis} != pinned ${DSH_CORDIS_VERSION}" >&2; exit 1; }
+  # The LibreOffice Kit (WebAssembly LibreOffice, MPL-2.0) is part of the kernel's own closure at this pin: the Office skills convert,
+  # recalculate and render through it, so the image carries no system LibreOffice. It gets its own name on PATH, which is also how
+  # `verify-tools` proves it runs and how the skill-supply table learns the image has it.
+  kit="/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/libreoffice-kit/lib/cli.js"
+  test -f "${kit}" || kit="/usr/local/lib/node_modules/@deepseek-ai/libreoffice-kit/lib/cli.js"
+  test -f "${kit}" || { echo "the kernel closure carries no @deepseek-ai/libreoffice-kit" >&2; exit 1; }
+  chmod 0755 "${kit}"
+  ln -sf "${kit}" /usr/local/bin/libreoffice-kit
 }
 
 # `dsh plugin add` manages a profile's plugin set with pnpm, so the image has
@@ -355,6 +363,7 @@ verify_tools() {
   test -x /usr/bin/chromium
   rg --version
   python -m playwright --version
+  libreoffice-kit capabilities --json > /dev/null
   Rscript -e 'stopifnot(getRversion() >= "4.0.0", abs(mean(c(1, 2, 3)) - 2) < 1e-12)'
 }
 
