@@ -463,4 +463,6 @@ if (options.out) {
   await writeFile(options.out, text);
   process.stderr.write(`wrote ${options.out}\n`);
 }
-process.stdout.write(text);
+// The native arm leaves a gateway listening for its queries; the run is over, so it does not keep the process.
+if (options.arm === "native") process.stdout.write(text, () => process.exit(0));
+else process.stdout.write(text);
