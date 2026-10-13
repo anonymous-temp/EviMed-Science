@@ -1,0 +1,99 @@
+{
+  "id": "2026-10-13-learning-ignored-ordinary-work",
+  "observedIn": "course-correction general-agent probe 2026-10-12, finding GA21: apps/server/src/learningTriggers.mjs (the delivery trigger read only the files a capability's gate accepted) and capabilities/method-distillation/SKILL.md ('A research method, not the platform's bookkeeping')",
+  "observed": {
+    "ordinaryConversationFiles": "an e-mail, a workbook, a deck and a script made in an ordinary conversation were recorded as no artifact at all, so the turn was not a delivery",
+    "methodDefinition": "a method was defined as a research method: how a question is framed, a search planned, bias appraised, a statistic chosen"
+  },
+  "verbatim": [
+    { "source": "a researcher's three corrections of one weekly report, the same each time", "text": "周报先写结论，再写数据；表格放最后，不要给我长段落。" },
+    { "source": "a researcher asking for the same script conventions every time", "text": "脚本都加类型标注，再带一个能跑的单元测试，别用全局变量。" }
+  ],
+  "whyItIsWrong": "Most of the work people bring to the platform is not a literature review. A weekly report shaped the same way three times, a script held to the same conventions, a deck always made 16:9 in a dark theme taught the platform nothing: the only way such a preference was kept was a one-line memory, never a method a later run reads before it starts. The loop had two blind spots: a turn of an ordinary conversation left its files where the trigger did not look, and the distillation skill told the model that anything that was not a research practice was not a method.",
+  "caughtBy": "the general-agent probe (GA21)",
+  "fix": "A turn that produced or changed a file is a delivery lesson whichever record of the ledger the file landed in (leftFiles: artifacts, unverifiedArtifacts, outputFiles); the researcher's corrections stay the strongest signal, with or without a file; an ordinary conversation is not counted as a repeated routine because it has no kind of operation to count over. method-distillation 1.3.0 defines a method as how this person does this kind of work and gives general examples beside the research ones; the platform's delivery bookkeeping is still `no_change`, and a one-off wish is not a method (apps/server/src/learningTriggers.mjs, capabilities/method-distillation/SKILL.md).",
+  "scenarios": {
+    "triggers": [
+      {
+        "name": "a weekly report written in an ordinary conversation, recorded from what changed in the workspace",
+        "run": { "artifacts": [], "outputFiles": ["reports/weekly-10-13.docx"] },
+        "expect": { "queued": ["delivered"] }
+      },
+      {
+        "name": "a script an ordinary conversation was asked for, which no gate graded",
+        "run": { "artifacts": [], "unverifiedArtifacts": ["scripts/rename.py"] },
+        "expect": { "queued": ["delivered"] }
+      },
+      {
+        "name": "a question answered in prose, no file, no correction",
+        "run": { "artifacts": [] },
+        "expect": { "queued": [] }
+      },
+      {
+        "name": "the researcher typed a correction into the turn that made the report",
+        "run": { "artifacts": [], "outputFiles": ["reports/weekly-10-13.docx"], "corrections": 1 },
+        "expect": { "queued": ["correction", "delivered"] }
+      },
+      {
+        "name": "the researcher corrected a turn that left no file",
+        "run": { "artifacts": [], "corrections": 1 },
+        "expect": { "queued": ["correction"] }
+      }
+    ],
+    "distillation": [
+      {
+        "name": "the weekly report was reshaped the same way three times",
+        "trigger": "correction",
+        "signal": "researcher",
+        "lesson": "The assistant wrote the weekly report with the data first and long paragraphs; the researcher, for the third week running: 周报先写结论，再写数据；表格放最后，不要给我长段落。",
+        "expect": {
+          "operation": "create",
+          "appliesTo": "a weekly report for this person",
+          "namesAWayOfWorking": true
+        }
+      },
+      {
+        "name": "script conventions asked for every time",
+        "trigger": "correction",
+        "signal": "researcher",
+        "lesson": "The assistant wrote a rename script with no type hints and no test; the researcher: 脚本都加类型标注，再带一个能跑的单元测试，别用全局变量。 The same request was made for the previous two scripts.",
+        "expect": {
+          "operation": "create",
+          "appliesTo": "a script written for this person",
+          "namesAWayOfWorking": true
+        }
+      },
+      {
+        "name": "a one-off wish about one document",
+        "trigger": "correction",
+        "signal": "researcher",
+        "lesson": "The researcher, once: 这份会议纪要短一点，只留结论。 Nothing says this applies beyond this document.",
+        "expect": {
+          "operation": "no_change",
+          "reason": "a one-off wish, not a repeatable way of working"
+        }
+      },
+      {
+        "name": "a figure that belongs to one task",
+        "trigger": "delivered",
+        "signal": "run",
+        "lesson": "The deck's price slide quoted 99 yuan a seat, taken from this quarter's price list.",
+        "expect": {
+          "operation": "no_change",
+          "reason": "an answer that belongs to one task, not a method"
+        }
+      },
+      {
+        "name": "the platform's own bookkeeping is still not a method",
+        "trigger": "repair_accepted",
+        "signal": "reviewer",
+        "lesson": "Gate issues: quote location off by one line after the reference list was renumbered; the run re-anchored three claims and resubmitted.",
+        "expect": {
+          "operation": "no_change",
+          "reason": "platform bookkeeping"
+        }
+      }
+    ]
+  },
+  "liveCheck": "method-distillation 1.3.0 on a real DSH + DeepSeek session: one ordinary conversation in which the user corrects a result produces a distill job (live/bg in the acceptance directory)."
+}
