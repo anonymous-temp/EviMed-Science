@@ -163,7 +163,7 @@
       "min": 4,
       "max": 30
     },
-    "pairRecall": 0.6,
+    "pairRecall": 0.3,
     "neverTogether": [
       [
         "m14",
@@ -268,5 +268,6 @@
       "neverTogether",
       "noKindWords"
     ]
-  }
+  },
+  "expectNote": "A general account's broad themes may honestly be read finer (budget apart from procurement, a statistics plan apart from its sensitivity analyses), so this case asks only that a theme is not scattered; the merge case holds the 0.6 bar."
 }

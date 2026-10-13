@@ -124,7 +124,8 @@ test("the request names no subject and no closed list, tells the model which nam
   assert.equal(body.response_format.type, "json_object");
   assert.deepEqual(body.thinking, { type: "disabled" });
   const system = body.messages[0].content;
-  assert.match(system, /8 to 30 topics/u);
+  assert.match(system, /Prefer the broader theme/u);
+  assert.match(system, /at most thirty/u);
   assert.match(system, /open/u);
   assert.doesNotMatch(system, /专科|specialt|cardiolog|oncolog|drug|disease|药|病/iu, "a general prompt: no medical vocabulary");
   const user = JSON.parse(body.messages[1].content);

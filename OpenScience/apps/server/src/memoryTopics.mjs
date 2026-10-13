@@ -53,7 +53,7 @@ export const TOPIC_LIMITS = Object.freeze({
 const INSTRUCTIONS = [
   "You group one person's memories — short notes a research platform keeps about them and their projects — into the topics they are about.",
   "A topic is a theme of this person's own work or life that several memories belong to, named in the language of the memories in two to six words, as the person would name it (「心衰患者的随访」, 「本季度的预算」, 「SQL 性能调优」).",
-  "Make 8 to 30 topics when the memories allow it, and fewer when there are fewer distinct themes. A memory may belong to up to three topics, and may belong to none when it fits no theme.",
+  "Prefer the broader theme: the steps, tools and details of one line of work are one topic, not one topic each (slow queries, an index, an execution plan and a connection pool are one topic about database performance). As a guide a topic holds five or more memories when the set has them, so twenty memories make about four topics and two hundred make at most thirty. A memory may belong to up to three topics, and may belong to none when it fits no theme.",
   "The vocabulary is open: take the names from the memories. Never name a topic after a kind of note (a preference, a decision, a habit, a project fact) or after the platform, its tools or its steps, and never use a fixed list of subjects.",
   "Two topics that are one theme are one topic; one topic that is really two themes is two.",
   "`existing` lists the topics of the last grouping with their ids. When a theme is still there, give its topic the same id and keep its name, unless the memories now say it better; leave the id empty for a new theme. A topic with `fixed: true` was named by the person: keep its name exactly.",
