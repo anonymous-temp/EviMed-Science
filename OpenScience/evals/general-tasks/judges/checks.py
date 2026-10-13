@@ -360,16 +360,19 @@ def chk_xlsx_budget(spec, ctx):
                 for cell in row:
                     if isinstance(cell.value, str):
                         labels.setdefault(cell.value.strip(), []).append(cell)
-            profit_cells = [c for text, cells in labels.items() if HEADER_PROFIT.search(text) and not HEADER_TOTAL.fullmatch(text) for c in cells]
+            # Labels are short cells ("利润", "Profit", "合计"); a sentence that mentions profit is a note, not an anchor.
+            short = {t: cells for t, cells in labels.items() if len(t) <= 14}
+            profit_cells = [c for text, cells in short.items() if HEADER_PROFIT.search(text) and not HEADER_TOTAL.fullmatch(text) and not re.search(r"率|margin|rate", text, re.I) for c in cells]
             if not profit_cells:
                 best = best or f"{ws.title}: no profit label"
                 continue
-            anchor = profit_cells[0]
-            # Layout 1: the profit column; Layout 2: the profit row.
-            column_values = [row[anchor.column - 1] for row in grid[anchor.row:] if len(row) >= anchor.column]
-            row_values = [c for c in grid[anchor.row - 1][anchor.column:]]
-            col_formulas = sum(1 for c in column_values if _is_formula(c.value))
-            row_formulas = sum(1 for c in row_values if _is_formula(c.value))
+            # Months as rows (profit is a column) or as columns (profit is a row): take the anchor with the most formulas.
+            scored = []
+            for anchor in profit_cells:
+                column_values = [row[anchor.column - 1] for row in grid[anchor.row:] if len(row) >= anchor.column]
+                row_values = [c for c in grid[anchor.row - 1][anchor.column:]]
+                scored.append((sum(1 for c in column_values if _is_formula(c.value)), sum(1 for c in row_values if _is_formula(c.value)), column_values, row_values))
+            col_formulas, row_formulas, column_values, row_values = max(scored, key=lambda x: max(x[0], x[1]))
             col_literals = [c.coordinate for c in column_values if isinstance(c.value, (int, float)) and not isinstance(c.value, bool)]
             row_literals = [c.coordinate for c in row_values if isinstance(c.value, (int, float)) and not isinstance(c.value, bool)]
             if col_formulas >= row_formulas:
@@ -383,7 +386,7 @@ def chk_xlsx_budget(spec, ctx):
                 numeric_months = max(numeric_months, _count_month_numbers(grid))
             has_total = any(HEADER_TOTAL.search(str(c.value)) for row in grid for c in row if isinstance(c.value, str))
             total_formula = any(_is_formula(c.value) and re.search(r"(?i)sum\(", c.value) for row in grid for c in row)
-            cost_labels = {t for t in labels if re.search(r"成本|费用|房租|人力|营销|工资|采购|cost|expense|rent|marketing|payroll", t, re.I)}
+            cost_labels = {t for t in short if re.search(r"成本|费用|房租|人力|营销|工资|采购|cost|expense|rent|marketing|payroll", t, re.I)}
             number_formats = {c.number_format for row in grid for c in row if isinstance(c.value, (int, float)) or _is_formula(c.value)} - {"General"}
             problems = []
             if formulas < spec["months"]:

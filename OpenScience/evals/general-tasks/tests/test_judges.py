@@ -257,6 +257,23 @@ class OfficeChecks(unittest.TestCase):
         self.assertEqual(ok_of(env.run(spec)), [False])
         env.close()
 
+    def test_xlsx_budget_accepts_months_as_columns_and_ignores_a_note_that_mentions_profit(self):
+        from openpyxl import Workbook
+        from openpyxl.utils import get_column_letter as col
+
+        env = Env("G04", [turn("x")])
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["单位：万元。黄底为输入项，其余为公式；改数字后成本合计、利润、利润率自动重算。"])
+        ws.append(["科目", *[f"{m}月" for m in range(1, 13)], "全年合计"])
+        for label, base in (("收入", 120), ("人力成本", 40), ("房租", 12), ("营销费用", 20)):
+            ws.append([label, *[base + m for m in range(12)], f"=SUM(B{ws.max_row + 1}:M{ws.max_row + 1})"])
+        ws.append(["利润", *[f"={col(c)}3-{col(c)}4-{col(c)}5-{col(c)}6" for c in range(2, 14)], "=SUM(B7:M7)"])
+        ws["B3"].number_format = "#,##0.0"
+        wb.save(env.put(0, "b.xlsx"))
+        self.assertEqual(ok_of(env.run(CASES["G04"]["checks"][1])), [True], env.run(CASES["G04"]["checks"][1]))
+        env.close()
+
     def test_xlsx_pivot_checks_values_against_an_independent_sum_and_the_chart(self):
         from openpyxl import Workbook
         from openpyxl.chart import BarChart, Reference
