@@ -1,7 +1,7 @@
-// The knowledge base a question is asked of: which documents, and for arm B which compiled pages, are in the search index.
+// The knowledge base a question is asked of: which documents, and for arm C which compiled pages, are in the search index.
+import { ARMS, ARM_B_REMOVED } from './prompts.mjs'
 import { buildIndex } from './retrieval.mjs'
-
-export const INDEX_TITLE = '知识页目录'
+import { treeForRep, upstreamPageRecords } from './upstream.mjs'
 
 /** @param {{ documents: Array<{ sourceId: string, title: string, text: string }> }} topic */
 export function documentRecords(topic) {
@@ -9,30 +9,43 @@ export function documentRecords(topic) {
 }
 
 /**
- * The page files of a compile as searchable documents: ids `page:<prefix><slug>`, so a model that cites a page can be told from one
- * that cites a document, and the index page beside them (it is a file of the wiki folder like any other).
- * @param {{ pages: Array<{ slug: string, title: string, markdown: string }>, indexMarkdown?: string }} compiledTopic @param {string} [prefix]
+ * The tree each topic of a question's knowledge base contributes in one repetition, by topic id.
+ *  - scope `topic`: the project is the question's topic, so one tree;
+ *  - scope `pooled`: the project holds every selected topic, so one tree of each.
+ * Null when one of them has no tree: the pages are part of what arm C is, and a cell asked without them would be arm A.
+ * @param {{ scope: 'topic' | 'pooled', topic: any, corpus: any[], trees: Map<string, any[]>, rep: number }} options
+ * @returns {Record<string, { name: string, pages: Array<{ path: string, content: string }> }> | null}
  */
-export function pageRecords(compiledTopic, prefix = '') {
-  const records = compiledTopic.pages.map((page) => ({ id: `page:${prefix}${page.slug}`, kind: 'page', title: page.title, text: page.markdown }))
-  if (compiledTopic.indexMarkdown) records.push({ id: `page:${prefix}index`, kind: 'page', title: INDEX_TITLE, text: compiledTopic.indexMarkdown })
-  return records
+export function treesFor({ scope, topic, corpus, trees, rep }) {
+  const chosen = {}
+  for (const member of scope === 'pooled' ? corpus : [topic]) {
+    const tree = treeForRep(trees.get(member.id) ?? [], rep)
+    if (!tree) return null
+    chosen[member.id] = tree
+  }
+  return chosen
 }
 
 /**
- * The index for one question.
- *  - scope `topic`: the project is the question's topic: its documents, and for arm B its pages.
- *  - scope `pooled`: the project holds every selected topic: all their documents, and for arm B all their pages
- *    (page ids carry the topic, because two topics may each have a page `aspirin`).
- * @param {{ scope: 'topic' | 'pooled', arm: string, topic: any, corpus: any[], compiled: Map<string, any>, rep: number }} options
+ * The index for one question: the documents of its project and, in arm C, the pages compiled from them — every page file a
+ * searchable document beside the originals, as in the product. In a pooled project page ids carry the topic, because two
+ * topics may each have a page `entity/aspirin.md`.
+ * @param {{ scope: 'topic' | 'pooled', arm: string, topic: any, corpus: any[], trees?: Map<string, any[]>, rep: number }} options
+ * @returns {import('./retrieval.mjs').Bm25Index | null}  null: arm C with no tree to search (see `treesFor`)
  */
-export function buildKnowledgeBase({ scope, arm, topic, corpus, compiled, rep }) {
-  if (scope === 'pooled') {
-    const records = corpus.flatMap(documentRecords)
-    if (arm === 'B') for (const entry of corpus) records.push(...pageRecords(compiled.get(`${entry.id}/${rep}`), `${entry.id}/`))
-    return buildIndex(records)
+export function buildKnowledgeBase({ scope, arm, topic, corpus, trees = new Map(), rep }) {
+  if (!ARMS[arm]?.runnable) throw new Error(arm === 'B' ? ARM_B_REMOVED : `unknown arm ${arm}`)
+  const members = scope === 'pooled' ? corpus : [topic]
+  const records = members.flatMap(documentRecords)
+  if (ARMS[arm].pages) {
+    const chosen = treesFor({ scope, topic, corpus, trees, rep })
+    if (!chosen) return null
+    for (const member of members) {
+      records.push(...upstreamPageRecords(chosen[member.id], {
+        documentIds: new Set(member.documents.map((document) => document.sourceId)),
+        prefix: scope === 'pooled' ? `${member.id}/` : '',
+      }))
+    }
   }
-  const records = documentRecords(topic)
-  if (arm === 'B') records.push(...pageRecords(compiled.get(`${topic.id}/${rep}`)))
   return buildIndex(records)
 }

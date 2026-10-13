@@ -3,12 +3,20 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { sourceFileFormat, sourceFormatRoute } from "@evimed/domain";
+import { SOURCE_TEXT_SAMPLE_BYTES, sourceFileFormat, sourceFormatRoute, sourceReadRoute } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /**
- * The document parser boundary: the team's own parsing API for everything a
- * text read cannot do, and a byte-exact local read for everything it can.
+ * The document parser boundary: a byte-exact local read for everything that is
+ * text, the team's own parsing API for PDF, Office and images, and — for a file
+ * neither takes — the engine's own parsers, when the caller hands one in.
+ *
+ * Where a file is read is `sourceReadRoute`'s answer (`@evimed/domain`): its
+ * name, corrected by its bytes where the name cannot know. No file is refused
+ * here for what it is called. A file nothing reads answers
+ * `source_format_unsupported`, which the ingestion worker turns into a document
+ * kept as an original with no text and every other caller (a pasted link, a
+ * public page's file) reports as it is.
  *
  * Hidden knowledge, from the service's own source (`server.py`) and the one
  * deployment we can reach:
@@ -245,6 +253,9 @@ function leadingSummary(text) {
   return text.replace(/\s+/g, " ").trim().slice(0, 500) || SUMMARY_FALLBACK;
 }
 
+/** What the engine's parsers made of a file is named apart from the two readers above; the capture keys its text by this. */
+const ENGINE_EXTRACTOR = Object.freeze({ name: "openviking-parse", version: "1.0.0", parser: "engine" });
+
 /**
  * Text as the file wrote it. UTF-8 first; a CSV saved by Excel on a Chinese
  * Windows machine is GB18030, and decoding it as UTF-8 would store replacement
@@ -298,48 +309,59 @@ export class DocumentParserClient {
    * Parse a file the ingestion worker already resolved inside the project. Its
    * bytes are read once, without following a link, and checked against the
    * digest the source was registered under.
-   * @param {{path:string,mimeType?:string,sha256:string,sourceId?:string,signal?:AbortSignal}} input
+   *
+   * `engine` reads a file neither the local reader nor the API takes — the
+   * engine's own parsers, bound by the caller to the account and the document —
+   * and answers `{ text }`. Without one such a file is `source_format_unsupported`.
+   * @param {{path:string,mimeType?:string,sha256:string,sourceId?:string,signal?:AbortSignal,
+   *   engine?:((file:{name:string,bytes:Buffer,signal?:AbortSignal})=>Promise<{text?:string}>)|null}} input
    */
   async parse(input) {
     if (input.signal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
     const filename = path.basename(String(input.path ?? ""));
-    const route = sourceFormatRoute(filename);
-    // Refused before a byte is read: a recording can be gigabytes.
-    if (route === "media") throw parserError(415, "source_media_unsupported", "Audio and video cannot be parsed yet.");
-    if (route === "unsupported") throw parserError(415, "source_format_unsupported", "This document format cannot be parsed.");
-    const limit = route === "local" ? this.maxTextBytes : this.maxUploadBytes;
+    // Known by name, before a byte is read: a recording can be gigabytes.
+    if (sourceFormatRoute(filename) === "media") throw parserError(415, "source_format_unsupported", "Nothing here reads audio or video.");
     const handle = await fsp.open(input.path, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
     let bytes;
     try {
       const stat = await handle.stat();
       if (!stat.isFile()) throw parserError(400, "source_format_unsupported", "The source is not a regular file.");
+      // The first bytes say where the file is read when its name cannot, and so which limit it is held to. Read at
+      // a position of their own, they leave the whole-file read below where it starts.
+      const sample = Buffer.alloc(Math.min(stat.size, SOURCE_TEXT_SAMPLE_BYTES));
+      await handle.read(sample, 0, sample.length, 0);
+      const limit = sourceReadRoute(filename, sample) === "local" ? this.maxTextBytes : this.maxUploadBytes;
       if (stat.size > limit) throw parserError(413, "source_parser_input_too_large", "The source exceeds the parser's size limit.");
       bytes = await handle.readFile();
     } finally { await handle.close(); }
-    return this.parseBytes({ bytes, filename, mediaType: input.mimeType, sha256: input.sha256, signal: input.signal });
+    return this.parseBytes({ bytes, filename, mediaType: input.mimeType, sha256: input.sha256, signal: input.signal, engine: input.engine });
   }
 
   /**
    * Parse bytes that never became a file — the entry point for a caller that
-   * holds a download in memory (contract X2).
-   * @param {{bytes:Uint8Array,filename:string,mediaType?:string,sha256?:string,signal?:AbortSignal}} input
+   * holds a download in memory (contract X2). `engine` as for `parse`.
+   * @param {{bytes:Uint8Array,filename:string,mediaType?:string,sha256?:string,signal?:AbortSignal,
+   *   engine?:((file:{name:string,bytes:Buffer,signal?:AbortSignal})=>Promise<{text?:string}>)|null}} input
    */
-  async parseBytes({ bytes, filename, mediaType = "application/octet-stream", sha256 = "", signal: callerSignal = undefined }) {
+  async parseBytes({ bytes, filename, mediaType = "application/octet-stream", sha256 = "", signal: callerSignal = undefined, engine = null }) {
     if (callerSignal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
     if (!(bytes instanceof Uint8Array)) throw new TypeError("Document bytes are required.");
     const name = path.basename(String(filename ?? "")).trim();
-    if (!name || name.length > 255 || name.includes("\0")) throw parserError(400, "source_format_unsupported", "The document needs a file name with its extension.");
+    if (!name || name.length > 255 || name.includes("\0")) throw parserError(400, "source_format_unsupported", "The document needs a file name.");
     const digest = createHash("sha256").update(bytes).digest("hex");
     if (sha256 && String(sha256).toLowerCase() !== digest) {
       throw parserError(409, "source_changed", "The document bytes do not match the digest they were registered under.");
     }
-    const route = sourceFormatRoute(name);
-    if (route === "media") throw parserError(415, "source_media_unsupported", "Audio and video cannot be parsed yet.");
-    if (route === "unsupported") throw parserError(415, "source_format_unsupported", "This document format cannot be parsed.");
+    let route = sourceReadRoute(name, bytes);
+    if (route === "media") throw parserError(415, "source_format_unsupported", "Nothing here reads audio or video.");
     if (route === "local") {
       if (bytes.byteLength > this.maxTextBytes) throw parserError(413, "source_parser_input_too_large", "The text source exceeds its size limit.");
-      return this.#localText(bytes);
+      const text = decodeText(bytes);
+      // A NUL past the sampled prefix: not text after all, and nothing PostgreSQL could hold.
+      if (!text.includes("\0")) return this.#localText(text);
+      route = "engine";
     }
+    if (route === "engine") return this.#engineText({ bytes, name, engine, signal: callerSignal });
     if (!this.baseUrl) throw parserError(503, "source_parser_unconfigured", "Document parsing is not configured for this deployment.");
     if (bytes.byteLength > this.maxUploadBytes) throw parserError(413, "source_parser_payload_too_large", "The document exceeds the parser's upload limit.");
     const request = { bytes, filename: name, format: sourceFileFormat(name), mediaType: String(mediaType || "application/octet-stream"), sha256: digest };
@@ -447,16 +469,42 @@ export class DocumentParserClient {
     };
   }
 
-  /** @param {Uint8Array} bytes */
-  #localText(bytes) {
-    const text = decodeText(bytes);
+  /** @param {string} text the file's own text, decoded @param {Record<string, string>} [extractor] */
+  #localText(text, extractor = { name: "plain-text", version: "1.0.0", parser: "local" }) {
     const units = [];
     for (let offset = 0, index = 1; offset < text.length; offset += this.chunkChars, index += 1) {
       units.push({ id: `chunk-${index}`, unitType: "chunk", status: "extracted", itemIds: [] });
     }
     if (!units.length) units.push({ id: "chunk-1", unitType: "chunk", status: "no_content", itemIds: [] });
-    return { protocolVersion: 1, extractor: { name: "plain-text", version: "1.0.0", parser: "local" },
-      units, summary: leadingSummary(text), facts: [], methods: [], text };
+    return { protocolVersion: 1, extractor, units, summary: leadingSummary(text), facts: [], methods: [], text };
+  }
+
+  /**
+   * A file neither reader above takes, read by the engine's own parsers: an
+   * archive, a binary with a name nobody listed. The text is the Markdown the
+   * engine wrote — what a quotation of such a document is checked against —
+   * and never the file's own bytes, so a NUL in it is dropped: nothing a
+   * quotation could match, and nothing PostgreSQL can hold.
+   *
+   * `source_format_unsupported` when there is no engine to ask;
+   * `source_original_engine_failed` when the engine was asked and did not
+   * answer with a reading. Neither is retried here. The limit is the one any
+   * parser is sent a file under.
+   * @param {{bytes:Uint8Array,name:string,engine:Function|null,signal?:AbortSignal}} input
+   */
+  async #engineText({ bytes, name, engine, signal }) {
+    if (typeof engine !== "function") throw parserError(415, "source_format_unsupported", "Nothing here parses this document format.");
+    if (bytes.byteLength > this.maxUploadBytes) throw parserError(413, "source_parser_payload_too_large", "The document exceeds the parser's upload limit.");
+    let parsed;
+    try {
+      parsed = await engine({ name, bytes: Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength), signal });
+    } catch {
+      if (signal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
+      throw parserError(502, "source_original_engine_failed", "The engine's parsers could not read the document.");
+    }
+    const text = String(parsed?.text ?? "").replaceAll("\0", "");
+    if (text.length > this.maxTextBytes) throw parserError(502, "source_parser_response_too_large", "Parser full text exceeded its limit.");
+    return this.#localText(text, { ...ENGINE_EXTRACTOR });
   }
 
   /** The service's own liveness answer. No credential: `/health` is the one

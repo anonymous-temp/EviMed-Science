@@ -116,12 +116,14 @@ export class KnowledgePageService {
    *   config: any, documents: any, jobs: any, sources: any, store: any, resources: any, engine?: any, sourceSync?: any,
    *   entries: { writePage: (request: { user: any, project: any, tree: string, rel: string, buffer: Buffer, title: string }) => Promise<any>,
    *     retirePage: (request: { user: any, source: any }) => Promise<any>, readPage: (project: any, tree: string, rel: string) => Promise<string | null> },
+   *   libraryText?: ((userId: string, sourceId: string) => Promise<string | null>) | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
-   *   `resources`: `OpenVikingResources`; `engine`: `OpenVikingEngine` (its `ready("knowledge")`); `sourceSync`: `OpenVikingSourceSync`
+   *   `resources`: `OpenVikingResources`; `engine`: `OpenVikingEngine` (its `ready("knowledge")`); `sourceSync`: `OpenVikingSourceSync`;
+   *   `libraryText`: the account library's own copy of a document, which a compile reads beside the project's documents
    */
-  constructor({ config, documents, jobs, sources, store, resources, engine = null, sourceSync = null, entries, now = () => new Date(), report = () => {} }) {
+  constructor({ config, documents, jobs, sources, store, resources, engine = null, sourceSync = null, entries, libraryText = null, now = () => new Date(), report = () => {} }) {
     this.config = config; this.documents = documents; this.jobs = jobs; this.sources = sources; this.store = store;
-    this.resources = resources; this.engine = engine; this.sourceSync = sourceSync; this.entries = entries; this.now = now; this.report = report;
+    this.resources = resources; this.engine = engine; this.sourceSync = sourceSync; this.entries = entries; this.libraryText = libraryText; this.now = now; this.report = report;
     this.counters = { rounds: 0, failed: 0, compiles: 0, pagesMirrored: 0, pagesRetired: 0, blocksRestored: 0, writeBacks: 0, limited: 0, deferred: 0,
       quotationsPresent: 0, quotationsAbsent: 0, tokens: 0 };
   }
@@ -388,8 +390,13 @@ export class KnowledgePageService {
     for (const id of new Set(ids)) {
       if (cache.has(id) || !SOURCE_ID.test(id)) continue;
       try {
-        const source = await this.sources.get(userId, id);
-        if (!source || source.projectId !== projectId || source.deletedAt || KnowledgePageService.isPage(source)) continue;
+        const source = await this.sources.get(userId, id).catch(() => null);
+        if (!source || source.projectId !== projectId || source.deletedAt || KnowledgePageService.isPage(source)) {
+          // Not a document of this project: the account's library may hold it, and its copy there is what the compile read.
+          const copy = this.libraryText ? await this.libraryText(userId, id).catch(() => null) : null;
+          if (copy) cache.set(id, { title: /^#[ \t]+(.+)$/m.exec(copy)?.[1]?.trim() ?? id, text: copy });
+          continue;
+        }
         const capture = await this.sources.loadCapture(userId, source);
         if (!capture) continue;
         cache.set(id, { title: projectSourceManifestRecord(source).display.title,
@@ -470,10 +477,11 @@ export class KnowledgePageService {
     for (const entry of listed) {
       const rel = entry.relPath;
       if (!isKnowledgeMirrorPath(rel) || !/\.(?:md|jsonl)$/i.test(rel)) { summary.skipped += 1; continue; }
+      // The listing says the engine holds it: a read that fails below is a read to try again, never a file that is gone.
+      seen.add(rel);
       try {
         const bytes = await this.resources.download(userId, entry.uri);
         if (!bytes) continue;
-        seen.add(rel);
         const engineText = bytes.toString("utf8");
         if (isTypedKnowledgePage(rel, engineText)) summary.typed += 1;
         const record = known.get(rel);
@@ -905,7 +913,8 @@ export class KnowledgePageService {
 
   /** The mirrored files of one tree, read from the project. @param {string} userId @param {any} project @param {"wiki" | "kg"} tree */
   async #files(userId, project, tree) {
-    const records = await this.#pageRecords(userId, project.id, { tree });
+    // In path order, so a graph's nodes come out the same way every time it is read.
+    const records = (await this.#pageRecords(userId, project.id, { tree })).sort((left, right) => (left.payload.path < right.payload.path ? -1 : 1));
     /** @type {{ path: string, content: string, record: any }[]} */
     const files = [];
     for (const row of records) {

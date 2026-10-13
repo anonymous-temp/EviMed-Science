@@ -33,7 +33,6 @@ const RESEARCHER_OWNED = [
 const PLATFORM_INTERNAL = {
   "learningRuntime.mjs": "the learning loop distils and relates methods in an internal project",
   "sourceUnderstandingRuntime.mjs": "reading a document into the knowledge base is the platform's cost",
-  "knowledgeCompileRuntime.mjs": "compiling a project's documents into knowledge pages is held by the compile's own caps (`knowledge` purpose), never by a conversation",
   "evolutionRuns.mjs": "literature-driven tool development and protected paper evaluation use the platform's own budget",
 };
 

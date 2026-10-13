@@ -62,7 +62,7 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     };
     /** Read every queued document; an understanding is not part of this fixture. */
     const ingest = async () => {
-      for (let round = 0; round < 60; round += 1) {
+      for (let round = 0; round < 600; round += 1) {
         const queued = await app.store.database.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest' AND status IN ('queued','running')", [user.id]);
         if (!queued.rowCount) return;
         await app.sourceWorker.tick();

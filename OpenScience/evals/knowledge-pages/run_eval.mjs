@@ -1,65 +1,78 @@
 #!/usr/bin/env node
-// Three-arm evaluation of knowledge pages: A (kb_search), A' (kb_search + decomposition sentence), B (pages + kb_search).
-// See README.md for the design, the thresholds and how to read the results. Resumable: run the same command again.
+// Do compiled knowledge pages make cross-document answers better than kb_search? Three arms can be run: A (kb_search),
+// A' (kb_search + decomposition sentence) and C (pages compiled by OpenViking's official skill, exported from the engine,
+// + kb_search). Arm B (the pages of the self-built compiler removed on 2026-10-13) is on record under results/2026-10-12-*
+// and can only be summarized. See README.md for the design, the thresholds and how to read the results.
+// Resumable: run the same command again.
 import { createHash } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve as resolvePath } from 'node:path'
 import { answerQuestion, MAX_TOOL_CALLS, TOP_K } from './lib/answer.mjs'
 import { checkAnswerCitations } from './lib/citations.mjs'
-import { compileTopic, readCompiled, writeCompiled } from './lib/compile.mjs'
 import { ROOT, checkCorpus, loadCorpus } from './lib/corpus.mjs'
 import { THRESHOLDS } from './lib/decide.mjs'
 import { judgeAnswer } from './lib/judge.mjs'
+import { buildKnowledgeBase, treesFor } from './lib/kb.mjs'
 import { BudgetExceeded, createLlm, readKeyFile, ledgerTotal } from './lib/llm.mjs'
-import { ANSWER_SYSTEM, ARMS, DECOMPOSITION_GUIDANCE, JUDGE_SYSTEM, compileUserMessage, repairUserMessage, sha256 } from './lib/prompts.mjs'
-import { buildKnowledgeBase } from './lib/kb.mjs'
-import { appendJsonl, latestByKey, readJsonl, runKey, spentElsewhere } from './lib/store.mjs'
+import { ANSWER_SYSTEM, ARMS, ARM_B_REMOVED, DECOMPOSITION_GUIDANCE, JUDGE_SYSTEM, sha256 } from './lib/prompts.mjs'
+import { appendJsonl, latestByKey, readCompileStats, readJsonl, runKey, spentElsewhere } from './lib/store.mjs'
 import { BOOTSTRAP_ITERATIONS, BOOTSTRAP_SEED } from './lib/stats.mjs'
-import { ARM_IDS, renderTable, summarize } from './lib/summary.mjs'
+import { ARM_IDS, RUNNABLE_ARM_IDS, orderArms, renderTable, summarize } from './lib/summary.mjs'
+import { adoptUpstreamTrees, readUpstreamTrees, upstreamTreeStats } from './lib/upstream.mjs'
 
-const RESULTS_DIR = join(ROOT, 'results')
-const SKILL_PATH = join(ROOT, '..', '..', 'capabilities', 'knowledge-compile', 'SKILL.md')
-const DOMAIN_PAGE_PATH = join(ROOT, '..', '..', 'packages', 'domain', 'src', 'knowledgePage.mjs')
+/** Where a run keeps the trees arm C searched, inside its own directory; the layout is the export directory's. */
+const RUN_TREES = 'upstream'
 
-/** Rough per-unit spend (CNY), used only by --dry-run to print an upper bound. */
-const ESTIMATE_CNY = { answerRun: 0.02, judge: 0.01, compile: 0.22, sanity: 0.01 }
+/**
+ * Rough per-unit spend (CNY), used only by --dry-run to print an upper bound. From the spend of the 2026-10-12 runs (an
+ * answer cost CNY 0.014 on average without pages and 0.016 with arm B's); arm C's passages are longer, hence the margin.
+ */
+const ESTIMATE_CNY = { answerRun: 0.02, answerRunWithPages: 0.03, judge: 0.01, sanity: 0.01 }
 
 function parseArgs(argv) {
   const options = {
-    runId: '2026-10-12-three-arm', stage: 'all', reps: 3, arms: [...ARM_IDS], topics: null, questionsPerTopic: null, budget: 15, totalCap: 20,
-    concurrency: 4, answerModel: 'deepseek-v4-flash', judgeModel: 'deepseek-v4-pro', compileModel: 'deepseek-v4-flash', thinking: 'disabled',
-    temperature: 0.7, compileTemperature: 0.3, dryRun: false, forceConfig: false, kbScope: 'topic', reuseFrom: null,
+    runId: null, stage: 'all', reps: 3, arms: [...RUNNABLE_ARM_IDS], topics: null, questionsPerTopic: null, budget: 15, totalCap: 20,
+    concurrency: 4, answerModel: 'deepseek-v4-flash', judgeModel: 'deepseek-v4-pro', thinking: 'disabled', temperature: 0.7,
+    dryRun: false, forceConfig: false, kbScope: 'topic', reuseFrom: null, upstreamPages: null, resultsDir: join(ROOT, 'results'),
   }
+  /** The options the command line named, so that `--stage summarize` can take the others from what the run recorded. */
+  const given = new Set()
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index]
     const next = () => argv[++index]
+    const set = (name, value) => { options[name] = value; given.add(name) }
     switch (flag) {
-      case '--run-id': options.runId = next(); break
-      case '--stage': options.stage = next(); break
-      case '--reps': options.reps = Number(next()); break
-      case '--arms': options.arms = next().split(',').map((arm) => arm.trim()); break
-      case '--topics': options.topics = next().split(',').map((topic) => topic.trim()); break
-      case '--questions-per-topic': options.questionsPerTopic = Number(next()); break
-      case '--budget': options.budget = Number(next()); break
-      case '--total-cap': options.totalCap = Number(next()); break
-      case '--concurrency': options.concurrency = Number(next()); break
-      case '--answer-model': options.answerModel = next(); break
-      case '--judge-model': options.judgeModel = next(); break
-      case '--compile-model': options.compileModel = next(); break
-      case '--thinking': options.thinking = next(); break
-      case '--temperature': options.temperature = Number(next()); break
-      case '--dry-run': options.dryRun = true; break
-      case '--force-config': options.forceConfig = true; break
-      case '--kb-scope': options.kbScope = next(); break
-      case '--reuse-from': options.reuseFrom = next(); break
+      case '--run-id': set('runId', next()); break
+      case '--stage': set('stage', next()); break
+      case '--reps': set('reps', Number(next())); break
+      case '--arms': set('arms', next().split(',').map((arm) => arm.trim())); break
+      case '--topics': set('topics', next().split(',').map((topic) => topic.trim())); break
+      case '--questions-per-topic': set('questionsPerTopic', Number(next())); break
+      case '--budget': set('budget', Number(next())); break
+      case '--total-cap': set('totalCap', Number(next())); break
+      case '--concurrency': set('concurrency', Number(next())); break
+      case '--answer-model': set('answerModel', next()); break
+      case '--judge-model': set('judgeModel', next()); break
+      case '--thinking': set('thinking', next()); break
+      case '--temperature': set('temperature', Number(next())); break
+      case '--dry-run': set('dryRun', true); break
+      case '--force-config': set('forceConfig', true); break
+      case '--kb-scope': set('kbScope', next()); break
+      case '--reuse-from': set('reuseFrom', next()); break
+      case '--upstream-pages': set('upstreamPages', resolvePath(next())); break
+      case '--results-dir': set('resultsDir', resolvePath(next())); break
       default: throw new Error(`unknown argument ${flag}`)
     }
   }
-  if (!['all', 'sanity', 'compile', 'run', 'summarize'].includes(options.stage)) throw new Error(`unknown --stage ${options.stage}`)
+  if (options.stage === 'compile') throw new Error('there is no compile stage any more: the harness compiles nothing. Arm C reads trees exported from the engine (--upstream-pages), and arm B\'s compiler was removed on 2026-10-13.')
+  if (!['all', 'sanity', 'run', 'summarize'].includes(options.stage)) throw new Error(`unknown --stage ${options.stage}`)
   for (const arm of options.arms) if (!ARM_IDS.includes(arm)) throw new Error(`unknown arm ${arm}`)
+  if (options.dryRun && options.stage === 'summarize') throw new Error('--dry-run plans a run; --stage summarize makes no model call and has nothing to plan')
+  if (options.arms.includes('B') && options.stage !== 'summarize') throw new Error(ARM_B_REMOVED)
   if (!['topic', 'pooled'].includes(options.kbScope)) throw new Error('--kb-scope must be topic or pooled')
   if (!Number.isInteger(options.reps) || options.reps < 1) throw new Error('--reps must be a positive integer')
-  return options
+  if (!options.runId && !options.dryRun) throw new Error('--run-id <id> is required: it names the directory under results/ the run is written to (or read from)')
+  return { options, given }
 }
 
 /** The questions of a trial run: a deterministic slice with two synthesis questions for each single-fact one. */
@@ -69,6 +82,10 @@ function selectQuestions(questions, perTopic) {
   const single = questions.filter((question) => question.kind === 'single')
   const wantSynthesis = Math.min(synthesis.length, Math.ceil((perTopic * 2) / 3))
   return [...synthesis.slice(0, wantSynthesis), ...single.slice(0, Math.min(single.length, perTopic - wantSynthesis))]
+}
+
+async function selectCorpus(topics, questionsPerTopic) {
+  return (await loadCorpus(topics)).map((topic) => ({ ...topic, questions: selectQuestions(topic.questions, questionsPerTopic) }))
 }
 
 function seedOf(key) {
@@ -91,62 +108,147 @@ async function runPool(tasks, concurrency, work, shouldStop) {
   return failures
 }
 
+/**
+ * From the records of a run directory to `summary.json` and the printed table. No model call: the records, arm B's
+ * recorded compile statistics and the trees arm C searched are all in the directory.
+ * @param {{ runDir: string, runId: string, corpus: any[], reps: number, arms: string[], config: any }} input
+ */
+function writeSummary({ runDir, runId, corpus, reps, arms, config }) {
+  const records = [...latestByKey(readJsonl(join(runDir, 'runs.jsonl'))).values()]
+  const compiles = []
+  const upstreamTrees = []
+  for (const topic of corpus) {
+    for (let rep = 1; rep <= reps; rep += 1) {
+      const stats = readCompileStats(runDir, topic.id, rep)
+      if (stats) compiles.push({ topic: topic.id, rep, stats })
+    }
+    for (const tree of readUpstreamTrees(join(runDir, RUN_TREES), topic.id)) upstreamTrees.push({ topic: topic.id, tree: tree.name, sha256: tree.sha256, stats: upstreamTreeStats(tree, topic.documents) })
+  }
+  const sanityPath = join(runDir, 'judge-sanity.json')
+  const sanity = existsSync(sanityPath) ? JSON.parse(readFileSync(sanityPath, 'utf8')) : null
+  const summary = summarize({
+    runs: records, compiles, upstreamTrees, ledger: readJsonl(join(runDir, 'calls.jsonl')), corpus, config, runId,
+    // The arms the run was to ask and any other its records hold: an arm that was planned and never answered is missing data.
+    arms: orderArms([...arms, ...records.map((record) => record.arm)]),
+    judgeSanity: sanity ? { n: sanity.n, referenceMean: sanity.referenceMean, emptyMean: sanity.emptyMean } : null,
+    minReps: reps < THRESHOLDS.minRepsPerCell ? reps : THRESHOLDS.minRepsPerCell,
+  })
+  writeFileSync(join(runDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`, 'utf8')
+  console.log(`\n${renderTable(summary)}`)
+}
+
+/**
+ * `--stage summarize`: recompute a recorded run's summary. The plan (arms, repetitions, topics) and the configuration are
+ * the ones the run recorded in `config.json`, unless the command line names them; nothing but `summary.json` is written.
+ */
+async function summarizeRecorded(options, given) {
+  const runDir = join(options.resultsDir, options.runId)
+  const configPath = join(runDir, 'config.json')
+  if (!existsSync(join(runDir, 'runs.jsonl')) && !existsSync(configPath)) throw new Error(`nothing is recorded under ${runDir}`)
+  const recorded = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : null
+  const planned = (name) => (given.has(name) || recorded?.plan?.[name] === undefined ? options[name] : recorded.plan[name])
+  const corpus = await selectCorpus(planned('topics'), planned('questionsPerTopic'))
+  // With no arms named and none recorded, the summary covers the arms the records hold.
+  const arms = given.has('arms') ? options.arms : recorded?.plan?.arms ?? []
+  writeSummary({ runDir, runId: options.runId, corpus, reps: planned('reps'), arms, config: recorded?.core ?? null })
+}
+
 async function main() {
-  const options = parseArgs(process.argv.slice(2))
+  const { options, given } = parseArgs(process.argv.slice(2))
   const corpusReport = await checkCorpus()
   if (corpusReport.issues.length) { for (const issue of corpusReport.issues) console.error(`corpus: ${issue}`); throw new Error('the corpus does not check out; run check_corpus.mjs') }
-  const corpus = (await loadCorpus(options.topics)).map((topic) => ({ ...topic, questions: selectQuestions(topic.questions, options.questionsPerTopic) }))
+  if (options.stage === 'summarize') return summarizeRecorded(options, given)
+
+  const corpus = await selectCorpus(options.topics, options.questionsPerTopic)
   const fullCorpus = await loadCorpus()
-  const skillText = readFileSync(SKILL_PATH, 'utf8')
-  const runDir = join(RESULTS_DIR, options.runId)
-  const questionCount = corpus.reduce((sum, topic) => sum + topic.questions.length, 0)
-  const tasksPerRep = questionCount * options.arms.length
+  const questionTotal = fullCorpus.reduce((sum, topic) => sum + topic.questions.length, 0)
+  const runDir = options.runId ? join(options.resultsDir, options.runId) : null
+  const pooled = options.kbScope === 'pooled'
+
+  const config = {
+    schemaVersion: 2,
+    models: { answer: options.answerModel, judge: options.judgeModel },
+    thinking: options.thinking,
+    kbScope: options.kbScope,
+    temperature: { answer: options.temperature, judge: 0 },
+    retrieval: { engine: 'bm25', topK: TOP_K, maxToolCalls: MAX_TOOL_CALLS },
+    prompts: { answerSystemSha256: sha256(ANSWER_SYSTEM), decompositionSentence: DECOMPOSITION_GUIDANCE, judgeSystemSha256: sha256(JUDGE_SYSTEM) },
+    thresholds: THRESHOLDS,
+    bootstrap: { iterations: BOOTSTRAP_ITERATIONS, seed: BOOTSTRAP_SEED },
+    arms: Object.fromEntries(RUNNABLE_ARM_IDS.map((arm) => [arm, ARMS[arm].label])),
+  }
+  const configPath = runDir ? join(runDir, 'config.json') : null
+  // Checked before anything is written: a run directory made under other settings is not added to.
+  const otherSettings = Boolean(configPath) && existsSync(configPath) && JSON.stringify(JSON.parse(readFileSync(configPath, 'utf8')).core) !== JSON.stringify(config)
+  if (otherSettings && !options.forceConfig && !options.dryRun) {
+    throw new Error(`${configPath} was written with different models, prompts or settings; use a new --run-id (or --force-config to keep going on purpose)`)
+  }
+
+  // --- arm C's pages -------------------------------------------------------------------------------------------------------
+  // A run that reuses another's judge check searches that run's trees too, unless told otherwise.
+  const reusedTrees = options.reuseFrom ? join(options.resultsDir, options.reuseFrom, RUN_TREES) : null
+  const exportDir = options.upstreamPages ?? (reusedTrees && existsSync(reusedTrees) ? reusedTrees : join(ROOT, 'upstream'))
+  /** topic id -> the trees this run searches for it; empty when the topic has none. A dry run copies nothing. */
+  const trees = new Map()
+  if (options.arms.includes('C')) {
+    for (const topic of corpus) trees.set(topic.id, adoptUpstreamTrees({ from: exportDir, to: runDir ? join(runDir, RUN_TREES) : null, topicId: topic.id, write: !options.dryRun }))
+  }
+  /** The trees an arm C cell searches, or null when the cell cannot be asked. */
+  const cellTrees = (topic, rep) => treesFor({ scope: options.kbScope, topic, corpus, trees, rep })
+  const skippedTopics = options.arms.includes('C') ? corpus.filter((topic) => !cellTrees(topic, 1)).map((topic) => topic.id) : []
+
+  const sanityPath = runDir ? join(runDir, 'judge-sanity.json') : null
+  const sanityDone = () => Boolean(sanityPath) && existsSync(sanityPath) && JSON.parse(readFileSync(sanityPath, 'utf8')).n === questionTotal
+  /** Another run's judge check stands for this one only if it was the same judge under the same instructions. */
+  const reusableSanity = () => {
+    if (!options.reuseFrom) return null
+    const directory = join(options.resultsDir, options.reuseFrom)
+    try {
+      const core = JSON.parse(readFileSync(join(directory, 'config.json'), 'utf8')).core
+      if (core.models.judge !== options.judgeModel || core.prompts.judgeSystemSha256 !== sha256(JUDGE_SYSTEM)) return null
+      return JSON.parse(readFileSync(join(directory, 'judge-sanity.json'), 'utf8')).n === questionTotal ? join(directory, 'judge-sanity.json') : null
+    } catch { return null }
+  }
 
   if (options.dryRun) {
-    const answerRuns = tasksPerRep * options.reps
-    const compiles = options.arms.includes('B') ? corpus.length * options.reps : 0
-    const upper = answerRuns * (ESTIMATE_CNY.answerRun + ESTIMATE_CNY.judge) + compiles * ESTIMATE_CNY.compile + questionCount * 2 * ESTIMATE_CNY.sanity
-    console.log(JSON.stringify({ runId: options.runId, topics: corpus.map((topic) => topic.id), questions: questionCount, arms: options.arms, reps: options.reps, answerRuns, judgeCalls: answerRuns, compiles, estimatedUpperBoundCny: Number(upper.toFixed(2)) }, null, 2))
+    const cells = corpus.reduce((sum, topic) => sum + topic.questions.length, 0)
+    const skippedCells = corpus.filter((topic) => skippedTopics.includes(topic.id)).reduce((sum, topic) => sum + topic.questions.length, 0)
+    const plain = cells * options.arms.filter((arm) => !ARMS[arm].pages).length * options.reps
+    const withPages = (cells - skippedCells) * options.arms.filter((arm) => ARMS[arm].pages).length * options.reps
+    const sanityCalls = ['all', 'sanity'].includes(options.stage) && !sanityDone() && !reusableSanity() ? questionTotal * 2 : 0
+    const upper = plain * ESTIMATE_CNY.answerRun + withPages * ESTIMATE_CNY.answerRunWithPages + (plain + withPages) * ESTIMATE_CNY.judge + sanityCalls * ESTIMATE_CNY.sanity
+    const elsewhere = spentElsewhere(options.resultsDir, options.runId)
+    console.log(JSON.stringify({
+      runId: options.runId, kbScope: options.kbScope, topics: corpus.map((topic) => topic.id), questions: cells, arms: options.arms, reps: options.reps,
+      answerRuns: plain + withPages, judgeCalls: plain + withPages, judgeSanityCalls: sanityCalls,
+      ...(options.arms.includes('C') ? { upstreamPages: { trees: Object.fromEntries(corpus.map((topic) => [topic.id, trees.get(topic.id).map((tree) => tree.name)])), topicsSkipped: skippedTopics, answerRunsSkipped: skippedCells * options.reps } } : {}),
+      estimatedUpperBoundCny: Number(upper.toFixed(2)),
+      spentInOtherRunsCny: Number(elsewhere.toFixed(2)),
+      capForThisRunCny: Number(Math.min(options.budget, options.totalCap - elsewhere).toFixed(2)),
+      ...(otherSettings ? { refused: `${configPath} was written with different settings: a run under this id needs --force-config, or a new --run-id` } : {}),
+    }, null, 2))
     return
   }
 
-  mkdirSync(join(runDir, 'compiled'), { recursive: true })
-  const config = {
-    schemaVersion: 1,
-    models: { answer: options.answerModel, judge: options.judgeModel, compile: options.compileModel },
-    thinking: options.thinking,
-    kbScope: options.kbScope,
-    temperature: { answer: options.temperature, compile: options.compileTemperature, judge: 0 },
-    retrieval: { engine: 'bm25', topK: TOP_K, maxToolCalls: MAX_TOOL_CALLS },
-    prompts: { answerSystemSha256: sha256(ANSWER_SYSTEM), decompositionSentence: DECOMPOSITION_GUIDANCE, judgeSystemSha256: sha256(JUDGE_SYSTEM), compileUserMessageSha256: sha256(compileUserMessage('<input>')), repairUserMessageSha256: sha256(repairUserMessage([{ severity: 'required', message: '<m>' }, { severity: 'advisory', message: '<m>' }])), knowledgeCompileSkillSha256: sha256(skillText) },
-    domainKnowledgePageSha256: sha256(readFileSync(DOMAIN_PAGE_PATH, 'utf8')),
-    thresholds: THRESHOLDS,
-    bootstrap: { iterations: BOOTSTRAP_ITERATIONS, seed: BOOTSTRAP_SEED },
-    arms: Object.fromEntries(Object.values(ARMS).map((arm) => [arm.id, arm.label])),
+  const plan = {
+    reps: options.reps, arms: options.arms, topics: corpus.map((topic) => topic.id), questionsPerTopic: options.questionsPerTopic, budgetCny: options.budget, totalCapCny: options.totalCap, concurrency: options.concurrency,
+    ...(options.arms.includes('C') ? { upstreamTrees: Object.fromEntries(corpus.map((topic) => [topic.id, trees.get(topic.id).map((tree) => ({ tree: tree.name, pages: tree.pages.length, sha256: tree.sha256 }))])) } : {}),
   }
-  const configPath = join(runDir, 'config.json')
-  if (existsSync(configPath)) {
-    const previous = JSON.parse(readFileSync(configPath, 'utf8'))
-    if (JSON.stringify(previous.core) !== JSON.stringify(config) && !options.forceConfig) {
-      throw new Error(`${configPath} was written with different models, prompts or settings; use a new --run-id (or --force-config to keep going on purpose)`)
-    }
-  }
-  writeFileSync(configPath, `${JSON.stringify({ core: config, plan: { reps: options.reps, arms: options.arms, topics: corpus.map((topic) => topic.id), questionsPerTopic: options.questionsPerTopic, budgetCny: options.budget, totalCapCny: options.totalCap, concurrency: options.concurrency }, startedAt: new Date().toISOString() }, null, 2)}\n`, 'utf8')
+  mkdirSync(runDir, { recursive: true })
+  writeFileSync(configPath, `${JSON.stringify({ core: config, plan, startedAt: new Date().toISOString() }, null, 2)}\n`, 'utf8')
+  for (const topic of skippedTopics) console.log(`arm C skipped for ${topic}: ${pooled ? 'the pooled project needs a tree of every topic and one is missing' : `no tree under ${join(exportDir, topic)}/rep<N>/`}`)
 
   const ledgerPath = join(runDir, 'calls.jsonl')
-  const elsewhere = spentElsewhere(RESULTS_DIR, options.runId)
+  const elsewhere = spentElsewhere(options.resultsDir, options.runId)
   const cap = Math.min(options.budget, options.totalCap - elsewhere)
-  const needsLlm = options.stage !== 'summarize'
-  const llm = needsLlm ? createLlm({ apiKey: readKeyFile(process.env.OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE), ledgerPath, budget: cap }) : null
-  if (needsLlm) console.log(`run ${options.runId}: spent so far CNY ${ledgerTotal(ledgerPath).toFixed(4)} here, ${elsewhere.toFixed(4)} in other runs; cap for this run CNY ${cap.toFixed(2)}`)
+  const llm = createLlm({ apiKey: readKeyFile(process.env.OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE), ledgerPath, budget: cap })
+  console.log(`run ${options.runId}: spent so far CNY ${ledgerTotal(ledgerPath).toFixed(4)} here, ${elsewhere.toFixed(4)} in other runs; cap for this run CNY ${cap.toFixed(2)}`)
   let stopped = false
 
   // --- the judge's sanity check ------------------------------------------------------------------------------------------
-  const sanityPath = join(runDir, 'judge-sanity.json')
-  const questionTotal = fullCorpus.reduce((sum, topic) => sum + topic.questions.length, 0)
-  const sanityDone = () => existsSync(sanityPath) && JSON.parse(readFileSync(sanityPath, 'utf8')).n === questionTotal
   async function judgeSanity() {
-    if (!sanityDone() && options.reuseFrom && existsSync(join(RESULTS_DIR, options.reuseFrom, 'judge-sanity.json'))) cpSync(join(RESULTS_DIR, options.reuseFrom, 'judge-sanity.json'), sanityPath)
+    const reusable = sanityDone() ? null : reusableSanity()
+    if (reusable) cpSync(reusable, sanityPath)
     if (sanityDone()) return
     const rows = []
     const tasks = fullCorpus.flatMap((topic) => topic.questions.map((question) => ({ topic: topic.id, question })))
@@ -168,66 +270,46 @@ async function main() {
     } else console.log(`judge sanity incomplete (${complete.length}/${questionTotal}); ${failures.length} failures`)
   }
 
-  // --- compile (arm B) and run --------------------------------------------------------------------------------------------
-  const compiledDir = (topic, rep) => join(runDir, 'compiled', `${topic}-rep${rep}`)
-  const compiled = new Map()
-  async function ensureCompiles(rep) {
-    const tasks = corpus.filter((topic) => !compiled.has(`${topic.id}/${rep}`)).map((topic) => ({ topic, rep, key: `compile/${topic.id}/${rep}` }))
-    const failures = await runPool(tasks, Math.min(options.concurrency, 3), async ({ topic, rep: repetition }) => {
-      let result = await readCompiled(compiledDir(topic.id, repetition))
-      if (!result && options.reuseFrom) {
-        const source = join(RESULTS_DIR, options.reuseFrom, 'compiled', `${topic.id}-rep${repetition}`)
-        if (existsSync(join(source, 'compile.json'))) { cpSync(source, compiledDir(topic.id, repetition), { recursive: true }); result = await readCompiled(compiledDir(topic.id, repetition)) }
-      }
-      if (!result) {
-        const fresh = await compileTopic({ llm, model: options.compileModel, topic, skillText, label: `${topic.id}/rep${repetition}`, temperature: options.compileTemperature, thinking: options.thinking, meta: { topic: topic.id, rep: repetition } })
-        await writeCompiled(compiledDir(topic.id, repetition), fresh)
-        result = await readCompiled(compiledDir(topic.id, repetition))
-        console.log(`compiled ${topic.id} rep${repetition}: ${fresh.stats.pages} pages, ${fresh.stats.kept} claims kept, ${fresh.stats.held} held, ${fresh.stats.rounds} rounds, CNY ${fresh.stats.cost.toFixed(3)}`)
-      }
-      compiled.set(`${topic.id}/${repetition}`, result)
-    }, () => stopped)
-    if (failures.some((failure) => failure.budget)) stopped = true
-    for (const failure of failures.filter((entry) => !entry.budget)) console.error(`compile failed: ${failure.key}: ${failure.message}`)
-  }
-
+  // --- answer and judge ---------------------------------------------------------------------------------------------------
   const runsPath = join(runDir, 'runs.jsonl')
   const latest = latestByKey(readJsonl(runsPath))
-  const pooled = options.kbScope === 'pooled'
   const indexCache = new Map()
-  /** One index per distinct knowledge base: per topic (and, for B, per repetition's compile), or one pooled for all topics. */
-  function indexFor(topic, arm, rep) {
-    const key = `${pooled ? 'pooled' : topic.id}/${arm === 'B' ? `B${rep}` : 'docs'}`
-    if (!indexCache.has(key)) indexCache.set(key, buildKnowledgeBase({ scope: options.kbScope, arm, topic, corpus, compiled, rep }))
+  /** One index per distinct knowledge base: the documents of a project and, for arm C, the trees of that repetition. */
+  function indexFor(topic, arm, rep, chosen) {
+    const pages = chosen ? Object.entries(chosen).map(([id, tree]) => `${id}:${tree.name}`).join(',') : 'docs'
+    const key = `${pooled ? 'pooled' : topic.id}/${pages}`
+    if (!indexCache.has(key)) indexCache.set(key, buildKnowledgeBase({ scope: options.kbScope, arm, topic, corpus, trees, rep }))
     return indexCache.get(key)
   }
   const allDocuments = corpus.flatMap((topic) => topic.documents)
 
   async function runRep(rep) {
-    const tasks = []
+    const ready = []
     for (const topic of corpus) {
       for (const question of topic.questions) {
         for (const arm of options.arms) {
           const key = runKey(topic.id, question.id, arm, rep)
           const existing = latest.get(key)
           if (existing?.stage === 'judged' && existing.judge?.ok) continue
-          tasks.push({ key, topic, question, arm, rep })
+          const chosen = ARMS[arm].pages ? cellTrees(topic, rep) : null
+          if (ARMS[arm].pages && !chosen) continue
+          ready.push({ key, topic, question, arm, rep, chosen })
         }
       }
     }
-    if (!tasks.length) return 0
-    if (options.arms.includes('B')) await ensureCompiles(rep)
-    const ready = tasks.filter((task) => task.arm !== 'B' || (pooled ? corpus.every((entry) => compiled.has(`${entry.id}/${task.rep}`)) : compiled.has(`${task.topic.id}/${task.rep}`)))
+    if (!ready.length) return 0
     let finished = 0
     const failures = await runPool(ready, options.concurrency, async (task) => {
-      const { topic, question, arm } = task
+      const { topic, question, arm, chosen } = task
       const resolve = (id) => { const document = (pooled ? allDocuments : topic.documents).find((entry) => entry.sourceId === id); return document ? { text: document.text } : null }
       let record = latest.get(task.key)
       if (!record?.answered) {
         const started = Date.now()
-        const result = await answerQuestion({ llm, model: options.answerModel, arm, question: question.question, index: indexFor(topic, arm, task.rep), label: `answer:${task.key}`, temperature: options.temperature, thinking: options.thinking, seed: seedOf(task.key), meta: { key: task.key } })
+        const result = await answerQuestion({ llm, model: options.answerModel, arm, question: question.question, index: indexFor(topic, arm, task.rep, chosen), label: `answer:${task.key}`, temperature: options.temperature, thinking: options.thinking, seed: seedOf(task.key), meta: { key: task.key } })
         record = {
           key: task.key, topic: topic.id, questionId: question.id, kind: question.kind, arm, rep: task.rep, stage: 'answered', answered: true,
+          // Which tree of each topic the knowledge base held: trees are reused in order when a topic has fewer than there are repetitions.
+          ...(chosen ? { pages: Object.fromEntries(Object.entries(chosen).map(([id, tree]) => [id, tree.name])) } : {}),
           answer: result.answer, finished: result.finished, toolCalls: result.toolCalls, searches: result.searches, tokens: result.tokens, cost: result.cost,
           citations: checkAnswerCitations(result.answer, resolve), durationMs: Date.now() - started, finishedAt: new Date().toISOString(),
         }
@@ -247,27 +329,12 @@ async function main() {
   }
 
   if (options.stage === 'sanity' || options.stage === 'all') await judgeSanity()
-  if (options.stage === 'compile') {
-    for (let rep = 1; rep <= options.reps && !stopped; rep += 1) await ensureCompiles(rep)
-  }
   if (options.stage === 'run' || options.stage === 'all') {
     for (let rep = 1; rep <= options.reps && !stopped; rep += 1) await runRep(rep)
   }
   if (stopped) console.log(`STOPPED at the budget cap (spend CNY ${llm.spent.toFixed(3)} of ${cap.toFixed(2)}). Everything finished is saved; run the same command again after raising --budget to continue.`)
 
-  // --- summary ------------------------------------------------------------------------------------------------------------
-  const records = [...latestByKey(readJsonl(runsPath)).values()]
-  const compiles = []
-  for (const topic of corpus) {
-    for (let rep = 1; rep <= options.reps; rep += 1) {
-      const result = await readCompiled(compiledDir(topic.id, rep))
-      if (result) compiles.push({ topic: topic.id, rep, stats: result.stats })
-    }
-  }
-  const sanity = existsSync(sanityPath) ? JSON.parse(readFileSync(sanityPath, 'utf8')) : null
-  const summary = summarize({ runs: records, compiles, ledger: readJsonl(ledgerPath), corpus, judgeSanity: sanity ? { n: sanity.n, referenceMean: sanity.referenceMean, emptyMean: sanity.emptyMean } : null, config, runId: options.runId, minReps: options.reps < THRESHOLDS.minRepsPerCell ? options.reps : THRESHOLDS.minRepsPerCell })
-  writeFileSync(join(runDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`, 'utf8')
-  console.log(`\n${renderTable(summary)}`)
+  writeSummary({ runDir, runId: options.runId, corpus, reps: options.reps, arms: options.arms, config })
 }
 
 main().catch((error) => {

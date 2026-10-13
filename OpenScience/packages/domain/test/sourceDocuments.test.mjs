@@ -2,15 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  KNOWLEDGE_BASE_FORMATS,
+  ERROR_CODE_MESSAGES,
   SOURCE_API_FORMATS,
+  SOURCE_CODE_FORMATS,
   SOURCE_LOCAL_TEXT_FORMATS,
   SOURCE_MEDIA_FORMATS,
+  SOURCE_ORIGINAL_CODES,
+  SOURCE_TEXT_SAMPLE_BYTES,
   normalizeSourcePageMap,
   normalizeSourceText,
+  sourceBytesAreText,
   sourceFileFormat,
+  sourceFirstPassType,
   sourceFormatRoute,
   sourcePageForOffset,
+  sourceReadRoute,
 } from "../index.mjs";
 
 test("a file name's format is its lower-cased extension, and nothing else", () => {
@@ -21,18 +27,80 @@ test("a file name's format is its lower-cased extension, and nothing else", () =
   assert.equal(sourceFileFormat("trailing."), "");
 });
 
-test("each accepted format has exactly one route, and recordings are refused by name", () => {
+test("a name says where a file is read, and no name is refused", () => {
   for (const format of SOURCE_API_FORMATS) assert.equal(sourceFormatRoute(`a.${format}`), "api", format);
   for (const format of SOURCE_LOCAL_TEXT_FORMATS) assert.equal(sourceFormatRoute(`a.${format}`), "local", format);
   for (const format of SOURCE_MEDIA_FORMATS) assert.equal(sourceFormatRoute(`a.${format}`), "media", format);
-  // The API lists txt and md; they are read locally anyway, byte for byte.
+  const listed = [...SOURCE_API_FORMATS, ...SOURCE_LOCAL_TEXT_FORMATS, ...SOURCE_MEDIA_FORMATS];
+  assert.equal(new Set(listed).size, listed.length, "a format is on one list");
+  // The API lists txt and md; they are read locally anyway, byte for byte. HTML stays the API's.
   assert.equal(sourceFormatRoute("notes.txt"), "local");
   assert.equal(sourceFormatRoute("notes.md"), "local");
-  assert.equal(sourceFormatRoute("cohort.sav"), "unsupported");
-  assert.equal(sourceFormatRoute("no-extension"), "unsupported");
-  // The upload list is the two parsed routes and never a recording.
-  assert.deepEqual(KNOWLEDGE_BASE_FORMATS, [...new Set([...SOURCE_API_FORMATS, ...SOURCE_LOCAL_TEXT_FORMATS])].sort());
-  assert.ok(!KNOWLEDGE_BASE_FORMATS.some((format) => SOURCE_MEDIA_FORMATS.includes(format)));
+  assert.equal(sourceFormatRoute("page.html"), "api");
+  // GA07, the probe of 2026-10-12: what a general project holds beside its papers. Each was refused with 415.
+  for (const name of ["app.ts", "index.js", "main.go", "Main.java", "site.css", "analysis.ipynb", "pyproject.toml", "setup.ini", "paper.tex", "refs.bib",
+    "figure.svg", "run.sh", "letter.eml", "server.log", "model.do", "macro.sas", "talk.srt", "relations.jsonl", "events.ndjson", "README.markdown"]) {
+    assert.equal(sourceFormatRoute(name), "local", name);
+  }
+  // The mirror of the compiled wiki and graph is text the platform itself writes.
+  assert.equal(sourceFormatRoute("knowledge-base/wiki/aspirin.md"), "local");
+  assert.equal(sourceFormatRoute("knowledge-base/kg/relations.jsonl"), "local");
+  // A name no list knows is not refused: its bytes decide.
+  for (const name of ["cohort.sav", "no-extension", "Makefile", "LICENSE", ".env", "Dockerfile.evimed", "src.zip", "data.parquet", "backup.tar", "notes.gz"]) {
+    assert.equal(sourceFormatRoute(name), "engine", name);
+  }
+});
+
+test("bytes say whether a file with a name nobody listed is text", () => {
+  assert.equal(sourceBytesAreText(new TextEncoder().encode("all: build\n\tnode build.mjs\n")), true);
+  assert.equal(sourceBytesAreText(new TextEncoder().encode("许可协议：MIT\n")), true);
+  assert.equal(sourceBytesAreText(new Uint8Array(0)), true, "an empty file is text with nothing in it");
+  assert.equal(sourceBytesAreText(Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00])), false, "a zip holds NUL bytes");
+  assert.equal(sourceBytesAreText(Uint8Array.from([0xff, 0xfe, 0x41, 0x00])), false, "UTF-16 is not recognised");
+  assert.equal(sourceBytesAreText(Uint8Array.from([0xc0, 0xfb, 0xb7, 0xa5])), false, "GB18030 without a listed name is not recognised");
+  // A sequence the sample cuts in two is not an error, and nothing past the sample is looked at.
+  const cut = new Uint8Array(SOURCE_TEXT_SAMPLE_BYTES + 8).fill(0x61);
+  cut.set(new TextEncoder().encode("中"), SOURCE_TEXT_SAMPLE_BYTES - 1);
+  assert.equal(sourceBytesAreText(cut), true);
+  const late = new Uint8Array(SOURCE_TEXT_SAMPLE_BYTES + 8).fill(0x61);
+  late[SOURCE_TEXT_SAMPLE_BYTES + 1] = 0;
+  assert.equal(sourceBytesAreText(late), true, "the reader, not the sample, meets a NUL that far in");
+
+  assert.equal(sourceReadRoute("Makefile", new TextEncoder().encode("all:\n")), "local");
+  assert.equal(sourceReadRoute("Dockerfile.evimed", new TextEncoder().encode("FROM debian\n")), "local");
+  assert.equal(sourceReadRoute("src.zip", Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 0x00])), "engine");
+  // A listed text name whose bytes are not text: `.ts` is TypeScript and an MPEG transport stream alike.
+  assert.equal(sourceReadRoute("clip.ts", Uint8Array.from([0x47, 0x40, 0x00, 0x10, 0x00])), "engine");
+  assert.equal(sourceReadRoute("app.ts", new TextEncoder().encode("export const a = 1;\n")), "local");
+  // A listed text name in another encoding stays local: its reader decodes it.
+  assert.equal(sourceReadRoute("剂量表.csv", Uint8Array.from([0xc0, 0xfb, 0xb7, 0xa5])), "local");
+  // The bytes never move a document off the API's route or make a recording readable.
+  assert.equal(sourceReadRoute("scan.pdf", new TextEncoder().encode("plain")), "api");
+  assert.equal(sourceReadRoute("visit.mp4", new TextEncoder().encode("plain")), "media");
+});
+
+test("the first pass names code as code, a message as a message, and reads nothing of a recording", () => {
+  for (const format of SOURCE_CODE_FORMATS) assert.equal(sourceFirstPassType(`knowledge-base/a.${format}`).docType, "code", format);
+  assert.deepEqual([sourceFirstPassType("knowledge-base/letter.eml").docType, sourceFirstPassType("knowledge-base/letter.eml").depth], ["message-export", "structured"]);
+  assert.deepEqual([sourceFirstPassType("knowledge-base/paper.tex").docType, sourceFirstPassType("knowledge-base/Makefile").docType, sourceFirstPassType("knowledge-base/src.zip").docType],
+    ["document", "document", "document"], "a manuscript and a name nobody listed are documents until they are read");
+  assert.deepEqual([sourceFirstPassType("knowledge-base/figure.svg").docType, sourceFirstPassType("knowledge-base/figure.svg").depth], ["image-figure", "index_only"]);
+  for (const format of SOURCE_MEDIA_FORMATS) {
+    const first = sourceFirstPassType(`knowledge-base/a.${format}`);
+    assert.deepEqual([first.docType, first.depth], ["other", "skip"], format);
+  }
+  // The compiled graph's relations are a page of the mirror whatever their format.
+  assert.deepEqual([sourceFirstPassType("knowledge-base/kg/relations.jsonl").docType, sourceFirstPassType("knowledge-base/kg/relations.jsonl").depth], ["wiki-page", "index_only"]);
+});
+
+test("every reason a document is kept without text has a sentence a person can read", () => {
+  assert.deepEqual([...SOURCE_ORIGINAL_CODES], ["source_original_media", "source_original_unread", "source_original_engine_failed", "source_original_no_text"]);
+  for (const code of SOURCE_ORIGINAL_CODES) {
+    assert.match(ERROR_CODE_MESSAGES[code] ?? "", /原件/, code);
+    assert.doesNotMatch(ERROR_CODE_MESSAGES[code], /[「」]/, code);
+  }
+  // The upload refusal that named recordings is gone with the refusal.
+  assert.equal(ERROR_CODE_MESSAGES.source_media_unsupported, undefined);
 });
 
 test("a page map moves with the characters normalization removes, and only those", () => {

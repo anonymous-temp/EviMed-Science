@@ -4,7 +4,7 @@ import test from "node:test";
 import { HttpError } from "../src/security.mjs";
 import { normalizeSourceText, projectSourceUnderstandingOutput, sourceUnderstandingAuditSample, sourceUnderstandingSchema,
   validateSourceUnderstanding, SOURCE_TYPES as DOMAIN_SOURCE_TYPES } from "@evimed/domain";
-import { projectSourceDerivedRecord, projectSourceManifestRecord, readCopyOf, sourceIdFor, sourceIndexDocument, sourceOmissionRecord, sourceReadable, sourceStateOf, SOURCE_DEPTHS, SOURCE_STATES, SOURCE_TYPES,
+import { projectSourceDerivedRecord, projectSourceManifestRecord, readCopyOf, sourceIdFor, sourceIndexDocument, sourceOmissionRecord, sourceReadable, sourceStateOf, understandingPending, SOURCE_DEPTHS, SOURCE_STATES, SOURCE_TYPES,
   SourceService } from "../src/sourceService.mjs";
 
 // The lease, replay and account-generation fences need a real database, so they
@@ -341,18 +341,29 @@ test("the connector vocabulary no longer names a local agent that does not ship"
   assert.equal(accepted.source.payload.connector.type, "openlist");
 });
 
-test("the knowledge base refuses what it cannot read at registration, recordings by name", async () => {
+test("no file is refused for what it is called: every one is registered and queued to be read", async () => {
+  // GA07 / GA23, 2026-10-12: a closed list of twenty-nine extensions answered 415 here, for a project's source code, a
+  // notebook, an archive, a recording and a name with no extension alike.
   const { service, jobs } = fixture();
-  await assert.rejects(service.register("user-one", upload({ path: "knowledge-base/查房录音.m4a" })),
-    (error) => error.code === "source_media_unsupported" && error.status === 415);
-  await assert.rejects(service.register("user-one", upload({ path: "knowledge-base/cohort.sav" })),
-    (error) => error.code === "source_format_unsupported" && error.status === 415);
-  assert.equal(jobs.enqueued.length, 0, "nothing refused is queued for parsing");
-  // Every format on the parser's table and every local text format is taken.
-  for (const [index, name] of ["指南.pdf", "说明书.docx", "讲课.pptx", "数据.xlsx", "扫描.jpg", "书.epub", "页面.html", "笔记.md", "剂量.csv"].entries()) {
-    const registered = await service.register("user-one", upload({ path: `knowledge-base/${name}`, sha256: String(index).repeat(64) }));
+  const names = ["指南.pdf", "说明书.docx", "讲课.pptx", "数据.xlsx", "扫描.jpg", "书.epub", "页面.html", "笔记.md", "剂量.csv",
+    "app.ts", "analysis.ipynb", "pyproject.toml", "paper.tex", "letter.eml", "Makefile", "LICENSE", "src.zip", "cohort.sav", "查房录音.m4a", "visit.mp4"];
+  for (const [index, name] of names.entries()) {
+    const registered = await service.register("user-one", upload({ path: `knowledge-base/${name}`, sha256: index.toString(16).padStart(2, "0").repeat(32) }));
     assert.equal(registered.source.payload.status, "queued", name);
   }
+  assert.equal(jobs.enqueued.length, names.length, "each has a job that reads it, or keeps it as it is");
+  const typed = async (name) => {
+    const { payload } = (await service.register("user-one", upload({ path: `knowledge-base/${name}`, sha256: names.indexOf(name).toString(16).padStart(2, "0").repeat(32) }))).source;
+    return [payload.docType, payload.depth];
+  };
+  assert.deepEqual(await typed("app.ts"), ["code", "structured"]);
+  assert.deepEqual(await typed("letter.eml"), ["message-export", "structured"]);
+  assert.deepEqual(await typed("Makefile"), ["document", "structured"], "a name nobody listed is a document until it is read");
+  assert.deepEqual(await typed("src.zip"), ["document", "structured"]);
+  assert.deepEqual(await typed("查房录音.m4a"), ["other", "skip"], "nothing reads a recording: it is kept as an original");
+  // What registration still refuses is not about the format.
+  await assert.rejects(service.register("user-one", upload({ path: "../outside.md" })), { code: "source_path_invalid" });
+  await assert.rejects(service.register("user-one", upload({ path: "knowledge-base/big.zip", size: 3 * 1024 * 1024 * 1024 })), { code: "source_size_invalid" });
 });
 
 test("index.md carries the document's own bibliographic header and a marker where each page begins", () => {
@@ -1069,6 +1080,22 @@ test("a document is usable once its text is written out for the generation it is
   // 2026-09-24: a PDF stayed `parsing`, and unsearchable, for the whole
   // understanding run that follows its few-second parse.
   const artifactPath = "knowledge-base/.evimed-derived/src_one/read-2-job-one-abc/index.md";
+  // 2026-10-13: the record itself says so. The text is in, the document is `complete`, and what its understanding is
+  // doing is a field of its own that an ingestion job may still be working on.
+  const finished = { status: "complete", generation: 2, analysis: { generation: 2, readAt: "2026-10-13T00:00:00.000Z" }, outputs: { artifactPath },
+    understanding: { generation: 2, state: "pending", at: "2026-10-13T00:00:00.000Z" } };
+  assert.deepEqual([sourceReadable(finished), sourceStateOf(finished), understandingPending(finished)], [true, "ready", true]);
+  assert.equal(understandingPending({ ...finished, status: "needs_attention" }), true, "a text read only in part is still a text whose understanding is to come");
+  for (const state of ["understood", "failed"]) {
+    const ended = { ...finished, understanding: { generation: 2, state, at: "2026-10-13T00:01:00.000Z", ...(state === "failed" ? { code: "source_understanding_run_failed" } : {}) } };
+    assert.deepEqual([sourceReadable(ended), sourceStateOf(ended), understandingPending(ended)], [true, "ready", false], `${state}: the understanding ended, the document did not move`);
+  }
+  assert.equal(understandingPending({ ...finished, generation: 3, status: "queued" }), false, "a generation the source moved past is nobody's to finish");
+  assert.equal(understandingPending({ ...finished, generation: 3 }), false);
+  assert.equal(understandingPending({ status: "complete", generation: 2 }), false, "a document nobody was asked to understand");
+  assert.equal(understandingPending({ ...finished, status: "parsing" }), false);
+  assert.equal(readCopyOf({ payload: finished }), artifactPath);
+  // A record written before that day: text in, status still the understanding's. Read as what it is until the repair cycle rewrites it.
   const read = { status: "parsing", generation: 2, analysis: { generation: 2, readAt: "2026-09-24T00:00:00.000Z" }, outputs: { artifactPath } };
   assert.equal(sourceReadable(read), true, "read, while its understanding still runs");
   assert.equal(sourceReadable({ ...read, status: "failed" }), true, "an understanding that failed does not unread the text");

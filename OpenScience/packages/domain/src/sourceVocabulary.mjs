@@ -31,7 +31,7 @@
  * @module @evimed/domain/source-vocabulary
  */
 
-import { sourceFileFormat } from './sourceDocuments.mjs'
+import { SOURCE_CODE_FORMATS, SOURCE_MEDIA_FORMATS, sourceFileFormat } from './sourceDocuments.mjs'
 
 /**
  * The chips the knowledge base page groups documents under, in the order it
@@ -60,9 +60,10 @@ export const SOURCE_KINDS = Object.freeze([
  *
  * The ids that existed before 2026-10-07 keep their spelling: they are on
  * stored sources, in the evolution ledger and in the capsule. Two older ones
- * are not here — `audio-recording` and `video-recording` — because the knowledge
- * base refuses recordings; a stored source that still carries one is read as
- * 「其他」 (`sourceDocTypeLabel`).
+ * are not here — `audio-recording` and `video-recording` — because nothing
+ * reads a recording: one is kept as an original and is an 「其他」
+ * (`sourceFirstPassType`), as is a stored source that still carries either id
+ * (`sourceDocTypeLabel`).
  */
 export const SOURCE_DOC_TYPES = Object.freeze([
   { id: 'published-paper', label: '已发表论文', short: '论文', kind: 'literature', schema: 'paper', deep: false },
@@ -207,12 +208,13 @@ export function sourceOriginOf({ connectorType, path }) {
   return 'upload'
 }
 
-/** Formats read as an image, a table, a presentation or a page — the whole of the first pass. */
-const IMAGE_FORMATS = Object.freeze(['jpg', 'jpeg', 'png', 'bmp', 'gif'])
+/** Formats read as an image, a table, a presentation, a page or a message — with the code formats and the recordings
+ *  of `sourceDocuments.mjs`, the whole of the first pass. */
+const IMAGE_FORMATS = Object.freeze(['jpg', 'jpeg', 'png', 'bmp', 'gif', 'svg'])
 const TABLE_FORMATS = Object.freeze(['csv', 'tsv', 'xls', 'xlsx', 'xlsm'])
 const SLIDE_FORMATS = Object.freeze(['ppt', 'pptx'])
 const PAGE_FORMATS = Object.freeze(['htm', 'html', 'xml'])
-const CODE_FORMATS = Object.freeze(['r', 'py', 'sql', 'json', 'yaml', 'yml'])
+const MESSAGE_FORMATS = Object.freeze(['eml'])
 
 /**
  * The first guess at what a file is, from its format and the platform folder
@@ -220,11 +222,13 @@ const CODE_FORMATS = Object.freeze(['r', 'py', 'sql', 'json', 'yaml', 'yml'])
  * decides what it is once the text is in (`SOURCE_DOC_TYPES`), and a document
  * that is never judged is simply what its format says it is.
  *
- * Images are only indexed; every other format is read and understood
- * (`structured`). The depth is the reading's, not the document's worth.
+ * Images are only indexed and a recording is not read at all (`skip`); every
+ * other format is read and understood (`structured`) — a name no list knows
+ * included, which is a 「文档」 until it is read. The depth is the reading's,
+ * not the document's worth.
  *
  * @param {string} file the registered path, relative to the project's base folder
- * @returns {{ docType: string, depth: 'index_only' | 'structured', reason: string }}
+ * @returns {{ docType: string, depth: 'skip' | 'index_only' | 'structured', reason: string }}
  */
 export function sourceFirstPassType(file) {
   const origin = sourceOriginOf({ path: file })
@@ -239,6 +243,8 @@ export function sourceFirstPassType(file) {
   if (TABLE_FORMATS.includes(format)) return { docType: 'dataset', depth: 'structured', reason: 'The tabular format is profiled as a table.' }
   if (SLIDE_FORMATS.includes(format)) return { docType: 'lecture-slides', depth: 'structured', reason: 'The presentation format is read slide by slide.' }
   if (PAGE_FORMATS.includes(format)) return { docType: 'webpage', depth: 'structured', reason: 'The markup format is read as a web page.' }
-  if (CODE_FORMATS.includes(format)) return { docType: 'code', depth: 'structured', reason: 'The file is source code or a structured text file.' }
+  if (SOURCE_CODE_FORMATS.includes(format)) return { docType: 'code', depth: 'structured', reason: 'The file is source code or a structured text file.' }
+  if (MESSAGE_FORMATS.includes(format)) return { docType: 'message-export', depth: 'structured', reason: 'The message format is read as the text it is.' }
+  if (SOURCE_MEDIA_FORMATS.includes(format)) return { docType: 'other', depth: 'skip', reason: 'A recording is kept as an original; nothing reads it.' }
   return { docType: 'document', depth: 'structured', reason: 'The document format is parsed into traceable units.' }
 }

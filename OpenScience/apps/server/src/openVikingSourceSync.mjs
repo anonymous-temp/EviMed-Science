@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { sourceOriginOf } from "@evimed/domain";
+import { resourcesRoot } from "./openVikingLayout.mjs";
 import { sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
 
 /**
@@ -88,6 +89,30 @@ export class OpenVikingSourceSync {
     } catch (error) { this.report(codeOf(error)); return null; }
   }
 
+  /**
+   * A project was deleted: everything of it in the engine — its documents, its wiki, its graph — is owed a removal. A job of
+   * the account's (the project is gone, so the job names it in its payload), retried until the engine has answered. Never throws.
+   * @param {string} userId @param {string} projectId
+   */
+  async forgetProject(userId, projectId) {
+    if (!this.enabled || !userId || !projectId) return null;
+    try {
+      return await this.jobs.enqueue(userId, SOURCE_SYNC_JOB_KIND, { action: "forget-project", forgottenProjectId: projectId }, { idempotencyKey: `ov-forget:${projectId}`, maxAttempts: 10, rearmFailed: true });
+    } catch (error) { this.report(codeOf(error)); return null; }
+  }
+
+  /**
+   * An account is being erased: one attempt at its whole resources subtree, never waited on. Its jobs go with the account, so
+   * there is no queue to leave this in; what an unreachable engine keeps is unreadable by anyone else (the subtree is the
+   * account's own) and is found by the operator's listing of `viking://user/`.
+   * @param {string} userId
+   */
+  async forgetAccount(userId) {
+    if (!this.enabled || !userId) return false;
+    try { return await this.resources.removeTree(userId, resourcesRoot(userId)); }
+    catch (error) { this.report(codeOf(error)); return false; }
+  }
+
   /** What a readable document is pushed as. @param {string} userId @param {any} source the full record @returns {Promise<{ text: string, sha: string } | null>} */
   async #rendition(userId, source) {
     const capture = await this.sources.loadCapture(userId, source);
@@ -123,7 +148,8 @@ export class OpenVikingSourceSync {
   async convergeSource(userId, sourceId, projectId = null) {
     const source = await this.#current(userId, sourceId);
     const project = source?.projectId ?? projectId;
-    if (!project) return { action: "absent", sourceId };
+    // A mirrored page was never pushed, so there is nothing of it to converge.
+    if (!project || (source && isCompiledPage(source))) return { action: "absent", sourceId };
     const uri = this.resources.sourceUri(userId, project, sourceId);
     if (!OpenVikingSourceSync.pushable(source)) {
       const removed = await this.resources.removeSource(userId, uri);
@@ -219,6 +245,10 @@ export class OpenVikingSourceSync {
     // Pushing needs the engine to answer, not its Compile: only "no answer" postpones a push.
     if (ready && !ready.ok && /^memory_index_|_api_key_/.test(String(ready.code))) throw Object.assign(new Error("The engine is not answering."), { code: ready.code });
     if (job.payload?.action === "library") return this.reconcileLibrary(job.userId);
+    if (job.payload?.action === "forget-project") {
+      const removed = await this.resources.removeTree(job.userId, this.resources.roots(job.userId, String(job.payload.forgottenProjectId)).project);
+      return { action: removed ? "removed" : "absent", projectId: job.payload.forgottenProjectId };
+    }
     return this.convergeSource(job.userId, String(job.payload?.sourceId ?? ""), job.payload?.projectId ?? job.projectId ?? null);
   }
 

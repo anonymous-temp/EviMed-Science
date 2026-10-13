@@ -56,10 +56,13 @@ function names(payload, sourceId, sha256) {
  *   documents?: { list: (userId: string, kind: string, options: any) => Promise<{ items: any[] }> } | null,
  *   memory?: { recordSummaries: (userId: string, ids: readonly string[]) => Promise<any[]> } | null,
  *   runs?: ((project: any, runIds: readonly string[]) => Promise<Map<string, { title: string | null, deleted: boolean }>>) | null,
+ *   pages?: ((userId: string, projectId: string, sourceId: string) => Promise<any[]>) | null,
  *   report?: (code: string) => void,
- * }} dependencies `runs` says what each run is called in the project's ledger, and whether the researcher deleted it.
+ * }} dependencies `runs` says what each run is called in the project's ledger, and whether the researcher deleted it;
+ *   `pages` lists the compiled pages and graph files that cite a document (`KnowledgePageService.pagesQuoting`).
  * @returns {(request: { user: { id: string }, project: { id: string }, source: { id: string, payload?: any } }) =>
- *   Promise<{ memories: { recordId: string, text: string, scope: string }[], methods: { id: string, title: string }[],
+ *   Promise<{ pages: { sourceId: string | null, tree: string, path: string, title: string }[],
+ *     memories: { recordId: string, text: string, scope: string }[], methods: { id: string, title: string }[],
  *     results: { versionId: string, runId: string, path: string, title: string | null, at: string }[] }>}
  */
 export function createSourceDependents({ knowledge, documents = null, memory = null, runs = null, pages = null, report = () => {} }) {

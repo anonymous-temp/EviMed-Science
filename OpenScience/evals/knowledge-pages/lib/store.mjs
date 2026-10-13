@@ -26,6 +26,15 @@ export function latestByKey(records) {
   return latest
 }
 
+/**
+ * The statistics of one of arm B's compiles, as the 2026-10-12 runs recorded them in `compiled/<topic>-rep<N>/compile.json`,
+ * or null. The compiler that wrote them is gone; the pages, the held claims and the patches stay in those directories.
+ * @param {string} runDir @param {string} topicId @param {number} rep
+ */
+export function readCompileStats(runDir, topicId, rep) {
+  try { return JSON.parse(readFileSync(join(runDir, 'compiled', `${topicId}-rep${rep}`, 'compile.json'), 'utf8')).stats ?? null } catch { return null }
+}
+
 /** CNY already spent by every run directory under `resultsDir` except `exceptRunId`. */
 export function spentElsewhere(resultsDir, exceptRunId) {
   if (!existsSync(resultsDir)) return 0

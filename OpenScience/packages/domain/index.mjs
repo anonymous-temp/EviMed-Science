@@ -1085,22 +1085,27 @@ export {
   evidenceNewEvidenceNoticeTitleZh,
   evidenceUpkeepRoute,
 } from './src/evidenceUpkeep.mjs'
-// sourceDocuments — 12 exports: what the knowledge base accepts, where each
-// format is read, where its pages begin, how a quotation's offset becomes a
-// page number, and what a personal-library document's state reads as.
+// sourceDocuments — 16 exports: where each file of the knowledge base is
+// read (by its name, then by its bytes), why one is kept as an original with
+// no text, where its pages begin, how a quotation's offset becomes a page
+// number, and what a personal-library document's state reads as.
 export {
-  KNOWLEDGE_BASE_FORMATS,
   LIBRARY_ITEM_STATUSES,
   SOURCE_API_FORMATS,
+  SOURCE_CODE_FORMATS,
   SOURCE_LOCAL_TEXT_FORMATS,
   SOURCE_MEDIA_FORMATS,
+  SOURCE_ORIGINAL_CODES,
   SOURCE_PAGE_MAP_MAX_PAGES,
   SOURCE_PAGE_STATUSES,
+  SOURCE_TEXT_SAMPLE_BYTES,
   normalizeSourcePageMap,
   renderSourcePageMarkers,
+  sourceBytesAreText,
   sourceFileFormat,
   sourceFormatRoute,
   sourcePageForOffset,
+  sourceReadRoute,
 } from './src/sourceDocuments.mjs'
 // sourceVocabulary — what a document in the knowledge base is: its types with their Chinese names, the chip each is counted under, the understanding schema it is read with, where it came from, and the format-only first guess
 export {

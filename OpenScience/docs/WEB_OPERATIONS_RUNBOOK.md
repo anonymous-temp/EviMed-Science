@@ -996,22 +996,29 @@ re-runs an understanding, never reads a file again and never changes a depth, a 
 researcher or the judge already typed is left alone, and a second run reports nothing to do. Run it once after the release and read the
 report's `format` count: those documents were not named by the judge, and a 「重新读取」 on one reads it under its new type.
 
-### Knowledge pages (「知识页」), off until the evaluation says otherwise
+### Knowledge pages (「知识页」) and the knowledge graph
 
-`OPEN_SCIENCE_KNOWLEDGE_PAGES_ENABLED` (default off, needs Postgres) turns on the compile of a project's documents into linked
-pages in which every sentence quotes its document (`knowledgePageService.mjs`; the internal `knowledge-compile` capability on
-Flash, run in the account's hidden `evimed-knowledge` project). A round runs per project, ten minutes after the last change to its
-documents (`..._DEBOUNCE_MS`) and only once five documents are readable (`..._MIN_SOURCES`); a changed, replaced, removed or
-retracted document labels the pages that quote it and queues the next round. The pages are documents of the knowledge base under
-`knowledge-base/wiki/` and the 知识页 filter of 知识库; the compile's spend is the `knowledge` purpose, with its own caps
-(`..._RUN_LIMIT_CNY` 2, `..._DAILY_LIMIT_CNY` 10, `..._WEEKLY_LIMIT_CNY` 40; 0 = no cap) beside the account's. Off, nothing is queued, no worker
-starts and pages that exist stay readable and editable. Whether to switch it on is decided by `evals/knowledge-pages` (three arms:
-`kb_search`; `kb_search` with a decomposition instruction; the pages with `kb_search`), not by this runbook. To read it: `GET
-/api/knowledge-pages?projectId=` (state), the `wiki-compile` jobs and the `knowledge` purpose in the usage report.
+`OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED` (on when OpenViking is the deployment's index, needs Postgres) covers the whole path: every
+readable document's captured text is pushed to the engine as a resource (`ov-resource-sync` jobs, reconciled every
+`OPEN_SCIENCE_KNOWLEDGE_SOURCE_SYNC_RECONCILE_MS`), and OpenViking's own Compile writes the project's wiki and its knowledge graph
+with the official `llm-wiki` and `knowledge-graph` skills. `knowledgePageService.mjs` only schedules it and keeps the product's
+copy. A round runs per project, ten minutes after the last change to its documents (`..._DEBOUNCE_MS`) and only once five
+documents are readable (`..._MIN_SOURCES`), within the account's `knowledge` caps (`..._DAILY_LIMIT_CNY` 10, `..._WEEKLY_LIMIT_CNY`
+40; 0 = no cap), and not at all once the target holds 100 typed pages — the engine's own limit of 128 is destructive at this pin,
+so the state reads `limited` and what is compiled stays as it is. After each task the service mirrors the engine's files by content
+hash into the knowledge base under `knowledge-base/wiki/` and `knowledge-base/kg/` (the 知识页 filter of 知识库), puts back a
+person's edits a recompile dropped, and labels each quotation ✓ or ⚠ against the document it names; a label never withholds a
+page. A changed, replaced, removed or retracted document labels the pages that link to it and queues the next round. The engine
+down stops compiling and nothing else: uploads, search and the pages already mirrored are unaffected. The engine's model calls
+are the platform's cost under the `knowledge` purpose (see "The model path" in `WEB_DEPLOYMENT.md`). To read it: `GET
+/api/knowledge-pages?projectId=` (state, last compiled, pages against the limit), the `wiki-compile` and `ov-resource-sync` jobs,
+and `checks.memoryIndex.engine` in `/api/ready`. `evals/knowledge-pages` is the offline instrument for whether pages help an
+answer; its 2026-10-12 run, on the pages of the self-built compiler since removed, did not show pages raising cross-document
+answer quality over a decomposition instruction (+0.014, interval −0.053 to 0.085), so their value is browsing, accumulation
+and the graph.
 
-`OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED` (default on) is the other switch of this change: whether each readable document's summary and
-key claims are still written into the memory capsule's `sources` layer. Turning it off stops new writes only; what was written goes
-when its document does. Flip it only after the evaluation shows the pages do not do worse.
+`OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED` (default off since 2026-10-13) is whether each readable document's summary and key claims
+are written into the memory capsule's `sources` layer. Off stops new writes only; what was written goes when its document does.
 
 ### Specialist job slots on a small host
 

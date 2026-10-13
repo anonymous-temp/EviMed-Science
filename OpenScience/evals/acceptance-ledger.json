@@ -286,26 +286,6 @@
       "note": "New on 2026-09-25 with the 「循证 GEO」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. 2026-09-25 production (信尔美, step 5, run_3576ce426c20, geo-strategy 1.0.2), dispatched by the 循证 GEO orchestrator once the baseline round had its metrics: succeeded and verified in 22 minutes (¥2.96), all three submissions passing, the independent review's 11 findings all fixed. The delivered strategy.json holds a 28-site source table with the three conditions per site, 20 gaps in the seven classes, five engine expectations, a named battlefield (「P1-03 与其他减重药怎么选」) and three tiers. Its one notice (no battlefield group; no source table) was the contract not reading the method pack's shape; re-gated on 2026-09-28 with a6286df48 the package raises nothing. The run's transcript was not kept, so whether it read the gate cannot be checked. Not the project's current data: after the 2026-09-27 data repair the registered strategy has no battlefield, layout or gaps, none of 963 sources has its conditions checked, and the targets carry no M-19 or M-01S; a re-run on the current release is planned to refill them (run plan of 2026-09-28), and its package can replace this evidence if it is accepted. Briefs geo-strategy-001…004 have not been dispatched as written. 2026-09-28 re-run on 信尔美 through capability-acceptance (release evimed-1f5607732e37-1, brief geo-strategy-004 with the project's own strategy brief, a new session bound to geo-strategy 1.0.4), because the 09-27 data repair had emptied the registered strategy: 17 minutes, delivered verified, the review's five findings all fixed, and the strategy refilled. The 09-25 orchestrator run stays in relatedEvidence."
     },
     {
-      "id": "knowledge-compile",
-      "visibility": "internal",
-      "evalHarness": "evals/knowledge-pages",
-      "briefCount": 3,
-      "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
-      },
-      "relatedEvidence": [
-        "capabilities/knowledge-compile/capability.yaml",
-        "evals/knowledge-pages/briefs.json",
-        "evals/knowledge-pages/README.md",
-        "packages/domain/src/knowledgePage.mjs",
-        "apps/server/test/knowledgePages.integration.test.mjs"
-      ],
-      "note": "Internal: dispatched only by the knowledge-page compile (knowledgePageService.mjs), never by a user request; a researcher's documents reach it, so it is not exempt from the brief rule (three briefs, one per corpus of evals/knowledge-pages). New with 「知识页」 (2026-10-12) and off by default (OPEN_SCIENCE_KNOWLEDGE_PAGES_ENABLED): no production run is on record, so the row reads not-run until one is. The harness's three-arm offline comparison (kb_search alone, kb_search with a decomposition instruction, and the compiled pages with kb_search) decides whether the module is switched on; its results are under evals/knowledge-pages/results. What the platform accepts of a delivery is decided by code, not by this package: each sentence's quotation is checked against the whole document and a sentence that does not stand is held beside the page."
-    },
-    {
       "id": "manuscript-support",
       "visibility": "public",
       "evalHarness": "evals/manuscript-support",

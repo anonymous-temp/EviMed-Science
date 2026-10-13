@@ -33,6 +33,8 @@ import { extensionGenerationRoot, validateExtensionGenerationReference, verifyEx
 import { PERSONAL_SKILLS_RUNTIME_DIR, personalGenerationRoot, samePersonalPackages, validatePersonalGenerationReference, verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 // Knowledge-base search reaches the MCP server by this one variable (2026-09-20).
 import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
+// And knowledge-base browsing by its own (2026-10-13), where the knowledge switch is on.
+import { kbBrowseGatewayProviderUrl } from "./kbBrowseGateway.mjs";
 // So does 「前沿动态」 search (2026-09-22), for an account the module is open to.
 import { frontierGatewayProviderUrl } from "./frontierGateway.mjs";
 import { frontierAudienceAllows } from "./frontierService.mjs";
@@ -1632,6 +1634,10 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     // switch is off, so the tool says "disabled" without asking.
     const kbSearchGatewayUrl = gateways ? String(gateways.kbSearch ?? "") : kbSearchGatewayProviderUrl(config);
     if (kbSearchGatewayUrl) environment.EVIMED_KB_SEARCH_GATEWAY_URL = kbSearchGatewayUrl;
+    // Browsing the knowledge base as a tree likewise, on the knowledge switch: absent, `kb_browse` says "disabled"
+    // without asking and points the run at the search and the files.
+    const kbBrowseGatewayUrl = gateways ? String(gateways.kbBrowse ?? "") : kbBrowseGatewayProviderUrl(config);
+    if (kbBrowseGatewayUrl) environment.EVIMED_KB_BROWSE_GATEWAY_URL = kbBrowseGatewayUrl;
     if (config.resultsEnabled && config.stateStore === "postgres"
       && (String(config.resultEngineUrl ?? "").trim() || config.vcrEnabled && config.vcrEngineConfigured)) {
       const resultGatewayUrl = new URL(modelGatewayProviderUrl(config));

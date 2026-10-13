@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { checkKnowledgeEvidence } from '@evimed/domain'
+import { checkCitation } from './citations.mjs'
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 export const CORPUS_DIR = join(ROOT, 'corpus')
@@ -98,8 +98,8 @@ export function checkTopic(topic) {
         docs.add(support.doc)
         if (typeof support.quote !== 'string' || support.quote.length < 10) { issues.push(`${here}: quote is missing or shorter than 10 characters`); continue }
         if (!collapse(document.text).includes(collapse(support.quote))) issues.push(`${here}: quote is not verbatim in ${support.doc}: "${support.quote.slice(0, 70)}"`)
-        const checked = checkKnowledgeEvidence({ sourceId: document.sourceId, quote: support.quote }, (id) => (id === document.sourceId ? { text: document.text } : null))
-        if (checked.status !== 'verified') issues.push(`${here}: the platform's quote check says ${checked.status} for ${support.doc}`)
+        const checked = checkCitation({ sourceId: document.sourceId, quote: support.quote }, (id) => (id === document.sourceId ? { text: document.text } : null))
+        if (checked.status !== 'verified') issues.push(`${here}: the citation check an answer is held to says ${checked.status} for ${support.doc}`)
       }
     }
     if (question.kind === 'synthesis' && docs.size < 2) issues.push(`${where}: a synthesis question must draw on at least two documents, this one draws on ${docs.size}`)

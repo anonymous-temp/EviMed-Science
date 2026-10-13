@@ -36,6 +36,7 @@ import {
 } from "./runtimeManager.mjs";
 import { HttpError, sendError } from "./security.mjs";
 import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
+import { kbBrowseGatewayProviderUrl } from "./kbBrowseGateway.mjs";
 import { frontierGatewayProviderUrl } from "./frontierGateway.mjs";
 import { geoGatewayProviderUrl } from "./geoGateway.mjs";
 import { vcrGatewayProviderUrl } from "./vcrGateway.mjs";
@@ -84,6 +85,8 @@ export function publicRuntimeGatewayUrls(config) {
     tasks: taskToolsGatewayProviderUrl(config) ? `${base}/tasks/v1` : "",
     geoProbe: String(config.geoProbeUrl ?? "").trim() ? `${base}/geo-probe/v1` : "",
     kbSearch: kbSearchGatewayProviderUrl(config) ? `${base}/kb/v1/search` : "",
+    // The same `kb` name, so the prefix already maps it: `/runtime-gateway/kb/v1/browse`.
+    kbBrowse: kbBrowseGatewayProviderUrl(config) ? `${base}/kb/v1/browse` : "",
     frontier: frontierGatewayProviderUrl(config) ? `${base}/frontier/v1/search` : "",
     // 循证 GEO's three operations sit under one base (`geo_platform.py` appends them).
     geo: geoGatewayProviderUrl(config) ? `${base}/geo/v1` : "",

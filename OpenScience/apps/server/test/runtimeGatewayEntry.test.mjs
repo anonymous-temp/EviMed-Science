@@ -117,6 +117,14 @@ test("a remote runtime is offered exactly the gateways a local one is, at the pu
   });
   assert.equal(withKb?.kbSearch, "https://evimed.example/runtime-gateway/kb/v1/search");
   assert.deepEqual(resolveRuntimeGatewayPath("/runtime-gateway/kb/v1/search"), { kind: "internal", url: "/internal/kb/v1/search" });
+  // Browsing the knowledge base rides the same `kb` name and its own switch: the knowledge engine, not the search index.
+  assert.equal(withKb?.kbBrowse, "", "no knowledge engine here, so browsing is not offered there");
+  const withBrowse = publicRuntimeGatewayUrls({
+    runtimeGatewayPublicUrl: "https://evimed.example/runtime-gateway",
+    ovKnowledgeEnabled: true, openVikingUrl: "http://openviking:1933", kbSearchGatewayInternalUrl: "http://open-science-web:8787/internal/kb/v1/search",
+  });
+  assert.equal(withBrowse?.kbBrowse, "https://evimed.example/runtime-gateway/kb/v1/browse");
+  assert.deepEqual(resolveRuntimeGatewayPath("/runtime-gateway/kb/v1/browse"), { kind: "internal", url: "/internal/kb/v1/browse" });
   const withFrontier = publicRuntimeGatewayUrls({
     runtimeGatewayPublicUrl: "https://evimed.example/runtime-gateway",
     frontierEnabled: true, modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1",

@@ -15,7 +15,7 @@ import { HttpError } from "./security.mjs";
  * Now the two questions are separate:
  *
  *  - **this kind of work's own caps** (`own`) count only its own purpose in the
- *    usage ledger (`learning`, `source-understanding`, `knowledge`);
+ *    usage ledger (`learning`, `source-understanding`);
  *  - **the account's caps** (`account`, and the gateway `scope`) are the
  *    researcher's own spend limits, which cover everything, bounded runs
  *    included, exactly as they cover an interactive run.
@@ -48,7 +48,7 @@ function cap(value, code) {
 
 /**
  * @param {{ runLimitCny?: number, dailyLimitCny?: number, weeklyLimitCny?: number,
- *   purpose: "learning" | "source-understanding" | "knowledge" | "geo" | "vcr" | "autopilot", invalidCode: string }} own
+ *   purpose: "learning" | "source-understanding" | "geo" | "vcr" | "autopilot", invalidCode: string }} own
  * @param {Record<string, any>} config the account caps: `userDailySpendLimit`, `userWeeklySpendLimit`
  */
 export function boundedRunBudget(own, config) {

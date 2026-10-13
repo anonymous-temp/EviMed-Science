@@ -217,6 +217,20 @@ test('quoteIsPresent: a marker before a number is still a sign where nothing say
   assert.equal(quoteIsPresent('Doses\n\n- 150 mg twice daily', '50 mg twice daily'), false)
 })
 
+test('quoteIsPresent: a comma between a word and a number is punctuation, and a number is still not to be cut', () => {
+  // Chinese puts no space after its comma; the quotation starts at the number that follows it.
+  assert.equal(quoteIsPresent('Beta 网关是 Lumen 工作组推出的边缘网关产品，2.0 版本最多可接入 512 台下游设备。', '2.0 版本最多可接入 512 台下游设备'), true)
+  assert.equal(quoteIsPresent('共纳入，18113 例患者，随访 2 年。', '18113 例患者'), true)
+  assert.equal(quoteIsPresent('of the enrolled patients,250 of whom were women', '250 of whom were women'), true)
+  // With the comma, as always.
+  assert.equal(quoteIsPresent('共纳入，18113 例患者', '，18113 例患者'), true)
+  // The comma of a number stays the number's: after a digit, and after a space in a noisy extraction.
+  assert.equal(quoteIsPresent('enrolment rose to 1,250 patients', '250 patients'), false)
+  assert.equal(quoteIsPresent('enrolment rose to 1 ,250 patients', '250 patients'), false)
+  assert.equal(quoteIsPresent('共纳入 18,113 例患者', '113 例患者'), false)
+  assert.equal(quoteIsPresent('enrolment rose to 1,250 patients', '1,250 patients'), true)
+})
+
 // ---- pages as the product reads and keeps them -----------------------------------------------------------------------
 
 test('mirror paths: a compiled file keeps its name in the project, a name that cannot be a file is refused', () => {

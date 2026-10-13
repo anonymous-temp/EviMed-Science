@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { RUNTIME_ROOM_REFUSAL_CODES } from "@evimed/domain";
+import { RUNTIME_ROOM_REFUSAL_CODES, SOURCE_ORIGINAL_CODES, sourceFormatRoute } from "@evimed/domain";
 import { RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
-import { extractorRevision, readCopyOf } from "./sourceService.mjs";
+import { extractorRevision, readCopyOf, understandingPending } from "./sourceService.mjs";
 
 /** Codes that mean no runtime or budget was available yet, and how long a
  *  document waits before asking again. `runtime_yielded` is the same wait from
@@ -19,22 +19,55 @@ const CAPACITY_DEFERRALS = new Map([
 const TERMINAL_ERRORS = new Set([
   "source_job_invalid", "source_path_invalid", "source_digest_invalid", "source_format_unsupported",
   "source_generation_stale", "source_state_conflict", "source_changed", "openlist_source_changed",
-  "source_parser_input_too_large", "source_understanding_invalid", "source_understanding_run_failed", "source_understanding_input_too_large",
-  // The parser's answers that the same bytes would get again: a format it does
-  // not read, a file over its limit, a refused request, and the two that wait
-  // on an operator (a key, a quota). Retrying them only spends the backoff; the
-  // card says what to do and 「重新分析」 starts over once it is done.
-  "source_media_unsupported", "source_parser_payload_too_large", "source_parser_checksum_failed", "source_parser_rejected",
+  "source_parser_input_too_large",
+  // The understanding's answers that the same capture would get again: it is not
+  // installed here, its input is over the limit, the run ended without one, or
+  // what it delivered does not stand against the text. None of them is the
+  // document's: the text is in before any of them can happen (`#tick`).
+  "source_understanding_unconfigured", "source_understanding_invalid", "source_understanding_run_failed", "source_understanding_input_too_large",
+  // The parser's answers that the same bytes would get again: a file over its
+  // limit, a refused request, and the two that wait on an operator (a key, a
+  // quota). Retrying them only spends the backoff; the card says what to do and
+  // 「重新分析」 starts over once it is done.
+  "source_parser_payload_too_large", "source_parser_checksum_failed", "source_parser_rejected",
   "source_parser_auth_failed", "source_parser_quota_exhausted", "source_parser_unconfigured",
   "source_not_found", "source_account_changed", "source_cleanup_unconfigured", "source_cleanup_platform_unsupported", "source_cleanup_path_invalid",
   "source_folder_not_found", "source_folder_invalid", "source_folder_conflict",
 ]);
 
-/** Leased ingestion worker. ProductJobs owns retries; source generations make
- * an old lease unable to overwrite a newer user correction. */
+/**
+ * Why a parse that ended without text leaves a document kept as an original
+ * (`SOURCE_ORIGINAL_CODES`), or null for an answer that is a failure. A parser
+ * that says nothing here reads the format — no engine on this deployment, or
+ * the parsing API's own 415 — is the `unread` one; the engine's own failure
+ * names itself. A size limit is not among them: it stays a refusal that says so.
+ * @param {any} error @returns {string | null}
+ */
+function originalReason(error) {
+  if (error?.code === "source_format_unsupported" && error.status === 415) return "source_original_unread";
+  return SOURCE_ORIGINAL_CODES.includes(error?.code) ? error.code : null;
+}
+
+/**
+ * Leased ingestion worker. ProductJobs owns retries; source generations make
+ * an old lease unable to overwrite a newer user correction.
+ *
+ * A job has two legs, and a document's outcome is decided by the first alone
+ * (2026-10-13). The first captures the text and writes it out; from that
+ * moment the record says the document is usable (`recordReadable`), and a file
+ * nothing could read text out of is kept as an original instead of failing
+ * (`SOURCE_ORIGINAL_CODES`). The second is the understanding, for a depth that
+ * asks for one: a background enhancement that the same job carries on with,
+ * behind every document still waiting for its first leg, and whose waiting,
+ * failing or never running is recorded as a fact about the understanding and
+ * changes nothing about the document.
+ */
 export class SourceIngestionWorker {
-  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,verifyMetadata?:(metadata:any)=>Promise<any>,onPublished?:(job:any)=>void,onReadable?:(job:any)=>void,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,materials?:{extract:Function}|null,pollMs?:number,leaseMs?:number,reconcileMs?:number,report?:(event:string,detail:Record<string,any>)=>void}} dependencies */
-  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, verifyMetadata = async (metadata) => metadata, onPublished = () => {}, onReadable = () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, materials = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000, report = () => {} }) {
+  /**
+   * `engineParser` reads a file neither the local reader nor the parsing API takes — the engine's own parsers
+   * (`OpenVikingResources.parseWithEngine`) — and is null where the deployment has no engine to ask.
+   * @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,verifyMetadata?:(metadata:any)=>Promise<any>,onPublished?:(job:any)=>void,onReadable?:(job:any)=>void,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,materials?:{extract:Function}|null,engineParser?:((userId:string,file:{name:string,bytes:Buffer,token:string,signal?:AbortSignal|null})=>Promise<{text?:string}>)|null,pollMs?:number,leaseMs?:number,reconcileMs?:number,report?:(event:string,detail:Record<string,any>)=>void}} dependencies */
+  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, verifyMetadata = async (metadata) => metadata, onPublished = () => {}, onReadable = () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, materials = null, engineParser = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000, report = () => {} }) {
     if (![jobs, sources, parser, resolveSource, materialize].every(Boolean)) throw new TypeError("SourceIngestionWorker dependencies are required.");
     if (!Number.isSafeInteger(pollMs) || pollMs < 100 || pollMs > 86_400_000
       || !Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 3_600_000
@@ -57,6 +90,7 @@ export class SourceIngestionWorker {
     this.cancelUnderstanding = cancelUnderstanding;
     /** Structured materials of a parsed source (tables, cells, pages): an extension of the parse that never fails it. */
     this.materials = materials;
+    this.engineParser = engineParser;
     this.pollMs = pollMs;
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
@@ -143,6 +177,11 @@ export class SourceIngestionWorker {
     /** A copy this attempt wrote and has not recorded on the source yet. */
     let materialized = null;
     let extractionRecorded = false;
+    /** The capture and the written copy of the text, and whether the record already says it is in: what a failure
+     *  after that point leaves standing. */
+    let parsed = null;
+    let artifactPath = null;
+    let textIn = false;
     try {
       if (job.payload?.action === "source-run-cancel") {
         if (!this.cancelUnderstanding) throw Object.assign(new Error("Source run cancellation is unavailable."), { code: "source_cancel_unconfigured" });
@@ -181,18 +220,22 @@ export class SourceIngestionWorker {
         || !Number.isSafeInteger(expectedGeneration) || expectedGeneration !== actualGeneration) {
         return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "source_superseded" });
       }
-      if (!["queued", "parsing", "failed"].includes(source.payload.status)) {
+      if (!["queued", "parsing", "failed"].includes(source.payload.status) && !understandingPending(source.payload)) {
         return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "source_no_longer_processing" });
       }
       processing = await this.sources.beginIngestion(job.userId, source.id, { generation: actualGeneration, job });
-      if (processing.payload.depth === "skip") {
-        const finished = await this.sources.publishUnderstanding(job, null);
+      textIn = understandingPending(processing.payload);
+      // Nothing is read: a depth of `skip` asks for nothing, and a recording is known by its name to hold no text
+      // anything here reads, so it is kept as an original before a byte of it is fetched.
+      const recording = sourceFormatRoute(processing.payload.paths?.[0]) === "media";
+      if (processing.payload.depth === "skip" || recording) {
+        const finished = await this.sources.publishUnderstanding(job, null, null, null, recording ? { original: "source_original_media" } : {});
         this.#published(job);
         this.lastError = null;
         this.lastCompletedAt = new Date().toISOString();
         return finished;
       }
-      let parsed = await this.sources.loadCapture(job.userId, processing);
+      parsed = await this.sources.loadCapture(job.userId, processing);
       if (!parsed) {
         const resolved = await this.resolveSource(job, processing);
         resolvedFile = resolved;
@@ -209,17 +252,23 @@ export class SourceIngestionWorker {
         cancellationCheck.unref();
         let result;
         let materials = null;
+        /** Why the parse yielded no text, when it yielded none (`SOURCE_ORIGINAL_CODES`). */
+        let original = null;
         try {
           result = await this.parser.parse({ path: file,
             mimeType: processing.payload.fingerprint.mimeType,
             sha256: processing.payload.fingerprint.sha256,
             sourceId: processing.id, signal: controller.signal,
+            // A file neither the local reader nor the parsing API takes is the engine's parsers' to try, where there
+            // is an engine: staged under the document's own id, read back as Markdown, removed.
+            engine: this.engineParser ? (/** @type {any} */ document) => this.engineParser(job.userId, { ...document, token: processing.id }) : null,
           });
+          if (!String(result.text ?? "").trim()) original = "source_original_no_text";
           // The tables, cells and pages of what was just parsed, under the same
           // cancellation and lease checks as the parse. A failure here is the
           // ledger's (`coverage.materials`), never the ingestion's: only the
           // caller's own cancellation propagates.
-          if (this.materials) {
+          else if (this.materials) {
             try {
               materials = await this.materials.extract({ text: result.text, file, name: path.basename(file),
                 sha256: processing.payload.fingerprint.sha256, parserRevision: extractorRevision(result.extractor), signal: controller.signal });
@@ -233,10 +282,22 @@ export class SourceIngestionWorker {
           }
         } catch (error) {
           if (controller.signal.aborted) throw controller.signal.reason;
-          throw error;
+          // Nothing here reads this file, or the engine could not: that is a document without text, not a failed one.
+          original = originalReason(error);
+          if (!original) throw error;
         } finally {
           clearInterval(cancellationCheck);
           parseController = null;
+        }
+        if (original) {
+          // No text to capture. The file is kept as it is — listed and opened like any other, searched by nothing,
+          // nothing pushed to the engine for it — with the reason on its record, and the job ends here.
+          await this.#renewOrThrow(job, () => leaseLost, "before commit");
+          const finished = await this.sources.publishUnderstanding(job, null, null, null, { original });
+          this.#published(job);
+          this.lastError = null;
+          this.lastCompletedAt = new Date().toISOString();
+          return finished;
         }
         // A model wrote the parser's metadata; the DOI is checked against
         // Crossref here, outside the capture's transaction, so a slow lookup
@@ -247,24 +308,32 @@ export class SourceIngestionWorker {
       }
       const understands = ["structured", "deep"].includes(processing.payload.depth);
       const result = { ...parsed, text: parsed.input.text, units: parsed.input.units, facts: [], methods: [] };
-      // The document is usable once its text is written out, before and
-      // whatever its understanding does: a PDF used to stay unsearchable for
-      // the one to four minutes the understanding run takes (2026-09-24). A
-      // generation already written out — a deferred or retried attempt — is
-      // not written again.
-      let artifactPath = readCopyOf(await this.#assertCurrent(job.userId, processing.id, actualGeneration));
+      // The text is written out as soon as it is captured: a PDF used to stay
+      // unsearchable for the one to four minutes the understanding run takes
+      // (2026-09-24). A generation already written out — a deferred or retried
+      // attempt — is not written again.
+      artifactPath = readCopyOf(await this.#assertCurrent(job.userId, processing.id, actualGeneration));
       if (!artifactPath) {
         await this.#renewOrThrow(job, () => leaseLost, "before materialization");
         artifactPath = await this.sources.withIngestionLease(job, () => this.materialize(job, processing, result));
         materialized = artifactPath;
         await this.#renewOrThrow(job, () => leaseLost, "before commit");
         await this.#assertCurrent(job.userId, processing.id, actualGeneration);
-        if (understands) {
-          await this.sources.recordReadable(job, artifactPath);
-          // Recorded: the copy is the source's now, not this attempt's to discard.
-          materialized = null;
-          this.#readable(job);
-        }
+      }
+      if (understands && !textIn) {
+        // The first leg ends here, and with it everything that decides the document: the record says it is usable,
+        // and nothing the understanding does or fails to do moves that (2026-10-13 — until then the document stayed
+        // `parsing` for as long as its understanding ran or waited, and read `failed` when it could not run).
+        await this.sources.recordReadable(job, artifactPath);
+        // Recorded: the copy is the source's now, not this attempt's to discard.
+        materialized = null;
+        textIn = true;
+        this.#readable(job);
+        // The second leg is taken up from the queue, behind every document whose text is still to be read: launching
+        // an understanding takes seconds, and no document's reading waits for another's understanding.
+        await this.sources.deferIngestion(job, null, 0);
+        this.lastError = null;
+        return { deferred: true, readable: true };
       }
       let completed = null;
       if (understands) {
@@ -280,6 +349,8 @@ export class SourceIngestionWorker {
       }
       const finished = await this.sources.publishUnderstanding(job, parsed, completed, artifactPath);
       extractionRecorded = true;
+      // A document nobody understands is written out and published in one step: this is when its text can be taken.
+      if (!understands) this.#readable(job);
       this.#published(job);
       this.lastError = null;
       this.lastCompletedAt = new Date().toISOString();
@@ -293,9 +364,11 @@ export class SourceIngestionWorker {
         return { deferred: true };
       }
       // Every runtime slot taken, or a spending cap reached, says nothing about
-      // the document either: it waits for room instead of being marked failed.
-      // A knowledge-base upload failed in 21 s this way while the account's
-      // background work held the slots (2026-09-21).
+      // the document either: the job waits for room instead of failing. A
+      // knowledge-base upload failed in 21 s this way while the account's
+      // background work held the slots (2026-09-21). Only an understanding
+      // asks for a runtime or spends, so the document itself is not waiting:
+      // its text was in before this could be answered.
       const capacityWait = CAPACITY_DEFERRALS.get(code);
       if (processing && capacityWait && !leaseLost) {
         await this.sources.deferIngestion(job, null, capacityWait);
@@ -309,7 +382,20 @@ export class SourceIngestionWorker {
         const discarded = materialized;
         await this.sources.withAttemptCleanup(job, () => this.discardMaterialized(job, processing, discarded)).catch(() => {});
       }
-      if (processing && code !== "source_generation_stale" && code !== "product_job_lease_lost") {
+      const superseded = code === "source_generation_stale" || code === "product_job_lease_lost";
+      // The text is in, so this is the understanding's failure and never the document's. When nothing will try
+      // again — the same capture would get the same answer, or this was the job's last attempt — the job ends as a
+      // finished document: its units published as an indexed document's are, and what became of the understanding
+      // on the record. Until then the document stays as it is and only the job is retried.
+      if (textIn && parsed && !superseded && !leaseLost && (TERMINAL_ERRORS.has(code) || job.attempts >= job.maxAttempts)) {
+        try {
+          const finished = await this.sources.publishUnderstanding(job, parsed, null, artifactPath, { understandingError: code });
+          this.#published(job);
+          this.lastCompletedAt = new Date().toISOString();
+          return finished;
+        } catch { /* the job fails below, and the repair cycle records the understanding's end (`reconcileJobs`) */ }
+      }
+      if (processing && !textIn && !superseded) {
         await this.sources.recordFailure(job.userId, processing.id, {
           expectedRevision: processing.revision, generation: processing.payload.generation, job,
           code, message: "Source analysis failed.",
@@ -331,14 +417,16 @@ export class SourceIngestionWorker {
     }
   }
 
-  /** A source's understanding was published: tell whoever keeps a derivation
-   *  of it (the knowledge-base index, the library, the capsule) without letting
-   *  its failure touch this job. @param {any} job */
+  /** A source's job ended in a finished document — understood, indexed, read
+   *  without an understanding, or kept as an original: tell whoever keeps a
+   *  derivation of it (the knowledge-base index, the library, the capsule)
+   *  without letting its failure touch this job. @param {any} job */
   #published(job) {
     try { this.onPublished(job); } catch { /* the index converges on its own timer */ }
   }
 
-  /** A source's text was written out ahead of its understanding: the index
+  /** A source's text is in — written out ahead of its understanding, or published
+   *  with nothing to follow: the index, the engine's copy and the project's pages
    *  can take it now. Never able to fail the job. @param {any} job */
   #readable(job) {
     try { this.onReadable(job); } catch { /* the index converges on its own timer */ }
@@ -353,7 +441,7 @@ export class SourceIngestionWorker {
 
   async #assertCurrent(userId, sourceId, generation) {
     const current = await this.sources.get(userId, sourceId);
-    if (!current || current.payload?.status !== "parsing" || current.payload?.generation !== generation) {
+    if (!current || (current.payload?.status !== "parsing" && !understandingPending(current.payload)) || current.payload?.generation !== generation) {
       const error = /** @type {Error & {code:string}} */ (Object.assign(
         new Error("A newer source state superseded this ingestion result."),
         { code: "source_generation_stale" },

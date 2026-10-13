@@ -1,40 +1,25 @@
-import { KNOWLEDGE_BASE_FORMATS, sourceFormatRoute } from "@evimed/domain";
-
 /**
- * The knowledge base's accepted formats as a researcher reads them: eight
- * families instead of thirty extensions. The families are held equal to the
- * list the upload check itself uses (`KNOWLEDGE_BASE_FORMATS` in
- * `@evimed/domain`, which the server refuses against) by a test, so the copy
- * cannot promise a format the server turns away.
+ * What the knowledge base's file picker offers, and what it turns away before anything is sent: every file, and none.
+ *
+ * Until 2026-10-13 the picker filtered by a closed list of twenty-nine extensions and this module refused the rest
+ * with a reason, as the server did. No file is refused for what it is any more: text, code, PDF, Office and images
+ * are read and can be searched; a recording, or a file nothing can read text out of, is kept as an original
+ * (`SOURCE_ORIGINAL_CODES` in `@evimed/domain`, whose sentences are the registry's). Where each file is read is the
+ * server's to decide from its name and its bytes (`sourceReadRoute`), so nothing here reads a name.
  */
-export const KNOWLEDGE_BASE_FORMAT_FAMILIES: ReadonlyArray<readonly [string, readonly string[]]> = [
-  ["PDF", ["pdf"]],
-  ["Word", ["doc", "docx", "rtf"]],
-  ["PPT", ["ppt", "pptx"]],
-  ["Excel 与表格", ["xls", "xlsx", "xlsm", "csv", "tsv"]],
-  ["图片", ["jpg", "jpeg", "png", "bmp", "gif"]],
-  ["电子书", ["epub", "mobi"]],
-  ["网页", ["htm", "html", "xml"]],
-  ["纯文本与代码", ["txt", "md", "json", "yaml", "yml", "r", "py", "sql"]],
-];
-/** The picker's default filter: what the knowledge base accepts. */
-export const KNOWLEDGE_BASE_ACCEPT = KNOWLEDGE_BASE_FORMATS.map((format) => `.${format}`).join(",");
-export const KNOWLEDGE_BASE_UPLOAD_HINT =
-  `支持 ${KNOWLEDGE_BASE_FORMAT_FAMILIES.map(([label]) => label).join("、")}；音视频暂不支持。`;
+
+/** The picker's filter: none. An empty `accept` leaves the system dialog showing every file. */
+export const KNOWLEDGE_BASE_ACCEPT = "";
+
+/** What a person is told about what can be added, where a page says it. */
+export const KNOWLEDGE_BASE_UPLOAD_HINT = "任何文件都可以添加；音视频和读不出文字的文件只保存原件。";
 
 /**
- * What the knowledge base would refuse, told before anything is sent: a
- * recording is not parsed at all yet, and any other format is outside the
- * list. The server refuses the same files with the same reasons; this only
- * saves the round trip and keeps one refused file from stopping the rest.
+ * The files of a selection that go on to be uploaded, and the ones that do not. Nothing is turned away for its
+ * format, so every file goes on; the size limit and the project's room are the server's answers, one file at a time.
  */
 export function partitionKnowledgeBaseFiles(files: readonly File[]) {
-  const accepted: File[] = [];
+  const accepted: File[] = [...files];
   const refused: { name: string; reason: string }[] = [];
-  for (const file of files) {
-    const route = sourceFormatRoute(file.name);
-    if (route === "local" || route === "api") accepted.push(file);
-    else refused.push({ name: file.name, reason: route === "media" ? "音视频暂不支持" : "格式不在支持范围内" });
-  }
   return { accepted, refused };
 }

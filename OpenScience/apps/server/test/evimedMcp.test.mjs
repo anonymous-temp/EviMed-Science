@@ -260,6 +260,9 @@ test("every optional evidence channel the platform configures reaches the runtim
       // the MCP by one variable each.
       kbSearchEnabled: true,
       kbSearchGatewayInternalUrl: "https://gateway.internal/internal/kb/v1/search",
+      // Browsing the knowledge base follows that address, on the knowledge switch.
+      ovKnowledgeEnabled: true,
+      openVikingUrl: "http://openviking.internal:1933",
       frontierEnabled: true,
       frontierAudience: "all",
     });
@@ -284,6 +287,7 @@ test("every optional evidence channel the platform configures reaches the runtim
     assert.equal(environment.EVIMED_UNPAYWALL_EMAIL, "evimed@example.test");
     assert.equal(environment.EVIMED_LITERATURE_SEARCH_URL, "https://evidence.internal/literature");
     assert.equal(environment.EVIMED_KB_SEARCH_GATEWAY_URL, "https://gateway.internal/internal/kb/v1/search");
+    assert.equal(environment.EVIMED_KB_BROWSE_GATEWAY_URL, "https://gateway.internal/internal/kb/v1/browse");
     assert.equal(
       environment.EVIMED_FRONTIER_GATEWAY_URL,
       "http://127.0.0.1:8787/internal/frontier/v1/search",

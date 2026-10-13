@@ -1219,6 +1219,12 @@ What the deployment adds to the service (`deploy/web/docker-compose.yml`, `deplo
 | `OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY` | `50` | The platform's money for the engine's model calls per rolling 24 hours; `0` is no cap. A refused call answers 402, which the engine does not retry: a commit refused here is extracted only if it is replayed. Counted in `open_science_openviking_model_requests_total` and `open_science_openviking_model_budget_cny`. |
 | `OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS` | `1800000` | How often the engine's facts are re-read (five minutes while one is failing). |
 | `OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED` | on when the engine is the deployment's index | Resources, Compile, the wiki and the graph. |
+| `OPEN_SCIENCE_KNOWLEDGE_PAGES_MIN_SOURCES`, `OPEN_SCIENCE_KNOWLEDGE_PAGES_DEBOUNCE_MS` | `5`, `600000` | When a project is compiled: after its documents changed and stayed quiet this long, once this many of them are readable. |
+| `OPEN_SCIENCE_KNOWLEDGE_PAGES_DAILY_LIMIT_CNY`, `OPEN_SCIENCE_KNOWLEDGE_PAGES_WEEKLY_LIMIT_CNY` | `10`, `40` | The account's `knowledge` caps: what its compile tasks used, from the tokens the engine reports when each ends; `0` is no cap. A round is not started past them. |
+| `OPEN_SCIENCE_KNOWLEDGE_PAGES_TASK_TIMEOUT_MS` | `1800000` | How long one compile task may run before the engine is asked to cancel it (one minute to two hours). |
+| `OPEN_SCIENCE_KNOWLEDGE_GRAPH_ENABLED` | `true` | Whether the `knowledge-graph` compile follows the wiki's; off compiles the wiki only. |
+| `OPEN_SCIENCE_KNOWLEDGE_SOURCE_SYNC_RECONCILE_MS` | `900000` | How often every project's readable documents are compared with the engine's copies and repaired. One changed document is pushed at once by its own job; this is the net under that. |
+| `OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED` | `false` | Whether each readable document's summary and key claims are written into the memory capsule's `sources` layer. Off since 2026-10-13; off stops new writes only. |
 | `OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED` | on when the engine is the deployment's index | Sessions, native extraction, the memory plugin behind the memory gateway. |
 
 `/api/ready` reports the engine under `checks.memoryIndex.engine`: `facts.version` (the answering server is the pin),

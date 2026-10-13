@@ -22,10 +22,9 @@ Skills
 - OpenScience/runtime/skills/curated-scientific/ derives from K-Dense's
   scientific-agent-skills (MIT; LICENSE.scientific-agent-skills.md). Per-skill
   provenance is recorded in its inventory.json.
-- OpenScience/capabilities/knowledge-compile/SKILL.md (and its copy under capability-skills/) adapts the page
-  types, the read-before-write rule, synonym merging and the handling of disagreements of the llm-wiki skill of
-  volcengine/OpenViking (examples/compile/ov-compile-skills/llm-wiki, Apache-2.0). The quotation protocol and the
-  checks are EviMed's.
+- OpenScience/apps/server/src/openVikingSkills/ holds, unmodified, the llm-wiki and knowledge-graph skills of
+  volcengine/OpenViking v0.5.0 (examples/compile/ov-compile-skills, Apache-2.0); the digest of each file at
+  that tag is recorded in OpenScience/deps-version.json.
 - OpenScience/runtime/skills/community/ and core/humanizer, core/humanizer-zh
   are third-party skills under the MIT License, each with its LICENSE file; the
   community skills' pinned sources are recorded in community/sources.json.

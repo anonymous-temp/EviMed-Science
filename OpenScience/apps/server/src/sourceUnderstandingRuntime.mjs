@@ -150,9 +150,6 @@ export async function packageCandidates(project, name, file, formatVersion, deli
  * package, or names bytes a file no longer has leaves the package **unverified** — and the caller still validates what it
  * read against its own frozen input, which is the check that guards what the document is understood to say. Only the
  * `required` file not being there is a failure.
- *
- * Shared by the source understanding and the knowledge-page compile (`knowledgeCompileRuntime.mjs`): the same receipt, the
- * same places a package is looked for, the same path guard.
  * @param {any} project @param {any} run
  * @param {{ capability: string, contractKind?: string, files: Array<{ name: string, limit: number }>, required: string, missingCode: string, missingMessage: string }} spec
  * @returns {Promise<{ values: Record<string, any>, verified: boolean }>}

@@ -110,6 +110,10 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   // the researcher's own knowledge base, through the server's index
   // (kb_search.py, 2026-09-20)
   'kb_search',
+  // the same knowledge base as a tree to find one's way through — the documents, the wiki compiled from them and the
+  // knowledge graph — through the server's browse gateway (kb_browse.py, 2026-10-13): read-only, an index into the
+  // documents and never evidence of its own
+  'kb_browse',
   // the feed of recent medical developments, 「前沿动态」, through the server's
   // gateway (frontier_search.py, 2026-09-22): leads, never evidence
   'frontier_search',
@@ -251,6 +255,9 @@ export const ROOT_VISIBLE_MCP_BASE_NAMES = Object.freeze([
   // A question about the researcher's own documents is a plain question, and
   // the answer line must be able to look (plan §3.2; model-chosen, never forced).
   'kb_search',
+  // So is "what does my knowledge base hold" and a question that spans several documents: the answer line finds its
+  // way by the wiki's contents, a page, the graph (model-chosen, never forced).
+  'kb_browse',
   // So is "what is new in X": the answer persona's optional feed lookup
   // (frontier plan 2026-09-21 §4.8; model-chosen, never forced).
   'frontier_search',

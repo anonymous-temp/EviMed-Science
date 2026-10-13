@@ -223,7 +223,7 @@ import { createGuestInfluence } from "./capsuleShareTrust.mjs";
 import { EvidenceZoneSubscriptions, createEvidenceLinkStates, subscriptionsForAudience } from "./evidenceZoneSubscription.mjs";
 import { reownOperatorImportedZones } from "./evidenceReown.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
-import { SourceService, assertKnowledgeBaseFormat, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
+import { SourceService, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
 import { createKnowledgeBaseEntries } from "./knowledgeBaseEntries.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
 // Knowledge-base search (2026-09-20): the index, its embedder and its gateway.
@@ -231,6 +231,8 @@ import { KB_RERANK_INSTRUCT, KnowledgeBaseIndex } from "./kbIndex.mjs";
 import { createLibrary } from "./libraryService.mjs";
 import { KbEmbedder } from "./kbEmbedding.mjs";
 import { KB_SEARCH_GATEWAY_PATH, createKbSearchGatewayHandler } from "./kbSearchGateway.mjs";
+// The knowledge base as a tree, for the runtime's `kb_browse` tool: the engine's documents, wiki and graph (2026-10-13).
+import { KB_BROWSE_GATEWAY_PATH, createKbBrowseGatewayHandler } from "./kbBrowseGateway.mjs";
 // 「前沿动态」 search for the runtime's `frontier_search` tool (2026-09-22).
 import { FRONTIER_GATEWAY_PATH, createFrontierGatewayHandler } from "./frontierGateway.mjs";
 // The independent reviewer (plan 2026-09-22, tiered review): the gateway a
@@ -774,6 +776,7 @@ function routePattern(pathname) {
     pathname === ENGINE_USAGE_PATH ||
     pathname === ENGINE_MODEL_TOKEN_PATH ||
     pathname === KB_SEARCH_GATEWAY_PATH ||
+    pathname === KB_BROWSE_GATEWAY_PATH ||
     pathname === FRONTIER_GATEWAY_PATH
   ) return pathname;
   // The rest of the runtime's and the engines' gateways: one label each, a prefix gateway's operations folded
@@ -1756,17 +1759,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // 资料组成: the library counted by year and keyword, in SQL over the account's documents of the project.
     composition: productDatabase ? (userId, project) => projectComposition(productDatabase, userId, project.id) : null,
     maxJsonBytes: config.maxJsonBytes });
-  // One admission for every way a file reaches `knowledge-base/`: the upload
-  // route and the upload command both refuse a format the knowledge base
-  // cannot read before a byte is written, and both register what they wrote.
-  // The web page uploads through the command, which until 2026-09-20 wrote
-  // the file and registered nothing — a researcher's upload never became a
-  // source, and the knowledge base stayed empty however much was uploaded.
+  // One intake for every way a file reaches `knowledge-base/`: the upload
+  // route and the upload command both register what they wrote. The web page
+  // uploads through the command, which until 2026-09-20 wrote the file and
+  // registered nothing — a researcher's upload never became a source, and the
+  // knowledge base stayed empty however much was uploaded.
   const knowledgeBaseUploads = {
     /** @param {string} root @param {string} rel */
     covers: (root, rel) => root === "base" && (rel === "knowledge-base" || rel.startsWith("knowledge-base/")),
-    /** @param {string} rel */
-    admit: (rel) => assertKnowledgeBaseFormat(rel),
+    // No file is refused for its format (2026-10-13; until then a closed list of twenty-nine extensions answered
+    // 415 here): what a file is decides who reads its text (`sourceReadRoute`), and one nothing reads is kept as an
+    // original. What an upload is still refused for — its size, the project's room, an unsafe path — its callers check.
+    /** @param {string} _rel */
+    admit: (_rel) => {},
     /** @param {any} ctx @param {string} rel @param {Buffer} buffer */
     register: async (ctx, rel, buffer, meta = null) => {
       if (!sourceService) return null;
@@ -1789,11 +1794,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /**
    * Write one file into a project the way an upload writes it — the one path
    * `/api/files/upload` and 「前沿动态」's 存入知识库 (frontierActions.mjs) share,
-   * so a saved item is a source like any upload: the size limit, the knowledge
-   * base's format admission, the project's capacity, an atomic no-follow
-   * write, the mirror into a running runtime, the audit line, and the source
-   * registration that parses and indexes it. Returns the registration, or null
-   * outside `knowledge-base/`.
+   * so a saved item is a source like any upload: the size limit, the project's
+   * capacity, an atomic no-follow write, the mirror into a running runtime, the
+   * audit line, and the source registration that reads and indexes it. Returns
+   * the registration, or null outside `knowledge-base/`.
    * `meta` is the title and link a registered page or note carries; `register: false` keeps the bytes in the knowledge base's
    * folder without making them a source (the original HTML beside a page's text snapshot).
    * @param {{ config: any, user: any, project: any }} ctx @param {{ root: string, rel: string, buffer: Buffer, meta?: Record<string, any>, register?: boolean }} file
@@ -1833,6 +1837,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The tables, cells and pages of a parsed source; a failure of it is the
     // source's ledger entry, never a failed ingestion.
     materials: createSourceMaterials({ config, controller: intakeController, report: (code) => process.stderr.write(`source-materials: ${code}\n`) }),
+    // A file neither the local reader nor the parsing API takes (an archive, a binary nobody listed) is read by the
+    // engine's own parsers where the knowledge engine is on; elsewhere it is kept as an original with no text.
+    engineParser: config.ovKnowledgeEnabled === true && openVikingResources.configured
+      ? (userId, file) => openVikingResources.parseWithEngine(userId, file) : null,
     pollMs: config.sourceIngestionPollMs,
     leaseMs: config.sourceIngestionLeaseMs,
     // The orphan sweep's own line: what it withdrew, or why it could not.
@@ -4066,6 +4074,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     knowledgePages = new KnowledgePageService({
       config, documents: productDocuments, jobs: productJobs, sources: sourceService, store, entries: knowledgeEntries,
       resources: openVikingResources, engine: openVikingEngine, sourceSync,
+      // A page may cite a document of the account's library; its read-only copy there is the text the compile was given.
+      libraryText: async (userId, sourceId) => (libraryService && /^src_[a-f0-9]{32}$/.test(sourceId)
+        ? fsp.readFile(path.join(libraryService.libraryDir(userId), sourceId, "index.md"), "utf8").catch(() => null) : null),
       report: code => { void securityAudit(config, "knowledge.pages", "failed", { code }).catch(() => {}); },
     });
     knowledgePageRoutes = createKnowledgePageRoutes({ store, service: knowledgePages, sources: sourceService, maxJsonBytes: config.maxJsonBytes });
@@ -4896,6 +4907,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return (await researchSessions.get(project, sessionId))?.sourceScope ?? null;
     },
   });
+  // `kb_browse`: the same token, the engine's own tree of the project. With the knowledge switch off or no engine it
+  // answers `kb_browse_disabled` (kbBrowseGateway.mjs); a document is named by the title the knowledge base shows.
+  const kbBrowseGatewayHandler = createKbBrowseGatewayHandler(config, runtimeManager, { resources: openVikingResources, evaluationIsolation,
+    sources: sourceService, library: libraryService, titleOf: (source) => projectSourceManifestRecord(source).display.title });
   // `frontier_search`: the page's own list, read for the runtime's account;
   // with the module off it answers `frontier_disabled` (frontierGateway.mjs).
   const frontierGatewayHandler = createFrontierGatewayHandler(config, runtimeManager, {
@@ -5813,6 +5828,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       ? taskToolsGatewayHandler
       : pathname === TOOL_UNIVERSE_GATEWAY_PATH
       ? toolUniverseGatewayHandler
+      : pathname === KB_BROWSE_GATEWAY_PATH
+      ? kbBrowseGatewayHandler
       : pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)
       ? capsuleGatewayHandler
       : isModelGatewayPath(pathname)
@@ -7064,6 +7081,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // hand them to, one attempt, never waited on.
         await memoryWithdrawals?.migrate();
         if (!memoryWithdrawals) void memorySubstrate.forgetUser(user.id).catch(() => false);
+        // The engine's copies of the account's documents, and the wiki and graphs compiled from them: one attempt, never waited on.
+        void sourceSync?.forgetAccount(user.id);
         // Counted, not deleted. The memory tables reference the account with ON
         // DELETE CASCADE, so `store.deleteUser` below removes them inside the
         // transaction that can still fail — where deleting them here would mean
@@ -7266,6 +7285,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               }
             },
           });
+          // What the engine held of the project — its documents' copies, its wiki, its graph — is owed a removal (openVikingSourceSync.forgetProject).
+          void sourceSync?.forgetProject(user.id, projectId);
           recordMethodsRetired("project_deleted", methodsStopped);
           // The audit line outlives the project. It used to be written into
           // the project's own `.openscience/audit.jsonl` a moment before that
@@ -9257,6 +9278,26 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
         value: /** @type {any} */ (state)?.ok ? 1 : 0, labels: { fact, code: String(/** @type {any} */ (state)?.code ?? "ok") },
       })),
     );
+  }
+  // The knowledge module built on the engine: documents pushed as the files a compile reads, compile rounds and what
+  // their mirror did, and where the module is stopped. Counters since this process started (`knowledgeStatus`).
+  const knowledge = readiness.checks.memoryIndex?.knowledge ?? null;
+  if (knowledge?.sources) {
+    addMetric(lines, "open_science_knowledge_source_sync_total",
+      "Documents made to agree between PostgreSQL and the OpenViking engine since this process started, by what was done.", "counter",
+      ["pushed", "removed", "unchanged", "failed", "reconciled"].map((outcome) => ({ value: Number(knowledge.sources[outcome] ?? 0), labels: { outcome } })));
+  }
+  if (knowledge?.pages) {
+    addMetric(lines, "open_science_knowledge_compile_total",
+      "What the knowledge-page scheduler did since this process started: rounds finished, compile tasks submitted and failed, rounds stopped at the page limit, steps postponed.", "counter",
+      [["rounds", "round"], ["compiles", "submitted"], ["failed", "failed"], ["limited", "page_limit"], ["deferred", "deferred"]]
+        .map(([key, event]) => ({ value: Number(knowledge.pages[key] ?? 0), labels: { event } })));
+    addMetric(lines, "open_science_knowledge_mirror_total",
+      "Compiled files the product ledger mirrored from the engine since this process started, and what was laid on them: a person's blocks put back, write-backs, quotation labels.", "counter",
+      [["pagesMirrored", "mirrored"], ["pagesRetired", "retired"], ["blocksRestored", "blocks_restored"], ["writeBacks", "write_back"], ["quotationsPresent", "quotation_present"], ["quotationsAbsent", "quotation_absent"]]
+        .map(([key, event]) => ({ value: Number(knowledge.pages[key] ?? 0), labels: { event } })));
+    addMetric(lines, "open_science_knowledge_compile_tokens_total",
+      "Tokens the engine reported for the compile tasks that ended since this process started.", "counter", { value: Number(knowledge.pages.tokens ?? 0) });
   }
   addMetric(
     lines,

@@ -2019,13 +2019,25 @@ function normalizedExtractionPassage(value) {
     .replace(/\s+([.,;:!?。！？])/gu, "$1");
 }
 
+// A comma that follows a word and is followed at once by a digit is the sentence's punctuation, not the number's:
+// "边缘网关产品，2.0 版本最多可接入 512 台", "共纳入，18113 例患者", "patients,250 of whom". Chinese is written without
+// a space after its comma, the comparison folds that comma to an ASCII one, and the number pattern then took ",2" for a
+// number the way it takes ".5" — so a quotation beginning at the number was refused as cutting it in half (found
+// 2026-10-13 on a compiled page's quotation). Only where a letter or an ideograph stands directly before the comma: after
+// a digit ("1,250") or a space ("1 ,250" in a noisy extraction) the comma may still belong to the number, and stays in it.
+/** @param {string} haystack @param {RegExpMatchArray} match @returns {0 | 1} how many leading characters of the match are not the number's */
+function punctuationBeforeNumber(haystack, match) {
+  const at = match.index ?? 0;
+  return match[0][0] === "," && at > 0 && /\p{L}/u.test(haystack[at - 1]) ? 1 : 0;
+}
+
 /**
  * @param {string} haystack @param {readonly string[]} segments @param {(segment: string) => string} project
  * @param {{ spans?: number[][] }} [memo] where the haystack's numeric spans are kept for the next quote checked against it
  * @returns {boolean} */
 function segmentsPresentInOrder(haystack, segments, project, memo = {}) {
   if (!haystack) return false;
-  const numericSpans = memo.spans ??= [...haystack.matchAll(passageNumberToken)].map((match) => [match.index, match.index + match[0].length]);
+  const numericSpans = memo.spans ??= [...haystack.matchAll(passageNumberToken)].map((match) => [match.index + punctuationBeforeNumber(haystack, match), match.index + match[0].length]);
   let from = 0;
   for (const segment of segments) {
     const needle = project(segment);

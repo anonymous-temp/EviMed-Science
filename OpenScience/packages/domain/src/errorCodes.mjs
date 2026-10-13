@@ -212,6 +212,20 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "kb_search_response_too_large",
   "kb_search_gateway_token_missing",
   "kb_search_gateway_token_invalid",
+  // The knowledge base as a tree (kb_browse → kbBrowseGateway.mjs) not answering — the knowledge switch off, no
+  // engine, an outage, a slow engine — or a page that is not at the path asked for (pages are rewritten by each
+  // compile). The search and the files are still there, which is what the tool's own failure tells the run to use.
+  "kb_browse_disabled",
+  "kb_browse_unconfigured",
+  "kb_browse_unavailable",
+  "kb_browse_timeout",
+  "kb_browse_rate_limited",
+  "kb_browse_upstream_error",
+  "kb_browse_response_invalid",
+  "kb_browse_response_too_large",
+  "kb_browse_gateway_token_missing",
+  "kb_browse_gateway_token_invalid",
+  "kb_browse_not_found",
   // The stored meaning of a dataset (dataset_semantics → dataSemanticsGateway.mjs) not answering — the module off,
   // an outage, a slow ledger. The analysis goes on from the files, as it did before the tool existed, and says it
   // did not have the recorded interpretation. The two codes a malformed call earns are the run's to fix and sit
@@ -596,6 +610,15 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "kb_search_source_ids_invalid",
   "kb_search_request_invalid",
   "kb_search_request_too_large",
+  // And a knowledge-base browse: an operation, root, path, pattern or bound the run built wrongly.
+  "kb_browse_op_invalid",
+  "kb_browse_root_invalid",
+  "kb_browse_path_invalid",
+  "kb_browse_pattern_invalid",
+  "kb_browse_offset_invalid",
+  "kb_browse_limit_invalid",
+  "kb_browse_request_invalid",
+  "kb_browse_request_too_large",
   ...DATA_SEMANTICS_RUN_FIXES,
   // And for a task tool: an instruction, title, schedule or id the run built wrongly, a task that is not this project's, a change
   // that changes nothing.
@@ -1154,10 +1177,19 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
  * in a run's verdict; they are here so each one is held to having a Chinese
  * sentence like every other code a person can read. Private: nothing outside
  * this module needs the list, only the guarantee.
+ *
+ * No format is refused at upload (2026-10-13). `source_format_unsupported` is
+ * what a parser answers about a document it was asked to read and cannot — a
+ * pasted link, a public page's file; `source_original_*` (`SOURCE_ORIGINAL_CODES`
+ * in `sourceDocuments.mjs`) is why a stored document has no text, and is not a
+ * failure of anything.
  */
 const sourceIntakeErrorCodes = Object.freeze([
   'source_format_unsupported',
-  'source_media_unsupported',
+  'source_original_media',
+  'source_original_unread',
+  'source_original_engine_failed',
+  'source_original_no_text',
   'source_parser_payload_too_large',
   'source_parser_input_too_large',
   'source_parser_checksum_failed',
@@ -2538,8 +2570,14 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // three of them (413, 415, 422) are final on the first answer, so each says
   // what to do instead of only that it failed.
   source_format_unsupported:
-    '这种文件格式还不能解析。支持 PDF、Word、PPT、Excel、图片（jpg、png、bmp、gif）、EPUB、MOBI、HTML、RTF 和纯文本类文件（txt、md、csv、json 等）。',
-  source_media_unsupported: '音频和视频暂时不能入库：文档解析服务还不能转写录音和视频。可以上传讲稿或逐字稿。',
+    '这种文件格式还读不出文字。能读出文字的有 PDF、Word、PPT、Excel、图片（jpg、png、bmp、gif）、EPUB、MOBI、HTML、RTF，以及文本、代码和数据类文件（txt、md、csv、json 等）。',
+  // A document kept as an original with no text: stored, listed and opened like
+  // any other, and searched by nothing. Each says what was kept and what to do
+  // when the content is wanted; none of them is a failure.
+  source_original_media: '音频和视频只保存原件：录音和视频还不能转成文字，所以搜不到里面的内容。原件可以照常打开和下载；需要引用内容时，可以另外上传讲稿或逐字稿。',
+  source_original_unread: '这种格式的文件只保存了原件：现在还读不出里面的文字，所以搜不到它的内容。原件可以照常打开和下载。',
+  source_original_engine_failed: '这份文件只保存了原件：这一次没能读出里面的文字，所以暂时搜不到它的内容。原件可以照常打开和下载，稍后可以重新读取。',
+  source_original_no_text: '这份文件里没有读到文字，只保存了原件。原件可以照常打开和下载。',
   source_parser_payload_too_large: '文件超过文档解析服务 100 MB 的上限，拆分后再上传即可。',
   source_parser_input_too_large: '文件超过可解析的大小上限，拆分后再上传即可。',
   source_parser_checksum_failed: '文件在传给解析服务的途中发生了变化，校验没有通过；重新分析一次即可。',
@@ -2718,6 +2756,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   // and what the card's own button does about it.
   [/^source_parser_/, '文档解析这次没有完成，稍后再重新分析。'],
   [/^kb_search_/, '资料库检索这次没能完成；运行会直接读取知识库里的文件继续。'],
+  [/^kb_browse_/, '知识库目录这次没能打开；运行会改用资料库检索或直接读取知识库里的文件继续。'],
   [/^semantics_/, DATA_SEMANTICS_ERROR_MESSAGE_ZH],
   [/^task_(?:tools_|limit_reached$|revision_conflict$|instruction_invalid$|title_invalid$|schedule_|id_invalid$|not_found$|update_empty$|paused_invalid$)/, TASK_TOOL_ERROR_MESSAGE_ZH],
   [/^frontier_(?:disabled$|search_)/, '前沿动态检索这次没能完成；回答会改用文献、指南和监管来源继续。'],

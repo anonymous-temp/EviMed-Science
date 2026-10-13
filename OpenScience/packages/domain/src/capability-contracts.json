@@ -94,13 +94,6 @@
       ]
     },
     {
-      "id": "knowledge-compile",
-      "safetyClass": "general",
-      "contractKinds": [
-        "knowledge-wiki-patch"
-      ]
-    },
-    {
       "id": "manuscript-support",
       "safetyClass": "clinical",
       "contractKinds": [

@@ -41,12 +41,6 @@ export const SOURCES_PROJECT_ID = "evimed-sources";
 /** What that project is called where an operator lists everything. */
 export const SOURCES_PROJECT_NAME = "EviMed 资料";
 
-/** Where the knowledge-page compile runs happen (「知识页」, knowledgeCompileRuntime.mjs), one per account. */
-export const KNOWLEDGE_PROJECT_ID = "evimed-knowledge";
-
-/** What that project is called where an operator lists everything. */
-export const KNOWLEDGE_PROJECT_NAME = "EviMed 知识页";
-
 /**
  * Where the frontier feed's model calls are billed (「前沿动态」, plan §7.2):
  * one project, under the first operator account, made when the feed's worker
@@ -135,7 +129,7 @@ export function isSelfMeasurementProject(projectId) {
 /** @param {unknown} projectId @returns {boolean} */
 export function isInternalProject(projectId) {
   const id = String(projectId ?? "");
-  return /^eval-paper-[a-zA-Z0-9_-]+$/.test(id) || id === EVOLUTION_PROJECT_ID || /^evolution-eval-[a-z0-9-]+$/.test(id) || id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === KNOWLEDGE_PROJECT_ID || id === FRONTIER_PROJECT_ID || id === EVIDENCE_PROJECT_ID
+  return /^eval-paper-[a-zA-Z0-9_-]+$/.test(id) || id === EVOLUTION_PROJECT_ID || /^evolution-eval-[a-z0-9-]+$/.test(id) || id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === FRONTIER_PROJECT_ID || id === EVIDENCE_PROJECT_ID
     || id === OPENVIKING_PROJECT_ID
     || /^eval-method-[a-z0-9-]+$/.test(id) || EVALUATION_CELL_PROJECT.test(id)
     || SELF_MEASUREMENT_PROJECT.test(id);
@@ -186,7 +180,7 @@ export function isInternalProjectOf(config, userId, projectId) {
  */
 export function isReservedProjectId(projectId) {
   const id = String(projectId ?? "");
-  return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === KNOWLEDGE_PROJECT_ID || id === FRONTIER_PROJECT_ID || id === EVIDENCE_PROJECT_ID
+  return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === FRONTIER_PROJECT_ID || id === EVIDENCE_PROJECT_ID
     || id === OPENVIKING_PROJECT_ID || EVALUATION_CELL_PROJECT.test(id);
 }
 

@@ -9,9 +9,8 @@ import { normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstan
 // under, and the format-only first guess made before anyone has read a word.
 import { SOURCE_CHOICE_TYPES, SOURCE_DOC_TYPES, SOURCE_KINDS, SOURCE_TYPES, sourceDocTypeIsDeep, sourceFirstPassType, sourceOriginOf } from "@evimed/domain";
 import { sourceDisplayOf } from "./sourceDisplay.mjs";
-// The knowledge base's format list and page arithmetic, shared with the
-// browser so the picker and this refusal cannot disagree (2026-09-20).
-import { normalizeSourcePageMap, renderSourcePageMarkers, sourceFormatRoute } from "@evimed/domain";
+// The page arithmetic, and the reasons a document is kept as an original with no text (`sourceDocuments.mjs`).
+import { SOURCE_ORIGINAL_CODES, normalizeSourcePageMap, renderSourcePageMarkers } from "@evimed/domain";
 import { openListSourceInput } from "./openListSourceConnector.mjs";
 import { estimateTokens } from "./kbChunker.mjs";
 import { materialsRecordIds, materialsRecords } from "./sourceMaterials.mjs";
@@ -21,17 +20,23 @@ import { materialsRecordIds, materialsRecords } from "./sourceMaterials.mjs";
  * 「@知识库」, read by a conversation — which is the one question the
  * knowledge base page answers about it.
  *
- * Hidden knowledge: until 2026-09-24 only `complete` and `needs_attention`
- * counted, and a PDF stayed `parsing` for the whole understanding run that
- * follows its parse (one to four minutes, one document at a time per account).
- * The text a run reads was already captured after the first few seconds; it
- * was only written out, and so only searchable, once the understanding ended.
- * The text is written as soon as it is captured now, and the source records
- * that moment as `analysis.readAt` for the generation it read. `status` keeps
- * describing the pipeline — `parsing` while the understanding runs, `failed`
- * when the understanding (not the reading) failed — and `complete` still
- * means the understanding is in. A generation the source has moved past
- * (retry, override, cancel) is not readable until it is read again.
+ * Hidden knowledge: the document's outcome is decided when its text is
+ * captured, and by nothing after. Until 2026-09-24 a PDF stayed `parsing` for
+ * the whole understanding run that follows its parse (one to four minutes, one
+ * document at a time per account); from then its text was written out at once
+ * (`analysis.readAt`), but `status` went on describing the understanding —
+ * `parsing` while it ran or waited for room or budget, `failed` when it could
+ * not run or did not succeed — so a document that could be searched read as
+ * unfinished or failed wherever the status was read. Since 2026-10-13 the
+ * record says what is true (`recordReadable`): `complete` (or
+ * `needs_attention`, for a text the parser read only in part) from the moment
+ * the text is in, and the understanding is a background enhancement with a
+ * state of its own (`payload.understanding`) that holds nothing back.
+ *
+ * The second clause reads the records written before that: text in, status
+ * still the understanding's. The repair cycle moves them over
+ * (`reconcileJobs`). A generation the source has moved past (retry, override,
+ * cancel) is not readable until it is read again.
  * @param {any} payload a source record's payload
  */
 export function sourceReadable(payload) {
@@ -40,6 +45,30 @@ export function sourceReadable(payload) {
   return (status === "parsing" || status === "failed") && typeof payload?.analysis?.readAt === "string"
     && payload.analysis.generation === payload.generation;
 }
+
+/**
+ * Whether a document's text is in and its understanding has not ended: the one
+ * finished state an ingestion job still works on. The job's lease and the
+ * source's generation are what fence that work, exactly as while the text was
+ * being read; a retry, an override or a removal moves the generation on and
+ * the job finds itself superseded.
+ *
+ * `payload.understanding` is `{ generation, state, at, code? }`, written for a
+ * depth that asks for an understanding and null for one that does not:
+ * `pending` — to come (waiting for room or budget, running, or about to be
+ * tried again); `understood` — published; `failed` — it could not run or did
+ * not succeed, `code` says which, and nothing tries again until the document
+ * is read again. A fact about the understanding, never the document's state.
+ * @param {any} payload a source record's payload
+ */
+export function understandingPending(payload) {
+  return (payload?.status === "complete" || payload?.status === "needs_attention")
+    && payload.understanding?.state === "pending" && payload.understanding.generation === payload.generation;
+}
+
+/** The SQL twin of `understandingPending`, over a source row aliased `d`. */
+const UNDERSTANDING_PENDING_SQL = `(d.payload->>'status' IN ('complete','needs_attention') AND d.payload->'understanding'->>'state'='pending'
+  AND coalesce(d.payload->'understanding'->'generation'=d.payload->'generation',false))`;
 
 /**
  * A document's state in the page's three words, or `unavailable` for one that
@@ -201,21 +230,6 @@ const UNIT_TYPES = Object.freeze(["page", "slide", "segment", "column", "chunk",
 const UNIT_STATUSES = Object.freeze(["extracted", "indexed_only", "no_content", "failed"]);
 const shaPattern = /^[a-f0-9]{64}$/;
 const registrationLocks = new Map();
-
-/**
- * Refuse a file the knowledge base cannot read, before it is written or
- * registered: every connector registers through `register()`, so the upload
- * route, the upload command, an OpenList import and a folder sync all get the
- * same answer. Recordings are refused by name because the parser lists them
- * and does not transcribe them; the sentence a researcher reads is the
- * domain registry's for each code.
- * @param {string} file
- */
-export function assertKnowledgeBaseFormat(file) {
-  const route = sourceFormatRoute(file);
-  if (route === "media") throw new HttpError(415, "source_media_unsupported", "Audio and video cannot be added to the knowledge base yet.");
-  if (route === "unsupported") throw new HttpError(415, "source_format_unsupported", "This file format cannot be added to the knowledge base.");
-}
 
 /**
  * The materialized `index.md` a run reads: a bibliographic header, then the
@@ -479,6 +493,24 @@ export function readCopyOf(source) {
     && typeof payload.outputs?.artifactPath === "string" ? payload.outputs.artifactPath : null;
 }
 
+/**
+ * What a record says from the moment its text is in, whatever its understanding goes on to do: usable, with what the
+ * parse itself yielded. `needs_attention` is about the text — the parser read it only in part — and nothing else.
+ * @param {any} payload a source record's payload, holding this generation's capture @param {string|null} artifactPath
+ * @param {string} at
+ */
+function readablePayload(payload, artifactPath, at) {
+  const analysis = payload.analysis;
+  const coverage = analysis.parserCoverage ?? null;
+  return { ...payload,
+    status: coverage?.failed > 0 ? "needs_attention" : "complete", error: null, original: null,
+    // An understanding of an earlier generation is not this one's: until this one is in, the document says what its parse says.
+    currentUnderstandingId: null, coverage, omissionAudit: { ...UNAUDITED_OMISSION }, omissionNotice: null,
+    analysis: { ...analysis, readAt: analysis.readAt ?? at },
+    outputs: { summary: String(analysis.summary ?? ""), facts: 0, methods: 0, artifactPath: readCopyOf({ payload }) ?? artifactPath },
+    extractor: analysis.extractor ?? null, updatedAt: at };
+}
+
 function retiredSourceRun(payload) {
   const pending = [...(payload.pendingRunCancellations ?? [])];
   const run = payload.analysis?.run?.id ? payload.analysis.run
@@ -561,8 +593,8 @@ export class SourceService {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new HttpError(400, "source_payload_invalid", "Source manifest is invalid.");
     const projectId = text(input.projectId, "project id", 160);
     const sourceConnector = connector(input.connector);
+    // No format is refused (2026-10-13): what a file is decides who reads its text, never whether it is kept.
     const file = sourcePath(input.path);
-    assertKnowledgeBaseFormat(file);
     const sha256 = text(input.sha256, "sha256", 64).toLowerCase();
     if (!shaPattern.test(sha256)) throw new HttpError(400, "source_digest_invalid", "Source SHA-256 is invalid.");
     const size = Number(input.size);
@@ -858,7 +890,8 @@ export class SourceService {
 
   async loadCapture(userId, source, client = this.documents.database) {
     const analysis = source.payload.analysis;
-    if (analysis?.generation !== source.payload.generation) return null;
+    // No capture for this generation yet, or none at all: a document kept as an original, or one nobody was asked to read.
+    if (analysis?.generation !== source.payload.generation || typeof analysis.textSha256 !== "string") return null;
     const result = await client.query(`SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND project_id=$2 AND kind='knowledge'
       AND deleted_at IS NULL AND payload->>'recordType'='source-capture' AND payload->>'sourceId'=$3 AND payload->>'generation'=$4
       ORDER BY (payload->'unit'->>'start')::integer`, [userId, source.projectId, source.id, String(source.payload.generation)]);
@@ -896,28 +929,37 @@ export class SourceService {
   }
 
   /**
-   * The document can be used: its captured text is written out at
-   * `artifactPath` for the generation being read, so search, 「@知识库」 and a
-   * conversation can read it while its understanding still runs. Recorded
-   * once per generation; a second call for the same generation keeps the
-   * first path (`readCopyOf`).
+   * The text is in, and that is the document's outcome: its captured text is
+   * written out at `artifactPath` for the generation being read, and the record
+   * says `complete` — or `needs_attention`, for a text the parser read only in
+   * part — with what the parse itself yielded. Search, 「@知识库」, the
+   * engine's copy and a conversation take the document from here.
+   *
+   * The understanding that follows is `pending` on the record
+   * (`understandingPending`) and is a background enhancement: its waiting for
+   * room or budget, its failing and its never running change nothing written
+   * here. Recorded once per generation; a second call keeps what the first
+   * wrote, and a record read before 2026-10-13 keeps the path it was read to
+   * (`readCopyOf`).
    * @param {any} job @param {string} artifactPath
    */
   async recordReadable(job, artifactPath) {
     const file = sourcePath(artifactPath);
     return this.withSourceLease(job, async (source, client) => {
+      if (understandingPending(source.payload)) return source;
       if (source.payload.status !== "parsing") throw new HttpError(409, "source_state_conflict", "The source is no longer being read.");
-      if (source.payload.analysis?.generation !== source.payload.generation) throw new HttpError(409, "source_capture_invalid", "A readable source requires its frozen capture.");
-      if (readCopyOf(source)) return source;
+      const analysis = source.payload.analysis;
+      const generation = source.payload.generation;
+      if (analysis?.generation !== generation) throw new HttpError(409, "source_capture_invalid", "A readable source requires its frozen capture.");
       const at = this.now().toISOString();
-      return this.documents.put(job.userId, "source", source.id, { ...source.payload,
-        analysis: { ...source.payload.analysis, readAt: at },
-        outputs: { ...(source.payload.outputs ?? {}), artifactPath: file }, updatedAt: at },
-      { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
+      return this.documents.put(job.userId, "source", source.id,
+        { ...readablePayload(source.payload, file, at), understanding: { generation, state: "pending", at } },
+        { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
     });
   }
 
-  /** Waiting for a bounded runtime is not a failed parse or a retry attempt. */
+  /** Waiting for a bounded runtime is not a failed parse or a retry attempt — and, the text being in before any
+   *  understanding is asked for, it is not the document waiting either: only its job does. */
   async deferIngestion(job, run = null, delayMs = 5000) {
     return this.withSourceLease(job, async (source, client) => {
       const bound = source.payload.analysis?.run;
@@ -1021,7 +1063,7 @@ export class SourceService {
     [userId, projectId, runId]);
     const matches = result.rows.flatMap(row => [row.payload.analysis?.run, ...(row.payload.pendingRunCancellations ?? [])].filter(Boolean)
       .map(run => ({ ...run, sourceStatus: row.payload.status, sourceDeleted: Boolean(row.deleted_at),
-        recoverable: !row.deleted_at && ["queued", "parsing", "failed"].includes(row.payload.status)
+        recoverable: !row.deleted_at && (["queued", "parsing", "failed"].includes(row.payload.status) || understandingPending(row.payload))
           && row.payload.analysis?.generation === row.payload.generation && row.payload.analysis?.run?.id === run.id
           && !(row.payload.pendingRunCancellations ?? []).some(pending => pending.id === run.id),
       })))
@@ -1042,7 +1084,7 @@ export class SourceService {
       .filter(launch => launch?.dispatchId === dispatchId).map(launch => ({ sessionId: launch.sessionId, dispatchId: launch.dispatchId,
         workspaceName: launch.workspaceName, artifactDirectory: launch.artifactDirectory,
         sourceStatus: row.payload.status, sourceDeleted: Boolean(row.deleted_at),
-        recoverable: !row.deleted_at && ["queued", "parsing", "failed"].includes(row.payload.status)
+        recoverable: !row.deleted_at && (["queued", "parsing", "failed"].includes(row.payload.status) || understandingPending(row.payload))
           && row.payload.analysis?.generation === row.payload.generation && row.payload.analysis?.launch?.dispatchId === dispatchId
           && !(row.payload.pendingRunCancellations ?? []).some(pending => pending.dispatchId === dispatchId),
       })));
@@ -1079,16 +1121,30 @@ export class SourceService {
   }
 
   /** Units, structured knowledge, method drafts and current pointer are one
-   * account/project/generation/lease-checked publication transaction. */
-  async publishUnderstanding(job, parsed, completed = null, artifactPath = null) {
+   * account/project/generation/lease-checked publication transaction.
+   *
+   * It is where an ingestion job ends, and every end it has is a finished
+   * document. With an understanding: published. With `understandingError` —
+   * the understanding could not run, or did not succeed, after the text was in
+   * — the text's units are published as an indexed document's are, and the
+   * record says what became of the understanding (`payload.understanding`:
+   * `failed`, the code, when) without the document's state moving. With
+   * `original` (`SOURCE_ORIGINAL_CODES`) no text was read at all: the document
+   * is kept as an original — `complete`, nothing captured, the reason on
+   * `payload.original` — the way a depth of `skip` has always finished, and its
+   * depth stays what it was so that reading it again tries again.
+   * @param {any} job @param {any} parsed @param {any} [completed] @param {string|null} [artifactPath]
+   * @param {{original?:string|null,understandingError?:string|null}} [outcome] */
+  async publishUnderstanding(job, parsed, completed = null, artifactPath = null, { original = null, understandingError = null } = {}) {
+    if (original !== null && !SOURCE_ORIGINAL_CODES.includes(original)) throw new HttpError(400, "source_payload_invalid", "The reason a source has no text is invalid.");
     let hasOmission=false;
     const published=await this.withSourceLease(job, async (source, client) => {
       const generation = source.payload.generation;
-      const isSkip = source.payload.depth === "skip";
+      const isSkip = source.payload.depth === "skip" || original !== null;
       const input = isSkip ? null : (await this.loadCapture(job.userId, source, client))?.input;
       if (!isSkip && !input) throw new HttpError(409, "source_capture_invalid", "Source capture is missing.");
-      const deep = ["structured", "deep"].includes(source.payload.depth);
-      if (deep && !completed?.output) throw new HttpError(409, "source_understanding_missing", "Structured depth requires its bounded understanding result.");
+      const deep = !isSkip && ["structured", "deep"].includes(source.payload.depth);
+      if (deep && !completed?.output && !understandingError) throw new HttpError(409, "source_understanding_missing", "Structured depth requires its bounded understanding result.");
       if (completed) {
         const bound = source.payload.analysis?.run;
         if (!bound || bound.id !== completed.runId || bound.sessionId !== completed.sessionId || bound.dispatchId !== completed.dispatchId) {
@@ -1129,17 +1185,27 @@ export class SourceService {
       const coverage = parserCoverage ? { ...parserCoverage, omissionRate: omission.omissionRate } : null;
       const status = coverage?.failed > 0 ? "needs_attention" : "complete";
       hasOmission=Number(omission.omissionRate??0)>0 || Number(coverage?.failed??0)>0;
+      const at = this.now().toISOString();
+      // Where the text was written out: handed in, or what the record already says for this generation.
+      const copy = isSkip ? null : artifactPath ?? readCopyOf(source);
       // The audit verdict belongs to the understanding contract; carry through
       // whatever it declared instead of restating a fixed "not run" here.
       const payload = { ...source.payload, status, currentUnderstandingId: output ? id : null, coverage,
         omissionAudit: omission.audit, omissionNotice: omission.notice,
-        analysis: { ...(source.payload.analysis ?? {}), generation, phase: isSkip ? "skipped" : output ? "understood" : "indexed", run: run ? { ...source.payload.analysis?.run, ...run } : null },
-        outputs: { summary: output?.summary ?? (isSkip ? "Skipped by the selected analysis depth." : parsed.summary),
+        // What became of the understanding, for a depth that asks for one: a fact beside the document's state, never part of it.
+        understanding: deep ? { generation, state: output ? "understood" : "failed",
+          ...(output ? {} : { code: text(understandingError, "understanding error code", 100) }), at } : null,
+        original: original ? { generation, code: original, at } : null,
+        // Nothing was read for this generation: what an earlier one captured is not this one's to carry.
+        analysis: isSkip ? { generation, phase: "skipped", run: null }
+          : { ...(source.payload.analysis ?? {}), generation, phase: output ? "understood" : "indexed", run: run ? { ...source.payload.analysis?.run, ...run } : null },
+        outputs: { summary: output?.summary ?? (original ? "Kept as an original; no text was read." : isSkip ? "Skipped by the selected analysis depth." : parsed.summary),
           facts: output?.claims.length ?? 0, methods: output?.methods.length ?? 0,
-          ...(artifactPath ? { artifactPath: sourcePath(artifactPath) } : {}) },
-        extractor: isSkip ? null : parsed.extractor, error: null, updatedAt: this.now().toISOString() };
+          ...(copy ? { artifactPath: sourcePath(copy) } : {}) },
+        extractor: isSkip ? null : parsed.extractor, error: null, updatedAt: at };
       const updated = await this.documents.put(job.userId, "source", source.id, payload, { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
-      return { sourceId: source.id, sourceRevision: updated.revision, status, understandingId: output ? id : null };
+      return { sourceId: source.id, sourceRevision: updated.revision, status, understandingId: output ? id : null,
+        ...(original ? { original } : {}), ...(deep && !output ? { understandingError } : {}) };
     }, false, true);
     // `withSourceLease(..., finish)` hands back the finished job, and what the publication returned is its `result`: the revision was read
     // off the job itself, where it is never, so no signal of either kind was ever recorded from here (review D-E18).
@@ -1233,7 +1299,8 @@ export class SourceService {
   async beginIngestion(userId, sourceId, input) {
     return this.mutateIngestion(userId, sourceId, input.job, current => {
       if (input.generation !== current.payload.generation) throw new HttpError(409, "source_generation_stale", "A newer source analysis superseded this job.");
-      if (current.payload.status === "parsing") return current.payload;
+      // Being read, or read and waiting for its understanding: the job goes on from where the record is.
+      if (current.payload.status === "parsing" || understandingPending(current.payload)) return current.payload;
       if (!["queued", "failed"].includes(current.payload.status)) throw new HttpError(409, "source_state_conflict", "This source is not ready for processing.");
       return {
         ...current.payload, status: "parsing", error: null, updatedAt: this.now().toISOString(),
@@ -1884,7 +1951,7 @@ export class SourceService {
       const cancelling = job.payload.action === "source-run-cancel";
       if (!row || row.project_id !== job.projectId || (!cancelling && Number(row.payload.generation) !== Number(job.payload.sourceGeneration ?? job.payload.sourceRevision))
         || (deleting ? !row.deleted_at || row.payload.deletion?.jobId !== job.id || row.payload.deletion?.revision !== job.payload.deletionRevision
-          : row.deleted_at || (!cancelling && !["queued", "parsing", "failed"].includes(row.payload.status)))) throw new HttpError(409, "source_generation_stale", "This source job was superseded.");
+          : row.deleted_at || (!cancelling && !["queued", "parsing", "failed"].includes(row.payload.status) && !understandingPending(row.payload)))) throw new HttpError(409, "source_generation_stale", "This source job was superseded.");
       const output = await operation(sourceRecord(row), client);
       const live = await client.query("SELECT 1 FROM evimed_product.jobs WHERE id=$1 AND user_id=$2 AND lease_token=$3 AND status='running' AND lease_expires_at>clock_timestamp()", [job.id, job.userId, job.leaseToken]);
       if (!live.rowCount) throw new HttpError(409, "product_job_lease_lost", "The source job lease expired.");
@@ -1900,10 +1967,11 @@ export class SourceService {
     return result.output;
   }
 
-  /** @param {any} job @param {()=>Promise<any>} operation */
+  /** Under the job's lease, while the source is being read or its understanding is still to come.
+   * @param {any} job @param {()=>Promise<any>} operation */
   async withIngestionLease(job, operation) {
     return this.withSourceLease(job, source => {
-      if (source.payload.status !== "parsing") throw new HttpError(409, "source_state_conflict", "The source is no longer being parsed.");
+      if (source.payload.status !== "parsing" && !understandingPending(source.payload)) throw new HttpError(409, "source_state_conflict", "The source is no longer being parsed.");
       return operation();
     });
   }
@@ -2054,7 +2122,7 @@ export class SourceService {
         AND d.deleted_at IS NOT NULL AND (d.payload->'deletion'->>'jobId' IS NULL OR d.payload->'deletion'->>'jobId'=j.id))`);
     const stalled = await database.query(`SELECT d.user_id,d.id,d.project_id,d.payload,d.revision,u.created_at::text AS account_created_at
       FROM evimed_product.documents d JOIN evimed_control.users u ON u.id=d.user_id
-      WHERE d.kind='source' AND d.deleted_at IS NULL AND d.payload->>'status' IN ('queued','parsing')
+      WHERE d.kind='source' AND d.deleted_at IS NULL AND (d.payload->>'status' IN ('queued','parsing') OR ${UNDERSTANDING_PENDING_SQL})
       AND EXISTS (SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=d.user_id AND j.project_id=d.project_id
         AND j.kind='ingest' AND j.payload->>'action' IS NULL AND j.payload->>'sourceId'=d.id
         AND j.payload->>'sourceGeneration'=d.payload->>'generation' AND j.status='failed')
@@ -2075,11 +2143,33 @@ export class SourceService {
           [row.user_id, row.project_id, row.id, String(row.payload.generation)]);
           const failed = generationJobs.rows.find(job => job.status === "failed");
           if (!failed || generationJobs.rows.some(job => ["queued", "running", "succeeded"].includes(job.status))) return;
-          await this.documents.put(row.user_id, "source", row.id, { ...row.payload, status: "failed",
-            error: { code: String(failed.error?.code ?? "product_job_attempts_exhausted").slice(0, 100),
-              message: "Source analysis stopped. Retry starts a new source generation." }, updatedAt: this.now().toISOString() },
+          const code = String(failed.error?.code ?? "product_job_attempts_exhausted").slice(0, 100);
+          const at = this.now().toISOString();
+          // The text is in: what stopped is the understanding, said where it belongs, and the document stays what it is.
+          await this.documents.put(row.user_id, "source", row.id, understandingPending(row.payload)
+            ? { ...row.payload, understanding: { generation: row.payload.generation, state: "failed", code, at }, updatedAt: at }
+            : { ...row.payload, status: "failed",
+              error: { code, message: "Source analysis stopped. Retry starts a new source generation." }, updatedAt: at },
           { expectedRevision: row.revision, projectId: row.project_id, transactionClient: client });
         });
+      } catch (error) { if (!isConflict(error)) throw error; }
+    }
+    // Records from before 2026-10-13, and the ones the branch above just closed: the text was in (`sourceReadable`) and
+    // the status went on to say what the understanding did. With no job left that would try again, the record says what
+    // is true — the document was read, and its understanding is what failed.
+    const misfiled = await database.query(`SELECT d.user_id,d.id,d.project_id,d.payload,d.revision FROM evimed_product.documents d
+      WHERE d.kind='source' AND d.deleted_at IS NULL AND d.payload->>'status'='failed'
+      AND coalesce(jsonb_typeof(d.payload->'analysis'->'readAt')='string',false)
+      AND coalesce(d.payload->'analysis'->'generation'=d.payload->'generation',false)
+      AND NOT EXISTS (SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=d.user_id AND j.kind='ingest' AND j.payload->>'action' IS NULL
+        AND j.payload->>'sourceId'=d.id AND j.payload->>'sourceGeneration'=d.payload->>'generation' AND j.status IN ('queued','running'))
+      ORDER BY d.updated_at,d.id LIMIT 100`);
+    for (const row of misfiled.rows) {
+      const at = this.now().toISOString();
+      try {
+        await this.documents.put(row.user_id, "source", row.id, { ...readablePayload(row.payload, null, at),
+          understanding: { generation: row.payload.generation, state: "failed", code: String(row.payload.error?.code ?? "source_understanding_run_failed").slice(0, 100), at } },
+        { expectedRevision: row.revision, projectId: row.project_id });
       } catch (error) { if (!isConflict(error)) throw error; }
     }
     const result = await database.query(`SELECT user_id,id,project_id,payload,revision FROM evimed_product.documents d
@@ -2093,6 +2183,6 @@ export class SourceService {
       await this.enqueue({ id: row.id, projectId: row.project_id, revision: row.revision, payload: row.payload }, row.user_id);
       enqueued += 1;
     }
-    return { scanned: result.rows.length + stalled.rows.length + deleted.rows.length, enqueued };
+    return { scanned: result.rows.length + stalled.rows.length + misfiled.rows.length + deleted.rows.length, enqueued };
   }
 }

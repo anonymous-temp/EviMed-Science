@@ -5213,18 +5213,18 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
   // The web-read gateway answers `web_read` with its own codes, and the
   // knowledge-base gateway answers `kb_search` with its own; the tools pass
   // them through to the run unchanged (2026-09-20). So does the frontier
-  // gateway `frontier_search` (2026-09-22).
+  // gateway `frontier_search` (2026-09-22), and the browse gateway `kb_browse` (2026-10-13).
   for (const relative of [
     "../src/publicSourceGateway.mjs", "../src/webSearchGateway.mjs", "../src/geoProbeGateway.mjs",
     "../src/webRead.mjs", "../src/webReadNetwork.mjs", "../src/webReadLimits.mjs", "../src/webReadExtract.mjs", "../src/agentbay/browser.mjs",
     "../src/webRender.mjs", "../src/webRenderPage.mjs", "../src/localBrowser.mjs", "../src/webRenderEgress.mjs",
-    "../src/kbSearchGateway.mjs", "../src/frontierGateway.mjs",
+    "../src/kbSearchGateway.mjs", "../src/kbBrowseGateway.mjs", "../src/frontierGateway.mjs",
     // 循证 GEO's gateway, the write module it hands writes to, and the social
     // channel behind `social_posts_search` (2026-09-25).
     "../src/geoGateway.mjs", "../src/geoWrites.mjs", "../src/socialCrawlClient.mjs",
   ]) {
     const text = await readFile(new URL(relative, import.meta.url), "utf8");
-    for (const [, code] of text.matchAll(/"((?:public_source|web_search|geo_probe|web_read|web_render|kb_search|frontier|geo|social_posts)_[a-z0-9_]+)"/g)) emitted.add(code);
+    for (const [, code] of text.matchAll(/"((?:public_source|web_search|geo_probe|web_read|web_render|kb_search|kb_browse|frontier|geo|social_posts)_[a-z0-9_]+)"/g)) emitted.add(code);
   }
   assert.ok(emitted.size > 30, `expected the real code set, found ${emitted.size}`);
 

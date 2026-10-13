@@ -1,5 +1,5 @@
 // In-process lexical retrieval for the evaluation: tokenizer, chunker and BM25. It stands in for the platform's
-// `kb_search` so that all three arms search the same way; the only thing that differs between the arms is what
+// `kb_search` so that every arm searches the same way; the only thing that differs between the arms is what
 // documents the index holds.
 
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
@@ -51,19 +51,27 @@ export function tokenize(text) {
 
 /**
  * A text cut into passages with their offsets. The unit is a line (a page's list item is one line and is never cut); a document line longer
- * than `maxChars` is cut at sentence ends. Passages are packed up to `maxChars`, and each repeats the last short unit of the one before it.
- * `text.slice(start, end)` is always the passage.
+ * than `maxChars` is cut at sentence ends. With `blocks`, the unit is a block instead — the lines between two blank lines: a paragraph with
+ * the source link under it, a table, a list — and a block is never cut. Passages are packed up to `maxChars`, and each repeats the last
+ * short unit of the one before it. `text.slice(start, end)` is always the passage.
  * @param {string} text
- * @param {{ maxChars?: number, splitLongLines?: boolean }} [options]
+ * @param {{ maxChars?: number, splitLongLines?: boolean, blocks?: boolean }} [options]
  * @returns {Array<{ start: number, end: number, text: string }>}
  */
-export function chunkText(text, { maxChars = 700, splitLongLines = true } = {}) {
+export function chunkText(text, { maxChars = 700, splitLongLines = true, blocks = false } = {}) {
   const units = []
   let offset = 0
+  let open = false
   for (const line of String(text).split('\n')) {
     const lineStart = offset
     offset += line.length + 1
-    if (!line.trim()) continue
+    if (!line.trim()) { open = false; continue }
+    if (blocks) {
+      if (open) units[units.length - 1].end = lineStart + line.length
+      else units.push({ start: lineStart, end: lineStart + line.length })
+      open = true
+      continue
+    }
     if (!splitLongLines || line.length <= maxChars) { units.push({ start: lineStart, end: lineStart + line.length }); continue }
     let from = 0
     const sentence = /(?:[.!?]\s+|[。！？])/g
@@ -77,7 +85,7 @@ export function chunkText(text, { maxChars = 700, splitLongLines = true } = {}) 
   // A unit still longer than the ceiling is cut hard: no passage may be unbounded.
   const bounded = []
   for (const unit of units) {
-    if (!splitLongLines || unit.end - unit.start <= maxChars * 1.5) { bounded.push(unit); continue }
+    if (blocks || !splitLongLines || unit.end - unit.start <= maxChars * 1.5) { bounded.push(unit); continue }
     for (let from = unit.start; from < unit.end; from += maxChars) bounded.push({ start: from, end: Math.min(unit.end, from + maxChars) })
   }
   const chunks = []
@@ -103,10 +111,11 @@ export function chunkText(text, { maxChars = 700, splitLongLines = true } = {}) 
 
 /**
  * @typedef {object} IndexDocument
- * @property {string} id         what a hit names: `src_…` for a document, `page:<slug>` for a knowledge page
+ * @property {string} id         what a hit names: `src_…` for a document, `page:<path>` for a knowledge page
  * @property {'document' | 'page'} kind
  * @property {string} title
  * @property {string} text
+ * @property {boolean} [blocks]  a page whose passages are its blocks, not its lines (upstream's pages; see `chunkText`)
  */
 
 export class Bm25Index {
@@ -124,7 +133,7 @@ export class Bm25Index {
   /** @param {IndexDocument} document */
   add(document) {
     const pieces = document.kind === 'page'
-      ? chunkText(document.text, { maxChars: this.maxChars * 1.6, splitLongLines: false })
+      ? chunkText(document.text, { maxChars: this.maxChars * 1.6, splitLongLines: false, blocks: document.blocks === true })
       : chunkText(document.text, { maxChars: this.maxChars })
     for (const piece of pieces) {
       // The title is searchable with every passage, as a library's metadata would be.

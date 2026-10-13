@@ -1,18 +1,32 @@
 /**
- * What the knowledge base accepts, where each accepted format is read, and how
- * a character offset in a parsed document becomes a page number.
+ * Where each file of the knowledge base is read, and how a character offset in
+ * a parsed document becomes a page number.
  *
- * Hidden knowledge: the format list is not ours to invent. It is the in-house
- * parsing API's own table (`docs/api/API.md` v0.5.0, 支持的文件格式, and
- * `server.py` `DocumentHandler.SUPPORTED_FORMATS`), minus the audio and video
- * formats that table lists and marks 「暂不支持」 — the service accepts the
- * upload and then has nothing to say about it. Plain-text formats are read here
- * instead, byte for byte, even when the API would take them: the delivery gate
- * matches quotations verbatim, so a local read of a text file is strictly
- * better than a round trip that might re-flow it, and it costs no credit.
+ * Hidden knowledge: no list here decides what may be kept. Until 2026-10-13 the
+ * knowledge base took twenty-nine extensions — the in-house parsing API's own
+ * table (`docs/api/API.md` v0.5.0, 支持的文件格式, and `server.py`
+ * `DocumentHandler.SUPPORTED_FORMATS`) and eleven text formats — and refused
+ * the rest with 415, so a project's `src/`, a notebook, a `.tex` manuscript and
+ * a `Makefile` could not be kept beside the papers they belong to. A file is
+ * kept whatever it is now; the lists only say who reads its text:
  *
- * One module for the server and the browser, so the upload refusal and the
- * picker's `accept` list cannot disagree about a format.
+ * - Plain text is read here, byte for byte, even when the API would take it:
+ *   the delivery gate matches quotations verbatim, so a local read of a text
+ *   file is strictly better than a round trip that might re-flow it, and it
+ *   costs no credit. A name these lists do not know is text when its bytes are
+ *   (`sourceBytesAreText`) — `Makefile`, `LICENSE`, `Dockerfile.evimed`.
+ * - PDF, Office and images go to the parsing API, as its table says.
+ * - Whatever is left — an archive, a binary with a name nobody listed — is
+ *   handed to the engine's own parsers where a deployment has them.
+ * - A recording is read by nothing: the API's table lists audio and video and
+ *   marks them 「暂不支持」, and the engine keeps them as they are.
+ *
+ * A file nothing could read text out of is kept as an original with no text
+ * (`SOURCE_ORIGINAL_CODES`): listed and opened like any other, searched by
+ * nothing.
+ *
+ * One module for the server and the browser, so the two cannot disagree about a
+ * format.
  *
  * @module @evimed/domain/source-documents
  */
@@ -24,22 +38,31 @@ export const SOURCE_API_FORMATS = Object.freeze([
   'epub', 'mobi', 'htm', 'html', 'rtf',
 ])
 
+/** Source code, scripts, configuration and structured text: what a row calls 「代码」 before anyone has read it. */
+export const SOURCE_CODE_FORMATS = Object.freeze([
+  'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'pyi', 'r', 'rmd', 'qmd', 'rb', 'go', 'rs', 'java', 'kt', 'kts',
+  'c', 'h', 'cc', 'cpp', 'cxx', 'hpp', 'hh', 'cs', 'swift', 'php', 'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd',
+  'sql', 'lua', 'pl', 'pm', 'scala', 'm', 'mm', 'jl', 'do', 'ado', 'sas', 'sps', 'stan', 'css', 'scss', 'less', 'vue',
+  'toml', 'ini', 'cfg', 'conf', 'env', 'properties', 'gradle', 'cmake', 'mk',
+  'json', 'jsonl', 'ndjson', 'yaml', 'yml', 'ipynb', 'bst', 'cls', 'sty',
+])
+
 /** Read locally and kept byte-exact: what the file says is what a quotation
- *  is checked against. `txt` and `md` are on the API's list too and stay here. */
+ *  is checked against. `txt` and `md` are on the API's list too and stay here;
+ *  a notebook is the JSON text it is, a message the text it is. */
 export const SOURCE_LOCAL_TEXT_FORMATS = Object.freeze([
-  'txt', 'md', 'csv', 'tsv', 'json', 'yaml', 'yml', 'xml', 'r', 'py', 'sql',
+  'txt', 'text', 'md', 'markdown', 'mdx', 'rst', 'adoc', 'org', 'tex', 'bib', 'log', 'srt', 'vtt', 'eml',
+  'csv', 'tsv', 'xml', 'svg',
+  ...SOURCE_CODE_FORMATS,
 ])
 
-/** Listed by the API and not parsed by it, plus the recordings a researcher is
- *  likely to try. Refused by name so the reason can say why. */
+/** Recordings: listed by the API and not parsed by it, plus the ones a
+ *  researcher is likely to add. Known by name, so one is kept as an original
+ *  without a byte of it being read first — a recording can be gigabytes. */
 export const SOURCE_MEDIA_FORMATS = Object.freeze([
-  'mp4', 'mkv', 'avi', 'mov', 'wmv', 'webm', 'mp3', 'wav', 'aac', 'm4a', 'flac',
+  'mp4', 'm4v', 'mkv', 'avi', 'mov', 'wmv', 'webm', 'mpg', 'mpeg', 'flv', '3gp', 'ogv',
+  'mp3', 'wav', 'aac', 'm4a', 'flac', 'ogg', 'oga', 'opus', 'wma', 'aiff', 'amr',
 ])
-
-/** Everything the knowledge base accepts, for the upload check and the picker. */
-export const KNOWLEDGE_BASE_FORMATS = Object.freeze(
-  [...new Set([...SOURCE_API_FORMATS, ...SOURCE_LOCAL_TEXT_FORMATS])].sort(),
-)
 
 /** A file name's format: its extension, lower-cased, without the dot; `''`
  *  when it has none. A leading dot is a hidden file, not an extension.
@@ -52,20 +75,76 @@ export function sourceFileFormat(name) {
 }
 
 /**
- * Where a file of this name is read.
+ * Where a file of this name is read, as far as a name can say.
  *
  * `local` — read byte-exact on the control plane; `api` — sent to the parsing
- * API; `media` — a recording, refused with the reason; `unsupported` — anything
- * else, refused with the list.
- * @param {unknown} name @returns {'local' | 'api' | 'media' | 'unsupported'}
+ * API; `media` — a recording, read by nothing and kept as an original;
+ * `engine` — a name no list knows: its bytes decide (`sourceReadRoute`), text
+ * being read locally and anything else handed to the engine's parsers.
+ * @param {unknown} name @returns {'local' | 'api' | 'media' | 'engine'}
  */
 export function sourceFormatRoute(name) {
   const format = sourceFileFormat(name)
   if (SOURCE_LOCAL_TEXT_FORMATS.includes(format)) return 'local'
   if (SOURCE_API_FORMATS.includes(format)) return 'api'
   if (SOURCE_MEDIA_FORMATS.includes(format)) return 'media'
-  return 'unsupported'
+  return 'engine'
 }
+
+/** How many leading bytes say whether a file is text. */
+export const SOURCE_TEXT_SAMPLE_BYTES = 8192
+
+/**
+ * Whether bytes are text, by what they are and not by what the file is called:
+ * the sampled prefix holds no NUL byte and is well-formed UTF-8. A sequence the
+ * sample cuts in two at its end is not an error; an empty file is text.
+ *
+ * Deterministic and deliberately narrow. A text file in another encoding with a
+ * name no list knows is not recognised and goes to the engine's parsers — the
+ * known text formats are decoded more generously where they are read.
+ * @param {Uint8Array} bytes @returns {boolean}
+ */
+export function sourceBytesAreText(bytes) {
+  const sample = bytes.subarray(0, SOURCE_TEXT_SAMPLE_BYTES)
+  if (sample.includes(0)) return false
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(sample, { stream: true })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Where these bytes under this name are read: the name's route, corrected by
+ * the bytes where the name cannot know. A name no list knows is `local` when
+ * its bytes are text. A name on the text list whose bytes hold a NUL is not
+ * text whatever it is called (`.ts` is TypeScript and an MPEG transport stream
+ * alike) and is the engine's to try.
+ * @param {unknown} name @param {Uint8Array} bytes the file, or at least its first `SOURCE_TEXT_SAMPLE_BYTES`
+ * @returns {'local' | 'api' | 'media' | 'engine'}
+ */
+export function sourceReadRoute(name, bytes) {
+  const route = sourceFormatRoute(name)
+  if (route === 'engine') return sourceBytesAreText(bytes) ? 'local' : 'engine'
+  if (route === 'local') return bytes.subarray(0, SOURCE_TEXT_SAMPLE_BYTES).includes(0) ? 'engine' : 'local'
+  return route
+}
+
+/**
+ * Why a document is kept as an original with no text — what its record carries
+ * (`payload.original.code`) and the registry has a sentence for. None of them is
+ * a failure: the file is stored, listed and opened; it is searched by nothing
+ * and nothing is pushed to the engine for it.
+ *
+ * `source_original_media` — a recording; nothing here transcribes one.
+ * `source_original_unread` — no parser this deployment has reads the format.
+ * `source_original_engine_failed` — the engine's parsers were asked and could not read it this time.
+ * `source_original_no_text` — it was read, and there was no text in it.
+ */
+export const SOURCE_ORIGINAL_CODES = Object.freeze([
+  'source_original_media', 'source_original_unread', 'source_original_engine_failed', 'source_original_no_text',
+])
 
 /** A page's parse state, in the parser's own words (plan §2.4). */
 export const SOURCE_PAGE_STATUSES = Object.freeze(['ok', 'empty', 'ocr_failed'])

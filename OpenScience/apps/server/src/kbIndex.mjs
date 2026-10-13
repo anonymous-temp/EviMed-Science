@@ -626,6 +626,6 @@ export class KnowledgeBaseIndex {
       note: "Each snippet is the exact text at start–end (UTF-16 offsets) of the document's parsed text; quote it verbatim and read the document at `path` for context."
         // A compiled page is an index into the documents it quotes, never evidence of its own (`knowledgePage.mjs`).
         + (hits.some((hit) => hit.compiled === true)
-          ? " A hit marked compiled is a page compiled from the documents: each sentence of it carries the quotation and the document it comes from in an evimed-source comment; cite that document, never the page." : "") };
+          ? " A hit marked compiled is a page compiled from the documents: its claims link to the document they come from (the link's address ends in that document's id, src_…, and its title may carry the quoted sentence); cite that document, never the page." : "") };
   }
 }

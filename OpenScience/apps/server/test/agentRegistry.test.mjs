@@ -67,11 +67,8 @@ test("the public registry excludes internal pipelines while trusted lookup retai
   }
   assert.equal(ids.includes("source-understanding"), false);
   assert.equal(registry.get("source-understanding").visibility, "internal");
-  // The knowledge-page compile (「知识页」) is dispatched only by its platform job.
-  assert.equal(ids.includes("knowledge-compile"), false);
-  assert.equal(registry.get("knowledge-compile").visibility, "internal");
   assert.ok(registry.getPackage("source-understanding"));
-  assert.equal(registry.list({ includeInternal: true }).length, 32);
+  assert.equal(registry.list({ includeInternal: true }).length, 31);
 });
 
 test("source understanding uses native delivery tools without inventing an external MCP requirement", async () => {

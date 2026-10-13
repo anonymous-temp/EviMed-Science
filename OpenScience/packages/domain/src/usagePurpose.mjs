@@ -45,10 +45,13 @@
  *  behalf, booked to it, counted against its caps and charged to it through
  *  the research allowance like a run's model calls. The platform's budget
  *  pays for official zones only; until 2026-10-05 any account's zone ran on
- *  the frontier budget (plan §3.3). `knowledge` is the platform compiling a
- *  researcher's own documents into their knowledge pages (`knowledgePage.mjs`):
- *  made for the account that owns the documents, counted against its caps like
- *  the understanding of a document, and held by the compile's own budget. */
+ *  the frontier budget (plan §3.3). `knowledge` is the model calls
+ *  OpenViking's Compile makes while it writes a project's knowledge pages and
+ *  knowledge graph: no run of ours makes them, so the model gateway books
+ *  them by the bearer the engine's Compile agent carries, to the platform's
+ *  internal `evimed-openviking` project and under the engine's own daily
+ *  budget. What a compile used of its account's `knowledge` caps is counted
+ *  separately, by the page service, from the tokens each task reports. */
 export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.freeze([
   'kernel',
   'memory-extraction',
@@ -150,7 +153,6 @@ export function usagePurposeOfRun(run) {
   const agent = String(run?.effectiveAgentId ?? '')
   if (['evolution-scout', 'tool-builder'].includes(agent)) return 'evolution'
   if (agent === 'source-understanding') return 'source-understanding'
-  if (agent === 'knowledge-compile') return 'knowledge'
   if (LEARNING_AGENT_IDS.includes(agent)) return 'learning'
   return 'kernel'
 }

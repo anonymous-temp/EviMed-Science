@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { DocumentParserClient, normalizeDoi } from "../src/documentParserClient.mjs";
@@ -78,14 +79,77 @@ test("an empty source is preserved as empty text rather than an invented sentenc
   assert.equal(result.summary, "The source contains no extractable text.");
 });
 
-test("recordings and unknown formats are refused by name, before any byte is read or sent", async (t) => {
+test("source code, configuration, a notebook and a message are text: read here whole, byte for byte", async (t) => {
+  // GA07, 2026-10-12: each of these names was refused with 415 before a byte of it was looked at.
   const { baseUrl, seen } = await withParser(t, []);
   const parser = client(baseUrl);
-  await assert.rejects(parser.parseBytes({ bytes: PDF, filename: "查房录音.m4a" }), (error) => error.code === "source_media_unsupported" && error.status === 415);
-  await assert.rejects(parser.parseBytes({ bytes: PDF, filename: "cohort.sav" }), (error) => error.code === "source_format_unsupported" && error.status === 415);
-  // parse() refuses on the name alone: a path that does not even exist.
-  await assert.rejects(parser.parse({ path: "/nonexistent/visit.mp4", sha256: "a".repeat(64) }), { code: "source_media_unsupported" });
+  for (const [filename, text] of [
+    ["app.ts", "export const dose = (kg: number) => kg * 15;\n"],
+    ["pyproject.toml", "[project]\nname = \"cohort\"\n"],
+    ["analysis.ipynb", "{\"cells\":[{\"cell_type\":\"markdown\",\"source\":[\"# 队列分析\"]}],\"nbformat\":4}"],
+    ["letter.eml", "From: a@example.org\r\nSubject: 审稿意见\r\n\r\n正文\r\n"],
+    ["paper.tex", "\\section{方法}\n"],
+    ["relations.jsonl", "{\"from\":\"aspirin\",\"to\":\"bleeding\"}\n"],
+  ]) {
+    const result = await parser.parseBytes({ bytes: Buffer.from(text, "utf8"), filename });
+    assert.equal(result.text, text, filename);
+    assert.deepEqual(result.extractor, { name: "plain-text", version: "1.0.0", parser: "local" }, filename);
+  }
+  assert.equal(seen.length, 0, "nothing is sent to the parser for a text read");
+});
+
+test("a name nobody listed is read as text when its bytes are text, and is not when they are not", async (t) => {
+  const { baseUrl, seen } = await withParser(t, []);
+  const parser = client(baseUrl);
+  for (const filename of ["Makefile", "LICENSE", "Dockerfile.evimed", ".env", "notes.unknownext"]) {
+    const text = `# ${filename}\nall: build\n`;
+    const result = await parser.parseBytes({ bytes: Buffer.from(text, "utf8"), filename });
+    assert.equal(result.text, text, filename);
+    assert.equal(result.extractor.parser, "local", filename);
+  }
+  // Bytes that are not text, under a name nobody listed and under one on the text list: nothing here reads them.
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00, 0x08, 0x00]);
+  for (const filename of ["src.zip", "cohort.sav", "clip.ts", "noext"]) {
+    await assert.rejects(parser.parseBytes({ bytes: zip, filename }), (error) => error.code === "source_format_unsupported" && error.status === 415, filename);
+  }
+  // A NUL past the sampled prefix is met by the reader itself: still not text, and never stored as text.
+  const late = Buffer.concat([Buffer.alloc(9000, 0x61), Buffer.from([0x00]), Buffer.from("tail")]);
+  await assert.rejects(parser.parseBytes({ bytes: late, filename: "server.log" }), { code: "source_format_unsupported" });
+  // A recording is known by its name: neither parsed nor, from a path, even opened.
+  await assert.rejects(parser.parseBytes({ bytes: PDF, filename: "查房录音.m4a" }), (error) => error.code === "source_format_unsupported" && error.status === 415);
+  await assert.rejects(parser.parse({ path: "/nonexistent/visit.mp4", sha256: "a".repeat(64) }), { code: "source_format_unsupported" });
   assert.equal(seen.length, 0);
+});
+
+test("a file neither reader takes is read by the engine's parsers when the caller hands one in", async (t) => {
+  const { baseUrl, seen } = await withParser(t, []);
+  const parser = client(baseUrl);
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00, 0x08, 0x00]);
+  /** @type {any[]} */
+  const asked = [];
+  const result = await parser.parseBytes({ bytes: zip, filename: "src.zip", engine: async (file) => {
+    asked.push(file);
+    return { text: "<!-- file: README.md -->\n# 项目\u0000说明\n\n<!-- file: src/app.ts -->\nexport {};", files: [] };
+  } });
+  assert.deepEqual([asked[0].name, Buffer.isBuffer(asked[0].bytes), asked[0].bytes.equals(zip)], ["src.zip", true, true]);
+  assert.equal(result.text, "<!-- file: README.md -->\n# 项目说明\n\n<!-- file: src/app.ts -->\nexport {};", "the engine's Markdown, without the one character PostgreSQL cannot hold");
+  assert.deepEqual(result.extractor, { name: "openviking-parse", version: "1.0.0", parser: "engine" });
+  assert.equal(result.protocolVersion, 1);
+  assert.equal(result.units[0].status, "extracted");
+
+  // An engine that read nothing answers an empty text, which the ingestion keeps as an original; one that fails is named.
+  const empty = await parser.parseBytes({ bytes: zip, filename: "empty.zip", engine: async () => ({ text: "", files: [] }) });
+  assert.deepEqual([empty.text, empty.units[0].status], ["", "no_content"]);
+  await assert.rejects(parser.parseBytes({ bytes: zip, filename: "broken.zip", engine: async () => { throw Object.assign(new Error("memory index unavailable"), { code: "memory_index_unavailable" }); } }),
+    (error) => error.code === "source_original_engine_failed" && error.status === 502);
+  // A cancelled read is a cancellation, not the engine's failure.
+  const controller = new AbortController();
+  await assert.rejects(parser.parseBytes({ bytes: zip, filename: "slow.zip", signal: controller.signal, engine: async () => { controller.abort(); throw new Error("aborted"); } }),
+    { code: "source_parser_canceled" });
+  // PDF and Office stay the parsing API's, and text stays the local reader's, engine or not.
+  const text = await parser.parseBytes({ bytes: Buffer.from("plain"), filename: "notes.md", engine: async () => { throw new Error("never asked"); } });
+  assert.equal(text.extractor.parser, "local");
+  assert.equal(seen.length, 0, "the parsing API is never sent what the engine reads");
 });
 
 test("a document the parser must read fails with a stated reason when no parser is configured", async () => {
@@ -281,6 +345,32 @@ test("parse() reads the resolved file once, never through a link, and checks its
   const link = path.join(root, "linked.pdf");
   await symlink(file, link);
   await assert.rejects(client(baseUrl).parse({ path: link, sha256: sha(PDF) }), { code: "ELOOP" });
+});
+
+test("parse() decides where a file is read from its first bytes, and holds it to that reader's limit", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-parser-route-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const parser = new DocumentParserClient({ maxTextBytes: 1024, maxUploadBytes: 4096 });
+  const write = async (name, bytes) => { const file = path.join(root, name); await writeFile(file, bytes); return { path: file, sha256: sha(bytes) }; };
+  // A name with no extension, text inside: read here like any text file.
+  const makefile = Buffer.from("all: build\n\tnode build.mjs\n");
+  const read = await parser.parse(await write("Makefile", makefile));
+  assert.deepEqual([read.text, read.extractor.parser], [makefile.toString("utf8"), "local"]);
+  // Text is held to the text limit whatever it is called.
+  const long = Buffer.alloc(2000, 0x61);
+  await assert.rejects(parser.parse(await write("server.log", long)), (error) => error.code === "source_parser_input_too_large" && error.status === 413);
+  await assert.rejects(parser.parse(await write("NOTES", long)), { code: "source_parser_input_too_large" });
+  // Bytes that are not text are not: a name on the text list does not hold them to the text limit, and they reach the engine whole.
+  const stream = Buffer.concat([Buffer.from([0x47, 0x40, 0x00, 0x10]), Buffer.alloc(1996, 0x00)]);
+  /** @type {number[]} */
+  const sizes = [];
+  const engine = async (file) => { sizes.push(file.bytes.length); return { text: "transcript" }; };
+  const parsed = await parser.parse({ ...(await write("clip.ts", stream)), engine });
+  assert.deepEqual([parsed.text, parsed.extractor.parser, sizes], ["transcript", "engine", [2000]]);
+  // A size limit is still a refusal with its own reason, and the engine is not sent what is over it.
+  await assert.rejects(parser.parse({ ...(await write("big.bin", Buffer.alloc(5000, 0x00))), engine }), { code: "source_parser_input_too_large" });
+  await assert.rejects(parser.parseBytes({ bytes: Buffer.alloc(5000, 0x00), filename: "big.bin", engine }), (error) => error.code === "source_parser_payload_too_large" && error.status === 413);
+  assert.deepEqual(sizes, [2000]);
 });
 
 test("health reads the service's own answer, and sends it no credential", async (t) => {
