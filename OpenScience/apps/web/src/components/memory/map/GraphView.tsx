@@ -3,10 +3,10 @@ import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useColorScheme } from "@/lib/colorScheme";
 import { formatDay } from "@/lib/format";
-import type { MapNode, MemoryMap } from "@/lib/memoryMapClient";
+import type { MapEdge, MapNode, MemoryMap } from "@/lib/memoryMapClient";
 import { MapChart } from "@/components/charts/MapChart";
 import { useReducedMotion } from "@/components/charts/echartsBase";
-import { chainOption, graphOption } from "@/components/charts/map/graphOption";
+import { chainOption, edgeWords, graphOption, isHideableEdge } from "@/components/charts/map/graphOption";
 import { layoutGraph } from "@/components/charts/map/layout";
 import { mapPalette } from "@/components/charts/map/palette";
 import { existingAt, replayStops, type NarrowedMap } from "./mapModel";
@@ -35,15 +35,34 @@ function useCompact(): boolean {
   return compact;
 }
 
-/** The words under the picture that say what its shapes and colours are (spec §2: every encoding is in a legend). */
-function Legend() {
+/**
+ * The words under the picture that say what its shapes and colours are (spec §2: every encoding is in a legend) — and only the ones
+ * the picture has. An account that has replaced nothing has no grey mark, and a legend that named one would be describing a picture
+ * it is not looking at.
+ */
+export function Legend({ nodes }: { nodes: readonly MapNode[] }) {
+  const things = nodes.filter((node) => node.type !== "you" && node.type !== "project");
+  const has = (test: (node: MapNode) => boolean) => nodes.some(test);
+  const states = [
+    { tone: "text-accent", word: "现行", shown: things.some((node) => (node.state ?? "current") === "current") },
+    { tone: "text-warn", word: "需要看一眼", shown: things.some((node) => node.state === "check") },
+    { tone: "text-text-3", word: "已被替代", shown: things.some((node) => node.state === "replaced") },
+  ].filter((entry) => entry.shown);
+  const decided = (node: MapNode) => node.type === "memory" && (node.subtype === "decision" || node.subtype === "correction");
+  const shapes = [
+    { word: "● 记忆", shown: has((node) => node.type === "memory" && !decided(node)) },
+    { word: "◆ 决定与纠正", shown: has(decided) },
+    { word: "■ 资料与知识页", shown: has((node) => node.type === "document" || node.type === "page") },
+    { word: "▲ 做法", shown: has((node) => node.type === "method") },
+    { word: "▢ 论文与其他来源", shown: has((node) => node.type === "reference") },
+    { word: "○ 知识库里的概念", shown: has((node) => node.type === "entity") },
+    { word: "⬢ 你、项目与折叠的一组", shown: has((node) => node.type === "you" || node.type === "project" || node.type === "cluster") },
+  ].filter((entry) => entry.shown);
   return (
     <div role="group" aria-label="图例" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-text-3">
-      <span><span aria-hidden="true" className="text-accent">●</span> 现行</span>
-      <span><span aria-hidden="true" className="text-warn">●</span> 需要看一眼</span>
-      <span><span aria-hidden="true" className="text-text-3">●</span> 已被替代</span>
-      <span aria-hidden="true">·</span>
-      <span>● 记忆</span><span>◆ 决定与纠正</span><span>■ 资料</span><span>▲ 做法</span><span>⬢ 你、项目与折叠的一组</span>
+      {states.map((entry) => <span key={entry.word}><span aria-hidden="true" className={entry.tone}>●</span> {entry.word}</span>)}
+      {states.length > 0 && shapes.length > 0 && <span aria-hidden="true">·</span>}
+      {shapes.map((entry) => <span key={entry.word}>{entry.word}</span>)}
     </div>
   );
 }
@@ -53,13 +72,15 @@ function Legend() {
  * mark), the picture the library draws from them, and under it the legend and the slider that grows the map from its first day.
  * Played, it adds the marks in the order they began, which is the nearest thing the map has to the sense of having built something.
  */
-export function GraphView({ doc, narrowed, selected, actions, chain, focused }: {
+export function GraphView({ doc, narrowed, selected, actions, chain, focused, onHideEdge }: {
   doc: Pick<MemoryMap, "nodes" | "edges" | "truncated">;
   narrowed: NarrowedMap;
   selected: string | null;
   actions: GraphActions;
   /** The map is centred on one mark or one group, so what is left out is outside its reach and not folded. */
   focused: boolean;
+  /** 「这条关联不对」 on a line: it stays out of this person's map. Absent where the page cannot keep that word. */
+  onHideEdge?: (edge: MapEdge) => Promise<void>;
   /** The source chain of the focused memory, in place of the graph. */
   chain: { root: MapNode; rests: Array<{ node: MapNode; state: import("@/lib/memoryMapClient").MapEdge["state"] }>; replaced: MapNode[] } | null;
 }) {
@@ -99,9 +120,23 @@ export function GraphView({ doc, narrowed, selected, actions, chain, focused }: 
   )), [chain, shown, positions, narrowed.hits, selected, scheme, compact]);
 
   const byId = useMemo(() => new Map(doc.nodes.map((node) => [node.id, node])), [doc.nodes]);
+  // A line pressed on the canvas, read out below it with the one thing the researcher may say about it.
+  const edgeById = useMemo(() => new Map((doc.edges as MapEdge[]).filter((edge) => edge.id).map((edge) => [edge.id as string, edge])), [doc.edges]);
+  const [pickedEdge, setPickedEdge] = useState<string | null>(null);
+  const [hiding, setHiding] = useState(false);
+  const picked = pickedEdge ? edgeById.get(pickedEdge) ?? null : null;
   const nodeOf = (params: { name?: string; data?: { id?: string; name?: string } }) => byId.get(String(params?.data?.id ?? params?.name ?? params?.data?.name ?? ""));
   const on = {
-    click: (params: { name?: string; data?: { id?: string } }) => { const node = nodeOf(params); if (node) actions.onOpen(node); },
+    click: (params: { name?: string; dataType?: string; data?: { id?: string; edgeId?: string | null } }) => {
+      if (params?.dataType === "edge") {
+        const edge = params.data?.edgeId ? edgeById.get(params.data.edgeId) : undefined;
+        if (edge && onHideEdge) setPickedEdge(edge.id ?? null);
+        return;
+      }
+      setPickedEdge(null);
+      const node = nodeOf(params);
+      if (node) actions.onOpen(node);
+    },
     dblclick: (params: { name?: string; data?: { id?: string } }) => { const node = nodeOf(params); if (node) actions.onFocus(node); },
   };
 
@@ -113,7 +148,19 @@ export function GraphView({ doc, narrowed, selected, actions, chain, focused }: 
         label={chain ? `这条记忆依据的资料链，共 ${chain.rests.length} 项。` : `记忆、资料和项目之间的关系图，共 ${shown.nodes.length} 个标记，列表在下方。`}
         unpainted={`${shown.nodes.length} 个标记、${shown.edges.length} 条连线。`}
       />
-      {!chain && <Legend />}
+      {!chain && <Legend nodes={shown.nodes} />}
+      {!chain && picked && onHideEdge && isHideableEdge(picked, byId.get(picked.from), byId.get(picked.to)) && (
+        <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui text-text-2">
+          <span>{edgeWords(picked, byId.get(picked.from)?.label ?? "", byId.get(picked.to)?.label ?? "")}</span>
+          <Button
+            size="sm" variant="secondary" loading={hiding}
+            onClick={() => { setHiding(true); void onHideEdge(picked).then(() => setPickedEdge(null)).finally(() => setHiding(false)); }}
+          >
+            这条关联不对
+          </Button>
+          <button type="button" onClick={() => setPickedEdge(null)} className="rounded px-1 text-accent hover:underline">知道了</button>
+        </div>
+      )}
       {!chain && stops.length > 1 && (
         <div className="flex flex-wrap items-center gap-3 text-ui text-text-2">
           <Button

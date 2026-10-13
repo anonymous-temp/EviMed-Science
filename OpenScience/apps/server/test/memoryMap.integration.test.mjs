@@ -288,3 +288,45 @@ test("the topics routes: the researcher's word over HTTP, refused for what is no
   assert.deepEqual(map.facets.topics, [], "the dismissed topics are not on the map either");
   void other;
 });
+
+test("a line the researcher calls wrong stays out of their map until they take it back, and is nobody else's business", options, async (t) => {
+  const { app, base, headers, user, otherHeaders, other } = await fixture(t);
+  const memory = app.researchMemory;
+  const made = await seed(memory, user.id);
+  await memory.upsertRecord(other.id, fact({ key: "project.theirs", value: "their private memory", summary: "their private memory" }), proof,
+    { sourceLinks: [{ type: "doi", id: "10.1056/nejmoa2034577" }] });
+  const read = async (headersOf = headers) => (await get(base, headersOf, "/api/memory/map?include=nodes,edges")).body.data;
+  const put = async (id, hidden, headersOf = headers) => {
+    const response = await fetch(`${base}/api/memory/map/edges/${id}`, { method: "PUT", headers: headersOf, body: JSON.stringify({ hidden }) });
+    return { status: response.status, body: await response.json() };
+  };
+  const rests = (map) => map.edges.find((entry) => entry.type === "rests-on" && entry.from === `memory:${made.cited.id}` && entry.to === "reference:doi:10.1056/nejmoa2034577");
+
+  const before = await read();
+  const line = rests(before);
+  assert.match(line.id, /^e_[0-9a-f]{24}$/u);
+  assert.equal((await put(line.id, true)).status, 200);
+  const after = await read();
+  assert.equal(rests(after), undefined, "the line is hidden");
+  assert.ok(after.nodes.some((node) => node.id === `memory:${made.cited.id}`), "the memory itself is still drawn");
+  assert.ok(!after.nodes.some((node) => node.id === "reference:doi:10.1056/nejmoa2034577"), "and so is no longer a mark of the paper nothing rests on");
+  // Said twice is said once; another account sees its own line, with the same id, untouched.
+  assert.equal((await put(line.id, true)).status, 200);
+  const theirs = await read(otherHeaders);
+  const theirLine = theirs.edges.find((entry) => entry.type === "rests-on");
+  assert.ok(theirLine, "another account's line to the same paper is drawn");
+  assert.equal(theirLine.id === line.id, false, "a line is a memory's: the same paper under another account's memory is another line");
+  // Taken back, the line is drawn again.
+  assert.equal((await put(line.id, false)).status, 200);
+  assert.ok(rests(await read()), "taking it back draws it again");
+  // The answers by name: a malformed id and body, and the structure that cannot be called wrong.
+  assert.equal((await put("not-a-line", true)).status, 400);
+  assert.equal((await fetch(`${base}/api/memory/map/edges/${line.id}`, { method: "PUT", headers, body: JSON.stringify({ hidden: "yes" }) })).status, 400);
+  assert.equal((await fetch(`${base}/api/memory/map/edges/${line.id}`, { method: "GET", headers })).status, 405);
+  const structure = before.edges.find((entry) => entry.type === "belongs-to");
+  assert.equal((await put(structure.id, true)).status, 200);
+  assert.ok((await read()).edges.some((entry) => entry.id === structure.id), "a belongs-to line is structure: saying it is wrong hides nothing");
+  // The correction is a row of its own, keyed by account and line.
+  const rows = await app.store.database.query("SELECT edge_id FROM evimed_memory.map_edge_dismissals WHERE user_id=$1", [user.id]);
+  assert.ok(rows.rows.length >= 1);
+});

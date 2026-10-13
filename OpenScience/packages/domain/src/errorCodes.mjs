@@ -1153,6 +1153,7 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   // 2026-10-12: the memory map (`memoryMap.mjs`) — switched off, asked for what it does not have, and the topics it cannot make.
   'memory_map_disabled',
   'memory_map_invalid',
+  'memory_map_edges_full',
   'memory_topic_not_found',
   'memory_topic_invalid',
   'memory_topics_unavailable',
@@ -2724,6 +2725,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // ——— 记忆地图 (memoryMap.mjs) ———
   memory_map_disabled: '这个部署没有开放记忆地图；记忆本身照常可以在记忆页查看。',
   memory_map_invalid: '记忆地图的这次请求不完整，请刷新页面后再试。',
+  memory_map_edges_full: '隐藏的关联已经很多了；先把不再需要隐藏的恢复，再隐藏新的。',
   memory_topic_not_found: '这个主题已经不在了，刷新后再看。',
   memory_topic_invalid: '这个主题的修改不完整，请重新操作。',
   memory_topics_unavailable: '主题暂时整理不了；已有的记忆和其他视图不受影响。',
@@ -2961,6 +2963,7 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   // The memory map (2026-10-12): a request it refused before reading anything, and the topics a model could not make.
   memory_map_disabled: 'capped',
   memory_map_invalid: 'capped',
+  memory_map_edges_full: 'capped',
   memory_topic_not_found: 'capped',
   memory_topic_invalid: 'capped',
   memory_topics_unavailable: 'upstream',

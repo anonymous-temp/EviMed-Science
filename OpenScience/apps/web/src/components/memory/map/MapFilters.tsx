@@ -23,7 +23,7 @@ function rangeLabel(range: string): string {
  */
 export function MapFilters({ selection, doc, topicName, aspectName, focusLabel, projects, onNarrow, onClear, search }: {
   selection: MapSelection;
-  doc: Pick<MemoryMap, "facets">;
+  doc: Pick<MemoryMap, "facets" | "summary">;
   topicName: string | null;
   aspectName: string | null;
   focusLabel: string | null;
@@ -49,7 +49,8 @@ export function MapFilters({ selection, doc, topicName, aspectName, focusLabel, 
         onChange={(range) => onNarrow({ range: range ?? "all" })}
       />
       {kinds.length > 0 && <FilterSelect label="种类" allLabel="全部种类" options={kinds} value={selection.kind} onChange={(kind) => onNarrow({ kind })} />}
-      <FilterChip pressed={selection.look} onClick={() => onNarrow({ look: !selection.look })}>只看需要看一眼的</FilterChip>
+      {/* Only when something needs a look (or the page is already narrowed to it, so it can be let go): a chip for nothing is a filter that empties the page. */}
+      {(doc.summary.needsLook > 0 || selection.look) && <FilterChip pressed={selection.look} onClick={() => onNarrow({ look: !selection.look })}>只看需要看一眼的</FilterChip>}
       {topicName && <FilterChip pressed icon={X} onClick={() => onNarrow({ topic: null })} aria-label={`取消主题：${topicName}`}>{`主题：${topicName}`}</FilterChip>}
       {aspectName && <FilterChip pressed icon={X} onClick={() => onNarrow({ dimension: null })} aria-label={`取消维度：${aspectName}`}>{`维度：${aspectName}`}</FilterChip>}
       {selection.focus && focusLabel && (

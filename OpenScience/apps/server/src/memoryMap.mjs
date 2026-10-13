@@ -1,6 +1,7 @@
 import { dayOf, timeZoneOrDefault } from "./memoryTimeline.mjs";
 import { HttpError, apiBaseFromRequest, assertObject, readJson, sendJson } from "./security.mjs";
 import { MAP_EDGE_TYPES, MAP_NODE_TYPES, excerpt, nodeId, parseNodeId, requestMemo } from "./memoryMapSources/common.mjs";
+import { edgeIdOf, isDismissable } from "./memoryMapEdges.mjs";
 
 /**
  * 「记忆地图」: the one read-only document every view of the map is drawn from — what the platform remembers and knows about a
@@ -237,8 +238,9 @@ export function egoOf(nodes, edges, focus, depth, limit) {
  *
  * @param {{ sources: import("./memoryMapSources/common.mjs").MapSource[] }} dependencies
  * @param {{ user: { id: string }, projects: { id: string, name: string, kind?: string }[], projectId?: string | null,
- *   range?: unknown, timeZone?: unknown, now?: Date, engine?: "postgres" | "native", focus?: unknown, depth?: unknown, include?: unknown }} request
- *   `projects` are the account's own, never the platform's internal ones; `projectId`, when given, has already been checked to be one of them
+ *   range?: unknown, timeZone?: unknown, now?: Date, engine?: "postgres" | "native", focus?: unknown, depth?: unknown, include?: unknown,
+ *   dismissedEdges?: ReadonlySet<string> | null }} request
+ *   `dismissedEdges`: the ids of the lines the account called wrong (`memoryMapEdges.mjs`), left out of the map. `projects` are the account's own, never the platform's internal ones; `projectId`, when given, has already been checked to be one of them
  */
 export async function buildMemoryMap({ sources }, request) {
   const now = request.now ?? new Date();
@@ -294,7 +296,11 @@ export async function buildMemoryMap({ sources }, request) {
       if (node && typeof node.id === "string" && MAP_NODE_TYPES.includes(node.type)) merged.set(node.id, layered(merged.get(node.id) ?? {}, node));
     }
     for (const edge of answer.edges ?? []) {
-      if (edge && MAP_EDGE_TYPES.includes(edge.type)) joined.set(`${edge.from}\u0000${edge.to}\u0000${edge.type}`, joined.get(`${edge.from}\u0000${edge.to}\u0000${edge.type}`) ?? edge);
+      if (!edge || !MAP_EDGE_TYPES.includes(edge.type)) continue;
+      // Every line carries a stable id, so the researcher can call one wrong; one they already did is not drawn.
+      const id = edgeIdOf(edge);
+      if (isDismissable(edge) && request.dismissedEdges?.has(id)) continue;
+      joined.set(`${edge.from}\u0000${edge.to}\u0000${edge.type}`, joined.get(`${edge.from}\u0000${edge.to}\u0000${edge.type}`) ?? { ...edge, id });
     }
     lanes.push(...(answer.lanes ?? []));
     events.push(...(answer.events ?? []));
@@ -448,6 +454,8 @@ export async function buildMemoryMap({ sources }, request) {
  *   projectOf?: (user: any, projectId: string) => Promise<any>,
  *   isInternalProject?: (userId: string, projectId: string) => boolean,
  *   recordLinks?: ((user: any, record: any) => Promise<any>) | null,
+ *   edgeCorrections?: import("./memoryMapEdges.mjs").MapEdgeCorrections | null,
+ *   accountRecords?: ((userId: string) => Promise<any[]>) | null,
  *   nativeLinks?: ((user: any, recordId: string) => Promise<any>) | null,
  *   decodeRouteComponent: (value: string, label: string) => string, audit?: ((ctx: any, action: string, status: string, details?: any) => Promise<void>) | null,
  * }} dependencies
@@ -455,18 +463,22 @@ export async function buildMemoryMap({ sources }, request) {
  */
 export function createMemoryMapRoutes({
   config, researchMemory, sources, topics = null, store, context, memoryEngine = () => "postgres", isInternalProject = () => false,
-  recordLinks = null, nativeLinks = null, decodeRouteComponent, audit = null,
+  recordLinks = null, nativeLinks = null, edgeCorrections = null, accountRecords = null, decodeRouteComponent, audit = null,
 }) {
+  /** The account's memories as the topics are made from them, from whichever engine holds them. */
+  const topicRecords = (/** @type {string} */ userId) => (accountRecords ? accountRecords(userId) : researchMemory.mapRecords(userId, { projectId: null, limit: 2000 }));
   const enabled = config.memoryEnabled !== false && config.memoryMapEnabled !== false;
   const TOPICS = /^\/api\/memory\/topics(?:\/([^/]+))?$/u;
   const LINKS = /^\/api\/memory\/records\/([^/]+)\/links$/u;
+  const EDGE = /^\/api\/memory\/map\/edges\/([^/]+)$/u;
 
   return async function memoryMapRoutes(req, res) {
     const pathname = new URL(req.url ?? "/", "http://evimed.local").pathname;
     const isMap = pathname === "/api/memory/map";
     const links = LINKS.exec(pathname);
     const topic = TOPICS.exec(pathname);
-    if (!isMap && !links && !topic) return false;
+    const edge = EDGE.exec(pathname);
+    if (!isMap && !links && !topic && !edge) return false;
     if (!enabled) throw new HttpError(503, "memory_map_disabled", "The memory map is disabled in this deployment.");
     if (!researchMemory?.configured) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
 
@@ -479,12 +491,28 @@ export function createMemoryMapRoutes({
       const project = asked ? await store.requireProject(ctx.user, decodeRouteComponent(asked, "project id")) : null;
       if (project && isInternalProject(ctx.user.id, project.id)) throw new HttpError(404, "project_not_found", "Project not found.");
       const listed = (await store.listProjects(ctx.user)).filter((/** @type {any} */ item) => !isInternalProject(ctx.user.id, item.id) && !item.archivedAt);
+      // What the account called wrong; a failed read costs the corrections, never the map.
+      const dismissedEdges = await edgeCorrections?.dismissed(ctx.user.id).catch(() => null) ?? null;
       const map = await buildMemoryMap({ sources }, {
-        user: ctx.user, projects: listed, projectId: project?.id ?? null,
+        user: ctx.user, projects: listed, projectId: project?.id ?? null, dismissedEdges,
         range: url.searchParams.get("range"), timeZone: url.searchParams.get("timeZone"), engine: await memoryEngine(ctx.user.id),
         focus: url.searchParams.get("focus"), depth: url.searchParams.get("depth"), include: url.searchParams.get("include"),
       });
       sendJson(res, 200, { data: map });
+      return true;
+    }
+
+    // 「这条关联不对」: a line of the relation view the researcher called wrong, or took back.
+    if (edge) {
+      if (req.method !== "PUT") throw new HttpError(405, "method_not_allowed", "A line is hidden or shown again with PUT.");
+      const ctx = await context(req, res);
+      if (!edgeCorrections?.configured) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
+      const body = assertObject(await readJson(req, config.maxJsonBytes), "line correction");
+      const unknown = Object.keys(body).filter((field) => field !== "hidden");
+      if (unknown.length > 0 || typeof body.hidden !== "boolean") throw new HttpError(400, "memory_map_invalid", "A line correction says hidden: true or false.");
+      const done = await edgeCorrections.set(ctx.user.id, decodeRouteComponent(edge[1], "line id"), body.hidden);
+      await audit?.(ctx, "memory.map.edge", "completed", { hidden: done.hidden });
+      sendJson(res, 200, { data: done });
       return true;
     }
 
@@ -508,7 +536,7 @@ export function createMemoryMapRoutes({
     const ctx = await context(req, res);
     if (!topics?.configured) throw new HttpError(503, "memory_topics_unavailable", "Memory topics are not available in this deployment.");
     if (!topic[1] && pathname === "/api/memory/topics" && req.method === "GET") {
-      const records = await researchMemory.mapRecords(ctx.user.id, { projectId: null, limit: 2000 });
+      const records = await topicRecords(ctx.user.id);
       sendJson(res, 200, { data: await topics.read(ctx.user.id, records) });
       return true;
     }
@@ -530,7 +558,7 @@ export function createMemoryMapRoutes({
       else done = await topics.removeMember(ctx.user.id, id, String(body.removeMember ?? ""));
       if (!done) throw new HttpError(404, "memory_topic_not_found", "Topic not found.");
       await audit?.(ctx, "memory.topic.update", "completed", { verb: verbs[0] });
-      const records = await researchMemory.mapRecords(ctx.user.id, { projectId: null, limit: 2000 });
+      const records = await topicRecords(ctx.user.id);
       sendJson(res, 200, { data: await topics.read(ctx.user.id, records) });
       return true;
     }

@@ -6,7 +6,7 @@
  * Every call goes through `productRequest`, which already speaks the
  * `{ data }` envelope, the CSRF header and the error dictionary.
  */
-import type { WebMemoryProvenance, WebStructuredMemory } from "./apiClient";
+import type { WebMemoryProvenance, WebPendingMemory, WebStructuredMemory } from "./apiClient";
 import { productRequest, type CapsuleCard, type CapsuleEntry, type CapsuleRecord, type CapsuleScanResult } from "./productClient";
 
 /** One memory that changed by itself — a line of the write prompt 「刚记住了…」. */
@@ -32,6 +32,14 @@ export function fetchMemoryChanges({ since, sessionId }: { since: string; sessio
   const query = new URLSearchParams({ since });
   if (sessionId) query.set("sessionId", sessionId);
   return productRequest<MemoryChange[]>(`/memory/changes?${query.toString()}`);
+}
+
+/**
+ * 「记住这一条」: the person's own words, handed to the memory to be written. They appear in the list when it has written them
+ * (about twelve seconds); until then the answer is the row the page shows as 「正在记住」. `projectId` files it under a project.
+ */
+export function rememberMemory(text: string, projectId?: string | null) {
+  return productRequest<{ pending: WebPendingMemory }>("/memory/remember", "POST", { text, ...(projectId ? { projectId } : {}) });
 }
 
 /** Undo the last change to one memory; undoing its creation removes it. */

@@ -3156,6 +3156,14 @@ export function loadConfig(overrides = {}) {
     memoryTopicsMinMemories: Math.max(4, Math.min(200, Math.trunc(Number(
       overrides.memoryTopicsMinMemories ?? process.env.OPEN_SCIENCE_MEMORY_TOPICS_MIN_MEMORIES ?? 12,
     )) || 12)),
+    // The map's 「在做什么」 radar for any account (runTaskType.mjs): one Flash call says what kind of work a finished conversation was,
+    // from a short fixed list. `Enabled` off leaves the radar to the capabilities that answered; `DailyCalls` is the most such calls one
+    // account may have made in a day (a conversation is judged once, an older one only when the map is read) and 0 stops the judging.
+    taskTypeEnabled: overrides.taskTypeEnabled ?? boolEnv("OPEN_SCIENCE_TASK_TYPE_ENABLED", true),
+    taskTypeDailyCalls: (() => {
+      const asked = Number(overrides.taskTypeDailyCalls ?? process.env.OPEN_SCIENCE_TASK_TYPE_DAILY_CALLS ?? 60);
+      return Number.isFinite(asked) ? Math.max(0, Math.min(1000, Math.trunc(asked))) : 60;
+    })(),
     // Off by default: turning it on publishes an account's memory to whoever
     // holds an API key. A deployment decides that, never a default.
     agentMemoryApiEnabled:

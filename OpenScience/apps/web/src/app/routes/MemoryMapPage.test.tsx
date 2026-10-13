@@ -76,6 +76,7 @@ function open(search = "") {
       <Routes>
         <Route path="/app/memory/map" element={<MemoryMapPage />} />
         <Route path="/app/memory" element={<p>记忆页</p>} />
+        <Route path="/app/files/open" element={<p>知识页的入口</p>} />
         <Route path="/app/files/:id" element={<p>资料页</p>} />
       </Routes>
     </MemoryRouter>,
@@ -151,6 +152,24 @@ describe("记忆地图", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await user.click(screen.getByRole("link", { name: "GOLD 指南" }));
     expect(await screen.findByText("资料页")).toBeInTheDocument();
+  });
+
+  it("opens an entity of the project's knowledge graph in the knowledge base's reader, and only narrows an unscoped map to it", async () => {
+    const entity: MapNode = { id: "entity:trial-rocket-af", type: "entity", subtype: "trial", group: "trial", label: "ROCKET AF 试验", state: "current", open: null };
+    const withEntity = (projectId: string | null) => {
+      const doc = busyMap();
+      return { ...doc, scope: { ...doc.scope, projectId }, nodes: [...doc.nodes, entity], edges: [...doc.edges, edge("entity:trial-rocket-af", "you:account")] };
+    };
+    const user = userEvent.setup();
+    fetchMemoryMap.mockResolvedValue(withEntity("p1"));
+    open("?project=p1");
+    await user.click(await screen.findByRole("button", { name: "ROCKET AF 试验" }));
+    expect(where()).toBe("/app/files/open?project=p1&tree=kg&path=entities%2Ftrial-rocket-af.md");
+    cleanup();
+    fetchMemoryMap.mockResolvedValue(withEntity(null));
+    open();
+    await user.click(await screen.findByRole("button", { name: "ROCKET AF 试验" }));
+    expect(where()).toContain("focus=entity%3Atrial-rocket-af");
   });
 
   it("says a memory that is gone in a sentence, not as an empty drawer", async () => {

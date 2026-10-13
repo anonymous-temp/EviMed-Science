@@ -111,6 +111,7 @@ import {
 } from "@evimed/domain";
 import { recordPlatformContentCited } from "./evidenceCitationMetrics.mjs";
 import { normalizePagesRead } from "./webReadPages.mjs";
+import { TASK_TYPE_IDS } from "./taskTypes.mjs";
 
 export { repairableEvidencePackageErrorCodes, recoverableEvidenceSourceErrorCodes, terminalEvidenceSourceErrorCodes };
 
@@ -804,10 +805,13 @@ function foldEvents(events) {
       // notice; deletion is not, because the word promises it.
       const archived = typeof event.archived === "boolean" ? event.archived : null;
       const deleted = event.deleted === true;
+      // What kind of work the conversation was (runTaskType.mjs): one of a closed list, judged once and never rewritten.
+      const taskType = current.taskType == null && TASK_TYPE_IDS.has(event.taskType) ? event.taskType : null;
       runs.set(id, Object.freeze({
         ...current,
         ...(labelled ? { title, titleSource } : {}),
         ...(question ? { question } : {}),
+        ...(taskType ? { taskType } : {}),
         ...(archived === null ? {} : { archived }),
         ...(deleted ? { deleted: true } : {}),
         verification: event.verification === "unchecked" && current.verification === null
@@ -5044,15 +5048,16 @@ export class AgentRunStore {
    * replaces theirs, and a question is filled once: this returns the run
    * unchanged, without writing, when there is nothing it may change.
    * @param {any} project @param {string} rawRunId
-   * @param {{ title?: string, titleSource?: 'auto'|'user', question?: string, archived?: boolean, deleted?: boolean }} labels
+   * @param {{ title?: string, titleSource?: 'auto'|'user', question?: string, archived?: boolean, deleted?: boolean, taskType?: string }} labels
    */
-  async recordRunLabels(project, rawRunId, { title, titleSource, question, archived, deleted } = {}) {
+  async recordRunLabels(project, rawRunId, { title, titleSource, question, archived, deleted, taskType } = {}) {
     const runId = safeId(rawRunId, "agent run id");
     const named = title === undefined ? null : normalizeRunTitle(title);
     if (title !== undefined && !named) throw new HttpError(400, "invalid_payload", `A run title is one line of 1 to ${maxRunTitle} characters.`);
     if (named && titleSource !== "auto" && titleSource !== "user") throw invalid("A run title needs its source.");
     if (archived !== undefined && typeof archived !== "boolean") throw new HttpError(400, "invalid_payload", "archived must be a boolean.");
     if (deleted !== undefined && deleted !== true) throw new HttpError(400, "invalid_payload", "deleted can only be set.");
+    if (taskType !== undefined && !TASK_TYPE_IDS.has(/** @type {any} */ (taskType))) throw new HttpError(400, "invalid_payload", "A run's task type is one of the closed list.");
     const asked = question === undefined ? null : questionPreview(question);
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
@@ -5063,7 +5068,9 @@ export class AgentRunStore {
       const fill = asked && current.question == null;
       const shelve = archived !== undefined && Boolean(current.archived) !== archived;
       const remove = deleted === true && !current.deleted;
-      if (!retitle && !fill && !shelve && !remove) return current;
+      // Judged once: a second judgement of the same conversation is the first one's again.
+      const typed = taskType !== undefined && current.taskType == null;
+      if (!retitle && !fill && !shelve && !remove && !typed) return current;
       const event = {
         event: "notice",
         id: runId,
@@ -5073,6 +5080,7 @@ export class AgentRunStore {
         ...(fill ? { question: asked } : {}),
         ...(shelve ? { archived } : {}),
         ...(remove ? { deleted: true } : {}),
+        ...(typed ? { taskType } : {}),
       };
       const text = serializeNext(events, event, this.maxBytes);
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });

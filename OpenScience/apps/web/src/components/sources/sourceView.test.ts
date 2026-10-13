@@ -78,6 +78,12 @@ describe("a document's state", () => {
     expect(stateLabel(source({ status: "canceled" }))).toBe("已取消");
   });
 
+  it("says a recording or an unreadable file is kept as the original it was, and a document read from its text says nothing", () => {
+    const original = { generation: 1, code: "source_original_media", at: "2026-10-13T00:00:00Z" };
+    expect(stateLabel({ ...source(), readable: false, payload: { ...source().payload, original } } as SourceRecord)).toBe("只保存原件");
+    expect(stateLabel({ ...source(), payload: { ...source().payload, original: null } } as SourceRecord)).toBe("");
+  });
+
   it("is not reading once the text is read, whatever the understanding still does", () => {
     expect(isReading(source({ status: "parsing" }, {}, { readable: true }))).toBe(false);
     expect(isUsable(source({ status: "parsing" }, {}, { readable: true }))).toBe(true);

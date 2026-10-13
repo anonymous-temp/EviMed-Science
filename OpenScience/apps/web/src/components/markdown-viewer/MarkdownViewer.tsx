@@ -90,6 +90,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({
   claims,
   claimStatuses,
   reading,
+  renderLink,
 }: {
   children: string;
   className?: string;
@@ -102,6 +103,10 @@ export const MarkdownViewer = memo(function MarkdownViewer({
   /** What the report reader around this text knows: per-source verification,
    *  the run (to open preserved sources), safety claims, print. */
   reading?: ClaimReading;
+  /** A page that knows what its links lead to (a knowledge page) draws them itself: given the address and the link's
+   *  text, a node replaces the anchor; `undefined` leaves the anchor as written. Keep it stable (`useCallback`), or the
+   *  document is rebuilt on every render. */
+  renderLink?: (href: string | undefined, children: ReactNode) => ReactNode | undefined;
 }) {
   const s = STYLES[variant];
   // Claim markers become citations when there is a matrix to open; whatever
@@ -115,6 +120,8 @@ export const MarkdownViewer = memo(function MarkdownViewer({
     a: ({ children, href }) => {
       const ids = claims ? claimIdsFromHref(href) : null;
       if (ids && claims) return <ClaimCitation ids={ids} claims={claims} statuses={claimStatuses} reading={reading} />;
+      const drawn = renderLink?.(href, children);
+      if (drawn !== undefined) return <>{drawn}</>;
       return (
         <a href={href} className={s.a}>
           {children}
@@ -160,7 +167,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({
     th: ({ children }) => <th className={s.th}>{children}</th>,
     td: ({ children }) => <td className={s.td}>{children}</td>,
     img: ({ src, alt }) => <img src={typeof src === "string" ? src : undefined} alt={alt ?? ""} loading="lazy" className={s.img} />,
-  }), [s, claims, claimStatuses, reading]);
+  }), [s, claims, claimStatuses, reading, renderLink]);
   return (
     <div className={cn(s.root, className)}>
       <ReactMarkdown

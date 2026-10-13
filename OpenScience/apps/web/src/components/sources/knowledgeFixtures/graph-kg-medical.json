@@ -1,0 +1,1378 @@
+{
+ "kind": "kg",
+ "nodes": [
+  {
+   "id": "meta-analysis-2014",
+   "path": "entities/meta-analysis-2014.md",
+   "title": "2014 年《柳叶刀》新型口服抗凝药荟萃分析",
+   "entityType": "document",
+   "description": "发表于《柳叶刀》的一项预设荟萃分析，汇总 RE-LY、ROCKET AF、ARISTOTLE 与 ENGAGE AF-TIMI 48 四项 3 期随机试验共 71,683 名心房颤动患者，比较新型口服抗凝药与华法林的疗效与安全性。",
+   "aliases": [
+    "Comparison of the efficacy and safety of new oral anticoagulants with warfarin",
+    "PMID 24315724",
+    "DOI 10.1016/S0140-6736(13)62343-0"
+   ],
+   "degree": 16,
+   "sourceId": "src_c52267a68a26fb6c418a9e7a990cc89a",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "outcome-全因死亡",
+   "path": "entities/outcome-全因死亡.md",
+   "title": "全因死亡",
+   "entityType": "outcome",
+   "description": "指随访期间任何原因导致的死亡，是心房颤动抗凝试验中用于衡量总体临床获益的关键次要结局。",
+   "aliases": [
+    "all-cause mortality",
+    "death from any cause",
+    "死亡"
+   ],
+   "degree": 5,
+   "sourceId": "src_4b457b916e3ebcfed55cfe89259a1244",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    },
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "id": "outcome-卒中或体循环栓塞",
+   "path": "entities/outcome-卒中或体循环栓塞.md",
+   "title": "卒中或体循环栓塞",
+   "entityType": "outcome",
+   "description": "由卒中与体循环栓塞组成的复合疗效终点，是心房颤动抗凝试验中衡量血栓栓塞预防效果的标准主要终点。",
+   "aliases": [
+    "stroke or systemic embolism",
+    "主要疗效终点",
+    "主要终点"
+   ],
+   "degree": 9,
+   "sourceId": "src_04f2338aabf5ac5a3897725b948db5ff",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    },
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "outcome-大出血",
+   "path": "entities/outcome-大出血.md",
+   "title": "大出血",
+   "entityType": "outcome",
+   "description": "抗凝治疗的主要安全性终点，指达到预设严重程度标准的出血事件，在各试验中用于衡量抗凝方案的出血负担。",
+   "aliases": [
+    "major bleeding",
+    "主要安全性终点",
+    "大出血与非大临床相关出血"
+   ],
+   "degree": 8,
+   "sourceId": "src_8fa8e9b84ff7255f4dd357d854918123",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    },
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "outcome-心肌梗死",
+   "path": "entities/outcome-心肌梗死.md",
+   "title": "心肌梗死",
+   "entityType": "outcome",
+   "description": "抗凝治疗试验中报告的心血管安全性结局之一，指心肌缺血性坏死事件，用于评估抗凝方案的心血管风险平衡。",
+   "aliases": [
+    "myocardial infarction",
+    "MI"
+   ],
+   "degree": 1,
+   "sourceId": "src_1a2357f881fdcbbc2a5aae1b23f96a38",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "outcome-胃肠出血",
+   "path": "entities/outcome-胃肠出血.md",
+   "title": "胃肠出血",
+   "entityType": "outcome",
+   "description": "抗凝治疗相关的出血性安全性结局，指消化道出血事件，是新型口服抗凝药相较华法林风险升高的主要出血部位。",
+   "aliases": [
+    "gastrointestinal bleeding",
+    "GI bleeding",
+    "消化道出血"
+   ],
+   "degree": 2,
+   "sourceId": "src_b056dbf5c92b9b6bb012bf1a74d379e7",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    },
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "id": "outcome-颅内出血",
+   "path": "entities/outcome-颅内出血.md",
+   "title": "颅内出血",
+   "entityType": "outcome",
+   "description": "抗凝治疗的关键安全性终点之一，指颅腔内的出血事件，是华法林相较新型口服抗凝药的主要劣势所在。",
+   "aliases": [
+    "intracranial hemorrhage",
+    "ICH",
+    "颅内出血"
+   ],
+   "degree": 6,
+   "sourceId": "src_ec47db553a16002312dd1dd068f704a0",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    },
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "trial-aristotle",
+   "path": "entities/trial-aristotle.md",
+   "title": "ARISTOTLE 试验",
+   "entityType": "trial",
+   "description": "一项在 18,201 名心房颤动伴至少一项额外卒中危险因素患者中比较阿哌沙班 5 mg 每日两次与华法林（目标 INR 2.0–3.0）的随机双盲试验，主要结局为缺血性或出血性卒中或体循环栓塞。",
+   "aliases": [
+    "ARISTOTLE",
+    "Apixaban for Reduction in Stroke and Other Thromboembolic Events in Atrial Fibrillation",
+    "NCT00412984"
+   ],
+   "degree": 8,
+   "sourceId": "src_8b995380ea93986e0dea3fdfd5a3d8f3",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "trial-averroes",
+   "path": "entities/trial-averroes.md",
+   "title": "AVERROES 试验",
+   "entityType": "trial",
+   "description": "一项在 5,599 名不适于维生素 K 拮抗剂治疗的心房颤动卒中高危患者中比较阿哌沙班 5 mg 每日两次与阿司匹林的双盲随机试验，因阿哌沙班获益明确而提前终止。",
+   "aliases": [
+    "AVERROES",
+    "Apixaban Versus Acetylsalicylic Acid to Prevent Stroke in Atrial Fibrillation Patients Who Have Failed or Are Unsuitable for Vitamin K Antagonist Treatment",
+    "NCT00496769"
+   ],
+   "degree": 7,
+   "sourceId": "src_b206c5284fbb5bc6db6bc8650b7830dc",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    }
+   ]
+  },
+  {
+   "id": "trial-eldercare-af",
+   "path": "entities/trial-eldercare-af.md",
+   "title": "ELDERCARE-AF 试验",
+   "entityType": "trial",
+   "description": "一项在 ≥80 岁日本非瓣膜性心房颤动患者中比较每日一次 15 mg 依度沙班与安慰剂的 3 期、多中心、随机、双盲、安慰剂对照、事件驱动试验。",
+   "aliases": [
+    "ELDERCARE-AF",
+    "NCT02801669"
+   ],
+   "degree": 7,
+   "sourceId": "src_c9b88d9260be601f646786260f162bad",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "id": "trial-engage-af-timi-48",
+   "path": "entities/trial-engage-af-timi-48.md",
+   "title": "ENGAGE AF-TIMI 48 试验",
+   "entityType": "trial",
+   "description": "一项在 21,105 名中度至高度风险心房颤动患者中比较两种每日一次依度沙班方案与华法林的随机、双盲、双模拟试验，主要疗效终点为卒中或体循环栓塞。",
+   "aliases": [
+    "ENGAGE AF-TIMI 48",
+    "Effective Anticoagulation with Factor Xa Next Generation in Atrial Fibrillation–Thrombolysis in Myocardial Infarction 48",
+    "NCT00781391"
+   ],
+   "degree": 6,
+   "sourceId": "src_5152943f261c3dc300548616b451cff4",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "trial-j-rocket-af",
+   "path": "entities/trial-j-rocket-af.md",
+   "title": "J-ROCKET AF 试验",
+   "entityType": "trial",
+   "description": "一项在日本心房颤动患者中比较日本特异性剂量利伐沙班（15 mg 每日一次）与按日本指南剂量调整华法林的前瞻性、随机、双盲 3 期试验，主要目标为安全性非劣效。",
+   "aliases": [
+    "J-ROCKET AF",
+    "NCT01136416"
+   ],
+   "degree": 7,
+   "sourceId": "src_f80322714dae3c549ed226fb27722894",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    }
+   ]
+  },
+  {
+   "id": "trial-rel-y",
+   "path": "entities/trial-rel-y.md",
+   "title": "RE-LY 试验",
+   "entityType": "trial",
+   "description": "一项在 18,113 名心房颤动伴卒中风险患者中比较两种固定剂量达比加群酯与剂量调整华法林的非劣效性随机试验，主要结局为卒中或体循环栓塞。",
+   "aliases": [
+    "RE-LY",
+    "Randomized Evaluation of Long-Term Anticoagulation Therapy",
+    "NCT00262600"
+   ],
+   "degree": 8,
+   "sourceId": "src_7de232948af9486c0b4a143df27769b9",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "trial-rocket-af",
+   "path": "entities/trial-rocket-af.md",
+   "title": "ROCKET AF 试验",
+   "entityType": "trial",
+   "description": "一项在 14,264 名非瓣膜性心房颤动伴卒中风险增高患者中比较每日 20 mg 利伐沙班与剂量调整华法林的随机双盲试验，主要终点为卒中或体循环栓塞。",
+   "aliases": [
+    "ROCKET AF",
+    "Rivaroxaban Once Daily Oral Direct Factor Xa Inhibition Compared with Vitamin K Antagonism for Prevention of Stroke and Embolism Trial in Atrial Fibrillation",
+    "NCT00403767"
+   ],
+   "degree": 8,
+   "sourceId": "src_9b393ac2846819e2fa0590adc06a63fb",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    },
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "依度沙班",
+   "path": "entities/依度沙班.md",
+   "title": "依度沙班",
+   "entityType": "drug",
+   "description": "一种口服直接 Xa 因子抑制剂类抗凝药，具有确证的血栓抑制作用，用于心房颤动患者卒中与体循环栓塞的预防，可每日一次给药。",
+   "aliases": [
+    "edoxaban",
+    "Xa 因子抑制剂"
+   ],
+   "degree": 3,
+   "sourceId": "src_57222d63f9a9b50b08569bd4f836127f",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    },
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "利伐沙班",
+   "path": "entities/利伐沙班.md",
+   "title": "利伐沙班",
+   "entityType": "drug",
+   "description": "一种口服直接 Xa 因子抑制剂类抗凝药，用于心房颤动患者卒中与体循环栓塞的预防，通常每日一次给药。",
+   "aliases": [
+    "rivaroxaban",
+    "Xa 因子抑制剂"
+   ],
+   "degree": 3,
+   "sourceId": "src_341c98a37c8b03eeb5b52cd5b12972c4",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    },
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "华法林",
+   "path": "entities/华法林.md",
+   "title": "华法林",
+   "entityType": "drug",
+   "description": "一种维生素 K 拮抗剂类口服抗凝药，通过抑制维生素 K 依赖性凝血因子合成发挥抗凝作用，是心房颤动患者卒中预防的经典标准治疗与对照药物。",
+   "aliases": [
+    "warfarin",
+    "维生素 K 拮抗剂",
+    "VKA"
+   ],
+   "degree": 6,
+   "sourceId": "src_846dc5686f524fc18a911e0eb29a52ba",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    },
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    },
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    }
+   ]
+  },
+  {
+   "id": "安慰剂",
+   "path": "entities/安慰剂.md",
+   "title": "安慰剂",
+   "entityType": "drug",
+   "description": "无活性药理成分的对照制剂，在无法使用标准抗凝治疗的人群中作为抗凝试验的对照臂，用于评估试验药物相对于不抗凝状态的疗效与安全性。",
+   "aliases": [
+    "placebo"
+   ],
+   "degree": 1,
+   "sourceId": "src_e612a8fad9515d0622dbcdeb4a46426e",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "id": "心房颤动",
+   "path": "entities/心房颤动.md",
+   "title": "心房颤动",
+   "entityType": "disease",
+   "description": "一种以心房不规则电活动为特征的常见心律失常，显著增加缺血性卒中与体循环栓塞风险，是口服抗凝治疗的主要适应证。",
+   "aliases": [
+    "atrial fibrillation",
+    "AF",
+    "房颤",
+    "非瓣膜性心房颤动"
+   ],
+   "degree": 9,
+   "sourceId": "src_3a9da343213eab6ec5a7a76b1fc4de25",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    },
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "达比加群酯",
+   "path": "entities/达比加群酯.md",
+   "title": "达比加群酯",
+   "entityType": "drug",
+   "description": "一种口服直接凝血酶抑制剂类抗凝药，用于心房颤动患者卒中与体循环栓塞的预防，通常以固定剂量每日两次给药。",
+   "aliases": [
+    "dabigatran",
+    "直接凝血酶抑制剂"
+   ],
+   "degree": 2,
+   "sourceId": "src_2f620811e5df4f9e7cb39f75c7769213",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "阿司匹林",
+   "path": "entities/阿司匹林.md",
+   "title": "阿司匹林",
+   "entityType": "drug",
+   "description": "一种抗血小板药物，在不适于维生素 K 拮抗剂治疗的心房颤动患者中曾作为卒中预防的替代抗栓治疗与对照用药。",
+   "aliases": [
+    "aspirin"
+   ],
+   "degree": 1,
+   "sourceId": "src_46aef2f3446ae50801cc5319afa679e8",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    },
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    }
+   ]
+  },
+  {
+   "id": "阿哌沙班",
+   "path": "entities/阿哌沙班.md",
+   "title": "阿哌沙班",
+   "entityType": "drug",
+   "description": "一种口服直接 Xa 因子抑制剂类抗凝药，用于心房颤动患者卒中与体循环栓塞的预防，标准方案为 5 mg 每日两次。",
+   "aliases": [
+    "apixaban",
+    "Xa 因子抑制剂"
+   ],
+   "degree": 3,
+   "sourceId": "src_d3d0320a5ea1c5a5580c934aeb2a87b4",
+   "stale": [],
+   "sources": [
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    },
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  }
+ ],
+ "links": [
+  {
+   "source": "meta-analysis-2014",
+   "target": "trial-aristotle",
+   "relation": "includes_trial",
+   "label": "纳入试验",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "trial-engage-af-timi-48",
+   "relation": "includes_trial",
+   "label": "纳入试验",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "trial-rel-y",
+   "relation": "includes_trial",
+   "label": "纳入试验",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "trial-rocket-af",
+   "relation": "includes_trial",
+   "label": "纳入试验",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "outcome-全因死亡",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "outcome-心肌梗死",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "outcome-大出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "outcome-卒中或体循环栓塞",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "outcome-颅内出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "outcome-胃肠出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "心房颤动",
+   "relation": "studies",
+   "label": "研究对象",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "达比加群酯",
+   "relation": "synthesizes",
+   "label": "汇总证据",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "利伐沙班",
+   "relation": "synthesizes",
+   "label": "汇总证据",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "华法林",
+   "relation": "synthesizes",
+   "label": "汇总证据",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "依度沙班",
+   "relation": "synthesizes",
+   "label": "汇总证据",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "meta-analysis-2014",
+   "target": "阿哌沙班",
+   "relation": "synthesizes",
+   "label": "汇总证据",
+   "evidence": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-aristotle",
+   "target": "华法林",
+   "relation": "compared_with",
+   "label": "对照药物",
+   "evidence": [
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-aristotle",
+   "target": "阿哌沙班",
+   "relation": "evaluates",
+   "label": "评估药物",
+   "evidence": [
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-aristotle",
+   "target": "outcome-卒中或体循环栓塞",
+   "relation": "has_primary_outcome",
+   "label": "主要结局",
+   "evidence": [
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-aristotle",
+   "target": "outcome-全因死亡",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-aristotle",
+   "target": "outcome-大出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-aristotle",
+   "target": "outcome-颅内出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-aristotle",
+   "target": "心房颤动",
+   "relation": "studies",
+   "label": "研究对象",
+   "evidence": [
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-averroes",
+   "target": "阿司匹林",
+   "relation": "compared_with",
+   "label": "对照药物",
+   "evidence": [
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-averroes",
+   "target": "阿哌沙班",
+   "relation": "evaluates",
+   "label": "评估药物",
+   "evidence": [
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-averroes",
+   "target": "outcome-卒中或体循环栓塞",
+   "relation": "has_primary_outcome",
+   "label": "主要结局",
+   "evidence": [
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-averroes",
+   "target": "outcome-全因死亡",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-averroes",
+   "target": "outcome-大出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-averroes",
+   "target": "outcome-颅内出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-averroes",
+   "target": "心房颤动",
+   "relation": "studies",
+   "label": "研究对象",
+   "evidence": [
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-eldercare-af",
+   "target": "安慰剂",
+   "relation": "compared_with",
+   "label": "对照药物",
+   "evidence": [
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-eldercare-af",
+   "target": "依度沙班",
+   "relation": "evaluates",
+   "label": "评估药物",
+   "evidence": [
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-eldercare-af",
+   "target": "outcome-卒中或体循环栓塞",
+   "relation": "has_primary_outcome",
+   "label": "主要结局",
+   "evidence": [
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-eldercare-af",
+   "target": "outcome-全因死亡",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-eldercare-af",
+   "target": "outcome-大出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-eldercare-af",
+   "target": "outcome-胃肠出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-eldercare-af",
+   "target": "心房颤动",
+   "relation": "studies",
+   "label": "研究对象",
+   "evidence": [
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-engage-af-timi-48",
+   "target": "华法林",
+   "relation": "compared_with",
+   "label": "对照药物",
+   "evidence": [
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-engage-af-timi-48",
+   "target": "依度沙班",
+   "relation": "evaluates",
+   "label": "评估药物",
+   "evidence": [
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-engage-af-timi-48",
+   "target": "outcome-卒中或体循环栓塞",
+   "relation": "has_primary_outcome",
+   "label": "主要结局",
+   "evidence": [
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-engage-af-timi-48",
+   "target": "outcome-大出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-engage-af-timi-48",
+   "target": "心房颤动",
+   "relation": "studies",
+   "label": "研究对象",
+   "evidence": [
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-j-rocket-af",
+   "target": "华法林",
+   "relation": "compared_with",
+   "label": "对照药物",
+   "evidence": [
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-j-rocket-af",
+   "target": "利伐沙班",
+   "relation": "evaluates",
+   "label": "评估药物",
+   "evidence": [
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-j-rocket-af",
+   "target": "trial-rocket-af",
+   "relation": "extends",
+   "label": "延伸研究",
+   "evidence": [
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-j-rocket-af",
+   "target": "outcome-卒中或体循环栓塞",
+   "relation": "has_primary_outcome",
+   "label": "主要结局",
+   "evidence": [
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-j-rocket-af",
+   "target": "outcome-大出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-j-rocket-af",
+   "target": "outcome-颅内出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-j-rocket-af",
+   "target": "心房颤动",
+   "relation": "studies",
+   "label": "研究对象",
+   "evidence": [
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rel-y",
+   "target": "华法林",
+   "relation": "compared_with",
+   "label": "对照药物",
+   "evidence": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rel-y",
+   "target": "达比加群酯",
+   "relation": "evaluates",
+   "label": "评估药物",
+   "evidence": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rel-y",
+   "target": "outcome-卒中或体循环栓塞",
+   "relation": "has_primary_outcome",
+   "label": "主要结局",
+   "evidence": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rel-y",
+   "target": "outcome-全因死亡",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rel-y",
+   "target": "outcome-大出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rel-y",
+   "target": "outcome-颅内出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rel-y",
+   "target": "心房颤动",
+   "relation": "studies",
+   "label": "研究对象",
+   "evidence": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rocket-af",
+   "target": "华法林",
+   "relation": "compared_with",
+   "label": "对照药物",
+   "evidence": [
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rocket-af",
+   "target": "利伐沙班",
+   "relation": "evaluates",
+   "label": "评估药物",
+   "evidence": [
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rocket-af",
+   "target": "outcome-卒中或体循环栓塞",
+   "relation": "has_primary_outcome",
+   "label": "主要结局",
+   "evidence": [
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rocket-af",
+   "target": "outcome-大出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rocket-af",
+   "target": "outcome-颅内出血",
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "evidence": [
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    }
+   ]
+  },
+  {
+   "source": "trial-rocket-af",
+   "target": "心房颤动",
+   "relation": "studies",
+   "label": "研究对象",
+   "evidence": [
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    }
+   ]
+  },
+  {
+   "source": "心房颤动",
+   "target": "outcome-卒中或体循环栓塞",
+   "relation": "increases_risk_of",
+   "label": "增加风险",
+   "evidence": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    },
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    }
+   ]
+  }
+ ],
+ "relations": [
+  {
+   "relation": "reports_outcome",
+   "label": "报告结局",
+   "count": 23
+  },
+  {
+   "relation": "studies",
+   "label": "研究对象",
+   "count": 8
+  },
+  {
+   "relation": "compared_with",
+   "label": "对照药物",
+   "count": 7
+  },
+  {
+   "relation": "evaluates",
+   "label": "评估药物",
+   "count": 7
+  },
+  {
+   "relation": "has_primary_outcome",
+   "label": "主要结局",
+   "count": 7
+  },
+  {
+   "relation": "synthesizes",
+   "label": "汇总证据",
+   "count": 5
+  },
+  {
+   "relation": "includes_trial",
+   "label": "纳入试验",
+   "count": 4
+  },
+  {
+   "relation": "extends",
+   "label": "延伸研究",
+   "count": 1
+  },
+  {
+   "relation": "increases_risk_of",
+   "label": "增加风险",
+   "count": 1
+  }
+ ],
+ "unresolved": 0,
+ "problems": [
+  {
+   "kind": "relation_label_inconsistent",
+   "line": 31,
+   "path": null
+  }
+ ]
+}

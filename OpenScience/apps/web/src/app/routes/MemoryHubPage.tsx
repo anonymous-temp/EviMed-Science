@@ -6,6 +6,7 @@ import { Brain } from "lucide-react";
 import { fetchMemoryProfile, searchMemories, type WebStructuredMemory } from "@/lib/apiClient";
 import { listAllHandbooks } from "@/lib/handbooksClient";
 import { fetchMyCapsule } from "@/lib/memoryClient";
+import { isMemoryServiceUnavailable } from "@/lib/memoryErrors";
 import { SELF_SECTIONS } from "@/lib/memoryGroups";
 import { listAllMethods } from "@/lib/methodsClient";
 import { useProjectLabels } from "@/lib/projectNames";
@@ -26,14 +27,17 @@ import { FactDrawer } from "@/components/memory/FactDrawer";
 import { ForgottenDrawer } from "@/components/memory/ForgottenDrawer";
 import { GrowthPanel } from "@/components/memory/GrowthPanel";
 import { MemoryControls } from "@/components/memory/MemoryControls";
-import { GroupHeader, MemoryListRow } from "@/components/memory/MemoryRows";
+import { GroupHeader, MemoryListRow, PendingMemoryRows } from "@/components/memory/MemoryRows";
 import { HandbookDrawer, MethodDrawer } from "@/components/memory/PracticeDrawer";
 import { ProjectOverview } from "@/components/memory/ProjectOverview";
 import { ProjectScope } from "@/components/memory/ProjectScope";
-import { factItems, factRowTitle, factsOfProject, practiceItems, projectChoices, type FactItem, type PracticeItem } from "@/components/memory/memoryItems";
+import { factItems, factRowSummary, factRowTitle, factsOfProject, OTHER_PROJECT, practiceItems, projectChoices, type FactItem, type PracticeItem } from "@/components/memory/memoryItems";
+import { RememberDialog } from "@/components/memory/RememberDialog";
+import { usePendingMemory } from "@/components/memory/usePendingMemory";
 import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
 import { useProjectOverview } from "@/components/memory/useProjectOverview";
 import { ShareDrawer } from "./CapsuleTransferPanel";
+import { knownErrorCodeMessage } from "@evimed/domain";
 
 /** The four tabs: each is one list, or — 成长 — the line and the days under it. */
 export type MemoryTab = "self" | "project" | "methods" | "growth";
@@ -111,7 +115,7 @@ export function MemoryHubPage() {
   const [pickedProject, setPickedProject] = useState<string | null>(null);
   const projectChoice = params.get("project") ?? pickedProject;
   const { value: openKey, open: setOpenKey, close } = useAddressOpen("open");
-  const [drawer, setDrawer] = useState<"share" | "forgotten" | null>(null);
+  const [drawer, setDrawer] = useState<"share" | "forgotten" | "remember" | null>(null);
   const [found, setFound] = useState<WebStructuredMemory[] | null>(null);
   // What the conversations behind a search's hits were about, for the drawer's source link.
   const [searchConversations, setSearchConversations] = useState<Record<string, string>>({});
@@ -129,7 +133,9 @@ export function MemoryHubPage() {
   const { data, reload } = useCapsuleData(async () => {
     const settled = await Promise.allSettled([fetchMemoryProfile(), fetchMyCapsule(), listAllMethods("approved"), listAllHandbooks("active")]);
     const read = <T,>(result: PromiseSettledResult<T>) => (result.status === "fulfilled" ? result.value : null);
-    return { profile: read(settled[0]), mine: read(settled[1]), methods: read(settled[2]), handbooks: read(settled[3]) };
+    // The memory service itself being down is not "could not read": the page says so in place of the lists it feeds, and nothing else breaks.
+    const serviceDown = settled[0].status === "rejected" && isMemoryServiceUnavailable(settled[0].reason);
+    return { profile: read(settled[0]), mine: read(settled[1]), methods: read(settled[2]), handbooks: read(settled[3]), serviceDown };
   });
 
   // Server-side, and debounced: the box used to be a `toLowerCase().includes` over the rows already loaded, so it could only find what was on screen.
@@ -202,8 +208,13 @@ export function MemoryHubPage() {
 
   const loading = data === null;
   const scrollAnchor = usePageScroll(!loading);
-  const unread = (Object.entries(data ?? {}) as [string, unknown][]).filter(([, value]) => value === null).map(([name]) => name);
+  const serviceDown = data?.serviceDown === true;
+  const unread = (Object.entries(data ?? {}) as [string, unknown][]).filter(([name, value]) => value === null && !(serviceDown && name === "profile")).map(([name]) => name);
   const tabUnread = SOURCES_OF[tab].some((name) => unread.includes(name));
+  // What 「记住这一条」 asked and is not written yet (about twelve seconds), and whether that is taking longer than it should.
+  const pending = useMemo(() => data?.profile?.pending ?? [], [data]);
+  const pendingState = usePendingMemory(pending, reload);
+  const native = data?.profile?.engine === "native";
 
   // 关于你 is the first tab and, for most accounts early on, the empty one while 项目 and 做法 hold what was learned: landing on an
   // empty list reads as 「什么都没记住」. A tab whose read failed is not known to be empty, so the choice stops there.
@@ -247,10 +258,12 @@ export function MemoryHubPage() {
   const factRows = (rows: readonly FactItem[], label: string) => (
     <List label={label}>
       {rows.map((fact) => (
-        <MemoryListRow key={fact.key} title={factRowTitle(fact)} muted={fact.kind === "record" && fact.record.status === "superseded"} onOpen={() => setOpenKey(fact.key)} />
+        <MemoryListRow key={fact.key} title={factRowTitle(fact)} summary={factRowSummary(fact)} muted={fact.kind === "record" && fact.record.status === "superseded"} onOpen={() => setOpenKey(fact.key)} />
       ))}
     </List>
   );
+  // Waiting words head the two lists of memories, but not a search: that is a list of hits.
+  const waiting = pending.length > 0 && !query.trim() ? <PendingMemoryRows items={pending} slow={pendingState.slow} /> : null;
   const empty = (title: string, description: string) => (
     <EmptyState icon={Brain} title={query.trim() ? "没有找到" : title} description={query.trim() ? undefined : description} />
   );
@@ -266,11 +279,17 @@ export function MemoryHubPage() {
         />
       );
     }
+    if (serviceDown && (tab === "self" || tab === "project")) {
+      return <LoadError message={knownErrorCodeMessage("memory_engine_unavailable") ?? "记忆服务暂时不可用。"} onRetry={reload} />;
+    }
     if (tabUnread) return null;
     if (tab === "self") {
-      if (self.length === 0) return empty("还没有关于你的记忆", "你在对话里说过的偏好、背景和写作习惯会出现在这里。");
+      if (self.length === 0) {
+        return waiting ?? empty("还没有关于你的记忆", "你在对话里说过的偏好、背景和写作习惯会出现在这里。");
+      }
       return (
         <div className="space-y-6">
+          {waiting}
           {SELF_SECTIONS.map((section) => {
             const rows = self.filter((fact) => fact.section === section.key);
             return rows.length === 0 ? null : (
@@ -299,7 +318,8 @@ export function MemoryHubPage() {
               onOpen={(recordId) => setOpenKey(`record:${recordId}`)}
             />
           )}
-          {projectFacts.length === 0 ? empty("这个项目还没有记忆", "你在对话里说过的目标、资料和已定的事会出现在这里。")
+          {waiting}
+          {projectFacts.length === 0 ? (waiting ? null : empty("这个项目还没有记忆", "你在对话里说过的目标、资料和已定的事会出现在这里。"))
             // Under the card, the ranking and the works, the list needs its own name; alone, the tab names it.
             : above ? <section><GroupHeader>记忆</GroupHeader>{factRows(projectFacts, "项目的记忆")}</section>
               : factRows(projectFacts, "项目的记忆")}
@@ -334,7 +354,16 @@ export function MemoryHubPage() {
   return (
     <PageShell
       title="记忆胶囊"
-      actions={<MemoryControls onReset={reload} onSettingsChanged={reloadOverview} onShare={() => setDrawer("share")} onForgotten={() => setDrawer("forgotten")} onMap={() => navigate("/app/memory/map")} />}
+      actions={(
+        <MemoryControls
+          onReset={reload}
+          onSettingsChanged={reloadOverview}
+          onShare={() => setDrawer("share")}
+          onForgotten={() => setDrawer("forgotten")}
+          onMap={() => navigate("/app/memory/map")}
+          onRemember={native ? () => setDrawer("remember") : undefined}
+        />
+      )}
     >
       <span ref={scrollAnchor} hidden />
       {/* One row: the tabs, and the search box at its end; on a phone the box takes its own line. */}
@@ -356,6 +385,7 @@ export function MemoryHubPage() {
           item={opened}
           projectName={opened.group === "project" ? projectName(opened.projectId) : null}
           conversations={{ ...data?.profile?.conversations, ...searchConversations }}
+          siblings={records}
           onClose={close}
           onChanged={reload}
           onOpenRecord={(recordId) => setOpenKey(`record:${recordId}`)}
@@ -366,6 +396,13 @@ export function MemoryHubPage() {
       ) : opened?.kind === "handbook" ? (
         <HandbookDrawer key={opened.key} handbook={opened.handbook} tool={opened.tool} onClose={close} onChanged={reload} />
       ) : null}
+      {drawer === "remember" && (
+        <RememberDialog
+          projectId={tab === "project" && scope && scope !== OTHER_PROJECT ? scope : null}
+          onClose={() => setDrawer(null)}
+          onAsked={reload}
+        />
+      )}
       {drawer === "share" && <ShareDrawer onClose={() => setDrawer(null)} onImported={reload} />}
       {drawer === "forgotten" && (
         <ForgottenDrawer

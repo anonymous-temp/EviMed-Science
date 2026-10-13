@@ -1,0 +1,1093 @@
+{
+ "pages": [
+  {
+   "sourceId": "src_30316d9867c2420d01c734541c5cb537",
+   "tree": "wiki",
+   "path": "analysis/2026-04-02-盘点演练事故复盘.md",
+   "type": "analysis",
+   "title": "2026-04-02 盘点演练事故复盘",
+   "updatedAt": "2026-10-13T04:23:35.390Z",
+   "labels": {
+    "stale": [],
+    "userEdited": true,
+    "userBlocks": 1,
+    "restored": null,
+    "quotations": {
+     "present": 15,
+     "absent": 0,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_c3855854a56d85e6e199e50b2ada3949",
+   "tree": "wiki",
+   "path": "comparison/扫码枪-A-B方案对比.md",
+   "type": "comparison",
+   "title": "扫码枪 A/B 方案对比",
+   "updatedAt": "2026-10-13T04:19:21.096Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": {
+     "present": 10,
+     "absent": 0,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_0840f87ce1803e83ac2f1199bb97d72e",
+   "tree": "wiki",
+   "path": "concept/库存流水模型.md",
+   "type": "concept",
+   "title": "库存流水模型",
+   "updatedAt": "2026-10-13T04:19:21.192Z",
+   "labels": {
+    "stale": [
+     {
+      "reason": "changed",
+      "sourceId": "src_ce053ae449b5d6cb58d055fb6d81ccb8"
+     }
+    ],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": {
+     "present": 10,
+     "absent": 0,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_6d46b0d467d014b135346abcac8faaab",
+   "tree": "wiki",
+   "path": "concept/盘点差异率.md",
+   "type": "concept",
+   "title": "盘点差异率",
+   "updatedAt": "2026-10-13T04:19:21.253Z",
+   "labels": {
+    "stale": [
+     {
+      "reason": "changed",
+      "sourceId": "src_ce053ae449b5d6cb58d055fb6d81ccb8"
+     }
+    ],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": {
+     "present": 8,
+     "absent": 1,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_fac5259ec7dd4cc196590099112a026c",
+   "tree": "wiki",
+   "path": "concept/离线优先盘点与冲突合并.md",
+   "type": "concept",
+   "title": "离线优先盘点与冲突合并",
+   "updatedAt": "2026-10-13T04:23:35.662Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": {
+     "present": 15,
+     "absent": 0,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_67f9d708a33fadfba094b5a2cd4a9931",
+   "tree": "wiki",
+   "path": "concept/银豹收银系统对接.md",
+   "type": "concept",
+   "title": "银豹收银系统对接",
+   "updatedAt": "2026-10-13T04:19:21.430Z",
+   "labels": {
+    "stale": [
+     {
+      "reason": "changed",
+      "sourceId": "src_ce053ae449b5d6cb58d055fb6d81ccb8"
+     }
+    ],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": {
+     "present": 8,
+     "absent": 0,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_44d80438b5dfb3fe777ccf3b792cc59d",
+   "tree": "wiki",
+   "path": "entity/扫码枪采购与型号选型.md",
+   "type": "entity",
+   "title": "扫码枪采购与型号选型",
+   "updatedAt": "2026-10-13T04:19:21.494Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": {
+     "present": 10,
+     "absent": 0,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_d08b4b159a1984daf4f58d35714d9784",
+   "tree": "wiki",
+   "path": "entity/拾页书店门店库存系统.md",
+   "type": "entity",
+   "title": "拾页书店门店库存系统",
+   "updatedAt": "2026-10-13T04:23:35.917Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": {
+     "present": 12,
+     "absent": 0,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_b6235bf02fdb6c66dbe74aee6fcde294",
+   "tree": "wiki",
+   "path": "entity/拾页文化发展有限公司.md",
+   "type": "entity",
+   "title": "拾页文化发展有限公司（甲方）",
+   "updatedAt": "2026-10-13T04:19:21.791Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": {
+     "present": 13,
+     "absent": 1,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_4acb6d775583bd950c74a42c073d8769",
+   "tree": "wiki",
+   "path": "entity/服务协议-QM-2026-017.md",
+   "type": "entity",
+   "title": "服务协议 QM-2026-017",
+   "updatedAt": "2026-10-13T04:19:21.890Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": {
+     "present": 10,
+     "absent": 0,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_02c960342aba47c129e558bcdfba2547",
+   "tree": "wiki",
+   "path": "entity/栖木软件工作室.md",
+   "type": "entity",
+   "title": "栖木软件工作室（乙方）",
+   "updatedAt": "2026-10-13T04:19:22.014Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": {
+     "present": 13,
+     "absent": 0,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_90be55857e83282e4cdaaf81d58cec1d",
+   "tree": "wiki",
+   "path": "index.md",
+   "type": "index",
+   "title": "拾页书店门店库存系统知识库",
+   "updatedAt": "2026-10-13T04:23:36.624Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": {
+     "present": 0,
+     "absent": 0,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_a66f133e00899947af6519d2b89d9419",
+   "tree": "wiki",
+   "path": "method/试点到全量的交付流程.md",
+   "type": "method",
+   "title": "试点到全量的交付流程",
+   "updatedAt": "2026-10-13T04:23:36.377Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": {
+     "present": 18,
+     "absent": 0,
+     "none": 0,
+     "sourceMissing": 0
+    }
+   }
+  },
+  {
+   "sourceId": "src_929184002a8bda720a90b7a4cf839763",
+   "tree": "kg",
+   "path": "entities/a-du.md",
+   "type": "entity",
+   "title": "阿杜",
+   "updatedAt": "2026-10-13T04:21:32.094Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_4883a5a40d52221cef85d32d9c453b6f",
+   "tree": "kg",
+   "path": "entities/acceptance-criteria.md",
+   "type": "entity",
+   "title": "验收标准",
+   "updatedAt": "2026-10-13T04:21:32.196Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_1488ea75f4077fb11406b8ebe002c33e",
+   "tree": "kg",
+   "path": "entities/beizhan-store.md",
+   "type": "entity",
+   "title": "北站店",
+   "updatedAt": "2026-10-13T04:21:32.388Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_3986bcf7c6847b12d61c08172f96138f",
+   "tree": "kg",
+   "path": "entities/chengxi-store.md",
+   "type": "entity",
+   "title": "城西店",
+   "updatedAt": "2026-10-13T04:21:32.497Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_f53164eacd8e80e04da92d3eef4d5bc5",
+   "tree": "kg",
+   "path": "entities/daxuecheng-store.md",
+   "type": "entity",
+   "title": "大学城店",
+   "updatedAt": "2026-10-13T04:21:32.597Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_98b5d8972d1d3705d785fd57f4dde4bd",
+   "tree": "kg",
+   "path": "entities/dongmen-store.md",
+   "type": "entity",
+   "title": "东门店",
+   "updatedAt": "2026-10-13T04:21:32.731Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_3165a2c445d35c102b9f5b37abc77b38",
+   "tree": "kg",
+   "path": "entities/excel-migration.md",
+   "type": "entity",
+   "title": "历史 Excel 数据迁移",
+   "updatedAt": "2026-10-13T04:21:33.021Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_f49b96ed23505e38444478c10f438b7e",
+   "tree": "kg",
+   "path": "entities/full-rollout.md",
+   "type": "entity",
+   "title": "5/20 全量交付",
+   "updatedAt": "2026-10-13T04:21:33.137Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_e2e04d7fc70c0c7fc7b6713740c31d7e",
+   "tree": "kg",
+   "path": "entities/gulou-store.md",
+   "type": "entity",
+   "title": "鼓楼店",
+   "updatedAt": "2026-10-13T04:21:33.376Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_6988156dafceec4d7ec04cbf394c72cc",
+   "tree": "kg",
+   "path": "entities/handover-package.md",
+   "type": "entity",
+   "title": "门店端 App 交接包",
+   "updatedAt": "2026-10-13T04:28:52.809Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_e855bf0fd2fc218417fa0e7f1925998c",
+   "tree": "kg",
+   "path": "entities/he-chuan.md",
+   "type": "entity",
+   "title": "贺川",
+   "updatedAt": "2026-10-13T04:28:53.066Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_a54fcdaa2edc62e0adaf7b377e7b814b",
+   "tree": "kg",
+   "path": "entities/hengma-electronics.md",
+   "type": "entity",
+   "title": "恒码电子",
+   "updatedAt": "2026-10-13T04:21:33.653Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_d2aeef1b81eb1961cedb1aa950d9961a",
+   "tree": "kg",
+   "path": "entities/hm-2200.md",
+   "type": "entity",
+   "title": "HM-2200",
+   "updatedAt": "2026-10-13T04:21:33.832Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_2a3131fb4db9edca94f9f3da90579a54",
+   "tree": "kg",
+   "path": "entities/hm-520.md",
+   "type": "entity",
+   "title": "HM-520",
+   "updatedAt": "2026-10-13T04:21:33.930Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_843a8270604e2ecbfca3ff4b41a42f5e",
+   "tree": "kg",
+   "path": "entities/hubin-store.md",
+   "type": "entity",
+   "title": "湖滨店",
+   "updatedAt": "2026-10-13T04:21:34.034Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_8c98723ca9cf67206db861ddc037a811",
+   "tree": "kg",
+   "path": "entities/incident-2026-04-02.md",
+   "type": "entity",
+   "title": "2026-04-02 盘点演练数据错乱事故",
+   "updatedAt": "2026-10-13T04:28:53.550Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_9ddbc8fbc8e02efceb8cb9b314353806",
+   "tree": "kg",
+   "path": "entities/keqiao-store.md",
+   "type": "entity",
+   "title": "柯桥店",
+   "updatedAt": "2026-10-13T04:21:34.356Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_9dd158f01322166308b1fce4901053a2",
+   "tree": "kg",
+   "path": "entities/kickoff-meeting-2026-03-04.md",
+   "type": "entity",
+   "title": "2026-03-04 启动会",
+   "updatedAt": "2026-10-13T04:21:34.467Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_09b1dd41b34d061d7b9e91ae392f4873",
+   "tree": "kg",
+   "path": "entities/lu-manager.md",
+   "type": "entity",
+   "title": "卢经理",
+   "updatedAt": "2026-10-13T04:28:54.172Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_df921cbb8f5a45c16f081592be5b74fe",
+   "tree": "kg",
+   "path": "entities/mai-dong.md",
+   "type": "entity",
+   "title": "麦冬",
+   "updatedAt": "2026-10-13T04:28:54.542Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_cec650326569ed1e2d88c1a9b85de15c",
+   "tree": "kg",
+   "path": "entities/nanhu-store.md",
+   "type": "entity",
+   "title": "南湖店",
+   "updatedAt": "2026-10-13T04:21:34.877Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_b9336f3855daf42dc4a91e8950d47e88",
+   "tree": "kg",
+   "path": "entities/offline-conflict-rule.md",
+   "type": "entity",
+   "title": "离线盘点冲突规则",
+   "updatedAt": "2026-10-13T04:28:54.742Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_5b42fe7ac3d88ad4d0ad6342b2f1368d",
+   "tree": "kg",
+   "path": "entities/offline-merge-module.md",
+   "type": "entity",
+   "title": "offlineMerge.ts",
+   "updatedAt": "2026-10-13T04:21:35.096Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_b25438d36d18c9a0f86147dff1f22b51",
+   "tree": "kg",
+   "path": "entities/offline-sync-test-cases.md",
+   "type": "entity",
+   "title": "离线同步测试用例",
+   "updatedAt": "2026-10-13T04:28:55.348Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_9f283aa60fafbdcc56231bfba80461ee",
+   "tree": "kg",
+   "path": "entities/pilot-store-confirmation-2026-03-26.md",
+   "type": "entity",
+   "title": "2026-03-26 试点门店确认",
+   "updatedAt": "2026-10-13T04:28:55.527Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_61684207c6c4ea01eca1083eaf5d55a3",
+   "tree": "kg",
+   "path": "entities/postmortem-2026-04-02.md",
+   "type": "entity",
+   "title": "0402 盘点演练事故复盘",
+   "updatedAt": "2026-10-13T04:28:55.766Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_30a9de55fab8cac1af3f0ad7cc09441e",
+   "tree": "kg",
+   "path": "entities/qianjiang-store.md",
+   "type": "entity",
+   "title": "钱江店",
+   "updatedAt": "2026-10-13T04:21:35.185Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_ce083e2b34a0c8714aa2a9f90f1522dd",
+   "tree": "kg",
+   "path": "entities/qimu-studio.md",
+   "type": "entity",
+   "title": "栖木软件工作室",
+   "updatedAt": "2026-10-13T04:21:35.352Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_bc1051d547fe0e5e96fba0194237f152",
+   "tree": "kg",
+   "path": "entities/qm-2026-017.md",
+   "type": "entity",
+   "title": "软件定制开发服务协议（QM-2026-017）",
+   "updatedAt": "2026-10-13T04:21:35.448Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_40d8c0c5a775d51a147dc3f1469625bb",
+   "tree": "kg",
+   "path": "entities/scanner-procurement.md",
+   "type": "entity",
+   "title": "扫码枪采购",
+   "updatedAt": "2026-10-13T04:28:55.979Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_242bcae18be3d13cda09e5e119534722",
+   "tree": "kg",
+   "path": "entities/scanner-quote-thread.md",
+   "type": "entity",
+   "title": "扫码枪报价对比邮件往来",
+   "updatedAt": "2026-10-13T04:28:56.279Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_8ba95de582f638df3b6b9f349ba31ae6",
+   "tree": "kg",
+   "path": "entities/shijian-store.md",
+   "type": "entity",
+   "title": "天一店",
+   "updatedAt": "2026-10-13T04:28:56.996Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_33612b44a553223c2b2fae11af4aca5c",
+   "tree": "kg",
+   "path": "entities/shiye-culture.md",
+   "type": "entity",
+   "title": "拾页文化发展有限公司",
+   "updatedAt": "2026-10-13T04:21:35.846Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_fccdca9a867e01110ca3ceb56b9986c3",
+   "tree": "kg",
+   "path": "entities/shiye-inventory-system.md",
+   "type": "entity",
+   "title": "拾页书店门店库存系统",
+   "updatedAt": "2026-10-13T04:28:57.695Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_47538ca4c793a1a7d273c18081f674ec",
+   "tree": "kg",
+   "path": "entities/stocktake-pilot.md",
+   "type": "entity",
+   "title": "5/6 试点上线",
+   "updatedAt": "2026-10-13T04:21:36.084Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_e4e92539f523987bd21735a4558bbbea",
+   "tree": "kg",
+   "path": "entities/stocktake-variance-metric.md",
+   "type": "entity",
+   "title": "盘点差异率",
+   "updatedAt": "2026-10-13T04:28:58.227Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_ff1fe560efd8440c932b3d0b9bef4439",
+   "tree": "kg",
+   "path": "entities/stocktake-variance-notebook.md",
+   "type": "entity",
+   "title": "盘点差异率复算 notebook",
+   "updatedAt": "2026-10-13T04:21:36.195Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_e52971fedc744f6716d2f42ef5fa584d",
+   "tree": "kg",
+   "path": "entities/store-app-1-5-0.md",
+   "type": "entity",
+   "title": "门店端 1.5.0 版本",
+   "updatedAt": "2026-10-13T04:28:58.857Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_907c54a047104e720276d6e00306a931",
+   "tree": "kg",
+   "path": "entities/store-app.md",
+   "type": "entity",
+   "title": "门店端应用",
+   "updatedAt": "2026-10-13T04:28:59.220Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_df4ede71b75ced1db268e8235fc5c168",
+   "tree": "kg",
+   "path": "entities/store-inventory-snapshot-0315.md",
+   "type": "entity",
+   "title": "门店清单与库存快照（0315）",
+   "updatedAt": "2026-10-13T04:28:59.821Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_b7175842a7dcaa777b584b5fcce2251c",
+   "tree": "kg",
+   "path": "entities/unknown-barcode-rule.md",
+   "type": "entity",
+   "title": "未知条码处理规则",
+   "updatedAt": "2026-10-13T04:21:36.390Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_78dbc9c8b6c74e952e5f4105269cf0ab",
+   "tree": "kg",
+   "path": "entities/weekly-meeting-2026-03-18.md",
+   "type": "entity",
+   "title": "2026-03-18 周会",
+   "updatedAt": "2026-10-13T04:21:36.501Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_beb159d299e09a3eceac3f06f6bbb8df",
+   "tree": "kg",
+   "path": "entities/xiao-tang.md",
+   "type": "entity",
+   "title": "小唐",
+   "updatedAt": "2026-10-13T04:29:00.452Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_03072bad6f95c261b727211efd8dd9b4",
+   "tree": "kg",
+   "path": "entities/xt-b50.md",
+   "type": "entity",
+   "title": "XT-B50",
+   "updatedAt": "2026-10-13T04:21:36.830Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_a180bcad7bf5cc6306a9361612aefb1f",
+   "tree": "kg",
+   "path": "entities/xuntong-tech.md",
+   "type": "entity",
+   "title": "讯瞳科技",
+   "updatedAt": "2026-10-13T04:21:36.930Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_0ea86826800a36ef5a7c56b9ad2c590f",
+   "tree": "kg",
+   "path": "entities/yinbao-csv-export-job.md",
+   "type": "entity",
+   "title": "银豹 CSV 导出同步任务",
+   "updatedAt": "2026-10-13T04:29:00.861Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_60b4a236f2472a0a25b259600bdb49c5",
+   "tree": "kg",
+   "path": "entities/yinbao-ftp-credential.md",
+   "type": "entity",
+   "title": "银豹 FTP 凭据",
+   "updatedAt": "2026-10-13T04:29:01.171Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_496f7e15dc93e7e7228803375d0bde5a",
+   "tree": "kg",
+   "path": "entities/yinbao-pos.md",
+   "type": "entity",
+   "title": "银豹",
+   "updatedAt": "2026-10-13T04:21:37.033Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_72aef6c6a2cf8498f2bd34d3b1dcd2ce",
+   "tree": "kg",
+   "path": "entities/yuehe-store.md",
+   "type": "entity",
+   "title": "月河店",
+   "updatedAt": "2026-10-13T04:21:37.144Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_4f5f911df7a6b65a2ed4a99184d9807f",
+   "tree": "kg",
+   "path": "entities/zhongshanlu-store.md",
+   "type": "entity",
+   "title": "中山路店",
+   "updatedAt": "2026-10-13T04:21:37.330Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_59e4ba804078cc9ac36e0148518c1aca",
+   "tree": "kg",
+   "path": "entities/zhou-lan.md",
+   "type": "entity",
+   "title": "周岚",
+   "updatedAt": "2026-10-13T04:29:01.973Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_2b7e75b6e9c9560eae121e8d8ead6acb",
+   "tree": "kg",
+   "path": "entities/天一店.md",
+   "type": "entity",
+   "title": "天一店",
+   "updatedAt": "2026-10-13T04:29:02.285Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_ec8fbbc9d645ada9b19611113075c95d",
+   "tree": "kg",
+   "path": "index.md",
+   "type": "entity",
+   "title": "拾页书店门店库存系统知识图谱",
+   "updatedAt": "2026-10-13T04:29:02.591Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  },
+  {
+   "sourceId": "src_411d5de065e48804584ac90c4e9bf51d",
+   "tree": "kg",
+   "path": "relations.jsonl",
+   "type": "relations",
+   "title": "relations.jsonl",
+   "updatedAt": "2026-10-13T04:29:02.828Z",
+   "labels": {
+    "stale": [],
+    "userEdited": false,
+    "userBlocks": 0,
+    "restored": null,
+    "quotations": null
+   }
+  }
+ ],
+ "counts": {
+  "wiki": 13,
+  "kg": 54
+ }
+}

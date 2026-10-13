@@ -51,8 +51,23 @@ describe("时间", () => {
     expect(screen.getByRole("status")).toHaveTextContent("这段时间里没有记下的事");
     cleanup();
     render(<TimeView doc={{ ...base, lanes: [], events: [{ id: "e1", at: "2026-10-01T00:00:00.000Z", type: "memory", change: "created", ref: "memory:a", lane: "account", kind: "decision", text: "定了" }] }} range="all" projectName={() => "项目"} onRange={() => {}} onOpen={() => {}} />);
-    expect(screen.getByRole("img", { name: "时间线：0 条沿革，1 件记下的事，列表在下方。" })).toBeInTheDocument();
-    expect(screen.getByText("0 条沿革，1 件记下的事。")).toBeInTheDocument();
+    // An account that has replaced nothing has no lineages: the picture and its words say the events and nothing of bars.
+    expect(screen.getByRole("img", { name: "时间线：1 件记下的事，列表在下方。" })).toBeInTheDocument();
+    expect(screen.getByText("1 件记下的事。")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/蓝条|灰条|琥珀|沿革/u);
+  });
+
+  it("names the bars, the grey and the amber mark only when the document has them", () => {
+    const base = { summary: { memories: 2, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null }, scope };
+    const event = { id: "e1", at: "2026-10-01T00:00:00.000Z", type: "memory" as const, change: "created", ref: "memory:a", lane: "account", kind: "decision", text: "定了" };
+    const lane = (conflict: boolean) => ({ id: "l1", label: "写作", projectId: null, segments: [{ recordId: "a", text: "先写摘要", from: "2026-09-01T00:00:00.000Z", to: "2026-10-01T00:00:00.000Z", state: "replaced" as const, conflict }] });
+    render(<TimeView doc={{ ...base, lanes: [lane(false)], events: [event] }} range="all" projectName={() => "项目"} onRange={() => {}} onOpen={() => {}} />);
+    expect(screen.getByRole("img", { name: "时间线：1 条沿革，1 件记下的事，列表在下方。" })).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/蓝条是一直成立的说法/u);
+    expect(document.body.textContent).not.toMatch(/琥珀/u);
+    cleanup();
+    render(<TimeView doc={{ ...base, lanes: [lane(true)], events: [event] }} range="all" projectName={() => "项目"} onRange={() => {}} onOpen={() => {}} />);
+    expect(document.body.textContent).toMatch(/琥珀小标是和另一条不一致/u);
   });
 });
 

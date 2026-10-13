@@ -115,9 +115,11 @@ test("the learned methods are marks hanging from the account, named as the memor
 test("the first radar counts the researcher's own finished conversations by the kind of work, and shows a medical axis only when it was used", () => {
   const run = (id, agent, finishedAt, extra = {}) => ({ id, status: "succeeded", effectiveAgentId: agent, finishedAt, automated: false, ...extra });
   const runs = [
-    run("1", "open-domain-answer", "2026-10-05T00:00:00Z"), run("2", "open-domain-answer", "2026-10-06T00:00:00Z"),
+    run("1", "open-domain-answer", "2026-10-05T00:00:00Z", { taskType: "web-research" }), run("2", "open-domain-answer", "2026-10-06T00:00:00Z", { taskType: "web-research" }),
     run("3", "manuscript-support", "2026-10-07T00:00:00Z"), run("4", "statistical-analysis", "2026-09-20T00:00:00Z"),
-    run("5", "open-domain-answer", "2026-09-01T00:00:00Z"),
+    run("5", "open-domain-answer", "2026-09-01T00:00:00Z", { taskType: "web-research" }),
+    // Not judged yet: counted under nothing, however recent.
+    run("y1", "open-domain-answer", "2026-10-09T00:00:00Z"),
     run("x1", "open-domain-answer", "2026-10-08T00:00:00Z", { automated: true }),
     run("x2", "open-domain-answer", "2026-10-08T00:00:00Z", { status: "failed" }),
     run("x3", "open-domain-answer", "2026-10-08T00:00:00Z", { deleted: true }),
@@ -126,20 +128,21 @@ test("the first radar counts the researcher's own finished conversations by the 
     run("x6", "no-such-capability", "2026-10-08T00:00:00Z"),
   ];
   const work = workOf(runs, (agent) => agent === "source-understanding" || agent === "evolution-scout");
-  assert.deepEqual(work.map((item) => item.label).sort(), ["普通问答", "普通问答", "普通问答", "研究设计与数据", "写作与传播"].sort());
+  assert.deepEqual(work.map((item) => item.label).sort(), ["查资料与调研", "查资料与调研", "查资料与调研", "表格与数据分析", "写作"].sort());
   const dimension = workDimension(work, NOW);
-  assert.deepEqual(dimension.axes.map((axis) => axis.label), ["普通问答", "写作与传播", "研究设计与数据"], "no clinical axis for an account that never used one");
+  assert.deepEqual(dimension.axes.map((axis) => axis.label), ["写作", "文档与演示", "表格与数据分析", "代码", "查资料与调研", "其他"], "no medical axis for an account that never used one");
   const byLabel = Object.fromEntries(dimension.axes.map((axis) => [axis.label, axis]));
-  assert.deepEqual([byLabel["普通问答"].count, byLabel["普通问答"].value, byLabel["普通问答"].previousValue], [2, 0.5, 1]);
+  assert.deepEqual([byLabel["查资料与调研"].count, byLabel["查资料与调研"].value, byLabel["查资料与调研"].previousValue], [2, 0.5, 1]);
   assert.deepEqual([dimension.total, dimension.previousTotal, dimension.scale], [4, 1, "share"]);
-  assert.equal(byLabel["研究设计与数据"].previousValue, 0, "a month ago the account only asked questions");
+  assert.equal(byLabel["表格与数据分析"].previousValue, 0, "a month ago the account only looked things up");
+  assert.deepEqual(dimension.axes.map((axis) => axis.id), ["kind:writing", "kind:documents", "kind:data", "kind:code", "kind:web-research", "kind:other"]);
   const clinical = workDimension(workOf([run("c", "clinical-evidence-synthesis", "2026-10-09T00:00:00Z")]), NOW);
-  assert.ok(clinical.axes.some((axis) => axis.label === "临床证据"));
+  assert.ok(clinical.axes.some((axis) => axis.label === "医学证据"));
 });
 
 test("the runs source reads each project's ledger once, shared with the activity source, and fails only when every ledger did", async () => {
   let reads = 0;
-  const agentRuns = { researcherRuns: async (project) => { reads += 1; return [{ id: `r-${project.id}`, status: "succeeded", effectiveAgentId: "open-domain-answer", finishedAt: "2026-10-05T00:00:00Z", sessionId: "s", title: "t" }]; } };
+  const agentRuns = { researcherRuns: async (project) => { reads += 1; return [{ id: `r-${project.id}`, status: "succeeded", effectiveAgentId: "open-domain-answer", finishedAt: "2026-10-05T00:00:00Z", sessionId: "s", title: "t", taskType: "code" }]; } };
   const projectOf = async (_user, id) => ({ id });
   const asked = request({ projects: [{ id: "p1", name: "一" }, { id: "p2", name: "二" }] });
   const dimension = (await createRunsSource({ agentRuns, projectOf }).read(asked)).facets.dimensions[0];
@@ -177,6 +180,24 @@ test("the topics source serves the grouping as it stands and never groups: membe
   assert.deepEqual(found.facets.topics[0].members, ["memory:a"]);
   assert.equal(found.facts.topicsStatus, "stale");
   assert.equal(createTopicsSource({ topics: { configured: false }, researchMemory }).applies(request()), false);
+});
+
+test("the topics are one view for both kinds of account: an account on the second engine is grouped from the memories that engine keeps", async () => {
+  const seen = [];
+  const topics = {
+    configured: true,
+    read: async (userId, records) => { seen.push([userId, records.map((entry) => entry.id)]); return { status: "ready", topics: [{ id: "topic:bbbbbbbbbb", label: "报告格式", weight: 2, trend: 1, members: records.map((entry) => entry.id) }] }; },
+  };
+  // The store's own rows are another engine's: never asked for this account.
+  const researchMemory = { mapRecords: async () => assert.fail("the older engine's rows are not this account's memories") };
+  const accountRecords = async (userId) => { assert.equal(userId, "usr_1"); return [record({ id: "nm_file", summary: "回答格式" }), record({ id: "nm_secret", sensitive: true })]; };
+  const source = createTopicsSource({ topics, researchMemory, accountRecords });
+  const asked = request({ engine: "native" });
+  assert.equal(source.applies(asked), true, "it no longer stands aside for the second engine");
+  const found = await source.read(asked);
+  assert.deepEqual(seen, [["usr_1", ["nm_file"]]], "only what can be drawn is offered");
+  assert.deepEqual(found.facets.topics[0].members, ["memory:nm_file"]);
+  assert.equal(found.facts.topicsStatus, "ready");
 });
 
 // ------------------------------------------------------ the native memory seam
@@ -337,7 +358,12 @@ test("a compile becomes entity marks, typed relation lines and page links; what 
   });
   const marks = Object.fromEntries(graph.nodes.map((node) => [node.id, node]));
   assert.deepEqual(Object.keys(marks).sort(), ["entity:aspirin", "entity:stroke", "page:entity/aspirin.md", "page:entity/stroke.md", "page:index.md"]);
-  assert.deepEqual([marks["entity:aspirin"].subtype, marks["entity:aspirin"].label, marks["entity:aspirin"].open], ["drug", "阿司匹林", null]);
+  assert.deepEqual([marks["entity:aspirin"].subtype, marks["entity:aspirin"].label, marks["entity:aspirin"].open], ["drug", "阿司匹林", { kind: "page", href: "/app/files?kind=wiki&view=graph&graph=kg&focus=aspirin&depth=1" }]);
+  // Made for a project, an entity and a page open in the knowledge base's graph of it, centred on the mark: an entity in the graph of
+  // entities, a page in the graph of pages, the page's path as it is, encoded.
+  const forProject = Object.fromEntries(graphFromCompile({ entities: [{ path: "entities/aspirin.md", text: ENTITY_ASPIRIN }], pages: [{ uri: "entity/aspirin.md", text: WIKI_ASPIRIN }] }, { projectId: "prj_a" }).nodes.map((node) => [node.id, node.open]));
+  assert.deepEqual(forProject["entity:aspirin"], { kind: "page", href: "/app/files?scope=prj_a&kind=wiki&view=graph&graph=kg&focus=aspirin&depth=1" });
+  assert.deepEqual(forProject["page:entity/aspirin.md"], { kind: "page", href: "/app/files?scope=prj_a&kind=wiki&view=graph&focus=entity%2Faspirin.md&depth=1" });
   assert.deepEqual(graph.edges.filter((edge) => edge.type === "relates"), [
     { from: "entity:aspirin", to: "entity:stroke", type: "relates", label: "预防", relation: "prevents" },
   ]);
@@ -353,7 +379,7 @@ test("a compile becomes entity marks, typed relation lines and page links; what 
   assert.equal(documentIdOfUri("viking://u/xsrc_0123456789abcdef.md"), null);
 });
 
-test("the knowledge-graph seam stands aside until a reader is wired, then draws entities and their lines without opening a drawer", async () => {
+test("the knowledge-graph seam stands aside until a reader is wired, then draws entities and their lines, each opening in the knowledge base and none in a drawer", async () => {
   assert.equal(createKnowledgeGraphSource().applies(request()), false);
   const source = createKnowledgeGraphSource({ fetchProducts: async () => ({ entities: [{ path: "entities/aspirin.md", text: ENTITY_ASPIRIN }, { path: "entities/stroke.md", text: ENTITY_STROKE }], relations: RELATIONS, pages: [] }) });
   assert.equal(source.applies(request()), true);
@@ -361,6 +387,7 @@ test("the knowledge-graph seam stands aside until a reader is wired, then draws 
   assert.deepEqual(map.nodes.map((node) => [node.id, node.type]).sort(), [["entity:aspirin", "entity"], ["entity:stroke", "entity"]]);
   assert.deepEqual(map.edges.map((edge) => [edge.type, edge.label]), [["relates", "预防"]]);
   assert.equal(map.summary.memories, 0);
+  assert.ok(map.nodes.every((node) => node.open?.kind === "page" && node.open.href.startsWith("/app/files?")), "an entity is not a memory: it opens in the knowledge base");
   assert.deepEqual((await buildMemoryMap({ sources: [createKnowledgeGraphSource({ fetchProducts: async () => null })] }, { user, projects, now: NOW })).missing, [], "no graph yet is not a failure");
   assert.deepEqual((await buildMemoryMap({ sources: [createKnowledgeGraphSource({ fetchProducts: async () => { throw new Error("OpenViking unreachable"); } })] }, { user, projects, now: NOW })).missing, ["knowledge-graph"]);
 });
