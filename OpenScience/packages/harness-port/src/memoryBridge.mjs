@@ -38,6 +38,16 @@ export const MEMORY_BRIDGE_PORT = 19336
 /** The service the bridge row provides once it listens; the plugin's row waits on it (`inject`), so it never dials first. */
 export const MEMORY_BRIDGE_SERVICE = 'evimedMemoryBridge'
 
+/**
+ * Skills the plugin ships that describe abilities this platform does not offer: its skill store (`add_skill`, `viking://`
+ * skill directories) and Experience memory. The plugin mounts all three of its skills unconditionally (a provider named
+ * `openviking`; no switch in the package), so the model's catalogue would list them and spend a call on tools that are not
+ * there. The registry lets a runtime registration win a name against a provider's, and a skill whose invocation is closed on
+ * both surfaces is in no catalogue — so registering these names closed hides them, and the package's own bytes stay as they
+ * were. The third skill (`openviking-memory`, which says when to search, read and write) is kept.
+ */
+export const OPENVIKING_WITHHELD_SKILLS = Object.freeze(['openviking-skills', 'ov-experience-memory'])
+
 /** The code a caller of the bridge is answered when the gateway cannot be reached in time. */
 export const MEMORY_BRIDGE_UNAVAILABLE = 'memory_bridge_unavailable'
 
@@ -358,6 +368,21 @@ export async function registerMemoryBridge(ctx, config) {
       ctx.logger?.warn?.(`evimed memory bridge: gateway ${event} (${detail})`)
     },
   })
+  // The plugin's skills that name abilities we do not offer stay out of the model's catalogue (see OPENVIKING_WITHHELD_SKILLS).
+  const skills = ctx.get('skills') ?? ctx.skills
+  if (typeof skills?.register === 'function') {
+    for (const name of OPENVIKING_WITHHELD_SKILLS) {
+      ctx.effect(() => skills.register({
+        name,
+        description: 'Withheld: this platform does not offer the ability this skill describes.',
+        content: 'Withheld.',
+        source: 'runtime',
+        invocation: { modelInvocable: false, userInvocable: false },
+      }))
+    }
+  } else {
+    diagnostics()?.degrade?.('memory bridge: the skill registry is not available, so the OpenViking plugin\'s skills stay in the catalogue')
+  }
   let listening = false
   try {
     await bridge.listen()

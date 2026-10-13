@@ -1301,6 +1301,7 @@ export {
   MEMORY_BRIDGE_UNAVAILABLE,
   OPENVIKING_PLUGIN_ENVIRONMENT,
   OPENVIKING_PLUGIN_SETTINGS,
+  OPENVIKING_WITHHELD_SKILLS,
   createLocalBridgeKey,
   createMemoryBridge,
   pinOpenVikingPluginEnvironment,

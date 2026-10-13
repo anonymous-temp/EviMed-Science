@@ -14,6 +14,7 @@ import {
   MEMORY_BRIDGE_SERVICE,
   OPENVIKING_PLUGIN_ENVIRONMENT,
   OPENVIKING_PLUGIN_SETTINGS,
+  OPENVIKING_WITHHELD_SKILLS,
   createLocalBridgeKey,
   createMemoryBridge,
   pinOpenVikingPluginEnvironment,
@@ -290,6 +291,26 @@ test('a bridge that cannot bind still provides its service, so the plugin\'s row
   } finally {
     for (const dispose of disposers) await dispose()
     await new Promise((resolve) => taken.close(() => resolve(undefined)))
+    for (const name of [...Object.keys(OPENVIKING_PLUGIN_ENVIRONMENT), 'OPENVIKING_API_KEY']) { if (env[name] === undefined) delete process.env[name]; else process.env[name] = env[name] }
+  }
+})
+
+test('the two skills that describe abilities we do not offer are registered closed on both surfaces; the memory skill is not touched', async () => {
+  /** @type {any[]} */ const registered = []
+  /** @type {string[]} */ const disposed = []
+  const env = { ...process.env }
+  /** @type {(() => unknown)[]} */ const disposers = []
+  try {
+    await registerMemoryBridge({
+      get: (/** @type {string} */ name) => (name === 'skills' ? { register: (/** @type {any} */ skill) => { registered.push(skill); return () => disposed.push(skill.name) } } : undefined),
+      effect: (/** @type {() => () => unknown} */ install) => { disposers.push(install()) },
+      provide: () => {},
+    }, { enabled: true, gatewayUrl: '', tokenFile: '', port: await freePort() })
+    assert.deepEqual(registered.map((skill) => skill.name).sort(), ['openviking-skills', 'ov-experience-memory'])
+    assert.deepEqual([...OPENVIKING_WITHHELD_SKILLS].sort(), ['openviking-skills', 'ov-experience-memory'])
+    for (const skill of registered) assert.deepEqual(skill.invocation, { modelInvocable: false, userInvocable: false })
+  } finally {
+    for (const dispose of disposers) await dispose?.()
     for (const name of [...Object.keys(OPENVIKING_PLUGIN_ENVIRONMENT), 'OPENVIKING_API_KEY']) { if (env[name] === undefined) delete process.env[name]; else process.env[name] = env[name] }
   }
 })

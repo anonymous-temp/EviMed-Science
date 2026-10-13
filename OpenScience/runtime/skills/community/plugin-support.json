@@ -54,7 +54,7 @@
         "mcp-tools",
         "bundled-skills"
       ],
-      "adaptation": "None: the archive is digest-checked when fetched and the installed files are compared with it byte for byte (deploy/runtime-dsh/install-openviking-plugin.mjs). Configured, not edited: autoRecall, captureToolResults, workspacePeer and skillCatalog off, skipSubagentSessions on, the default commit threshold, no key and no identity in the row; the same settings are stated as the plugin's environment so a workspace file cannot overrule them.",
+      "adaptation": "None: the archive is digest-checked when fetched and the installed files are compared with it byte for byte (deploy/runtime-dsh/install-openviking-plugin.mjs). Configured, not edited: autoRecall, captureToolResults, workspacePeer and skillCatalog off, skipSubagentSessions on, the default commit threshold, no key and no identity in the row; the same settings are stated as the plugin's environment so a workspace file cannot overrule them; two of its three bundled skills (openviking-skills, ov-experience-memory), which describe abilities this platform does not offer, are registered closed on both surfaces by the bridge row so the model's catalogue lists only openviking-memory.",
       "recordAuthority": "OpenViking keeps a native account's long-term memory; the control plane's memory gateway fixes identity, routes, the five memory tools and who is learned from. The platform's own recall and note tools stand aside for such an account.",
       "contract": "apps/server/test/openVikingMemoryPlugin.test.mjs"
     }
