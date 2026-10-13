@@ -159,6 +159,8 @@ class LanguageChecks(unittest.TestCase):
         fixed = "1. 订阅页设计评审完成\n2. 转化率 37%，目标 4%\n3. 下周压测与灰度"
         env = Env("G19", [turn("全文" * 100), turn(short), turn(fixed)])
         self.assertTrue(all(r["ok"] for r in checks.chk_weekly({}, env.ctx())))
+        env.record["turns"][1]["reply"] = "**本周周报**\n\n" + short  # a bold title line is not an item
+        self.assertTrue(checks.chk_weekly({}, env.ctx())[0]["ok"])
         env.record["turns"][2]["reply"] = short + "\n请问是哪一条？"
         out = {r["id"]: r["ok"] for r in checks.chk_weekly({}, env.ctx())}
         self.assertFalse(out["final_contains_37_percent"])

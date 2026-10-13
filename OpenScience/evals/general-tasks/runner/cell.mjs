@@ -264,7 +264,7 @@ export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeout
     record.memoryRecords = await get('/api/memory/records?pageSize=100');
     record.memoryProfile = await get('/api/memory/profile');
   }
-  if (spec.manual_trigger === 'schedule') record.schedule = await driveSchedule(api, projectId, timeoutMs, log);
+  if (spec.manual_trigger === 'schedule') record.schedule = await driveSchedule(api, projectId, userId, dataDir, outDir, timeoutMs, log);
   record.firstRequest = await firstRequestOf(dataDir, startedAt, new Date().toISOString(), outDir);
   await api.call('POST', '/api/commands/stop_runtime', {});
   record.finishedAt = new Date().toISOString();
@@ -287,8 +287,8 @@ async function waitForMemory(api, ms) {
 }
 
 /** G20: the task the conversation created, one execution of it started by hand, and what it produced. */
-async function driveSchedule(api, projectId, timeoutMs, log) {
-  const out = { agendas: null, runNow: null, episodes: [], notes: [] };
+async function driveSchedule(api, projectId, userId, dataDir, outDir, timeoutMs, log) {
+  const out = { agendas: null, runNow: null, episodes: [], notes: [], executions: [] };
   const list = await api.call('GET', `/api/autopilot/agendas?projectId=${encodeURIComponent(projectId)}`);
   out.agendas = list.json?.data ?? list.raw.slice(0, 300);
   const agendas = Array.isArray(out.agendas) ? out.agendas : out.agendas?.items ?? [];
@@ -297,15 +297,48 @@ async function driveSchedule(api, projectId, timeoutMs, log) {
   const started = await api.call('POST', `/api/autopilot/agendas/${encodeURIComponent(agenda.id)}/run-now`, { requestId: `eval-${randomBytes(4).toString('hex')}` });
   out.runNow = { status: started.status, body: started.json?.data ?? started.raw.slice(0, 400) };
   if (started.status >= 300) { out.notes.push(`run-now refused: ${started.status}`); return out; }
+  const OPEN = new Set(['queued', 'running', 'planned', 'dispatching', 'starting', 'waiting', 'pending', 'scheduled', 'verifying']);
+  const statusOf = (e) => String(e?.payload?.status ?? e?.status ?? '');
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await sleep(8000);
     const eps = await api.call('GET', `/api/autopilot/episodes?projectId=${encodeURIComponent(projectId)}&agendaId=${encodeURIComponent(agenda.id)}`);
     const items = Array.isArray(eps.json?.data) ? eps.json.data : eps.json?.data?.items ?? [];
     out.episodes = items;
-    if (items.length && items.every((e) => !['queued', 'running', 'planned', 'dispatching', 'starting', 'waiting', 'pending', 'scheduled'].includes(String(e.status)))) break;
+    if (items.length && items.every((e) => !OPEN.has(statusOf(e)))) break;
   }
-  log(`  schedule: ${out.episodes.length} episode(s), statuses ${out.episodes.map((e) => e.status).join(',')}`);
+  const still = out.episodes.filter((e) => OPEN.has(statusOf(e)));
+  for (const e of still) {
+    out.notes.push(`execution ${e.id} still ${statusOf(e)} at the timeout; canceled`);
+    await api.call('POST', `/api/autopilot/agendas/${encodeURIComponent(agenda.id)}/episodes/${encodeURIComponent(e.id)}/cancel`, { requestId: `eval-${randomBytes(4).toString('hex')}` });
+  }
+  log(`  schedule: ${out.episodes.length} execution(s), statuses ${out.episodes.map(statusOf).join(',')}`);
+  // The execution runs in the platform's own background project: read its run record and transcript from the data directory.
+  for (const e of out.episodes) {
+    const runId = e?.payload?.runId;
+    const execution = { episodeId: e.id, status: statusOf(e), runId: runId ?? null, taskType: e?.payload?.taskType ?? null };
+    if (runId) {
+      const root = `${dataDir}/users/${userId}/projects`;
+      for (const dir of await fs.readdir(root).catch(() => [])) {
+        const transcript = await fs.readFile(`${root}/${dir}/.openscience/transcripts/${runId}.jsonl`, 'utf8').catch(() => null);
+        if (!transcript) continue;
+        const lines = transcript.split('\n').filter(Boolean).map((l) => JSON.parse(l));
+        const digest = digestTranscript(lines);
+        Object.assign(execution, { project: dir, reply: digest.reply, tools: digest.tools.map((t) => t.name), toolCalls: digest.tools.length });
+        const runs = await fs.readFile(`${root}/${dir}/.openscience/runs.jsonl`, 'utf8').catch(() => '');
+        const row = runs.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((r) => r?.id === runId).pop();
+        if (row) Object.assign(execution, { agent: row.effectiveAgentId ?? null, routeReason: row.effectiveRouteReason ?? null, verification: row.verification ?? null });
+        await fs.mkdir(`${outDir}/transcripts`, { recursive: true });
+        await fs.writeFile(`${outDir}/transcripts/execution-${runId}.jsonl.gz`, zlib.gzipSync(lines.map((l) => JSON.stringify(l)).join('\n')));
+        // The files the execution wrote, so the judges can read what it delivered.
+        const ws = `${root}/${dir}/workspace`;
+        const manifest = await workspaceManifest(ws);
+        execution.files = await snapshotTurn(ws, [], manifest, `${outDir}/ws-execution`);
+        break;
+      }
+    }
+    out.executions.push(execution);
+  }
   const progress = await api.call('GET', `/api/autopilot/agendas/${encodeURIComponent(agenda.id)}/progress`);
   out.progress = progress.json?.data ?? progress.raw.slice(0, 400);
   return out;

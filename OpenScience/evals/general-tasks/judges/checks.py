@@ -898,6 +898,9 @@ def chk_report_pages(spec, ctx):
         chars = len(re.sub(r"\s", "", textio.file_text(path)))
         return chars <= 6500, f"{chars} characters (about {chars / 1800:.1f} pages; max {spec['max']})"
 
+    if not files:  # no file was left: the reply is the report, judged by its length (the missing file is the file check's finding)
+        chars = len(re.sub(r"\s", "", ctx.reply(spec)))
+        return [result("report_within_pages", chars <= 6500, f"no file; the reply is {chars} characters (about {chars / 1800:.1f} pages; max {spec['max']})")]
     ok, note = _any_candidate(files, check)
     return [result("report_within_pages", ok, note)]
 
@@ -949,7 +952,7 @@ def chk_numbers_preserved(spec, ctx):
 
 
 def _items(text: str) -> int:
-    return len(re.findall(r"(?m)^\s*(?:[-*•]|\d+[.、)）]|[一二三]、|[①②③])\s*\S", text))
+    return len(re.findall(r"(?m)^\s*(?:[-*•]\s+|\d+[.、)）]\s*|[一二三]、|[①②③])\S", text))
 
 
 def _length(text: str) -> int:
@@ -977,15 +980,25 @@ def chk_schedule(spec, ctx):
     agendas = s.get("agendas")
     items = agendas if isinstance(agendas, list) else (agendas or {}).get("items", []) if isinstance(agendas, dict) else []
     out = [result("task_created", bool(items), f"{len(items)} task(s) in the project; notes {s.get('notes')}")]
-    episodes = s.get("episodes") or []
-    blob = json.dumps({"episodes": episodes, "progress": s.get("progress")}, ensure_ascii=False)
-    out.append(result("execution_ran", bool(episodes), f"{len(episodes)} execution(s), statuses {[e.get('status') for e in episodes]}"))
-    urls = _urls(blob)
-    out.append(result("execution_output_has_links", len(urls) >= spec["min_items_links"], f"{len(urls)} link(s) in the execution's output"))
-    clinical = bool(re.search(r"clinical-evidence-synthesis|literature-sentinel|临床证据|证据综述", blob))
-    out.append(result("execution_is_not_a_clinical_evidence_review", not clinical, "a clinical evidence capability or wording appears in the execution" if clinical else "no clinical evidence framing"))
+    executions = s.get("executions") or []
+    statuses = [e.get("status") for e in executions]
+    finished = [e for e in executions if e.get("status") not in ("queued", "running", "pending", "planned", "dispatching", "starting", "waiting", "scheduled", "verifying", "canceled", "cancelled", None, "")]
+    out.append(result("execution_ran_to_the_end", bool(finished), f"{len(executions)} execution(s), statuses {statuses}"))
+    text = "\n".join(str(e.get("reply") or "") for e in executions)
+    exec_root = ctx.files_dir / "ws-execution"
+    if exec_root.is_dir():
+        for file in sorted(exec_root.rglob("*")):
+            if file.is_file():
+                text += "\n" + textio.file_text(file)
+    urls = _urls(text)
+    out.append(result("execution_output_has_links", len(urls) >= spec["min_items_links"], f"{len(urls)} link(s) in what the execution produced ({[e.get('files') for e in executions][:1]})"))
+    agents = [str(e.get("agent") or "") for e in executions]
+    clinical = "clinical-evidence-synthesis" in agents or bool(FORBIDDEN["evidence_framework"].search(text))
+    out.append(result("execution_is_not_a_clinical_evidence_review", not clinical, f"execution agents {agents}; evidence-review vocabulary {'present' if FORBIDDEN['evidence_framework'].search(text) else 'absent'}"))
+    types = [e.get("taskType") for e in executions]
+    out.append(result("task_type_is_not_the_literature_sentinel", "literature-sentinel" not in types, f"the execution ran as task type {types}", required=False))
     inbox = json.dumps(ctx.record.get("inbox", {}), ensure_ascii=False)
-    out.append(result("inbox_does_not_call_it_research", "研究" not in inbox, f"inbox mentions 研究: {re.findall(r'.{0,12}研究.{0,12}', inbox)[:2]}" if "研究" in inbox else "no 研究 in the inbox"))
+    out.append(result("inbox_does_not_call_it_research", "研究" not in inbox, f"inbox mentions 研究: {re.findall(r'.{0,12}研究.{0,12}', inbox)[:2]}" if "研究" in inbox else "no 研究 in the inbox (inbox holds %d chars)" % len(inbox)))
     return out
 
 
