@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   KNOWLEDGE_PAGE_ENGINE_LIMIT, KNOWLEDGE_PAGE_SUBMIT_LIMIT, KNOWLEDGE_TREES, applyKnowledgePageEdits, checkPageQuotations, diffKnowledgePageEdit,
-  emptyKnowledgeUserEdits, isKnowledgeMirrorPath, isTypedKnowledgePage, knowledgeGraphToGraph, knowledgeMirrorPath, knowledgeMirrorPathOf,
+  emptyKnowledgeUserEdits, isKnowledgeMirrorPath, isTypedKnowledgePage, knowledgeGraphToGraph, knowledgeMirrorPathOf,
   knowledgeSourceIdOfUri, readKnowledgePage, wikiPagesToGraph,
 } from "@evimed/domain";
 import { compileIdempotencyKey } from "./openVikingResources.mjs";
@@ -637,7 +637,10 @@ export class KnowledgePageService {
       const over = await this.#overBudget(userId);
       if (over) return defer("usage_budget_exceeded", over === "day" ? 3_600_000 : 6 * 3_600_000);
       // The engine's copy of the documents is made to agree with PostgreSQL before anything reads it.
-      if (this.sourceSync) await this.sourceSync.reconcileProject(userId, projectId);
+      if (this.sourceSync) {
+        await this.sourceSync.reconcileProject(userId, projectId);
+        await this.sourceSync.reconcileLibrary(userId).catch((error) => this.report(codeOf(error)));
+      }
       // What the engine holds is in the ledger before a compile may touch it, and nothing a person saved is still waiting.
       await this.#flushWriteBacks(user, project);
       const mirrored = await this.#mirror(user, project, "wiki", { round: state.round });
@@ -948,12 +951,13 @@ export class KnowledgePageService {
 
   /**
    * What the memory map's knowledge-graph source reads (`memoryMapSources/knowledgeGraph.mjs`): the compiled files of
-   * one project, whole. Null when the project has no graph and no wiki yet.
-   * @param {{ userId: string, projectId?: string | null }} request
+   * the project the map is narrowed to, whole. Null when the map is of the whole account (entity ids are a project's
+   * own, and two projects' graphs are two graphs) or the project has neither a graph nor a wiki yet.
+   * @param {{ user: { id: string }, projectId: string | null }} request
    */
   async fetchProducts(request) {
-    if (!request?.projectId) return null;
-    const user = await this.store.userById(request.userId);
+    if (!request?.projectId || !request.user?.id) return null;
+    const user = await this.store.userById(request.user.id);
     if (!user) return null;
     let project;
     try { project = await this.store.requireProject(user, request.projectId); } catch { return null; }

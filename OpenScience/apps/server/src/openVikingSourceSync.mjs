@@ -43,6 +43,19 @@ export function isCompiledPage(source) {
   return sourceOriginOf({ connectorType: source?.payload?.connector?.type, path: source?.payload?.paths?.[0] }) === "wiki";
 }
 
+/**
+ * Every (account, project) that holds a document, for the timer's reconciliation; the project a document was read in
+ * most recently first, so a pass that is cut short has done the ones in use.
+ * @param {any} database @param {{ limit?: number }} [options] @returns {Promise<Array<{ userId: string, projectId: string }>>}
+ */
+export async function readableSourceProjects(database, { limit = 200 } = {}) {
+  if (!database) return [];
+  const result = await database.query(`SELECT user_id, project_id FROM evimed_product.documents
+    WHERE kind='source' AND deleted_at IS NULL AND project_id IS NOT NULL
+    GROUP BY user_id, project_id ORDER BY max(updated_at) DESC LIMIT $1`, [limit]);
+  return result.rows.map((/** @type {any} */ row) => ({ userId: row.user_id, projectId: row.project_id }));
+}
+
 export class OpenVikingSourceSync {
   /**
    * @param {{ config: any, sources: any, resources: any, jobs: any, library?: any, engine?: any, now?: () => Date, report?: (code: string) => void }} dependencies

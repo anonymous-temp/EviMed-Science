@@ -3360,30 +3360,31 @@ export function loadConfig(overrides = {}) {
     // data capabilities use reaches it through its own gateway; off, that tool answers `semantics_disabled` and every
     // analysis goes on from the files, as before. Needs the product ledger (Postgres).
     dataSemanticsEnabled: overrides.dataSemanticsEnabled ?? boolEnv("OPEN_SCIENCE_DATA_SEMANTICS_ENABLED", true),
-    // 「知识页」 (knowledgePageService.mjs, 2026-10-12): the project's documents compiled into linked pages in which every
-    // sentence quotes its document, by the internal `knowledge-compile` capability on Flash. OFF by default until the three-arm
-    // evaluation (evals/knowledge-pages) says it earns its place; off, nothing is compiled, no worker starts and the knowledge
-    // base is what it was. Needs the product ledger (Postgres). Compiled per project, driven by changes to the project's
-    // documents, after `knowledgePagesDebounceMs` of quiet and not before `knowledgePagesMinSources` documents are readable
-    // (below that `kb_search` reads the whole library anyway). Each round reads at most `knowledgePagesMaxSourcesPerRound`
-    // changed documents, each cut to `knowledgePagesSourceChars` and all together to `knowledgePagesInputChars`, beside at most
-    // `knowledgePagesPagesBytes` of the pages already written. Its own caps count `knowledge` spend only (CNY; 0 = no cap).
-    knowledgePagesEnabled: overrides.knowledgePagesEnabled ?? boolEnv("OPEN_SCIENCE_KNOWLEDGE_PAGES_ENABLED", false),
+    // 「知识页」 (knowledgePageService.mjs): the project's documents compiled into a linked wiki and a knowledge graph by
+    // OpenViking's own Compile (the official `llm-wiki` and `knowledge-graph` skills). The switch is
+    // `OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED` (`ovKnowledgeEnabled` above, on when the engine is this deployment's index); the
+    // self-built compiler it replaced, and its `OPEN_SCIENCE_KNOWLEDGE_PAGES_ENABLED`, were removed on 2026-10-13 without
+    // ever having been switched on. What is here is when to compile: per project, driven by changes to its documents, after
+    // `knowledgePagesDebounceMs` of quiet and not before `knowledgePagesMinSources` documents are readable (below that
+    // `kb_search` reads the whole library anyway). The caps count what this account's compile tasks used, as the engine
+    // reports it when each ends (CNY; 0 = no cap): a round is not started past them, and a task is asked to stop after
+    // `knowledgePagesTaskTimeoutMs`. `knowledgeGraphEnabled` off compiles the wiki only.
     knowledgePagesMinSources: Math.max(1, Math.min(200, Math.trunc(Number(overrides.knowledgePagesMinSources ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_MIN_SOURCES ?? 5)) || 5)),
     knowledgePagesDebounceMs: Math.max(0, Math.min(86_400_000, Math.trunc(Number(overrides.knowledgePagesDebounceMs ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_DEBOUNCE_MS ?? 600_000)) || 0)),
-    knowledgePagesMaxSourcesPerRound: Math.max(1, Math.min(30, Math.trunc(Number(overrides.knowledgePagesMaxSourcesPerRound ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_MAX_SOURCES_PER_ROUND ?? 8)) || 8)),
-    knowledgePagesSourceChars: Math.max(2_000, Math.min(400_000, Math.trunc(Number(overrides.knowledgePagesSourceChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_SOURCE_CHARS ?? 40_000)) || 40_000)),
-    knowledgePagesInputChars: Math.max(10_000, Math.min(1_500_000, Math.trunc(Number(overrides.knowledgePagesInputChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_INPUT_CHARS ?? 240_000)) || 240_000)),
-    knowledgePagesPagesBytes: Math.max(10_000, Math.min(2_000_000, Math.trunc(Number(overrides.knowledgePagesPagesBytes ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_PAGES_BYTES ?? 300_000)) || 300_000)),
-    knowledgePagesRunLimitCny: Number(overrides.knowledgePagesRunLimitCny ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_RUN_LIMIT_CNY ?? 2),
     knowledgePagesDailyLimitCny: Number(overrides.knowledgePagesDailyLimitCny ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_DAILY_LIMIT_CNY ?? 10),
     knowledgePagesWeeklyLimitCny: Number(overrides.knowledgePagesWeeklyLimitCny ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_WEEKLY_LIMIT_CNY ?? 40),
+    knowledgePagesTaskTimeoutMs: Math.max(60_000, Math.min(7_200_000, Math.trunc(Number(overrides.knowledgePagesTaskTimeoutMs ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_TASK_TIMEOUT_MS ?? 1_800_000)) || 1_800_000)),
     knowledgePagesPollMs: Math.max(100, Math.min(86_400_000, Math.trunc(Number(overrides.knowledgePagesPollMs ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_POLL_MS ?? 5_000)) || 5_000)),
     knowledgePagesLeaseMs: Math.max(1_000, Math.min(3_600_000, Math.trunc(Number(overrides.knowledgePagesLeaseMs ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_LEASE_MS ?? 900_000)) || 900_000)),
+    knowledgeGraphEnabled: overrides.knowledgeGraphEnabled ?? boolEnv("OPEN_SCIENCE_KNOWLEDGE_GRAPH_ENABLED", true),
+    // How often every project's documents are compared with the engine's copies and repaired (openVikingSourceSync.mjs).
+    // A change to one document is pushed at once by its own job; this is the net under that.
+    knowledgeSourceSyncReconcileMs: Math.max(60_000, Math.min(86_400_000, Math.trunc(Number(overrides.knowledgeSourceSyncReconcileMs ?? process.env.OPEN_SCIENCE_KNOWLEDGE_SOURCE_SYNC_RECONCILE_MS ?? 900_000)) || 900_000)),
     // The summary and key claims of each readable document, written into the memory capsule's `sources` layer
-    // (libraryService.publishSourceUnderstanding). On, as it always was; the owner stops it once the knowledge pages are shown
-    // not to do worse (2026-10-12). Off stops new writes only: what was written stays until its document goes.
-    documentMemoryEnabled: overrides.documentMemoryEnabled ?? boolEnv("OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED", true),
+    // (libraryService.publishSourceUnderstanding). Off since 2026-10-13: cross-document knowledge now has a place a person can
+    // see and edit — the compiled pages — and a hidden second channel that is recalled but cannot be read has no reason to be
+    // written. Off stops new writes only: what was written stays where it is until its document goes.
+    documentMemoryEnabled: overrides.documentMemoryEnabled ?? boolEnv("OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED", false),
     // Scheduled tasks made and changed from a conversation (`schedule_task` / `update_task`, taskToolsGateway.mjs, N-13): the
     // form's twin, with the platform's default budget and no step to approve. Off, the runtime is given no route and the tools
     // are not offered; the 定时任务 page is unchanged. `taskToolsMaxTasks` is the most tasks one project may hold before the

@@ -127,7 +127,7 @@ export class OpenVikingResources {
    */
   inScope(userId, projectId, uri) {
     const value = String(uri ?? "");
-    if (!value.startsWith("viking://") || /[\u0000-\u001f]/.test(value) || value.split("/").some((part) => part === "." || part === "..")) return false;
+    if (!value.startsWith("viking://") || [...value].some((char) => char.charCodeAt(0) < 32) || value.split("/").some((part) => part === "." || part === "..")) return false;
     const { project, library } = this.roots(userId, projectId);
     return [project, library].some((root) => value === root || value.startsWith(`${root}/`));
   }

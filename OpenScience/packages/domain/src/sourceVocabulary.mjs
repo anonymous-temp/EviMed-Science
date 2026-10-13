@@ -162,8 +162,10 @@ export const SOURCE_FOLDERS = Object.freeze({
   frontier: 'knowledge-base/frontier',
   evidence: 'knowledge-base/evidence',
   openAccess: 'knowledge-base/open-access',
-  /** The pages compiled from the project's documents (`knowledgePage.mjs`), one Markdown file each. */
+  /** The wiki compiled from the project's documents, mirrored file for file from the engine (`knowledgePage.mjs`). */
   wiki: 'knowledge-base/wiki',
+  /** The knowledge graph compiled from the same documents: `entities/*.md` and `relations.jsonl`, mirrored the same way. */
+  graph: 'knowledge-base/kg',
   /** The original bytes of a page a link read, kept beside its text snapshot and never a source of its own. */
   snapshots: 'knowledge-base/.evimed-snapshots',
 })
@@ -201,7 +203,7 @@ export function sourceOriginOf({ connectorType, path }) {
   if (inside(SOURCE_FOLDERS.notes)) return 'note'
   if (inside(SOURCE_FOLDERS.frontier) || inside(SOURCE_FOLDERS.evidence)) return 'frontier'
   if (inside(SOURCE_FOLDERS.chat) || inside(SOURCE_FOLDERS.openAccess)) return 'conversation'
-  if (inside(SOURCE_FOLDERS.wiki)) return 'wiki'
+  if (inside(SOURCE_FOLDERS.wiki) || inside(SOURCE_FOLDERS.graph)) return 'wiki'
   return 'upload'
 }
 

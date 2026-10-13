@@ -32,7 +32,6 @@ import { ResultRevisionService } from "./resultRevision.mjs";
 import { ResultCorrectionService } from "./resultCorrection.mjs";
 import { createResultReuseRoutes } from "./resultReuseRoutes.mjs";
 import { KnowledgeChangeService, producingAgenda } from "./knowledgeChange.mjs";
-import { createKnowledgeCompileRuntime } from "./knowledgeCompileRuntime.mjs";
 import { KnowledgePageService } from "./knowledgePageService.mjs";
 import { createKnowledgePageRoutes } from "./knowledgePageRoutes.mjs";
 import { KnowledgePageWorker } from "./knowledgePageWorker.mjs";
@@ -87,7 +86,7 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
-import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, KNOWLEDGE_PROJECT_ID, LEARNING_PROJECT_ID, assertClientProject, ensureEvidenceProject, ensureOpenVikingProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
+import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, LEARNING_PROJECT_ID, assertClientProject, ensureEvidenceProject, ensureOpenVikingProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
 import { createEvolutionPositiveEvidence } from "./evolutionPositiveEvidence.mjs";
@@ -207,6 +206,8 @@ import { RunMetrics, runCapabilityLabel } from "./runMetrics.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
 import { OpenVikingEngine } from "./openVikingEngine.mjs";
+import { OpenVikingResources } from "./openVikingResources.mjs";
+import { OpenVikingSourceSync, OpenVikingSourceSyncWorker, readableSourceProjects } from "./openVikingSourceSync.mjs";
 import { createOpenVikingModelCaller } from "./openVikingModelCaller.mjs";
 import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
 import { MemoryIndexWithdrawals } from "./memoryIndexWithdrawals.mjs";
@@ -1290,6 +1291,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     ? new OpenVikingEngine({ client: openVikingClient, config, pin: config.openVikingPin,
       report: (line) => process.stderr.write(`${line}\n`) })
     : null);
+  // The Resources and Compile half of the engine (`openVikingResources.mjs`): a project's documents as the files a compile
+  // reads, and the wiki and the graph it writes. Built on the same client, so it exists exactly when the engine does.
+  const openVikingResources = overrides.openVikingResources ?? new OpenVikingResources({ client: openVikingClient });
   // The engine's own model calls, as a caller of the model gateway (`openVikingModelCaller.mjs`).
   const openVikingModelCaller = createOpenVikingModelCaller({ config, usageLedger, ensureOwner: () => ensureOpenVikingProject(store) });
   // Whether a memory write has an index to tell about it. Decided before the
@@ -1626,8 +1630,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // through these, so a deployment without it (or with it switched off) behaves as it always did.
   /** @type {KnowledgePageService | null} */
   let knowledgePages = null;
-  /** @type {ReturnType<typeof createKnowledgeCompileRuntime> | null} */
-  let knowledgeCompileRuntime = null;
+  // Every readable document kept in the engine as the file its compile reads (`openVikingSourceSync.mjs`): told here of each
+  // change to a document, converging on its own worker.
+  /** @type {OpenVikingSourceSync | null} */
+  let sourceSync = null;
+  /** @type {OpenVikingSourceSyncWorker | null} */
+  let sourceSyncWorker = null;
+  // What readiness and the operator metrics say of the knowledge module built on the engine: counters only.
+  const knowledgeStatus = () => ({
+    pages: knowledgePages?.status() ?? null, worker: knowledgePagesWorker?.status() ?? null,
+    sources: sourceSync ? { ...sourceSync.status(), worker: sourceSyncWorker?.status() ?? null } : null,
+    resources: openVikingResources.status(),
+  });
   /** @type {KnowledgePageWorker | null} */
   let knowledgePagesWorker = null;
   /** @type {((req: any, res: any) => Promise<boolean>) | null} */
@@ -1642,6 +1656,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         geoValueSourceReplaced(geo?.store, event),
         // The pages that quote the document that was replaced are labelled and queued for a recompile.
         knowledgePages?.noteSourcesChanged(event.userId, event.projectId, [{ sourceId: event.replaced.sourceId, reason: "changed" }]),
+        // The engine's copy follows: the document that was replaced goes, the one that replaces it is pushed when it is read.
+        sourceSync?.note(event.userId, event.projectId, event.replaced.sourceId),
       ]);
       const failed = outcomes.find(outcome => outcome.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;
@@ -1649,6 +1665,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A page's older version going is the page being rewritten, not a document the pages quote.
     afterRemove: async event => {
       if (KnowledgePageService.isPage(event.source)) return;
+      void sourceSync?.note(event.userId, event.projectId, event.sourceId);
       await knowledgePages?.noteSourcesChanged(event.userId, event.projectId, [{ sourceId: event.sourceId, reason: "removed" }]);
     },
     report: code => { void securityAudit(config, "source.replacement", "failed", { code }).catch(() => {}); },
@@ -1677,8 +1694,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     readWeb: (url, options) => webReader.read(url, options),
     readFile: (project, rel) => readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel)),
     readTimeoutMs: config.webReadTimeoutMs,
-    // A researcher's save of a knowledge page makes their wording the page's basis (knowledgePageService.pageEdited).
-    onPageEdited: async ({ user, project, source }) => { await knowledgePages?.pageEdited(user.id, project.id, source); },
+    // A person's save of a compiled page: a ledger revision, their blocks kept, the engine's copy written to match (knowledgePageService.saveEdit).
+    savePage: ({ user, project, source, markdown }) => (knowledgePages ? knowledgePages.saveEdit({ user, project, source, markdown }) : null),
   }) : null;
   // Which conversations used a document (N-16): recorded when a run finishes, read here with each conversation's title
   // from the ledger of the project it happened in. `agentRuns` and `kbIndex` are built further down; both are read only
@@ -1833,8 +1850,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     onPublished: (job) => {
       kbIndex?.wake();
       void libraryService?.refreshSource(job.userId, job.payload?.sourceId);
-      // A readable document is something new for the project's knowledge pages to take in (a page itself is ignored there).
-      void knowledgePages?.noteSourceReady(job.userId, job.projectId, job.payload?.sourceId);
       // What the platform read out of the document goes into the researcher's
       // capsule here, labelled 来自资料 and reversible — the replacement for
       // the 「放进胶囊」 button that used to ask them to do it once per file
@@ -1853,6 +1868,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     onReadable: (job) => {
       kbIndex?.wake();
       void libraryService?.refreshSource(job.userId, job.payload?.sourceId);
+      // Readable is usable: the engine gets its copy and the project's pages have something new to take in, whatever the
+      // understanding that follows does (a compiled page is ignored by both).
+      void sourceSync?.note(job.userId, job.projectId, job.payload?.sourceId);
+      void sourceSync?.note(job.userId, null, job.payload?.sourceId, { library: true });
+      void knowledgePages?.noteSourceReady(job.userId, job.projectId, job.payload?.sourceId);
     },
     resolveSource: async (job, source) => {
       const connectorType = source.payload.connector?.type;
@@ -3390,7 +3410,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (autopilotService && verificationEpisodeId(run.dispatchId)) {
         return Promise.resolve(verificationRunProject(project, run.dispatchId));
       }
-      if (knowledgeCompileRuntime && project?.id === KNOWLEDGE_PROJECT_ID) return knowledgeCompileRuntime.resolveRunProject(project, run);
       return sourceUnderstandingRuntime
         ? sourceUnderstandingRuntime.resolveRunProject(project, run) : Promise.resolve(project);
     },
@@ -3547,14 +3566,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (sourceUnderstandingRuntime) {
         await sourceUnderstandingRuntime.complete(project, run).catch(async error => {
           await securityAudit(config, "source.runtime.release", "failed", {
-            userId: project.userId, projectId: project.id, runId: run.id,
-            code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
-          });
-        });
-      }
-      if (knowledgeCompileRuntime) {
-        await knowledgeCompileRuntime.complete(project, run).catch(async error => {
-          await securityAudit(config, "knowledge.runtime.release", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
             code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
           });
@@ -4032,20 +4043,24 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         sourceId: match[1], generation: Number(match[2]), jobIds: [match[3]], attemptId: match[4] }));
     },
   });
-  // 「知识页」: the service is always composed with the ledger, so pages that exist stay readable and editable with the compile off; the
-  // compile itself (the runtime, the worker, every hook that queues a round) needs `OPEN_SCIENCE_KNOWLEDGE_PAGES_ENABLED`.
+  // 「知识页」: the service is always composed with the ledger, so what was compiled stays readable and editable with the engine
+  // down or the compile off; compiling itself (the worker, every hook that queues a round) needs `OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED`
+  // and an engine to compile with.
   if (sourceService && knowledgeEntries && productDocuments && productJobs) {
-    if (config.knowledgePagesEnabled) {
-      knowledgeCompileRuntime = overrides.knowledgeCompileRuntime ?? createKnowledgeCompileRuntime({
-        config, store, agentRuns, runtimeManager, researchSessions, registry: agentRegistry, usageLedger, prepareContext: prepareResearchContext,
-      });
+    const knowledgeActive = config.ovKnowledgeEnabled === true && openVikingResources.configured;
+    if (knowledgeActive) {
+      sourceSync = new OpenVikingSourceSync({ config, sources: sourceService, resources: openVikingResources, jobs: productJobs, engine: openVikingEngine,
+        library: libraryService, report: code => { void securityAudit(config, "knowledge.sources.sync", "failed", { code }).catch(() => {}); } });
+      sourceSyncWorker = new OpenVikingSourceSyncWorker({ jobs: productJobs, service: sourceSync, reconcileMs: config.knowledgeSourceSyncReconcileMs,
+        projects: () => readableSourceProjects(productDatabase) });
     }
     knowledgePages = new KnowledgePageService({
-      config, documents: productDocuments, jobs: productJobs, sources: sourceService, store, entries: knowledgeEntries, runtime: knowledgeCompileRuntime,
+      config, documents: productDocuments, jobs: productJobs, sources: sourceService, store, entries: knowledgeEntries,
+      resources: openVikingResources, engine: openVikingEngine, sourceSync,
       report: code => { void securityAudit(config, "knowledge.pages", "failed", { code }).catch(() => {}); },
     });
     knowledgePageRoutes = createKnowledgePageRoutes({ store, service: knowledgePages, sources: sourceService, maxJsonBytes: config.maxJsonBytes });
-    if (config.knowledgePagesEnabled) {
+    if (knowledgeActive) {
       knowledgePagesWorker = new KnowledgePageWorker({ jobs: productJobs, service: knowledgePages, pollMs: config.knowledgePagesPollMs, leaseMs: config.knowledgePagesLeaseMs });
     }
   }
@@ -4713,7 +4728,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       createNativeMemorySource(),
       createDocumentsSource({ sources: sourceService, researchMemory }),
       createMethodsSource({ learning: learningService }),
-      createKnowledgeGraphSource(),
+      // The compiled graph and wiki of the project the map is drawn for, read from the ledger's mirror (knowledgePageService.fetchProducts).
+      createKnowledgeGraphSource({ fetchProducts: (request) => (knowledgePages ? knowledgePages.fetchProducts(request) : Promise.resolve(null)) }),
       createActivitySource({ agentRuns, projectOf: memoryMapProjectOf, learning: learningService, feedbackEvents }),
       createRunsSource({
         agentRuns, projectOf: memoryMapProjectOf,
@@ -5493,6 +5509,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           memoryIndexWorker?.reconciling,
           sourceWorker?.status?.().running,
           knowledgePagesWorker?.status?.().running,
+          sourceSyncWorker?.status?.().running,
           autopilotWorker?.status?.().running,
           learningWorker?.status?.().running,
           evolution?.worker.status().running,
@@ -5960,7 +5977,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService, capsuleService, { engine: openVikingEngine, modelCaller: openVikingModelCaller });
+        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService, capsuleService, { engine: openVikingEngine, modelCaller: openVikingModelCaller, knowledge: knowledgeStatus });
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -5968,7 +5985,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (pathname === "/api/ops/metrics" && (req.method === "GET" || req.method === "HEAD")) {
         await sendOperatorMetrics(req, res, {
           judgeService,
-          openViking: { engine: openVikingEngine, modelCaller: openVikingModelCaller },
+          openViking: { engine: openVikingEngine, modelCaller: openVikingModelCaller, knowledge: knowledgeStatus },
           config,
           store,
           taskManager,
@@ -7857,7 +7874,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     void Promise.resolve(managedBrowser.pause?.()).catch(() => {
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
-    for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, knowledgePagesWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
+    for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, knowledgePagesWorker, sourceSyncWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
       geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker, evidenceProgramme?.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
@@ -7901,6 +7918,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       openVikingEngine?.start();
       sourceWorker?.start();
       knowledgePagesWorker?.start();
+      sourceSyncWorker?.start();
       kbIndex?.start();
       autopilotWorker?.start();
       learningWorker?.start();
@@ -8009,7 +8027,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     sourceWorker,
     knowledgePages,
     knowledgePagesWorker,
-    knowledgeCompileRuntime,
+    sourceSync,
+    sourceSyncWorker,
+    openVikingResources,
     // The one source-change record and the modules that read it (B5), returned so the composition can be asserted.
     sourceChanges,
     sourceUpdates,
@@ -8139,6 +8159,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       openVikingEngine?.close();
       await sourceWorker?.close();
       await knowledgePagesWorker?.close();
+      await sourceSyncWorker?.close();
       await kbIndex?.close();
       await autopilotWorker?.close();
       await learningWorker?.close();
@@ -9920,6 +9941,9 @@ async function readinessMemoryIndex(config, substrate, worker, capsules = null, 
       features: { nativeMemory: config.ovNativeMemoryEnabled === true, knowledge: config.ovKnowledgeEnabled === true },
     } } : {}),
     ...(openViking?.engine && openViking.modelCaller ? { modelPath: await openViking.modelCaller.status() } : {}),
+    // What is built on the engine's Resources and Compile (`knowledgePageService.mjs`): counters of the document push, of the
+    // compile rounds and of the mirror. Reported only; nothing here is required of a deployment that is ready.
+    ...(openViking?.knowledge ? { knowledge: openViking.knowledge() } : {}),
   };
   if (required && !(status.configured && status.connected)) {
     throw readinessFailure(status.code ?? "memory_index_unavailable", details);

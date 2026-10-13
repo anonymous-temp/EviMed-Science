@@ -30,7 +30,7 @@
 
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { SOURCE_FOLDERS, knowledgePagePath, knowledgePageSlugOfPath, parseKnowledgePage, sourceOriginOf } from "@evimed/domain";
+import { SOURCE_FOLDERS, knowledgeMirrorPath, knowledgeMirrorPathOf, readKnowledgePage, sourceOriginOf } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /** The longest title a note or a snapshot is filed under. */
@@ -139,10 +139,10 @@ const originalPath = (slug, extension) => `${SOURCE_FOLDERS.snapshots}/${slug}.$
  *   readFile: (project: any, rel: string) => Promise<Buffer>,
  *   readTimeoutMs?: number,
  *   now?: () => Date,
- *   onPageEdited?: (request: { user: any, project: any, source: any }) => Promise<any>,
+ *   savePage?: (request: { user: any, project: any, source: any, markdown: string }) => Promise<any> | null,
  * }} dependencies
  */
-export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, readTimeoutMs = 150_000, now = () => new Date(), onPageEdited = async () => null }) {
+export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, readTimeoutMs = 150_000, now = () => new Date(), savePage = () => null }) {
   /**
    * Retire the older versions of a document that was just written again: the live
    * sources of the same family other than the one that now stands. The replacement
@@ -241,27 +241,27 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
   /** @param {string} title @param {string} body */
   const noteMarkdown = (title, body) => `# ${title}\n\n${body.trim()}\n`;
 
-  /** A knowledge page's slug, or the refusal that this document is not one. @param {any} source */
+  /** Where a compiled page lives in its tree, or the refusal that this document is not one. @param {any} source */
   function requirePage(source) {
-    const slug = knowledgePageSlugOfPath(source?.payload?.paths?.[0]);
-    if (!slug) throw new HttpError(409, "source_note_required", "This document is not a note or a knowledge page.");
-    return slug;
+    const where = knowledgeMirrorPathOf(source?.payload?.paths?.[0]);
+    if (!where) throw new HttpError(409, "source_note_required", "This document is not a note or a knowledge page.");
+    return where;
   }
 
   return {
     /**
-     * A knowledge page (「知识页」) the platform compiled: written under `knowledge-base/wiki/` the way a note is, so a rewrite is
-     * the next version of one document and the version it replaces goes. The text is the platform's (`knowledgePage.mjs`),
-     * not a researcher's: nothing here parses or judges it.
-     * @param {{ user: any, project: any, slug: string, markdown: string, title: string }} request
+     * One file of a compiled tree (「知识页」), mirrored from the engine or saved by a person: written under
+     * `knowledge-base/wiki/` or `knowledge-base/kg/` the way a note is, so new bytes are the next version of one document and
+     * the version they replace goes. Nothing here parses or judges the text.
+     * @param {{ user: any, project: any, tree: "wiki" | "kg", rel: string, buffer: Buffer, title: string }} request
      */
-    async writePage({ user, project, slug, markdown, title }) {
-      return writeEntry(user, project, knowledgePagePath(slug), Buffer.from(markdown, "utf8"), { title: String(title).slice(0, TITLE_MAX_CHARS) });
+    async writePage({ user, project, tree, rel, buffer, title }) {
+      return writeEntry(user, project, knowledgeMirrorPath(tree, rel), buffer, { title: String(title).slice(0, TITLE_MAX_CHARS) });
     },
 
-    /** The text of a page, or null where there is none. @param {any} project @param {string} slug */
-    async readPage(project, slug) {
-      try { return (await readFile(project, knowledgePagePath(slug))).toString("utf8"); }
+    /** The text of a compiled file, or null where there is none. @param {any} project @param {"wiki" | "kg"} tree @param {string} rel */
+    async readPage(project, tree, rel) {
+      try { return (await readFile(project, knowledgeMirrorPath(tree, rel))).toString("utf8"); }
       catch (error) {
         const code = /** @type {any} */ (error)?.code;
         if (code === "ENOENT" || code === "file_not_found" || /** @type {any} */ (error)?.status === 404) return null;
@@ -269,7 +269,7 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
       }
     },
 
-    /** Retire a page's document (the compiler merged it into another). @param {{ user: any, source: any }} request */
+    /** Retire a compiled file's document (the engine no longer holds it). @param {{ user: any, source: any }} request */
     async retirePage({ user, source }) {
       return sources.remove(user.id, source.id, { expectedRevision: source.revision, accountCreatedAt: user.accountCreatedAt });
     },
@@ -315,10 +315,9 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
     async readNote({ project, source }) {
       // A knowledge page opens in the same editor: the whole of its Markdown is the text.
       if (sourceOriginOf({ connectorType: source?.payload?.connector?.type, path: source?.payload?.paths?.[0] }) === "wiki") {
-        const slug = requirePage(source);
-        const content = (await readFile(project, knowledgePagePath(slug))).toString("utf8");
-        const parsed = parseKnowledgePage(content);
-        return { title: parsed.title ?? source.payload?.title ?? slug, body: content.replace(/\n+$/, "") };
+        const where = requirePage(source);
+        const content = (await readFile(project, knowledgeMirrorPath(where.tree, where.rel))).toString("utf8");
+        return { title: readKnowledgePage(content, { path: where.rel }).title || source.payload?.title || where.rel, body: content.replace(/\n+$/, "") };
       }
       const rel = requireNote(source);
       const content = (await readFile(project, rel)).toString("utf8");
@@ -334,14 +333,15 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
      */
     async saveNote({ user, project, source, title, body }) {
       if (sourceOriginOf({ connectorType: source?.payload?.connector?.type, path: source?.payload?.paths?.[0] }) === "wiki") {
-        // A researcher's edit of a page: their text is kept as written, and from here their wording is the page's basis.
-        const slug = requirePage(source);
+        // A person's edit of a compiled page: their text is kept as written, what they changed is carried into every later compile.
+        const where = requirePage(source);
         const text = noteBody(body);
         if (!text.trim()) throw new HttpError(400, "source_note_invalid", "A page cannot be saved empty.");
-        const parsed = parseKnowledgePage(text);
-        const registered = await writeEntry(user, project, knowledgePagePath(slug), Buffer.from(`${text.trimEnd()}\n`, "utf8"),
-          { title: String(parsed.title ?? title ?? slug).slice(0, TITLE_MAX_CHARS) });
-        if (!registered.duplicate) await onPageEdited({ user, project, source: registered.source });
+        const saved = await savePage({ user, project, source, markdown: text });
+        if (saved) return { source: saved.source, duplicate: saved.duplicate, job: null, changed: saved.changed };
+        // No page service (the product ledger is partial): the file is still the person's to save.
+        const registered = await writeEntry(user, project, knowledgeMirrorPath(where.tree, where.rel), Buffer.from(`${text.trimEnd()}\n`, "utf8"),
+          { title: String(readKnowledgePage(text, { path: where.rel }).title || title || where.rel).slice(0, TITLE_MAX_CHARS) });
         return { ...registered, changed: !registered.duplicate };
       }
       const rel = requireNote(source);
