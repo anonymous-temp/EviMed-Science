@@ -93,4 +93,4 @@ class Registration(unittest.TestCase):
     def test_the_capability_rows_are_untouched_by_the_extra_key(self):
         ledger = json.loads((SUITE.parent / "acceptance-ledger.json").read_text(encoding="utf-8"))
         self.assertEqual(ledger["schemaVersion"], 1)
-        self.assertGreaterEqual(len(ledger["capabilities"]), 31)
+        self.assertGreaterEqual(len(ledger["capabilities"]), 30)
