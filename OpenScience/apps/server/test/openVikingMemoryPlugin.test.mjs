@@ -1,4 +1,4 @@
-// The official OpenViking memory plugin as the runtime image carries it (WP-OVMEM-R).
+// The official OpenViking memory plugin as the runtime image carries it.
 //
 // The plugin is built in the way LoopX's is — one digest-pinned archive, fetched at build time, added to the seeded profile,
 // never installed during a turn — but it is not adapted: no byte is edited. These tests hold what that depends on: the pin is
