@@ -142,7 +142,7 @@ export function timeOption(input: TimeInput): EChartsCoreOption {
 
   return {
     animation: false,
-    grid: { left: 132, right: 18, top: 10, bottom: 62 },
+    grid: { left: 8, right: 18, top: 10, bottom: 62, containLabel: true },
     tooltip: {
       confine: true,
       formatter: (params: { seriesType?: string; data?: { value?: number[]; eventId?: string } }) => {
@@ -163,7 +163,13 @@ export function timeOption(input: TimeInput): EChartsCoreOption {
     },
     dataZoom: [
       { type: "inside", xAxisIndex: 0, startValue, endValue, filterMode: "none" },
-      { type: "slider", xAxisIndex: 0, startValue, endValue, filterMode: "none", height: 24, bottom: 10, brushSelect: false, borderColor: palette.grid, textStyle: { color: palette.textFaint } },
+      {
+        type: "slider", xAxisIndex: 0, startValue, endValue, filterMode: "none", height: 24, bottom: 10, brushSelect: false, borderColor: palette.grid, textStyle: { color: palette.textFaint },
+        // The ends of the window are days in the researcher's zone, not the library's timestamp; the dates are read off the axis while
+        // dragging and, once the window is chosen, from the sentence under the chart — the library's own end labels ran off the canvas.
+        showDetail: false,
+        labelFormatter: (value: number) => dayIn(Number(value), timeZone),
+      },
     ],
     series: [
       {

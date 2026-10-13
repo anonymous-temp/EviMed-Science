@@ -82,6 +82,7 @@ describe("the option", () => {
     expect(windowed.dataZoom[1].endValue).toBe(Date.parse("2026-09-30T23:59:59.999Z"));
     expect(windowed.xAxis.min).toBe(option.xAxis.min);
     expect(option.dataZoom[1].type).toBe("slider");
+    expect(option.dataZoom[1].labelFormatter(Date.parse("2026-09-30T16:30:00Z"))).toBe("2026-09-30");
   });
   it("draws a bar inside the plot, at least as wide as a sliver", () => {
     const plot = { x: 100, y: 0, width: 400, height: 200 };
