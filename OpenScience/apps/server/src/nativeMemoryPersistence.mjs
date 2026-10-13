@@ -71,6 +71,8 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
   ingested_at timestamptz(3),
   PRIMARY KEY (user_id, archive_uri)
 );
+-- A ledger made before the page's 「记住这一条」 existed gains the column without being rebuilt.
+ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS pending_text text CHECK (pending_text IS NULL OR char_length(pending_text) <= 2000);
 CREATE INDEX IF NOT EXISTS native_commits_open_idx ON evimed_memory.native_commits (state, next_attempt_at)
   WHERE state IN ('pending', 'failed');
 CREATE INDEX IF NOT EXISTS native_commits_session_idx ON evimed_memory.native_commits (user_id, engine_session);

@@ -495,10 +495,35 @@ export class NativeMemoryStore {
       const next = raw.join("\n");
       await this.#write(userId, file, next, { actor, reason: keepText ? "forgotten on the memory page" : "deleted on the memory page" });
       // A delete takes the line out of the history too; a forget keeps it for the undo.
-      if (!keepText) await this.overlay.scrubLines(userId, file.uri, [line.raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")]);
+      if (!keepText) await this.overlay.scrubLines(userId, file.uri, await this.#wordingsOf(userId, file.uri, line.raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")));
       return { removed: true, uri: file.uri, hash: contentHash(next) };
     }
     return this.forgetFile(userId, file, { keepText, actor });
+  }
+
+  /**
+   * A line and the wordings it had before the person's own edits made it what it is: an edit that took out exactly one line
+   * and put exactly one in its place is one line changing, so deleting the line deletes its earlier wordings from the history
+   * too. Nothing looser is guessed — whether two lines say the same thing is language.
+   * @param {string} userId @param {string} uri @param {string} text
+   */
+  async #wordingsOf(userId, uri, text) {
+    const wordings = [text];
+    const prints = new Set([lineFingerprint(text)]);
+    for (const revision of await this.overlay.revisionsOf(userId, uri, { limit: 200 })) {
+      if (revision.actor !== "user" || revision.change !== "updated" || revision.before === null || revision.after === null) continue;
+      const before = statements(revision.before);
+      const after = statements(revision.after);
+      const kept = new Set(after.map(lineFingerprint));
+      const had = new Set(before.map(lineFingerprint));
+      const removed = before.filter((candidate) => !kept.has(lineFingerprint(candidate)));
+      const added = after.filter((candidate) => !had.has(lineFingerprint(candidate)));
+      if (removed.length === 1 && added.length === 1 && prints.has(lineFingerprint(added[0]))) {
+        wordings.push(removed[0]);
+        prints.add(lineFingerprint(removed[0]));
+      }
+    }
+    return wordings;
   }
 
   /** @param {string} userId @param {any} file @param {{ keepText?: boolean, actor?: string, reason?: string }} [options] */

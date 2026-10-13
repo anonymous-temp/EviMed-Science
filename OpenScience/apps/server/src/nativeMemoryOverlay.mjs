@@ -131,17 +131,17 @@ export class NativeMemoryOverlay {
   /**
    * One commit the engine accepted. Written once per archive: a second sighting (the scan finding what the gateway
    * recorded) fills what the first did not know and never moves the state back.
-   * @param {{ userId: string, archiveUri: string, engineSession: string, projectId?: string | null, origin: string, taskId?: string | null, state?: string, error?: string, pendingText?: string | null }} commit
+   * @param {{ userId: string, archiveUri: string, engineSession: string, projectId?: string | null, origin: string, taskId?: string | null, state?: string, error?: string, pendingText?: string | null, attempts?: number }} commit `attempts`: how many replays the conversation behind this commit has had already (a replay's own commit carries the count on, so the cap bounds the chain)
    */
-  async recordCommit({ userId, archiveUri, engineSession, projectId = null, origin, taskId = null, state = "pending", error = "", pendingText = null }) {
+  async recordCommit({ userId, archiveUri, engineSession, projectId = null, origin, taskId = null, state = "pending", error = "", pendingText = null, attempts = 0 }) {
     if (!NATIVE_COMMIT_ORIGINS.includes(origin)) throw new HttpError(500, "memory_commit_invalid", "Unknown commit origin.");
-    const result = await this.#query(`INSERT INTO evimed_memory.native_commits AS c (user_id, archive_uri, engine_session, project_id, origin, task_id, state, error, next_attempt_at, pending_text)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $9)
+    const result = await this.#query(`INSERT INTO evimed_memory.native_commits AS c (user_id, archive_uri, engine_session, project_id, origin, task_id, state, error, next_attempt_at, pending_text, attempts)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $9, $10)
       ON CONFLICT (user_id, archive_uri) DO UPDATE SET
         task_id = COALESCE(c.task_id, EXCLUDED.task_id), project_id = COALESCE(c.project_id, EXCLUDED.project_id), updated_at = clock_timestamp()
       RETURNING *, (xmax = 0) AS inserted`,
     [owner(userId), String(archiveUri), String(engineSession), projectId, origin, taskId, state, String(error ?? "").slice(0, 400),
-      pendingText == null ? null : String(pendingText).slice(0, 2_000)]);
+      pendingText == null ? null : String(pendingText).slice(0, 2_000), Math.max(0, Math.min(100, Math.trunc(Number(attempts)) || 0))]);
     return { ...publicCommit(result.rows[0]), inserted: result.rows[0].inserted === true };
   }
 
@@ -159,13 +159,13 @@ export class NativeMemoryOverlay {
 
   /**
    * The commits something is still owed for: a diff to read (`pending`), or a replay that is due (`failed`).
-   * @param {{ limit?: number, userId?: string | null }} [options]
+   * @param {{ limit?: number, userId?: string | null, now?: Date | null }} [options] `now`: the moment a replay is due by (the database's clock when absent)
    */
-  async openCommits({ limit = 50, userId = null } = {}) {
+  async openCommits({ limit = 50, userId = null, now = null } = {}) {
     const result = await this.#query(`SELECT * FROM evimed_memory.native_commits
-      WHERE ((state = 'pending') OR (state = 'failed' AND (next_attempt_at IS NULL OR next_attempt_at <= clock_timestamp())))
+      WHERE ((state = 'pending') OR (state = 'failed' AND (next_attempt_at IS NULL OR next_attempt_at <= COALESCE($3::timestamptz, clock_timestamp()))))
         AND ($2::text IS NULL OR user_id = $2)
-      ORDER BY created_at LIMIT $1`, [Math.max(1, Math.min(500, Math.trunc(Number(limit)) || 50)), userId == null ? null : owner(userId)]);
+      ORDER BY created_at LIMIT $1`, [Math.max(1, Math.min(500, Math.trunc(Number(limit)) || 50)), userId == null ? null : owner(userId), now ? now.toISOString() : null]);
     return result.rows.map(publicCommit);
   }
 

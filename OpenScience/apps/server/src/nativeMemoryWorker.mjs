@@ -203,7 +203,7 @@ export class NativeMemoryWorker {
    */
   async processCommits({ userId = null, limit = 50 } = {}) {
     let settled = 0;
-    for (const commit of await this.overlay.openCommits({ userId, limit })) {
+    for (const commit of await this.overlay.openCommits({ userId, limit, now: this.now() })) {
       try {
         if (commit.state === "pending") settled += await this.#settle(commit) ? 1 : 0;
         else if (commit.state === "failed") settled += await this.#replay(commit) ? 1 : 0;
@@ -291,7 +291,7 @@ export class NativeMemoryWorker {
       const result = answer?.result ?? {};
       if (result.status !== "accepted" || typeof result.archive_uri !== "string") throw Object.assign(new Error("the replay commit was not accepted"), { code: "native_replay_not_accepted" });
       await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: session, projectId: commit.projectId, origin: "replay",
-        taskId: typeof result.task_id === "string" ? result.task_id : null, pendingText: commit.pendingText });
+        taskId: typeof result.task_id === "string" ? result.task_id : null, pendingText: commit.pendingText, attempts: commit.attempts + 1 });
       await this.overlay.markReplayed(userId, commit.archiveUri, result.archive_uri);
       recordNativeCommit("replayed");
       return true;
