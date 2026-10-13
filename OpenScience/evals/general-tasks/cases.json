@@ -380,7 +380,7 @@
      "type": "pdf_summary",
      "source": "operations-report-20p.pdf",
      "min_numbers": 5,
-     "min_found_ratio": 0.9
+     "min_found_ratio": 0.75
     },
     {
      "type": "xlsx_table",

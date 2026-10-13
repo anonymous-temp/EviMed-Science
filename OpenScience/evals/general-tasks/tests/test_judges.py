@@ -320,6 +320,12 @@ class OfficeChecks(unittest.TestCase):
         self.assertEqual(ok_of(env.run(spec)), [False])
         env.close()
 
+    def test_pdf_summary_does_not_count_years_units_or_derived_totals_against_the_summary(self):
+        spec = CASES["G08"]["checks"][0]
+        env = Env("G08", [turn("2025 年报告。入库 53,290 吨，增长 8.4%，覆盖率 81%，人均 142 单，达标率 99.2%，上海一仓破损率 0.42%，五仓合计 52,180 吨。")])
+        self.assertEqual(ok_of(env.run(spec)), [True], env.run(spec))
+        env.close()
+
     def test_pdf_summary_numbers_must_be_in_the_source(self):
         spec = CASES["G08"]["checks"][0]
         env = Env("G08", [turn("摘要：全年入库 53,290 吨，同比增长 8.4%，自动分拣覆盖率 81%，人均 142 单，冷链达标率 99.2%。")])
@@ -404,6 +410,15 @@ for name in sorted(os.listdir(a.folder)):
         self.assertEqual(ok_of(env.run({"type": "rename_script"})), [True], env.run({"type": "rename_script"}))
         env.put(0, "rename.py", self.GOOD.replace("if not a.dry_run: ", ""))
         self.assertEqual(ok_of(env.run({"type": "rename_script"})), [False])
+        env.close()
+
+    def test_a_script_that_previews_by_default_and_renames_under_apply_still_passes(self):
+        env = Env("G09", [turn("x")])
+        script = self.GOOD.replace('p.add_argument("--dry-run", action="store_true")', 'p.add_argument("--dry-run", action="store_true"); p.add_argument("--apply", action="store_true")').replace("if not a.dry_run:", "if a.apply and not a.dry_run:")
+        env.put(0, "rename.py", script)
+        result = env.run({"type": "rename_script"})
+        self.assertEqual(ok_of(result), [True], result)
+        self.assertIn("--apply", result[0]["detail"])
         env.close()
 
     def test_project_tests_and_unchanged_test_file(self):

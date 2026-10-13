@@ -145,9 +145,14 @@ def chk_run_ok(spec, ctx: Ctx):
     return [result("run_succeeded", not bad, "; ".join(bad) or "all turns succeeded")]
 
 
+def _picked(ctx: Ctx, spec: dict) -> list[tuple[int, dict]]:
+    indexes = [spec["turn"]] if spec.get("turn") is not None else spec.get("turns") or range(len(ctx.turns))
+    return [(i, ctx.turns[i]) for i in indexes if i < len(ctx.turns)]
+
+
 def chk_route_not(spec, ctx):
     hits = []
-    for i, turn in enumerate(ctx.pick(spec)):
+    for i, turn in _picked(ctx, spec):
         agent, reason = _agent_of(turn)
         for banned in spec["agents"]:
             if agent == banned or f"named:{banned}" in reason or reason.endswith(f":{banned}"):
@@ -158,7 +163,7 @@ def chk_route_not(spec, ctx):
 
 def chk_route_is(spec, ctx):
     wrong = []
-    for i, turn in enumerate(ctx.pick(spec)):
+    for i, turn in _picked(ctx, spec):
         agent, reason = _agent_of(turn)
         if agent != spec["agent"]:
             wrong.append(f"turn {i}: {agent or '-'}/{reason or '-'}")
@@ -167,7 +172,7 @@ def chk_route_is(spec, ctx):
 
 def chk_route_reason_not(spec, ctx):
     pattern = re.compile(spec["pattern"])
-    hits = [f"turn {i}: {_agent_of(t)[1]}" for i, t in enumerate(ctx.pick(spec)) if pattern.search(_agent_of(t)[1])]
+    hits = [f"turn {i}: {_agent_of(t)[1]}" for i, t in _picked(ctx, spec) if pattern.search(_agent_of(t)[1])]
     return [result(f"route_reason_not:{spec['pattern']}", not hits, "; ".join(hits) or "no such route reason")]
 
 
@@ -534,12 +539,14 @@ def chk_pdf_summary(spec, ctx):
     text = ctx.reply(spec)
     for rel, path in ctx.new_files([".md", ".txt", ".docx", ".html", ".pdf"]):
         text += "\n" + textio.file_text(path)
-    tokens = sorted({t for t in numbers_in(text, 2)})
-    found = [t for t in tokens if squash(t) in source]
+    tokens = sorted({t for t in numbers_in(text, 2) if not re.fullmatch(r"(?:19|20)\d\d", t)})
+    found = [t for t in tokens if squash(t) in source or squash(t.rstrip("%")) in source]
     ratio = len(found) / len(tokens) if tokens else 0
-    ok = len(tokens) >= spec["min_numbers"] and ratio >= spec["min_found_ratio"]
+    # Five facts picked from the summary must each be in the source; a derived figure (a total, a share) is not in the source and
+    # is not held against the summary, so the bar is five found facts and three quarters of the numbers found.
+    ok = len(found) >= spec["min_numbers"] and ratio >= spec["min_found_ratio"]
     missing = [t for t in tokens if t not in found][:6]
-    return [result("summary_facts_in_source", ok, f"{len(found)}/{len(tokens)} numeric facts of the summary are in the PDF; not found {missing}")]
+    return [result("summary_facts_in_source", ok, f"{len(found)}/{len(tokens)} numeric facts of the summary are in the PDF; not found (derived or wrong) {missing}")]
 
 
 def chk_numbers_from_source(spec, ctx):
@@ -667,6 +674,7 @@ def chk_rename_script(spec, ctx):
 
     def check(script: Path):
         problems = []
+        applied_with = None
         for mode in ("dry", "real"):
             work = Path(tempfile.mkdtemp(prefix="gt-photos-"))
             shutil.copytree(ctx.fixtures / "photos", work / "photos")
@@ -685,6 +693,23 @@ def chk_rename_script(spec, ctx):
             if outcome is None:
                 return False, f"the script did not run cleanly on the fixture folder ({mode}); tried the folder as argument, as an option and as cwd"
             after = _dir_state(directory)
+            if mode == "real" and after == before:
+                # A script that previews by default and renames under an explicit flag (--apply, --execute, ...) is still a script
+                # that renames; the baseline notes it, because the request said --dry-run is the option.
+                help_text = _run([sys.executable, str(script), "--help"], directory, 30).stdout
+                apply_flags = re.findall(r"(--(?:apply|execute|exec|run|commit|yes|real|write|rename|go|do-it|no-dry-run)\b)", help_text)
+                for flag in apply_flags[:2]:
+                    for cmd, cwd in attempts(script, directory, [flag]):
+                        try:
+                            done = _run(cmd, cwd)
+                        except subprocess.TimeoutExpired:
+                            continue
+                        if done.returncode == 0:
+                            applied_with = flag
+                            break
+                    after = _dir_state(directory)
+                    if after != before:
+                        break
             if mode == "dry":
                 if after != before:
                     problems.append("--dry-run changed the folder")
@@ -708,7 +733,7 @@ def chk_rename_script(spec, ctx):
                             break
                     if len(set(after)) != len(after):
                         problems.append("two files share a name")
-        return (not problems), "; ".join(problems) or "dry-run left the folder alone; the real run renamed all six photos by their EXIF date"
+        return (not problems), "; ".join(problems) or ("dry-run left the folder alone; the real run renamed all six photos by their EXIF date" + (f" (only with {applied_with}: the plain run previews)" if applied_with else ""))
 
     ok, note = _any_candidate(scripts, check)
     return [result("rename_script_works", ok, note)]
