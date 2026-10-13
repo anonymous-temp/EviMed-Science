@@ -1,5 +1,6 @@
 memory_type: project_facts
 description: |
+  __LANGUAGE__
   Working facts: a standing fact about the user's work that is not a preference and does
   NOT belong to one project's card: who does what in their team ("统计部分由合作者李教授负责，
   用 R"), a definition or convention their group uses, an arrangement that holds across

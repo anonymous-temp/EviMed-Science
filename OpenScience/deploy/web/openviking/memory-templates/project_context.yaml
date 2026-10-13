@@ -1,5 +1,7 @@
 memory_type: project_context
 description: |
+  # Language
+  Write every memory in {{ language }}, the language of the user's own messages. The examples in this description are in Chinese or English only to show the shape of a memory: never copy an example's words or its language. The section labels and the default heading written in Chinese below are Chinese only for a Chinese conversation; in any other language write them in that language. Names, drug names, abbreviations and terms the user quoted stay as the user wrote them.
   Project context: one card for ONE piece of work the user is carrying out over time, in
   any field: a study, a manuscript, a product release, a system migration, a case, a course,
   a campaign. The card is the user's own description of that work and nothing else.
@@ -26,7 +28,7 @@ description: |
   When, and only when, the user describes a clinical or epidemiological study, the section
   研究要素 may list the elements they stated, each on its own line and only those stated:
   人群 / 干预或暴露 / 对照 / 结局 / 设计. Other kinds of work never get this section.
-  The line 领域 under the title names the field of the work in the user's own terms
+  The line 领域 ("Field" outside a Chinese conversation) under the title names the field of the work in the user's own terms
   (心血管流行病学, 后端架构, 劳动法, 初中数学教学 ...): an open description, never chosen from
   a fixed list; leave it out when the user did not make it clear.
 
@@ -74,7 +76,7 @@ fields:
       The card in Markdown, only with what the user stated:
 
       # <project name>
-      领域：<field of the work, in the user's terms>   (omit the line when unclear)
+      {% if language == 'zh-CN' %}领域：{% else %}Field: {% endif %}<field of the work, in the user's terms>   (omit the line when unclear)
       <one plain sentence saying what this work is>
 
       ## 目标
