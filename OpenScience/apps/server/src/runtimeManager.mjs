@@ -10,7 +10,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { GENE_EXPRESSION_LIMITS, RUN_CONTEXT_PROTOCOL, workspaceLayout } from "@evimed/domain";
+import { GENE_EXPRESSION_LIMITS, RUN_CONTEXT_PROTOCOL, isolatedToolRowIsAdmitted, workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv } from "@evimed/harness-port";
 import {
   dockerRuntimeMount,
@@ -6080,17 +6080,20 @@ export class RuntimeManager {
       if (canonicalJson(physical) !== canonicalJson(candidate)) throw new HttpError(400, 'extension_contract_invalid', 'The extension manifest changed.');
     } else if (candidate.projection.plugins.some(plugin => plugin.compatibility !== 'legacy-citation-v1')) throw new HttpError(400, 'extension_contract_invalid', 'A baseline cannot select extension tools.');
     const external = candidate.projection.plugins.filter(plugin => plugin.compatibility !== 'legacy-citation-v1');
-    if (external.length > 1) throw new HttpError(400, 'extension_contract_invalid', 'The selected bridge is unsupported.');
-    for (const plugin of external) {
-      const artifact = this.extensionArtifacts.get(plugin.extensionId);
-      if (!artifact || artifact.artifactDigest !== plugin.artifactDigest || artifact.integrity !== plugin.integrity || plugin.executionClass !== 'isolated-tool'
-        || plugin.coordinate?.kind !== 'github' || plugin.coordinate.repository !== 'Jesse-njx/dsh-cowork' || !plugin.settings || Object.keys(plugin.settings).length !== 0 || !Array.isArray(plugin.connectionRefs) || plugin.connectionRefs.length !== 0) throw new HttpError(400, 'extension_contract_invalid', 'The selected bridge is unsupported.');
-    }
+    this.assertSelectedBridge(external);
     const personal = candidate.projection.personal;
     if (personal.reference) { const selected = await verifyPersonalSkillGeneration(this.config, project, personal.reference, candidate.identity.baseRuntimeImageDigest);
       if (canonicalJson(selected.pins) !== canonicalJson(personal.pins)) throw new HttpError(400, 'extension_contract_invalid', 'Personal generation pins changed.');
     } else if (personal.pins.length) throw new HttpError(400, 'extension_contract_invalid', 'Personal generation pins require selected bytes.');
     return { joined: true, manifestDigest: 'sha256:' + createHash('sha256').update(canonicalJson(candidate)).digest('hex') };
+  }
+  /** One native bridge row carries the selected isolated tool, and it must be exactly what the deployment admitted: the
+   * descriptor's artifact digest, package integrity, coordinate and the class's permission profile. Which repository that
+   * is, is the deployment's protected allow-list and not a name written here. @param {any[]} external projection rows that are not the citation baseline */
+  assertSelectedBridge(external) {
+    if (external.length > 1 || external.some(plugin => !isolatedToolRowIsAdmitted(plugin, this.extensionArtifacts.get(plugin.extensionId)))) {
+      throw new HttpError(400, 'extension_contract_invalid', 'The selected bridge is unsupported.');
+    }
   }
   currentGeneration(project) { return this.runtimes.get(this.key(project))?.extensionGeneration ?? null; }
   /** Factual target registry lookup, always bound to the same live runtime epoch. @param {any} project @param {string} sessionId */
