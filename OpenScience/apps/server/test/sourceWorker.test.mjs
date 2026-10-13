@@ -150,7 +150,7 @@ test("a document is finished as soon as its text is in; its understanding is the
   // understanding run took, because its text was written out only after it.
   // 2026-10-13: and it stayed `parsing` for all of that time, which is what
   // every reader of the status took it to be.
-  const { calls, source, sources, worker } = fixture({ depth: "structured" });
+  const { calls, source, worker } = fixture({ depth: "structured" });
   let runs = 0;
   worker.understandingRuns = { execute: async () => {
     runs += 1;
