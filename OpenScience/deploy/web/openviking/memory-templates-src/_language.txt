@@ -1,0 +1,2 @@
+# Language
+Write every memory in {{ language }}, the language of the user's own messages. The examples in this description are in Chinese or English only to show the shape of a memory: never copy an example's words or its language. The section labels and the default heading written in Chinese below are Chinese only for a Chinese conversation; in any other language write them in that language. Names, drug names, abbreviations and terms the user quoted stay as the user wrote them.

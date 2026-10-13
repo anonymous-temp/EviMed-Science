@@ -87,7 +87,8 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
-import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, KNOWLEDGE_PROJECT_ID, LEARNING_PROJECT_ID, assertClientProject, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
+import { openVikingBackupReadiness } from "./openVikingBackupReadiness.mjs";
+import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, KNOWLEDGE_PROJECT_ID, LEARNING_PROJECT_ID, assertClientProject, ensureEvidenceProject, ensureOpenVikingProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
 import { createEvolutionPositiveEvidence } from "./evolutionPositiveEvidence.mjs";
@@ -206,6 +207,8 @@ import { ALERT_RECEIVER_PATH, createAlertReceiver } from "./alertReceiver.mjs";
 import { RunMetrics, runCapabilityLabel } from "./runMetrics.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
+import { OpenVikingEngine } from "./openVikingEngine.mjs";
+import { createOpenVikingModelCaller } from "./openVikingModelCaller.mjs";
 import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
 import { MemoryIndexWithdrawals } from "./memoryIndexWithdrawals.mjs";
 import { MaintenanceService } from "./maintenanceService.mjs";
@@ -1280,6 +1283,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // interface without one.
   const openVikingClient = overrides.openVikingClient
     ?? new OpenVikingClient(config, { fetchImpl: overrides.openVikingFetch ?? globalThis.fetch });
+  // OpenViking as an engine (v0.5.0): what must be true of the running service before native memory or knowledge
+  // compile can rely on it (`ready(feature)`), read at start and on a slow cadence, and reported under
+  // `memoryIndex.engine`. Only when the engine is this deployment's index: a deployment that pinned `builtin` asks
+  // nothing of a service it does not use.
+  const openVikingEngine = overrides.openVikingEngine ?? (selectedMemoryIndexProvider(config) === "openviking" && openVikingClient.configured
+    ? new OpenVikingEngine({ client: openVikingClient, config, pin: config.openVikingPin,
+      report: (line) => process.stderr.write(`${line}\n`) })
+    : null);
+  // The engine's own model calls, as a caller of the model gateway (`openVikingModelCaller.mjs`).
+  const openVikingModelCaller = createOpenVikingModelCaller({ config, usageLedger, ensureOwner: () => ensureOpenVikingProject(store) });
   // Whether a memory write has an index to tell about it. Decided before the
   // store is built, because the store is handed the outbox only when something
   // will claim from it, and decided by the same function the substrate reads so
@@ -4734,6 +4747,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     attributeRun,
     runPurpose,
     runScope: autopilotRunScope,
+    serviceCaller: openVikingModelCaller,
   });
   // A specialist engine's spend, reported by its adapter when a job ends (X1
   // purpose `engine`): the runtime calls engines directly, so this is the one
@@ -5947,7 +5961,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService, capsuleService);
+        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService, capsuleService, { engine: openVikingEngine, modelCaller: openVikingModelCaller });
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -5955,6 +5969,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (pathname === "/api/ops/metrics" && (req.method === "GET" || req.method === "HEAD")) {
         await sendOperatorMetrics(req, res, {
           judgeService,
+          openViking: { engine: openVikingEngine, modelCaller: openVikingModelCaller },
           config,
           store,
           taskManager,
@@ -7878,6 +7893,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       hostedExtensions?.preparation.start();
       hostedExtensions?.worker.start();
       memoryIndexWorker?.start();
+      openVikingEngine?.start();
       sourceWorker?.start();
       knowledgePagesWorker?.start();
       kbIndex?.start();
@@ -8115,6 +8131,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await hostedExtensions?.preparation.close();
       await hostedExtensions?.worker.close();
       await memoryIndexWorker?.close();
+      openVikingEngine?.close();
       await sourceWorker?.close();
       await knowledgePagesWorker?.close();
       await kbIndex?.close();
@@ -8952,8 +8969,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ webVitals = null, judgeService = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null, capsuleService = null }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService, capsuleService);
+async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null, capsuleService = null }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService, capsuleService, openViking);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -9169,6 +9186,59 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, conf
     "counter",
     { value: modelGatewayFilesRefusals() },
   );
+  // OpenViking as an engine: its own model calls through the gateway (admitted, or refused by the module's day), the
+  // day's budget and what is committed against it, and whether each fact the features built on it need is true.
+  const modelPath = readiness.checks.memoryIndex?.modelPath ?? null;
+  if (modelPath) {
+    addMetric(
+      lines,
+      "open_science_openviking_model_requests_total",
+      "Model calls the OpenViking service made through the model gateway since this process started, by purpose and by whether the module's daily budget admitted them.",
+      "counter",
+      ["memory-extraction", "knowledge"].flatMap((purpose) => [
+        { value: Number(modelPath.admitted?.[purpose] ?? 0), labels: { purpose, outcome: "admitted" } },
+        { value: Number(modelPath.refused?.[purpose] ?? 0), labels: { purpose, outcome: "budget_refused" } },
+      ]),
+    );
+    addMetric(
+      lines,
+      "open_science_openviking_model_budget_cny",
+      "The OpenViking service's own model money per rolling 24 hours (0 = no cap) and what is committed against it; committed is absent when the ledger could not be read.",
+      "gauge",
+      [
+        { value: Number(modelPath.budgetCny ?? 0), labels: { kind: "budget" } },
+        ...(modelPath.spentCny == null ? [] : [{ value: Number(modelPath.spentCny), labels: { kind: "committed" } }]),
+      ],
+    );
+  }
+  // The engine volume's last verified copy (`openVikingBackupReadiness.mjs`): the notice readiness gives, as numbers an
+  // alert can read. The age is absent when no copy is known.
+  const engineBackup = /** @type {any} */ (readiness.checks.backup)?.openviking ?? null;
+  if (engineBackup) {
+    addMetric(
+      lines,
+      "open_science_openviking_backup_healthy",
+      "Whether the OpenViking engine volume's last capture was verified and is within its maximum age (1) or not (0), with the code that says why.",
+      "gauge",
+      { value: engineBackup.healthy ? 1 : 0, labels: { code: String(engineBackup.code ?? "ok") } },
+    );
+    if (Number.isFinite(engineBackup.ageSeconds)) {
+      addMetric(lines, "open_science_openviking_backup_age_seconds", "Seconds since the OpenViking engine volume's last verified capture.", "gauge",
+        { value: Number(engineBackup.ageSeconds) });
+    }
+  }
+  const engineFacts = readiness.checks.memoryIndex?.engine?.facts ?? null;
+  if (engineFacts) {
+    addMetric(
+      lines,
+      "open_science_openviking_engine_fact",
+      "Whether each fact of the OpenViking engine that native memory and knowledge compile depend on is true (1) or not (0), with the code that says why.",
+      "gauge",
+      Object.entries(engineFacts).map(([fact, state]) => ({
+        value: /** @type {any} */ (state)?.ok ? 1 : 0, labels: { fact, code: String(/** @type {any} */ (state)?.code ?? "ok") },
+      })),
+    );
+  }
   addMetric(
     lines,
     "open_science_autopilot_episode_dispatches_total",
@@ -9620,7 +9690,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null, vcr = null, credits = null, judgeService = null, capsules = null) {
+async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null, vcr = null, credits = null, judgeService = null, capsules = null, openViking = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -9634,7 +9704,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     auth: await readinessCheck(async () => readinessAuth(config, store)),
     stateStore: await readinessCheck(async () => readinessStateStore(config, store)),
     memory: await readinessCheck(async () => readinessMemory(researchMemory, config)),
-    memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memorySubstrate, memoryIndexWorker, capsules)),
+    memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memorySubstrate, memoryIndexWorker, capsules, openViking)),
     usageLedger: await readinessCheck(async () => readinessUsageLedger(config, usageLedger)),
     inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
     documentParser: await readinessCheck(async () => readinessDocumentParser(config, documentParser)),
@@ -9804,7 +9874,7 @@ async function readinessMemory(researchMemory, config) {
  * over a degraded one. `OPEN_SCIENCE_MEMORY_INDEX_STRICT` is the operator's
  * statement that they would rather see the failure, and it is the same switch
  * that makes those recalls fail instead of degrade. */
-async function readinessMemoryIndex(config, substrate, worker, capsules = null) {
+async function readinessMemoryIndex(config, substrate, worker, capsules = null, openViking = null) {
   const required = Boolean(config.memoryIndexStrict);
   const status = substrate
     ? await substrate.status()
@@ -9853,6 +9923,14 @@ async function readinessMemoryIndex(config, substrate, worker, capsules = null) 
     // The same for the capsule half of a recall, which falls back to lexical search when the index cannot answer and said so
     // to nobody (2026-10-10 review M-7: `lastIndexError` was read only by a test). It clears when the index answers.
     ...(capsules?.lastIndexError ? { capsuleRecall: { lastError: capsules.lastIndexError } } : {}),
+    // OpenViking as an engine (`openVikingEngine.mjs`): the facts native memory and knowledge compile need to be true,
+    // which features a failed one degrades, and the engine's own model path (the key, the day's budget and what it has
+    // committed). Reported, never required: a failed fact pauses the feature built on it, and no conversation.
+    ...(openViking?.engine ? { engine: {
+      ...openViking.engine.status(),
+      features: { nativeMemory: config.ovNativeMemoryEnabled === true, knowledge: config.ovKnowledgeEnabled === true },
+    } } : {}),
+    ...(openViking?.engine && openViking.modelCaller ? { modelPath: await openViking.modelCaller.status() } : {}),
   };
   if (required && !(status.configured && status.connected)) {
     throw readinessFailure(status.code ?? "memory_index_unavailable", details);
@@ -10419,7 +10497,8 @@ export async function readinessBackup(config, database = null) {
     if (!config.backupExternalAck) throw readinessFailure("backup_external_unconfirmed");
     if (!config.restoreDrillAck) throw readinessFailure("restore_drill_unconfirmed");
     return { ...summary, external: true, postgres: await postgresBackupReadiness(config, database),
-      ...(config.vcrEnabled ? { vcr: await vcrBackupReadiness(config) } : {}) };
+      ...(config.vcrEnabled ? { vcr: await vcrBackupReadiness(config) } : {}),
+      ...(await openVikingBackupNotice(config)) };
   }
 
   const backupDir = String(config.backupDir ?? "").trim();
@@ -10524,7 +10603,14 @@ export async function readinessBackup(config, database = null) {
     },
     postgres: await postgresBackupReadiness(config, database),
     ...(config.vcrEnabled ? { vcr: await vcrBackupReadiness(config) } : {}),
+    ...(await openVikingBackupNotice(config)),
   };
+}
+
+/** The engine volume's copy (`openVikingBackupReadiness.mjs`), when the engine is this deployment's: a notice, never a
+ *  failure of the backup check. @param {Record<string, any>} config */
+async function openVikingBackupNotice(config) {
+  return selectedMemoryIndexProvider(config) === "openviking" ? { openviking: await openVikingBackupReadiness(config) } : {};
 }
 
 async function inspectRuntimeImage(config, runtimeManager) {

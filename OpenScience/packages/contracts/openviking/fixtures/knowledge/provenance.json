@@ -1,0 +1,662 @@
+{
+  "recorded_from": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recorded_at": "2026-10-12T23:55:38Z",
+  "auth_mode": "trusted (X-API-Key root + X-OpenViking-Account: evimed + X-OpenViking-User)",
+  "account": "evimed",
+  "user": "u-0f1e2d3c4b5a69788796a5b4",
+  "fixtures": {
+    "fs-mkdir": {
+      "file": "fs-mkdir.json",
+      "method": "POST",
+      "path": "/api/v1/fs/mkdir",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources"
+      },
+      "status": 200
+    },
+    "content-write-create": {
+      "file": "content-write-create.json",
+      "method": "POST",
+      "path": "/api/v1/content/write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md",
+        "content": "# Alpha 协议\n\nSource: alpha.md\nSHA-256: 0000\nExtractor: local-read 1.0 (text)\n\n<!-- page 1 -->\nAlpha 协议是一个用于设备间时间同步的轻量协议，由 Lumen 工作组在 2021 年发布。它使用 UDP 端口 4123，默认同步周期为 64 秒。\n\n<!-- page 2 -->\nAlpha 协议的参考实现叫做 alphad，用 Rust 编写。\n",
+        "mode": "create",
+        "wait": true,
+        "processing_mode": "vectors_only",
+        "tags": [
+          "src=src_00000000000000000000000000000001",
+          "doctype=other"
+        ]
+      },
+      "status": 200
+    },
+    "content-write-create-exists": {
+      "file": "content-write-create-exists.json",
+      "method": "POST",
+      "path": "/api/v1/content/write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md",
+        "content": "x",
+        "mode": "create",
+        "wait": true,
+        "processing_mode": "vectors_only"
+      },
+      "status": 409,
+      "note": "create on an existing file"
+    },
+    "content-batch-write": {
+      "file": "content-batch-write.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
+        "wait": true,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000002.md",
+            "content": "# Beta 网关\n\nSource: beta.md\nSHA-256: 0000\nExtractor: local-read 1.0 (text)\n\nBeta 网关是 Lumen 工作组维护的边缘网关产品，内置 alphad 以通过 Alpha 协议同步时间。Beta 网关 2.0 版本于 2023 年 3 月发布，支持最多 500 台下游设备。\n",
+            "mode": "upsert"
+          },
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000003.md",
+            "content": "# Gamma 仪表盘\n\nSource: gamma.md\nSHA-256: 0000\nExtractor: local-read 1.0 (text)\n\nGamma 仪表盘是 Beta 网关 2.0 自带的 Web 管理界面，默认监听 TCP 端口 8443，用来查看下游设备的时间偏差。\n",
+            "mode": "upsert"
+          },
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md",
+            "content": "# Alpha 协议\n\nSource: alpha.md\nSHA-256: 0000\nExtractor: local-read 1.0 (text)\n\n<!-- page 1 -->\nAlpha 协议是一个用于设备间时间同步的轻量协议，由 Lumen 工作组在 2021 年发布。它使用 UDP 端口 4123，默认同步周期为 64 秒。\n\n<!-- page 2 -->\nAlpha 协议的参考实现叫做 alphad，用 Rust 编写。\n",
+            "mode": "upsert"
+          }
+        ]
+      },
+      "status": 200,
+      "note": "two created, one unchanged"
+    },
+    "content-batch-write-root-missing": {
+      "file": "content-batch-write-root-missing.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/nowhere",
+        "wait": true,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/nowhere/a.md",
+            "content": "a",
+            "mode": "create"
+          }
+        ]
+      },
+      "status": 404,
+      "note": "the root directory must exist first (fs/mkdir)"
+    },
+    "content-set-tags": {
+      "file": "content-set-tags.json",
+      "method": "POST",
+      "path": "/api/v1/content/set_tags",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000002.md",
+        "tags": [
+          "src=src_00000000000000000000000000000002",
+          "state=retracted"
+        ]
+      },
+      "status": 200
+    },
+    "content-batch-write-other-extensions": {
+      "file": "content-batch-write-other-extensions.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
+        "wait": true,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/table.csv",
+            "content": "code,name\nSY01,湖滨店\n",
+            "mode": "upsert"
+          },
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/edges.jsonl",
+            "content": "{\"from\":\"a\",\"relation\":\"part_of\",\"label\":\"属于\",\"to\":\"b\",\"evidence\":[\"x\"]}\n",
+            "mode": "upsert"
+          }
+        ]
+      },
+      "status": 200,
+      "note": "upsert takes extensions that content/write create refuses"
+    },
+    "content-write-create-extension-refused": {
+      "file": "content-write-create-extension-refused.json",
+      "method": "POST",
+      "path": "/api/v1/content/write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/table2.csv",
+        "content": "a,b\n",
+        "mode": "create",
+        "processing_mode": "vectors_only"
+      },
+      "status": 400,
+      "note": "create allows only .md .txt .json .yaml .yml .toml .py .js .ts"
+    },
+    "resources-temp-upload": {
+      "file": "resources-temp-upload.json",
+      "method": "POST",
+      "path": "/api/v1/resources/temp_upload",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_body": "multipart/form-data: file=upload-sample.md",
+      "status": 200,
+      "note": "temp_file_id is random per upload"
+    },
+    "resources-add-no-split": {
+      "file": "resources-add-no-split.json",
+      "method": "POST",
+      "path": "/api/v1/resources",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "temp_file_id": "upload_66e68766598542be862d427e229837e2.md",
+        "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/uploaded",
+        "wait": true,
+        "args": {
+          "parse_mode": "no_split"
+        },
+        "processing_mode": "vectors_only",
+        "tags": [
+          "src=src_00000000000000000000000000000009"
+        ]
+      },
+      "status": 200
+    },
+    "fs-stat-file": {
+      "file": "fs-stat-file.json",
+      "method": "GET",
+      "path": "/api/v1/fs/stat?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fsources%2Fsrc_00000000000000000000000000000001.md",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "fs-stat-directory": {
+      "file": "fs-stat-directory.json",
+      "method": "GET",
+      "path": "/api/v1/fs/stat?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fsources",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "fs-stat-missing": {
+      "file": "fs-stat-missing.json",
+      "method": "GET",
+      "path": "/api/v1/fs/stat?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fsources%2Fnone.md",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 404
+    },
+    "fs-attrs": {
+      "file": "fs-attrs.json",
+      "method": "GET",
+      "path": "/api/v1/fs/attrs?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fsources%2Fsrc_00000000000000000000000000000002.md",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "fs-ls-page-1": {
+      "file": "fs-ls-page-1.json",
+      "method": "GET",
+      "path": "/api/v1/fs/ls?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fsources&limit=2&include_tags=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200,
+      "note": "has_more is a top-level key beside result"
+    },
+    "fs-ls-page-2": {
+      "file": "fs-ls-page-2.json",
+      "method": "GET",
+      "path": "/api/v1/fs/ls?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fsources&limit=2&offset=2&include_tags=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "fs-ls-missing": {
+      "file": "fs-ls-missing.json",
+      "method": "GET",
+      "path": "/api/v1/fs/ls?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fnone",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 404
+    },
+    "fs-tree": {
+      "file": "fs-tree.json",
+      "method": "GET",
+      "path": "/api/v1/fs/tree?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665&node_limit=1000&level_limit=6&include_tags=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "content-read": {
+      "file": "content-read.json",
+      "method": "GET",
+      "path": "/api/v1/content/read?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fsources%2Fsrc_00000000000000000000000000000001.md",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "content-read-lines": {
+      "file": "content-read-lines.json",
+      "method": "GET",
+      "path": "/api/v1/content/read?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fsources%2Fsrc_00000000000000000000000000000001.md&offset=6&limit=2",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200,
+      "note": "offset and limit count lines, 0-indexed"
+    },
+    "content-read-missing": {
+      "file": "content-read-missing.json",
+      "method": "GET",
+      "path": "/api/v1/content/read?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fsources%2Fnone.md",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 404
+    },
+    "content-download": {
+      "file": "content-download.bin",
+      "method": "GET",
+      "path": "/api/v1/content/download?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fsources%2Fsrc_00000000000000000000000000000001.md",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200,
+      "note": "the stored bytes, unchanged",
+      "binary": {
+        "bytes": 342,
+        "sha256": "24f1ea74711216271465822cbe1df4dfafe9a96b295525c0dd403238f31d9b5c"
+      }
+    },
+    "search-grep": {
+      "file": "search-grep.json",
+      "method": "POST",
+      "path": "/api/v1/search/grep",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
+        "pattern": "端口 \\d+",
+        "node_limit": 50
+      },
+      "status": 200
+    },
+    "search-grep-uri-pattern": {
+      "file": "search-grep-uri-pattern.json",
+      "method": "POST",
+      "path": "/api/v1/search/grep",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665",
+        "pattern": "alphad",
+        "case_insensitive": true,
+        "before_context": 1,
+        "after_context": 1
+      },
+      "status": 200
+    },
+    "search-grep-no-match": {
+      "file": "search-grep-no-match.json",
+      "method": "POST",
+      "path": "/api/v1/search/grep",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
+        "pattern": "nothing-like-this"
+      },
+      "status": 200
+    },
+    "search-find-resource": {
+      "file": "search-find-resource.json",
+      "method": "POST",
+      "path": "/api/v1/search/find",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "query": "时间同步协议用哪个端口",
+        "target_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
+        "limit": 3,
+        "level": [
+          2
+        ]
+      },
+      "status": 200
+    },
+    "search-find-by-tag": {
+      "file": "search-find-by-tag.json",
+      "method": "POST",
+      "path": "/api/v1/search/find",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "query": "网关",
+        "target_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
+        "limit": 3,
+        "tags": [
+          "state=retracted"
+        ]
+      },
+      "status": 200
+    },
+    "fs-read-other-user-denied": {
+      "file": "fs-read-other-user-denied.json",
+      "method": "GET",
+      "path": "/api/v1/content/read?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fsources%2Fsrc_00000000000000000000000000000001.md",
+      "as_user": "u-aa11bb22cc33dd44ee55ff66",
+      "request_headers": {},
+      "request_body": null,
+      "status": 403,
+      "note": "another user of the same account"
+    },
+    "skills-list": {
+      "file": "skills-list.json",
+      "method": "GET",
+      "path": "/api/v1/skills",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "skills-get": {
+      "file": "skills-get.json",
+      "method": "GET",
+      "path": "/api/v1/skills/llm-wiki?target_uri=viking%3A%2F%2Fagent%2Fskills",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "skills-install": {
+      "file": "skills-install.json",
+      "method": "POST",
+      "path": "/api/v1/skills",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": "(omitted: large)",
+      "status": 200,
+      "note": "request body: {data: <SKILL.md text of the pinned tag>, target_uri: 'viking://agent/skills', wait: true}; installing over an existing skill"
+    },
+    "compile-capabilities": {
+      "file": "compile-capabilities.json",
+      "method": "GET",
+      "path": "/api/v1/compile/capabilities",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "compile-submit": {
+      "file": "compile-submit.json",
+      "method": "POST",
+      "path": "/api/v1/compile",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {
+        "Idempotency-Key": "evimed-kb-fixture-000000000001"
+      },
+      "request_body": {
+        "from": [
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources"
+        ],
+        "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki",
+        "skill": "viking://agent/skills/llm-wiki"
+      },
+      "status": 202
+    },
+    "compile-submit-replayed": {
+      "file": "compile-submit-replayed.json",
+      "method": "POST",
+      "path": "/api/v1/compile",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {
+        "Idempotency-Key": "evimed-kb-fixture-000000000001"
+      },
+      "request_body": {
+        "from": [
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources"
+        ],
+        "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki",
+        "skill": "viking://agent/skills/llm-wiki"
+      },
+      "status": 202,
+      "note": "same key, same body: the same task comes back"
+    },
+    "compile-submit-key-conflict": {
+      "file": "compile-submit-key-conflict.json",
+      "method": "POST",
+      "path": "/api/v1/compile",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {
+        "Idempotency-Key": "evimed-kb-fixture-000000000001"
+      },
+      "request_body": {
+        "from": [
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources"
+        ],
+        "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-other",
+        "skill": "viking://agent/skills/llm-wiki"
+      },
+      "status": 409,
+      "note": "same key, different body"
+    },
+    "compile-submission-by-key": {
+      "file": "compile-submission-by-key.json",
+      "method": "GET",
+      "path": "/api/v1/compile/submissions/evimed-kb-fixture-000000000001",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "tasks-get-pending": {
+      "file": "tasks-get-pending.json",
+      "method": "GET",
+      "path": "/api/v1/tasks/{task_id}?include_events=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "status": 200
+    },
+    "tasks-get-running": {
+      "file": "tasks-get-running.json",
+      "method": "GET",
+      "path": "/api/v1/tasks/{task_id}?include_events=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "status": 200
+    },
+    "tasks-get-completed": {
+      "file": "tasks-get-completed.json",
+      "method": "GET",
+      "path": "/api/v1/tasks/{task_id}?include_events=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "status": 200
+    },
+    "tasks-get-without-events": {
+      "file": "tasks-get-without-events.json",
+      "method": "GET",
+      "path": "/api/v1/tasks/cmp_a72ba693a456e273e3f4d780703839f71c890c84fba8cb95b71d9f2f3dda8d5d",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "tasks-list": {
+      "file": "tasks-list.json",
+      "method": "GET",
+      "path": "/api/v1/tasks?task_type=compile&limit=5",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "tasks-get-unknown": {
+      "file": "tasks-get-unknown.json",
+      "method": "GET",
+      "path": "/api/v1/tasks/cmp_0000000000000000000000000000000000000000000000000000000000000000",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 404,
+      "note": "also what an expired task answers (24 h after completion, 7 d after failure)"
+    },
+    "tasks-get-other-user": {
+      "file": "tasks-get-other-user.json",
+      "method": "GET",
+      "path": "/api/v1/tasks/cmp_a72ba693a456e273e3f4d780703839f71c890c84fba8cb95b71d9f2f3dda8d5d",
+      "as_user": "u-aa11bb22cc33dd44ee55ff66",
+      "request_headers": {},
+      "request_body": null,
+      "status": 404
+    },
+    "fs-tree-wiki": {
+      "file": "fs-tree-wiki.json",
+      "method": "GET",
+      "path": "/api/v1/fs/tree?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fwiki&node_limit=1000&level_limit=6",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "fs-tree-wiki-with-hidden": {
+      "file": "fs-tree-wiki-with-hidden.json",
+      "method": "GET",
+      "path": "/api/v1/fs/tree?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fwiki&node_limit=1000&level_limit=6&show_all_hidden=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200,
+      "note": "the L0/L1 sidecars .abstract.md / .overview.md appear only here"
+    },
+    "content-read-wiki-index": {
+      "file": "content-read-wiki-index.json",
+      "method": "GET",
+      "path": "/api/v1/content/read?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fwiki%2Findex.md",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "search-grep-source-uri-in-wiki": {
+      "file": "search-grep-source-uri-in-wiki.json",
+      "method": "POST",
+      "path": "/api/v1/search/grep",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki",
+        "pattern": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001\\.md",
+        "node_limit": 200
+      },
+      "status": 200,
+      "note": "which pages cite one source: the reverse index the product needs"
+    },
+    "compile-submit-to-cancel": {
+      "file": "compile-submit-to-cancel.json",
+      "method": "POST",
+      "path": "/api/v1/compile",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {
+        "Idempotency-Key": "evimed-kb-fixture-000000000002"
+      },
+      "request_body": {
+        "from": [
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources"
+        ],
+        "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-cancelled",
+        "skill": "viking://agent/skills/llm-wiki"
+      },
+      "status": 202
+    },
+    "tasks-cancel": {
+      "file": "tasks-cancel.json",
+      "method": "POST",
+      "path": "/api/v1/tasks/cmp_dcb642d3d6f7f745ed8bd944d26ca10e08de6e18a8238a044b4131dfa8e001a8/cancel",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "tasks-get-after-cancel": {
+      "file": "tasks-get-after-cancel.json",
+      "method": "GET",
+      "path": "/api/v1/tasks/{task_id}?include_events=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "status": 200
+    },
+    "tasks-cancel-terminal": {
+      "file": "tasks-cancel-terminal.json",
+      "method": "POST",
+      "path": "/api/v1/tasks/cmp_dcb642d3d6f7f745ed8bd944d26ca10e08de6e18a8238a044b4131dfa8e001a8/cancel",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200,
+      "note": "cancelling a task that already ended"
+    },
+    "fs-delete-file": {
+      "file": "fs-delete-file.json",
+      "method": "DELETE",
+      "path": "/api/v1/fs?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fuploaded&recursive=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "fs-delete-missing": {
+      "file": "fs-delete-missing.json",
+      "method": "DELETE",
+      "path": "/api/v1/fs?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fuploaded&recursive=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200,
+      "note": "deleting again"
+    },
+    "fs-tree-kg": {
+      "file": "fs-tree-kg.json",
+      "method": "GET",
+      "path": "/api/v1/fs/tree?uri=<project>/kg&node_limit=200&level_limit=4",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "status": 200,
+      "note": "the tree a knowledge-graph compile wrote (recorded on the final configuration)"
+    },
+    "content-read-kg-relations": {
+      "file": "content-read-kg-relations.json",
+      "method": "GET",
+      "path": "/api/v1/content/read?uri=<project>/kg/relations.jsonl",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "status": 200
+    }
+  }
+}

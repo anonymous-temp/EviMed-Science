@@ -1,0 +1,53 @@
+{
+  "status": "ok",
+  "result": {
+    "execution_events": {
+      "items": [
+        {
+          "seq": 1,
+          "recorded_at": "2026-10-12T23:56:40.115840+00:00",
+          "kind": "created",
+          "status": "pending",
+          "stage": null,
+          "operation": null,
+          "error": null
+        },
+        {
+          "seq": 2,
+          "recorded_at": "2026-10-12T23:56:40.116382+00:00",
+          "kind": "stage_changed",
+          "status": "pending",
+          "stage": "queued",
+          "operation": null,
+          "error": null
+        }
+      ],
+      "dropped_count": 0,
+      "started_mid_task": false
+    },
+    "task_id": "cmp_a72ba693a456e273e3f4d780703839f71c890c84fba8cb95b71d9f2f3dda8d5d",
+    "task_type": "compile",
+    "status": "pending",
+    "created_at": 1791849400.1156456,
+    "updated_at": 1791849400.1163769,
+    "processing_seconds": null,
+    "resource_id": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
+    "meta": {
+      "request": {
+        "from": [
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources"
+        ],
+        "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki",
+        "skill": "viking://agent/skills/llm-wiki"
+      }
+    },
+    "stage": "queued",
+    "result": null,
+    "error": null,
+    "created_at_iso": "2026-10-12T23:56:40.115646+00:00",
+    "updated_at_iso": "2026-10-12T23:56:40.116377+00:00"
+  },
+  "error": null,
+  "telemetry": null,
+  "profile": null
+}

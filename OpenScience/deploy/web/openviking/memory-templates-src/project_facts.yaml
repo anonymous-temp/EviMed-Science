@@ -1,0 +1,40 @@
+memory_type: project_facts
+description: |
+  __LANGUAGE__
+  Working facts: a standing fact about the user's work that is not a preference and does
+  NOT belong to one project's card: who does what in their team ("统计部分由合作者李教授负责，
+  用 R"), a definition or convention their group uses, an arrangement that holds across
+  their projects. A fact about one particular project (its data, its scope, its progress)
+  is written in that project's PROJECT_CONTEXT card and not here as well.
+  Only what the user stated in a user-role message. People appear by role and working
+  responsibility only: no contact details, no health, no private details.
+  One file per subject; update it when the fact changes.
+
+  __NEVER_KEEP__
+directory: "viking://user/{{ user_space }}/memories/project_facts"
+filename_template: "{{ topic|lower }}.md"
+enabled: true
+embedding_template: |-
+  {{ topic }}
+
+  {{ content }}
+
+overview_template: |-
+  # Working Facts Overview
+  {% for item in items %}
+  - [{{ item.file_content.topic|default(item.file_name, true) }}](./{{ item.file_name }})
+  {% endfor %}
+
+fields:
+  - name: topic
+    type: string
+    description: |
+      What the fact is about, written in {{ language }}, a few words. It identifies this
+      memory.
+    merge_op: immutable
+
+  - name: content
+    type: string
+    description: |
+      Markdown bullets stating the fact as it now stands, short and self-contained.
+    merge_op: patch

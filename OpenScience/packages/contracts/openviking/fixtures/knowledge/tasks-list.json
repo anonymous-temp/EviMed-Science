@@ -1,0 +1,57 @@
+{
+  "status": "ok",
+  "result": [
+    {
+      "task_id": "cmp_a72ba693a456e273e3f4d780703839f71c890c84fba8cb95b71d9f2f3dda8d5d",
+      "task_type": "compile",
+      "status": "completed",
+      "created_at": 1791849400.1156456,
+      "updated_at": 1791849432.1039994,
+      "processing_seconds": 30.285237386007793,
+      "resource_id": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
+      "meta": {
+        "request": {
+          "from": [
+            "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources"
+          ],
+          "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki",
+          "skill": "viking://agent/skills/llm-wiki"
+        },
+        "token_usage": {
+          "input_tokens": 60864,
+          "output_tokens": 5108,
+          "total_tokens": 65972
+        }
+      },
+      "stage": "completed",
+      "result": {
+        "from": [
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources"
+        ],
+        "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki",
+        "skill": "viking://agent/skills/llm-wiki",
+        "okf_version": "0.1",
+        "created": [
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha协议.md",
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/设备间时间同步.md",
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Beta网关.md",
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Gamma仪表盘.md",
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Lumen工作组.md",
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/alphad.md",
+          "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/index.md"
+        ],
+        "updated": [],
+        "unchanged": [],
+        "page_count": 7,
+        "link_count": 1,
+        "warnings": []
+      },
+      "error": null,
+      "created_at_iso": "2026-10-12T23:56:40.115646+00:00",
+      "updated_at_iso": "2026-10-12T23:57:12.103999+00:00"
+    }
+  ],
+  "error": null,
+  "telemetry": null,
+  "profile": null
+}

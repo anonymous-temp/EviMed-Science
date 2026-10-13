@@ -76,6 +76,7 @@ const inputPaths = [
   "examples/climate-trends",
   "deploy/web/Dockerfile",
   "deploy/web/postgres-backup-status",
+  "deploy/web/openviking-backup-status",
   "deploy/openlist",
   "deploy/specialist-adapter",
   "deploy/host",
@@ -94,6 +95,8 @@ const inputPaths = [
   "scripts/ops/configure-backup.mjs",
   "scripts/ops/configure-local-auth.mjs",
   "scripts/ops/configure-production-state.mjs",
+  "scripts/ops/openviking-configuration.mjs",
+  "scripts/ops/openviking-backup.mjs",
   "scripts/ops/object-backup.mjs",
   "scripts/ops/restore-data.sh",
   "scripts/ops/restore-drill.sh",
@@ -118,6 +121,10 @@ const inputPaths = [
   "deploy/web/docker-compose.ingestion.yml",
   "deploy/web/saas-capability-contract.json",
   "deploy/web/Caddyfile",
+  // The engine's release files, bind-mounted read-only into `evimed-openviking` from the release directory: the
+  // identity shim, its entrypoint wrapper and the memory templates. They run in production without entering any
+  // image, so a release that changed one must change the manifest.
+  "deploy/web/openviking",
   "deploy/web/monitoring/prometheus.json",
   "deploy/web/monitoring/open-science.rules.json",
   "docs/WEB_OPERATIONS_RUNBOOK.md",

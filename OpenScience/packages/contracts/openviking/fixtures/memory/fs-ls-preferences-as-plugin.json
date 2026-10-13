@@ -1,0 +1,40 @@
+{
+  "note": "The plugin's own startup listing of preferences/.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/fs/ls?uri=viking%3A%2F%2Fuser%2Ffx-user-a%2Fmemories%2Fpreferences&output=agent&recursive=true&abs_limit=512&node_limit=512",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": [
+      {
+        "uri": "viking://user/fx-user-a/memories/preferences/self",
+        "size": 0,
+        "isDir": true,
+        "modTime": "2026-10-13T00:17:54.000Z",
+        "rel_path": "self",
+        "abstract": "# viking://user/fx-user-a/memories/preferences/self [Directory abstract is not ready]"
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/preferences/self/回答结构.md",
+        "size": 221,
+        "isDir": false,
+        "modTime": "2026-10-13T00:17:54.000Z",
+        "rel_path": "self/回答结构.md",
+        "abstract": ""
+      }
+    ],
+    "error": null,
+    "telemetry": null,
+    "profile": null,
+    "has_more": false
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "status": "ok",
+  "result": {
+    "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/uploaded",
+    "estimated_deleted_count": 0,
+    "memory_cleanup": {
+      "status": "no_references",
+      "memory_uris": []
+    },
+    "semantic_root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665",
+    "semantic_status": "queued"
+  },
+  "error": null,
+  "telemetry": null,
+  "profile": null
+}

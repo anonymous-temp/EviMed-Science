@@ -1,0 +1,129 @@
+{
+  "note": "Every memory of one user, with tags: the memory page's listing call.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/fs/tree?uri=viking%3A%2F%2Fuser%2Ffx-user-a%2Fmemories&level_limit=8&node_limit=1000&include_tags=true",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": [
+      {
+        "uri": "viking://user/fx-user-a/memories/evimed",
+        "size": 0,
+        "isDir": true,
+        "modTime": "2026-10-13T00:17:39.000Z",
+        "rel_path": "evimed",
+        "abstract": "# viking://user/fx-user-a/memories/evimed [Directory abstract is not ready]",
+        "tags": []
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/evimed/user",
+        "size": 0,
+        "isDir": true,
+        "modTime": "2026-10-13T00:17:39.000Z",
+        "rel_path": "evimed/user",
+        "abstract": "# viking://user/fx-user-a/memories/evimed/user [Directory abstract is not ready]",
+        "tags": []
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/evimed/user/preference",
+        "size": 0,
+        "isDir": true,
+        "modTime": "2026-10-13T00:17:42.000Z",
+        "rel_path": "evimed/user/preference",
+        "abstract": "# viking://user/fx-user-a/memories/evimed/user/preference [Directory abstract is not ready]",
+        "tags": []
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec1.md",
+        "size": 129,
+        "isDir": false,
+        "modTime": "2026-10-13T00:17:39.000Z",
+        "rel_path": "evimed/user/preference/rec1.md",
+        "abstract": "",
+        "tags": []
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec2.md",
+        "size": 120,
+        "isDir": false,
+        "modTime": "2026-10-13T00:17:41.000Z",
+        "rel_path": "evimed/user/preference/rec2.md",
+        "abstract": "",
+        "tags": []
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/preferences",
+        "size": 0,
+        "isDir": true,
+        "modTime": "2026-10-13T00:17:54.000Z",
+        "rel_path": "preferences",
+        "abstract": "# viking://user/fx-user-a/memories/preferences [Directory abstract is not ready]",
+        "tags": []
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/preferences/self",
+        "size": 0,
+        "isDir": true,
+        "modTime": "2026-10-13T00:17:54.000Z",
+        "rel_path": "preferences/self",
+        "abstract": "# viking://user/fx-user-a/memories/preferences/self [Directory abstract is not ready]",
+        "tags": []
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/preferences/self/回答结构.md",
+        "size": 221,
+        "isDir": false,
+        "modTime": "2026-10-13T00:17:54.000Z",
+        "rel_path": "preferences/self/回答结构.md",
+        "abstract": "",
+        "tags": [
+          "memory_type=preferences"
+        ]
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/projects",
+        "size": 0,
+        "isDir": true,
+        "modTime": "2026-10-13T00:17:54.000Z",
+        "rel_path": "projects",
+        "abstract": "# viking://user/fx-user-a/memories/projects [Directory abstract is not ready]",
+        "tags": []
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/projects/三跨预应力混凝土连续梁桥施工图设计.md",
+        "size": 404,
+        "isDir": false,
+        "modTime": "2026-10-13T00:17:54.000Z",
+        "rel_path": "projects/三跨预应力混凝土连续梁桥施工图设计.md",
+        "abstract": "",
+        "tags": [
+          "memory_type=project_context"
+        ]
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/profile.md",
+        "size": 212,
+        "isDir": false,
+        "modTime": "2026-10-13T00:17:54.000Z",
+        "rel_path": "profile.md",
+        "abstract": "",
+        "tags": [
+          "memory_type=profile"
+        ]
+      }
+    ],
+    "error": null,
+    "telemetry": null,
+    "profile": null,
+    "has_more": false
+  }
+}

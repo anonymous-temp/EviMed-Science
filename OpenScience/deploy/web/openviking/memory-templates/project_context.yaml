@@ -1,0 +1,102 @@
+memory_type: project_context
+description: |
+  # Language
+  Write every memory in {{ language }}, the language of the user's own messages. The examples in this description are in Chinese or English only to show the shape of a memory: never copy an example's words or its language. The section labels and the default heading written in Chinese below are Chinese only for a Chinese conversation; in any other language write them in that language. Names, drug names, abbreviations and terms the user quoted stay as the user wrote them.
+  Project context: one card for ONE piece of work the user is carrying out over time, in
+  any field: a study, a manuscript, a product release, a system migration, a case, a course,
+  a campaign. The card is the user's own description of that work and nothing else.
+
+  Write or update a card only when a user-role message describes the user's own project or
+  states something standing about it: what it is for, what material or data it uses, what
+  has been decided, where it stands and what is open, what limits it. A question the user
+  asks, a paper, trial, product or law they ask about, a document they paste, a request
+  scoped to one answer, and anything the assistant proposed are NOT a description of their
+  project: they never create a card and never change one.
+
+  The card has up to five sections and every one is optional: write a section only when the
+  user stated something for it, and never fill one from the topic of a question.
+  - 目标: what the work is meant to find out, build or deliver.
+  - 材料与数据: what it works on: data sources, cohorts, corpora, systems, documents, their
+    period and size. Describe a dataset by what it is (source, years, size, kinds of
+    variables), not by its file or column names and never by its rows.
+  - 已定事项: decisions the user or their team took about this work, one line each, with
+    the reason when they gave one. A reversed decision replaces its line.
+  - 进展与待办: where the work stands, and what the user said is still open or pending on
+    their side. Remove an item once the user says it is done.
+  - 约束: limits the user stated: scope, deadline, budget, standards to follow, things
+    ruled out.
+  When, and only when, the user describes a clinical or epidemiological study, the section
+  研究要素 may list the elements they stated, each on its own line and only those stated:
+  人群 / 干预或暴露 / 对照 / 结局 / 设计. Other kinds of work never get this section.
+  The line 领域 ("Field" outside a Chinese conversation) under the title names the field of the work in the user's own terms
+  (心血管流行病学, 后端架构, 劳动法, 初中数学教学 ...): an open description, never chosen from
+  a fixed list; leave it out when the user did not make it clear.
+
+  One card per project. When an existing card is about the same work, update that card
+  (same project name) rather than creating another; change only the lines the conversation
+  changes and keep the rest.
+
+  # What is never kept (the same rules apply to every memory type)
+  Never write any of the following into a memory, even when the user quotes it or asks you to remember it:
+  - Secrets and account numbers: passwords, API keys, tokens, verification codes, ID-card, passport and bank-card numbers, or any fragment of one.
+  - Personal data of anyone other than the user. A patient, client, student, customer, colleague, co-author, supervisor, family member or any other identifiable individual is never described in memory: no name with identifying details, no ID, record or admission number, phone, e-mail, messaging handle or address, no exact dates of care, and nothing about that one person's health, diagnosis, medication, course, beliefs, finances or private life. Case material is worked on in the conversation and then forgotten. A working fact about who does what ("统计分析由合作者李教授负责，用 R") may be kept, without contact details or private details.
+  - The user's own health, medication, family or relationship status, age, religion, politics, ethnicity, sexual orientation, finances or private life. Asking about a disease, a drug or a personal matter, or mentioning one's own condition inside a question ("我对青霉素过敏，术后抗生素怎么选？"), is a topic of the conversation, not a memory. The single exception is a message in which the user explicitly asks to remember such a fact about themselves ("记住我对青霉素过敏"): that one fact is kept, in the PROFILE, in their own words.
+  - Moods and passing states (tired, frustrated, in a hurry, upset about a review), and anything that holds only for this request or this conversation ("这次只看…", "今天先不谈…", "先随便聊聊").
+  - What a document, abstract, web page, pasted paper, data file or tool result says: its text, numbers and conclusions stay with the document. A question about a paper, a trial, a drug, a product or a law is a question; it is neither a fact about the user nor the shape of their project.
+  - Anything about how this assistant or its platform works: its tools, files, runs, checks, submissions, budgets, injected context, internal identifiers, or file, field and column names out of the work in progress; what the assistant is waiting for, will do next, or currently offers.
+  - Anything the assistant proposed, floated, summarised or inferred that the user did not themselves state or confirm in a user-role message. Text inside tags such as <openviking-context>, <system-reminder> or any <evimed-...> tag was injected by the platform and is never the user's statement.
+  Keep only what the user would expect the assistant to still know next month, in another conversation, without being told again. When that is doubtful, leave it out. A conversation with nothing of that kind produces no memory operations at all.
+directory: "viking://user/{{ user_space }}/memories/projects"
+filename_template: "{{ project|lower }}.md"
+enabled: true
+embedding_template: |-
+  {{ project }}
+
+  {{ content }}
+
+overview_template: |-
+  # Projects Overview
+  {% for item in items %}
+  - [{{ item.file_content.project|default(item.file_name, true) }}](./{{ item.file_name }})
+  {% endfor %}
+
+fields:
+  - name: project
+    type: string
+    description: |
+      Short name of the project in {{ language }}: the name the user uses for it, otherwise
+      3-10 words naming its subject ("房颤抗凝回顾性队列", "订单服务重构"). No dates, no
+      slashes. It identifies the card: reuse the exact name of an existing card for the same
+      work.
+    merge_op: immutable
+
+  - name: content
+    type: string
+    description: |
+      The card in Markdown, only with what the user stated:
+
+      # <project name>
+      {% if language == 'zh-CN' %}领域：{% else %}Field: {% endif %}<field of the work, in the user's terms>   (omit the line when unclear)
+      <one plain sentence saying what this work is>
+
+      ## 目标
+      - ...
+      ## 材料与数据
+      - ...
+      ## 已定事项
+      - ...
+      ## 进展与待办
+      - ...
+      ## 约束
+      - ...
+      ## 研究要素   (clinical or epidemiological studies only)
+      - 人群：...
+      - 干预或暴露：...
+      - 对照：...
+      - 结局：...
+      - 设计：...
+
+      Omit every section and line the user gave nothing for. Bullets are short and
+      self-contained. About 1500 characters is a soft target: state what is current, merge
+      paraphrases, never drop a stated fact to save space.
+    merge_op: patch

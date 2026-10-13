@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -943,4 +943,79 @@ test("owner-approved registration and one-credit-per-CNY defaults preserve an ex
   const disabled = loadConfig({ rootDir: repoRoot, selfRegistrationEnabled: false, evimedCreditsPerCny: 0 });
   assert.equal(disabled.selfRegistrationEnabled, false);
   assert.equal(disabled.evimedCreditsPerCny, 0);
+});
+
+test("OpenViking as an engine: the two switches follow whether the engine is the deployment's index, and the levers are checked", () => {
+  // Each switch gates behaviour another module implements, so its default has to be a fact about the deployment and not
+  // an opinion: on exactly when there is an engine to build on. A literal `true` would switch native memory on for a
+  // deployment that pinned the term matcher.
+  const engine = { openVikingUrl: "http://evimed-openviking:1933", openVikingApiKey: "root-key-of-a-fixture" };
+  const base = configUnder({ ...HOSTED_ENV });
+  assert.equal(base.ovKnowledgeEnabled, false);
+  assert.equal(base.ovNativeMemoryEnabled, false);
+  assert.equal(base.openVikingModelDailyBudgetCny, 50);
+  assert.equal(base.openVikingEngineCheckMs, 1_800_000);
+  assert.equal(base.openVikingModelKey, "");
+  assert.match(base.openVikingPin.version, /^\d+\.\d+\.\d+$/);
+  assert.deepEqual(Object.keys(base.openVikingPin.skills).sort(), ["knowledge-graph", "llm-wiki"]);
+
+  const withEngine = loadConfig({ rootDir: repoRoot, ...engine });
+  assert.equal(withEngine.ovKnowledgeEnabled, true);
+  assert.equal(withEngine.ovNativeMemoryEnabled, true);
+  // Named `openviking`, the same; pinned to the term matcher, both off though the engine is configured.
+  assert.equal(loadConfig({ rootDir: repoRoot, ...engine, memoryIndexProvider: "openviking" }).ovNativeMemoryEnabled, true);
+  const pinned = loadConfig({ rootDir: repoRoot, ...engine, memoryIndexProvider: "builtin" });
+  assert.equal(pinned.ovKnowledgeEnabled, false);
+  assert.equal(pinned.ovNativeMemoryEnabled, false);
+  // An unreadable root key is no engine.
+  assert.equal(loadConfig({ rootDir: repoRoot, openVikingUrl: engine.openVikingUrl, openVikingApiKey: "" }).ovKnowledgeEnabled, false);
+
+  // The operator's word wins in both directions, one switch at a time.
+  const saved = process.env;
+  try {
+    process.env = { ...HOSTED_ENV, OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED: "false" };
+    const oneOff = loadConfig({ rootDir: repoRoot, ...engine });
+    assert.equal(oneOff.ovKnowledgeEnabled, false);
+    assert.equal(oneOff.ovNativeMemoryEnabled, true);
+    process.env = { ...HOSTED_ENV, OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED: "true", OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY: "0", OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS: "600000" };
+    const forced = loadConfig({ rootDir: repoRoot });
+    assert.equal(forced.ovNativeMemoryEnabled, true);
+    assert.equal(forced.openVikingModelDailyBudgetCny, 0, "0 is no cap, like every spend limit here");
+    assert.equal(forced.openVikingEngineCheckMs, 600_000);
+    // Empty reads as unset: `Number("")` is 0, and an unset budget must not become "no cap" by accident.
+    process.env = { ...HOSTED_ENV, OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY: "", OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS: "" };
+    assert.equal(loadConfig({ rootDir: repoRoot }).openVikingModelDailyBudgetCny, 50);
+    assert.equal(loadConfig({ rootDir: repoRoot }).openVikingEngineCheckMs, 1_800_000);
+    for (const [name, value] of [
+      ["OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY", "-1"], ["OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY", "plenty"],
+      ["OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS", "1000"], ["OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS", "soon"],
+    ]) {
+      process.env = { ...HOSTED_ENV, [name]: value };
+      assert.throws(() => loadConfig({ rootDir: repoRoot }), new RegExp(name), `${name}=${value} was accepted`);
+    }
+  } finally {
+    process.env = saved;
+  }
+});
+
+test("the engine's service key is read from its file and never from a value that is not there", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "evimed-ov-model-key-"));
+  try {
+    const file = path.join(directory, "model-key");
+    await writeFile(file, "service-key-of-a-fixture-0123456789abcdef\n", { mode: 0o600 });
+    const loaded = loadConfig({ rootDir: repoRoot, openVikingModelKeyFile: file });
+    assert.equal(loaded.openVikingModelKey, "service-key-of-a-fixture-0123456789abcdef");
+    assert.equal(loaded.openVikingModelKeySource, "file");
+    assert.equal(loaded.openVikingModelKeyError, null);
+    // A file anyone can read is not a credential; the caller is then off, by name, and nothing else changes.
+    await chmod(file, 0o644);
+    const exposed = loadConfig({ rootDir: repoRoot, openVikingModelKeyFile: file });
+    assert.equal(exposed.openVikingModelKey, "");
+    assert.equal(exposed.openVikingModelKeyError, "openviking_model_key_file_permissions");
+    // A deployment that has not re-run configure:production-state since v0.5.0 has no such file.
+    const missing = loadConfig({ rootDir: repoRoot, openVikingModelKeyFile: path.join(directory, "absent") });
+    assert.equal(missing.openVikingModelKeyError, "openviking_model_key_file_unavailable");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

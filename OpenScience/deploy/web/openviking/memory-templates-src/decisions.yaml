@@ -1,0 +1,42 @@
+memory_type: decisions
+description: |
+  __LANGUAGE__
+  Decisions: a standing decision the user or their team took about their work that does NOT
+  belong to one project's card: a choice about how the team, the practice or several
+  projects will proceed ("团队决定每两周发布一次", "课题组以后所有队列研究都先注册方案").
+  A decision about one particular project is a line under 已定事项 in that project's
+  PROJECT_CONTEXT card and is not written here as well. A personal working style is a
+  PREFERENCE. Only a decision the user stated in a user-role message; never a suggestion the
+  assistant made, and never an option still under discussion.
+  One file per subject; when the decision on that subject changes, update the file so it
+  states the current decision (and, briefly, what it replaced).
+
+  __NEVER_KEEP__
+directory: "viking://user/{{ user_space }}/memories/decisions"
+filename_template: "{{ topic|lower }}.md"
+enabled: true
+embedding_template: |-
+  {{ topic }}
+
+  {{ content }}
+
+overview_template: |-
+  # Decisions Overview
+  {% for item in items %}
+  - [{{ item.file_content.topic|default(item.file_name, true) }}](./{{ item.file_name }})
+  {% endfor %}
+
+fields:
+  - name: topic
+    type: string
+    description: |
+      What was decided about, written in {{ language }}, a few words. It identifies this
+      decision memory.
+    merge_op: immutable
+
+  - name: content
+    type: string
+    description: |
+      Markdown bullets: the decision as it now stands, who took it when the user said so,
+      the reason when given, and the date the user stated it "(as of YYYY-MM-DD)".
+    merge_op: patch

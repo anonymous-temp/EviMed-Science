@@ -1,0 +1,89 @@
+{
+  "status": "ok",
+  "result": [
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
+      "size": 0,
+      "isDir": true,
+      "modTime": "2026-10-12T23:56:10.000Z",
+      "rel_path": "sources",
+      "abstract": "本目录是一组围绕时间同步与边缘网关主题的参考资料的集合，主要包含协议说明、产品说明、数据表与图关系数据等类型的内容。从样本来看，资料覆盖了 Alpha 时间同步协议的基本参数（如 UDP 端口 4123、64 秒同步周期、参考实现 alphad）、Beta 网关产品规格（内置 alphad、2.0 版本、支持 500 台下游设备）、Gamma 仪表盘（Web 管理界面、TCP 端口 8443、查看下游设备时间偏差），以及用于描述实体关系的边数据文件和编码与名称映射表。",
+      "tags": []
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/edges.jsonl",
+      "size": 77,
+      "isDir": false,
+      "modTime": "2026-10-12T23:55:59.000Z",
+      "rel_path": "sources/edges.jsonl",
+      "abstract": "",
+      "tags": []
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md",
+      "size": 342,
+      "isDir": false,
+      "modTime": "2026-10-12T23:55:53.000Z",
+      "rel_path": "sources/src_00000000000000000000000000000001.md",
+      "abstract": "",
+      "tags": [
+        "src=src_00000000000000000000000000000001",
+        "doctype=other"
+      ]
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000002.md",
+      "size": 275,
+      "isDir": false,
+      "modTime": "2026-10-12T23:55:53.000Z",
+      "rel_path": "sources/src_00000000000000000000000000000002.md",
+      "abstract": "",
+      "tags": [
+        "src=src_00000000000000000000000000000002",
+        "state=retracted"
+      ]
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000003.md",
+      "size": 222,
+      "isDir": false,
+      "modTime": "2026-10-12T23:55:53.000Z",
+      "rel_path": "sources/src_00000000000000000000000000000003.md",
+      "abstract": "",
+      "tags": []
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/table.csv",
+      "size": 25,
+      "isDir": false,
+      "modTime": "2026-10-12T23:55:59.000Z",
+      "rel_path": "sources/table.csv",
+      "abstract": "",
+      "tags": []
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/uploaded",
+      "size": 0,
+      "isDir": true,
+      "modTime": "2026-10-12T23:56:12.000Z",
+      "rel_path": "uploaded",
+      "abstract": "# viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/uploaded [Directory abstract is not ready]",
+      "tags": []
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/uploaded/upload-sample.md",
+      "size": 222,
+      "isDir": false,
+      "modTime": "2026-10-12T23:56:12.000Z",
+      "rel_path": "uploaded/upload-sample.md",
+      "abstract": "",
+      "tags": [
+        "src=src_00000000000000000000000000000009"
+      ]
+    }
+  ],
+  "error": null,
+  "telemetry": null,
+  "profile": null,
+  "has_more": false
+}

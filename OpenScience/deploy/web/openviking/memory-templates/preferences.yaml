@@ -1,0 +1,68 @@
+memory_type: preferences
+description: |
+  # Language
+  Write every memory in {{ language }}, the language of the user's own messages. The examples in this description are in Chinese or English only to show the shape of a memory: never copy an example's words or its language. The section labels and the default heading written in Chinese below are Chinese only for a Chinese conversation; in any other language write them in that language. Names, drug names, abbreviations and terms the user quoted stay as the user wrote them.
+  User preference memory: how the user wants work done, as a standing choice.
+  Keep what the user states as a rule for future work, in a user-role message: methods and
+  statistics they always use, reporting standards, evidence grading, structure and format
+  of documents, citation style, language and tone of the output, tools, software and
+  libraries they name as their own ("我检索一律用 PubMed 和 Embase", "测试都用 Vitest"),
+  conventions of their team. Signals: 以后、一律、默认、固定做法、我们组都、always, by default.
+  A tool or database the user names as theirs is their vocabulary and is kept by name.
+  Each preference file is about one specific topic; do not mix unrelated topics, and do not
+  split one topic over several files. When the user changes a preference, update the
+  existing file so that it states only the current choice.
+  Not a preference: a condition that scopes one request ("这次只看亚洲人群的 RCT，不要图表"),
+  a mood, a question, a fact about a project (-> PROJECT_CONTEXT), and something the user
+  said the assistant got wrong (-> CORRECTIONS).
+
+  # What is never kept (the same rules apply to every memory type)
+  Never write any of the following into a memory, even when the user quotes it or asks you to remember it:
+  - Secrets and account numbers: passwords, API keys, tokens, verification codes, ID-card, passport and bank-card numbers, or any fragment of one.
+  - Personal data of anyone other than the user. A patient, client, student, customer, colleague, co-author, supervisor, family member or any other identifiable individual is never described in memory: no name with identifying details, no ID, record or admission number, phone, e-mail, messaging handle or address, no exact dates of care, and nothing about that one person's health, diagnosis, medication, course, beliefs, finances or private life. Case material is worked on in the conversation and then forgotten. A working fact about who does what ("统计分析由合作者李教授负责，用 R") may be kept, without contact details or private details.
+  - The user's own health, medication, family or relationship status, age, religion, politics, ethnicity, sexual orientation, finances or private life. Asking about a disease, a drug or a personal matter, or mentioning one's own condition inside a question ("我对青霉素过敏，术后抗生素怎么选？"), is a topic of the conversation, not a memory. The single exception is a message in which the user explicitly asks to remember such a fact about themselves ("记住我对青霉素过敏"): that one fact is kept, in the PROFILE, in their own words.
+  - Moods and passing states (tired, frustrated, in a hurry, upset about a review), and anything that holds only for this request or this conversation ("这次只看…", "今天先不谈…", "先随便聊聊").
+  - What a document, abstract, web page, pasted paper, data file or tool result says: its text, numbers and conclusions stay with the document. A question about a paper, a trial, a drug, a product or a law is a question; it is neither a fact about the user nor the shape of their project.
+  - Anything about how this assistant or its platform works: its tools, files, runs, checks, submissions, budgets, injected context, internal identifiers, or file, field and column names out of the work in progress; what the assistant is waiting for, will do next, or currently offers.
+  - Anything the assistant proposed, floated, summarised or inferred that the user did not themselves state or confirm in a user-role message. Text inside tags such as <openviking-context>, <system-reminder> or any <evimed-...> tag was injected by the platform and is never the user's statement.
+  Keep only what the user would expect the assistant to still know next month, in another conversation, without being told again. When that is doubtful, leave it out. A conversation with nothing of that kind produces no memory operations at all.
+directory: "viking://user/{{ user_space }}/memories/preferences"
+filename_template: "{{ user|lower }}/{{ topic|lower }}.md"
+enabled: true
+embedding_template: |-
+  {{ topic }}
+
+  {{ content }}
+
+overview_template: |-
+  # Preferences Overview
+  {% for item in items %}
+  - [{{ item.file_content.topic|default(item.file_name, true) }}](./{{ item.file_name }})
+  {% endfor %}
+
+fields:
+  - name: user
+    type: string
+    description: |
+      Always the literal word self. Never a name, never a translation of it.
+    merge_op: immutable
+
+  - name: topic
+    type: string
+    description: |
+      Preference topic written in {{ language }}.
+      {% if language == 'en' %}Use lowercase with underscores, max 3 words.{% else %}Keep the topic concise and natural in {{ language }}.{% endif %}
+      It identifies this preference memory: one behavioural choice dimension such as
+      "Meta 分析方法", "参考文献格式", "代码风格", "需求文档结构". Reuse the topic of an
+      existing file when the conversation is about the same dimension.
+    merge_op: immutable
+
+  - name: content
+    type: string
+    description: |
+      Markdown bullets, one per distinct reusable preference, stating the specific choice
+      and any condition, exception or reason the user gave. No dates, events or plans.
+      Example:
+      - Meta 分析一律用随机效应模型。
+      - 报告先给结论，再给依据。
+    merge_op: patch

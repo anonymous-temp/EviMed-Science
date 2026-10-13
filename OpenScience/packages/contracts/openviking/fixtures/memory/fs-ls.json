@@ -1,0 +1,45 @@
+{
+  "note": "fs/ls of one directory.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/fs/ls?uri=viking%3A%2F%2Fuser%2Ffx-user-a%2Fmemories%2Fevimed%2Fuser%2Fpreference",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": [
+      {
+        "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec1.md",
+        "size": 129,
+        "isDir": false,
+        "modTime": "2026-10-13T00:17:39.000Z",
+        "abstract": ""
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec2.md",
+        "size": 120,
+        "isDir": false,
+        "modTime": "2026-10-13T00:17:41.000Z",
+        "abstract": ""
+      },
+      {
+        "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec3.md",
+        "size": 96,
+        "isDir": false,
+        "modTime": "2026-10-13T00:17:40.000Z",
+        "abstract": ""
+      }
+    ],
+    "error": null,
+    "telemetry": null,
+    "profile": null,
+    "has_more": false
+  }
+}
