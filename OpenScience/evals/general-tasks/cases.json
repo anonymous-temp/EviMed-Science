@@ -660,6 +660,11 @@
      "max": 3
     },
     {
+     "type": "tools",
+     "group": "web",
+     "min": 1
+    },
+    {
      "type": "reply_contains",
      "any": [
       "nodejs.org"
@@ -724,6 +729,11 @@
    ],
    "checks_by_variant": {
     "normal": [
+     {
+      "type": "tools",
+      "group": "web",
+      "min": 1
+     },
      {
       "type": "reply_contains",
       "any": [

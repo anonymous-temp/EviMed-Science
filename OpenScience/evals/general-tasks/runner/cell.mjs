@@ -160,8 +160,9 @@ export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeout
   const startedAt = new Date().toISOString();
   const t0 = Date.now();
   const suffix = randomBytes(3).toString('hex');
+  const slug = spec.id.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const username = `evg${suffix}${Date.now().toString(36).slice(-4)}`;
-  const projectId = `ev-${spec.id.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${suffix}`;
+  const projectId = `ev-${slug}-${suffix}`;
   const record = { schema: 1, cell: spec.id, startedAt, username, projectId, turns: [], inputs: [], notes: [] };
 
   const registered = await api.call('POST', '/api/auth/register', { username, password: 'eval-pass-1', name: username }, { project: null });
@@ -201,7 +202,7 @@ export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeout
   const sessions = new Map();
   const sessionFor = async (index) => {
     if (!sessions.has(index)) {
-      const id = `s-${spec.id.toLowerCase()}-${index}-${suffix}`;
+      const id = `s-${slug}-${index}-${suffix}`;
       await api.call('PUT', `/api/research-sessions/${id}`, { mode: 'open-domain' });
       sessions.set(index, id);
     }
@@ -216,7 +217,7 @@ export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeout
     firstTurnOfSession.add(sessionIndex);
     const turn = { index, session: sessionIndex, sessionId, text, startedAt: new Date().toISOString() };
     const turnStart = Date.now();
-    const dispatched = await api.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId: `d_${spec.id.toLowerCase()}_${index}_${suffix}`, text });
+    const dispatched = await api.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId: `d_${slug}_${index}_${suffix}`, text });
     if (dispatched.status !== 202) { turn.error = `dispatch ${dispatched.status} ${dispatched.raw.slice(0, 500)}`; record.turns.push(turn); break; }
     let run = dispatched.json.data;
     turn.runId = run.id;
