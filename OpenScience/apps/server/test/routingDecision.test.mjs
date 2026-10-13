@@ -107,9 +107,9 @@ test("a plain clinical question is the quick line, and nothing about it is charg
   }
 });
 
-test("naming a capability is an instruction, and it outranks everything else", async () => {
+test("a slash command is an instruction and outranks the model; an id inside the sentence is only a word of it", async () => {
   const decision = await decideRouting({
-    question: "请按 dataset-research-scoping 出一份报告",
+    question: "/dataset-research-scoping 出一份报告",
     agents: await agents(),
     classifier: classifierStub("peer-review"),
   });
@@ -118,9 +118,17 @@ test("naming a capability is an instruction, and it outranks everything else", a
   assert.equal(decision.capability?.id, "dataset-research-scoping");
   assert.equal(decision.capability?.title, "数据集科研可行性勘查");
   assert.equal(decision.modelConsulted, false, "the model is not asked about a question that named its own capability");
+
+  // The same id in a sentence is put to the model, whose answer is final (2026-10-13: GA15).
+  const asked = classifierStub("none");
+  const sentence = await decideRouting({ question: "请按 dataset-research-scoping 出一份报告", agents: await agents(), classifier: asked });
+  assert.equal(sentence.mode, "quick");
+  assert.equal(sentence.modelConsulted, true);
+  assert.deepEqual(asked.calls, ["请按 dataset-research-scoping 出一份报告"]);
+  assert.equal((await decideRouting({ question: "Can you peer-review my pull request description?", agents: await agents(), classifier: asked })).mode, "quick");
 });
 
-test("the model decides, and the regex rules are the net under an absent decision", async () => {
+test("the model decides and its answer is final; only the pharmacists' medicine list stands under it", async () => {
   const catalogue = await agents();
   // The model claims it: `decidedBy` says so and the capability is the model's.
   const byModel = await decideRouting({
@@ -132,27 +140,18 @@ test("the model decides, and the regex rules are the net under an absent decisio
   assert.equal(byModel.capability?.id, "peer-review");
   assert.equal(byModel.modelConsulted, true);
 
-  // The model declines; the rules still catch a commissioned deliverable.
-  const byRules = await decideRouting({
-    question: "开展降压药对卒中结局的 meta 分析",
-    agents: catalogue,
-    classifier: classifierStub("none"),
-  });
-  assert.equal(byRules.decidedBy, "rules");
-  assert.equal(byRules.capability?.id, "meta-analysis");
-
-  // And a clean `none` narrows the net exactly as it does on the dispatch path:
-  // after the model has said "no specialist fits", only a medicine on the
-  // pharmacists' own safety list still reaches the clinical line.
-  const question = "患者胸痛的治疗证据，请写一份报告";
-  assert.equal((await decideRouting({ question, agents: catalogue, classifier: null })).capability?.id,
-    "clinical-evidence-synthesis", "with no model answer the same question keeps the full net");
-  assert.equal((await decideRouting({ question, agents: catalogue, classifier: classifierStub("none") })).mode, "quick");
-  // A named high-risk medicine reaches it either way — the property the net exists for.
+  // The model declines: no vocabulary rule brings a meta-analysis or a clinical report back, with or without an answer.
+  for (const question of ["开展降压药对卒中结局的 meta 分析", "患者胸痛的治疗证据，请写一份报告", "帮我写一份消息队列选型报告"]) {
+    for (const classifier of [null, classifierStub("none"), classifierStub("declined")]) {
+      assert.equal((await decideRouting({ question, agents: catalogue, classifier })).mode, "quick", question);
+    }
+  }
+  // A named high-risk medicine reaches the clinical line either way — the property the one remaining rule exists for.
   const medicine = "速效救心丸的有效性与安全性，请写一份报告";
-  for (const classifier of [null, classifierStub("none")]) {
-    assert.equal((await decideRouting({ question: medicine, agents: catalogue, classifier })).capability?.id,
-      "clinical-evidence-synthesis");
+  for (const classifier of [null, classifierStub("none"), classifierStub("declined")]) {
+    const decision = await decideRouting({ question: medicine, agents: catalogue, classifier });
+    assert.equal(decision.capability?.id, "clinical-evidence-synthesis");
+    assert.equal(decision.decidedBy, "rules");
   }
 });
 
@@ -190,14 +189,21 @@ test("consultModel: false keeps the answer free and deterministic", async () => 
   assert.deepEqual(classifier.calls, []);
   assert.equal(decision.modelConsulted, false);
   assert.equal(decision.mode, "quick");
-  // The deterministic half still routes everything the rules can decide.
+  // The deterministic half still routes what is exact: a slash command, and the medicine list with a request for a report.
   const ruled = await decideRouting({
-    question: "用孟德尔随机化分析 BMI 对冠心病的因果作用",
+    question: "/mendelian-randomization 分析 BMI 对冠心病的因果作用",
     agents: await agents(),
     classifier,
     consultModel: false,
   });
   assert.equal(ruled.capability?.id, "mendelian-randomization");
+  const medicine = await decideRouting({
+    question: "速效救心丸的有效性与安全性，请写一份报告",
+    agents: await agents(),
+    classifier,
+    consultModel: false,
+  });
+  assert.equal(medicine.capability?.id, "clinical-evidence-synthesis");
   assert.deepEqual(classifier.calls, []);
 });
 
@@ -208,14 +214,14 @@ test("a deep decision carries the duration the dispatch would record, not a seco
     ["开展降压药对卒中结局的 meta 分析", "meta-analysis"],
     ["对 GLP-1 肥胖研究做 CiteSpace 文献计量分析", "bibliometric-analysis"],
   ]) {
-    const decision = await decideRouting({ question, agents: catalogue, classifier: null });
+    const decision = await decideRouting({ question, agents: catalogue, classifier: classifierStub(id) });
     assert.equal(decision.capability?.id, id);
     // The same function the run ledger uses, so the line shown before the send
     // and the one on the run row cannot disagree.
     assert.deepEqual(decision.minutes, runEstimate(registry.get(id)));
   }
   assert.equal(
-    (await decideRouting({ question: "对 GLP-1 肥胖研究做 CiteSpace 文献计量分析", agents: catalogue, classifier: null })).summary,
+    (await decideRouting({ question: "对 GLP-1 肥胖研究做 CiteSpace 文献计量分析", agents: catalogue, classifier: classifierStub("bibliometric-analysis") })).summary,
     "会做深度研究 · 文献计量分析 · 约 20–120 分钟",
   );
 });
@@ -226,7 +232,7 @@ test("credits come from the injected estimator, and its absence costs the caller
   const withCredits = await decideRouting({
     question: "对 GLP-1 肥胖研究做 CiteSpace 文献计量分析",
     agents: catalogue,
-    classifier: null,
+    classifier: classifierStub("bibliometric-analysis"),
     estimateCredits: async (input) => {
       seen.push(input);
       return { min: 80, max: 240 };
@@ -253,7 +259,7 @@ test("credits come from the injected estimator, and its absence costs the caller
   const service = await decideRouting({
     question: "对 GLP-1 肥胖研究做 CiteSpace 文献计量分析",
     agents: catalogue,
-    classifier: null,
+    classifier: classifierStub("bibliometric-analysis"),
     estimateCredits: async ({ capabilityId }) => ({ capabilityId, unit: "灵豆", low: 46, high: 118, basis: "manifest" }),
   });
   assert.deepEqual(service.credits, { min: 46, max: 118 });
@@ -264,7 +270,7 @@ test("credits come from the injected estimator, and its absence costs the caller
   const exact = await decideRouting({
     question: "对 GLP-1 肥胖研究做 CiteSpace 文献计量分析",
     agents: catalogue,
-    classifier: null,
+    classifier: classifierStub("bibliometric-analysis"),
     estimateCredits: async () => ({ low: 0.0043, high: 0.4, basis: "history", simulated: true }),
   });
   assert.deepEqual(exact.credits, { min: 0.0043, max: 0.4 });
@@ -274,7 +280,7 @@ test("credits come from the injected estimator, and its absence costs the caller
   const simulated = await decideRouting({
     question: "对 GLP-1 肥胖研究做 CiteSpace 文献计量分析",
     agents: catalogue,
-    classifier: null,
+    classifier: classifierStub("bibliometric-analysis"),
     estimateCredits: async ({ capabilityId }) => ({ capabilityId, unit: "灵豆", low: 46, high: 118, basis: "manifest", simulated: true }),
   });
   assert.deepEqual(simulated.credits, { min: 46, max: 118 });
@@ -286,7 +292,7 @@ test("credits come from the injected estimator, and its absence costs the caller
   const down = await decideRouting({
     question: "对 GLP-1 肥胖研究做 CiteSpace 文献计量分析",
     agents: catalogue,
-    classifier: null,
+    classifier: classifierStub("bibliometric-analysis"),
     estimateCredits: async () => { throw Object.assign(new Error("pool exhausted"), { code: "evimed_credits_unavailable" }); },
   });
   assert.equal(down.mode, "deep");
@@ -299,7 +305,7 @@ test("credits come from the injected estimator, and its absence costs the caller
     const decision = await decideRouting({
       question: "对 GLP-1 肥胖研究做 CiteSpace 文献计量分析",
       agents: catalogue,
-      classifier: null,
+      classifier: classifierStub("bibliometric-analysis"),
       estimateCredits: () => answer,
     });
     assert.equal(decision.credits, null, JSON.stringify(answer));
@@ -328,7 +334,7 @@ test("the route answers its own path only, on POST, to a caller the store recogn
     await assert.rejects(routes(request(method, ROUTING_DECISION_PATH), response()), { status: 405, code: "method_not_allowed" });
   }
 
-  const asked = await ask({ question: "开展降压药对卒中结局的 meta 分析" });
+  const asked = await ask({ question: "开展降压药对卒中结局的 meta 分析" }, { classifier: classifierStub("meta-analysis") });
   assert.equal(asked.data.mode, "deep");
   assert.equal(asked.data.capability.id, "meta-analysis");
   assert.deepEqual(asked.contexts, [ROUTING_DECISION_PATH]);
@@ -374,9 +380,9 @@ test("every way the decision can be reached is one the published vocabulary name
   const catalogue = await agents();
   const reached = new Set();
   for (const [question, classifier] of [
-    ["请按 dataset-research-scoping 出一份报告", null],
+    ["/dataset-research-scoping 出一份报告", null],
     ["帮我把这批稿件过一遍", classifierStub("peer-review")],
-    ["开展降压药对卒中结局的 meta 分析", null],
+    ["速效救心丸的有效性与安全性，请写一份报告", null],
     ["阿托伐他汀的作用机制是什么？", null],
   ]) {
     reached.add((await decideRouting({ question, agents: catalogue, classifier })).decidedBy);

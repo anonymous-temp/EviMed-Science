@@ -99,8 +99,8 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.7-rc.2",
-  sha256: "71d9ec5c2f2567452befd17595061ef196c0193850be01facd1a1d1bd353be79",
-  recordedBy: "Pinned DSH --profile evimed-runtime --dump-config from the isolated seeded native profile on 2026-10-11, with the official LoopX bundle followed by EviMed. Real sessions booted this profile. The runtime image build compares its own fresh dump byte for byte before sealing.",
+  sha256: "daddfee844a3fc9af74e8e63eedac6815cb4b6cd7787b407b58e98c6eb5a1f5a",
+  recordedBy: "Pinned DSH --profile evimed-runtime --dump-config from the isolated seeded native profile on 2026-10-12, with the official LoopX bundle followed by EviMed; the same seeding reproduced the 2026-10-11 record byte for byte before the preset changed (general persona, tool-todo, present, tool-subagent, command-compact). Real sessions booted this profile. The runtime image build compares its own fresh dump byte for byte before sealing.",
   // The complete recipe booted its seeded composition and an evimed-universal
   // session. A second read-only, network-isolated UID65534 boot passed after
   // import; image-owned profile sync then produced this byte-identical dump.
@@ -123,9 +123,12 @@ export const EXTRACTION_FLOORS = {
   // with a floor of six meant three could vanish and the run stayed green.
   // Changing this number is how a reviewer says "the composition's ban list
   // changed on purpose", which is exactly the moment worth stopping at.
-  // 13 since 2026-09-18: the kernel's subagent, subagent-control, workflow and
-  // workflow-worker rows left the preset and joined the list.
-  derivedFromAbsentListExactly: 13,
+  // 13 from 2026-09-18, when the kernel's subagent, subagent-control, workflow
+  // and workflow-worker rows left the preset and joined the list. 9 since
+  // 2026-10-12: the step list and the one-shot sub-agent tool are mounted for
+  // general work, and the two code rows the pinned kernel never shipped are no
+  // longer listed as if they were refused.
+  derivedFromAbsentListExactly: 9,
 };
 
 /**

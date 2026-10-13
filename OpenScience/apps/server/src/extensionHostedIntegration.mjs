@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { canonicalJson } from '@evimed/domain';
+import { canonicalJson, isolatedToolRowIsAdmitted } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { deploymentGenerationIdentities, deploymentProofIdentity } from './extensionDeployment.mjs';
 import { ExtensionQualification } from './extensionQualification.mjs';
@@ -93,10 +93,13 @@ export function composeExtensionExecution({config,database,store,agentRuns,runti
   });
   extensions.cancelPreparation = identity => controller.cancelPreparation(identity);
   const documents = new ExtensionDocumentResources({ config, database, store, access: extensions.access,
-    resolveGeneration: principal => {
-      const descriptor = deployment.admittedDescriptors.find(item => item.coordinate.repository === 'Jesse-njx/dsh-cowork');
-      if (!descriptor) throw new HttpError(503, 'product_state_unavailable', 'The document extension is unavailable.');
-      return generations.operationIdentity({ id: principal.userId }, principal.projectId, descriptor.id, principal.jti);
+    // The tool the project's current generation selected, among the descriptors the deployment admitted; no name decides it.
+    resolveGeneration: async principal => {
+      const project = await extensions.access.project({ id: principal.userId }, principal.projectId);
+      const selected = (await generations.current(project))?.payload.effective?.projection.plugins
+        .find(plugin => plugin.enabled && isolatedToolRowIsAdmitted(plugin, deployment.admittedDescriptors.find(item => item.id === plugin.extensionId)));
+      if (!selected) throw new HttpError(503, 'product_state_unavailable', 'The document extension is unavailable.');
+      return generations.operationIdentity({ id: principal.userId }, principal.projectId, selected.extensionId, principal.jti);
     },
   });
   const actors = new ExtensionActorBindings({ database, access: extensions.access, runtimeManager, secret: config.modelGatewaySigningSecret });

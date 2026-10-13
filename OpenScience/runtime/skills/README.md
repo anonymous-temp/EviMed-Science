@@ -6,7 +6,7 @@ Scientific skills, layered:
 skills/
   core/      # self-authored general-purpose skills; all twelve ship a SKILL.md
   curated-scientific/ # reviewed skills with an exhaustive delivery inventory
-  office/    # first-party MIT baseline Office artifact exporters
+  office/    # read / edit in place / create Word, Excel, PowerPoint and PDF files (MIT, first-party text and helpers)
   community/ # ecosystem skills, vendored at pinned commits (sources.json)
   evimed/    # our own agent packages (agent.yaml + SKILL.md). The eleven
              # specialists reach a run as capability bodies under
@@ -47,16 +47,24 @@ Where it goes:
 
 To bump the pack version, update `AI4S_SKILLS_COMMIT` in `fetch-skills.sh`.
 
-## Office pack: first-party exporters
+## Office pack: read, edit in place, create
 
-The `office/` pack contains EviMed-owned MIT implementations for baseline DOCX,
-PDF, PPTX, and XLSX export. Each skill has an executable standard-library script,
-an explicit artifact boundary, and an independent smoke test. The restricted
-Anthropic document skills under a developer's ignored `external/` cache are not
-fetched or copied into images.
+The `office/` pack is for anyone's documents: contracts, budgets, decks, reports, PDFs. Each skill covers three
+flows with the libraries the runtime image pins (`python-docx`, `python-pptx`, `XlsxWriter`, `openpyxl`,
+`pdfplumber`, `pypdf`; see `python_stack` in `deploy/runtime-dsh/install-runtime.sh`) and a helper for the one
+operation the library has no call for: `docx_tool.py` (a run-aware replace that rewrites one XML part and copies
+the rest, tracked revisions, a diff), `xlsx_tool.py` (recalculate and report formulas without a result or in error),
+`pptx_tool.py` (duplicate a slide with its chart, move, delete, a dark or light palette), `pdf_tool.py` (text,
+find, tables to Excel, page images). Converting, recalculating, rendering and structural checks go through
+`shared/office_kit.py`, which drives the LibreOffice Kit and the checker that ship inside the DSH kernel's own
+closure; the image carries no system LibreOffice. `shared/test_office_flows.py` runs the flows on real files, in CI
+and at image build.
 
-These exporters are deliberately narrow. They establish a real cross-runtime
-artifact chain without claiming full Office editing or layout fidelity.
+The four `create_*` scripts are the original first-party exporters (one-slide PPTX, CSV-only XLSX, Markdown to DOCX
+and PDF through Pandoc). They stay as smoke fixtures and as the dependency-light create path for DOCX and PDF.
+The restricted Anthropic document skills under a developer's ignored `external/` cache are not fetched or copied
+into images. The community `dsh-ppt` skill stays beside them. What was tried from the ecosystem, and why each piece
+was or was not taken, is in `community/plugin-support.json` and `community/try-install.json`.
 
 ## Curated scientific delivery tiers
 

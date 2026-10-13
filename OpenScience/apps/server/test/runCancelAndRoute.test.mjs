@@ -265,7 +265,20 @@ test("deleting a conversation that is still working stops its kernel session fir
 
 test("a line the researcher chose replaces the router and is recorded as theirs", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-run-line-"));
-  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false });
+  // The model that routes: it reads the brief and names the capability. A chosen line must never reach it.
+  let classifications = 0;
+  const specialistClassifierFetch = async () => {
+    classifications += 1;
+    return {
+      ok: true,
+      headers: { get: () => null },
+      text: async () => JSON.stringify({ choices: [{ message: { content: JSON.stringify({ agentId: "adr-analysis", confidence: 0.95 }) } }] }),
+    };
+  };
+  const app = createWebApiApp({
+    dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false,
+    llmRoutingEnabled: true, deepseekProviderEnabled: true, deepseekApiKey: "sk-test", specialistClassifierFetch,
+  });
   const address = await app.listen(0, "127.0.0.1");
   const base = `http://127.0.0.1:${address.port}`;
   const headers = { "X-Open-Science-Project": "default", "Content-Type": "application/json" };
@@ -277,6 +290,7 @@ test("a line the researcher chose replaces the router and is recorded as theirs"
     assert.equal((await put("ses_routed", { mode: "open-domain" })).status, 200);
     const routed = (await (await dispatch({ sessionId: "ses_routed", dispatchId: "line_routed", text })).json()).data;
     assert.notEqual(routed.effectiveAgentId, "open-domain-answer", "the control: without a choice this question is routed to a capability");
+    assert.equal(classifications, 1);
 
     // 「改为普通问答」: the same question, pinned to the answer line.
     assert.equal((await put("ses_answer", { mode: "open-domain" })).status, 200);
@@ -294,6 +308,7 @@ test("a line the researcher chose replaces the router and is recorded as theirs"
     assert.equal(meta.effectiveRouteReason, "choice:meta-analysis");
     assert.equal(meta.routeReason, undefined);
     assert.ok(meta.estimatedMinutes, "the chosen capability's estimate comes with it");
+    assert.equal(classifications, 1, "a chosen line asked the classifier nothing");
 
     // Refused, not ignored: a line that is not one, a capability this
     // deployment does not offer publicly, and a conversation that already has one.

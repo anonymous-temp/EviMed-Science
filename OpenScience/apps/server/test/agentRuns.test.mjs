@@ -274,6 +274,10 @@ test("a turn typed into a conversation bound to a multi-product capability is he
  * @param {string} id
  */
 const shippedVersion = (id) => JSON.parse(readFileSync(new URL(`../../../deploy/runtime-dsh/capabilities/${id}.json`, import.meta.url), "utf8")).version;
+/** The default conversation package is a skill-root manifest, not a capability manifest. */
+const shippedAnswerVersion = /^version:\s*"?([0-9.]+)"?\s*$/m.exec(
+  readFileSync(new URL("../../../runtime/skills/evimed/open-domain-answer/agent.yaml", import.meta.url), "utf8"),
+)?.[1];
 
 /**
  * A completed `skill` tool call as the kernel reports one: the result is the
@@ -486,10 +490,11 @@ test("starts immutable open-domain and specialist run identities from research-s
         agentId: null,
         agentVersion: null,
         runtimeAgent: null,
-        // Unrouted open-domain turns run on the managed default answer agent
-        // (persona + proportional quality floor), not the bare coding agent.
+        // An unrouted turn is recorded under the default conversation package: a general
+        // work assistant whose evidence method is a skill the model loads when the question
+        // is medical. Its version is the shipped manifest's, read rather than repeated.
         effectiveAgentId: "open-domain-answer",
-        effectiveAgentVersion: "1.0.0",
+        effectiveAgentVersion: shippedAnswerVersion,
         effectiveRuntimeAgent: "evimed-open-domain-answer",
         model: "deepseek/deepseek-flash",
         status: "running",
@@ -604,10 +609,13 @@ test("open-domain clinical evidence questions record and dispatch the selected s
     assert.equal(plain.response.status, 202);
     assert.equal(plain.body.data.effectiveAgentId, "open-domain-answer");
     assert.equal(plain.body.data.effectiveRuntimeAgent, "evimed-open-domain-answer");
-    assert.match(
-      await readFile(path.join(workspace, ".evimed-brief", "sessions", "ses_unrouted_clinical", "context.md"), "utf8"),
-      /保持开放域回答/,
-    );
+    // An open conversation's context carries the turn's own facts and nothing
+    // else: no routing sentence, no second catalogue of the capabilities, no
+    // rule of evidence work — and, a person having sent it, no word that
+    // nobody is waiting (2026-10-12).
+    const openContext = await readFile(path.join(workspace, ".evimed-brief", "sessions", "ses_unrouted_clinical", "context.md"), "utf8");
+    assert.match(openContext, /自主判断回答深度/);
+    assert.doesNotMatch(openContext, /evimed-specialist|确定性路由到专项能力|必须加载对应 Skill|黑框警告|没有人值守/);
     assert.equal("capability" in JSON.parse(await readFile(path.join(workspace, ".evimed-brief", "sessions", "ses_unrouted_clinical", "index.json"), "utf8")), false,
       "an answer-line dispatch was routed nowhere");
     await assert.rejects(
@@ -646,7 +654,7 @@ test("the ledger records why each run was routed where it was", async () => {
       assert.equal((await bind(base, id, { mode: "open-domain" })).status, 200);
     }
     // The classifier answers first now, so its confidence is the reason on a
-    // route it made; the regex reason appears only where it acted as the net.
+    // route it made; the medicine rule's reason appears only where it acted under it.
     const regex = await dispatchRun(base, "ses_reason_regex", "turn_reason_regex", "分析奥希替尼的 FAERS 药物警戒信号");
     assert.equal(regex.body.data.effectiveRouteReason, "llm:0.91");
 
@@ -678,29 +686,26 @@ test("the ledger records why each run was routed where it was", async () => {
   });
 });
 
-test("the classifier decides and the regex is the net under it", async () => {
+test("the classifier decides and its answer is final; only a slash command and the medicine rule act without it", async () => {
   // The old order was regex-first, and a rule that matched ended the decision.
   // Six real requests for a clinical evidence review went elsewhere because
   // they mentioned meta-analyses, adverse reactions or a dataset — the
-  // classifier was never asked. Now the model decides; the regex may only add a
-  // route the model declined to make.
+  // classifier was never asked. Then the rules became a net under the model,
+  // and a sales spreadsheet, "什么是同行评审" and a pull request went to medical
+  // pipelines over its clean none (2026-10-13). Now the model's answer is final.
   const calls = [];
   const specialistClassifierFetch = async (_url, init) => {
     calls.push(String(init?.body ?? ""));
-    // A brief that discusses published meta-analyses is a literature appraisal,
-    // and the classifier is the one able to tell that from a request to run a
-    // new meta-analysis. It answers "none" for the second query below.
-    const declines = calls.at(-1).includes("奥希替尼");
-    // Before the net overrules that "none" the model is asked whether the message only describes the researcher; this
-    // one asks for an analysis.
-    const statementCheck = calls.at(-1).includes("only tells the assistant about the researcher");
+    const body = calls.at(-1);
+    // A request the classifier reads as an analysis of reported signals is none here, and it must stay none.
+    const declines = body.includes("奥希替尼") || body.includes("sales.xlsx") || body.includes("速效救心丸");
     return {
       ok: true,
       headers: { get: () => null },
       text: async () => JSON.stringify({
         choices: [{
           message: {
-            content: JSON.stringify(statementCheck ? { statement: false, confidence: 0.95 } : declines
+            content: JSON.stringify(declines
               ? { agentId: "none", confidence: 0.9 }
               : { agentId: "meta-analysis", confidence: 0.95 }),
           },
@@ -709,14 +714,16 @@ test("the classifier decides and the regex is the net under it", async () => {
     };
   };
   await withApp(async ({ base }) => {
-    for (const id of ["ses_llm_a", "ses_llm_b"]) await bind(base, id, { mode: "open-domain" });
+    for (const id of ["ses_llm_a", "ses_llm_b", "ses_llm_c", "ses_llm_d"]) await bind(base, id, { mode: "open-domain" });
 
-    // The classifier is consulted even where a regex rule would have matched.
-    const netted = await dispatchRun(base, "ses_llm_a", "turn_llm_a", "分析奥希替尼的 FAERS 药物警戒信号");
-    assert.equal(calls.length, 2, "the model was asked first, and once more before the net overruled its none");
-    // Having declined, the safety net still delivers the specialty route.
-    assert.equal(netted.body.data.effectiveAgentId, "adr-analysis");
-    assert.equal(netted.body.data.effectiveRouteReason, "matched:adr-analysis");
+    // The model said none: the ordinary line, with no rule to take it elsewhere.
+    const declined = await dispatchRun(base, "ses_llm_a", "turn_llm_a", "分析奥希替尼的 FAERS 药物警戒信号");
+    assert.equal(calls.length, 1, "the model was asked once");
+    assert.equal(declined.body.data.effectiveAgentId, "open-domain-answer");
+    assert.equal(declined.body.data.effectiveRouteReason, "unrouted:open-domain");
+    const sheet = await dispatchRun(base, "ses_llm_c", "turn_llm_c", "分析一下这份数据 sales.xlsx，告诉我哪个地区卖得最好");
+    assert.equal(sheet.body.data.effectiveAgentId, "open-domain-answer");
+    assert.equal(sheet.body.data.effectiveRouteReason, "unrouted:open-domain");
 
     const classified = await dispatchRun(
       base,
@@ -724,9 +731,13 @@ test("the classifier decides and the regex is the net under it", async () => {
       "turn_llm_b",
       "帮我把这个研究方向整理成一个可执行的分析计划",
     );
-    assert.equal(calls.length, 3);
     assert.equal(classified.body.data.effectiveAgentId, "meta-analysis");
     assert.equal(classified.body.data.effectiveRouteReason, "llm:0.95");
+
+    // The one data rule stands under a none: a high-risk medicine from the pharmacists' list in a report request.
+    const medicine = await dispatchRun(base, "ses_llm_d", "turn_llm_d", "速效救心丸的有效性与安全性，请写一份报告");
+    assert.equal(medicine.body.data.effectiveAgentId, "clinical-evidence-synthesis");
+    assert.equal(medicine.body.data.effectiveRouteReason, "matched:safety-medicine");
   }, {
     llmRoutingEnabled: true,
     deepseekProviderEnabled: true,
@@ -735,7 +746,7 @@ test("the classifier decides and the regex is the net under it", async () => {
   });
 });
 
-test("naming the package outranks the classifier, because it is an instruction", async () => {
+test("a slash command is an instruction and needs no classification; a name inside the sentence is only a word of it", async () => {
   let asked = 0;
   const specialistClassifierFetch = async () => {
     asked += 1;
@@ -743,7 +754,7 @@ test("naming the package outranks the classifier, because it is an instruction",
       ok: true,
       headers: { get: () => null },
       text: async () => JSON.stringify({
-        choices: [{ message: { content: JSON.stringify({ agentId: "meta-analysis", confidence: 0.99 }) } }],
+        choices: [{ message: { content: JSON.stringify({ agentId: "none", confidence: 0.99 }) } }],
       }),
     };
   };
@@ -753,11 +764,16 @@ test("naming the package outranks the classifier, because it is an instruction",
       base,
       "ses_named",
       "turn_named",
-      "请按 adr-analysis 出一份分析报告",
+      "/adr-analysis 出一份分析报告",
     );
     assert.equal(named.body.data.effectiveAgentId, "adr-analysis");
-    assert.equal(named.body.data.effectiveRouteReason, "matched:named:adr-analysis");
-    assert.equal(asked, 0, "an explicit name needs no classification");
+    assert.equal(named.body.data.effectiveRouteReason, "command:adr-analysis");
+    assert.equal(asked, 0, "an explicit command needs no classification");
+
+    await bind(base, "ses_word", { mode: "open-domain" });
+    const word = await dispatchRun(base, "ses_word", "turn_word", "Can you peer-review my pull request description?");
+    assert.equal(asked, 1, "the name inside the sentence went to the model");
+    assert.equal(word.body.data.effectiveAgentId, "open-domain-answer");
   }, {
     llmRoutingEnabled: true,
     deepseekProviderEnabled: true,
@@ -1515,19 +1531,40 @@ test("an answer-mode turn succeeds with zero citations once its skill is loaded"
   });
 });
 
-test("an answer-mode turn delivers unverified (not failed) when its answer skill was never loaded", async () => {
-  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, store }) => {
+test("a general answer that never loaded the evidence method is delivered as it stands, never unverified for not loading it", async () => {
+  // The conversation is a general one (2026-10-12): an e-mail, a script, a
+  // look-up. Until then the evidence method was every conversation's persona
+  // and a reply written without it was delivered 未核验 with 「本轮没有加载
+  // 「open-domain-answer」方法」 — a correct answer marked for not reading a
+  // medical persona it had no reason to read (review GA20).
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
     await dispatch("turn_answer_skill_missing");
     appendHistory([{ type: "text", text: "直接回答，没有加载任何 skill。" }]);
     const run = await store.reconcileSession(project, binding.sessionId);
-    // A missing skill load is a process gap: the answer is delivered marked
-    // unverified instead of discarding a sound reply.
     assert.equal(run.status, "succeeded");
     assert.equal(run.errorCode, null);
-    assert.equal(run.verification, "unverified");
-    // The sentence is shown to the researcher, on the run ledger and in
-    // their inbox, so it is in the product's language (2026-09-15 walk, B8).
-    assert.match(noticeTexts(run).join("\n"), /没有加载「open-domain-answer」方法/);
+    assert.notEqual(run.verification, "unverified");
+    assert.deepEqual(noticeTexts(run), []);
+
+    // The method's citation floor is the method's. An address in a coding
+    // answer is not a citation that points inside this deployment.
+    await dispatch("turn_answer_local_address");
+    appendHistory([{ type: "text", text: "脚本已写好。启动后在浏览器打开 http://127.0.0.1:3000 查看。\n\n参考\n1. http://localhost:3000/docs" }]);
+    const coding = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(coding.status, "succeeded");
+    assert.notEqual(coding.verification, "unverified");
+    assert.deepEqual(noticeTexts(coding), []);
+
+    // The same address under the method is the defect it always was: the floor
+    // did not move, only whom it is asked of.
+    await dispatch("turn_answer_local_address_under_method");
+    appendHistory([
+      skillLoadedPart,
+      { type: "text", text: "本地证据 [1]。\n\n参考文献\n1. http://127.0.0.1:3000/doc/42" },
+    ]);
+    const evidence = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(evidence.verification, "unverified");
+    assert.match(noticeTexts(evidence).join("\n"), /points inside this deployment/);
   });
 });
 
@@ -7926,13 +7963,12 @@ test("the correction route takes a text and nothing else, and names what it cann
   });
 });
 
-// The answer line's `skillsLoaded` check had no route to being true. It does
-// not delegate, so `injectedSkills` — which reads `projection.subagents` —
-// found nothing on every run, and the only remaining evidence was a `skill`
-// tool call the brief asked for and the model made 6 times in 17. The control
-// plane now mounts the body itself and records that it did; these assert the
-// gate reads that record, and that the record cannot be faked from the run side.
-test("a control-plane mounted persona satisfies skillsLoaded with no skill tool call", async () => {
+// Whether the evidence method was in front of the model has three answers: a
+// `skill` tool call, a body a delegation injected, or a body the control plane
+// mounted and recorded. These assert the gate reads the control plane's own
+// record of a mount, and that the method's floor follows the method: a reply
+// the method was mounted for is held to it, and one it was not is not.
+test("the method's floor is asked of a reply the method was mounted for, and of no other", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-mounted-skill-"));
   try {
     const project = {
@@ -7955,7 +7991,7 @@ test("a control-plane mounted persona satisfies skillsLoaded with no skill tool 
           skill: "open-domain-answer",
           companionSkills: [],
           outputs: [],
-          completionChecks: ["skillsLoaded"],
+          completionChecks: ["citationsResolvable"],
         }),
       },
       model: "deepseek/deepseek-v4-pro",
@@ -7973,43 +8009,41 @@ test("a control-plane mounted persona satisfies skillsLoaded with no skill tool 
       effectiveRuntimeAgent: "evimed-open-domain-answer",
     }, async () => ({ accepted: true }));
 
-    // Baseline: the shape production was in. No mount, no tool call, and the
-    // reply is delivered unverified for a process gap the reader cannot see.
+    const reply = "内部证据 [1]。\n\n参考文献\n1. https://www.evimed.com/api-evimed/medicine-api/ai-api/search";
+    // No mount and no tool call: a general conversation. Nothing is owed to a
+    // method the run never had — this is the reply that was delivered 未核验
+    // for a persona on 11 of 17 production answer-line runs.
     const first = await dispatch("turn_unmounted");
     history = [{
       info: { id: "msg_unmounted", role: "assistant", time: { completed: Date.now() + 10 } },
-      parts: [{ type: "text", text: "二甲双胍主要通过抑制肝糖异生发挥作用。" }],
+      parts: [{ type: "text", text: reply }],
     }];
     const unmounted = await store.reconcileSession(project, binding.sessionId);
-    // Delivered, but stamped: a missing persona is a process gap the reader
-    // cannot see, so the answer ships and the run says it was not verified.
-    // This is the notice that fired on 11 of 17 production answer-line runs.
     assert.equal(unmounted.status, "succeeded");
-    assert.equal(unmounted.verification, "unverified");
-    assert.match(noticeTexts(unmounted).join("\n"), /没有加载「open-domain-answer」方法/);
+    assert.equal(unmounted.verification, null);
+    assert.deepEqual(noticeTexts(unmounted), []);
     assert.equal(first.id, unmounted.id);
 
-    // The same turn, with the control plane having mounted the body.
+    // The same reply, with the control plane having mounted the method: the
+    // floor is the method's, read from the ledger's own record of the mount.
     const second = await dispatch("turn_mounted");
     await store.recordLearning(project, second.id, { mountedSkills: ["open-domain-answer"] });
     history = [...history, {
       info: { id: "msg_mounted", role: "assistant", time: { completed: Date.now() + 20 } },
-      parts: [{ type: "text", text: "二甲双胍主要通过抑制肝糖异生发挥作用。" }],
+      parts: [{ type: "text", text: reply }],
     }];
     const mounted = await store.reconcileSession(project, binding.sessionId);
     assert.equal(mounted.status, "succeeded");
     assert.equal(mounted.errorCode, null);
-    // The difference the mount makes, and the whole point of it: same reply,
-    // same absence of a `skill` tool call, no notice and nothing unverified.
-    assert.equal(mounted.verification, null);
-    assert.deepEqual(noticeTexts(mounted), []);
+    assert.equal(mounted.verification, "unverified");
+    assert.match(noticeTexts(mounted).join("\n"), /points inside this deployment/);
     assert.deepEqual(mounted.mountedSkills, ["open-domain-answer"]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test("a mounted name the control plane never recorded does not pass the check", async () => {
+test("another skill being mounted is not the method being mounted", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-mounted-other-"));
   try {
     const project = {
@@ -8032,7 +8066,7 @@ test("a mounted name the control plane never recorded does not pass the check", 
           skill: "open-domain-answer",
           companionSkills: [],
           outputs: [],
-          completionChecks: ["skillsLoaded"],
+          completionChecks: ["citationsResolvable"],
         }),
       },
       model: "deepseek/deepseek-v4-pro",
@@ -8049,16 +8083,18 @@ test("a mounted name the control plane never recorded does not pass the check", 
       effectiveAgentVersion: "1.0.0",
       effectiveRuntimeAgent: "evimed-open-domain-answer",
     }, async () => ({ accepted: true }));
-    // Some other skill was mounted. The required one still was not, so the
-    // record must not be read as "a skill was mounted, therefore fine".
+    // Some other skill was mounted. The record must not be read as "a skill
+    // was mounted, therefore this is an evidence answer": the method's floor is
+    // asked only where the method itself was.
     await store.recordLearning(project, run.id, { mountedSkills: ["citation-integrity"] });
     history = [{
       info: { id: "msg_wrong_mount", role: "assistant", time: { completed: Date.now() + 10 } },
-      parts: [{ type: "text", text: "答案。" }],
+      parts: [{ type: "text", text: "见此 [1]。\n\n参考文献\n1. https://www.evimed.com/api-evimed/medicine-api/ai-api/search" }],
     }];
     const finished = await store.reconcileSession(project, binding.sessionId);
-    assert.equal(finished.verification, "unverified");
-    assert.match(noticeTexts(finished).join("\n"), /没有加载「open-domain-answer」方法/);
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.verification, null);
+    assert.deepEqual(noticeTexts(finished), []);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

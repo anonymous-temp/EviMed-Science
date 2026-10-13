@@ -1,15 +1,16 @@
 /**
- * The orchestration guidance section.
+ * The guidance section every conversation reads.
  *
- * Hidden knowledge: what the model is told about how to work, and where the
- * edge of its abilities is. There is no router and no mode; this section plus
- * `evimed_plan` is the entire dispatch mechanism, and the capability catalogue
- * inside it is the honest boundary — a capability listed can be composed, one
- * that is not gets "we do not do that" instead of an improvisation of it.
+ * Hidden knowledge: what the model is told about how to work, whatever the
+ * work is. There is no router and no mode: a general assistant answers, writes
+ * files and looks things up with the kernel's own tools, and this section says
+ * only what every such task needs. The capability catalogue inside it is an
+ * index of the professional workflows a plan may name — a workflow listed can
+ * be planned, and a task that is not one of them is simply done, not declined.
  *
- * The catalogue is generated from the capability manifests the deployment
- * mounted, never hand-written: a catalogue that drifts from the manifests
- * promises work nobody can do.
+ * The index is generated from the capability manifests the deployment mounted,
+ * never hand-written: an index that drifts from the manifests promises a
+ * workflow nobody can run.
  *
  * @module @evimed/dsh-socket/plugins/guidance
  */
@@ -24,25 +25,10 @@ import {
   readFileAt,
   registerAgentSection,
   registerSection,
-  withdrawPromptSection,
 } from '@evimed/harness-port'
 import { GUIDANCE_SECTION_NAME, GUIDANCE_SECTION_ORDER, buildChildGuidanceText, buildGuidanceText } from '../src/guidanceText.mjs'
 
 const Schema = await configSchema()
-
-/** The persona the answer line is graded against. */
-const ANSWER_PERSONA_SKILL = 'open-domain-answer'
-/** Sits just after the orchestration guidance, inside DSH's guidance band. */
-const ANSWER_PERSONA_SECTION_NAME = 'evimed:answer-persona'
-const ANSWER_PERSONA_SECTION_ORDER = GUIDANCE_SECTION_ORDER + 1
-/**
- * A skill body far larger than this is a packaging mistake, not a persona.
- *
- * Counted in characters rather than bytes: this plugin's lint environment has
- * no `Buffer`, and the number is a sanity ceiling, not an accounting of the
- * wire. `open-domain-answer` is a few thousand characters.
- */
-const ANSWER_PERSONA_MAX_CHARS = 32_000
 
 export const name = 'evimed-guidance'
 
@@ -56,7 +42,6 @@ export const inject = ['systemPrompt']
  * @property {boolean} capsuleActive
  * @property {boolean} reviewEnabled
  * @property {string} [disabledToolsFile]
- * @property {string} answerPersonaDir
  * @property {boolean} [runPolicyEnabled]
  * @property {boolean} [capsuleEnabled]
  */
@@ -64,23 +49,12 @@ export const inject = ['systemPrompt']
 export const Config = Schema.object({
   enabled: Schema.boolean().default(true)
     .description('Off registers nothing: no prompt section, no capability catalogue, no hook (EVIMED_GUIDANCE_ENABLED=0).'),
-  // Where `open-domain-answer/SKILL.md` lives in this image.
-  //
-  // Principle 7: priors live in context, not control flow. The answer line's
-  // contract requires this persona to have been loaded, and the model was left
-  // to fetch it with the `skill` tool — which it skips on a fast question. On
-  // 2026-09-15 a fourteen-second answer with clean citations was delivered
-  // 「待人工复核」 because of it, and the production ledger had already shown
-  // 11 of 17 answer-line runs doing the same. The platform is holding the text;
-  // handing it over costs one section and removes a whole class of false doubt.
-  answerPersonaDir: Schema.string().default('')
-    .description('Read-only directory holding the open-domain-answer skill package. Empty leaves the model to load it itself.'),
   // A deployment-owned read-only directory. It is not the workspace: a manifest
   // a user could upload would be a capability a user could invent.
   capabilitiesDir: Schema.string().default('')
     .description('Read-only directory holding capability.yaml manifests. The hosted image and the local installer set different paths.'),
   askUserEnabled: Schema.boolean().default(false)
-    .description('Whether this deployment lets a run stop and ask. Hosted runs are unattended, local ones are not.'),
+    .description('Whether the ask-user tool is mounted in this runtime (EVIMED_ASK_USER). On, the guidance says when a question is worth asking; off, it says to state the assumption and go on.'),
   capsuleActive: Schema.boolean().default(false)
     .description('Whether a memory capsule is mounted for this session; changes the retrieval order the guidance states.'),
   reviewEnabled: Schema.boolean().default(false)
@@ -114,88 +88,35 @@ export async function apply(ctx, config) {
   })
   ctx.provide('evimedCapabilities', capabilities, true)
   ctx.effect(() => registerSection(ctx, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text }))
-  // The kernel's produced-files row asks every request to cite changed files
-  // as inline code so it can link them. It never renders here: its fold reads
-  // `write`/`edit` while our runs write through `bash`, `present` is not
-  // mounted, and the click target is a disabled preview pane (review appendix
-  // A, 2026-09-18). The paragraph goes; the row stays, so the recorded host
-  // composition does not move.
-  ctx.effect(() => withdrawPromptSection(ctx, 'deliverableFileReferences'))
+  // The kernel's produced-files paragraph (`ui:deliverable-file-references`)
+  // stays. It was withdrawn here from 2026-09-18, when `present` was not
+  // mounted and the page's preview pane was disabled, so the paragraph asked
+  // for links and cards that could not render. Both are back (the preview
+  // since 2026-09-22, `present` with this change), and the paragraph is the
+  // kernel's own account of when a file card helps and how a file is linked.
 
-  const persona = await loadAnswerPersona(ctx, config.answerPersonaDir)
-
-  // A delegated child is not the orchestrator and not the answer line. Both
-  // sections are replaced in the child's own scope before its first request is
-  // assembled: the orchestration guidance by the part that holds for any agent
-  // doing the work, the answer persona by nothing. Nothing of the root's
-  // prompt changes.
+  // A delegated child is not the orchestrator. Its section is replaced in the
+  // child's own scope before its first request is assembled, by the part that
+  // holds for any agent doing the work. Nothing of the root's prompt changes.
+  //
+  // There is no answer persona to withhold from it any more. Until 2026-10-12
+  // this row also injected `open-domain-answer/SKILL.md` — the evidence-based
+  // answer method — into every root session as a second always-on section
+  // (8,271 characters), so that the answer line's `skillsLoaded` check was
+  // true by construction; a conversation about an e-mail read a method that
+  // opens 「an evidence-based-medicine specialist」. The method is a skill now:
+  // the model loads it when the question is medical or asks what the
+  // literature shows, and the control plane holds a reply to the method's
+  // citation floor only when the run actually loaded it.
   const childText = buildChildGuidanceText({ capsuleActive: config.capsuleActive, capsuleToolEnabled: config.capsuleEnabled !== false })
   ctx.effect(() => onSessionStart(ctx, (agent) => {
     if (!isSubagentSession(agent) || !agent?.ctx) return
     try {
       registerAgentSection(agent, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text: childText })
-      if (persona) registerAgentSection(agent, { name: ANSWER_PERSONA_SECTION_NAME, order: ANSWER_PERSONA_SECTION_ORDER, text: '' })
     } catch (error) {
       ctx.get('evimedDiagnostics')?.degrade?.(`child guidance not installed: ${errorMessage(error)}`)
     }
   }))
-
-  if (persona) {
-    ctx.effect(() => registerSection(ctx, {
-      name: ANSWER_PERSONA_SECTION_NAME,
-      order: ANSWER_PERSONA_SECTION_ORDER,
-      text: persona,
-    }))
-    // Told to the host composition rather than published as a service of our
-    // own. This plugin is a row of an agent preset, and the kernel refuses to
-    // mount a preset whose rows publish process-global services — the build
-    // smoke caught exactly that (`row(s) published process-global service(s)
-    // [evimedInjectedSkills]`). Calling a service the host provides is both
-    // allowed and the direction the fact travels: the run-state projection is
-    // written on the host side, and the control plane's completion gate reads
-    // it from there.
-    ctx.get('evimedDiagnostics')?.injectedSkill?.(ANSWER_PERSONA_SKILL)
-  }
-}
-
-/**
- * The answer-line persona, wrapped so the model can see what it is.
- *
- * Returns null — not a throw and not an empty section — when the deployment
- * did not mount it. A missing persona is the state that existed before this
- * function, and the gate's `skillsLoaded` check still covers it: without the
- * injection the run has to load the skill itself, exactly as it did.
- *
- * @param {any} ctx @param {string} directory @returns {Promise<string | null>}
- */
-export async function loadAnswerPersona(ctx, directory) {
-  if (!directory) return null
-  let body = ''
-  try {
-    body = String(await readFileAt(ctx, directory, 'SKILL.md') ?? '')
-  } catch (error) {
-    ctx.get('evimedDiagnostics')?.degrade?.(`answer persona unreadable: ${errorMessage(error)}`)
-    return null
-  }
-  if (!body.trim()) {
-    ctx.get('evimedDiagnostics')?.degrade?.(`answer persona is empty: ${directory}/SKILL.md`)
-    return null
-  }
-  if (body.length > ANSWER_PERSONA_MAX_CHARS) {
-    ctx.get('evimedDiagnostics')?.degrade?.(
-      `answer persona too large to inject (${body.length} characters); the model must load it itself`,
-    )
-    return null
-  }
-  return [
-    `<evimed-skill name="${ANSWER_PERSONA_SKILL}">`,
-    '',
-    '开放域问答的人设与规范正文如下，已由平台直接注入，无需再用 skill 工具加载。',
-    '',
-    body.trim(),
-    '',
-    '</evimed-skill>',
-  ].join('\n')
 }
 
 /**

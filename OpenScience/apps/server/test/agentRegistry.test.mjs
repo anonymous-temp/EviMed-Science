@@ -179,14 +179,17 @@ test("official specialist packages preserve domain-specific evidence and release
     ["mendelian-randomization", "1.0.1"],
     ["meta-analysis", "1.0.0"],
     ["off-label-analysis", "2.2.1"],
-    ["open-domain-answer", "1.0.0"],
+    ["open-domain-answer", "2.0.0"],
     ["peer-review", "1.0.1"],
     ["research-topic-selection", "1.3.0"],
   ]);
   const evidenceSnapshotAgents = new Set(["comprehensive-drug-evaluation", "drug-selection", "off-label-analysis"]);
   for (const agent of registry.list()) {
     assert.equal(agent.version, expectedVersions.get(agent.id));
-    assert.ok(agent.requiredTools.length > 0);
+    // The default conversation requires no research tool (2026-10-12): it writes an
+    // e-mail or a script with the kernel's own tools. Every specialist still does.
+    if (agent.id === "open-domain-answer") assert.deepEqual(agent.requiredTools, []);
+    else assert.ok(agent.requiredTools.length > 0);
     let expectedChecks = ["requiredOutputsExist", "citationsResolvable"];
     if (agent.id === "clinical-evidence-synthesis") {
       expectedChecks = ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable", "skillsLoaded"];
@@ -199,9 +202,11 @@ test("official specialist packages preserve domain-specific evidence and release
       // evidence expansion is only real if the skill actually loaded.
       expectedChecks = ["requiredOutputsExist", "citationsResolvable", "skillsLoaded"];
     } else if (agent.id === "open-domain-answer") {
-      // Answer-mode contract: the reply is the deliverable, so the floor is
-      // skill loading plus citation hygiene and integrity, instead of file outputs.
-      expectedChecks = ["skillsLoaded", "citationsResolvable", "citationIntegrity"];
+      // Answer-mode contract: the reply is the deliverable. Its skill is the
+      // evidence method the model loads for a medical question, and these two
+      // are that method's floor, asked of a reply written with it. Loading it is
+      // not a requirement: a general answer owes a medical persona nothing.
+      expectedChecks = ["citationsResolvable", "citationIntegrity"];
     } else if (evidenceSnapshotAgents.has(agent.id)) {
       expectedChecks = ["requiredOutputsExist", "citationsResolvable", "citedSourcesRecorded"];
     }
@@ -328,6 +333,29 @@ test("accepts an answer-mode package with zero file outputs", async () => {
     const agent = registry.get("open-domain-answer");
     assert.deepEqual(agent.outputs, []);
     assert.deepEqual(agent.completionChecks, ["skillsLoaded", "citationsResolvable"]);
+  });
+});
+
+test("an answer-mode package may require no research tool; a file-delivery package still names what it cannot work without", async () => {
+  // The default conversation writes an e-mail or a script with the kernel's own
+  // tools. Requiring a research tool of it — `biomedical_source_search`, until
+  // 2026-10-12 — was a statement that every conversation is research.
+  await withPackageRoot(async (root) => {
+    await writePackage(root, {
+      ...validManifest,
+      id: "open-domain-answer",
+      skill: "open-domain-answer",
+      requiredTools: [],
+      optionalTools: ["web_search", "literature_search"],
+      outputs: [],
+      completionChecks: ["citationsResolvable"],
+    });
+    const agent = (await loadAgentRegistry({ packageDirs: [root] })).get("open-domain-answer");
+    assert.deepEqual(agent.requiredTools, []);
+  });
+  await withPackageRoot(async (root) => {
+    await writePackage(root, { ...validManifest, requiredTools: [], optionalTools: ["literature_search"] });
+    await assert.rejects(loadAgentRegistry({ packageDirs: [root] }), /requiredTools must contain between 1 and/);
   });
 });
 
@@ -608,13 +636,20 @@ test("an answer-only package keeps its reply contract: the reply is the delivera
   );
 
   // And the answer-mode contract itself still exists where the server enforces
-  // it: zero declared outputs, and a floor of skill loading plus citation
-  // hygiene rather than `requiredOutputsExist`.
+  // it: zero declared outputs, and the evidence method's citation floor rather
+  // than `requiredOutputsExist`. It is the default conversation's manifest and
+  // a general one (2026-10-12): no research tool is required of it, loading
+  // the method is not required of it, and what it says of itself is not
+  // "answers biomedical and scientific questions".
   const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot] });
   const answer = registry.get("open-domain-answer");
   assert.deepEqual(answer.outputs, []);
   assert.equal(answer.completionChecks.includes("requiredOutputsExist"), false);
-  assert.deepEqual(answer.completionChecks, ["skillsLoaded", "citationsResolvable", "citationIntegrity"]);
+  assert.deepEqual(answer.completionChecks, ["citationsResolvable", "citationIntegrity"]);
+  assert.deepEqual(answer.requiredTools, []);
+  assert.ok(answer.optionalTools.includes("web_search") && answer.optionalTools.includes("literature_search"));
+  assert.doesNotMatch(`${answer.title} ${answer.description}`, /biomedical|Research Answer/i);
+  assert.ok(answer.starterPrompts.some((prompt) => !/二甲双胍|GLP-1|心衰/.test(prompt)), "a general conversation's examples are not all medical");
 });
 
 // --- a run for one product is held to that product -----------------------------------------------

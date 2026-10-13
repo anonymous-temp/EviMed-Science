@@ -2789,35 +2789,26 @@ async function specialistCompletionOutcome(
   }
   if (!agent.completionChecks.includes("requiredOutputsExist")) {
     // Answer-mode contract: the deliverable is the assistant reply itself, not
-    // workspace files. The floor is proportional — required skills must have
-    // actually been loaded, and any explicit citation URL in the reply prose
-    // must be one a reader can open (no credentials, nothing internal to this
-    // deployment). A direct answer with zero citations is legitimate and
-    // passes. A missing skill load is a process gap, not an integrity
-    // violation: deliver the reply marked "unverified" instead of discarding a
-    // sound answer.
-    if (agent.completionChecks.includes("skillsLoaded")) {
-      const loadedSkills = await loadedOrInjectedSkills(project, assistantMessages, run);
-      const requiredSkills = [...(agent.companionSkills ?? []), agent.skill];
-      if (requiredSkills.some((skill) => !loadedSkills.has(skill))) {
-        // Said in the product's language, because this sentence is shown to
-        // the researcher on the run ledger and in their inbox — it was
-        // English, and it was the first thing a first-time user read about
-        // their own first answer (2026-09-15 walk, B8).
-        const sentence = `本轮没有加载「${agent.skill}」方法，回答按未经人设校验交付。内容本身未被判定有误，可直接阅读；如需严格校验，重新提问即可。`;
-        return {
-          artifacts: [],
-          errorCode: "specialist_required_skill_missing",
-          qualityDegradable: true,
-          // The managed-persona check did not run, which is what "unverified"
-          // literally means. Unlike a bookkeeping gap between the report and
-          // its apparatus, a reader cannot see that it was skipped.
-          qualityUnverified: true,
-          qualityIssues: [sentence],
-          qualityFindings: [runNotice("specialist_required_skill_missing", sentence, { detail: sentence })],
-        };
-      }
-    }
+    // workspace files, and the conversation is a general one — an e-mail, a
+    // script, a look-up on an official site. The package's skill is the
+    // evidence method the model loads when a question is medical or asks what
+    // the literature shows, and the floor below is that method's: any citation
+    // URL in the reply prose must be one a reader can open (no credentials,
+    // nothing internal to this deployment), and a reference list must agree
+    // with the text that cites it. It is asked of a reply written with the
+    // method in front of the model, by any of the three routes it arrives by,
+    // and of no other.
+    //
+    // Until 2026-10-12 the method was the persona of every conversation and
+    // not having loaded it marked the reply 未核验 (「本轮没有加载
+    // 「open-domain-answer」方法」): a correct general answer was held to a
+    // medical persona it had no reason to read, and the reference rules read
+    // `http://localhost:3000` in a coding answer as a citation that points
+    // inside this deployment. A direct answer with no method and no citation
+    // is the ordinary case, and it is delivered as it stands.
+    const loadedSkills = await loadedOrInjectedSkills(project, assistantMessages, run);
+    const method = [...(agent.companionSkills ?? []), agent.skill];
+    if (method.some((skill) => !loadedSkills.has(skill))) return { artifacts: [], errorCode: null };
     if (agent.completionChecks.includes("citationsResolvable")) {
       const prose = assistantProse(assistantMessages);
       const { blocking, advisory } = citationUrlDefects(prose);

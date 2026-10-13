@@ -104,6 +104,7 @@ import {
   evidenceSourceErrorCode,
   gateDeliverable,
   indexPlan,
+  NATIVE_SUBAGENT_TOOL,
   planCapabilityIssues,
   planToolParameters,
   rejectionEnvelope,
@@ -1061,7 +1062,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       if (notice) diagnostics(call.sessionId)?.degrade?.(notice)
       break
     }
-    return toolPolicy(call, {
+    // The kernel's own sub-agents (`subagent`, one-shot) of this run that are working now: counted when the call is
+    // admitted and released when it settles, which for a one-shot child is its whole life.
+    entry.nativeChildCalls ??= new Set()
+    const decision = toolPolicy(call, {
       budget: entry.budget,
       limits: entry.limits,
       submitAttempts: entry.attempts.get(String(call.args?.deliverableId ?? '')) ?? 0,
@@ -1069,7 +1073,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       // Only once the turn that wrote them has ended: inside it, an accepted
       // deliverable is still the run's to repair.
       frozenDeliverables: entry.frozen ? entry.items.filter((/** @type {any} */ item) => item.status === 'accepted').map((/** @type {any} */ item) => item.id) : [],
+      runningChildren: runningDelegations(entry).length + entry.nativeChildCalls.size,
     })
+    if (decision.allow && call.name === NATIVE_SUBAGENT_TOOL) {
+      entry.budget.children += 1
+      entry.nativeChildCalls.add(String(call.callId ?? ''))
+    }
+    return decision
   }))
 
   ctx.effect(() => guardTools(ctx, (call) => {
@@ -1126,6 +1136,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
 
   // ---- record everything the run writes, for the completion scan ----------
   ctx.effect(() => onToolObserved(ctx, (call, outcome) => {
+    // A one-shot sub-agent's call settling, however it ended, is the child no longer working.
+    if (call.name === NATIVE_SUBAGENT_TOOL) ownedSessionState(call.sessionId).entry.nativeChildCalls?.delete(String(call.callId ?? ''))
     if (outcome.status !== 'completed') return
     if (call.name !== 'write' && call.name !== 'edit') return
     const path = String(call.args?.path ?? call.args?.file_path ?? '')
@@ -1382,7 +1394,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     return defineTool({
       name: 'evimed_plan',
       description: [
-        '写下或读取本次运行的计划。需要产出文件的任务在开始工作前必须先写计划。',
+        // Said of the professional workflows only since 2026-10-12. It read 「需要产出文件的任务在开始工作前必须先写计划」
+        // on every request, and a plan takes a capability and a contract kind: an apology e-mail was planned with zero
+        // deliverables, and a market report as a research-topic package (live control on main).
+        '写下或读取本次运行的计划。专业工作流的交付物（指引里「专业工作流」列出的那些）在开始工作前先写计划；普通的文件任务不用计划，直接做。',
         'action=write：给出 clarifications（问过的问题，或你直接采用的假设——不能为空）与 deliverables（每件含 id、contractKind、capability、title、dependsOn，以及 acceptance：5–10 条按用户要求写的验收项，读者能在交付文件里逐条核对到的东西，独立审查会逐条核对；报告或设计某一项具体研究的交付物再加 studyType）。',
         'action=status：读回每件交付物当前的状态。',
         '直接回答的问题不需要调用本工具。',

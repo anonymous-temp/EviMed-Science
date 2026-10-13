@@ -69,7 +69,7 @@ test("every patch row carries an explicit id", async () => {
   }
 });
 
-test("the composition mounts every agent plugin we own and nothing we ruled out", async () => {
+test("the composition mounts every agent plugin we own, the kernel's own pieces a general task needs, and nothing we ruled out", async () => {
   const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
   const patch = await readFile(new URL("../cordis.patch.yml", import.meta.url), "utf8");
   // Counted, not named in the title: it said "five" while there were eight,
@@ -82,14 +82,65 @@ test("the composition mounts every agent plugin we own and nothing we ruled out"
   assert.deepEqual([...patch.matchAll(/^\s+- id: (evimed-[\w-]+)\s*$/gm)].map(row => row[1]).sort(),
     [...HOST_PLUGIN_IDS].sort(), "the host patch must mount exactly the intended plugin identities");
   for (const id of AGENT_PLUGIN_IDS) assert.match(preset, new RegExp(`id: ${id}\\b`), id);
-  for (const banned of ["tool-todo", "agent-instructions", "str_replace_editor", "tool-web", "plan-mode", "tool-ralph", "tool-lsp", "tool-goal"]) {
-    const mounted = new RegExp(`^\\s*-?\\s*id: ${banned}\\s*$`, "m");
-    assert.ok(!mounted.test(preset), `${banned} is mounted; it was ruled out on purpose`);
+  /** @param {string} id */
+  const mounted = (id) => new RegExp(`^\\s*-?\\s*id: ${id}\\s*$`, "m").test(preset);
+  // Ruled out, each for the reason the preset's own list states: an uploaded
+  // file becoming an instruction, an egress the gateway does not see, a second
+  // channel from a child to its parent, a schema nothing calls.
+  for (const banned of ["agent-instructions", "str_replace_editor", "tool-web", "plan-mode", "tool-ralph", "tool-goal", "tool-subagent-control", "tool-workflow"]) {
+    assert.ok(!mounted(banned), `${banned} is mounted; it was ruled out on purpose`);
   }
+  // The kernel's own step list, sub-agent, file hand-over, question and
+  // `/compact` are what a general multi-step task works with. They were absent
+  // while the composition was written as a medical research assistant's
+  // (2026-10-12 review, GA19): a task that is not a capability deliverable had
+  // no step list, no delegation and no way to hand a file over.
+  for (const native of ["tool-todo", "tool-subagent", "present", "tool-ask-user", "command-compact"]) {
+    assert.ok(mounted(native), `${native} is not mounted; a general task has nothing to work with in its place`);
+  }
+  // What the composition says about code is a fact about the pinned kernel,
+  // not a statement of what the assistant is for: no language-server or
+  // code-runtime row exists at this pin, and code work runs through the shell,
+  // the file tools and the job tools, which are mounted.
+  const recorded = await readFile(new URL("../../../deploy/runtime-dsh/dump-config.baseline.json", import.meta.url), "utf8");
+  assert.ok(recorded.length > 10_000, "the recorded composition was not read, so this walked nothing");
+  assert.doesNotMatch(recorded, /dsh-tool-lsp|dsh-code-runtime/, "the pinned kernel ships such a row now: judge it by its boundary, and say so in the preset");
+  for (const row of ["tool-bash", "tool-fs", "tool-fs-search", "tool-jobs"]) assert.ok(mounted(row), `${row} is what code work runs through`);
+  assert.doesNotMatch(preset, /not a coding agent/, "a product stance written as a ban reads as a red line to the next change");
   assert.match(preset, /includeDefaultRoots: false/, "workspace skill discovery would make an uploaded file an instruction");
   assert.match(preset, /thresholdChars: 8192/);
   assert.equal(HOST_PLUGIN_IDS.length + AGENT_PLUGIN_IDS.length, Object.keys(PLUGIN_SPECIFIERS).length);
   assert.equal(PRESET_NAME, "evimed-universal");
+});
+
+test("the kernel's own sub-agent is under the run's child budgets, like a delegation", async () => {
+  // `subagent` is mounted for general work (2026-10-12): parallel pieces of a
+  // task that is not a capability deliverable. A child is a child whichever
+  // tool starts it, so the two limits a delegation is held to hold it too.
+  const { NATIVE_SUBAGENT_TOOL } = await import("../src/runPolicy.mjs");
+  assert.equal(NATIVE_SUBAGENT_TOOL, "subagent");
+  const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
+  assert.match(preset, new RegExp(`toolName: ${NATIVE_SUBAGENT_TOOL}\\b`), "the policy counts the tool the preset mounts");
+  const state = (/** @type {Record<string, any>} */ over) => ({
+    budget: { steps: 0, tokens: 0, children: 0 }, limits: { maxSteps: 0, maxTokens: 0, maxChildren: 3, maxConcurrentChildren: 2 },
+    submitAttempts: 0, deliveryAttemptLimit: 3, runningChildren: 0, ...over,
+  });
+  const call = { name: NATIVE_SUBAGENT_TOOL, args: { description: "d", prompt: "p" } };
+  assert.equal(toolPolicy(call, state({})).allow, true);
+  const spent = toolPolicy(call, state({ budget: { steps: 0, tokens: 0, children: 3 } }));
+  assert.deepEqual([spent.allow, /** @type {any} */ (spent).code], [false, "budget_exhausted"]);
+  const busy = toolPolicy(call, state({ runningChildren: 2 }));
+  assert.deepEqual([busy.allow, /** @type {any} */ (busy).code], [false, "delegation_concurrency_limit"]);
+  assert.match(/** @type {any} */ (busy).reason, /已有 2 个子代理在运行/);
+  // No limit configured is no limit, as for a delegation.
+  assert.equal(toolPolicy(call, state({ limits: { maxSteps: 0, maxTokens: 0, maxChildren: 0, maxConcurrentChildren: 0 }, budget: { steps: 0, tokens: 0, children: 99 }, runningChildren: 99 })).allow, true);
+  // A foreground, one-level child: its call is its life, which is what makes counting calls counting children.
+  const row = preset.slice(preset.indexOf("- id: tool-subagent\n"));
+  assert.match(row.slice(0, row.indexOf("\n\n")), /enableRunInBackground: false/);
+  assert.match(row.slice(0, row.indexOf("\n\n")), /- present\b/, "the parent hands files to the user, not a child");
+  const policy = await readFile(new URL("../plugins/run-policy.mjs", import.meta.url), "utf8");
+  assert.match(policy, /if \(decision\.allow && call\.name === NATIVE_SUBAGENT_TOOL\) \{\n\s+entry\.budget\.children \+= 1/, "an admitted call is counted against the run's total");
+  assert.match(policy, /nativeChildCalls\?\.delete\(String\(call\.callId/, "and released when it settles");
 });
 
 test("a child cannot interrupt its parent's synthesis by choosing how its report is delivered", async () => {
@@ -105,8 +156,18 @@ test("a child cannot interrupt its parent's synthesis by choosing how its report
   const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
   const rows = preset.split("\n").filter((line) => /^\s*-?\s*name: '@deepseek-ai\//.test(line));
   assert.ok(rows.length > 0, "no plugin rows were read, so this test walked nothing");
-  for (const retired of ["dsh-tool-subagent-report", "dsh-tool-subagent-control", "dsh-tool-subagent'"]) {
+  for (const retired of ["dsh-tool-subagent-report", "dsh-tool-subagent-control"]) {
     assert.ok(!rows.some((row) => row.includes(retired)), `${retired} is mounted; a child could address its parent directly again`);
+  }
+  // The kernel's own sub-agent tool is mounted for general work (2026-10-12),
+  // and in the one mode that needs no messaging row: a one-shot child answers
+  // with its final text, or as a job its parent collects. A continuable child
+  // is the mode that is given follow-ups through `send_message`.
+  const subagent = preset.slice(preset.indexOf("- id: tool-subagent\n"));
+  assert.match(subagent.slice(0, subagent.indexOf("\n\n")), /backgroundMode: one-shot/);
+  assert.match(subagent.slice(0, subagent.indexOf("\n\n")), /maxDepth: 1/, "a child does not start children of its own");
+  for (const orchestration of ["evimed_plan", "evimed_delegate", "evimed_await", "evimed_submit_deliverable"]) {
+    assert.match(subagent.slice(0, subagent.indexOf("\n\n")), new RegExp(`- ${orchestration}\\b`), `a general child is shown ${orchestration}`);
   }
   const { DELEGATION_BASE_TOOLS } = await import("@evimed/domain");
   assert.ok(DELEGATION_BASE_TOOLS.length > 0, "no child tools were read, so this test walked nothing");
@@ -122,6 +183,14 @@ test("the work happens in the conversation, and delegation states what it is for
   // is a judgement now, in one sentence, in the two places every session reads.
   const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
   assert.match(preset, /默认就在这次对话里把它做完/);
+  // The persona is a general work assistant's (2026-10-12): the evidence
+  // workflow is not what every task is, and medicine is one clause.
+  const persona = preset.slice(preset.indexOf("    prefix: >-"), preset.indexOf("# One realm for the four rows that share state."));
+  assert.ok(persona.length > 200, "the persona was not read, so this walked nothing");
+  assert.match(persona, /你是 EviMed 的工作助手/);
+  assert.doesNotMatch(persona, /医学研究助手|检索、读原文、记证据、写报告、提交|尽量附文献依据/);
+  assert.match(persona, /医学与临床问题按循证方法回答，不替具体患者做诊疗决定/);
+  assert.doesNotMatch(persona, /`|mcp__|evimed_/, "the persona names no tool: it is mounted whatever our switches say");
   // The persona names no tool (a switched-off row's tool would be named to a
   // session without it); the guidance names `evimed_delegate` where it is on.
   assert.match(preset, /只有同时有多件互相独立的活可以并行，或者一段附带工作会带回大量你不会再用的内容时，才委派/);
@@ -1130,16 +1199,77 @@ test("the run-state projection is total and orders gate runs by attempt", () => 
   assert.deepEqual(empty.plan.items, []);
 });
 
-test("the guidance names the capability catalogue as the edge of what we can do", () => {
-  const text = buildGuidanceText(
-    [{ id: "clinical-evidence-synthesis", description: "把临床问题变成可追溯的证据包。", whenToUse: "需要证据综述时。", produces: [{ contractKind: "clinical-evidence-report" }] }],
-    { askUserEnabled: false, capsuleActive: true, reviewEnabled: false },
-  );
-  assert.match(text, /clinical-evidence-synthesis/);
-  assert.match(text, /目录里没有的能力，如实说明/);
-  assert.match(text, /把你所做的假设写进/, "an unattended deployment must be told to write the assumption down");
+test("the guidance offers the capability catalogue as an index of professional workflows, not as the edge of what the assistant does", () => {
+  const capabilities = [{ id: "clinical-evidence-synthesis", description: "把临床问题变成可追溯的证据包。", whenToUse: "需要证据综述时。", produces: [{ contractKind: "clinical-evidence-report" }] }];
+  const text = buildGuidanceText(capabilities, { askUserEnabled: false, capsuleActive: true, reviewEnabled: false });
+  // One line: the id and the contract kind a plan has to name, and the name a
+  // reader knows it by. What it is for in detail arrives with the plan.
+  assert.match(text, /^- `clinical-evidence-synthesis`（clinical-evidence-report）临床证据深度分析$/m);
+  assert.doesNotMatch(text, /何时用：|需要证据综述时/, "the long catalogue line rode every request of every conversation");
+  // The sentence that made the catalogue a boundary is gone, and the index
+  // says what it is not (2026-10-12 review, GA02).
+  assert.doesNotMatch(text, /目录里没有的能力|我们目前不做/);
+  assert.match(text, /这张表也不是你能做什么的边界/);
+  // A plan is for one of these deliverables; an ordinary file task is simply done.
+  assert.doesNotMatch(text, /需要产出文件的任务，先写计划/);
+  assert.match(text, /用户要的正是其中一种正式交付物时才用它：调用 `evimed_plan`/);
+  assert.match(text, /把所作的假设写进结果里/, "a runtime without the ask-user tool is told to write the assumption down");
   assert.ok(!/evimed_review_run/.test(text), "a disabled capability must not be advertised");
   assert.ok(CONTRACT_KINDS.includes("clinical-evidence-report"));
+  // With the tool mounted, a question is for what changes the next step, never a ceremony (principle 17).
+  const asking = buildGuidanceText(capabilities, { askUserEnabled: true, capsuleActive: true, reviewEnabled: false });
+  assert.match(asking, /默认不问。按最合理的理解就能做的，直接做完、答完：有几种情形就把几种情形分开说清楚/);
+  assert.match(asking, /只有缺的东西让事情根本没法开始（要处理的文件或数据没给），或者动作不可撤回时，才用 `ask_user_question` 问一次、一次问清/);
+  // A question nobody answered is not the reply. On a real session a clinical question (「INR 3.8，今晚这顿还吃不吃」)
+  // was answered with two questions and nothing else once the card could not be drawn (2026-10-13).
+  assert.match(asking, /提问没有得到回答时，照最合理的理解做完，把还需要用户确认的点写在回答里，不提提问的事/);
+  assert.match(asking, /自动续跑和定时触发的轮次不追问/);
+  assert.doesNotMatch(asking, /本部署不接受运行中追问/);
+});
+
+test("what every conversation reads stays under its budget with the whole catalogue mounted", async () => {
+  // Measured on the manifests the image ships, with every module on and the
+  // review on — the largest this text gets. It was 13,694 characters, 9,462 of
+  // them the catalogue of 25 medical and research capabilities, on every
+  // request of every conversation (2026-10-12 review, GA13); the budget is
+  // 4,500 (principle 16: prompts stay short and stable).
+  const { readdir } = await import("node:fs/promises");
+  const directory = new URL("../../../deploy/runtime-dsh/capabilities/", import.meta.url);
+  const manifests = [];
+  for (const name of (await readdir(directory)).filter((file) => file.endsWith(".json")).sort()) {
+    manifests.push(JSON.parse(await readFile(new URL(name, directory), "utf8")));
+  }
+  assert.ok(manifests.length >= 25, `only ${manifests.length} manifests were read, so this measured nothing`);
+  for (const askUserEnabled of [true, false]) {
+    const text = buildGuidanceText(manifests, { askUserEnabled, capsuleActive: true, reviewEnabled: true });
+    assert.ok(text.length < 4500, `the guidance is ${text.length} characters with ask-user ${askUserEnabled ? "on" : "off"}`);
+    const index = text.split("\n").filter((line) => /^- `[a-z0-9-]+`（/.test(line));
+    assert.ok(index.length >= 12 && index.length <= 20, `${index.length} workflows are indexed`);
+    assert.ok(index.every((line) => line.length < 110), "an index line is an id, its contract kinds and a name");
+    assert.ok(!index.some((line) => /`(geo|vcr)-/.test(line)), "a module's capabilities are opened from the module");
+    assert.ok(!index.some((line) => /source-understanding|knowledge-compile|method-distillation|tool-builder|evolution-scout/.test(line)), "an internal capability is a platform job's");
+  }
+});
+
+test("what every task is told carries no rule of one kind of work", () => {
+  // The literature-only evidence rules, 「网页只作线索」, 「每条事实性主张都要能追到一条可解析的文献」
+  // and the ban on paths and tool names were shared lines every task read; a
+  // script that may not be told how it is run is not a delivered script.
+  const root = buildGuidanceText([], { askUserEnabled: true, capsuleActive: true, reviewEnabled: true });
+  for (const medical of ["去哪里找证据", "引文卫生", "网页只作线索", "可解析的文献", "产物路径", "诊疗建议（剂量", "二甲双胍"]) {
+    assert.ok(!root.includes(medical), `the root guidance still says 「${medical}」 to every task`);
+  }
+  assert.match(root, /读者用得上的文件名、命令和网址照常写/);
+  // A short piece of writing is the reply; a file is produced when a file is what was asked for. Measured on a real
+  // session: asked for 「写一份本周周报」, the first wording of this text delivered a Word file and a reply that read
+  // 「文档已放在上方两张卡片里」, which says nothing where no card is drawn (an IM channel, the dispatch route).
+  assert.match(root, /邮件、周报、文案这类短文稿，成品直接写在回答里/);
+  assert.match(root, /用户要的是文件（文档、表格、幻灯片、脚本、图表），或者内容长到不适合放进对话时，才产出文件/);
+  assert.match(root, /在回答里说清结果和要点，不要只说「见文件」/);
+  // The evidence method is a skill the model loads when the question calls for it, named once.
+  assert.match(root, /先用 `skill` 加载 `open-domain-answer`（循证问答方法）再作答/);
+  assert.match(root, /教科书层面的常识直接、简明地回答，不检索、不列参考文献/, "a plain medical fact stays a zero-tool answer (principle 12)");
+  assert.match(root, /涉及急症，第一句先说何时立即就医；不替具体患者做用药或诊疗决定/, "the clinical floor is said where every conversation reads it");
 });
 
 test("an empty or unconfigured capability catalogue says so instead of disabling delegation quietly", async () => {
@@ -1355,9 +1485,9 @@ test("every compaction observation is emitted under a topic the vocabulary defin
 /* ------------------------------------------------ what the root is shown */
 
 test("the root is shown every research tool its own instructions name, and the specialist tools stay with the children", async () => {
-  // The root is the answer line as well as the orchestrator: an open-domain
-  // question is answered in the root session under the open-domain-answer
-  // persona. A tool that persona declares, or that the orchestration guidance
+  // The root is the conversation itself: it answers, and when the question is
+  // medical it loads the evidence method (`open-domain-answer`). A tool the
+  // conversation's manifest declares, or that the guidance or the method
   // names, must stay visible to the root, or the plain questions that should
   // never need a delegation are the ones that fail.
   const agentYaml = await readFile(new URL("../../../runtime/skills/evimed/open-domain-answer/agent.yaml", import.meta.url), "utf8");
@@ -1374,13 +1504,15 @@ test("the root is shown every research tool its own instructions name, and the s
     }
     return items;
   };
-  const personaTools = [...list("requiredTools"), ...list("optionalTools")];
-  assert.ok(personaTools.length >= 8 && personaTools.includes("biomedical_source_search"), `read ${personaTools.join(", ")}`);
+  const personaTools = list("optionalTools");
+  assert.ok(personaTools.length >= 8 && personaTools.includes("web_search") && personaTools.includes("biomedical_source_search"), `read ${personaTools.join(", ")}`);
+  // The guidance names no research tool since 2026-10-12 (each describes
+  // itself), so there may be none to read; whatever it does name is held.
   const guidance = buildGuidanceText([], { askUserEnabled: false, capsuleActive: true, reviewEnabled: false });
   const guidanceTools = [...guidance.matchAll(/mcp__evimed__([a-z_]+)/g)].map((match) => match[1]);
-  assert.ok(guidanceTools.length >= 3, `read ${guidanceTools.join(", ")} from the guidance`);
   const personaSkill = await readFile(new URL("../../../runtime/skills/evimed/open-domain-answer/SKILL.md", import.meta.url), "utf8");
   const personaSkillTools = [...personaSkill.matchAll(/mcp__evimed__([a-z_]+)/g)].map((match) => match[1]);
+  assert.ok(personaSkillTools.length >= 5, `read ${personaSkillTools.join(", ")} from the evidence method`);
   for (const tool of new Set([...personaTools, ...guidanceTools, ...personaSkillTools])) {
     assert.ok(ROOT_VISIBLE_MCP_BASE_NAMES.includes(tool), `the root's instructions name ${tool} and the root would not be shown it`);
   }

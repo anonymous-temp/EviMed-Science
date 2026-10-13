@@ -1649,6 +1649,438 @@
         "agentId": "none"
       },
       "tag": "title-to-paper"
+    },
+    {
+      "id": "general-001",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "分析一下这份数据 sales.xlsx，告诉我哪个地区卖得最好"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-002",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "帮我分析下我的数据表，按月汇总销售额并画图"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-003",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "我上传的表格 q3.csv 能不能做一个销量预测模型"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-004",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "什么是孟德尔随机化？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-005",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "解释一下同行评审是怎么回事"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-006",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "帮我审查一下这篇论文的英文语法"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-007",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "CiteSpace 怎么安装？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-008",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "我们团队想做研究选题的头脑风暴，给几个通用的方法"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-009",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "这篇 meta-analysis 的结论是什么？一句话总结"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-010",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "Can you peer-review my pull request description?"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-011",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "Write a statistical-analysis script in Python for my A/B test"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-012",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "帮我把 manuscript-support 这个词翻译成中文"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-013",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "《A meta-analysis of remote work productivity》这篇讲了什么"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-014",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "帮我写一份消息队列选型报告"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-015",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请出一份服务器故障诊断报告"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-016",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "写一份公司数字化转型可行性研究报告"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-017",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "给我写一份上季度销售统计分析报告"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-018",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "写一份关于宠物用药市场的商业分析报告"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-019",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请写一份 PostgreSQL 数据库选型报告"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-020",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "给我写一份新能源汽车市场可行性报告"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-021",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请给我写一份用户行为数据挖掘报告"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-022",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请写一份 2026 年咖啡连锁行业调研报告"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-023",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "帮我写一份竞品分析报告"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-024",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "给客户写一封道歉邮件：交付延期两周，原因是供应商缺货，语气诚恳，给一个补偿方案。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-025",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "分析一下这份数据 sales.xlsx：按地区和月份汇总销售额，放到新工作表，再画一张柱状图。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-026",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "做一个 10 页的商业计划 PPT：市场、产品、商业模式、竞争、团队、财务预测、融资需求。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-027",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "写一个 Python 脚本，把文件夹里的照片按拍摄日期重命名成 YYYYMMDD_序号.jpg，要有 --dry-run。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-028",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "Can you peer-review my pull request description?"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-029",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "我上传了 orders.csv。哪些客户流失了？说清你的定义、数量、三条可能原因，画一条留存曲线。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-030",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "分析一下我的数据。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-031",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "Node.js 现在的 LTS 是哪个版本？什么时候结束维护？给官网链接。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-032",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "写一份国内咖啡连锁行业的调研报告，三页以内：市场规模、主要玩家、趋势，带来源链接。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-033",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "帮我写一份消息队列选型报告：Kafka、RabbitMQ、Pulsar 对比并给推荐。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-034",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "把这段 800 字的中文产品介绍翻成英文，商务语气。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-035",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "这篇 meta-analysis 的摘要帮我翻成中文：Background: remote work has been studied extensively. Methods: we pooled 14 cohort studies. Results: productivity did not differ."
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
+    },
+    {
+      "id": "general-036",
+      "source": "2026-10-13-general-agent-review",
+      "labelBasis": "curated",
+      "input": {
+        "question": "我上传了血糖仪的临床验证报告 PDF，把它做成给渠道商看的 6 页销售 PPT。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "general"
     }
   ],
   "labelCorrections": {

@@ -2214,7 +2214,12 @@ export function loadConfig(overrides = {}) {
       overrides.runtimeSandboxEnforcement ?? process.env.OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT ?? (production ? "full" : "partial"),
     ).trim().toLowerCase(),
     loopxEnabled: overrides.loopxEnabled ?? boolEnv("OPEN_SCIENCE_LOOPX_ENABLED", true),
-    runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", false),
+    // The kernel's ask-user tool, for every runtime of the deployment. On unless the deployment says otherwise
+    // (2026-10-12): a person is in the conversation, and 「分析一下我的数据」 with nothing uploaded should be asked about,
+    // not assumed about. It was off on the premise that a hosted run is unattended. Which turns are — a scheduled task,
+    // a proactive episode, a platform job — is said per dispatch (`researchContext.mjs`, `attended`), because one
+    // runtime serves both kinds; a question asked with no page attached is answered by the kernel with an error.
+    runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", true),
     // The socket plugins a runtime runs without (preset row ids, comma
     // separated). Empty — every plugin on — is the product; naming one is how
     // a plugin is measured against the kernel's own composition (principle 11).
@@ -2354,10 +2359,11 @@ export function loadConfig(overrides = {}) {
     deepseekReasoningEffort: parseReasoningEffort(
       overrides.deepseekReasoningEffort ?? process.env.OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT ?? "high",
     ),
-    // LLM-augmented open-domain routing. On by default: the classifier only
-    // runs after the regex router returns no match and fails safe to
-    // open-domain on any error (see specialistClassifier.mjs). Set
-    // OPEN_SCIENCE_LLM_ROUTING_ENABLED=false to fall back to regex-only routing.
+    // LLM open-domain routing. On by default: the classifier decides which
+    // specialist, if any, an unrouted question commissions, and any error sends
+    // it to the ordinary conversation line (see specialistClassifier.mjs). Set
+    // OPEN_SCIENCE_LLM_ROUTING_ENABLED=false and only a structured choice or the
+    // high-risk-medicine report rule routes; everything else is conversation.
     llmRoutingEnabled:
       overrides.llmRoutingEnabled ?? boolEnv("OPEN_SCIENCE_LLM_ROUTING_ENABLED", true),
     llmRoutingConfidenceThreshold: Number(

@@ -5,6 +5,8 @@ import path from "node:path";
 import test from "node:test";
 import {
   boundConversationNote,
+  EVIDENCE_WORK_RULES,
+  UNATTENDED_TURN_NOTE,
   prepareResearchContext,
   routedSpecialistInstruction,
   syncKnowledgeBase,
@@ -63,9 +65,44 @@ test("builds a hidden system context without changing the user's prompt", async 
     assert.match(prepared.system, /自主判断回答深度/);
     assert.match(prepared.system, /\.evimed-knowledge/);
     assert.match(prepared.system, /不得为寻找知识库扫描父目录/);
-    assert.match(prepared.system, /不得把检索题录包装成已读摘要或全文/);
-    assert.match(prepared.system, /先给结论与可执行建议/);
-    assert.match(prepared.system, /不得称为黑框警告/);
+    assert.match(prepared.system, /不把服务不可用、零结果或没有读到的内容写成结论/);
+  });
+});
+
+test("an open conversation's context says nothing of medicine; the evidence rules travel with a routed or bound turn", async () => {
+  // Until 2026-10-12 every dispatch opened 「你是 EviMed 科研助手」 and closed on ten rules of medical evidence work: how to
+  // cite a label PDF, when a warning may be called a boxed warning, what a simulated dataset may claim. An apology e-mail
+  // read all ten (review GA13). They are the rules of one kind of work, so they reach the turns that are that work.
+  await withProject(async (project) => {
+    const open = await prepareResearchContext(project, { mode: "open-domain" }, config, { attended: true });
+    assert.doesNotMatch(open.system, /科研助手|先给结论与可执行建议|开放域问题保持自主科研能力/);
+    for (const rule of EVIDENCE_WORK_RULES) assert.ok(!open.system.includes(rule), `an open conversation is told: ${rule.slice(0, 24)}…`);
+    assert.doesNotMatch(open.system, /黑框警告|检索题录|PubMed|citation-integrity|阴性证据/);
+    assert.ok(open.system.length < 600, `an open conversation's context is ${open.system.length} characters`);
+
+    const routed = await prepareResearchContext(project, { mode: "open-domain" }, config, {
+      routedSpecialist: { agentId: "clinical-evidence-synthesis", runtimeAgent: "evimed-clinical-evidence-synthesis", skill: "clinical-evidence-synthesis", companionSkills: [] },
+    });
+    for (const rule of EVIDENCE_WORK_RULES) assert.ok(routed.system.includes(rule), `a routed turn lost: ${rule.slice(0, 24)}…`);
+    assert.match(routed.system, /不得把检索题录包装成已读摘要或全文/);
+    assert.match(routed.system, /不得称为黑框警告/);
+
+    const bound = await prepareResearchContext(project, { mode: "specialist", agentId: "meta-analysis" }, config);
+    for (const rule of EVIDENCE_WORK_RULES) assert.ok(bound.system.includes(rule), `a bound conversation lost: ${rule.slice(0, 24)}…`);
+    assert.match(bound.system, /专项会话继续遵循已注册专项能力的方法正文、工具边界和交付物约束/);
+  });
+});
+
+test("only a turn a person is in may ask; every other dispatch is told nobody is waiting", async () => {
+  // The ask-user tool is a runtime's, and one runtime serves the conversation a person is in and the scheduled task that
+  // runs at night. The caller that knows says `attended`; a dispatch that says nothing is a job.
+  await withProject(async (project) => {
+    const job = await prepareResearchContext(project, { mode: "open-domain" }, config);
+    assert.ok(job.system.includes(UNATTENDED_TURN_NOTE));
+    assert.match(UNATTENDED_TURN_NOTE, /不要追问，按最合理的假设做完，并把所作的假设写进结果里/);
+    const conversation = await prepareResearchContext(project, { mode: "open-domain" }, config, { attended: true });
+    assert.ok(!conversation.system.includes(UNATTENDED_TURN_NOTE));
+    assert.doesNotMatch(conversation.system, /没有人值守|不要追问/);
   });
 });
 
@@ -144,7 +181,10 @@ test("the resident profile reaches the root only when it is due, and the delegat
   });
 });
 
-test("injects the live specialist registry into open-domain routing without forcing unrelated calls", async () => {
+test("an open conversation is not handed a second catalogue of the capabilities", async () => {
+  // Every dispatch used to paste the routable catalogue here — one `<evimed-specialist>` block per capability with its
+  // tool list, 13,000 characters with the shipped manifests — under 「必须加载对应 Skill」. The guidance holds the index,
+  // and a capability's method arrives with the plan that names it; the `skill` tool cannot load one.
   await withProject(async (project) => {
     const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config, {
       specialists: [{
@@ -155,10 +195,7 @@ test("injects the live specialist registry into open-domain routing without forc
         requiredTools: ["drug_safety_analysis"],
       }],
     });
-    assert.match(prepared.system, /开放域科研问答已注册以下专项 Skill/);
-    assert.match(prepared.system, /<evimed-specialist id="adr-analysis" skill="adr-analysis">/);
-    assert.match(prepared.system, /drug_safety_analysis/);
-    assert.match(prepared.system, /不得为展示能力而无关调用/);
+    assert.doesNotMatch(prepared.system, /evimed-specialist|adr-analysis|drug_safety_analysis|必须加载对应 Skill|已注册以下专项/);
   });
 });
 
@@ -247,13 +284,13 @@ test("the personal library is named beside the knowledge base once it holds a do
   });
 });
 
-// The answer line is the one product path where `skillsLoaded` could never be
-// true by construction: it does not delegate, so nothing injects its persona,
-// and the check fell back to scanning for a `skill` tool call the brief merely
-// asked for. Measured on the production ledger, 11 of 17 answer-line runs never
-// made that call and were delivered "unverified" for a persona the control
-// plane was already holding in memory. These cover the mount and the record of
-// it, which are the two halves that make the check answerable without asking.
+// A method the control plane hands a turn is mounted in its context and
+// recorded as mounted — the two halves that make "was the method in front of
+// the model" answerable without asking the runtime. Built for the answer line,
+// whose evidence method was mounted into every unrouted turn until 2026-10-12;
+// no dispatch mounts one by default now (the model loads that method when the
+// question is medical), and the mechanism is what a caller that does know
+// uses.
 test("an open-domain turn carries the mounted skill body instead of an instruction to load it", async () => {
   await withProject(async (project) => {
     const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config, {
@@ -271,13 +308,16 @@ test("an open-domain turn carries the mounted skill body instead of an instructi
   });
 });
 
-test("without a mountable skill the open-domain turn still asks the model to load one", async () => {
+test("without a mountable skill an open conversation is told to load nothing", async () => {
+  // It used to read 「作答前必须先成功加载 open-domain-answer skill」: every question, an e-mail included, was to
+  // be answered under the evidence method. Which questions call for it is the model's judgement, from the skill's
+  // own description.
   await withProject(async (project) => {
     const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config);
 
     assert.deepEqual(prepared.mountedSkills, []);
     assert.doesNotMatch(prepared.system, /<evimed-skill/);
-    assert.match(prepared.system, /作答前必须先成功加载 open-domain-answer skill/);
+    assert.doesNotMatch(prepared.system, /必须先成功加载|open-domain-answer|未命中确定性专项路由/);
   });
 });
 

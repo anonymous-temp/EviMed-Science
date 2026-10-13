@@ -614,7 +614,6 @@ export class AgentBayRuntimeProvider {
       ...runtimeEnvironment({
         presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
         capabilitiesDir: "/opt/evimed/capabilities",
-        answerPersonaDir: "/opt/evimed/skills/evimed/open-domain-answer",
         capabilitySkillsDir: "/opt/evimed/capability-skills",
         platformSkillsDir: plan.platformSkillsRuntimeDir ?? "",
         evolutionGatewayUrl: plan.platformSkillGeneration ? gateways.evolution : "",
