@@ -181,7 +181,7 @@ Two ways of storing the corpus, because they ask different questions:
 (`results/2026-10-13-native-files-v0.5.0.json`, `results/2026-10-13-native-conversation-v0.5.0.json`; one run each.)
 
 Read the two native columns apart. **Retrieval** (third column): the engine's own search puts the right memory first for every
-question, and finds all but one of the fourteen gold records in the first five — the same recall as the index arm without the
+question, and finds 14 of the 15 expected records in the first five — the same recall as the index arm without the
 reranker, in less time. **Writing** (fourth column): when the 300 records are *stated* to the engine, it keeps one of the thirteen
 gold ones. That is the write policy working, not retrieval failing: this corpus is the legacy store's, 292 of its 300 records are
 analysis findings ("what a paper or a method shows") that no person said about themselves, and the engine's templates keep only
