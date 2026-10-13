@@ -1,4 +1,5 @@
 import { HttpError } from "./security.mjs";
+import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 import { EXTENSION_PRODUCT_KINDS, EXTENSION_JOB_KINDS, EVOLUTION_JOB_KINDS } from "@evimed/domain";
 
 export const PRODUCT_KINDS = Object.freeze([
@@ -619,6 +620,11 @@ export async function migrateProductStore(database) {
   const attempt = database.transaction(async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-product-v1'))");
     await client.query(sql);
+    // Every kind, trigger and subject type the lists above name reaches a database that already has the table. The
+    // per-kind blocks in the DDL each rebuild a constraint only when it lacks their own word, so a word added without
+    // its own block (wiki-compile and ov-resource-sync, 2026-10-12 and 10-13) was refused by production's `jobs`
+    // table until it was repaired by hand. This step compares the stored words with the lists and has no block to forget.
+    await refreshVocabularyChecks(client, sql, "evimed_product");
   });
   migrations.set(database, attempt);
   try { await attempt; }
