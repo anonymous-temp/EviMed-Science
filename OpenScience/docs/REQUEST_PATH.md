@@ -51,11 +51,12 @@
 [C] 认证与项目作用域       store.mjs:138 ensureUser / 211 assertCsrf / 422 selectedProject / 555 requireProject
   │  ctx = {config, store, runtimeManager, commands, user, tenant, project}  server.mjs:429-434
   ▼
-[D] 路由（分类器 + 安全网） server.mjs:791-846
-  │  1. routeNamedSpecialist   specialistRouting.mjs:145-150   （点名即指令，最高优先）
-  │  2. SpecialistClassifier   specialistClassifier.mjs:107-188（LLM 判断，默认开；J3：Jev 先判，把握够才采信，不够就交给下一步的安全网、不再问 Flash，超时或出错才退回 Flash，等待上限 `OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS`，默认 3000 ms）
-  │  3. routeOpenDomainSpecialist specialistRouting.mjs:152-192（正则安全网，只能"补"不能"改"）
-  │  4. 都未命中 → open-domain-answer  server.mjs:834-846
+[D] 路由（会话绑定 > 结构化选择 > 模型）  specialistRouting.mjs `routeOpenDomain`
+  │  0. 会话已绑定某个能力 / 外壳选了 `line`（server.mjs `chosenDispatchLine`）：按名字走，不问模型
+  │  1. 开头的 `/<能力 id>`（routeSlashCommand）：按名字走，不问模型；正文里出现 id 只是一个词，作为 `namedInRequest` 交给分类器
+  │  2. SpecialistClassifier   specialistClassifier.mjs（LLM 判断，默认开，**答案即最终**：某个专项或 none；J3：Jev 先判，把握够才采信，不够就留在普通对话、不再问 Flash，超时或出错才退回 Flash，等待上限 `OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS`，默认 3000 ms）
+  │  3. 没有答案（超时 / 限流 / 余额 / 解析失败 / 关闭）或答了 none → 只剩一条数据规则：药师维护的高危药品清单里的药 + 明确要报告 → clinical-evidence-synthesis（`matched:safety-medicine`）；没有任何词表规则能把请求送进专项
+  │  4. 都未命中 → open-domain-answer（普通对话线）
   ▼
 [E] 运行账本 agentRuns     server.mjs:847-894 → agentRuns.mjs:1572-1626 dispatch
   │  reserveRun(1505) → sendPrompt → markDispatch(1628) → scheduleMonitor(1883)
