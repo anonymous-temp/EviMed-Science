@@ -44,7 +44,7 @@ const LIST_COLUMN = 300;
 const PANE_MIN = 640;
 
 /** What a scheduled task is, said where there is none yet: the work, and where the result is. */
-const FIRST_RUN_SENTENCE = "按你定的时间，让 EviMed 自己去跟进一个研究问题，比如每天一份文献简报，结果留在这里。";
+const FIRST_RUN_SENTENCE = "按你定的时间，让 EviMed 自己去做一件事，比如每天一份行业要闻、每周一份工作汇总，结果留在这里。";
 
 /** How often the page reads the project again: quickly while an execution is on its way, quietly otherwise. */
 const POLL_ACTIVE_MS = 5_000;

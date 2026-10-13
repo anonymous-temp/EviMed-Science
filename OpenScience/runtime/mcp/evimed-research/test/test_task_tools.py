@@ -111,6 +111,16 @@ class TaskToolsTests(_GatewayCase):
         self.assertNotIn("required", update["inputSchema"]["properties"]["schedule"])
         self.assertIn("paused", update["inputSchema"]["properties"])
 
+    def test_the_tools_are_for_any_kind_of_work_not_for_research_tasks(self):
+        # GA17: a task made here is whatever the user asked to be done on a schedule. The descriptions the model reads give general
+        # examples and do not call the work research.
+        schedule, update = task_tools.tool_definitions()
+        for definition in (schedule, update):
+            self.assertNotIn("research", definition["description"].lower())
+            self.assertNotIn("研究", definition["description"])
+        self.assertIn("行业要闻", schedule["description"])
+        self.assertIn("Any kind of work", schedule["description"])
+
     def test_the_limits_are_the_domains(self):
         source = DOMAIN.read_text(encoding="utf-8")
         instruction = int(re.search(r"TASK_INSTRUCTION_MAX_CHARS = ([\d_]+)", source).group(1).replace("_", ""))

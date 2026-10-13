@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AGENDA_DEFAULT_BUDGETS, AGENDA_MIN_EPISODE_BUDGET_CNY } from "@evimed/domain";
+import { AGENDA_DEFAULT_BUDGETS, AGENDA_MIN_EPISODE_BUDGET_CNY, SCHEDULED_TASK_DEFAULT_TYPES } from "@evimed/domain";
 import { createAgenda, getAgenda, startAgenda, updateAgenda, type AgendaRecord, type AgendaSchedule } from "@/lib/autopilotClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectLabels } from "@/lib/projectNames";
@@ -24,7 +24,9 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
   const [schedule, setSchedule] = useState<AgendaSchedule>(agenda ? scheduleOf(agenda) : {
     kind: recommendation?.kind ?? "daily", time: "07:00", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai", weekdays: [1],
   });
-  const [taskTypes, setTaskTypes] = useState(agenda?.payload.taskTypes ?? ["literature-sentinel"]);
+  // A new task holds what a task made in a conversation holds: the next-action decision tells an ordinary job from a literature,
+  // evidence or data one by the instruction. A template starts with the types it was written for.
+  const [taskTypes, setTaskTypes] = useState<string[]>(agenda?.payload.taskTypes ?? recommendation?.taskTypes ?? [...SCHEDULED_TASK_DEFAULT_TYPES]);
   // The defaults and the floor are the domain's, the ones the server holds the saved task to: the form cannot offer what the server refuses.
   const [budgets, setBudgets] = useState({ maxEpisodeCny: agenda?.payload.maxEpisodeCny ?? AGENDA_DEFAULT_BUDGETS.maxEpisodeCny, dailyBudgetCny: agenda?.payload.dailyBudgetCny ?? AGENDA_DEFAULT_BUDGETS.dailyBudgetCny, weeklyBudgetCny: agenda?.payload.weeklyBudgetCny ?? AGENDA_DEFAULT_BUDGETS.weeklyBudgetCny });
   const minimum = lingdou(AGENDA_MIN_EPISODE_BUDGET_CNY);
@@ -81,7 +83,7 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
   };
   return <form className="space-y-5" onSubmit={submit}>
     <fieldset disabled={saving || !!created || conflict} className="min-w-0 space-y-4">
-      <Textarea ref={field} label="任务指令" required rows={4} maxLength={20000} value={prompt} placeholder="要持续做的事，说明研究问题、关注范围和希望收到的结果" onChange={event => setPrompt(event.target.value)} />
+      <Textarea ref={field} label="任务指令" required rows={4} maxLength={20000} value={prompt} placeholder="要定时做的事，说明做什么、关注范围和希望收到的结果" onChange={event => setPrompt(event.target.value)} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Select label="重复" value={schedule.kind} onChange={event => setSchedule({ ...schedule, kind: event.target.value as AgendaSchedule["kind"], weekdays: schedule.weekdays ?? [1] })}>
           <option value="once">仅一次</option><option value="daily">每天</option><option value="weekly">每周</option>

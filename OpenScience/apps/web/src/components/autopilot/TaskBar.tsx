@@ -76,7 +76,8 @@ export function TaskBar({ agenda, executions, selected, running, stopping = fals
           ? <Button variant="secondary" disabled={busy || stopping} onClick={actions.stop}>{stopping ? "正在停止" : "停止本次"}</Button>
           : <Button disabled={busy || !activeAgenda(agenda)} onClick={actions.run}>立即运行</Button>}
         <Menu label="更多" items={[
-          { label: "研究进展", onSelect: actions.openProgress },
+          // The record of what research found and left open: an ordinary job (nothing but routine) has none.
+          ...(agenda.payload.taskTypes.every(type => type === "routine") ? [] : [{ label: "研究进展", onSelect: actions.openProgress }]),
           { label: "编辑", disabled: busy, onSelect: actions.edit },
           ...(completed ? [] : [{ label: activeAgenda(agenda) ? "暂停" : "启用", disabled: busy, onSelect: actions.togglePause }]),
           "separator" as const,

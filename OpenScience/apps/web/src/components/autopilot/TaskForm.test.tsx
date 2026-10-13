@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgendaSchedule } from "@/lib/autopilotClient";
 import { useProjectStore } from "@/lib/projects";
 import { TaskForm } from "./TaskForm";
+import { RECOMMENDATIONS } from "./taskPresentation";
 
 const mocks = vi.hoisted(() => ({ createAgenda: vi.fn(), startAgenda: vi.fn(), updateAgenda: vi.fn(), getAgenda: vi.fn() }));
 vi.mock("@/lib/autopilotClient", () => mocks);
@@ -117,5 +118,36 @@ describe("the task form's summary line", () => {
       render(<TaskForm projectId="project-two" agenda={task({ kind: "daily", timeZone: "Asia/Shanghai", time: "07:00" })} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
       expect(screen.getByText(/^在“波立维 · 10月1日”运行 · 每天 07:00 · /)).toBeInTheDocument();
     } finally { useProjectStore.setState({ projects: [] }); }
+  });
+});
+
+describe("the task types a new task holds", () => {
+  const save = async (instruction: string) => {
+    const created = vi.fn();
+    mocks.createAgenda.mockImplementation(async (input: unknown) => { created(input); return { id: "agenda-new", revision: 1, projectId: "project-one", payload: {} }; });
+    mocks.startAgenda.mockResolvedValue({ id: "agenda-new", revision: 2, projectId: "project-one", payload: {} });
+    await userEvent.type(screen.getByLabelText("任务指令"), instruction);
+    await userEvent.click(screen.getByRole("button", { name: "创建并启用" }));
+    await waitFor(() => expect(created).toHaveBeenCalled());
+    return created.mock.calls[0][0] as { taskTypes: string[] };
+  };
+
+  it("holds what a task made in a conversation holds, so the instruction decides what kind of work it is", async () => {
+    render(<TaskForm projectId="project-one" onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
+    expect((await save("每个工作日早上给我一份昨天的行业要闻")).taskTypes).toEqual(["routine", "literature-sentinel", "evidence-update", "data-prospecting"]);
+  });
+
+  it("starts a general template as an ordinary job and a research template as the research it was written for", async () => {
+    expect(RECOMMENDATIONS[0].taskTypes).toEqual(["routine"]);
+    render(<TaskForm projectId="project-one" recommendation={RECOMMENDATIONS[0]} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
+    expect(screen.getByLabelText("任务指令")).toHaveValue(RECOMMENDATIONS[0].prompt);
+    await userEvent.click(screen.getByText("高级设置"));
+    expect(screen.getByLabelText("日常任务")).toBeChecked();
+    expect(screen.getByLabelText("文献追踪")).not.toBeChecked();
+    mocks.createAgenda.mockClear();
+    mocks.createAgenda.mockImplementation(async (input: unknown) => ({ id: "agenda-new", revision: 1, projectId: "project-one", payload: {}, input }));
+    mocks.startAgenda.mockResolvedValue({ id: "agenda-new", revision: 2, projectId: "project-one", payload: {} });
+    await userEvent.click(screen.getByRole("button", { name: "创建并启用" }));
+    await waitFor(() => expect(mocks.createAgenda).toHaveBeenCalledWith(expect.objectContaining({ taskTypes: ["routine"] })));
   });
 });

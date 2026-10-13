@@ -2515,7 +2515,7 @@ test("a recurring job is never answered: after a routine execution the decision 
   assert.equal(planner.calls[1].stopAllowed, false, "a routine execution completed, and a routine job is never exhausted");
 
   // The control: the same task after a research execution may be answered.
-  const researchPlanner = plannerDouble((input) => choose("literature-sentinel"));
+  const researchPlanner = plannerDouble(() => choose("literature-sentinel"));
   const other = fixture({ planner: researchPlanner });
   const made = await other.service.create("user-one", { ...routineInput, title: "另一个任务", prompt: "每周跟进二甲双胍的新文献", taskTypes: types });
   let second = await other.service.start("user-one", made.id, { expectedRevision: made.revision });
