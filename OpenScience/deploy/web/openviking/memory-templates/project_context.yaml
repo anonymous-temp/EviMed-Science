@@ -21,15 +21,19 @@ description: |
   - 材料与数据: what it works on: data sources, cohorts, corpora, systems, documents, their
     period and size. Describe a dataset by what it is (source, years, size, kinds of
     variables), not by its file or column names and never by its rows.
-  - 已定事项: decisions the user or their team took about this work, one line each, with
-    the reason when they gave one. A reversed decision replaces its line.
+  - 已定事项: choices the user or their team made between options for this work ("先做
+    Excel 导出", "use Airflow"), one line each, with the reason when they gave one. A reversed
+    decision replaces its line. A budget, a date or a standard is a limit, not a choice: it
+    belongs under 约束.
   - 阶段: where the work stands now, and what the user said is still open or pending on
     their side. Remove an item once the user says it is done. A due date is not a stage.
   - 约束: limits the user stated: any deadline or due date ("周五前出初稿", "by the end of
     the quarter"), budget, standards to follow, things ruled out.
   When, and only when, the user describes a clinical or epidemiological study, the section
   研究要素 may list the elements they stated, each on its own line and only those stated:
-  人群 / 干预或暴露 / 对照 / 结局 / 设计. Other kinds of work never get this section.
+  人群 / 干预或暴露 / 对照 / 结局 / 设计. When the user compares one treatment or exposure with
+  another, the first is 干预或暴露 and the one it is compared with is 对照, each on its own
+  line. Other kinds of work never get this section.
   The line 领域 ("Field" outside a Chinese conversation) under the title names the field of the work in the user's own terms
   (心血管流行病学, 后端架构, 劳动法, 初中数学教学 ...): an open description, never chosen from
   a fixed list; leave it out when the user did not make it clear.
