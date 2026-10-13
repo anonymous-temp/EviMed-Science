@@ -186,6 +186,59 @@ class LanguageChecks(unittest.TestCase):
         self.assertEqual(ok_of(env.run(spec)), [True])
         env.close()
 
+    def test_translation_may_write_the_thousands_separator_as_a_space(self):
+        # G17's first baseline: "9 812 名参与者" (a plain space, as Chinese typography has it) failed as a missing 9,812.
+        for separator in (" ", "\u00a0", "\u202f", "，"):
+            env = Env("G17", [turn("x"), turn("背景：远程办公。" * 30 + f"9{separator}812 0.04 0.13 0.12 0.22 0.02 41% 58%")])
+            spec = {"type": "translation", "turn": 1, "to": "zh", "min_chars": 150, "keep_numbers": ["9,812", "41%"]}
+            self.assertEqual(ok_of(env.run(spec)), [True], repr(separator))
+            env.close()
+        # A separator only counts between a digit and a group of three digits: "14 项" and "9 8" are not 9,812.
+        env = Env("G17", [turn("x"), turn("背景：远程办公。" * 30 + "9 8 12 0.04 41%")])
+        spec = {"type": "translation", "turn": 1, "to": "zh", "min_chars": 150, "keep_numbers": ["9,812"]}
+        self.assertEqual(ok_of(env.run(spec)), [False])
+        env.close()
+
+    def _clinical_env(self, run: dict, upserts=(), verdicts=(), located=()):
+        """M04 as the platform records it: the dispatch record carries `verification: null` and advisory notices, the gate's own answers are in the transcript."""
+        import gzip
+
+        env = Env("M04", [turn("报告已写好。", agent="clinical-evidence-synthesis", reason="llm:0.85", **run)])
+        env.put(0, "deliverables/x/clinical-evidence-report.md", "# 报告\n")
+        env.put(0, "deliverables/x/clinical-evidence-matrix.json", json.dumps({"claims": []}))
+        tdir = env.files / "transcripts"
+        tdir.mkdir(parents=True)
+        parts = [{"type": "tool", "tool": "evimed_claim_upsert", "input": {}, "output": "ok\n" + json.dumps({"results": list(upserts)})}] if upserts else []
+        parts += [{"type": "tool", "tool": "evimed_submit_deliverable", "input": {}, "output": text} for text in verdicts]
+        parts += [{"type": "tool", "tool": "mcp__evimed__locate_quote", "input": {}, "output": json.dumps({"status": "success", "data": {"found": found}})} for found in located]
+        with gzip.open(tdir / "t0-run_x.jsonl.gz", "wt", encoding="utf-8") as f:
+            f.write(json.dumps({"sessionId": "s"}) + "\n")
+            f.write(json.dumps({"role": "tool", "parts": parts}) + "\n")
+        return env
+
+    def test_a_clinical_delivery_is_read_by_what_the_platform_records_of_its_checks(self):
+        # The saved arm-C record of M04: verification null, forty advisory notices, every mark `source_unavailable` (the preserved sources
+        # sit in a hidden workspace directory the runner does not keep). It was failed on two checks that looked at the wrong place.
+        notice = {"code": "clinical_evidence_notice", "check": "claim-numeric-support", "severity": "advice", "text": "claims[1] numeric fact 50 is not present"}
+        env = self._clinical_env({"verification": None, "qualityNotices": [notice]}, upserts=[{"claimId": "CLM-001", "status": "verified", "issues": []},
+                                  {"claimId": "CLM-002", "status": "unverified", "issues": [{"code": "claim-quote-verbatim", "severity": "required"}]}], verdicts=["ok\n{}"])
+        got = {r["id"]: r["ok"] for r in env.run({"type": "clinical_package"})}
+        self.assertEqual([got["report_and_evidence_matrix_delivered"], got["verification_recorded"], got["verbatim_check_ran"]], [True, True, True])
+        env.close()
+        # No trace of any check, in the record or in what the tools answered: both fail, as they did on arm B's drug-evaluation route.
+        bare = self._clinical_env({"verification": None, "qualityNotices": [{"code": "cited_source_unretrieved", "severity": "advice"}]})
+        got = {r["id"]: r["ok"] for r in bare.run({"type": "clinical_package"})}
+        self.assertEqual([got["verification_recorded"], got["verbatim_check_ran"]], [False, False])
+        bare.close()
+        # Each witness alone is enough for the check it answers; the quotation check also reads an answer of locate_quote.
+        for run, extra in (({"verification": "unverified"}, {}), ({"claimSummary": {"total": 3, "verified": 2, "unverified": 1}}, {}), ({}, {"verdicts": ["failed: x"]})):
+            env = self._clinical_env(run, **extra)
+            self.assertTrue({r["id"]: r["ok"] for r in env.run({"type": "clinical_package"})}["verification_recorded"], (run, extra))
+            env.close()
+        env = self._clinical_env({}, located=[True, False])
+        self.assertTrue({r["id"]: r["ok"] for r in env.run({"type": "clinical_package"})}["verbatim_check_ran"])
+        env.close()
+
     def test_a_scheduled_execution_that_wrote_a_clinical_evidence_package_is_caught(self):
         env = Env("G20", [turn("已安排")], record_extra={"schedule": {"agendas": {"items": [{"id": "a"}]}, "notes": [], "executions": [
             {"status": "merged", "reply": "要闻 https://a.example/1", "taskType": "literature-sentinel", "files": ["deliverables/x/clinical-evidence-report.md"]}]}, "inbox": {"body": {}}})

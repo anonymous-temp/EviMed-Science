@@ -124,6 +124,21 @@ class Ctx:
                     pass
         return "\n".join(chunks)
 
+    def tool_results(self) -> list[dict]:
+        """Every tool call of the cell's turns from the saved transcripts, as {tool, input, output}: what the platform's own tools told the run."""
+        found = []
+        for index in range(self.offset, self.offset + len(self.turns)):
+            for file in sorted((self.files_dir / "transcripts").glob(f"t{index}-*.jsonl.gz")):
+                try:
+                    for line in gzip.open(file, "rt", encoding="utf-8"):
+                        message = json.loads(line)
+                        for part in message.get("parts", []) if isinstance(message, dict) else []:
+                            if part.get("type") == "tool":
+                                found.append({"tool": str(part.get("tool", "")), "input": part.get("input"), "output": str(part.get("output", ""))})
+                except (OSError, ValueError):
+                    pass
+        return found
+
     def check_text(self, spec: dict) -> str:
         text = self.reply(spec)
         if spec.get("scope") == "reply+files":
@@ -938,6 +953,15 @@ def cjk_count(text: str) -> int:
     return len(re.findall(r"[一-鿿]", text))
 
 
+# The groups of a number written with a separator: 9,812 (English), 9 812 (Chinese and ISO typography, a plain, no-break or thin space),
+# 9，812. The number is the same number; the first G17 baseline failed a correct translation for writing it the Chinese way.
+_THOUSANDS_SEPARATOR = re.compile(r"(?<=\d)[,\uff0c\u0020\u00a0\u2009\u202f\u2006\u2007\u2008](?=\d{3}(?!\d))")
+
+
+def _without_thousands_separators(text: str) -> str:
+    return _THOUSANDS_SEPARATOR.sub("", text)
+
+
 def chk_translation(spec, ctx):
     turn = ctx.pick(spec)
     text = turn[0].get("reply", "") if turn else ""
@@ -952,7 +976,7 @@ def chk_translation(spec, ctx):
     else:
         if cjk < spec["min_chars"]:
             problems.append(f"{cjk} CJK characters < {spec['min_chars']}")
-    plain = text.replace(",", "")  # a thousands separator may be written or dropped in a translation
+    plain = _without_thousands_separators(text)  # a thousands separator may be written, dropped or set as a space in a translation
     missing = [n for n in spec.get("keep_numbers", []) if n not in text and n.replace(",", "") not in plain]
     if missing:
         problems.append(f"numbers not carried over: {missing}")
@@ -1121,33 +1145,72 @@ def chk_citations(spec, ctx):
     return out
 
 
+def _gate_witnesses(ctx: Ctx, run: dict) -> dict:
+    """What the platform recorded about a clinical evidence delivery's checks.
+
+    A delivery whose gate found nothing blocking carries `verification: null` (only a must-fix or safety finding writes `unverified`,
+    and only a check that could not run writes `unchecked`), so the field alone cannot say that the gate ran. Its witnesses are the
+    run's quality notices (what the gate said, advice included), the claim summary of the run row, and what the platform's tools
+    returned to the run itself: `evimed_submit_deliverable` is the gate's verdict, `evimed_claim_upsert` checks each claim's quotation
+    against the preserved source and answers `verified` or `unverified` for it, `locate_quote` says whether a quotation is in a source.
+    """
+    results = ctx.tool_results()
+    notices = [n for n in run.get("qualityNotices") or [] if str(n.get("code", "")).startswith("clinical_evidence")]
+    verdicts = [r for r in results if r["tool"].endswith("evimed_submit_deliverable") and re.match(r"(?:ok|failed)", r["output"])]
+    claim_states: dict[str, int] = {}
+    quote_findings = 0
+    for result_ in results:
+        if not result_["tool"].endswith("evimed_claim_upsert"):
+            continue
+        try:
+            payload = json.loads(result_["output"].split("\n", 1)[1])
+        except (IndexError, ValueError):
+            continue
+        for claim in payload.get("results", []) if isinstance(payload, dict) else []:
+            claim_states[claim.get("status", "?")] = claim_states.get(claim.get("status", "?"), 0) + 1
+            quote_findings += sum(1 for issue in claim.get("issues", []) if issue.get("code") == "claim-quote-verbatim")
+    located = sum(1 for r in results if r["tool"].endswith("locate_quote") and '"found"' in r["output"])
+    return {"notices": notices, "verdicts": verdicts, "claim_states": claim_states, "quote_findings": quote_findings, "located": located}
+
+
 def chk_clinical_package(spec, ctx):
     files = dict(ctx.new_files())
     report = [r for r in files if re.search(r"clinical-evidence-report\.md$", r)]
     matrix = [r for r in files if re.search(r"clinical-evidence-matrix\.json$", r)]
     run = ctx.turns[-1].get("run", {}) if ctx.turns else {}
+    seen = _gate_witnesses(ctx, run)
+    recorded = run.get("verification") in ("verified", "unverified", "unchecked") or bool(run.get("claimSummary")) or bool(seen["notices"]) or bool(seen["verdicts"])
     out = [result("report_and_evidence_matrix_delivered", bool(report) and bool(matrix), f"report {report[:1]}, matrix {matrix[:1]}"),
-           result("verification_recorded", run.get("verification") in ("verified", "unverified"), f"verification={run.get('verification')}, notices={len(run.get('qualityNotices', []))}")]
-    if matrix and ctx.tree:
-        helper = Path(__file__).with_name("claim_marks.mjs")
-        sources_dir = Path(tempfile.mkdtemp(prefix="gt-claims-"))
-        for rel, path in ctx.snapshot().items():
-            if path.suffix.lower() in (".md", ".txt", ".json", ".html", ".xml", ".csv") and path.stat().st_size < 5_000_000:
-                target = sources_dir / rel
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy(path, target)
-        try:
-            done = subprocess.run(["node", str(helper), ctx.tree, str(files[matrix[0]]), str(sources_dir)], capture_output=True, text=True, timeout=120)
-            marks = json.loads(done.stdout) if done.returncode == 0 else {"error": done.stderr[-200:]}
-        except Exception as error:
-            marks = {"error": str(error)[:200]}
+           result("verification_recorded", recorded,
+                  f"verification={run.get('verification')}; gate notices {len(seen['notices'])}; gate verdicts returned to the run {len(seen['verdicts'])}; claim summary {run.get('claimSummary')}")]
+    if matrix:
+        marks: dict = {}
+        if ctx.tree:
+            helper = Path(__file__).with_name("claim_marks.mjs")
+            sources_dir = Path(tempfile.mkdtemp(prefix="gt-claims-"))
+            for rel, path in ctx.snapshot().items():
+                if path.suffix.lower() in (".md", ".txt", ".json", ".html", ".xml", ".csv") and path.stat().st_size < 5_000_000:
+                    target = sources_dir / rel
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy(path, target)
+            try:
+                done = subprocess.run(["node", str(helper), ctx.tree, str(files[matrix[0]]), str(sources_dir)], capture_output=True, text=True, timeout=120)
+                marks = json.loads(done.stdout) if done.returncode == 0 else {"error": done.stderr[-200:]}
+            except Exception as error:
+                marks = {"error": str(error)[:200]}
         counts = marks.get("counts") if isinstance(marks, dict) else None
         if counts:
-            total = sum(counts.values())
-            out.append(result("every_claim_carries_a_mark", total > 0, f"claim marks by status {counts}"))
-            out.append(result("verbatim_check_ran", ("verified" in counts) or ("quote_not_found" in counts), f"statuses {sorted(counts)}"))
+            out.append(result("every_claim_carries_a_mark", sum(counts.values()) > 0, f"claim marks by status {counts}"))
         else:
             out.append(result("every_claim_carries_a_mark", None, f"the domain's claimVerification could not be run: {marks}", required=False))
+        # The quotation check. The popover's marks are computed from the preserved sources, which live in a hidden directory of the
+        # workspace that the runner does not keep (every mark then reads `source_unavailable`): where they could not be computed the
+        # check reads what the platform's tools said to the run, which is the same comparison made at the time the claim was written.
+        computed = bool(counts) and (("verified" in counts) or ("quote_not_found" in counts))
+        states = seen["claim_states"]
+        in_run = bool(states.get("verified") or states.get("unverified") or seen["quote_findings"] or seen["located"])
+        out.append(result("verbatim_check_ran", computed or in_run,
+                          f"marks {counts or '-'}; in-run claim checks {states or '-'} ({seen['quote_findings']} quotation findings); locate_quote answers {seen['located']}"))
     return out
 
 

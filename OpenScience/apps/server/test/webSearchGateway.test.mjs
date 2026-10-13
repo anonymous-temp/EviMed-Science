@@ -109,13 +109,14 @@ test("an empty result set says so instead of reading as an unoccupied field", as
   assert.ok(payload.warnings.some((warning) => /not evidence that the topic is unoccupied/.test(warning)));
 });
 
-test("a deployment without a backend refuses with a reason and names what remains", async () => {
+test("a deployment without a backend refuses with a reason and names what can still be read", async () => {
   const res = await run({ webSearchUrl: "" }, async () => {
     throw new Error("must not be called");
   }, { query: "anything" });
   assert.equal(res.statusCode, 503);
   assert.equal(res.json().code, "web_search_unconfigured");
-  assert.match(res.json().error, /bibliographic channels remain available/);
+  assert.match(res.json().error, /A page whose address is known can still be read; for published literature the bibliographic databases are one option/);
+  assert.doesNotMatch(res.json().error, /continue with|remain available/, "a general question is not sent to the literature databases");
 });
 
 test("the gateway rejects what it must", async () => {
