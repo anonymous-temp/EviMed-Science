@@ -155,6 +155,16 @@ describe("the graph option", () => {
     const labelled = (option: any) => series(option).data.filter((entry: any) => entry.label?.show).map((entry: any) => entry.name).sort();
     expect(labelled(small)).toEqual(["cluster:memory:p:preference", "memory:b", "project:p", "you:account"]);
     expect(series(small).data.length).toBe(series(wide).data.length);
+    // Of ten marks that need a look a phone names the four tied to the most.
+    const worried = Array.from({ length: 10 }, (_, index) => memory(`w${index}`, { state: "check", reason: "conflict", weight: index / 10 }));
+    const crowd = [...nodes, ...worried];
+    const ties: MapEdge[] = [{ from: "memory:w0", to: "memory:w1", type: "conflicts" }, { from: "memory:w0", to: "memory:w2", type: "conflicts" }];
+    const phone: any = graphOption({ ...base, nodes: crowd, edges: ties, positions: layoutGraph(crowd.map((node) => ({ id: node.id, type: node.type, home: null, weight: 0 })), ties), compact: true });
+    const named = series(phone).data.filter((entry: any) => entry.label?.show && String(entry.name).startsWith("memory:")).map((entry: any) => entry.name);
+    expect(named).toHaveLength(4);
+    expect(named).toContain("memory:w0");
+    const desk: any = graphOption({ ...base, nodes: crowd, edges: ties, positions: layoutGraph(crowd.map((node) => ({ id: node.id, type: node.type, home: null, weight: 0 })), ties) });
+    expect(series(desk).data.filter((entry: any) => entry.label?.show && String(entry.name).startsWith("memory:") && entry.name.startsWith("memory:w"))).toHaveLength(10);
   });
 
   it("sizes a memory by its weight and a cluster by how many it stands for", () => {

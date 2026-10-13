@@ -14,15 +14,18 @@ import { MAP_RECORD_LIMIT, drawable } from "./records.mjs";
 import { nodeId } from "./common.mjs";
 
 /**
- * @param {{ topics: import("../memoryTopics.mjs").MemoryTopics | null, researchMemory: any }} dependencies
+ * @param {{ topics: import("../memoryTopics.mjs").MemoryTopics | null, researchMemory: any, accountRecords?: ((userId: string) => Promise<any[]>) | null }} dependencies
+ *   `accountRecords`: the account's memories from whichever engine holds them, as the map draws them; the store's own rows by default.
+ *   An account's topics are the same view whichever engine keeps its memories.
  * @returns {import("./common.mjs").MapSource}
  */
-export function createTopicsSource({ topics, researchMemory }) {
+export function createTopicsSource({ topics, researchMemory, accountRecords = null }) {
+  const recordsOf = accountRecords ?? ((/** @type {string} */ userId) => researchMemory.mapRecords(userId, { projectId: null, limit: MAP_RECORD_LIMIT }));
   return {
     name: "topics",
-    applies: (request) => Boolean(topics?.configured) && request.engine !== "native" && typeof researchMemory?.mapRecords === "function",
+    applies: () => Boolean(topics?.configured) && (typeof accountRecords === "function" || typeof researchMemory?.mapRecords === "function"),
     async read(request) {
-      const all = await request.memo("records:account", () => researchMemory.mapRecords(request.user.id, { projectId: null, limit: MAP_RECORD_LIMIT }));
+      const all = await request.memo("records:account", () => recordsOf(request.user.id));
       const found = await /** @type {NonNullable<typeof topics>} */ (topics).read(request.user.id, all.filter(drawable));
       return {
         facets: {

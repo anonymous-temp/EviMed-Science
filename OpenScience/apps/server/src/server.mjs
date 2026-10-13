@@ -4806,7 +4806,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     native: { store: nativeMemory, engine: (/** @type {string} */ userId) => researchMemory.memoryEngine(userId) } });
   // 「记忆地图」: one read-only document assembled from independent sources, the topics a model groups the memories into, and the
   // links the memory drawer shows. An account on the native engine is drawn from its files; the compiled graph of the knowledge base comes from the ledger's mirror.
-  const memoryTopics = researchMemory.configured ? new MemoryTopics(config, researchMemory, { usageLedger }) : null;
+  // The account's memories as the map draws them, from whichever engine keeps them: the topics are one view for both kinds of account.
+  const accountMemoryRecords = async (/** @type {string} */ userId) => (await researchMemory.memoryEngine(userId).catch(() => "legacy")) === "native"
+    ? (await nativeMemory.mapMemories(userId)).records
+    : researchMemory.mapRecords(userId, { projectId: null, limit: 2000 });
+  const memoryTopics = researchMemory.configured ? new MemoryTopics(config, researchMemory, { usageLedger, accountRecords: accountMemoryRecords }) : null;
   const memoryMapProjectOf = (/** @type {any} */ user, /** @type {string} */ projectId) => store.requireProject(user, projectId);
   const memoryMapRoutes = createMemoryMapRoutes({
     config, researchMemory, store, context, decodeRouteComponent, audit, topics: memoryTopics,
@@ -4825,9 +4829,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         agentRuns, projectOf: memoryMapProjectOf, taskTypes,
         isInternal: (/** @type {string} */ agentId) => (agentRuns.loadedAgentRegistry?.get?.(agentId)?.visibility ?? "public") === "internal",
       }),
-      createTopicsSource({ topics: memoryTopics, researchMemory }),
+      createTopicsSource({ topics: memoryTopics, researchMemory, accountRecords: accountMemoryRecords }),
     ],
     edgeCorrections: new MapEdgeCorrections({ database: productDatabase }),
+    accountRecords: accountMemoryRecords,
     nativeLinks: createNativeRecordLinks({ nativeMemory }),
     recordLinks: createRecordLinks({
       researchMemory, sources: sourceService, agentRuns, projectOf: memoryMapProjectOf,

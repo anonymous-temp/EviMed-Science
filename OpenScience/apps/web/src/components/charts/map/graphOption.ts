@@ -108,6 +108,10 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
     .filter((node) => node.state !== "replaced" && ((ties.get(node.id) ?? 0) > 0 || (node.weight ?? 0) >= 0.8))
     .sort((left, right) => (ties.get(right.id) ?? 0) - (ties.get(left.id) ?? 0) || (right.weight ?? 0) - (left.weight ?? 0) || left.id.localeCompare(right.id))
     .slice(0, budget).map((node) => node.id));
+  // What needs a look is always worth a name — on a phone, the four of them tied to the most, since eight names in a hand's width are a smear.
+  const looked = new Set([...input.nodes].filter((node) => node.state === "check")
+    .sort((left, right) => (ties.get(right.id) ?? 0) - (ties.get(left.id) ?? 0) || (right.weight ?? 0) - (left.weight ?? 0) || left.id.localeCompare(right.id))
+    .slice(0, input.compact ? 4 : Infinity).map((node) => node.id));
   // Where two labels would overlap the library keeps the first it meets, so the marks that matter most come first: the structure, then
   // what needs a look, is searched for or is chosen, then the heavy ones, then the rest. The lines point at these positions.
   const rank = (node: MapNode) => (node.type === "you" || node.type === "project" || node.type === "cluster" ? 0
@@ -123,7 +127,7 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
     const colour = colourOf(node, palette);
     const dimmed = searching && !input.hits.has(node.id) && !structure;
     const chosen = input.selected === node.id;
-    const labelled = structure || node.state === "check" || chosen || input.hits.has(node.id) || heavy.has(node.id);
+    const labelled = structure || looked.has(node.id) || chosen || input.hits.has(node.id) || heavy.has(node.id);
     const [x, y] = input.positions.get(node.id) ?? [LAYOUT_WIDTH / 2, LAYOUT_HEIGHT / 2];
     return {
       name: node.id, x, y, symbol, symbolSize: Math.max(4, size * shrink),

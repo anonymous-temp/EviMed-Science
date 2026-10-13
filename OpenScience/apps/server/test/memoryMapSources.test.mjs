@@ -182,6 +182,24 @@ test("the topics source serves the grouping as it stands and never groups: membe
   assert.equal(createTopicsSource({ topics: { configured: false }, researchMemory }).applies(request()), false);
 });
 
+test("the topics are one view for both kinds of account: an account on the second engine is grouped from the memories that engine keeps", async () => {
+  const seen = [];
+  const topics = {
+    configured: true,
+    read: async (userId, records) => { seen.push([userId, records.map((entry) => entry.id)]); return { status: "ready", topics: [{ id: "topic:bbbbbbbbbb", label: "报告格式", weight: 2, trend: 1, members: records.map((entry) => entry.id) }] }; },
+  };
+  // The store's own rows are another engine's: never asked for this account.
+  const researchMemory = { mapRecords: async () => assert.fail("the older engine's rows are not this account's memories") };
+  const accountRecords = async (userId) => { assert.equal(userId, "usr_1"); return [record({ id: "nm_file", summary: "回答格式" }), record({ id: "nm_secret", sensitive: true })]; };
+  const source = createTopicsSource({ topics, researchMemory, accountRecords });
+  const asked = request({ engine: "native" });
+  assert.equal(source.applies(asked), true, "it no longer stands aside for the second engine");
+  const found = await source.read(asked);
+  assert.deepEqual(seen, [["usr_1", ["nm_file"]]], "only what can be drawn is offered");
+  assert.deepEqual(found.facets.topics[0].members, ["memory:nm_file"]);
+  assert.equal(found.facts.topicsStatus, "ready");
+});
+
 // ------------------------------------------------------ the native memory seam
 
 const NATIVE_FIXTURE = {

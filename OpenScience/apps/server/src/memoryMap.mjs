@@ -455,6 +455,7 @@ export async function buildMemoryMap({ sources }, request) {
  *   isInternalProject?: (userId: string, projectId: string) => boolean,
  *   recordLinks?: ((user: any, record: any) => Promise<any>) | null,
  *   edgeCorrections?: import("./memoryMapEdges.mjs").MapEdgeCorrections | null,
+ *   accountRecords?: ((userId: string) => Promise<any[]>) | null,
  *   nativeLinks?: ((user: any, recordId: string) => Promise<any>) | null,
  *   decodeRouteComponent: (value: string, label: string) => string, audit?: ((ctx: any, action: string, status: string, details?: any) => Promise<void>) | null,
  * }} dependencies
@@ -462,8 +463,10 @@ export async function buildMemoryMap({ sources }, request) {
  */
 export function createMemoryMapRoutes({
   config, researchMemory, sources, topics = null, store, context, memoryEngine = () => "postgres", isInternalProject = () => false,
-  recordLinks = null, nativeLinks = null, edgeCorrections = null, decodeRouteComponent, audit = null,
+  recordLinks = null, nativeLinks = null, edgeCorrections = null, accountRecords = null, decodeRouteComponent, audit = null,
 }) {
+  /** The account's memories as the topics are made from them, from whichever engine holds them. */
+  const topicRecords = (/** @type {string} */ userId) => (accountRecords ? accountRecords(userId) : researchMemory.mapRecords(userId, { projectId: null, limit: 2000 }));
   const enabled = config.memoryEnabled !== false && config.memoryMapEnabled !== false;
   const TOPICS = /^\/api\/memory\/topics(?:\/([^/]+))?$/u;
   const LINKS = /^\/api\/memory\/records\/([^/]+)\/links$/u;
@@ -533,7 +536,7 @@ export function createMemoryMapRoutes({
     const ctx = await context(req, res);
     if (!topics?.configured) throw new HttpError(503, "memory_topics_unavailable", "Memory topics are not available in this deployment.");
     if (!topic[1] && pathname === "/api/memory/topics" && req.method === "GET") {
-      const records = await researchMemory.mapRecords(ctx.user.id, { projectId: null, limit: 2000 });
+      const records = await topicRecords(ctx.user.id);
       sendJson(res, 200, { data: await topics.read(ctx.user.id, records) });
       return true;
     }
@@ -555,7 +558,7 @@ export function createMemoryMapRoutes({
       else done = await topics.removeMember(ctx.user.id, id, String(body.removeMember ?? ""));
       if (!done) throw new HttpError(404, "memory_topic_not_found", "Topic not found.");
       await audit?.(ctx, "memory.topic.update", "completed", { verb: verbs[0] });
-      const records = await researchMemory.mapRecords(ctx.user.id, { projectId: null, limit: 2000 });
+      const records = await topicRecords(ctx.user.id);
       sendJson(res, 200, { data: await topics.read(ctx.user.id, records) });
       return true;
     }
