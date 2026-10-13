@@ -44,13 +44,15 @@ test("the analysis layer and the control plane read the same list", () => {
 });
 
 test("only a paper or a preprint is read with the paper slots; every other type has its own", () => {
-  const paperSlots = ["doi", "design", "population", "interventionExposure", "outcomes", "effectEstimates", "limitations"];
+  const paperSlots = ["question", "method", "dataOrSubjects", "mainResults", "doi", "design", "population", "interventionExposure", "outcomes", "effectEstimates", "limitations"];
   for (const type of SOURCE_TYPES) {
     const schema = sourceUnderstandingSchema(type);
     if (type === "published-paper" || type === "preprint-manuscript") assert.equal(schema.id, "paper");
     else {
       assert.notEqual(schema.id, "paper", `${type} is not read as a paper`);
-      for (const slot of paperSlots.filter((name) => name !== "limitations")) assert.ok(!schema.slots.includes(slot), `${type} is not asked for ${slot}`);
+      for (const slot of paperSlots.filter((name) => name !== "limitations")) {
+        assert.ok(!schema.slots.includes(slot) && !schema.optionalSlots.includes(slot), `${type} is not asked for ${slot}`);
+      }
     }
   }
   assert.equal(sourceUnderstandingSchema("research-protocol").id, "procedure");

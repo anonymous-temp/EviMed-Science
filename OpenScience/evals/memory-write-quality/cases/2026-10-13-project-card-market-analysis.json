@@ -1,0 +1,67 @@
+{
+  "id": "2026-10-13-project-card-market-analysis",
+  "class": "project-card-market-analysis",
+  "observedIn": "synthetic replay of 2026-10-13 (the project card made general), deepseek-flash, temperature 0; the extractor as it stood before the change (cc/int 3c9a7c799) passed 0 of 3 samples, the one after it 3 of 3",
+  "written": [
+    {
+      "kind": "project_fact",
+      "scope": "project",
+      "key": "project.field",
+      "value": "公共卫生",
+      "summary": "该研究属于公共卫生领域。"
+    },
+    {
+      "kind": "project_fact",
+      "scope": "project",
+      "key": "project.data_source",
+      "value": "行业协会年报和三家上市公司公告",
+      "summary": "数据主要来自行业协会年报和三家上市公司公告。"
+    },
+    {
+      "kind": "project_fact",
+      "scope": "project",
+      "key": "project.population",
+      "value": "华东三省",
+      "summary": "分析范围限定在华东三省。"
+    },
+    {
+      "kind": "project_fact",
+      "scope": "project",
+      "key": "project.stage",
+      "value": "周五前出初稿",
+      "summary": "项目当前处于周五前出初稿的阶段。"
+    }
+  ],
+  "whyItIsWrong": "A market analysis of charging stations was given a medical specialty as its field (「公共卫生」, the nearest of the twenty-one), its geographic scope as a study population (「华东三省」) and its deadline as its stage (0 of 3 samples wrote the deadline as a limit).",
+  "expected": "A market analysis is kept under the general keys: the material it works from and its deadline are written, and none of the study keys that only a clinical study has (intervention, comparator, outcome, design).",
+  "decidable": true,
+  "preChange": "failed",
+  "replay": {
+    "synthetic": true,
+    "projectId": "proj_charging_market",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "我在做新能源汽车充电桩的市场分析，要给投资委员会看。范围限定在华东三省，数据主要来自行业协会年报和三家上市公司公告，周五前要出初稿。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的：面向投资委员会的充电桩市场分析，范围华东三省，数据来自行业协会年报和三家上市公司公告，周五前出初稿。"
+      }
+    ]
+  },
+  "expect": {
+    "requireKeys": [
+      "project.data_source",
+      "project.constraints"
+    ],
+    "noKeys": [
+      "project.intervention",
+      "project.comparator",
+      "project.outcome",
+      "project.design"
+    ]
+  }
+}

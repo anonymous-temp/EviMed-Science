@@ -284,18 +284,22 @@ export function MemoryHubPage() {
       );
     }
     if (tab === "project") {
-      const above = overview !== null && (overview.paused || overview.card.length + overview.capabilities.length + overview.works.length > 0);
+      // Something sits above the list when the card, the ranking or the works have something to say, when the project's memory is
+      // switched off, or when the card is the one quiet line a project with memories and no card yet gets.
+      const above = overview !== null && (overview.paused || overview.card.length + overview.capabilities.length + overview.works.length > 0
+        || projectFacts.length > 0);
       return (
         <div className="space-y-4">
           {choices.length > 0 && <ProjectScope choices={choices} value={scope} onChange={setProjectChoice} />}
           {overview && (
             <ProjectOverview
               overview={overview}
+              hasMemories={projectFacts.length > 0}
               canOpen={(recordId) => everyFact.some((fact) => fact.key === `record:${recordId}`)}
               onOpen={(recordId) => setOpenKey(`record:${recordId}`)}
             />
           )}
-          {projectFacts.length === 0 ? empty("这个项目还没有记忆", "项目里的研究范围、数据来源和已定的决策会出现在这里。")
+          {projectFacts.length === 0 ? empty("这个项目还没有记忆", "你在对话里说过的目标、资料和已定的事会出现在这里。")
             // Under the card, the ranking and the works, the list needs its own name; alone, the tab names it.
             : above ? <section><GroupHeader>记忆</GroupHeader>{factRows(projectFacts, "项目的记忆")}</section>
               : factRows(projectFacts, "项目的记忆")}

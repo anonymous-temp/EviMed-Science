@@ -130,7 +130,7 @@ describe("one memory, opened from its row", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("/app/memory");
   });
 
-  it("draws how long a memory held when there is something to say: a version behind it, or an end", () => {
+  it("draws how long a memory held only when it has a real term: a replacement or an end, or an interval a source stated", () => {
     // Made today, never changed: the date under the title is all there is to say.
     open(fact({ createdAt: new Date().toISOString() }));
     expect(screen.queryByRole("img", { name: /^有效期/ })).not.toBeInTheDocument();
@@ -145,9 +145,21 @@ describe("one memory, opened from its row", () => {
     expect(within(bar.parentElement!).getByText("10月3日")).toBeInTheDocument();
     expect(bar.querySelectorAll("span")).toHaveLength(2);
     cleanup();
-    // Still holding, changed once: it runs to today.
-    open(fact({ revisions: [{ version: 1, value: "旧", summary: "旧", status: "active", changedAt: "2026-09-20T02:00:00Z", reason: "x" }], version: 2 }));
-    const holding = screen.getByRole("img", { name: /^有效期：9月12日起，至今/ });
+    // Changed twice and still holding, with no term anyone stated: an age is not a lifetime, so no bar — the date under the
+    // title (「9月12日」) is the since date, and the versions are listed under 「以前的版本」.
+    open(fact({
+      version: 3,
+      revisions: [
+        { version: 1, value: "旧", summary: "旧", status: "active", changedAt: "2026-09-20T02:00:00Z", reason: "x" },
+        { version: 2, value: "旧二", summary: "旧二", status: "active", changedAt: "2026-09-25T02:00:00Z", reason: "x" },
+      ],
+    }));
+    expect(screen.queryByRole("img", { name: /^有效期/ })).not.toBeInTheDocument();
+    expect(screen.getByText("9月12日")).toBeInTheDocument();
+    cleanup();
+    // A source stated the interval and it still holds: it runs from the stated start to today.
+    open(fact({ relations: { validity: { from: "2026-01-01T00:00:00Z", until: null }, caveats: [], conflicts: [] } }));
+    const holding = screen.getByRole("img", { name: /^有效期：1月1日起，至今/ });
     expect(within(holding.parentElement!).getByText("至今")).toBeInTheDocument();
   });
 

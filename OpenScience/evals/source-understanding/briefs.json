@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "acceptanceStatus": "offline fixtures only; real source DSH acceptance pending",
+  "acceptanceStatus": "offline fixtures only; real source DSH acceptance pending (2026-10-13: the paper briefs, three of them added with source-understanding 1.4.0, were replayed on DeepSeek three times each by replay_paper_schema.mjs, slots only and without tools: results/2026-10-13-paper-schema-replay/summary.json)",
   "briefs": [
     {
       "id": "sop",
@@ -28,7 +28,7 @@
       "sourceText": "Research report fixture\nMethods: This retrospective cohort used routinely collected records from one institution. Adults who attended follow-up were included. The exposure was attendance at a structured follow-up visit. The primary outcome was completeness of recorded outcomes at 30 days.\nResults: The report does not provide an effect estimate or sample size.\nLimitations: Selection of participants and incomplete records may affect interpretation.\n",
       "brief": "Extract the paper schema at structured depth. Explicitly identify absent DOI, effect estimate and sample size without supplying external information.",
       "expectations": [
-        "The design, population, exposure, outcomes and limitations remain source-bound.",
+        "The paper is read with the discipline-neutral slots and, because it is a retrospective cohort of patients, also carries the five clinical slots; the design, population, exposure, outcomes and limitations remain source-bound.",
         "DOI and effectEstimates remain unknown with reasons.",
         "No method draft is produced at structured depth.",
         "The system records the configured actual model and CNY receipt.",
@@ -145,6 +145,60 @@
       ],
       "generated": {
         "authoredAt": "2026-10-08",
+        "authoredAtSource": "first-commit"
+      }
+    },
+    {
+      "id": "paper-machine-learning",
+      "docType": "preprint-manuscript",
+      "depth": "structured",
+      "fixtureOnly": true,
+      "sourceText": "Load-Aware Expert Routing for Long-Context Language Models\nPreprint, v2. Not peer reviewed. arXiv:2610.01234 (fixture; every name and number is invented)\n\nAbstract. Sparse mixture-of-experts (MoE) language models route each token to a few experts, but routing collapses onto a handful of experts as the context grows. We propose load-aware gating, which adds a running estimate of each expert's recent load to the router logits. On a 7B-active-parameter MoE with 64 experts and top-2 routing, load-aware gating lowers validation perplexity from 8.11 to 7.82 on 32k-token sequences and raises training throughput by 14%.\n\n1. Method. The router computes logits z_e for expert e. Load-aware gating subtracts lambda * l_e, where l_e is an exponential moving average of the fraction of tokens sent to expert e over the last 1,000 steps, and lambda is set to 0.3 by grid search on a held-out split. No auxiliary balancing loss is used.\n\n2. Data and training. We train on a deduplicated corpus of 1.2T tokens of web text and source code, tokenised with a 100k-entry byte-level vocabulary. Sequences are packed to 32,768 tokens. Each configuration is trained once, for 300B tokens, on 512 accelerators.\n\n3. Results. On the held-out validation set of 40M tokens, perplexity is 7.82 with load-aware gating against 8.11 for the auxiliary-loss baseline and 8.37 for no balancing. On the 5-shot MMLU benchmark the models reach 61.4, 60.9 and 59.8. The share of tokens handled by the busiest expert falls from 31% to 9%.\n\n4. Limitations. All models are trained with a single random seed, so differences below 0.1 perplexity are not distinguishable from noise. Context length is evaluated only up to 32k tokens and the corpus is English-dominant.\n",
+      "brief": "Read this machine-learning preprint with the paper schema at structured depth. State its question, method, data and main results in its own terms.",
+      "expectations": [
+        "The paper is read with the discipline-neutral slots: question, method, dataOrSubjects, mainResults, limitations and doi are present, each known with an exact anchor or unknown with a reason.",
+        "None of the clinical slots (design, population, interventionExposure, outcomes, effectEstimates) is written: the keys are left out of slots altogether, not written as unknown.",
+        "The method slot names load-aware gating and the data slot names the 1.2T-token corpus; the main results carry the perplexity figures 7.82 and 8.11 with their anchors.",
+        "limitations carries the single-seed and 32k-context limits the paper concedes; doi is unknown because the preprint states none."
+      ],
+      "generated": {
+        "authoredAt": "2026-10-13",
+        "authoredAtSource": "first-commit"
+      }
+    },
+    {
+      "id": "paper-economics",
+      "docType": "published-paper",
+      "depth": "structured",
+      "fixtureOnly": true,
+      "sourceText": "Minimum Wage Increases and Teen Employment: Evidence from Contiguous County Pairs\nJournal of Applied Labor Economics, 2026. doi:10.0000/jale.2026.0117 (fixture; every name and number is invented)\n\nAbstract. We estimate the employment effect of state minimum wage increases on workers aged 16 to 19 using a border-discontinuity design. Comparing contiguous county pairs that straddle a state border, a 10 percent increase in the minimum wage reduces teen employment by 0.4 percent, an estimate that is small and not statistically distinguishable from zero.\n\n1. Identification. Treated counties are those whose state raised its minimum wage in a given quarter; their pair partner across the border is the control. All specifications include pair-by-quarter fixed effects, and standard errors are clustered by state. The identifying assumption is that, within a pair, employment would have moved together absent the policy change.\n\n2. Data. We use the Quarterly Census of Employment and Wages for 2005 to 2019 and county-level teen population counts from the American Community Survey. The sample has 1,284 contiguous county pairs and about 160,000 pair-quarter observations.\n\n3. Results. The preferred elasticity of teen employment with respect to the minimum wage is -0.04 (standard error 0.03). Restricting to restaurant employment gives -0.07 (0.05). Event-study coefficients for the eight quarters before an increase are all within 0.01 of zero.\n\n4. Limitations. The data record jobs and not hours, so reductions in hours are not captured. Workers may live in one county and work in the other, which can bias estimates toward zero. Estimates are local to border counties and may not extend to metropolitan labor markets.\n",
+      "brief": "Read this economics paper with the paper schema at structured depth. State its question, identification strategy, data and main estimate in its own terms.",
+      "expectations": [
+        "The paper is read with the discipline-neutral slots; none of the clinical slots (design, population, interventionExposure, outcomes, effectEstimates) is written, and no effect measure is invented for a study with no patients.",
+        "The method slot names the border-discontinuity design on contiguous county pairs; the data slot names the QCEW and ACS sources and the 1,284 pairs; the main results carry the -0.04 elasticity with its standard error.",
+        "doi is known (10.0000/jale.2026.0117) with an exact anchor.",
+        "limitations carries the hours-not-measured and commuting limits."
+      ],
+      "generated": {
+        "authoredAt": "2026-10-13",
+        "authoredAtSource": "first-commit"
+      }
+    },
+    {
+      "id": "paper-randomised-trial",
+      "docType": "published-paper",
+      "depth": "structured",
+      "fixtureOnly": true,
+      "sourceText": "Dapagliflozin in Patients Hospitalised with Acute Heart Failure: A Randomised, Double-Blind, Placebo-Controlled Trial\nJournal of Cardiac Therapeutics, 2026. doi:10.0000/jct.2026.0412 (fixture; every name and number is invented)\n\nBackground. Sodium-glucose cotransporter 2 inhibitors reduce events in chronic heart failure; their effect when started during a hospitalisation for acute heart failure is uncertain.\n\nMethods. In this randomised, double-blind trial at 41 hospitals in one country, adults hospitalised with acute heart failure and an elevated natriuretic peptide were randomly assigned 1:1 to dapagliflozin 10 mg once daily or matching placebo, started within 72 hours of admission and continued for 90 days. Patients with type 1 diabetes or an eGFR below 20 mL/min/1.73 m2 were excluded. The primary outcome was a hierarchical composite of death from any cause, heart-failure rehospitalisation within 90 days, and change in the Kansas City Cardiomyopathy Questionnaire score at 90 days.\n\nResults. Between March 2024 and June 2025, 1,200 patients were randomised (600 per group; median age 71 years, 38% women). The primary composite favoured dapagliflozin (win ratio 1.22, 95% CI 1.05 to 1.42, P=0.009). Death from any cause occurred in 49 patients (8.2%) with dapagliflozin and 63 (10.5%) with placebo (hazard ratio 0.77, 95% CI 0.53 to 1.12). Serious adverse events were similar between groups.\n\nLimitations. Follow-up was limited to 90 days and the trial was conducted in a single country, so generalisability and long-term effects are uncertain. The trial was not powered for death from any cause alone.\n",
+      "brief": "Read this randomised trial with the paper schema at structured depth. Keep its design, population, intervention, outcomes and effect estimates source-bound.",
+      "expectations": [
+        "The paper is read with the discipline-neutral slots and, because it is a clinical trial of patients, also carries the five clinical slots (design, population, interventionExposure, outcomes, effectEstimates), each known with an exact anchor or unknown with a reason.",
+        "The design slot says randomised, double-blind, placebo-controlled; population names adults hospitalised with acute heart failure; interventionExposure names dapagliflozin 10 mg daily for 90 days.",
+        "effectEstimates carries the win ratio 1.22 (95% CI 1.05 to 1.42) and the all-cause death hazard ratio 0.77 (95% CI 0.53 to 1.12) with their anchors, not a restatement of either.",
+        "doi is known (10.0000/jct.2026.0412) and limitations carries the 90-day follow-up and single-country limits."
+      ],
+      "generated": {
+        "authoredAt": "2026-10-13",
         "authoredAtSource": "first-commit"
       }
     }

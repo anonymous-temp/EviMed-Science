@@ -7,10 +7,11 @@ import { ProjectOverview, monthHeading, workPath } from "./ProjectOverview";
 import { validitySpan } from "./ValidityBar";
 
 const base: Overview = { projectId: "prj_1", paused: false, card: [], capabilities: [], works: [], timeZone: "UTC" };
-function show(patch: Partial<Overview>, props: { canOpen?: (id: string) => boolean; onOpen?: (id: string) => void } = {}) {
+function show(patch: Partial<Overview>, props: { canOpen?: (id: string) => boolean; onOpen?: (id: string) => void; hasMemories?: boolean } = {}) {
   return render(
     <MemoryRouter>
-      <ProjectOverview overview={{ ...base, ...patch }} canOpen={props.canOpen ?? (() => true)} onOpen={props.onOpen ?? (() => undefined)} />
+      <ProjectOverview overview={{ ...base, ...patch }} canOpen={props.canOpen ?? (() => true)} onOpen={props.onOpen ?? (() => undefined)}
+        hasMemories={props.hasMemories} />
     </MemoryRouter>,
   );
 }
@@ -36,6 +37,47 @@ describe("the top of a project", () => {
     expect(screen.getByRole("table", { name: "这个项目做过" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "项目卡" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "作品" })).toBeNull();
+  });
+
+  it("says in one quiet line that a project with memories has no card yet, and never draws a grid of empty slots", () => {
+    show({}, { hasMemories: true });
+    expect(screen.getByRole("heading", { name: "项目卡" })).toBeInTheDocument();
+    expect(screen.getByText("还没有记下这个项目的目标、资料和进展。")).toBeInTheDocument();
+    // No slot is named, and no clinical element is listed as a gap.
+    expect(screen.queryByRole("list")).toBeNull();
+    for (const label of ["领域", "目标", "范围或对象", "材料与数据", "阶段", "约束", "人群", "干预或暴露", "对照", "结局", "设计"]) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
+    cleanup();
+    // Not when the project's memory is off (that line speaks), and not when the card has something.
+    show({ paused: true }, { hasMemories: true });
+    expect(screen.queryByText("还没有记下这个项目的目标、资料和进展。")).toBeNull();
+    cleanup();
+    show({ card: [{ slot: "goal", label: "目标", recordId: "rec_g", text: "把单体拆成三个服务", updatedAt: null }] }, { hasMemories: true });
+    expect(screen.queryByText("还没有记下这个项目的目标、资料和进展。")).toBeNull();
+  });
+
+  it("draws the rows the project has, in the words of the card: general slots, a study's elements only when stated, and an extra by its own name or its sentence", () => {
+    show({ card: [
+      { slot: "field", label: "领域", recordId: "rec_f", text: "后端架构、支付系统", updatedAt: null },
+      { slot: "goal", label: "目标", recordId: "rec_g", text: "把单体拆成三个服务", updatedAt: null },
+      { slot: "constraints", label: "约束", recordId: "rec_c", text: "十一月底前切完", updatedAt: null },
+      { slot: "ext.interface", label: "接口", recordId: "rec_i", text: "对外接口保持不变", updatedAt: null },
+      { slot: "ext.release_train", label: null, recordId: "rec_r", text: "每两周一个发布窗口。", updatedAt: null },
+    ] });
+    const rows = within(screen.getByRole("list", { name: "项目卡" })).getAllByRole("listitem").map((row) => row.textContent);
+    expect(rows).toEqual([
+      "领域后端架构、支付系统", "目标把单体拆成三个服务", "约束十一月底前切完", "接口对外接口保持不变", "每两周一个发布窗口。",
+    ].map((text) => expect.stringContaining(text)));
+    // An extra the card has no word for is its sentence alone, not an English key.
+    expect(document.body.textContent).not.toMatch(/release_train|ext\./);
+    // Nothing that was not stated is listed as missing.
+    for (const label of ["人群", "干预或暴露", "对照", "结局", "设计", "阶段"]) expect(screen.queryByText(label)).toBeNull();
+  });
+
+  it("reads a card from a server that sent no labels: the slot's own name", () => {
+    show({ card: [{ slot: "data_source", recordId: "rec_d", text: "医院 2018 到 2024 年的电子病历", updatedAt: null }] });
+    expect(screen.getByText("材料与数据")).toBeInTheDocument();
   });
 
   it("gives a slot a door only when the memory behind it is on the page", async () => {
@@ -67,12 +109,19 @@ describe("how long a memory held", () => {
   const now = day("2026-10-12T00:00:00Z");
   const record = (patch: Record<string, unknown> = {}) => ({ createdAt: "2026-09-12T02:00:00Z", invalidSince: null, revisions: [], relations: undefined, ...patch }) as never;
 
-  it("is drawn for an end, a stated interval or a version, and not for a memory with nothing else to say", () => {
+  it("is drawn for a real term — an end, or an interval a source stated — and for nothing else", () => {
     expect(validitySpan(record(), now)).toBeNull();
     expect(validitySpan(record({ invalidSince: "2026-10-03T02:00:00Z" }), now)).toMatchObject({ ended: true, ticks: [] });
     expect(validitySpan(record({ relations: { validity: { from: "2026-01-01T00:00:00Z", until: null }, caveats: [], conflicts: [] } }), now)).toMatchObject({ ended: false, from: day("2026-01-01T00:00:00Z") });
-    const changed = validitySpan(record({ revisions: [{ changedAt: "2026-09-20T02:00:00Z" }, { changedAt: "2026-09-20T02:00:00Z" }, { changedAt: "2026-09-01T00:00:00Z" }, { changedAt: null }] }), now);
-    expect(changed?.ticks).toEqual([day("2026-09-20T02:00:00Z")]);
+    expect(validitySpan(record({ relations: { validity: { from: null, until: "2026-09-30T00:00:00Z" }, caveats: [], conflicts: [] } }), now)).toMatchObject({ ended: true });
+  });
+
+  it("is not drawn from an age: a memory reworded any number of times, with no term and no replacement, has the date it was made and no bar", () => {
+    const reworded = record({ revisions: [{ changedAt: "2026-09-20T02:00:00Z" }, { changedAt: "2026-09-25T02:00:00Z" }, { changedAt: "2026-10-01T02:00:00Z" }] });
+    expect(validitySpan(reworded, now)).toBeNull();
+    // Its changes are ticks on a term it has, never a term of their own.
+    const changed = validitySpan(record({ revisions: [{ changedAt: "2026-09-20T02:00:00Z" }, { changedAt: "2026-09-25T02:00:00Z" }, { changedAt: "2026-10-01T02:00:00Z" }], invalidSince: "2026-10-05T00:00:00Z" }), now);
+    expect(changed?.ticks).toEqual([day("2026-09-20T02:00:00Z"), day("2026-09-25T02:00:00Z"), day("2026-10-01T02:00:00Z")]);
   });
 
   it("does not end before the end has come, and has no bar when it ended before it began", () => {

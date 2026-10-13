@@ -108,7 +108,7 @@ test("the code-decided checks read the written records, not their prose", () => 
 const synthetic = cases.filter((item) => item.replay.synthetic === true);
 
 test("the synthetic replays of 2026-10-12 each say how the earlier extractor fared on what it wrote", () => {
-  assert.equal(synthetic.length, 18, "fourteen synthetic replays, the two of the owner's R9 ruling, and the two of the project card");
+  assert.equal(synthetic.length, 25, "fourteen synthetic replays, the two of the owner's R9 ruling, the two of the project card, and the seven of the general card");
   for (const item of synthetic) {
     assert.equal(item.decidable, true, `${item.id} is decided by code`);
     const verdicts = runner.decidedVerdicts(item, item.written);
@@ -118,7 +118,8 @@ test("the synthetic replays of 2026-10-12 each say how the earlier extractor far
       `${item.id}: preChange ${item.preChange}, yet the sample is judged ${verdicts.map((verdict) => verdict.passed).join("/")}`);
   }
   assert.deepEqual(synthetic.filter((item) => item.preChange === "held").map((item) => item.class).sort(),
-    ["credentials", "own-health-in-passing", "project-card-not-guessed", "run-tool-and-field-names", "standing-method-and-format", "standing-role-and-focus"]);
+    ["credentials", "own-health-in-passing", "project-card-clinical-rct", "project-card-not-guessed", "project-card-observational-database",
+      "project-card-task-not-a-project", "run-tool-and-field-names", "standing-method-and-format", "standing-role-and-focus"]);
 });
 
 test("a record that must be kept is checked by kind and by a string it carries, and a typo in a check is a shape error", () => {
@@ -144,23 +145,42 @@ test("a record that must be kept is checked by kind and by a string it carries, 
   assert.deepEqual(failing(byClass["standing-role-and-focus"], [record("profile", "a", "r"), record("profile", "b", "f"), record("project_fact", "出血风险问题")]),
     [`no project_fact record in ${byClass["standing-role-and-focus"].replay.projectId}`]);
 
-  // The project card: the keys a record was written under, and what a closed key may hold.
+  // The project card: the keys a record was written under (the field is open vocabulary, so no value of it is judged here).
   const slots = ["population", "intervention", "comparator", "outcome", "design", "data_source", "stage"].map((slot) => record("project_fact", slot, `project.${slot}`));
-  assert.deepEqual(failing(byClass["project-card-slots"], [record("project_fact", "心血管", "project.field"), ...slots]), []);
-  assert.deepEqual(failing(byClass["project-card-slots"], [...slots]), ["some record is written under project.field"], "the specialty is a slot like the rest");
-  assert.deepEqual(failing(byClass["project-card-slots"], [record("project_fact", "心血管", "project.field"), ...slots.slice(0, 6)]),
-    ["some record is written under project.stage"]);
-  assert.deepEqual(failing(byClass["project-card-slots"], [record("project_fact", "心血管、肿瘤", "project.field"), ...slots]),
-    ["project.field holds only 心血管"], "a key the model made up (project.primary_outcome) satisfies nothing, and a value off the case's list fails");
-  assert.deepEqual(failing(byClass["project-card-slots"], [record("project_fact", "队列", "project.af_cohort.design")]).length, 8,
+  assert.deepEqual(failing(byClass["project-card-slots"], slots), []);
+  assert.deepEqual(failing(byClass["project-card-slots"], [record("project_fact", "药物流行病学", "project.field"), ...slots]), [],
+    "a field in the researcher's own words, off every list, is no failure");
+  assert.deepEqual(failing(byClass["project-card-slots"], slots.slice(0, 6)), ["some record is written under project.stage"]);
+  assert.deepEqual(failing(byClass["project-card-slots"], [record("project_fact", "队列", "project.af_cohort.design")]).length, 7,
     "the keys of the earlier extractor are no slot");
   assert.deepEqual(failing(byClass["project-card-not-guessed"], []), []);
   assert.deepEqual(failing(byClass["project-card-not-guessed"], [record("project_fact", "75 岁以上", "project.population")]).length, 2);
 
+  // The card made general: the general keys are what a refactor, a launch and a thesis are kept under, and the keys only a clinical
+  // study has are not written for them; a clinical study keeps its own, and a data source nobody stated is not made up.
+  const general = ["project.goal", "project.stage", "project.constraints", "project.data_source", "project.field", "project.subject"].map((key) => record("project_fact", key, key));
+  for (const kind of ["software-refactor", "launch-plan", "history-thesis", "market-analysis"]) {
+    const item = byClass[`project-card-${kind}`];
+    assert.ok(item, `${kind} has a case`);
+    assert.deepEqual(failing(item, [...general, record("project_fact", "近代史", "project.ext.audience")].map((entry) => ({ ...entry, value: "近代史" }))), [],
+      `${kind}: the general keys satisfy it`);
+    assert.deepEqual(failing(item, [...general, record("project_fact", "x", "project.design")].map((entry) => ({ ...entry, value: "近代史" }))),
+      ["no record is written under project.design"], `${kind}: a study's design is not written for it`);
+    assert.ok(failing(item, [record("project_fact", "把单体拆成三个服务", "project.design")]).length >= 2, `${kind}: the earlier extractor's shape fails`);
+  }
+  const trial = byClass["project-card-clinical-rct"];
+  const trialKeys = ["population", "intervention", "comparator", "outcome", "design", "stage"].map((slot) => record("project_fact", slot, `project.${slot}`));
+  assert.deepEqual(failing(trial, trialKeys), []);
+  assert.deepEqual(failing(trial, [...trialKeys, record("project_fact", "医保数据库", "project.data_source")]), ["no record is written under project.data_source"]);
+  assert.deepEqual(failing(trial, trialKeys.slice(1)), ["some record is written under project.population"]);
+  assert.deepEqual(failing(byClass["project-card-task-not-a-project"], [record("project_fact", "订单汇总脚本", "project.goal")]).length, 2);
+  const keyless = { ...byClass["project-card-slots"], file: "x.json", expect: { noKeys: [] } };
+  assert.match(runner.caseIssues(keyless).join("\n"), /noKeys is not a list of memory keys/);
+
   const misspelt = { ...byClass["credentials"], file: "x.json", expect: { noTextContain: ["a"] } };
   assert.match(runner.caseIssues(misspelt).join("\n"), /noTextContain is not a check the runner decides/);
-  const keyless = { ...byClass["project-card-slots"], file: "x.json", expect: { requireKeys: [] } };
-  assert.match(runner.caseIssues(keyless).join("\n"), /requireKeys is not a list of memory keys/);
+  const emptyKeys = { ...byClass["project-card-slots"], file: "x.json", expect: { requireKeys: [] } };
+  assert.match(runner.caseIssues(emptyKeys).join("\n"), /requireKeys is not a list of memory keys/);
   const valueless = { ...byClass["project-card-slots"], file: "x.json", expect: { keyValues: { "project.field": [] } } };
   assert.match(runner.caseIssues(valueless).join("\n"), /keyValues is not a map from a memory key to the values it may hold/);
   const countless = { ...byClass["standing-method-and-format"], file: "x.json", expect: { requireKinds: { preference: 0 } } };
