@@ -84,10 +84,11 @@ not mounted and the rest of the platform is unaffected.
 | Module | Files | Switch (default) |
 | --- | --- | --- |
 | Knowledge-base intake | `source*.mjs`, `openList*.mjs`, `documentParserClient.mjs` | `OPEN_SCIENCE_SOURCE_INGESTION_ENABLED` (on in production) |
+| Knowledge pages and graph (OpenViking Resources and Compile) | `knowledgePage*.mjs`, `openViking*.mjs`, `kbBrowseGateway.mjs` | `OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED` (on with the engine) |
 | Autopilot (proactive research) | `autopilot*.mjs` | `OPEN_SCIENCE_AUTOPILOT_ENABLED` (on in production) |
 | Learning loop | `learning*.mjs`, `method*.mjs`, `handbook*.mjs` | `OPEN_SCIENCE_LEARNING_ENABLED` (on) |
 | Research evolution | `evolution*.mjs` | `OPEN_SCIENCE_EVOLUTION_ENABLED` (on) |
-| Research memory and recall | `memory*.mjs`, `researchMemory.mjs` | `OPEN_SCIENCE_MEMORY_ENABLED` (on), `OPEN_SCIENCE_MEMORY_RECALL_ENABLED` |
+| Memory and recall (two engines per account) | `memory*.mjs`, `researchMemory.mjs`; native: `nativeMemory*.mjs`, `memoryGateway.mjs` | `OPEN_SCIENCE_MEMORY_ENABLED` (on), `OPEN_SCIENCE_MEMORY_RECALL_ENABLED`, `OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED` (on with the engine) |
 | Data semantics, result versions | `dataSemantics*.mjs`, `result*.mjs` | `OPEN_SCIENCE_DATA_SEMANTICS_ENABLED`, `OPEN_SCIENCE_RESULTS_ENABLED` (on) |
 | Frontier feed | `frontier*.mjs` | `OPEN_SCIENCE_FRONTIER_ENABLED` (off) |
 | Evidence-based GEO | `geo*.mjs` | `OPEN_SCIENCE_GEO_ENABLED` (off) |
