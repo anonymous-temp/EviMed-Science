@@ -156,13 +156,13 @@ async function stopHarness(h) {
 
 function judge(args, outDir, name) {
   const script = path.join(SUITE, 'judges', 'judge_case.py');
-  const r = spawnSync('python3', ['-I', script, '--cases', path.join(SUITE, 'cases.json'), '--record', `${outDir}/records/${name}.json`, '--out', `${outDir}/judged/${name}.json`, '--fixtures', path.join(SUITE, 'fixtures')],
+  const r = spawnSync('python3', [script, '--cases', path.join(SUITE, 'cases.json'), '--record', `${outDir}/records/${name}.json`, '--out', `${outDir}/judged/${name}.json`, '--fixtures', path.join(SUITE, 'fixtures')],
     { encoding: 'utf8', timeout: 600_000 });
   if (r.status !== 0) log(`  judge failed for ${name}: ${(r.stderr || r.stdout).slice(-400)}`);
 }
 
 function summarize(outDir) {
-  const r = spawnSync('python3', ['-I', path.join(SUITE, 'judges', 'summarize.py'), '--run', outDir], { encoding: 'utf8', timeout: 120_000 });
+  const r = spawnSync('python3', [path.join(SUITE, 'judges', 'summarize.py'), '--run', outDir], { encoding: 'utf8', timeout: 120_000 });
   if (r.status !== 0) log(`  summary failed: ${(r.stderr || r.stdout).slice(-300)}`);
 }
 
