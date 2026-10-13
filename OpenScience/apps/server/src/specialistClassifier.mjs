@@ -1,12 +1,13 @@
-// LLM-based open-domain routing (item 10b), an OPTIONAL augmentation of the
-// deterministic regex router in specialistRouting.mjs.
+// LLM-based open-domain routing (item 10b): the model reads the request and
+// decides whether it commissions one of the specialist capabilities. Its answer
+// is final — a specialist, or none — and no word list overrules either
+// (specialistRouting.mjs has the order and the one data rule that remains).
 //
-// Bound sessions, explicit selections and named deliverables precede this
-// classifier. The commissioning-verb rules remain the net beneath an absent
-// verdict; an affirmative open-domain verdict is preserved.
-// It is also fully fail-safe: any disabled flag, missing key, timeout, bad
-// response, low confidence, or unknown agent id resolves to null (open-domain),
-// never an exception and never a blocked dispatch.
+// Bound sessions and structured choices (the shell's picker, a slash command)
+// precede this classifier. It is fully fail-safe: any disabled flag, missing
+// key, timeout, bad response, low confidence, or unknown agent id resolves to
+// null (the ordinary conversation line), never an exception and never a blocked
+// dispatch.
 //
 // It reaches the provider through `callModelForControlPlane`, metered as
 // `routing`. It used to call api.deepseek.com with its own fetch, so every
@@ -14,7 +15,7 @@
 // outside the usage ledger and outside the account's caps: the same second way
 // out that memory extraction had until it was moved onto the gateway.
 import { callModelForControlPlane } from "./modelGateway.mjs";
-import { routeOpenDomainSpecialist } from "./specialistRouting.mjs";
+import { namedSpecialistIds } from "./specialistRouting.mjs";
 
 function parseClassifierJson(content) {
   if (typeof content !== "string") return null;
@@ -48,10 +49,11 @@ function parseClassifierJson(content) {
 }
 
 const classifierInstructions = [
-  "You route an open-domain biomedical research request to at most one specialist agent.",
-  "Choose only from the supplied specialists by their exact id. If none clearly fits, or the message is generic conversation, small talk, or a non-research request, return agentId \"none\".",
-  "Every specialist in the catalog produces a heavy deliverable (a report, analysis package, or evaluation). Route only when the user actually wants that deliverable — a plain clinical or scientific QUESTION (mechanism, efficacy, safety, definition, dosing) stays open-domain even when it mentions a drug, disease, or symptom.",
-  "In particular, choose a clinical evidence synthesis agent only when the user explicitly asks for a report, systematic review, or deep evidence analysis.",
+  "You route one request, sent to a general-purpose research and work assistant, to at most one specialist capability from a catalog, or to none.",
+  "Most requests are ordinary work the assistant does itself, and the answer is \"none\": a question, an explanation, writing, translating, editing, code, a spreadsheet or a slide deck, analysing or charting data the user holds, looking something up, a report on a technical, business or market subject, small talk. The specialists are for specific scientific or medical research deliverables, each described in the catalog.",
+  "Choose only from the supplied specialists by their exact id. If none clearly fits, return agentId \"none\".",
+  "Every specialist in the catalog produces a heavy deliverable (a report, analysis package, or evaluation). Route only when the user actually wants that deliverable — a plain question (mechanism, efficacy, safety, definition, how a tool works) stays \"none\" even when it mentions a drug, a disease, a method or a specialist's own subject.",
+  "In particular, choose a clinical evidence synthesis agent only when the user explicitly asks for a report, systematic review, or deep evidence analysis on a medical or pharmaceutical question; a report on any other subject is not one.",
   // Topic words are the wrong signal, and they are the loudest one. Six real
   // requests for a clinical evidence review were routed away from it because
   // they mentioned what the review would have to discuss: briefs that said
@@ -60,6 +62,9 @@ const classifierInstructions = [
   // pharmacovigilance, and a brief mentioning a dataset went to dataset
   // scoping. Each produced a deliverable nobody asked for.
   "Decide by the DELIVERABLE the request commissions, never by the topics it mentions. A request that asks you to appraise what published meta-analyses show is a literature appraisal, not a request to run a new meta-analysis. A request that asks whether a reported adverse reaction can be attributed to a drug is an evidence question, not a request for a disproportionality signal analysis. Mentioning a data source is not the same as supplying one.",
+  "A user who hands over a table or a file and wants it summarised, cleaned, charted, forecast or otherwise worked on is doing ordinary work: \"none\". A dataset-scoping specialist fits when the user has supplied a dataset and wants to learn which research questions or studies it can support.",
+  "A message that only tells the assistant about the user — who they are, what they work on, how they want work done from now on, something to remember — asks for nothing now: \"none\".",
+  "namedInRequest lists the specialist ids that appear as words in the request. A name appearing is not a request for it: the user may be translating the word, asking what it means, discussing it, or using it as an ordinary term (a code review that says peer-review, a script for a statistical analysis, a paper someone else wrote). Choose that specialist only when the user is asking for its deliverable.",
   "Refuse any specialist whose requiredInputs the request does not actually supply. A specialist that requires a dataset must not be chosen when the user has described data rather than provided it; a specialist that requires a defined PICO must not be chosen when the request is an open appraisal question.",
   "The starterPrompts show what a request that belongs to a specialist looks like. If the request does not resemble any of them in KIND — not in vocabulary — that specialist is the wrong one.",
   "Never invent an id. Prefer \"none\" over a weak guess.",
@@ -198,7 +203,7 @@ export class SpecialistClassifier {
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: classifierInstructions },
-            { role: "user", content: JSON.stringify({ query: query.slice(0, 4_000), specialists: catalog }) },
+            { role: "user", content: JSON.stringify({ query: query.slice(0, 4_000), namedInRequest: namedSpecialistIds(query, agents), specialists: catalog }) },
           ],
         },
       });
@@ -213,10 +218,9 @@ export class SpecialistClassifier {
       // be indistinguishable from the other two.
       if (!parsed) return this.declined(message?.content?.trim() ? "unparseable" : "empty_content", trace);
       // An affirmative "no specialist fits" is a decision, and the caller has to
-      // be able to tell it from a classification that never happened: the regex
-      // net is a safety net under an ABSENT decision, and it was overriding this
-      // one. Only the explicit `none` is recorded — a low-confidence guess or an
-      // invented id is a verdict the caller should still let the net back up.
+      // be able to tell it from a classification that never happened: both go
+      // to the ordinary line, but only the second means the classifier is not
+      // working. Only the explicit `none` is recorded as a verdict.
       if (parsed.agentId.toLowerCase() === "none") {
         if (trace) trace.verdict = "none";
         return null;
@@ -238,85 +242,5 @@ export class SpecialistClassifier {
     } finally {
       clearTimeout(timeout);
     }
-  }
-
-  /**
-   * The regex net under the model's decision, asked once more when it would overrule a clean `none`.
-   *
-   * The specific rules stay in force after the model declines, because the model sometimes declines a real commission
-   * (「分析奥希替尼的 FAERS 药物警戒信号」). They also fire on a researcher telling the assistant about themselves:
-   * 「以后我做 Meta 分析时，先报 GRADE 证据等级，再报效应量」 went to the meta-analysis pipeline on 2026-10-12 and was failed
-   * for the report nobody asked for, and 「我主要做孟德尔随机化研究」, 「我平时用 CiteSpace」 match the same way. Whether a message
-   * only describes the researcher is language, so the model is asked that one narrow question — only here, where a word
-   * list is about to overrule its decision — and the net yields when it says yes. Unavailable, slow or unsure, the net
-   * stands as before.
-   * @param {string} query @param {any[]} agents
-   * @param {{ failure?: string, verdict?: string, statement?: boolean }} [trace]
-   * @param {{ userId: string, projectId: string } | null} [owner]
-   */
-  async net(query, agents, trace, owner = null) {
-    const net = routeOpenDomainSpecialist(query, agents, { afterCleanNone: trace?.verdict === "none" });
-    if (!net || trace?.verdict !== "none" || !this.available) return net;
-    if (await this.describesResearcher(query, owner)) {
-      if (trace) trace.statement = true;
-      return null;
-    }
-    return net;
-  }
-
-  /** @param {string} query @param {{ userId: string, projectId: string } | null} owner @returns {Promise<boolean>} */
-  async describesResearcher(query, owner) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const body = await callModelForControlPlane({
-        config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl,
-      }, {
-        userId: owner?.userId ?? "",
-        projectId: owner?.projectId ?? "",
-        purpose: "routing",
-        signal: controller.signal,
-        body: {
-          model: this.config.deepseekModel,
-          thinking: { type: "disabled" },
-          temperature: 0,
-          max_tokens: 128,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: statementInstructions },
-            { role: "user", content: JSON.stringify({ message: query.slice(0, 4_000) }) },
-          ],
-        },
-      });
-      const message = body?.choices?.[0]?.message;
-      const parsed = parseStatementJson(message?.content) ?? parseStatementJson(message?.reasoning_content);
-      return parsed !== null && parsed.statement && parsed.confidence >= this.threshold;
-    } catch {
-      return false;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-}
-
-const statementInstructions = [
-  "Read one message a researcher sent to a research assistant.",
-  "Decide whether it only tells the assistant about the researcher — who they are, what they work on, how they want work done from now on, or something to remember (「以后我做 Meta 分析时，先报 GRADE 证据等级，再报效应量」, 「我主要做孟德尔随机化研究」, 「我平时用 CiteSpace 画合作网络」, 「记住我对青霉素过敏」) — rather than asking for something to be done or answered now.",
-  "A message that asks for an analysis, a report, a review or an answer, even in one clause, is not only telling (「分析奥希替尼的 FAERS 药物警戒信号」, 「帮我做一个他汀与卒中的 meta 分析」).",
-  "Return JSON only: {\"statement\": true|false, \"confidence\": <0..1>}.",
-].join(" ");
-
-/** @param {unknown} content @returns {{ statement: boolean, confidence: number } | null} */
-function parseStatementJson(content) {
-  if (typeof content !== "string") return null;
-  const match = content.match(/\{[^{}]*\}/g)?.at(-1);
-  if (!match) return null;
-  try {
-    const parsed = JSON.parse(match);
-    const confidence = Number(parsed?.confidence);
-    if (typeof parsed?.statement !== "boolean" || !Number.isFinite(confidence)) return null;
-    return { statement: parsed.statement, confidence: Math.max(0, Math.min(1, confidence)) };
-  } catch {
-    return null;
   }
 }

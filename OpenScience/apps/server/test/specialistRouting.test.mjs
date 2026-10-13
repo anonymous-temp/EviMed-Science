@@ -1,375 +1,185 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { loadAgentRegistry } from "../src/agentRegistry.mjs";
-import { classifierFailureReason, routeNamedSpecialist, routeOpenDomainSpecialist } from "../src/specialistRouting.mjs";
+import {
+  classifierFailureReason,
+  namedSpecialistIds,
+  routeOpenDomain,
+  routeSafetyMedicine,
+  routeSlashCommand,
+} from "../src/specialistRouting.mjs";
 
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const registry = await loadAgentRegistry({
+  packageDirs: [path.join(root, "runtime/skills/evimed")],
+  capabilityDirs: [path.join(root, "capabilities")],
+});
+const agents = registry.list().filter((agent) => agent.id !== "open-domain-answer");
+const { cases } = JSON.parse(await readFile(path.join(root, "evals/routing/cases.json"), "utf8"));
 
-const packageRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../../runtime/skills/evimed",
-);
+/** A classifier that answers with whatever it was told to, and counts what it was asked. @param {string | Error | null} verdict */
+function classifier(verdict) {
+  const asked = [];
+  return {
+    asked,
+    async classify(/** @type {string} */ query, /** @type {any[]} */ candidates, /** @type {any} */ trace) {
+      asked.push(query);
+      if (verdict instanceof Error) throw verdict;
+      if (verdict === "none") { trace.verdict = "none"; return null; }
+      if (verdict === null) { trace.failure = "timeout"; return null; }
+      const agent = candidates.find((candidate) => candidate.id === verdict);
+      return agent ? { agentId: agent.id, agentVersion: agent.version, runtimeAgent: agent.runtimeAgent, reason: "llm:0.91", confidence: 0.91 } : null;
+    },
+  };
+}
 
-test("open-domain research questions deterministically route to every registered specialty", async () => {
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  const cases = new Map([
-    ["分析奥希替尼的 FAERS 药物警戒信号", "adr-analysis"],
-    ["对 GLP-1 肥胖研究做 CiteSpace 文献计量分析", "bibliometric-analysis"],
-    ["综合评价达格列净治疗慢性肾病的临床价值", "comprehensive-drug-evaluation"],
-    ["为院内目录做候选药品遴选评分", "drug-selection"],
-    ["用孟德尔随机化分析 BMI 对冠心病的因果作用", "mendelian-randomization"],
-    ["开展降压药对卒中结局的 meta 分析", "meta-analysis"],
-    ["评估某药超说明书用于儿童感染的证据", "off-label-analysis"],
-    ["请对我上传的临床试验论文做同行评审", "peer-review"],
-    ["为 ICU 抗菌药精准给药设计科研选题", "research-topic-selection"],
-    ["我手上这份住院数据集能支撑哪些研究课题", "dataset-research-scoping"],
-    ["胸口突然发闷发紧，是心绞痛还是胃病？请结合速效救心丸生成一份证据报告", "clinical-evidence-synthesis"],
-  ]);
-  for (const [query, expected] of cases) {
-    assert.equal(routeOpenDomainSpecialist(query, agents)?.agentId, expected, query);
+// The probes of the general-agent review (GA14, GA15, GA03) and the baseline wordings (G05, G10, G12, G16, G17) were rerun in
+// every state the old router could be in: the model answered none, the model could not answer, and no classifier at all. Each
+// one used to route to a medical pipeline in at least one of them. None may route to a specialist now, in any.
+test("ordinary work reaches no specialist, whatever state the classifier is in", async () => {
+  const ordinary = cases.filter((item) => [item.expect].flat().includes("none"));
+  assert.ok(ordinary.length >= 40, `read ${ordinary.length} cases`);
+  for (const item of ordinary) {
+    for (const [state, model] of [["answered none", classifier("none")], ["timed out", classifier(null)], ["threw", classifier(new Error("boom"))], ["absent", null]]) {
+      const trace = {};
+      const routed = await routeOpenDomain({ query: item.message, agents, classifier: model, trace });
+      assert.equal(routed.specialist, null, `${item.id} (${state}) went to ${routed.specialist?.agentId}: ${item.message}`);
+      assert.equal(routed.decidedBy, "default");
+    }
   }
 });
 
-test("a commissioned paper is a commissioned document, and the net catches it", async () => {
-  // The regex net exists so that a high-risk medicine asked about in a report
-  // request always reaches the clinical gate when the classifier declines or is
-  // unavailable. RQ-03's brief is titled
-  // 《速效救心丸连续用药三个月及以上的有效性与安全性证据评价》 and its 交付
-  // section asks for 「一篇面向临床医师与药师的中文学术论文」. The clinical
-  // subject matched; the report intent did not, because the pattern knew 报告
-  // and 综述 and not 论文. The net returned null, the classifier then timed out
-  // on a slow link, and the request became an open-domain chat answer with no
-  // report and no gate — `effectiveRouteReason: "unrouted:open-domain"`.
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+test("a capability id inside the request is a word of it: the model is asked, and its answer is final", () => {
+  const wording = {
+    "这篇 meta-analysis 的结论是什么？一句话总结": ["meta-analysis"],
+    "Can you peer-review my pull request description?": ["peer-review"],
+    "Write a statistical-analysis script in Python for my A/B test": ["statistical-analysis"],
+    "帮我把 manuscript-support 这个词翻译成中文": ["manuscript-support"],
+    // A paper's own title is the name of a work and not a word of the request.
+    "《A meta-analysis of remote work productivity》这篇讲了什么": [],
+    "把这段话翻成英文": [],
+  };
+  for (const [query, ids] of Object.entries(wording)) assert.deepEqual(namedSpecialistIds(query, agents), ids, query);
+});
+
+test("the model's answer is final, and it is asked first", async () => {
+  for (const [query, id] of [
+    ["Can you peer-review my pull request description?", "peer-review"],
+    ["分析一下这份数据 sales.xlsx，告诉我哪个地区卖得最好", "dataset-research-scoping"],
+    ["帮我写一份消息队列选型报告", "clinical-evidence-synthesis"],
+  ]) {
+    // The model that claims it routes it (a commission is the model's to recognise)...
+    const claimed = await routeOpenDomain({ query, agents, classifier: classifier(id) });
+    assert.equal(claimed.specialist?.agentId, id);
+    assert.equal(claimed.decidedBy, "model");
+    assert.equal(claimed.modelConsulted, true);
+    // ...and with the model's none there is no rule left to overrule it.
+    assert.equal((await routeOpenDomain({ query, agents, classifier: classifier("none") })).specialist, null);
+  }
+  // The rules that used to correct a model's none are gone with the net: FAERS vocabulary included.
+  assert.equal((await routeOpenDomain({ query: "分析奥希替尼的 FAERS 药物警戒信号", agents, classifier: classifier("none") })).specialist, null);
+  // A request is classified once, and a request that a structured choice names is never put to the model.
+  const model = classifier("none");
+  await routeOpenDomain({ query: "把这段话翻成英文", agents, classifier: model });
+  assert.equal(model.asked.length, 1);
+});
+
+test("what used to be the net no longer takes a request when the classifier is absent or broken", async () => {
+  // Each of these was routed by a vocabulary rule: verb + field, the field's own word, data + 分析一下, a clinical word + 报告.
+  for (const query of [
+    "开展降压药对卒中结局的 meta 分析",
+    "帮我做不良事件信号监测",
+    "对 GLP-1 肥胖研究做 CiteSpace 文献计量分析",
+    "请对我上传的临床试验论文做同行评审",
+    "我手上有一份住院数据，能做什么研究？",
+    "冠心病二级预防的循证用药报告",
+    "请输出一份阿立哌唑血药浓度的分析报告",
+    "完成一份回顾性研究的可行性报告",
+    "速效救心丸疗效证据分析",
+  ]) {
+    for (const model of [null, classifier(null), classifier("none")]) {
+      assert.equal((await routeOpenDomain({ query, agents, classifier: model })).specialist, null, query);
+    }
+  }
+});
+
+test("a leading slash command is a structured choice: it routes by name and the model is not asked", async () => {
+  const model = classifier("none");
+  const routed = await routeOpenDomain({ query: "/meta-analysis 把这些试验合并成一个效应量", agents, classifier: model });
+  assert.equal(routed.specialist?.agentId, "meta-analysis");
+  assert.equal(routed.specialist?.reason, "command:meta-analysis");
+  assert.match(routed.specialist?.reason, /^[a-z][a-z0-9_.:-]{0,63}$/);
+  assert.equal(routed.decidedBy, "named");
+  assert.equal(routed.modelConsulted, false);
+  assert.equal(model.asked.length, 0);
+  assert.equal(routeSlashCommand("  /peer-review", agents)?.agentId, "peer-review");
+  // Not a command: an id mid-sentence, a longer word, a path, an id that is no capability, the answer line.
+  for (const query of ["please /meta-analysis this", "/meta-analysis-x", "/etc/meta-analysis", "/unknown-thing hello", "/open-domain-answer hello", "meta-analysis", ""]) {
+    assert.equal(routeSlashCommand(query, agents), null, query);
+  }
+});
+
+// A high-risk medicine named in clinical-safety-rules.json — a closed vocabulary the pharmacists own — together with an
+// explicit request for a report reaches the clinical gate whatever the model said or whether it answered at all. It is
+// the only rule left under the model.
+test("the one rule that remains is the pharmacists' medicine list together with a request for a report", async () => {
+  const medicine = "请就速效救心丸的疗效与安全性做一份循证证据综述报告。";
+  const refused = await routeOpenDomain({ query: medicine, agents, classifier: classifier("none") });
+  assert.equal(refused.specialist?.agentId, "clinical-evidence-synthesis");
+  assert.equal(refused.specialist?.reason, "matched:safety-medicine");
+  assert.equal(refused.decidedBy, "rules");
+  // Not answered: the ledger says the model never ran, not that the rule overruled it.
+  const silent = await routeOpenDomain({ query: medicine, agents, classifier: classifier(null) });
+  assert.equal(silent.specialist?.agentId, "clinical-evidence-synthesis");
+  assert.match(silent.specialist?.reason ?? "", /^matched:safety-medicine:classifier:timeout$/);
+  assert.match(silent.specialist?.reason ?? "", /^[a-z][a-z0-9_.:-]{0,63}$/);
+  assert.equal((await routeOpenDomain({ query: medicine, agents, classifier: null })).specialist?.agentId, "clinical-evidence-synthesis");
+  // A model that names a specialist is not overruled by it.
+  assert.equal((await routeOpenDomain({ query: medicine, agents, classifier: classifier("adr-analysis") })).specialist?.agentId, "adr-analysis");
+  // Both halves are needed: the medicine alone is a question, a report alone is not about it, and a medicine off the list is not on it.
+  for (const query of ["速效救心丸一次吃几粒", "速效救心丸疗效证据分析", "这篇论文说速效救心丸能长期服用，是真的吗？", "速效救心丸长期吃安全吗",
+    "请就某种保健品的口碑做一份综述报告。", "学术论文一般怎么组织结构？"]) {
+    assert.equal(routeSafetyMedicine(query, agents), null, query);
+  }
+  // A commissioned paper is a commissioned document.
   for (const query of [
     "速效救心丸连续用药三个月及以上的有效性与安全性证据评价。交付：一篇面向临床医师与药师的中文学术论文。",
-    "胸口突然发闷发紧，请就速效救心丸的证据写一篇学术论文",
-    "速效救心丸的证据评价，输出一份论文",
+    "Suxiao Jiuxin Wan evidence report",
+    "请评估速效救心丸的临床证据并出一份报告",
+    "胸口发闷，请结合速效救心丸生成一份临床证据报告",
   ]) {
-    assert.equal(routeOpenDomainSpecialist(query, agents)?.agentId, "clinical-evidence-synthesis", query);
-  }
-
-  // Negative controls. A quantifier is what separates commissioning a paper
-  // from talking about one, and the subject requirement still holds.
-  for (const query of [
-    "这篇论文说速效救心丸能长期服用，是真的吗？",
-    "速效救心丸长期吃安全吗",
-    "学术论文一般怎么组织结构？",
-  ]) {
-    assert.notEqual(
-      routeOpenDomainSpecialist(query, agents)?.agentId,
-      "clinical-evidence-synthesis",
-      `must not commission a report: ${query}`,
-    );
+    assert.equal(routeSafetyMedicine(query, agents)?.agentId, "clinical-evidence-synthesis", query);
   }
 });
 
-test("the heavy clinical report pipeline only engages on explicit report intent", async () => {
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  // Explicit report / deep-synthesis requests route to the clinical gate —
-  // including for high-risk medicines carried by routingEntities.
-  assert.equal(
-    routeOpenDomainSpecialist("请评估速效救心丸的临床证据并出一份报告", agents)?.agentId,
-    "clinical-evidence-synthesis",
-  );
-  assert.equal(
-    routeOpenDomainSpecialist("Suxiao Jiuxin Wan evidence report", agents)?.agentId,
-    "clinical-evidence-synthesis",
-  );
-  assert.equal(
-    routeOpenDomainSpecialist("冠心病二级预防的循证用药报告", agents)?.agentId,
-    "clinical-evidence-synthesis",
-  );
-});
-
-test("asking for a report routes to the report line whichever verb carries it", async () => {
-  // The production prompt that exposed this: "给我写出所有的分析结果和报告".
-  // 写出 was not among the verbs the pattern listed, so a request for a report
-  // was answered as a chat message with no file produced at all.
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  const asked = [
-    "请把阿立哌唑血药浓度的证据整理好，并给我写出所有的分析结果和报告",
-    "请输出一份阿立哌唑血药浓度的分析报告",
-    "帮我形成关于抗精神病药 TDM 的综述",
-    "完成一份回顾性研究的可行性报告",
-  ];
-  for (const query of asked) {
-    assert.equal(
-      routeOpenDomainSpecialist(query, agents)?.agentId,
-      "clinical-evidence-synthesis",
-      `should route to the report line: ${query}`,
-    );
-  }
-});
-
-test("a question that starts from the researcher's own data reaches the scoping line", async () => {
-  // The production prompt that motivated the skill. It went to
-  // clinical-evidence-synthesis, which synthesises literature and never profiles
-  // a file, so the five-table extract it was handed had no bearing on the answer.
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  const scoping = [
-    "请你基于上传的数据集，来分析能做哪些科学性研究……并给我写出所有的分析结果和报告",
-    "我手上有一份住院数据，能做什么研究？",
-    "这份数据集能支撑哪些课题",
-    "评估我上传的数据集的研究可行性",
-    "profile my uploaded dataset and tell me what research it can support",
-    // The object is a model rather than a 研究, which the enumeration missed
-    // entirely: only the LLM fallback reached it.
-    "这份住院 TDM 数据集能不能支撑一个个体化用药的预测模型？",
-    "用我上传的数据集建一个剂量预测模型可行吗",
-    "assess the feasibility of a dose prediction model on my uploaded dataset",
-    // 科研选题 is research-topic-selection's own trigger, but a researcher who
-    // says it while holding data wants the topic analysis grounded in that data.
-    "基于我上传的这份住院数据集做一次完整的科研选题分析，判断它能支撑哪些课题",
-  ];
-  for (const query of scoping) {
-    assert.equal(
-      routeOpenDomainSpecialist(query, agents)?.agentId,
-      "dataset-research-scoping",
-      `should route to the scoping line: ${query}`,
-    );
-  }
-
-  // Both halves are required, so neither a dataset alone nor a feasibility
-  // question alone diverts a request that belongs elsewhere.
-  assert.equal(
-    routeOpenDomainSpecialist("对我的数据集做 meta 分析", agents)?.agentId,
-    "meta-analysis",
-    "meta analysis keeps its own line even when a dataset is named",
-  );
-  assert.equal(
-    routeOpenDomainSpecialist("完成一份回顾性研究的可行性报告", agents)?.agentId,
-    "clinical-evidence-synthesis",
-    "a feasibility report with no dataset in hand is not scoping",
-  );
-  assert.equal(
-    routeOpenDomainSpecialist("为 ICU 抗菌药精准给药设计科研选题", agents)?.agentId,
-    "research-topic-selection",
-    "direction-first topic selection with no data in hand is unaffected",
-  );
-  assert.equal(
-    routeOpenDomainSpecialist("请输出一份阿立哌唑血药浓度的分析报告", agents)?.agentId,
-    "clinical-evidence-synthesis",
-    "a clinical report request is unaffected",
-  );
-});
-
-test("plain clinical questions stay on the open-domain answer line", async () => {
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  // No explicit report intent: analysis/efficacy questions — including ones
-  // about high-risk medicines — are answered directly by the open-domain
-  // answer agent, whose skill carries the same safety framing. The heavy
-  // clinical gate is reserved for explicit report requests.
-  assert.equal(routeOpenDomainSpecialist("速效救心丸疗效证据分析", agents), null);
-  assert.equal(routeOpenDomainSpecialist("分析急性胸痛的鉴别诊断思路", agents), null);
-  assert.equal(routeOpenDomainSpecialist("二甲双胍的临床疗效研究进展如何", agents), null);
-});
-
-test("generic conversation stays in the open-domain agent", async () => {
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  assert.equal(routeOpenDomainSpecialist("帮我把这一句话润色得更自然", agents), null);
-  // A bare medicine mention without an evidence/analysis intent is not a
-  // research request and stays open-domain, exactly as before this change.
-  assert.equal(routeOpenDomainSpecialist("速效救心丸一次吃几粒", agents), null);
-});
-
-test("a pharmacovigilance report reaches the ADR specialist however it is phrased", async () => {
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  for (const text of [
-    "请出具一份阿托伐他汀横纹肌溶解的药物安全性信号分析报告，基于 openFDA 计算 ROR 与 PRR",
-    "帮我做不良事件信号监测",
-    "run a disproportionality analysis on this drug",
-  ]) {
-    assert.equal(routeOpenDomainSpecialist(text, agents)?.agentId, "adr-analysis", text);
-  }
-  // A plain safety question is still a conversation, not a signal-analysis package.
-  assert.equal(routeOpenDomainSpecialist("二甲双胍的安全性怎么样？", agents), null);
-})
-
-test("a dataset in hand outranks the review vocabulary", async () => {
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  // The final scoping request asked for a mini-review per topic and a
-  // literature landscape. Both phrases belong to clinical-evidence-synthesis,
-  // which never opens the file, and it took the request away from the one
-  // skill that had to read it.
-  const withData = [
-    "上传的 20260803TDM.xlsx 是住院治疗药物监测数据抽取，请出一份分析报告，每个题目配一个小综述和研究方案",
-    "针对我上传的数据集做选题分析，并给出证据综述与文献检索范围",
-    "profile the uploaded hospital dataset and give each topic a mini-review of the evidence",
-  ];
-  for (const query of withData) {
-    assert.equal(routeOpenDomainSpecialist(query, agents)?.agentId, "dataset-research-scoping", query);
-  }
-  // Without a dataset the same review vocabulary still reaches the evidence skill.
-  assert.equal(
-    routeOpenDomainSpecialist("胸口发闷，请结合速效救心丸生成一份临床证据报告", agents)?.agentId,
-    "clinical-evidence-synthesis",
-  );
-});
-
-// The net fires on the vocabulary a field's own review necessarily uses, and
-// that is how six of thirty-three briefs commissioning a clinical evidence
-// review ended up in the meta-analysis, pharmacovigilance, off-label and
-// dataset-scoping pipelines, each producing a deliverable nobody asked for.
-// Every sentence below is lifted from one of those briefs.
-test("a review that discusses a specialty is not a request for it", async () => {
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  const discussing = [
-    // Appraising published syntheses, not commissioning one.
-    "事件的昼夜分布优先采用大样本前瞻队列、注册登记及其 meta 分析，并说明混杂控制方式",
-    "现有网络 meta 分析或其他间接比较在传递性、一致性上表现如何",
-    // Asking whether pharmacovigilance evidence exists, not asking for a signal run.
-    "有无毒理学研究、不良反应监测记录或可定位的病例报告作为支撑",
-    // An enumeration inside a search-scope sentence, where a verb and a
-    // specialty term sit either side of a comma.
-    "国内外指南索引（含胸痛评估、医疗机构用药与超说明书用药相关规范文件）及临床试验注册库",
-    // The methods section of every clinical paper names databases and 资料.
-    "中文全文数据库（CNKI、万方等）无法访问，中文文献仅能通过国际数据库的收录部分获得",
-    "证据不足时结论须相应降级表述：现有资料只能\"提示\"某种关联",
-  ];
-  for (const query of discussing) {
-    const routed = routeOpenDomainSpecialist(query, agents);
-    assert.equal(
-      routed?.agentId ?? null,
-      null,
-      `the net claimed ${routed?.agentId} for a sentence that only discusses the field: ${query}`,
-    );
-  }
-});
-
-test("asking for a specialty's own deliverable still reaches it", async () => {
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  const commissioning = [
-    ["开展降压药对卒中结局的 meta 分析", "meta-analysis"],
-    ["帮我做不良事件信号监测", "adr-analysis"],
-    ["分析奥希替尼的 FAERS 药物警戒信号", "adr-analysis"],
-    ["评估某药超说明书用于儿童感染的证据", "off-label-analysis"],
-    ["我上传了一份住院数据，能做哪些科学性研究？", "dataset-research-scoping"],
-    ["帮我做一篇论文审稿", "peer-review"],
-  ];
-  for (const [query, expected] of commissioning) {
-    assert.equal(routeOpenDomainSpecialist(query, agents)?.agentId, expected, query);
-  }
-});
-
-// The net is a safety net under an ABSENT decision. It was overriding a
-// present one.
-//
-// Measured 2026-08-31 on the real title-to-paper corpus: fifty paper-rewrite
-// briefs ("以已发表论文题目为检索入口……重写一份结构化科研正文") drew a clean
-// `none` from the classifier — no specialist fits, which is correct — and were
-// routed to clinical-evidence-synthesis anyway, because they name research
-// subjects and ask for a structured write-up. Four runs out of four then did
-// the rewrite the brief asked for and were failed for not loading a clinical
-// skill nobody had asked them to use.
-//
-// Fixing this by narrowing the prose patterns would be extending the keyword
-// wall (principles 2 and 5). The defect is not in the rules, it is in when they
-// are consulted.
-test("a clean 'no specialist fits' is a decision the regex net does not overturn", async () => {
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  const paperRewrite = "请以已发表论文题目《Empagliflozin in Patients with Chronic Kidney Disease.》为检索入口，"
-    + "检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。";
-
-  assert.equal(
-    routeOpenDomainSpecialist(paperRewrite, agents, { afterCleanNone: true }),
-    null,
-    "the model said no specialist fits; the net must leave the answer line alone",
-  );
-
-  // The same brief with no verdict to respect — classifier disabled, timed out,
-  // or unreachable — still reaches the net, because that is what it is for.
-  assert.equal(
-    routeOpenDomainSpecialist(paperRewrite, agents)?.agentId,
-    "clinical-evidence-synthesis",
-    "with no model decision the net must still run in full",
-  );
-
-  // What changes is not "the model spoke" but "which rule answered". A specific,
-  // high-signal rule still overrides a clean `none`, because that is the case
-  // where the model is simply wrong: asked about a drug's pharmacovigilance
-  // signals it sometimes answers "none", and FAERS vocabulary is not ambiguous.
-  assert.equal(
-    routeOpenDomainSpecialist("分析奥希替尼的 FAERS 药物警戒信号", agents, { afterCleanNone: true })?.agentId,
-    "adr-analysis",
-    "a specific rule is a correction, not an override of a judgement",
-  );
-});
-
-test("one rule still outranks a clean 'none', and it is the one made of data", async () => {
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  // 速效救心丸 is named in clinical-safety-rules.json, the pharmacist-owned file
-  // — a closed vocabulary, not prose matching. A high-risk medicine asked about
-  // in a report request reaches the clinical gate whatever the model thinks,
-  // which is the property the net was built to preserve.
-  const medicine = "请就速效救心丸的疗效与安全性做一份循证证据综述报告。";
-  const routed = routeOpenDomainSpecialist(medicine, agents, { afterCleanNone: true });
-  assert.equal(routed?.agentId, "clinical-evidence-synthesis");
-  assert.match(
-    routed.reason,
-    /safety-medicine/,
-    "the ledger must say the net overrode a model verdict, and on what grounds",
-  );
-  assert.match(routed.reason, /^[a-z][a-z0-9_.:-]{0,63}$/, "the route reason must fit the AgentRun ledger contract");
-
-  // And a request that names no such medicine does not get there this way.
-  assert.equal(
-    routeOpenDomainSpecialist("请就某种保健品的口碑做一份综述报告。", agents, { afterCleanNone: true }),
-    null,
-  );
+test("a classifier that throws is a failure named in the trace, never an exception", async () => {
+  const trace = {};
+  const routed = await routeOpenDomain({ query: "把这段话翻成英文", agents, classifier: classifier(Object.assign(new Error("boom"), { code: "model_gateway_upstream_error" })), trace });
+  assert.equal(routed.specialist, null);
+  assert.equal(trace.failure, "error_model_gateway_upstream_error");
 });
 
 test("classifier failure attribution remains a valid bounded AgentRun reason", () => {
-  for (const base of ["matched:clinical-evidence-synthesis", "unrouted:open-domain"]) {
+  for (const base of ["matched:safety-medicine", "unrouted:open-domain"]) {
     const reason = classifierFailureReason(base, "empty_content");
     assert.match(reason, /^[a-z][a-z0-9_.:-]{0,63}$/);
     assert.match(reason, /:classifier:empty_content$/);
   }
 });
 
-// Naming a package is an instruction; a paper's own title is not.
-//
-// Measured 2026-08-31 across the 33-case batch: the only two failures were both
-// routed to meta-analysis by their own titles — 《… large-scale meta-analysis of
-// 192 epidemiological studies.》 and 《… an individual patient data
-// meta-analysis.》 — and then failed for not writing meta-analysis-report.md,
-// which nobody had asked for. Naming outranks the classifier, so neither run
-// was ever put to the model.
-test("a capability named inside 《》 is a document title, not an instruction", async () => {
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-
-  assert.equal(
-    routeNamedSpecialist(
-      "请以已发表论文题目《Age at onset of mental disorders worldwide: large-scale meta-analysis of 192 "
-      + "epidemiological studies.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文。",
-      agents,
-    ),
-    null,
-    "a title is the name of a work, not a request for that capability",
-  );
-
-  // Only 《》 is stripped. Someone may reasonably put a package name in ordinary
-  // quotes for emphasis, and that is still naming it.
-  assert.equal(routeNamedSpecialist("请用 meta-analysis 能力包把这些试验合并成一个效应量", agents)?.agentId, "meta-analysis");
-  assert.equal(routeNamedSpecialist("请用「meta-analysis」跑一遍", agents)?.agentId, "meta-analysis");
-
-  // And a title does not silence a real instruction sitting beside it.
-  assert.equal(
-    routeNamedSpecialist("请以《… meta-analysis of 192 studies.》为入口，然后用 meta-analysis 能力包重跑一次合并", agents)?.agentId,
-    "meta-analysis",
-  );
-});
-
-test("every message of the routing statements eval is one the net claims after a clean none, so the eval asks something", async () => {
-  // evals/routing/statements.json: self-descriptions the model lets through and commissions it keeps on their
-  // specialist (SpecialistClassifier.net). A case the net no longer matches would pass that eval without asking it.
-  const { readFile } = await import("node:fs/promises");
-  const statements = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../evals/routing/statements.json");
-  const { cases } = JSON.parse(await readFile(statements, "utf8"));
-  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  assert.ok(cases.some((item) => item.expect === "yield") && cases.some((item) => item.expect === "route"));
+test("the routing eval cases are well formed: every expectation is none or a specialist the catalog offers", () => {
+  const ids = new Set(agents.map((agent) => agent.id));
+  assert.equal(new Set(cases.map((item) => item.id)).size, cases.length, "case ids are unique");
   for (const item of cases) {
-    assert.equal(routeOpenDomainSpecialist(item.message, agents, { afterCleanNone: true })?.agentId, item.net, item.message);
+    for (const accepted of [item.expect].flat()) assert.ok(accepted === "none" || ids.has(accepted), `${item.id} expects ${accepted}`);
+    assert.ok(typeof item.message === "string" && item.message.trim(), item.id);
   }
+  // Ordinary work and commissions are both there, and the review's baseline wordings are in.
+  for (const id of ["ga14-01", "ga15-02", "ga03-01", "g05", "g10", "g12", "g16", "g17a", "g17b", "m04", "meta-named", "pv-1", "slash-1"]) {
+    assert.ok(cases.some((item) => item.id === id), id);
+  }
+  assert.ok(cases.filter((item) => ![item.expect].flat().includes("none")).length >= 20);
 });

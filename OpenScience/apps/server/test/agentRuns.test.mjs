@@ -646,7 +646,7 @@ test("the ledger records why each run was routed where it was", async () => {
       assert.equal((await bind(base, id, { mode: "open-domain" })).status, 200);
     }
     // The classifier answers first now, so its confidence is the reason on a
-    // route it made; the regex reason appears only where it acted as the net.
+    // route it made; the medicine rule's reason appears only where it acted under it.
     const regex = await dispatchRun(base, "ses_reason_regex", "turn_reason_regex", "分析奥希替尼的 FAERS 药物警戒信号");
     assert.equal(regex.body.data.effectiveRouteReason, "llm:0.91");
 
@@ -678,29 +678,26 @@ test("the ledger records why each run was routed where it was", async () => {
   });
 });
 
-test("the classifier decides and the regex is the net under it", async () => {
+test("the classifier decides and its answer is final; only a slash command and the medicine rule act without it", async () => {
   // The old order was regex-first, and a rule that matched ended the decision.
   // Six real requests for a clinical evidence review went elsewhere because
   // they mentioned meta-analyses, adverse reactions or a dataset — the
-  // classifier was never asked. Now the model decides; the regex may only add a
-  // route the model declined to make.
+  // classifier was never asked. Then the rules became a net under the model,
+  // and a sales spreadsheet, "什么是同行评审" and a pull request went to medical
+  // pipelines over its clean none (2026-10-13). Now the model's answer is final.
   const calls = [];
   const specialistClassifierFetch = async (_url, init) => {
     calls.push(String(init?.body ?? ""));
-    // A brief that discusses published meta-analyses is a literature appraisal,
-    // and the classifier is the one able to tell that from a request to run a
-    // new meta-analysis. It answers "none" for the second query below.
-    const declines = calls.at(-1).includes("奥希替尼");
-    // Before the net overrules that "none" the model is asked whether the message only describes the researcher; this
-    // one asks for an analysis.
-    const statementCheck = calls.at(-1).includes("only tells the assistant about the researcher");
+    const body = calls.at(-1);
+    // A request the classifier reads as an analysis of reported signals is none here, and it must stay none.
+    const declines = body.includes("奥希替尼") || body.includes("sales.xlsx") || body.includes("速效救心丸");
     return {
       ok: true,
       headers: { get: () => null },
       text: async () => JSON.stringify({
         choices: [{
           message: {
-            content: JSON.stringify(statementCheck ? { statement: false, confidence: 0.95 } : declines
+            content: JSON.stringify(declines
               ? { agentId: "none", confidence: 0.9 }
               : { agentId: "meta-analysis", confidence: 0.95 }),
           },
@@ -709,14 +706,16 @@ test("the classifier decides and the regex is the net under it", async () => {
     };
   };
   await withApp(async ({ base }) => {
-    for (const id of ["ses_llm_a", "ses_llm_b"]) await bind(base, id, { mode: "open-domain" });
+    for (const id of ["ses_llm_a", "ses_llm_b", "ses_llm_c", "ses_llm_d"]) await bind(base, id, { mode: "open-domain" });
 
-    // The classifier is consulted even where a regex rule would have matched.
-    const netted = await dispatchRun(base, "ses_llm_a", "turn_llm_a", "分析奥希替尼的 FAERS 药物警戒信号");
-    assert.equal(calls.length, 2, "the model was asked first, and once more before the net overruled its none");
-    // Having declined, the safety net still delivers the specialty route.
-    assert.equal(netted.body.data.effectiveAgentId, "adr-analysis");
-    assert.equal(netted.body.data.effectiveRouteReason, "matched:adr-analysis");
+    // The model said none: the ordinary line, with no rule to take it elsewhere.
+    const declined = await dispatchRun(base, "ses_llm_a", "turn_llm_a", "分析奥希替尼的 FAERS 药物警戒信号");
+    assert.equal(calls.length, 1, "the model was asked once");
+    assert.equal(declined.body.data.effectiveAgentId, "open-domain-answer");
+    assert.equal(declined.body.data.effectiveRouteReason, "unrouted:open-domain");
+    const sheet = await dispatchRun(base, "ses_llm_c", "turn_llm_c", "分析一下这份数据 sales.xlsx，告诉我哪个地区卖得最好");
+    assert.equal(sheet.body.data.effectiveAgentId, "open-domain-answer");
+    assert.equal(sheet.body.data.effectiveRouteReason, "unrouted:open-domain");
 
     const classified = await dispatchRun(
       base,
@@ -724,9 +723,13 @@ test("the classifier decides and the regex is the net under it", async () => {
       "turn_llm_b",
       "帮我把这个研究方向整理成一个可执行的分析计划",
     );
-    assert.equal(calls.length, 3);
     assert.equal(classified.body.data.effectiveAgentId, "meta-analysis");
     assert.equal(classified.body.data.effectiveRouteReason, "llm:0.95");
+
+    // The one data rule stands under a none: a high-risk medicine from the pharmacists' list in a report request.
+    const medicine = await dispatchRun(base, "ses_llm_d", "turn_llm_d", "速效救心丸的有效性与安全性，请写一份报告");
+    assert.equal(medicine.body.data.effectiveAgentId, "clinical-evidence-synthesis");
+    assert.equal(medicine.body.data.effectiveRouteReason, "matched:safety-medicine");
   }, {
     llmRoutingEnabled: true,
     deepseekProviderEnabled: true,
@@ -735,7 +738,7 @@ test("the classifier decides and the regex is the net under it", async () => {
   });
 });
 
-test("naming the package outranks the classifier, because it is an instruction", async () => {
+test("a slash command is an instruction and needs no classification; a name inside the sentence is only a word of it", async () => {
   let asked = 0;
   const specialistClassifierFetch = async () => {
     asked += 1;
@@ -743,7 +746,7 @@ test("naming the package outranks the classifier, because it is an instruction",
       ok: true,
       headers: { get: () => null },
       text: async () => JSON.stringify({
-        choices: [{ message: { content: JSON.stringify({ agentId: "meta-analysis", confidence: 0.99 }) } }],
+        choices: [{ message: { content: JSON.stringify({ agentId: "none", confidence: 0.99 }) } }],
       }),
     };
   };
@@ -753,11 +756,16 @@ test("naming the package outranks the classifier, because it is an instruction",
       base,
       "ses_named",
       "turn_named",
-      "请按 adr-analysis 出一份分析报告",
+      "/adr-analysis 出一份分析报告",
     );
     assert.equal(named.body.data.effectiveAgentId, "adr-analysis");
-    assert.equal(named.body.data.effectiveRouteReason, "matched:named:adr-analysis");
-    assert.equal(asked, 0, "an explicit name needs no classification");
+    assert.equal(named.body.data.effectiveRouteReason, "command:adr-analysis");
+    assert.equal(asked, 0, "an explicit command needs no classification");
+
+    await bind(base, "ses_word", { mode: "open-domain" });
+    const word = await dispatchRun(base, "ses_word", "turn_word", "Can you peer-review my pull request description?");
+    assert.equal(asked, 1, "the name inside the sentence went to the model");
+    assert.equal(word.body.data.effectiveAgentId, "open-domain-answer");
   }, {
     llmRoutingEnabled: true,
     deepseekProviderEnabled: true,

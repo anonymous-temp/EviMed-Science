@@ -2,7 +2,7 @@
  * How long a run is expected to take, in minutes (C3, 2026-09-18).
  *
  * The ledger records the route as a machine reason (`llm:0.87`, or `jev:0.87`
- * when the Jev routing site decided, `matched:named:meta-analysis`,
+ * when the Jev routing site decided, `command:meta-analysis`,
  * `unrouted:open-domain:classifier:timeout`), which is what operations and the
  * batch evaluations read and must keep reading. It used to be translated into a
  * Chinese sentence for the reader (「按问题内容交给…」, 「直接回答：…」); no screen

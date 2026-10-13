@@ -9,7 +9,7 @@ const agents = [
   { id: "meta-analysis", version: "1.0.0", runtimeAgent: "evimed-meta-analysis", title: "Meta", description: "systematic review and meta-analysis" },
 ];
 
-test("Jev uncertainty leaves routing to the deterministic net without another model", async () => {
+test("Jev uncertainty leaves the request on the ordinary line without another model", async () => {
   const fetchImpl = fetchReturning('{"agentId":"meta-analysis","confidence":1}');
   const classifier = new SpecialistClassifier(baseConfig(), { fetchImpl,
     judgeService: { judge: async () => ({ outcome: "escalated", code: "judge_uncertain" }) } });
@@ -49,7 +49,7 @@ test("J3 on the online path: an unsure Jev costs the dispatch no model call, a s
   assert.match(routed?.reason ?? "", /^jev:0\.\d\d$/);
   await sure.close();
 
-  // Unsure: the net decides, with no model call from the dispatch (the plan: an unsure Jev is a classifier with no verdict).
+  // Unsure: the request stays on the ordinary line, with no model call from the dispatch (the plan: an unsure Jev is a classifier with no verdict).
   const unsure = createJudgeService({ config: siteConfig, callImpl: answering([0.4, 0.3, 0.3]) });
   const asked = fetchReturning('{"agentId":"adr-analysis","confidence":1}');
   assert.equal(await new SpecialistClassifier(baseConfig(), { fetchImpl: asked, judgeService: unsure }).classify(question, agents), null);
@@ -108,33 +108,25 @@ function fetchReturning(content, { ok = true, reasoningContent = undefined } = {
   return fetchImpl;
 }
 
-test("a researcher telling the assistant about themselves is not a commission the net may claim over a clean none (2026-10-12)", async () => {
-  const statement = "以后我做 Meta 分析时，先报 GRADE 证据等级，再报效应量。";
-  // The model says it only describes the researcher: the meta rule matched, and yields.
-  const yes = fetchReturning('{"statement":true,"confidence":0.95}');
-  const trace = { verdict: "none" };
-  assert.equal(await new SpecialistClassifier(baseConfig(), { fetchImpl: yes }).net(statement, agents, trace), null);
-  assert.equal(yes.calls.length, 1);
-  assert.equal(trace.statement, true);
-  assert.match(String(yes.calls[0].init.body), /以后我做 Meta 分析时/);
-
-  // Not a statement, unsure, or no answer: the net stands as before.
-  for (const content of ['{"statement":false,"confidence":0.9}', '{"statement":true,"confidence":0.5}', "not json"]) {
-    const answer = fetchReturning(content);
-    assert.equal((await new SpecialistClassifier(baseConfig(), { fetchImpl: answer }).net(statement, agents, { verdict: "none" }))?.agentId, "meta-analysis");
-  }
-  const failing = fetchReturning("", { ok: false });
-  assert.equal((await new SpecialistClassifier(baseConfig(), { fetchImpl: failing }).net(statement, agents, { verdict: "none" }))?.agentId, "meta-analysis");
-
-  // Only a rule overruling the model's own none is asked about: with no verdict (the classifier never answered) or
-  // routing off, the net is the plain net and costs no call.
-  const untouched = fetchReturning('{"statement":true,"confidence":0.95}');
-  assert.equal((await new SpecialistClassifier(baseConfig(), { fetchImpl: untouched }).net(statement, agents, {}))?.agentId, "meta-analysis");
-  assert.equal((await new SpecialistClassifier(baseConfig({ llmRoutingEnabled: false }), { fetchImpl: untouched }).net(statement, agents, { verdict: "none" }))?.agentId, "meta-analysis");
-  assert.equal(untouched.calls.length, 0);
-  // Nothing matched: nothing to ask.
-  assert.equal(await new SpecialistClassifier(baseConfig(), { fetchImpl: untouched }).net("阿司匹林是什么药", agents, { verdict: "none" }), null);
-  assert.equal(untouched.calls.length, 0);
+test("the request the model reads carries the ids it names as a fact, and the instruction does not presume a domain (2026-10-13)", async () => {
+  const fetchImpl = fetchReturning('{"agentId":"none","confidence":0.95}');
+  const classifier = new SpecialistClassifier(baseConfig(), { fetchImpl });
+  const trace = {};
+  assert.equal(await classifier.classify("Can you review my meta-analysis-style pull request? 《A meta-analysis of remote work》", agents, trace), null);
+  assert.equal(trace.verdict, "none");
+  const body = JSON.parse(fetchImpl.calls[0].init.body);
+  const [system, user] = body.messages;
+  // A capability id inside the request is handed over as a fact (outside 《》 titles); what it means is the model's to read.
+  assert.deepEqual(JSON.parse(user.content).namedInRequest, ["meta-analysis"]);
+  assert.match(system.content, /namedInRequest/);
+  assert.match(system.content, /A name appearing is not a request for it/);
+  // It routes for a general-purpose assistant: ordinary work is none, and a table the user holds is not research scoping by itself.
+  assert.doesNotMatch(system.content, /biomedical research request/);
+  assert.match(system.content, /general-purpose/);
+  assert.match(system.content, /table or a file[^"]*ordinary work/);
+  // No names, no list: an empty feature for a request that names nothing.
+  await classifier.classify("把这段话翻成英文", agents);
+  assert.deepEqual(JSON.parse(JSON.parse(fetchImpl.calls[1].init.body).messages[1].content).namedInRequest, []);
 });
 
 test("is unavailable and never calls the model when routing is disabled", async () => {
