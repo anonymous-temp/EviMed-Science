@@ -1,0 +1,889 @@
+{
+ "kind": "wiki",
+ "nodes": [
+  {
+   "id": "analysis/特殊人群抗凝决策分析.md",
+   "path": "analysis/特殊人群抗凝决策分析.md",
+   "title": "特殊人群的抗凝决策分析",
+   "type": "analysis",
+   "description": "基于八份文献评估高龄、日本人群与不适合维生素 K 拮抗剂者在抗凝决策上的证据强度、矛盾与不确定性。",
+   "tags": [
+    "分析",
+    "特殊人群",
+    "高龄",
+    "抗凝"
+   ],
+   "degree": 5,
+   "sourceId": "src_d916af2a97cb6db59a101151bf827f34",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    },
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    },
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    },
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    },
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    }
+   ]
+  },
+  {
+   "id": "comparison/新型口服抗凝药与华法林比较.md",
+   "path": "comparison/新型口服抗凝药与华法林比较.md",
+   "title": "新型口服抗凝药与华法林的疗效安全性比较",
+   "type": "comparison",
+   "description": "在同一房颤人群与同一终点定义下，并列比较达比加群、利伐沙班、阿哌沙班、依度沙班与华法林的疗效、出血与死亡结局。",
+   "tags": [
+    "比较",
+    "抗凝",
+    "华法林",
+    "新型口服抗凝药"
+   ],
+   "degree": 7,
+   "sourceId": "src_7f9bfba1ed17465b63a146c87f74ab5c",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    },
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    },
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    },
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    },
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    },
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "id": "concept/华法林治疗窗内时间.md",
+   "path": "concept/华法林治疗窗内时间.md",
+   "title": "华法林治疗窗内时间",
+   "type": "concept",
+   "description": "解释治疗窗内时间（TTR）作为华法林剂量调整质量指标的含义，以及它如何改变新型口服抗凝药与华法林的安全性比较结论。",
+   "tags": [
+    "华法林",
+    "TTR",
+    "抗凝质量"
+   ],
+   "degree": 5,
+   "sourceId": "src_7fef0ab62a56ad299e41bfca4ce4426f",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    },
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    }
+   ]
+  },
+  {
+   "id": "concept/房颤卒中预防的抗凝治疗.md",
+   "path": "concept/房颤卒中预防的抗凝治疗.md",
+   "title": "心房颤动卒中预防的抗凝治疗",
+   "type": "concept",
+   "description": "说明心房颤动患者以抗凝预防卒中/体循环栓塞的适应人群、终点定义与华法林方案的内在局限。",
+   "tags": [
+    "心房颤动",
+    "抗凝",
+    "卒中预防"
+   ],
+   "degree": 3,
+   "sourceId": "src_40ea57730f036040c6cb6593a57cc642",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    },
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    },
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    },
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    },
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    },
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "id": "concept/新型口服抗凝药.md",
+   "path": "concept/新型口服抗凝药.md",
+   "title": "新型口服抗凝药",
+   "type": "concept",
+   "description": "归纳直接凝血酶抑制剂与 Xa 因子抑制剂两类新型口服抗凝药的共同机制、跨试验共同效应与共同局限。",
+   "tags": [
+    "抗凝",
+    "新型口服抗凝药",
+    "NOAC",
+    "DOAC"
+   ],
+   "degree": 8,
+   "sourceId": "src_2507d74258036c20fd5717b24e2b193f",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    },
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    },
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    },
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    },
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    },
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/ARISTOTLE试验.md",
+   "path": "entity/ARISTOTLE试验.md",
+   "title": "ARISTOTLE 试验",
+   "type": "entity",
+   "description": "阿哌沙班 5 mg 每日两次对比华法林的房颤试验，同时达成非劣效与卒中、出血、死亡的优效性结论。",
+   "tags": [
+    "临床试验",
+    "阿哌沙班",
+    "心房颤动"
+   ],
+   "degree": 4,
+   "sourceId": "src_06901af673f0c1e12400030eec96f906",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/AVERROES试验.md",
+   "path": "entity/AVERROES试验.md",
+   "title": "AVERROES 试验",
+   "type": "entity",
+   "description": "在维生素 K 拮抗剂治疗不适用人群中比较阿哌沙班与阿司匹林的试验，因阿哌沙班明确获益而提前终止。",
+   "tags": [
+    "临床试验",
+    "阿哌沙班",
+    "阿司匹林",
+    "心房颤动"
+   ],
+   "degree": 4,
+   "sourceId": "src_14d50dbd2deae1780eb9d335288ac81b",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/ELDERCARE-AF试验.md",
+   "path": "entity/ELDERCARE-AF试验.md",
+   "title": "ELDERCARE-AF 试验",
+   "type": "entity",
+   "description": "在 80 岁及以上不适合标准剂量口服抗凝药的日本房颤患者中，比较 15 mg 依度沙班与安慰剂的 III 期试验。",
+   "tags": [
+    "临床试验",
+    "依度沙班",
+    "高龄",
+    "日本",
+    "心房颤动"
+   ],
+   "degree": 3,
+   "sourceId": "src_10bb23f8dc569c2b72c7af914a6c1a01",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/ENGAGE-AF-TIMI-48试验.md",
+   "path": "entity/ENGAGE-AF-TIMI-48试验.md",
+   "title": "ENGAGE AF-TIMI 48 试验",
+   "type": "entity",
+   "description": "依度沙班高剂量与低剂量两种每日一次方案对比华法林的房颤试验，两种剂量均达成非劣效且出血率更低。",
+   "tags": [
+    "临床试验",
+    "依度沙班",
+    "心房颤动"
+   ],
+   "degree": 4,
+   "sourceId": "src_cb55cb498576e83df5521e081235f7dc",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/J-ROCKET-AF试验.md",
+   "path": "entity/J-ROCKET-AF试验.md",
+   "title": "J-ROCKET AF 试验",
+   "type": "entity",
+   "description": "在日本房颤患者中比较日本专用利伐沙班剂量与日本指南调整华法林的安全性非劣效性试验，为全球 ROCKET AF 结论的本地化桥接证据。",
+   "tags": [
+    "临床试验",
+    "利伐沙班",
+    "日本",
+    "心房颤动"
+   ],
+   "degree": 4,
+   "sourceId": "src_2aaf89786b0ba1acd8b92447046d0ad4",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/RE-LY试验.md",
+   "path": "entity/RE-LY试验.md",
+   "title": "RE-LY 试验",
+   "type": "entity",
+   "description": "达比加群两种固定剂量（110 mg 与 150 mg 每日两次）对比调整剂量华法林的房颤卒中预防非劣效性试验。",
+   "tags": [
+    "临床试验",
+    "达比加群",
+    "心房颤动"
+   ],
+   "degree": 5,
+   "sourceId": "src_eff8422645e8f33df22fc84a46072c65",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/ROCKET-AF试验.md",
+   "path": "entity/ROCKET-AF试验.md",
+   "title": "ROCKET AF 试验",
+   "type": "entity",
+   "description": "利伐沙班 20 mg 每日一次对比调整剂量华法林的房颤卒中预防非劣效性试验，含颅内与致死性出血的显著降低。",
+   "tags": [
+    "临床试验",
+    "利伐沙班",
+    "心房颤动"
+   ],
+   "degree": 4,
+   "sourceId": "src_52a1f9f33f1be177c57bc73b82498b8b",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/依度沙班.md",
+   "path": "entity/依度沙班.md",
+   "title": "依度沙班",
+   "type": "entity",
+   "description": "口服 Xa 因子抑制剂，证据来自 ENGAGE AF-TIMI 48 的双剂量方案与 ELDERCARE-AF 的高龄低剂量试验。",
+   "tags": [
+    "药物",
+    "依度沙班",
+    "Xa因子抑制剂"
+   ],
+   "degree": 10,
+   "sourceId": "src_5a3fd965db45e301ee2e3523df519a11",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    },
+    {
+     "sourceId": "src_f3487bd9258a480ebbcbbd92a0ea14ff",
+     "title": "pmid-32865374.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/利伐沙班.md",
+   "path": "entity/利伐沙班.md",
+   "title": "利伐沙班",
+   "type": "entity",
+   "description": "口服 Xa 因子抑制剂，证据来自全球 ROCKET AF 试验与日本专用剂量的 J-ROCKET AF 试验。",
+   "tags": [
+    "药物",
+    "利伐沙班",
+    "Xa因子抑制剂"
+   ],
+   "degree": 11,
+   "sourceId": "src_752f99874170d583e08022fe1424a7ad",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    },
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/华法林.md",
+   "path": "entity/华法林.md",
+   "title": "华法林",
+   "type": "entity",
+   "description": "维生素 K 拮抗剂，是本知识库全部八份文献中作为疗效与安全性参照的对照药。",
+   "tags": [
+    "药物",
+    "华法林",
+    "维生素K拮抗剂"
+   ],
+   "degree": 19,
+   "sourceId": "src_3ceecbf2942c74ce74604e391e1e0399",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    },
+    {
+     "sourceId": "src_a025499e95740c95789d9c76fcc06472",
+     "title": "pmid-21830957.md"
+    },
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    },
+    {
+     "sourceId": "src_2b3b6a08cc0b0df1fbc4ab928a525569",
+     "title": "pmid-22664783.md"
+    },
+    {
+     "sourceId": "src_5cf3315f6efea1e844ad6dd5614e00dc",
+     "title": "pmid-24251359.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/新型口服抗凝药荟萃分析.md",
+   "path": "entity/新型口服抗凝药荟萃分析.md",
+   "title": "新型口服抗凝药荟萃分析",
+   "type": "entity",
+   "description": "汇总 RE-LY、ROCKET AF、ARISTOTLE 与 ENGAGE AF-TIMI 48 共 71,683 例受试者的预设荟萃分析，给出 NOAC 类别的整体效应与亚组发现。",
+   "tags": [
+    "荟萃分析",
+    "新型口服抗凝药",
+    "心房颤动"
+   ],
+   "degree": 3,
+   "sourceId": "src_25bff33002c208778d1c174fbd0fe0a0",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_ddc6830509eb49e9cb4db0d20287fd43",
+     "title": "pmid-24315724.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/达比加群.md",
+   "path": "entity/达比加群.md",
+   "title": "达比加群",
+   "type": "entity",
+   "description": "口服直接凝血酶抑制剂，在 RE-LY 试验中以 110 mg 与 150 mg 两种固定剂量对比华法林。",
+   "tags": [
+    "药物",
+    "达比加群",
+    "直接凝血酶抑制剂"
+   ],
+   "degree": 9,
+   "sourceId": "src_385e231503dacb459c8712e7f782757c",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_b16e299529cf7664f97fa2194b03cbdf",
+     "title": "pmid-19717844.md"
+    }
+   ]
+  },
+  {
+   "id": "entity/阿哌沙班.md",
+   "path": "entity/阿哌沙班.md",
+   "title": "阿哌沙班",
+   "type": "entity",
+   "description": "口服直接 Xa 因子抑制剂，证据来自 ARISTOTLE（对比华法林）与 AVERROES（对比阿司匹林）两项试验。",
+   "tags": [
+    "药物",
+    "阿哌沙班",
+    "Xa因子抑制剂"
+   ],
+   "degree": 10,
+   "sourceId": "src_a49c93d2cd619d93d86d4d97cc922b02",
+   "stale": [],
+   "userEdited": false,
+   "sources": [
+    {
+     "sourceId": "src_4cfedebca32acc9363b2e9d1a50a115a",
+     "title": "pmid-21870978.md"
+    },
+    {
+     "sourceId": "src_63dfee4f945072398dddc2c04a174088",
+     "title": "pmid-21309657.md"
+    }
+   ]
+  },
+  {
+   "id": "index.md",
+   "path": "index.md",
+   "title": "心房颤动抗凝治疗证据库",
+   "type": "index",
+   "description": "汇总 8 份房颤抗凝随机对照试验与荟萃分析文献所构建的知识导航，覆盖新型口服抗凝药、关键试验、剂量策略与出血风险。",
+   "tags": [
+    "心房颤动",
+    "抗凝",
+    "索引"
+   ],
+   "degree": 18,
+   "sourceId": "src_ccc7814ea98a43f20962af525d3a4ae2",
+   "stale": [],
+   "userEdited": false,
+   "sources": []
+  }
+ ],
+ "links": [
+  {
+   "source": "analysis/特殊人群抗凝决策分析.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "analysis/特殊人群抗凝决策分析.md",
+   "target": "entity/依度沙班.md",
+   "label": "依度沙班"
+  },
+  {
+   "source": "analysis/特殊人群抗凝决策分析.md",
+   "target": "entity/利伐沙班.md",
+   "label": "利伐沙班"
+  },
+  {
+   "source": "analysis/特殊人群抗凝决策分析.md",
+   "target": "entity/阿哌沙班.md",
+   "label": "阿哌沙班"
+  },
+  {
+   "source": "comparison/新型口服抗凝药与华法林比较.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "comparison/新型口服抗凝药与华法林比较.md",
+   "target": "entity/达比加群.md",
+   "label": "达比加群"
+  },
+  {
+   "source": "comparison/新型口服抗凝药与华法林比较.md",
+   "target": "entity/利伐沙班.md",
+   "label": "利伐沙班"
+  },
+  {
+   "source": "comparison/新型口服抗凝药与华法林比较.md",
+   "target": "entity/阿哌沙班.md",
+   "label": "阿哌沙班"
+  },
+  {
+   "source": "comparison/新型口服抗凝药与华法林比较.md",
+   "target": "entity/依度沙班.md",
+   "label": "依度沙班"
+  },
+  {
+   "source": "comparison/新型口服抗凝药与华法林比较.md",
+   "target": "concept/华法林治疗窗内时间.md",
+   "label": "华法林治疗窗内时间"
+  },
+  {
+   "source": "concept/华法林治疗窗内时间.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "concept/房颤卒中预防的抗凝治疗.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "concept/房颤卒中预防的抗凝治疗.md",
+   "target": "concept/新型口服抗凝药.md",
+   "label": "新型口服抗凝药"
+  },
+  {
+   "source": "concept/新型口服抗凝药.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "concept/新型口服抗凝药.md",
+   "target": "entity/达比加群.md",
+   "label": "达比加群"
+  },
+  {
+   "source": "concept/新型口服抗凝药.md",
+   "target": "entity/利伐沙班.md",
+   "label": "利伐沙班"
+  },
+  {
+   "source": "concept/新型口服抗凝药.md",
+   "target": "entity/阿哌沙班.md",
+   "label": "阿哌沙班"
+  },
+  {
+   "source": "concept/新型口服抗凝药.md",
+   "target": "entity/依度沙班.md",
+   "label": "依度沙班"
+  },
+  {
+   "source": "entity/ARISTOTLE试验.md",
+   "target": "entity/阿哌沙班.md",
+   "label": "阿哌沙班"
+  },
+  {
+   "source": "entity/ARISTOTLE试验.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "entity/AVERROES试验.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "entity/AVERROES试验.md",
+   "target": "entity/阿哌沙班.md",
+   "label": "阿哌沙班"
+  },
+  {
+   "source": "entity/ELDERCARE-AF试验.md",
+   "target": "entity/依度沙班.md",
+   "label": "依度沙班"
+  },
+  {
+   "source": "entity/ENGAGE-AF-TIMI-48试验.md",
+   "target": "entity/依度沙班.md",
+   "label": "依度沙班"
+  },
+  {
+   "source": "entity/ENGAGE-AF-TIMI-48试验.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "entity/J-ROCKET-AF试验.md",
+   "target": "entity/利伐沙班.md",
+   "label": "利伐沙班"
+  },
+  {
+   "source": "entity/J-ROCKET-AF试验.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "entity/RE-LY试验.md",
+   "target": "concept/新型口服抗凝药.md",
+   "label": "新型口服抗凝药"
+  },
+  {
+   "source": "entity/RE-LY试验.md",
+   "target": "entity/达比加群.md",
+   "label": "达比加群"
+  },
+  {
+   "source": "entity/RE-LY试验.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "entity/ROCKET-AF试验.md",
+   "target": "entity/利伐沙班.md",
+   "label": "利伐沙班"
+  },
+  {
+   "source": "entity/ROCKET-AF试验.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "entity/依度沙班.md",
+   "target": "entity/ENGAGE-AF-TIMI-48试验.md",
+   "label": "ENGAGE AF-TIMI 48 试验"
+  },
+  {
+   "source": "entity/依度沙班.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "entity/依度沙班.md",
+   "target": "entity/ELDERCARE-AF试验.md",
+   "label": "ELDERCARE-AF 试验"
+  },
+  {
+   "source": "entity/利伐沙班.md",
+   "target": "entity/ROCKET-AF试验.md",
+   "label": "ROCKET AF 试验"
+  },
+  {
+   "source": "entity/利伐沙班.md",
+   "target": "entity/J-ROCKET-AF试验.md",
+   "label": "J-ROCKET AF 试验"
+  },
+  {
+   "source": "entity/利伐沙班.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "entity/华法林.md",
+   "target": "entity/利伐沙班.md",
+   "label": "利伐沙班"
+  },
+  {
+   "source": "entity/华法林.md",
+   "target": "concept/华法林治疗窗内时间.md",
+   "label": "华法林治疗窗内时间"
+  },
+  {
+   "source": "entity/新型口服抗凝药荟萃分析.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "entity/新型口服抗凝药荟萃分析.md",
+   "target": "concept/华法林治疗窗内时间.md",
+   "label": "华法林治疗窗内时间"
+  },
+  {
+   "source": "entity/达比加群.md",
+   "target": "entity/RE-LY试验.md",
+   "label": "RE-LY 试验"
+  },
+  {
+   "source": "entity/达比加群.md",
+   "target": "entity/利伐沙班.md",
+   "label": "利伐沙班"
+  },
+  {
+   "source": "entity/达比加群.md",
+   "target": "entity/阿哌沙班.md",
+   "label": "阿哌沙班"
+  },
+  {
+   "source": "entity/达比加群.md",
+   "target": "entity/依度沙班.md",
+   "label": "依度沙班"
+  },
+  {
+   "source": "entity/达比加群.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "entity/阿哌沙班.md",
+   "target": "entity/ARISTOTLE试验.md",
+   "label": "ARISTOTLE 试验"
+  },
+  {
+   "source": "entity/阿哌沙班.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "entity/阿哌沙班.md",
+   "target": "entity/AVERROES试验.md",
+   "label": "AVERROES 试验"
+  },
+  {
+   "source": "index.md",
+   "target": "concept/房颤卒中预防的抗凝治疗.md",
+   "label": "心房颤动卒中预防的抗凝治疗"
+  },
+  {
+   "source": "index.md",
+   "target": "concept/新型口服抗凝药.md",
+   "label": "新型口服抗凝药"
+  },
+  {
+   "source": "index.md",
+   "target": "concept/华法林治疗窗内时间.md",
+   "label": "华法林治疗窗内时间"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/RE-LY试验.md",
+   "label": "RE-LY 试验"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/ROCKET-AF试验.md",
+   "label": "ROCKET AF 试验"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/J-ROCKET-AF试验.md",
+   "label": "J-ROCKET AF 试验"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/ARISTOTLE试验.md",
+   "label": "ARISTOTLE 试验"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/AVERROES试验.md",
+   "label": "AVERROES 试验"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/ENGAGE-AF-TIMI-48试验.md",
+   "label": "ENGAGE AF-TIMI 48 试验"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/ELDERCARE-AF试验.md",
+   "label": "ELDERCARE-AF 试验"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/新型口服抗凝药荟萃分析.md",
+   "label": "RE-LY、ROCKET AF、ARISTOTLE 与 ENGAGE AF-TIMI 48 荟萃分析"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/达比加群.md",
+   "label": "达比加群"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/利伐沙班.md",
+   "label": "利伐沙班"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/阿哌沙班.md",
+   "label": "阿哌沙班"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/依度沙班.md",
+   "label": "依度沙班"
+  },
+  {
+   "source": "index.md",
+   "target": "entity/华法林.md",
+   "label": "华法林"
+  },
+  {
+   "source": "index.md",
+   "target": "comparison/新型口服抗凝药与华法林比较.md",
+   "label": "新型口服抗凝药与华法林的疗效安全性比较"
+  },
+  {
+   "source": "index.md",
+   "target": "analysis/特殊人群抗凝决策分析.md",
+   "label": "特殊人群的抗凝决策分析"
+  }
+ ],
+ "unresolved": 0,
+ "problems": []
+}
