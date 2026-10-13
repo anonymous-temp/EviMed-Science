@@ -702,6 +702,9 @@ function foldEvents(events) {
         // would not have degraded one run, it would have made the whole ledger
         // unreadable the moment this shipped.
         unverifiedArtifacts: normalizeStoredArtifacts(event.unverifiedArtifacts ?? []),
+        // The files the run handed over with the kernel's `present` tool, which the kernel's own page draws as cards: the
+        // run card leaves those to it. Absent on every run recorded before it existed, and on a run that presented none.
+        ...(Array.isArray(event.presentedFiles) && event.presentedFiles.length ? { presentedFiles: normalizeStoredArtifacts(event.presentedFiles) } : {}),
         // A judgement can land either side of the delivery decision, so both
         // orders must fold to the same run. An admission already on the record
         // survives a terminal event that says nothing; a terminal finding
@@ -2233,10 +2236,10 @@ async function existingArtifacts(project, candidates, run = null, endTime = null
  * capability at all never reaches that function.
  *
  * @param {{ project: any, run: any, registry: any, assistants: readonly any[], runtimeWorkspaceRoot: string, endTime: number | null | undefined }} input
- * @returns {Promise<{ files: string[], notices: any[] }>}
+ * @returns {Promise<{ files: string[], presented: string[], notices: any[] }>}
  */
 async function ordinaryConversationOutputs({ project, run, registry, assistants, runtimeWorkspaceRoot, endTime }) {
-  const none = { files: [], notices: [] };
+  const none = { files: [], presented: [], notices: [] };
   const plan = Array.isArray(run.deliverables) && run.deliverables.length ? run.deliverables : (run.nativeWorkflow?.plan?.items ?? []);
   const agentId = run.effectiveAgentId ? String(run.effectiveAgentId) : "";
   const outputs = agentId ? registry?.get?.(agentId)?.outputs : null;
@@ -2251,7 +2254,9 @@ async function ordinaryConversationOutputs({ project, run, registry, assistants,
     // No run: a file handed over is the answer whenever it was written.
     ...await existingArtifacts(project, handedOver),
   ])].sort().slice(0, maxArtifacts);
-  return { files, notices: await outputFormatNotices(project, files) };
+  // Only what is still a file of this run: a presented path that was not found is not recorded as handed over.
+  const presented = (await existingArtifacts(project, handedOver)).filter((file) => files.includes(file));
+  return { files, presented, notices: await outputFormatNotices(project, files) };
 }
 
 /** The files of an ordinary conversation that are read for the generic contract's format checks, and the largest one read. */
@@ -5651,6 +5656,7 @@ export class AgentRunStore {
       /** Files the run wrote that no gate accepted. Empty is "none"; the field
        *  is always present so a reader never has to treat absent as unknown. */
       unverifiedArtifacts: normalizeArtifacts(terminal.unverifiedArtifacts),
+      ...(terminal.presentedFiles?.length ? { presentedFiles: normalizeArtifacts(terminal.presentedFiles) } : {}),
       verification: normalizeVerification(terminal.verification),
       qualityNotices: normalizeQualityNotices([...(await this.#reviewNoticesFor(project, runId)), ...(terminal.qualityNotices ?? [])]),
       ...(terminal.status === "canceled" && (terminal.canceledBy === "user" || terminal.canceledBy === "platform")
@@ -6537,7 +6543,7 @@ export class AgentRunStore {
     // An ordinary conversation's files (course correction 2026-10-12, GA16). Its own witness is the workspace and the
     // transcript's `present` calls, joined to what its `write` calls named; a run that owes a capability's files is
     // untouched. Held back until here so no verdict above reads a file this only adds.
-    let outputs = { files: /** @type {string[]} */ ([]), notices: /** @type {any[]} */ ([]) };
+    let outputs = { files: /** @type {string[]} */ ([]), presented: /** @type {string[]} */ ([]), notices: /** @type {any[]} */ ([]) };
     if (terminal.status === "succeeded") {
       try {
         outputs = await ordinaryConversationOutputs({ project, run, registry: await this.agentRegistry, assistants: allRunAssistants, runtimeWorkspaceRoot, endTime: ownEnd?.time });
@@ -6546,6 +6552,7 @@ export class AgentRunStore {
     return this.finishInternal(project, run.id, { ...terminal,
       artifacts: outputs.files.length ? [...new Set([...artifacts, ...outputs.files])].sort().slice(0, maxArtifacts) : artifacts,
       ...(outputs.notices.length ? { qualityNotices: [...(terminal.qualityNotices ?? []), ...outputs.notices] } : {}),
+      ...(outputs.presented.length ? { presentedFiles: outputs.presented } : {}),
       ...(run.nativeTurn && ownEnd?.time ? { finishedAt: new Date(ownEnd.time).toISOString() } : {}),
     });
   }

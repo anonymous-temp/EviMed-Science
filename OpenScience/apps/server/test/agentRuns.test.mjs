@@ -8749,6 +8749,9 @@ test("a file handed over with present is the run's output whatever its age, and 
     // The control plane reads the kernel's paths against the root the model sees; the harness runs without a container.
     const run = await store.reconcileSession(project, binding.sessionId);
     assert.deepEqual(run.artifacts, ["reports/q3.pdf"]);
+    // The kernel draws a card for it, so the record says which files it drew, and the run card leaves those alone.
+    assert.deepEqual(run.presentedFiles, ["reports/q3.pdf"]);
+    assert.deepEqual((await store.list(project)).find((item) => item.id === run.id)?.presentedFiles, ["reports/q3.pdf"], "it survives the ledger's fold");
   });
 });
 
@@ -8778,5 +8781,6 @@ test("a conversation that wrote nothing has no outputs, and says so by saying no
     assert.deepEqual(run.artifacts, []);
     const described = store.withArtifactKinds(run);
     assert.equal(described.outputFiles, undefined);
+    assert.equal(run.presentedFiles, undefined);
   });
 });

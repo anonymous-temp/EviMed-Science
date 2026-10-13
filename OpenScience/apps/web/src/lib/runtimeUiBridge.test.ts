@@ -49,6 +49,11 @@ describe("which run a conversation shows", () => {
     expect(state).toMatchObject({ runId: "run-1", sessionId: "session-a", state: "running", title: "老年房颤抗凝的证据" });
     expect(state.progress).toMatchObject({ deliverables: [{ id: "evidence", title: "证据综述", status: "delegated", attempts: 0 }] });
   });
+
+  it("carries the files the run handed over with the kernel's present tool, so the run card does not draw them twice", () => {
+    expect(runStateFromRecord(run({ artifacts: ["a.docx", "b.md"], presentedFiles: ["a.docx"] })).presentedFiles).toEqual(["a.docx"]);
+    expect(runStateFromRecord(run({ artifacts: ["a.docx"] })).presentedFiles).toBeUndefined();
+  });
 });
 
 describe("folding the run's stream", () => {

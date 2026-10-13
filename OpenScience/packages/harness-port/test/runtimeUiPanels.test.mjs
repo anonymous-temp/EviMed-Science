@@ -75,6 +75,13 @@ test('an ordinary conversation hands over its script, workbook and document; a c
   assert.equal(fileCardsModel(capability), null);
 });
 
+test('a file the run handed over with present is left to the kernel\'s own card, and the rest still gets one', () => {
+  const run = { runId: 'run-9', sessionId: 'session-a', state: 'succeeded', artifacts: ['会议纪要.docx', '会议纪要.md'], artifactRoles: { '会议纪要.docx': 'document', '会议纪要.md': 'document' } };
+  assert.deepEqual(/** @type {any} */ (fileCardsModel(run)).files.map((/** @type {any} */ file) => file.path), ['会议纪要.docx', '会议纪要.md']);
+  assert.deepEqual(/** @type {any} */ (fileCardsModel({ ...run, presentedFiles: ['会议纪要.md'] })).files.map((/** @type {any} */ file) => file.path), ['会议纪要.docx']);
+  assert.equal(fileCardsModel({ ...run, presentedFiles: ['会议纪要.docx', '会议纪要.md'] }), null, 'every file presented: nothing is drawn twice');
+});
+
 test('a completed reporting checklist is never taken for the report: it follows the section it lists', () => {
   // manuscript-support delivers `manuscript-section.md` beside its CONSORT
   // checklist; only the checklist's name contains `report`.

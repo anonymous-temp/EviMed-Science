@@ -824,6 +824,11 @@ export interface WebAgentRun {
    *  ledger rows omit it, which is why `undeliveredFiles` distinguishes an
    *  absent field from an empty one. */
   unverifiedArtifacts?: string[];
+  /** The files an ordinary conversation handed over with the kernel's `present` tool, which the kernel's own page draws as
+   *  cards (the run card leaves those to it). Absent where the run presented none. */
+  presentedFiles?: string[];
+  /** An ordinary conversation's own files, in the order a reader looks for them; absent on a run a capability took. */
+  outputFiles?: string[];
   // "unverified" when a clinical package finished with only process-documentation
   // or presentation gaps and was delivered rather than discarded.
   // "unchecked" when a layer of the gate did not run at all — most often the

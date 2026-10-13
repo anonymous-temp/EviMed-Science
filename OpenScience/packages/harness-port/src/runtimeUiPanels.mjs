@@ -125,7 +125,9 @@ export function documentNameOf(path) {
  * wrote nothing. Accepted and unchecked files are both the run's output (a
  * gate verdict never withholds a delivery), and neither says which it is.
  * Revision notes are the run's answer to its reviewer — a backstage file
- * (principle 10a) — and stay in the file tree. Two files of one name — one
+ * (principle 10a) — and stay in the file tree. A file the run handed over with
+ * the kernel's own `present` tool is not drawn twice: the kernel's page already
+ * shows it as a card, with the sentence the run wrote about it. Two files of one name — one
  * per deliverable — say which deliverable's folder each is in (`where`), the
  * folder the answer names them by.
  * @param {any} live
@@ -135,7 +137,7 @@ export function fileCardsModel(live) {
   const state = String(live?.state ?? '');
   if (!live || !live.runId || !['succeeded', 'failed', 'canceled', 'cancelled'].includes(state)) return null;
   /** @type {Set<string>} */
-  const seen = new Set();
+  const seen = new Set(Array.isArray(live.presentedFiles) ? live.presentedFiles : []);
   const files = [];
   for (const path of [...(Array.isArray(live.artifacts) ? live.artifacts : []), ...(Array.isArray(live.unverifiedArtifacts) ? live.unverifiedArtifacts : [])]) {
     // The shell opens what the bridge lets through: a relative path that climbs nowhere.
