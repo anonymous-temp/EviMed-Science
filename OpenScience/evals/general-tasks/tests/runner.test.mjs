@@ -12,13 +12,13 @@ const SUITE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OS = path.resolve(SUITE, '../..');
 const cases = JSON.parse(fs.readFileSync(path.join(SUITE, 'cases.json'), 'utf8')).cases;
 
-test('the plan: 28 cases are 27 cells, plus the two fault variants', () => {
+test('the plan: 28 cases are 27 cells, plus the three fault variants', () => {
   const plan = buildPlan(cases, { set: 'all', arm: 'B' });
-  assert.equal(plan.length, 29);
+  assert.equal(plan.length, 30);
   const ids = plan.map((u) => `${u.id}/${u.variant.id}`);
   assert.ok(ids.includes('G06+G07/normal'));
   assert.ok(!ids.some((id) => id.startsWith('G07/')));
-  assert.ok(ids.includes('G16/classifier-timeout') && ids.includes('G14/web-search-off'));
+  assert.ok(ids.includes('G16/classifier-timeout') && ids.includes('G14/web-search-off') && ids.includes('G14/web-off'));
   assert.equal(plan.find((u) => u.id === 'G06+G07').cases.length, 2);
 });
 
@@ -38,7 +38,7 @@ test('an unknown case id is refused', () => {
 });
 
 test('every fault variant names a profile the runner knows', () => {
-  for (const c of cases) for (const v of c.variants ?? []) assert.ok(!v.profile || ['classifier-timeout', 'web-search-off'].includes(v.profile), `${c.id}/${v.id}`);
+  for (const c of cases) for (const v of c.variants ?? []) assert.ok(!v.profile || ['classifier-timeout', 'web-search-off', 'web-off'].includes(v.profile), `${c.id}/${v.id}`);
 });
 
 test('persona replacement swaps only the persona block, in both preset files of the tree under test', () => {

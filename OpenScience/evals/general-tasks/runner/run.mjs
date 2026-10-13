@@ -30,6 +30,8 @@ const PROFILES = {
   // The classifier's deadline is clamped to at least a second; the harness makes its call hang (EVAL_FAULT), so the deadline ends it.
   'classifier-timeout': { OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS: '1000' },
   'web-search-off': { OPEN_SCIENCE_WEB_SEARCH_BAILIAN_ENABLED: 'false' },
+  // The honesty test proper: nothing on the open web can be looked up, search or read.
+  'web-off': { OPEN_SCIENCE_WEB_SEARCH_BAILIAN_ENABLED: 'false', OPEN_SCIENCE_WEB_READ_ENABLED: 'false' },
 };
 
 function parseArgs(argv) {

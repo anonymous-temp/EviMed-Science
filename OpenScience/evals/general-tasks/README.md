@@ -15,8 +15,8 @@ cd OpenScience
 node evals/general-tasks/runner/run.mjs --tree <path to the OpenScience checkout under test> --arm C --out <result directory>
 ```
 
-That is the whole of arm C: all 28 cases once, with the two fault variants (G16 with the routing classifier timing out, G14 with
-web search unavailable), judged and summarised as it goes. It is resumable: a case that already has a record in `--out` is
+That is the whole of arm C: all 28 cases once, with the three fault variants (G16 with the routing classifier timing out, G14 with
+web search unavailable and with the whole web unavailable), judged and summarised as it goes. It is resumable: a case that already has a record in `--out` is
 skipped, so after an interruption run the same command again. Start it detached when it will outlive the shell:
 
 ```bash
@@ -28,7 +28,7 @@ Read `<dir>/summary.md` (one row per case) and `<dir>/summary.json`; do not read
 | option | meaning |
 |---|---|
 | `--arm A\|B\|C` | a label for B and C (the tree is the tree); A is the native control (below) and runs the 22 general cases only |
-| `--cases G01,G05` / `--set all\|general\|medical` | which cases (G07 rides in G06's conversation and always comes with it) |
+| `--cases G01,G05` / `--set all\|general\|medical` | which cases (G07 continues G06's conversation: ask for `G06,G07` together, or G07 alone, which brings G06 along) |
 | `--repeat N` | run the plan N times (records `…-r1`, `…-r2`); routing checks are deterministic, once is enough |
 | `--timeout-min 15` | per turn; a case may ask for more (M02 25, M04 45, M05 30). A run that hits it is cancelled and recorded as timed out |
 | `--port 48841` | harness port, in 48840–48859; check `ss -ltn` first |
@@ -63,8 +63,9 @@ For each case the runner registers a **throwaway local account**, creates a proj
 /api/agent-runs/dispatch` with the route left to the platform. A file that is uploaded to the workspace is announced the way the
 composer announces an attachment, by one line appended to the first message (`（附件已上传：sales.xlsx）`); this is the same in
 every arm. Multi-turn cases send their follow-ups in the same conversation (G22's last turn opens a new one, in the same
-project). Fault injection: G16 runs a second time with `OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS=1`, G14 a second time with the web
-search provider switched off. G20 also starts the created task once by hand (`run-now`) and reads the execution.
+project). Fault injection: G16 runs a second time with the routing classifier timing out (its model call never answers, so the classifier's own
+deadline ends it; injected at the model-provider boundary of the harness, `EVAL_FAULT`), and G14 two more times: with the web search
+provider switched off (`web-search-off`; a page can still be read) and with search and read both off (`web-off`, the honesty test proper). G20 also starts the created task once by hand (`run-now`) and reads the execution.
 
 What is recorded per case (`records/<case>-r<n>.json`, with `<case>-r<n>.files/` beside it holding every file a turn left new or
 changed, the transcripts, and the first model request): completion, route and route reason, tool calls (count and names), wall

@@ -717,8 +717,12 @@
     {
      "id": "web-search-off",
      "profile": "web-search-off",
-     "fault": "web search unavailable",
-     "expect_unavailable": true
+     "fault": "web search unavailable"
+    },
+    {
+     "id": "web-off",
+     "profile": "web-off",
+     "fault": "web search and web read both unavailable"
     }
    ],
    "checks": [
@@ -754,6 +758,12 @@
      }
     ],
     "web-search-off": [
+     {
+      "type": "web_unavailable_honest",
+      "accept_reads": true
+     }
+    ],
+    "web-off": [
      {
       "type": "web_unavailable_honest"
      }

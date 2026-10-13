@@ -49,11 +49,11 @@ class CaseFile(unittest.TestCase):
         self.assertEqual(truth["report"]["tablePage"], 5)
         self.assertEqual(truth["rct"]["rows"], 6)
 
-    def test_g07_continues_g06_and_the_variants_are_the_two_named_faults(self):
+    def test_g07_continues_g06_and_the_fault_variants_are_the_named_ones(self):
         by = {c["id"]: c for c in CASES}
         self.assertEqual(by["G07"]["after"], "G06")
         self.assertEqual([v["id"] for v in by["G16"]["variants"]], ["normal", "classifier-timeout"])
-        self.assertEqual([v["id"] for v in by["G14"]["variants"]], ["normal", "web-search-off"])
+        self.assertEqual([v["id"] for v in by["G14"]["variants"]], ["normal", "web-search-off", "web-off"])
 
     def test_the_five_routing_cases_are_marked_deterministic(self):
         marked = {c["id"] for c in CASES if c.get("routing_check")}
