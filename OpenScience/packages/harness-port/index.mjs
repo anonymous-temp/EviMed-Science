@@ -1282,6 +1282,7 @@ export {
   MEMORY_BRIDGE_UNAVAILABLE,
   OPENVIKING_PLUGIN_ENVIRONMENT,
   OPENVIKING_PLUGIN_SETTINGS,
+  createLocalBridgeKey,
   createMemoryBridge,
   pinOpenVikingPluginEnvironment,
   registerMemoryBridge,

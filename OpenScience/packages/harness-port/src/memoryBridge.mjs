@@ -20,6 +20,7 @@
  * @module memoryBridge
  */
 
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
 import { readFile } from 'node:fs/promises'
 import process from 'node:process'
@@ -68,7 +69,8 @@ export const OPENVIKING_PLUGIN_SETTINGS = Object.freeze({
  * and a run writes them: a file there saying `{"recall":{"enabled":true}}` would turn per-turn recall back on. The
  * environment outranks every file, so the bridge states the settings there before the plugin is applied.
  * `OPENVIKING_CREDENTIAL_SOURCE=env` keeps the connection (server, key, identity) from being read out of a file at all; the
- * endpoint itself is the row's, which outranks the environment too.
+ * endpoint itself is the row's, which outranks the environment too. The one key the plugin holds is the bridge's own local
+ * key ({@link pinOpenVikingPluginEnvironment}), never a credential of anything beyond this process.
  */
 export const OPENVIKING_PLUGIN_ENVIRONMENT = Object.freeze({
   OPENVIKING_AUTO_RECALL: '0',
@@ -81,19 +83,43 @@ export const OPENVIKING_PLUGIN_ENVIRONMENT = Object.freeze({
   OPENVIKING_CREDENTIAL_SOURCE: 'env',
 })
 
-/** Connection variables of the plugin that must not be set in a runtime: the row names the endpoint and nothing names a key. */
+/** Connection variables of the plugin a runtime never sets: the row names the endpoint, and nothing names a server key or an identity. */
 const OPENVIKING_CONNECTION_ENVIRONMENT = Object.freeze([
-  'OPENVIKING_URL', 'OPENVIKING_BASE_URL', 'OPENVIKING_MCP_URL', 'OPENVIKING_API_KEY', 'OPENVIKING_BEARER_TOKEN',
+  'OPENVIKING_URL', 'OPENVIKING_BASE_URL', 'OPENVIKING_MCP_URL', 'OPENVIKING_BEARER_TOKEN',
   'OPENVIKING_ACCOUNT', 'OPENVIKING_USER', 'OPENVIKING_PEER_ID', 'OPENVIKING_AUTH_MODE', 'OPENVIKING_EXTRA_HEADERS',
 ])
 
 /**
- * State the plugin's settings in this process's environment and clear any connection a parent environment carried.
- * @param {Record<string, string | undefined>} [env]
+ * A key that exists only inside this process, for the plugin to show the bridge.
+ *
+ * Loopback is shared by everything in the runtime's network namespace — the kernel's sandboxed shell, a page the runtime's
+ * browser renders — and, where a deployment opts into host networking, by every runtime on the machine: there a kernel whose
+ * bridge could not bind its port would have its plugin reach another kernel's bridge, and be forwarded under THAT runtime's
+ * workload token. So the bridge answers only a caller that presents this key, and the plugin is the only one given it. The
+ * plugin sends it as `Authorization: Bearer`, in its own requests and through the MCP child it spawns (it forwards the key to
+ * the child explicitly); the bridge never forwards it, and replaces it with the workload token.
+ * @returns {string}
  */
-export function pinOpenVikingPluginEnvironment(env = process.env) {
+export function createLocalBridgeKey() {
+  return randomBytes(32).toString('base64url')
+}
+
+/**
+ * State the plugin's settings and the bridge's local key in this process's environment, and clear any connection a parent
+ * environment carried. Called before the plugin is applied (its row waits on the bridge).
+ * @param {string} localKey @param {Record<string, string | undefined>} [env]
+ */
+export function pinOpenVikingPluginEnvironment(localKey, env = process.env) {
   for (const [name, value] of Object.entries(OPENVIKING_PLUGIN_ENVIRONMENT)) env[name] = value
   for (const name of OPENVIKING_CONNECTION_ENVIRONMENT) delete env[name]
+  env.OPENVIKING_API_KEY = localKey
+}
+
+/** @param {unknown} presented @param {string} localKey @returns {boolean} */
+function presentsLocalKey(presented, localKey) {
+  const expected = Buffer.from(`Bearer ${localKey}`)
+  const actual = Buffer.from(typeof presented === 'string' ? presented : '')
+  return actual.length === expected.length && timingSafeEqual(actual, expected)
 }
 
 /** What crosses towards the gateway: content negotiation and the MCP session headers. Identity never does. */
@@ -137,6 +163,7 @@ function isToolCall(pathname, body) {
 /**
  * @typedef {object} MemoryBridgeOptions
  * @property {string} gatewayUrl the control plane's memory gateway, without a trailing slash
+ * @property {string} localKey the key the plugin presents ({@link createLocalBridgeKey}); a caller without it is refused
  * @property {string} [tokenFile] the workload token file the other gateway clients read; empty sends no credential
  * @property {number} [port]
  * @property {typeof fetch} [fetchImpl]
@@ -153,6 +180,8 @@ function isToolCall(pathname, body) {
  */
 export function createMemoryBridge(options) {
   const gateway = String(options.gatewayUrl ?? '').trim().replace(/\/+$/, '')
+  const localKey = String(options.localKey ?? '')
+  if (localKey.length < 32) throw new Error('evimed memory bridge: a local key of at least 32 characters is required')
   const tokenFile = String(options.tokenFile ?? '').trim()
   const port = Number.isInteger(options.port) ? Number(options.port) : MEMORY_BRIDGE_PORT
   const send = options.fetchImpl ?? fetch
@@ -189,11 +218,11 @@ export function createMemoryBridge(options) {
   const handle = async (req, res) => {
     stats.requests += 1
     const url = new URL(req.url ?? '/', `http://${MEMORY_BRIDGE_HOST}:${port}`)
-    // Only this process's own plugin dials here. A page rendered inside the runtime (the image carries a browser) could
-    // otherwise reach the listener by name or by a form post: it would send an Origin, or a Host that is not this address.
+    // Only this process's own plugin dials here: it presents the local key. A browser page would also send an Origin, or a
+    // Host that is not this address, and is refused for that before its key is even read.
     const host = String(req.headers.host ?? '')
     if (req.headers.origin !== undefined || (host !== `${MEMORY_BRIDGE_HOST}:${port}` && host !== `localhost:${port}`)
-      || !BRIDGE_METHODS.includes(String(req.method))) {
+      || !BRIDGE_METHODS.includes(String(req.method)) || !presentsLocalKey(req.headers.authorization, localKey)) {
       stats.refused += 1
       req.resume()
       answer(res, 403, 'memory_bridge_refused', 'This address serves the runtime\'s own memory plugin only.')
@@ -313,11 +342,13 @@ export function createMemoryBridge(options) {
 export async function registerMemoryBridge(ctx, config) {
   if (config.enabled !== true) return
   const diagnostics = () => ctx.get('evimedDiagnostics')
-  pinOpenVikingPluginEnvironment()
+  const localKey = createLocalBridgeKey()
+  pinOpenVikingPluginEnvironment(localKey)
   const gatewayUrl = String(config.gatewayUrl ?? '').trim()
   if (!gatewayUrl) diagnostics()?.degrade?.('memory bridge: no memory gateway is configured for this runtime')
   const bridge = createMemoryBridge({
     gatewayUrl,
+    localKey,
     tokenFile: config.tokenFile,
     port: config.port,
     onState: (event, detail) => {
