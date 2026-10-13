@@ -1268,3 +1268,21 @@ export { createNativeExtensionPreparer, createDisposableNativeExtensionPreparer 
 export { createScopedSkillCatalogue, registerScopedSkillCatalogue, SCOPED_SKILL_ROOTS } from './src/scopedSkillCatalogue.mjs'
 
 export { registerHostedLoopx, verifyHostedLoopx } from './src/loopxBootstrap.mjs'
+
+// The official OpenViking memory plugin's way to the control plane: a loopback
+// listener that carries the workload token of the moment, the settings stated
+// where the plugin cannot be overruled by a file, and the row that starts both.
+export {
+  MEMORY_BRIDGE_COOLDOWN_MS,
+  MEMORY_BRIDGE_DEADLINES,
+  MEMORY_BRIDGE_HOST,
+  MEMORY_BRIDGE_MAX_BODY_BYTES,
+  MEMORY_BRIDGE_PORT,
+  MEMORY_BRIDGE_SERVICE,
+  MEMORY_BRIDGE_UNAVAILABLE,
+  OPENVIKING_PLUGIN_ENVIRONMENT,
+  OPENVIKING_PLUGIN_SETTINGS,
+  createMemoryBridge,
+  pinOpenVikingPluginEnvironment,
+  registerMemoryBridge,
+} from './src/memoryBridge.mjs'
