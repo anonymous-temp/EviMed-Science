@@ -6776,9 +6776,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             owner: { userId: ctx.project.userId, projectId: ctx.project.id },
           }));
         }
-        // Unrouted open-domain questions still run on a managed EviMed agent
-        // (persona + proportional quality floor) instead of the bare coding
-        // agent the runtime ships with.
+        // Unrouted open-domain requests still run on a managed EviMed agent
+        // (`open-domain-answer`, the conversation package: the general work
+        // assistant's persona and tools) instead of the kernel's bare defaults.
         const answerAgent = boundSession?.mode === "open-domain" && !routedSpecialist
           ? registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID)
           : null;

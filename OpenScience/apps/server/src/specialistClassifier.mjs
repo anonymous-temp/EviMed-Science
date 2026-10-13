@@ -86,7 +86,7 @@ export class SpecialistClassifier {
     this.threshold = Number.isFinite(threshold) ? Math.max(0, Math.min(1, threshold)) : 0.75;
     // Its own total deadline (config.mjs `llmRoutingTimeoutMs`). It borrowed
     // the model gateway's streaming idle time, clamped to 120 s, so a provider
-    // that hung held a dispatch for two minutes before the net took over.
+    // that hung held a dispatch for two minutes before it fell back to the ordinary conversation.
     this.timeoutMs = Math.max(1_000, Math.min(120_000, Number(config?.llmRoutingTimeoutMs ?? 20_000) || 20_000));
   }
 

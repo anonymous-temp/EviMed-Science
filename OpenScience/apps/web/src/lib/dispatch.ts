@@ -15,9 +15,9 @@ import { announceRunsChanged } from "@/lib/runPresentation";
  * `capability` binds a fresh research session to one capability, and the
  * control plane then skips routing entirely (`session-binding`): the
  * researcher chose, and a classifier second-guessing that choice would be the
- * defect. `open-domain` leaves the choice to the router — the named-capability
- * rule, the classifier, and the net under it — and the answer line when none
- * of them claims the request.
+ * defect. `open-domain` leaves the choice to the router — a structured choice
+ * by name, then the classifier, whose answer is final — and the ordinary
+ * conversation when neither claims the request.
  */
 export type DispatchTarget =
   | { kind: "capability"; agentId: string; agentVersion: string }
