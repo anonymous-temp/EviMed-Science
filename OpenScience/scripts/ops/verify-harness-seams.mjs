@@ -187,6 +187,25 @@ for (const [name, exports] of Object.entries(REQUIRED_EXPORTS)) {
 
 const deepseekPackages = [...installed.values()];
 
+// What a pinned third-party bundle reaches in the kernel that no EviMed code calls (`seams.bundleSeams`): the exports it
+// imports by name, and the agent and session members it reads. A rename here is a behaviour change in someone else's
+// plugin — the OpenViking memory bundle would inject its profile on every start, or never — so it is reported by name.
+for (const [bundle, uses] of Object.entries(seams.bundleSeams ?? {})) {
+  for (const [name, exports] of Object.entries(/** @type {any} */ (uses).kernelExports ?? {})) {
+    const pkg = installed.get(name);
+    const entry = pkg ? packageEntry(pkg.dir) : null;
+    const mod = entry ? await import(entry).catch((error) => ({ __error: error?.message ?? String(error) })) : { __error: "package missing" };
+    const absent = mod.__error ? [mod.__error] : /** @type {string[]} */ (exports).filter((key) => typeof mod[key] === "undefined");
+    report(`${bundle} imports ${name} ${/** @type {string[]} */ (exports).join(", ")}`, absent.length === 0, absent.join(", "));
+  }
+  const members = [.../** @type {any} */ (uses).agent ?? [], .../** @type {any} */ (uses).session ?? []]
+    .map((member) => String(member).split(".").pop() ?? "")
+    .filter((member) => member && !["id", "ctx", "effect"].includes(member));
+  const absent = members.filter((member) => !appearsInCode(deepseekPackages, `${member}(`) && !appearsInCode(deepseekPackages, `${member}:`)
+    && !appearsInCode(deepseekPackages, `.${member}`) && !appearsInCode(deepseekPackages, `get ${member}`));
+  report(`${bundle}: ${members.length - absent.length}/${members.length} agent and session members appear in shipped code`, absent.length === 0, absent.join(", "));
+}
+
 /**
  * A manifest key, or a named failure.
  *

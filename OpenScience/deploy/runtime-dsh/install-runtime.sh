@@ -28,7 +28,7 @@ case "${target}" in docker|agentbay) ;; *) echo "EVIMED_RUNTIME_TARGET must be d
 
 # Invalid requests are rejected before reading or changing host state.
 case "${phase}" in
-  system|renderer|toolchain|kernel|pnpm|python|browser|verify-tools|python-methods|curated-smoke|office-smoke|sider-cache|socket-client|preset-skills|preset-row|loopx|profile-seed|smoke|serve|session) ;;
+  system|renderer|toolchain|kernel|pnpm|python|browser|verify-tools|python-methods|curated-smoke|office-smoke|sider-cache|socket-client|preset-skills|preset-row|loopx|openviking-plugin|profile-seed|smoke|serve|session) ;;
   *) echo "unknown phase: ${phase}" >&2; exit 64 ;;
 esac
 if [ "${phase}" = session ] && [ "${target}" != agentbay ]; then
@@ -513,6 +513,21 @@ loopx() {
   chmod -R a-w /opt/evimed/loopx
 }
 
+# --- OpenViking memory plugin (WP-OVMEM-R) ---------------------------------
+# The official `@openviking/dsh-memory-plugin`, the way LoopX's plugin is built
+# in: the archive deps-version.json `openviking.plugin` pins, fetched and
+# checked against its sha256 here, added to the seed by `profile_seed` below,
+# never installed during a turn. Unlike LoopX's it is not adapted: `profile_seed`
+# checks the installed files byte for byte against the archive. Whether a
+# session uses it is the socket's patch, from the launch plan's
+# EVIMED_MEMORY_GATEWAY_URL; off, nothing of it is mounted.
+openviking_plugin() {
+  set -x
+  node /usr/local/lib/evimed/install-openviking-plugin.mjs fetch
+  chmod -R a-w /opt/evimed/openviking-plugin
+}
+# ---------------------------------------------------------------------------
+
 profile_seed() {
   set -x
   install -d -m 0755 "${DSH_HOME_SEED}/profiles/evimed-runtime"
@@ -521,9 +536,12 @@ profile_seed() {
   # shellcheck disable=SC2086
   node /usr/local/bin/evimed-profile-kernel-pins.mjs /usr/local/lib/node_modules/@deepseek-ai/dsh/package.json "${DSH_HOME_SEED}/profiles/evimed-runtime" /opt/evimed/profile-pnpm-workspace.yaml "${DSH_VERSION}" "${DSH_CORDIS_VERSION}" ${DSH_COMMUNITY_PEER_PINS}
   loopx_archive="$(node -p '"/opt/evimed/loopx/" + JSON.parse(require("node:fs").readFileSync("/opt/evimed/runtime-deps-version.json", "utf8")).loopx.plugin.filename')"
-  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --save-prod --save-exact "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "${DSH_CITE_BUNDLE}" "${DSH_ANNOTATION_BUNDLE}" "${DSH_MERMAID_BUNDLE}" "${loopx_archive}" file:/opt/evimed/socket
-  # Reconciliation follows pnpm's package-name order; our patch must run after LoopX's.
+  openviking_archive="$(node -p '"/opt/evimed/openviking-plugin/" + JSON.parse(require("node:fs").readFileSync("/opt/evimed/runtime-deps-version.json", "utf8")).openviking.plugin.filename')"
+  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --save-prod --save-exact "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "${DSH_CITE_BUNDLE}" "${DSH_ANNOTATION_BUNDLE}" "${DSH_MERMAID_BUNDLE}" "${loopx_archive}" "${openviking_archive}" file:/opt/evimed/socket
+  # Reconciliation follows pnpm's package-name order; our patch must run after LoopX's and the OpenViking plugin's, whose rows it configures.
   node /usr/local/lib/evimed/loopx-compat.mjs --order-profile "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"
+  node /usr/local/lib/evimed/install-openviking-plugin.mjs order "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"
+  node /usr/local/lib/evimed/install-openviking-plugin.mjs verify "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@openviking/dsh-memory-plugin"
   node -e 'const fs=require("node:fs"); const pin=JSON.parse(fs.readFileSync("/opt/evimed/runtime-deps-version.json")).loopx.plugin; const pkg=JSON.parse(fs.readFileSync(process.argv[1])); if(pkg.version!==pin.version)throw Error("LoopX profile pin mismatch");' "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/dsh-loopx-plugin/package.json"
   node /usr/local/lib/evimed/loopx-compat.mjs "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/dsh-loopx-plugin"
   node -e 'const fs=require("node:fs"),path=require("node:path"); const [root,want]=process.argv.slice(1),seen=new Set(); for(const entry of fs.readdirSync(root,{recursive:true})){const match=entry.match(/(?:^|\/)@deepseek-ai\/(dsh(?:-[^/]+)?)\/package\.json$/); if(!match)continue; const pkg=JSON.parse(fs.readFileSync(path.join(root,entry),"utf8")); if(pkg.name!=="@deepseek-ai/"+match[1]||pkg.version!==want)throw Error("Profile kernel package differs from the pinned CLI: "+pkg.name); seen.add(pkg.name);} if(seen.size<100)throw Error("Profile kernel inventory is incomplete"); console.log("Verified profile kernel packages:",seen.size,want);' "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" "${DSH_VERSION}"
@@ -534,8 +552,19 @@ profile_seed() {
   pty_binding="$(find "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" -path "*/node-pty/prebuilds/${pty_platform}/pty.node" -print -quit)"
   test -n "${pty_binding}"
   node -e 'require(process.argv[1])' "${pty_binding}"
-  DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json
+  DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json 2> /opt/evimed/dump-config.stderr
+  cat /opt/evimed/dump-config.stderr >&2
   test -s /opt/evimed/dump-config.baseline.json
+  # A bundle patch row whose target an earlier bundle did not make is dropped
+  # with this one line, and a serving kernel does not even print it: the row
+  # then runs on its own defaults (the OpenViking plugin enabled for every
+  # account, measured 2026-10-13). The order above is what prevents it; this is
+  # what refuses an image in which it did not.
+  if grep -E "patch( insert)?: entry .* not found" /opt/evimed/dump-config.stderr; then
+    echo "profile_seed: a bundle patch names a row no earlier bundle makes; check the bundle order" >&2
+    exit 1
+  fi
+  rm -f /opt/evimed/dump-config.stderr
   diff -u /opt/evimed/committed-dump-config.baseline.json /opt/evimed/dump-config.baseline.json
   relocated="$(mktemp -d)"
   cp -a "${DSH_HOME_SEED}/." "${relocated}/"
@@ -607,6 +636,7 @@ case "${phase}" in
   preset-row) preset_row ;;
   profile-seed) profile_seed ;;
   loopx) loopx ;;
+  openviking-plugin) openviking_plugin ;;
   smoke) smoke ;;
   serve) serve ;;
   session) session ;;

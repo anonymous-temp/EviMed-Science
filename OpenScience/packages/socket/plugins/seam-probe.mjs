@@ -17,7 +17,7 @@
  * @module @evimed/dsh-socket/plugins/seam-probe
  */
 
-import { SEAMS, configSchema, probeSeams } from '@evimed/harness-port'
+import { SEAMS, bundleSeamGaps, configSchema, onSessionStart, probeSeams } from '@evimed/harness-port'
 
 const Schema = await configSchema()
 
@@ -70,5 +70,12 @@ export async function apply(ctx, config) {
   }
   const diagnostics = ctx.get('evimedDiagnostics')
   for (const line of result.degraded) diagnostics?.degrade?.(line)
-  ctx.effect?.(() => () => {})
+  // The agent half of what pinned bundles rely on (`SEAMS.bundleSeams`) exists only once an agent does: asked of the first
+  // one, and said once.
+  let asked = false
+  ctx.effect?.(() => onSessionStart(ctx, (agent) => {
+    if (asked || !agent) return
+    asked = true
+    for (const gap of bundleSeamGaps(agent)) ctx.get('evimedDiagnostics')?.degrade?.(`optional seam missing: ${gap} (a pinned bundle reads it)`)
+  }))
 }

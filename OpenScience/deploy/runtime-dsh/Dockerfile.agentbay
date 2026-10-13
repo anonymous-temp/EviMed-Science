@@ -124,6 +124,8 @@ COPY deploy/runtime-dsh/install-loopx.mjs /usr/local/lib/evimed/install-loopx.mj
 COPY deploy/runtime-dsh/loopx-compat.mjs /usr/local/lib/evimed/loopx-compat.mjs
 ENV LOOPX_USAGE_PING=0 DO_NOT_TRACK=1 LOOPX_BIN=/opt/evimed/venv/bin/loopx
 RUN bash /usr/local/lib/evimed/install-runtime.sh loopx
+COPY deploy/runtime-dsh/install-openviking-plugin.mjs /usr/local/lib/evimed/install-openviking-plugin.mjs
+RUN bash /usr/local/lib/evimed/install-runtime.sh openviking-plugin
 RUN bash /usr/local/lib/evimed/install-runtime.sh profile-seed
 RUN node /usr/local/bin/runtime-yaml-security.mjs verify
 
