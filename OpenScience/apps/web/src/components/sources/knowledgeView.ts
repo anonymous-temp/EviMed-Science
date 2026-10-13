@@ -52,8 +52,9 @@ export function statusLine(status: KnowledgeStatus | null, now: Date = new Date(
     }
     case "below_threshold": {
       if (status.readable === 0 && status.pages === 0) return null;
+      // The control plane's own sentence is the one a caller of the compile route reads too; this is the same words for one that has none.
       const missing = Math.max(1, status.minSources - status.readable);
-      return { text: `资料不足 · 再放入 ${missing} 份资料，就会整理成知识页`, busy: false, canCompile: false, attention: false };
+      return { text: status.message || `资料还不够：再加 ${missing} 份就会开始整理`, busy: false, canCompile: false, attention: false };
     }
     case "idle":
       return { text: "资料已就绪，随时可以整理成知识页", busy: false, canCompile: true, attention: false };

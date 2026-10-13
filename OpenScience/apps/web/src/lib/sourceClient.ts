@@ -511,6 +511,8 @@ export interface KnowledgeStatus {
   lastError: { code: string; detail?: string; at?: string; round?: number } | null;
   writeBacksQueued: number;
   held: number;
+  /** Why no round runs, in plain words (资料还不够：再加 N 份就会开始整理); null when nothing is in the way. Absent from an older control plane. */
+  message?: string | null;
 }
 /** What a compiled file carries beside its text, for a row of the tree and a page's head. */
 export interface KnowledgeLabels {

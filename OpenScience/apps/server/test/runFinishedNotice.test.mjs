@@ -267,6 +267,21 @@ test("only a person's own research reaches the inbox; evaluations and background
   assert.equal(runFinishedNotifies({ ...run, durationMs: 3_000, artifacts: [] }), false, "a turn the reader watched finish");
 });
 
+test("a short conversation that delivered a workbook is told in the inbox, one that only answered is not, one an evaluation dispatched never is", () => {
+  // Release 18's acceptance read GET /api/notifications after such a run and found nothing: that route does not exist (the inbox is
+  // GET /api/inbox, `data.items`). The rule itself is this one: a file is something to open later, so it is told however short the turn.
+  const project = { id: "default", userId: "usr_1" };
+  const workbook = { id: "run-xlsx", status: "succeeded", errorCode: null, verification: null, title: "整理销量表", durationMs: 45_000,
+    artifacts: ["销量汇总.xlsx"], outputFiles: ["销量汇总.xlsx"], finishedAt: "2026-10-13T03:00:00.000Z", startedAt: "2026-10-13T02:59:15.000Z" };
+  assert.equal(runFinishedReachesInbox(workbook, { automated: automatedRun(workbook) }), true);
+  const item = runFinishedInboxItem(project, workbook, { peers: [] });
+  assert.equal(item.title, "整理销量表 已完成");
+  assert.deepEqual(item.source, { type: "run", id: "run-xlsx" });
+  assert.match(item.body, /销量汇总\.xlsx/u, "the notice names the file");
+  assert.equal(runFinishedReachesInbox({ ...workbook, artifacts: [], outputFiles: [] }), false, "a two-sentence answer already on screen");
+  assert.equal(runFinishedReachesInbox({ ...workbook, automated: true }, { automated: automatedRun({ ...workbook, automated: true }) }), false, "an evaluation harness said so at dispatch");
+});
+
 test("a goal's automatic turns reach the inbox as one item per conversation, whatever their length", () => {
   const project = { id: "default" };
   const turn = finished("run-g2", "2026-09-18T03:00:00.000Z", {

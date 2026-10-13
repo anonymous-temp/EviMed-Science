@@ -26,7 +26,7 @@ describe("statusLine", () => {
   });
 
   it("says not enough documents by how many more it takes, and nothing at all for an empty project", () => {
-    expect(statusLine(status({ state: "below_threshold", readable: 1, minSources: 3, pages: 0, typedPages: { wiki: 0, kg: 0 } }), NOW)!.text).toBe("资料不足 · 再放入 2 份资料，就会整理成知识页");
+    expect(statusLine(status({ state: "below_threshold", readable: 1, minSources: 3, pages: 0, typedPages: { wiki: 0, kg: 0 } }), NOW)!.text).toBe("资料还不够：再加 2 份就会开始整理");
     expect(statusLine(status({ state: "below_threshold", readable: 0, pages: 0 }), NOW)).toBeNull();
   });
 

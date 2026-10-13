@@ -87,6 +87,16 @@ export function preferredLanguage(header) {
   return /^[a-z]{2,3}(?:-[a-z0-9]{2,8}){0,2}$/.test(first) ? first : null;
 }
 
+
+/**
+ * What a project below the threshold is told: how many more documents start a round. At least one more, whatever the arithmetic
+ * says (a count that is already past it is not below it).
+ * @param {number} readable @param {number} minSources
+ */
+export function thresholdSentence(readable, minSources) {
+  return `资料还不够：再加 ${Math.max(1, minSources - readable)} 份就会开始整理`;
+}
+
 /**
  * The instruction one compile is submitted with: the output language, the quotation in each source link's title, and
  * every passage a person wrote into the pages, verbatim, so the engine keeps them.
@@ -1049,6 +1059,10 @@ export class KnowledgePageService {
       quotations: wiki.reduce((sum, row) => ({ present: sum.present + (row.payload.quotations?.counts?.present ?? 0), absent: sum.absent + (row.payload.quotations?.counts?.absent ?? 0),
         none: sum.none + (row.payload.quotations?.counts?.noQuotation ?? 0) }), { present: 0, absent: 0, none: 0 }),
       held: 0, pending, readable, minSources: this.config.knowledgePagesMinSources, round: value.round, language: value.language ?? null,
+      // Why no round runs, in the words a person reads: a request for one below the threshold is accepted (the next document asks
+      // for a new round by itself) and then closed, and a status that only said `below_threshold` left the person who had just
+      // pressed 「重新整理」 with nothing to say why.
+      message: state === "below_threshold" ? thresholdSentence(readable, this.config.knowledgePagesMinSources) : null,
       compiledAt: value.compiledAt, lastRound: value.lastRound, lastError: value.lastError, writeBacksQueued: (value.writeBacks ?? []).length,
     };
   }

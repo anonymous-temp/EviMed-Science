@@ -433,7 +433,7 @@ describe("知识库", () => {
       cleanup();
       mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "below_threshold", readable: 1, minSources: 3, pages: 0 });
       renderPage();
-      expect(await screen.findByRole("status", { name: "知识页的整理情况" })).toHaveTextContent("资料不足 · 再放入 2 份资料");
+      expect(await screen.findByRole("status", { name: "知识页的整理情况" })).toHaveTextContent("资料还不够：再加 2 份就会开始整理");
       cleanup();
       context.features = { openList: true };
       renderPage();
