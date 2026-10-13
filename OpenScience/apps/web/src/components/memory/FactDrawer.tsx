@@ -7,10 +7,12 @@ import { readerPath } from "@/lib/knowledgeNav";
 import {
   announceMemoryChanged, archiveMemoryRecord, fetchMemorySources, retireCapsuleEntry, settleMemoryConflict, undoCapsuleEntry, undoMemoryRecord, type OwnCapsuleEntry,
 } from "@/lib/memoryClient";
+import { isMemoryConflict, MEMORY_CONFLICT_SENTENCE } from "@/lib/memoryErrors";
 import { memoryExcerpt } from "@/lib/memoryText";
 import { productErrorMessage, updateCapsuleEntry } from "@/lib/productClient";
 import { getSource } from "@/lib/sourceClient";
 import { toast } from "@/lib/toast";
+import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Drawer } from "@/components/ui/Drawer";
@@ -21,6 +23,7 @@ import { ConversationLink } from "./ConversationLink";
 import { DrawerSection } from "./DrawerSection";
 import { RelatedSection } from "./RelatedSection";
 import { heldFrom, type FactItem } from "./memoryItems";
+import { breath, fileTopic, isFileMemory, memoryText } from "./memoryNative";
 import { ValidityBar, validitySpan } from "./ValidityBar";
 
 /** Why a memory in force is uncertain, as a few small words. 「有冲突」 comes first, as it does in the control plane. */
@@ -77,12 +80,14 @@ export function memorySource(record: WebStructuredMemory): { sessionId: string; 
  * back and 已忘记的内容 restores; 不再记这条 deletes and stops the extractor
  * inferring it again, so it is the one that asks first.
  */
-export function FactDrawer({ item, projectName, conversations, onClose, onChanged, onOpenRecord, canOpenRecord }: {
+export function FactDrawer({ item, projectName, conversations, siblings = [], onClose, onChanged, onOpenRecord, canOpenRecord }: {
   item: FactItem;
   /** The project a project's fact belongs to, when the shell knows its name. */
   projectName: string | null;
   /** What each conversation was about, by its id (the memory profile's `conversations`): the 《…》 the source link names. */
   conversations?: Record<string, string>;
+  /** The other lines of the document a line of the profile belongs to, so the drawer can show the line in its document. */
+  siblings?: readonly WebStructuredMemory[];
   onClose: () => void;
   onChanged: () => void;
   /** Opens another memory in this drawer, from its 关联 section; absent where the page cannot. */
@@ -91,7 +96,9 @@ export function FactDrawer({ item, projectName, conversations, onClose, onChange
 }) {
   const record = item.kind === "record" ? item.record : null;
   const entry: OwnCapsuleEntry | null = item.kind === "entry" ? item.entry : null;
-  const text = record ? record.summary || record.value : entry?.payload.content ?? "";
+  const text = record ? memoryText(record) : entry?.payload.content ?? "";
+  // A memory kept as a file is a topic with statements under it: the drawer shows the file as it is written and edits all of it.
+  const file = record ? isFileMemory(record) : false;
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(text);
   const [busy, setBusy] = useState(false);
@@ -134,7 +141,9 @@ export function FactDrawer({ item, projectName, conversations, onClose, onChange
       announceMemoryChanged();
       onChanged();
     } catch (reason) {
-      toast.error(error(reason));
+      // Someone changed the memory first (the memory itself, writing from a conversation): read it again, so the next try is made on what it says now.
+      if (isMemoryConflict(reason)) { toast.error(MEMORY_CONFLICT_SENTENCE); onChanged(); }
+      else toast.error(error(reason));
     } finally {
       setBusy(false);
     }
@@ -144,12 +153,14 @@ export function FactDrawer({ item, projectName, conversations, onClose, onChange
   const saveRecord = (next: { value?: string; status?: "active" }) => run(async () => {
     if (!record) return;
     const edited = next.value?.trim();
-    await updateStructuredMemory(record, {
+    const saved = await updateStructuredMemory(record, {
       ...(edited ? { value: edited, summary: edited } : {}),
       ...(next.status ? { status: next.status } : {}),
     });
     setEditing(false);
     toast.success(next.status && !edited ? "已确认" : "已保存");
+    // A line of the profile is named by its words: the edited line has a new name, and the drawer follows it.
+    if (saved && saved.id !== record.id) onOpenRecord?.(saved.id);
   });
   const confirmOrSave = (next: { value?: string; status?: "active" }) => {
     // The truth, not a promise the code does not keep: a sensitive record is never recalled, whatever its status.
@@ -240,7 +251,8 @@ export function FactDrawer({ item, projectName, conversations, onClose, onChange
     ...(record ? [{ label: "不再记这条", destructive: true, disabled: busy, onSelect: () => setRejecting(true) }] : []),
   ];
 
-  const sentence = record ? memoryExcerpt(record.summary || record.value, 4_000) : memoryExcerpt(text, 4_000);
+  const sentence = memoryExcerpt(text, 4_000);
+  const lines = record?.document ? siblings.filter((other) => other.document?.id === record.document?.id && other.id !== record.id) : [];
   const save = () => (record ? confirmOrSave({ value, status: "active" }) : void saveEntry());
 
   return (
@@ -264,7 +276,29 @@ export function FactDrawer({ item, projectName, conversations, onClose, onChange
               </div>
             </form>
           ) : (
-            <p className="whitespace-pre-wrap text-body text-text">{former ? `曾经如此：${sentence}${record ? heldFrom(record) : ""}` : sentence}</p>
+            file
+              ? (
+                <div className="space-y-2">
+                  {/* A file is a topic with statements under it: the topic leads, unless the file's own first heading already is it. */}
+                  {record && !/^#\s/u.test(text.trimStart()) && <p className="text-body font-medium text-text">{fileTopic(record)}</p>}
+                  <MarkdownViewer className="text-ui text-text">{sentence}</MarkdownViewer>
+                </div>
+              )
+              : <p className="whitespace-pre-wrap text-body text-text">{former ? `曾经如此：${sentence}${record ? heldFrom(record) : ""}` : sentence}</p>
+          )}
+
+          {lines.length > 0 && (
+            <DrawerSection label="个人档案里的其他内容">
+              <ul className="space-y-1 text-ui text-text-2">
+                {lines.map((other) => (
+                  <li key={other.id}>
+                    {onOpenRecord && canOpenRecord?.(other.id)
+                      ? <button type="button" className="text-left hover:underline" onClick={() => onOpenRecord(other.id)}>{memoryExcerpt(other.value, 120)}</button>
+                      : memoryExcerpt(other.value, 120)}
+                  </li>
+                ))}
+              </ul>
+            </DrawerSection>
           )}
 
           {record && <ValidityBar span={validitySpan(record)} />}
@@ -334,7 +368,7 @@ export function FactDrawer({ item, projectName, conversations, onClose, onChange
                 {revisions.map((revision) => (
                   <li key={revision.version}>
                     {when(revision.changedAt)}
-                    {revision.changedAt ? "：" : ""}{memoryExcerpt(revision.summary || revision.value, 120)}
+                    {revision.changedAt ? "：" : ""}{memoryExcerpt(file ? breath(revision.value) : revision.summary || revision.value, 120)}
                   </li>
                 ))}
               </ul>

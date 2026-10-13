@@ -430,6 +430,9 @@ services:
       OPEN_SCIENCE_MEMORY_TOPICS_ENABLED: ${OPEN_SCIENCE_MEMORY_TOPICS_ENABLED:-true}
       OPEN_SCIENCE_MEMORY_TOPICS_DAILY_RUNS: ${OPEN_SCIENCE_MEMORY_TOPICS_DAILY_RUNS:-4}
       OPEN_SCIENCE_MEMORY_TOPICS_MIN_MEMORIES: ${OPEN_SCIENCE_MEMORY_TOPICS_MIN_MEMORIES:-12}
+      # The map's 「在做什么」 radar: one Flash call per finished conversation says what kind of work it was (switch, calls per account per day).
+      OPEN_SCIENCE_TASK_TYPE_ENABLED: ${OPEN_SCIENCE_TASK_TYPE_ENABLED:-true}
+      OPEN_SCIENCE_TASK_TYPE_DAILY_CALLS: ${OPEN_SCIENCE_TASK_TYPE_DAILY_CALLS:-60}
       # Publishes an account's memory to whoever holds one of its API keys;
       # off unless a deployment decides otherwise (docs/AGENT_MEMORY_API.md).
       OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED:

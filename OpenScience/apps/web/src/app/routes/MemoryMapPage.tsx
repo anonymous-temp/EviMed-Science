@@ -18,11 +18,13 @@ import { TopicsView } from "@/components/memory/map/TopicsView";
 import { headline, isThin, markRows, narrowMap, STRUCTURE } from "@/components/memory/map/mapModel";
 import { useMapSelection } from "@/components/memory/map/useMapSelection";
 import { useMemoryMap } from "@/components/memory/map/useMemoryMap";
+import { webErrorMessage } from "@/lib/apiClient";
 import { formatDay } from "@/lib/format";
 import { knowledgeNodeAddress } from "@/lib/knowledgeNav";
-import { MAP_VIEWS, type MapEvent, type MapNode, type MapView } from "@/lib/memoryMapClient";
+import { hideMapEdge, MAP_VIEWS, type MapEdge, type MapEvent, type MapNode, type MapView } from "@/lib/memoryMapClient";
 import { useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
+import { toast } from "@/lib/toast";
 
 const VIEW_NAMES: Record<MapView, string> = { graph: "关系", topics: "主题", dims: "维度", time: "时间", activity: "活跃" };
 const VIEW_OPTIONS = MAP_VIEWS.map((value) => ({ value, label: VIEW_NAMES[value] }));
@@ -88,6 +90,20 @@ export function MemoryMapPage() {
     else if (node.type === "you") clear();
     else narrow({ focus: node.id });
   }, [drawer, navigate, narrow, clear, doc, selection.project]);
+  /** 「这条关联不对」: the line stays out of this person's map; the toast takes it back. */
+  const hideEdge = useCallback(async (edge: MapEdge) => {
+    if (!edge.id) return;
+    const id = edge.id;
+    try {
+      await hideMapEdge(id, true);
+      toast.success("已隐藏这条关联", {
+        action: { label: "撤销", onClick: () => void hideMapEdge(id, false).then(reload, (error) => toast.error(webErrorMessage(error, { fallback: "没有撤销成功，请重试。" }))) },
+      });
+      reload();
+    } catch (error) {
+      toast.error(webErrorMessage(error, { fallback: "没有隐藏成功，请重试。" }));
+    }
+  }, [reload]);
   const focusNode = useCallback((node: MapNode) => { if (!STRUCTURE.has(node.type)) narrow({ focus: node.id }); }, [narrow]);
 
   const topicName = selection.topic ? doc?.facets.topics.find((topic) => topic.id === selection.topic)?.label ?? null : null;
@@ -139,7 +155,7 @@ export function MemoryMapPage() {
           </div>
         );
       }
-      return <GraphView doc={doc} narrowed={narrowed} selected={selection.focus ?? (drawer.value?.startsWith("record:") ? `memory:${drawer.value.slice(7)}` : null)} actions={{ onOpen: openNode, onFocus: focusNode }} chain={chain} focused={Boolean(doc.scope.focus)} />;
+      return <GraphView doc={doc} narrowed={narrowed} selected={selection.focus ?? (drawer.value?.startsWith("record:") ? `memory:${drawer.value.slice(7)}` : null)} actions={{ onOpen: openNode, onFocus: focusNode }} chain={chain} focused={Boolean(doc.scope.focus)} onHideEdge={hideEdge} />;
     }
     if (selection.view === "topics") {
       return (

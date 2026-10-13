@@ -246,11 +246,13 @@ export class MemoryTopics {
    * @param {any} config
    * @param {any} memoryStore `ResearchMemoryStore`: `database` and `mapRecords`
    * @param {{ usageLedger?: any, fetchImpl?: typeof fetch, callModel?: typeof callModelForControlPlane, now?: () => Date,
-   *   audit?: (event: string, error: unknown) => unknown }} [options]
+   *   audit?: (event: string, error: unknown) => unknown, accountRecords?: ((userId: string) => Promise<any[]>) | null }} [options]
+   *   `accountRecords`: the account's memories as the map draws them, from whichever engine holds them (the store's own rows by default)
    */
-  constructor(config, memoryStore, { usageLedger = null, fetchImpl = globalThis.fetch, callModel = callModelForControlPlane, now = () => new Date(), audit = () => {} } = {}) {
+  constructor(config, memoryStore, { usageLedger = null, fetchImpl = globalThis.fetch, callModel = callModelForControlPlane, now = () => new Date(), audit = () => {}, accountRecords = null } = {}) {
     this.config = config;
     this.memoryStore = memoryStore;
+    this.accountRecords = accountRecords ?? ((/** @type {string} */ userId) => memoryStore.mapRecords(userId, { projectId: null, limit: 2000 }));
     this.usageLedger = usageLedger;
     this.fetchImpl = fetchImpl;
     this.callModel = callModel;
@@ -343,7 +345,7 @@ export class MemoryTopics {
 
   /** @param {string} userId @param {{ projectId: string, runId: string | null }} options */
   async #refresh(userId, { projectId, runId }) {
-    const records = await this.memoryStore.mapRecords(userId, { projectId: null, limit: 2000 });
+    const records = await this.accountRecords(userId);
     const eligible = groupable(records);
     const row = await this.#row(userId);
     if (eligible.length < this.config.memoryTopicsMinMemories) return { status: row.topics.length > 0 ? "ready" : "empty", made: false };

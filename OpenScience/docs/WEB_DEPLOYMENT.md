@@ -1190,6 +1190,14 @@ groups the account's memories into topics when they changed. `OPEN_SCIENCE_MEMOR
 researcher's rename, merge or dismissal of a topic costs no call and is kept through every regrouping; the grouping lives in
 `evimed_memory.topic_sets` and goes with the account and with a memory reset.
 
+Its 「在做什么」 radar (the first of the dimensions view) is drawn for any account, not only for those that used a named capability:
+when a researcher's conversation finishes, one Flash call (`task-type`, charged to the account like a run title, caps included)
+says which of a short fixed list of kinds of work it was — writing, documents and slides, spreadsheets and data analysis, code, web
+research, medical evidence, other — and code keeps the answer only if it is on the list. It is recorded once on the run ledger. A
+conversation older than that feature is judged lazily when the map is read, a few per read, and never delays the read or a run.
+`OPEN_SCIENCE_TASK_TYPE_ENABLED` (default on) switches it off, leaving the radar to the capability that answered;
+`OPEN_SCIENCE_TASK_TYPE_DAILY_CALLS` (default 60) is the most such calls one account may have made in a day (0 stops the judging).
+
 ### OpenViking as an engine (v0.5.0)
 
 Until 2026-10-13 the `evimed-openviking` service was a derived recall index and nothing else. It is now also an engine: it

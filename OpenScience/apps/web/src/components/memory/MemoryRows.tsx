@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { ListRow } from "@/components/ui/ListRow";
+import type { WebPendingMemory } from "@/lib/apiClient";
+import { List, ListRow } from "@/components/ui/ListRow";
 
 /**
  * One row of the memory page, whichever tab and whichever store it comes from
@@ -38,4 +39,23 @@ export function MemoryListRow({ title, summary, end, onOpen, highlighted = false
 export function GroupHeader({ children }: { children: ReactNode }) {
   // Under the page's title directly: the tabs are not headings, so a group's header is the next level down from it.
   return <h2 className="px-2 pb-1 text-caption text-text-3">{children}</h2>;
+}
+
+/**
+ * What 「记住这一条」 asked and the memory has not written yet: the words, marked 「正在记住」, at the head of the list. A row of
+ * its own kind, because there is nothing to open yet; when the memory is slow it says so instead of spinning for ever.
+ */
+export function PendingMemoryRows({ items, slow }: { items: readonly WebPendingMemory[]; slow: boolean }) {
+  return (
+    <List label="正在记住的内容">
+      {items.map((item) => (
+        <ListRow
+          key={item.id}
+          chevron={false}
+          title={<span className="line-clamp-2 max-w-measure">{item.text}</span>}
+          trailing={<span role="status" className="text-caption text-text-3">{slow ? "还在记，比平时慢一些" : "正在记住"}</span>}
+        />
+      ))}
+    </List>
+  );
 }

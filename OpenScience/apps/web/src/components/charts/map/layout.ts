@@ -93,6 +93,40 @@ export function layoutGraph(nodes: readonly LayoutNode[], edges: readonly Layout
     tied.set(edge.from, [...(tied.get(edge.from) ?? []), edge.to]);
     tied.set(edge.to, [...(tied.get(edge.to) ?? []), edge.from]);
   }
+
+  // A group that is tied only to itself — the entities of a compiled knowledge graph and the lines between them, the pages and their
+  // links — is a hub of its own: its marks are laid round a place no other hub has taken, the best connected nearest, and not
+  // scattered round the outer ring with every line between them a long one.
+  const loose = new Set(nodes.filter((node) => !place.has(node.id) && !(tied.get(node.id) ?? []).some((id) => place.has(id))).map((node) => node.id));
+  const groups: string[][] = [];
+  const seen = new Set<string>();
+  for (const id of [...loose].sort()) {
+    if (seen.has(id)) continue;
+    const group: string[] = [];
+    const queue = [id];
+    seen.add(id);
+    while (queue.length > 0) {
+      const next = queue.shift() as string;
+      group.push(next);
+      for (const other of tied.get(next) ?? []) if (loose.has(other) && !seen.has(other)) { seen.add(other); queue.push(other); }
+    }
+    if (group.length >= 3) groups.push(group);
+  }
+  for (const group of groups.sort((left, right) => right.length - left.length || left[0].localeCompare(right[0]))) {
+    // The place farthest from everything laid so far, on the outer ellipse.
+    let best: Point = { x: centre.x + LAYOUT_WIDTH * 0.4, y: centre.y };
+    let bestGap = -1;
+    for (let step = 0; step < 24; step += 1) {
+      const angle = (step / 24) * Math.PI * 2 + unitHash(group[0], 8) * 0.2;
+      const candidate = { x: centre.x + Math.cos(angle) * LAYOUT_WIDTH * 0.4, y: centre.y + Math.sin(angle) * LAYOUT_HEIGHT * 0.36 };
+      const gap = Math.min(...[...place.values()].map((point) => Math.hypot(point.x - candidate.x, (point.y - candidate.y) * 1.6)), 1e9);
+      if (gap > bestGap) { bestGap = gap; best = candidate; }
+    }
+    const degree = (id: string) => (tied.get(id) ?? []).length;
+    group.sort((left, right) => degree(right) - degree(left) || left.localeCompare(right));
+    const turn = unitHash(group[0], 9) * Math.PI * 2;
+    group.forEach((id, order) => place.set(id, spiral(order, best, SPACING * 0.95, turn)));
+  }
   for (const node of [...nodes].sort((left, right) => left.id.localeCompare(right.id))) {
     if (place.has(node.id)) continue;
     const near = (tied.get(node.id) ?? []).map((id) => place.get(id)).filter((point): point is Point => point !== undefined);

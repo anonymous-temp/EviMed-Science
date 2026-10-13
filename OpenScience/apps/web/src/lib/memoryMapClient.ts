@@ -38,6 +38,8 @@ export interface MapNode {
 
 export type MapEdgeType = "belongs-to" | "rests-on" | "replaces" | "conflicts" | "links" | "quotes" | "relates";
 export interface MapEdge {
+  /** The line's stable id, which 「这条关联不对」 names; absent from a control plane older than it. */
+  id?: string;
   from: string;
   to: string;
   type: MapEdgeType;
@@ -181,4 +183,12 @@ export interface RecordLinks {
 /** What one memory is tied to, read when its drawer opens. */
 export function fetchRecordLinks(recordId: string) {
   return productRequest<RecordLinks>(`/memory/records/${encodeURIComponent(recordId)}/links`);
+}
+
+/**
+ * 「这条关联不对」: a line of the relation view the researcher says is wrong stays out of their map (`hidden: true`), or is drawn again
+ * (`hidden: false`). The source of the line is untouched; it is a correction about what this person is shown.
+ */
+export function hideMapEdge(edgeId: string, hidden: boolean) {
+  return productRequest<{ hidden: boolean }>(`/memory/map/edges/${encodeURIComponent(edgeId)}`, "PUT", { hidden });
 }

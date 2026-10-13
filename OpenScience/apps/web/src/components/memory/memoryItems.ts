@@ -7,6 +7,7 @@ import type { OwnCapsuleEntry } from "@/lib/memoryClient";
 import { memoryExcerpt } from "@/lib/memoryText";
 import { projectLabels, type LabelledProject } from "@/lib/projectNames";
 import { methodTitle, type WebMethod } from "@/lib/methodsClient";
+import { fileSummary, fileTopic, isFileMemory } from "./memoryNative";
 
 /**
  * What the memory page lists, as one shape per kind of row. Two stores hold a
@@ -68,7 +69,8 @@ export function factItems(
       .filter((record) => record.status !== "archived" && !underReplacement.has(record.id))
       .map((record): FactItem => ({
         kind: "record", key: `record:${record.id}`, group: recordGroup(record), section: selfSection(record.kind), projectId: recordProjectId(record),
-        at: record.updatedAt ?? record.createdAt ?? "", text: memoryExcerpt(record.summary || record.value), record, formerly: replaced.get(record.id) ?? [],
+        at: record.updatedAt ?? record.createdAt ?? "", text: isFileMemory(record) ? fileTopic(record) : memoryExcerpt(record.summary || record.value),
+        record, formerly: replaced.get(record.id) ?? [],
       })),
     ...entries
       .filter((entry) => entry.payload.status !== "retired" && (!text || matches(entry.payload.content, text)))
@@ -158,4 +160,9 @@ export function heldFrom(record: Pick<WebStructuredMemory, "createdAt" | "invali
  */
 export function factRowTitle(item: FactItem): string {
   return item.kind === "record" && item.record.status === "superseded" ? `曾经如此：${item.text}${heldFrom(item.record)}` : item.text;
+}
+
+/** The quiet line under a row: what a file memory says under its topic. A sentence needs none. */
+export function factRowSummary(item: FactItem): string | undefined {
+  return item.kind === "record" && isFileMemory(item.record) ? fileSummary(item.record) || undefined : undefined;
 }

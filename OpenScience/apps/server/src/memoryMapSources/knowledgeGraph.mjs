@@ -168,6 +168,24 @@ export function documentIdOfUri(uri) {
 }
 
 /**
+ * Where a mark of the compiled graph opens: the knowledge base's picture of that graph (`wiki` the pages and their links, `kg` the
+ * entities and their relations) centred on the mark, in the project it was compiled for. The knowledge base's own address
+ * (`knowledgeNav.ts`: `scope`, `kind=wiki`, `view=graph`, `graph`, `focus`, `depth`) is the contract; a mark's id in it is the page's
+ * path or the entity's id, which is what these marks are made of.
+ * @param {string | null} projectId @param {"wiki" | "kg"} graph @param {string} mark
+ */
+export function knowledgeHref(projectId, graph, mark) {
+  const params = new URLSearchParams();
+  if (projectId) params.set("scope", projectId);
+  params.set("kind", "wiki");
+  params.set("view", "graph");
+  if (graph === "kg") params.set("graph", "kg");
+  params.set("focus", mark);
+  params.set("depth", "1");
+  return `/app/files?${params.toString()}`;
+}
+
+/**
  * The marks and lines of one compile's products.
  *
  * Entities become `entity` marks, a relation between two of them a `relates` line carrying its label and predicate, a page a
@@ -175,11 +193,14 @@ export function documentIdOfUri(uri) {
  * is not there and an entity that is not a file are left out. The documents an entity was read from, and a relation's evidence,
  * become `quotes` lines to the knowledge-base documents they map to.
  *
+ * An entity and a page open in the knowledge base, on the picture of its graph centred on the mark (`knowledgeHref`): the route the
+ * knowledge base's own address defines, whose marks open the page they are.
+ *
  * @param {{ entities?: { path: string, text: string }[], relations?: string, pages?: { uri: string, text: string }[] }} products
- * @param {{ documentIdOfUri?: (uri: string) => string | null }} [options]
+ * @param {{ documentIdOfUri?: (uri: string) => string | null, projectId?: string | null }} [options]
  * @returns {{ nodes: import("./common.mjs").MapNode[], edges: import("./common.mjs").MapEdge[], rejected: { line: number, reason: string }[] }}
  */
-export function graphFromCompile(products, { documentIdOfUri: documentOf = documentIdOfUri } = {}) {
+export function graphFromCompile(products, { documentIdOfUri: documentOf = documentIdOfUri, projectId = null } = {}) {
   /** @type {import("./common.mjs").MapNode[]} */
   const nodes = [];
   /** @type {import("./common.mjs").MapEdge[]} */
@@ -190,7 +211,8 @@ export function graphFromCompile(products, { documentIdOfUri: documentOf = docum
   for (const entity of entities) {
     nodes.push({
       id: nodeId("entity", entity.id), type: "entity", subtype: entity.entityType, group: entity.entityType,
-      label: excerpt(entity.title, 40), state: "current", open: null, ...(entity.description ? { description: excerpt(entity.description, 120) } : {}),
+      label: excerpt(entity.title, 40), state: "current", open: { kind: "page", href: knowledgeHref(projectId, "kg", entity.id) },
+      ...(entity.description ? { description: excerpt(entity.description, 120) } : {}),
     });
     for (const source of entity.sources) {
       const document = documentOf(source);
@@ -205,7 +227,7 @@ export function graphFromCompile(products, { documentIdOfUri: documentOf = docum
   const pages = (products.pages ?? []).map((page) => parseWikiPage(page.text, { path: page.uri }));
   const paths = new Set(pages.map((page) => page.path));
   for (const page of pages) {
-    nodes.push({ id: nodeId("page", page.path), type: "page", subtype: page.type, group: page.type, label: excerpt(page.title, 40), state: "current", open: null });
+    nodes.push({ id: nodeId("page", page.path), type: "page", subtype: page.type, group: page.type, label: excerpt(page.title, 40), state: "current", open: { kind: "page", href: knowledgeHref(projectId, "wiki", page.path) } });
     for (const target of page.links) {
       if (paths.has(target)) edges.push({ from: nodeId("page", page.path), to: nodeId("page", target), type: "links" });
     }
@@ -230,7 +252,7 @@ export function createKnowledgeGraphSource({ fetchProducts = null, documentIdOfU
     async read(request) {
       const products = await /** @type {NonNullable<typeof fetchProducts>} */ (fetchProducts)(request);
       if (!products) return null;
-      const { nodes, edges } = graphFromCompile(products, { documentIdOfUri: documentOf });
+      const { nodes, edges } = graphFromCompile(products, { documentIdOfUri: documentOf, projectId: request.projectId });
       return { nodes, edges };
     },
   };

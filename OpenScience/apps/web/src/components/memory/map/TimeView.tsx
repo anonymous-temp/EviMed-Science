@@ -38,6 +38,16 @@ export function TimeView({ doc, range, projectName, onRange, onOpen }: {
   useEffect(() => () => { if (settle.current) clearTimeout(settle.current); }, []);
   const byId = new Map(doc.events.map((event) => [event.id, event]));
 
+  // The words under the picture name only what is in it: an account that has replaced nothing has no bars and no grey, and the picture says nothing of them.
+  const hasLanes = doc.lanes.length > 0;
+  const hasReplaced = doc.events.some((event) => event.change === "superseded");
+  const hasConflict = doc.lanes.some((lane) => lane.segments.some((segment) => segment.conflict));
+  const legend = [
+    "◆ 决定 ✕ 纠正 ▲ 学会一个做法 ● 记下一条",
+    hasLanes ? `蓝条是一直成立的说法，灰条和灰点是后来被替代的${hasConflict ? "，条上的琥珀小标是和另一条不一致" : ""}。` : hasReplaced ? "灰点是后来被替代的。" : "",
+    "拖下面的滑块可以选一段时间。",
+  ].filter(Boolean).join(" ");
+  const counted = `${hasLanes ? `${doc.lanes.length} 条沿革，` : ""}${doc.events.length} 件记下的事`;
   if (rows.length === 0) return <p role="status" className="text-ui text-text-2">{window ? "这段时间里没有记下的事。" : "还没有记下的事，时间线会在这里长出来。"}</p>;
   return (
     <div className="space-y-2">
@@ -58,11 +68,11 @@ export function TimeView({ doc, range, projectName, onRange, onOpen }: {
             else if (params?.data?.recordId) onOpen(`memory:${params.data.recordId}`);
           },
         }}
-        label={`时间线：${doc.lanes.length} 条沿革，${doc.events.length} 件记下的事，列表在下方。`}
-        unpainted={`${doc.lanes.length} 条沿革，${doc.events.length} 件记下的事。`}
+        label={`时间线：${counted}，列表在下方。`}
+        unpainted={`${counted}。`}
       />
       <p className="text-caption text-text-3">
-        {`◆ 决定 ✕ 纠正 ▲ 学会一个做法 ● 记下一条 蓝条是一直成立的说法，灰条和灰点是后来被替代的，条上的琥珀小标是和另一条不一致。拖下面的滑块可以选一段时间。`}
+        {legend}
         {window ? `现在看的是 ${window.from} 到 ${window.to}。` : ""}
       </p>
       <span className="sr-only">{`按 ${timeZone} 的日期`}</span>
