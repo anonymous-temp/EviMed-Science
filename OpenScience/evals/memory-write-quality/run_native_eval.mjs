@@ -43,7 +43,7 @@ const PLATFORM_TAG = "<evimed-geo-run>geo_eval_run</evimed-geo-run>";
 
 const FIELD_EXPECTATIONS = Object.freeze([
   "noTextContains", "noRecordOfKinds", "atMostRecords", "atLeastRecords", "requireKinds", "requireTextContains",
-  "briefRefusedWhenTagged", "identifierShapes", "requireKeys", "keyValues",
+  "briefRefusedWhenTagged", "identifierShapes", "requireKeys", "noKeys", "keyValues",
 ]);
 
 /** What a project-card key looks like in the card's text. */
@@ -114,6 +114,7 @@ export function scoreNative(item, files, operations) {
   if (expect.atMostRecords !== undefined && operations > expect.atMostRecords) failures.push(`${operations} memory operations > ${expect.atMostRecords}`);
   if (expect.atLeastRecords !== undefined && operations < expect.atLeastRecords) failures.push(`${operations} memory operations < ${expect.atLeastRecords}`);
   for (const key of expect.requireKeys ?? []) if (!CARD_PATTERNS[key]?.test(text)) failures.push(`the card lacks ${key}`);
+  for (const key of expect.noKeys ?? []) if (CARD_PATTERNS[key]?.test(text)) failures.push(`the card carries ${key}, which this work does not have`);
   for (const [key, allowed] of Object.entries(expect.keyValues ?? {})) {
     const held = CARD_PATTERNS[key] && text.match(new RegExp(`${CARD_PATTERNS[key].source}.*`, CARD_PATTERNS[key].flags.replace("g", "")))?.[0];
     if (held && !(/** @type {string[]} */ (allowed)).some((value) => held.includes(value))) failures.push(`${key} holds "${held.slice(0, 60)}", none of ${JSON.stringify(allowed)}`);

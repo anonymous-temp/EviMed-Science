@@ -50,6 +50,9 @@ test("the decided checks read the files: a string, a kind, a count of operations
   assert.deepEqual(scoreNative({ expect: { requireKeys: ["project.population"] } }, files, 0), ["the card lacks project.population"]);
   assert.deepEqual(scoreNative({ expect: { keyValues: { "project.field": ["心血管"] } } }, files, 1), ['project.field holds "领域：B 端 SaaS", none of ["心血管"]']);
   assert.ok(Object.keys(CARD_PATTERNS).includes("project.subject"), "the card's six general slots are read");
+  // A work that is not a study has no clinical element: a card that carries one fails the case (`noKeys`).
+  assert.deepEqual(scoreNative({ expect: { noKeys: ["project.outcome", "project.design"] } }, { "projects/x.md": "# X\n## Study elements\n- Outcome: major bleeding" }, 1), ["the card carries project.outcome, which this work does not have"]);
+  assert.deepEqual(scoreNative({ expect: { noKeys: ["project.outcome"] } }, { "projects/x.md": "# X\n## Goal\n- Ship it" }, 1), []);
 });
 
 test("a message wearing the platform's tag never reaches the engine, and the person's own words do", () => {
