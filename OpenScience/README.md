@@ -1,8 +1,8 @@
 # EviMed (OpenScience/)
 
-EviMed is a traceable medical research agent platform: a hosted, multi-tenant research
-workbench in which each project runs in its own isolated runtime on the DeepSeek Harness
-(DSH) agent kernel. This directory is the production system. The repository-level
+EviMed is a traceable agent platform — a general work assistant first, with a professional
+layer for medical research: hosted and multi-tenant, each project running in its own isolated
+runtime on the DeepSeek Harness (DSH) agent kernel. This directory is the production system. The repository-level
 overview is [`../README.md`](../README.md), contribution rules are in
 [`../CONTRIBUTING.md`](../CONTRIBUTING.md), and the rules agents and people follow inside
 this subtree are in [`AGENTS.md`](./AGENTS.md).

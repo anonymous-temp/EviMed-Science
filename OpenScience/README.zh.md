@@ -1,6 +1,6 @@
 # EviMed（OpenScience/）
 
-EviMed 是一套可追溯的医学科研智能体平台：托管的多租户科研工作台，每个项目在各自隔离的
+EviMed 是一套可追溯的智能体平台：首先是通用工作助手，再叠加医学科研的专业层；托管、多租户，每个项目在各自隔离的
 运行时里，由 DeepSeek Harness（DSH）智能体内核驱动。本目录就是生产系统。仓库层面的总览见
 [`../README.zh-CN.md`](../README.zh-CN.md)，贡献规则见 [`../CONTRIBUTING.md`](../CONTRIBUTING.md)，
 本子树内人和智能体共同遵守的规则见 [`AGENTS.md`](./AGENTS.md)。
