@@ -1109,6 +1109,12 @@ export function runtimeStartRecovery(code, status) {
  * entirely.
  */
 export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
+  // 2026-10-12: the memory map (`memoryMap.mjs`) — switched off, asked for what it does not have, and the topics it cannot make.
+  'memory_map_disabled',
+  'memory_map_invalid',
+  'memory_topic_not_found',
+  'memory_topic_invalid',
+  'memory_topics_unavailable',
   'usage_budget_exceeded',
   'runtime_reserved_for_autopilot',
   'runtime_busy',
@@ -2620,6 +2626,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
 
   // ——— 记忆地图 (memoryMap.mjs) ———
   memory_map_disabled: '这个部署没有开放记忆地图；记忆本身照常可以在记忆页查看。',
+  memory_map_invalid: '记忆地图的这次请求不完整，请刷新页面后再试。',
   memory_topic_not_found: '这个主题已经不在了，刷新后再看。',
   memory_topic_invalid: '这个主题的修改不完整，请重新操作。',
   memory_topics_unavailable: '主题暂时整理不了；已有的记忆和其他视图不受影响。',
@@ -2836,6 +2843,12 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   agent_run_limit_reached: 'capped',
   project_limit_reached: 'capped',
   default_project_protected: 'capped',
+  // The memory map (2026-10-12): a request it refused before reading anything, and the topics a model could not make.
+  memory_map_disabled: 'capped',
+  memory_map_invalid: 'capped',
+  memory_topic_not_found: 'capped',
+  memory_topic_invalid: 'capped',
+  memory_topics_unavailable: 'upstream',
   usage_budget_exceeded: 'capped',
   paper_gold_administrative_deferred: 'capped',
   runtime_spend_limit_reached: 'capped',
