@@ -51,4 +51,4 @@ To split a crowded slide: `outline`, `duplicate` it, `delete-shapes` the second 
 
 ## Check and deliver
 
-Render the slides you changed and look at them if you can read images: `python3 ../shared/office_kit.py render --input deck.pptx --output-dir preview-1 --pages 3,4 --dpi 110` (a new directory each time). Check clipping, overlaps, contrast, chart labels against the data. `outline` flags shapes outside the slide. Leave the deck in the workspace under its name; a follow-up edit keeps the same file.
+Structure first: `python3 ../shared/office_kit.py check deck.pptx --count 11 --contains "Market size"` (the kernel's own check: package sound, slide count, required text; it cannot judge how a slide looks). Then render the slides you changed and look at them if you can read images: `python3 ../shared/office_kit.py render --input deck.pptx --output-dir preview-1 --pages 3,4 --dpi 110` (a new directory each time). Check clipping, overlaps, contrast, chart labels against the data. `outline` flags shapes outside the slide. Leave the deck in the workspace under its name; a follow-up edit keeps the same file.

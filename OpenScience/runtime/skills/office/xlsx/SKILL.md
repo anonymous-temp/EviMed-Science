@@ -48,6 +48,6 @@ A workbook written by openpyxl or XlsxWriter holds formulas without results: pre
 python3 scripts/xlsx_tool.py recalc budget.xlsx --out budget-calculated.xlsx
 ```
 
-It refreshes every formula with the bundled LibreOffice Kit, keeps them as formulas, and reports formulas without a result and cells in error (`#REF!`, `#DIV/0!`, `#NAME?`, `#VALUE!`). Fix every reported cell, recalculate again, and deliver the calculated file (move it over the working name once it is clean). `python3 scripts/xlsx_tool.py check file.xlsx` repeats the report without writing.
+It refreshes every formula with the bundled LibreOffice Kit, keeps them as formulas, and reports formulas without a result and cells in error (`#REF!`, `#DIV/0!`, `#NAME?`, `#VALUE!`). Fix every reported cell, recalculate again, and deliver the calculated file (move it over the working name once it is clean). `python3 scripts/xlsx_tool.py check file.xlsx` repeats the report without writing; `python3 ../shared/office_kit.py check file.xlsx` is the kernel's own structural check of the package.
 
 Say what the workbook contains and where the totals are; if a figure depends on an assumption the user did not give, name the assumption and where to change it.

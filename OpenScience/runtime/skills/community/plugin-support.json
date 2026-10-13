@@ -67,20 +67,156 @@
     {
       "name": "dsh-plugin-academic-writing",
       "version": "0.2.0",
-      "status": "incompatible",
-      "reason": "Peer dependency does not admit the current DSH packages."
+      "status": "not-adopted",
+      "reason": "Installs and boots on the pinned kernel (the earlier peer refusal named @deepseek-ai/dsh-fs, a package the 0.1.7 kernel no longer ships, so nothing refuses it now). Not taken: its row injects a persona section into every system prompt by default (personaSection: true), it adds one tool schema to every first request, and the manuscript-support capability already covers the same ground; no measured gain over it.",
+      "testedOn": "2026-10-13"
     },
     {
       "name": "dsh-plugin-translation",
       "version": "0.2.0",
-      "status": "incompatible",
-      "reason": "Peer dependency does not admit the current DSH packages."
+      "status": "not-adopted",
+      "reason": "Installs and boots on the pinned kernel (same peer note as academic-writing). Not taken: persona section injected into every system prompt by default, one more tool schema in every first request, and its consistency checks are unmeasured against the model's own translation; revisit with a paired evaluation.",
+      "testedOn": "2026-10-13"
     },
     {
       "name": "dsh-plugin-writing-guard",
       "version": "2.0.1",
       "status": "rejected",
-      "reason": "Dependency build scripts require an unreviewed pnpm approval."
+      "reason": "Install refused by the profile's build policy: its postinstall (scripts/install-extras.mjs) copies a skill and a Python module into $DSH_HOME/skills and $DSH_HOME/plugins at install time. The runtime profile is sealed and read-only and nothing is installed during a turn, so a postinstall-installed file set cannot exist there; allowBuilds stays deny-by-default.",
+      "testedOn": "2026-10-13"
+    },
+    {
+      "name": "dsh-univer-office",
+      "version": "0.3.7",
+      "status": "not-adopted",
+      "testedOn": "2026-10-13",
+      "license": "Apache-2.0",
+      "reason": "Installs and boots on the pinned kernel (peers admit 0.1.7-rc.1). Not taken: 213 MB added to the image (201 MB of viewer assets); pulls closed-source native bindings (@univerjs-pro/exchange-node-binding, engine-formula-rust-binding, cli-assets) that carry no licence field, so the plugin's Apache-2.0 does not cover what it runs; product telemetry is on by default (config telemetry: true); documents live in its own libsql worktree store and reach the user through a browser viewer with approve-or-discard cards, which the hosted frame does not mount and which would be a new approval step.",
+      "registers": [
+        "univer_new",
+        "univer_import",
+        "univer_export",
+        "univer_inspect",
+        "univer_execute",
+        "univer_api",
+        "univer_lint",
+        "univer_worktree",
+        "univer_unit",
+        "univer_resources",
+        "univer_screenshot",
+        "univer_print_pdf",
+        "univer_compile_svg",
+        "univer_status",
+        "univer"
+      ]
+    },
+    {
+      "name": "dsh-office-tools",
+      "version": "1.0.5",
+      "status": "not-adopted",
+      "testedOn": "2026-10-13",
+      "license": "MIT",
+      "reason": "Installs and boots. Not taken: capability. word_update only appends, excel_update replaces sheets or writes cells, ppt_* only creates and reads, and PPT images are linked, not embedded (its write channel is UTF-8 text); nothing edits one clause in place or restructures a deck. Its declared compatibility ends at 0.1.5-rc.2 and 0.2.0-rc.1. python-docx, python-pptx and openpyxl, with the office skills' helpers, cover read, edit and create.",
+      "registers": [
+        "word_create",
+        "word_read",
+        "word_update",
+        "excel_create",
+        "excel_read",
+        "excel_update",
+        "ppt_create",
+        "ppt_read"
+      ]
+    },
+    {
+      "name": "dsh-office",
+      "version": "0.4.6",
+      "status": "not-adopted",
+      "testedOn": "2026-10-13",
+      "license": "MIT",
+      "reason": "Installs and boots, but it is another product with a colliding name: an agent-fleet dashboard (sprite office over workspaces, sessions, token use, Feishu messages, agent mail, meetings through lark-cli). It registers no document tools and reads other sessions' data, which the tenancy boundary does not allow a runtime to do."
+    },
+    {
+      "name": "dsh-zagens-office",
+      "version": "github:didclawapp-ai/DSH-Office",
+      "status": "not-adopted",
+      "testedOn": "2026-10-13",
+      "license": "MIT",
+      "reason": "Not on the registry: a GitHub-only package whose four tools (office_schema, office_write, office_edit, office_read) shell out to a local zagens-office CLI the image does not carry. A pin needs a registry artifact with an integrity digest, and an external executable of unknown provenance is not something the image builds in."
+    },
+    {
+      "name": "@zhtx2026/dsh-pdf",
+      "version": "0.1.1",
+      "status": "not-adopted",
+      "testedOn": "2026-10-13",
+      "license": "MIT",
+      "reason": "Installs and boots (the npm package named dsh-pdf is another author's). Not taken: pdf_info, pdf_extract_text and pdf_render_page are covered by pdfplumber and the kit's PDFium page renderer, which the pdf skill already drives; it would add pdfjs-dist (37 MB) and a native canvas binding (30 MB per architecture) and three tool schemas to every first request.",
+      "registers": [
+        "pdf_info",
+        "pdf_extract_text",
+        "pdf_render_page"
+      ]
+    },
+    {
+      "name": "dsh-drawio",
+      "version": "0.1.0",
+      "status": "incompatible",
+      "testedOn": "2026-10-13",
+      "license": "Apache-2.0",
+      "reason": "Install refused by the kernel: \"Plugin dsh-drawio@0.1.0 is incompatible with dsh 0.1.7-rc.2\" - it pins @deepseek-ai/dsh-tools, dsh-workspace, dsh-attachment and dsh-session to exactly 0.1.0-rc.6. It would also add 92 MB and embed the diagrams.net editor; the repository's licence reads NOASSERTION while the package says Apache-2.0."
+    },
+    {
+      "name": "dsh-diagram",
+      "version": "0.6.1",
+      "status": "not-adopted",
+      "testedOn": "2026-10-13",
+      "license": "MIT",
+      "reason": "Installs and boots, and declares 0.1.7-rc.2 compatible. Not taken: it is a browser surface (an Excalidraw canvas with React 18 and 17 peer dependencies, eight of them client modules) that the headless try-install lane cannot qualify, 25 MB, and the hosted frame serves only client bundles recorded with a deployment switch. Mermaid already draws diagrams in replies; revisit when a client bundle can be tried in the hosted frame.",
+      "registers": [
+        "diagram_create",
+        "diagram_read"
+      ]
+    },
+    {
+      "name": "dsh-excel-chat",
+      "version": "0.42.0",
+      "status": "not-adopted",
+      "testedOn": "2026-10-13",
+      "license": "MIT",
+      "reason": "Installs and boots (\"ready: 25 tools registered\"). Not taken: 25 tool schemas in every first request, nine of which (chart, pivot and PDF export, visual review) need Windows with a local Excel; its goal mode plans with a model call inside the tool. Formula health, recalculation and error cells are covered by xlsx_tool and the kit's recalculate."
+    },
+    {
+      "name": "dsh-data-insight",
+      "version": "0.1.6",
+      "status": "not-adopted",
+      "testedOn": "2026-10-13",
+      "license": "MIT",
+      "reason": "Installs and boots; a 128 KB instruction-only skill (data-insight-runbook) with a CSV profiling script. Not taken without a measured gain: it overlaps exploratory-data-analysis and dataset-research-scoping, and principle 11 asks for a paired run before a second skill for the same request is mounted."
+    },
+    {
+      "name": "dsh-ppt",
+      "version": "0.9.0",
+      "status": "not-adopted",
+      "testedOn": "2026-10-13",
+      "license": "MIT",
+      "reason": "The plugin form of the community skill already vendored (decision: keep the skill). Installs and boots with seven ppt_* tools; its edit, reorder and undo work on its own project files and a settings-page client, and its peer pins @deepseek-ai/libreoffice-kit to exactly 0.1.5 while the kernel carries 0.1.1. Decks that already exist are restructured with the office pptx skill.",
+      "registers": [
+        "ppt_check",
+        "ppt_create",
+        "ppt_edit",
+        "ppt_render",
+        "ppt_templates",
+        "ppt_themes",
+        "ppt_undo"
+      ]
+    },
+    {
+      "name": "dsh-cowork",
+      "version": "commit 2ae5cf755c42",
+      "status": "not-adopted",
+      "testedOn": "2026-10-13",
+      "license": "MIT",
+      "reason": "Descriptor and isolated-tool pipeline exist and stay (activation not-wired, qualification unverified). Not wired: doc_write creates xlsx and ipynb only and never edits, doc_read of docx and pdf is covered in the run's own sandbox, and every call costs a disposable container. The admission code is no longer written for this repository (isolatedToolRowIsAdmitted); a tool is admitted by its descriptor's digest, coordinate and permission profile."
     }
   ],
   "communityClientBundles": [
@@ -125,5 +261,24 @@
       "transcriptSha256": "04999ab913118a37555c3c57a463279e602a956fe6e419bba97caadf4fa187b9",
       "controlTranscriptSha256": "3ecf4d67d6e98b9604f73a4c3e7428b4567e6eb038e0773d1f43e26c573339f8"
     }
-  }
+  },
+  "kernelNativeOffice": [
+    {
+      "name": "@deepseek-ai/libreoffice-kit",
+      "version": "0.1.1",
+      "license": "MPL-2.0",
+      "status": "used",
+      "testedOn": "2026-10-13",
+      "how": "Part of the DSH kernel's own closure (installed with the kernel at the pin, under its --before cutoff and closure check), so no new pin and no system LibreOffice in the image. runtime/skills/office/shared/office_kit.py finds its CLI (global kernel install, sealed profile, or EVIMED_LIBREOFFICE_KIT_CLI) and drives convert, recalculate and render; the office skills' helpers call it.",
+      "evidence": "shared/test_office_flows.py: docx to PDF keeps the contract at three pages, a 5,000-row workbook recalculates and its formulas stay formulas, a dark deck renders dark, a PDF page renders to PNG. install-runtime.sh office-smoke runs the suite with EVIMED_OFFICE_REQUIRE_KIT=1, so an image without the kit fails its build."
+    },
+    {
+      "name": "@deepseek-ai/dsh-skill-office",
+      "version": "0.1.7-rc.2",
+      "license": "MIT",
+      "status": "used-checker-only",
+      "testedOn": "2026-10-13",
+      "how": "Its read-only structural checker (assets/scripts/check_office.py, standard library only) is what `office_kit.py check` runs. Its three skill bodies (office-docx, office-pptx, office-xlsx) are not mounted: they would sit beside the office pack's docx, pptx and xlsx under different names for the same requests, depend on the load_workspace_dependencies tool this composition does not mount, and do not cover restructuring a deck or editing one clause byte-stably. To mount them anyway, the composition row is `- name: '@deepseek-ai/dsh-skill-office'` (WP-PROMPT's composition files)."
+    }
+  ]
 }

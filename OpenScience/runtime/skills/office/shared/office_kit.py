@@ -10,6 +10,12 @@ this wrapper takes care of both and finds the CLI.
     python3 office_kit.py render --input deck.pptx --output-dir preview --pages 1,3
     python3 office_kit.py convert --input contract.docx --output contract.pdf
     python3 office_kit.py recalculate --input budget.xlsx --output budget-calculated.xlsx
+    python3 office_kit.py check deck.pptx --count 11 --contains "Market size"
+
+`check` runs the structural checker that ships beside the kit in the kernel's own `@deepseek-ai/dsh-skill-office`
+(standard library only): it reads a DOCX, PPTX or XLSX without changing it, validates the package and its relationships,
+and reports paragraphs / slides / sheets, optionally asserting required text or a slide count. A pass says the file is
+sound, not that it looks right or that its formulas are calculated.
 """
 from __future__ import annotations
 
@@ -33,8 +39,19 @@ _ROOTS = (
 )
 
 
+CHECKER = "@deepseek-ai/dsh-skill-office/assets/scripts/check_office.py"
+
+
 class KitError(RuntimeError):
     pass
+
+
+def _find(relative: str) -> Path | None:
+    candidates: list[str] = [f"{root}/{relative}" for root in _ROOTS]
+    for home in filter(None, [os.environ.get("DSH_HOME"), "/opt/evimed/dsh-home-seed"]):
+        candidates += glob.glob(f"{home}/profiles/*/node_modules/{relative}")
+        candidates += glob.glob(f"{home}/profiles/*/node_modules/.pnpm/{relative.split('/')[0]}+{relative.split('/')[1]}@*/node_modules/{relative}")
+    return next((Path(c) for c in candidates if Path(c).is_file()), None)
 
 
 def find_cli() -> Path:
@@ -44,15 +61,37 @@ def find_cli() -> Path:
         if path.is_file():
             return path
         raise KitError(f"{CLI_ENV} names {explicit}, which is not a file")
-    candidates: list[str] = [f"{root}/{_RELATIVE}" for root in _ROOTS]
-    homes = [os.environ.get("DSH_HOME"), "/opt/evimed/dsh-home-seed"]
-    for home in filter(None, homes):
-        candidates += glob.glob(f"{home}/profiles/*/node_modules/{_RELATIVE}")
-        candidates += glob.glob(f"{home}/profiles/*/node_modules/.pnpm/@deepseek-ai+libreoffice-kit@*/node_modules/{_RELATIVE}")
-    for candidate in candidates:
-        if Path(candidate).is_file():
-            return Path(candidate)
-    raise KitError("the LibreOffice Kit CLI is not installed here; set " + CLI_ENV + " to its cli.js")
+    found = _find(_RELATIVE)
+    if not found:
+        raise KitError("the LibreOffice Kit CLI is not installed here; set " + CLI_ENV + " to its cli.js")
+    return found
+
+
+def find_checker() -> Path:
+    """The kernel's own structural checker: beside the kit when CLI_ENV points into a kernel install, else where the kernel is installed."""
+    explicit = os.environ.get(CLI_ENV)
+    if explicit:
+        beside = Path(explicit).resolve().parents[2] / "dsh-skill-office/assets/scripts/check_office.py"
+        if beside.is_file():
+            return beside
+    found = _find(CHECKER)
+    if not found:
+        raise KitError("the kernel's Office checker (@deepseek-ai/dsh-skill-office) is not installed here")
+    return found
+
+
+def check(path: str | Path, contains: list[str] | None = None, count: int | None = None) -> tuple[dict, int]:
+    """Structural check of a DOCX, PPTX or XLSX with the kernel's own checker; returns its JSON report and its exit status (0 = every check passed)."""
+    arguments = [sys.executable, str(find_checker()), _absolute(path)]
+    for text in contains or []:
+        arguments += ["--contains", text]
+    if count is not None:
+        arguments += ["--count", str(count)]
+    done = subprocess.run(arguments, capture_output=True, text=True, timeout=120)
+    try:
+        return json.loads(done.stdout), done.returncode
+    except ValueError:
+        raise KitError((done.stderr or done.stdout).strip() or "the checker printed nothing") from None
 
 
 def run(arguments: list[str], timeout: int = 240) -> dict:
@@ -114,12 +153,20 @@ def main() -> int:
     three.add_argument("--dpi", type=int, default=144)
     three.add_argument("--sheet")
     three.add_argument("--range", dest="cell_range")
+    four = sub.add_parser("check")
+    four.add_argument("file")
+    four.add_argument("--contains", action="append", default=[])
+    four.add_argument("--count", type=int)
     sub.add_parser("where")
     args = parser.parse_args()
     try:
         if args.command == "where":
             print(find_cli())
             return 0
+        if args.command == "check":
+            report, status = check(args.file, args.contains, args.count)
+            print(json.dumps(report, ensure_ascii=False))
+            return status
         if args.command == "convert":
             result = convert(args.input, args.output, args.sheet)
         elif args.command == "recalculate":

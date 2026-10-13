@@ -296,7 +296,7 @@ test('a plugin the matrix could not probe is reported as not probed, never as co
   assert.equal(pluginCompatibilityRow(bundle(PLUGIN_ID), { kernel: support.kernel, probe: { loaded: true, reason: 'booted' } }).loadsAgainstPin, 'pass');
   assert.equal(pluginCompatibilityRow(bundle(PLUGIN_ID), { kernel: support.kernel, probe: { loaded: false, reason: 'boom' } }).verdict, 'fails-to-load');
   // A bundle the record already refuses keeps its recorded verdict.
-  const refused = pluginCompatibilityRow(bundle('dsh-plugin-translation'), { kernel: support.kernel });
+  const refused = pluginCompatibilityRow(bundle('dsh-drawio'), { kernel: support.kernel });
   assert.equal(refused.declaredStatus, 'incompatible');
   assert.equal(refused.loadsAgainstPin, 'not-probed');
 });

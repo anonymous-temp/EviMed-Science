@@ -66,6 +66,13 @@ def serialize(root: etree._Element) -> bytes:
     return etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
 
 
+def put_text(node: etree._Element, text: str) -> None:
+    """Set a text node's text; xml:space="preserve" only where whitespace at an edge would otherwise be lost (or was already declared)."""
+    node.text = text
+    if text != text.strip() or node.get(f"{{{XML}}}space") == "preserve":
+        node.set(f"{{{XML}}}space", "preserve")
+
+
 def paragraphs(root: etree._Element) -> list[etree._Element]:
     return list(root.iter(q("p")))
 
@@ -148,11 +155,10 @@ def split_run(run: etree._Element, offset: int) -> etree._Element:
     if properties is not None:
         tail.append(copy.deepcopy(properties))
     piece = etree.SubElement(tail, q("t"))
-    node.text, piece.text = text[:offset], text[offset:]
     for after in list(node.itersiblings()):
         tail.append(after)
-    for part in (node, piece):
-        part.set(f"{{{XML}}}space", "preserve")
+    put_text(node, text[:offset])
+    put_text(piece, text[offset:])
     run.addnext(tail)
     return tail
 
@@ -191,8 +197,7 @@ def replace_in_paragraph(paragraph: etree._Element, offset: int, old: str, new: 
             target = next((n for n, start, stop in spans if start < offset <= stop), spans[0][0] if spans else None)
             if target is not None:
                 at = offset - next(start for n, start, stop in spans if n is target)
-                target.text = (target.text or "")[:at] + new + (target.text or "")[at:]
-                target.set(f"{{{XML}}}space", "preserve")
+                put_text(target, (target.text or "")[:at] + new + (target.text or "")[at:])
             return
         placed = False
         for node, start, stop in spans:
@@ -200,9 +205,8 @@ def replace_in_paragraph(paragraph: etree._Element, offset: int, old: str, new: 
                 continue
             text = node.text or ""
             lo, hi = max(offset, start) - start, min(end, stop) - start
-            node.text = text[:lo] + ("" if placed else new) + text[hi:]
+            put_text(node, text[:lo] + ("" if placed else new) + text[hi:])
             placed = True
-            node.set(f"{{{XML}}}space", "preserve")
         return
     if not simple_runs(paragraph):
         raise ValueError("this paragraph holds runs that a tracked change cannot wrap; replace it without --track-changes")
@@ -232,9 +236,7 @@ def replace_in_paragraph(paragraph: etree._Element, offset: int, old: str, new: 
         fresh = etree.SubElement(insertion, q("r"))
         if properties is not None:
             fresh.append(copy.deepcopy(properties))
-        t = etree.SubElement(fresh, q("t"))
-        t.text = new
-        t.set(f"{{{XML}}}space", "preserve")
+        put_text(etree.SubElement(fresh, q("t")), new)
     if covered:
         deletion = etree.Element(q("del"), {q("id"): str(ids[0]), q("author"): author, q("date"): stamp})
         covered[0].addprevious(deletion)
@@ -242,7 +244,7 @@ def replace_in_paragraph(paragraph: etree._Element, offset: int, old: str, new: 
             deletion.append(run)
             for t in run.findall("w:t", NS):
                 t.tag = q("delText")
-                t.set(f"{{{XML}}}space", "preserve")
+                put_text(t, t.text or "")
         if insertion is not None:
             deletion.addnext(insertion)
     elif insertion is not None:

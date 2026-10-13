@@ -27,7 +27,7 @@
     {
       "name": "writing-guard",
       "repo": "xmutfyh/dsh-plugin-writing-guard",
-      "reason": "Bundle-form, not skill-form: its SKILL.md calls `writing_audit()` twelve times, and that tool comes from the plugin half of the package. Vendoring the prose alone would instruct the model to call a tool that does not exist. Belongs in the try-install lane, where the bundle is pinned into the image whole."
+      "reason": "Bundle-form, not skill-form: its SKILL.md calls `writing_audit()` twelve times, and that tool comes from the plugin half of the package. Vendoring the prose alone would instruct the model to call a tool that does not exist. Belongs in the try-install lane, where the bundle is pinned into the image whole. Tried 2026-10-13: its postinstall copies a skill and a Python module into $DSH_HOME, which the sealed profile's build policy refuses (plugin-support.json)."
     },
     {
       "name": "dsh-cite",
@@ -37,12 +37,12 @@
     {
       "name": "academic-writing",
       "repo": "863683348/dsh-plugin-academic-writing",
-      "reason": "Registers the `academic_writing` tool. Try-install lane."
+      "reason": "Registers the `academic_writing` tool. Try-install lane. Tried 2026-10-13 at 0.3.2: boots on the pinned kernel; not taken (plugin-support.json)."
     },
     {
       "name": "translation",
       "repo": "863683348/dsh-plugin-translation",
-      "reason": "Registers a translation tool. Try-install lane."
+      "reason": "Registers a translation tool. Try-install lane. Tried 2026-10-13 at 0.3.2: boots on the pinned kernel; not taken (plugin-support.json)."
     }
   ]
 }

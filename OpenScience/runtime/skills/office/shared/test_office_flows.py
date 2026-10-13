@@ -40,6 +40,12 @@ except office_kit.KitError:
 if os.environ.get("EVIMED_OFFICE_REQUIRE_KIT") and not KIT:
     raise SystemExit("EVIMED_OFFICE_REQUIRE_KIT is set and the LibreOffice Kit CLI is not installed")
 needs_kit = unittest.skipUnless(KIT, "the LibreOffice Kit CLI is not installed here")
+try:
+    office_kit.find_checker()
+    CHECKER = True
+except office_kit.KitError:
+    CHECKER = False
+needs_checker = unittest.skipUnless(CHECKER, "the kernel's Office checker is not installed here")
 
 
 def run(script: Path, *arguments: object) -> subprocess.CompletedProcess:
@@ -88,6 +94,20 @@ class DocxFlows(Workdir):
         self.assertEqual(document.sections[0].header.paragraphs[0].text, "Services Agreement - Confidential")
         self.assertEqual(len(Document(self.contract).paragraphs), len(document.paragraphs))
 
+    def test_a_chinese_contract_changes_in_the_clause_named_and_not_in_its_twin(self) -> None:
+        from docx import Document
+
+        contract = fixtures.make_contract_zh(self.dir / "zh.docx")
+        refused = run(DOCX, "replace", contract, "--find", "30", "--with", "45", "--out", self.dir / "never.docx")
+        self.assertEqual(refused.returncode, 3, "the same number stands in the payment and the liability clause")
+        edited = self.dir / "zh-45.docx"
+        done = run(DOCX, "replace", contract, "--find", "30天", "--with", "45天", "--paragraph", 9, "--out", edited)
+        self.assertEqual(done.returncode, 0, done.stdout)
+        texts = [p.text for p in Document(edited).paragraphs]
+        self.assertIn("\u7532\u65b9\u5e94\u81ea\u6536\u5230\u53d1\u7968\u4e4b\u65e5\u8d7745\u5929\u5185\u652f\u4ed8\u5168\u90e8\u6b3e\u9879\uff0c\u652f\u4ed8\u65b9\u5f0f\u4e3a\u94f6\u884c\u8f6c\u8d26\u3002", texts)
+        self.assertIn("\u4e59\u65b9\u903e\u671f\u4ea4\u4ed8\u8d85\u8fc7 30 \u5929\u7684\uff0c\u7532\u65b9\u6709\u6743\u89e3\u9664\u5408\u540c\u5e76\u8981\u6c42\u8d54\u507f\u3002", texts)
+        self.assertEqual(json.loads(run(DOCX, "diff", contract, edited).stdout)["parts_changed"], ["word/document.xml"])
+
     def test_an_ambiguous_change_is_refused_and_names_the_candidates(self) -> None:
         out = self.dir / "never.docx"
         done = run(DOCX, "replace", self.contract, "--find", "30 days", "--with", "45 days", "--out", out)
@@ -127,6 +147,18 @@ class DocxFlows(Workdir):
             office_kit.convert(self.dir / f"{name}.docx", self.dir / f"{name}.pdf")
         counts = [json.loads(run(PDF, "info", self.dir / f"{name}.pdf").stdout)["pages"] for name in ("contract", "contract-v2")]
         self.assertEqual(counts, [3, 3])
+
+
+class KernelChecker(Workdir):
+    @needs_checker
+    def test_the_kernels_own_structural_check_reads_every_format(self) -> None:
+        contract = fixtures.make_contract(self.dir / "contract.docx")
+        report, status = office_kit.check(contract, contains=["Payment is due within 30 days"])
+        self.assertEqual((status, report["verdict"], report["summary"]["paragraphs"]), (0, "pass", 25))
+        self.assertEqual(office_kit.check(contract, contains=["a sentence the contract does not hold"])[1], 1)
+        self.assertEqual(office_kit.check(fixtures.make_deck(self.dir / "deck.pptx"), count=10)[0]["summary"]["slides"], 10)
+        sheets = office_kit.check(fixtures.make_sales(self.dir / "sales.xlsx", rows=20))[0]["summary"]["sheets"]
+        self.assertEqual(sheets[0]["name"], "Data")
 
 
 class XlsxFlows(Workdir):
