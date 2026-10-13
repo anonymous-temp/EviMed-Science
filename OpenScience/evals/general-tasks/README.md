@@ -109,7 +109,7 @@ Re-judging saved records costs no model time on the agent side: `python3 judges/
   (guidance, run-policy, evidence, capsule, screening, compaction, duplicate-lines), the citation tools are off (`EVIMED_CITE_ENABLED=0`
   in the kernel process), and the persona row of the preset is replaced by one neutral sentence in the runtime's own copy of the profile
   (`runner/persona.mjs`; the persona is a row of the kernel's own and no switch reaches it). The MCP server's tools are still mounted
-  (they are not socket plugins). With run-policy off the control plane's dispatch brief is not injected either, so the first
+  (they are not socket plugins); with run-policy off the root-tool filter is off too, so arm A's first request carries 55 tools against B's 41. With run-policy off the control plane's dispatch brief is not injected either, so the first
   model request carries the kernel's own prompt and one neutral sentence; each record keeps that request's size and a flag for
   whether it still names the medical persona.
 * Reading: the completion-rate gap B − A is the net effect of the platform's composition on general tasks; the target for C is
