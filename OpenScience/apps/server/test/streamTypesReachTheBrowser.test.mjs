@@ -110,19 +110,19 @@ test("the deliverable publisher is called, not just mentioned", async () => {
   assert.ok(calls >= 3, `publishDeliverables is called ${calls} times; the live path, the durable path and the monitor each need one`);
 });
 
-// Routing attribution, checked where it is actually written. The regex net
-// catching a request after the model declined to answer looks identical, in the
-// ledger, to the net catching one after the model said "no specialist fits" —
-// and only the first means the model never got a vote.
-test("the regex net says when it caught a request the model never judged", async () => {
-  const source = await readFile(path.join(repoRoot, "apps/server/src/server.mjs"), "utf8");
+// Routing attribution, checked where it is actually written. The medicine rule
+// catching a request after the model never answered looks identical, in the
+// ledger, to the rule catching one after the model said "none" -- and only the
+// first means the model never got a vote. The same holds for the answer line.
+test("the routing ledger says when a request was settled without the model's verdict", async () => {
+  const routing = await readFile(path.join(repoRoot, "apps/server/src/specialistRouting.mjs"), "utf8");
   assert.match(
-    source,
-    /routedSpecialist = net && classifierTrace\.failure/,
-    "a net match after a classifier failure must be distinguishable from one after a clean verdict",
+    routing,
+    /trace\.failure \? \{ \.\.\.medicine, reason: classifierFailureReason\(medicine\.reason, trace\.failure\) \}/,
+    "a medicine-rule match after a classifier failure must be distinguishable from one after a clean verdict",
   );
-  assert.match(source, /classifierFailureReason\(net\.reason, classifierTrace\.failure\)/);
   // And the answer-line fallback keeps its own attribution.
+  const source = await readFile(path.join(repoRoot, "apps/server/src/server.mjs"), "utf8");
   assert.match(source, /classifierFailureReason\("unrouted:open-domain", classifierTrace\.failure\)/);
 });
 

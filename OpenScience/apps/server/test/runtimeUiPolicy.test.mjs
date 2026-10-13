@@ -1435,7 +1435,9 @@ test("PostgreSQL plugin fence holds native mux admission through kernel ACK and 
   await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Native admission','development')", [f.user.id]);
   await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,$2,'Native',1000000)", [f.user.id, project.id]);
   t.after(async () => { await db.query("DELETE FROM evimed_control.users WHERE id=$1", [f.user.id]); await db.close(); });
-  const service = new PluginService(db); f.manager.pluginService = service;
+  // An admission waits for an apply up to `admissionWaitMs` (20 s by default, since 2026-10-04) before it is refused with
+  // `plugin_apply_in_progress`; the test holds the apply's lock only until it has seen that refusal, so the wait is short here.
+  const service = new PluginService(db, { admissionWaitMs: 300 }); f.manager.pluginService = service;
   const connection = f.connect(); await connection.opened;
   connection.send(open("plugin-prompt", "session/prompt"));
   assert.equal((await connection.next()).type, "item");
