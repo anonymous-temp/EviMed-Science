@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/memoryMapClient";
 import { LAYOUT_HEIGHT, LAYOUT_WIDTH, layoutGraph, unitHash } from "./layout";
 import { TEST_PALETTE } from "./palette";
-import { chainOption, edgeTooltip, graphOption, symbolOf, tooltipOf } from "./graphOption";
+import { chainOption, edgeTooltip, edgeWords, graphOption, isHideableEdge, symbolOf, tooltipOf } from "./graphOption";
 
 const memory = (id: string, over: Partial<MapNode> = {}): MapNode => ({ id: `memory:${id}`, type: "memory", subtype: "preference", group: "偏好", label: `记忆 ${id}`, weight: 0.4, state: "current", ...over });
 const you: MapNode = { id: "you:account", type: "you", label: "你", state: "current" };
@@ -174,5 +174,29 @@ describe("the source chain", () => {
     expect(root.children[0].itemStyle.color).toBe("#amber");
     expect(root.children[2].itemStyle.color).toBe("#grey");
     expect(option.series[0].orient).toBe("LR");
+  });
+});
+
+describe("a line the researcher may call wrong", () => {
+  const lines: MapEdge[] = [
+    { id: "e_aaaaaaaaaaaaaaaaaaaaaaaa", from: "memory:b", to: "document:src_1", type: "rests-on", state: "retracted" },
+    { id: "e_bbbbbbbbbbbbbbbbbbbbbbbb", from: "memory:a", to: "you:account", type: "belongs-to" },
+    { id: "e_cccccccccccccccccccccccc", from: "memory:a", to: "cluster:memory:p:preference", type: "rests-on" },
+    { from: "memory:a", to: "memory:c", type: "replaces" },
+  ];
+  const by = new Map(nodes.map((node) => [node.id, node]));
+
+  it("is a derived line between two real marks that has an id; structure, a folded group's line and a line without an id are not", () => {
+    expect(lines.map((line) => isHideableEdge(line, by.get(line.from), by.get(line.to)))).toEqual([true, false, false, false]);
+  });
+
+  it("is named on the line the library draws, so a press on the canvas can say which one it was", () => {
+    const option = graphOption({ nodes, edges: lines, positions, hits: new Set(), selected: null, palette: TEST_PALETTE }) as { series: Array<{ links: Array<{ edgeId: string | null }> }> };
+    expect(option.series[0].links.map((link) => link.edgeId)).toEqual(["e_aaaaaaaaaaaaaaaaaaaaaaaa", null, null, null]);
+  });
+
+  it("is said in words with the marks' own names", () => {
+    expect(edgeWords(lines[0], "有研究称该药把再入院减半", "GOLD")).toBe("有研究称该药把再入院减半 依据 GOLD");
+    expect(edgeWords({ from: "entity:a", to: "entity:b", type: "relates", label: "治疗" }, "二甲双胍", "2 型糖尿病")).toBe("二甲双胍 治疗 2 型糖尿病");
   });
 });

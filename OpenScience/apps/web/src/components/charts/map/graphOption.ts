@@ -72,9 +72,19 @@ const EDGE_WORDS: Record<MapEdge["type"], string> = {
   "belongs-to": "属于", "rests-on": "依据", replaces: "替代了", conflicts: "彼此矛盾", links: "链接到", quotes: "引自", relates: "相关",
 };
 
-export function edgeTooltip(edge: MapEdge, from: string, to: string): string {
+/** A line in words: 「某条记忆 依据 某份资料」. */
+export function edgeWords(edge: MapEdge, from: string, to: string): string {
   const word = edge.type === "relates" && edge.label ? edge.label : EDGE_WORDS[edge.type];
-  return `<div style="max-width:280px;white-space:normal">${escapeTooltip(from)} ${escapeTooltip(word)} ${escapeTooltip(to)}</div>`;
+  return `${from} ${word} ${to}`;
+}
+
+/** Whether the researcher may call this line wrong: a derived line between two real marks. Structure, and the lines of a folded group, are not theirs to dismiss. */
+export function isHideableEdge(edge: MapEdge, from: MapNode | undefined, to: MapNode | undefined): boolean {
+  return Boolean(edge.id) && edge.type !== "belongs-to" && Boolean(from) && Boolean(to) && from?.type !== "cluster" && to?.type !== "cluster";
+}
+
+export function edgeTooltip(edge: MapEdge, from: string, to: string): string {
+  return `<div style="max-width:280px;white-space:normal">${escapeTooltip(edgeWords(edge, from, to))}</div>`;
 }
 
 export function graphOption(input: GraphInput): EChartsCoreOption {
@@ -143,6 +153,8 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
       },
       label: { show: edge.type === "relates" && Boolean(edge.label), formatter: edge.label ?? "", color: palette.textFaint, fontSize: 11 },
       tooltipText: edgeTooltip(edge, byId.get(edge.from)?.label ?? "", byId.get(edge.to)?.label ?? ""),
+      // What a press on the line names, when the researcher may call it wrong.
+      edgeId: isHideableEdge(edge, byId.get(edge.from), byId.get(edge.to)) ? edge.id : null,
     };
   });
 

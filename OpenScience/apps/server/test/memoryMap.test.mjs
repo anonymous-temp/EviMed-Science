@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   MAP_EDGES, MAP_FOCUS_NODES, MAP_OVERVIEW_NODES, blocksOf, buildMemoryMap, createMemoryMapRoutes, egoOf, foldToFit, rangeOf,
 } from "../src/memoryMap.mjs";
+import { edgeIdOf } from "../src/memoryMapEdges.mjs";
 import { nodeId, parseNodeId } from "../src/memoryMapSources/common.mjs";
 import { recordsContribution } from "../src/memoryMapSources/records.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
@@ -117,7 +118,29 @@ test("a memory is marked when a source it rests on was withdrawn, when it is in 
   });
   assert.equal(map.summary.needsLook, 5);
   assert.ok(map.edges.some((edge) => edge.type === "conflicts" && edge.from === "memory:b" && edge.to === "memory:c"));
-  assert.deepEqual(map.edges.find((edge) => edge.from === "memory:a" && edge.type === "rests-on"), { from: "memory:a", to: "reference:doi:10.1/x", type: "rests-on", state: "retracted", at: null });
+  const rests = map.edges.find((edge) => edge.from === "memory:a" && edge.type === "rests-on");
+  assert.deepEqual(rests, { from: "memory:a", to: "reference:doi:10.1/x", type: "rests-on", state: "retracted", at: null, id: edgeIdOf(rests) });
+});
+
+test("every line has a stable id, and a line the account called wrong is left out of the map and of what hangs only from it", async () => {
+  const records = [record({ id: "a" }), record({ id: "b" })];
+  const links = { sources: [{ recordId: "a", type: "doi", id: "10.1/x", state: "current", linkedAt: null }, { recordId: "b", type: "knowledge_source", id: "src_1", state: "current", linkedAt: null }], conflicts: [], usage: {} };
+  const sources = [source("records", recordsContribution(records, links, { now: NOW, timeZone: "UTC" }))];
+  const whole = await build(sources);
+  const again = await build(sources);
+  assert.deepEqual(whole.edges.map((edge) => edge.id), again.edges.map((edge) => edge.id), "the same line has the same id in two reads");
+  assert.ok(whole.edges.every((edge) => /^e_[0-9a-f]{24}$/.test(edge.id)));
+  assert.equal(new Set(whole.edges.map((edge) => edge.id)).size, whole.edges.length);
+  const wrong = whole.edges.find((edge) => edge.type === "rests-on" && edge.from === "memory:a");
+  const structure = whole.edges.find((edge) => edge.type === "belongs-to");
+  const cut = await build(sources, { dismissedEdges: new Set([wrong.id, structure.id]) });
+  assert.equal(cut.edges.some((edge) => edge.id === wrong.id), false, "the line the researcher called wrong is not drawn");
+  assert.equal(cut.nodes.some((node) => node.id === "reference:doi:10.1/x"), false, "an outside source nothing rests on any more is not a mark");
+  assert.ok(cut.edges.some((edge) => edge.id === structure.id), "structure is never a claim to dismiss: a belongs-to line stays");
+  assert.ok(cut.nodes.some((node) => node.id === "memory:a"), "the memory itself is still remembered");
+  assert.equal(cut.summary.memories, whole.summary.memories);
+  // Another account's corrections are another account's: a set that names nothing here changes nothing.
+  assert.deepEqual((await build(sources, { dismissedEdges: new Set(["e_000000000000000000000000"]) })).edges, whole.edges);
 });
 
 test("a disagreement that is settled, or that a replaced memory was a side of, is no reason to look", async () => {

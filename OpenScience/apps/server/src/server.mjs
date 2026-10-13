@@ -163,6 +163,7 @@ import { eraseRetiredMemos } from "./retiredMemos.mjs";
 import { sessionDispatchNotes, withTrialTitles } from "./memorySessions.mjs";
 import { createMemoryTimelineRoutes } from "./memoryTimeline.mjs";
 import { createMemoryMapRoutes } from "./memoryMap.mjs";
+import { MapEdgeCorrections } from "./memoryMapEdges.mjs";
 import { MemoryTopics } from "./memoryTopics.mjs";
 import { createActivitySource } from "./memoryMapSources/activity.mjs";
 import { createDocumentsSource } from "./memoryMapSources/documents.mjs";
@@ -4826,6 +4827,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }),
       createTopicsSource({ topics: memoryTopics, researchMemory }),
     ],
+    edgeCorrections: new MapEdgeCorrections({ database: productDatabase }),
     nativeLinks: createNativeRecordLinks({ nativeMemory }),
     recordLinks: createRecordLinks({
       researchMemory, sources: sourceService, agentRuns, projectOf: memoryMapProjectOf,

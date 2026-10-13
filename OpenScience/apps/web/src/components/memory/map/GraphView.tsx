@@ -3,10 +3,10 @@ import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useColorScheme } from "@/lib/colorScheme";
 import { formatDay } from "@/lib/format";
-import type { MapNode, MemoryMap } from "@/lib/memoryMapClient";
+import type { MapEdge, MapNode, MemoryMap } from "@/lib/memoryMapClient";
 import { MapChart } from "@/components/charts/MapChart";
 import { useReducedMotion } from "@/components/charts/echartsBase";
-import { chainOption, graphOption } from "@/components/charts/map/graphOption";
+import { chainOption, edgeWords, graphOption, isHideableEdge } from "@/components/charts/map/graphOption";
 import { layoutGraph } from "@/components/charts/map/layout";
 import { mapPalette } from "@/components/charts/map/palette";
 import { existingAt, replayStops, type NarrowedMap } from "./mapModel";
@@ -72,13 +72,15 @@ export function Legend({ nodes }: { nodes: readonly MapNode[] }) {
  * mark), the picture the library draws from them, and under it the legend and the slider that grows the map from its first day.
  * Played, it adds the marks in the order they began, which is the nearest thing the map has to the sense of having built something.
  */
-export function GraphView({ doc, narrowed, selected, actions, chain, focused }: {
+export function GraphView({ doc, narrowed, selected, actions, chain, focused, onHideEdge }: {
   doc: Pick<MemoryMap, "nodes" | "edges" | "truncated">;
   narrowed: NarrowedMap;
   selected: string | null;
   actions: GraphActions;
   /** The map is centred on one mark or one group, so what is left out is outside its reach and not folded. */
   focused: boolean;
+  /** 「这条关联不对」 on a line: it stays out of this person's map. Absent where the page cannot keep that word. */
+  onHideEdge?: (edge: MapEdge) => Promise<void>;
   /** The source chain of the focused memory, in place of the graph. */
   chain: { root: MapNode; rests: Array<{ node: MapNode; state: import("@/lib/memoryMapClient").MapEdge["state"] }>; replaced: MapNode[] } | null;
 }) {
@@ -118,9 +120,23 @@ export function GraphView({ doc, narrowed, selected, actions, chain, focused }: 
   )), [chain, shown, positions, narrowed.hits, selected, scheme, compact]);
 
   const byId = useMemo(() => new Map(doc.nodes.map((node) => [node.id, node])), [doc.nodes]);
+  // A line pressed on the canvas, read out below it with the one thing the researcher may say about it.
+  const edgeById = useMemo(() => new Map((doc.edges as MapEdge[]).filter((edge) => edge.id).map((edge) => [edge.id as string, edge])), [doc.edges]);
+  const [pickedEdge, setPickedEdge] = useState<string | null>(null);
+  const [hiding, setHiding] = useState(false);
+  const picked = pickedEdge ? edgeById.get(pickedEdge) ?? null : null;
   const nodeOf = (params: { name?: string; data?: { id?: string; name?: string } }) => byId.get(String(params?.data?.id ?? params?.name ?? params?.data?.name ?? ""));
   const on = {
-    click: (params: { name?: string; data?: { id?: string } }) => { const node = nodeOf(params); if (node) actions.onOpen(node); },
+    click: (params: { name?: string; dataType?: string; data?: { id?: string; edgeId?: string | null } }) => {
+      if (params?.dataType === "edge") {
+        const edge = params.data?.edgeId ? edgeById.get(params.data.edgeId) : undefined;
+        if (edge && onHideEdge) setPickedEdge(edge.id ?? null);
+        return;
+      }
+      setPickedEdge(null);
+      const node = nodeOf(params);
+      if (node) actions.onOpen(node);
+    },
     dblclick: (params: { name?: string; data?: { id?: string } }) => { const node = nodeOf(params); if (node) actions.onFocus(node); },
   };
 
@@ -133,6 +149,18 @@ export function GraphView({ doc, narrowed, selected, actions, chain, focused }: 
         unpainted={`${shown.nodes.length} 个标记、${shown.edges.length} 条连线。`}
       />
       {!chain && <Legend nodes={shown.nodes} />}
+      {!chain && picked && onHideEdge && isHideableEdge(picked, byId.get(picked.from), byId.get(picked.to)) && (
+        <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui text-text-2">
+          <span>{edgeWords(picked, byId.get(picked.from)?.label ?? "", byId.get(picked.to)?.label ?? "")}</span>
+          <Button
+            size="sm" variant="secondary" loading={hiding}
+            onClick={() => { setHiding(true); void onHideEdge(picked).then(() => setPickedEdge(null)).finally(() => setHiding(false)); }}
+          >
+            这条关联不对
+          </Button>
+          <button type="button" onClick={() => setPickedEdge(null)} className="rounded px-1 text-accent hover:underline">知道了</button>
+        </div>
+      )}
       {!chain && stops.length > 1 && (
         <div className="flex flex-wrap items-center gap-3 text-ui text-text-2">
           <Button
