@@ -130,7 +130,9 @@ describe("editing a page", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "编辑" }));
     const field = await screen.findByLabelText("页面全文");
-    expect(field).toHaveValue(mine.markdown);
+    // The engine's address is not shown in the editor; it goes back on when the page is saved.
+    expect((field as HTMLTextAreaElement).value).not.toContain("viking://");
+    expect((field as HTMLTextAreaElement).value).toContain("](sources/src_");
     expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
     await user.type(field, "\n补充一句。");
     await user.click(screen.getByRole("button", { name: "保存" }));

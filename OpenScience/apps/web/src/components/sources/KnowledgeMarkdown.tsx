@@ -60,7 +60,7 @@ function SourceLink({ link, children }: { link: Extract<KnowledgePageLink, { kin
       <button type="button" className={`${LINK} text-left`} onClick={() => void openQuotation(link.sourceId, link.quote, navigate, listParams(readListState(params)).toString())}>{children}</button>
       {mark}
       {link.status === "absent" && open && (
-        <span role="note" className="my-1 block rounded-tag bg-warn-soft px-2 py-1 text-caption text-warn-strong">
+        <span role="note" className="mx-1 rounded-tag bg-warn-soft px-1.5 py-0.5 text-caption text-warn-strong">
           {MISSING_QUOTE}：“{link.quote}”
         </span>
       )}

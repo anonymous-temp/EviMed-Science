@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { Pencil } from "lucide-react";
 import { knowledgePageTypeLabel } from "@evimed/domain";
@@ -15,7 +15,7 @@ import {
 } from "@/lib/sourceClient";
 import { toast } from "@/lib/toast";
 import { KnowledgeMarkdown } from "./KnowledgeMarkdown";
-import { STALE_LABEL, staleReasons, statusLine } from "./knowledgeView";
+import { STALE_LABEL, maskEngineAddresses, staleReasons, statusLine } from "./knowledgeView";
 
 /**
  * 「知识页」, opened: the page as the compile wrote it, drawn as a document (`KnowledgeMarkdown`), with what a reader needs
@@ -136,17 +136,19 @@ function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
   onReloaded: (page: KnowledgePage) => void;
 }) {
   const [base, setBase] = useState(page);
-  const [text, setText] = useState(page.markdown);
+  // The engine's address in front of each link to a document is not the person's to read or to keep; it goes back on when saved.
+  const masked = useMemo(() => maskEngineAddresses(base.markdown), [base.markdown]);
+  const [text, setText] = useState(masked.text);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
-  const changed = text !== base.markdown;
+  const changed = text !== masked.text;
   const save = async () => {
     setSaving(true);
     setMessage(null);
     try {
-      const saved = await saveKnowledgePage({ sourceId: base.sourceId, markdown: text, baseSha256: base.sha256 });
+      const saved = await saveKnowledgePage({ sourceId: base.sourceId, markdown: masked.restore(text), baseSha256: base.sha256 });
       if (live.current) onSaved(saved.page);
     } catch (failure) {
       if (!live.current) return;
@@ -155,7 +157,7 @@ function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
           const fresh = await getKnowledgePageAt(projectId, base.tree, base.path);
           if (!live.current) return;
           setBase(fresh);
-          setText(fresh.markdown);
+          setText(maskEngineAddresses(fresh.markdown).text);
           onReloaded(fresh);
           setMessage("这一页刚被重新整理过，已换成最新的版本，请在它的基础上再改一次。");
         } catch (reloadFailure) { setMessage(productErrorMessage(reloadFailure)); }

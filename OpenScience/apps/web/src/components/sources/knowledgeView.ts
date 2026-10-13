@@ -95,7 +95,7 @@ export function groupRows(rows: readonly KnowledgeTreeRow[], query = ""): TreeGr
   const groups = new Map<string, TreeGroup>();
   for (const row of kept) {
     const id = `${row.tree}:${row.type}`;
-    const group = groups.get(id) ?? { id, tree: row.tree, type: row.type, label: row.tree === "kg" ? "图谱实体" : knowledgePageTypeLabel(row.type), rows: [] };
+    const group = groups.get(id) ?? { id, tree: row.tree, type: row.type, label: row.tree === "kg" ? (row.type === "index" ? "图谱目录" : "图谱实体") : knowledgePageTypeLabel(row.type), rows: [] };
     group.rows.push(row);
     groups.set(id, group);
   }
@@ -230,4 +230,22 @@ export function conversationReferences(
   if (primary) add(primary.id, primary.title);
   for (const entry of cited) if (entry.available !== false) add(entry.sourceId, entry.title);
   return out;
+}
+
+/** The engine's own directory in front of a page's links to documents: `viking://user/<id>/resources/p/<project>/` before `sources/…`. */
+const ENGINE_PREFIX = /viking:\/\/[^\s)"'<>\]]*?\/(?=(?:sources|library)\/)/gu;
+
+/**
+ * A page's text as the editor shows it: the engine's address in front of each link to a document left off, so a link reads
+ * `(sources/src_….md "…")`, and `restore` puts it back on what was written. A page whose links name more than one engine
+ * directory is shown as it is (the restore would not know which belongs where).
+ */
+export function maskEngineAddresses(markdown: string): { text: string; restore: (edited: string) => string } {
+  const prefixes = [...new Set(markdown.match(ENGINE_PREFIX) ?? [])];
+  if (prefixes.length !== 1) return { text: markdown, restore: (edited) => edited };
+  const prefix = prefixes[0]!;
+  return {
+    text: markdown.replaceAll(prefix, ""),
+    restore: (edited) => edited.replace(/\]\((?=(?:sources|library)\/)/gu, `](${prefix}`),
+  };
 }

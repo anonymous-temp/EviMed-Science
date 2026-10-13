@@ -4,7 +4,7 @@ import statusCompiled from "./knowledgeFixtures/status-compiled.json";
 import treeMixed from "./knowledgeFixtures/tree-mixed.json";
 import pageMine from "./knowledgeFixtures/page-analysis-mine.json";
 import pageAbsent from "./knowledgeFixtures/page-concept-absent.json";
-import { groupRows, linkPosition, pageSegments, staleReasons, statusLine, withoutEngineAddresses, withoutLeadingTitle } from "./knowledgeView";
+import { groupRows, linkPosition, maskEngineAddresses, pageSegments, staleReasons, statusLine, withoutEngineAddresses, withoutLeadingTitle } from "./knowledgeView";
 
 const NOW = new Date("2026-10-13T12:00:00Z");
 const status = (patch: Partial<KnowledgeStatus>): KnowledgeStatus => ({ ...(statusCompiled as unknown as KnowledgeStatus), ...patch });
@@ -56,8 +56,13 @@ describe("groupRows", () => {
   it("groups the pages by type in the reading order and puts the graph's entities last", () => {
     const groups = groupRows(rows);
     expect(groups.map((group) => group.label)).toEqual(["概念", "实体", "方法", "比较", "分析", "目录", "图谱实体"]);
-    expect(groups.at(-1)!.rows.length).toBeGreaterThan(20);
+    expect(groups.find((group) => group.label === "图谱实体")!.rows.length).toBeGreaterThan(20);
     expect(groups.flatMap((group) => group.rows).some((row) => row.type === "relations")).toBe(false);
+  });
+
+  it("names the graph's own index apart from its entities", () => {
+    const index = { ...rows.find((row) => row.tree === "kg")!, type: "index", title: "知识图谱目录", path: "index.md" };
+    expect(groupRows([...rows, index]).map((group) => group.label).slice(-2)).toEqual(["图谱实体", "图谱目录"]);
   });
 
   it("narrows by title without asking again", () => {
@@ -127,5 +132,25 @@ describe("small helpers", () => {
   it("drops the first heading when it is the title the header already shows", () => {
     expect(withoutLeadingTitle("\n# 盘点差异率\n\n正文", "盘点差异率")).toBe("\n正文");
     expect(withoutLeadingTitle("# 另一个\n正文", "盘点差异率")).toBe("# 另一个\n正文");
+  });
+});
+
+describe("maskEngineAddresses", () => {
+  const mine = pageMine as unknown as KnowledgePage;
+
+  it("shows a page's links to documents without the engine's directory, and puts it back on save", () => {
+    const { text, restore } = maskEngineAddresses(mine.markdown);
+    expect(text).not.toContain("viking://");
+    expect(text).toMatch(/\]\(sources\/src_[a-f0-9]{32}\.md "/u);
+    expect(restore(text)).toBe(mine.markdown);
+    // What the person wrote is kept, and a link they add to a document goes back with the directory too.
+    expect(restore(`${text}\n更多见 [另一份](sources/src_${"0".repeat(32)}.md)。`)).toContain("viking://user/");
+  });
+
+  it("leaves a page alone whose links name more than one engine directory", () => {
+    const text = "[a](viking://user/u/resources/p/one/sources/src_1.md) [b](viking://user/u/resources/p/two/sources/src_2.md)";
+    const masked = maskEngineAddresses(text);
+    expect(masked.text).toBe(text);
+    expect(masked.restore("x")).toBe("x");
   });
 });
