@@ -67,29 +67,60 @@ services:
       - no-new-privileges:true
     restart: unless-stopped
 
-  # The recall index: a third-party context database holding derived copies of
-  # user memories, and nothing original. Every record it ranks is hydrated back
-  # from PostgreSQL before it reaches anyone, so a lost volume costs one
-  # `pnpm rebuild:memory-index --all` and no data.
+  # The context engine: a third-party service (OpenViking, deps-version.json
+  # `openviking`) that holds two kinds of thing since v0.5.0.
   #
-  # It is in the base stack rather than an overlay because both recall paths —
-  # research memory and capsule facts — now rank through it, and a deployment
-  # that skipped the overlay would silently fall back to term matching.
+  # Derived: copies of the records PostgreSQL owns — research memory and capsule
+  # facts — ranked for recall. Every hit is hydrated back from PostgreSQL before
+  # it reaches anyone, and that part of a lost volume costs one
+  # `pnpm rebuild:memory-index --all`.
+  #
+  # Original: an account's native memory (extracted here from sessions, with the
+  # templates mounted below), the documents pushed as resources, and the pages
+  # and graph its Compile writes from them. That part exists nowhere else, so
+  # the volume is in the backup (docker-compose.backup.yml,
+  # docs/WEB_OPERATIONS_RUNBOOK.md) and a lost one is a restore.
+  #
+  # It is in the base stack rather than an overlay because both recall paths
+  # rank through it, and a deployment that skipped the overlay would silently
+  # fall back to term matching.
   evimed-openviking:
-    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.4.23@sha256:fb4cd789fd3303509edd1c10437ff63d4fab56b622494ac621f1fda042540ed4}
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.0@sha256:c60a83cd79cfce80db5266acb8bdd0908eee8abe8ff559a5f786aa504c251ccf}
     environment:
-      # The bot gateway is a second product on the same image — a chat frontend
-      # with its own channels. Nothing here calls it, and it would be the only
-      # part of this container that wants to reach the internet.
-      OPENVIKING_WITH_BOT: "0"
+      # The built-in VikingBot is the runtime of Compile (the official
+      # `llm-wiki` and `knowledge-graph` skills). It binds the container's
+      # loopback only, command execution is off in the rendered ov.conf
+      # (`bot.sandbox.backends.direct.allow_compile_exec: false`), and nothing
+      # here publishes `/bot/v1/*`: the control plane stays the only caller.
+      OPENVIKING_WITH_BOT: "1"
       OPENVIKING_SERVER_PORT: "1933"
       # Read-only: the configuration carries the embedding credential, and the
       # entrypoint rewrites this path only when OPENVIKING_CONF_CONTENT is set,
       # which would put that credential in `docker inspect` output.
       OPENVIKING_CONFIG_FILE: /run/openviking-secrets/ov.conf
+      # The account the identity shim asserts for a Compile task: the one the
+      # control plane asserts on every request it makes.
+      SHIM_ACCOUNT: ${OPEN_SCIENCE_OPENVIKING_ACCOUNT:-evimed}
+    # The identity shim first, then the image's own entrypoint as PID 1
+    # (openviking/entrypoint.sh). In trusted auth mode v0.5.0 forwards only the
+    # root key to its Compile runtime and the bot refuses a request that names
+    # no user; the shim adds the two identity headers from the target the
+    # server already authorized. Run through `sh` so the file needs no
+    # executable bit to survive however the release directory was copied.
+    entrypoint: ["sh", "/opt/evimed-shim/entrypoint.sh"]
     volumes:
       - evimed-openviking-data:/app/.openviking
       - evimed-openviking-secrets:/run/openviking-secrets:ro
+      # Release files, bound read-only from the directory this compose file is
+      # in — the way the Caddyfile is — so a release's shim and templates are
+      # the ones its control plane was tested with. The container runs as uid
+      # 10001 with no capabilities: the three paths must be world-readable,
+      # which the init step below verifies by name before the server starts.
+      - ./openviking/identity_shim.py:/opt/evimed-shim/identity_shim.py:ro
+      - ./openviking/entrypoint.sh:/opt/evimed-shim/entrypoint.sh:ro
+      # `memory.custom_templates_dir`. A directory that is not here is silent
+      # upstream: the server falls back to its built-in memory types.
+      - ./openviking/memory-templates:/app/memory-templates:ro
     depends_on:
       evimed-openviking-init:
         condition: service_completed_successfully
@@ -98,37 +129,50 @@ services:
     # because the init step made that directory inside the volume and gave it
     # away. Chowning the volume's own root does not survive: an empty named
     # volume is re-populated from the image on every mount, which resets it.
+    # The bot's logs, sessions and task workspaces all land under
+    # `storage.workspace` too, so nothing else needs to be writable.
     user: "10001:10001"
     # No published ports. The control plane is the only caller and reaches it
     # over the internal network; the runtime container never learns it exists.
     #
-    # The second network is egress, and it is the reason this service has one
-    # at all: embeddings are computed by DashScope over the public internet.
-    # Dedicated rather than `default` so that reaching this index still means
+    # `memory-recall-internal` carries both directions: the control plane's
+    # requests in, and the engine's own model calls out to the control plane's
+    # model gateway (`vlm.api_base` in the rendered ov.conf), which is how its
+    # extraction, summaries and Compile reach a model without a provider key in
+    # this container.
+    #
+    # The second network is egress, and embeddings are the reason this service
+    # has one at all: they are computed by DashScope over the public internet.
+    # Dedicated rather than `default` so that reaching this engine still means
     # being on `memory-recall-internal`, which only the web service joins.
     networks:
       - memory-recall-internal
       - memory-index-egress
     healthcheck:
-      # `/health` is answered by the process itself and needs no credential.
-      # `/ready` is the other candidate and probes the embedder: it would make
-      # this container's health a report on DashScope's availability, so an
-      # unpaid or rate-limited account would read here as a broken index.
+      # Three processes, three questions: the server's `/health` (answered by
+      # the process itself, no credential), the bot's, and the shim — which
+      # serves three POST routes and answers 404 by name to anything else, so a
+      # 404 from it is the proof it is the shim that is listening.
+      # `/ready` is not asked: it probes the embedder, and would make this
+      # container's health a report on DashScope's availability.
       test:
         [
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:1933/health', timeout=3).read()",
+          "import urllib.request as r, urllib.error as e\nr.urlopen('http://127.0.0.1:1933/health', timeout=3).read()\nr.urlopen('http://127.0.0.1:18790/health', timeout=3).read()\ntry:\n    r.urlopen(r.Request('http://127.0.0.1:18791/', data=b'{}', method='POST'), timeout=3)\n    raise SystemExit('the identity shim answered a route it does not serve')\nexcept e.HTTPError as refused:\n    assert refused.code == 404, refused.code",
         ]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
-      start_period: 60s
+      # The bot starts after the server answers; a cold start is about 40 s.
+      start_period: 120s
     deploy:
       resources:
         limits:
           cpus: "2.0"
+          # Idle about 0.8 GB (server 0.47, bot 0.40, shim 0.02); 0.94 GB after
+          # dozens of compiles (lab/knowledge, 2026-10-12).
           memory: 3g
     security_opt:
       - no-new-privileges:true
@@ -136,11 +180,12 @@ services:
       - ALL
     restart: unless-stopped
 
-  # One root one-shot with no network: it copies the two secrets into the
-  # secrets volume at 0600, owned by the uid that reads each, and prepares the
-  # data directory the server would otherwise have to be root to create.
+  # One root one-shot with no network: it copies the three secrets into the
+  # secrets volume at 0600, owned by the uid that reads each, prepares the
+  # data directory the server would otherwise have to be root to create, and
+  # refuses to finish when a release file the server needs cannot be read.
   evimed-openviking-init:
-    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.4.23@sha256:fb4cd789fd3303509edd1c10437ff63d4fab56b622494ac621f1fda042540ed4}
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.0@sha256:c60a83cd79cfce80db5266acb8bdd0908eee8abe8ff559a5f786aa504c251ccf}
     user: "0:0"
     entrypoint: ["python", "-c"]
     command:
@@ -155,9 +200,12 @@ services:
         output.mkdir(parents=True, exist_ok=True)
         # One owner per file, and it is the uid of the container that reads it.
         # Both readers drop every capability, so neither holds DAC_OVERRIDE and
-        # a 0600 file owned by anyone else is unreadable to them: the index
-        # reads ov.conf as 10001, the control plane reads api-key as root.
-        for source, name, owner in (('/input/ov.conf', 'ov.conf', 10001), ('/input/api-key', 'api-key', 0)):
+        # a 0600 file owned by anyone else is unreadable to them: the engine
+        # reads ov.conf as 10001, the control plane reads api-key and model-key
+        # as root. The model key is the bearer the engine's own model calls
+        # carry to the control plane's gateway; the engine has its copy inside
+        # ov.conf and never reads this file.
+        for source, name, owner in (('/input/ov.conf', 'ov.conf', 10001), ('/input/api-key', 'api-key', 0), ('/input/model-key', 'model-key', 0)):
             target = output / name
             temporary = output / (name + '.tmp')
             with open(source, 'rb') as stream:
@@ -207,6 +255,25 @@ services:
             entry = os.lstat(path)
             if entry.st_uid != 10001 or entry.st_gid != 10001:
                 os.lchown(path, 10001, 10001)
+        # The release files the server is started with. It runs as 10001 with
+        # no capability, so each must be readable by "other" — and each fails
+        # quietly when it is not: a shim that cannot be read is a Compile that
+        # fails eighteen seconds after it was accepted, and a template directory
+        # that cannot be read is a server that extracts with upstream's memory
+        # types and says nothing. Naming the path here is the loud version.
+        release = pathlib.Path('/input/openviking')
+        templates = release / 'memory-templates'
+        needed = [release / 'identity_shim.py', release / 'entrypoint.sh', templates]
+        needed += [templates / (name + '.yaml') for name in ('profile', 'preferences', 'entities', 'corrections', 'project_context', 'decisions', 'follow_ups', 'project_facts')]
+        for path in needed:
+            try:
+                mode = os.stat(path).st_mode
+            except PermissionError:
+                raise SystemExit('%s is not readable by the engine (uid 10001): make it and its directory world-readable' % path.relative_to('/input'))
+            except OSError:
+                raise SystemExit('the release is missing %s' % path.relative_to('/input'))
+            if not mode & 0o004 or (path.is_dir() and not mode & 0o001):
+                raise SystemExit('%s is not readable by the engine (uid 10001): make it world-readable' % path.relative_to('/input'))
     volumes:
       - type: bind
         source: ${OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE:?set OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE}
@@ -216,6 +283,11 @@ services:
         source: ${OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE:?set OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE}
         target: /input/api-key
         read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_OPENVIKING_MODEL_KEY_HOST_FILE:?set OPEN_SCIENCE_OPENVIKING_MODEL_KEY_HOST_FILE}
+        target: /input/model-key
+        read_only: true
+      - ./openviking:/input/openviking:ro
       - evimed-openviking-secrets:/output
       - evimed-openviking-data:/data
     network_mode: none

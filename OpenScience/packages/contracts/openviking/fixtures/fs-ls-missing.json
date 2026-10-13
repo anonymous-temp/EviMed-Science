@@ -1,0 +1,14 @@
+{
+  "status": "error",
+  "result": null,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Directory not found: viking://user/u-68dc43da763fbe7a5b3d6564/memories/evimed/user/absent",
+    "details": {
+      "type": "directory",
+      "resource": "viking://user/u-68dc43da763fbe7a5b3d6564/memories/evimed/user/absent"
+    }
+  },
+  "telemetry": null,
+  "profile": null
+}

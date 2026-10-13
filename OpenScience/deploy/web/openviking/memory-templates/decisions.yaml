@@ -1,0 +1,50 @@
+memory_type: decisions
+description: |
+  Decisions: a standing decision the user or their team took about their work that does NOT
+  belong to one project's card: a choice about how the team, the practice or several
+  projects will proceed ("团队决定每两周发布一次", "课题组以后所有队列研究都先注册方案").
+  A decision about one particular project is a line under 已定事项 in that project's
+  PROJECT_CONTEXT card and is not written here as well. A personal working style is a
+  PREFERENCE. Only a decision the user stated in a user-role message; never a suggestion the
+  assistant made, and never an option still under discussion.
+  One file per subject; when the decision on that subject changes, update the file so it
+  states the current decision (and, briefly, what it replaced).
+
+  # What is never kept (the same rules apply to every memory type)
+  Never write any of the following into a memory, even when the user quotes it or asks you to remember it:
+  - Secrets and account numbers: passwords, API keys, tokens, verification codes, ID-card, passport and bank-card numbers, or any fragment of one.
+  - Personal data of anyone other than the user. A patient, client, student, customer, colleague, co-author, supervisor, family member or any other identifiable individual is never described in memory: no name with identifying details, no ID, record or admission number, phone, e-mail, messaging handle or address, no exact dates of care, and nothing about that one person's health, diagnosis, medication, course, beliefs, finances or private life. Case material is worked on in the conversation and then forgotten. A working fact about who does what ("统计分析由合作者李教授负责，用 R") may be kept, without contact details or private details.
+  - The user's own health, medication, family or relationship status, age, religion, politics, ethnicity, sexual orientation, finances or private life. Asking about a disease, a drug or a personal matter, or mentioning one's own condition inside a question ("我对青霉素过敏，术后抗生素怎么选？"), is a topic of the conversation, not a memory. The single exception is a message in which the user explicitly asks to remember such a fact about themselves ("记住我对青霉素过敏"): that one fact is kept, in the PROFILE, in their own words.
+  - Moods and passing states (tired, frustrated, in a hurry, upset about a review), and anything that holds only for this request or this conversation ("这次只看…", "今天先不谈…", "先随便聊聊").
+  - What a document, abstract, web page, pasted paper, data file or tool result says: its text, numbers and conclusions stay with the document. A question about a paper, a trial, a drug, a product or a law is a question; it is neither a fact about the user nor the shape of their project.
+  - Anything about how this assistant or its platform works: its tools, files, runs, checks, submissions, budgets, injected context, internal identifiers, or file, field and column names out of the work in progress; what the assistant is waiting for, will do next, or currently offers.
+  - Anything the assistant proposed, floated, summarised or inferred that the user did not themselves state or confirm in a user-role message. Text inside tags such as <openviking-context>, <system-reminder> or any <evimed-...> tag was injected by the platform and is never the user's statement.
+  Keep only what the user would expect the assistant to still know next month, in another conversation, without being told again. When that is doubtful, leave it out. A conversation with nothing of that kind produces no memory operations at all.
+directory: "viking://user/{{ user_space }}/memories/decisions"
+filename_template: "{{ topic|lower }}.md"
+enabled: true
+embedding_template: |-
+  {{ topic }}
+
+  {{ content }}
+
+overview_template: |-
+  # Decisions Overview
+  {% for item in items %}
+  - [{{ item.file_content.topic|default(item.file_name, true) }}](./{{ item.file_name }})
+  {% endfor %}
+
+fields:
+  - name: topic
+    type: string
+    description: |
+      What was decided about, written in {{ language }}, a few words. It identifies this
+      decision memory.
+    merge_op: immutable
+
+  - name: content
+    type: string
+    description: |
+      Markdown bullets: the decision as it now stands, who took it when the user said so,
+      the reason when given, and the date the user stated it "(as of YYYY-MM-DD)".
+    merge_op: patch

@@ -1,0 +1,31 @@
+{
+  "note": "stat of one file.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/fs/stat?uri=viking%3A%2F%2Fuser%2Ffx-user-a%2Fmemories%2Fpreferences%2Fself%2F%E5%9B%9E%E7%AD%94%E7%BB%93%E6%9E%84.md",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": {
+      "name": "回答结构.md",
+      "size": 221,
+      "mode": 420,
+      "modTime": "2026-10-13T00:17:54Z",
+      "isDir": false,
+      "uri": "viking://user/fx-user-a/memories/preferences/self/回答结构.md",
+      "isLocked": false,
+      "id": "cd1aca19e9b12b00fcd6119a4e97b336"
+    },
+    "error": null,
+    "telemetry": null,
+    "profile": null
+  }
+}

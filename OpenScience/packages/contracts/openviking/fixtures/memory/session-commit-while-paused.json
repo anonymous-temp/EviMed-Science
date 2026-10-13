@@ -1,0 +1,33 @@
+{
+  "note": "A commit while memory_policy.self.enabled is false.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/sessions/dsh-session_fixture0000000000000000000000000001/commit",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "keep_recent_count": 0
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": {
+      "session_id": "dsh-session_fixture0000000000000000000000000001",
+      "status": "accepted",
+      "task_id": "aab22c49-2fa1-46b4-acf5-b610613ef91e",
+      "archive_uri": "viking://user/fx-user-a/sessions/dsh-session_fixture0000000000000000000000000001/history/archive_006",
+      "archived": true,
+      "effective_enable_working_memory": false,
+      "trace_id": "",
+      "estimated_active_tokens": 0,
+      "budget_exceeded": false
+    }
+  }
+}

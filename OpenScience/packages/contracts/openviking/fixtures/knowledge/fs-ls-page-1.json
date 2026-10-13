@@ -1,0 +1,28 @@
+{
+  "status": "ok",
+  "result": [
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/edges.jsonl",
+      "size": 77,
+      "isDir": false,
+      "modTime": "2026-10-12T23:55:59.000Z",
+      "tags": [],
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md",
+      "size": 342,
+      "isDir": false,
+      "modTime": "2026-10-12T23:55:53.000Z",
+      "tags": [
+        "src=src_00000000000000000000000000000001",
+        "doctype=other"
+      ],
+      "abstract": ""
+    }
+  ],
+  "error": null,
+  "telemetry": null,
+  "profile": null,
+  "has_more": true
+}

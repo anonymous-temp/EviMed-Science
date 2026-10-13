@@ -1,0 +1,73 @@
+{
+  "status": "ok",
+  "result": [
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities",
+      "size": 0,
+      "isDir": true,
+      "modTime": "2026-10-13T00:12:25.000Z",
+      "rel_path": "entities",
+      "abstract": "# viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities [Directory abstract is not ready]"
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities/alphad.md",
+      "size": 904,
+      "isDir": false,
+      "modTime": "2026-10-13T00:12:25.000Z",
+      "rel_path": "entities/alphad.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities/Alpha协议.md",
+      "size": 987,
+      "isDir": false,
+      "modTime": "2026-10-13T00:12:25.000Z",
+      "rel_path": "entities/Alpha协议.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities/Beta网关.md",
+      "size": 1256,
+      "isDir": false,
+      "modTime": "2026-10-13T00:12:25.000Z",
+      "rel_path": "entities/Beta网关.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities/Gamma仪表盘.md",
+      "size": 839,
+      "isDir": false,
+      "modTime": "2026-10-13T00:12:25.000Z",
+      "rel_path": "entities/Gamma仪表盘.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities/Lumen工作组.md",
+      "size": 913,
+      "isDir": false,
+      "modTime": "2026-10-13T00:12:25.000Z",
+      "rel_path": "entities/Lumen工作组.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities/湖滨店.md",
+      "size": 690,
+      "isDir": false,
+      "modTime": "2026-10-13T00:12:25.000Z",
+      "rel_path": "entities/湖滨店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/relations.jsonl",
+      "size": 1520,
+      "isDir": false,
+      "modTime": "2026-10-13T00:12:25.000Z",
+      "rel_path": "relations.jsonl",
+      "abstract": ""
+    }
+  ],
+  "error": null,
+  "telemetry": null,
+  "profile": null,
+  "has_more": false
+}

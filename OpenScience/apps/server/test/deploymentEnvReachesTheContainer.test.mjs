@@ -117,6 +117,14 @@ const operatorLevers = {
   OPEN_SCIENCE_MEMORY_INDEX_STRICT: ["open-science-web"],
   OPEN_SCIENCE_OPENVIKING_URL: ["open-science-web"],
   OPEN_SCIENCE_OPENVIKING_ACCOUNT: ["open-science-web"],
+  // OpenViking as an engine (2026-10-13). The budget is the platform's own money for the engine's model calls, and a
+  // request it refuses is lost for good: a value that did not arrive would leave the default deciding that. The two
+  // switches are how a deployment keeps native memory or knowledge compile off while the index stays on; undelivered,
+  // each follows the index and the operator believes otherwise.
+  OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY: ["open-science-web"],
+  OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS: ["open-science-web"],
+  OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED: ["open-science-web"],
   // Read by config.mjs and passed by no compose file until 2026-09-16: turning
   // memory off, opening the agent memory API, or excluding an evaluation's
   // projects from extraction all did nothing from .env. The last one reached

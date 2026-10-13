@@ -299,6 +299,11 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     // How often the control plane re-reads the engine's facts (`openVikingEngine.mjs`). Each pass costs one refused
     // Compile submission — a task record the engine keeps for seven days — so it is minutes, not seconds.
     openVikingEngineCheckMs: checkMs,
+    // What the running engine is held to: the pinned release and the installed bytes of the two official skills.
+    openVikingPin: overrides.openVikingPin ?? {
+      version: String(depsVersions.openviking?.version ?? ""),
+      skills: depsVersions.openviking?.skills ?? {},
+    },
     ovKnowledgeEnabled: overrides.ovKnowledgeEnabled ?? boolEnv("OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED", engineSelected),
     ovNativeMemoryEnabled: overrides.ovNativeMemoryEnabled ?? boolEnv("OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED", engineSelected),
   };

@@ -1,0 +1,28 @@
+{
+  "note": "A request as the user being deleted, at once.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/fs/ls?uri=viking%3A%2F%2Fuser%2Ffx-user-b%2Fmemories",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-b"
+    }
+  },
+  "status": 412,
+  "contentType": "application/json",
+  "response": {
+    "status": "error",
+    "result": null,
+    "error": {
+      "code": "FAILED_PRECONDITION",
+      "message": "Identity deletion is in progress",
+      "details": {
+        "task_id": "8a9bd64c-8356-4182-b2ba-7cdb45296f0a"
+      }
+    },
+    "telemetry": null,
+    "profile": null
+  }
+}

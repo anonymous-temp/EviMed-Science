@@ -1,0 +1,28 @@
+{
+  "status": "ok",
+  "result": [
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000002.md",
+      "size": 275,
+      "isDir": false,
+      "modTime": "2026-10-12T23:55:53.000Z",
+      "tags": [
+        "src=src_00000000000000000000000000000002",
+        "state=retracted"
+      ],
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000003.md",
+      "size": 222,
+      "isDir": false,
+      "modTime": "2026-10-12T23:55:53.000Z",
+      "tags": [],
+      "abstract": ""
+    }
+  ],
+  "error": null,
+  "telemetry": null,
+  "profile": null,
+  "has_more": true
+}

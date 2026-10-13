@@ -578,6 +578,7 @@ test("production compose holds every memory in PostgreSQL and ranks it with the 
     "OPEN_SCIENCE_DATABASE_URL_HOST_FILE",
     "OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE",
     "OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE",
+    "OPEN_SCIENCE_OPENVIKING_MODEL_KEY_HOST_FILE",
     "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE",
   ]) {
     assert.match(envExample, new RegExp(`^${name}=`, "m"));

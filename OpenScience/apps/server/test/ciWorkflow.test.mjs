@@ -132,18 +132,19 @@ test("PostgreSQL auth and product tests execute against different disposable dat
   assert.ok(inventory.every((file) => !file.endsWith("postgresStore.integration.test.mjs")));
 });
 
-test("the hosted CI job names the recall index's configuration, its key and the DashScope key", async () => {
+test("the hosted CI job names the engine's configuration, its two keys and the DashScope key", async () => {
   const job = (await workflow("web.yml")).jobs["docker-hosted"];
   const release = job.steps.find((step) => step.name === "Define immutable CI release");
   const environment = job.steps.find((step) => step.name === "Write CI Compose environment");
   assert.ok(release && environment);
-  // These three paths are bind-mount sources Compose declares as `${VAR:?...}`,
+  // These four paths are bind-mount sources Compose declares as `${VAR:?...}`,
   // so a missing name is not a missing file: it aborts interpolation, and every
   // `docker compose` call in the job fails before it reads a service.
   for (const name of [
     "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE",
     "OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE",
     "OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE",
+    "OPEN_SCIENCE_OPENVIKING_MODEL_KEY_HOST_FILE",
   ]) {
     const exported = new RegExp(`echo "${name}=\\S+" >> "\\$GITHUB_ENV"`).exec(release.run);
     assert.ok(exported, `${name} is not exported by "Define immutable CI release"`);

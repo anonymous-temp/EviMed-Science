@@ -1,0 +1,28 @@
+{
+  "status": "ok",
+  "result": {
+    "uri": "viking://user/u-68dc43da763fbe7a5b3d6564/memories/evimed/user/preference/rec1.md",
+    "root_uri": "viking://user/u-68dc43da763fbe7a5b3d6564/memories/evimed/user/preference",
+    "context_type": "memory",
+    "mode": "replace",
+    "written_bytes": 86,
+    "content_updated": true,
+    "semantic_status": "skipped",
+    "vector_status": "complete",
+    "queue_status": {
+      "Semantic": {
+        "processed": 0,
+        "requeue_count": 0,
+        "error_count": 0,
+        "errors": []
+      },
+      "Embedding": {
+        "processed": 1,
+        "requeue_count": 0,
+        "error_count": 0,
+        "errors": []
+      }
+    },
+    "overview_status": "skipped"
+  }
+}
