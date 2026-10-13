@@ -119,7 +119,8 @@ test("CI installs the same digest-checked renderer and real Chromium before the 
   for (const arch of ["amd64", "arm64"]) assert.match(step, new RegExp(`\\.debSha256\\.${arch}`));
   for (const name of ["renderer", "browser", "verify-tools"]) assert.match(step, new RegExp(`bash deploy/runtime-dsh/install-runtime\\.sh ${name}`));
   const python = definedInstallPhases(script).get("python") ?? "";
-  for (const name of ["Pillow", "playwright", "pypdf"]) {
+  // The Office skills' libraries ride with the renderer: the flows test (officeFlows.test.mjs) runs on the same versions the image pins.
+  for (const name of ["Pillow", "playwright", "pypdf", "openpyxl", "pdfplumber", "python-docx", "python-pptx", "XlsxWriter"]) {
     const dependency = new RegExp(`${name}==[0-9.]+`).exec(python)?.[0];
     assert.ok(dependency && step.includes(dependency), `${name}: CI and runtime must exercise one renderer dependency version`);
   }

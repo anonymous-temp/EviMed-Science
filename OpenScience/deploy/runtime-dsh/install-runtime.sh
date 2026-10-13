@@ -202,6 +202,12 @@ pnpm_tool() {
 # evidence that production has the same Python/R capabilities tested in CI.
 # ipykernel and jupyterlab serve the runs, not a notebook page: the curated
 # skills have a run execute its analysis as a notebook and deliver the .ipynb.
+#
+# python-docx, python-pptx, XlsxWriter and pdfplumber are the Office skills' libraries
+# (runtime/skills/office): read, edit in place and create Word, PowerPoint, Excel and
+# PDF files. Converting, recalculating and rendering them needs no system LibreOffice:
+# the kernel's own closure carries `@deepseek-ai/libreoffice-kit` (WebAssembly), which
+# `office_smoke` below exercises through `shared/office_kit.py`.
 python_stack() {
   set -x
   uv venv "${VIRTUAL_ENV}" --python /usr/bin/python3
@@ -213,16 +219,20 @@ python_stack() {
     openpyxl==3.1.5 \
     xlrd==2.0.2 \
     pandas==2.2.3 \
+    pdfplumber==0.11.7 \
     Pillow==10.4.0 \
     playwright==1.58.0 \
     pypdf==6.7.0 \
+    python-docx==1.2.0 \
+    python-pptx==1.0.2 \
     scikit-learn==1.6.1 \
     scipy==1.15.3 \
-    statsmodels==0.14.6
+    statsmodels==0.14.6 \
+    XlsxWriter==3.2.9
   python - <<'PY'
 import importlib
 
-for package in ("ipykernel", "jupyterlab", "matplotlib", "numpy", "openpyxl", "xlrd", "pandas", "PIL", "playwright", "pypdf", "sklearn", "scipy", "statsmodels"):
+for package in ("ipykernel", "jupyterlab", "matplotlib", "numpy", "openpyxl", "xlrd", "pandas", "pdfplumber", "PIL", "playwright", "pypdf", "docx", "pptx", "sklearn", "scipy", "statsmodels", "xlsxwriter"):
     importlib.import_module(package)
 PY
   python /usr/local/lib/evimed/verify-legacy-spreadsheet.py
@@ -425,6 +435,9 @@ office_smoke() {
   printf 'name,value\ncontrol,1\n' > "${tmp}/input.csv"
   python3 /usr/local/share/evimed/skills/office/xlsx/scripts/create_xlsx.py --input "${tmp}/input.csv" --output "${tmp}/workbook.xlsx"
   python3 -c 'import pathlib,sys,zipfile; files=[pathlib.Path(sys.argv[1])/name for name in ("document.docx","presentation.pptx","workbook.xlsx")]; [zipfile.ZipFile(file).testzip() for file in files]' "${tmp}"
+  # The flows people ask for, on real files and with the real kit: change one clause, add formulas and recalculate them,
+  # split a slide and switch the palette, pull a table out of a PDF. A missing kit fails the build instead of skipping.
+  EVIMED_OFFICE_REQUIRE_KIT=1 python3 /usr/local/share/evimed/skills/office/shared/test_office_flows.py
   rm -rf "${tmp}"
 }
 
