@@ -296,6 +296,25 @@ test("each point is what the fact tabs listed at the end of its week, a moment i
   assert.deepEqual(methodRead?.filter, { recordType: "learned-method" });
 });
 
+test("an account whose memory is kept as files has its growth line read from the files, in the researcher's zone", async () => {
+  const records = [
+    // The profile document's lines began on the day the document did; a file began on its own day.
+    { id: "nm_a_1", createdAt: "2026-09-10T20:30:00Z" }, { id: "nm_a_2", createdAt: "2026-09-10T20:30:00Z" },
+    { id: "nm_b", createdAt: "2026-09-21T02:00:00Z" },
+  ];
+  const reads = { database: 0 };
+  const researchMemory = { growthDays: async () => { reads.database += 1; return [{ day: "2026-01-01", added: 99, ended: 0 }]; } };
+  const native = { engine: async () => "native", store: { records: async () => records } };
+  const growth = await memoryGrowth({ researchMemory, native, now: () => new Date("2026-09-28T04:00:00Z") }, user, { timeZone: "Asia/Shanghai" });
+  assert.equal(reads.database, 0, "the database's rows are not the memory of this account");
+  // 20:30Z is already the 11th in Shanghai.
+  assert.equal(growth.first, "2026-09-11");
+  assert.deepEqual(growth.points.map((point) => point.known), [0, 2, 2, 3, 3]);
+  // The older engine's account is read as it was.
+  const older = await memoryGrowth({ researchMemory, native: { ...native, engine: async () => "legacy" }, now: () => new Date("2026-09-28T04:00:00Z") }, user, { timeZone: "UTC" });
+  assert.equal(older.first, "2026-01-01");
+});
+
 test("an account with nothing has no line, a bad zone is refused, and a source that cannot be read fails the read", async () => {
   const empty = await memoryGrowth({ researchMemory: { growthDays: async () => [] }, now: () => new Date("2026-09-28T00:00:00Z") }, user, {});
   assert.deepEqual(empty, { unit: null, first: null, fromStart: false, points: [], moments: [], timeZone: "Asia/Shanghai" });

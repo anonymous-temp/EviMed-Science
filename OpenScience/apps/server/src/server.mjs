@@ -4794,7 +4794,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     capsules: capsuleService, handbooks: handbookLibrary, context,
     native: { store: nativeMemory, engine: (/** @type {string} */ userId) => researchMemory.memoryEngine(userId) } });
   // 「记忆地图」: one read-only document assembled from independent sources, the topics a model groups the memories into, and the
-  // links the memory drawer shows. The native memory engine and the OpenViking knowledge graph are seams with no reader wired yet.
+  // links the memory drawer shows. An account on the native engine is drawn from its files; the compiled graph of the knowledge base comes from the ledger's mirror.
   const memoryTopics = researchMemory.configured ? new MemoryTopics(config, researchMemory, { usageLedger }) : null;
   const memoryMapProjectOf = (/** @type {any} */ user, /** @type {string} */ projectId) => store.requireProject(user, projectId);
   const memoryMapRoutes = createMemoryMapRoutes({

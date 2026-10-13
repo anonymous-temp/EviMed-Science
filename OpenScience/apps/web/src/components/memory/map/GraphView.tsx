@@ -35,15 +35,34 @@ function useCompact(): boolean {
   return compact;
 }
 
-/** The words under the picture that say what its shapes and colours are (spec §2: every encoding is in a legend). */
-function Legend() {
+/**
+ * The words under the picture that say what its shapes and colours are (spec §2: every encoding is in a legend) — and only the ones
+ * the picture has. An account that has replaced nothing has no grey mark, and a legend that named one would be describing a picture
+ * it is not looking at.
+ */
+export function Legend({ nodes }: { nodes: readonly MapNode[] }) {
+  const things = nodes.filter((node) => node.type !== "you" && node.type !== "project");
+  const has = (test: (node: MapNode) => boolean) => nodes.some(test);
+  const states = [
+    { tone: "text-accent", word: "现行", shown: things.some((node) => (node.state ?? "current") === "current") },
+    { tone: "text-warn", word: "需要看一眼", shown: things.some((node) => node.state === "check") },
+    { tone: "text-text-3", word: "已被替代", shown: things.some((node) => node.state === "replaced") },
+  ].filter((entry) => entry.shown);
+  const decided = (node: MapNode) => node.type === "memory" && (node.subtype === "decision" || node.subtype === "correction");
+  const shapes = [
+    { word: "● 记忆", shown: has((node) => node.type === "memory" && !decided(node)) },
+    { word: "◆ 决定与纠正", shown: has(decided) },
+    { word: "■ 资料与知识页", shown: has((node) => node.type === "document" || node.type === "page") },
+    { word: "▲ 做法", shown: has((node) => node.type === "method") },
+    { word: "▢ 论文与其他来源", shown: has((node) => node.type === "reference") },
+    { word: "○ 知识库里的概念", shown: has((node) => node.type === "entity") },
+    { word: "⬢ 你、项目与折叠的一组", shown: has((node) => node.type === "you" || node.type === "project" || node.type === "cluster") },
+  ].filter((entry) => entry.shown);
   return (
     <div role="group" aria-label="图例" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-text-3">
-      <span><span aria-hidden="true" className="text-accent">●</span> 现行</span>
-      <span><span aria-hidden="true" className="text-warn">●</span> 需要看一眼</span>
-      <span><span aria-hidden="true" className="text-text-3">●</span> 已被替代</span>
-      <span aria-hidden="true">·</span>
-      <span>● 记忆</span><span>◆ 决定与纠正</span><span>■ 资料</span><span>▲ 做法</span><span>⬢ 你、项目与折叠的一组</span>
+      {states.map((entry) => <span key={entry.word}><span aria-hidden="true" className={entry.tone}>●</span> {entry.word}</span>)}
+      {states.length > 0 && shapes.length > 0 && <span aria-hidden="true">·</span>}
+      {shapes.map((entry) => <span key={entry.word}>{entry.word}</span>)}
     </div>
   );
 }
@@ -113,7 +132,7 @@ export function GraphView({ doc, narrowed, selected, actions, chain, focused }: 
         label={chain ? `这条记忆依据的资料链，共 ${chain.rests.length} 项。` : `记忆、资料和项目之间的关系图，共 ${shown.nodes.length} 个标记，列表在下方。`}
         unpainted={`${shown.nodes.length} 个标记、${shown.edges.length} 条连线。`}
       />
-      {!chain && <Legend />}
+      {!chain && <Legend nodes={shown.nodes} />}
       {!chain && stops.length > 1 && (
         <div className="flex flex-wrap items-center gap-3 text-ui text-text-2">
           <Button

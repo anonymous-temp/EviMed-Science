@@ -381,15 +381,35 @@ async function everyDocument(documents, userId, kind, { filter = {}, fields } = 
 }
 
 /**
+ * The days an account's memories began to hold or stopped, from whichever store holds them: the database's own rows for the older
+ * engine, the memory files for an account on the second one (a file or a line of the profile began when its file first said it;
+ * a forgotten one leaves the files, so nothing ends there). The growth line and the learned story read this and nothing else.
+ *
+ * @param {{ researchMemory: any, native?: any }} sources @param {string} userId @param {string} zone @param {Intl.DateTimeFormat} format
+ * @returns {Promise<Array<{ day: string, added: number, ended: number }>>}
+ */
+async function memoryDays({ researchMemory, native = null }, userId, zone, format) {
+  const onNative = native ? await native.engine(userId).then((/** @type {string} */ engine) => engine === "native", () => false) : false;
+  if (!onNative) return researchMemory.growthDays(userId, { timeZone: zone });
+  /** @type {Map<string, number>} */
+  const added = new Map();
+  for (const record of await native.store.records(userId)) {
+    const at = instant(record.createdAt);
+    if (at) added.set(dayOf(at, format), (added.get(dayOf(at, format)) ?? 0) + 1);
+  }
+  return [...added.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([day, count]) => ({ day, added: count, ended: 0 }));
+}
+
+/**
  * The line and its moments, in the researcher's zone.
  *
- * @param {{ researchMemory: any, learning?: any, capsules?: any, now?: () => Date }} sources
+ * @param {{ researchMemory: any, learning?: any, capsules?: any, native?: any, now?: () => Date }} sources
  * @param {{ id: string }} user
  * @param {{ timeZone?: string | null }} [options]
  * @returns {Promise<{ unit: "day" | "week" | "month" | null, first: string | null, fromStart: boolean, points: Array<{ start: string, known: number }>,
  *   moments: Array<{ day: string, kind: "method" | "capsule", title: string }>, timeZone: string }>}
  */
-export async function memoryGrowth({ researchMemory, learning = null, capsules = null, now = () => new Date() }, user, { timeZone = null } = {}) {
+export async function memoryGrowth({ researchMemory, learning = null, capsules = null, native = null, now = () => new Date() }, user, { timeZone = null } = {}) {
   const zone = timeZoneOrDefault(timeZone);
   const format = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" });
   const day = (/** @type {unknown} */ value) => {
@@ -405,7 +425,7 @@ export async function memoryGrowth({ researchMemory, learning = null, capsules =
     changes.set(at, entry);
   };
 
-  for (const row of await researchMemory.growthDays(user.id, { timeZone: zone })) {
+  for (const row of await memoryDays({ researchMemory, native }, user.id, zone, format)) {
     note(row.day, "added", row.added);
     note(row.day, "ended", row.ended);
   }
@@ -504,12 +524,12 @@ export const MEMORY_LEARNED_ITEMS = 200;
 export const MEMORY_LEARNED_HISTORIES = 100;
 
 /**
- * @param {{ researchMemory: any, learning?: any, handbooks?: any }} sources
+ * @param {{ researchMemory: any, learning?: any, handbooks?: any, native?: any }} sources
  * @param {{ id: string }} user
  * @param {{ timeZone?: string | null }} [options]
  * @returns {Promise<{ days: Array<{ day: string, items: Array<{ kind: "start" | "learned" | "improved", what: "method" | "handbook" | null, id: string | null, title: string }> }>, timeZone: string }>}
  */
-export async function memoryLearned({ researchMemory, learning = null, handbooks = null }, user, { timeZone = null } = {}) {
+export async function memoryLearned({ researchMemory, learning = null, handbooks = null, native = null }, user, { timeZone = null } = {}) {
   const zone = timeZoneOrDefault(timeZone);
   const format = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" });
   const day = (/** @type {unknown} */ value) => {
@@ -534,7 +554,7 @@ export async function memoryLearned({ researchMemory, learning = null, handbooks
   };
 
   try {
-    const first = (await researchMemory.growthDays(user.id, { timeZone: zone })).filter((/** @type {any} */ row) => row.added > 0).map((/** @type {any} */ row) => row.day).sort()[0];
+    const first = (await memoryDays({ researchMemory, native }, user.id, zone, format)).filter((/** @type {any} */ row) => row.added > 0).map((/** @type {any} */ row) => row.day).sort()[0];
     add(first ?? null, "start", null, null, "");
   } catch { /* no first day: the list starts at what was learned */ }
 
@@ -602,11 +622,11 @@ export function createMemoryTimelineRoutes({ researchMemory, agentRuns = null, f
     if (!researchMemory?.configured) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
     const ctx = await context(req, res);
     if (url.pathname === "/api/memory/learned") {
-      sendJson(res, 200, { data: await memoryLearned({ researchMemory, learning, handbooks }, ctx.user, { timeZone: url.searchParams.get("timeZone") }) });
+      sendJson(res, 200, { data: await memoryLearned({ researchMemory, learning, handbooks, native }, ctx.user, { timeZone: url.searchParams.get("timeZone") }) });
       return true;
     }
     if (url.pathname === "/api/memory/growth") {
-      sendJson(res, 200, { data: await memoryGrowth({ researchMemory, learning, capsules }, ctx.user, {
+      sendJson(res, 200, { data: await memoryGrowth({ researchMemory, learning, capsules, native }, ctx.user, {
         timeZone: url.searchParams.get("timeZone"),
       }) });
       return true;

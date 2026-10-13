@@ -69,6 +69,7 @@ export function MapDrawer({ open, projectName, onClose, onChanged, onOpenRecord,
         key={item.key} item={item}
         projectName={item.group === "project" ? projectName(item.projectId) : null}
         conversations={profile && profile !== "failed" ? profile.conversations : undefined}
+        siblings={records ?? []}
         onClose={onClose} onChanged={reload}
         onOpenRecord={onOpenRecord} canOpenRecord={(id) => knownIds.has(id) && canOpenRecord(id)}
       />

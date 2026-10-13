@@ -11,8 +11,8 @@ import type { MapPalette } from "./palette";
  * What a mark is told by (spec §2, the colour budget): its **state** by colour — the brand blue in force, amber for a second
  * look, grey replaced — its **kind** by shape and by its words in the tooltip and the list, never by another hue. The account and
  * the projects are hollow hexagons (blue outline, the page's own surface inside), a memory a circle, a decision or a correction a
- * diamond, a document a square, a learned method a triangle, an outside source a rounded square, and a folded cluster a hexagon
- * with its size. Positions come from `layout.ts`, so the same marks give the same picture; the library only draws and lets the
+ * diamond, a document or a knowledge page a square, a learned method a triangle, an outside source a rounded square, a concept of
+ * the knowledge base a ring, and a folded cluster a hexagon with its size. Positions come from `layout.ts`, so the same marks give the same picture; the library only draws and lets the
  * reader zoom, pan and drag.
  *
  * Labels are a budget, not a rule: the account, the projects, the clusters, whatever needs a look, the hits of a search, the
@@ -90,6 +90,8 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
   const data = input.nodes.map((node) => {
     const { symbol, size } = symbolOf(node);
     const structure = node.type === "you" || node.type === "project" || node.type === "cluster";
+    // A concept out of the knowledge base is a ring where a memory is a dot: same circle, told apart by being hollow.
+    const hollow = structure || node.type === "entity";
     const colour = colourOf(node, palette);
     const dimmed = searching && !input.hits.has(node.id) && !structure;
     const chosen = input.selected === node.id;
@@ -100,9 +102,9 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
       value: node.label,
       itemStyle: {
         // A hexagon of the structure is hollow: an outline in the state's colour on the page's own surface.
-        color: structure ? palette.surface : colour,
-        borderColor: chosen ? palette.text : structure ? colour : node.state === "check" ? palette.check : colour,
-        borderWidth: chosen ? 3 : structure ? 2 : node.type === "reference" ? 1.5 : 0,
+        color: hollow ? palette.surface : colour,
+        borderColor: chosen ? palette.text : hollow ? colour : node.state === "check" ? palette.check : colour,
+        borderWidth: chosen ? 3 : hollow ? 2 : node.type === "reference" ? 1.5 : 0,
         opacity: dimmed ? 0.22 : node.state === "replaced" ? 0.7 : 1,
       },
       label: {
