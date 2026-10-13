@@ -830,8 +830,9 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   ctx.provide("evimedDiagnostics", { degrade() {}, notice() {} });
   ctx.provide("evimedCapabilities", capabilities ?? [{ id: "research-brief", skills: [], tools: [], persona: "Research analyst", produces: [{ contractKind: "research-brief", outputs: [{ path: "brief.md", required: true }] }] }]);
   // What the capsule row publishes on every mount, methods or not; a composition
-  // with that row switched off publishes nothing.
-  if (capsuleMounted) ctx.provide("evimedCapsuleMethods", []);
+  // with that row switched off publishes nothing. `evimedCapsuleMemory` is the
+  // recall and note tools alone: it is what lets a child be handed the recall tool.
+  if (capsuleMounted) { ctx.provide("evimedCapsuleMethods", []); ctx.provide("evimedCapsuleMemory", { tools: ["evimed_capsule_recall", "evimed_capsule_note"] }); }
   /** @type {any} */ (ctx).subagents = { start: subagentStart ?? (() => { throw new Error("unexpected subagent start"); }) };
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,

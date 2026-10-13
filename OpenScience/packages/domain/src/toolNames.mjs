@@ -279,6 +279,33 @@ export function mcpToolName(baseName) {
 }
 
 /**
+ * The official OpenViking memory plugin's tools (`@openviking/dsh-memory-plugin`, built into the runtime image; on only for an
+ * account on the native memory engine). The plugin mounts an MCP server named `openviking`, so the model sees them as
+ * `mcp__openviking__<tool>`. They are not the research server's: no `mcp__evimed__` rule applies to them, a run that called
+ * one has not thereby done research work (`isEviMedToolName` stays false), and the root narrowing that hides the research
+ * server's specialist tools never touches them.
+ *
+ * Exactly these five are admitted. The memory gateway answers `tools/list` with these and nothing else (its descriptions,
+ * its argument guards), and the plugin's server advertises twenty — add a resource, add a skill, a file write — that would
+ * reach the model if the gateway were ever bypassed or changed. The root session is denied every other `mcp__openviking__*`
+ * tool the registry holds (`rootHiddenMcpTools`), so a sixth tool is a red test here before it is a capability in a run.
+ */
+export const OPENVIKING_MCP_SERVER_NAME = 'openviking'
+export const OPENVIKING_MCP_TOOL_PREFIX = `mcp__${OPENVIKING_MCP_SERVER_NAME}__`
+export const OPENVIKING_MEMORY_TOOL_BASE_NAMES = Object.freeze(['search', 'read', 'list', 'remember', 'forget'])
+export const OPENVIKING_MEMORY_TOOL_NAMES = Object.freeze(OPENVIKING_MEMORY_TOOL_BASE_NAMES.map((name) => `${OPENVIKING_MCP_TOOL_PREFIX}${name}`))
+
+/** @param {string} name @returns {boolean} one of the five memory tools, under the name the model sees */
+export function isOpenVikingMemoryToolName(name) {
+  return OPENVIKING_MEMORY_TOOL_NAMES.includes(String(name ?? ''))
+}
+
+/** @param {string} name @returns {boolean} any tool of the plugin's MCP server, admitted or not */
+export function isOpenVikingToolName(name) {
+  return String(name ?? '').startsWith(OPENVIKING_MCP_TOOL_PREFIX)
+}
+
+/**
  * Accepts any spelling of an MCP tool and returns the base name, or null.
  *
  * One tool has four names, depending on who is looking and when, and all four

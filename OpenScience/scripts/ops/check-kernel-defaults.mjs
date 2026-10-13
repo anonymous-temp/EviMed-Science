@@ -99,8 +99,8 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.7-rc.2",
-  sha256: "daddfee844a3fc9af74e8e63eedac6815cb4b6cd7787b407b58e98c6eb5a1f5a",
-  recordedBy: "Pinned DSH --profile evimed-runtime --dump-config from the isolated seeded native profile on 2026-10-12, with the official LoopX bundle followed by EviMed; the same seeding reproduced the 2026-10-11 record byte for byte before the preset changed (general persona, tool-todo, present, tool-subagent, command-compact). Real sessions booted this profile. The runtime image build compares its own fresh dump byte for byte before sealing.",
+  sha256: "25adc63dad6ab279c0dece9b8c5d723c706326ae091219e50cf9375808c03ffd",
+  recordedBy: "Pinned DSH --profile evimed-runtime --dump-config from the isolated seeded native profile on 2026-10-13 (DSH 0.1.7-rc.2), with the official LoopX bundle, then the official OpenViking memory plugin, then EviMed (the plugin's bundle before the socket's, so the socket's patch reaches its row; the dump's stderr names no unmatched patch row); the 2026-10-12 record was reproduced byte for byte before the plugin and the memory rows were added; the same seeding reproduced the 2026-10-11 record byte for byte before the preset changed (general persona, tool-todo, present, tool-subagent, command-compact). Real sessions booted this profile. The runtime image build compares its own fresh dump byte for byte before sealing.",
   // The complete recipe booted its seeded composition and an evimed-universal
   // session. A second read-only, network-isolated UID65534 boot passed after
   // import; image-owned profile sync then produced this byte-identical dump.

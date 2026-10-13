@@ -71,8 +71,9 @@
 
           # One realm for the four rows that share state.
           #
-          # Three of them publish services — `evimedCapabilities`, `evimedCapsuleMethods`,
-          # `evimedEvidence` — and a preset row may not publish into the process-global
+          # Four of them publish services — `evimedCapabilities`, `evimedCapsuleMethods`,
+          # `evimedCapsuleMemory` (only while the capsule's recall and note tools are
+          # mounted), `evimedEvidence` — and a preset row may not publish into the process-global
           # scope: the kernel refuses to mount the preset, saying a preset service must
           # sit behind an `isolate` realm or move to the host composition. It is right to
           # refuse. One container serves one project but not one session, and a
@@ -81,7 +82,8 @@
           #
           # `evimed-run-policy` is inside the realm because it is the only consumer: it
           # reads the capability manifest and the capsule methods when it validates a
-          # delegation. Everything else these rows use — `tools`, `agents`, `sessions`,
+          # delegation, and whether the recall tool exists before it hands that tool to a
+          # child. Everything else these rows use — `tools`, `agents`, `sessions`,
           # `subagents`, `systemPrompt` — is not named here and so still resolves from
           # the parent, which is what `isolate` means.
           - id: evimed-core
@@ -90,6 +92,7 @@
             isolate:
               evimedCapabilities: true
               evimedCapsuleMethods: true
+              evimedCapsuleMemory: true
               evimedEvidence: true
             config:
               # What every task is told: the workspace, how files are produced and handed
@@ -106,6 +109,11 @@
                   # The switches of the rows whose tools the guidance names: off, it names none of them.
                   runPolicyEnabled: !!js process.env.EVIMED_RUN_POLICY_ENABLED !== '0'
                   capsuleEnabled: !!js process.env.EVIMED_CAPSULE_ENABLED !== '0'
+                  # The capsule's recall and note tools: not for an account whose memory the official OpenViking plugin keeps
+                  # (EVIMED_MEMORY_GATEWAY_URL is that gateway's address and is empty for every other account), whose one memory
+                  # entrance is that plugin's five tools. The same expression as the capsule row's `memoryEnabled` below.
+                  capsuleMemoryEnabled: !!js process.env.EVIMED_CAPSULE_MEMORY_ENABLED !== '0' && (process.env.EVIMED_MEMORY_GATEWAY_URL || '') === ''
+                  openVikingMemory: !!js (process.env.EVIMED_MEMORY_GATEWAY_URL || '') !== ''
                 name: '@evimed/dsh-socket/plugins/guidance'
 
               # "When is a run finished, and when is it acceptable" — the plan, the
@@ -146,10 +154,15 @@
                 name: '@evimed/dsh-socket/plugins/evidence'
 
               # The capsule's runtime face: recall, note, and the user's own distilled methods
-              # registered as skills from a deployment-owned read-only directory.
+              # registered as skills from a deployment-owned read-only directory. Two
+              # switches, because the row carries two things: the methods and the
+              # conversation's context are not memory and stay with `enabled`; recall and
+              # note are the person's way into their memory and stand aside for an account
+              # on the native engine, where the official OpenViking plugin is the one entrance.
               - id: evimed-capsule
                 config:
                   enabled: !!js process.env.EVIMED_CAPSULE_ENABLED !== '0'
+                  memoryEnabled: !!js process.env.EVIMED_CAPSULE_MEMORY_ENABLED !== '0' && (process.env.EVIMED_MEMORY_GATEWAY_URL || '') === ''
                   methodsDir: !!js process.env.EVIMED_CAPSULE_METHODS_DIR
                   recallUrl: !!js process.env.EVIMED_CAPSULE_GATEWAY_URL
                   tokenFile: !!js process.env.EVIMED_WORKLOAD_TOKEN_FILE

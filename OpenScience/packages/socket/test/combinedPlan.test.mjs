@@ -372,6 +372,7 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   // Published by the capsule row on every mount; with that row switched off
   // a child is not handed the recall tool, so the composition here has it on.
   ctx.provide("evimedCapsuleMethods", []);
+  ctx.provide("evimedCapsuleMemory", { tools: ["evimed_capsule_recall", "evimed_capsule_note"] });
   /** @type {{ provider: any, options: any }[]} */
   const starts = [];
   /** @type {any} */ (ctx).subagents = {

@@ -52,10 +52,10 @@ export const inject = ['tools', 'systemPrompt']
 /** The one section that lists the mounted methods. After the orchestration
  *  guidance (120) and the answer persona (121), inside DSH's tool-guidance band. */
 export const METHODS_SECTION_NAME = 'evimed:capsule-methods'
+export const METHODS_SECTION_ORDER = 130
 
 /** Provided in the preset's realm when the recall and note tools are registered; absent when the memory half is off. */
 export const MEMORY_SERVICE = 'evimedCapsuleMemory'
-export const METHODS_SECTION_ORDER = 130
 
 /** A ceiling on the list, not on the methods: past it the rest are counted,
  *  and delegations still carry every body. */

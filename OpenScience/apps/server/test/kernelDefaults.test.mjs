@@ -88,7 +88,8 @@ test("every setting the runtime depends on still holds in the composition the im
   // leaves; `code-runtime`, `workflow-worker-thread` and `agent-presets` left.
   // 192 on 2026-09-30: the request-scoped engine execution-context plugin.
   // 193 on 2026-10-02: the scoped native skill catalogue host plugin.
-  assert.equal(report.counts.baselineRows, 198, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue and LoopX");
+  // 200 on 2026-10-13: the official OpenViking memory plugin's row and the loopback bridge that serves it.
+  assert.equal(report.counts.baselineRows, 200, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue, LoopX and the OpenViking memory plugin with its bridge");
   assert.equal(parseCordisDocument(await readFile(source("baseline"), "utf8")).rows.filter((row) => ["dsh-annotation", "ui-mermaid"].includes(row.id)).length, 2);
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.byId.get("evimed-engine-context").name, "@evimed/dsh-socket/plugins/engine-context");
@@ -167,6 +168,18 @@ test("the invariant list is read out of the composition, not retyped beside it",
       // and no server this composition configures serves a resource.
       "mcp-resources.disabled=true",
       "open-in-app.disabled=true",
+      // The official OpenViking memory plugin's row (the bundle is ordered before ours, so this patch reaches the row it
+      // inserts): off unless the launch plan gave this runtime a memory gateway, waiting on the loopback bridge, and
+      // configured with the six measured settings. Left alone the row is enabled on the plugin's own defaults.
+      "openviking-memory-runtime.config.autoRecall=false",
+      "openviking-memory-runtime.config.captureToolResults=false",
+      "openviking-memory-runtime.config.commitTokenThreshold=20000",
+      "openviking-memory-runtime.config.endpoint=!!js String('http://127.0.0.1:') + (process.env.EVIMED_MEMORY_BRIDGE_PORT || '19336')",
+      "openviking-memory-runtime.config.skillCatalog=false",
+      "openviking-memory-runtime.config.skipSubagentSessions=true",
+      "openviking-memory-runtime.config.workspacePeer=false",
+      "openviking-memory-runtime.disabled=!!js (process.env.EVIMED_MEMORY_GATEWAY_URL || '') === ''",
+      "openviking-memory-runtime.inject[0]=evimedMemoryBridge",
       "plugin-manager.disabled=true",
       "plugin-package-inventory-deepseek.disabled=true",
       // The four upstream presets the web bundle declares beside ours: a

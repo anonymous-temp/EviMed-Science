@@ -131,7 +131,7 @@ export { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from './src/accountPolicy.m
 export { safeAppReturnPath } from './src/returnPath.mjs'
 
 
-// toolNames — 22 exports
+// toolNames — 28 exports
 export {
   MCP_MANAGED_JOB_BASE_NAMES,
   MCP_SERVER_NAME,
@@ -140,6 +140,10 @@ export {
   MCP_TOOL_PREFIX,
   OPENCODE_MCP_SERVER_NAME,
   OPENCODE_MCP_TOOL_PREFIX,
+  OPENVIKING_MCP_SERVER_NAME,
+  OPENVIKING_MCP_TOOL_PREFIX,
+  OPENVIKING_MEMORY_TOOL_BASE_NAMES,
+  OPENVIKING_MEMORY_TOOL_NAMES,
   KERNEL_MOUNTED_TOOL_NAMES,
   MOUNTED_TOOL_NAMES,
   RETIRED_MCP_TOOL_NAMES,
@@ -150,6 +154,8 @@ export {
   SOCKET_TOOL_NAME_LIST,
   isEviMedToolName,
   isMcpToolName,
+  isOpenVikingMemoryToolName,
+  isOpenVikingToolName,
   isSocketToolName,
   mcpToolBaseName,
   mcpToolName,
