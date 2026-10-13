@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { CircleCheck, TriangleAlert } from "lucide-react";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { Tag } from "@/components/ui/Tag";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { listParams, readListState, readerPath } from "@/lib/knowledgeNav";
 import { locateSourceQuote, type KnowledgePage, type KnowledgePageLink } from "@/lib/sourceClient";
 import { linkPosition, pageSegments, rawMarkdown, withoutLeadingTitle } from "./knowledgeView";
@@ -47,7 +48,7 @@ function SourceLink({ link, children }: { link: Extract<KnowledgePageLink, { kin
   const [params] = useSearchParams();
   const [open, setOpen] = useState(false);
   if (!link.available || link.status === "source_missing") {
-    return <span className="text-text-3" title="这份资料已不在知识库里">{children}</span>;
+    return <Tooltip content="这份资料已不在知识库里"><span className="text-text-3">{children}</span></Tooltip>;
   }
   const mark = link.status === "present" ? (
     <span role="img" aria-label="原文里找到了这句引文" className="ml-0.5 inline-block align-text-bottom"><CircleCheck size={16} aria-hidden="true" className="text-ok" /></span>
@@ -71,7 +72,7 @@ function SourceLink({ link, children }: { link: Extract<KnowledgePageLink, { kin
 /** A page of the knowledge base opened from a page; one that is not there yet is written as plain text. */
 function PageLinkTo({ link, children }: { link: Extract<KnowledgePageLink, { kind: "page" }>; children: ReactNode }) {
   const [params] = useSearchParams();
-  if (!link.exists || !link.sourceId) return <span className="text-text-2" title="这一页还没有整理出来">{children}</span>;
+  if (!link.exists || !link.sourceId) return <Tooltip content="这一页还没有整理出来"><span className="text-text-2">{children}</span></Tooltip>;
   return <Link to={readerPath(link.sourceId, readListState(params))} className={LINK}>{children}</Link>;
 }
 
