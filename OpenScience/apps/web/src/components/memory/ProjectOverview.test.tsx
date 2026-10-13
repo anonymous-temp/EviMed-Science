@@ -120,7 +120,7 @@ describe("how long a memory held", () => {
     const reworded = record({ revisions: [{ changedAt: "2026-09-20T02:00:00Z" }, { changedAt: "2026-09-25T02:00:00Z" }, { changedAt: "2026-10-01T02:00:00Z" }] });
     expect(validitySpan(reworded, now)).toBeNull();
     // Its changes are ticks on a term it has, never a term of their own.
-    const changed = validitySpan({ ...reworded, invalidSince: "2026-10-05T00:00:00Z" } as never, now);
+    const changed = validitySpan(record({ revisions: [{ changedAt: "2026-09-20T02:00:00Z" }, { changedAt: "2026-09-25T02:00:00Z" }, { changedAt: "2026-10-01T02:00:00Z" }], invalidSince: "2026-10-05T00:00:00Z" }), now);
     expect(changed?.ticks).toEqual([day("2026-09-20T02:00:00Z"), day("2026-09-25T02:00:00Z"), day("2026-10-01T02:00:00Z")]);
   });
 
