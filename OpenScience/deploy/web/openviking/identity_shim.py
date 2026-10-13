@@ -52,10 +52,15 @@ ACCOUNT = os.environ.get("SHIM_ACCOUNT", "evimed")
 UPSTREAM_TIMEOUT = float(os.environ.get("SHIM_UPSTREAM_TIMEOUT_SECONDS", "9"))
 CAPTURE_FILE = os.environ.get("SHIM_CAPTURE_FILE", "")
 
-# OpenViking's own identifier alphabet (openviking/core/identifiers.py); "~" is
-# outside it, so the first "~" of a wrapped session id is always the separator.
+# OpenViking's own identifier rule (openviking/core/identifiers.py): its
+# alphabet, never "." or "..", at most one "@". "~" is outside the alphabet, so
+# the first "~" of a wrapped session id is always the separator.
 USER_TARGET = re.compile(r"^viking://user/([A-Za-z0-9_.@-]+)/")
 USER_ID = re.compile(r"^[A-Za-z0-9_.@-]+$")
+
+
+def is_user_id(value):
+    return bool(USER_ID.match(value)) and value not in {".", ".."} and value.count("@") <= 1
 SEPARATOR = "~"
 CREATE = "/runtime/v1/tasks"
 ROUTES = {CREATE, "/runtime/v1/tasks/status", "/runtime/v1/tasks/cancel"}
@@ -68,7 +73,7 @@ def identity_for_create(body):
     payload = body.get("payload") if isinstance(body, dict) else None
     target = payload.get("to") if isinstance(payload, dict) else None
     match = USER_TARGET.match(target) if isinstance(target, str) else None
-    return (match.group(1), body) if match else None
+    return (match.group(1), body) if match and is_user_id(match.group(1)) else None
 
 
 def identity_for_session(body):
@@ -76,7 +81,7 @@ def identity_for_session(body):
     if not isinstance(wrapped, str):
         return None
     user, separator, session = wrapped.partition(SEPARATOR)
-    if not separator or not session or not USER_ID.match(user):
+    if not separator or not session or not is_user_id(user):
         return None
     return user, {**body, "session_id": session}
 

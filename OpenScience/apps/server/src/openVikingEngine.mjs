@@ -61,7 +61,8 @@ const SHIM_PROBE_POLL_MS = 500;
 
 const sha256 = (/** @type {Buffer | string} */ bytes) => createHash("sha256").update(bytes).digest("hex");
 const codeOf = (/** @type {any} */ error) => (typeof error?.code === "string" && error.code ? error.code : "memory_index_unavailable");
-const sleep = (/** @type {number} */ ms) => new Promise((resolve) => { const timer = setTimeout(resolve, ms); timer.unref?.(); });
+// Not unref'd: this wait is awaited, and a process whose only pending work is an unref'd timer ends in the middle of it.
+const sleep = (/** @type {number} */ ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 /**
  * Whether an admin route refused because the account or the user is not in the engine's registry yet. In trusted mode
  * identities are registered in batches, up to five minutes after their first data request, and until then every admin
@@ -271,11 +272,21 @@ export class OpenVikingEngine {
    */
   async #compileShim() {
     this.counters.shimProbes += 1;
-    const submitted = await this.client.request({
-      method: "POST", path: "/api/v1/compile", openVikingUser: OPENVIKING_ENGINE_USER,
-      idempotencyKey: `evimed-shim-probe-${randomBytes(12).toString("hex")}`,
-      body: { from: [skillUri(OPENVIKING_SKILL_NAMES[0])], to: SHIM_PROBE_TARGET, skill: skillUri(OPENVIKING_SKILL_NAMES[0]) },
-    });
+    let submitted;
+    try {
+      submitted = await this.client.request({
+        method: "POST", path: "/api/v1/compile", openVikingUser: OPENVIKING_ENGINE_USER,
+        idempotencyKey: `evimed-shim-probe-${randomBytes(12).toString("hex")}`,
+        body: { from: [skillUri(OPENVIKING_SKILL_NAMES[0])], to: SHIM_PROBE_TARGET, skill: skillUri(OPENVIKING_SKILL_NAMES[0]) },
+      });
+    } catch (error) {
+      // 503 UNAVAILABLE at submission is the server saying it has no Compile runtime at all ("compile_api.base_url is not
+      // configured"): the bot was not started or the rendered configuration is not the one it reads.
+      if (/** @type {any} */ (error)?.upstreamStatus === 503 && /** @type {any} */ (error)?.upstreamCode === "UNAVAILABLE") {
+        return { ok: false, code: "openviking_shim_absent" };
+      }
+      throw error;
+    }
     const taskId = String(submitted?.result?.task_id ?? "");
     if (!taskId) return { ok: false, code: "openviking_shim_probe_unreadable" };
     for (let waited = 0; waited <= SHIM_PROBE_WAIT_MS; waited += SHIM_PROBE_POLL_MS) {
