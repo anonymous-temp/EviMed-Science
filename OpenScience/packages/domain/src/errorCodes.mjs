@@ -1240,6 +1240,17 @@ const sourceIntakeErrorCodes = Object.freeze([
   'source_link_required',
   'source_note_invalid',
   'source_note_required',
+  // The compiled pages (知识页): a save that lost to a newer round, a file nobody edits, a round that did not finish.
+  'knowledge_page_changed',
+  'knowledge_page_not_editable',
+  'knowledge_page_empty',
+  'knowledge_page_not_found',
+  'knowledge_pages_disabled',
+  'knowledge_page_limit',
+  'knowledge_task_expired',
+  'knowledge_compile_failed',
+  'knowledge_compile_cancelled',
+  'knowledge_compile_misplaced',
   // 连接网盘 (`openListClient.mjs`): OpenList's own refusals, named so the
   // browse toast says what happened rather than a bare 502. No storage covers
   // the account's namespace; the deployment's credential was not accepted.
