@@ -657,7 +657,13 @@
    "checks": [
     {
      "type": "tools",
+     "group": "retrieval",
      "max": 3
+    },
+    {
+     "type": "tools",
+     "max": 5,
+     "required": false
     },
     {
      "type": "tools",

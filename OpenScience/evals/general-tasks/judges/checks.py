@@ -189,7 +189,7 @@ def chk_tools(spec, ctx):
     if "min" in spec and count < spec["min"]:
         problems.append(f"{count} calls < min {spec['min']}")
     listing = ", ".join(sorted({c["name"] for c in selected})) or "none"
-    return [result(f"tools:{label}", not problems, "; ".join(problems) or f"{count} call(s): {listing}")]
+    return [result(f"tools:{label}", not problems, ("; ".join(problems) + f" ({listing})") if problems else f"{count} call(s): {listing}")]
 
 
 def chk_wall(spec, ctx):
@@ -1162,7 +1162,11 @@ def run_case(case: dict, variant: str, ctx: Ctx) -> list[dict]:
             out.append(result(f"unknown_check:{spec['type']}", False, "no such check type"))
             continue
         try:
-            out += fn(spec, ctx)
+            produced = fn(spec, ctx)
+            if spec.get("required") is False:  # an advisory check reports but never fails the case
+                for r in produced:
+                    r["required"] = False
+            out += produced
         except Exception as error:
             out.append(result(spec["type"], None, f"the judge itself failed: {type(error).__name__}: {str(error)[:200]}", required=False))
     return out
