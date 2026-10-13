@@ -5,7 +5,7 @@
 //
 //   node evals/general-tasks/runner/run.mjs --tree <OpenScience checkout> --arm B|A|C --out <dir>
 //        [--cases G01,G05 | --set all|general|medical] [--repeat 1] [--timeout-min 15] [--port 48841] [--pg-port 55657]
-//        [--seed-from <sealed seed dir>] [--redo] [--no-judge] [--keep-data]
+//        [--variant normal,classifier-timeout,web-search-off] [--seed-from <sealed seed dir>] [--redo] [--no-judge] [--keep-data]
 //
 // Arms: B and C run the tree as it is (B = the tree before the course correction, C = the corrected tree: the arm is a label);
 // A is the native control: the seven switchable first-party socket plugins off (OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS),
@@ -27,7 +27,8 @@ const L = process.env.EVAL_LIVE_DIR ?? '/tmp/eval/live';
 const ARM_A_PLUGINS = ['evimed-guidance', 'evimed-run-policy', 'evimed-evidence', 'evimed-capsule', 'evimed-screening', 'evimed-compaction', 'evimed-duplicate-lines'];
 const PROFILES = {
   normal: {},
-  'classifier-timeout': { OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS: '1' },
+  // The classifier's deadline is clamped to at least a second; the harness makes its call hang (EVAL_FAULT), so the deadline ends it.
+  'classifier-timeout': { OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS: '1000' },
   'web-search-off': { OPEN_SCIENCE_WEB_SEARCH_BAILIAN_ENABLED: 'false' },
 };
 
@@ -51,7 +52,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const listening = (port) => new Promise((resolve) => { const s = net.connect(port, '127.0.0.1'); s.once('connect', () => { s.destroy(); resolve(true); }); s.once('error', () => resolve(false)); });
 
 /** The cells to run: a case that continues another (`after`) rides in the other's conversation. */
-export function buildPlan(cases, { ids, set, arm }) {
+export function buildPlan(cases, { ids, set, arm, variants = null }) {
   const byId = new Map(cases.map((c) => [c.id, c]));
   let wanted = ids?.length ? ids : cases.filter((c) => set === 'all' || (set === 'general' && c.kind === 'general') || (set === 'medical' && c.kind === 'medical')).map((c) => c.id);
   if (arm === 'A') wanted = wanted.filter((id) => byId.get(id)?.kind === 'general');
@@ -66,6 +67,7 @@ export function buildPlan(cases, { ids, set, arm }) {
     const members = [c, ...cases.filter((d) => d.after === c.id && set2.has(d.id))];
     members.forEach((m) => taken.add(m.id));
     for (const variant of c.variants ?? [{ id: 'normal' }]) {
+      if (variants && !variants.includes(variant.id)) continue;
       units.push({ id: members.map((m) => m.id).join('+'), cases: members, variant, profile: variant.profile ?? 'normal' });
     }
   }
@@ -130,7 +132,7 @@ async function startHarness({ args, treeOs, treeDir, dataDir, profile, arm, dbUr
     cwd: dataDir, detached: true, stdio: ['ignore', logFile, logFile],
     env: { ...process.env, OS: treeOs, TREE_DIR: treeDir, LIVE_DIR: L, LIVE_DATA: dataDir, LIVE_PORT: String(args.port), LIVE_DATABASE_URL: dbUrl,
       LIVE_ENV: JSON.stringify(env), LIVE_OVERRIDES: JSON.stringify(overrides), TMPDIR: '/tmp/eval-t',
-      EVAL_DEEPSEEK_KEY_FILE: path.join(SECRETS, 'deepseek.api-key'),
+      EVAL_DEEPSEEK_KEY_FILE: path.join(SECRETS, 'deepseek.api-key'), ...(profile === 'classifier-timeout' ? { EVAL_FAULT: 'classifier-timeout' } : {}),
       ...(armA ? { EVAL_PERSONA: NEUTRAL_PERSONA, EVAL_KERNEL_ENV: JSON.stringify({ EVIMED_CITE_ENABLED: '0' }) } : {}) },
   });
   child.unref();
@@ -169,7 +171,7 @@ function summarize(outDir) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.tree || !args.arm || !args.out) {
-    console.log('usage: run.mjs --tree <OpenScience checkout> --arm A|B|C --out <dir> [--cases G01,G05 | --set all|general|medical] [--repeat 1] [--timeout-min 15] [--port 48841] [--pg-port 55657] [--seed-from DIR] [--redo] [--no-judge] [--keep-data]');
+    console.log('usage: run.mjs --tree <OpenScience checkout> --arm A|B|C --out <dir> [--cases G01,G05 | --set all|general|medical] [--repeat 1] [--timeout-min 15] [--port 48841] [--pg-port 55657] [--variant ID[,ID]] [--seed-from DIR] [--redo] [--no-judge] [--keep-data]');
     process.exit(args.help ? 0 : 2);
   }
   const arm = String(args.arm).toUpperCase();
@@ -182,7 +184,7 @@ async function main() {
   const outDir = path.resolve(args.out);
   await fs.mkdir(`${outDir}/records`, { recursive: true });
   const cases = JSON.parse(await fs.readFile(path.join(SUITE, 'cases.json'), 'utf8')).cases;
-  const plan = buildPlan(cases, { ids: args.cases ? String(args.cases).split(',').map((s) => s.trim()) : null, set: args.set, arm });
+  const plan = buildPlan(cases, { ids: args.cases ? String(args.cases).split(',').map((s) => s.trim()) : null, set: args.set, arm, variants: args.variant ? String(args.variant).split(',').map((s) => s.trim()) : null });
   // Normal profile first: the harness restarts only when the profile changes.
   plan.sort((a, b) => (a.profile === 'normal' ? 0 : 1) - (b.profile === 'normal' ? 0 : 1));
   const manifestFile = `${outDir}/run.json`;

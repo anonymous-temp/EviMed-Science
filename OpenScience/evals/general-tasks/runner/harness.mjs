@@ -30,6 +30,7 @@ const DSH_BIN = process.env.DSH_BIN ?? '/tmp/evimed-openmed-dsh/node_modules/.bi
 const SEED = `${TREE}/dsh-seed`;
 const SOCK = `${TREE}/opt/socket`;
 const PERSONA = process.env.EVAL_PERSONA ?? '';
+const FAULT = process.env.EVAL_FAULT ?? '';
 const log = (...parts) => process.stderr.write(`${new Date().toISOString()} harness ${parts.join(' ')}\n`);
 
 // --- secrets (random, scratch) and the operator's DeepSeek key file (read by config only, never printed) -----------------
@@ -74,6 +75,16 @@ if (/\/(chat\/completions|messages)$/.test(new URL(url).pathname) && typeof init
         const systemText = Array.isArray(body.system) ? body.system.map((block) => block?.text ?? '').join('\n') : system;
         const tools = Array.isArray(body.tools) ? body.tools : [];
         const first = !messages.some((m) => m.role === 'assistant');
+        // Fault injection (EVAL_FAULT=classifier-timeout): the routing classifier's own model call never answers, so its own
+        // deadline (OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS) ends it. The failure path measured is the platform's, not a stub of it.
+        if (FAULT === 'classifier-timeout' && /\bagentId\b/.test(systemText) && /confidence/.test(systemText) && /rout/i.test(systemText)) {
+          return new Promise((_resolve, reject) => {
+            const fail = () => reject(Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }));
+            if (init.signal?.aborted) return fail();
+            init.signal?.addEventListener('abort', fail, { once: true });
+            setTimeout(fail, 30_000).unref();
+          });
+        }
         const row = { at: new Date().toISOString(), seq: seq += 1, path: new URL(url).pathname, model: body.model, bytes: Buffer.byteLength(init.body), messages: messages.length,
           systemChars: systemText.length, tools: tools.length, toolsChars: JSON.stringify(tools).length, first,
           toolNames: first ? tools.map((t) => t?.function?.name ?? t?.name) : undefined,
