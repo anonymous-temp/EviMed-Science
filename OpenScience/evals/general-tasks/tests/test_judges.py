@@ -477,9 +477,9 @@ class OfficeChecks(unittest.TestCase):
         env.close()
 
 
-def make_pptx(path, slides, dark=False, chart=False, counter=False, ground="background"):
+def make_pptx(path, slides, dark=False, chart=False, counter=False, ground="background", numbered=False):
     """A minimal valid-enough deck: each slide is (title, [points]). `counter` writes each slide's own page counter ("02 / 06") into it;
-    `ground="rectangle"` paints a dark slide the way a python-pptx script does, as a solid shape over the whole slide, with no background."""
+    `numbered` adds a slide-number box ("4"), which moves when a slide is added before it. `ground="rectangle"` paints a dark slide the way a python-pptx script does, as a solid shape over the whole slide, with no background."""
     ns = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
     with zipfile.ZipFile(path, "w") as z:
         z.writestr("[Content_Types].xml", '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>')
@@ -491,9 +491,10 @@ def make_pptx(path, slides, dark=False, chart=False, counter=False, ground="back
         z.writestr("ppt/slideMasters/slideMaster1.xml", f'<?xml version="1.0"?><p:sldMaster {ns}><p:cSld>{f"<p:bg><p:bgPr><a:solidFill><a:srgbClr val={chr(34)}{"101820" if dark else "FFFFFF"}{chr(34)}/></a:solidFill></p:bgPr></p:bg>" if painted else ""}</p:cSld><p:clrMap bg1="{"dk1" if dark and painted else "lt1"}"/></p:sldMaster>')
         for i, (title, points) in enumerate(slides):
             body = "".join(f"<a:p><a:r><a:t>{p}</a:t></a:r></a:p>" for p in points + ([f"{i + 1:02d} / {len(slides):02d}"] if counter else []))
+            number = f'<p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:txBody><a:p><a:r><a:t>{i + 1}</a:t></a:r></a:p></p:txBody></p:sp>' if numbered else ""
             rectangle = (f'<p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12192000" cy="6858000"/></a:xfrm><a:solidFill><a:srgbClr val="{"06171E" if dark else "FFFFFF"}"/></a:solidFill></p:spPr></p:sp>'
                          if ground == "rectangle" else "")
-            z.writestr(f"ppt/slides/slide{i + 1}.xml", f'<?xml version="1.0"?><p:sld {ns}><p:cSld><p:spTree>{rectangle}<p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>{title}</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:txBody>{body}</p:txBody></p:sp></p:spTree></p:cSld></p:sld>')
+            z.writestr(f"ppt/slides/slide{i + 1}.xml", f'<?xml version="1.0"?><p:sld {ns}><p:cSld><p:spTree>{rectangle}<p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>{title}</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:txBody>{body}</p:txBody></p:sp>{number}</p:spTree></p:cSld></p:sld>')
         if chart:
             z.writestr("ppt/charts/chart1.xml", f'<?xml version="1.0"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"/>')
 
@@ -546,6 +547,11 @@ class PowerPointChecks(unittest.TestCase):
         spec = {"type": "pptx_edit", "base_turn": 0, "slides_delta": 1, "dark": True}
         self.assertEqual(ok_of(env.run(spec)), [True], env.run(spec))
         # Still a failure: the other slides were reworded, the deck is not dark, the split slide's sentences were replaced.
+        # A slide-number box ("4") that became "5" is the same slide; "4" typed into a sentence is not a slide number.
+        make_pptx(env.put(0, "d.pptx"), base, counter=False, numbered=True)
+        make_pptx(env.put(1, "e.pptx"), edited, dark=True, counter=False, ground="rectangle", numbered=True)
+        self.assertEqual(ok_of(env.run(spec)), [True], env.run(spec))
+        make_pptx(env.put(0, "d.pptx"), base, counter=True)
         reworded = [base[0], ("第2页", ["完全不同的两句话", "另一句话"]), ("第3页上", ["要点 3-a"]), ("第3页下", ["要点 3-b"]), ("第4页", ["也被改写了", "不再是原话"]), base[4]]
         make_pptx(env.put(1, "e.pptx"), reworded, dark=True, counter=True, ground="rectangle")
         self.assertEqual(ok_of(env.run(spec)), [False])

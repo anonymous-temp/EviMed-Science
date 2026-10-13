@@ -1,6 +1,6 @@
 ---
 name: pptx
-description: Read, edit in place, restructure, and create PowerPoint decks (.pptx) - business plans, reports, lectures, with charts, tables, notes and a chosen palette. Use whenever a .pptx is an input or the deliverable, including follow-ups such as splitting a crowded slide, reordering, or switching the whole deck to a dark or light palette.
+description: Read, edit in place, restructure, and create PowerPoint decks (.pptx) - business plans, reports, lectures, with charts, tables, notes and a chosen palette. Use whenever a .pptx is an input or the deliverable, including follow-ups such as splitting a crowded slide, reordering, or switching the whole deck to a dark or light palette. A deck that already exists in the conversation, whichever tool made it, is changed through this skill and not regenerated, because regenerating rewrites every slide.
 license: MIT
 ---
 

@@ -3487,7 +3487,7 @@
       "origin": "office",
       "source": {"kind":"release"},
       "licence": {"id":"MIT","basis":"inventory"},
-      "digest": "sha256:874d5dac221e8209286a2a6b74217f96ede06534f5c7b25d3d7cf5e149b4967c",
+      "digest": "sha256:e6ecb1d78bd43c971c79c20e7e8b25936cb3852d73fc4d52045e72603da6f47c",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/create_pptx.py","sha256":"2025a5217bf12f21a8c8e193d5c7c7b9782f43d71f7e3d819b33e8af36ed5683"},

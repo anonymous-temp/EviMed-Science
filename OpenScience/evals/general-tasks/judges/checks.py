@@ -632,8 +632,11 @@ def _slide_dark(slide: dict, master_bg: str | None, theme_dark: bool | None) -> 
 _PAGE_COUNTER = re.compile(r"\b\d{1,3}\b(?=\s*/)|(?<=/)\s*\d{1,3}\b")
 
 
-def _slide_words(text: str) -> str:
-    return squash(_PAGE_COUNTER.sub("", text))
+def _slide_words(slide: dict) -> str:
+    """A slide's text compared as what it says: without its page counters and without a text box that holds only a number (the
+    slide-number box, which reads "4" and becomes "5" when a slide is added before it)."""
+    own = [t for t in slide.get("shape_texts") or [slide["all_text"]] if not re.fullmatch(r"\s*\d{1,3}\s*", t)]
+    return squash(_PAGE_COUNTER.sub("", " ".join(own)))
 
 
 def _shingles(text: str, size: int = 2) -> set[str]:
@@ -658,18 +661,18 @@ def chk_pptx_edit(spec, ctx):
         nb, nf = len(base["slides"]), len(final["slides"])
         if nf != nb + spec.get("slides_delta", 1):
             problems.append(f"{nf} slides after, {nb} before (expected +{spec.get('slides_delta', 1)})")
-        final_texts = [_slide_words(s["all_text"]) for s in final["slides"]]
+        final_texts = [_slide_words(s) for s in final["slides"]]
         unchanged = 0
         others = [i for i in range(nb) if i != 2]
         for i in others:
-            want = _slide_words(base["slides"][i]["all_text"])
+            want = _slide_words(base["slides"][i])
             if any(want and want == t for t in final_texts):
                 unchanged += 1
         if others and unchanged < len(others) - 1:
             problems.append(f"only {unchanged}/{len(others)} other slides keep their text")
         if nb >= 3 and nf >= 4:
             # What the slide said (its body, not its title: a split gives the two halves titles of their own) must still be said.
-            words = _shingles(" ".join(base["slides"][2]["texts"]) or base["slides"][2]["all_text"])
+            words = _shingles(" ".join(t for t in base["slides"][2]["texts"] if not re.fullmatch(r"\s*\d{1,3}\s*", t)) or base["slides"][2]["all_text"])
             after = _shingles(final["slides"][2]["all_text"] + " " + final["slides"][3]["all_text"])
             kept = len(words & after) / len(words) if words else 1
             if kept < 0.8:

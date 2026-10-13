@@ -89,11 +89,14 @@ def pptx_info(path: Path) -> dict:
                     title = " ".join(paragraphs)
                 else:
                     texts += paragraphs
+            # Each shape's own text, so that a text box holding only a number (a slide-number box) can be told from content.
+            shape_texts = [" ".join("".join(t.text or "" for t in para.iter("{%s}t" % NS["a"])) for para in shape.iter("{%s}p" % NS["a"])).strip()
+                           for shape in root.iter("{%s}sp" % NS["p"])]
             tables = len(list(root.iter("{%s}tbl" % NS["a"])))
             background = _background_rgb(root) or _full_bleed_rgb(root, slide_size)
             slides.append({
                 "part": name, "title": title, "texts": texts, "charts": rels.count("/chart"), "pictures": len(list(root.iter("{%s}pic" % NS["p"]))),
-                "tables": tables, "background": background,
+                "tables": tables, "background": background, "shape_texts": shape_texts,
                 "all_text": " ".join(t.text or "" for t in root.iter("{%s}t" % NS["a"])),
             })
         master_bg = _master_background(archive)
