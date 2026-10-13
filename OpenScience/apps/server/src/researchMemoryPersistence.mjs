@@ -262,6 +262,22 @@ CREATE TABLE IF NOT EXISTS evimed_memory.retired_erasures (
 -- schema: a run that ends in the same second as the reset must still be placed
 -- on one side of it. Null: never reset.
 ALTER TABLE evimed_memory.settings ADD COLUMN IF NOT EXISTS reset_at timestamptz(3);
+-- Which engine keeps the account's memory (2026-10-13): \`legacy\` is this schema's records, written by the platform's own
+-- extraction; \`native\` is OpenViking's engine, written by its extraction through the memory plugin. One account is on exactly
+-- one of them at any time, and this column is the only place that says which. Every account that existed when the column
+-- arrived is \`legacy\` and stays so until an operator switches it (\`scripts/ops/memory-engine.mjs\`); an account with no
+-- value is a new one, and takes the deployment's default the first time it is asked (\`ResearchMemoryStore.memoryEngine\`),
+-- which writes it here so that a later change of the default moves nobody.
+DO $engine$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_schema='evimed_memory' AND table_name='settings' AND column_name='engine') THEN
+    ALTER TABLE evimed_memory.settings ADD COLUMN engine text CHECK (engine IS NULL OR engine IN ('legacy', 'native'));
+    ALTER TABLE evimed_memory.settings ADD COLUMN engine_changed_at timestamptz(3);
+    INSERT INTO evimed_memory.settings (user_id, engine) SELECT id, 'legacy' FROM evimed_control.users
+      ON CONFLICT (user_id) DO UPDATE SET engine = 'legacy';
+  END IF;
+END $engine$;
 -- One conversation's own memory state. Keyed by the kernel's session id inside
 -- a project; deleted with the account, and with the project by
 -- deleteProjectMemory. All that is left of it is the capsule a conversation is

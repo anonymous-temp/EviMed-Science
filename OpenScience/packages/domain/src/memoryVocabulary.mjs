@@ -29,7 +29,7 @@ import { KERNEL_MOUNTED_TOOL_NAMES, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX, SOCKET
 import { workspaceLayout } from './workspaceLayout.mjs'
 
 /**
- * Every `<evimed-*>` tag the platform writes into a conversation.
+ * Every `<evimed-*>` tag the platform writes into a conversation, and the one a pinned plugin writes beside them.
  *
  * `role` says what a message carrying the tag is:
  *  - `injected` — machine text in the user slot (a brief, a recalled memory, a
@@ -43,7 +43,10 @@ import { workspaceLayout } from './workspaceLayout.mjs'
  * complete can say which file added a tag nobody listed. `legacy` marks a tag
  * no current code writes but older transcripts still carry.
  *
- * @type {readonly { tag: string, role: 'injected' | 'user-wrapper', emitters: readonly string[], legacy?: string }[]}
+ * `upstream` marks a tag a pinned third-party plugin writes into the conversation: no file of this repository emits it, and
+ * it is machine text all the same.
+ *
+ * @type {readonly { tag: string, role: 'injected' | 'user-wrapper', emitters: readonly string[], legacy?: string, upstream?: string }[]}
  */
 export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   { tag: 'evimed-evolution', role: 'injected', emitters: ['apps/server/src/evolutionRuns.mjs'] },
@@ -106,6 +109,15 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
     role: 'injected',
     emitters: [],
     legacy: 'the dispatch context block before it moved into context.md; transcripts from that time still carry it',
+  },
+  // Not ours: the block the official OpenViking memory plugin injects (the profile at a session's start, a recall when
+  // auto-recall is on). It is memory read back into the conversation, and learning from it again is how a memory comes to
+  // quote itself; the memory gateway holds captured messages to this list (`memoryGateway.mjs`).
+  {
+    tag: 'openviking-context',
+    role: 'injected',
+    emitters: [],
+    upstream: '@openviking/dsh-memory-plugin (pinned in deps-version.json), which runs unmodified in the runtime',
   },
 ])
 

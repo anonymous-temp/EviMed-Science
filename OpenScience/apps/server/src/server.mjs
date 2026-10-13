@@ -386,6 +386,11 @@ import { GeoInclusionClient, inclusionEnabled } from "./geoInclusionClient.mjs";
 import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
 import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
+import { MEMORY_GATEWAY_PATH, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
+import { createMemoryAdmission } from "./memoryAdmission.mjs";
+import { OpenVikingSessions } from "./openVikingSessions.mjs";
+import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
+import { nativeMemoryMetricFamilies } from "./nativeMemoryMetrics.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
 import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, extractionEmptyCause } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
@@ -701,6 +706,7 @@ function requestIdFor(req) {
 function routePattern(pathname) {
   if (pathname === "/api/health" || pathname === "/api/ready" || pathname === "/api/me") return pathname;
   if (pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)) return `${CAPSULE_GATEWAY_PATH}/:action`;
+  if (pathname.startsWith(`${MEMORY_GATEWAY_PATH}/`)) return memoryGatewayRoutePattern(pathname);
   if (pathname === "/api/document-exports") return pathname;
   if (pathname.startsWith("/api/document-exports/")) return "/api/document-exports/:id/:action/:format";
   if (pathname === "/api/capsules") return pathname;
@@ -1307,6 +1313,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     ?? new ResearchMemoryStore(config, {
       database: productDatabase, jobs: memoryIndexActive ? productJobs : null, withdrawals: memoryWithdrawals,
     });
+  // Memory on OpenViking's native engine (2026-10-13): the calls the control plane makes of it, with the gateway's short
+  // deadlines, and the overlay of what the engine has no place for. Both exist whenever their dependency does; whether an
+  // account's memory is on that engine is the account's own setting (`researchMemory.memoryEngine`).
+  const openVikingSessions = overrides.openVikingSessions ?? new OpenVikingSessions(openVikingClient, {
+    timeoutMs: config.memoryGatewayTimeoutMs, fastTimeoutMs: Math.round(Number(config.memoryGatewayTimeoutMs ?? 4_000) / 3),
+  });
+  const nativeMemoryOverlay = overrides.nativeMemoryOverlay ?? new NativeMemoryOverlay({ database: productDatabase });
   // One reranker for both recall paths. It orders candidates that have already
   // been hydrated from the authoritative store, because the index's own
   // reranked endpoint navigates by directory abstracts that nothing generates
@@ -3143,6 +3156,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // have the same lifetime -- both are null exactly when no product database is
   // configured.
   runtimeManager.capsuleService = capsuleService;
+  // Which engine keeps an account's memory decides what its runtime is launched with (`RuntimeManager.memoryGatewayUrlFor`).
+  runtimeManager.memoryEngineOf = researchMemory.configured && typeof researchMemory.memoryEngine === "function"
+    ? (userId) => researchMemory.memoryEngine(userId) : null;
   // And the other source of mountable methods. Without this assignment
   // `materializeCapsuleMethods` writes only capsule entries, which is what the
   // deployment did until 2026-09-10: approving a learned method changed nothing
@@ -4653,6 +4669,23 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     ? createEvaluationIsolation({ dataDir: config.dataDir, resolveRunId: identity => identity.runId ?? attributeRun(identity),
       reportFailure: code => process.stderr.write(`evaluation isolation: ${code}\n`) })
     : null;
+  // The memory gateway (`memoryGateway.mjs`): the unmodified OpenViking memory plugin in a runtime reaches the engine only
+  // through here. Who is learned from and read for is one decision (`memoryAdmission.mjs`), asked per request.
+  const memoryAdmission = createMemoryAdmission({
+    config, researchMemory,
+    engineReady: openVikingEngine ? () => openVikingEngine.ready("nativeMemory") : null,
+    conversations: {
+      running: (project) => agentRuns.activeRuns(project),
+      runsOf: (project, sessionId) => agentRuns.conversationRuns(project, sessionId),
+      parentOf: (sessionId, running) => agentRuns.runIdForSession(sessionId, running),
+    },
+    internalAgent: async (agentId) => (await agentRegistry)?.get?.(agentId)?.visibility === "internal",
+    clinicalContext: vcrPrivacyStore ? (userId, projectId, runs) => vcrPrivacyStore.hasClinicalContext(userId, projectId, runs) : null,
+  });
+  const memoryGatewayHandler = createMemoryGatewayHandler({
+    config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
+    overlay: nativeMemoryOverlay.configured ? nativeMemoryOverlay : null,
+  });
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext, evaluationIsolation,
     // The recall tool answers with at most this many (review M6): five unless the model asks, and never more than the most.
     recallLimit: config.memoryRecallToolLimit, recallMaxLimit: config.memoryRecallToolMaxLimit,
@@ -5789,6 +5822,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       ? toolUniverseGatewayHandler
       : pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)
       ? capsuleGatewayHandler
+      : pathname.startsWith(`${MEMORY_GATEWAY_PATH}/`)
+      ? memoryGatewayHandler
       : isModelGatewayPath(pathname)
       ? modelGatewayHandler
       : pathname === REVISION_GATEWAY_PATH
@@ -9487,6 +9522,9 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // What the memory does and refuses (memoryMetrics.mjs): conversations held against a reset, a deleted project's methods, a
   // deleted account's retired rows.
   for (const family of memoryMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // Memory on the native engine (nativeMemoryMetrics.mjs): what the memory gateway forwarded, withheld and refused, and what
+  // the overlay's worker read, replayed and took back.
+  if (config.ovNativeMemoryEnabled === true) for (const family of nativeMemoryMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Recalculation cards (evidenceRecalculation.mjs): the switch, and what became of each proof the evolution module recorded.
   for (const family of evidenceRecalculationMetricFamilies(evidenceRecalculation, config)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The prediction registry (predictionRegistry.mjs): the switch, registrations, scores and what each published paper that named a registered trial led to.

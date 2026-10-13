@@ -137,6 +137,15 @@ const operatorLevers = {
   OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_RECALL_TOOL_LIMIT: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_RECALL_TOOL_MAX_LIMIT: ["open-science-web"],
+  // The memory gateway's limits and the native memory worker's cadence (2026-10-13): each bounds what a runtime's memory
+  // plugin can spend of the engine and of the platform's extraction budget, and one that did not arrive leaves the default
+  // deciding it while the operator believes otherwise.
+  OPEN_SCIENCE_MEMORY_GATEWAY_RATE_PER_MINUTE: ["open-science-web"],
+  OPEN_SCIENCE_MEMORY_GATEWAY_COMMITS_PER_HOUR: ["open-science-web"],
+  OPEN_SCIENCE_MEMORY_GATEWAY_MAX_BODY_BYTES: ["open-science-web"],
+  OPEN_SCIENCE_MEMORY_GATEWAY_TIMEOUT_MS: ["open-science-web"],
+  OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS: ["open-science-web"],
+  OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS: ["open-science-web"],
   // The two delegation limits that replaced `maxParallelChildren` (2026-09-18).
   // The controller builds the hosted launch plan and so is the service that
   // actually writes them into a runtime container; the web API builds it when

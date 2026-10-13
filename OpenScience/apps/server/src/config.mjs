@@ -245,6 +245,20 @@ function releaseManifestConfig(overrides) {
 }
 
 /**
+ * A whole number inside a range, or the default when nothing was set. Out of range or not a number is refused by name:
+ * a limit that silently became `NaN` is no limit.
+ * @param {unknown} value @param {number} fallback @param {number} min @param {number} max @param {string} name
+ */
+function boundedInteger(value, fallback, min, max, name) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < min || number > max) {
+    throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(value)}.`);
+  }
+  return number;
+}
+
+/**
  * OpenViking as an engine (v0.5.0, 2026-10-13): the model path of its own
  * extraction, summaries and Compile, and the two switches of what is built on it.
  *
@@ -2676,6 +2690,23 @@ export function loadConfig(overrides = {}) {
     memoryRecallToolMaxLimit: Number(
       overrides.memoryRecallToolMaxLimit ?? process.env.OPEN_SCIENCE_MEMORY_RECALL_TOOL_MAX_LIMIT ?? 8,
     ),
+    // The memory gateway (`memoryGateway.mjs`): the door between a runtime's memory plugin and OpenViking's native engine.
+    // Each limit protects a resource and has a counter (`open_science_memory_gateway_*`):
+    //  - requests a minute from one runtime (a session start is seven, a turn a handful; a loop in a plugin is thousands);
+    //  - commits an hour from one account (each is one extraction call, paid by the platform);
+    //  - the largest body it reads (a captured message, an MCP call);
+    //  - how long it waits for the engine before answering 5xx. Short on purpose: a memory service that hangs delays a new
+    //    conversation's first prompt by eighteen seconds, one that refuses costs nothing. Session start, health and the MCP
+    //    handshake wait a third of it.
+    memoryGatewayRatePerMinute: boundedInteger(overrides.memoryGatewayRatePerMinute ?? process.env.OPEN_SCIENCE_MEMORY_GATEWAY_RATE_PER_MINUTE, 600, 0, 100_000, "OPEN_SCIENCE_MEMORY_GATEWAY_RATE_PER_MINUTE"),
+    memoryGatewayCommitsPerHour: boundedInteger(overrides.memoryGatewayCommitsPerHour ?? process.env.OPEN_SCIENCE_MEMORY_GATEWAY_COMMITS_PER_HOUR, 120, 0, 100_000, "OPEN_SCIENCE_MEMORY_GATEWAY_COMMITS_PER_HOUR"),
+    memoryGatewayMaxBodyBytes: boundedInteger(overrides.memoryGatewayMaxBodyBytes ?? process.env.OPEN_SCIENCE_MEMORY_GATEWAY_MAX_BODY_BYTES, 1_048_576, 1_024, 8_388_608, "OPEN_SCIENCE_MEMORY_GATEWAY_MAX_BODY_BYTES"),
+    memoryGatewayTimeoutMs: boundedInteger(overrides.memoryGatewayTimeoutMs ?? process.env.OPEN_SCIENCE_MEMORY_GATEWAY_TIMEOUT_MS, 4_000, 500, 60_000, "OPEN_SCIENCE_MEMORY_GATEWAY_TIMEOUT_MS"),
+    // The native memory worker (`nativeMemoryWorker.mjs`): how often it reads commit diffs into the overlay and scans
+    // session archives for the commits only the engine made, and how many times a failed commit is replayed before it is
+    // given up (the engine never retries one; each replay is one extraction call, backed off from one minute).
+    nativeMemoryScanMs: boundedInteger(overrides.nativeMemoryScanMs ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS, 60_000, 5_000, 3_600_000, "OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS"),
+    nativeMemoryReplayAttempts: boundedInteger(overrides.nativeMemoryReplayAttempts ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS, 5, 0, 20, "OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS"),
     // The similarity below which an index hit is not offered: by the memory
     // page's search (2026-09-26 audit, M-4: 「信尔美」 also listed five unrelated
     // memories of another project) and, since 2026-10-10 (review M-3), by the

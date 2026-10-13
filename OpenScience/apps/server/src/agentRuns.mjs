@@ -4459,6 +4459,20 @@ export class AgentRunStore {
   }
 
   /**
+   * The runs of one conversation, newest first, as the ledger folds them (status, `automated`, the route's reason, the
+   * agent) — what the memory gateway asks to know whose turn a captured message belongs to: the person's, or one the
+   * platform started. A fold with no phase walk, because it is asked per request.
+   * @param {any} project @param {string} sessionId @returns {Promise<Record<string, any>[]>}
+   */
+  async conversationRuns(project, sessionId) {
+    const id = typeof sessionId === "string" ? sessionId.trim() : "";
+    if (!id) return [];
+    return [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()]
+      .filter((run) => run.sessionId === id)
+      .sort((left, right) => String(right.startedAt ?? "").localeCompare(String(left.startedAt ?? "")));
+  }
+
+  /**
    * Which of these runs a kernel session belongs to.
    *
    * A run's own conversation is on its record; a subagent's session is not,

@@ -1109,6 +1109,24 @@ export function runtimeStartRecovery(code, status) {
  * entirely.
  */
 export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
+  // 2026-10-13: memory on OpenViking's native engine. The first four are what a person on the memory page can be answered
+  // with; the `memory_gateway_*` ones are what the memory gateway answers a runtime's memory plugin (`memoryGateway.mjs`).
+  'memory_engine_unavailable',
+  'memory_engine_unsupported',
+  'memory_content_refused',
+  'memory_engine_invalid',
+  'memory_gateway_disabled',
+  'memory_gateway_unauthenticated',
+  'memory_gateway_role_refused',
+  'memory_gateway_route_refused',
+  'memory_gateway_uri_refused',
+  'memory_gateway_body_invalid',
+  'memory_gateway_payload_too_large',
+  'memory_gateway_rate_limited',
+  'memory_gateway_tool_refused',
+  'memory_gateway_upstream_unavailable',
+  'memory_gateway_upstream_invalid',
+  'memory_gateway_failed',
   // 2026-10-12: the memory map (`memoryMap.mjs`) — switched off, asked for what it does not have, and the topics it cannot make.
   'memory_map_disabled',
   'memory_map_invalid',
@@ -2624,6 +2642,24 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   handbook_unavailable: '这条经验已不存在，刷新后再试。',
   handbook_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
+  // ——— 记忆：原生引擎 (nativeMemoryStore.mjs, memoryGateway.mjs) ———
+  memory_engine_unavailable: '记忆服务暂时不可用，稍后再来看；对话照常进行，不受影响。',
+  memory_engine_unsupported: '这项操作在当前的记忆方式下不可用。',
+  memory_content_refused: '这条含有密钥、证件号、手机号、卡号或邮箱这类信息，没有记下。可以只记住不含这些信息的部分。',
+  memory_engine_invalid: '记忆引擎只能是 legacy 或 native。',
+  memory_gateway_disabled: '这个部署没有开放原生记忆。',
+  memory_gateway_unauthenticated: '记忆网关不认识这个调用方。',
+  memory_gateway_role_refused: '调用方不能自己声明角色。',
+  memory_gateway_route_refused: '记忆网关不提供这个接口。',
+  memory_gateway_uri_refused: '这个地址不在本人的记忆范围内。',
+  memory_gateway_body_invalid: '记忆请求的内容不完整。',
+  memory_gateway_payload_too_large: '记忆请求过大。',
+  memory_gateway_rate_limited: '记忆请求过于频繁，请稍后再试。',
+  memory_gateway_tool_refused: '记忆服务不提供这个工具。',
+  memory_gateway_upstream_unavailable: '记忆服务暂时不可用；对话照常进行。',
+  memory_gateway_upstream_invalid: '记忆服务的应答无法读取。',
+  memory_gateway_failed: '记忆网关没能应答这次请求。',
+
   // ——— 记忆地图 (memoryMap.mjs) ———
   memory_map_disabled: '这个部署没有开放记忆地图；记忆本身照常可以在记忆页查看。',
   memory_map_invalid: '记忆地图的这次请求不完整，请刷新页面后再试。',
@@ -2843,6 +2879,23 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   agent_run_limit_reached: 'capped',
   project_limit_reached: 'capped',
   default_project_protected: 'capped',
+  // Memory on the native engine (2026-10-13): what the page or the gateway refused before asking the engine, and the engine not answering.
+  memory_engine_unavailable: 'upstream',
+  memory_engine_unsupported: 'capped',
+  memory_content_refused: 'capped',
+  memory_engine_invalid: 'capped',
+  memory_gateway_disabled: 'capped',
+  memory_gateway_unauthenticated: 'capped',
+  memory_gateway_role_refused: 'capped',
+  memory_gateway_route_refused: 'capped',
+  memory_gateway_uri_refused: 'capped',
+  memory_gateway_body_invalid: 'capped',
+  memory_gateway_payload_too_large: 'capped',
+  memory_gateway_rate_limited: 'capped',
+  memory_gateway_tool_refused: 'capped',
+  memory_gateway_upstream_unavailable: 'upstream',
+  memory_gateway_upstream_invalid: 'upstream',
+  memory_gateway_failed: 'upstream',
   // The memory map (2026-10-12): a request it refused before reading anything, and the topics a model could not make.
   memory_map_disabled: 'capped',
   memory_map_invalid: 'capped',

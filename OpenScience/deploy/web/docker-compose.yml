@@ -614,6 +614,16 @@ services:
       OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS:
       OPEN_SCIENCE_MEMORY_RECALL_TOOL_LIMIT:
       OPEN_SCIENCE_MEMORY_RECALL_TOOL_MAX_LIMIT:
+      # The memory gateway between a runtime's memory plugin and the native engine,
+      # and the worker that reads the engine's commits into the overlay. Value-less
+      # so the code defaults (600 a minute, 120 an hour, 1 MiB, 4 s; 60 s, 5) apply
+      # when unset.
+      OPEN_SCIENCE_MEMORY_GATEWAY_RATE_PER_MINUTE:
+      OPEN_SCIENCE_MEMORY_GATEWAY_COMMITS_PER_HOUR:
+      OPEN_SCIENCE_MEMORY_GATEWAY_MAX_BODY_BYTES:
+      OPEN_SCIENCE_MEMORY_GATEWAY_TIMEOUT_MS:
+      OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS:
+      OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS:
       # Autopilot's levers belong to the base stack, not to an overlay. Compose
       # passes environment item by item, and these were listed only in
       # `docker-compose.ingestion.yml` — so on a deployment without that overlay

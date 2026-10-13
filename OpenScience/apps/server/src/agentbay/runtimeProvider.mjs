@@ -35,6 +35,7 @@ import path from "node:path";
 import { HttpError, readTextFileNoFollow, writeJsonFileAtomicNoFollow } from "../security.mjs";
 import { runtimeEnvironment } from "../dshProfilePatch.mjs";
 import {
+  MEMORY_GATEWAY_URL_ENV,
   RUNTIME_AUTHORITY,
   appendRuntimeEventForProvider,
   capsuleMethodsHostDir,
@@ -469,8 +470,8 @@ export class AgentBayRuntimeProvider {
     return result.stdout.slice(-4096);
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any }} input */
-  async prepare(project, { pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, memoryGatewayUrl?: string }} input */
+  async prepare(project, { pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, memoryGatewayUrl = "" }) {
     this.assertConfigured();
     // A session that just ended may still be coming home; its Context copy
     // and manifests are what this start reads.
@@ -529,6 +530,9 @@ export class AgentBayRuntimeProvider {
       platformSkillGeneration,
       platformSkillsRuntimeDir: platformSkillGeneration ? `/opt/evimed/platform-skill-generations/${platformSkillGeneration.reference.generationHash}/skills` : "",
       gateways: publicRuntimeGatewayUrls(this.config),
+      // The account's memory engine, as the address a session outside this host reaches the memory gateway at: the public
+      // prefix's when the account is on the native engine, empty otherwise (`RuntimeManager.memoryGatewayUrlFor`).
+      memoryGatewayUrl: memoryGatewayUrl ? String(publicRuntimeGatewayUrls(this.config)?.memory ?? "") : "",
       agentbay,
     };
   }
@@ -611,6 +615,8 @@ export class AgentBayRuntimeProvider {
     const gateways = plan.gateways;
     return {
       OPEN_SCIENCE_RUNTIME_AUTHORITY: RUNTIME_AUTHORITY,
+      // The same name the Docker launch passes: present, and empty for an account on the legacy memory engine.
+      [MEMORY_GATEWAY_URL_ENV]: String(plan.memoryGatewayUrl ?? ""),
       ...runtimeEnvironment({
         presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
         capabilitiesDir: "/opt/evimed/capabilities",

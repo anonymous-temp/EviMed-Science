@@ -19,7 +19,9 @@ import { VCR_INTAKE_LONG_KINDS } from "./vcrIntakeLayout.mjs";
 // citation runtime-start shape stays explicitly supported during coordinated
 // rollout.
 // Version 12 adds disposable candidate execution, without a customer runtime.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 12;
+// Version 13 adds one optional field to a runtime start: `memoryGatewayUrl`, the memory gateway's base for an account on
+// the native memory engine (absent for one on the legacy path). The controller accepts only its own configured endpoint.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 13;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -293,7 +295,7 @@ export class RuntimeControllerClient {
     return this.request("GET", "/v1/docker/runtime-image");
   }
 
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null) {
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null, memoryGatewayUrl = "") {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -305,6 +307,9 @@ export class RuntimeControllerClient {
       ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
       ...(extensionGeneration ? { extensionGeneration } : {}),
       ...(platformSkillGeneration ? { platformSkillGeneration } : {}),
+      // Protocol 13: the account's memory engine, as the memory gateway's base for one on the native engine. Sent only
+      // then; absent, the runtime is launched for the legacy path.
+      ...(memoryGatewayUrl ? { memoryGatewayUrl } : {}),
     });
   }
 

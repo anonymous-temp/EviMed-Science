@@ -1,0 +1,140 @@
+/**
+ * The overlay of the native memory engine: the few facts about an account's memory files that OpenViking has no place for.
+ *
+ * Since 2026-10-13 an account on the native engine keeps its memories as files in OpenViking, written by the engine's own
+ * extraction. PostgreSQL holds none of their text as the record of them. What it holds, keyed by `(user, uri)`:
+ *
+ *  - `native_accounts` — that the engine's admin routes know the account (settings and deletion answer 404 until they
+ *    do), and when its session archives were last scanned.
+ *  - `native_commits` — the ledger of every commit: which archive, which task, what became of it. Fed by the memory
+ *    gateway (a commit it forwarded) and by the scan of `sessions/*\/history/archive_*` (an idle auto-commit never
+ *    passes the gateway). A failed commit is never retried upstream, so its replay is counted and scheduled here.
+ *  - `native_revisions` — what each commit and each edit changed, before and after, read from the archive's
+ *    `memory_diff.json`: the timeline, 「刚记住了」, and the undo. A memory the person deleted keeps no text here.
+ *  - `native_files` — per file: the project it belongs to (the `project=<id>` tag, kept here because a pack restore
+ *    loses every tag), whether recall leaves it out, the hash of the body last seen (the page's compare-and-swap; the
+ *    engine has none), the body as last ingested, and the source labels currently written into it.
+ *  - `native_sources` — the sources a file names (a DOI, a knowledge-base document id), found in its text.
+ *  - `native_rejections` — fingerprints of the lines a person removed, so that a line the engine writes back verbatim
+ *    is removed again. A fingerprint is a hash: what was forgotten is not kept in order to recognise it.
+ *
+ * What this does not hold, and the legacy path did (owner-accepted, README §5.4 of the course correction): a line of
+ * `profile.md` has no origin, no validity interval, no confidence and no conflict record of its own — those were
+ * columns of one row per fact, and the engine's profile is one file. They exist here at file granularity only.
+ *
+ * Every table belongs to one account and goes with it (the cascade).
+ *
+ * @module nativeMemoryPersistence
+ */
+const migrations = new WeakMap();
+
+export const NATIVE_COMMIT_ORIGINS = Object.freeze(["gateway", "tool", "scan", "page", "replay", "migration"]);
+/**
+ * `pending`: accepted by the engine, its diff not read yet. `completed`: its diff is in the revisions. `failed`: the
+ * extraction failed and a replay is owed. `replayed`: its messages were committed again as another archive.
+ * `abandoned`: the replay cap is spent, or the archive holds nothing to replay.
+ */
+export const NATIVE_COMMIT_STATES = Object.freeze(["pending", "completed", "failed", "replayed", "abandoned"]);
+export const NATIVE_REVISION_CHANGES = Object.freeze(["added", "updated", "deleted", "restored"]);
+/** Who changed a memory: the engine's extraction, the person on the memory page, the conversation's `forget` tool, or a
+ *  deterministic step of the platform (a check, a source label, a migration). */
+export const NATIVE_REVISION_ACTORS = Object.freeze(["engine", "user", "conversation", "platform"]);
+export const NATIVE_TEXT_LIMIT = 100_000;
+
+const quoted = (/** @type {readonly string[]} */ values) => values.map((value) => `'${value}'`).join(", ");
+
+const sql = `
+CREATE TABLE IF NOT EXISTS evimed_memory.native_accounts (
+  user_id text PRIMARY KEY REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  registered_at timestamptz(3),
+  scanned_at timestamptz(3),
+  migrated_at timestamptz(3),
+  updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
+);
+CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  archive_uri text NOT NULL CHECK (char_length(archive_uri) BETWEEN 1 AND 600),
+  engine_session text NOT NULL CHECK (engine_session ~ '^[A-Za-z0-9_.@-]{1,200}$'),
+  project_id text CHECK (project_id IS NULL OR project_id ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$'),
+  origin text NOT NULL CHECK (origin IN (${quoted(NATIVE_COMMIT_ORIGINS)})),
+  task_id text CHECK (task_id IS NULL OR task_id ~ '^[A-Za-z0-9-]{8,64}$'),
+  state text NOT NULL DEFAULT 'pending' CHECK (state IN (${quoted(NATIVE_COMMIT_STATES)})),
+  operations integer NOT NULL DEFAULT 0 CHECK (operations >= 0),
+  error text NOT NULL DEFAULT '' CHECK (char_length(error) <= 400),
+  attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  next_attempt_at timestamptz(3),
+  replayed_as text CHECK (replayed_as IS NULL OR char_length(replayed_as) <= 600),
+  created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  ingested_at timestamptz(3),
+  PRIMARY KEY (user_id, archive_uri)
+);
+CREATE INDEX IF NOT EXISTS native_commits_open_idx ON evimed_memory.native_commits (state, next_attempt_at)
+  WHERE state IN ('pending', 'failed');
+CREATE INDEX IF NOT EXISTS native_commits_session_idx ON evimed_memory.native_commits (user_id, engine_session);
+CREATE TABLE IF NOT EXISTS evimed_memory.native_revisions (
+  id bigserial PRIMARY KEY,
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  uri text NOT NULL CHECK (char_length(uri) BETWEEN 1 AND 600),
+  memory_type text NOT NULL CHECK (char_length(memory_type) <= 64),
+  change text NOT NULL CHECK (change IN (${quoted(NATIVE_REVISION_CHANGES)})),
+  actor text NOT NULL CHECK (actor IN (${quoted(NATIVE_REVISION_ACTORS)})),
+  reason text NOT NULL DEFAULT '' CHECK (char_length(reason) <= 200),
+  before text CHECK (before IS NULL OR char_length(before) <= ${NATIVE_TEXT_LIMIT}),
+  after text CHECK (after IS NULL OR char_length(after) <= ${NATIVE_TEXT_LIMIT}),
+  archive_uri text CHECK (archive_uri IS NULL OR char_length(archive_uri) <= 600),
+  engine_session text,
+  project_id text,
+  undone_at timestamptz(3),
+  changed_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS native_revisions_file_idx ON evimed_memory.native_revisions (user_id, uri, id DESC);
+CREATE INDEX IF NOT EXISTS native_revisions_recent_idx ON evimed_memory.native_revisions (user_id, changed_at DESC);
+-- One diff is ingested once: the same archive never writes the same change of the same file twice.
+CREATE UNIQUE INDEX IF NOT EXISTS native_revisions_once_idx ON evimed_memory.native_revisions (user_id, archive_uri, uri, change)
+  WHERE archive_uri IS NOT NULL;
+CREATE TABLE IF NOT EXISTS evimed_memory.native_files (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  uri text NOT NULL CHECK (char_length(uri) BETWEEN 1 AND 600),
+  memory_type text NOT NULL CHECK (char_length(memory_type) <= 64),
+  project_id text CHECK (project_id IS NULL OR project_id ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$'),
+  sensitive boolean NOT NULL DEFAULT false,
+  content_hash text CHECK (content_hash IS NULL OR content_hash ~ '^[a-f0-9]{64}$'),
+  body text CHECK (body IS NULL OR char_length(body) <= ${NATIVE_TEXT_LIMIT}),
+  labels jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(labels) = 'array' AND jsonb_array_length(labels) <= 16),
+  created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (user_id, uri)
+);
+CREATE INDEX IF NOT EXISTS native_files_project_idx ON evimed_memory.native_files (user_id, project_id) WHERE project_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS evimed_memory.native_sources (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  uri text NOT NULL CHECK (char_length(uri) BETWEEN 1 AND 600),
+  source_type text NOT NULL CHECK (source_type IN ('knowledge_source', 'doi')),
+  source_id text NOT NULL CHECK (char_length(source_id) BETWEEN 1 AND 300),
+  state text NOT NULL DEFAULT 'current' CHECK (state IN ('current', 'changed', 'retracted', 'expired', 'removed', 'unknown')),
+  state_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (user_id, uri, source_type, source_id)
+);
+CREATE INDEX IF NOT EXISTS native_sources_source_idx ON evimed_memory.native_sources (user_id, source_type, source_id);
+CREATE TABLE IF NOT EXISTS evimed_memory.native_rejections (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  memory_type text NOT NULL CHECK (char_length(memory_type) <= 64),
+  fingerprint text NOT NULL CHECK (fingerprint ~ '^[a-f0-9]{64}$'),
+  uri text NOT NULL CHECK (char_length(uri) <= 600),
+  rejected_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (user_id, memory_type, fingerprint)
+);
+`;
+
+/** @param {any} database */
+export async function migrateNativeMemory(database) {
+  if (migrations.has(database)) return migrations.get(database);
+  const attempt = database.transaction(async (/** @type {any} */ client) => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-memory-native-v1'))");
+    await client.query(sql);
+  });
+  migrations.set(database, attempt);
+  try { await attempt; }
+  catch (error) { migrations.delete(database); throw error; }
+}
