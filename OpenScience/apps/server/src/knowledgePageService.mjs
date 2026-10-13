@@ -449,8 +449,12 @@ export class KnowledgePageService {
     if (tree === "wiki") {
       await this.#texts(userId, projectId, /** @type {string[]} */ (dependsOn), texts);
       const checked = checkPageQuotations([{ path: rel, content }], { sourceText: (_uri, sourceId) => (sourceId ? texts.get(sourceId)?.text ?? null : null) });
-      this.counters.quotationsPresent += checked.summary.present; this.counters.quotationsAbsent += checked.summary.absent;
-      quotations = { checkedSha256: sha256(content), checkedAt: this.now().toISOString(), counts: checked.summary,
+      // Every link whose title carries a sentence is checked, beside a claim or in the 来源 list: a page that cites only in its
+      // list still has its quotations confirmed (or not). A list entry with no sentence is a bibliography line, not a miss.
+      const listed = (/** @type {string} */ status) => checked.records.filter((record) => record.inSourceList && record.quote && record.status === status).length;
+      const counts = { ...checked.summary, present: checked.summary.present + listed("present"), absent: checked.summary.absent + listed("absent") };
+      this.counters.quotationsPresent += counts.present; this.counters.quotationsAbsent += counts.absent;
+      quotations = { checkedSha256: sha256(content), checkedAt: this.now().toISOString(), counts,
         records: checked.records.slice(0, QUOTATIONS_KEPT).map((record) => ({ sourceId: record.sourceId, quote: record.quote?.slice(0, 600) ?? null, status: record.status, inSourceList: record.inSourceList, index: record.index })),
         truncated: Math.max(0, checked.records.length - QUOTATIONS_KEPT) };
     }
