@@ -151,6 +151,12 @@ export class NativeMemoryOverlay {
     return result.rows[0] ? publicCommit(result.rows[0]) : null;
   }
 
+  /** Every commit the ledger holds of one engine session, oldest first. @param {string} userId @param {string} engineSession */
+  async commitsOfSession(userId, engineSession) {
+    const result = await this.#query("SELECT * FROM evimed_memory.native_commits WHERE user_id=$1 AND engine_session=$2 ORDER BY created_at", [owner(userId), String(engineSession)]);
+    return result.rows.map(publicCommit);
+  }
+
   /** The archives of one account the ledger already holds. @param {string} userId @returns {Promise<Set<string>>} */
   async knownArchives(userId) {
     const result = await this.#query("SELECT archive_uri FROM evimed_memory.native_commits WHERE user_id=$1", [owner(userId)]);
