@@ -68,6 +68,10 @@ async function prepareLaunch(f) {
 
 test("real PostgreSQL recovery freezes complete input, reuses one dispatch, publishes typed records atomically and preserves history", options, async t => {
   const f = await fixture(t, "deep"); await f.worker().tick(); // superseded original job
+  // The first leg reads the document and says it is usable; the understanding is its own, second leg (2026-10-13).
+  await f.worker().tick();
+  assert.equal(f.calls.parse, 1); assert.equal(f.calls.dispatch, 0);
+  assert.equal((await f.sources.get(f.userId, f.source.id)).payload.status, "complete", "the document is usable before its understanding runs");
   await f.worker().tick();
   assert.equal(f.calls.parse, 1); assert.equal(f.calls.dispatch, 1);
   assert.equal((await f.sources.getUnderstanding(f.userId, f.source.id)).current, null);
@@ -153,11 +157,14 @@ test("skip and index_only perform genuinely different work without calling a mod
   }
 });
 
-test("cancellation after dispatch queues the exact owned run and rejects its late output", options, async t => {
-  const f = await fixture(t); await f.worker().tick();
+test("withdrawing a source after dispatch queues the exact owned run's cancellation and rejects its late output", options, async t => {
+  const f = await fixture(t); await f.worker().tick(); await f.worker().tick();
   const current = await f.sources.get(f.userId, f.source.id);
-  await f.sources.cancel(f.userId, current.id, { expectedRevision: current.revision });
-  f.state.complete = true; await f.due(); await f.worker().tick(); await f.worker().tick();
+  // A document is `complete` as soon as its text is in (2026-10-13), so it is no longer something `cancel` can stop: what ends
+  // a running understanding is a change of depth or a deletion.
+  await assert.rejects(f.sources.cancel(f.userId, current.id, { expectedRevision: current.revision }), { code: "source_state_conflict" });
+  await f.sources.override(f.userId, current.id, { expectedRevision: current.revision, docType: "note-memo", depth: "index_only", reason: "Changed" });
+  f.state.complete = true; await f.due(); for (let i = 0; i < 4; i++) await f.worker().tick();
   assert.equal(f.calls.cancel, 1); assert.equal(f.state.cancelRequests[0].runId, "run_1");
   assert.equal((await f.sources.getUnderstanding(f.userId, f.source.id)).current, null);
   assert.equal((await f.sources.understandingHistory(f.userId, f.source.id)).items.length, 0);
@@ -202,15 +209,16 @@ test("lease loss after inserts rolls back every output and duplicate completion 
 test("busy runtime defers intact capture without consuming retry attempts", options, async t => {
   const f = await fixture(t); const worker = f.worker();
   worker.understandingRuns = { execute: async () => { throw Object.assign(new Error("Busy"), { code: "project_runtime_busy" }); } };
-  await worker.tick(); await f.due(); await worker.tick();
+  await worker.tick(); await worker.tick(); await f.due(); await worker.tick();
   assert.equal(f.calls.parse, 1); assert.equal(f.calls.dispatch, 0);
   const result = await f.database.query("SELECT status,attempts FROM evimed_product.jobs WHERE user_id=$1", [f.userId]);
   assert.equal(result.rows[0].status, "queued"); assert.equal(result.rows[0].attempts, 0);
-  assert.equal((await f.sources.get(f.userId, f.source.id)).payload.status, "parsing");
+  // The text is in before the understanding is asked for, so a busy runtime holds the understanding and nothing else.
+  assert.equal((await f.sources.get(f.userId, f.source.id)).payload.status, "complete");
 });
 
 test("two overrides before cancellation keep one immutable cancellation job through reconciliation", options, async t => {
-  const f = await fixture(t); await f.worker().tick();
+  const f = await fixture(t); await f.worker().tick(); await f.worker().tick();
   let source = await f.sources.get(f.userId, f.source.id);
   source = await f.sources.override(f.userId, source.id, { expectedRevision: source.revision,
     docType: "note-memo", depth: "deep", reason: "First correction" });
@@ -229,7 +237,7 @@ test("two overrides before cancellation keep one immutable cancellation job thro
 });
 
 test("a lost cancellation enqueue response survives another override and service restart", options, async t => {
-  const f = await fixture(t); await f.worker().tick();
+  const f = await fixture(t); await f.worker().tick(); await f.worker().tick();
   const source = await f.sources.get(f.userId, f.source.id);
   const enqueue = f.jobs.enqueue.bind(f.jobs);
   f.jobs.enqueue = async (...args) => {
@@ -296,13 +304,13 @@ test("the UTF-8 output boundary leaves room for the canonical knowledge record e
 });
 
 test("private run ownership remains available for cleanup while superseded runs are not recoverable", options, async t => {
-  for (const action of ["cancel", "override", "delete"]) {
-    const f = await fixture(t); await f.worker().tick();
+  // `cancel` is not here: a readable document is `complete` while its understanding runs, and a complete one is not cancelled.
+  for (const action of ["override", "delete"]) {
+    const f = await fixture(t); await f.worker().tick(); await f.worker().tick();
     assert.equal((await f.sources.understandingRunForRun(f.userId, "default", "run_1")).recoverable, true);
     assert.equal(await f.sources.understandingRunForRun("another-account", "default", "run_1"), null);
     const source = await f.sources.get(f.userId, f.source.id);
-    if (action === "cancel") await f.sources.cancel(f.userId, source.id, { expectedRevision: source.revision });
-    else if (action === "delete") await f.sources.remove(f.userId, source.id, { expectedRevision: source.revision });
+    if (action === "delete") await f.sources.remove(f.userId, source.id, { expectedRevision: source.revision });
     else await f.sources.override(f.userId, source.id, { expectedRevision: source.revision, docType: "note-memo", depth: "index_only", reason: "Changed" });
     const bound = await f.sources.understandingRunForRun(f.userId, "default", "run_1");
     assert.equal(bound.id, "run_1"); assert.equal(bound.recoverable, false);
@@ -361,9 +369,12 @@ test("cancel override and deletion clean protected launch-only scopes without a 
 test("terminal source failures remain stopped across reconciliation until an explicit new generation", options, async t => {
   const f = await fixture(t); const worker = f.worker();
   worker.understandingRuns = { execute: async () => { throw Object.assign(new Error("Terminal run failure"), { code: "source_understanding_run_failed" }); } };
-  await worker.tick();
+  // The first leg reads the document; the second asks for its understanding, which fails for good. The document is
+  // finished as read, with what became of the understanding on its record (2026-10-13), not failed with it.
+  await worker.tick(); await worker.tick();
   const failed = await f.sources.get(f.userId, f.source.id);
-  assert.equal(failed.payload.status, "failed");
+  assert.equal(failed.payload.status, "complete");
+  assert.equal(failed.payload.understanding.state, "failed"); assert.equal(failed.payload.understanding.code, "source_understanding_run_failed");
   const duplicate = await f.sources.register(f.userId, { projectId: failed.projectId, connector: failed.payload.connector,
     path: failed.payload.paths[0], ...failed.payload.fingerprint });
   assert.equal(duplicate.duplicate, true); assert.equal(duplicate.job, null);

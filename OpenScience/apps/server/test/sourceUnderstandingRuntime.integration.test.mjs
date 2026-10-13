@@ -116,12 +116,18 @@ async function acceptFixture(f) {
 
 test("the wired structured source worker uses one real run ledger dispatch and publishes the accepted result on reclaim", options, async t => {
   const f = await fixture(t);
+  // The first leg reads the document and says it is usable; no model is asked for anything yet (2026-10-13).
+  const read = await f.app.sourceWorker.tick();
+  assert.equal(read.deferred, true); assert.equal(read.readable, true);
+  assert.equal(f.calls.reserve, 0);
+  assert.equal(f.calls.prompt, 0);
+  assert.equal((await f.app.sourceService.get(f.userId, f.source.id)).payload.status, "complete");
   const first = await f.app.sourceWorker.tick();
   assert.equal(first.deferred, true);
   assert.equal(f.calls.reserve, 1);
   assert.equal(f.calls.prompt, 1);
   const processing = await f.app.sourceService.get(f.userId, f.source.id);
-  assert.equal(processing.payload.status, "parsing");
+  assert.equal(processing.payload.status, "complete", "the document stays usable while its understanding runs");
   assert.ok(processing.payload.analysis.run.artifactDirectory.includes("knowledge-base/.evimed-derived"));
   await f.due();
   await f.app.sourceWorker.tick();
@@ -160,7 +166,7 @@ test("the model gateway records a source understanding run's calls as source und
   t.after(() => new Promise((resolve) => upstream.close(resolve)));
   const f = await fixture(t, { deepseekProviderEnabled: true, deepseekApiKey: "test-provider-key",
     deepseekBaseUrl: `http://127.0.0.1:${upstream.address().port}` });
-  await f.app.sourceWorker.tick();
+  await f.app.sourceWorker.tick(); await f.app.sourceWorker.tick();
   assert.ok(f.state.scope?.runId, "the source run was dispatched under a bounded scope");
   const jti = `fixture_${randomUUID()}`;
   // The runtime that makes the call is the sources project's.
@@ -184,10 +190,14 @@ test("wired source budget rejection happens before any runtime or paid request",
   const f = await fixture(t);
   // Zero is no cap since 2026-09-21; a nonsense cap is what is refused.
   f.app.config.sourceUnderstandingRunLimitCny = -1;
-  await f.app.sourceWorker.tick();
+  await f.app.sourceWorker.tick(); await f.app.sourceWorker.tick();
   assert.equal(f.calls.reserve, 0);
   assert.equal(f.calls.prompt, 0);
-  assert.equal((await f.app.sourceService.get(f.userId, f.source.id)).payload.error.code, "source_understanding_budget_invalid");
+  // The document was read before the understanding was asked for, and stays read; the refusal is the understanding's.
+  const refused = await f.app.sourceService.get(f.userId, f.source.id);
+  assert.equal(refused.payload.status, "complete");
+  const jobError = await f.app.store.database.query("SELECT error FROM evimed_product.jobs WHERE user_id=$1 AND error IS NOT NULL", [f.userId]);
+  assert.equal(jobError.rows[0].error.code, "source_understanding_budget_invalid", "and the job that asked for it says why it did not");
   assert.equal((await f.app.usageLedger.summary(f.userId)).totalCalls, 0);
 });
 
@@ -224,6 +234,9 @@ test("a crash after the actual ledger append recovers the protected launch and t
   f.app.agentRuns.monitorMaxPolls = 1;
   f.app.agentRuns.monitorIntervalMs = 1;
   await f.app.store.database.query("UPDATE evimed_product.jobs SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", [job.id]);
+  // The first leg of the reclaimed job writes the capture out and makes the document usable; the second recovers the launch.
+  await f.app.sourceWorker.tick();
+  await f.due();
   await f.app.sourceWorker.tick();
   await awaitBackgroundMonitor(Promise.all([...f.app.agentRuns.monitors.values()].map(monitor => monitor.promise)));
   const recovered = (await f.app.agentRuns.list(f.state.project)).find(run => run.id === identity.runId);
@@ -232,9 +245,12 @@ test("a crash after the actual ledger append recovers the protected launch and t
   await f.due();
   await f.app.sourceWorker.tick();
   const failed = await f.app.sourceService.get(f.userId, f.source.id);
-  assert.equal(failed.payload.status, "failed");
-  assert.equal(failed.payload.analysis.run.id, identity.runId);
-  assert.equal(failed.payload.analysis.run.artifactDirectory, unbound.payload.analysis.launch.artifactDirectory);
+  // The recovered run ended without a result: that is the understanding's end, and the document stays as it was read.
+  assert.equal(failed.payload.status, "complete");
+  assert.equal(failed.payload.understanding.state, "failed");
+  assert.ok(failed.payload.understanding.code, "and the record says why");
+  // The run that was recovered is the one the ledger holds; the failed publication keeps no binding to it on the source.
+  assert.equal(recovered.id, identity.runId);
   assert.equal(f.calls.reserve, 1);
   assert.equal(f.calls.prompt, 0);
   assert.equal(f.calls.release.length, 1);
@@ -245,10 +261,11 @@ test("wired durable cancellation stops only the bound source session and removes
   ...options, skip: !databaseUrl || (process.platform !== "linux" && "Source copy cleanup requires the hosted Linux environment"),
 }, async t => {
   const f = await fixture(t);
-  await f.app.sourceWorker.tick();
+  await f.app.sourceWorker.tick(); await f.app.sourceWorker.tick();
   const source = await f.app.sourceService.get(f.userId, f.source.id);
   const owned = f.state.project.workspaceDir;
-  await f.app.sourceService.cancel(f.userId, source.id, { expectedRevision: source.revision });
+  // A document is `complete` while its understanding runs (2026-10-13), so what ends that run is a change of depth, not `cancel`.
+  await f.app.sourceService.override(f.userId, source.id, { expectedRevision: source.revision, docType: "note-memo", depth: "index_only", reason: "Changed" });
   await f.due();
   for (let index = 0; index < 3; index++) await f.app.sourceWorker.tick();
   assert.equal(f.calls.cancel, 1);

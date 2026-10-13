@@ -11,6 +11,7 @@ import { gunzipSync } from "node:zlib";
 import { nativeFileId } from "../src/nativeMemoryStore.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
+import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { startOpenVikingStub } from "./helpers/openVikingStub.mjs";
 
@@ -32,6 +33,10 @@ async function fixture(t, { native = true } = {}) {
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
     stateStore: "postgres", requireSharedStateStore: true, databaseUrl, ovNativeMemoryEnabled: native, openVikingSessions,
   });
+  // The memory schema is migrated the first time anything asks, and its migration marks every account that already exists
+  // as `legacy` (an account that predates the column). A deployment's schema is there long before a new account is, so the
+  // fixture's account must not be the one the first migration of a fresh database finds.
+  await migrateResearchMemory(app.store.database);
   const username = `native${randomUUID().replaceAll("-", "").slice(0, 10)}`;
   const user = await app.store.createUser(username, PASSWORD, "Native fixture");
   const address = await app.listen(0, "127.0.0.1");
