@@ -555,8 +555,12 @@ class WholeRecord(unittest.TestCase):
         entry = {"caseId": "G05", "variant": "normal", "family": "data", "kind": "general", "routingCheck": True, "status": "fail", "required": 3, "passed": 2,
                  "failedChecks": ["route_not:dataset-research-scoping"], "checks": [], "metrics": {"routes": ["dataset-research-scoping/matched"], "toolCalls": 4, "wallSeconds": 90, "filesNew": ["a.xlsx"]}}
         (run / "judged" / "G05-r1.json").write_text(json.dumps({"name": "G05-r1", "entries": {"G05": entry}}), encoding="utf-8")
+        (run / "records" / "G16--classifier-timeout-r1.json").write_text(json.dumps({"name": "G16--classifier-timeout-r1", "cell": "G16", "variant": "classifier-timeout"}), encoding="utf-8")
+        fault = dict(entry, caseId="G16", variant="classifier-timeout", status="pass", routingCheck=True, failedChecks=[])
+        (run / "judged" / "G16--classifier-timeout-r1.json").write_text(json.dumps({"name": "G16--classifier-timeout-r1", "entries": {"G16": fault}}), encoding="utf-8")
         data = summarize.summarize(run)
-        self.assertEqual(data["totals"]["general"], {"pass": 0, "of": 1})
+        self.assertEqual(data["totals"]["general"], {"pass": 0, "of": 1}, "fault variants stay out of the headline")
+        self.assertEqual(data["totals"]["variantsAndRepeats"][0]["variant"], "classifier-timeout")
         self.assertIn("G05=fail", (run / "summary.md").read_text(encoding="utf-8"))
 
 
