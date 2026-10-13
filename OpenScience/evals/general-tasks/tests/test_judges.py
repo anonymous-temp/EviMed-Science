@@ -488,7 +488,8 @@ def make_pptx(path, slides, dark=False, chart=False, counter=False, ground="back
         rels = "".join(f'<Relationship Id="rId{i + 1}" Type="x" Target="slides/slide{i + 1}.xml"/>' for i in range(len(slides)))
         z.writestr("ppt/_rels/presentation.xml.rels", f'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{rels}</Relationships>')
         painted = ground == "background"
-        z.writestr("ppt/slideMasters/slideMaster1.xml", f'<?xml version="1.0"?><p:sldMaster {ns}><p:cSld>{f"<p:bg><p:bgPr><a:solidFill><a:srgbClr val={chr(34)}{"101820" if dark else "FFFFFF"}{chr(34)}/></a:solidFill></p:bgPr></p:bg>" if painted else ""}</p:cSld><p:clrMap bg1="{"dk1" if dark and painted else "lt1"}"/></p:sldMaster>')
+        backdrop = f'<p:bg><p:bgPr><a:solidFill><a:srgbClr val="{"101820" if dark else "FFFFFF"}"/></a:solidFill></p:bgPr></p:bg>' if painted else ""
+        z.writestr("ppt/slideMasters/slideMaster1.xml", f'<?xml version="1.0"?><p:sldMaster {ns}><p:cSld>{backdrop}</p:cSld><p:clrMap bg1="{"dk1" if dark and painted else "lt1"}"/></p:sldMaster>')
         for i, (title, points) in enumerate(slides):
             body = "".join(f"<a:p><a:r><a:t>{p}</a:t></a:r></a:p>" for p in points + ([f"{i + 1:02d} / {len(slides):02d}"] if counter else []))
             number = f'<p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:txBody><a:p><a:r><a:t>{i + 1}</a:t></a:r></a:p></p:txBody></p:sp>' if numbered else ""
