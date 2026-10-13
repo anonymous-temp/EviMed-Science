@@ -94,7 +94,7 @@ export function KnowledgeGraphView({ projectId, kind, listState, version, onChan
     kind, marks: view.marks, lines: withoutIndexLines(view.lines, view.marks, focusMark?.id ?? null), folded: view.folded, hits, focus: focusMark?.id ?? null, hues: hueOfTypes(model?.marks ?? view.marks),
     // The palette is read from the live document, so a theme flip is a reason to build the option again.
     palette: mapPalette(), scheme, compact,
-  }) : null), [view, thin, kind, hits, focusMark, scheme, compact]);
+  }) : null), [view, thin, kind, hits, focusMark, scheme, compact, model]);
 
   const open = useCallback((mark: GraphMark) => { if (mark.sourceId) navigate(readerPath(mark.sourceId, listState)); }, [navigate, listState]);
   const marksById = useMemo(() => new Map((model?.marks ?? []).map((mark) => [mark.id, mark])), [model]);
