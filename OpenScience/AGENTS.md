@@ -1,6 +1,6 @@
 # EviMed Science (hosted SaaS)
 
-Brand name: **EviMed** — an AI research workbench for evidence-based medicine.
+Brand name: **EviMed** — a general-purpose agent platform first and, on top of it, a professional layer for evidence-based medicine (owner, 2026-10-12).
 (Bundle identifier stays `com.ai4s.workbench` and
 internal `@ai4s/*` package names are unchanged — display branding only.)
 
@@ -18,7 +18,7 @@ Keep it **simple, explicit, clear, complete**.
 
 ## What this project is
 
-A hosted, multi-tenant SaaS research platform. There is no second form: the
+A hosted, multi-tenant SaaS agent platform: a general work assistant first (documents, spreadsheets, slides, code, data, the open web, scheduled work), with the medical research method, vocabulary and checks loaded when the task or the content is medical — enhancement and labels, never a precondition for other work. There is no second form: the
 optional desktop packaging was deleted on 2026-09-04 along with the Tauri shell
 and the browser-side kernel client. See `README.md`, `docs/PRD.md`, and
 `docs/TECHNICAL_DESIGN.md`.
@@ -45,17 +45,19 @@ per-project workspace + JSONL provenance.
   workspace layout, the four state vocabularies, the error-code registry and the
   delivery-gate rules), `harness-port` (the only package that may import
   `@deepseek-ai/*`), `socket` (`@evimed/dsh-socket` — the plug: the
-  `evimed-universal` composition and its sixteen plugins — eight core agent
-  policies plus the scoped Cowork bridge in the preset, and seven host-scope
-  rows the bundle's own `cordis.patch.yml` inserts), `contracts` (one
-  directory per tracked upstream pin).
-- `capabilities/` — one directory per capability: `capability.yaml` (the only
-  definition of a capability) plus its SKILL.md and scripts. `capability-skills/`
+  `evimed-universal` composition and its eighteen plugin rows — nine agent-scope
+  policies in the preset and nine host-scope rows the bundle's own
+  `cordis.patch.yml` inserts, listed in `HOST_PLUGIN_IDS` / `AGENT_PLUGIN_IDS`,
+  plus the scoped Cowork bridge), `contracts` (one directory per tracked
+  upstream pin).
+- `capabilities/` — one directory per professional workflow: `capability.yaml` (the only
+  definition of a capability) plus its SKILL.md and scripts. An ordinary task
+  needs none; its units are a skill, a tool and the general `file-deliverable` contract. `capability-skills/`
   holds the shared skill bodies delegation pre-injects.
 - `deploy/runtime-dsh/` — the runtime image: Node, the pinned kernel, the socket
   bundle, the capability manifests and a profile pre-initialized at build time.
 - `deps-version.json` — the one place a tracked upstream pin is written
-  (`dsh` / `openlist` / `evimed-extract` / `openviking` / `pgvector` / `knowledge-plugin`). A Dockerfile ARG, a seam manifest,
+  (`dsh` / `openlist` / `evimed-extract` / `openviking` / `pgvector` / `knowledge-plugin` / `loopx`, among others). A Dockerfile ARG, a seam manifest,
   a peer dependency and a release manifest that each carried their own copy
   meant "bump the pin" was four edits and one was always missed.
 - `runtime/` — `mcp` (the `evimed` research server; its tool roster is
@@ -111,6 +113,17 @@ per-project workspace + JSONL provenance.
   evaluated the day they land.
 - Keep the frontend, the control plane, and the agent runtime decoupled.
 - Skills, MCP servers, and model providers must stay pluggable.
+- **Reuse upstream with the narrowest adapter.** Before building a piece, find the one that already does it
+  (a DSH row or plugin, an official skill, a mature library, OpenViking's native engine); a mismatch with a
+  boundary we drew is an adapter, a shim or a template with a stated date of deletion, not a rebuild.
+- **OpenViking is an engine, not only an index** (v0.5.0, `packages/contracts/openviking/README.md` is the
+  division of labour). An account's memory is on one of two engines: `legacy` (PostgreSQL records, OpenViking
+  only their derived recall index) or `native` (the engine extracts, merges and recalls; the runtime's official
+  plugin reaches it through a loopback bridge and the control plane's memory gateway; PostgreSQL keeps a thin
+  overlay). The knowledge base pushes every readable document to the engine as a Resource, and the official
+  `llm-wiki` and `knowledge-graph` skills compile the wiki and the graph, mirrored back into the product
+  ledger; quotation checks on them are ✓ / ⚠ labels, not a condition. The engine's model calls go through our
+  model gateway; the runtime holds no key; the volume is backed up.
 - Keep the artifact schema and workflow templates stable and versioned.
 
 ## Frontend conventions (design system)
@@ -154,8 +167,11 @@ per-project workspace + JSONL provenance.
 - **The interface never explains the system** (2026-09-23 plan): no subtitle, no hint
   under a card title, no 「为什么入选」; no internal state as text (已交付, 核对 N 条,
   用过 N 次, token, tok/s, API names, ids). Say what the user can do and the result.
+  The example pills on a blank conversation tell the user what can be asked; that is not
+  explaining the system. Nothing shows back-office provenance, an engine name or a file address.
 - **Page structure** (2026-10-07 plan §9.4, `DESIGN.md` 「页面结构」): a page is one list of one
-  kind of object, detail opens in the right-hand drawer, the header is the title, the scope
+  kind of object (a data page — the 记忆地图, the knowledge base's reader and graph — is the one
+  exception, `DESIGN.md` rule 1), detail opens in the right-hand drawer, the header is the title, the scope
   and at most one primary button, and nothing that looks clickable may be silent.
   `scripts/ops/ui-walk.mjs` measures it on the live pages after every release.
 - **Module names** (the owner's rulings of 2026-10-07): the product calls its two modules 「循证 GEO」

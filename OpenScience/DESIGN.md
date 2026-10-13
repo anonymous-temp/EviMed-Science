@@ -119,7 +119,7 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   memory page has a chart, so a second chart there, or a first on another list page, needs the same
   argument. The explorable picture of the same memories is a data page of its own, 记忆地图 (see 「页面结构」
   rule 1), reached from the memory page's 「⋯」; it draws in the brand blue, the warn amber and one grey, tells a
-  mark's kind by shape and words, and prints a radar's numbers at its axes.
+  mark's kind by shape and words, and prints a radar's numbers at its axes; the knowledge base's graph follows the same grammar.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
 - **No colour outside the table.** `designTokens.test.ts` fails on a hex literal or a colour
@@ -366,10 +366,12 @@ pages after every release.
    own page, never above or below. The walk reads a page body's top-level sections by shape (a
    `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
    budget (`SECTION_SHAPES_BY_PAGE`); groups of one shape — a group per use, a group per day — are
-   one kind. **The one exception is a data page** (记忆地图, `/app/memory/map`, the owner's formal requirement of
-   2026-10-12): one view at a time over one shared selection, switched by one row, with the same marks listed under
-   the canvas, and every mark opening the record's own drawer — so its three shapes (the sentence with its switch
-   and filters, the canvas, the list) are its budget, and the memory page itself stays a list with one line.
+   one kind. **The one exception is a data page** — the 记忆地图 (`/app/memory/map`) and the knowledge base's graph
+   view, the owner's formal requirement of 2026-10-12 that memory and knowledge be shown and not only listed: one
+   view at a time over one shared selection, switched by one row, with the same marks listed under the canvas, and
+   every mark opening the record's own drawer or the document's own page — so its three shapes (the sentence with
+   its switch and filters, the canvas, the list) are its budget; the memory page and the knowledge base page
+   themselves stay lists with one line, and a compiled wiki page opens as a document under rule 2.
 2. **A row opens by the nature of what it is** (adopted 2026-10-08 with release 13, from the owner's
    screenshots of the scheduled-task and knowledge-base pages):
    - a **record** — a memory entry, an inbox message, a frontier item, an evidence-matrix row, a GEO
@@ -377,8 +379,9 @@ pages after every release.
      is; a record's row does not take the reader to another page to read what it holds;
    - a **conversation-type object** — a scheduled task — opens its conversation in the main area,
      with the list as a column inside the page (`/app/autopilot/:taskId`);
-   - a **document** — a knowledge-base source, a report, an event — opens on a page of its own that
-     has an address (`/app/files/:sourceId`), and going back restores the list as it was.
+   - a **document** — a knowledge-base source, a compiled wiki page, a report, an event, a file the
+     assistant made (a spreadsheet, a deck, a script, shown by the kernel's own preview) — opens on a page of
+     its own that has an address (`/app/files/:sourceId`), and going back restores the list as it was.
    A drawer never holds a conversation and never holds a second input box (the kernel's composer is
    the only one).
 3. **The header is the title, the scope and at most one primary button** — and a search box. Two
@@ -422,7 +425,7 @@ icon tiles, no sparkles, no shimmer. A list beats a wall of cards.
 | running | a pulsing dot |
 
 Six states on every interactive component: default, hover, active, focus-visible, disabled,
-loading. Four states on every list page: loading skeleton, empty, error-with-retry, content.
+loading. Four states on every list page and data page: loading skeleton, empty, error-with-retry, content; a data page with too little to draw says so in one sentence and shows the list.
 
 **Motion**: three durations — `duration-fast` 120 ms for a state change, `duration-base` 200 ms
 for a container, `duration-slow` 320 ms for a page-sized change — one easing in
