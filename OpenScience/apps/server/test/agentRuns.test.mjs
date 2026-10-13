@@ -8773,10 +8773,15 @@ test("a file handed over with present is the run's output whatever its age, and 
     const longAgo = new Date(Date.now() - 3_600_000);
     await utimes(path.join(workspace, "reports", "q3.pdf"), longAgo, longAgo);
     await dispatch("turn_ordinary_present");
+    // A render directory is how the run looked at its own file, not what it was asked for — unless it hands a page over.
+    await mkdir(path.join(workspace, "preview"), { recursive: true });
+    await writeFile(path.join(workspace, "preview", "page-0001.png"), "png");
+    await writeFile(path.join(workspace, "preview", "page-0002.png"), "png");
     appendHistory([
       skillLoadedPart,
       { type: "tool", tool: "present", state: { status: "completed", input: { files: [
         { path: path.join(workspace, "reports", "q3.pdf"), description: "上季度报告" },
+        { path: "preview/page-0001.png", description: "封面" },
         { path: "/etc/passwd", description: "outside the workspace is not an output" },
         { path: "reports/missing.pdf" },
       ] }, output: "Presented" } },
@@ -8784,10 +8789,10 @@ test("a file handed over with present is the run's output whatever its age, and 
     ]);
     // The control plane reads the kernel's paths against the root the model sees; the harness runs without a container.
     const run = await store.reconcileSession(project, binding.sessionId);
-    assert.deepEqual(run.artifacts, ["reports/q3.pdf"]);
+    assert.deepEqual(run.artifacts, ["preview/page-0001.png", "reports/q3.pdf"], "page-0002 was only looked at; page-0001 was handed over");
     // The kernel draws a card for it, so the record says which files it drew, and the run card leaves those alone.
-    assert.deepEqual(run.presentedFiles, ["reports/q3.pdf"]);
-    assert.deepEqual((await store.list(project)).find((item) => item.id === run.id)?.presentedFiles, ["reports/q3.pdf"], "it survives the ledger's fold");
+    assert.deepEqual(run.presentedFiles, ["preview/page-0001.png", "reports/q3.pdf"]);
+    assert.deepEqual((await store.list(project)).find((item) => item.id === run.id)?.presentedFiles, ["preview/page-0001.png", "reports/q3.pdf"], "it survives the ledger's fold");
   });
 });
 

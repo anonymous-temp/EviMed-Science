@@ -71,6 +71,16 @@ export const SCRATCH_DIRECTORIES = Object.freeze(new Set([
 ]));
 
 /**
+ * The directories a render step writes page images to. The office skills tell the run to look at its own file after it saves
+ * it (`render --output-dir preview-1`, `--out-dir page-5`, a new directory each time), so the pictures and the manifest beside
+ * them are the run's way of checking its work, not what it was asked for. A whole name, a stem and an optional number: a
+ * folder the person named (`pages/`, `site/preview-copy/`) is not matched. A page the run really hands over goes through
+ * `present`, which is not filtered.
+ * Deletable when the office kit renders under a dot directory.
+ */
+const RENDER_DIRECTORY = /^(?:previews?|renders?)(?:[-_]?\d+)?$|^page-\d+$/i;
+
+/**
  * The first-level directories that are not the conversation's: the read-only dataset mount, the project's document library
  * (mounted read-only into the runtime and written by the platform's own intake) and the account's personal library (mounted
  * read-only too). The two names are spelled out because `researchContext.mjs` and `runtimeManager.mjs`, which own the
@@ -87,7 +97,7 @@ const PLATFORM_ROOT_FILES = Object.freeze(/** @type {Set<string>} */ (new Set([w
  */
 export function isOrdinaryOutputDirectory(name, atRoot) {
   if (!name || name.startsWith(".")) return false;
-  if (SCRATCH_DIRECTORIES.has(name.toLowerCase())) return false;
+  if (SCRATCH_DIRECTORIES.has(name.toLowerCase()) || RENDER_DIRECTORY.test(name)) return false;
   return !(atRoot && PLATFORM_ROOT_DIRECTORIES.has(name));
 }
 

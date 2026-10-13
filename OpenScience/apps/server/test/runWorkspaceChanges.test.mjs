@@ -52,6 +52,18 @@ test("scratch, dependencies, hidden names and the platform's partitions are not 
   });
 });
 
+test("the pictures a render step writes to look at its own file are not the file; a folder the person named is", async () => {
+  await withWorkspace(async ({ root, put }) => {
+    const now = Date.now();
+    // What the office skills prescribe (a new directory each time) and what the kit leaves in it.
+    for (const relative of ["preview/page-0001.png", "preview/manifest.json", "preview-2/page-0003.png", "page-5/page-0005.png", "renders/slide-1.png", "Preview_3/page-0001.png"]) await put(relative);
+    await put("deck.pptx");
+    await put("pages/index.html");
+    await put("site/preview-copy/a.html");
+    assert.deepEqual(await workspaceChangedFiles(root, { since: now - 5_000 }), ["deck.pptx", "pages/index.html", "site/preview-copy/a.html"]);
+  });
+});
+
 test("a link is neither followed nor listed, and the walk is bounded in depth, entries and files", async () => {
   await withWorkspace(async ({ root, put }) => {
     const now = Date.now();
