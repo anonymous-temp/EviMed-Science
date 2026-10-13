@@ -13,6 +13,17 @@
 > `docs/WEB_DEPLOYMENT.md` and `docs/REQUEST_PATH.md` are authoritative on the system as it
 > runs today.
 >
+> **Since 2026-10-12** the product is a general-purpose agent platform with a medical professional
+> layer, not a medical-only workbench: the default conversation is a general work assistant, the
+> evidence method is a skill the model loads, an ordinary file is a deliverable
+> (`file-deliverable`), and the kernel's own `ask-user`, `todo`, sub-agent, `present` and `/compact`
+> rows are mounted. OpenViking v0.5.0 is an engine rather than only a derived index: an account on
+> the native memory engine has its memory extracted, merged and recalled by it (through the
+> official DSH plugin, a loopback bridge and the control plane's memory gateway), and a project's
+> documents are Resources compiled into a wiki and a graph; both are mirrored into the product
+> ledger where the page reads them. `packages/contracts/openviking/README.md` is the division of
+> labour.
+>
 > **Original implementation status (v0.1, 2026-07-02).** Built and verified: Tauri 2 shell
 > + React UI; OpenCode bundled as an isolated sidecar (auto-started, app-private
 > config/data, dedicated port); a client wrapper over HTTP + SSE; real multi-session chat

@@ -15,6 +15,15 @@
 > multi-session chat with history, a real Skills/Agents view, BYOK key config, and a
 > macOS installer. Literature search, provenance/reviewer, code-execution backends, and
 > Science Packs below were the target scope, not all shipped.
+>
+> **Positioning today (2026-10-12).** EviMed is a general-purpose agent platform first — writing,
+> office documents, spreadsheets, slides, code, data, the open web, scheduled work — and a
+> professional platform for medicine second; “research workbench” below describes the medical
+> layer, which loads when the task or the content is medical and is never a precondition for other
+> work. Memory and the knowledge base run on OpenViking's native engine for the accounts and
+> projects on it (the engine extracts, merges and recalls memory; documents are pushed to it as
+> Resources and compiled into a wiki and a graph by its official skills), and both are shown to the
+> user as maps, pages and graphs. The root `AGENTS.md` is authoritative.
 
 ## 1. Positioning
 
