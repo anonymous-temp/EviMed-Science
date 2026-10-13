@@ -88,6 +88,33 @@ test("the documents source titles the documents and tells a memory's placeholder
   assert.equal(documentNode({ id: "src_x", projectId: "p", createdAt: "2026-01-01T00:00:00Z", payload: { paths: ["a/b/notes.md"], docType: "other" } }).label, "notes.md", "an untitled document is its file's name");
 });
 
+test("the files the engine compiled are pages and entities on the map, never documents beside them", async () => {
+  const upload = (id, name, extra = {}) => ({ id, projectId: "prj_a", createdAt: "2026-09-10T00:00:00Z", deletedAt: null, payload: { title: name, docType: "other", paths: [`knowledge-base/uploads/${name}.pdf`] }, ...extra });
+  const mirror = (id, rel) => ({ id, projectId: "prj_a", createdAt: "2026-10-12T00:00:00Z", deletedAt: null, payload: { docType: "other", paths: [rel] } });
+  const mirrored = [mirror("src_w1", "knowledge-base/wiki/index.md"), mirror("src_w2", "knowledge-base/wiki/entity/aspirin.md"), mirror("src_k1", "knowledge-base/kg/entities/aspirin.md")];
+  const uploads = [upload("src_u1", "指南"), upload("src_u2", "试验")];
+  // The newest files are the compiled ones, so a long wiki fills a page before the uploads are reached: the page is followed.
+  const filler = Array.from({ length: 100 }, (_unused, index) => mirror(`src_f${index}`, `knowledge-base/wiki/page/${index}.md`));
+  const asked = [];
+  const sources = {
+    list: async (_userId, { limit, cursor }) => {
+      asked.push(cursor ?? null);
+      return cursor ? { items: [...uploads], nextCursor: null } : { items: [...mirrored, ...filler.slice(0, limit - mirrored.length)], nextCursor: "next" };
+    },
+    get: async (_userId, id) => mirrored.find((item) => item.id === id) ?? upload(id, id),
+  };
+  const researchMemory = { mapRecords: async () => [record()], mapLinks: async () => ({ sources: [{ recordId: "rec_1", type: "knowledge_source", id: "src_w2", state: "current", linkedAt: null }], conflicts: [], usage: {} }) };
+  const products = { entities: [{ path: "entities/aspirin.md", text: ENTITY_ASPIRIN }], relations: "", pages: [{ uri: "entity/aspirin.md", text: WIKI_ASPIRIN }, { uri: "index.md", text: WIKI_INDEX }] };
+  const map = await buildMemoryMap({ sources: [createDocumentsSource({ sources, researchMemory }), createKnowledgeGraphSource({ fetchProducts: async () => products })] },
+    { ...request({ projectId: "prj_a" }), projects, include: "summary,nodes" });
+  const countOf = (type) => map.nodes.filter((node) => node.type === type).length;
+  assert.deepEqual(map.nodes.filter((node) => node.type === "document").map((node) => node.id).sort(), ["document:src_u1", "document:src_u2"], "only what the researcher put in is a document");
+  assert.equal(map.summary.documents, 2);
+  assert.ok(countOf("page") >= 2 && countOf("entity") >= 1, "the compiled files are drawn once, as pages and entities");
+  assert.deepEqual(asked, [null, "next"], "the second page was read because the first held only compiled files");
+  assert.equal(map.nodes.some((node) => node.id === "document:src_w2"), false, "a compiled file a memory names is not looked up as a document either");
+});
+
 test("a documents read that failed in every project is the source's failure; one project failing is only its own", async () => {
   const asked = request({ projects: [{ id: "p1", name: "一" }, { id: "p2", name: "二" }] });
   const half = createDocumentsSource({ sources: { list: async (_u, { projectId }) => { if (projectId === "p1") throw new Error("boom"); return { items: [{ id: "src_2", projectId, createdAt: "2026-09-01T00:00:00Z", payload: { title: "二的资料", paths: ["a.md"] } }] }; } } });
