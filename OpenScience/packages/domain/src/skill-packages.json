@@ -3326,7 +3326,7 @@
       "origin": "evimed",
       "version": "2.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:6cbfbd53fb30de814a553264eb629f5fa24c24436f87bde8d7133b1af31b3d7c",
+      "digest": "sha256:f61a379ce737e4cd3c0cdea5f115e87c0c65ed218f87a04ee8330f598b5bc0af",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"agent.yaml","sha256":"da7dcb6c40961dc186c5afced8d053ff9341a5d9d873c9a7517989acff1e13c0"}]
     },
