@@ -79,6 +79,8 @@ export class OpenVikingSourceSync {
   async note(userId, projectId, sourceId, { library = false } = {}) {
     if (!this.enabled || !userId || !sourceId) return null;
     try {
+      // A mirrored page of a compiled tree is never pushed, so its versions ask for nothing (a compile mirrors a hundred).
+      if (!library && isCompiledPage(await this.#current(userId, sourceId).catch(() => null))) return null;
       // A key of its own per event: a job that already ran read the state as it was then, and this event is later.
       const job = await this.jobs.enqueue(userId, SOURCE_SYNC_JOB_KIND, { action: library ? "library" : "source", sourceId, projectId: projectId ?? null }, {
         idempotencyKey: `${library ? "ov-library" : "ov-source"}:${sourceId}:${this.now().getTime().toString(36)}-${randomUUID().slice(0, 8)}`,

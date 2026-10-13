@@ -8060,6 +8060,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     sourceSync,
     sourceSyncWorker,
     openVikingResources,
+    // The engine's readiness facts (`ready("knowledge")` is what a compile round asks first).
+    openVikingEngine,
     // The one source-change record and the modules that read it (B5), returned so the composition can be asserted.
     sourceChanges,
     sourceUpdates,

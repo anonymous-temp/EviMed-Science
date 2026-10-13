@@ -46,7 +46,11 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     const project = await app.store.defaultProject(await app.store.userById(user.id));
     const address = await app.listen(0, "127.0.0.1");
     listening = true;
-    // The test drives every worker by hand, so each step is one observable thing.
+    // The test drives every worker by hand, so each step is one observable thing. A worker claims jobs of any account, and
+    // these two kinds exist only where the knowledge engine is on, which in this suite is here: a run that died before its
+    // cleanup must not hand its rounds to this one.
+    await app.store.database.query(`UPDATE evimed_product.jobs SET status='canceled', finished_at=clock_timestamp()
+      WHERE kind IN ('wiki-compile','ov-resource-sync') AND status IN ('queued','running') AND user_id<>$1`, [user.id]);
     await app.sourceWorker.close();
     await app.knowledgePagesWorker.close();
     await app.sourceSyncWorker.close();
@@ -78,7 +82,16 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
       }
       return sent.body.data.source.id;
     };
-    const syncSources = async () => { for (let round = 0; round < 60 && (await app.sourceSyncWorker.tick()); round += 1) { /* until the queue is empty */ } };
+    // The push is queued by the reading's hook without being waited for, so the queue is read until it stays empty.
+    const syncSources = async () => {
+      for (let quiet = 0, round = 0; quiet < 3 && round < 400; round += 1) {
+        if (await app.sourceSyncWorker.tick()) { quiet = 0; continue; }
+        const open = await app.store.database.query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND kind='ov-resource-sync' AND status IN ('queued','running')", [user.id]);
+        if (open.rowCount) await app.store.database.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp() WHERE user_id=$1 AND kind='ov-resource-sync' AND status='queued'", [user.id]);
+        quiet = open.rowCount ? 0 : quiet + 1;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    };
     /** Run the compile job to its end, reading what it mirrors as it goes. */
     const compileRound = async () => {
       for (let round = 0; round < 200; round += 1) {
@@ -288,8 +301,10 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     assert.ok(engine.text(`${roots.sources}/${offline}.md`));
     assert.ok(app.knowledgePages.status().rounds >= 5);
   } finally {
+    // The account goes with everything filed under it, its queued jobs included (a job left behind is claimed by the next
+    // run's worker, which takes jobs of any account) — before the app closes its database pool.
+    if (user) { try { await app.store.deleteUser(await app.store.userById(user.id)); } catch { /* the next run starts from a fresh account anyway */ } }
     if (listening) await app.close();
-    if (user) await app.store.deleteUser?.(user.id).catch(() => {});
     await rm(dataDir, { recursive: true, force: true });
   }
 });
