@@ -17,6 +17,8 @@ import {
   onTurnEnd,
   parentSessionOf,
   probeSeams,
+  readBytesAt,
+  readFileAt,
   registerAgentSection,
   registerAgentSkill,
   registerRightSidebarTab,
@@ -749,4 +751,29 @@ test("a section and a skill registered for one agent go through that agent's own
     resourceBase: { kind: "directory", path: "/skills/demo" },
   });
   assert.equal(skills[1].resourceBase, undefined);
+});
+
+test("a file's bytes are read through the kernel's own fs service, bounded by the kernel, and absence is null", async () => {
+  /** @type {any[]} */
+  const calls = [];
+  const fs = {
+    resolve: async (/** @type {string} */ relative, /** @type {any} */ options) => `${options.cwd}/${relative}`,
+    readText: async (/** @type {string} */ target) => {
+      // The kernel refuses a binary file to its text reader: that is why the bytes have a door of their own.
+      if (target.endsWith(".docx")) throw new Error("FS_BINARY_FILE");
+      return "text";
+    },
+    readBytes: async (/** @type {string} */ target, /** @type {any} */ _signal, /** @type {number} */ maxBytes) => {
+      calls.push({ target, maxBytes });
+      if (target.endsWith("missing.docx")) throw new Error("FS_NOT_FOUND");
+      return Uint8Array.from([0x50, 0x4b, 3, 4]);
+    },
+  };
+  const ctx = { get: (/** @type {string} */ name) => (name === "fs" ? fs : undefined) };
+  assert.equal(await readFileAt(ctx, "/w", "a.docx"), null, "the text reader says nothing about a binary file");
+  assert.deepEqual([...(await readBytesAt(ctx, "/w", "a.docx", 1024) ?? [])], [0x50, 0x4b, 3, 4]);
+  assert.deepEqual(calls, [{ target: "/w/a.docx", maxBytes: 1024 }], "the bound is the kernel's: it is handed the cap");
+  assert.equal(await readBytesAt(ctx, "/w", "missing.docx", 1024), null);
+  assert.equal(await readBytesAt({ get: () => undefined }, "/w", "a.docx", 1024), null, "no fs service, no bytes");
+  assert.equal(await readBytesAt({ get: () => ({ resolve: fs.resolve }) }, "/w", "a.docx", 1024), null, "a kernel without the bytes door is not an error");
 });
