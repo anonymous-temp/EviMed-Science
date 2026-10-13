@@ -16,6 +16,7 @@ import {
   onToolPolicy,
   onTurnEnd,
   parentSessionOf,
+  bundleSeamGaps,
   probeSeams,
   registerAgentSection,
   registerAgentSkill,
@@ -179,7 +180,7 @@ function fakeContext(overrides = {}) {
   const listeners = new Map();
   /** @type {Map<string, any>} */
   const services = new Map(Object.entries({
-    tools: {}, systemPrompt: {}, agents: {}, sessions: {}, subagents: {}, agentPresets: {}, shell: {},
+    tools: {}, systemPrompt: {}, agents: {}, sessions: { flush: async () => {} }, subagents: {}, agentPresets: {}, shell: {},
     storageDomain: {}, skills: {}, fs: {}, jobs: {}, workflowEngine: {}, commands: {},
     web: { registerSearchProvider: () => () => {}, registerFetchProvider: () => () => {} },
     ...overrides.services,
@@ -526,6 +527,26 @@ test("the startup probe crashes on a missing gate seam and degrades on a missing
   const degraded = await probeSeams(noStorage, { dshVersion: SEAMS.dsh });
   assert.deepEqual(degraded.fatal, []);
   assert.ok(degraded.degraded.some((line) => line.includes("ctx.storageDomain")));
+
+  // The awaited checkpoint a pinned bundle (the OpenViking memory plugin) drains its capture queue at: an enhancement's seam.
+  const noFlush = await probeSeams(fakeContext({ services: { sessions: {} } }), { dshVersion: SEAMS.dsh });
+  assert.deepEqual(noFlush.fatal, []);
+  assert.deepEqual(noFlush.degraded, ["optional seam missing: ctx.sessions.flush (session/flush)"]);
+  assert.ok(noFlush.checked.includes("bundle:sessions.flush"));
+});
+
+test("the agent half of what a pinned bundle reads is asked of the first agent, by the names the manifest gives", () => {
+  const agent = { inbox: { nextTurn: [], nextStep: [] }, session: { ownEvents: () => [] } };
+  assert.deepEqual(bundleSeamGaps(agent), []);
+  assert.deepEqual(bundleSeamGaps({ ...agent, inbox: { nextTurn: [] } }), ["agent.inbox.nextTurn/nextStep"]);
+  assert.deepEqual(bundleSeamGaps({ ...agent, session: {} }), ["session.ownEvents"]);
+  assert.deepEqual(bundleSeamGaps(undefined), ["agent.inbox.nextTurn/nextStep", "session.ownEvents"]);
+  const declared = SEAMS.bundleSeams["@openviking/dsh-memory-plugin"];
+  assert.ok(declared.agent.includes("inbox.nextTurn") && declared.agent.includes("inbox.nextStep"));
+  assert.ok(declared.session.includes("ownEvents"));
+  assert.deepEqual(declared.probed, ["sessions.flush", "agent.inbox.nextTurn", "agent.inbox.nextStep", "session.ownEvents"]);
+  assert.equal(declared.row, "openviking-memory-runtime");
+  assert.equal(SEAMS.events.sessionFlush, "session/flush");
 });
 
 test("a renamed event shows up as a silent seam, not as a passing probe", async () => {
