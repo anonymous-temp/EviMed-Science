@@ -373,3 +373,19 @@ test("the map's reader: the same records, sources and no sensitive file", option
   assert.equal(map.sources[0].recordId, map.records[0].id);
   assert.deepEqual(map.conflicts, []);
 });
+
+test("the person's own words win over their deletion: a line they say again, word for word, stays and leaves the rejection list", options, async (t) => {
+  const { userId, store, worker, overlay, stub, engineUser, sessions, root, seed } = await fixture(t);
+  seed("preferences/window.md", "Release window is Wednesday night.", { type: "preferences" });
+  await store.remove(userId, nativeFileId(`${root}/preferences/window.md`), { keepText: false });
+  assert.ok((await overlay.rejectedFingerprints(userId, "preferences")).has(lineFingerprint("Release window is Wednesday night.")));
+  stub.extract = ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/window.md`, memory_type: "preferences", after: "Release window is Wednesday night." }] });
+  const session = "dsh-session_9999999999999999999999999999999a";
+  stub.sessions.set(`${engineUser}/${session}`, { id: session, user: engineUser, archives: 0, commitCount: 0,
+    messages: [{ role: "user", parts: [{ type: "text", text: "To be clear: Release window is Wednesday night. Please keep that." }] }] });
+  stub.commitSession(engineUser, session);
+  await worker.scanArchives(userId);
+  await worker.processCommits({ userId });
+  assert.equal(await sessions.read(userId, `${root}/preferences/window.md`), "Release window is Wednesday night.", "said again by the person: it stays");
+  assert.ok(!(await overlay.rejectedFingerprints(userId, "preferences")).has(lineFingerprint("Release window is Wednesday night.")), "and is theirs again");
+});

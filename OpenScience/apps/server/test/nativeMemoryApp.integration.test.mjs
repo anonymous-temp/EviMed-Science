@@ -115,3 +115,14 @@ test("with the native engine off, an account is on the legacy path and the page 
   assert.notEqual(profile.data.engine, "native");
   assert.equal((await fetch(`${base}/api/memory/remember`, { method: "POST", headers, body: JSON.stringify({ text: "x" }) })).status, 400);
 });
+
+test("the drawer's links for a native memory are the sources it names; the other three relations are empty", options, async (t) => {
+  const { app, base, headers, user, seed } = await fixture(t);
+  const uri = seed("project_facts/trial.md", "The trial reported a benefit (doi 10.1056/nejmoa0000001).", { type: "project_facts" });
+  await app.nativeMemory.overlay.setSources(user.id, uri, [{ type: "doi", id: "10.1056/nejmoa0000001" }]);
+  const record = (await (await fetch(`${base}/api/memory/records`, { headers })).json()).data.find((item) => item.uri === uri);
+  const links = await (await fetch(`${base}/api/memory/records/${encodeURIComponent(record.id)}/links`, { headers })).json();
+  assert.equal(links.data.rests.length, 1);
+  assert.equal(links.data.rests[0].href, "https://doi.org/10.1056/nejmoa0000001");
+  assert.deepEqual([links.data.replaced, links.data.replacedBy, links.data.conflicts, links.data.usedIn], [[], null, [], []]);
+});

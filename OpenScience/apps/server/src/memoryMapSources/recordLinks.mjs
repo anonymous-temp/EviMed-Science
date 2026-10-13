@@ -31,6 +31,25 @@ function neighbour(record) {
 }
 
 /**
+ * The same section for a memory file of the native engine (`NativeMemoryStore`): what it rests on is the sources it names, as the
+ * overlay recorded them. The engine keeps no replacement, no disagreement and no record of which conversation was handed what, so
+ * the other three are empty — said here rather than guessed.
+ * @param {{ nativeMemory: { sourceLinks: (userId: string, id: string) => Promise<{ type: string, id: string, state: string }[]> } }} dependencies
+ */
+export function createNativeRecordLinks({ nativeMemory }) {
+  return async function nativeRecordLinks(/** @type {{ id: string }} */ user, /** @type {string} */ recordId) {
+    const links = await nativeMemory.sourceLinks(user.id, recordId);
+    return {
+      rests: links.slice(0, LINK_SOURCES).map((link) => ({
+        type: String(link.type), id: String(link.id), state: String(link.state), title: link.type === "doi" ? excerpt(link.id, 60) : null,
+        href: link.type === "knowledge_source" ? `/app/files/${encodeURIComponent(link.id)}` : link.type === "doi" ? `https://doi.org/${link.id}` : null,
+      })),
+      replaced: [], replacedBy: null, conflicts: [], usedIn: [],
+    };
+  };
+}
+
+/**
  * @param {{ researchMemory: any, sources?: any, agentRuns?: any, listProjects?: ((user: any) => Promise<{ id: string }[]>) | null,
  *   projectOf?: ((user: any, projectId: string) => Promise<any>) | null }} dependencies
  * @returns {(user: { id: string }, record: any) => Promise<{

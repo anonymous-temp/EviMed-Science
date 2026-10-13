@@ -20,7 +20,8 @@ import { PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openV
  *     undo), the files' project tags (a pack restore loses tags, so the overlay keeps them too), and the sources a memory names.
  *  4. **The deterministic checks after the fact.** A line the engine wrote that carries an identifier's shape (a phone, an ID
  *     or card number, an e-mail, a key), platform-injected text or a platform identifier, or that the person removed before
- *     and the engine wrote back verbatim, is taken out again — the file restored or deleted when nothing else is left — and
+ *     and the engine wrote back verbatim (unless the person said it again themselves, word for word, in that conversation: their
+ *     words win over their deletion), is taken out again — the file restored or deleted when nothing else is left — and
  *     the revision says why. The templates are the first line (the "never keep" block); this is the code that holds the
  *     closed half of it, seconds after the write rather than before (README §5.3 of the course correction).
  *  5. **Replay.** A failed extraction is never retried upstream: its archive keeps the messages and a `.failed.json`. The
@@ -338,7 +339,7 @@ export class NativeMemoryWorker {
         const after = String(operation?.after ?? "");
         const recorded = await this.overlay.addRevision({ ...base, uri, memoryType: file.type, change, actor: "engine", reason: "",
           before: change === "updated" ? String(operation?.before ?? "") : null, after, projectId });
-        await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, fresh: recorded !== null });
+        await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, fresh: recorded !== null, archiveUri: commit.archiveUri });
       }
     }
     recordNativeOperations(counts);
@@ -348,15 +349,24 @@ export class NativeMemoryWorker {
   /**
    * What follows an engine write of one file: the checks, the project tag, the sources and their labels, the overlay's copy.
    * Acts on the file as it is now, not as the diff says: a later commit may already have changed it.
-   * @param {string} userId @param {string} uri @param {string} type @param {{ projectId: string | null, diffAfter: string, fresh: boolean }} context
+   * @param {string} userId @param {string} uri @param {string} type @param {{ projectId: string | null, diffAfter: string, fresh: boolean, archiveUri: string }} context
    */
-  async #afterWrite(userId, uri, type, { projectId, diffAfter, fresh }) {
+  async #afterWrite(userId, uri, type, { projectId, diffAfter, fresh, archiveUri }) {
     const current = await this.sessions.read(userId, uri);
     if (current === null) return;
     const rejected = await this.overlay.rejectedFingerprints(userId, type);
-    // Only what this write brought is held to the checks: a line the person wrote themselves is theirs (and is unrejected).
-    const brought = new Set(memoryLines(diffAfter).map(lineFingerprint));
+    // Only what this write brought is held to the checks.
+    const broughtLines = memoryLines(diffAfter);
+    const brought = new Set(broughtLines.map(lineFingerprint));
     const relevant = new Set([...rejected].filter((print) => brought.has(print)));
+    // The person's own words win over their earlier deletion: a line they said again in this very conversation, word for word,
+    // is theirs, and is taken off the rejection list. Exact containment of the line in one of their messages and nothing looser
+    // — whether a reworded line means the same is language, and the engine's own extraction already decided that.
+    const stated = relevant.size ? await this.#statedByThePerson(userId, archiveUri, broughtLines.filter((line) => relevant.has(lineFingerprint(line)))) : [];
+    if (stated.length) {
+      for (const line of stated) relevant.delete(lineFingerprint(line));
+      await this.overlay.unreject(userId, type, stated);
+    }
     const cleaned = cleanBody(current, relevant);
     const reasons = [...new Set(cleaned.reasons)];
     let body = current;
@@ -386,6 +396,26 @@ export class NativeMemoryWorker {
     for (const source of await this.overlay.sources(userId, [uri])) {
       if (source.state in LABEL_WORDS) await this.#writeLabel(userId, uri, type, source, source.state);
     }
+  }
+
+  /**
+   * Which of these lines one of the person's own messages of an archive carries word for word.
+   * @param {string} userId @param {string} archiveUri @param {readonly string[]} lines @returns {Promise<string[]>}
+   */
+  async #statedByThePerson(userId, archiveUri, lines) {
+    const raw = await this.sessions.read(userId, `${archiveUri}/messages.jsonl`);
+    if (!raw) return [];
+    const flat = (/** @type {string} */ text) => text.replace(/\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+    const said = [];
+    for (const line of raw.split("\n")) {
+      let message;
+      try { message = JSON.parse(line); } catch { continue; }
+      if (message?.role !== "user") continue;
+      const text = typeof message.content === "string" ? message.content
+        : Array.isArray(message.parts) ? message.parts.filter((/** @type {any} */ part) => part?.type === "text").map((/** @type {any} */ part) => String(part.text ?? "")).join("\n") : "";
+      said.push(flat(text));
+    }
+    return lines.filter((line) => { const own = flat(line); return own.length >= 4 && said.some((text) => text.includes(own)); });
   }
 
   /**

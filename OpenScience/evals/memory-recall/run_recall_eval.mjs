@@ -15,6 +15,22 @@
  *   node evals/memory-recall/run_recall_eval.mjs --arm builtin
  *   node evals/memory-recall/run_recall_eval.mjs --arm openviking --url http://127.0.0.1:1933 --seed-index
  *
+ * The `native` arm is OpenViking's own engine (2026-10-13): the corpus is stored the way a conversation stores it — the records
+ * stated in the person's words, a session per group, a commit, the engine's extraction writing the files — and recalled the way
+ * the memory plugin recalls, through the memory gateway's `search` (`mode: context`, the gateway rewriting the request). The
+ * engine merges and rewrites, so a hit is a returned entry whose text carries the gold record's statement whole; the run
+ * reports how many gold records the engine kept verbatim beside the recall, because a record the write policy left out
+ * cannot be recalled by any ranker. `--seed-index` stores the corpus first (about one extraction per twelve thousand
+ * characters); `--user` names the throwaway account, and `--key-file` the engine's root key.
+ *
+ * `--seed-mode files` writes each record straight into the engine as a memory file instead, so that only the engine's retrieval
+ * is measured and its write policy is not: this corpus is the legacy store's (292 of its 300 records are analysis findings no
+ * person said about themselves), which the engine's templates rightly decline to keep. The files have no memory type and no
+ * tags, as every file written this way does (`lab/memory/RESULTS.md` §3); retrieval does not read them.
+ *
+ *   node evals/memory-recall/run_recall_eval.mjs --arm native --url http://127.0.0.1:19330 --key-file <root key file> \
+ *     --seed-index --label native-v0.5.0 --out evals/memory-recall/results/$(date +%F)-native.json
+ *
  * `--label` names a run in its own results, because the arm no longer says
  * what was measured: two `openviking` runs against servers configured with
  * different embedders are different arms, and a comparison whose rows are both
@@ -70,7 +86,7 @@ async function buildRerank(options) {
 }
 
 function parseArguments(argv) {
-  const options = { mode: "record", arm: "builtin", label: "", url: "", limit: 5, seedIndex: false, user: "eval-recall-user", out: "", rerank: false };
+  const options = { mode: "record", arm: "builtin", label: "", url: "", limit: 5, seedIndex: false, user: "eval-recall-user", out: "", rerank: false, keyFile: "", seedMode: "conversation" };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
@@ -80,6 +96,8 @@ function parseArguments(argv) {
     else if (flag === "--url") { options.url = value; index += 1; }
     else if (flag === "--limit") { options.limit = Number(value); index += 1; }
     else if (flag === "--user") { options.user = value; index += 1; }
+    else if (flag === "--key-file") { options.keyFile = value; index += 1; }
+    else if (flag === "--seed-mode") { options.seedMode = value; index += 1; }
     else if (flag === "--out") { options.out = value; index += 1; }
     else if (flag === "--seed-index") options.seedIndex = true;
     // The third arm. Reranking happens in the control plane, not in the index,
@@ -90,8 +108,10 @@ function parseArguments(argv) {
     else throw new Error(`unknown argument ${flag}`);
   }
   if (!["record", "capsule"].includes(options.mode)) throw new Error(`unknown mode ${options.mode}`);
-  if (!["builtin", "openviking"].includes(options.arm)) throw new Error(`unknown arm ${options.arm}`);
-  if (options.arm === "openviking" && !options.url) throw new Error("--url is required for the openviking arm");
+  if (!["builtin", "openviking", "native"].includes(options.arm)) throw new Error(`unknown arm ${options.arm}`);
+  if (options.arm !== "builtin" && !options.url) throw new Error(`--url is required for the ${options.arm} arm`);
+  if (options.arm === "native" && options.mode !== "record") throw new Error("the native arm recalls research memory: --mode record");
+  if (!["conversation", "files"].includes(options.seedMode)) throw new Error(`unknown seed mode ${options.seedMode}`);
   if (options.rerank && options.arm !== "openviking") throw new Error("--rerank reorders index candidates, so it needs --arm openviking");
   // Free-form on purpose: what distinguishes two runs of one arm is whatever
   // the operator changed, and a closed list here would have to be edited before
@@ -101,7 +121,7 @@ function parseArguments(argv) {
 }
 
 async function readKey() {
-  const file = process.env.OPEN_SCIENCE_OPENVIKING_API_KEY_FILE ?? "";
+  const file = options.keyFile || (process.env.OPEN_SCIENCE_OPENVIKING_API_KEY_FILE ?? "");
   if (file) return (await readFile(file, "utf8")).trim();
   return process.env.OPEN_SCIENCE_OPENVIKING_API_KEY ?? "";
 }
@@ -291,7 +311,111 @@ async function runRecordMode() {
   };
 }
 
-const plan = options.mode === "capsule" ? await runCapsuleMode() : await runRecordMode();
+/** Whitespace-collapsed, lower-cased, without bullets and dates: what a statement and the engine's rendering of it share. */
+const flat = (text) => String(text ?? "").replace(/[（(](?:as of )?\d{4}-\d{2}-\d{2}[)）]/gi, " ").replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+/**
+ * Research-memory recall on the native engine: the same three hundred records stated to the engine, the same twelve questions
+ * asked through the memory gateway. See the header for what a hit is.
+ */
+async function runNativeMode() {
+  const corpus = JSON.parse(await readFile(path.join(here, "corpus.json"), "utf8"));
+  const gold = JSON.parse(await readFile(path.join(here, "queries.json"), "utf8"));
+  const { OpenVikingSessions } = await import(path.join(serverSrc, "openVikingSessions.mjs"));
+  const { createMemoryGatewayHandler } = await import(path.join(serverSrc, "memoryGateway.mjs"));
+  const { planMigration } = await import(path.join(serverSrc, "nativeMemoryMigration.mjs"));
+  const { createServer } = await import("node:http");
+  const { once } = await import("node:events");
+  const client = new OpenVikingClient({
+    openVikingUrl: options.url, openVikingApiKey: await readKey(), openVikingAccount: process.env.OPEN_SCIENCE_OPENVIKING_ACCOUNT ?? "evimed", openVikingRequestTimeoutMs: 120_000,
+  });
+  const sessions = new OpenVikingSessions(client, { timeoutMs: 120_000, fastTimeoutMs: 30_000 });
+  const records = corpus.records.map((row) => ({ ...row, scope: "user", scopeId: "", origin: "explicit", status: "active", sensitive: false, createdAt: "2026-09-01T00:00:00Z" }));
+  const byId = new Map(records.map((row) => [row.id, row]));
+  let stored = null;
+
+  if (options.seedIndex && options.seedMode === "files") {
+    await sessions.register(options.user).catch(() => false);
+    let written = 0;
+    for (const record of records) {
+      await client.request({ method: "POST", path: "/api/v1/content/write", userId: options.user, timeoutMs: 120_000,
+        body: { uri: `${sessions.memoryRoot(options.user)}/project_facts/${record.id}.md`, content: `- ${record.value}`, mode: "create", wait: true } });
+      written += 1;
+      if (written % 25 === 0) process.stderr.write(`written ${written}/${records.length}\n`);
+    }
+  } else if (options.seedIndex) {
+    await sessions.register(options.user).catch(() => false);
+    const plan = planMigration(records, { now: new Date("2026-10-13T00:00:00Z") });
+    let commits = 0;
+    for (const session of plan.sessions) {
+      // A group is committed in parts of three messages: one extraction call reads and writes a bounded amount.
+      for (let from = 0; from < session.messages.length; from += 3) {
+        const name = `${session.session}-${from / 3}`;
+        await sessions.createSession(options.user, name, { timeoutMs: 60_000 });
+        for (const message of session.messages.slice(from, from + 3)) await sessions.addMessage(options.user, name, { role: "user", parts: [{ type: "text", text: message.text }] });
+        const committed = (await sessions.commit(options.user, name, { timeoutMs: 60_000 }))?.result ?? {};
+        if (committed.status !== "accepted" || !committed.task_id) throw new Error(`the commit of ${name} was not accepted`);
+        const deadline = Date.now() + 600_000;
+        for (;;) {
+          const task = await sessions.task(options.user, committed.task_id);
+          if (task && ["completed", "failed", "cancelled"].includes(String(task.status))) { if (task.status !== "completed") throw new Error(`the extraction of ${name} ${task.status}`); break; }
+          if (Date.now() > deadline) throw new Error(`the extraction of ${name} did not finish`);
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+        }
+        commits += 1;
+      }
+      process.stderr.write(`stored ${session.kind}${session.projectId ? `/${session.projectId}` : ""}: ${session.records} records, ${commits} commits so far\n`);
+    }
+  }
+
+  // The files the engine wrote, and how many gold records it kept whole.
+  const root = sessions.memoryRoot(options.user);
+  const files = new Map();
+  for (const node of await sessions.tree(options.user, root, { levelLimit: 8 })) {
+    if (node.isDir) continue;
+    const rel = node.uri.slice(root.length + 1);
+    if (!rel.endsWith(".md") || rel.split("/").some((segment) => segment.startsWith("."))) continue;
+    files.set(node.uri, (await sessions.read(options.user, node.uri)) ?? "");
+  }
+  const allText = [...files.values()].map(flat).join("\n");
+  const goldIds = [...new Set(gold.queries.flatMap((query) => query.expected))];
+  stored = { files: files.size, goldKeptWhole: goldIds.filter((id) => allText.includes(flat(byId.get(id).value))).length, gold: goldIds.length };
+  process.stderr.write(`the engine holds ${stored.files} memory files; ${stored.goldKeptWhole} of ${stored.gold} gold records are in them whole\n`);
+
+  // The memory gateway, in process: the request the plugin sends is rewritten the way production rewrites it.
+  const TOKEN = "recall-eval-token";
+  const handler = createMemoryGatewayHandler({
+    config: { ovNativeMemoryEnabled: true, memoryEnabled: true },
+    runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: options.user, projectId: "p1" }; throw new Error("no"); } },
+    store: { userById: async (id) => ({ id }), requireProject: async (_user, id) => ({ id, userId: options.user }) },
+    sessions, admission: { admit: async () => ({ native: true, learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null }) },
+  });
+  const server = createServer((req, res) => { void handler(req, res, () => {}); });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const base = `http://127.0.0.1:${server.address().port}/internal/memory/v1`;
+  process.on("exit", () => server.close());
+
+  const recall = async (query) => {
+    const response = await fetch(`${base}/api/v1/search/search`, {
+      method: "POST", headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ query, mode: "context", purpose: "coding", score_threshold: 0.35, query_expansion: "auto" }),
+    });
+    const answer = await response.json();
+    // The entries the plugin would hand the model: the files, not the directory overviews.
+    const entries = (answer?.result?.entries ?? []).filter((entry) => entry.detail !== "overview" && /\.md$/.test(String(entry.uri)));
+    const returned = [];
+    for (const entry of entries) {
+      const text = flat(entry.detail === "full" ? entry.text : (files.get(entry.uri) ?? entry.text));
+      for (const [id, record] of byId) if (!returned.includes(id) && text.includes(flat(record.value))) returned.push(id);
+      if (returned.length >= options.limit) break;
+    }
+    return returned.slice(0, options.limit);
+  };
+  return { corpusSize: records.length, queries: gold.queries, recall, provider: "native", active: true, stored: () => stored };
+}
+
+const plan = options.mode === "capsule" ? await runCapsuleMode() : options.arm === "native" ? await runNativeMode() : await runRecordMode();
 
 const rows = [];
 for (const { query, expected } of plan.queries) {
@@ -322,6 +446,7 @@ const summary = {
   arm: plan.provider,
   active: plan.active,
   lastError: plan.lastError ? plan.lastError() : null,
+  ...(plan.stored ? { engine: plan.stored() } : {}),
   corpus: plan.corpusSize,
   queries: rows.length,
   limit: options.limit,

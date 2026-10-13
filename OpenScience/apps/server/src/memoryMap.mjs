@@ -448,13 +448,14 @@ export async function buildMemoryMap({ sources }, request) {
  *   projectOf?: (user: any, projectId: string) => Promise<any>,
  *   isInternalProject?: (userId: string, projectId: string) => boolean,
  *   recordLinks?: ((user: any, record: any) => Promise<any>) | null,
+ *   nativeLinks?: ((user: any, recordId: string) => Promise<any>) | null,
  *   decodeRouteComponent: (value: string, label: string) => string, audit?: ((ctx: any, action: string, status: string, details?: any) => Promise<void>) | null,
  * }} dependencies
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createMemoryMapRoutes({
   config, researchMemory, sources, topics = null, store, context, memoryEngine = () => "postgres", isInternalProject = () => false,
-  recordLinks = null, decodeRouteComponent, audit = null,
+  recordLinks = null, nativeLinks = null, decodeRouteComponent, audit = null,
 }) {
   const enabled = config.memoryEnabled !== false && config.memoryMapEnabled !== false;
   const TOPICS = /^\/api\/memory\/topics(?:\/([^/]+))?$/u;
@@ -491,6 +492,11 @@ export function createMemoryMapRoutes({
       if (req.method !== "GET") throw new HttpError(405, "method_not_allowed", "A memory's links are read-only.");
       const ctx = await context(req, res);
       const recordId = decodeRouteComponent(links[1], "structured memory id");
+      // An account on the native engine: the memory is a file of the engine's, and its links are what the overlay recorded.
+      if (nativeLinks && await memoryEngine(ctx.user.id) === "native") {
+        sendJson(res, 200, { data: await nativeLinks(ctx.user, recordId) });
+        return true;
+      }
       // The record first: one of another account is a 404.
       const record = await researchMemory.getRecord(ctx.user.id, recordId);
       if (record.sensitive || record.kind === "run_summary") throw new HttpError(404, "memory_not_found", "Memory not found.");

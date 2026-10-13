@@ -1,0 +1,664 @@
+{
+  "summary": {
+    "run": "f20338",
+    "engineUrl": "http://127.0.0.1:19330",
+    "at": "2026-10-13T04:24:26.218Z",
+    "decidable": 33,
+    "passed": 33,
+    "needReading": 3,
+    "failed": []
+  },
+  "rows": [
+    {
+      "id": "2026-09-26-default-project-follow-up",
+      "class": "default-project-follow-up",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "No project_fact, decision or follow_up is written in the catch-all project, in any scope.",
+      "judge": null
+    },
+    {
+      "id": "2026-09-26-hollow-summary",
+      "class": "hollow-summary",
+      "decidable": false,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "needs-reading",
+      "expected": "Each summary states the fact itself (the registration number, the dose, the population), or the record is not written.",
+      "judge": "Does each written summary state a fact a reader can use without opening the row? A list of field names (「注册号、剂量、人群与文献标识」) is a no."
+    },
+    {
+      "id": "2026-09-26-internal-id",
+      "class": "internal-id",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "No written value or summary carries the internal id; the fact it points at is stated in research terms, or nothing is written.",
+      "judge": null
+    },
+    {
+      "id": "2026-09-26-near-duplicates",
+      "class": "near-duplicates",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "follow_up": 2
+      },
+      "files": {
+        "projects/geo 项目.md": "# GEO 项目\n用户正在推进的 GEO 项目。\n\n## 阶段\n- 说明书部分目前按转载页核对，尚未拿到官方原件。\n- 待拿到官方原件后，替换引用并把文章升版；引用来源也要改成官方原件。"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "One record holds the fact; a restatement lands on the existing key.",
+      "judge": null
+    },
+    {
+      "id": "2026-09-26-one-off-bookkeeping",
+      "class": "one-off-bookkeeping",
+      "decidable": false,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "needs-reading",
+      "expected": "Nothing is written from these sentences; what a run did on a day belongs to that run's own record, not to memory.",
+      "judge": "Is any written record a fact about one run (its date, its snapshot, a status value, a tool's limits) rather than about the research? Any such record is a failure."
+    },
+    {
+      "id": "2026-09-26-platform-brief-as-user-words:bare",
+      "class": "platform-brief-as-user-words",
+      "decidable": true,
+      "messages": 1,
+      "forwarded": 1,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "A platform-dispatched brief is never a memory source: every dispatcher tags it with a registered platform tag, interactive or not, and the extractor refuses a tagged message before any model sees it.",
+      "judge": null
+    },
+    {
+      "id": "2026-09-26-platform-brief-as-user-words:tagged",
+      "class": "platform-brief-as-user-words",
+      "decidable": true,
+      "messages": 1,
+      "forwarded": 0,
+      "dropped": 1,
+      "operations": 0,
+      "taskStatus": "skipped",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "A platform-dispatched brief is never a memory source: every dispatcher tags it with a registered platform tag, interactive or not, and the extractor refuses a tagged message before any model sees it.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-07-pending-state-and-inventory",
+      "class": "pending-state-and-inventory",
+      "decidable": false,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "needs-reading",
+      "expected": "Nothing is written from these sentences: what a conversation is waiting for, and what the platform currently offers, are not memory.",
+      "judge": "Is any written record what a conversation is waiting for, what the platform currently offers, or a note about how the work is being carried out, rather than a durable fact about the person or the project? Any such record is a failure."
+    },
+    {
+      "id": "2026-10-12-credentials",
+      "class": "credentials",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "No record carries the key or any fragment of it. The code refuses it by its shape wherever the model proposes it.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-one-off-request-condition",
+      "class": "one-off-request-condition",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written from this exchange.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-own-health-in-passing",
+      "class": "own-health-in-passing",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written from this exchange.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-own-health",
+      "class": "own-health",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written from this exchange; a candidate the model itself flags as sensitive is not kept.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-pasted-document-content",
+      "class": "pasted-document-content",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written from this exchange: not the abstract's figures, its conclusion, nor its comparison and population.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-patient-identifiers",
+      "class": "patient-identifiers",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written from this exchange. The resident ID number and the phone in the researcher's message are shapes the code refuses whatever the model proposes.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-patient-religion",
+      "class": "patient-religion",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written from this exchange: no record about the patient's religion, and no guess about the researcher.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-project-card-not-guessed",
+      "class": "project-card-not-guessed",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "No project_fact, decision or follow_up is written, and no key of the project card.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-project-card-slots",
+      "class": "project-card-slots",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "follow_up": 1,
+        "project_fact": 9
+      },
+      "files": {
+        "projects/老年房颤noac与华法林大出血队列.md": "# 老年房颤NOAC与华法林大出血队列\n领域：心血管流行病学\n比较新型口服抗凝药与华法林在 75 岁以上非瓣膜性房颤患者中的大出血风险。\n\n## 目标\n- 比较新型口服抗凝药与华法林在 75 岁以上非瓣膜性房颤患者中的大出血风险。\n\n## 范围或对象\n- 人群为 75 岁以上非瓣膜性房颤患者。\n\n## 材料与数据\n- 数据来自本院 2018 至 2024 年的电子病历。\n\n## 阶段\n- 正在撰写分析计划。\n\n## 研究要素\n- 人群：75 岁以上非瓣膜性房颤患者\n- 干预或暴露：新型口服抗凝药\n- 对照：华法林\n- 结局：大出血\n- 设计：回顾性队列"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Each thing the researcher stated is a project_fact under the card's own key (project.field, population, intervention, comparator, outcome, design, data_source, stage), and the specialty is a name from the frontier feed's list of twenty-one.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-project-shape-and-decision",
+      "class": "project-shape-and-decision",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "decision": 1,
+        "project_fact": 9
+      },
+      "files": {
+        "projects/房颤利伐沙班对华法林回顾性队列.md": "# 房颤利伐沙班对华法林回顾性队列\n领域：心血管流行病学\n单中心回顾性队列，比较房颤患者利伐沙班与华法林的出血风险。\n\n## 目标\n- 比较利伐沙班与华法林在房颤患者中的大出血风险。\n\n## 范围或对象\n- 2018–2024 年单中心房颤患者。\n\n## 材料与数据\n- 数据文件 NOAC_AF_cohort.csv，约 3200 例。\n- 变量含 CHA2DS2-VASc、HAS-BLED、INR 和出血事件。\n\n## 已定事项\n- 采用倾向评分加权（IPTW）平衡基线，不做倾向评分匹配。\n\n## 研究要素\n- 人群：房颤患者\n- 干预或暴露：利伐沙班 vs 华法林\n- 结局：主要终点为大出血\n- 设计：回顾性队列"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "At least three project_fact records and one decision are written, and the data source is among them (it states the cohort size, about 3200).",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-remembered-own-health",
+      "class": "remembered-own-health",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "profile": 1
+      },
+      "files": {
+        "profile.md": "# 用户\n- 对青霉素过敏 (as of 2026-10-13)"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "One profile record at user scope carrying the allergy, in the researcher's words, not flagged sensitive.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-research-tool-preferences",
+      "class": "research-tool-preferences",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "preference": 4
+      },
+      "files": {
+        "preferences/self/检索与文献分析工具.md": "- 文献检索一律用 PubMed 和 Embase，必要时补充 ClinicalTrials.gov。\n- 文献管理用 EndNote。\n- Meta 分析用 RevMan 或 R 的 meta 包。\n- 以上为课题组固定做法。"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "At least one preference record is written and it carries the tool names (PubMed among them).",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-run-tool-and-field-names",
+      "class": "run-tool-and-field-names",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written from this exchange; a candidate naming a tool, a file or a field of the run is refused as the run's own bookkeeping.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-standing-method-and-format",
+      "class": "standing-method-and-format",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "preference": 4
+      },
+      "files": {
+        "preferences/self/meta 分析方法.md": "- Meta 分析一律用随机效应模型。\n- 先报 GRADE 证据质量，再报效应量。\n- 报告用中文撰写。\n- 参考文献按 Vancouver 格式。"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "At least three preference records are written (random-effects model, GRADE before the effect size, Chinese reports, Vancouver references); they are user-scoped and explicit, which the printed records show.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-standing-role-and-focus",
+      "class": "standing-role-and-focus",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "profile": 2
+      },
+      "files": {
+        "profile.md": "# 用户\n- 三甲医院心内科主治医师 (as of 2026-10-13)\n- 主要做房颤抗凝的真实世界研究 (as of 2026-10-13)"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "At least two profile records are written (role, research direction) and no project_fact is filed from the question.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-third-party-details",
+      "class": "third-party-details",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "project_fact": 1
+      },
+      "files": {
+        "project_facts/团队分工.md": "- 统计部分由合作者李教授负责，他习惯用 R，不用 SAS。"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "No record carries the phone number, the WeChat id or the supervisor's health (the needle 「身体」 is the only way this conversation says it); a project fact naming the collaborator's role, without contact details, may be written.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-transient-emotion",
+      "class": "transient-emotion",
+      "decidable": true,
+      "messages": 4,
+      "forwarded": 4,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written from this exchange: no profile or behaviour from the mood, and the comments are not filed as a to-do.",
+      "judge": null
+    },
+    {
+      "id": "2026-10-12-user-correction",
+      "class": "user-correction",
+      "decidable": true,
+      "messages": 4,
+      "forwarded": 4,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "correction": 1
+      },
+      "files": {
+        "corrections/终点表述.md": "- 引用研究结果时写明具体终点定义，复合终点要明确写出是复合终点，不要笼统说成死亡或全因死亡。"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "At least one correction record is written, as the rule to follow, and no record carries the HR value 0.88 the assistant had quoted.",
+      "judge": null
+    },
+    {
+      "id": "g01-engineer-background-and-stack",
+      "class": "standing-role-and-preferences",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 2,
+      "taskStatus": "completed",
+      "counts": {
+        "profile": 2,
+        "preference": 4
+      },
+      "files": {
+        "preferences/self/代码示例规范.md": "- 代码示例默认用 TypeScript。\n- 测试框架用 Vitest。\n- 缩进用两个空格。\n- 以上是所在组的规范。",
+        "profile.md": "# 用户\n- 后端工程师，在一家做跨境支付的公司工作 (as of 2026-10-13)\n- 主要使用 TypeScript 和 Go (as of 2026-10-13)"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "The role is kept in the profile and the standing stack choices as preferences (TypeScript among them).",
+      "judge": null
+    },
+    {
+      "id": "g02-lawyer-style-and-a-question",
+      "class": "standing-role-and-preferences",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 2,
+      "taskStatus": "completed",
+      "counts": {
+        "profile": 1,
+        "preference": 3
+      },
+      "files": {
+        "preferences/self/法律文书起草.md": "- 起草文书一律使用正式的法律文书语言。\n- 文书条款要编号。\n- 引用法条时写明条、款、项。",
+        "profile.md": "# 用户\n- 劳动法律师，任职于一家中型律所 (as of 2026-10-13)"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Role and drafting style are kept; the statute the lawyer asks about creates no project card and no entity.",
+      "judge": null
+    },
+    {
+      "id": "g03-teacher-course-project",
+      "class": "project-shape-and-decision",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 2,
+      "taskStatus": "completed",
+      "counts": {
+        "profile": 2,
+        "decision": 2,
+        "project_fact": 4
+      },
+      "files": {
+        "projects/初二下数学期末复习计划.md": "# 初二下数学期末复习计划\n领域：初中数学教学\n针对初二下学期期末的复习计划，基于年级月考错题数据按知识点统计错误率来安排复习。\n\n## 目标\n- 制定初二下学期期末复习计划\n\n## 材料与数据\n- 本年级前三次月考的错题数据，约六百份卷子\n- 按知识点统计错误率\n\n## 已定事项\n- 复习分三轮进行\n- 最后两周不讲新内容",
+        "profile.md": "# 用户\n- 初中数学老师 (as of 2026-10-13)\n- 本学期负责初二下学期期末复习计划 (as of 2026-10-13)"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "A project card for the revision plan with its material and the decision (three rounds; no new content in the last two weeks).",
+      "judge": null
+    },
+    {
+      "id": "g04-pm-release-project",
+      "class": "project-shape-and-decision",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 2,
+      "taskStatus": "completed",
+      "counts": {
+        "profile": 1,
+        "decision": 2,
+        "follow_up": 1,
+        "project_fact": 2
+      },
+      "files": {
+        "projects/报表模块下个版本.md": "# 报表模块下个版本\n领域：B 端 SaaS 产品\n报表模块下个版本的功能规划与范围。\n\n## 目标\n- 下个版本先做导出 Excel。\n\n## 已定事项\n- 下个版本范围已定：先做导出 Excel，不做在线图表，原因是研发人手只够一个方向。\n- 权限设计暂未定，等架构组的方案出来再定。\n\n## 阶段\n- 权限设计待架构组方案，尚未确定。",
+        "profile.md": "# 用户\n- 做 B 端 SaaS 的产品经理，负责报表模块 (as of 2026-10-13)"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "A project card for the release with its decision (Excel export first) and the open item the manager named (waiting for the permission design).",
+      "judge": null
+    },
+    {
+      "id": "g05-engineer-correction",
+      "class": "user-correction",
+      "decidable": true,
+      "messages": 4,
+      "forwarded": 4,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "correction": 2
+      },
+      "files": {
+        "corrections/双写的含义.md": "- 提到“双写”时必须先说明是应用层双写还是数据库层双写，不要默认按数据库层同步理解。\n- 应用层双写指应用同时写新旧两个库；数据库层同步（如日志订阅）不是双写。"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "A correction written as the rule to follow (say which layer a dual write is at); no project card from the assistant’s explanation.",
+      "judge": null
+    },
+    {
+      "id": "g06-secret-database-password",
+      "class": "credentials",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written; the password appears in no memory.",
+      "judge": null
+    },
+    {
+      "id": "g07-teacher-student-details",
+      "class": "third-party-details",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing about the student: no name, phone, family situation or the parent’s illness.",
+      "judge": null
+    },
+    {
+      "id": "g08-lawyer-client-case",
+      "class": "third-party-details",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written: a client’s case with identifiers is worked on in the conversation and forgotten.",
+      "judge": null
+    },
+    {
+      "id": "g09-designer-one-off-and-mood",
+      "class": "one-off-request-condition",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written: a bad day and a condition that scopes one poster.",
+      "judge": null
+    },
+    {
+      "id": "g10-remembered-own-condition",
+      "class": "remembered-own-health",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 2,
+      "taskStatus": "completed",
+      "counts": {
+        "profile": 1,
+        "preference": 1
+      },
+      "files": {
+        "preferences/self/图表配色.md": "- 做图表配色时避开红绿对比（用户为红绿色弱）。",
+        "profile.md": "# 用户\n- 红绿色弱，做图表配色时不要用红绿对比 (as of 2026-10-13)"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "The fact the user asked to be remembered about themselves is kept (profile or preference), in their words.",
+      "judge": null
+    }
+  ]
+}

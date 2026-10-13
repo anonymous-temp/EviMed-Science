@@ -169,7 +169,7 @@ import { createDocumentsSource } from "./memoryMapSources/documents.mjs";
 import { createKnowledgeGraphSource } from "./memoryMapSources/knowledgeGraph.mjs";
 import { createMethodsSource } from "./memoryMapSources/methods.mjs";
 import { createNativeMemorySource } from "./memoryMapSources/nativeMemory.mjs";
-import { createRecordLinks } from "./memoryMapSources/recordLinks.mjs";
+import { createNativeRecordLinks, createRecordLinks } from "./memoryMapSources/recordLinks.mjs";
 import { createRecordsSource } from "./memoryMapSources/records.mjs";
 import { createRunsSource } from "./memoryMapSources/runs.mjs";
 import { createTopicsSource } from "./memoryMapSources/topics.mjs";
@@ -4777,6 +4777,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }),
       createTopicsSource({ topics: memoryTopics, researchMemory }),
     ],
+    nativeLinks: createNativeRecordLinks({ nativeMemory }),
     recordLinks: createRecordLinks({
       researchMemory, sources: sourceService, agentRuns, projectOf: memoryMapProjectOf,
       listProjects: async (/** @type {any} */ user) => (await store.listProjects(user)).filter((/** @type {any} */ project) => !internalFor(user.id, project.id)),
