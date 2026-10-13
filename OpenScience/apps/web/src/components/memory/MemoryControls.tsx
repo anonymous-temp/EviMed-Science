@@ -9,6 +9,7 @@ import {
   type WebMemorySettings,
 } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu } from "@/components/ui/Menu";
@@ -29,7 +30,7 @@ import { Switch } from "@/components/ui/Switch";
  * the researcher's own capsule), and none of what it does not (对话, 报告, 知识库
  * and the capsules others shared).
  */
-export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten, onMap }: {
+export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten, onMap, onRemember }: {
   onReset: () => void;
   /** A switch was changed: 项目 says 「本项目已暂停记忆」 from the same setting. */
   onSettingsChanged?: () => void;
@@ -37,6 +38,8 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
   onForgotten: () => void;
   /** Opens 记忆地图, the explorable picture of the same memories. */
   onMap: () => void;
+  /** 「记住这一条」: present only for an account whose memory can take words typed on the page. */
+  onRemember?: () => void;
 }) {
   const [settings, setSettings] = useState<WebMemorySettings | null>(null);
   const [failed, setFailed] = useState(false);
@@ -83,6 +86,7 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
 
   return (
     <>
+      {onRemember && <Button size="sm" variant="secondary" onClick={onRemember}>记住这一条</Button>}
       {failed
         ? <span className="text-caption text-text-3">记忆开关暂时读取不到</span>
         : settings && (
