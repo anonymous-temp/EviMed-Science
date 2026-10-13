@@ -144,7 +144,7 @@ function searchEndpoint(value) {
     throw gatewayError(
       503,
       "web_search_unconfigured",
-      "Open-web search is not configured for this deployment. The bibliographic channels remain available.",
+      "Open-web search is not configured for this deployment. A page whose address is known can still be read; the bibliographic channels remain available.",
     );
   }
   let base;
@@ -460,7 +460,7 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
         throw gatewayError(
           503,
           "web_search_unconfigured",
-          "Open-web search is not configured for this deployment. The bibliographic channels remain available.",
+          "Open-web search is not configured for this deployment. A page whose address is known can still be read; the bibliographic channels remain available.",
         );
       }
       const searx = localUrl || edgeUrl ? (async () => {
@@ -515,7 +515,9 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
           unresponsiveEngines,
         },
         warnings: [
-          "Open-web results are unreviewed pages, not indexed literature; a claim taken from one needs the primary source before it enters a report.",
+          // Neutral since 2026-10-12: it read "unreviewed pages, not indexed literature", which is how an evidence
+          // review weighs a web page and wrong for a release schedule or a policy text, where the page is the source.
+          "Results are search hits, not the pages themselves: read a page before relying on it, and cite the page's own address.",
           ...(results.length === 0
             ? ["No engine returned a result for this query; this is not evidence that the topic is unoccupied."]
             : []),

@@ -1322,7 +1322,7 @@
       "name": "deep-research",
       "origin": "core",
       "source": {"kind":"release"},
-      "digest": "sha256:f724f36aad77701cf7d1d4cc64a606ec27bbca1cab304de06a2a08d49fc922e2",
+      "digest": "sha256:0a8cc6b4ab3f9f3e8b254931dea08dcaa909d2ae5a207b77391c607a01105ceb",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -3324,11 +3324,11 @@
       "id": "evimed/open-domain-answer",
       "name": "open-domain-answer",
       "origin": "evimed",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:7d80bd7cabfbab88a8845e1ed88aff8347b4258f34ee57e105f46a16565bcf69",
+      "digest": "sha256:f61a379ce737e4cd3c0cdea5f115e87c0c65ed218f87a04ee8330f598b5bc0af",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"agent.yaml","sha256":"7c349f115e15d4a9c144cd1065372d94d7b0351e7a28ed2fd3951a5cff16cd04"}]
+      "references": [{"path":"agent.yaml","sha256":"da7dcb6c40961dc186c5afced8d053ff9341a5d9d873c9a7517989acff1e13c0"}]
     },
     {
       "schemaVersion": 1,

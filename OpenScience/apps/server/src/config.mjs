@@ -2214,7 +2214,12 @@ export function loadConfig(overrides = {}) {
       overrides.runtimeSandboxEnforcement ?? process.env.OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT ?? (production ? "full" : "partial"),
     ).trim().toLowerCase(),
     loopxEnabled: overrides.loopxEnabled ?? boolEnv("OPEN_SCIENCE_LOOPX_ENABLED", true),
-    runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", false),
+    // The kernel's ask-user tool, for every runtime of the deployment. On unless the deployment says otherwise
+    // (2026-10-12): a person is in the conversation, and 「分析一下我的数据」 with nothing uploaded should be asked about,
+    // not assumed about. It was off on the premise that a hosted run is unattended. Which turns are — a scheduled task,
+    // a proactive episode, a platform job — is said per dispatch (`researchContext.mjs`, `attended`), because one
+    // runtime serves both kinds; a question asked with no page attached is answered by the kernel with an error.
+    runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", true),
     // The socket plugins a runtime runs without (preset row ids, comma
     // separated). Empty — every plugin on — is the product; naming one is how
     // a plugin is measured against the kernel's own composition (principle 11).

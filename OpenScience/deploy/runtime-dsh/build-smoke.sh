@@ -125,13 +125,15 @@ fi
 
 export EVIMED_CAPABILITIES_DIR=/opt/evimed/capabilities
 export EVIMED_CAPABILITY_SKILLS_DIR=/opt/evimed/capability-skills
-# The answer line's persona, which `evimed-guidance` reads and registers as a
-# system-prompt section. The Dockerfile copies exactly this one package out of
-# `runtime/skills/evimed`; booting without it is a boot no hosted run has.
-export EVIMED_ANSWER_PERSONA_DIR=/opt/evimed/skills/evimed/open-domain-answer
-[ -r "${EVIMED_ANSWER_PERSONA_DIR}/SKILL.md" ] || {
-  echo "build smoke: the answer persona is missing at ${EVIMED_ANSWER_PERSONA_DIR}/SKILL.md" >&2
-  echo "  every open-domain answer would then be delivered unverified for a method the image was holding." >&2
+# The evidence method. It is no longer a persona the guidance plugin injects
+# into every session (2026-10-12): it is a skill the model loads when the
+# question is medical, and the guidance names it. The Dockerfile copies exactly
+# this one package out of `runtime/skills/evimed`; an image without it tells
+# every medical question to load a skill that is not there.
+evidence_method_dir=/opt/evimed/skills/evimed/open-domain-answer
+[ -r "${evidence_method_dir}/SKILL.md" ] || {
+  echo "build smoke: the evidence method skill is missing at ${evidence_method_dir}/SKILL.md" >&2
+  echo "  the guidance names it for every medical question, and the model would find nothing to load." >&2
   exit 1
 }
 export EVIMED_CAPSULE_METHODS_DIR="" EVIMED_CAPSULE_GATEWAY_URL="" EVIMED_REVISION_AUTHORIZE_URL="" EVIMED_DISABLED_TOOLS_FILE=""
