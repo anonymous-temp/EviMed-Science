@@ -811,7 +811,7 @@ not sufficient containment for those events.
   # (from object storage: pnpm restore:object s3://…/openviking-data-….tar.gz.enc /srv/evimed-science/shared/backups/openviking)
   sudo node --env-file=deploy/web/.env scripts/ops/openviking-backup.mjs verify "$A"
   sudo node --env-file=deploy/web/.env scripts/ops/openviking-backup.mjs run      # keep the current state too, if it is readable
-  COMPOSE="docker compose --env-file deploy/web/.env -f deploy/web/docker-compose.yml"   # plus the deployment's usual overlays
+  COMPOSE="docker compose --env-file deploy/web/.env -f deploy/web/docker-compose.yml --profile tls"   # plus the deployment's usual overlays
   $COMPOSE stop evimed-openviking && $COMPOSE rm -f evimed-openviking evimed-openviking-init
   docker volume rm web_evimed-openviking-data && docker volume create web_evimed-openviking-data
   sudo node --env-file=deploy/web/.env scripts/ops/openviking-backup.mjs restore "$A" web_evimed-openviking-data

@@ -63,6 +63,9 @@ TASK_FIXTURES = {
     # answer ("read these files", with none to read) is a real answer from the
     # real gateway and the only one that needs no corpus planted first.
     "kb_search": {"query": "阿司匹林 一级预防 剂量", "limit": 3},
+    # Added 2026-10-13 with the tool, which reads the same knowledge base by structure instead of by passage. The overview
+    # of the project's documents answers on an empty library too (an empty list is a real answer from the real gateway).
+    "kb_browse": {"op": "overview", "root": "sources"},
     # Added 2026-09-22 with the tool, so the registry never again gains a
     # tool this audit refuses to start over. The widest question the feed
     # answers without a planted corpus: every item of the last thirty days, a

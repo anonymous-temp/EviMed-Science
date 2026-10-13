@@ -172,13 +172,15 @@ test("the controller audit accepts only validated internal endpoints in a recons
   const { controllerLaunchPlanIsScoped } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
   const controller = await readFile(new URL("../src/runtimeControllerServer.mjs", import.meta.url), "utf8");
   assert.equal(controllerLaunchPlanIsScoped(controller), true);
-  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig, platformSkillGeneration: platform?.reference ?? null,\n      personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null })";
+  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, pluginConfig, platformSkillGeneration: platform?.reference ?? null,\n      personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null })";
   const guard = controller.match(/    if \(\s*typeof capsuleGatewayUrl[\s\S]*?\n    \}/)?.[0];
   const revisionGuard = controller.match(/    if \(\s*typeof revisionGatewayUrl[\s\S]*?\n    \}/)?.[0];
   assert.ok(guard, "the endpoint guard must be exercised by the negative controls");
   const sourceGuard = controller.match(/    if \(\s*typeof publicSourceGatewayUrl[\s\S]*?\n    \}/)?.[0];
   assert.ok(sourceGuard);
   assert.ok(revisionGuard, "the revision endpoint guard must be exercised by the negative controls");
+  const memoryGuard = controller.match(/    if \(typeof memoryGatewayUrl[\s\S]*?\n    \}/)?.[0];
+  assert.ok(memoryGuard, "the memory endpoint guard must be exercised by the negative controls");
   const pluginGuard = controller.match(/    if \(!pluginConfig[^\n]+\n/)?.[0];
   const pluginValidation = controller.match(/    validatePluginConfig\([^\n]+\n/)?.[0];
   assert.ok(pluginGuard && pluginValidation, "the fixed plugin shape and typed validator must be exercised");
@@ -190,12 +192,15 @@ test("the controller audit accepts only validated internal endpoints in a recons
     ["spread caller settings", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, ...payload })")],
     ["unvalidated capsule endpoint reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl: payload.capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl })")],
     ["unvalidated revision endpoint reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl: payload.revisionGatewayUrl })")],
+    ["unvalidated memory endpoint reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl: payload.memoryGatewayUrl })")],
+    ["memory guard removed", controller.replace(memoryGuard, "")],
+    ["memory endpoint comparison removed", controller.replace("memoryGatewayUrl !== memoryGatewayEndpointUrl(config)", "false")],
     ["source guard removed", controller.replace(sourceGuard, "")],
     ["source endpoint comparison removed", controller.replace("publicSourceGatewayUrl !== publicSourceGatewayProviderUrl(config)", "false")],
     ["endpoint comparison removed", controller.replace("capsuleGatewayUrl !== capsuleGatewayEndpointUrl(config)", "false")],
     ["guard only mentioned in a comment", controller.replace(guard, `/* ${guard} */`)],
     ["revision guard only mentioned in a comment", controller.replace(revisionGuard, `/* ${revisionGuard} */`)],
-    ["unknown fields allowed", controller.replace('"personalSkillGeneration", "extensionGeneration", "platformSkillGeneration"]', '"personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "args"]')],
+    ["unknown fields allowed", controller.replace('"platformSkillGeneration", "memoryGatewayUrl"]', '"platformSkillGeneration", "memoryGatewayUrl", "args"]')],
     ["plugin shape guard removed", controller.replace(pluginGuard, "")],
     ["plugin validator removed", controller.replace(pluginValidation, "")],
     ["plugin validation only mentioned in a comment", controller.replace(pluginValidation, `/* ${pluginValidation} */`)],
