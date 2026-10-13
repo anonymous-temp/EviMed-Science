@@ -15,7 +15,8 @@ describe("useKnowledgeStatus", () => {
   afterEach(() => { vi.useRealTimers(); });
 
   it("asks again every few seconds while a round is under way, and stops when it has ended", async () => {
-    mocks.status.mockResolvedValueOnce(compiling).mockResolvedValueOnce(compiling).mockResolvedValue(compiled);
+    // Each answer is a new object, as a read over the wire is.
+    mocks.status.mockResolvedValueOnce({ ...compiling }).mockResolvedValueOnce({ ...compiling }).mockImplementation(async () => ({ ...compiled }));
     const { result } = renderHook(() => useKnowledgeStatus("p1", true));
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(result.current.status?.state).toBe("compiling");
