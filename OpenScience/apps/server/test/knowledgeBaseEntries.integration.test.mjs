@@ -197,15 +197,16 @@ test("a file a conversation produced is saved into this project's knowledge base
     const changed = (await (await command("save_to_knowledge_base", { path: "report/评价报告.md" })).json()).data;
     assert.notEqual(changed.path, result.path);
 
-    // A format the knowledge base cannot read is refused by name; a path outside the workspace and a file that is not there are refused.
+    // No format is refused by its name (2026-10-13: what nothing here reads is kept as the original); a path outside the
+    // workspace and a file that is not there are refused.
     await command("add_text_to_workspace", { filename: "report/data.sav", content: "x" });
-    const unreadable = await command("save_to_knowledge_base", { path: "report/data.sav" });
-    assert.deepEqual([unreadable.status, (await unreadable.json()).code], [415, "source_format_unsupported"]);
+    const unlisted = await command("save_to_knowledge_base", { path: "report/data.sav" });
+    assert.equal(unlisted.status, 200, "a format nobody listed is kept, not refused");
     assert.equal((await command("save_to_knowledge_base", { path: "report/not-there.md" })).status, 404);
     assert.equal((await command("save_to_knowledge_base", { path: "../../etc/passwd" })).status, 403);
     assert.equal((await command("save_to_knowledge_base", { path: "report" })).status, 400);
     const files = await readdir(path.join(project.baseDir, "knowledge-base/chat"));
-    assert.equal(files.length, 2, "only the two saved versions were written");
+    assert.equal(files.length, 3, "the two saved versions of the report and the file nobody listed were written, and nothing else");
     await assert.rejects(stat(path.join(project.baseDir, "knowledge-base/chat/data.sav")), { code: "ENOENT" });
   } finally { await close(); }
 });

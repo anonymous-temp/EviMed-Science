@@ -100,7 +100,7 @@ test("through the server: dependents, the vault, the delivered files and the com
     assert.deepEqual(found.data.results.map((item) => [item.versionId, item.runId, item.title]), [[versionId, "run_report", "房颤抗凝综述"]]);
     assert.deepEqual(found.data.methods, []);
     const none = await (await fetch(`${base}/api/sources/${(await app.sourceService.list(owner.user.id, { projectId, limit: 100 })).items.find((item) => item.payload.paths[0] === "knowledge-base/guideline.pdf").id}/dependents`, { headers: ownerHeaders })).json();
-    assert.deepEqual(none.data, { memories: [], methods: [], results: [] });
+    assert.deepEqual(none.data, { memories: [], methods: [], results: [], pages: [] });
     assert.equal((await fetch(`${base}/api/sources/${trial.source.id}/dependents`, { headers: strangerHeaders })).status, 404, "another account's document is not found, however it is asked for");
     assert.equal((await fetch(`${base}/api/sources/${trial.source.id}/dependents`)).status, 401);
 

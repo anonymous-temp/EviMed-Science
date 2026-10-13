@@ -189,7 +189,7 @@ async function settle(app, userId, sourceId) {
   return current;
 }
 
-test("the page's own upload command makes a source, and a format the knowledge base cannot read is never written", {
+test("the page's own upload command makes a source, whatever the file's format", {
   skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
 }, async () => {
   const { user, project, base, headers, close } = await signedIn();
@@ -204,22 +204,22 @@ test("the page's own upload command makes a source, and a format the knowledge b
     const inventory = await (await fetch(`${base}/api/sources?projectId=${encodeURIComponent(project.id)}`, { headers })).json();
     assert.deepEqual(inventory.data.items.map((item) => item.payload.paths), [["knowledge-base/房颤笔记.md"]]);
 
-    const recording = await command("knowledge-base/查房录音.mp3");
-    assert.equal(recording.status, 415);
-    assert.equal((await recording.json()).code, "source_media_unsupported");
-    await assert.rejects(stat(path.join(project.baseDir, "knowledge-base/查房录音.mp3")), { code: "ENOENT" });
+    // 2026-10-13: no file is refused by its format. A recording or a format nothing here reads is kept as the original,
+    // a source like any other that has no text to search.
+    const recording = await command("knowledge-base/查房录音.mp3", "ID3 recording");
+    assert.equal(recording.status, 200);
+    await stat(path.join(project.baseDir, "knowledge-base/查房录音.mp3"));
 
     const data = await fetch(`${base}/api/files/upload`, { method: "POST", headers,
       body: JSON.stringify({ root: "base", path: "knowledge-base/cohort.sav", data: "x", encoding: "utf8" }) });
-    assert.equal(data.status, 415);
-    assert.equal((await data.json()).code, "source_format_unsupported");
-    await assert.rejects(stat(path.join(project.baseDir, "knowledge-base/cohort.sav")), { code: "ENOENT" });
+    assert.equal(data.status, 200);
+    await stat(path.join(project.baseDir, "knowledge-base/cohort.sav"));
 
     // Outside the knowledge base the workspace takes any file, as before.
     const elsewhere = await command("analysis/cohort.sav");
     assert.equal(elsewhere.status, 200);
     const after = await (await fetch(`${base}/api/sources?projectId=${encodeURIComponent(project.id)}`, { headers })).json();
-    assert.equal(after.data.items.length, 1);
+    assert.deepEqual(after.data.items.map((item) => item.payload.paths[0]).sort(), ["knowledge-base/cohort.sav", "knowledge-base/房颤笔记.md", "knowledge-base/查房录音.mp3"]);
     assert.equal(user.id.length > 0, true);
   } finally { await close(); }
 });
