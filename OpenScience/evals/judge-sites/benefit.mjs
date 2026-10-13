@@ -50,7 +50,7 @@ export function percentile(values, p) {
 
 /**
  * What a decision takes and costs with the site on: Jev's call, plus the original path's where the caller asks it after Jev.
- * Most callers ask it for every decision Jev did not settle; J3 hands an unsure answer to its regex net, which is no model call,
+ * Most callers ask it for every decision Jev did not settle; J3 leaves an unsure answer on the ordinary line, which is no model call,
  * and asks the original classifier only when Jev failed; J4's original path is no notice at all.
  * @param {string} site @param {any} row
  */
@@ -191,7 +191,7 @@ export function rowsDigest(rows) {
 export function siteConditions(site, rows, summary) {
   if (site === 'J3') {
     // §4.1: "上线前必须满足两条: title-to-paper 的 50 条应答普通回答的问题，一条都不误送; 误送专项的次数不多于 Flash." Misrouting is
-    // read on the final route, regex net included, which is what a researcher gets.
+    // read on the final route, which is what a researcher gets.
     const titleToPaper = rows.filter((row) => row.tag === 'title-to-paper');
     const misrouted = titleToPaper.filter((row) => row.falseSpecialist).length;
     const jev = rows.filter((row) => row.falseSpecialist).length;

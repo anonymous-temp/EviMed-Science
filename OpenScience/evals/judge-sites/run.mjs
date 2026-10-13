@@ -172,7 +172,7 @@ try {
             row.falseSpecialist = example.expected?.agentId === 'none' && row.finalRoute.agentId !== 'none';
             row.baselineFalseSpecialist = example.expected?.agentId === 'none' && row.baselineFinalRoute?.agentId !== 'none';
             row.finalCorrect = row.finalRoute.agentId === example.expected?.agentId;
-            // What the researcher gets is the final route, regex net included: that is what both arms are scored on.
+            // What the researcher gets is the final route, medicine rule included: that is what both arms are scored on.
             row.hybridCorrect = row.finalCorrect;
             if (row.incumbent && row.baselineFinalRoute) row.incumbent.correct = row.baselineFinalRoute.agentId === example.expected?.agentId;
           } else if (incumbents[site]) {

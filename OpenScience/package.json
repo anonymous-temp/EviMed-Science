@@ -126,6 +126,7 @@
     "gallery:check": "node scripts/ops/gallery-shot.mjs --check",
     "eval:judge-sites": "node evals/judge-sites/run.mjs",
     "eval:routing": "node evals/routing/run.mjs",
+    "eval:routing:classifier": "node evals/routing/classifier.mjs",
     "test:judge-sites": "node --test evals/judge-sites/*.test.mjs"
   },
   "engines": {
