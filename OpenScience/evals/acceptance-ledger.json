@@ -579,5 +579,42 @@
       "relatedEvidence": [],
       "note": "新建于 2026-09-28，随「虚拟临研」工作包 D：研究定义、入排结构化与访视日程。尚无能力级交付。"
     }
+  ],
+  "suites": [
+    {
+      "id": "general-tasks",
+      "evalHarness": "evals/general-tasks",
+      "caseCount": 28,
+      "kinds": {
+        "general": 22,
+        "medical": 6
+      },
+      "families": {
+        "code": 2,
+        "cross-domain": 1,
+        "data": 3,
+        "knowledge": 1,
+        "medical-evidence": 1,
+        "medical-qa": 1,
+        "medical-report": 1,
+        "medical-safety": 2,
+        "medical-stats": 1,
+        "office-docx": 2,
+        "office-pdf": 1,
+        "office-pptx": 2,
+        "office-xlsx": 1,
+        "scheduled": 1,
+        "web-lookup": 2,
+        "web-report": 2,
+        "writing": 4
+      },
+      "arms": {
+        "A": "native control: the seven switchable first-party socket plugins and the citation tools off, the persona replaced by one neutral sentence (22 general cases)",
+        "B": "the tree as given",
+        "C": "a corrected tree, run by the controller with the same command"
+      },
+      "command": "node evals/general-tasks/runner/run.mjs --tree <OpenScience checkout> --arm B --out <dir>",
+      "note": "Not a capability: the general-task baseline of the 2026-10-12 course correction (general-agent.md GA30). Twenty-two general tasks and six medical controls against a real DSH kernel and DeepSeek through the real control plane; deterministic judges first, an offline model judge per task family second. It sits beside the capability rows because it answers the same kind of question for the platform as a whole: what a plain request gets today. Results are recorded under .evimed-local/acceptance/course-correction-20261012/live/eval/<arm>/."
+    }
   ]
 }
