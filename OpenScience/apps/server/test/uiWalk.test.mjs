@@ -2363,6 +2363,21 @@ test("with the chat asked for, the walk answers a start with the cleanup refusal
   assert.equal((await walk()).report.steps?.["chat-cleanup-cover"], undefined);
 });
 
+test("the memory page's project tab stacks one shape of section, and 记忆地图 is held to the data-page controls", () => {
+  // Release 18's switch walk: the tab drew a quiet line, a table and a list as three shapes under a budget of two.
+  const three = ["section>h2+p", "section>h2+div", "section>h2+ul"];
+  assert.deepEqual(pageFindings("memory-project", "desktop", clean({ sectionShapes: three }), []).failures,
+    [`memory-project@desktop: the page stacks 3 kinds of section (budget 2): ${three.join(", ")}`]);
+  assert.deepEqual(pageFindings("memory-project", "desktop", clean({ sectionShapes: ["section>h2+div"] }), []), { failures: [], notices: [] });
+  // The same switch counted eleven kinds of control on the map under the reading page's eight; the data-page budget is ten, and
+  // the page measures nine now that its sentence's count and its replay button are chips.
+  assert.equal(budgetKey("memory-map"), "memory-map");
+  assert.equal(BUDGET_BY_PAGE["memory-map"].controls, 10);
+  assert.deepEqual(pageFindings("memory-map", "desktop", clean({ controlKinds: 9, colorKinds: 6 }), []).failures, []);
+  assert.deepEqual(pageFindings("memory-map", "desktop", clean({ controlKinds: 11 }), []).failures, ["memory-map@desktop: 11 kinds of control (budget 10)"]);
+  assert.deepEqual(pageFindings("memory-tab-other", "desktop", clean({ controlKinds: 9 }), []).failures, ["memory-tab-other@desktop: 9 kinds of control (budget 8)"], "a reading page keeps its eight");
+});
+
 test("记忆地图 is a data page: three kinds of section, a notice first, and its first mark and drawer are checked", () => {
   assert.equal(SECTION_SHAPES_BY_PAGE["memory-map"], 3);
   assert.ok(NOTICE_SECTION_PAGES.has("memory-map"), "a budget no walk has measured is a notice first (principle 4)");

@@ -331,6 +331,11 @@ export const BUDGET_BY_PAGE = {
   ...Object.fromEntries(GEO_TABS.map(([name]) => [name, GEO_BUDGET])),
   "virtual-research": DATA_BUDGET,
   ...Object.fromEntries(VCR_TABS_WALK.map(([name]) => [name, GEO_BUDGET])),
+  // 记忆地图 (DESIGN.md 「页面结构」 rule 1: the data page of memory). The release-18 switch walked it under the reading page's eight and
+  // failed at eleven. Two of the eleven were a second look for the same job — the sentence's count and the replay button, now chips
+  // like the filters — and the nine that remain are the page's own: the shell's three, the view switch's two (the chosen view is a
+  // second kind), the chips, the search, the mark rows and the timeline scrubber. Measured on a local deployment on 2026-10-13.
+  "memory-map": DATA_BUDGET,
   // The knowledge base became a data page when it grew its project-and-type
   // rail. Its route is `files`: the key used to read `knowledge`, a page name
   // no route has, so the page kept the reading budget and failed on its ninth

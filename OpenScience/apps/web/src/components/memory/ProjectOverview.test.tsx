@@ -39,6 +39,18 @@ describe("the top of a project", () => {
     expect(screen.queryByRole("heading", { name: "作品" })).toBeNull();
   });
 
+  it("draws every block as one shape of section, however different their bodies, so the page's walk counts one kind", () => {
+    // What the walk reads (scripts/ops/ui-walk.mjs): a section's tag and its first two distinct kinds of child.
+    const shapes = (root: HTMLElement) => [...new Set([...root.querySelectorAll("section")].map((section) => `section>${[...new Set([...section.children].map((child) => child.tagName.toLowerCase()))].slice(0, 2).join("+")}`))];
+    const works = [{ month: "2026-10", items: [{ runId: "run_1", title: "随访方案", path: "outputs/plan.docx", name: "plan.docx", at: "2026-10-03T08:00:00Z" }] }];
+    const capabilities = [{ id: "a", title: "文献检索", count: 5 }];
+    // The quiet line, the ranking and the works: a line, a table and months of rows.
+    expect(shapes(show({ capabilities, works }, { hasMemories: true }).container)).toEqual(["section>h2+div"]);
+    cleanup();
+    // The card's rows, the ranking and the works: a list, a table and months of rows.
+    expect(shapes(show({ card: [{ slot: "goal", label: "目标", recordId: "rec_1", text: "比较两种抗凝药", updatedAt: null }], capabilities, works }).container)).toEqual(["section>h2+div"]);
+  });
+
   it("says in one quiet line that a project with memories has no card yet, and never draws a grid of empty slots", () => {
     show({}, { hasMemories: true });
     expect(screen.getByRole("heading", { name: "项目卡" })).toBeInTheDocument();

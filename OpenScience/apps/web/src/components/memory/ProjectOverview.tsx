@@ -5,7 +5,7 @@ import { memoryExcerpt } from "@/lib/memoryText";
 import { DataTable, InlineBar, type DataColumn } from "@/components/ui/DataTable";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { ShowMore, useShowMore } from "@/components/ui/ShowMore";
-import { GroupHeader } from "./MemoryRows";
+import { GroupSection } from "./MemoryRows";
 
 /**
  * The top of the 项目 tab (2026-10-12; the owner's choice A): what the project is, what was done in it and what it delivered,
@@ -61,8 +61,7 @@ function Works({ works, timeZone }: { works: ProjectOverviewData["works"]; timeZ
   const { visible, remaining, more } = useShowMore(rows, { first: WORKS_FIRST, step: 12, resetKey: rows.map((row) => `${row.runId}:${row.path}`).join("|").slice(0, 200) });
   const months = [...new Set(visible.map((row) => row.month))];
   return (
-    <section>
-      <GroupHeader>作品</GroupHeader>
+    <GroupSection title="作品">
       <div className="space-y-3">
         {months.map((month) => (
           <div key={month}>
@@ -82,7 +81,7 @@ function Works({ works, timeZone }: { works: ProjectOverviewData["works"]; timeZ
         ))}
       </div>
       <ShowMore remaining={remaining} unit="项" onMore={more} />
-    </section>
+    </GroupSection>
   );
 }
 
@@ -107,8 +106,7 @@ export function ProjectOverview({ overview, canOpen, onOpen, hasMemories = false
   }
   if (overview.card.length > 0) {
     blocks.push(
-      <section key="card">
-        <GroupHeader>项目卡</GroupHeader>
+      <GroupSection key="card" title="项目卡">
         <List label="项目卡">
           {overview.card.map((slot) => (
             <ListRow
@@ -119,23 +117,21 @@ export function ProjectOverview({ overview, canOpen, onOpen, hasMemories = false
             />
           ))}
         </List>
-      </section>,
+      </GroupSection>,
     );
   }
   if (overview.card.length === 0 && hasMemories && !overview.paused) {
     blocks.push(
-      <section key="card">
-        <GroupHeader>项目卡</GroupHeader>
+      <GroupSection key="card" title="项目卡">
         <p className="px-2 text-ui text-text-3">还没有记下这个项目的目标、资料和进展。</p>
-      </section>,
+      </GroupSection>,
     );
   }
   if (capabilities.length > 0) {
     blocks.push(
-      <section key="capabilities">
-        <GroupHeader>这个项目做过</GroupHeader>
+      <GroupSection key="capabilities" title="这个项目做过">
         <DataTable label="这个项目做过" columns={columns} rows={capabilities} rowKey={(row) => row.id} minWidth="min-w-0" />
-      </section>,
+      </GroupSection>,
     );
   }
   if (overview.works.length > 0) blocks.push(<Works key="works" works={overview.works} timeZone={overview.timeZone} />);

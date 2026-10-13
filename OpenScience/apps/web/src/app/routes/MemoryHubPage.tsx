@@ -27,7 +27,7 @@ import { FactDrawer } from "@/components/memory/FactDrawer";
 import { ForgottenDrawer } from "@/components/memory/ForgottenDrawer";
 import { GrowthPanel } from "@/components/memory/GrowthPanel";
 import { MemoryControls } from "@/components/memory/MemoryControls";
-import { GroupHeader, MemoryListRow, PendingMemoryRows } from "@/components/memory/MemoryRows";
+import { GroupSection, MemoryListRow, PendingMemoryRows } from "@/components/memory/MemoryRows";
 import { HandbookDrawer, MethodDrawer } from "@/components/memory/PracticeDrawer";
 import { ProjectOverview } from "@/components/memory/ProjectOverview";
 import { ProjectScope } from "@/components/memory/ProjectScope";
@@ -293,10 +293,9 @@ export function MemoryHubPage() {
           {SELF_SECTIONS.map((section) => {
             const rows = self.filter((fact) => fact.section === section.key);
             return rows.length === 0 ? null : (
-              <section key={section.key}>
-                <GroupHeader>{section.label}</GroupHeader>
+              <GroupSection key={section.key} title={section.label}>
                 {factRows(rows, `${section.label}`)}
-              </section>
+              </GroupSection>
             );
           })}
         </div>
@@ -321,7 +320,7 @@ export function MemoryHubPage() {
           {waiting}
           {projectFacts.length === 0 ? (waiting ? null : empty("这个项目还没有记忆", "你在对话里说过的目标、资料和已定的事会出现在这里。"))
             // Under the card, the ranking and the works, the list needs its own name; alone, the tab names it.
-            : above ? <section><GroupHeader>记忆</GroupHeader>{factRows(projectFacts, "项目的记忆")}</section>
+            : above ? <GroupSection title="记忆">{factRows(projectFacts, "项目的记忆")}</GroupSection>
               : factRows(projectFacts, "项目的记忆")}
         </div>
       );
@@ -330,22 +329,20 @@ export function MemoryHubPage() {
     return (
       <div className="space-y-6">
         {practices.methods.length > 0 && (
-          <section>
-            <GroupHeader>所有研究都会用</GroupHeader>
+          <GroupSection title="所有研究都会用">
             <List label="所有研究都会用的做法">
               {practices.methods.map((item) => <MemoryListRow key={item.key} title={item.title} summary={item.summary} onOpen={() => setOpenKey(item.key)} />)}
             </List>
-          </section>
+          </GroupSection>
         )}
         {practices.handbooks.length > 0 && (
-          <section>
-            <GroupHeader>用在某个科研工具里</GroupHeader>
+          <GroupSection title="用在某个科研工具里">
             <List label="用在某个科研工具里的做法">
               {practices.handbooks.map((item) => (
                 <MemoryListRow key={item.key} title={item.title} summary={item.summary} end={<span className="text-caption text-text-3">{item.tool}</span>} onOpen={() => setOpenKey(item.key)} />
               ))}
             </List>
-          </section>
+          </GroupSection>
         )}
       </div>
     );

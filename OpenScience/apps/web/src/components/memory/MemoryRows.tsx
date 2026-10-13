@@ -42,6 +42,21 @@ export function GroupHeader({ children }: { children: ReactNode }) {
 }
 
 /**
+ * One group of the memory page: its small header and, under it, its body in one block — whatever the body is (a list of rows, a
+ * table, the months of the works, one quiet line). The walk reads a section by its tag and its first two kinds of child
+ * (DESIGN.md 「页面结构」 rule 1), so a group written as header-and-list in one place and header-and-line in another counted as two
+ * kinds of section on one tab; every group is this one shape.
+ */
+export function GroupSection({ title, children }: { title: ReactNode; children: ReactNode }) {
+  return (
+    <section>
+      <GroupHeader>{title}</GroupHeader>
+      <div>{children}</div>
+    </section>
+  );
+}
+
+/**
  * What 「记住这一条」 asked and the memory has not written yet: the words, marked 「正在记住」, at the head of the list. A row of
  * its own kind, because there is nothing to open yet; when the memory is slow it says so instead of spinning for ever.
  */

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { FilterChip } from "@/components/ui/FilterChips";
 import { useColorScheme } from "@/lib/colorScheme";
 import { formatDay } from "@/lib/format";
 import type { MapEdge, MapNode, MemoryMap } from "@/lib/memoryMapClient";
@@ -163,13 +164,13 @@ export function GraphView({ doc, narrowed, selected, actions, chain, focused, on
       )}
       {!chain && stops.length > 1 && (
         <div className="flex flex-wrap items-center gap-3 text-ui text-text-2">
-          <Button
-            size="sm" variant="secondary"
+          {/* A chip, like the filters above it: a button of its own look would be one more kind of control on a page that already has five views. */}
+          <FilterChip
+            icon={playing ? Pause : Play}
             onClick={() => { if (playing) setPlaying(false); else { setCursor(reduced ? stops.length - 1 : 0); setPlaying(!reduced); } }}
           >
-            {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
             {playing ? "暂停" : "回放它是怎么长出来的"}
-          </Button>
+          </FilterChip>
           <input
             type="range" min={0} max={stops.length - 1} step={1} value={cursor ?? stops.length - 1} aria-label="回放到哪一天"
             onChange={(event) => { setPlaying(false); const next = Number(event.target.value); setCursor(next >= stops.length - 1 ? null : next); }}

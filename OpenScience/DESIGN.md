@@ -371,7 +371,11 @@ pages after every release.
    view at a time over one shared selection, switched by one row, with the same marks listed under the canvas, and
    every mark opening the record's own drawer or the document's own page — so its three shapes (the sentence with
    its switch and filters, the canvas, the list) are its budget; the memory page and the knowledge base page
-   themselves stay lists with one line, and a compiled wiki page opens as a document under rule 2.
+   themselves stay lists with one line, and a compiled wiki page opens as a document under rule 2. A data
+   page is also held to the data-page budget of controls — 10 kinds and 7 text colours, against a reading
+   page's 8 and 5 (`DATA_BUDGET` in the walk): the 记忆地图 measures 9, which are the shell's three, the view
+   switch's two (the chosen view is a second kind), the chips, the search, the mark rows and the timeline
+   scrubber; the count in its sentence and its replay button wear the chips' look and are not kinds of their own.
 2. **A row opens by the nature of what it is** (adopted 2026-10-08 with release 13, from the owner's
    screenshots of the scheduled-task and knowledge-base pages):
    - a **record** — a memory entry, an inbox message, a frontier item, an evidence-matrix row, a GEO

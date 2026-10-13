@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
+import { FilterChip } from "@/components/ui/FilterChips";
 import { Menu } from "@/components/ui/Menu";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { ActivityView } from "@/components/memory/map/ActivityView";
@@ -186,7 +187,7 @@ export function MemoryMapPage() {
           <section aria-labelledby={headingId} className="space-y-3">
             <p id={headingId} className="text-section text-text">
               {sentence.map((part, index) => (part.action
-                ? <button key={index} type="button" onClick={() => narrow({ look: true })} className="rounded text-accent hover:underline" aria-label={`${part.text}，只看这些`}>{part.text}</button>
+                ? <FilterChip key={index} onClick={() => narrow({ look: true })} className="align-middle text-accent" aria-label={`${part.text}，只看这些`}>{part.text}</FilterChip>
                 : <span key={index}>{part.text}</span>))}
             </p>
             <SegmentedControl aria-label="地图的视图" options={VIEW_OPTIONS} value={selection.view} onChange={setView} />
