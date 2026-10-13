@@ -274,6 +274,10 @@ test("a turn typed into a conversation bound to a multi-product capability is he
  * @param {string} id
  */
 const shippedVersion = (id) => JSON.parse(readFileSync(new URL(`../../../deploy/runtime-dsh/capabilities/${id}.json`, import.meta.url), "utf8")).version;
+/** The default conversation package is a skill-root manifest, not a capability manifest. */
+const shippedAnswerVersion = /^version:\s*"?([0-9.]+)"?\s*$/m.exec(
+  readFileSync(new URL("../../../runtime/skills/evimed/open-domain-answer/agent.yaml", import.meta.url), "utf8"),
+)?.[1];
 
 /**
  * A completed `skill` tool call as the kernel reports one: the result is the
@@ -486,10 +490,11 @@ test("starts immutable open-domain and specialist run identities from research-s
         agentId: null,
         agentVersion: null,
         runtimeAgent: null,
-        // Unrouted open-domain turns run on the managed default answer agent
-        // (persona + proportional quality floor), not the bare coding agent.
+        // An unrouted turn is recorded under the default conversation package: a general
+        // work assistant whose evidence method is a skill the model loads when the question
+        // is medical. Its version is the shipped manifest's, read rather than repeated.
         effectiveAgentId: "open-domain-answer",
-        effectiveAgentVersion: "1.0.0",
+        effectiveAgentVersion: shippedAnswerVersion,
         effectiveRuntimeAgent: "evimed-open-domain-answer",
         model: "deepseek/deepseek-flash",
         status: "running",
