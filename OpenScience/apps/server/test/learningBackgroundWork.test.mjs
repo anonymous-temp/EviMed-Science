@@ -56,6 +56,16 @@ test("every harness in the repository that dispatches a run says it is automated
   /** @type {string[]} */
   const unmarked = [];
   const marked = /automated["']?\s*[:=]\s*(?:true|True)|x-evimed-automated/;
+  // One harness dispatches as a person on purpose: the general-task baseline measures the attended conversation — the
+  // question a person is asked, the file card, a preference remembered into the next conversation (its case G22) — which an
+  // automated run by definition does not have. It may, because it can reach nothing but the control plane it starts itself
+  // on the loopback with throwaway accounts; that is asserted below, so the exception cannot outlive the reason for it.
+  const attendedByDesign = new Map([["evals/general-tasks/runner/cell.mjs", "evals/general-tasks/runner/run.mjs"]]);
+  for (const [, starter] of attendedByDesign) {
+    const text = await readFile(path.join(openScience, starter), "utf8");
+    assert.match(text, /const base = `http:\/\/127\.0\.0\.1:\$\{args\.port\}`/, `${starter} must only ever address the control plane it starts`);
+    assert.doesNotMatch(text, /--base\b|OPEN_SCIENCE_PUBLIC_URL|https:\/\//, `${starter} gained a way to address a deployment: its dispatches must then be marked automated`);
+  }
   for (const tree of ["scripts", "evals"]) {
     for await (const file of files(path.join(openScience, tree))) {
       scanned += 1;
@@ -71,6 +81,7 @@ test("every harness in the repository that dispatches a run says it is automated
         const statement = statementEnd > 0 ? call.slice(0, statementEnd) : call;
         dispatching.push(`${relative}@${match.index}`);
         if (marked.test(statement)) continue;
+        if (attendedByDesign.has(relative)) continue;
         // A helper that posts whatever payload it is handed is marked by its
         // callers: every `.dispatch({...})` in the file must carry the mark.
         const helperCalls = [...text.matchAll(/\.dispatch\(\{[^}]*\}/g)].map((found) => found[0]);
