@@ -1,5 +1,6 @@
 memory_type: entities
 description: |
+  __LANGUAGE__
   Entity memory: stable cards for things the user's work keeps returning to and that the
   user described in a user-role message: organisations and institutions, products, software
   systems, datasets and registries, standards and guidelines, instruments, works, places and

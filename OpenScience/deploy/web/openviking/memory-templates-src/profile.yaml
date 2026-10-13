@@ -1,5 +1,6 @@
 memory_type: profile
 description: |
+  __LANGUAGE__
   # Role and objective
   Maintain a compact description of the USER'S OWN durable current state: who they are
   professionally and what they work on. profile.md holds one H1 for the user and bullets
@@ -43,8 +44,8 @@ description: |
      be remembered.
 
   # Required Markdown format
-  - One H1 heading with the name the user gave for themselves, or 用户 when they gave none,
-    followed directly by bullet statements. No H2/H3 headings, tables, JSON or paragraphs.
+  - One H1 heading with the name the user gave for themselves, or the word for "user" in {{ language }}
+    (用户 in Chinese) when they gave none, followed directly by bullet statements. No H2/H3 headings, tables, JSON or paragraphs.
   - Every bullet ends with the date the user most recently stated or confirmed it, in the
     exact form "(as of YYYY-MM-DD)". Keep an old bullet's date when nothing newer confirms it.
   - Concise, self-contained declarative bullets, normally under 30 words.
@@ -57,7 +58,7 @@ fields:
     description: |
       Complete Markdown profile of the user's durable professional state:
 
-      # <name the user gave, or 用户>
+      # <name the user gave, or the word for "user" in {{ language }}>
       - <current stable fact> (as of YYYY-MM-DD)
       - <current stable fact> (as of YYYY-MM-DD)
 

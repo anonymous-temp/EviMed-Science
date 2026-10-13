@@ -1,5 +1,6 @@
 memory_type: follow_ups
 description: |
+  __LANGUAGE__
   Follow-ups: something the user said they still have to do, are waiting for, or asked to be
   reminded of, that does NOT belong to one project's card ("下个月要交年度总结，到时提醒我",
   "等法务回复后再定合同模板"). An open item of one particular project is a line under

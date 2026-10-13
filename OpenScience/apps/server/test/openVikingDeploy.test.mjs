@@ -157,6 +157,10 @@ test("the memory templates are the eight types, rendered from their one source, 
     assert.equal(YAML.parse(text).memory_type, name.replace(/\.yaml$/, ""));
     assert.ok(!text.includes("__NEVER_KEEP__"));
     assert.ok(text.includes("Never write any of the following into a memory"), `${name} does not carry the never-kept rules`);
+    // The examples and section labels are partly Chinese; without this block the model copied them into an English
+    // user's memories (2 of 3 live runs). `{{ language }}` is the language the engine detected in the user's messages.
+    assert.ok(!text.includes("__LANGUAGE__"));
+    assert.ok(text.includes("Write every memory in {{ language }}, the language of the user's own messages"), `${name} does not carry the language rule`);
   }
   assert.deepEqual(rendered.server.user_config_defaults.memory_policy.memory_types, [...OPENVIKING_MEMORY_TYPES]);
   // `events` copies quoted messages verbatim into a memory file; it is off the list on purpose.
