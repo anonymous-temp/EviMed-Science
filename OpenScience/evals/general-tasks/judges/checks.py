@@ -934,7 +934,8 @@ def chk_translation(spec, ctx):
     else:
         if cjk < spec["min_chars"]:
             problems.append(f"{cjk} CJK characters < {spec['min_chars']}")
-    missing = [n for n in spec.get("keep_numbers", []) if n not in text]
+    plain = text.replace(",", "")  # a thousands separator may be written or dropped in a translation
+    missing = [n for n in spec.get("keep_numbers", []) if n not in text and n.replace(",", "") not in plain]
     if missing:
         problems.append(f"numbers not carried over: {missing}")
     return [result(f"translation_{spec['to']}", not problems, "; ".join(problems) or f"{letters} letters, {cjk} CJK characters; numbers kept")]
@@ -993,8 +994,10 @@ def chk_schedule(spec, ctx):
     urls = _urls(text)
     out.append(result("execution_output_has_links", len(urls) >= spec["min_items_links"], f"{len(urls)} link(s) in what the execution produced ({[e.get('files') for e in executions][:1]})"))
     agents = [str(e.get("agent") or "") for e in executions]
-    clinical = "clinical-evidence-synthesis" in agents or bool(FORBIDDEN["evidence_framework"].search(text))
-    out.append(result("execution_is_not_a_clinical_evidence_review", not clinical, f"execution agents {agents}; evidence-review vocabulary {'present' if FORBIDDEN['evidence_framework'].search(text) else 'absent'}"))
+    files = [f for e in executions for f in (e.get("files") or [])]
+    clinical_files = [f for f in files if re.search(r"clinical-evidence|evidence-matrix|agenda-delta", f)]
+    clinical = "clinical-evidence-synthesis" in agents or bool(clinical_files) or bool(FORBIDDEN["evidence_framework"].search(text))
+    out.append(result("execution_is_not_a_clinical_evidence_review", not clinical, f"execution agents {agents}; clinical-evidence files {clinical_files}; evidence-review vocabulary {'present' if FORBIDDEN['evidence_framework'].search(text) else 'absent'}"))
     types = [e.get("taskType") for e in executions]
     out.append(result("task_type_is_not_the_literature_sentinel", "literature-sentinel" not in types, f"the execution ran as task type {types}", required=False))
     inbox = json.dumps(ctx.record.get("inbox", {}), ensure_ascii=False)
@@ -1010,7 +1013,7 @@ def chk_kb(spec, ctx):
     out.append(result("every_file_enters_the_knowledge_base", not refused and not unregistered, f"{len(uploads)} uploads; refused {refused}; accepted but not registered as a source {unregistered}"))
     sources = ctx.record.get("sources", {}).get("body")
     items = sources.get("data", {}).get("items", []) if isinstance(sources, dict) and isinstance(sources.get("data"), dict) else []
-    states = {str(i.get("title") or i.get("id"))[:30]: (i.get("status") or i.get("state")) for i in items}
+    states = {(((i.get("payload") or {}).get("paths") or [i.get("id")])[0]): (i.get("payload") or {}).get("status") for i in items}
     out.append(result("sources_ledger", None, f"{len(items)} source(s): {states}", required=False))
     if len(ctx.turns) >= 3:
         answer = squash(ctx.turns[0].get("reply", ""))

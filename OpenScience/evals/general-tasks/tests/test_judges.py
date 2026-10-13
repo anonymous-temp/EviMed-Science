@@ -154,6 +154,21 @@ class LanguageChecks(unittest.TestCase):
         self.assertEqual(ok_of(env.run({"type": "translation", "turn": 1, "to": "en", "min_chars": 600})), [False])
         env.close()
 
+    def test_translation_may_drop_a_thousands_separator(self):
+        env = Env("G17", [turn("x"), turn("背景：远程办公。" * 30 + "9812 0.04 0.13 0.12 0.22 0.02 41% 58%")])
+        spec = {"type": "translation", "turn": 1, "to": "zh", "min_chars": 150, "keep_numbers": ["9,812", "41%"]}
+        self.assertEqual(ok_of(env.run(spec)), [True])
+        env.close()
+
+    def test_a_scheduled_execution_that_wrote_a_clinical_evidence_package_is_caught(self):
+        env = Env("G20", [turn("已安排")], record_extra={"schedule": {"agendas": {"items": [{"id": "a"}]}, "notes": [], "executions": [
+            {"status": "merged", "reply": "要闻 https://a.example/1", "taskType": "literature-sentinel", "files": ["deliverables/x/clinical-evidence-report.md"]}]}, "inbox": {"body": {}}})
+        out = {r["id"]: r["ok"] for r in env.run({"type": "schedule", "min_items_links": 1, "max_items": 5})}
+        self.assertTrue(out["task_created"] and out["execution_output_has_links"])
+        self.assertFalse(out["execution_is_not_a_clinical_evidence_review"])
+        self.assertFalse(out["task_type_is_not_the_literature_sentinel"])
+        env.close()
+
     def test_weekly_requires_three_items_the_limit_and_the_correction(self):
         short = "1. 订阅页设计评审完成\n2. 转化率 3.4%，目标 4%\n3. 下周压测与灰度"
         fixed = "1. 订阅页设计评审完成\n2. 转化率 37%，目标 4%\n3. 下周压测与灰度"
