@@ -83,13 +83,32 @@ describe("the graph option", () => {
     expect([...colours].every((colour) => ["#blue", "#amber", "#grey", "#surface", "#text"].includes(colour as string))).toBe(true);
   });
 
-  it("labels the structure, what needs a look, the selected, the hits and the few that weigh most", () => {
+  it("labels the structure, what needs a look, the selected, the hits and the few that are tied to the most — never the marks that only belong to their hub", () => {
     const heavy = [memory("h1", { weight: 0.9 }), memory("h2", { weight: 0.8 }), ...Array.from({ length: 20 }, (_, index) => memory(`l${index}`, { weight: 0.1 }))];
     const crowd = [...nodes, ...heavy];
     const option: any = graphOption({ ...base, nodes: crowd, positions: layoutGraph(crowd.map((node) => ({ id: node.id, type: node.type, home: null, weight: 0 })), []), selected: "memory:l3", hits: new Set(["memory:l5"]), labelBudget: 2 });
     const shown = series(option).data.filter((entry: any) => entry.label?.show).map((entry: any) => entry.name).sort();
-    expect(shown).toEqual(["cluster:memory:p:preference", "memory:b", "memory:h1", "memory:h2", "memory:l3", "memory:l5", "project:p", "you:account"].sort());
+    // `memory:a` has three lines (a source, a replaced version, a disagreement) and `memory:b` two: they take the budget of two ahead of
+    // the heavier marks that have none. `memory:b` is also the one that needs a look.
+    expect(shown).toEqual(["cluster:memory:p:preference", "memory:a", "memory:b", "memory:l3", "memory:l5", "project:p", "you:account"].sort());
     expect(series(option).labelLayout.hideOverlap).toBe(true);
+    // With nothing tied to anything, the weight decides, and only a mark of real weight is named.
+    const lone: any = graphOption({ ...base, nodes: crowd, edges: [], positions: layoutGraph(crowd.map((node) => ({ id: node.id, type: node.type, home: null, weight: 0 })), []), labelBudget: 5 });
+    expect(series(lone).data.filter((entry: any) => entry.label?.show && String(entry.name).startsWith("memory:")).map((entry: any) => entry.name).sort()).toEqual(["memory:b", "memory:h1", "memory:h2"]);
+    // The marks that matter are placed first, so where two labels would overlap the library keeps them.
+    const names = series(option).data.filter((entry: any) => !String(entry.name).startsWith("anchor:")).map((entry: any) => entry.name);
+    expect(names.indexOf("you:account")).toBeLessThan(names.indexOf("memory:a"));
+    expect(names.indexOf("memory:a")).toBeLessThan(names.indexOf("memory:l0"));
+  });
+
+  it("names a mark on the right of the picture to its left, so no label runs off the canvas", () => {
+    const right = memory("r", { weight: 0.9 });
+    const left = memory("l", { weight: 0.9 });
+    const where = new Map<string, [number, number]>([["memory:r", [LAYOUT_WIDTH - 60, 300]], ["memory:l", [60, 300]]]);
+    const option: any = graphOption({ ...base, nodes: [left, right], edges: [], positions: where });
+    const byName = Object.fromEntries(series(option).data.map((entry: any) => [entry.name, entry]));
+    expect(byName["memory:r"].label.position).toBe("left");
+    expect(byName["memory:l"].label.position).toBe("right");
   });
 
   it("dims what a search did not match, and rings the selected mark", () => {
@@ -105,7 +124,9 @@ describe("the graph option", () => {
     const option: any = graphOption(base);
     const links = series(option).links;
     expect(links).toHaveLength(edges.length);
-    const index = (id: string) => nodes.findIndex((node) => node.id === id);
+    // The marks are in the order they are labelled in, not the order the document gave: lines point at positions in that list.
+    const placed = series(option).data.map((entry: any) => entry.name);
+    const index = (id: string) => placed.indexOf(id);
     const link = (from: string, to: string) => links.find((entry: any) => entry.source === index(from) && entry.target === index(to));
     expect(link("memory:b", "document:src_1").lineStyle.color).toBe("#amber");
     expect(link("memory:a", "document:src_1").lineStyle.color).toBe("#line");
@@ -198,5 +219,36 @@ describe("a line the researcher may call wrong", () => {
   it("is said in words with the marks' own names", () => {
     expect(edgeWords(lines[0], "有研究称该药把再入院减半", "GOLD")).toBe("有研究称该药把再入院减半 依据 GOLD");
     expect(edgeWords({ from: "entity:a", to: "entity:b", type: "relates", label: "治疗" }, "二甲双胍", "2 型糖尿病")).toBe("二甲双胍 治疗 2 型糖尿病");
+  });
+});
+
+describe("a relation's name on its line", () => {
+  const series = (option: any) => option.series[0];
+  const entity = (id: string): MapNode => ({ id: `entity:${id}`, type: "entity", subtype: "drug", label: id, state: "current" });
+  const pair = [entity("a"), entity("b"), entity("c")];
+  const relates: MapEdge[] = [{ from: "entity:a", to: "entity:b", type: "relates", label: "预防" }, { from: "entity:b", to: "entity:c", type: "relates", label: "治疗" }];
+  const where = layoutGraph(pair.map((node) => ({ id: node.id, type: node.type, home: null, weight: 0 })), relates);
+
+  it("is shown only for the mark the researcher is on, and the others say it when pointed at", () => {
+    const quiet: any = graphOption({ nodes: pair, edges: relates, positions: where, hits: new Set(), selected: null, palette: TEST_PALETTE });
+    expect(series(quiet).links.map((link: any) => link.label.show)).toEqual([false, false]);
+    expect(series(quiet).links.map((link: any) => link.emphasis.label.show)).toEqual([true, true]);
+    const chosen: any = graphOption({ nodes: pair, edges: relates, positions: where, hits: new Set(), selected: "entity:a", palette: TEST_PALETTE });
+    expect(series(chosen).links.map((link: any) => link.label.show)).toEqual([true, false]);
+  });
+
+  it("lays a group tied only to itself round a place of its own, the best connected nearest, and not on the outer ring", () => {
+    const group = Array.from({ length: 12 }, (_, index) => entity(`e${index}`));
+    const lines: MapEdge[] = group.slice(1).map((node, index) => ({ from: node.id, to: group[Math.floor(index / 2)].id, type: "relates", label: "相关" }));
+    const at = layoutGraph([{ id: "you:account", type: "you", home: null, weight: 0 }, ...group.map((node) => ({ id: node.id, type: node.type, home: null, weight: 0 }))], lines);
+    const middle = at.get("you:account") as number[];
+    const points = group.map((node) => at.get(node.id) as number[]);
+    const centre = [points.reduce((sum, [x]) => sum + x, 0) / points.length, points.reduce((sum, [, y]) => sum + y, 0) / points.length];
+    // Every mark of the group is near the group's own centre, and the centre is away from the account.
+    expect(Math.max(...points.map(([x, y]) => Math.hypot(x - centre[0], y - centre[1])))).toBeLessThan(260);
+    expect(Math.hypot(centre[0] - middle[0], centre[1] - middle[1])).toBeGreaterThan(400);
+    // The root of the tree has the most lines, so it is the nearest to the centre.
+    const nearest = [...group].sort((left, right) => Math.hypot(...[0, 1].map((axis) => (at.get(left.id) as number[])[axis] - centre[axis])) - Math.hypot(...[0, 1].map((axis) => (at.get(right.id) as number[])[axis] - centre[axis])))[0];
+    expect(["entity:e0", "entity:e1"]).toContain(nearest.id);
   });
 });

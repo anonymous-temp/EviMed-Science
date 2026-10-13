@@ -34,9 +34,14 @@ export function fileStatements(value: string): string[] {
   return (statements.length > 0 ? statements : lines).map((line) => line.replace(/^(?:#{1,6}|[-*+]|\d+[.)])\s+/, "").trim()).filter(Boolean);
 }
 
+/** The statements of a file in a breath: each without its closing stop, joined with 「；」. */
+export function breath(value: string): string {
+  return fileStatements(value).map((line) => line.replace(/[。.；;]+$/u, "")).join("；");
+}
+
 /** The quiet line under a file's topic: what it says, in a breath. */
 export function fileSummary(record: Pick<WebStructuredMemory, "value">): string {
-  return memoryExcerpt(fileStatements(record.value).join("；"), 160);
+  return memoryExcerpt(breath(record.value), 160);
 }
 
 /** The text a memory's drawer opens with and its edit starts from: a file's own text, else the sentence. */

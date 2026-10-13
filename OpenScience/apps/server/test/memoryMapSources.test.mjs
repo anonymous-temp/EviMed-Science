@@ -340,7 +340,12 @@ test("a compile becomes entity marks, typed relation lines and page links; what 
   });
   const marks = Object.fromEntries(graph.nodes.map((node) => [node.id, node]));
   assert.deepEqual(Object.keys(marks).sort(), ["entity:aspirin", "entity:stroke", "page:entity/aspirin.md", "page:entity/stroke.md", "page:index.md"]);
-  assert.deepEqual([marks["entity:aspirin"].subtype, marks["entity:aspirin"].label, marks["entity:aspirin"].open], ["drug", "阿司匹林", null]);
+  assert.deepEqual([marks["entity:aspirin"].subtype, marks["entity:aspirin"].label, marks["entity:aspirin"].open], ["drug", "阿司匹林", { kind: "page", href: "/app/files?kind=wiki&view=graph&graph=kg&focus=aspirin&depth=1" }]);
+  // Made for a project, an entity and a page open in the knowledge base's graph of it, centred on the mark: an entity in the graph of
+  // entities, a page in the graph of pages, the page's path as it is, encoded.
+  const forProject = Object.fromEntries(graphFromCompile({ entities: [{ path: "entities/aspirin.md", text: ENTITY_ASPIRIN }], pages: [{ uri: "entity/aspirin.md", text: WIKI_ASPIRIN }] }, { projectId: "prj_a" }).nodes.map((node) => [node.id, node.open]));
+  assert.deepEqual(forProject["entity:aspirin"], { kind: "page", href: "/app/files?scope=prj_a&kind=wiki&view=graph&graph=kg&focus=aspirin&depth=1" });
+  assert.deepEqual(forProject["page:entity/aspirin.md"], { kind: "page", href: "/app/files?scope=prj_a&kind=wiki&view=graph&focus=entity%2Faspirin.md&depth=1" });
   assert.deepEqual(graph.edges.filter((edge) => edge.type === "relates"), [
     { from: "entity:aspirin", to: "entity:stroke", type: "relates", label: "预防", relation: "prevents" },
   ]);
@@ -356,7 +361,7 @@ test("a compile becomes entity marks, typed relation lines and page links; what 
   assert.equal(documentIdOfUri("viking://u/xsrc_0123456789abcdef.md"), null);
 });
 
-test("the knowledge-graph seam stands aside until a reader is wired, then draws entities and their lines without opening a drawer", async () => {
+test("the knowledge-graph seam stands aside until a reader is wired, then draws entities and their lines, each opening in the knowledge base and none in a drawer", async () => {
   assert.equal(createKnowledgeGraphSource().applies(request()), false);
   const source = createKnowledgeGraphSource({ fetchProducts: async () => ({ entities: [{ path: "entities/aspirin.md", text: ENTITY_ASPIRIN }, { path: "entities/stroke.md", text: ENTITY_STROKE }], relations: RELATIONS, pages: [] }) });
   assert.equal(source.applies(request()), true);
@@ -364,6 +369,7 @@ test("the knowledge-graph seam stands aside until a reader is wired, then draws 
   assert.deepEqual(map.nodes.map((node) => [node.id, node.type]).sort(), [["entity:aspirin", "entity"], ["entity:stroke", "entity"]]);
   assert.deepEqual(map.edges.map((edge) => [edge.type, edge.label]), [["relates", "预防"]]);
   assert.equal(map.summary.memories, 0);
+  assert.ok(map.nodes.every((node) => node.open?.kind === "page" && node.open.href.startsWith("/app/files?")), "an entity is not a memory: it opens in the knowledge base");
   assert.deepEqual((await buildMemoryMap({ sources: [createKnowledgeGraphSource({ fetchProducts: async () => null })] }, { user, projects, now: NOW })).missing, [], "no graph yet is not a failure");
   assert.deepEqual((await buildMemoryMap({ sources: [createKnowledgeGraphSource({ fetchProducts: async () => { throw new Error("OpenViking unreachable"); } })] }, { user, projects, now: NOW })).missing, ["knowledge-graph"]);
 });

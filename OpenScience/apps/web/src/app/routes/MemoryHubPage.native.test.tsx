@@ -58,7 +58,7 @@ describe("the memory page of an account whose memory is kept as files", () => {
     expect(within(list).getByText("常用 R 做统计分析。")).toBeInTheDocument();
     const preferences = screen.getByRole("list", { name: "偏好" });
     const row = within(preferences).getByText("回答结构").closest("li")!;
-    expect(row).toHaveTextContent("先给结论，再给依据。；表格不超过五列。");
+    expect(row).toHaveTextContent("先给结论，再给依据；表格不超过五列");
     expect(within(preferences).getByText("meta analysis method")).toBeInTheDocument();
     // The tab counts every row of the account that is about the person.
     expect(screen.getByRole("tab", { name: /关于你/ })).toHaveTextContent("5");

@@ -16,7 +16,7 @@ describe("a memory kept as a file", () => {
     expect(fileTopic(nativeFile("meta_analysis_method", "- x"))).toBe("meta analysis method");
     expect(fileTopic(nativeFile("回答结构", "- x"))).toBe("回答结构");
     expect(fileStatements("# 订单服务重构\n领域：后端架构\n## 目标\n- 把订单拆成独立服务。\n1. 周五前出方案。")).toEqual(["领域：后端架构", "把订单拆成独立服务。", "周五前出方案。"]);
-    expect(fileSummary(nativeFile("回答结构", "- 先给结论，再给依据。\n- 表格不超过五列。"))).toBe("先给结论，再给依据。；表格不超过五列。");
+    expect(fileSummary(nativeFile("回答结构", "- 先给结论，再给依据。\n- 表格不超过五列。"))).toBe("先给结论，再给依据；表格不超过五列");
     // A file with only a heading says the heading rather than nothing.
     expect(fileStatements("# 只有标题")).toEqual(["只有标题"]);
   });
@@ -26,7 +26,7 @@ describe("a memory kept as a file", () => {
     const file = items.find((item) => item.kind === "record" && item.record.summary === "回答结构");
     const line = items.find((item) => item.kind === "record" && item.record.value === "所在科室是临床药学部。");
     expect(file && factRowTitle(file)).toBe("回答结构");
-    expect(file && factRowSummary(file)).toBe("先给结论，再给依据。；表格不超过五列。");
+    expect(file && factRowSummary(file)).toBe("先给结论，再给依据；表格不超过五列");
     expect(line && factRowTitle(line)).toBe("所在科室是临床药学部。");
     expect(line && factRowSummary(line)).toBeUndefined();
     // The older engine's rows are what they were.

@@ -23,7 +23,7 @@ import { ConversationLink } from "./ConversationLink";
 import { DrawerSection } from "./DrawerSection";
 import { RelatedSection } from "./RelatedSection";
 import { heldFrom, type FactItem } from "./memoryItems";
-import { isFileMemory, memoryText } from "./memoryNative";
+import { breath, fileTopic, isFileMemory, memoryText } from "./memoryNative";
 import { ValidityBar, validitySpan } from "./ValidityBar";
 
 /** Why a memory in force is uncertain, as a few small words. 「有冲突」 comes first, as it does in the control plane. */
@@ -277,7 +277,13 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
             </form>
           ) : (
             file
-              ? <MarkdownViewer className="text-ui text-text">{sentence}</MarkdownViewer>
+              ? (
+                <div className="space-y-2">
+                  {/* A file is a topic with statements under it: the topic leads, unless the file's own first heading already is it. */}
+                  {record && !/^#\s/u.test(text.trimStart()) && <p className="text-body font-medium text-text">{fileTopic(record)}</p>}
+                  <MarkdownViewer className="text-ui text-text">{sentence}</MarkdownViewer>
+                </div>
+              )
               : <p className="whitespace-pre-wrap text-body text-text">{former ? `曾经如此：${sentence}${record ? heldFrom(record) : ""}` : sentence}</p>
           )}
 
@@ -362,7 +368,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
                 {revisions.map((revision) => (
                   <li key={revision.version}>
                     {when(revision.changedAt)}
-                    {revision.changedAt ? "：" : ""}{memoryExcerpt(revision.summary || revision.value, 120)}
+                    {revision.changedAt ? "：" : ""}{memoryExcerpt(file ? breath(revision.value) : revision.summary || revision.value, 120)}
                   </li>
                 ))}
               </ul>

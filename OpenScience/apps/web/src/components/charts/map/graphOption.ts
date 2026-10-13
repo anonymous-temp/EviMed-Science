@@ -30,7 +30,7 @@ export interface GraphInput {
   /** The mark in focus or open in the drawer. */
   selected: string | null;
   palette: MapPalette;
-  /** How many of the heaviest memories carry a label of their own. */
+  /** How many of the marks tied to the most carry a label of their own (6 by default, none on a phone). */
   labelBudget?: number;
   /** A canvas a phone's width: the same picture in smaller marks, with a label for the structure and what needs a look only. */
   compact?: boolean;
@@ -89,15 +89,33 @@ export function edgeTooltip(edge: MapEdge, from: string, to: string): string {
 
 export function graphOption(input: GraphInput): EChartsCoreOption {
   const { palette } = input;
-  const index = new Map(input.nodes.map((node, position) => [node.id, position]));
   const byId = new Map(input.nodes.map((node) => [node.id, node]));
   const searching = input.hits.size > 0;
   // The heaviest memories earn a label of their own; the rest are named on hover.
   const shrink = input.compact ? 0.5 : 1;
+  // A label is a budget spent where the picture says something: on what is tied to something else (a source, a replaced version,
+  // a disagreement, a concept's relations), by how many lines, then by weight — never on the marks that only belong to their hub,
+  // which on a dense hub are most of them and would cover each other.
+  const ties = new Map<string, number>();
+  for (const edge of input.edges) {
+    if (edge.type === "belongs-to") continue;
+    ties.set(edge.from, (ties.get(edge.from) ?? 0) + 1);
+    ties.set(edge.to, (ties.get(edge.to) ?? 0) + 1);
+  }
+  const budget = input.labelBudget ?? (input.compact ? 0 : 6);
   const heavy = new Set([...input.nodes].filter((node) => node.type === "memory" || node.type === "document" || node.type === "entity")
-    .sort((left, right) => (right.weight ?? 0) - (left.weight ?? 0) || left.id.localeCompare(right.id)).slice(0, input.labelBudget ?? (input.compact ? 0 : 8)).map((node) => node.id));
+    // What was replaced is history, named when pointed at; what is current and tied to something is named now.
+    .filter((node) => node.state !== "replaced" && ((ties.get(node.id) ?? 0) > 0 || (node.weight ?? 0) >= 0.8))
+    .sort((left, right) => (ties.get(right.id) ?? 0) - (ties.get(left.id) ?? 0) || (right.weight ?? 0) - (left.weight ?? 0) || left.id.localeCompare(right.id))
+    .slice(0, budget).map((node) => node.id));
+  // Where two labels would overlap the library keeps the first it meets, so the marks that matter most come first: the structure, then
+  // what needs a look, is searched for or is chosen, then the heavy ones, then the rest. The lines point at these positions.
+  const rank = (node: MapNode) => (node.type === "you" || node.type === "project" || node.type === "cluster" ? 0
+    : node.state === "check" || input.hits.has(node.id) || input.selected === node.id ? 1 : heavy.has(node.id) ? 2 : 3);
+  const ordered = input.nodes.map((node, position) => ({ node, position })).sort((left, right) => rank(left.node) - rank(right.node) || left.position - right.position).map((entry) => entry.node);
+  const index = new Map(ordered.map((node, position) => [node.id, position]));
 
-  const data = input.nodes.map((node) => {
+  const data = ordered.map((node) => {
     const { symbol, size } = symbolOf(node);
     const structure = node.type === "you" || node.type === "project" || node.type === "cluster";
     // A concept out of the knowledge base is a ring where a memory is a dot: same circle, told apart by being hollow.
@@ -119,7 +137,8 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
       },
       label: {
         show: labelled,
-        position: node.type === "you" ? "inside" : structure ? "bottom" : "right",
+        // A mark on the right of the picture is named to its left: the label of the rightmost marks ran off the canvas.
+        position: node.type === "you" ? "inside" : structure ? "bottom" : x > LAYOUT_WIDTH / 2 + 120 ? "left" : "right",
         formatter: node.type === "cluster" ? `${groupWord(node)}\n${node.count ?? 0}` : [...node.label].length > 14 ? `${[...node.label].slice(0, 13).join("")}…` : node.label,
         color: structure && node.type !== "cluster" ? palette.text : palette.text,
         fontSize: input.compact ? 10 : structure ? 11 : 12,
@@ -151,7 +170,10 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
         color: worried ? palette.check : palette.line, width: worried ? 1.6 : edge.type === "belongs-to" ? 0.7 : 1.1, type: dashed,
         opacity: edge.type === "belongs-to" ? 0.4 : 0.9, curveness: edge.type === "replaces" ? 0.18 : 0.04,
       },
-      label: { show: edge.type === "relates" && Boolean(edge.label), formatter: edge.label ?? "", color: palette.textFaint, fontSize: 11 },
+      // A relation's name is on the line only for the mark the researcher is on (or pointing at): thirty relation names laid over thirty
+      // lines were the picture. The tooltip of every line says it in words.
+      label: { show: edge.type === "relates" && Boolean(edge.label) && (input.selected === edge.from || input.selected === edge.to), formatter: edge.label ?? "", color: palette.textFaint, fontSize: 11 },
+      emphasis: { label: { show: edge.type === "relates" && Boolean(edge.label) } },
       tooltipText: edgeTooltip(edge, byId.get(edge.from)?.label ?? "", byId.get(edge.to)?.label ?? ""),
       // What a press on the line names, when the researcher may call it wrong.
       edgeId: isHideableEdge(edge, byId.get(edge.from), byId.get(edge.to)) ? edge.id : null,

@@ -44,6 +44,8 @@ describe("a memory kept as a file, opened from its row", () => {
     const { onChanged } = show(file);
     expect(screen.getByRole("dialog", { name: "偏好" })).toBeInTheDocument();
     expect(screen.getByTestId("file-text").textContent).toBe("- 先给结论，再给依据。\n- 表格不超过五列。");
+    // The topic leads, as a line of its own, so the file is read as what it is about.
+    expect(within(screen.getByRole("dialog")).getByText("回答结构")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "编辑" }));
     const box = screen.getByRole("textbox", { name: "编辑这条记忆" });
     expect(box).toHaveValue("- 先给结论，再给依据。\n- 表格不超过五列。");
