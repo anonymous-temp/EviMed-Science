@@ -285,6 +285,21 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     status = await api(`/api/knowledge-pages?projectId=${project.id}`);
     assert.deepEqual([status.body.data.state, status.body.data.limited.wiki, status.body.data.typedPages.wiki >= 100], ["page_limit", true, true]);
 
+    // ---- 8b. a graph written one level down is not the graph: it is taken out and counted, nothing else changes ----------
+    script = (request) => {
+      compiles.push(request);
+      if (request.skill.endsWith("/knowledge-graph")) engine.put(`${request.to}/kg/entities/ghost.md`, "---\ntype: entity\ntitle: Ghost\ndescription: d\n---\n\n# Ghost\n");
+    };
+    compiles.length = 0;
+    await api("/api/knowledge-pages/compile", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
+    await compileRound();
+    assert.match(compiles.at(-1).instruction, /never create a subdirectory named after the target/);
+    status = await api(`/api/knowledge-pages?projectId=${project.id}`);
+    assert.equal(status.body.data.lastRound.kg.misplaced, 1);
+    assert.equal(engine.text(`${roots.kg}/kg/entities/ghost.md`), null, "the engine no longer holds the stray tree");
+    assert.equal((await api(`/api/knowledge-pages/tree?projectId=${project.id}`)).body.data.pages.some((/** @type {any} */ entry) => entry.path.startsWith("kg/")), false, "and the ledger never mirrored it");
+    assert.ok(app.knowledgePages.status().misplaced >= 1);
+
     // ---- 9. the engine down: uploads, the list and the pages do not notice; the round waits ------------------------
     engine.setDown(true);
     const offline = await upload("epsilon.md", "# Epsilon\n\n第五份资料。\n");

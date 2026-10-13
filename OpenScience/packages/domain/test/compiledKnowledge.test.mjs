@@ -313,3 +313,13 @@ test("a person's edits: rewording a block of their own keeps one block, taking i
   assert.deepEqual(three.edits.removed.map((entry) => entry.text), ['- engine item'])
   assert.equal(applyKnowledgePageEdits(compiled, three.edits).markdown.includes('- engine item'), false)
 })
+
+test('readKnowledgePage: a page link written from the tree root is found from a page below it, by path then by unique name', () => {
+  const known = new Set(['concept/Alpha.md', 'entity/Beta.md', 'method/Run.md', 'method/Beta.md'])
+  const text = '# Run\n\n[a](concept/Alpha.md) [b](entity/Beta.md) [c](Alpha.md) [d](Beta.md) [e](../concept/Alpha.md) [f](concept/Gone.md)\n'
+  const paths = (/** @type {Set<string> | null} */ set) => readKnowledgePage(text, { path: 'method/Run.md', known: set }).links.map((link) => link.path)
+  // Without the tree's paths a link is what the page says, from the page's directory.
+  assert.deepEqual(paths(null), ['method/concept/Alpha.md', 'method/entity/Beta.md', 'method/Alpha.md', 'method/Beta.md', 'concept/Alpha.md', 'method/concept/Gone.md'])
+  // With them: the root's path when the page's own directory names nothing, a file name only when one page has it.
+  assert.deepEqual(paths(known), ['concept/Alpha.md', 'entity/Beta.md', 'concept/Alpha.md', 'method/Beta.md', 'concept/Alpha.md', 'method/concept/Gone.md'])
+})

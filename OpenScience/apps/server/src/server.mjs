@@ -9307,7 +9307,7 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
         .map(([key, event]) => ({ value: Number(knowledge.pages[key] ?? 0), labels: { event } })));
     addMetric(lines, "open_science_knowledge_mirror_total",
       "Compiled files the product ledger mirrored from the engine since this process started, and what was laid on them: a person's blocks put back, write-backs, quotation labels.", "counter",
-      [["pagesMirrored", "mirrored"], ["pagesRetired", "retired"], ["blocksRestored", "blocks_restored"], ["writeBacks", "write_back"], ["quotationsPresent", "quotation_present"], ["quotationsAbsent", "quotation_absent"]]
+      [["pagesMirrored", "mirrored"], ["pagesRetired", "retired"], ["misplaced", "misplaced"], ["blocksRestored", "blocks_restored"], ["writeBacks", "write_back"], ["quotationsPresent", "quotation_present"], ["quotationsAbsent", "quotation_absent"]]
         .map(([key, event]) => ({ value: Number(knowledge.pages[key] ?? 0), labels: { event } })));
     addMetric(lines, "open_science_knowledge_compile_tokens_total",
       "Tokens the engine reported for the compile tasks that ended since this process started.", "counter", { value: Number(knowledge.pages.tokens ?? 0) });

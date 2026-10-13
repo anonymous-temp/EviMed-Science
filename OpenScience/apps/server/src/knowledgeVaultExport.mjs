@@ -136,13 +136,18 @@ export function rewriteCompiledLinks(text, { file, tree, rel, roots, noteOf, pag
       return sourceId ? noteOf(sourceId) : null;
     }
     if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(target) || !target) return null;
-    /** @type {string[]} */
-    const parts = [];
-    for (const part of [...(target.startsWith("/") ? [] : rel.split("/").slice(0, -1)), ...target.split("/")]) {
-      if (!part || part === ".") continue;
-      if (part === "..") parts.pop(); else parts.push(part);
-    }
-    return pageOf(tree, parts.join("/"));
+    /** @param {string[]} segments */
+    const joined = (segments) => {
+      /** @type {string[]} */
+      const parts = [];
+      for (const part of segments) {
+        if (!part || part === ".") continue;
+        if (part === "..") parts.pop(); else parts.push(part);
+      }
+      return parts.join("/");
+    };
+    // From the page's own directory, then from the tree's root (the engine writes both), then by the file name alone.
+    return pageOf(tree, joined([...(target.startsWith("/") ? [] : rel.split("/").slice(0, -1)), ...target.split("/")])) ?? pageOf(tree, joined(target.split("/")));
   };
   const { raw, body } = splitOkfFrontmatter(text);
   let rewritten = "";
@@ -262,7 +267,14 @@ export class KnowledgeVaultExport {
     const pageFiles = new Map(wikiEntries.map((page) => [`${page.tree}/${page.rel}`, page.file]));
     const engineRoots = this.roots ? this.roots(userId, project.id) : null;
     /** A compiled file is found by its path, by its path with `.md` (a link that lost it), or by its name alone. @param {"wiki" | "kg"} tree @param {string} rel */
-    const pageOf = (tree, rel) => pageFiles.get(`${tree}/${rel}`) ?? pageFiles.get(`${tree}/${rel}.md`) ?? null;
+    /** @type {Map<string, string | null>} a tree and a file name to the one file of that name; null where two share it */
+    const pageByName = new Map();
+    for (const page of wikiEntries) {
+      const key = `${page.tree}/${page.rel.split("/").pop()}`;
+      pageByName.set(key, pageByName.has(key) ? null : page.file);
+    }
+    const pageOf = (tree, rel) => pageFiles.get(`${tree}/${rel}`) ?? pageFiles.get(`${tree}/${rel}.md`)
+      ?? pageByName.get(`${tree}/${rel.split("/").pop()}`) ?? pageByName.get(`${tree}/${rel.split("/").pop()}.md`) ?? null;
 
     // Notes that share a keyword point at each other.
     /** @type {Map<string, number[]>} */

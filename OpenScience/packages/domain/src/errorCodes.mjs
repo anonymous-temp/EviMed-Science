@@ -2607,6 +2607,18 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   source_link_required: '这份资料不是保存下来的网页，没有可以重新读取的网址。',
   source_note_invalid: '笔记需要一个不超过 120 个字的标题，正文必须是文字。',
   source_note_required: '这份资料不是笔记，不能在这里编辑。',
+  // The compiled pages (知识页): what the reader and the status say when a save or a round does not go through. A round that
+  // fails keeps every page it already had, so each says what is still true as well as what did not happen.
+  knowledge_page_changed: '这页在你打开之后又被重新整理过，请重新打开再修改，以免盖掉新的内容。',
+  knowledge_page_not_editable: '这个文件由系统生成，不能手动修改。',
+  knowledge_page_empty: '页面内容不能为空。',
+  knowledge_page_not_found: '没有找到这个知识页。',
+  knowledge_pages_disabled: '这个部署没有开启知识页整理。',
+  knowledge_page_limit: '这个项目的知识页已经到了上限，这一轮没有再整理；已有的页面照常可用。',
+  knowledge_task_expired: '这一轮整理超时了，已有的页面没有变；可以再点一次“重新整理”。',
+  knowledge_compile_failed: '这一轮整理没有完成，已有的页面没有变；可以稍后再点“重新整理”。',
+  knowledge_compile_cancelled: '这一轮整理被取消了，已有的页面没有变。',
+  knowledge_compile_misplaced: '这一轮整理把图谱写到了错误的位置，已清理，图谱保持上一轮的样子；可以再点一次“重新整理”。',
   openlist_storage_missing: '这个账户还没有接入网盘，无法从网盘导入。可以先直接上传文件。',
   openlist_credential_rejected: '网盘服务没有接受这个部署的凭据，暂时无法浏览网盘。请联系管理员。',
   library_unavailable: '个人资料库暂时不可用，稍后再试。',

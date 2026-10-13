@@ -108,6 +108,26 @@ test("knowledge pages are exported where the folder holds them, and the vault is
   assert.equal(Object.keys(without).some((name) => name.includes("/wiki/")), false);
 });
 
+test("a page link written from the tree's root, in a page below it, still leads to the page by its name", async () => {
+  // The engine writes `concept/Alpha.md` from `method/Run.md` as often as `../concept/Alpha.md`; read from the page's own
+  // directory the first names nothing, and the name is the one thing both say.
+  const alpha = source(8, { path: "knowledge-base/wiki/concept/Alpha.md", docType: "wiki-page", understood: false });
+  const run = source(9, { path: "knowledge-base/wiki/method/Run.md", docType: "wiki-page", understood: false });
+  const other = source(7, { path: "knowledge-base/wiki/method/Alpha.md", docType: "wiki-page", understood: false });
+  const files = unpack(await exporter({ sources: [alpha, run], roots: () => ({ wiki: "viking://user/u/resources/p/p/wiki", kg: "viking://user/u/resources/p/p/kg" }), texts: {
+    "knowledge-base/wiki/concept/Alpha.md": "# Alpha\n",
+    "knowledge-base/wiki/method/Run.md": "# Run\n\n[Alpha](concept/Alpha.md) and [Gone](concept/Gone.md).\n",
+  } }).export("owner", PROJECT));
+  assert.match(files["房颤抗凝/wiki/method/Run.md"], /\[Alpha\]\(\.\.\/concept\/Alpha\.md\)/, "found by its name");
+  assert.match(files["房颤抗凝/wiki/method/Run.md"], /\[Gone\]\(concept\/Gone\.md\)/, "a page the vault does not hold is left as written");
+  // Two pages of one name are not guessed between.
+  const ambiguous = unpack(await exporter({ sources: [alpha, run, other], roots: () => ({ wiki: "viking://user/u/resources/p/p/wiki", kg: "viking://user/u/resources/p/p/kg" }), texts: {
+    "knowledge-base/wiki/concept/Alpha.md": "# Alpha\n", "knowledge-base/wiki/method/Alpha.md": "# Alpha too\n",
+    "knowledge-base/wiki/method/Run.md": "# Run\n\n[Alpha](concept/Alpha.md)\n",
+  } }).export("owner", PROJECT));
+  assert.match(ambiguous["房颤抗凝/wiki/method/Run.md"], /\[Alpha\]\(\.\.\/concept\/Alpha\.md\)/, "its own path still resolves");
+});
+
 test("an understanding that cannot be read costs the note its body and not the vault", async () => {
   const reported = [];
   const vault = new KnowledgeVaultExport({

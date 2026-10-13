@@ -63,6 +63,8 @@ const QUOTATION_INSTRUCTION = "For every claim-level source link, put the suppor
   + "translate, shorten with an ellipsis or merge two passages inside a title. If no single passage supports the claim verbatim, leave the title out. "
   + "Keep the file name of every source link exactly as it is, including its .md.";
 const GRAPH_INSTRUCTION = "Use general entity types that fit the material; when it is clinical or scientific, types such as drug, disease, gene, trial, outcome and guideline are welcome.";
+/** One compile of the graph (2026-10-13, live) wrote a whole second graph one level down, under `<target>/<target name>/`. */
+const LAYOUT_INSTRUCTION = "Write every file directly under the target directory — index.md, the type directories and relations.jsonl at its top level — and never create a subdirectory named after the target.";
 const LANGUAGE_NAMES = new Map([["zh", "Simplified Chinese"], ["zh-cn", "Simplified Chinese"], ["zh-hans", "Simplified Chinese"], ["zh-tw", "Traditional Chinese"],
   ["zh-hk", "Traditional Chinese"], ["zh-hant", "Traditional Chinese"], ["en", "English"], ["ja", "Japanese"], ["ko", "Korean"], ["fr", "French"], ["de", "German"],
   ["es", "Spanish"], ["pt", "Portuguese"], ["ru", "Russian"], ["it", "Italian"]]);
@@ -95,6 +97,7 @@ export function knowledgeCompileInstruction({ tree, language, userBlocks = [], r
   const parts = [named
     ? `Write everything you produce — pages, titles, descriptions and labels — in ${named}, whatever language the sources are in. Quotations stay in the source's own language.`
     : "Write everything you produce in one language: the language the existing pages are written in; when there are none yet, the language most of the sources are written in. Quotations stay in the source's own language."];
+  parts.push(LAYOUT_INSTRUCTION);
   if (tree === "kg") return [...parts, GRAPH_INSTRUCTION].join("\n\n");
   parts.push(QUOTATION_INSTRUCTION);
   if (userBlocks.length) {
@@ -125,7 +128,7 @@ export class KnowledgePageService {
     this.config = config; this.documents = documents; this.jobs = jobs; this.sources = sources; this.store = store;
     this.resources = resources; this.engine = engine; this.sourceSync = sourceSync; this.entries = entries; this.libraryText = libraryText; this.now = now; this.report = report;
     this.counters = { rounds: 0, failed: 0, compiles: 0, pagesMirrored: 0, pagesRetired: 0, blocksRestored: 0, writeBacks: 0, limited: 0, deferred: 0,
-      quotationsPresent: 0, quotationsAbsent: 0, tokens: 0 };
+      quotationsPresent: 0, quotationsAbsent: 0, tokens: 0, misplaced: 0 };
   }
 
   /** Compiling is on: the switch, and an engine to compile with. Pages that exist are readable either way. */
@@ -472,9 +475,19 @@ export class KnowledgePageService {
     const userId = user.id;
     const projectId = project.id;
     const root = this.resources.treeUri(userId, projectId, tree);
-    const listed = (await this.resources.tree(userId, root)).filter((/** @type {any} */ entry) => !entry.isDir);
+    const everything = (await this.resources.tree(userId, root)).filter((/** @type {any} */ entry) => !entry.isDir);
+    // A compile that wrote a tree one level down, under `<target>/<target name>/`, did not write the tree: what it left
+    // there is the engine's derived output, not a page, and counting it would walk the tree toward the page limit.
+    // It is taken out of the engine so the next compile does not build on it, and the round says that it happened.
+    const misplaced = everything.filter((/** @type {any} */ entry) => String(entry.relPath ?? "").startsWith(`${tree}/`));
+    const listed = misplaced.length ? everything.filter((/** @type {any} */ entry) => !String(entry.relPath ?? "").startsWith(`${tree}/`)) : everything;
+    if (misplaced.length) {
+      this.counters.misplaced += misplaced.length;
+      this.report("knowledge_compile_misplaced");
+      await this.resources.removeTree(userId, `${root}/${tree}`).catch((/** @type {unknown} */ error) => this.report(codeOf(error)));
+    }
     const known = new Map((await this.#pageRecords(userId, projectId, { tree })).map((row) => [row.payload.path, row.payload]));
-    const summary = { tree, files: listed.length, typed: 0, created: 0, updated: 0, unchanged: 0, retired: 0, restored: 0, skipped: 0, failed: 0 };
+    const summary = { tree, files: listed.length, typed: 0, created: 0, updated: 0, unchanged: 0, retired: 0, restored: 0, skipped: 0, failed: 0, misplaced: misplaced.length };
     /** @type {Map<string, any>} */
     const texts = new Map();
     const seen = new Set();
@@ -861,7 +874,7 @@ export class KnowledgePageService {
     const byPath = new Map(records.map((row) => [row.payload.path, row.payload]));
     const ledger = byPath.get(where.rel) ?? null;
     const root = this.resources.treeUri(userId, project.id, where.tree);
-    const page = readKnowledgePage(markdown, { path: where.rel, root });
+    const page = readKnowledgePage(markdown, { path: where.rel, root, known: new Set(byPath.keys()) });
     // The labels of this text: the stored ones when they were computed for these bytes, else computed now.
     const digest = sha256(markdown);
     const texts = new Map();

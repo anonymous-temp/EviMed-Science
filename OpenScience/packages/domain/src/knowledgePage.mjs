@@ -107,6 +107,18 @@ export function isTypedKnowledgePage(rel, content) {
 // ---------------------------------------------------------------------------------------------------------------------
 // Reading a page
 
+/**
+ * Where a relative page link goes when it names no page from the page's own directory: the same path from the tree's
+ * root, else the one page of that file name; otherwise the path it was written with.
+ * @param {ReadonlySet<string>} known @param {string} fromRoot @param {string} fromHere
+ */
+function namedPage(known, fromRoot, fromHere) {
+  if (known.has(fromRoot)) return fromRoot
+  const name = fromHere.split('/').pop()
+  const same = [...known].filter((path) => path.split('/').pop() === name)
+  return same.length === 1 ? same[0] : fromHere
+}
+
 /** @param {string} path */
 function normalizePath(path) {
   /** @type {string[]} */
@@ -205,10 +217,15 @@ export function knowledgePageUnits(body) {
 /**
  * One compiled page, read: its front matter, its title and type, its body's units and every link classified — to
  * another page of the tree, to a source outside it (the page's provenance), or out of the engine altogether.
+ *
+ * The engine writes a link to a page of another directory both ways — `../concept/Alpha.md` and `concept/Alpha.md` — and
+ * the second names nothing from where the page stands. With `known` (the paths the tree holds) a relative link that
+ * names no page from the page's own directory is read from the tree's root, then by its file name when one page has it.
  * @param {unknown} markdown
- * @param {{ path: string, root?: string }} options  `path`: the page's path in its tree; `root`: the tree's own `viking://` address
+ * @param {{ path: string, root?: string, known?: ReadonlySet<string> | null }} options
+ *   `path`: the page's path in its tree; `root`: the tree's own `viking://` address; `known`: the paths of the tree's pages
  */
-export function readKnowledgePage(markdown, { path, root = '' }) {
+export function readKnowledgePage(markdown, { path, root = '', known = null }) {
   const { data, body, hasFrontmatter, raw } = splitOkfFrontmatter(markdown)
   const treeRoot = String(root || '').replace(/\/+$/, '')
   const heading = /^#[ \t]+(.+?)[ \t]*$/m.exec(body)
@@ -226,7 +243,8 @@ export function readKnowledgePage(markdown, { path, root = '' }) {
     } else if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(target)) {
       links.push({ ...base, kind: 'external', path: null, uri: null, quote: null })
     } else {
-      links.push({ ...base, kind: 'page', path: normalizePath(`${target.startsWith('/') ? '' : `${directory}/`}${target}`), uri: null, quote: null })
+      const fromHere = normalizePath(`${target.startsWith('/') ? '' : `${directory}/`}${target}`)
+      links.push({ ...base, kind: 'page', path: known && !known.has(fromHere) ? namedPage(known, normalizePath(target), fromHere) : fromHere, uri: null, quote: null })
     }
   }
   return {
