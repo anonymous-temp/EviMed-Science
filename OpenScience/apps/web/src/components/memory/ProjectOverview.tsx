@@ -14,8 +14,8 @@ import { GroupHeader } from "./MemoryRows";
  *
  *  - **the card** — one row per thing the researcher said about the work (领域, 目标, 范围或对象, 材料与数据, 阶段, 约束; and for a
  *    clinical study the elements they stated, 人群, 干预或暴露 …), only the ones they said; a row opens the memory it was written
- *    from, in the drawer, like every row on this page. Nothing is asked of the researcher to fill a slot: an empty slot is not
- *    drawn, and a project with nothing stated draws no card at all.
+ *    from, in the drawer, like every row on this page. Nothing is asked of the researcher to fill a slot: an empty slot is never
+ *    drawn, and a project that has memories but no card yet says so in one quiet line instead of a grid of empty labels.
  *  - **这个项目做过** — the capabilities that answered its conversations, the most used first: a ranking is a table with a bar
  *    in the row, never a pie (design reference, appendix E §4.1).
  *  - **作品** — the files its conversations delivered, by month, each a link to the file.
@@ -86,11 +86,13 @@ function Works({ works, timeZone }: { works: ProjectOverviewData["works"]; timeZ
   );
 }
 
-export function ProjectOverview({ overview, canOpen, onOpen }: {
+export function ProjectOverview({ overview, canOpen, onOpen, hasMemories = false }: {
   overview: ProjectOverviewData;
   /** Whether the memory a slot was written from is on the page, so the row can open its drawer. */
   canOpen: (recordId: string) => boolean;
   onOpen: (recordId: string) => void;
+  /** Whether the project has memories of its own below; without any, the page's own empty state speaks and no card line is added. */
+  hasMemories?: boolean;
 }) {
   const capabilities = overview.capabilities;
   const top = capabilities.reduce((most, row) => Math.max(most, row.count), 0);
@@ -117,6 +119,14 @@ export function ProjectOverview({ overview, canOpen, onOpen }: {
             />
           ))}
         </List>
+      </section>,
+    );
+  }
+  if (overview.card.length === 0 && hasMemories && !overview.paused) {
+    blocks.push(
+      <section key="card">
+        <GroupHeader>项目卡</GroupHeader>
+        <p className="px-2 text-ui text-text-3">还没有记下这个项目的目标、资料和进展。</p>
       </section>,
     );
   }

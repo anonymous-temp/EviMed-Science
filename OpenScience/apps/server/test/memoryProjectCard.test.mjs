@@ -63,7 +63,9 @@ test("the extraction instructions name the general slots for any kind of work, t
   const { seen } = await extract(new StoreDouble(), []);
   for (const slot of PROJECT_CARD_GENERAL_SLOTS) assert.match(seen.instructions, new RegExp(`project\\.${slot}\\b`), `${slot} is named`);
   for (const slot of PROJECT_CARD_CLINICAL_SLOTS) assert.match(seen.instructions, new RegExp(`project\\.${slot}\\b`), `${slot} is named, as an extension`);
-  assert.match(seen.instructions, /Only when they describe a clinical or epidemiological study, also record the elements of it they stated/);
+  assert.match(seen.instructions, /Only when they describe a clinical or epidemiological study of patients or participants, also record the elements of it they stated/);
+  // Another kind of work's audience or system is its subject, never a population or an intervention (the replay's one slip).
+  assert.match(seen.instructions, /are its subject, never a population or an intervention/);
   assert.match(seen.instructions, /project\.ext\.<one lowercase word>/);
   assert.match(seen.instructions, /a software refactor/);
   // The medical specialties are no longer the field's vocabulary: the list is not in the instructions.

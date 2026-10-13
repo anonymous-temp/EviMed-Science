@@ -820,9 +820,9 @@ describe("记忆胶囊", () => {
     const overview = (patch: Record<string, unknown> = {}) => ({
       projectId: "prj_1", paused: false, timeZone: "Asia/Shanghai",
       card: [
-        { slot: "field", recordId: "rec_f", text: "心血管", updatedAt: "2026-09-13T02:00:00Z" },
-        { slot: "population", recordId: "rec_3", text: "75 岁以上非瓣膜性房颤患者", updatedAt: "2026-09-13T02:00:00Z" },
-        { slot: "outcome", recordId: "rec_o", text: "大出血", updatedAt: "2026-09-13T02:00:00Z" },
+        { slot: "field", label: "领域", recordId: "rec_f", text: "心血管", updatedAt: "2026-09-13T02:00:00Z" },
+        { slot: "population", label: "人群", recordId: "rec_3", text: "75 岁以上非瓣膜性房颤患者", updatedAt: "2026-09-13T02:00:00Z" },
+        { slot: "outcome", label: "结局", recordId: "rec_o", text: "大出血", updatedAt: "2026-09-13T02:00:00Z" },
       ],
       capabilities: [{ id: "statistical-analysis", title: "统计分析", count: 6 }, { id: "meta-analysis", title: "自动化 Meta 分析", count: 2 }],
       works: [
@@ -840,7 +840,7 @@ describe("记忆胶囊", () => {
       await waitFor(() => expect(fetchProjectOverview).toHaveBeenCalledWith("prj_1"));
       // Only what was stated, under the names a researcher uses for it.
       expect(within(card).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
-        "专科心血管", "人群75 岁以上非瓣膜性房颤患者", "结局大出血",
+        "领域心血管", "人群75 岁以上非瓣膜性房颤患者", "结局大出血",
       ].map((text) => expect.stringContaining(text)));
       expect(screen.getByRole("heading", { name: "项目卡" })).toBeInTheDocument();
       // A ranking is a table with a bar in the row; the numbers are the bar's labels.
@@ -900,7 +900,7 @@ describe("记忆胶囊", () => {
       expect(fetchProjectOverview.mock.calls.length).toBeGreaterThan(before);
     });
 
-    it("leaves the memories alone when the overview cannot be read, draws nothing for a project with nothing to say, and steps aside for a search", async () => {
+    it("leaves the memories alone when the overview cannot be read, says in one line that a project with memories has no card, and steps aside for a search", async () => {
       const user = userEvent.setup();
       open("?tab=project");
       expect(await screen.findByText("纳入范围覆盖疳证与小儿厌食症。")).toBeInTheDocument();
@@ -910,7 +910,10 @@ describe("记忆胶囊", () => {
       fetchProjectOverview.mockResolvedValue(overview({ card: [], capabilities: [], works: [] }));
       open("?tab=project");
       expect(await screen.findByText("纳入范围覆盖疳证与小儿厌食症。")).toBeInTheDocument();
-      expect(screen.queryByRole("heading", { name: "记忆" })).toBeNull();
+      // One quiet line where the card would be, never a grid of empty labels; the memories keep their own name beneath it.
+      expect(await screen.findByText("还没有记下这个项目的目标、资料和进展。")).toBeInTheDocument();
+      expect(screen.queryByRole("list", { name: "项目卡" })).toBeNull();
+      expect(screen.getByRole("heading", { name: "记忆" })).toBeInTheDocument();
       cleanup();
       fetchProjectOverview.mockResolvedValue(overview());
       open("?tab=project");

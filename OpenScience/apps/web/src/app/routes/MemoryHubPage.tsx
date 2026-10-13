@@ -284,13 +284,17 @@ export function MemoryHubPage() {
       );
     }
     if (tab === "project") {
-      const above = overview !== null && (overview.paused || overview.card.length + overview.capabilities.length + overview.works.length > 0);
+      // Something sits above the list when the card, the ranking or the works have something to say, when the project's memory is
+      // switched off, or when the card is the one quiet line a project with memories and no card yet gets.
+      const above = overview !== null && (overview.paused || overview.card.length + overview.capabilities.length + overview.works.length > 0
+        || projectFacts.length > 0);
       return (
         <div className="space-y-4">
           {choices.length > 0 && <ProjectScope choices={choices} value={scope} onChange={setProjectChoice} />}
           {overview && (
             <ProjectOverview
               overview={overview}
+              hasMemories={projectFacts.length > 0}
               canOpen={(recordId) => everyFact.some((fact) => fact.key === `record:${recordId}`)}
               onOpen={(recordId) => setOpenKey(`record:${recordId}`)}
             />
