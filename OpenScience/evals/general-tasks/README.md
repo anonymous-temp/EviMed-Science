@@ -34,6 +34,7 @@ Read `<dir>/summary.md` (one row per case) and `<dir>/summary.json`; do not read
 | `--port 48841` | harness port, in 48840–48859; check `ss -ltn` first |
 | `--pg-port 55657` | PostgreSQL for the control plane; a throwaway one is initialised and started under `/tmp/eval-pg-<port>` if nothing listens |
 | `--seed-from DIR` | a sealed DSH profile seed to copy instead of building one (see prerequisites) |
+| `--data-dir DIR` | where this run's kernels, workspaces and logs live (default `/tmp/eval/live/data-<arm>`); give two runs of the same arm different ones |
 | `--redo`, `--no-judge`, `--keep-data` | run again, skip the judges, keep each case's project directory |
 
 A shorter run: `--cases G01,G05,M01` is the smoke test.

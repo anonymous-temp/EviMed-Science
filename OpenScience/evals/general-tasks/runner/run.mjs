@@ -5,7 +5,7 @@
 //
 //   node evals/general-tasks/runner/run.mjs --tree <OpenScience checkout> --arm B|A|C --out <dir>
 //        [--cases G01,G05 | --set all|general|medical] [--repeat 1] [--timeout-min 15] [--port 48841] [--pg-port 55657]
-//        [--variant normal,classifier-timeout,web-search-off] [--seed-from <sealed seed dir>] [--redo] [--no-judge] [--keep-data]
+//        [--variant normal,classifier-timeout,web-search-off,web-off] [--data-dir DIR] [--seed-from <sealed seed dir>] [--redo] [--no-judge] [--keep-data]
 //
 // Arms: B and C run the tree as it is (B = the tree before the course correction, C = the corrected tree: the arm is a label);
 // A is the native control: the seven switchable first-party socket plugins off (OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS),
@@ -173,7 +173,7 @@ function summarize(outDir) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.tree || !args.arm || !args.out) {
-    console.log('usage: run.mjs --tree <OpenScience checkout> --arm A|B|C --out <dir> [--cases G01,G05 | --set all|general|medical] [--repeat 1] [--timeout-min 15] [--port 48841] [--pg-port 55657] [--variant ID[,ID]] [--seed-from DIR] [--redo] [--no-judge] [--keep-data]');
+    console.log('usage: run.mjs --tree <OpenScience checkout> --arm A|B|C --out <dir> [--cases G01,G05 | --set all|general|medical] [--repeat 1] [--timeout-min 15] [--port 48841] [--pg-port 55657] [--variant ID[,ID]] [--data-dir DIR] [--seed-from DIR] [--redo] [--no-judge] [--keep-data]');
     process.exit(args.help ? 0 : 2);
   }
   const arm = String(args.arm).toUpperCase();
@@ -204,7 +204,8 @@ async function main() {
   process.stderr.write(seed.stderr ?? '');
   if (seed.status !== 0) throw new Error(`seed.sh failed (${seed.status})`);
   const treeDir = seed.stdout.trim().split('\n').pop();
-  const dataDir = `${L}/data-${arm.toLowerCase()}`;
+  // One data directory per arm; two runs of the same arm at once (a smoke beside a full run) must name different ones.
+  const dataDir = args.dataDir ? path.resolve(args.dataDir) : `${L}/data-${arm.toLowerCase()}`;
 
   let harness = null;
   let stopping = false;
