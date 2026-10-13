@@ -20,6 +20,7 @@
  * @module memoryBridge
  */
 
+import { Buffer } from 'node:buffer'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
 import { readFile } from 'node:fs/promises'
@@ -166,7 +167,7 @@ function isToolCall(pathname, body) {
  * @property {string} localKey the key the plugin presents ({@link createLocalBridgeKey}); a caller without it is refused
  * @property {string} [tokenFile] the workload token file the other gateway clients read; empty sends no credential
  * @property {number} [port]
- * @property {typeof fetch} [fetchImpl]
+ * @property {typeof globalThis.fetch} [fetchImpl]
  * @property {(file: string) => Promise<string>} [readToken]
  * @property {() => number} [now]
  * @property {{ healthMs?: number, requestMs?: number, toolCallMs?: number }} [deadlines]
@@ -184,7 +185,7 @@ export function createMemoryBridge(options) {
   if (localKey.length < 32) throw new Error('evimed memory bridge: a local key of at least 32 characters is required')
   const tokenFile = String(options.tokenFile ?? '').trim()
   const port = Number.isInteger(options.port) ? Number(options.port) : MEMORY_BRIDGE_PORT
-  const send = options.fetchImpl ?? fetch
+  const send = options.fetchImpl ?? globalThis.fetch
   const readToken = options.readToken ?? ((/** @type {string} */ file) => readFile(file, 'utf8'))
   const now = options.now ?? Date.now
   const deadlines = { ...MEMORY_BRIDGE_DEADLINES, ...options.deadlines }
@@ -253,7 +254,7 @@ export function createMemoryBridge(options) {
       if (!token) { unavailable(res, 'no credential yet'); return }
     }
     const deadline = url.pathname === '/health' ? deadlines.healthMs : isToolCall(url.pathname, body) ? deadlines.toolCallMs : deadlines.requestMs
-    const abort = new AbortController()
+    const abort = new globalThis.AbortController()
     const timer = setTimeout(() => abort.abort(), deadline)
     // The plugin has deadlines of its own; when it gives up, so does the forward.
     let callerLeft = false
