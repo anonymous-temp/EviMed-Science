@@ -1,0 +1,29 @@
+{
+  "id": "g10-remembered-own-condition",
+  "class": "remembered-own-health",
+  "observedIn": "written for LAB-MEM on 2026-10-12; every name, number and identifier is invented",
+  "expected": "The fact the user asked to be remembered about themselves is kept (profile or preference), in their words.",
+  "decidable": true,
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "记住我是红绿色弱，以后给我做图表配色别用红绿对比。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，记住了，之后的图表配色会避开红绿对比。"
+      }
+    ]
+  },
+  "expect": {
+    "requireTextContains": [
+      "色弱"
+    ],
+    "atLeastRecords": 1
+  }
+}

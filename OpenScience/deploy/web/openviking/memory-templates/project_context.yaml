@@ -11,18 +11,19 @@ description: |
   scoped to one answer, and anything the assistant proposed are NOT a description of their
   project: they never create a card and never change one.
 
-  The card has up to five sections and every one is optional: write a section only when the
+  The card has up to six sections and every one is optional: write a section only when the
   user stated something for it, and never fill one from the topic of a question.
   - 目标: what the work is meant to find out, build or deliver.
+  - 范围或对象: what the work is about or aimed at: the subject, case, product, system,
+    audience or population it covers, and what the user said is outside it.
   - 材料与数据: what it works on: data sources, cohorts, corpora, systems, documents, their
     period and size. Describe a dataset by what it is (source, years, size, kinds of
     variables), not by its file or column names and never by its rows.
   - 已定事项: decisions the user or their team took about this work, one line each, with
     the reason when they gave one. A reversed decision replaces its line.
-  - 进展与待办: where the work stands, and what the user said is still open or pending on
+  - 阶段: where the work stands now, and what the user said is still open or pending on
     their side. Remove an item once the user says it is done.
-  - 约束: limits the user stated: scope, deadline, budget, standards to follow, things
-    ruled out.
+  - 约束: limits the user stated: deadline, budget, standards to follow, things ruled out.
   When, and only when, the user describes a clinical or epidemiological study, the section
   研究要素 may list the elements they stated, each on its own line and only those stated:
   人群 / 干预或暴露 / 对照 / 结局 / 设计. Other kinds of work never get this section.
@@ -79,11 +80,13 @@ fields:
 
       ## 目标
       - ...
+      ## 范围或对象
+      - ...
       ## 材料与数据
       - ...
       ## 已定事项
       - ...
-      ## 进展与待办
+      ## 阶段
       - ...
       ## 约束
       - ...

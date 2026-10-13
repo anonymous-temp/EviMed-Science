@@ -1,0 +1,26 @@
+{
+  "id": "g09-designer-one-off-and-mood",
+  "class": "one-off-request-condition",
+  "observedIn": "written for LAB-MEM on 2026-10-12; every name, number and identifier is invented",
+  "expected": "Nothing is written: a bad day and a condition that scopes one poster.",
+  "decidable": true,
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "今天被客户改稿改崩了，烦得很。这次的海报只用黑白两色，不要任何渐变，尺寸按 A3。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "辛苦了。这张海报按黑白两色、无渐变、A3 尺寸来做。"
+      }
+    ]
+  },
+  "expect": {
+    "atMostRecords": 0
+  }
+}
