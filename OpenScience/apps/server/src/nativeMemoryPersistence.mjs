@@ -26,6 +26,8 @@
  *
  * @module nativeMemoryPersistence
  */
+import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
+
 const migrations = new WeakMap();
 
 export const NATIVE_COMMIT_ORIGINS = Object.freeze(["gateway", "tool", "scan", "page", "replay", "migration"]);
@@ -147,6 +149,8 @@ export async function migrateNativeMemory(database) {
   const attempt = database.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-memory-native-v1'))");
     await client.query(sql);
+    // A word a list above gained after the table was created is otherwise refused by every existing database (vocabularyChecks.mjs).
+    await refreshVocabularyChecks(client, sql, "evimed_memory");
   });
   migrations.set(database, attempt);
   try { await attempt; }

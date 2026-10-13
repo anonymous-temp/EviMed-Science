@@ -33,6 +33,7 @@
 import { randomUUID } from "node:crypto";
 import { migrateNotifications } from "../notificationPersistence.mjs";
 import { CHANNEL_IDS } from "./port.mjs";
+import { refreshVocabularyChecks } from "../vocabularyChecks.mjs";
 
 const migrations = new WeakMap();
 
@@ -168,6 +169,8 @@ export async function migrateChannels(database) {
     await database.transaction(async (/** @type {any} */ client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-channels-v1'))");
       await client.query(sql);
+      // A word a list above gained after the table was created is otherwise refused by every existing database (vocabularyChecks.mjs).
+      await refreshVocabularyChecks(client, sql, "evimed_channels");
     });
   })();
   migrations.set(database, attempt);

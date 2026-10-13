@@ -15,6 +15,8 @@
  * memory", and a bounded in-row history. The ledger's unbounded revision table
  * would copy up to 64 evidence quotes on every evidence append.
  */
+import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
+
 const migrations = new WeakMap();
 
 /** The closed vocabularies. They are defined here, next to the CHECK
@@ -346,6 +348,8 @@ export async function migrateResearchMemory(database) {
   const attempt = database.transaction(async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-memory-v1'))");
     await client.query(sql);
+    // A word a list above gained after the table was created is otherwise refused by every existing database (vocabularyChecks.mjs).
+    await refreshVocabularyChecks(client, sql, "evimed_memory");
   });
   migrations.set(database, attempt);
   try { await attempt; }

@@ -33,12 +33,16 @@ export function declaredVocabularyChecks(ddl, schema) {
   const found = new Map();
   const escaped = schema.replace(/[^A-Za-z0-9_]/g, "");
   const create = new RegExp(`^\\s*CREATE TABLE IF NOT EXISTS ${escaped}\\.(\\w+)\\s*\\(`);
-  const alter = new RegExp(`^\\s*ALTER TABLE ${escaped}\\.(\\w+) ADD COLUMN IF NOT EXISTS (\\w+)\\b.*?(CHECK \\((?:[^()]|\\([^()]*\\))*\\))`);
-  const column = /^\s+(\w+)\s+\w+\b[^\n]*?(CHECK \((?:[^()]|\([^()]*\))*\))/;
+  const alter = new RegExp(`^\\s*ALTER TABLE ${escaped}\\.(\\w+) ADD COLUMN IF NOT EXISTS (\\w+)\\b.*?(CHECK\\s*\\((?:[^()]|\\([^()]*\\))*\\))`);
+  // `CHECK(` with no space is written too, and a line can declare several columns: the column a check constrains is the one
+  // it names, so it is read from the check itself and the line's first column is only the fallback.
+  const column = /^\s+(\w+)\s+\w+\b[^\n]*?(CHECK\s*\((?:[^()]|\([^()]*\))*\))/;
   /** @type {string | null} */
   let table = null;
-  const add = (/** @type {string} */ tableName, /** @type {string} */ columnName, /** @type {string} */ check) => {
+  const add = (/** @type {string} */ tableName, /** @type {string} */ declaredColumn, /** @type {string} */ check) => {
     if (!/ IN \(/.test(check) || / NOT IN \(/.test(check)) return;
+    const named = /^CHECK\s*\(\s*(?:(\w+) IS NULL OR )?(\w+) IN \(/.exec(check);
+    const columnName = named ? named[2] : declaredColumn;
     const words = [...check.matchAll(/'([^']*)'/g)].map((match) => match[1]);
     if (!words.length) return;
     found.set(`${tableName}.${columnName}`, { table: tableName, column: columnName, check, words });

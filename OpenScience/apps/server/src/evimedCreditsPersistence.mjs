@@ -27,6 +27,7 @@
 
 import { RESEARCH_BILLING_VERSION, RESEARCH_BILLING_VERSION_WHOLE_CREDIT, WALLET_CONTRACT_EXACT, WALLET_CONTRACT_WHOLE_CREDIT } from "@evimed/domain";
 import { eraseSimulatedWallets } from "./evimedCreditsWallet.mjs";
+import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 
 const migrations = new WeakMap();
 
@@ -166,6 +167,8 @@ export async function migrateEvimedCredits(database) {
   const attempt = database.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-credits-v1'))");
     await client.query(sql);
+    // A word a list above gained after the table was created is otherwise refused by every existing database (vocabularyChecks.mjs).
+    await refreshVocabularyChecks(client, sql, "evimed_credits");
   });
   migrations.set(database, attempt);
   try {

@@ -11,6 +11,7 @@ import {
   EVIDENCE_ZONE_VISIBILITY,
   SOURCE_CURRENCY_LABELS,
 } from "@evimed/domain";
+import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 
 /** The domain's closed lists as a SQL list, so the table's CHECK and the contract cannot disagree.
  * @param {readonly string[]} values */
@@ -238,6 +239,8 @@ export async function migrateEvidenceZones(database) {
             "SELECT pg_advisory_xact_lock(hashtext('evimed-evidence-zones-v1'))",
           );
           await client.query(EVIDENCE_ZONE_SQL);
+          // A word a list above gained after the table was created is otherwise refused by every existing database (vocabularyChecks.mjs).
+          await refreshVocabularyChecks(client, EVIDENCE_ZONE_SQL, "evimed_frontier");
         })
         .catch((/** @type {unknown} */ error) => {
           migrations.delete(database);
