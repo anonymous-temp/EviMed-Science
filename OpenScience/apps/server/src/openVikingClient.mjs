@@ -194,8 +194,8 @@ function upstreamReason(parsed) {
 const REQUEST_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 /** `/health`, `/mcp` and everything under `/api/v1/`: a path, never a URL, a query or a traversal. */
 const REQUEST_PATH = /^\/(?:health|ready|mcp|api\/v1\/[A-Za-z0-9_.~@:/-]+)$/;
-/** The engine's own identifier alphabet (`openviking/core/identifiers.py`). */
-const OPENVIKING_IDENTIFIER = /^[A-Za-z0-9_.@-]{1,128}$/;
+/** The engine's own identifier rule (`openviking/core/identifiers.py`): its alphabet, never `.` or `..`, at most one `@`. */
+const OPENVIKING_IDENTIFIER = /^(?!\.{1,2}$)(?!.*@.*@)[A-Za-z0-9_.@-]{1,128}$/;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{16,128}$/;
 
 /**
@@ -476,8 +476,11 @@ export class OpenVikingClient {
     if (!REQUEST_METHODS.has(verb) || !REQUEST_PATH.test(route) || !["json", "text", "bytes"].includes(responseType)) {
       throw new HttpError(500, "memory_index_request_invalid", "An OpenViking request was built with an invalid method, path or response type.");
     }
-    const actingUser = openVikingUser != null ? String(openVikingUser) : userId != null && userId !== "" ? openVikingUserId(userId) : "";
-    if (actingUser && !OPENVIKING_IDENTIFIER.test(actingUser)) {
+    // An empty user is a caller's defect, never "no user": sent without the identity headers, a data request would be
+    // served as the account's default user — one tree for everybody who hit the same defect.
+    const named = openVikingUser != null || userId != null;
+    const actingUser = openVikingUser != null ? String(openVikingUser) : userId != null && String(userId) !== "" ? openVikingUserId(userId) : "";
+    if (named && !OPENVIKING_IDENTIFIER.test(actingUser)) {
       throw new HttpError(500, "memory_index_request_invalid", "An OpenViking request named an invalid acting user.");
     }
     if (idempotencyKey != null && !IDEMPOTENCY_KEY.test(String(idempotencyKey))) {

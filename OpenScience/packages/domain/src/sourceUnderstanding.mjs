@@ -11,13 +11,22 @@ export const SOURCE_UNDERSTANDING_INPUT_FILE = 'source-understanding-input.json'
 
 // Which types read with which slots is the vocabulary's (`sourceVocabulary.mjs`):
 // the paper slots belong to a paper or a preprint and to nothing else, so a
-// document that is anything but one is never asked for a study design.
+// document that is anything but one is never asked for them.
+//
+// A paper is read the way a paper in any discipline is: its question, its method, the data or subjects it works on, what it
+// found, what limits it. The clinical elements — design, population, intervention or exposure, outcomes, effect estimates —
+// are `optionalSlots`: the run carries them when it judges the paper to be a clinical or epidemiological study, and leaves them
+// out otherwise, so a machine-learning or an economics paper is never shown an empty 「干预或暴露」 or asked for an effect size.
+// (2026-10-13; until then every paper was read into the clinical slots.) An understanding stored before this still reads: its
+// slots are carried and shown by their own keys (`projectSourceUnderstandingOutput`, the knowledge page's reader), so there is
+// no migration and nothing is re-read.
 const schemas = Object.freeze([
-  { id: 'procedure', docTypes: sourceDocTypesOfSchema('procedure'), slots: ['purpose', 'applicability', 'inputs', 'steps', 'checks', 'pitfalls'] },
-  { id: 'paper', docTypes: sourceDocTypesOfSchema('paper'), slots: ['doi', 'design', 'population', 'interventionExposure', 'outcomes', 'effectEstimates', 'limitations'] },
-  { id: 'notes', docTypes: sourceDocTypesOfSchema('notes'), slots: ['topic', 'decisions', 'actions', 'openQuestions'] },
-  { id: 'general', docTypes: [], slots: ['purpose', 'keyInformation', 'limitations'] },
-].map(schema => Object.freeze({ ...schema, slots: Object.freeze(schema.slots), docTypes: Object.freeze(schema.docTypes) })))
+  { id: 'procedure', docTypes: sourceDocTypesOfSchema('procedure'), slots: ['purpose', 'applicability', 'inputs', 'steps', 'checks', 'pitfalls'], optionalSlots: [] },
+  { id: 'paper', docTypes: sourceDocTypesOfSchema('paper'), slots: ['question', 'method', 'dataOrSubjects', 'mainResults', 'limitations', 'doi'],
+    optionalSlots: ['design', 'population', 'interventionExposure', 'outcomes', 'effectEstimates'] },
+  { id: 'notes', docTypes: sourceDocTypesOfSchema('notes'), slots: ['topic', 'decisions', 'actions', 'openQuestions'], optionalSlots: [] },
+  { id: 'general', docTypes: [], slots: ['purpose', 'keyInformation', 'limitations'], optionalSlots: [] },
+].map(schema => Object.freeze({ ...schema, slots: Object.freeze(schema.slots), optionalSlots: Object.freeze(schema.optionalSlots), docTypes: Object.freeze(schema.docTypes) })))
 export const SOURCE_UNDERSTANDING_SCHEMAS = schemas
 
 /** @param {string} docType */
@@ -400,8 +409,9 @@ export function validateSourceUnderstanding(output, input) {
   const schema = sourceUnderstandingSchema(input.docType)
   if (!record(output.slots)) issues.push('slots must be an object.')
   else {
-    for (const key of Object.keys(output.slots)) if (!schema.slots.includes(key)) issues.push(`Unknown slot: ${key}.`)
-    for (const key of schema.slots) {
+    for (const key of Object.keys(output.slots)) if (!schema.slots.includes(key) && !schema.optionalSlots.includes(key)) issues.push(`Unknown slot: ${key}.`)
+    // An optional slot may be left out; one that is carried is held to the same rule as any other.
+    for (const key of [...schema.slots, ...schema.optionalSlots.filter(optional => output.slots[optional] !== undefined)]) {
       const slot = output.slots[key]
       if (slot?.state === 'known') {
         if (!nonempty(slot.value)) issues.push(`slots.${key} needs a known value.`)

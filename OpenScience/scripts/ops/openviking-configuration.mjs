@@ -49,9 +49,13 @@ export const OPENVIKING_MODEL_GATEWAY_URL = "http://open-science-web:8787/intern
  *
  * LANGUAGE. `output_language_override` is deliberately absent. It was `zh` while the engine extracted nothing; set, it
  * forces every memory and summary into that language whatever the user wrote (measured on v0.5.0: English, Japanese
- * and mixed text all resolved to `zh`). Unset, the engine detects per content (`zh-CN`, `en`, `ja`), so a general
- * platform keeps a user's memories in the user's language. Compile's language is the bot's own judgement and is
- * steered per task by the instruction the knowledge module sends.
+ * and mixed text all resolved to `zh`). Unset, the engine detects per content (`zh-CN`, `en`, `ja`) and tells the model
+ * to write in it, which is not enough on its own: with the templates' Chinese examples and section labels in front of
+ * it the model wrote an English conversation's memories in Chinese in 2 of 3 live runs (2026-10-13). Each template
+ * therefore opens with a language block (`deploy/web/openviking/memory-templates-src/_language.txt`, filled with the
+ * detected language); after it, 0 of 8 English conversations gave Chinese memory text (one card kept a Chinese section
+ * label) and a Chinese conversation was unchanged. Compile's language is the bot's own judgement and is steered per
+ * task by the instruction the knowledge module sends.
  *
  * There is no `rerank` section on purpose: `/search/find`, the only search our layout uses, never reranks. The
  * reranker runs in the control plane, over text it has already hydrated from PostgreSQL.

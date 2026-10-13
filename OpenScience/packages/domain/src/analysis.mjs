@@ -251,7 +251,9 @@ export function distillationCompleteness(audits, depth) {
  * a paper that yielded two claims was not a thin paper, it was a bad read.
  */
 export const EXPECTED_OUTPUT_FLOORS = Object.freeze({
-  'published-paper': { claims: 5, slots: ['design', 'population', 'outcome'] },
+  // A paper is read in any discipline (question, method, main results); the clinical elements are an extension of the paper
+  // schema (`sourceUnderstanding.mjs`), so no floor names them.
+  'published-paper': { claims: 5, slots: ['question', 'method', 'mainResults'] },
   'lecture-slides': { perSlide: 1 },
   'cohort-data': { codebookColumnFraction: 0.9 },
 })

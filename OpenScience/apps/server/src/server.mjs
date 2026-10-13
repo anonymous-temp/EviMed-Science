@@ -87,6 +87,7 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
+import { openVikingBackupReadiness } from "./openVikingBackupReadiness.mjs";
 import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, KNOWLEDGE_PROJECT_ID, LEARNING_PROJECT_ID, assertClientProject, ensureEvidenceProject, ensureOpenVikingProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
@@ -9210,6 +9211,22 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
       ],
     );
   }
+  // The engine volume's last verified copy (`openVikingBackupReadiness.mjs`): the notice readiness gives, as numbers an
+  // alert can read. The age is absent when no copy is known.
+  const engineBackup = /** @type {any} */ (readiness.checks.backup)?.openviking ?? null;
+  if (engineBackup) {
+    addMetric(
+      lines,
+      "open_science_openviking_backup_healthy",
+      "Whether the OpenViking engine volume's last capture was verified and is within its maximum age (1) or not (0), with the code that says why.",
+      "gauge",
+      { value: engineBackup.healthy ? 1 : 0, labels: { code: String(engineBackup.code ?? "ok") } },
+    );
+    if (Number.isFinite(engineBackup.ageSeconds)) {
+      addMetric(lines, "open_science_openviking_backup_age_seconds", "Seconds since the OpenViking engine volume's last verified capture.", "gauge",
+        { value: Number(engineBackup.ageSeconds) });
+    }
+  }
   const engineFacts = readiness.checks.memoryIndex?.engine?.facts ?? null;
   if (engineFacts) {
     addMetric(
@@ -10480,7 +10497,8 @@ export async function readinessBackup(config, database = null) {
     if (!config.backupExternalAck) throw readinessFailure("backup_external_unconfirmed");
     if (!config.restoreDrillAck) throw readinessFailure("restore_drill_unconfirmed");
     return { ...summary, external: true, postgres: await postgresBackupReadiness(config, database),
-      ...(config.vcrEnabled ? { vcr: await vcrBackupReadiness(config) } : {}) };
+      ...(config.vcrEnabled ? { vcr: await vcrBackupReadiness(config) } : {}),
+      ...(await openVikingBackupNotice(config)) };
   }
 
   const backupDir = String(config.backupDir ?? "").trim();
@@ -10585,7 +10603,14 @@ export async function readinessBackup(config, database = null) {
     },
     postgres: await postgresBackupReadiness(config, database),
     ...(config.vcrEnabled ? { vcr: await vcrBackupReadiness(config) } : {}),
+    ...(await openVikingBackupNotice(config)),
   };
+}
+
+/** The engine volume's copy (`openVikingBackupReadiness.mjs`), when the engine is this deployment's: a notice, never a
+ *  failure of the backup check. @param {Record<string, any>} config */
+async function openVikingBackupNotice(config) {
+  return selectedMemoryIndexProvider(config) === "openviking" ? { openviking: await openVikingBackupReadiness(config) } : {};
 }
 
 async function inspectRuntimeImage(config, runtimeManager) {

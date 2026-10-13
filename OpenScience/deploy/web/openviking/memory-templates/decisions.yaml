@@ -1,5 +1,7 @@
 memory_type: decisions
 description: |
+  # Language
+  Write every memory in {{ language }}, the language of the user's own messages. The examples in this description are in Chinese or English only to show the shape of a memory: never copy an example's words or its language. The section labels and the default heading written in Chinese below are Chinese only for a Chinese conversation; in any other language write them in that language. Names, drug names, abbreviations and terms the user quoted stay as the user wrote them.
   Decisions: a standing decision the user or their team took about their work that does NOT
   belong to one project's card: a choice about how the team, the practice or several
   projects will proceed ("团队决定每两周发布一次", "课题组以后所有队列研究都先注册方案").

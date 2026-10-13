@@ -7,9 +7,11 @@ import { formatDay } from "@/lib/format";
  * the question a reader has of an old memory, 「这还算数吗」, before they read its history (2026-10-12; Zep's validity interval is
  * the same idea).
  *
- * The bar says only what is recorded: the start is the date a source stated (`relations.validity`) or else the day the memory was
- * made, the end is the day a later memory replaced it or a source ended it. It is drawn for a memory that has an end, a stated
- * interval or a version behind it; a memory made today with nothing else to say has the date under its title already.
+ * The bar says only what is recorded, and is drawn only for a memory that has a real term: an interval a source stated
+ * (`relations.validity`), or an end — the day a later memory replaced it or a source ended it. The start is the stated start or
+ * else the day the memory was made. A memory with no term, however many times it was reworded, gets no bar: a line from its first
+ * day to today would draw an age as if it were a lifetime, and the date it was made is already under its title (2026-10-13,
+ * owner: no progress drawn from an assumed lifetime).
  */
 
 export interface ValiditySpan {
@@ -38,7 +40,7 @@ export function validitySpan(record: Pick<WebStructuredMemory, "createdAt" | "in
   if (to <= from) return null;
   const ticks = [...new Set(record.revisions.map((revision) => instant(revision.changedAt)).filter((time): time is number => time !== null && time > from && time < to))].sort((a, b) => a - b);
   const stated = Boolean(record.relations?.validity?.from || record.relations?.validity?.until);
-  if (end === null && ticks.length === 0 && !stated) return null;
+  if (end === null && !stated) return null;
   return { from, to, ended: end !== null && end <= now, ticks };
 }
 

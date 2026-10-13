@@ -6,7 +6,8 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-const archivePattern = /^open-science-data-\d{8}T\d{6}Z\.tar\.gz(?:\.enc)?$/;
+// The data directory's archive, and the OpenViking engine volume's (`openviking-backup.mjs`), which is always encrypted.
+const archivePattern = /^(?:open-science-data-\d{8}T\d{6}Z\.tar\.gz(?:\.enc)?|openviking-data-\d{8}T\d{6}Z\.tar\.gz\.enc)$/;
 const bucketPattern = /^[a-z0-9][a-z0-9.-]{0,61}[a-z0-9]$/;
 const keySegmentPattern = /^[A-Za-z0-9][A-Za-z0-9._+=-]{0,254}$/;
 const outputLimit = 64 * 1024;
