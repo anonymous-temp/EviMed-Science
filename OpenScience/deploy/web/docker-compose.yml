@@ -497,6 +497,26 @@ services:
       OPEN_SCIENCE_OPENVIKING_ACCOUNT: ${OPEN_SCIENCE_OPENVIKING_ACCOUNT:-evimed}
       OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS: ${OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS:-8000}
       OPEN_SCIENCE_OPENVIKING_API_KEY_FILE: /run/openviking-secrets/api-key
+      # The engine's own model path (v0.5.0): its extraction, summaries and
+      # Compile call this service's model gateway with this bearer, so the
+      # provider key never enters the engine's container and every call is in
+      # the usage ledger. The init step copies it into the secrets volume beside
+      # the root key; `configure:production-state` generates it and renders the
+      # same value into ov.conf. The budget is the platform's own money for
+      # those calls, per rolling day (0 = no cap); a request it refuses is
+      # answered 402, which the engine does not retry.
+      OPEN_SCIENCE_OPENVIKING_MODEL_KEY_FILE: /run/openviking-secrets/model-key
+      OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY: ${OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY:-50}
+      # How often the engine's facts are re-read (version, memory templates,
+      # the Compile shim, the two pinned skills). Value-less: unset keeps
+      # config.mjs's default, 30 minutes.
+      OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS:
+      # What is built on the engine, each behind its own switch. Value-less on
+      # purpose: unset, each is on exactly when the engine is this deployment's
+      # index (config.mjs `openVikingEngineSettings`), and a literal default
+      # here would switch them on for a deployment that pinned `builtin`.
+      OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED:
+      OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED:
       # The reranker orders what a recall already hydrated from PostgreSQL, so
       # it runs here rather than in the index: the index's own reranked endpoint
       # navigates by directory abstracts that no language model generates for
