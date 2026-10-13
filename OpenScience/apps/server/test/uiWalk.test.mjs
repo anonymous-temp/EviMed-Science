@@ -27,7 +27,7 @@ import {
   rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
   addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
-  handoffFindings, handoffProbe, HANDOFF_FIELDS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, NOTICE_SECTION_PAGES, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, NOTICE_SECTION_PAGES, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -95,6 +95,7 @@ test("every page the router serves at a fixed address is walked, or says why it 
     "/app/chat": "the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it",
     "/app/handoff": "opens only with a hand-off in the address; without one it returns to the conversation",
     "/app/runs": "a redirect to the newest run's conversation, decided at run time",
+    "/app/files/open": "a compiled file named by its place: it reads the file and goes to the document's page, which `files-reader` walks",
   };
   const walked = new Set(ROUTES.map(([, address]) => address.split("?")[0]));
   const missing = pages.filter((page) => !walked.has(page) && !Object.hasOwn(notWalked, page));
@@ -640,6 +641,8 @@ function probe(kind, arg, search) {
     case "sharedMissing": return wrong ? { title: true, back: true, retry: true } : { title: true, back: true, retry: false };
     case "memoryMap": return wrong ? { radios: ["关系"], figures: [{ kind: "relations", named: false }], lists: [], thin: false, empty: false }
       : { radios: ["关系", "主题", "维度", "时间", "活跃"], figures: [{ kind: "relations", named: true }], lists: [{ label: "标记", rows: 3 }], thin: false, empty: false };
+    case "knowledgeGraph": return wrong ? { figures: [{ kind: "knowledge-wiki", named: false }], lists: [], legend: false, views: ["图谱"], engineAddress: true, empty: false }
+      : { figures: [{ kind: "knowledge-wiki", named: true }], lists: [{ label: "页面", rows: 3 }], legend: true, views: ["页面", "图谱"], engineAddress: false, empty: false };
     case "inboxSafety": return wrong ? { heading: 2, bell: 5 } : { heading: 2, bell: 2 };
     case "feishuRows": return { rows: wrong ? 2 : search.includes("notifications") ? 1 : 0 };
     case "connectorRows": return { rows: arg.map((title) => ({ title, found: true, optional: !wrong, configured: false, missing: wrong })) };
@@ -760,7 +763,7 @@ function context() {
           // FAKE_ROWS=external: the row's title is a link to an outside address; the browser reports no popup, and the row is not silent.
           if (action === "external") return process.env.FAKE_ROWS === "external";
           dialogOpen = process.env.FAKE_ROWS !== "dead" && process.env.FAKE_ROWS !== "external";
-          log({ rowClick: new URL(url).pathname, index: arg[1] });
+          log({ rowClick: new URL(url).pathname, index: arg[1], search: new URL(url).search });
           // FAKE_ROW_WRITE=1: the row marks itself read on the way (the inbox): a write the walk's guard must refuse, next to a read it must let through.
           if (process.env.FAKE_ROW_WRITE) {
             for (const [, handler] of pageRoutes) {
@@ -811,6 +814,11 @@ function context() {
         if (typeof fn === "function" && fn.name === "markRowsProbe") return process.env.FAKE_ROWS === "none" ? 0 : 3;
         if (typeof fn === "function" && fn.name === "clickFirstMarkProbe") { dialogOpen = process.env.FAKE_ROWS !== "dead"; log({ markClick: new URL(url).pathname }); return true; }
         if (typeof fn === "function" && fn.name === "drawerStateProbe") return { dialog: dialogOpen, address: dialogOpen };
+        // 知识页's graph: a list of marks that open a file, the file's page and the way back.
+        if (typeof fn === "function" && fn.name === "knowledgeMarkRowsProbe") return process.env.FAKE_ROWS === "none" ? 0 : 3;
+        if (typeof fn === "function" && fn.name === "firstKnowledgeMarkProbe") { previousUrl = url; url = new URL("/app/files/src_" + "a".repeat(32), url).href; log({ knowledgeMark: new URL(url).pathname }); return 1; }
+        if (typeof fn === "function" && fn.name === "knowledgeReaderProbe") return { reader: true, address: true, engineAddress: false, title: true };
+        if (typeof fn === "function" && fn.name === "knowledgeGraphBackProbe") return { graph: true, address: true };
         if (typeof fn === "function" && fn.name === "addressAct") {
           log({ act: arg });
           if (arg[0] === "link") { previousUrl = url; url = new URL(arg[1], url).href; }
@@ -1049,7 +1057,8 @@ test("a row that is a link to an outside address is not a row that shows nothing
 test("with two lists on a page the walk loads the page again before the second click", async () => {
   const { code, stdout, stderr, log } = await walk({ FAKE_ROWS: "two" });
   assert.equal(code, 0, stdout + stderr);
-  const events = log.filter((entry) => (entry.goto && entry.goto.endsWith("/app/files")) || entry.rowClick === "/app/files");
+  // The 知识页 filter's two views are other addresses of the same page: they carry a query, and this is the plain list's.
+  const events = log.filter((entry) => (entry.goto && entry.goto.endsWith("/app/files")) || (entry.rowClick === "/app/files" && !entry.search));
   // The page, the first click, the page again, the second click — then the knowledge base's PDF step and its way-back step each open the page
   // once more, and the phone's view is the last.
   assert.deepEqual(events.map((entry) => (entry.rowClick ? `click ${entry.index}` : "goto")), ["goto", "click 第一张清单", "goto", "click 第二张清单", "goto", "goto", "goto"]);
@@ -1773,7 +1782,7 @@ test("the walk opens the pages whose ids the deployment's lists name: both studi
   const routeAt = log.findLastIndex((entry, index) => index < pressedAt && entry.route === String("**/api/**"));
   assert.ok(pressedAt >= 0 && routeAt >= 0 && log.findIndex((entry, index) => index > pressedAt && entry.unroute) > pressedAt);
   assert.equal(log.filter((entry) => entry.aborted).length, 0);
-  assert.deepEqual(Object.keys(report.steps).sort(), ["address-state", "evidence-matrix@desktop", "evidence-matrix@phone", "extensions-skills-create", "files-pdf", "files-return", "frontier-event-handoff", "memory-map-drawer"]);
+  assert.deepEqual(Object.keys(report.steps).sort(), ["address-state", "evidence-matrix@desktop", "evidence-matrix@phone", "extensions-skills-create", "files-pdf", "files-return", "frontier-event-handoff", "knowledge-graph-mark", "memory-map-drawer"]);
 });
 
 test("a page that regresses on what R11 fixed fails the walk and names the page and the defect", async () => {
@@ -2394,4 +2403,49 @@ test("记忆地图's drawer is read open and in the address, then closed and gon
   const none = memoryMapFindings("memory-map", { rows: 0, opened: null, closed: null });
   assert.deepEqual(none.failures, []);
   assert.match(none.notices[0], /not observable/u, "an account with no mark proves nothing");
+});
+
+test("the knowledge graph's first mark opens a knowledge page with no engine address in it, and Back brings the graph again", () => {
+  const read = (opened, closed) => ({ rows: 4, opened, closed });
+  const page = { reader: true, address: true, engineAddress: false, title: true };
+  const back = { graph: true, address: true };
+  assert.deepEqual(knowledgeGraphFindings("knowledge-graph", read(page, back)), { failures: [], notices: [] });
+  assert.deepEqual(knowledgeGraphFindings("knowledge-graph", read({ ...page, address: false, reader: false }, back)).failures,
+    ["knowledge-graph@desktop: pressing the first mark did not go to a document's page", "knowledge-graph@desktop: the page the first mark opened shows no knowledge page"]);
+  assert.deepEqual(knowledgeGraphFindings("knowledge-graph", read({ ...page, engineAddress: true }, back)).failures,
+    ["knowledge-graph@desktop: the page the first mark opened shows a viking:// address"]);
+  assert.deepEqual(knowledgeGraphFindings("knowledge-graph", read(page, { graph: false, address: false })).failures,
+    ["knowledge-graph@desktop: Back did not return to the graph's address", "knowledge-graph@desktop: Back returned and the graph is not drawn"]);
+  assert.deepEqual(knowledgeGraphFindings("knowledge-graph", read(page, null)).failures, ["knowledge-graph@desktop: there was no way back to the graph to read"]);
+  const none = knowledgeGraphFindings("knowledge-graph", { rows: 0, opened: null, closed: null });
+  assert.deepEqual(none.failures, []);
+  assert.match(none.notices[0], /not observable/u, "a project with no compiled pages proves nothing");
+});
+
+test("the knowledge graph's figure has a name, a legend and the same marks as a list, the two views are one switch, and no engine address is on the page", () => {
+  const ok = { figures: [{ kind: "knowledge-kg", named: true }], lists: [{ label: "实体", rows: 12 }], legend: true, views: [...KNOWLEDGE_VIEWS], engineAddress: false, empty: false };
+  assert.deepEqual(probeFindings("knowledge-graph", "desktop", "knowledgeGraph", ok), { failures: [], notices: [] });
+  const broken = probeFindings("knowledge-graph", "phone", "knowledgeGraph", { ...ok, figures: [{ kind: "knowledge-kg", named: false }], lists: [], legend: false, views: ["图谱"], engineAddress: true });
+  assert.deepEqual(broken.failures, [
+    "knowledge-graph@phone: the knowledge-kg figure has no accessible name",
+    "knowledge-graph@phone: the graph has no legend saying what its shapes and colours are",
+    "knowledge-graph@phone: the graph has no list of the same marks under it",
+    "knowledge-graph@phone: a viking:// address is on the page",
+    "knowledge-graph@phone: the view switch reads “图谱” (页面、图谱)",
+  ]);
+  // A thin graph draws no figure and needs no legend.
+  assert.deepEqual(probeFindings("knowledge-graph", "desktop", "knowledgeGraph", { ...ok, figures: [], legend: false }), { failures: [], notices: [] });
+});
+
+test("the walk presses the knowledge graph's first mark and comes back, and says so when there is none to press", async () => {
+  const { code, stdout, stderr, log, report } = await walk();
+  assert.equal(code, 0, stdout + stderr);
+  assert.ok(log.some((entry) => /^\/app\/files\/src_a{32}$/.test(entry.knowledgeMark ?? "")), "the first mark was pressed");
+  assert.deepEqual(report.steps["knowledge-graph-mark"].closed, { graph: true, address: true });
+  assert.ok(ROUTES.some(([name, route]) => name === "knowledge-graph" && route === "/app/files?kind=wiki&view=graph"));
+  assert.deepEqual(PAGE_PROBES["knowledge-graph"], [["knowledgeGraph", ["desktop", "phone"]]]);
+  assert.ok(NOTICE_SECTION_PAGES.has("knowledge-graph") && ROW_CLICK_PAGES.has("knowledge-graph"));
+  const none = await walk({ FAKE_ROWS: "none" });
+  assert.equal(none.code, 0, none.stdout + none.stderr);
+  assert.match(none.report.notices.find((notice) => notice.startsWith("knowledge-graph@desktop: not observable")) ?? "", /not observable/u);
 });

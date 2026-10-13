@@ -157,6 +157,11 @@ export const ROUTES = [
   ["virtual-research-precedents", "/app/virtual-research?tab=precedents"],
   ["virtual-research-definitions", "/app/virtual-research?tab=definitions"],
   ["files", "/app/files"],
+  // 知识页 (2026-10-13): the 知识页 filter of the knowledge base as a tree by type, and as a graph — a data view (DESIGN.md 「页面结构」,
+  // the data-page exception the memory map set), one canvas over the list of the same marks. Where the project has no compiled
+  // pages both read as the plain list and the graph walk says it could not be observed.
+  ["knowledge-pages", "/app/files?kind=wiki"],
+  ["knowledge-graph", "/app/files?kind=wiki&view=graph"],
   ["memory", "/app/memory"],
   // The memory page's other three tabs (R10): one list each, and the growth
   // tab's curve over its timeline. The default tab was the only one walked.
@@ -398,6 +403,8 @@ export const SECTION_SHAPES_BY_PAGE = {
   memory: 2, "memory-project": 2, "memory-methods": 2, "memory-growth": 2,
   // 记忆地图 is a data page: the sentence over its switch and filters, the one canvas of the view, and the list of the same marks.
   "memory-map": 3,
+  // 知识页: the chips and the compile's line, the tree; the graph adds its canvas and the list of its marks.
+  "knowledge-pages": 2, "knowledge-graph": 3,
   frontier: 3, "frontier-hot": 3, "frontier-daily": 3, "frontier-all": 3, "frontier-following": 3,
   capabilities: 2,
   "extensions-plugins": 2, "extensions-skills": 2,
@@ -414,7 +421,7 @@ export const SECTION_SHAPES_BY_PAGE = {
  * it, and not a failure (principle 4: a check ships as a notice until it has a distribution). The pages of the table above that are not
  * named here keep failing, as they have since R10.
  */
-export const NOTICE_SECTION_PAGES = new Set(["inbox", "geo", "frontier-zones", "autopilot", "account", "memory-map"]);
+export const NOTICE_SECTION_PAGES = new Set(["inbox", "geo", "frontier-zones", "autopilot", "account", "memory-map", "knowledge-pages", "knowledge-graph"]);
 
 /**
  * The pages whose lists are clicked: the first row of each list must show
@@ -424,7 +431,7 @@ export const NOTICE_SECTION_PAGES = new Set(["inbox", "geo", "frontier-zones", "
  * minus the study's own tabs, whose rows are results, not a place to go.
  */
 export const ROW_CLICK_PAGES = new Set([
-  "files", "memory", "memory-project", "memory-methods", "memory-growth", "memory-map",
+  "files", "memory", "memory-project", "memory-methods", "memory-growth", "memory-map", "knowledge-pages", "knowledge-graph",
   "frontier", "frontier-hot", "frontier-daily", "frontier-all",
   "extensions-plugins", "extensions-skills", "virtual-research",
   // R11 (re-aimed in R13, V-11): a source row opens a drawer (it opened its three conditions in place), a scheduled-task row goes to the
@@ -1057,6 +1064,17 @@ export function pageProbe([kind, arg]) {
       empty: text.includes("还没有记住什么"),
     };
   }
+  if (kind === "knowledgeGraph") {
+    const text = words(main);
+    return {
+      figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
+      lists: all("main ul[aria-label]").filter(visible).map((el) => ({ label: el.getAttribute("aria-label"), rows: el.querySelectorAll(":scope > li").length })),
+      legend: all("[role='group'][aria-label='图例']").some(visible),
+      views: all("[role='tab']").filter(visible).map(words),
+      engineAddress: text.includes("viking://"),
+      empty: text.includes("还没有整理出页面") || text.includes("内容还少"),
+    };
+  }
   if (kind === "inboxSafety") {
     const heading = all("h2").map(words).map((text) => /^需要优先查看 · 未读 (\d+) 条$/.exec(text)).find(Boolean);
     const bell = [...document.querySelectorAll("button[aria-label], a[aria-label]")].map((el) => el.getAttribute("aria-label") ?? "").find((label) => label.startsWith("收件箱"));
@@ -1131,6 +1149,7 @@ export const PAGE_PROBES = {
   "memory-growth": [["memoryTabs", ["desktop"]]],
   "memory-shared-missing": [["sharedMissing", ["desktop", "phone"]]],
   "memory-map": [["memoryMap", ["desktop", "phone"]]],
+  "knowledge-graph": [["knowledgeGraph", ["desktop", "phone"]]],
   inbox: [["inboxSafety", ["desktop"]]],
   account: [["feishuRows", ["desktop"]]],
   "account-notifications": [["feishuRows", ["desktop"]]],
@@ -1152,6 +1171,8 @@ export const MISSING_RECORDS = {
 
 /** The five views of 记忆地图, in the order its one row of switches shows them. */
 export const MEMORY_MAP_VIEWS = Object.freeze(["关系", "主题", "维度", "时间", "活跃"]);
+/** The 知识页 filter's two views. */
+export const KNOWLEDGE_VIEWS = Object.freeze(["页面", "图谱"]);
 
 /**
  * What 记忆地图's first mark did, and what the drawer's closing did: the click opens the memory page's own drawer and writes the mark into
@@ -1175,6 +1196,83 @@ export function memoryMapFindings(name, read) {
     if (read.closed.address) failures.push(`${current}: the drawer closed and its mark is still in the address`);
   } else if (read.opened.dialog) failures.push(`${current}: the drawer has no 关闭 button to press`);
   return { failures, notices };
+}
+
+/**
+ * What the knowledge graph's first mark did: the first row of the list under the picture is pressed, the page that opens is read (a
+ * knowledge page's own body, at a document's address, with no engine address in it), and Back brings the graph again at its address.
+ * A page with no mark says so; it is not a pass.
+ * @param {string} name the report's page name
+ * @param {{ rows: number, opened: { reader: boolean, address: boolean, engineAddress: boolean, title: boolean } | null, closed: { graph: boolean, address: boolean } | null }} read
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function knowledgeGraphFindings(name, read) {
+  const current = `${name}@desktop`;
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (read.rows === 0 || !read.opened) {
+    notices.push(`${current}: not observable: the page lists no mark that opens, so the first mark was not tried`);
+    return { failures, notices };
+  }
+  if (!read.opened.address) failures.push(`${current}: pressing the first mark did not go to a document's page`);
+  if (!read.opened.reader) failures.push(`${current}: the page the first mark opened shows no knowledge page`);
+  if (!read.opened.title) failures.push(`${current}: the page the first mark opened has no title`);
+  if (read.opened.engineAddress) failures.push(`${current}: the page the first mark opened shows a viking:// address`);
+  if (!read.closed) failures.push(`${current}: there was no way back to the graph to read`);
+  else {
+    if (!read.closed.address) failures.push(`${current}: Back did not return to the graph's address`);
+    if (!read.closed.graph) failures.push(`${current}: Back returned and the graph is not drawn`);
+  }
+  return { failures, notices };
+}
+
+/** The first mark of the knowledge graph's list: a link to the file the mark is. */
+export function firstKnowledgeMarkProbe() {
+  const link = [...document.querySelectorAll("main ul[aria-label] > li a[data-row-title]")].find((el) => el.getBoundingClientRect().width > 0);
+  if (!link) return 0;
+  link.click();
+  return 1;
+}
+
+/** How many marks the knowledge graph's list shows that open a file. */
+export function knowledgeMarkRowsProbe() {
+  return [...document.querySelectorAll("main ul[aria-label] > li a[data-row-title]")].filter((el) => el.getBoundingClientRect().width > 0).length;
+}
+
+/** What a knowledge page's reader shows. */
+export function knowledgeReaderProbe() {
+  const text = (document.querySelector("main") ?? document.body).textContent ?? "";
+  return {
+    reader: Boolean(document.querySelector("[data-knowledge-page]")),
+    address: /^\/app\/files\/src_[A-Za-z0-9_.:-]+$/.test(location.pathname),
+    engineAddress: text.includes("viking://"),
+    title: Boolean(document.querySelector("main h1, h1")?.textContent?.trim()),
+  };
+}
+
+/** Whether the graph is drawn again, and at its own address. */
+export function knowledgeGraphBackProbe() {
+  const params = new URLSearchParams(location.search);
+  return { graph: Boolean(document.querySelector("[data-knowledge-graph]")), address: location.pathname === "/app/files" && params.get("view") === "graph" };
+}
+
+/**
+ * The knowledge graph's first mark: pressed, read as a knowledge page at a document's address, and Back. Pressing a mark opens a page
+ * and reads; nothing here writes.
+ */
+async function walkKnowledgeGraph(page, base, route) {
+  await openRoute(page, base, route);
+  await page.waitForTimeout(1_500);
+  const rows = await page.evaluate(knowledgeMarkRowsProbe);
+  if (rows === 0) return { ...knowledgeGraphFindings("knowledge-graph", { rows: 0, opened: null, closed: null }), read: { rows } };
+  await page.evaluate(firstKnowledgeMarkProbe);
+  await page.waitForTimeout(2_000);
+  const opened = await page.evaluate(knowledgeReaderProbe);
+  await page.goBack({ waitUntil: "domcontentloaded", timeout: 30_000 }).catch(() => null);
+  await page.waitForTimeout(2_000);
+  const closed = await page.evaluate(knowledgeGraphBackProbe);
+  const judged = knowledgeGraphFindings("knowledge-graph", { rows, opened, closed });
+  return { ...judged, read: { rows, opened, closed } };
 }
 
 /** The tabs a memory address names, and the one it must open on. */
@@ -1237,6 +1335,16 @@ export function probeFindings(name, viewportName, kind, r) {
       for (const figure of r.figures) if (!figure.named) failures.push(`${current}: the ${figure.kind} figure has no accessible name`);
       if (r.figures.some((figure) => figure.kind === "relations") && !r.lists.some((list) => list.label === "标记" && list.rows > 0)) failures.push(`${current}: the graph has no list of the same marks under it`);
       if (r.thin && r.figures.some((figure) => figure.kind === "relations")) failures.push(`${current}: the page says there is too little to draw and draws the graph`);
+      break;
+    }
+    case "knowledgeGraph": {
+      // The graph and its list are one set of marks: a figure has a name, a legend and the same marks as a list under it; the 页面 / 图谱
+      // switch is there; and the engine's own address is never on the page.
+      for (const figure of r.figures) if (!figure.named) failures.push(`${current}: the ${figure.kind} figure has no accessible name`);
+      if (r.figures.length > 0 && !r.legend) failures.push(`${current}: the graph has no legend saying what its shapes and colours are`);
+      if (r.figures.length > 0 && !r.lists.some((list) => list.rows > 0)) failures.push(`${current}: the graph has no list of the same marks under it`);
+      if (r.engineAddress) failures.push(`${current}: a viking:// address is on the page`);
+      if (r.views.length > 0 && r.views.join(",") !== KNOWLEDGE_VIEWS.join(",")) failures.push(`${current}: the view switch reads “${r.views.join("、")}” (${KNOWLEDGE_VIEWS.join("、")})`);
       break;
     }
     case "sharedMissing":
@@ -2517,6 +2625,7 @@ async function main() {
             if (name === "files" && clicked.rows.length > 0) await recordStep(report, failures, notices, "files-return", () => walkKnowledgeReturn(page, base, route));
             if (name === "extensions-skills") await recordStep(report, failures, notices, "extensions-skills-create", () => walkSkillDrawer(page, base, route));
             if (name === "memory-map") await recordStep(report, failures, notices, "memory-map-drawer", () => walkMemoryMap(page, base, route));
+            if (name === "knowledge-graph") await recordStep(report, failures, notices, "knowledge-graph-mark", () => walkKnowledgeGraph(page, base, route));
           }
         } catch (error) {
           failures.push(`${current}: did not load (${String(error).slice(0, 120)})`);
