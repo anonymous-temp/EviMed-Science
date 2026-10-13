@@ -301,6 +301,11 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
   if (!Number.isSafeInteger(checkMs) || checkMs < 60_000 || checkMs > 86_400_000) {
     throw new Error(`OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS must be a whole number from 60000 to 86400000, got ${JSON.stringify(checkValue)}.`);
   }
+  const backupAgeValue = overrides.openVikingBackupMaxAgeSeconds ?? (process.env.OPEN_SCIENCE_OPENVIKING_BACKUP_MAX_AGE_SECONDS || 90_000);
+  const backupMaxAgeSeconds = Number(backupAgeValue);
+  if (!Number.isSafeInteger(backupMaxAgeSeconds) || backupMaxAgeSeconds < 60 || backupMaxAgeSeconds > 604_800) {
+    throw new Error(`OPEN_SCIENCE_OPENVIKING_BACKUP_MAX_AGE_SECONDS must be a whole number from 60 to 604800, got ${JSON.stringify(backupAgeValue)}.`);
+  }
   const provider = String(overrides.memoryIndexProvider ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_PROVIDER ?? "").trim();
   const url = String(overrides.openVikingUrl ?? process.env.OPEN_SCIENCE_OPENVIKING_URL ?? "").trim();
   // The rule `memorySubstrate.memoryIndexSelection` applies, restated because that module reads a finished config.
@@ -318,6 +323,11 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
       version: String(depsVersions.openviking?.version ?? ""),
       skills: depsVersions.openviking?.skills ?? {},
     },
+    // The receipt the host's backup timer writes after each capture of the engine's volume
+    // (`scripts/ops/openviking-backup.mjs`), as the backup overlay mounts it, and how old a verified copy may be before
+    // readiness says so (`openVikingBackupReadiness.mjs`; a notice, never a failure). Unset path: nothing is reported.
+    openVikingBackupStateFile: String(overrides.openVikingBackupStateFile ?? process.env.OPEN_SCIENCE_OPENVIKING_BACKUP_STATE_FILE ?? "").trim(),
+    openVikingBackupMaxAgeSeconds: backupMaxAgeSeconds,
     ovKnowledgeEnabled: overrides.ovKnowledgeEnabled ?? boolEnv("OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED", engineSelected),
     ovNativeMemoryEnabled: overrides.ovNativeMemoryEnabled ?? boolEnv("OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED", engineSelected),
   };
@@ -2308,7 +2318,12 @@ export function loadConfig(overrides = {}) {
       overrides.runtimeSandboxEnforcement ?? process.env.OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT ?? (production ? "full" : "partial"),
     ).trim().toLowerCase(),
     loopxEnabled: overrides.loopxEnabled ?? boolEnv("OPEN_SCIENCE_LOOPX_ENABLED", true),
-    runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", false),
+    // The kernel's ask-user tool, for every runtime of the deployment. On unless the deployment says otherwise
+    // (2026-10-12): a person is in the conversation, and 「分析一下我的数据」 with nothing uploaded should be asked about,
+    // not assumed about. It was off on the premise that a hosted run is unattended. Which turns are — a scheduled task,
+    // a proactive episode, a platform job — is said per dispatch (`researchContext.mjs`, `attended`), because one
+    // runtime serves both kinds; a question asked with no page attached is answered by the kernel with an error.
+    runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", true),
     // The socket plugins a runtime runs without (preset row ids, comma
     // separated). Empty — every plugin on — is the product; naming one is how
     // a plugin is measured against the kernel's own composition (principle 11).
@@ -2714,7 +2729,7 @@ export function loadConfig(overrides = {}) {
     // neighbours. Measured on the pinned embedder (qwen3.7-text-embedding,
     // 2026-09-14): relevant hits score 0.71–0.87, unrelated ones fall to about
     // 0.21 — as cosines. From OpenViking v0.4.22 a score is (cosine + 1) / 2
-    // (re-measured on v0.4.23, 2026-10-12: the same memory 0.712 → 0.861), so the
+    // (re-measured on v0.4.23, 2026-10-12: the same memory 0.712 → 0.861; unchanged on v0.5.0, 2026-10-13), so the
     // same cut is 0.75: relevant hits 0.86–0.94, unrelated about 0.6. The durable kinds (profile, preference, behavior, correction) are
     // not looked up under it: they are the standing profile, handed to a
     // conversation up front whatever they would score (`memoryProfileMaxRecords`).

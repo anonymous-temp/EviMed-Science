@@ -241,6 +241,36 @@ export function boundConversationNote(binding, registry) {
   ].join("\n");
 }
 
+/**
+ * What a turn nobody is watching is told about questions.
+ *
+ * The ask-user tool is mounted for a whole runtime, and one runtime serves the conversation a person is in and the
+ * scheduled task that runs at night. A question asked in the second waits for nobody: the kernel answers it with an error
+ * once no page is attached, which costs a step, and with a page left open it waits until someone comes back.
+ */
+export const UNATTENDED_TURN_NOTE = "本轮是没有人值守的运行：没有人在等着回答问题。不要追问，按最合理的假设做完，并把所作的假设写进结果里。";
+
+/**
+ * The rules of medical and scientific evidence work, for a turn that is that work: one routed to a capability, or a
+ * conversation bound to one.
+ *
+ * Until 2026-10-12 these rode every dispatch — an apology e-mail was told how to cite a label PDF and when a warning
+ * may be called a boxed warning (2026-10-12 review, GA13). An open conversation reads them in the evidence method
+ * (`runtime/skills/evimed/open-domain-answer`), which says the same things and is loaded when the question is medical.
+ */
+export const EVIDENCE_WORK_RULES = Object.freeze([
+  "对话回答中的引用统一采用 [1] 编号，并在文末参考文献区一次性列出各来源的完整 HTTPS 链接；正文句子不得夹带原始 URL 或 [1](https://…) 行内链接，也不得出现 <!-- claim:… -->、[claim:…] 等内部标记。引用的必须是读者可打开的公开来源（期刊页、PubMed/PMC、指南或监管页、说明书 PDF）；不得引用 www.evimed.com/api-evimed/ 等内部接口地址或任何带凭据的 URL——工具返回此类地址时，改引其指向的公开来源。未检索的直接回答无需强行添加引用。专项交付物内部的引用格式以对应 SKILL 约定为准。",
+  "网页（含官方医学、指南、循证评价与监管网页）必须通过 web_read 读取，并以落盘正文、抓取时间和内容哈希作为成功凭证；工具返回 error 时不得写成 Fetched 或当作已读取。",
+  "不得把检索题录包装成已读摘要或全文：按实际读到的层级措辞和引用，只到题录的来源不支撑对其研究设计、证据等级、效应量或因果结论的任何陈述。",
+  "需要开放获取论文原文时，优先用 open_access_full_text 将完整 XML 和 Markdown 写入当前工作区，再用 read 分段读取；不得为了读取本地工具输出而启动子会话，也不得要求子会话大段逐字复述原文。",
+  "当用户要求基于某一篇已发表论文题目重写、复现或评述正文时，必须先调用 citation-integrity skill，并只以题名、DOI/PMID/PMCID 完全匹配的已发表版本全文为事实底稿。配套论文、预印本、引文、检索页和第三方摘要可以作为线索，但其内容不得写成目标论文自身的方法或结果。",
+  "这类单篇论文任务在交付前必须做来源忠实性复核：逐项在目标全文中核对作者、样本/分母、每个定量结果、效应方向、组别归属、URL/标识符和结论；无法逐项定位的内容直接删除或明确标为未报告。不得补写原文没有明示的局限性、仓库地址、引用量、预印本 DOI 或实施状态。",
+  "必须准确区分说明书普通警告、注意事项和黑框警告；除非来源字段明确标记为 boxed warning，不得称为黑框警告。",
+  "实测结果是默认科研证据。模拟、合成或演示数据只能在用户明确要求 dry-run 时生成，必须在数据、图表、正文和结论中持续标记，且不得据此声称研究或论文已达到投稿条件。",
+  "页数、引用数量和图表数量只是范围目标，不能替代来源核验、方法适配、数值一致性、可复现性和完整性检查；无法核实的引用不得为了达到数量目标而补齐。",
+  "不得把服务不可用、零检索结果或缺少全文改写成阴性证据；交付物如实记录缺口，对话回答只按读到的内容措辞。",
+]);
+
 export async function prepareResearchContext(
   project,
   session,
@@ -251,7 +281,11 @@ export async function prepareResearchContext(
   // `resident` is the researcher's standing profile with the decision whether this dispatch hands it over
   // (`ResidentProfiles.forDispatch`): only the profile is pushed, and only when the conversation lacks it. `memories` is the
   // plain form, for a caller that has a list of memos and no conversation (a platform run passes none).
-  { query: _query = "", memories = [], resident = null, specialists = [], routedSpecialist = null, mountableSkills = [], handbooks = null, sourceContext = null, platformTrial = null } = {},
+  //
+  // `attended`: a person is in this conversation now and can answer a question (the web chat, an IM channel). It is said
+  // by the caller that knows — the dispatch a person sent — and everything else is a turn nobody is watching: a scheduled
+  // task, a proactive episode, a module's background step, a platform job.
+  { query: _query = "", memories = [], resident = null, specialists: _specialists = [], routedSpecialist = null, mountableSkills = [], handbooks = null, sourceContext = null, platformTrial = null, attended = false } = {},
 ) {
   const knowledge = await syncKnowledgeBase(project, config);
   // A pointer, not a retrieval. Until 2026-09-20 every dispatch indexed the
@@ -279,25 +313,22 @@ export async function prepareResearchContext(
   // rather than reaching the prompt (the store is a schema of the control-plane database; an unconfigured one has nothing).
   const memoryInstruction = resident ? (resident.due ? resident.text : "") : memoryContext;
   const handed = resident ? (resident.due ? resident.memories : []) : memories;
-  const specialistInstruction = session.mode === "open-domain" && specialists.length > 0
-    ? [
-        "开放域科研问答已注册以下专项 Skill。问题与其中一个或多个范围实质匹配时，必须加载对应 Skill，并按其工具、证据边界和交付物执行；可按问题需要组合多个专项，但不得为展示能力而无关调用：",
-        ...specialists.map((item) => [
-          `<evimed-specialist id="${escapeContext(item.id)}" skill="${escapeContext(item.skill)}">`,
-          `${escapeContext(item.title)}：${escapeContext(item.description)}`,
-          `Required tools: ${escapeContext((item.requiredTools ?? []).join(", "))}`,
-          "</evimed-specialist>",
-        ].join("\n")),
-        "若没有专项实质匹配，保持开放域回答；工具未配置、任务失败或证据不足时保留真实状态，不得假装已执行。",
-      ].join("\n")
-    : "专项科研会话必须继续遵循已注册专项 Agent 的 SKILL.md、工具边界和交付物约束。";
+  // An open conversation is told nothing about the capabilities here. Until 2026-10-12 every dispatch pasted the whole
+  // routable catalogue into this context — 25 `<evimed-specialist>` blocks with their tool lists, 13,000 characters, under
+  // 「问题与其中一个或多个范围实质匹配时，必须加载对应 Skill」 — a second copy of the index the guidance already holds, and
+  // an instruction nothing could follow: a capability's method is not in the kernel's skill roots, it arrives with the
+  // plan that names it. `specialists` still arrives from every caller and chooses nothing.
+  const specialistInstruction = session.mode === "open-domain"
+    ? ""
+    : "专项会话继续遵循已注册专项能力的方法正文、工具边界和交付物约束。";
   // Skills the control plane hands the model directly, rather than telling it to
-  // go and load them. `skillsLoaded` is a deterministic property — was the
-  // method in front of the model — and delegation already makes it true by
-  // construction for capability children by injecting their bodies. The answer
-  // line structurally never delegates, so nothing made it true there and the
-  // check measured instruction compliance instead: 35% on the production
-  // ledger. Mounting closes that by construction on the one path that lacked it.
+  // go and load them: a caller that knows a method belongs in this turn passes
+  // its body, and the ledger records that it was mounted. No dispatch passes
+  // one today. Until 2026-10-12 every unrouted turn was handed the evidence
+  // method (`open-domain-answer`) this way, so that the answer line's
+  // `skillsLoaded` check was true by construction; the conversation is a
+  // general one now, the model loads that method when the question is medical,
+  // and a reply is held to the method's floor only when the run loaded it.
   // Only the unrouted open-domain turn. A routed turn's skills reach the model
   // through delegation into the capability child, and a second copy sitting in
   // the root system prompt would be a persona the child never sees while the
@@ -322,19 +353,15 @@ export async function prepareResearchContext(
   // about rather than how to arrange it.
   const routingInstruction = routedSpecialist
     ? routedSpecialistInstruction(routedSpecialist)
-    : session.mode === "open-domain"
-      ? [
-          "本轮未命中确定性专项路由，由开放域答问主路处理。",
-          mounted.length > 0
-            // The method is in this same prompt, below. Asking the model to go
-            // fetch what the platform is already holding was measured on the
-            // production ledger: 11 of 17 answer-line runs never made the call,
-            // and each was delivered "unverified" for a persona the control
-            // plane could have handed it.
-            ? `本轮已直接挂载以下方法，正文见下方 <evimed-skill>：${mounted.map((skill) => skill.name).join("、")}。这些方法无需再调用 skill 工具加载；若后续发现任务与已注册专项实质匹配，仍应加载对应专项 Skill。`
-            : "作答前必须先成功加载 open-domain-answer skill，并遵循其答案优先结构、证据诚实与引用规范；若后续发现任务与已注册专项实质匹配，仍应加载对应专项 Skill。",
-        ].join("\n")
-      : "本轮未命中确定性专项路由；若后续发现任务与已注册专项实质匹配，仍应加载对应 Skill。";
+    // The method is in this same prompt, below: asking the model to go fetch
+    // what the platform is already holding was measured on the production
+    // ledger (11 of 17 runs never made the call).
+    : mounted.length > 0
+      ? `本轮已直接挂载以下方法，正文见下方 <evimed-skill>：${mounted.map((skill) => skill.name).join("、")}。这些方法无需再调用 skill 工具加载。`
+      : "";
+  // The rules of evidence work travel with the work. A turn routed to a capability, or a conversation bound to one,
+  // is that work; an open conversation is not, and reads them in the evidence method when it loads it.
+  const evidenceTurn = Boolean(routedSpecialist) || session.mode !== "open-domain";
 
   const attachedHandbooks = handbookContextFor(handbooks, project, routedSpecialist?.agentId ?? session.agentId ?? "");
   // The platform's entry on probation, for the sampled runs the caller decided it for (`learningPlatformHandbooks.probationFor`): the model's context only.
@@ -362,14 +389,14 @@ export async function prepareResearchContext(
       updatedAt: memo.updatedAt ?? null,
     })),
     system: [
-      "你是 EviMed 科研助手。使用用户所用语言回答。回答先给结论与可执行建议，再给关键证据；证据强弱写进它所支撑的那句话。",
-      "根据问题本身自主判断回答深度，以及是否需要检索、分析、调用工具或生成文件。简单事实、机制或定义类问题直接简明回答；只有用户明确要求报告、系统评价或深度研究时，才产出长篇结构化报告。",
+      // This turn's own facts, and nothing about what kind of assistant this is: the persona and the guidance are the
+      // composition's, and a conversation typed into the kernel's page reads them without ever passing through here.
+      "使用用户所用语言回答。根据问题本身自主判断回答深度，以及是否需要检索、计算、调用工具或生成文件；简单问题直接、简明地回答。",
       sourceContext ?? knowledgeInstruction,
       "只能在当前工作区内读取 .evimed-knowledge/；若该目录或相关文件不存在，就按知识库为空处理，不得为寻找知识库扫描父目录、用户主目录或其他外部目录。",
       ...(memoryInstruction ? [memoryInstruction] : []),
-      "开放域问题保持自主科研能力。",
-      specialistInstruction,
-      routingInstruction,
+      ...(specialistInstruction ? [specialistInstruction] : []),
+      ...(routingInstruction ? [routingInstruction] : []),
       attachedHandbooks.context,
       ...(trialContext ? [trialContext] : []),
       // Platform text, not retrieved material: the registry read this body from
@@ -382,16 +409,9 @@ export async function prepareResearchContext(
         skill.body.replaceAll("</evimed-skill>", "<\\/evimed-skill>"),
         "</evimed-skill>",
       ].join("\n")),
-      "开放域回答中引用统一采用 [1] 编号，并在文末参考文献区一次性列出各来源的完整 HTTPS 链接；正文句子不得夹带原始 URL 或 [1](https://…) 行内链接，也不得出现 <!-- claim:… -->、[claim:…] 等内部标记。引用的必须是读者可打开的公开来源（期刊页、PubMed/PMC、指南或监管页、说明书 PDF）；不得引用 www.evimed.com/api-evimed/ 等内部接口地址或任何带凭据的 URL——工具返回此类地址时，改引其指向的公开来源。未检索的直接回答无需强行添加引用。专项交付物内部的引用格式以对应 SKILL 约定为准。",
-      "隔离运行时不得调用原生 webfetch。网页（含官方医学、指南、循证评价与监管网页）必须通过 web_read 读取，并以落盘正文、抓取时间和内容哈希作为成功凭证；工具返回 error 时不得写成 Fetched 或当作已读取。",
-      "不得把检索题录包装成已读摘要或全文：按实际读到的层级措辞和引用，只到题录的来源不支撑对其研究设计、证据等级、效应量或因果结论的任何陈述。",
-      "需要开放获取论文原文时，优先用 open_access_full_text 将完整 XML 和 Markdown 写入当前工作区，再用 read 分段读取；不得为了读取本地工具输出而启动 task 子会话，也不得要求子会话大段逐字复述原文。",
-      "当用户要求基于某一篇已发表论文题目重写、复现或评述正文时，必须先调用 citation-integrity skill，并只以题名、DOI/PMID/PMCID 完全匹配的已发表版本全文为事实底稿。配套论文、预印本、引文、检索页和第三方摘要可以作为线索，但其内容不得写成目标论文自身的方法或结果。",
-      "这类单篇论文任务在交付前必须做来源忠实性复核：逐项在目标全文中核对作者、样本/分母、每个定量结果、效应方向、组别归属、URL/标识符和结论；无法逐项定位的内容直接删除或明确标为未报告。不得补写原文没有明示的局限性、仓库地址、引用量、预印本 DOI 或实施状态。",
-      "必须准确区分说明书普通警告、注意事项和黑框警告；除非来源字段明确标记为 boxed warning，不得称为黑框警告。",
-      "实测结果是默认科研证据。模拟、合成或演示数据只能在用户明确要求 dry-run 时生成，必须在数据、图表、正文和结论中持续标记，且不得据此声称研究或论文已达到投稿条件。",
-      "页数、引用数量和图表数量只是范围目标，不能替代来源核验、方法适配、数值一致性、可复现性和完整性检查；无法核实的引用不得为了达到数量目标而补齐。",
-      "任何工具、数据源或计算服务不可用时，不得把服务不可用、零检索结果或缺少全文改写成阴性证据；交付物如实记录缺口，对话回答只按读到的内容措辞。",
+      ...(attended ? [] : [UNATTENDED_TURN_NOTE]),
+      "任何工具、数据源或计算服务不可用时如实说明：不把服务不可用、零结果或没有读到的内容写成结论，工具返回 error 时不得当作已读取。",
+      ...(evidenceTurn ? EVIDENCE_WORK_RULES : []),
     ].join("\n"),
   };
 }

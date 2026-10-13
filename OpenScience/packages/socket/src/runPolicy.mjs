@@ -86,11 +86,12 @@ const GATE_SOURCE_REFUSAL = '交付门禁的实现不在你的阅读范围内。
  * @param {import('@evimed/harness-port').ToolCall | Record<string, any>} call
  * @param {{
  *   budget: { steps: number, tokens: number, children: number },
- *   limits: { maxSteps: number, maxTokens: number, maxChildren: number },
+ *   limits: { maxSteps: number, maxTokens: number, maxChildren: number, maxConcurrentChildren?: number },
  *   submitAttempts: number,
  *   deliveryAttemptLimit: number,
  *   frozenDeliverables?: readonly string[],
- * }} state
+ *   runningChildren?: number,
+ * }} state `runningChildren`: the children of this run working now, by either tool that starts one
  * @returns {{ allow: true } | { allow: false, code: string, reason: string }}
  */
 export function toolPolicy(call, state) {
@@ -169,12 +170,26 @@ export function toolPolicy(call, state) {
   if (state.budget.tokens > state.limits.maxTokens && state.limits.maxTokens > 0) {
     return { allow: false, code: 'budget_exhausted', reason: `token 已达上限 ${state.limits.maxTokens}。` }
   }
-  if (name === 'evimed_delegate' && state.limits.maxChildren > 0 && state.budget.children >= state.limits.maxChildren) {
+  // A child is a child whichever tool starts it. The kernel's own `subagent` (general work, mounted 2026-10-12) is
+  // under the same two budgets as a capability delegation: how many a run may start over its life, and how many may
+  // work at the same moment. `evimed_delegate` checks the second itself, where it can say which handle to wait for.
+  const startsChild = name === 'evimed_delegate' || name === NATIVE_SUBAGENT_TOOL
+  if (startsChild && state.limits.maxChildren > 0 && state.budget.children >= state.limits.maxChildren) {
     return { allow: false, code: 'budget_exhausted', reason: `本次运行的分工数已达上限 ${state.limits.maxChildren}。` }
+  }
+  const concurrent = Number(state.limits.maxConcurrentChildren ?? 0)
+  if (name === NATIVE_SUBAGENT_TOOL && concurrent > 0 && Number(state.runningChildren ?? 0) >= concurrent) {
+    return { allow: false, code: 'delegation_concurrency_limit', reason: `已有 ${state.runningChildren} 个子代理在运行，达到本部署同时运行的上限 ${concurrent}。等其中一个结束，再分出这一件，或者自己做。` }
   }
 
   return { allow: true }
 }
+
+/**
+ * The kernel's own sub-agent tool, as the preset names it (`tool-subagent`, `toolName: subagent`): one-shot children
+ * for general work. A capability deliverable is delegated with `evimed_delegate`.
+ */
+export const NATIVE_SUBAGENT_TOOL = 'subagent'
 
 /** What a caught value says about itself.
  *

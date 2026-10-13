@@ -112,6 +112,8 @@ export {
   EXTENSION_SAAS_CASE_IDS,
   ExtensionContractError,
   canonicalExtensionCoordinate,
+  isolatedToolProfileHolds,
+  isolatedToolRowIsAdmitted,
   validateExtensionInstallRequest,
   validateSkillWriteRequest,
   personalSkillName,
@@ -696,9 +698,10 @@ export {
   validateAgendaClaim,
 } from './src/agenda.mjs'
 
-// runtimeUiSurface — 11 exports
+// runtimeUiSurface — 12 exports
 export {
   RUNTIME_UI_MUX_RESPONSE_MAX_BYTES,
+  RUNTIME_UI_ANSWERED_HOST_ROUTES,
   RUNTIME_UI_ANSWERED_METHODS,
   RUNTIME_UI_DENIED_HOST_ROUTES,
   RUNTIME_UI_DENIED_METHODS,

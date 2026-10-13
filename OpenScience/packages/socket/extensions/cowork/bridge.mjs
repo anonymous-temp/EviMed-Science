@@ -4,7 +4,7 @@ import {Buffer} from 'node:buffer';
 import {constants} from 'node:fs';
 import {setTimeout as pause} from 'node:timers/promises';
 import {sendWithFreshWorkloadToken} from '../../src/workloadRequest.mjs';
-import {describeOperationParam,normalizeSkillOperation,renderOperationSummary} from '@evimed/domain';
+import {describeOperationParam,isolatedToolProfileHolds,normalizeSkillOperation,renderOperationSummary} from '@evimed/domain';
 import {COWORK_OPERATIONS,toolParameters} from './operations.mjs';
 
 const Schema=await configSchema();
@@ -96,7 +96,8 @@ export async function apply(ctx,config){
   let projection={plugins:[],personal:{reference:null,pins:[]}};
   if(config.projectionFile){if(config.projectionFile!=='/opt/evimed/extensions/projection.json')throw fail();projection=JSON.parse(await fixedFile(config.projectionFile,1024*1024));}
   const external=projection.plugins.filter(plugin=>plugin.compatibility!=='legacy-citation-v1');
-  if(external.length>1||external.some(plugin=>plugin.executionClass!=='isolated-tool'||plugin.coordinate?.kind!=='github'||plugin.coordinate.repository!=='Jesse-njx/dsh-cowork'||!plugin.settings||Object.keys(plugin.settings).length!==0||!Array.isArray(plugin.connectionRefs)||plugin.connectionRefs.length!==0))throw fail();
+  // The host's manager and controller compared each row with the deployment's admitted descriptor before this file existed in the container; here the class's permission profile is what is left to hold.
+  if(external.length>1||external.some(plugin=>!isolatedToolProfileHolds(plugin)))throw fail();
   const definitions=new Map(),selected=external[0];
   if(selected?.enabled){for(const spec of coworkToolSpecs(async({request,call})=>{
     const raw=(await fixedFile(config.generationTokenFile,8192)).trim(),parts=raw.split('.');if(parts.length!==3)throw fail();

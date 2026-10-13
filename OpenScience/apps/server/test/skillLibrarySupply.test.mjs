@@ -266,7 +266,7 @@ test("the session catalogue labels each skill with its package and never filters
   assert.equal(by.cheminformatics.state, "installed", "RDKit is in the image");
   assert.match(by.cheminformatics.sourceText, /scientific-agent-skills/);
   assert.equal(by["stats-integrity"].state, "installed");
-  assert.match(by["dsh-ppt"].sourceText, /STARDUSTLC666\/dsh-ppt @ 0db836e8251a/);
+  assert.match(by["dsh-ppt"].sourceText, /STARDUSTLC666\/dsh-ppt @ 9ab3c88e8ed8/);
   assert.equal(by["dsh-ppt"].licenceText, "MIT");
   assert.equal(by["nobody-ships-this"], null, "a name no shipped package carries is unknown, not fine");
   assert.equal(by[skill.payload.nativeName].state, "installed");

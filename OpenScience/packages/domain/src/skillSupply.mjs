@@ -550,6 +550,11 @@ export const PYTHON_DISTRIBUTION_MODULES = Object.freeze({
   pillow: ['PIL'],
   playwright: ['playwright', 'greenlet', 'pyee'],
   pypdf: ['pypdf'],
+  // The Office skills' libraries (`python_stack`): read, edit and create Word, PowerPoint, Excel and PDF files.
+  'python-docx': ['docx', 'lxml'],
+  'python-pptx': ['pptx'],
+  xlsxwriter: ['xlsxwriter'],
+  pdfplumber: ['pdfplumber', 'pdfminer', 'pypdfium2'],
   'scikit-learn': ['sklearn', 'joblib', 'threadpoolctl'],
   scipy: ['scipy'],
   statsmodels: ['statsmodels', 'patsy'],

@@ -60,7 +60,9 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   { tag: 'evimed-agenda', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   { tag: 'evimed-budget', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   { tag: 'evimed-run', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
-  { tag: 'evimed-skill', role: 'injected', emitters: ['packages/socket/plugins/guidance.mjs', 'apps/server/src/researchContext.mjs'] },
+  // A method the control plane mounts into a dispatch's context. The guidance plugin wrote it too until 2026-10-12, around the
+  // evidence method it injected into every conversation; transcripts from before carry that copy under the same tag.
+  { tag: 'evimed-skill', role: 'injected', emitters: ['apps/server/src/researchContext.mjs'] },
   { tag: 'evimed-orchestration', role: 'injected', emitters: ['packages/socket/src/guidanceText.mjs'] },
   // The capability's method, handed to the session that is doing the work
   // itself rather than delegating it (2026-09-20).

@@ -17,7 +17,7 @@
     {
       "name": "dsh-plugin-academic-writing",
       "repo": "863683348/dsh-plugin-academic-writing",
-      "version": "0.2.0",
+      "version": "0.3.2",
       "registers": [
         "academic_writing"
       ],
@@ -26,7 +26,7 @@
     {
       "name": "dsh-plugin-translation",
       "repo": "863683348/dsh-plugin-translation",
-      "version": "0.2.0",
+      "version": "0.3.2",
       "registers": [
         "translation"
       ],
@@ -67,6 +67,123 @@
         "data_report"
       ],
       "why": "Deterministic in-process profiling and, the part we lack, `data_verify`: numbers quoted in a document checked against a dataset snapshot with a tolerance and a four-value verdict. csv/tsv/json/jsonl only, so it complements rather than replaces `profile_dataset.py`. We do not `inject` its `dataQuality` service; only the model calls the tools. Queued 2026-09-15."
+    },
+    {
+      "name": "dsh-univer-office",
+      "repo": "dream-num/dsh-univer-office",
+      "version": "0.3.7",
+      "registers": [
+        "univer_new",
+        "univer_import",
+        "univer_export",
+        "univer_inspect",
+        "univer_execute",
+        "univer_api",
+        "univer_lint",
+        "univer_worktree",
+        "univer_unit",
+        "univer_resources",
+        "univer_screenshot",
+        "univer_print_pdf",
+        "univer_compile_svg",
+        "univer_status",
+        "univer"
+      ],
+      "why": "Office-class piece the 2026-08-24 adoption shortlist judged \"use directly\"; tried 2026-10-13 (officeClassTest)."
+    },
+    {
+      "name": "dsh-office-tools",
+      "repo": "kw78/dsh-office-tools",
+      "version": "1.0.5",
+      "registers": [
+        "word_create",
+        "word_read",
+        "word_update",
+        "excel_create",
+        "excel_read",
+        "excel_update",
+        "ppt_create",
+        "ppt_read"
+      ],
+      "why": "Office-class piece the 2026-08-24 adoption shortlist judged \"use directly\"; tried 2026-10-13 (officeClassTest)."
+    },
+    {
+      "name": "dsh-office",
+      "repo": "Fayelin12/dsh-office",
+      "version": "0.4.6",
+      "registers": [],
+      "why": "Office-class piece the 2026-08-24 adoption shortlist judged \"use directly\"; tried 2026-10-13 (officeClassTest)."
+    },
+    {
+      "name": "dsh-zagens-office",
+      "repo": "didclawapp-ai/DSH-Office",
+      "version": "github:didclawapp-ai/DSH-Office",
+      "registers": [],
+      "why": "Office-class piece the 2026-08-24 adoption shortlist judged \"use directly\"; tried 2026-10-13 (officeClassTest)."
+    },
+    {
+      "name": "@zhtx2026/dsh-pdf",
+      "repo": "zhtx2024/dsh-pdf",
+      "version": "0.1.1",
+      "registers": [
+        "pdf_info",
+        "pdf_extract_text",
+        "pdf_render_page"
+      ],
+      "why": "Office-class piece the 2026-08-24 adoption shortlist judged \"use directly\"; tried 2026-10-13 (officeClassTest)."
+    },
+    {
+      "name": "dsh-drawio",
+      "repo": "jean3690/dsh-drawio",
+      "version": "0.1.0",
+      "registers": [],
+      "why": "Office-class piece the 2026-08-24 adoption shortlist judged \"use directly\"; tried 2026-10-13 (officeClassTest)."
+    },
+    {
+      "name": "dsh-diagram",
+      "repo": "hanzhangzzz/dsh-diagram",
+      "version": "0.6.1",
+      "registers": [
+        "diagram_create",
+        "diagram_read"
+      ],
+      "why": "Office-class piece the 2026-08-24 adoption shortlist judged \"use directly\"; tried 2026-10-13 (officeClassTest)."
+    },
+    {
+      "name": "dsh-excel-chat",
+      "repo": "hccccc01333/dsh-excel-chat",
+      "version": "0.42.0",
+      "registers": [],
+      "why": "Office-class piece the 2026-08-24 adoption shortlist judged \"use directly\"; tried 2026-10-13 (officeClassTest)."
+    },
+    {
+      "name": "dsh-data-insight",
+      "repo": "duyanta123/dsh-data-insight",
+      "version": "0.1.6",
+      "registers": [],
+      "why": "Office-class piece the 2026-08-24 adoption shortlist judged \"use directly\"; tried 2026-10-13 (officeClassTest)."
+    },
+    {
+      "name": "dsh-ppt",
+      "repo": "STARDUSTLC666/dsh-ppt",
+      "version": "0.9.0",
+      "registers": [
+        "ppt_check",
+        "ppt_create",
+        "ppt_edit",
+        "ppt_render",
+        "ppt_templates",
+        "ppt_themes",
+        "ppt_undo"
+      ],
+      "why": "Office-class piece the 2026-08-24 adoption shortlist judged \"use directly\"; tried 2026-10-13 (officeClassTest)."
+    },
+    {
+      "name": "dsh-cowork",
+      "repo": "Jesse-njx/dsh-cowork",
+      "version": "commit 2ae5cf755c42",
+      "registers": [],
+      "why": "Office-class piece the 2026-08-24 adoption shortlist judged \"use directly\"; tried 2026-10-13 (officeClassTest)."
     }
   ],
   "lastCompatibilityTest": {
@@ -95,5 +212,43 @@
     "@changfenhuang/dsh-annotation@1.4.10",
     "dsh-mermaid@0.4.0"
   ],
-  "notInstalledYet": "dsh-data-quality booted and is not installed: its value is `data_verify`, which needs a real run to measure. academic-writing, translation and writing-guard remain outside the runtime image. dsh-cite is pinned whole; its public tool builder uses the managed source gateway. Boot compatibility does not certify runtime connectivity, which requires cite_health and a successful DOI lookup with the current model token. The two client bundles are installed with a deployment switch each (plugin-support.json communityClientBundles)."
+  "notInstalledYet": "dsh-data-quality booted and is not installed: its value is `data_verify`, which needs a real run to measure. academic-writing, translation and writing-guard remain outside the runtime image. dsh-cite is pinned whole; its public tool builder uses the managed source gateway. Boot compatibility does not certify runtime connectivity, which requires cite_health and a successful DOI lookup with the current model token. The two client bundles are installed with a deployment switch each (plugin-support.json communityClientBundles).",
+  "officeClassTest": {
+    "testedAt": "2026-10-13",
+    "kernel": "@deepseek-ai/dsh@0.1.7-rc.2",
+    "method": "No container runtime on the dev box, so a profile seeded the way install-runtime.sh profile_seed does it (kernel base and web-app at the pin with profile-kernel-pins.mjs overrides, pnpm 11.7.0, the repository's profile-pnpm-workspace.yaml build policy) and a hard-linked copy of it per candidate: `dsh plugin add --save-prod --save-exact <pkg@version>`, `dsh --dump-config` diffed against the baseline profile, then `dsh --profile t --no-open` until the `dsh web:` line. The source scan is the lane's own greps run on the published tarball. A boot proves the row composes; it does not prove a tool works, which is why nothing here was adopted on a boot alone.",
+    "results": {
+      "dsh-univer-office@0.3.7": "booted (213 MB installed)",
+      "dsh-office-tools@1.0.5": "booted",
+      "dsh-office@0.4.6": "booted",
+      "@zhtx2026/dsh-pdf@0.1.1": "booted",
+      "dsh-drawio@0.1.0": "rejected: installation refused by the kernel, peer pins 0.1.0-rc.6",
+      "dsh-diagram@0.6.1": "booted",
+      "dsh-excel-chat@0.42.0": "booted (25 tools registered)",
+      "dsh-data-insight@0.1.6": "booted",
+      "dsh-plugin-translation@0.3.2": "booted",
+      "dsh-plugin-academic-writing@0.3.2": "booted",
+      "dsh-plugin-writing-guard@2.0.1": "rejected: postinstall build script not allowed by the profile's build policy",
+      "dsh-ppt@0.9.0": "booted (7 tools)"
+    },
+    "scan": {
+      "dsh-univer-office@0.3.7": "files=242 net=11 proc=4 fsWrite=10 eval=0 env=5 httpRoute=2 installScripts=uninstall(telemetry) bundle=yes client=yes license=Apache-2.0 deps=6 peers=@deepseek-ai/cordis,@deepseek-ai/dsh-attachment,@deepseek-ai/dsh-host-webserver,@deepseek-ai/dsh-llm,@deepseek-ai/dsh-session,@deepseek-ai/dsh-settings",
+      "dsh-office-tools@1.0.5": "files=11 net=0 proc=0 fsWrite=0 eval=0 env=0 httpRoute=0 installScripts=none bundle=yes client=no license=MIT deps=0 peers=@deepseek-ai/cordis,@deepseek-ai/dsh-agent,@deepseek-ai/dsh-fs,@deepseek-ai/dsh-llm,@deepseek-ai/dsh-session,@deepseek-ai/dsh-tools",
+      "dsh-office@0.4.6": "files=33 net=5 proc=7 fsWrite=11 eval=0 env=11 httpRoute=2 installScripts=none bundle=yes client=yes license=MIT deps=0 peers=@deepseek-ai/cordis",
+      "@zhtx2026/dsh-pdf@0.1.1": "files=2 net=1 proc=0 fsWrite=1 eval=0 env=0 httpRoute=0 installScripts=none bundle=yes client=no license=MIT deps=2 peers=none",
+      "dsh-drawio@0.1.0": "files=466 net=13 proc=0 fsWrite=45 eval=57 env=0 httpRoute=9 installScripts=none bundle=yes client=yes license=Apache-2.0 deps=1 peers=@deepseek-ai/cordis,@deepseek-ai/cordis-plugin-loader,@deepseek-ai/dsh-tools,@deepseek-ai/dsh-workspace,@deepseek-ai/dsh-attachment,@deepseek-ai/dsh-session",
+      "dsh-diagram@0.6.1": "files=171 net=4 proc=0 fsWrite=15 eval=1 env=0 httpRoute=2 installScripts=none bundle=yes client=yes license=MIT deps=2 peers=@deepseek-ai/cordis,@deepseek-ai/dsh-client-connection,@deepseek-ai/dsh-client-locale,@deepseek-ai/dsh-client-ui-chat,@deepseek-ai/dsh-client-ui-conversation,@d",
+      "dsh-excel-chat@0.42.0": "files=140 net=0 proc=1 fsWrite=8 eval=0 env=2 httpRoute=0 installScripts=prepare bundle=yes client=yes license=MIT deps=2 peers=@deepseek-ai/cordis,@deepseek-ai/dsh-attachment,@deepseek-ai/dsh-llm,@deepseek-ai/dsh-system-prompt,@deepseek-ai/dsh-tools,@deepseek-ai/schemastery",
+      "dsh-data-insight@0.1.6": "files=2 net=0 proc=0 fsWrite=0 eval=0 env=0 httpRoute=0 installScripts=none bundle=yes client=no license=MIT deps=0 peers=@deepseek-ai/dsh-skill-filesystem",
+      "dsh-plugin-translation@0.3.2": "files=2 net=0 proc=0 fsWrite=0 eval=0 env=0 httpRoute=0 installScripts=none bundle=yes client=no license=MIT deps=0 peers=@deepseek-ai/cordis,@deepseek-ai/dsh-fs,@deepseek-ai/dsh-system-prompt,@deepseek-ai/dsh-tools,@deepseek-ai/schemastery",
+      "dsh-plugin-academic-writing@0.3.2": "files=2 net=0 proc=0 fsWrite=0 eval=0 env=0 httpRoute=0 installScripts=none bundle=yes client=no license=MIT deps=0 peers=@deepseek-ai/cordis,@deepseek-ai/dsh-fs,@deepseek-ai/dsh-system-prompt,@deepseek-ai/dsh-tools,@deepseek-ai/schemastery",
+      "dsh-plugin-writing-guard@2.0.1": "files=4 net=0 proc=2 fsWrite=3 eval=0 env=2 httpRoute=0 installScripts=postinstall bundle=yes client=no license=MIT deps=0 peers=@deepseek-ai/cordis,@deepseek-ai/dsh-tools,@deepseek-ai/dsh-llm",
+      "dsh-ppt@0.9.0": "files=23 net=3 proc=0 fsWrite=5 eval=0 env=2 httpRoute=0 installScripts=none bundle=yes client=yes license=MIT deps=2 peers=@deepseek-ai/libreoffice-kit"
+    },
+    "adopted": [
+      "@deepseek-ai/libreoffice-kit (kernel closure; shared/office_kit.py)",
+      "@deepseek-ai/dsh-skill-office structural checker (kernel closure; office_kit.py check)"
+    ],
+    "notAdopted": "every other row above; reasons are in plugin-support.json communityToolBundles"
+  }
 }

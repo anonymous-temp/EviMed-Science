@@ -274,6 +274,10 @@ test("a turn typed into a conversation bound to a multi-product capability is he
  * @param {string} id
  */
 const shippedVersion = (id) => JSON.parse(readFileSync(new URL(`../../../deploy/runtime-dsh/capabilities/${id}.json`, import.meta.url), "utf8")).version;
+/** The default conversation package is a skill-root manifest, not a capability manifest. */
+const shippedAnswerVersion = /^version:\s*"?([0-9.]+)"?\s*$/m.exec(
+  readFileSync(new URL("../../../runtime/skills/evimed/open-domain-answer/agent.yaml", import.meta.url), "utf8"),
+)?.[1];
 
 /**
  * A completed `skill` tool call as the kernel reports one: the result is the
@@ -486,10 +490,11 @@ test("starts immutable open-domain and specialist run identities from research-s
         agentId: null,
         agentVersion: null,
         runtimeAgent: null,
-        // Unrouted open-domain turns run on the managed default answer agent
-        // (persona + proportional quality floor), not the bare coding agent.
+        // An unrouted turn is recorded under the default conversation package: a general
+        // work assistant whose evidence method is a skill the model loads when the question
+        // is medical. Its version is the shipped manifest's, read rather than repeated.
         effectiveAgentId: "open-domain-answer",
-        effectiveAgentVersion: "1.0.0",
+        effectiveAgentVersion: shippedAnswerVersion,
         effectiveRuntimeAgent: "evimed-open-domain-answer",
         model: "deepseek/deepseek-flash",
         status: "running",
@@ -604,10 +609,13 @@ test("open-domain clinical evidence questions record and dispatch the selected s
     assert.equal(plain.response.status, 202);
     assert.equal(plain.body.data.effectiveAgentId, "open-domain-answer");
     assert.equal(plain.body.data.effectiveRuntimeAgent, "evimed-open-domain-answer");
-    assert.match(
-      await readFile(path.join(workspace, ".evimed-brief", "sessions", "ses_unrouted_clinical", "context.md"), "utf8"),
-      /保持开放域回答/,
-    );
+    // An open conversation's context carries the turn's own facts and nothing
+    // else: no routing sentence, no second catalogue of the capabilities, no
+    // rule of evidence work — and, a person having sent it, no word that
+    // nobody is waiting (2026-10-12).
+    const openContext = await readFile(path.join(workspace, ".evimed-brief", "sessions", "ses_unrouted_clinical", "context.md"), "utf8");
+    assert.match(openContext, /自主判断回答深度/);
+    assert.doesNotMatch(openContext, /evimed-specialist|确定性路由到专项能力|必须加载对应 Skill|黑框警告|没有人值守/);
     assert.equal("capability" in JSON.parse(await readFile(path.join(workspace, ".evimed-brief", "sessions", "ses_unrouted_clinical", "index.json"), "utf8")), false,
       "an answer-line dispatch was routed nowhere");
     await assert.rejects(
@@ -1523,19 +1531,40 @@ test("an answer-mode turn succeeds with zero citations once its skill is loaded"
   });
 });
 
-test("an answer-mode turn delivers unverified (not failed) when its answer skill was never loaded", async () => {
-  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, store }) => {
+test("a general answer that never loaded the evidence method is delivered as it stands, never unverified for not loading it", async () => {
+  // The conversation is a general one (2026-10-12): an e-mail, a script, a
+  // look-up. Until then the evidence method was every conversation's persona
+  // and a reply written without it was delivered 未核验 with 「本轮没有加载
+  // 「open-domain-answer」方法」 — a correct answer marked for not reading a
+  // medical persona it had no reason to read (review GA20).
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
     await dispatch("turn_answer_skill_missing");
     appendHistory([{ type: "text", text: "直接回答，没有加载任何 skill。" }]);
     const run = await store.reconcileSession(project, binding.sessionId);
-    // A missing skill load is a process gap: the answer is delivered marked
-    // unverified instead of discarding a sound reply.
     assert.equal(run.status, "succeeded");
     assert.equal(run.errorCode, null);
-    assert.equal(run.verification, "unverified");
-    // The sentence is shown to the researcher, on the run ledger and in
-    // their inbox, so it is in the product's language (2026-09-15 walk, B8).
-    assert.match(noticeTexts(run).join("\n"), /没有加载「open-domain-answer」方法/);
+    assert.notEqual(run.verification, "unverified");
+    assert.deepEqual(noticeTexts(run), []);
+
+    // The method's citation floor is the method's. An address in a coding
+    // answer is not a citation that points inside this deployment.
+    await dispatch("turn_answer_local_address");
+    appendHistory([{ type: "text", text: "脚本已写好。启动后在浏览器打开 http://127.0.0.1:3000 查看。\n\n参考\n1. http://localhost:3000/docs" }]);
+    const coding = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(coding.status, "succeeded");
+    assert.notEqual(coding.verification, "unverified");
+    assert.deepEqual(noticeTexts(coding), []);
+
+    // The same address under the method is the defect it always was: the floor
+    // did not move, only whom it is asked of.
+    await dispatch("turn_answer_local_address_under_method");
+    appendHistory([
+      skillLoadedPart,
+      { type: "text", text: "本地证据 [1]。\n\n参考文献\n1. http://127.0.0.1:3000/doc/42" },
+    ]);
+    const evidence = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(evidence.verification, "unverified");
+    assert.match(noticeTexts(evidence).join("\n"), /points inside this deployment/);
   });
 });
 
@@ -7934,13 +7963,12 @@ test("the correction route takes a text and nothing else, and names what it cann
   });
 });
 
-// The answer line's `skillsLoaded` check had no route to being true. It does
-// not delegate, so `injectedSkills` — which reads `projection.subagents` —
-// found nothing on every run, and the only remaining evidence was a `skill`
-// tool call the brief asked for and the model made 6 times in 17. The control
-// plane now mounts the body itself and records that it did; these assert the
-// gate reads that record, and that the record cannot be faked from the run side.
-test("a control-plane mounted persona satisfies skillsLoaded with no skill tool call", async () => {
+// Whether the evidence method was in front of the model has three answers: a
+// `skill` tool call, a body a delegation injected, or a body the control plane
+// mounted and recorded. These assert the gate reads the control plane's own
+// record of a mount, and that the method's floor follows the method: a reply
+// the method was mounted for is held to it, and one it was not is not.
+test("the method's floor is asked of a reply the method was mounted for, and of no other", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-mounted-skill-"));
   try {
     const project = {
@@ -7963,7 +7991,7 @@ test("a control-plane mounted persona satisfies skillsLoaded with no skill tool 
           skill: "open-domain-answer",
           companionSkills: [],
           outputs: [],
-          completionChecks: ["skillsLoaded"],
+          completionChecks: ["citationsResolvable"],
         }),
       },
       model: "deepseek/deepseek-v4-pro",
@@ -7981,43 +8009,41 @@ test("a control-plane mounted persona satisfies skillsLoaded with no skill tool 
       effectiveRuntimeAgent: "evimed-open-domain-answer",
     }, async () => ({ accepted: true }));
 
-    // Baseline: the shape production was in. No mount, no tool call, and the
-    // reply is delivered unverified for a process gap the reader cannot see.
+    const reply = "内部证据 [1]。\n\n参考文献\n1. https://www.evimed.com/api-evimed/medicine-api/ai-api/search";
+    // No mount and no tool call: a general conversation. Nothing is owed to a
+    // method the run never had — this is the reply that was delivered 未核验
+    // for a persona on 11 of 17 production answer-line runs.
     const first = await dispatch("turn_unmounted");
     history = [{
       info: { id: "msg_unmounted", role: "assistant", time: { completed: Date.now() + 10 } },
-      parts: [{ type: "text", text: "二甲双胍主要通过抑制肝糖异生发挥作用。" }],
+      parts: [{ type: "text", text: reply }],
     }];
     const unmounted = await store.reconcileSession(project, binding.sessionId);
-    // Delivered, but stamped: a missing persona is a process gap the reader
-    // cannot see, so the answer ships and the run says it was not verified.
-    // This is the notice that fired on 11 of 17 production answer-line runs.
     assert.equal(unmounted.status, "succeeded");
-    assert.equal(unmounted.verification, "unverified");
-    assert.match(noticeTexts(unmounted).join("\n"), /没有加载「open-domain-answer」方法/);
+    assert.equal(unmounted.verification, null);
+    assert.deepEqual(noticeTexts(unmounted), []);
     assert.equal(first.id, unmounted.id);
 
-    // The same turn, with the control plane having mounted the body.
+    // The same reply, with the control plane having mounted the method: the
+    // floor is the method's, read from the ledger's own record of the mount.
     const second = await dispatch("turn_mounted");
     await store.recordLearning(project, second.id, { mountedSkills: ["open-domain-answer"] });
     history = [...history, {
       info: { id: "msg_mounted", role: "assistant", time: { completed: Date.now() + 20 } },
-      parts: [{ type: "text", text: "二甲双胍主要通过抑制肝糖异生发挥作用。" }],
+      parts: [{ type: "text", text: reply }],
     }];
     const mounted = await store.reconcileSession(project, binding.sessionId);
     assert.equal(mounted.status, "succeeded");
     assert.equal(mounted.errorCode, null);
-    // The difference the mount makes, and the whole point of it: same reply,
-    // same absence of a `skill` tool call, no notice and nothing unverified.
-    assert.equal(mounted.verification, null);
-    assert.deepEqual(noticeTexts(mounted), []);
+    assert.equal(mounted.verification, "unverified");
+    assert.match(noticeTexts(mounted).join("\n"), /points inside this deployment/);
     assert.deepEqual(mounted.mountedSkills, ["open-domain-answer"]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test("a mounted name the control plane never recorded does not pass the check", async () => {
+test("another skill being mounted is not the method being mounted", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-mounted-other-"));
   try {
     const project = {
@@ -8040,7 +8066,7 @@ test("a mounted name the control plane never recorded does not pass the check", 
           skill: "open-domain-answer",
           companionSkills: [],
           outputs: [],
-          completionChecks: ["skillsLoaded"],
+          completionChecks: ["citationsResolvable"],
         }),
       },
       model: "deepseek/deepseek-v4-pro",
@@ -8057,16 +8083,18 @@ test("a mounted name the control plane never recorded does not pass the check", 
       effectiveAgentVersion: "1.0.0",
       effectiveRuntimeAgent: "evimed-open-domain-answer",
     }, async () => ({ accepted: true }));
-    // Some other skill was mounted. The required one still was not, so the
-    // record must not be read as "a skill was mounted, therefore fine".
+    // Some other skill was mounted. The record must not be read as "a skill
+    // was mounted, therefore this is an evidence answer": the method's floor is
+    // asked only where the method itself was.
     await store.recordLearning(project, run.id, { mountedSkills: ["citation-integrity"] });
     history = [{
       info: { id: "msg_wrong_mount", role: "assistant", time: { completed: Date.now() + 10 } },
-      parts: [{ type: "text", text: "答案。" }],
+      parts: [{ type: "text", text: "见此 [1]。\n\n参考文献\n1. https://www.evimed.com/api-evimed/medicine-api/ai-api/search" }],
     }];
     const finished = await store.reconcileSession(project, binding.sessionId);
-    assert.equal(finished.verification, "unverified");
-    assert.match(noticeTexts(finished).join("\n"), /没有加载「open-domain-answer」方法/);
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.verification, null);
+    assert.deepEqual(noticeTexts(finished), []);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

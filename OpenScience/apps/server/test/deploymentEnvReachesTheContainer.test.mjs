@@ -49,6 +49,14 @@ const hostSideOnly = {
   OPEN_SCIENCE_PREFLIGHT_MONITORING: "scripts/ops/host-preflight.mjs",
   OPEN_SCIENCE_PREFLIGHT_OBJECT_STORAGE: "scripts/ops/host-preflight.mjs",
   OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR: "scripts/ops/configure-production-state.mjs",
+  // The engine volume's capture runs on the host with Docker authority no container holds; only its receipt's
+  // directory and age reach the web container, through the backup overlay.
+  OPEN_SCIENCE_OPENVIKING_BACKUP_ENABLED: "scripts/ops/openviking-backup.mjs",
+  OPEN_SCIENCE_OPENVIKING_BACKUP_DIR: "scripts/ops/openviking-backup.mjs",
+  OPEN_SCIENCE_OPENVIKING_BACKUP_MAX_SETS: "scripts/ops/openviking-backup.mjs",
+  OPEN_SCIENCE_OPENVIKING_BACKUP_MAX_PAUSE_SECONDS: "scripts/ops/openviking-backup.mjs",
+  OPEN_SCIENCE_OPENVIKING_DATA_VOLUME: "scripts/ops/openviking-backup.mjs",
+  OPEN_SCIENCE_OPENVIKING_CONTAINER: "scripts/ops/openviking-backup.mjs",
   // Read on the host before anything starts: it is written into
   // monitoring/targets/tls.json, which Prometheus then discovers by file. The
   // value never enters a container, so passing it through compose would be the
