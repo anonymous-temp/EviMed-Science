@@ -68,9 +68,9 @@ export const EVIMED_DOCUMENT_LANG = 'zh-CN';
 export function evimedDictionaries() {
   return {
     conversation: {
-      'hero.headline': '从一个研究问题开始',
+      'hero.headline': '今天想做点什么？',
       'hero.preview': '',
-      'placeholder.hero': '描述你的研究问题…',
+      'placeholder.hero': '描述你的问题或任务…',
       'placeholder.default': '继续提问…',
       // Shown while the composer waits for its workspace; here the control
       // plane binds it, so there is nothing to choose.

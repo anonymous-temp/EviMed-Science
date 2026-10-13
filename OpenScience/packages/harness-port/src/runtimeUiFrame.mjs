@@ -33,6 +33,7 @@ import { cjkPunctFontFaceCss } from '@evimed/design-tokens/css';
 import { kernelThemeTokens } from '@evimed/design-tokens/kernel';
 
 import {
+  BLANK_EXAMPLES,
   CONTRACT_KIND_LABELS,
   EVIDENCE_SOURCE_TYPE_LABELS_ZH,
   EVIDENCE_SOURCE_TYPES,
@@ -111,6 +112,11 @@ export const FRAME_VOCABULARY = Object.freeze({
   // Where the researcher's knowledge base is synced in the workspace: the
   // `@` reference tells the model where a cited source's text is.
   knowledgeDir: KNOWLEDGE_DIR,
+  // The pills under the headline of a blank conversation that has no tool chosen:
+  // a short name and the whole sentence that goes into the composer, never sent
+  // (general ones first, two medical). One table with the tools page's general
+  // group, in the domain.
+  blankExamples: BLANK_EXAMPLES,
   // 循证 GEO's capabilities: a conversation bound to any of them carries the
   // module's chip, 「循证 GEO」, and none of them is offered by `/工具` — the
   // module is entered from its own sidebar row.

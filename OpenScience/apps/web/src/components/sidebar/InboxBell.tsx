@@ -19,7 +19,7 @@ export function unreadBadgeText(count: number): string {
 /** The bell's accessible name — the number, and the safety share when there is one. */
 export function inboxBellLabel({ unreadTotal, safetyUnread }: InboxUnreadCount): string {
   if (unreadTotal <= 0) return "收件箱";
-  const safety = safetyUnread > 0 ? `，其中 ${safetyUnread} 条涉及临床安全` : "";
+  const safety = safetyUnread > 0 ? `，其中 ${safetyUnread} 条需要优先查看` : "";
   return `收件箱，${unreadTotal} 条未读${safety}`;
 }
 

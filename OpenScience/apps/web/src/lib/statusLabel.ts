@@ -63,7 +63,7 @@ export const AUDIT_ACTION_LABEL: Readonly<Record<string, string>> = Object.freez
   "file.download": "下载文件",
   "file.preview": "预览文件",
   "feedback.record": "记录反馈",
-  "agent_run.cancel": "取消研究",
+  "agent_run.cancel": "取消任务",
   "task.create": "创建任务",
   "task.cancel": "取消任务",
   "project.create": "新建项目",

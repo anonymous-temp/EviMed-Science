@@ -91,7 +91,7 @@ test('the strings written for a coding agent on a laptop are rephrased for a hos
   assert.equal(/** @type {any} */ (EVIMED_DICTIONARIES).common, undefined, "the kernel's local-build label is drawn only by the left column this deployment removes");
   assert.equal(EVIMED_DICTIONARIES.conversation['tool.title.code'], '运行代码');
   // What to type, and nothing about the machinery.
-  assert.equal(EVIMED_DICTIONARIES.conversation['placeholder.hero'], '描述你的研究问题…');
+  assert.equal(EVIMED_DICTIONARIES.conversation['placeholder.hero'], '描述你的问题或任务…');
   assert.equal(EVIMED_DICTIONARIES.conversation['placeholder.default'], '继续提问…');
   assert.equal(EVIMED_DICTIONARIES.conversation['placeholder.workspace'], '正在连接');
   assert.equal(EVIMED_DICTIONARIES.chat['message.maxTokens.hint'], '发送“继续”接着写');

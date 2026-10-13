@@ -4,7 +4,7 @@
  *
  * Hidden knowledge: the tool names are the model's vocabulary
  * (`literature_search`, `vcr_simulate`) and never the reader's. The tool set is
- * one plugin to a researcher — 「医学研究工具集」 — and what it is worth saying
+ * one plugin to a researcher — 「内置工具集」 — and what it is worth saying
  * about it is what its tools can do, so the sentences are data
  * (`research-tools-zh.json`) beside the list they describe, and a test holds
  * the two equal: a tool published without a sentence fails there.

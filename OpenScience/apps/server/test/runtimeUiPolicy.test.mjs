@@ -482,7 +482,7 @@ test("a turn typed into the kernel's own window asks the research allowance befo
     const refused = await c.next();
     assertNativeError(refused, streamId, "simulated_credits_exhausted");
     // What the kernel's window prints: Chinese, says the allowance is simulated and too low, by how much, and where to top up.
-    assert.equal(refused.error.message, "模拟额度不足，这次没有开始：可用模拟额度 3.50 灵豆，这件事预计至少需要 6.00 灵豆。到“设置 → 科研额度”做一次模拟充值后即可继续。");
+    assert.equal(refused.error.message, "模拟额度不足，这次没有开始：可用模拟额度 3.50 灵豆，这件事预计至少需要 6.00 灵豆。到“设置 → 额度”做一次模拟充值后即可继续。");
     assert.deepEqual(await c.next(), { type: "end", streamId });
   }
   assert.deepEqual(f.received, [], "nothing reached the kernel");

@@ -46,7 +46,7 @@ export function AllowanceAmount({ value, simulated, mark = simulated, className,
   value: WebAmount | null | undefined;
   simulated: boolean;
   /**
-   * Whether this amount carries the mark itself. A group whose header carries it (「科研额度」, 「充值与订单」, the statement)
+   * Whether this amount carries the mark itself. A group whose header carries it (「额度」, 「充值与订单」, the statement)
    * says 「模拟」 once, and its amounts do not say it again; an amount that stands alone does, as it always did.
    */
   mark?: boolean;
@@ -119,7 +119,7 @@ export function simulatedAllowanceLevel(allowance: WebResearchAllowance | null):
 /**
  * The prompt a reader sees when their simulated allowance is running low or is
  * used up, with the way to the simulated recharge page — at the top of the
- * allowance page, and of 科研工具, where the next task would be started. Draws
+ * allowance page, and of 工具, where the next task would be started. Draws
  * nothing above the threshold, and nothing at all for an allowance that is not
  * simulated.
  */
@@ -134,7 +134,7 @@ export function SimulatedAllowanceNotice({ allowance, className }: { allowance: 
     >
       <SimulatedMark />
       <span className="min-w-0 flex-1 break-words">
-        {level === "exhausted" ? "科研额度已用完，模拟充值后可以继续研究。" : `科研额度即将用完，还剩 ${allowanceText(allowance.available)}。`}
+        {level === "exhausted" ? "额度已用完，模拟充值后可以继续使用。" : `额度即将用完，还剩 ${allowanceText(allowance.available)}。`}
       </span>
       {recharge && <CommerceLink href={recharge} className={buttonClasses({ variant: "secondary", size: "sm" })}>去模拟充值</CommerceLink>}
     </div>

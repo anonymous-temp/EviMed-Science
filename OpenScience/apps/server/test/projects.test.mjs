@@ -113,7 +113,7 @@ test("a project's list row says how many runs it holds and when one last did any
   });
 });
 
-test("the seeded project is 「我的研究」, an old English one is renamed once, and a deliberate name stays", async () => {
+test("the seeded project is 「我的项目」, an old English one is renamed once, and a deliberate name stays", async () => {
   await withApp(async ({ call }) => {
     assert.equal((await call("GET", "/api/projects")).body.data.find((item) => item.id === "default").name, DEFAULT_PROJECT_NAME);
   });

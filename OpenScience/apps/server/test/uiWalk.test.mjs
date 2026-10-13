@@ -259,7 +259,7 @@ test("the back-office list catches the model-only notes and the leftovers of the
 test("the back-office list catches the trust sentences the skills and tools pages drew, and not a tool's own words", () => {
   const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
   for (const text of ["尚未完成原生验证，确认导入后逐个版本验证并保存。", "包摘要\naaaaaaaaaaaa", "方法的数值验证还没有完成，结果按未验证的方法对待。", "检索药学参考资料，作为决策参考，需再对照最新的官方来源。",
-    "当前是模拟运行环境，不能证明真实可运行。", "它需要的「rdkit」暂时无法核对是否具备，无法确认能否运行。", "这个部署没有统计实际运行的情况，无法确认。", "实际运行的情况暂时读不到，无法确认。", "科研工具\n未验证\n约 20～40 分钟"]) {
+    "当前是模拟运行环境，不能证明真实可运行。", "它需要的「rdkit」暂时无法核对是否具备，无法确认能否运行。", "这个部署没有统计实际运行的情况，无法确认。", "实际运行的情况暂时读不到，无法确认。", "工具\n未验证\n约 20～40 分钟"]) {
     assert.equal(caught(text), true, text);
   }
   for (const text of ["检索药学参考资料，作为决策参考。", "它用到的软件「rdkit」运行环境里没有；需要它的方法会受阻，其余部分照常。", "一项还未验证的假设需要进一步研究", "目录里列了它，这个部署还没有安装。"]) {
@@ -299,7 +299,7 @@ test("a text control that wraps is one kind of control, and a control with a hei
 });
 
 test("a card its text grows past its minimum height is one kind at every height", () => {
-  // 科研工具's tools are `min-h-32` cards with an icon: descriptions of three
+  // 工具's tools are `min-h-32` cards with an icon: descriptions of three
   // lengths drew 136, 162 and 182 px and read as three kinds (2026-10-06 walk).
   const card = (height) => ({ tag: "button", text: "用“工具”开始一次对话", height, icon: true, declaredMinHeight: "128px", style: { borderTopLeftRadius: "12px" } });
   const grown = measureControls([card(136), card(162), card(182)]);
@@ -853,7 +853,7 @@ function context() {
         if (typeof fn === "function" && fn.name === "cleanupProbe") {
           cleanupProbes += 1;
           const bad = process.env.FAKE_CLEANUP === "quota";
-          return { cover: "正在清理上一次任务的运行环境，完成后自动继续", quotaButtons: bad ? ["查看科研额度"] : [], alertButtons: cleanupProbes > 1 ? ["重试", "查看已有成果"] : null };
+          return { cover: "正在清理上一次任务的运行环境，完成后自动继续", quotaButtons: bad ? ["查看额度"] : [], alertButtons: cleanupProbes > 1 ? ["重试", "查看已有成果"] : null };
         }
         if (typeof fn === "function" && fn.name === "matrixProbe") {
           const [action] = arg;
@@ -1018,7 +1018,7 @@ test("the walk clicks the first row of each list on the pages R10 rebuilt, at th
   // One click per page view that has a list: the page walked at the desktop width, never the phone's.
   assert.deepEqual(report.pages["files@desktop"].rowClicks, [{ label: "资料清单", shown: true }]);
   assert.equal(report.pages["files@phone"].rowClicks, undefined);
-  // 科研工具's cards start a conversation, so the walk does not click them.
+  // 工具's cards start a conversation, so the walk does not click them.
   assert.equal(report.pages["capabilities@desktop"].rowClicks, undefined);
 });
 
@@ -1379,9 +1379,9 @@ test("the page probes read what a fix left behind: the folded rail, the empty �
 
   assert.deepEqual(read([node("a", { text: "回到记忆胶囊" }), node("h2", { text: "x" })], "sharedMissing"), { title: false, back: true, retry: false });
 
-  const bell = node("button", { attrs: { "aria-label": "收件箱，8 条未读，其中 3 条涉及临床安全" } });
+  const bell = node("button", { attrs: { "aria-label": "收件箱，8 条未读，其中 3 条需要优先查看" } });
   const bare = node("button", { attrs: { "aria-label": "收件箱，8 条未读" } });
-  const inbox = (button, count) => inPage(node("body", {}, [node("aside", {}, [button]), node("main", {}, [node("h2", { text: `涉及临床安全 · 未读 ${count} 条` })])]), () => pageProbe(["inboxSafety"]));
+  const inbox = (button, count) => inPage(node("body", {}, [node("aside", {}, [button]), node("main", {}, [node("h2", { text: `需要优先查看 · 未读 ${count} 条` })])]), () => pageProbe(["inboxSafety"]));
   assert.deepEqual(inbox(bell, 3), { heading: 3, bell: 3 });
   assert.deepEqual(inbox(bare, 0), { heading: 0, bell: 0 });
   assert.deepEqual(read([node("h2", { text: "收件箱" })], "inboxSafety"), { heading: null, bell: null });
@@ -1687,8 +1687,8 @@ test("a start refused for cleanup shows a cover that says so and offers no allow
   assert.deepEqual(cleanupFindings(up, up), []);
   assert.deepEqual(cleanupNotices(up), ["chat@desktop: the runtime was already up, so a start refused for cleanup could not be shown"]);
   assert.deepEqual(cleanupFindings(cover, { ...cover, alertButtons: ["重试", "查看已有成果"] }), []);
-  assert.deepEqual(cleanupFindings({ ...cover, cover: "正在打开", quotaButtons: ["查看科研额度"] }, null), [
-    "chat@desktop: a start refused for cleanup does not say it is cleaning up (cover: “正在打开”)", "chat@desktop: a start refused for cleanup offers 查看科研额度"]);
+  assert.deepEqual(cleanupFindings({ ...cover, cover: "正在打开", quotaButtons: ["查看额度"] }, null), [
+    "chat@desktop: a start refused for cleanup does not say it is cleaning up (cover: “正在打开”)", "chat@desktop: a start refused for cleanup offers 查看额度"]);
   assert.deepEqual(cleanupFindings(cover, cover), ["chat@desktop: after the wait, a cleanup that did not finish raises no alert"]);
   assert.deepEqual(cleanupFindings(cover, { ...cover, alertButtons: ["重试"], quotaButtons: ["查看用量"] }), [
     "chat@desktop: the alert of a cleanup that did not finish has no 查看已有成果", "chat@desktop: the alert of a cleanup that did not finish offers 查看用量"]);
@@ -1904,7 +1904,7 @@ test("the composer is read inside the kernel's frame: the room under it, the chi
   assert.equal(inPage(page(header()), () => composerProbe([])).composer, false);
 
   // Judged: every verdict a notice, each "not observable" with its reason.
-  const none = "chat@desktop: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 科研工具, whose cards write)";
+  const none = "chat@desktop: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 工具, whose cards write)";
   assert.deepEqual(composerFindings("desktop", normal), { failures: [], notices: [none] });
   assert.deepEqual(composerFindings("desktop", read({}, { gap: 15 })).notices, ["chat@desktop: the lowest control of the composer is 15 px above the bottom of the window (at least 16)", none]);
   assert.deepEqual(composerFindings("desktop", read({}, { gap: 16 })).notices, [none]);
@@ -1936,7 +1936,7 @@ test("the composer is read inside the kernel's frame: the room under it, the chi
 test("with the chat asked for, the walk reads the composer at both widths, restores the window, and fails nothing", async () => {
   const { code, stdout, stderr, log, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
   assert.equal(code, 0, stdout + stderr);
-  const none = (width) => `chat@${width}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 科研工具, whose cards write)`;
+  const none = (width) => `chat@${width}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 工具, whose cards write)`;
   assert.ok(report.notices.includes(none("desktop")) && report.notices.includes(none("phone")), report.notices.join("\n"));
   assert.deepEqual(Object.keys(report.steps["chat-composer"]), ["desktop", "phone"]);
   assert.deepEqual([report.steps["chat-composer"].desktop.window, report.steps["chat-composer"].phone.window], [{ width: 1512, height: 945 }, { width: 390, height: 844 }]);
@@ -2013,7 +2013,7 @@ test("the daily of a day nobody published is read for the day it names, the cloc
 
 /** The inbox's filter chips and the memory page's tabs and search box, as the pages draw them. */
 const listPage = ({ pressed = "未读 3", selected = "项目 5", query = "探针", search = true, dialog = false } = {}) => node("body", {}, [
-  node("aside", {}, [node("a", { attrs: { href: "/app/capabilities" }, text: "科研工具" }), node("a", { attrs: { href: "/app/inbox" }, text: "收件箱" })]),
+  node("aside", {}, [node("a", { attrs: { href: "/app/capabilities" }, text: "工具" }), node("a", { attrs: { href: "/app/inbox" }, text: "收件箱" })]),
   node("main", {}, [
     node("div", { attrs: { role: "group", "aria-label": "消息筛选" } }, [node("button", { attrs: { "aria-pressed": String(pressed === "全部") }, text: "全部" }), node("button", { attrs: { "aria-pressed": String(pressed.startsWith("未读")) }, text: pressed.startsWith("未读") ? pressed : "未读" })]),
     node("div", { attrs: { role: "tablist" } }, ["关于你", "项目 5", "做法 2", "成长"].map((name) => node("button", { attrs: { role: "tab", "aria-selected": String(name === selected) }, text: name }))),
@@ -2042,7 +2042,7 @@ test("where a list page keeps its place is read from the address and from what i
     assert.equal(addressAct(["link", "/app/nowhere"]), false);
     assert.equal(addressAct(["other"]), false);
   });
-  assert.deepEqual(descendants(body).filter((el) => el.clicks > 0).map((el) => el.text), ["科研工具", "未读 3", "项目 5"]);
+  assert.deepEqual(descendants(body).filter((el) => el.clicks > 0).map((el) => el.text), ["工具", "未读 3", "项目 5"]);
   assert.deepEqual(ADDRESS_CASES.map((c) => c.page), ["inbox", "memory"]);
   assert.equal(addressStateHolds({ pressed: "未读" }, { pressed: "未读 3" }), true);
   assert.equal(addressStateHolds({ query: "探针" }, { query: "探针 " }), false);
@@ -2349,7 +2349,7 @@ test("with the chat asked for, the walk answers a start with the cleanup refusal
   assert.deepEqual(log.filter((entry) => entry.start).slice(-1).map((entry) => entry.verdict), ["fulfilled"]);
   const quota = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_CLEANUP: "quota" });
   assert.equal(quota.code, 1);
-  assert.ok(quota.report.failures.includes("chat@desktop: a start refused for cleanup offers 查看科研额度"));
+  assert.ok(quota.report.failures.includes("chat@desktop: a start refused for cleanup offers 查看额度"));
   // Without the chat page, the walk does not open it and does not wait.
   assert.equal((await walk()).report.steps?.["chat-cleanup-cover"], undefined);
 });

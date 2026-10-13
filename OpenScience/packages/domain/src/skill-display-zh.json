@@ -1,16 +1,16 @@
 {
   "description": "How the skills the runtime image ships are shown to a researcher: a Chinese name, the one line a list row carries, the sentence that says when the skill is used, and the group it is listed under. Keyed by the skill's own name (the folder name in its root). The order of the keys is the order a group lists them in, so the first four of a group are the ones a researcher is most likely to want. skillDisplay.mjs reads this and a test holds it equal to the shipped skill set.",
-  "groups": ["科研分析", "写作与核查", "办公文档", "社区", "循证 GEO"],
+  "groups": ["通用", "办公文档", "科研分析", "写作与核查", "社区", "循证 GEO"],
   "geoGroup": "循证 GEO",
   "skills": {
     "open-domain-answer": {
-      "group": "科研分析",
-      "title": "医学与科研问答",
-      "use": "直接回答医学和科学问题：先给结论，按需深入，写明证据强弱，引用带编号。",
-      "when": "你在对话里问一个具体的医学或科研问题，不需要一份完整报告时。"
+      "group": "通用",
+      "title": "通用问答",
+      "use": "直接回答你的问题：先给结论，按需深入；涉及医学或科研时写明证据强弱，引用带编号。",
+      "when": "你在对话里问一个具体的问题，不需要一份完整文件时。"
     },
     "deep-research": {
-      "group": "科研分析",
+      "group": "通用",
       "title": "深度调研",
       "use": "多轮、多来源地查资料，综合成带出处的结论或报告；一般题目先查公开网页和官方资料，生物医学题目再查文献与指南。",
       "when": "你要一份有出处的调研，而不是一个简短回答时。"
@@ -298,13 +298,13 @@
       "when": "稿件和证据工作都完成之后，作为最后一步。"
     },
     "humanizer": {
-      "group": "写作与核查",
+      "group": "通用",
       "title": "英文去机器腔",
       "use": "去掉英文文本里的 AI 写作痕迹，让文字更自然。",
       "when": "你要润色或审阅英文文本，让它读起来像人写的时。"
     },
     "humanizer-zh": {
-      "group": "写作与核查",
+      "group": "通用",
       "title": "中文去机器腔",
       "use": "去掉中文文本里的 AI 写作痕迹，让文字更自然。",
       "when": "你要润色或审阅中文文本，让它读起来像人写的时。"

@@ -280,10 +280,10 @@ describe("native frame identity and readiness", () => {
     emit(frame, { type: "evimed.runtime-ui.error", seq: 3, error: "NATIVE_NOT_READY" });
     await waitFor(() => expect(mocks.renew).toHaveBeenCalledTimes(1));
     emit(frame, { type: "evimed.runtime-ui.error", seq: 4, error: "NATIVE_NOT_READY" });
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("研究连接暂时无法恢复，请重试"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("连接暂时无法恢复，请重试"));
     mocks.start.mockRejectedValueOnce(new WebApiError("Too many running runtimes for this user; limit is 2.", { status: 429, code: "runtime_limit_exceeded" }));
     await userEvent.click(screen.getByRole("button", { name: "重新连接" }));
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("你同时进行的研究已达上限，先结束一个再试。"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("你同时进行的任务已达上限，先结束一个再试。"));
     expect(container.querySelector("iframe")).toBeNull();
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
@@ -442,7 +442,7 @@ describe("native frame identity and readiness", () => {
     // a place in line: one plain line, asked again by itself with a backoff that
     // honours the control plane's `Retry-After`, started when a slot frees. The
     // researcher's own ceiling (`runtime_limit_exceeded`) stays an honest refusal.
-    const FULL = "所有研究环境都在使用中，空出后会自动开始。";
+    const FULL = "所有运行环境都在使用中，空出后会自动开始。";
     const full = (retryAfterSeconds: number | null = 5) => new WebApiError("Every runtime slot of the server is taken; limit is 4.", { status: 429, code: "runtime_capacity_full", retryAfterSeconds });
 
     it("says one plain line, no alert and no retry button, and starts by itself once a slot frees", async () => {
@@ -529,14 +529,14 @@ describe("native frame identity and readiness", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(0); });
       expect(screen.getByText(FULL)).toBeInTheDocument();
       await act(async () => { await vi.advanceTimersByTimeAsync(5_100); });
-      expect(screen.getByRole("alert")).toHaveTextContent("你同时进行的研究已达上限，先结束一个再试。");
+      expect(screen.getByRole("alert")).toHaveTextContent("你同时进行的任务已达上限，先结束一个再试。");
       expect(screen.queryByText(FULL)).toBeNull();
     });
   });
 
   describe("a conversation opened while the previous task's runtime is still being cleaned up", () => {
     // 2026-10-07, audit B03 (P0): one stuck cleanup refused every start of a project for hours, and the
-    // page offered 「查看科研额度」 and nothing else — the refusal was classed as a ceiling and every
+    // page offered 「查看额度」 and nothing else — the refusal was classed as a ceiling and every
     // ceiling read as a spending one. The refusal is said for what it is: a wait, on the cover; and
     // when the wait is long, the retry and the way to what the project already holds.
     const WAIT_LINE = "正在清理上一次任务的运行环境，完成后自动继续";
@@ -735,7 +735,7 @@ describe("native frame identity and readiness", () => {
       mocks.start.mockRejectedValue(new WebApiError("This project runtime is completing bounded proactive research.", { status: 423, code: "runtime_reserved_for_autopilot" }));
       mount(null, "/app/chat/session-a");
       const alert = await screen.findByRole("alert");
-      expect(alert).toHaveTextContent("这个项目正在执行你设定的定时研究，结束后即可继续。");
+      expect(alert).toHaveTextContent("这个项目正在执行你设定的定时任务，结束后即可继续。");
       expect(alert).not.toHaveTextContent("主动研究");
       expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /额度|用量/ })).toBeNull();
@@ -748,7 +748,7 @@ describe("native frame identity and readiness", () => {
       const { container } = mount(null, "/app/chat/session-a");
       await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
       emit(container.querySelector("iframe")!, { type: "evimed.runtime-ui.notice", code: "runtime_reserved_for_autopilot", title: "对话暂时打不开", detail: errorCodeMessage("runtime_reserved_for_autopilot") });
-      expect(await screen.findByRole("alert")).toHaveTextContent("这个项目正在执行你设定的定时研究，结束后即可继续。");
+      expect(await screen.findByRole("alert")).toHaveTextContent("这个项目正在执行你设定的定时任务，结束后即可继续。");
       expect(screen.getByRole("button", { name: "查看定时任务" })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /额度|用量/ })).toBeNull();
     });
@@ -815,19 +815,19 @@ describe("native frame identity and readiness", () => {
     await userEvent.click(await screen.findByRole("button", { name: "查看用量" }));
     expect(screen.getByTestId("path")).toHaveTextContent("/app/account");
     expect(screen.getByTestId("search")).toHaveTextContent("?tab=usage");
-    expect(screen.queryByRole("button", { name: "查看科研额度" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看额度" })).toBeNull();
     expect(mocks.create).toHaveBeenCalledTimes(1);
   });
 
-  // The page behind the button is named by the deployment: 科研额度 only where
+  // The page behind the button is named by the deployment: 额度 only where
   // research is billed (`useResearchBilling`), and the button says what the
   // page is called.
-  it("calls the usage page 科研额度 on a deployment that bills research, and goes to the same address", async () => {
+  it("calls the usage page 额度 on a deployment that bills research, and goes to the same address", async () => {
     mocks.allowance.mockResolvedValue(billing(true));
     mocks.create.mockRejectedValueOnce(dailyLimit());
     mount();
     expect(await screen.findByRole("alert")).toHaveTextContent("今日额度上限已到");
-    await userEvent.click(await screen.findByRole("button", { name: "查看科研额度" }));
+    await userEvent.click(await screen.findByRole("button", { name: "查看额度" }));
     expect(screen.getByTestId("path")).toHaveTextContent("/app/account");
     expect(screen.getByTestId("search")).toHaveTextContent("?tab=usage");
     expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
@@ -839,9 +839,9 @@ describe("native frame identity and readiness", () => {
     mocks.create.mockRejectedValueOnce(dailyLimit());
     mount();
     expect(await screen.findByRole("button", { name: "查看用量" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "查看科研额度" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看额度" })).toBeNull();
     await act(async () => { answer(billing(true)); });
-    expect(screen.getByRole("button", { name: "查看科研额度" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看额度" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
   });
 
@@ -854,7 +854,7 @@ describe("native frame identity and readiness", () => {
     await act(async () => {});
     await userEvent.click(screen.getByRole("button", { name: "查看用量" }));
     expect(screen.getByTestId("search")).toHaveTextContent("?tab=usage");
-    expect(screen.queryByRole("button", { name: "查看科研额度" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看额度" })).toBeNull();
   });
 
   it("reads the allowance only when a ceiling refused the conversation, not for every conversation that opens", async () => {
@@ -880,7 +880,7 @@ describe("native frame identity and readiness", () => {
     expect(alert).toHaveTextContent(errorCodeMessage("simulated_credits_exhausted"));
     expect(alert).toHaveTextContent("模拟额度不足");
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "查看科研额度" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看额度" })).toBeNull();
     expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "去模拟充值" }));
     expect(screen.getByTestId("path")).toHaveTextContent(SIMULATED_WALLET_PAGES.recharge);
@@ -921,7 +921,7 @@ describe("native frame identity and readiness", () => {
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
     emit(container.querySelector("iframe")!, { type: "evimed.runtime-ui.notice", code: "runtime_limit_exceeded", title: "对话暂时打不开", detail: "" });
     // Said as the cap it is, whatever the page titled itself: the code decides what the refusal is.
-    expect(await screen.findByRole("alert")).toHaveTextContent("你同时进行的研究已达上限，先结束一个再试。");
+    expect(await screen.findByRole("alert")).toHaveTextContent("你同时进行的任务已达上限，先结束一个再试。");
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "去模拟充值" })).toBeNull();
     expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
@@ -931,7 +931,7 @@ describe("native frame identity and readiness", () => {
     mocks.create.mockRejectedValueOnce(new WebApiError("Out of credits.", { status: 402, code: "credits_exhausted" }));
     mount();
     expect(await screen.findByRole("alert")).toHaveTextContent(errorCodeMessage("credits_exhausted"));
-    expect(await screen.findByRole("button", { name: "查看科研额度" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "查看额度" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "去模拟充值" })).toBeNull();
   });
 
@@ -961,7 +961,7 @@ describe("native frame identity and readiness", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("登录已失效，请重新登录。");
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
     expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "查看科研额度" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看额度" })).toBeNull();
     expect(mocks.allowance).not.toHaveBeenCalled();
   });
 
@@ -1468,7 +1468,7 @@ describe("opening a task", () => {
     mocks.start.mockRejectedValue(new WebApiError("Too many running runtimes for this user; limit is 2.", { status: 429, code: "runtime_limit_exceeded" }));
     mount(null, "/app/chat/session-a");
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("你同时进行的研究已达上限，先结束一个再试。");
+    expect(alert).toHaveTextContent("你同时进行的任务已达上限，先结束一个再试。");
     expect(alert).not.toHaveTextContent(/冷启动|90 秒/);
     // A concurrency ceiling: no quota page lifts it, so none is offered, and
     // the run ledger it used to point at is gone. Freeing a slot is done in
@@ -1555,7 +1555,7 @@ describe("opening a task", () => {
 
   it("starts the project's runtime from any page, so the conversation is warm when it is opened", async () => {
     // 2026-09-22: a cold start is six to eight seconds, and a researcher who
-    // lands on 知识库 or 科研工具 first used to pay it on reaching the chat.
+    // lands on 知识库 or 工具 first used to pay it on reaching the chat.
     mocks.warm.mockReset();
     mount(null, "/app/files");
     expect(screen.getByText("knowledge base")).toBeInTheDocument();

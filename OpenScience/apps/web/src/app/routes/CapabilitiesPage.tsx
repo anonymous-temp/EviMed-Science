@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search } from "lucide-react";
-import { capabilityListed, searchMatches } from "@evimed/domain";
+import { capabilityListed, GENERAL_TOOL_GROUP, GENERAL_TOOLS, PROFESSIONAL_TOOL_GROUP, searchMatches } from "@evimed/domain";
 import { availabilityIsDrawn, fetchWebResearchEstimates, webErrorMessage, listWebResearchAgents, type WebResearchAgent, type WebResearchEstimate } from "@/lib/apiClient";
 import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
-import { capabilityIcon } from "@/lib/capabilityIcons";
+import { capabilityIcon, generalToolIcon } from "@/lib/capabilityIcons";
 import { bindConversationCapability } from "@/lib/dispatch";
 import { formatNumber, formatRange } from "@/lib/format";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
@@ -18,10 +18,10 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { Tag } from "@/components/ui/Tag";
 
 /**
- * The groups in the product's order — evidence, pharmacy, study design and
- * data, writing (2026-09-23 plan §5.4) — rather than by the sort order of their
- * names, which put 写作与传播 second. A group the display table gains later
- * follows these, by name.
+ * The order the professional tools follow within their one group — evidence,
+ * pharmacy, study design and data, writing (2026-09-23 plan §5.4) — rather than
+ * by the sort order of their categories' names, which put 写作与传播 second. A
+ * category the display table gains later follows these, by name.
  */
 const CATEGORY_ORDER = ["临床证据", "药学评价", "研究设计与数据", "写作与传播"];
 
@@ -29,6 +29,11 @@ function categoryRank(name: string): number {
   const at = CATEGORY_ORDER.indexOf(name);
   return at < 0 ? CATEGORY_ORDER.length : at;
 }
+
+type GeneralTool = (typeof GENERAL_TOOLS)[number];
+
+/** The groups of the page, in the order it lists them: what anyone does first, then the medical capabilities. */
+const GROUPS = [GENERAL_TOOL_GROUP, PROFESSIONAL_TOOL_GROUP] as const;
 
 /**
  * How long a tool usually takes: 「约 30～70 分钟」. This page is the one place a
@@ -57,19 +62,26 @@ function allowanceText(estimate: WebResearchEstimate | undefined): string | null
 }
 
 /**
- * 科研工具 — the catalogue of research tools as a grid.
+ * 工具 — what the platform does, as a grid in two groups.
  *
- * A tool is unlike its neighbours (each does a different job), so it is a card
- * — a quiet grey ground, no border — and not a row. A card says what the tool
- * does in one complete sentence and how long it usually takes; nothing else.
- * The sentence is the capability's `display.description`, kept short enough
- * for two lines at the source rather than cut off here with an ellipsis. What
- * a tool needs from the researcher is said by the composer once the tool is
- * chosen, not on the card.
+ * 通用 first: documents, spreadsheets, slides, data analysis, web research and
+ * code, which anyone does and which are not capability packages — a card opens
+ * an ordinary conversation with a sentence in the composer to change before it
+ * is sent. 医学专业 after: the capability packages, each with its own contract.
+ * The first group is the page's own table (`@evimed/domain`'s `GENERAL_TOOLS`),
+ * so it is there whether or not the catalogue could be read.
  *
- * Choosing a tool opens a new conversation with that tool on: the reader types
- * into the composer they were going to use anyway, and the tool rides along as
- * a chip above it.
+ * A capability is unlike its neighbours (each does a different job), so it is a
+ * card — a quiet grey ground, no border — and not a row. A card says what the
+ * tool does in one complete sentence and how long it usually takes; nothing
+ * else. The sentence is the capability's `display.description`, kept short
+ * enough for two lines at the source rather than cut off here with an ellipsis.
+ * What a tool needs from the researcher is said by the composer once the tool
+ * is chosen, not on the card.
+ *
+ * Choosing a capability opens a new conversation with that tool on: the reader
+ * types into the composer they were going to use anyway, and the tool rides
+ * along as a chip above it.
  *
  * Where research is billed from a simulated wallet (`useResearchBilling`), this
  * is also where the next task's cost is met before it starts: a card adds what
@@ -81,7 +93,7 @@ export function CapabilitiesPage() {
   const navigate = useNavigate();
   const [agents, setAgents] = useState<WebResearchAgent[]>([]);
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("all");
+  const [group, setGroup] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
@@ -108,7 +120,7 @@ export function CapabilitiesPage() {
 
   // What each listed tool usually costs, in one read for all of them — asked
   // only where the allowance is simulated, and again only when the list of
-  // tools itself changes (a search or a category filters what is already here).
+  // tools itself changes (a search or a group filters what is already here).
   // A read that fails costs the page nothing: the cards stay as they are.
   const listed = useMemo(() => catalogue.map((ui) => ui.id).join(","), [catalogue]);
   useEffect(() => {
@@ -120,22 +132,23 @@ export function CapabilitiesPage() {
     return () => { active = false; };
   }, [billing.simulated, listed]);
 
-  const categories = useMemo(
-    () => [...new Set(catalogue.map((ui) => ui.category))]
-      .sort((left, right) => categoryRank(left) - categoryRank(right) || left.localeCompare(right, "zh")),
-    [catalogue],
+  // A retired module name still finds the module's tools until 2027-01-07 (`searchMatches`).
+  const generalTools = useMemo(
+    () => GENERAL_TOOLS.filter((tool) => searchMatches(query, [tool.title, tool.description, ...tool.starterPrompts])),
+    [query],
   );
-  const groups = useMemo(() => categories
-    .filter((name) => category === "all" || name === category)
-    .map((name) => [name, catalogue.filter((ui) => ui.category === name
-      // A retired module name still finds the module's tools until 2027-01-07 (`searchMatches`).
-      && searchMatches(query, [ui.title, ui.description, ...ui.starterPrompts]))] as const)
-    .filter(([, items]) => items.length > 0), [catalogue, categories, category, query]);
+  const professionalTools = useMemo(
+    () => catalogue.filter((ui) => searchMatches(query, [ui.title, ui.description, ...ui.starterPrompts]))
+      .sort((left, right) => categoryRank(left.category) - categoryRank(right.category)),
+    [catalogue, query],
+  );
+  const showGeneral = (group === "all" || group === GENERAL_TOOL_GROUP) && generalTools.length > 0;
+  const showProfessional = group === "all" || group === PROFESSIONAL_TOOL_GROUP;
 
   /**
-   * A tool is chosen by opening a conversation that runs it — bound before the
-   * conversation exists, because a binding is what makes the router honour the
-   * choice rather than re-decide it with a classifier.
+   * A capability is chosen by opening a conversation that runs it — bound
+   * before the conversation exists, because a binding is what makes the router
+   * honour the choice rather than re-decide it with a classifier.
    */
   const [opening, setOpening] = useState<string | null>(null);
   const open = (agent: CapabilityUi) => {
@@ -149,45 +162,78 @@ export function CapabilitiesPage() {
       .catch(() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }))
       .finally(() => setOpening(null));
   };
+  // A general tool binds nothing: a new conversation with its first sentence in the composer, never sent.
+  const openGeneral = (tool: GeneralTool) => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(tool.starterPrompts[0]) } });
+
+  const professionalEmpty = !loading && !error && professionalTools.length === 0;
+  const nothing = !showGeneral && (!showProfessional || professionalEmpty);
 
   return (
     <PageShell
-      title="科研工具"
+      title="工具"
       actions={<SearchInput label="搜索工具" value={query} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-72" />}
     >
       {/* Only a balance just read: while it is being read again, or could not be, the one held is not drawn. */}
       {!billing.loading && !billing.error && <SimulatedAllowanceNotice allowance={billing.allowance} className="mb-6" />}
-      {categories.length > 1 && (
-        <FilterChips
-          label="分类"
-          className="mb-6"
-          options={[{ value: "all", label: "全部" }, ...categories.map((name) => ({ value: name, label: name }))]}
-          value={category}
-          onChange={setCategory}
-        />
-      )}
-      {loading ? <ToolGridSkeleton />
-        // Error with a way out, not a dead end: a catalogue that failed to
-        // load once is usually a control plane that was briefly away.
-        : error ? <LoadError message={`无法加载工具目录：${error}`} onRetry={() => setReloads((value) => value + 1)} />
-          : groups.length === 0 ? <EmptyState icon={Search} title="没有符合条件的科研工具" />
-            : (
-              <div className="space-y-8">
-                {groups.map(([name, items]) => (
-                  <section key={name} aria-labelledby={`capability-group-${name}`}>
-                    <h2 id={`capability-group-${name}`} className="mb-2 text-ui font-semibold text-text">{name}</h2>
-                    <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {items.map((agent) => (
-                        <li key={agent.id} className="flex">
-                          <ToolCard agent={agent} estimate={billing.simulated ? estimates.get(agent.id) : undefined} busy={opening === agent.id} onOpen={() => open(agent)} />
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ))}
-              </div>
-            )}
+      <FilterChips
+        label="分类"
+        className="mb-6"
+        options={[{ value: "all", label: "全部" }, ...GROUPS.map((name) => ({ value: name, label: name }))]}
+        value={group}
+        onChange={setGroup}
+      />
+      <div className="space-y-8">
+        {showGeneral && (
+          <section aria-labelledby="capability-group-general">
+            <h2 id="capability-group-general" className="mb-2 text-ui font-semibold text-text">{GENERAL_TOOL_GROUP}</h2>
+            <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {generalTools.map((tool) => (
+                <li key={tool.id} className="flex">
+                  <GeneralToolCard tool={tool} onOpen={() => openGeneral(tool)} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {showProfessional && (loading ? <ToolGridSkeleton />
+          // Error with a way out, not a dead end: a catalogue that failed to
+          // load once is usually a control plane that was briefly away. The
+          // general tools above do not wait for it.
+          : error ? <LoadError message={`无法加载工具目录：${error}`} onRetry={() => setReloads((value) => value + 1)} />
+            : professionalTools.length > 0 && (
+              <section aria-labelledby="capability-group-professional">
+                <h2 id="capability-group-professional" className="mb-2 text-ui font-semibold text-text">{PROFESSIONAL_TOOL_GROUP}</h2>
+                <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {professionalTools.map((agent) => (
+                    <li key={agent.id} className="flex">
+                      <ToolCard agent={agent} estimate={billing.simulated ? estimates.get(agent.id) : undefined} busy={opening === agent.id} onOpen={() => open(agent)} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+        {nothing && <EmptyState icon={Search} title="没有符合条件的工具" />}
+      </div>
     </PageShell>
+  );
+}
+
+/** One general tool: its icon and name and one sentence. It opens a conversation with a sentence to start from, bound to nothing. */
+function GeneralToolCard({ tool, onOpen }: { tool: GeneralTool; onOpen: () => void }) {
+  const Icon = generalToolIcon(tool.id);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`用“${tool.title}”开始一次对话`}
+      className="flex min-h-32 w-full flex-col gap-1.5 rounded-card bg-surface-1 p-4 text-left transition-colors duration-fast hover:bg-surface-2"
+    >
+      <span className="flex items-center gap-2 text-ui font-semibold text-text">
+        <Icon size={16} className="shrink-0 text-accent" aria-hidden="true" />
+        {tool.title}
+      </span>
+      <span className="text-ui text-text-2">{tool.description}</span>
+    </button>
   );
 }
 

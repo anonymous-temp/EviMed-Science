@@ -49,7 +49,7 @@ describe("飞书 under 通知: binding", () => {
     mocks.startFeishuRegistration.mockResolvedValue({ state: "polling", qrCodeUrl: QR_URL, remainingSeconds: 590 });
     mocks.fetchFeishuRegistration.mockResolvedValue({ state: "succeeded", result: { botName: "bot", pendingApproval: false, tenantBrand: "feishu" } });
     account();
-    expect(await screen.findByText("绑定后，研究完成和每日前沿也会推送到飞书")).toBeInTheDocument();
+    expect(await screen.findByText("绑定后，任务完成的通知也会推送到飞书")).toBeInTheDocument();
     const start = screen.getByRole("button", { name: "绑定" });
     vi.useFakeTimers();
     await act(async () => { fireEvent.click(start); });

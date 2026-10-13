@@ -31,7 +31,7 @@ vi.mock("@/components/settings/AccountSection", () => ({
 }));
 vi.mock("@/components/settings/NotificationsSection", () => ({ NotificationsSection: ({ imEnabled }: { imEnabled: boolean }) => <div>通知分区{imEnabled ? "（含飞书）" : ""}</div> }));
 vi.mock("@/components/settings/MonthlyUsage", () => ({ MonthlyUsage: () => <div>用量分区</div> }));
-vi.mock("@/components/settings/ResearchAllowance", () => ({ ResearchAllowance: () => <div>科研额度分区</div> }));
+vi.mock("@/components/settings/ResearchAllowance", () => ({ ResearchAllowance: () => <div>额度分区</div> }));
 vi.mock("@/components/settings/ConnectorsSection", () => ({ ConnectorsSection: () => <div>数据源分区</div> }));
 vi.mock("@/components/settings/ProjectsSection", () => ({ ProjectsSection: () => <div>项目分区</div> }));
 vi.mock("./OpsPage", () => ({ OpsPage: () => <div>运维分区<p>循证进化</p></div> }));
@@ -64,10 +64,10 @@ const nav = () => screen.getByRole("navigation", { name: "设置分区" });
 const answered = () => act(async () => {});
 const names = () => within(nav()).getAllByRole("link").map((link) => link.textContent);
 
-/** The usage section is named by the deployment: 用量, and 科研额度 only where research is billed. */
+/** The usage section is named by the deployment: 用量, and 额度 only where research is billed. */
 const DEPLOYMENTS = [
-  { name: "does not bill research", enabled: false, usage: "用量", body: "用量分区", other: "科研额度", reads: 1 },
-  { name: "bills research", enabled: true, usage: "科研额度", body: "科研额度分区", other: "用量", reads: 2 },
+  { name: "does not bill research", enabled: false, usage: "用量", body: "用量分区", other: "额度", reads: 1 },
+  { name: "bills research", enabled: true, usage: "额度", body: "额度分区", other: "用量", reads: 2 },
 ] as const;
 
 describe("设置", () => {
@@ -160,8 +160,8 @@ describe("设置", () => {
     expect(await screen.findByText("账户分区")).toBeInTheDocument();
     expect(names()).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目", "插件", "技能"]);
     await act(async () => { answer(billing(true)); });
-    expect(names()).toEqual(["账户", "外观", "通知", "科研额度", "数据源", "项目", "插件", "技能"]);
-    expect(within(nav()).getByRole("link", { name: "科研额度" })).toHaveAttribute("href", "/app/account?tab=usage");
+    expect(names()).toEqual(["账户", "外观", "通知", "额度", "数据源", "项目", "插件", "技能"]);
+    expect(within(nav()).getByRole("link", { name: "额度" })).toHaveAttribute("href", "/app/account?tab=usage");
   });
 
   it("keeps 用量 when the deployment's answer cannot be read, and the section says so with a retry", async () => {
@@ -172,11 +172,11 @@ describe("设置", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("操作未完成，请重试。");
     expect(names()).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目", "插件", "技能"]);
     expect(screen.queryByText("用量分区")).not.toBeInTheDocument();
-    expect(screen.queryByText("科研额度分区")).not.toBeInTheDocument();
+    expect(screen.queryByText("额度分区")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重试" }));
-    expect(await screen.findByText("科研额度分区")).toBeInTheDocument();
+    expect(await screen.findByText("额度分区")).toBeInTheDocument();
     // The one read the retry made is the tab's answer too.
-    expect(names()).toEqual(["账户", "外观", "通知", "科研额度", "数据源", "项目", "插件", "技能"]);
+    expect(names()).toEqual(["账户", "外观", "通知", "额度", "数据源", "项目", "插件", "技能"]);
   });
 
   it.each([

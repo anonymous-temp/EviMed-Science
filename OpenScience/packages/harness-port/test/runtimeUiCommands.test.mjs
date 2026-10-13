@@ -11,6 +11,7 @@ import {
 } from '../src/runtimeUiCommands.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 import { FRAME_VOCABULARY } from '../src/runtimeUiFrame.mjs';
+import { BLANK_EXAMPLES } from '@evimed/domain';
 
 const CATALOGUE = [
   { id: 'clinical-evidence-synthesis', title: '临床证据深度分析', category: '临床证据', brief: 'b1', summary: '围绕一个临床问题检索并综合证据。', minutes: [20, 40],
@@ -56,7 +57,7 @@ test('the slash popup lists the public tools, with category and summary to searc
     { id: 'clinical-evidence-synthesis', label: '临床证据深度分析', detail: '临床证据 · 围绕一个临床问题检索并综合证据。' },
     { id: 'comprehensive-drug-evaluation', label: '综合药品评价', detail: '临床证据 · 多维度评价一个药品。' },
     { id: 'research-topic-selection', label: '科研选题', detail: '研究规划 · 提出可落地的选题。' },
-  ], 'how long a tool takes is said once, on 科研工具');
+  ], 'how long a tool takes is said once, on 工具');
 });
 
 test('a tool its own module opens is not a row in the popup, and still has a chip', () => {
@@ -87,7 +88,7 @@ test('/工具 binds the conversation it was typed in, and writes nothing into th
   assert.equal(f.commands.length, 1);
   const command = f.commands[0];
   assert.equal(command.name, '工具');
-  assert.equal(command.description(), '选择科研工具');
+  assert.equal(command.description(), '选择工具');
   assert.equal(command.available({ sessionId: 'session-a' }), true);
   assert.equal(command.ui.kind, 'popupSelect');
   const options = await command.ui.options({ sessionId: 'session-a' }, new globalThis.AbortController().signal);
@@ -111,7 +112,16 @@ test('the blank conversation is the headline and the composer; a chosen tool is 
   // to the composer's width.
   const hero = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset');
   assert.equal(hero.options.priority, -1);
-  assert.equal(renderStatic(hero.component), '', 'nothing between the headline and the composer');
+  // With no tool chosen the hero offers a few things to start from — general ones first — and nothing else:
+  // no card, no description of the system.
+  const blankPills = renderStatic(hero.component);
+  assert.deepEqual([...blankPills.matchAll(/<button type="button" title="[^"]+"[^>]*><span[^>]*>([^<]+)<\/span><\/button>/g)].map((match) => match[1]),
+    BLANK_EXAMPLES.map((example) => example.label));
+  assert.match(blankPills, /data-evimed-blank-examples/);
+  assert.doesNotMatch(blankPills, /aria-label|移除/, 'no chip before a tool is chosen');
+  const labels = BLANK_EXAMPLES.map((example) => example.label);
+  assert.deepEqual(labels.slice(0, 4).filter((label) => /临床|药/.test(label)), [], 'the first four are not medical');
+  assert.deepEqual(labels.slice(4).filter((label) => /临床|药/.test(label)), labels.slice(4), 'the last two are');
   assert.equal(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.input.dock'), false);
   // E-17: nothing of ours is in the row under the composer card.
   assert.equal(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock'), false,
@@ -124,7 +134,7 @@ test('the blank conversation is the headline and the composer; a chosen tool is 
   f.kit.hub.deliver('capability', { capabilityId: 'clinical-evidence-synthesis', sessionId: 'session-a' });
   const drawn = renderStatic(chip.component);
   assert.match(drawn, /临床证据深度分析/);
-  // The tool's name alone: its duration and summary were said on 科研工具.
+  // The tool's name alone: its duration and summary were said on 工具.
   assert.doesNotMatch(drawn, /分钟|围绕一个临床问题|你会拿到|做不到/);
   // One click removes it; a native tooltip would be a second name for the same button.
   assert.match(drawn, /aria-label="移除“临床证据深度分析”"/);
@@ -222,7 +232,7 @@ test('references are read back strictly', () => {
   assert.deepEqual(knowledgeCandidates({ ok: false, items: [{ id: 'src_1', title: 'A' }] }), []);
 });
 
-// 循证 GEO: its capabilities are hidden from 科研工具, so the catalogue may not
+// 循证 GEO: its capabilities are hidden from 工具, so the catalogue may not
 // list them, and a conversation bound to any of them still says 「循证 GEO」.
 const GEO_OPTIONS = {
   sessionId: 'session-a', controls: true, coverageDays: 90, coverageOptions: [30, 60, 90, 180],
@@ -392,7 +402,8 @@ test('the 虚拟临床研究 chip carries 起点 and 预期用途 in its menu on
   // Another conversation: the options go with the tool until the shell speaks.
   f.kit.hub.deliver('session', { sessionId: 'session-b' });
   assert.equal(renderStatic(chip.component), '');
-  assert.equal(renderStatic(hero.component), '');
+  assert.doesNotMatch(renderStatic(hero.component), /估算样本量/, 'the study\'s starters went with the study');
+  assert.match(renderStatic(hero.component), /data-evimed-blank-examples/, 'and the blank conversation offers its own again');
 });
 
 test('without the command or trigger services the rest still stands', () => {

@@ -1,8 +1,8 @@
 {
   "id": "/app/chat",
-  "name": "EviMed 循证医学科研智能体",
+  "name": "EviMed 智能体",
   "short_name": "EviMed",
-  "description": "向 EviMed 提问、发起研究，在手机上查看报告",
+  "description": "向 EviMed 提问、交办任务，在手机上查看结果",
   "lang": "zh-CN",
   "dir": "ltr",
   "start_url": "/app/chat",

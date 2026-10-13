@@ -188,7 +188,7 @@ describe("数据源", () => {
     expect(await screen.findByRole("menuitem", { name: "更换凭据" })).toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "移除凭据" }));
     const dialog = await screen.findByRole("alertdialog", { name: "移除你的 OpenGWAS 凭据？" });
-    expect(dialog).toHaveTextContent("需要 OpenGWAS 的研究会跳过这部分");
+    expect(dialog).toHaveTextContent("需要 OpenGWAS 的任务会跳过这部分");
     expect(mocks.removeWebConnectorCredential).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "移除凭据" }));
     await waitFor(() => expect(mocks.removeWebConnectorCredential).toHaveBeenCalledWith("opengwas"));

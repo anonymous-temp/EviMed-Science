@@ -125,5 +125,5 @@ export function InfoDrawer({ title, kicker, does, when, onClose }: { title: stri
 }
 
 /** Where an engine's drawer says it is used from: the research tools, never the reader's own click. */
-export const ENGINE_WHEN = "你在科研工具里选择对应的工具，或在对话里提出这类任务时，由科研工具在后台调用它。";
+export const ENGINE_WHEN = "你在工具页里选择对应的工具，或在对话里提出这类任务时，由工具在后台调用它。";
 export const engineKicker = (available: boolean) => `计算引擎 · ${available ? "可用" : "暂不可用"}`;

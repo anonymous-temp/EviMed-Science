@@ -29,7 +29,7 @@ const SECTIONS: readonly Section[] = [
   { key: "account", label: "账户", icon: UserRound },
   { key: "appearance", label: "外观", icon: Palette },
   { key: "notifications", label: "通知", icon: BellRing },
-  { key: "usage", label: "用量", billingLabel: "科研额度", icon: Gauge },
+  { key: "usage", label: "用量", billingLabel: "额度", icon: Gauge },
   { key: "connectors", label: "数据源", icon: Plug },
   { key: "projects", label: "项目", icon: Folder },
 ];
@@ -49,7 +49,7 @@ const OPS: Section = { key: "ops", label: "运维", icon: Wrench };
  * (「设置 → 数据源」) and bookmarks all land where they did; no value opens
  * 账户, which is what the gear promises.
  *
- * 用量 is named by the deployment: it reads 科研额度 only where research billing
+ * 用量 is named by the deployment: it reads 额度 only where research billing
  * is on, and only once the deployment has said so (`useResearchBilling`), so a
  * deployment without billing never shows the word, not even while it loads.
  */

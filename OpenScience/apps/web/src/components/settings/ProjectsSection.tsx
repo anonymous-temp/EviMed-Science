@@ -31,7 +31,7 @@ import { Menu } from "@/components/ui/Menu";
 import { Panel, PanelRow } from "@/components/ui/Panel";
 import { Tag } from "@/components/ui/Tag";
 
-/** The project every account has and cannot delete. Its name is 「我的研究」. */
+/** The project every account has and cannot delete. A new account names it 「我的项目」; an older one may still call it 「我的研究」. */
 const DEFAULT_PROJECT_ID = "default";
 
 /**
@@ -40,7 +40,7 @@ const DEFAULT_PROJECT_ID = "default";
  */
 const DELETE_ERRORS = {
   project_busy: "这个项目还有排队或运行中的任务，等它们结束或取消后再删除。",
-  default_project_protected: "“我的研究”是每个账号都有的项目，不能删除。",
+  default_project_protected: "默认项目是每个账号都有的项目，不能删除。",
 };
 
 /** A row inside a settings group: the group's own padding, no row corners. */
@@ -189,7 +189,7 @@ export function ProjectsSection() {
         // The shell was in the project that is gone, so it moves — in place,
         // through the store the sidebar and every page are keyed on. A refused
         // move is not a failed deletion: the list refresh falls back to
-        // 「我的研究」 by itself.
+        // the default project by itself.
         const nextProject = items.find((item) => item.id === DEFAULT_PROJECT_ID) ?? items[0];
         if (nextProject && await useProjectStore.getState().select(nextProject.id).then(() => true, () => false)) {
           setCurrentId(nextProject.id);
@@ -316,7 +316,7 @@ export function ProjectsSection() {
       {pendingDelete && createPortal(
         <ConfirmDialog
           title={`删除项目“${labelOf(labels, pendingDelete)}”？`}
-          body={`${pendingKind === "own" ? "" : MODULE_DELETE_WARNING[pendingKind]}这个项目的文件、对话与研究环境都会删除，无法恢复；需要留底的话，先导出。`}
+          body={`${pendingKind === "own" ? "" : MODULE_DELETE_WARNING[pendingKind]}这个项目的文件、对话与运行环境都会删除，无法恢复；需要留底的话，先导出。`}
           confirmLabel="删除项目"
           onConfirm={() => void confirmDeleteProject()}
           onCancel={() => setPendingDelete(null)}

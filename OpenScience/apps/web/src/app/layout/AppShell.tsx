@@ -240,7 +240,7 @@ export function AppShell() {
             {/* Keyed by the workbench section, never by a page's parameters. The router navigates inside a
               * transition, and a transition never hides content a boundary has already shown: with one boundary for
               * every page, a section whose chunk was slow left the previous one on screen with no sign the click was
-              * taken (live walk 2026-10-10: 科研工具 stayed 11 s under /app/virtual-research). A new boundary per
+              * taken (live walk 2026-10-10: 工具 stayed 11 s under /app/virtual-research). A new boundary per
               * section shows its fallback; a list and its detail, a tab or a parameter inside one section keep the
               * boundary, so a row chosen in an in-page list keeps its focus and the page its state. */}
             <Suspense key={onChat ? "chat" : section} fallback={onChat ? null : <RouteFallback />}>

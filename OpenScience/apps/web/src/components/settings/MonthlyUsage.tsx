@@ -46,7 +46,7 @@ function shortDate(value: string | null): string {
  *
  * This is the section of a deployment without research billing, which is every
  * deployment until the owner switches billing on (`UsageSection` picks it);
- * the page it was before 「科研额度」 replaced it for everyone on 2026-10-03.
+ * the page it was before 「额度」 replaced it for everyone on 2026-10-03.
  */
 export function MonthlyUsage() {
   const operator = useOperator();
@@ -134,7 +134,7 @@ function UsageDetail({ usage, operator, onBack }: { usage: WebUsageSummary | nul
                     <ListRow
                       key={item.runId}
                       leading={<span className="w-20 pt-px text-caption tabular-nums text-text-3">{shortDate(item.at)}</span>}
-                      title={item.title ?? "未命名的研究"}
+                      title={item.title ?? "未命名的任务"}
                       to={`/app/runs?run=${encodeURIComponent(item.runId)}`}
                       meta={operator ? `${count(item.calls)} 次调用` : undefined}
                       trailing={<span className="text-ui tabular-nums text-text-2">{formatLingdou(item.cost)}</span>}

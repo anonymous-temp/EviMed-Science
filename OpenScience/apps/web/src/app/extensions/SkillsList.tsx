@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { searchMatches } from "@evimed/domain";
+import { PROFESSIONAL_TOOL_GROUP, searchMatches } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { PendingSkillTransfers } from "./SkillImport";
@@ -10,8 +10,8 @@ import { SKILL_GROUP_ICON, SKILL_PACK_ICON } from "./extensionCopy";
 
 /** Rows a group shows before 「展开其余 N 个」. */
 const SHOWN = 4;
-/** The group of the curated research tools: the platform's own, the same ones 科研工具 lists. */
-const TOOLS_GROUP = "平台内置";
+/** The group of the curated capability tools: the platform's own, the same ones 工具 lists under the same name. It follows the skills, which open with the general ones. */
+const TOOLS_GROUP = PROFESSIONAL_TOOL_GROUP;
 
 /** The set of open groups with one group toggled. */
 const toggled = (current: ReadonlySet<string>, name: string): Set<string> => {
@@ -40,13 +40,13 @@ function Group({ name, count, children }: { name: string; count: number; childre
 export function SkillsList({ personal, platform, tools, query, hasMore, loadingMore, onMore, onOpenPlatform, onOpenPersonal, onOpenTool, onResume }: {
   personal: readonly PersonalSkill[];
   platform: PlatformSkillList | null;
-  /** The curated research tools, already filtered as 科研工具 filters them; null until they are read. */
+  /** The curated research tools, already filtered as 工具 filters them; null until they are read. */
   tools: readonly CapabilityUi[] | null;
   query: string;
   hasMore: boolean; loadingMore: boolean; onMore: () => void;
   onOpenPlatform: (skill: PlatformSkill) => void;
   onOpenPersonal: (skill: PersonalSkill) => void;
-  /** Opens the conversation a tool starts, as its 科研工具 card does. */
+  /** Opens the conversation a tool starts, as its 工具 card does. */
   onOpenTool: (tool: CapabilityUi) => void;
   onResume: (entry: PendingSkillTransfer) => void;
 }) {
@@ -78,24 +78,6 @@ export function SkillsList({ personal, platform, tools, query, hasMore, loadingM
           {hasMore && <div className="px-2"><Button variant="text" size="sm" loading={loadingMore} onClick={onMore}>加载更多</Button></div>}
         </Group>
       )}
-      {toolRows.length > 0 && (
-        <Group name={TOOLS_GROUP} count={toolRows.length}>
-          <List label={TOOLS_GROUP} divided>
-            {(toolsUnfolded ? toolRows : toolRows.slice(0, SHOWN)).map(tool => {
-              const Icon = capabilityIcon(tool.id);
-              return <ListRow key={tool.id} leading={<Icon size={20} aria-hidden className="text-text-3" />} title={tool.title} meta={tool.description}
-                onOpen={() => onOpenTool(tool)} />;
-            })}
-          </List>
-          {!needle && toolRows.length > SHOWN && (
-            <div className="px-2 pt-1">
-              <Button variant="text" size="sm" aria-expanded={toolsUnfolded} onClick={() => setOpen(current => toggled(current, TOOLS_GROUP))}>
-                {toolsUnfolded ? "收起" : `展开其余 ${toolRows.length - SHOWN} 个`}
-              </Button>
-            </div>
-          )}
-        </Group>
-      )}
       {groups.map(group => {
         const unfolded = !!needle || open.has(group.name);
         const rows = unfolded ? group.items : group.items.slice(0, SHOWN);
@@ -120,6 +102,24 @@ export function SkillsList({ personal, platform, tools, query, hasMore, loadingM
           </Group>
         );
       })}
+      {toolRows.length > 0 && (
+        <Group name={TOOLS_GROUP} count={toolRows.length}>
+          <List label={TOOLS_GROUP} divided>
+            {(toolsUnfolded ? toolRows : toolRows.slice(0, SHOWN)).map(tool => {
+              const Icon = capabilityIcon(tool.id);
+              return <ListRow key={tool.id} leading={<Icon size={20} aria-hidden className="text-text-3" />} title={tool.title} meta={tool.description}
+                onOpen={() => onOpenTool(tool)} />;
+            })}
+          </List>
+          {!needle && toolRows.length > SHOWN && (
+            <div className="px-2 pt-1">
+              <Button variant="text" size="sm" aria-expanded={toolsUnfolded} onClick={() => setOpen(current => toggled(current, TOOLS_GROUP))}>
+                {toolsUnfolded ? "收起" : `展开其余 ${toolRows.length - SHOWN} 个`}
+              </Button>
+            </div>
+          )}
+        </Group>
+      )}
       {nothing && <p role="status" className="px-2 py-6 text-center text-ui text-text-3">没有找到技能</p>}
     </div>
   );

@@ -1,6 +1,6 @@
 {
   "description": "What each tool of the research tool set (the evimed MCP server, MCP_TOOL_BASE_NAMES) does, in one sentence a researcher can read, and the group the plugins page lists it under. The key is the tool's base name. researchToolDisplay.mjs reads this and a test holds it equal to the published tool list, so a tool added without a sentence fails there.",
-  "groups": ["文献与指南检索", "试验登记", "药品与安全", "基因与分子", "计算与分析", "网页与资料", "循证 GEO", "虚拟临床研究", "公共数据", "其他"],
+  "groups": ["网页与资料", "公共数据", "文献与指南检索", "试验登记", "药品与安全", "基因与分子", "计算与分析", "循证 GEO", "虚拟临床研究", "其他"],
   "tools": {
     "literature_search": { "group": "文献与指南检索", "use": "按关键词、检索式或关系在 PubMed 等文献库里查论文。" },
     "reference_list": { "group": "文献与指南检索", "use": "查一篇论文引用了哪些文献，或被哪些论文引用。" },
@@ -39,11 +39,11 @@
     "peer_review": { "group": "计算与分析", "use": "按多套规范对工作区里的稿件做同行评议。" },
     "research_calculate": { "group": "计算与分析", "use": "用经过验证的确定性引擎计算汇总数据，例如随机效应合并。" },
     "dataset_semantics": { "group": "计算与分析", "use": "记住并检查数据表的含义，同一数据集下次分析时沿用同一解释，数据行不会离开工作区。" },
-    "schedule_task": { "group": "其他", "use": "按你在对话里说的事和时间，安排一项定时任务，到点自动开始研究。" },
+    "schedule_task": { "group": "其他", "use": "按你在对话里说的事和时间，安排一项定时任务，到点自动开始。" },
     "update_task": { "group": "其他", "use": "改一项定时任务的内容、时间，或让它暂停、重新启用。" },
 
     "web_read": { "group": "网页与资料", "use": "读取一个公开网页或在线文档，保存成可引用的快照。" },
-    "web_search": { "group": "网页与资料", "use": "在开放网页上检索，适合基金公告、会议日程、学会页面等文献库里没有的内容。" },
+    "web_search": { "group": "网页与资料", "use": "在开放网页上检索，适合官网、公告、日程、行业资料等文献库里没有的内容。" },
     "kb_search": { "group": "网页与资料", "use": "在你的知识库里检索段落，并给出文件和页码。" },
     "kb_browse": { "group": "网页与资料", "use": "按目录翻看你的知识库：知识页、知识图谱和文档原文。" },
     "frontier_search": { "group": "网页与资料", "use": "检索前沿动态里近期的医学进展和证据卡。" },
@@ -67,6 +67,6 @@
     "get_usgs_water_data": { "group": "公共数据", "use": "取美国地质调查局某个站点近期的水文观测。" },
     "search_materials": { "group": "公共数据", "use": "按编号或化学式取 Materials Project 的材料数据。" },
 
-    "health": { "group": "其他", "use": "检查这套研究工具本身是否就绪。" }
+    "health": { "group": "其他", "use": "检查这套内置工具本身是否就绪。" }
   }
 }

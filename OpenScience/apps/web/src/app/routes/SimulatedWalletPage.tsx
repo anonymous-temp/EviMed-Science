@@ -91,7 +91,7 @@ function WalletPage({ page }: { page: WalletPageName }) {
       title={title}
       actions={(
         <Link to={ALLOWANCE_PATH} className={buttonClasses({ variant: "text" })}>
-          <ArrowLeft size={16} aria-hidden="true" />返回科研额度
+          <ArrowLeft size={16} aria-hidden="true" />返回额度
         </Link>
       )}
     >
@@ -165,10 +165,10 @@ function Recharge({ allowance, toppedUp, onToppedUp }: {
           <Link to={SIMULATED_WALLET_PAGES.orders} className={buttonClasses({ variant: "secondary", size: "sm" })}>查看模拟订单</Link>
         </div>
       )}
-      <Panel title="科研额度">
+      <Panel title="额度">
         {available === null
-          ? <PanelRow label="科研额度暂不可用" />
-          : <PanelRow label="可用科研额度" control={<AllowanceAmount value={available} simulated className="text-title font-semibold" />} />}
+          ? <PanelRow label="额度暂不可用" />
+          : <PanelRow label="可用额度" control={<AllowanceAmount value={available} simulated className="text-title font-semibold" />} />}
       </Panel>
       <section aria-labelledby="simulated-topup-packages">
         <div className="mb-2 flex items-center gap-2">

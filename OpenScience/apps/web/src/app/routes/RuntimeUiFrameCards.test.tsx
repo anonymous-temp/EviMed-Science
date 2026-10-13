@@ -4,6 +4,7 @@
 // recording slot registry.
 import * as React from "react";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { BLANK_EXAMPLES } from "@evimed/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFrameKit } from "../../../../../packages/harness-port/src/runtimeUiKit.mjs";
 import { FRAME_VOCABULARY } from "../../../../../packages/harness-port/src/runtimeUiFrame.mjs";
@@ -231,13 +232,14 @@ describe("the files after the answer that delivered them", () => {
 describe("the tools on a blank conversation", () => {
   afterEach(() => { cleanup(); });
 
-  it("show nothing but the composer until a tool is chosen, then a chip and its starters under the composer, which can be left", () => {
+  it("offer a few things to start from until a tool is chosen, then a chip and its starters under the composer, which can be left", () => {
+    const drafts: string[] = [];
     const components = new Map<string, (props: Record<string, unknown>) => unknown>();
     const ctx: Record<string, unknown> = {
       slots: { inject: (_name: string, setup: () => unknown) => setup(),
         register: (options: { name: string; id?: string }, component: (props: Record<string, unknown>) => unknown) => { components.set(options.id ?? options.name, component); return () => {}; } },
       sessions: { list: { getSnapshot: () => mainView("session-a"), subscribe: () => () => {} }, scope: (id: string) => ({ id }) },
-      conversation: { input: { for: () => ({ setDraft: () => {}, state: { getSnapshot: () => ({ draft: "老年房颤该不该抗凝？" }) } }) } },
+      conversation: { input: { for: () => ({ setDraft: (text: string) => { drafts.push(text); }, state: { getSnapshot: () => ({ draft: "老年房颤该不该抗凝？" }) } }) } },
       effect: (setup: () => unknown) => setup(),
       on: () => () => {},
     };
@@ -255,8 +257,16 @@ describe("the tools on a blank conversation", () => {
     // width; no page of the tool above the composer.
     const Hero = components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
     const heroView = render(<Hero />);
-    expect(heroView.container.textContent).toBe("");
+    // With no tool chosen the hero offers the blank conversation's examples — general ones first, two medical — as pills, and
+    // a pill puts its whole sentence into the composer without sending it.
+    expect(heroView.container.textContent).toBe(BLANK_EXAMPLES.map((example) => example.label).join(""));
+    expect(heroView.container.querySelector("[data-evimed-hero-tools]")).toBeNull();
+    fireEvent.click(heroView.getByRole("button", { name: BLANK_EXAMPLES[1].label }));
+    expect(drafts).toEqual([BLANK_EXAMPLES[1].draft]);
+    expect(sent.some(([type]) => type === "bind-capability")).toBe(false);
+    drafts.length = 0;
     act(() => kit.hub.deliver("capability", { capabilityId: "clinical-evidence-synthesis", sessionId: "session-a" }));
+    expect(heroView.container.querySelector("[data-evimed-blank-examples]")).toBeNull();
     expect(heroView.container.querySelector("[data-evimed-hero-tools]")).not.toBeNull();
     expect(heroView.container.querySelector("[data-evimed-tool-page]")).toBeNull();
     expect(heroView.getByText("临床证据深度分析")).toBeInTheDocument();
@@ -271,7 +281,7 @@ describe("the tools on a blank conversation", () => {
     expect(view.container.textContent).toBe("");
     act(() => kit.hub.deliver("capability", { capabilityId: "clinical-evidence-synthesis", sessionId: "session-a" }));
     expect(screen.getByText("临床证据深度分析")).toBeInTheDocument();
-    // The tool's name alone: how long it takes was said on 科研工具.
+    // The tool's name alone: how long it takes was said on 工具.
     expect(view.container.textContent).toBe("临床证据深度分析×");
     expect(screen.queryByRole("button", { name: "≥70 岁人群阿司匹林一级预防的获益与出血风险。" })).toBeNull();
     // The blank conversation of a session has this toolbar too: the hero seat

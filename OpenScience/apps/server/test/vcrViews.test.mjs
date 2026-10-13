@@ -559,7 +559,7 @@ test("what needs attention is deterministic over the rows: a route that cannot b
   const one = attentionOf({ ...quiet, steps: { evidence: { status: "queued", waiting: "simulated_allowance" } } });
   assert.deepEqual(one.map((line) => [line.kind, line.text]), [["allowance_waiting", "「证据」这一步在等模拟额度，模拟充值后会自动开始。"]]);
   const many = attentionOf({ ...quiet, steps: { trial: { status: "queued", waiting: "allowance" }, comparator: { status: "queued", waiting: "allowance" } } });
-  assert.equal(many[0].text, "2 个步骤在等科研额度，充值后会自动开始。");
+  assert.equal(many[0].text, "2 个步骤在等额度，充值后会自动开始。");
   assert.equal(many[0].items.length, 2);
   assert.deepEqual(attentionOf({ ...quiet, steps: { evidence: { status: "running", waiting: "allowance" } } }), [], "a step that has started waits on nothing");
   assert.equal(notEstimableDesign([{ route: "literature_control", conclusion: "limited" }], []), null);

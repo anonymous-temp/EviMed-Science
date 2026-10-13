@@ -9,12 +9,12 @@ import { ResearchAllowance } from "./ResearchAllowance";
  *
  * Research billing is off by default, and a page for a subsystem that is
  * switched off must not present it — no allowance panel, no recharge rows for
- * things that do not exist, no word of 科研额度. So the section follows the
+ * things that do not exist, no word of 额度. So the section follows the
  * deployment's answer:
  *
  *  - billing off: 「用量」, what this month has cost and its per-run detail
  *    (`MonthlyUsage`, the page every account had before billing existed);
- *  - billing on: 「科研额度」, the allowance and its statements
+ *  - billing on: 「额度」, the allowance and its statements
  *    (`ResearchAllowance`).
  *
  * The answer is the one `/api/account/allowance` read the account page's tab

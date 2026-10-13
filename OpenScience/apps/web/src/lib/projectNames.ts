@@ -26,7 +26,7 @@ export function projectNameProblem(name: string): string | null {
 export function projectErrorMessage(error: unknown, projectCount: number, fallback: string): string {
   return webErrorMessage(error, {
     codes: {
-      project_limit_reached: `这个账号已有 ${projectCount} 个项目，达到上限。每个项目都有自己的研究运行时和工作区，所以数量有限；删除一个不再需要的项目后再新建。`,
+      project_limit_reached: `这个账号已有 ${projectCount} 个项目，达到上限。每个项目都有自己的运行环境和工作区，所以数量有限；删除一个不再需要的项目后再新建。`,
     },
     fallback,
   });

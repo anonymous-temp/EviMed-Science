@@ -69,29 +69,29 @@ function row(label: string): HTMLElement {
 }
 /** Every mark on the page: the tags that read exactly 「模拟」. */
 const marks = () => screen.queryAllByText(SIMULATED_WALLET_LABEL);
-const statementRows = async () => within(await screen.findByRole("list", { name: "研究消费记录" })).getAllByRole("listitem");
+const statementRows = async () => within(await screen.findByRole("list", { name: "消费记录" })).getAllByRole("listitem");
 
 beforeEach(() => {
   mocks.statements.mockReset(); mocks.usage.mockReset(); mocks.operator = false;
   mocks.statements.mockResolvedValue({ simulated: true, items: [topUp, charge, grant], nextCursor: null });
 });
 
-describe("科研额度 on a deployment whose wallet is simulated", () => {
+describe("额度 on a deployment whose wallet is simulated", () => {
   it("opens with the line that says so, above everything else", async () => {
     open(simulated);
     const line = screen.getByText("模拟数据，不涉及真实资金");
     expect(line).toHaveClass("text-warn-strong");
-    expect(line.compareDocumentPosition(screen.getByRole("heading", { name: "科研额度" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.compareDocumentPosition(screen.getByRole("heading", { name: "额度" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await statementRows();
   });
 
   // Eleven tags on one screen read as a warning, not as a label. The group says it once; its amounts are covered by it.
   it("marks the allowance once, in the header of the group that holds its amounts, and not on each row", async () => {
     open(simulated);
-    const group = screen.getByRole("heading", { name: "科研额度" }).closest("section") as HTMLElement;
+    const group = screen.getByRole("heading", { name: "额度" }).closest("section") as HTMLElement;
     expect(within(group).getAllByText(SIMULATED_WALLET_LABEL)).toHaveLength(1);
     expect(within(group.querySelector("h2")!.parentElement as HTMLElement).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
-    for (const [label, amount] of [["可用科研额度", "200.00 灵豆"], ["本月研究消费", "4.00 灵豆"], ["本月待结算", "2.00 灵豆"]] as const) {
+    for (const [label, amount] of [["可用额度", "200.00 灵豆"], ["本月消费", "4.00 灵豆"], ["本月待结算", "2.00 灵豆"]] as const) {
       expect(within(row(label)).getByText(amount)).toBeInTheDocument();
       expect(within(row(label)).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
     }
@@ -110,7 +110,7 @@ describe("科研额度 on a deployment whose wallet is simulated", () => {
     mocks.statements.mockResolvedValue({ simulated: false, items: [{ ...charge, simulated: false }], nextCursor: null });
     open({ ...real, available: 0 });
     expect(await statementRows()).toHaveLength(1);
-    expect(within(row("可用科研额度")).getByText("0.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("0.00 灵豆")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看充值" })).toBeInTheDocument();
     expect(marks()).toEqual([]);
     expect(screen.queryAllByText(/模拟/)).toEqual([]);
@@ -119,7 +119,7 @@ describe("科研额度 on a deployment whose wallet is simulated", () => {
 
   it("says an allowance that cannot be read is unavailable, with no amount to mark and no zero", () => {
     open(unreadable);
-    expect(screen.getByText("科研额度暂不可用")).toBeInTheDocument();
+    expect(screen.getByText("额度暂不可用")).toBeInTheDocument();
     expect(screen.getByText("模拟数据，不涉及真实资金")).toBeInTheDocument();
     expect(marks()).toEqual([]);
     expect(screen.queryByText(/灵豆/)).not.toBeInTheDocument();
@@ -130,10 +130,10 @@ describe("the low-allowance prompt", () => {
   it("says a low allowance is running out, marked, with the way to the simulated recharge page", async () => {
     open({ ...simulated, available: 12 });
     const prompt = screen.getByRole("status");
-    expect(prompt).toHaveTextContent("科研额度即将用完，还剩 12.00 灵豆。");
+    expect(prompt).toHaveTextContent("额度即将用完，还剩 12.00 灵豆。");
     expect(within(prompt).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
     // At the top of the section: before the allowance itself.
-    expect(prompt.compareDocumentPosition(screen.getByRole("heading", { name: "科研额度" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(prompt.compareDocumentPosition(screen.getByRole("heading", { name: "额度" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const link = within(prompt).getByRole("link", { name: "去模拟充值" });
     expect(link).toHaveAttribute("href", SIMULATED_WALLET_PAGES.recharge);
     await userEvent.click(link);
@@ -143,7 +143,7 @@ describe("the low-allowance prompt", () => {
   it("says an empty allowance is used up", async () => {
     open({ ...simulated, available: 0 });
     const prompt = screen.getByRole("status");
-    expect(prompt).toHaveTextContent("科研额度已用完，模拟充值后可以继续研究。");
+    expect(prompt).toHaveTextContent("额度已用完，模拟充值后可以继续使用。");
     expect(prompt).not.toHaveTextContent("即将用完");
     expect(within(prompt).getByRole("link", { name: "去模拟充值" })).toHaveAttribute("href", SIMULATED_WALLET_PAGES.recharge);
     await statementRows();
@@ -151,11 +151,11 @@ describe("the low-allowance prompt", () => {
 
   it("begins at the threshold the server names, and not above it", async () => {
     const at = open({ ...simulated, available: SIMULATED_LOW_CREDITS });
-    expect(screen.getByRole("status")).toHaveTextContent("科研额度即将用完");
+    expect(screen.getByRole("status")).toHaveTextContent("额度即将用完");
     await statementRows();
     at.unmount();
     open({ ...simulated, available: SIMULATED_LOW_CREDITS + 1 });
-    expect(within(row("可用科研额度")).getByText("21.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("21.00 灵豆")).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await statementRows();
   });
@@ -175,7 +175,7 @@ describe("the low-allowance prompt", () => {
   it("offers no link when the server named no recharge page", async () => {
     open({ ...simulated, available: 0, commerce: { ...simulated.commerce, rechargeUrl: null } });
     const prompt = screen.getByRole("status");
-    expect(prompt).toHaveTextContent("科研额度已用完");
+    expect(prompt).toHaveTextContent("额度已用完");
     expect(within(prompt).queryByRole("link")).not.toBeInTheDocument();
     await statementRows();
   });
@@ -198,7 +198,7 @@ describe("充值与订单 on a deployment whose wallet is simulated", () => {
     }
     await userEvent.click(screen.getByRole("link", { name: "查看订单" }));
     expect(screen.getByTestId("where")).toHaveTextContent(SIMULATED_WALLET_PAGES.orders);
-    expect(screen.queryByRole("heading", { name: "科研额度" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "额度" })).not.toBeInTheDocument();
   });
 
   it("keeps a configured HTTPS page a document of its own", async () => {
@@ -211,7 +211,7 @@ describe("充值与订单 on a deployment whose wallet is simulated", () => {
 
   it("draws no placeholder row, and no group, when the server gave no destination", async () => {
     open({ ...simulated, commerce: { rechargeUrl: null, membershipUrl: null, ordersUrl: null, refundsUrl: null } });
-    expect(within(row("可用科研额度")).getByText("200.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("200.00 灵豆")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /^充值与/ })).not.toBeInTheDocument();
     expect(screen.queryAllByText(/尚未开放/)).toEqual([]);
     expect(screen.queryByRole("link", { name: /^查看/ })).not.toBeInTheDocument();
@@ -260,7 +260,7 @@ describe("the statement list", () => {
     expect(within(rows[2]).queryByRole("link")).not.toBeInTheDocument();
 
     // The list says 「模拟」 once, in its header; its rows do not say it again.
-    const list = screen.getByRole("region", { name: "研究消费明细" });
+    const list = screen.getByRole("region", { name: "消费明细" });
     expect(within(list.querySelector("h2")!.parentElement as HTMLElement).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
     for (const each of rows) expect(within(each).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
   });
@@ -298,7 +298,7 @@ describe("the statement list", () => {
     const second = open(simulated);
     rows = await statementRows();
     expect(within(rows[0]).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "研究消费明细" }).querySelector("h2")!.parentElement as HTMLElement).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "消费明细" }).querySelector("h2")!.parentElement as HTMLElement).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
     second.unmount();
 
     // …and where nothing says so — an older control plane — it is a charge of a real wallet.
@@ -311,9 +311,9 @@ describe("the statement list", () => {
 
   it("is not drawn, and not read, when the month could not be read", async () => {
     open(unreadable);
-    expect(screen.getByText("科研额度暂不可用")).toBeInTheDocument();
-    for (const gone of [/本月研究消费/, /本月待结算/, /研究消费明细/, /还没有研究消费记录/]) expect(screen.queryAllByText(gone)).toEqual([]);
-    expect(screen.queryByRole("list", { name: "研究消费记录" })).not.toBeInTheDocument();
+    expect(screen.getByText("额度暂不可用")).toBeInTheDocument();
+    for (const gone of [/本月消费/, /本月待结算/, /消费明细/, /还没有消费记录/]) expect(screen.queryAllByText(gone)).toEqual([]);
+    expect(screen.queryByRole("list", { name: "消费记录" })).not.toBeInTheDocument();
     await act(async () => {});
     expect(mocks.statements).not.toHaveBeenCalled();
   });
@@ -321,7 +321,7 @@ describe("the statement list", () => {
   it("is read once the month can be read", async () => {
     open(simulated);
     await statementRows();
-    expect(screen.getByRole("heading", { name: "研究消费明细" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "消费明细" })).toBeInTheDocument();
     expect(mocks.statements).toHaveBeenCalledTimes(1);
   });
 });

@@ -89,13 +89,13 @@ describe("the simulated wallet's two pages", () => {
     // The first thing in the page's body, before anything it qualifies.
     expect(line.parentElement?.firstElementChild).toBe(line);
     expect(line).toHaveClass("text-warn-strong");
-    expect(screen.getByRole("link", { name: "返回科研额度" })).toHaveAttribute("href", "/app/account?tab=usage");
+    expect(screen.getByRole("link", { name: "返回额度" })).toHaveAttribute("href", "/app/account?tab=usage");
     await settle();
   });
 
   it("follows the way back in place", async () => {
     open(SIMULATED_WALLET_PAGES.orders);
-    await userEvent.click(await screen.findByRole("link", { name: "返回科研额度" }));
+    await userEvent.click(await screen.findByRole("link", { name: "返回额度" }));
     expect(screen.getByTestId("where")).toHaveTextContent("/app/account?tab=usage");
   });
 
@@ -120,7 +120,7 @@ describe("the simulated wallet's two pages", () => {
 describe("模拟充值", () => {
   const openRecharge = async () => {
     const view = open(SIMULATED_WALLET_PAGES.recharge);
-    await screen.findByText("可用科研额度");
+    await screen.findByText("可用额度");
     return view;
   };
 
@@ -133,8 +133,8 @@ describe("模拟充值", () => {
 
   it("shows the balance, marked, and one button per package of the domain's list", async () => {
     await openRecharge();
-    expect(within(row("可用科研额度")).getByText("200.00 灵豆")).toBeInTheDocument();
-    expect(within(row("可用科研额度")).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("200.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
     expect(SIMULATED_TOPUP_PACKAGES.length).toBeGreaterThan(1);
     expect(packages().map((button) => button.textContent)).toEqual(SIMULATED_TOPUP_PACKAGES.map((item) => `${item.credits} 灵豆`));
     // The amounts on the buttons are simulated too, and say so.
@@ -156,14 +156,14 @@ describe("模拟充值", () => {
     expect(done).toHaveTextContent("模拟充值 100.00 灵豆已入账。");
     expect(within(done).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
     expect(within(done).getByRole("link", { name: "查看模拟订单" })).toHaveAttribute("href", SIMULATED_WALLET_PAGES.orders);
-    expect(within(row("可用科研额度")).getByText("300.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("300.00 灵豆")).toBeInTheDocument();
     expect(screen.queryByText("200.00 灵豆")).not.toBeInTheDocument();
     // The allowance every other surface shares is read again, and this page
     // does not blank while it is: it already holds the newer balance.
     await waitFor(() => expect(mocks.allowance).toHaveBeenCalledTimes(2));
     await settle();
     expect(container.querySelector(".animate-pulse")).toBeNull();
-    expect(within(row("可用科研额度")).getByText("300.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("300.00 灵豆")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("模拟充值 100.00 灵豆已入账。");
 
     await userEvent.click(screen.getByRole("link", { name: "查看模拟订单" }));
@@ -180,7 +180,7 @@ describe("模拟充值", () => {
     await settle();
     // That read has not come back, and the page is not waiting for it.
     expect(container.querySelector(".animate-pulse")).toBeNull();
-    expect(within(row("可用科研额度")).getByText("300.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("300.00 灵豆")).toBeInTheDocument();
     for (const each of packages()) expect(each).toBeEnabled();
   });
 
@@ -193,7 +193,7 @@ describe("模拟充值", () => {
     await waitFor(() => expect(mocks.allowance).toHaveBeenCalledTimes(2));
     await settle();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(within(row("可用科研额度")).getByText("250.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("250.00 灵豆")).toBeInTheDocument();
   });
 
   // The identity is what makes a top-up apply once: the same one goes out again
@@ -206,7 +206,7 @@ describe("模拟充值", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(webErrorMessage(refused));
     // Nothing was added and nothing reads as zero: the balance is the one read.
-    expect(within(row("可用科研额度")).getByText("200.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("200.00 灵豆")).toBeInTheDocument();
     expect(screen.queryByText("0.00 灵豆")).not.toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
@@ -215,10 +215,10 @@ describe("模拟充值", () => {
     expect(mocks.topUp).toHaveBeenCalledTimes(2);
     expect(asked(1)).toEqual(asked(0));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(within(row("可用科研额度")).getByText("300.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("300.00 灵豆")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "100 灵豆" }));
-    await waitFor(() => expect(within(row("可用科研额度")).getByText("400.00 灵豆")).toBeInTheDocument());
+    await waitFor(() => expect(within(row("可用额度")).getByText("400.00 灵豆")).toBeInTheDocument());
     expect(mocks.topUp).toHaveBeenCalledTimes(3);
     expect(asked(2)[0]).toBe("topup-100");
     expect(asked(2)[1]).not.toBe(asked(0)[1]);
@@ -260,7 +260,7 @@ describe("模拟充值", () => {
     await userEvent.click(screen.getByRole("button", { name: "50 灵豆" }));
     expect(mocks.topUp).toHaveBeenCalledTimes(1);
     await act(async () => { answer(applied(200, 400)); });
-    expect(within(row("可用科研额度")).getByText("400.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("400.00 灵豆")).toBeInTheDocument();
     for (const each of packages()) expect(each).toBeEnabled();
   });
 
@@ -270,14 +270,14 @@ describe("模拟充值", () => {
     await userEvent.click(screen.getByRole("button", { name: "100 灵豆" }));
     const done = await screen.findByRole("status");
     expect(done).toHaveTextContent("这笔模拟充值此前已经入账，没有重复入账。");
-    expect(within(row("可用科研额度")).getByText("300.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("300.00 灵豆")).toBeInTheDocument();
   });
 
   it("says a balance that cannot be read is unavailable, never zero, and still offers the packages", async () => {
     mocks.allowance.mockResolvedValue({ ...simulated, status: "unavailable", available: null, month: null, commerce: NO_LINKS });
     open(SIMULATED_WALLET_PAGES.recharge);
-    expect(await screen.findByText("科研额度暂不可用")).toBeInTheDocument();
-    expect(screen.queryByText("可用科研额度")).not.toBeInTheDocument();
+    expect(await screen.findByText("额度暂不可用")).toBeInTheDocument();
+    expect(screen.queryByText("可用额度")).not.toBeInTheDocument();
     expect(screen.queryByText(/\d+\.\d\d 灵豆/)).not.toBeInTheDocument();
     expect(packages()).toHaveLength(SIMULATED_TOPUP_PACKAGES.length);
   });
@@ -296,7 +296,7 @@ describe("模拟充值", () => {
     expect(screen.queryByText("200.00 灵豆")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     await act(async () => { answer({ ...simulated, available: 35 }); });
-    expect(within(row("可用科研额度")).getByText("35.00 灵豆")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("35.00 灵豆")).toBeInTheDocument();
     expect(mocks.allowance).toHaveBeenCalledTimes(2);
   });
 });
@@ -397,8 +397,8 @@ describe("a deployment whose wallet is not simulated", () => {
       expect(screen.queryByText("模拟数据，不涉及真实资金")).not.toBeInTheDocument();
       expect(screen.queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
       expect(screen.queryByText(/灵豆/)).not.toBeInTheDocument();
-      // A page of 科研额度 is not named where there may be no such page.
-      expect(screen.queryByRole("link", { name: "返回科研额度" })).not.toBeInTheDocument();
+      // A page of 额度 is not named where there may be no such page.
+      expect(screen.queryByRole("link", { name: "返回额度" })).not.toBeInTheDocument();
       await settle();
       view.unmount();
     }
@@ -423,7 +423,7 @@ describe("the pages while the deployment's answer is read", () => {
     expect(screen.queryByText("模拟数据，不涉及真实资金")).not.toBeInTheDocument();
     expect(screen.queryByText("这个部署没有开启模拟额度")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "返回科研额度" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "返回额度" })).not.toBeInTheDocument();
   });
 
   it("report a failed read with its retry, and open once it can be read", async () => {
@@ -434,8 +434,8 @@ describe("the pages while the deployment's answer is read", () => {
     expect(screen.queryByText("这个部署没有开启模拟额度")).not.toBeInTheDocument();
     expect(screen.queryByText(/灵豆/)).not.toBeInTheDocument();
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
-    expect(await screen.findByText("可用科研额度")).toBeInTheDocument();
-    expect(within(row("可用科研额度")).getByText("200.00 灵豆")).toBeInTheDocument();
+    expect(await screen.findByText("可用额度")).toBeInTheDocument();
+    expect(within(row("可用额度")).getByText("200.00 灵豆")).toBeInTheDocument();
     expect(packages()).toHaveLength(SIMULATED_TOPUP_PACKAGES.length);
   });
 

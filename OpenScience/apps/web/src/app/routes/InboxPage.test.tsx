@@ -457,7 +457,7 @@ it("keeps an unread clinical-safety finding above everything, and only it", asyn
     nextCursor: null,
   });
   open();
-  const pinned = await screen.findByRole("heading", { name: /涉及临床安全 · 未读 1 条/ });
+  const pinned = await screen.findByRole("heading", { name: /需要优先查看 · 未读 1 条/ });
   const section = pinned.closest("section")!;
   expect(within(section).getByText("〈研究〉：有 1 处用药安全提示")).toBeInTheDocument();
   expect(within(section).queryByText("今天的审阅")).not.toBeInTheDocument();
@@ -473,7 +473,7 @@ it("finds an unread safety finding that is not on the loaded page, and counts wh
     { items: [hidden("s1", "Kimi 把玛仕度肽说成口服药"), hidden("s2", "豆包讲错玛仕度肽")], nextCursor: "safety-2", unreadTotal: 27 },
   );
   open();
-  const heading = await screen.findByRole("heading", { name: "涉及临床安全 · 未读 27 条" });
+  const heading = await screen.findByRole("heading", { name: "需要优先查看 · 未读 27 条" });
   const section = heading.closest("section")!;
   expect(within(section).getByText("Kimi 把玛仕度肽说成口服药")).toBeInTheDocument();
   expect(within(section).getByText("豆包讲错玛仕度肽")).toBeInTheDocument();
@@ -485,10 +485,10 @@ it("finds an unread safety finding that is not on the loaded page, and counts wh
     { items: [{ ...review, id: "briefing", title: "主动科研简报：GLP-1" }], nextCursor: "page-2", unreadTotal: 306 },
     { items: [hidden("s3", "Qwen 讲错替尔泊肽")], nextCursor: null, unreadTotal: 27 },
   );
-  await userEvent.click(within(section).getByRole("button", { name: "显示更多涉及临床安全的消息" }));
+  await userEvent.click(within(section).getByRole("button", { name: "显示更多需要优先查看的消息" }));
   expect(await within(section).findByText("Qwen 讲错替尔泊肽")).toBeInTheDocument();
   expect(api.listInbox).toHaveBeenLastCalledWith({ unread: true, severity: "safety", cursor: "safety-2" });
-  expect(within(section).queryByRole("button", { name: "显示更多涉及临床安全的消息" })).not.toBeInTheDocument();
+  expect(within(section).queryByRole("button", { name: "显示更多需要优先查看的消息" })).not.toBeInTheDocument();
 });
 
 it("lowers the section's number when a pinned finding is read, and shows no section once none is unread", async () => {
@@ -496,9 +496,9 @@ it("lowers the section's number when a pinned finding is read, and shows no sect
   serve({ items: [], nextCursor: null, unreadTotal: 1 }, { items: [finding], nextCursor: null, unreadTotal: 1 });
   vi.mocked(api.markInboxRead).mockResolvedValue({ ...finding, readAt: at(0), revision: 4 });
   open();
-  const heading = await screen.findByRole("heading", { name: "涉及临床安全 · 未读 1 条" });
+  const heading = await screen.findByRole("heading", { name: "需要优先查看 · 未读 1 条" });
   await userEvent.click(within(heading.closest("section")!).getByRole("button", { name: "标为已读" }));
-  await waitFor(() => expect(screen.queryByRole("heading", { name: /涉及临床安全/ })).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByRole("heading", { name: /需要优先查看/ })).not.toBeInTheDocument());
   expect(api.announceInboxChanged).toHaveBeenCalled();
 });
 
@@ -508,13 +508,13 @@ it("says how many safety findings 「全部已读」 left to open one by one, an
   serve({ items: [runNotice({ id: "a" }), finding], nextCursor: null, unreadTotal: 5 }, { items: [finding], nextCursor: null, unreadTotal: 2 });
   vi.mocked(api.markAllInboxRead).mockResolvedValue({ updated: 3, safetyKept: 2 });
   open();
-  await screen.findByRole("heading", { name: "涉及临床安全 · 未读 2 条" });
+  await screen.findByRole("heading", { name: "需要优先查看 · 未读 2 条" });
   // 5 unread, 2 of them safety: 3 can be swept, so the button is live.
   expect(screen.getByRole("button", { name: "全部已读" })).toBeEnabled();
   serve({ items: [runNotice({ id: "a", readAt: at(0) }), finding], nextCursor: null, unreadTotal: 2 }, { items: [finding], nextCursor: null, unreadTotal: 2 });
   await userEvent.click(screen.getByRole("button", { name: "全部已读" }));
-  await waitFor(() => expect(useToastStore.getState().toasts.map((toast) => toast.message)).toContain("已读 3 条；涉及临床安全的 2 条请逐条查看。"));
-  expect(await screen.findByRole("heading", { name: "涉及临床安全 · 未读 2 条" })).toBeInTheDocument();
+  await waitFor(() => expect(useToastStore.getState().toasts.map((toast) => toast.message)).toContain("已读 3 条；另有 2 条需要优先查看，请逐条处理。"));
+  expect(await screen.findByRole("heading", { name: "需要优先查看 · 未读 2 条" })).toBeInTheDocument();
   // Only safety findings are unread now: nothing is left for a sweep.
   expect(screen.getByRole("button", { name: "全部已读" })).toBeDisabled();
 });
