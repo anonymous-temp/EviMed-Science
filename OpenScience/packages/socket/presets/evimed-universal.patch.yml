@@ -374,10 +374,11 @@
           #                        rode every root request (2026-09-18)
 
           # Not on that list, and not a decision about what this assistant is for: the
-          # pinned kernel ships no language-server or code-runtime row (0.1.7-rc.2 —
-          # `deploy/runtime-dsh/dump-config.baseline.json` holds neither). Code work runs
-          # through the shell, the file tools and the job tools above. A row of that kind
-          # arriving upstream is judged like any other — sandboxed, no egress of its own.
+          # pinned kernel ships no language-server or code-runtime row (the composition
+          # recorded in `deploy/runtime-dsh/dump-config.baseline.json` holds neither).
+          # Code work runs through the shell, the file tools and the job tools above. A
+          # row of that kind arriving upstream is judged like any other — sandboxed, no
+          # egress of its own.
 
           # Platform-owned bridge reads only the selected immutable projection.
           - id: evimed-cowork-bridge
