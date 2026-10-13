@@ -1,6 +1,6 @@
 # EviMed Science
 
-**An AI-native research workbench for evidence-based medicine.**
+**An AI-native agent platform: a general work assistant first, with a professional layer for evidence-based medicine.**
 
 [![CI](https://github.com/anonymous-temp/EviMed-Science/actions/workflows/web.yml/badge.svg?branch=main)](https://github.com/anonymous-temp/EviMed-Science/actions/workflows/web.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -8,13 +8,15 @@
 
 English | [简体中文](README.zh-CN.md)
 
-EviMed Science (循证医学, evidence-based medicine) is a hosted, multi-tenant research
-workbench for medical researchers. A researcher works in conversation; each project
-runs in its own isolated runtime on the [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)
-(DSH) agent kernel, with literature and source retrieval, statistics, specialist analysis
-engines and report writing available as capability packages. What comes back is a set of
-files in a project workspace, with every claim tied to a source that was preserved and
-quoted, and a plain statement of what could not be verified.
+EviMed Science is a hosted, multi-tenant agent platform. A person works in conversation —
+writing, office documents, spreadsheets, slides, code, data analysis, web research and
+scheduled tasks — and each project runs in its own isolated runtime on the
+[DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) (DSH) agent kernel. On top
+of that base sits a professional layer for medicine (循证医学, evidence-based medicine):
+literature and source retrieval, statistics, specialist analysis engines and report writing
+available as capability packages, loaded when the task or the content is medical. What comes
+back is a set of files in a project workspace; for evidence work, every claim is tied to a
+source that was preserved and quoted, with a plain statement of what could not be verified.
 
 Medical research is only useful if it can be checked. The platform is built around that:
 provenance on every artifact, verbatim-quote verification for evidence claims, and a
@@ -28,15 +30,15 @@ earlier version had was deleted on 2026-09-04.
 
 ## What it does
 
-- **Capability packages.** Each user-facing feature is a package under
+- **Capability packages.** Each professional workflow is a package under
   [`OpenScience/capabilities/`](OpenScience/capabilities): a `capability.yaml`, a `SKILL.md`,
   scripts and a contract validator, with real briefs in `OpenScience/evals/`. They cover
   clinical evidence synthesis and appraisal, meta-analysis, Mendelian randomization,
   drug-safety (pharmacovigilance) analysis, off-label use, drug selection and comprehensive
   drug evaluation, bibliometrics, research-topic selection, peer review, grant development,
   manuscript support, statistics, dataset scoping and NCBI GEO differential expression.
-  Plain questions are answered directly; a named specialty or an explicit report request is
-  routed to its package.
+  Ordinary requests — a plain question, a document, a spreadsheet, a script — are handled by the
+  conversation itself; a named specialty or an explicit report request is routed to its package.
 - **An evidence-quality gate that returns a verdict.** Claims are typed `direct` (a verbatim
   quote from one source), `synthesized` (a conclusion across several quoted sources) or
   `derived` (the analyst's own estimate, with its inputs and assumptions named). The delivery
@@ -44,12 +46,14 @@ earlier version had was deleted on 2026-09-04.
   A finished run is delivered with its findings attached and each claim marked as verified or
   not, rather than being withheld. Drug- and scenario-specific safety rules are data
   (`clinical-safety-rules.json`) that pharmacists can edit without touching code.
-- **Memory with provenance.** Research notes and structured records live in PostgreSQL; the
-  OpenViking recall index is derived from them and can be rebuilt. Validity, replacement,
-  conflicts and source links are kept with each record, and a user statement is never
-  confused with a model inference. Memory capsules export and import as signed, encrypted
-  files. The knowledge base ingests uploaded and imported documents with a per-source
-  coverage ledger.
+- **Memory and knowledge on OpenViking.** An account's memory is on one of two engines: the
+  platform's own records in PostgreSQL (OpenViking only their derived recall index, with
+  validity, replacement, conflicts and source links kept per record), or OpenViking's native
+  engine, which extracts, merges and recalls it through its official DSH plugin. Memory
+  capsules export and import as signed, encrypted files. The knowledge base pushes every
+  readable document to OpenViking as a resource, where its official wiki and graph skills
+  compile linked pages and a knowledge graph; the memory map and the knowledge graph show
+  both to the person.
 - **Autonomous research (主动科研).** Agendas, budgeted episodes and morning digests, with
   stop rules from `@evimed/domain`. A learning loop distils reusable methods from finished
   work.
@@ -99,7 +103,7 @@ flowchart LR
   ENG["Specialist engines (项目代码/)<br/>via deploy/specialist-adapter"]
   DS(["DeepSeek API"])
   PG[("PostgreSQL + pgvector")]
-  OV[("OpenViking recall index")]
+  OV[("OpenViking engine")]
   KP["knowledge-plugin"]
 
   B -->|"HTTPS /api, run event stream"| API

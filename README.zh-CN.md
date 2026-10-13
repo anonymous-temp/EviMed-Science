@@ -1,6 +1,6 @@
 # EviMed Science
 
-**面向循证医学的 AI 原生科研工作台。**
+**AI 原生的智能体平台：首先是好用的通用工作助手，再叠加面向循证医学的专业层。**
 
 [![CI](https://github.com/anonymous-temp/EviMed-Science/actions/workflows/web.yml/badge.svg?branch=main)](https://github.com/anonymous-temp/EviMed-Science/actions/workflows/web.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -8,11 +8,12 @@
 
 [English](README.md) | 简体中文
 
-EviMed Science（循证医学，evidence-based medicine）是一套托管的多租户医学科研工作台。
-研究者通过对话开展工作；每个项目运行在自己独立隔离的运行时里，内核是
-[DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)（DSH）智能体内核，
-文献与资料检索、统计、专项分析引擎和报告撰写都以能力包的形式提供。交付给研究者的是项目工作区里的一组文件：
-每一条结论都对应一份已留存并引用过的来源，哪些内容未能核实也会明确写出。
+EviMed Science 是一套托管的多租户智能体平台。用户通过对话开展工作——写作、办公文档、表格、幻灯片、代码、数据分析、
+网页调研和定时任务；每个项目运行在自己独立隔离的运行时里，内核是
+[DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)（DSH）智能体内核。在这个底座之上是面向医学
+（循证医学，evidence-based medicine）的专业层：文献与资料检索、统计、专项分析引擎和报告撰写都以能力包的形式提供，
+任务或内容涉及医学时才加载。交付的是项目工作区里的一组文件；做证据工作时，每一条结论都对应一份已留存并引用过的来源，
+哪些内容未能核实也会明确写出。
 
 医学科研的结论只有能被核查才有价值，平台围绕这一点构建：每个工件都有溯源，证据结论做逐字引文核验，
 交付门禁报告它的发现，而不是把未完成的工作藏起来。平台输出仅用于科研辅助，不替代临床诊断、治疗或专业判断；
@@ -22,20 +23,21 @@ EviMed Science（循证医学，evidence-based medicine）是一套托管的多�
 
 ## 能做什么
 
-- **能力包。** 面向用户的每项功能都是
+- **能力包。** 每个专业工作流都是
   [`OpenScience/capabilities/`](OpenScience/capabilities) 下的一个包：`capability.yaml`、
   `SKILL.md`、脚本和契约校验器，并在 `OpenScience/evals/` 中配有真实任务书。覆盖临床证据综合与评价、
   Meta 分析、孟德尔随机化、药物安全（药物警戒）分析、超说明书用药、药品遴选与药品综合评价、文献计量、
   科研选题、论文审稿、基金申请撰写、论文写作支持、统计分析、数据集研究范围界定，以及 NCBI GEO 差异表达分析。
-  普通问题直接回答；点名某个专项或明确要求出报告时，才路由到对应的能力包。
+  普通请求——一个问题、一份文档、一张表格、一个脚本——由对话本身处理；点名某个专项或明确要求出报告时，才路由到对应的能力包。
 - **返回判定结果的证据质量门禁。** 结论分三类：`direct`（来自单一来源的逐字引文）、`synthesized`
   （跨多个已引用来源的综合结论）、`derived`（分析者自己的估算，须写明输入与假设）。交付规则只在
   `packages/domain` 里存在一份，运行侧和控制面都引用同一份。运行结束后，已写出的内容连同发现一并交付，
   每条结论标注是否已核验，而不是被扣下不交。具体药品和场景的安全规则以数据形式存放
   （`clinical-safety-rules.json`），药师无需改动代码即可编辑。
-- **带出处的记忆。** 研究笔记和结构化记录存放在 PostgreSQL；OpenViking 召回索引由它们派生，可以重建。
-  每条记录都保留有效期、替代、冲突和来源链接，用户的陈述不会与模型的推断混为一谈。记忆胶囊可导出、导入为
-  带签名的加密文件。知识库接收上传和导入的文档，并为每份资料保留覆盖账本。
+- **建在 OpenViking 上的记忆和知识库。** 每个账号的记忆走两种引擎之一：平台自己存在 PostgreSQL 的记录
+  （OpenViking 只是它们派生的召回索引，每条记录保留有效期、替代、冲突和来源链接），或 OpenViking 的原生引擎，
+  由它通过官方 DSH 插件抽取、合并和召回。记忆胶囊可导出、导入为带签名的加密文件。知识库把每份可读文档作为资源
+  推给 OpenViking，由它官方的 Wiki 和图谱技能编译成互相链接的页面和知识图谱；记忆地图和知识图谱把两者展示给用户。
 - **主动科研。** 议程、有预算的研究回合和晨间摘要，停止规则来自 `@evimed/domain`。学习回路从已完成的工作中
   提炼可复用的方法。
 - **前沿动态。** 知识源插件（`项目代码/knowledge-plugin`）汇集期刊、监管机构、试验注册库和学会等来源；
@@ -75,7 +77,7 @@ flowchart LR
   ENG["专项引擎 (项目代码/)<br/>经 deploy/specialist-adapter"]
   DS(["DeepSeek API"])
   PG[("PostgreSQL + pgvector")]
-  OV[("OpenViking 召回索引")]
+  OV[("OpenViking 引擎")]
   KP["knowledge-plugin"]
 
   B -->|"HTTPS /api、运行事件流"| API
