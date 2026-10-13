@@ -69,8 +69,6 @@ export const CONTRACT_KINDS = Object.freeze([
   'evolution-tool-candidate',
   'method-candidate',
   'method-relations',
-  // The platform's own background compile of a project's documents into knowledge pages (`knowledgePage.mjs`).
-  'knowledge-wiki-patch',
 ])
 
 /** @param {string} value @returns {value is ContractKind} */
@@ -178,7 +176,6 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'evolution-research-card': '进化研发卡',
   'evolution-tool-candidate': '进化工具候选',
   'method-relations': '方法关系',
-  'knowledge-wiki-patch': '知识页补丁',
 })
 
 /** @param {string} kind @returns {string} */

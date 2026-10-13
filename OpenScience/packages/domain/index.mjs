@@ -33,39 +33,33 @@ export { conversationReference } from './src/conversationReference.mjs'
 /** @typedef {import('./src/artifactPresentation.mjs').ArtifactRole} ArtifactRole */
 /** @typedef {import('./src/runActions.mjs').RunAction} RunAction */
 export { SOURCE_SCOPE_UNAVAILABLE_CONTEXT, sourceCitationProse, sourceCitationReferences, locateSourceQuotation } from './src/sourceCitations.mjs'
-// knowledgePage — 「知识页」: the format a model-compiled personal wiki is written in, and the checks that make every sentence of it traceable to a verbatim quotation
+// knowledgePage — 「知识页」: the product layer around the pages OpenViking's Compile writes — where their mirror lives, how one is read, how a person's edits outlive a recompile
 export {
-  KNOWLEDGE_CLAIM_KINDS,
-  KNOWLEDGE_COMPILE_INPUT_FILE,
-  KNOWLEDGE_CONFIDENCE,
-  KNOWLEDGE_INDEX_SLUG,
-  KNOWLEDGE_INDEX_TITLE,
-  KNOWLEDGE_LINT_KINDS,
+  KNOWLEDGE_GRAPH_FOLDER,
+  KNOWLEDGE_PAGE_ENGINE_LIMIT,
   KNOWLEDGE_PAGE_FOLDER,
-  KNOWLEDGE_PAGE_LIMITS,
+  KNOWLEDGE_PAGE_SUBMIT_LIMIT,
   KNOWLEDGE_PAGE_TYPES,
-  KNOWLEDGE_PATCH_OPERATIONS,
-  KNOWLEDGE_PATCH_VERSION,
-  KNOWLEDGE_UPDATE_HEADING,
-  KNOWLEDGE_WIKI_PATCH_FILE,
-  checkKnowledgeEvidence,
-  isKnowledgePageSlug,
-  isKnowledgePageType,
-  judgeKnowledgeEvidence,
-  knowledgePageSlugOfPath,
-  knowledgePagePath,
-  knowledgePageSources,
+  KNOWLEDGE_TREES,
+  KNOWLEDGE_USER_EDIT_LIMITS,
+  applyKnowledgePageEdits,
+  diffKnowledgePageEdit,
+  emptyKnowledgeUserEdits,
+  isKnowledgeMirrorPath,
+  isTypedKnowledgePage,
+  knowledgeMirrorPath,
+  knowledgeMirrorPathOf,
   knowledgePageTypeLabel,
-  knowledgePatchIssues,
-  knowledgeSourceMarker,
-  mergeUserEditedKnowledgePage,
-  parseKnowledgePage,
-  renderKnowledgeClaim,
-  renderKnowledgeIndex,
-  renderKnowledgePage,
-  settleKnowledgePage,
-  verifyKnowledgePage,
+  knowledgePageUnits,
+  knowledgeUnitKey,
+  readKnowledgePage,
 } from './src/knowledgePage.mjs'
+// okfMarkdown — the front matter and the links of a compiled page, read the way upstream writes them
+export { okfLinkPath, okfMarkdownLinks, splitOkfFrontmatter } from './src/okfMarkdown.mjs'
+// knowledgeGraphs — pages and their links, entities and their relations, as { nodes, links }
+export { knowledgeGraphToGraph, wikiPagesToGraph } from './src/knowledgeGraphs.mjs'
+// knowledgeQuotations — the after-the-fact ✓ / ⚠ of a compiled page's quotations: a label, never a condition
+export { KNOWLEDGE_QUOTATION_STATUSES, checkPageQuotations, knowledgeSourceIdOfUri } from './src/knowledgeQuotations.mjs'
 
 /** @typedef {import('./src/agenda.mjs').AgendaResultKind} AgendaResultKind */
 

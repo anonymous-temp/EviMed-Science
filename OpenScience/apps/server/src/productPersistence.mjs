@@ -31,7 +31,9 @@ export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidat
   // The evidence programme's one decision a day (`evidenceProgramme.mjs`): the topic selector's run, leased like every other job.
   "evidence-programme",
   // The compile of one project's documents into knowledge pages (`knowledgePageService.mjs`).
-  "wiki-compile"]);
+  "wiki-compile",
+  // One document's copy in OpenViking made to agree with PostgreSQL (`openVikingSourceSync.mjs`).
+  "ov-resource-sync"]);
 
 /**
  * What the researcher did, as a closed vocabulary.

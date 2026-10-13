@@ -1,0 +1,323 @@
+{
+  "root": "viking://user/ulab0001/resources/p/pmed01/kg-r3",
+  "entries": [
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities",
+      "size": 0,
+      "isDir": true,
+      "modTime": "2026-10-12T22:52:58.000Z",
+      "rel_path": "entities",
+      "abstract": "该目录是一组围绕心房颤动抗凝治疗的结构化实体参考条目，涵盖药物产品、关键临床试验、制药企业与疾病条件四类实体。样本显示，内容以阿哌沙班、达比加群、依度沙班、利伐沙班、华法林和阿司匹林等抗凝或抗血小板药物为核心，配套记录 ARISTOTLE、AVERROES、RE-LY、ROCKET AF、J-ROCKET AF、ENGAGE AF-TIMI 48、ELDERCARE-AF 等试验，以及一项 2014 年新型口服抗凝药荟萃分析。"
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/apixaban.md",
+      "size": 2015,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/apixaban.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/aristotle-trial.md",
+      "size": 1960,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/aristotle-trial.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/aspirin.md",
+      "size": 746,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/aspirin.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/atrial-fibrillation.md",
+      "size": 1676,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/atrial-fibrillation.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/averroes-trial.md",
+      "size": 1816,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/averroes-trial.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/bayer.md",
+      "size": 570,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/bayer.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/bristol-myers-squibb.md",
+      "size": 955,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/bristol-myers-squibb.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/dabigatran.md",
+      "size": 1137,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/dabigatran.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/daiichi-sankyo.md",
+      "size": 986,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/daiichi-sankyo.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/edoxaban.md",
+      "size": 1895,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/edoxaban.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/eldercare-af-trial.md",
+      "size": 2042,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/eldercare-af-trial.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/engage-af-timi-48-trial.md",
+      "size": 1998,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/engage-af-timi-48-trial.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/j-rocket-af-trial.md",
+      "size": 1953,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/j-rocket-af-trial.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/johnson-and-johnson.md",
+      "size": 639,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/johnson-and-johnson.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/noac-af-meta-analysis-2014.md",
+      "size": 2387,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/noac-af-meta-analysis-2014.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/pfizer.md",
+      "size": 867,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/pfizer.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/rel-y-trial.md",
+      "size": 1563,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/rel-y-trial.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/rivaroxaban.md",
+      "size": 1747,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/rivaroxaban.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/rocket-af-trial.md",
+      "size": 1966,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/rocket-af-trial.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/warfarin.md",
+      "size": 1938,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "entities/warfarin.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/index.md",
+      "size": 2596,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "index.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/relations.jsonl",
+      "size": 7358,
+      "isDir": false,
+      "modTime": "2026-10-12T22:52:43.000Z",
+      "rel_path": "relations.jsonl",
+      "abstract": ""
+    }
+  ],
+  "saved": [
+    {
+      "rel_path": "entities/apixaban.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/apixaban.md",
+      "size": 2015,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/aristotle-trial.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/aristotle-trial.md",
+      "size": 1960,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/aspirin.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/aspirin.md",
+      "size": 746,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/atrial-fibrillation.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/atrial-fibrillation.md",
+      "size": 1676,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/averroes-trial.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/averroes-trial.md",
+      "size": 1816,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/bayer.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/bayer.md",
+      "size": 570,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/bristol-myers-squibb.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/bristol-myers-squibb.md",
+      "size": 955,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/dabigatran.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/dabigatran.md",
+      "size": 1137,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/daiichi-sankyo.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/daiichi-sankyo.md",
+      "size": 986,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/edoxaban.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/edoxaban.md",
+      "size": 1895,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/eldercare-af-trial.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/eldercare-af-trial.md",
+      "size": 2042,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/engage-af-timi-48-trial.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/engage-af-timi-48-trial.md",
+      "size": 1998,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/j-rocket-af-trial.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/j-rocket-af-trial.md",
+      "size": 1953,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/johnson-and-johnson.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/johnson-and-johnson.md",
+      "size": 639,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/noac-af-meta-analysis-2014.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/noac-af-meta-analysis-2014.md",
+      "size": 2387,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/pfizer.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/pfizer.md",
+      "size": 867,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/rel-y-trial.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/rel-y-trial.md",
+      "size": 1563,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/rivaroxaban.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/rivaroxaban.md",
+      "size": 1747,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/rocket-af-trial.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/rocket-af-trial.md",
+      "size": 1966,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/warfarin.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/entities/warfarin.md",
+      "size": 1938,
+      "status": 200
+    },
+    {
+      "rel_path": "index.md",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/index.md",
+      "size": 2596,
+      "status": 200
+    },
+    {
+      "rel_path": "relations.jsonl",
+      "uri": "viking://user/ulab0001/resources/p/pmed01/kg-r3/relations.jsonl",
+      "size": 7358,
+      "status": 200
+    }
+  ]
+}

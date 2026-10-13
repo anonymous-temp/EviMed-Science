@@ -2182,7 +2182,50 @@ export function quoteIsPresent(artifact, quote) {
     extraction.text ??= normalizedExtractionPassage(text);
     if (segmentsPresentInOrder(extraction.text, segments, normalizedExtractionPassage, extraction)) return true;
   }
+  // Last, the artifact read as the Markdown it is: a list item that begins with a number.
+  memo.itemized ??= withoutNumericListMarkers(source);
+  if (memo.itemized !== source) {
+    const itemized = memo["itemized:extraction"] ??= {};
+    itemized.text ??= normalizedExtractionPassage(memo.itemized);
+    if (segmentsPresentInOrder(itemized.text, segments, normalizedExtractionPassage, itemized)) return true;
+  }
   return false;
+}
+
+// A Markdown list item that begins with a number — "- 14:05 设备开始盘点", "- 4/2 演练出事了" — was read as a signed
+// number: the marker became the minus of "-14:05", and a quotation that starts at the time or the date, which is where
+// anyone would start it, was refused as cutting a number in half. Nine of 568 quotations a compile wrote into its pages
+// were marked ⚠ that way while standing in their documents word for word (2026-10-12, lab/knowledge RESULTS item 7).
+//
+// A marker before a number really can be its sign ("the change was\n- 5.2 mmHg" in a wrapped PDF line), and reading
+// that as a bullet would let "5.2 mmHg" stand for a source that says minus. So the marker is taken for a bullet only
+// where the text itself says it is in a list: the line opens a block (the text's first line, or one after a blank line
+// or a heading) or follows another list item. This reading is tried after the others have failed and can only add a
+// match, never take one away.
+const numericListItem = /^[ \t]*[-*+][ \t]+(?=\d)/u;
+const otherListItem = /^[ \t]*(?:[-*+][ \t]+(?=\S)|\d{1,3}[.)][ \t]+)/u;
+const blockOpeningLine = /^[ \t]*(?:#{1,6}[ \t].*)?$/u;
+
+/** @param {string} source @returns {string} the same string when no line changed */
+function withoutNumericListMarkers(source) {
+  if (!/(?:^|\n)[ \t]*[-*+][ \t]+\d/u.test(source)) return source;
+  const lines = source.split("\n");
+  let changed = false;
+  let inList = false;
+  let opensBlock = true;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const marker = numericListItem.exec(line);
+    if (marker && (opensBlock || inList)) {
+      lines[index] = line.slice(marker[0].length);
+      changed = true;
+      inList = true;
+    } else {
+      inList = !marker && otherListItem.test(line);
+    }
+    opensBlock = blockOpeningLine.test(line.replace(/\r$/u, ""));
+  }
+  return changed ? lines.join("\n") : source;
 }
 
 // Reading a document is the costly part of checking a quote against it —

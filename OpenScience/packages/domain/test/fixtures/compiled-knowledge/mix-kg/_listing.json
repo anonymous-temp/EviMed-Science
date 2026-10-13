@@ -1,0 +1,617 @@
+{
+  "root": "viking://user/ulab0001/resources/p/pmix01/kg-r1",
+  "entries": [
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities",
+      "size": 0,
+      "isDir": true,
+      "modTime": "2026-10-12T22:59:37.000Z",
+      "rel_path": "entities",
+      "abstract": "本目录是拾页书店门店库存管理系统项目的实体档案集合，主要覆盖项目相关的会议纪要、事故复盘、门店档案、人员职责、设备采购、合同协议与系统模块说明等资料。从样本看，内容围绕栖木软件工作室为拾页书店定制开发门店库存管理系统的全过程展开，涉及离线盘点冲突规则、银豹收银系统对接、扫码枪选型、试点门店确认、盘点差异率口径等关键议题。文档类型包括事件记录、实体参考、合同条款与代码仓库说明，适合项目团队成员、开发运维人员、法务及需要查询门店基础信息与项目决策依据的内部使用者检索使用。"
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/0318周会.md",
+      "size": 2256,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/0318周会.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/0402演练复盘报告.md",
+      "size": 1232,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/0402演练复盘报告.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/0402盘点演练数据错乱事故.md",
+      "size": 2724,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/0402盘点演练数据错乱事故.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/shiye-inventory.md",
+      "size": 1922,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/shiye-inventory.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/东门店.md",
+      "size": 777,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/东门店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/中山路店.md",
+      "size": 1703,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/中山路店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/北站店.md",
+      "size": 1324,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/北站店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/南湖店.md",
+      "size": 1310,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/南湖店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/卢经理.md",
+      "size": 1974,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/卢经理.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/周岚.md",
+      "size": 1747,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/周岚.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/周岚待办记录.md",
+      "size": 1607,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/周岚待办记录.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/嘉兴.md",
+      "size": 988,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/嘉兴.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/城西店.md",
+      "size": 777,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/城西店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/大学城店.md",
+      "size": 1785,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/大学城店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/天一店.md",
+      "size": 867,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/天一店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/宁波.md",
+      "size": 831,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/宁波.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/小唐.md",
+      "size": 1785,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/小唐.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/恒码电子.md",
+      "size": 901,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/恒码电子.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/扫码枪.md",
+      "size": 2378,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/扫码枪.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/扫码枪报价对比邮件.md",
+      "size": 1737,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/扫码枪报价对比邮件.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/拾页书店.md",
+      "size": 2159,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/拾页书店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/拾页书店库存系统.md",
+      "size": 2389,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/拾页书店库存系统.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/拾页书店库存系统启动会.md",
+      "size": 2267,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/拾页书店库存系统启动会.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/月河店.md",
+      "size": 894,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/月河店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/杭州.md",
+      "size": 1248,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/杭州.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/柯桥店.md",
+      "size": 1353,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/柯桥店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/栖木软件工作室.md",
+      "size": 2275,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/栖木软件工作室.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/浙江.md",
+      "size": 808,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/浙江.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/湖滨店.md",
+      "size": 1328,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/湖滨店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/离线同步协议.md",
+      "size": 2045,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/离线同步协议.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/绍兴.md",
+      "size": 1200,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/绍兴.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/讯瞳科技.md",
+      "size": 1160,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/讯瞳科技.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/贺川.md",
+      "size": 1819,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/贺川.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/软件定制开发服务协议-QM-2026-017.md",
+      "size": 2877,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/软件定制开发服务协议-QM-2026-017.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/钱江店.md",
+      "size": 777,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/钱江店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/银豹收银系统.md",
+      "size": 1628,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/银豹收银系统.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/门店库存管理系统.md",
+      "size": 2641,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/门店库存管理系统.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/门店清单与库存快照-0315.md",
+      "size": 1958,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/门店清单与库存快照-0315.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/阿杜.md",
+      "size": 1666,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/阿杜.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/麦冬.md",
+      "size": 1233,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/麦冬.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/鼓楼店.md",
+      "size": 777,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "entities/鼓楼店.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/index.md",
+      "size": 3926,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "index.md",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/relations.jsonl",
+      "size": 20304,
+      "isDir": false,
+      "modTime": "2026-10-12T22:59:25.000Z",
+      "rel_path": "relations.jsonl",
+      "abstract": ""
+    }
+  ],
+  "saved": [
+    {
+      "rel_path": "entities/0318周会.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/0318周会.md",
+      "size": 2256,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/0402演练复盘报告.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/0402演练复盘报告.md",
+      "size": 1232,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/0402盘点演练数据错乱事故.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/0402盘点演练数据错乱事故.md",
+      "size": 2724,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/shiye-inventory.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/shiye-inventory.md",
+      "size": 1922,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/东门店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/东门店.md",
+      "size": 777,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/中山路店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/中山路店.md",
+      "size": 1703,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/北站店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/北站店.md",
+      "size": 1324,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/南湖店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/南湖店.md",
+      "size": 1310,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/卢经理.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/卢经理.md",
+      "size": 1974,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/周岚.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/周岚.md",
+      "size": 1747,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/周岚待办记录.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/周岚待办记录.md",
+      "size": 1607,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/嘉兴.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/嘉兴.md",
+      "size": 988,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/城西店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/城西店.md",
+      "size": 777,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/大学城店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/大学城店.md",
+      "size": 1785,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/天一店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/天一店.md",
+      "size": 867,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/宁波.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/宁波.md",
+      "size": 831,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/小唐.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/小唐.md",
+      "size": 1785,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/恒码电子.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/恒码电子.md",
+      "size": 901,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/扫码枪.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/扫码枪.md",
+      "size": 2378,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/扫码枪报价对比邮件.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/扫码枪报价对比邮件.md",
+      "size": 1737,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/拾页书店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/拾页书店.md",
+      "size": 2159,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/拾页书店库存系统.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/拾页书店库存系统.md",
+      "size": 2389,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/拾页书店库存系统启动会.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/拾页书店库存系统启动会.md",
+      "size": 2267,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/月河店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/月河店.md",
+      "size": 894,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/杭州.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/杭州.md",
+      "size": 1248,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/柯桥店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/柯桥店.md",
+      "size": 1353,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/栖木软件工作室.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/栖木软件工作室.md",
+      "size": 2275,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/浙江.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/浙江.md",
+      "size": 808,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/湖滨店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/湖滨店.md",
+      "size": 1328,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/离线同步协议.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/离线同步协议.md",
+      "size": 2045,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/绍兴.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/绍兴.md",
+      "size": 1200,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/讯瞳科技.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/讯瞳科技.md",
+      "size": 1160,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/贺川.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/贺川.md",
+      "size": 1819,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/软件定制开发服务协议-QM-2026-017.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/软件定制开发服务协议-QM-2026-017.md",
+      "size": 2877,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/钱江店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/钱江店.md",
+      "size": 777,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/银豹收银系统.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/银豹收银系统.md",
+      "size": 1628,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/门店库存管理系统.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/门店库存管理系统.md",
+      "size": 2641,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/门店清单与库存快照-0315.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/门店清单与库存快照-0315.md",
+      "size": 1958,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/阿杜.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/阿杜.md",
+      "size": 1666,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/麦冬.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/麦冬.md",
+      "size": 1233,
+      "status": 200
+    },
+    {
+      "rel_path": "entities/鼓楼店.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/entities/鼓楼店.md",
+      "size": 777,
+      "status": 200
+    },
+    {
+      "rel_path": "index.md",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/index.md",
+      "size": 3926,
+      "status": 200
+    },
+    {
+      "rel_path": "relations.jsonl",
+      "uri": "viking://user/ulab0001/resources/p/pmix01/kg-r1/relations.jsonl",
+      "size": 20304,
+      "status": 200
+    }
+  ]
+}
