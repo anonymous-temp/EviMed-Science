@@ -186,8 +186,15 @@ test("every deployment value the preset reads is a value the container is given"
   const read = new Set(sources.flatMap((text) => [...text.matchAll(/(?:process\.env\.|os\.environ\[')([A-Z0-9_]+)/g)].map((match) => match[1])));
 
   assert.ok(read.size >= 10, `the rows read ${read.size} names; this test expected them to be bound`);
+  // Read by a row and not part of this mapping, each for a reason:
+  //  - EVIMED_MEMORY_GATEWAY_URL differs by account, which this deployment-wide mapping cannot state: the launch plan sends it
+  //    as its own `--env` (the memory gateway's base for an account on the native engine, empty for every other), and the
+  //    OpenViking plugin's row, its bridge row and the capsule's memory switch all decide from that one variable.
+  //  - EVIMED_MEMORY_BRIDGE_PORT is the loopback port of the bridge; a runtime container has its own network namespace, so the
+  //    default (19336) is always free there, and only a host that runs several kernels side by side (the local harness) sets it.
+  const elsewhere = new Set(["EVIMED_MEMORY_GATEWAY_URL", "EVIMED_MEMORY_BRIDGE_PORT"]);
   for (const name of read) {
-    assert.ok(name in provided, `a row reads ${name} and nothing provides it`);
+    assert.ok(name in provided || elsewhere.has(name), `a row reads ${name} and nothing provides it`);
   }
   // The image-owned LoopX CLI reads its telemetry switches outside the preset.
   for (const name of ["LOOPX_USAGE_PING", "DO_NOT_TRACK"]) read.add(name);

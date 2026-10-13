@@ -58,6 +58,7 @@ import {
   runStateFileFor,
 } from '@evimed/domain'
 import { capabilityCatalogue } from './guidance.mjs'
+import { MEMORY_SERVICE as CAPSULE_MEMORY_SERVICE } from './capsule.mjs'
 import {
   agentSeesTool,
   configSchema,
@@ -861,10 +862,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    */
   const childToolFilter = (manifest, contractKind) => {
     const tools = delegationToolFilter(manifest, { allowBash: true, contractKind })
-      // The capsule row can be switched off (EVIMED_CAPSULE_ENABLED=0), and
-      // off it registers no recall tool — naming it would fail the delegation.
-      // It publishes its methods on every mount, so their absence is the sign.
-      .filter((tool) => tool !== SOCKET_TOOL_NAMES.capsuleRecall || ctx.get('evimedCapsuleMethods') !== undefined)
+      // The capsule row can be switched off (EVIMED_CAPSULE_ENABLED=0), and so can its memory half
+      // (EVIMED_CAPSULE_MEMORY_ENABLED=0, and every account on the native memory engine, whose one memory entrance is the
+      // OpenViking plugin's): off, no recall tool is registered — naming it would fail the delegation. The row publishes
+      // `evimedCapsuleMemory` exactly when it registered the tool, so its absence is the sign.
+      .filter((tool) => tool !== SOCKET_TOOL_NAMES.capsuleRecall || ctx.get(CAPSULE_MEMORY_SERVICE) !== undefined)
     const locator = mcpToolName(QUOTE_LOCATOR)
     if (tools.includes(SOCKET_TOOL_NAMES.claimUpsert) && !tools.includes(locator) && registeredToolNames(ctx).includes(locator)) {
       tools.push(locator)

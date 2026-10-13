@@ -31,6 +31,8 @@ import {
   ROOT_VISIBLE_MCP_BASE_NAMES,
   errorCodeMessage,
   deliverableIdOfPath,
+  isOpenVikingMemoryToolName,
+  isOpenVikingToolName,
   isGateImplementationPath,
   PROTECTED_WRITE_PREFIXES,
   REPORTING_CHECKLIST_FILE,
@@ -438,7 +440,8 @@ export function unmetDependencies(item, items, delivered) {
 /**
  * The registered research tools the root session is not shown.
  *
- * Every `mcp__evimed__*` name whose base is not on the root's list — read off
+ * Every `mcp__evimed__*` name whose base is not on the root's list, and every `mcp__openviking__*` name beyond the five memory
+ * tools — read off
  * what the registry actually holds rather than off the domain's list of known
  * tools, because a restriction naming a tool the registry does not have is
  * refused outright, and a tool the server gained after this build still
@@ -449,7 +452,10 @@ export function unmetDependencies(item, items, delivered) {
 export function rootHiddenMcpTools(registered) {
   const visible = new Set(ROOT_VISIBLE_MCP_BASE_NAMES)
   return [...new Set(registered)]
-    .filter((name) => name.startsWith(MCP_TOOL_PREFIX) && !visible.has(name.slice(MCP_TOOL_PREFIX.length)))
+    .filter((name) => (name.startsWith(MCP_TOOL_PREFIX) && !visible.has(name.slice(MCP_TOOL_PREFIX.length)))
+      // The OpenViking memory plugin's server advertises twenty tools and the memory gateway lists five; any other the
+      // registry holds is not admitted, whatever answered the listing.
+      || (isOpenVikingToolName(name) && !isOpenVikingMemoryToolName(name)))
     .sort()
 }
 

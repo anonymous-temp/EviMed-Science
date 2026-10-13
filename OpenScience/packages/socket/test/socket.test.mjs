@@ -46,7 +46,9 @@ test("the bundle patch carries no deployment path and no address", async () => {
   const body = patch.split("\n").filter((line) => !line.trim().startsWith("#")).join("\n");
   assert.ok(!/\/opt\//.test(body), "a bundle row names an image path");
   assert.ok(!/\/runtime\//.test(body), "a bundle row names a container path");
-  assert.ok(!/https?:\/\//.test(body), "a bundle row names an address");
+  // The one address a bundle row may name is this process's own loopback: the OpenViking plugin's endpoint is the bridge
+  // (`evimed-memory-bridge`), which listens there in every deployment alike.
+  assert.ok(!/https?:\/\/(?!127\.0\.0\.1:)/.test(body), "a bundle row names an address");
   assert.match(body, /id: evimed-seam-probe/);
   // The web provider's endpoints are named as environment variables, not as
   // addresses: the `no address` assertion above is what holds that.
@@ -75,7 +77,7 @@ test("the composition mounts every agent plugin we own, the kernel's own pieces 
   assert.equal(AGENT_PLUGIN_IDS.length, 9, "add the row here when a plugin is added, so the count stays a fact");
   assert.deepEqual([...HOST_PLUGIN_IDS].sort(), [
     "evimed-runtime-ui", "evimed-skill-catalogue", "evimed-plugin-probe", "evimed-seam-probe",
-    "evimed-evidence-store", "evimed-web", "evimed-engine-context", "evimed-loopx-bootstrap",
+    "evimed-evidence-store", "evimed-web", "evimed-engine-context", "evimed-loopx-bootstrap", "evimed-memory-bridge",
   ].sort());
   assert.deepEqual([...patch.matchAll(/^\s+- id: (evimed-[\w-]+)\s*$/gm)].map(row => row[1]).sort(),
     [...HOST_PLUGIN_IDS].sort(), "the host patch must mount exactly the intended plugin identities");

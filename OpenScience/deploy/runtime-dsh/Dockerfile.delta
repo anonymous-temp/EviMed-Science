@@ -246,7 +246,12 @@ RUN set -eux; \
   mkdir -p "${installed}"; \
   cp -a /opt/evimed/socket/. "${installed}/"; \
   test -s "${installed}/dist/client.js"; \
-  DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json; \
+  test -f "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@openviking/dsh-memory-plugin/package.json" \
+    || { echo "this base image predates the OpenViking memory plugin the socket configures (deps-version.json openviking.plugin); build the full runtime image" >&2; exit 1; }; \
+  DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json 2> /opt/evimed/dump-config.stderr; \
+  cat /opt/evimed/dump-config.stderr >&2; \
+  if grep -E "patch( insert)?: entry .* not found" /opt/evimed/dump-config.stderr; then echo "a bundle patch names a row no earlier bundle makes" >&2; exit 1; fi; \
+  rm -f /opt/evimed/dump-config.stderr; \
   test -s /opt/evimed/dump-config.baseline.json; \
   diff -u /opt/evimed/committed-dump-config.baseline.json /opt/evimed/dump-config.baseline.json; \
   node /usr/local/bin/evimed-profile-seed.mjs seal "${DSH_HOME_SEED}" evimed-runtime; \

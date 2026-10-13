@@ -1111,6 +1111,9 @@ export async function probeSeams(ctx, options = {}) {
     checked.push(`service:${key}?`)
     if (!ctx.get(key)) degraded.push(`optional seam missing: ctx.${key}`)
   }
+  // The awaited `session/flush` checkpoint a pinned bundle drains its queue at (`bundleSeams`): dispatched by this method.
+  checked.push('bundle:sessions.flush')
+  if (ctx.get('sessions') && typeof ctx.get('sessions').flush !== 'function') degraded.push(`optional seam missing: ctx.sessions.flush (${SEAMS.events.sessionFlush})`)
 
   if (options.dshVersion && options.dshVersion !== SEAMS.dsh) {
     fatal.push(`dsh version ${options.dshVersion} != seam-manifest.dsh ${SEAMS.dsh}`)
@@ -1129,6 +1132,22 @@ export async function probeSeams(ctx, options = {}) {
   if (sandbox.error) fatal.push(sandbox.error)
 
   return { fatal, degraded, checked }
+}
+
+/**
+ * The seams a pinned third-party bundle reads off an agent that no EviMed code uses (`seam-manifest.json` `bundleSeams`):
+ * `agent.inbox.nextTurn/nextStep` and `session.ownEvents()`. The OpenViking memory bundle decides from them whether its
+ * startup profile is already in the conversation, so a rename upstream would not fail anything — the profile would arrive on
+ * every start, or never. Asked of the first agent a kernel creates (`evimed-seam-probe`).
+ * @param {any} agent
+ * @returns {string[]} the ones missing, as the manifest names them
+ */
+export function bundleSeamGaps(agent) {
+  /** @type {string[]} */
+  const gaps = []
+  if (!Array.isArray(agent?.inbox?.nextTurn) || !Array.isArray(agent?.inbox?.nextStep)) gaps.push('agent.inbox.nextTurn/nextStep')
+  if (typeof agent?.session?.ownEvents !== 'function') gaps.push('session.ownEvents')
+  return gaps
 }
 
 /**
@@ -1268,3 +1287,23 @@ export { createNativeExtensionPreparer, createDisposableNativeExtensionPreparer 
 export { createScopedSkillCatalogue, registerScopedSkillCatalogue, SCOPED_SKILL_ROOTS } from './src/scopedSkillCatalogue.mjs'
 
 export { registerHostedLoopx, verifyHostedLoopx } from './src/loopxBootstrap.mjs'
+
+// The official OpenViking memory plugin's way to the control plane: a loopback
+// listener that carries the workload token of the moment, the settings stated
+// where the plugin cannot be overruled by a file, and the row that starts both.
+export {
+  MEMORY_BRIDGE_COOLDOWN_MS,
+  MEMORY_BRIDGE_DEADLINES,
+  MEMORY_BRIDGE_HOST,
+  MEMORY_BRIDGE_MAX_BODY_BYTES,
+  MEMORY_BRIDGE_PORT,
+  MEMORY_BRIDGE_SERVICE,
+  MEMORY_BRIDGE_UNAVAILABLE,
+  OPENVIKING_PLUGIN_ENVIRONMENT,
+  OPENVIKING_PLUGIN_SETTINGS,
+  OPENVIKING_WITHHELD_SKILLS,
+  createLocalBridgeKey,
+  createMemoryBridge,
+  pinOpenVikingPluginEnvironment,
+  registerMemoryBridge,
+} from './src/memoryBridge.mjs'

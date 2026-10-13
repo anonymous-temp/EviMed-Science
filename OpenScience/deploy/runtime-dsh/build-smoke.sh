@@ -190,93 +190,129 @@ sed "s|'/runtime/dsh-home/sessions'|'${smoke_home}/sessions'|" \
   /usr/local/share/evimed/build-smoke-patch.yml > "${patch}"
 
 port="${SMOKE_PORT:-45999}"
-workspace="$(mktemp -d)"
 
-DSH_HOME="${smoke_home}" dsh --profile "${profile}" --patch "${patch}" \
-  --no-open --port "${port}" --trusted-host dsh.runtime > "${log}" 2>&1 &
-kernel=$!
+# One boot of the composition and one session on it, as a function: the proof
+# runs twice, once as an ordinary account's runtime is started and once as an
+# account on the native memory engine's is (below).
+boot_and_probe() {
+  label="$1"
+  workspace="$(mktemp -d)"
+  : > "${log}"
+  DSH_HOME="${smoke_home}" dsh --profile "${profile}" --patch "${patch}" \
+    --no-open --port "${port}" --trusted-host dsh.runtime > "${log}" 2>&1 &
+  kernel=$!
 
-fail() {
-  echo "build smoke: $1" >&2
-  echo "  (the addon cache was deliberately made unusable; see the note above)" >&2
-  grep -vE '^[[:space:]]+at |ExperimentalWarning|--trace-warnings' "${log}" | sed -n '1,60p' >&2
-  kill "${kernel}" 2>/dev/null || true
-  exit 1
-}
+  fail() {
+    echo "build smoke (${label}): $1" >&2
+    echo "  (the addon cache was deliberately made unusable; see the note above)" >&2
+    grep -vE '^[[:space:]]+at |ExperimentalWarning|--trace-warnings' "${log}" | sed -n '1,60p' >&2
+    kill "${kernel}" 2>/dev/null || true
+    exit 1
+  }
 
-# Boot takes about a minute: composing the plugin tree is most of it.
-for _ in $(seq 1 90); do
-  kill -0 "${kernel}" 2>/dev/null || fail "the seeded profile did not boot"
-  grep -q "dsh web: " "${log}" && break
-  sleep 2
-done
-grep -q "failed to apply loader entry" "${log}" && fail "an entry did not apply"
-# The same failure in the kernel's other words: a row that applied but threw on activation (2026-10-12: the LoopX
-# bootstrap row on every project volume older than LoopX, `command "loopx-init" is already registered`).
-grep -q "did not activate" "${log}" && fail "an entry did not activate"
-# A patch row naming a target the composition does not have is a WARNING in the
-# kernel and the boot continues without it. That is the exact shape of "a plugin
-# is silently absent": the row was written, the image was built, the container
-# started, and the capability it configures is simply not there. Both spellings
-# come from the installed kernel: "patch: entry %C not found" (replace) and
-# "patch insert: entry %C not found" (insert).
-grep -qE "patch( insert)?: entry .* not found" "${log}" \
-  && fail "a patch row names an entry the composition does not have; the kernel warned and carried on without it"
-grep -q "dsh web: " "${log}" || fail "the kernel never began serving"
+  # Boot takes about a minute: composing the plugin tree is most of it.
+  for _ in $(seq 1 90); do
+    kill -0 "${kernel}" 2>/dev/null || fail "the seeded profile did not boot"
+    grep -q "dsh web: " "${log}" && break
+    sleep 2
+  done
+  grep -q "failed to apply loader entry" "${log}" && fail "an entry did not apply"
+  # The same failure in the kernel's other words: a row that applied but threw on activation (2026-10-12: the LoopX
+  # bootstrap row on every project volume older than LoopX, `command "loopx-init" is already registered`).
+  grep -q "did not activate" "${log}" && fail "an entry did not activate"
+  # A patch row naming a target the composition does not have is a WARNING in the
+  # kernel and the boot continues without it. That is the exact shape of "a plugin
+  # is silently absent": the row was written, the image was built, the container
+  # started, and the capability it configures is simply not there. Both spellings
+  # come from the installed kernel: "patch: entry %C not found" (replace) and
+  # "patch insert: entry %C not found" (insert).
+  grep -qE "patch( insert)?: entry .* not found" "${log}" \
+    && fail "a patch row names an entry the composition does not have; the kernel warned and carried on without it"
+  # A bundle whose patch file cannot be read is skipped whole, and the kernel serves without it.
+  grep -q "skipping profile bundle" "${log}" && fail "a profile bundle was skipped"
+  grep -q "dsh web: " "${log}" || fail "the kernel never began serving"
 
-# Creating a session is the second half of the proof, and it is the half that
-# matters most.
-#
-# Booting validates the HOST composition. Our preset is mounted in AGENT scope,
-# so none of its rows are touched until a session exists — three defects reached
-# a real container through that gap: a preset the kernel could not see, a
-# permission pair matching no preset, and a required key on `tool-fs-search`
-# with no default. Every one of them was invisible to a boot-only check and
-# obvious the instant a session was requested.
-#
-# Same wire shape the control plane uses: POST /api/<method> with a
-# client-request envelope, Host set to the declared trusted host.
-#
-# `session/create`, slashed, and the arguments nested under `args.request` —
-# the shape `dshRuntimeAdapter` uses. 0.1.2 renamed every method from dotted to
-# slashed (the seam manifest records it), and this script kept the old spelling
-# because nothing here had ever reached a method: the boot failed earlier, so
-# `session.create` was never called until the auth above started working. It
-# then answered 404, which is the honest reply to a route that no longer
-# exists.
-session_probe=$(cat <<PROBE
+  # Creating a session is the second half of the proof, and it is the half that
+  # matters most.
+  #
+  # Booting validates the HOST composition. Our preset is mounted in AGENT scope,
+  # so none of its rows are touched until a session exists — three defects reached
+  # a real container through that gap: a preset the kernel could not see, a
+  # permission pair matching no preset, and a required key on `tool-fs-search`
+  # with no default. Every one of them was invisible to a boot-only check and
+  # obvious the instant a session was requested.
+  #
+  # Same wire shape the control plane uses: POST /api/<method> with a
+  # client-request envelope, Host set to the declared trusted host.
+  #
+  # `session/create`, slashed, and the arguments nested under `args.request` —
+  # the shape `dshRuntimeAdapter` uses. 0.1.2 renamed every method from dotted to
+  # slashed (the seam manifest records it), and this script kept the old spelling
+  # because nothing here had ever reached a method: the boot failed earlier, so
+  # `session.create` was never called until the auth above started working. It
+  # then answered 404, which is the honest reply to a route that no longer
+  # exists.
+  #
+  # The kernel's own plugin inventory, read on the same wire, says whether the
+  # two memory rows are what this boot's environment asks for: the official
+  # OpenViking plugin's row present and off for an ordinary account, and on and
+  # active, behind an active bridge, for an account on the native engine.
+  session_probe=$(cat <<PROBE
 import json, sys, urllib.error, urllib.request
-body = json.dumps({
-    "type": "client-request",
-    "rpcId": "rpc_build_smoke",
-    "method": "session/create",
-    "payload": {"args": {"request": {"cwd": "${workspace}", "agentPreset": "${profile_preset}"}}},
-}).encode()
-request = urllib.request.Request(
-    "http://127.0.0.1:${port}/api/session/create",
-    data=body,
-    headers={"content-type": "application/json", "Host": "dsh.runtime", "Cookie": "${smoke_cookie}"},
-)
-try:
+def call(method, args):
+    body = json.dumps({"type": "client-request", "rpcId": "rpc_build_smoke", "method": method, "payload": {"args": args}}).encode()
+    request = urllib.request.Request(
+        "http://127.0.0.1:${port}/api/" + method,
+        data=body,
+        headers={"content-type": "application/json", "Host": "dsh.runtime", "Cookie": "${smoke_cookie}"},
+    )
     envelope = json.load(urllib.request.urlopen(request, timeout=60))
+    result = envelope.get("result") or {}
+    if not result.get("ok"):
+        raise RuntimeError(json.dumps(result.get("error"), ensure_ascii=False)[:800])
+    return result.get("value") or {}
+try:
+    session = call("session/create", {"request": {"cwd": "${workspace}", "agentPreset": "${profile_preset}"}})
+    entries = {entry.get("entryId"): entry for entry in call("pluginInventory/list", {}).get("entries", [])}
 except urllib.error.HTTPError as error:
     print("HTTP %s: %s" % (error.code, error.read().decode("utf-8", "replace")[:800]))
     sys.exit(1)
 except Exception as error:
     print("%s: %s" % (type(error).__name__, error))
     sys.exit(1)
-result = envelope.get("result") or {}
-if not result.get("ok"):
-    print(json.dumps(result.get("error"), ensure_ascii=False)[:800])
+memory = entries.get("include:openviking-memory-runtime")
+bridge = entries.get("include:evimed-memory-bridge")
+if memory is None or bridge is None:
+    print("the OpenViking memory row or the memory bridge row is not in the composition")
     sys.exit(1)
-print("session " + str((result.get("value") or {}).get("sessionId", "?")))
+native = "${EVIMED_MEMORY_GATEWAY_URL:-}" != ""
+if native and not (memory.get("enabled") and memory.get("fiberPhase") == "active" and bridge.get("fiberPhase") == "active"):
+    print("native memory: the OpenViking row is %s/%s behind a bridge %s" % (memory.get("enabled"), memory.get("fiberPhase"), bridge.get("fiberPhase")))
+    sys.exit(1)
+if not native and memory.get("enabled"):
+    print("an ordinary account's runtime mounted the OpenViking memory row")
+    sys.exit(1)
+print("session " + str(session.get("sessionId", "?")) + ", OpenViking memory row " + ("active" if native else "off"))
 PROBE
 )
-if ! session_output=$(python3 -c "${session_probe}" 2>&1); then
-  fail "the preset would not mount a session — ${session_output}"
-fi
+  if ! session_output=$(python3 -c "${session_probe}" 2>&1); then
+    fail "the preset would not mount a session, or the memory rows are not what this boot asks for — ${session_output}"
+  fi
 
-kill "${kernel}" 2>/dev/null || true
-wait "${kernel}" 2>/dev/null || true
-rm -rf "${workspace}"
-echo "build smoke: profile ${profile} booted with every entry applied, and mounted a ${profile_preset} session (${session_output})"
+  kill "${kernel}" 2>/dev/null || true
+  wait "${kernel}" 2>/dev/null || true
+  rm -rf "${workspace}"
+  echo "build smoke (${label}): profile ${profile} booted with every entry applied, and mounted a ${profile_preset} session (${session_output})"
+}
+
+boot_and_probe "ordinary account"
+
+# The same proof for an account on the native memory engine: the launch plan
+# gives such a runtime its memory gateway's base, and the socket's patch then
+# mounts the official OpenViking plugin behind the loopback bridge. The address
+# below refuses connections (the discard port), which is what a runtime meets
+# while the memory service is down: memory degrades, nothing fails to activate,
+# and the session still mounts.
+export EVIMED_MEMORY_GATEWAY_URL="http://127.0.0.1:9/internal/memory/v1"
+boot_and_probe "native memory account"
+unset EVIMED_MEMORY_GATEWAY_URL

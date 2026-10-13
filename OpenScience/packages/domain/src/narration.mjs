@@ -12,7 +12,7 @@
  * or MCP appears in any string this module produces.
  */
 
-import { MCP_TOOL_PREFIX, RETIRED_SOCKET_TOOL_NAMES, SOCKET_TOOL_NAMES, mcpToolBaseName } from './toolNames.mjs'
+import { MCP_TOOL_PREFIX, OPENVIKING_MCP_TOOL_PREFIX, RETIRED_SOCKET_TOOL_NAMES, SOCKET_TOOL_NAMES, mcpToolBaseName } from './toolNames.mjs'
 import { contractKindLabel } from './contractKinds.mjs'
 import { frontierLabel } from './frontierVocabulary.mjs'
 import { GEO_READ_WHAT_LABELS_ZH, GEO_WRITE_WHAT_LABELS_ZH } from './geoVocabulary.mjs'
@@ -195,6 +195,20 @@ const SOCKET_NARRATION = Object.freeze({
   [SOCKET_TOOL_NAMES.reviewRun]: () => '跨交付物审查',
 })
 
+/**
+ * The five memory tools of the OpenViking plugin, by their base names (`OPENVIKING_MEMORY_TOOL_BASE_NAMES`). A reader sees
+ * what was asked of their memory, not the plugin's address scheme: the query, the count, never a `viking://` path.
+ * @type {Readonly<Record<string, (args: Record<string, any>, result: any) => string>>}
+ */
+const OPENVIKING_NARRATION = Object.freeze({
+  search: (args, result) => withCount(`查记忆：「${excerpt(args?.query)}」`, result),
+  read: () => '读记忆',
+  list: () => '翻记忆',
+  // The tool takes the person's own words as `messages`; a reader is shown the first of them.
+  remember: (args) => `记住：${excerpt(Array.isArray(args?.messages) ? args.messages.find((/** @type {any} */ message) => message?.role === 'user')?.content : args?.text, 32)}`,
+  forget: () => '忘记一条记忆',
+})
+
 /** @type {Readonly<Record<string, (args: Record<string, any>, result: any) => string>>} */
 const FRAMEWORK_NARRATION = Object.freeze({
   read: (args) => `读取 ${excerpt(args?.path ?? args?.file_path, 48)}`,
@@ -220,6 +234,9 @@ export function narrateToolCall(toolName, args = {}, result = undefined) {
   const base = mcpToolBaseName(name)
   if (base && MCP_NARRATION[base]) return { text: MCP_NARRATION[base](args ?? {}, result), known: true }
   if (SOCKET_NARRATION[name]) return { text: SOCKET_NARRATION[name](args ?? {}, result), known: true }
+  if (name.startsWith(OPENVIKING_MCP_TOOL_PREFIX) && OPENVIKING_NARRATION[name.slice(OPENVIKING_MCP_TOOL_PREFIX.length)]) {
+    return { text: OPENVIKING_NARRATION[name.slice(OPENVIKING_MCP_TOOL_PREFIX.length)](args ?? {}, result), known: true }
+  }
   if (FRAMEWORK_NARRATION[name]) return { text: FRAMEWORK_NARRATION[name](args ?? {}, result), known: true }
   const display = name.startsWith(MCP_TOOL_PREFIX) ? name.slice(MCP_TOOL_PREFIX.length) : name
   return { text: `调用 ${display || '未知工具'}`, known: false }
