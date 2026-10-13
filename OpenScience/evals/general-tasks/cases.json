@@ -765,7 +765,8 @@
     ],
     "web-off": [
      {
-      "type": "web_unavailable_honest"
+      "type": "web_unavailable_honest",
+      "accept_reads": true
      }
     ]
    },

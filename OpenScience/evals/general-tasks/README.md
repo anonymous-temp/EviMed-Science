@@ -118,5 +118,9 @@ Re-judging saved records costs no model time on the agent side: `python3 judges/
   route decision and the run ledger (as the other course-correction packages did). On the native page the model is not told the route.
 * Document parsing: the in-house parser is an external service with a key; on this box it is not configured, so G22's `.docx` / `.pdf`
   knowledge files are accepted and registered but not parsed (the record's `sources` ledger says so); the plain-text files are.
+* The harness kernel runs as a host process **with network**; the production runtime container has none. With the web tools off
+  (G14 `web-off`) a run can still fetch pages through its shell, so that variant cannot force “nothing can be looked up”; its judge
+  accepts either an honest “I could not look this up” or an answer whose cited hosts appear in what the tools returned. The same
+  holds for every web task: results show what the platform does where fetching is possible.
 * The model judge is one DeepSeek flash call per case; run it twice (`--redo`) when a score decides something.
 * Link and Node.js LTS checks read the public internet from the host running the judges; offline they report `unjudged`.
