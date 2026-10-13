@@ -134,6 +134,12 @@ export const READINESS_ERROR_MESSAGES_ZH = Object.freeze({
   openviking_shim_probe_unreadable: '检查编译身份转发程序时没有读到任务编号，知识编译暂停。',
   // The engine's model path (`openVikingModelCaller.mjs`): what the gateway answers the engine, and what readiness shows for it.
   openviking_model_budget_exhausted: 'OpenViking 这一天的模型预算已经用完，新的记忆提取和知识编译会被拒绝；可以调高预算，或等额度恢复。',
+  // The engine volume's copy (`openVikingBackupReadiness.mjs`, `checks.backup.openviking`): notices, never a red check.
+  openviking_backup_state_unconfigured: '没有接入 OpenViking 数据卷的备份回执（备份叠加层没有挂载它的状态目录），无法确认原生记忆和知识页有没有备份。',
+  openviking_backup_state_missing: '还没有 OpenViking 数据卷的备份回执：宿主机的备份任务可能还没装好或从未运行，请查看备份定时器。',
+  openviking_backup_state_invalid: 'OpenViking 数据卷的备份回执读不懂或不可信（格式、权限或内容不对），请查看宿主机的备份任务。',
+  openviking_backup_unhealthy: 'OpenViking 数据卷最近一次备份失败了，之前的备份仍在；请查看宿主机备份任务的日志。',
+  openviking_backup_stale: 'OpenViking 数据卷已经超过约定时间没有新的已校验备份，请查看宿主机的备份定时器。',
   openviking_model_owner_unavailable: '记不了 OpenViking 模型调用的账：平台账号或它的内部项目读不到；请查看数据库。',
 })
 
