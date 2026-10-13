@@ -178,13 +178,23 @@ def xlsx_text(path: Path) -> str:
     return "\n".join(out)
 
 
+class NoSpreadsheetEngine(RuntimeError):
+    """LibreOffice Calc is not installed (or cannot load the file), so formula cells cannot be given values."""
+
+
 def recalculated(path: Path) -> Path:
-    """A copy of a workbook with every formula's cached value filled in by LibreOffice (openpyxl writes formulas without values)."""
+    """A copy of a workbook with every formula's cached value filled in by LibreOffice Calc (openpyxl writes formulas without values)."""
     out_dir = Path(tempfile.mkdtemp(prefix="gt-recalc-"))
     profile = Path(tempfile.mkdtemp(prefix="gt-lo-"))
-    subprocess.run(["soffice", f"-env:UserInstallation=file://{profile}", "--headless", "--convert-to", "xlsx:Calc MS Excel 2007 XML", "--outdir", str(out_dir), str(path)],
-                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=240)
-    return out_dir / Path(path).name if (out_dir / Path(path).name).exists() else next(out_dir.glob("*.xlsx"))
+    try:
+        subprocess.run(["soffice", f"-env:UserInstallation=file://{profile}", "--headless", "--convert-to", "xlsx:Calc MS Excel 2007 XML", "--outdir", str(out_dir), str(path)],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=240)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise NoSpreadsheetEngine(f"soffice failed: {type(error).__name__}") from error
+    made = list(out_dir.glob("*.xlsx"))
+    if not made:
+        raise NoSpreadsheetEngine("LibreOffice Calc produced no workbook (is libreoffice-calc installed?)")
+    return made[0]
 
 
 def to_pdf(path: Path) -> Path:

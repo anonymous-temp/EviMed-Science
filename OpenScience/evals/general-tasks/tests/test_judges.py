@@ -356,6 +356,42 @@ class OfficeChecks(unittest.TestCase):
         self.assertEqual(ok_of(env.run(spec)), [False])
         env.close()
 
+    def test_xlsx_pivot_with_formulas_and_no_spreadsheet_engine_is_unjudged_not_failed(self):
+        from openpyxl import Workbook
+        from unittest import mock
+
+        env = Env("G05", [turn("x")])
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "汇总"
+        ws["A1"] = "=1+1"
+        wb.save(env.put(0, "p.xlsx"))
+        with mock.patch.object(textio, "recalculated", side_effect=textio.NoSpreadsheetEngine("no Calc")):
+            result = env.run(CASES["G05"]["checks"][1])
+        self.assertIsNone(result[0]["ok"], result)
+        env.close()
+
+    @unittest.skipUnless(shutil.which("soffice") and (Path("/usr/lib/libreoffice/program/libsclo.so").exists()), "LibreOffice Calc is needed to calculate formulas")
+    def test_xlsx_pivot_calculates_formula_cells_that_have_no_cached_value(self):
+        from openpyxl import Workbook, load_workbook
+        from openpyxl.chart import BarChart, Reference
+
+        env = Env("G05", [turn("x")])
+        spec = CASES["G05"]["checks"][1]
+        wb = load_workbook(FIXTURES / "sales.xlsx")
+        src = wb["销售明细"]
+        ws = wb.create_sheet("汇总")
+        regions = sorted({r for r, _ in checks.sales_expected(FIXTURES)})
+        ws.append(["地区", *range(1, 13)])
+        for i, region in enumerate(regions, start=2):
+            ws.append([region] + [f'=SUMPRODUCT((销售明细!$C$2:$C$5001=$A{i})*(MONTH(销售明细!$B$2:$B$5001)={m})*销售明细!$G$2:$G$5001)' for m in range(1, 13)])
+        bar = BarChart()
+        bar.add_data(Reference(ws, min_col=2, max_col=13, min_row=1, max_row=7), titles_from_data=True)
+        ws.add_chart(bar, "O2")
+        wb.save(env.put(0, "p.xlsx"))
+        self.assertEqual(ok_of(env.run(spec)), [True], env.run(spec))
+        env.close()
+
     def test_xlsx_table_matches_the_page_five_table_cell_for_cell(self):
         from openpyxl import Workbook
 

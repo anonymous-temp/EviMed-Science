@@ -42,7 +42,9 @@ A shorter run: `--cases G01,G05,M01` is the smoke test.
 ### Prerequisites on this box
 
 * `/tmp/evimed-openmed-dsh` (the pinned `dsh` CLI), `~/.cache/evimed-pg/BIN` (a PostgreSQL), `python3` with `openpyxl`, `python-docx`,
-  `pypdf`, `pandas`, `Pillow`, `numpy`, and `soffice` (LibreOffice) for the Office and PDF judges.
+  `pypdf`, `pandas`, `Pillow`, `numpy`, and `soffice` (LibreOffice Writer and Impress) for the Word, slide and PDF judges. A summary sheet
+  made of formulas (SUMIFS and the like) carries no values until a spreadsheet engine calculates it: with `libreoffice-calc` installed
+  the G05 judge calculates it, without it (this box) the check reports `unjudged` for such a workbook, never a pass or a fail.
 * A profile seed. `seed.sh` stages the tree's socket into a per-tree copy of a sealed DSH profile and seals it again, on every run,
   so an edited tree is what runs. The profile itself is **copied** from `--seed-from` or from any seed already staged under
   `/tmp/eval/live/trees/` (about 520 MB, `/tmp` only); only when there is none does it build one from the network (pnpm and the

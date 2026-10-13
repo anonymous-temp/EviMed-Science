@@ -266,16 +266,20 @@ def chk_file_new(spec, ctx):
 
 # ------------------------------------------------------------------------------------------------------------------- Word files
 def _any_candidate(files, predicate: Callable[[Path], tuple[bool, str]]):
+    """True when a candidate passes; False with every note when none does; None when none passed and one could not be judged."""
     notes = []
+    unjudged = False
     for rel, path in reversed(files):
         try:
             ok, note = predicate(path)
+        except textio.NoSpreadsheetEngine as error:  # not the file's fault: the judge has no way to calculate it
+            ok, note, unjudged = False, f"cannot be judged here: {error}", True
         except Exception as error:  # a file that cannot be read fails the predicate and says why
             ok, note = False, f"{type(error).__name__}: {str(error)[:120]}"
         notes.append(f"{rel}: {note}")
         if ok:
             return True, f"{rel}: {note}"
-    return False, " | ".join(notes) or "no candidate file"
+    return (None if unjudged else False), " | ".join(notes) or "no candidate file"
 
 
 def chk_docx(spec, ctx):
@@ -451,7 +455,9 @@ def chk_xlsx_pivot(spec, ctx):
         wb = textio.xlsx_load(path, data_only=True)
         formulas_wb = textio.xlsx_load(path)
         has_formula = any(_is_formula(c.value) for ws in formulas_wb.worksheets for row in ws.iter_rows() for c in row)
-        if has_formula and any(c.value is None for ws in formulas_wb.worksheets if ws.max_row < 400 for row in ws.iter_rows() for c in row if _is_formula(c.value) and wb[ws.title][c.coordinate].value is None):
+        # openpyxl writes formulas without their values: a summary made of SUMIFS cells is read after LibreOffice has calculated it.
+        needs_values = has_formula and any(wb[ws.title][c.coordinate].value is None for ws in formulas_wb.worksheets if ws.max_row < 400 for row in ws.iter_rows() for c in row if _is_formula(c.value))
+        if needs_values:
             wb = textio.xlsx_load(textio.recalculated(path), data_only=True)
         values = []
         sheet_names = []
