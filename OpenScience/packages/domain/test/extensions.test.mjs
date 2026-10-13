@@ -6,6 +6,7 @@ import {
   EXTENSION_SAAS_CASE_IDS, EXTENSION_SUPPORTED_DSH_VERSION, EXTENSION_QUALIFICATION_STATES, EXTENSION_EVIDENCE_STATES,
   canonicalExtensionCoordinate, validateExtensionInstallRequest, validateSkillWriteRequest, personalSkillName,
   extensionGenerationIdentity, extensionProofDigest, qualifyExtensionProof, extensionQualificationStateOf, extensionEvidenceState,
+  isolatedToolProfileHolds, isolatedToolRowIsAdmitted,
 } from '../src/extensions.mjs'
 
 /** @param {string} value */
@@ -188,4 +189,24 @@ test('a record is a label: every way of reading it maps to one of four states an
   assert.equal(new Set(words).size,4)
   for(const word of words)assert.ok(EXTENSION_EVIDENCE_STATES.includes(word),word)
   assert.equal(extensionEvidenceState('anything-else'),'source-assessed','an unknown state is shown as the unverified one, never as qualified')
+})
+
+test('an isolated tool is admitted by the digest, coordinate and permission profile of the deployment descriptor, never by a name',()=>{
+  const coordinate={kind:'github',repository:'Another-Author/some-tool',commit:'c'.repeat(40)}
+  const descriptor={id:'some-tool',coordinate,integrity:digest('integrity'),artifactDigest:digest('artifact')}
+  const row={extensionId:'some-tool',enabled:true,executionClass:'isolated-tool',coordinate:{...coordinate},integrity:descriptor.integrity,artifactDigest:descriptor.artifactDigest,settings:{},connectionRefs:[]}
+  assert.equal(isolatedToolRowIsAdmitted(row,descriptor),true,'any repository the deployment admitted')
+  assert.equal(isolatedToolRowIsAdmitted(row,undefined),false,'nothing admitted under that id')
+  assert.equal(isolatedToolRowIsAdmitted({...row,artifactDigest:digest('other')},descriptor),false,'other bytes')
+  assert.equal(isolatedToolRowIsAdmitted({...row,integrity:digest('other')},descriptor),false,'other package integrity')
+  assert.equal(isolatedToolRowIsAdmitted({...row,coordinate:{...coordinate,commit:'d'.repeat(40)}},descriptor),false,'another commit of the same repository')
+  assert.equal(isolatedToolRowIsAdmitted({...row,coordinate:{...coordinate,repository:'Another-Author/other'}},descriptor),false,'another repository')
+  assert.equal(isolatedToolRowIsAdmitted({...row,coordinate:{kind:'npm',name:'some-tool',version:'1.0.0'}},descriptor),false,'another kind of coordinate')
+  assert.equal(isolatedToolRowIsAdmitted({...row,executionClass:'managed-native'},descriptor),false,'another class')
+  assert.equal(isolatedToolRowIsAdmitted({...row,settings:{timeoutMs:1}},descriptor),false,'an isolated tool has no settings')
+  assert.equal(isolatedToolRowIsAdmitted({...row,connectionRefs:['conn_1']},descriptor),false,'an isolated tool has no connections')
+  assert.equal(isolatedToolRowIsAdmitted({...row,settings:undefined},descriptor),false)
+  assert.equal(isolatedToolRowIsAdmitted({...row,coordinate:{kind:'github'}},descriptor),false,'a malformed coordinate is a refusal, not a throw')
+  assert.equal(isolatedToolProfileHolds(row),true)
+  assert.equal(isolatedToolProfileHolds({...row,artifactDigest:'not-a-digest'}),false)
 })

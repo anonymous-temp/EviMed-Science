@@ -112,6 +112,8 @@ export {
   EXTENSION_SAAS_CASE_IDS,
   ExtensionContractError,
   canonicalExtensionCoordinate,
+  isolatedToolProfileHolds,
+  isolatedToolRowIsAdmitted,
   validateExtensionInstallRequest,
   validateSkillWriteRequest,
   personalSkillName,
