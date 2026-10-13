@@ -1719,6 +1719,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const sourceDependents = createSourceDependents({
     knowledge: { dependents: (ownerId, projectId, ref, versionIds) => knowledgeChange.dependents(ownerId, projectId, ref, versionIds) },
     documents: productDocuments, memory: researchMemory,
+    // The compiled pages that cite the document, from the mirror's record of each page's links.
+    pages: (userId, projectId, sourceId) => (knowledgePages ? knowledgePages.pagesQuoting(userId, projectId, sourceId) : Promise.resolve([])),
     runs: async (project, runIds) => {
       const wanted = new Set(runIds);
       /** @type {Map<string, { title: string | null, deleted: boolean }>} */
@@ -1736,6 +1738,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const knowledgeVault = sourceService && productDocuments ? new KnowledgeVaultExport({
     sources: sourceService, documents: productDocuments,
     readText: async (project, rel) => String(await readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel), "utf8")),
+    // Where the engine keeps the project's wiki and graph: how a compiled page's absolute links are told from its documents'.
+    roots: (userId, projectId) => openVikingResources.roots(userId, projectId),
     maxEntries: config.maxArchiveEntries, maxBytes: config.maxArchiveBytes,
     report: code => { void securityAudit(config, "source.vault", "failed", { code }).catch(() => {}); },
   }) : null;
@@ -1850,6 +1854,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     onPublished: (job) => {
       kbIndex?.wake();
       void libraryService?.refreshSource(job.userId, job.payload?.sourceId);
+      // The engine's copy and the project's pages are told here too: a document read without an understanding is published
+      // without ever passing `onReadable`, and both hooks are idempotent for one that passed it.
+      void sourceSync?.note(job.userId, job.projectId, job.payload?.sourceId);
+      void knowledgePages?.noteSourceReady(job.userId, job.projectId, job.payload?.sourceId);
       // What the platform read out of the document goes into the researcher's
       // capsule here, labelled 来自资料 and reversible — the replacement for
       // the 「放进胶囊」 button that used to ask them to do it once per file
@@ -2529,7 +2537,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // whose episode produced the result. A paused or not-started agenda is none, and nothing here asks for another approval.
   const knowledgeChange = new KnowledgeChangeService({ memory: researchMemory, methods: learningService, sourceChanges,
     // The knowledge pages that quote a changed source; composed later, read at the moment a change is reconciled.
-    pages: { get enabled() { return Boolean(knowledgePages?.enabled); },
+    // Labelling reads and writes the ledger's mirror only, so it works with compiling off and with the engine down.
+    pages: { get enabled() { return Boolean(knowledgePages); },
       sourceIdsByDoi: (userId, projectId, doi) => knowledgePages ? knowledgePages.sourceIdsByDoi(userId, projectId, doi) : [],
       noteSourcesChanged: (userId, projectId, changes) => knowledgePages ? knowledgePages.noteSourcesChanged(userId, projectId, changes) : { pages: 0 },
       pagesQuoting: (userId, projectId, sourceId) => knowledgePages ? knowledgePages.pagesQuoting(userId, projectId, sourceId) : [] },

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { strFromU8, unzipSync } from "fflate";
-import { KnowledgeVaultExport, frontMatter, noteName, pageTitle, understandingBody } from "../src/knowledgeVaultExport.mjs";
+import { rewriteCompiledLinks, KnowledgeVaultExport, frontMatter, noteName, pageTitle, understandingBody } from "../src/knowledgeVaultExport.mjs";
 
 const PROJECT = { id: "prj_1", name: "房颤抗凝" };
 const hex = (character, length = 32) => character.repeat(length);
@@ -141,4 +141,27 @@ test("an empty library is a vault with an index, and the helpers are what they s
   assert.equal(pageTitle("# 标题 \n正文", "f"), "标题");
   assert.equal(pageTitle("没有标题", "f"), "f");
   assert.equal(understandingBody({ summary: "", claims: [] }), "");
+});
+
+test("a compiled page's links lead into the vault: documents to their notes, pages to their files, quotations kept", () => {
+  const roots = { wiki: "viking://user/u-1/resources/p/p-1/wiki", kg: "viking://user/u-1/resources/p/p-1/kg" };
+  const src = "src_00000000000000000000000000000001";
+  const notes = new Map([[src, "sources/Alpha 协议.md"]]);
+  const pages = new Map([["wiki/index.md", "wiki/index.md"], ["wiki/concept/Alpha 协议.md", "wiki/concept/Alpha 协议.md"], ["wiki/entity/Beta网关.md", "wiki/entity/Beta网关.md"]]);
+  const context = { roots, noteOf: (/** @type {string} */ id) => notes.get(id) ?? null,
+    pageOf: (/** @type {string} */ tree, /** @type {string} */ rel) => pages.get(`${tree}/${rel}`) ?? pages.get(`${tree}/${rel}.md`) ?? null };
+  const page = [
+    "---", "type: entity", "title: Beta 网关", "sources:", `  - viking://user/u-1/resources/p/p-1/sources/${src}.md`, "---", "",
+    `周期为 64 秒 [Alpha](viking://user/u-1/resources/p/p-1/sources/${src}.md "默认同步周期为 \\"64\\" 秒")，另见 [协议](../concept/Alpha 协议.md#定义)、`,
+    `[目录](${roots.wiki}/index.md)、[丢了后缀](viking://user/u-1/resources/p/p-1/sources/${src})、[外部](https://example.org/a b) 和 [不在库里](viking://user/u-1/resources/p/p-1/sources/src_ffffffffffffffffffffffffffffffff.md)。`, "",
+  ].join("\n");
+  const rewritten = rewriteCompiledLinks(page, { ...context, file: "wiki/entity/Beta网关.md", tree: "wiki", rel: "entity/Beta网关.md" });
+  assert.equal(rewritten, [
+    "---", "type: entity", "title: Beta 网关", "sources:", "  - ../../sources/Alpha%20%E5%8D%8F%E8%AE%AE.md", "---", "",
+    '周期为 64 秒 [Alpha](../../sources/Alpha%20%E5%8D%8F%E8%AE%AE.md "默认同步周期为 \\"64\\" 秒")，另见 [协议](../concept/Alpha%20%E5%8D%8F%E8%AE%AE.md#定义)、',
+    "[目录](../index.md)、[丢了后缀](../../sources/Alpha%20%E5%8D%8F%E8%AE%AE.md)、[外部](https://example.org/a b) 和 [不在库里](viking://user/u-1/resources/p/p-1/sources/src_ffffffffffffffffffffffffffffffff.md)。", "",
+  ].join("\n"));
+  // The graph's relations name their evidence by address too.
+  const relations = `${JSON.stringify({ from: "beta", relation: "implements", label: "实现", to: "alpha", evidence: [`viking://user/u-1/resources/p/p-1/sources/${src}.md`] })}\n`;
+  assert.deepEqual(JSON.parse(rewriteCompiledLinks(relations, { ...context, file: "kg/relations.jsonl", tree: "kg", rel: "relations.jsonl" })).evidence, ["../sources/Alpha%20%E5%8D%8F%E8%AE%AE.md"]);
 });

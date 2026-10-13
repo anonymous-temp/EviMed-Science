@@ -25,6 +25,8 @@
 export const DEPENDENT_RESULTS = 20;
 /** The memories listed. */
 export const DEPENDENT_MEMORIES = 30;
+/** How many citing pages one read lists. */
+export const DEPENDENT_PAGES = 50;
 /** How many result versions a lookup reads per identity: the store's own page ceiling. */
 const SCAN = 100;
 const MEMORY_TEXT_CHARS = 120;
@@ -60,7 +62,7 @@ function names(payload, sourceId, sha256) {
  *   Promise<{ memories: { recordId: string, text: string, scope: string }[], methods: { id: string, title: string }[],
  *     results: { versionId: string, runId: string, path: string, title: string | null, at: string }[] }>}
  */
-export function createSourceDependents({ knowledge, documents = null, memory = null, runs = null, report = () => {} }) {
+export function createSourceDependents({ knowledge, documents = null, memory = null, runs = null, pages = null, report = () => {} }) {
   /** @param {string} userId @param {string} projectId @param {string} sourceId @param {string | null} sha256 */
   async function resultsNaming(userId, projectId, sourceId, sha256) {
     if (!documents) return [];
@@ -120,7 +122,18 @@ export function createSourceDependents({ knowledge, documents = null, memory = n
       } catch (error) { report(codeOf(error)); }
     }
 
+    // The compiled pages and graph files that cite it, by the document id the mirror recorded for each of their links.
+    /** @type {{ sourceId: string | null, tree: string, path: string, title: string }[]} */
+    let citing = [];
+    if (pages) {
+      try {
+        citing = (await pages(user.id, project.id, source.id)).slice(0, DEPENDENT_PAGES)
+          .map((/** @type {any} */ page) => ({ sourceId: page.sourceId ?? null, tree: String(page.tree), path: String(page.path), title: String(page.title ?? page.path) }));
+      } catch (error) { report(codeOf(error)); }
+    }
+
     return {
+      pages: citing,
       memories,
       methods: (read.methods?.items ?? []).map((/** @type {any} */ method) => ({ id: String(method.id), title: String(method.title ?? "") })).filter((/** @type {any} */ method) => method.title),
       results,

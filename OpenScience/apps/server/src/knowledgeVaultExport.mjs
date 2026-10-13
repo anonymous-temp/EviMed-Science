@@ -24,13 +24,12 @@
  * @module knowledgeVaultExport
  */
 import { zipSync } from "fflate";
+import { knowledgeMirrorPathOf, knowledgeSourceIdOfUri, okfLinkPath, okfMarkdownLinks, splitOkfFrontmatter } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { sourceDisplayOf } from "./sourceDisplay.mjs";
 import { publicationYear } from "./sourceMetadata.mjs";
 import { sourceReadable } from "./sourceService.mjs";
 
-/** Where the compiled pages live, relative to the project's base folder. */
-const WIKI_FOLDER = "knowledge-base/wiki/";
 const PAGE = 100;
 const NOTE_NAME_CHARS = 80;
 /** A note's `## 相关` lists at most this many of the notes that share a keyword with it. */
@@ -103,6 +102,70 @@ export function pageTitle(text, fallback) {
   return heading ? clean(heading[1]) : fallback;
 }
 
+/** A path from one file of the vault to another, as a Markdown link destination. @param {string} from the linking file @param {string} to */
+function relativeLink(from, to) {
+  const base = from.split("/").slice(0, -1);
+  const target = to.split("/");
+  let shared = 0;
+  while (shared < base.length && shared < target.length - 1 && base[shared] === target[shared]) shared += 1;
+  return encodeURI([...base.slice(shared).map(() => ".."), ...target.slice(shared)].join("/"));
+}
+
+/**
+ * A compiled page as a vault holds it: every link that pointed into the engine points into the vault instead.
+ *
+ * The pages are OpenViking's and link the way it writes — a document as `viking://…/sources/<srcId>.md` (sometimes without
+ * the `.md`), another page by a relative path that may hold unescaped spaces, or by its absolute `viking://` address. In a
+ * vault none of those lead anywhere, so: a document link becomes a relative link to that document's note, a page link a
+ * relative link to that page's file (percent-encoded, which Obsidian and every Markdown reader follow), and a title — the
+ * quotation a source link carries — stays where it was. Addresses outside links (an entity's `sources:` list, the
+ * `evidence` of `relations.jsonl`) are rewritten the same way. A link to something the vault does not hold is left as written.
+ *
+ * @param {string} text @param {{ file: string, tree: "wiki" | "kg", rel: string, roots: { wiki: string, kg: string } | null,
+ *   noteOf: (sourceId: string) => string | null, pageOf: (tree: "wiki" | "kg", rel: string) => string | null }} context
+ *   `file`: where this page is in the vault; `noteOf` / `pageOf`: the vault path of a document's note and of a compiled file
+ */
+export function rewriteCompiledLinks(text, { file, tree, rel, roots, noteOf, pageOf }) {
+  /** @param {string} target the decoded destination @returns {string | null} the vault path it names */
+  const resolve = (target) => {
+    if (target.startsWith("viking://")) {
+      for (const other of /** @type {Array<"wiki" | "kg">} */ (["wiki", "kg"])) {
+        if (roots && target.startsWith(`${roots[other]}/`)) return pageOf(other, target.slice(roots[other].length + 1));
+      }
+      const sourceId = knowledgeSourceIdOfUri(target);
+      return sourceId ? noteOf(sourceId) : null;
+    }
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(target) || !target) return null;
+    /** @type {string[]} */
+    const parts = [];
+    for (const part of [...(target.startsWith("/") ? [] : rel.split("/").slice(0, -1)), ...target.split("/")]) {
+      if (!part || part === ".") continue;
+      if (part === "..") parts.pop(); else parts.push(part);
+    }
+    return pageOf(tree, parts.join("/"));
+  };
+  const { raw, body } = splitOkfFrontmatter(text);
+  let rewritten = "";
+  let cursor = 0;
+  for (const link of okfMarkdownLinks(body)) {
+    const target = okfLinkPath(link.target);
+    const to = resolve(target);
+    if (!to) continue;
+    const fragment = link.target.includes("#") ? link.target.slice(link.target.indexOf("#")) : "";
+    const title = link.title == null ? "" : ` "${link.title.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    rewritten += `${body.slice(cursor, link.index)}[${link.text}](${relativeLink(file, to)}${fragment}${title})`;
+    cursor = link.end;
+  }
+  rewritten += body.slice(cursor);
+  // What is left names a document outside any link: front matter lists, JSON lines.
+  const outside = (/** @type {string} */ value) => value.replace(/viking:\/\/[^\s"'<>)\]]+/g, (uri) => {
+    const sourceId = knowledgeSourceIdOfUri(uri);
+    const to = sourceId ? noteOf(sourceId) : null;
+    return to ? relativeLink(file, to) : uri;
+  });
+  return `${outside(raw)}${outside(rewritten)}`;
+}
+
 /** Run `work` over `items`, `CONCURRENCY` at a time, keeping their order. @template T @template R @param {T[]} items @param {(item: T) => Promise<R>} work */
 async function inBatches(items, work) {
   /** @type {R[]} */
@@ -119,10 +182,12 @@ export class KnowledgeVaultExport {
    * @param {{ sources: { list: (userId: string, options: any) => Promise<{ items: any[], nextCursor?: string | null }> },
    *   documents: { get: (userId: string, kind: string, id: string) => Promise<any> },
    *   readText?: ((project: any, relativePath: string) => Promise<string | null>) | null,
+   *   roots?: ((userId: string, projectId: string) => { wiki: string, kg: string }) | null,
    *   maxEntries?: number, maxBytes?: number, report?: (code: string) => void }} dependencies
+   *   `roots`: the engine addresses of the project's wiki and graph, by which a page's absolute links to another page are read
    */
-  constructor({ sources, documents, readText = null, maxEntries = 10_000, maxBytes = 1024 * 1024 * 1024, report = () => {} }) {
-    this.sources = sources; this.documents = documents; this.readText = readText;
+  constructor({ sources, documents, readText = null, roots = null, maxEntries = 10_000, maxBytes = 1024 * 1024 * 1024, report = () => {} }) {
+    this.sources = sources; this.documents = documents; this.readText = readText; this.roots = roots;
     this.maxEntries = maxEntries; this.maxBytes = maxBytes; this.report = report;
   }
 
@@ -158,8 +223,9 @@ export class KnowledgeVaultExport {
   async export(userId, project) {
     const listed = (await this.#listAll(userId, project.id)).filter((source) => sourceReadable(source.payload));
     const path0 = (/** @type {any} */ source) => String(source.payload?.paths?.[0] ?? "");
-    const pages = listed.filter((source) => path0(source).startsWith(WIKI_FOLDER));
-    const documents = listed.filter((source) => !path0(source).startsWith(WIKI_FOLDER));
+    // The mirror of what the engine compiled — the wiki and the graph — goes in as it is; everything else is a document's note.
+    const pages = listed.filter((source) => knowledgeMirrorPathOf(path0(source)));
+    const documents = listed.filter((source) => !knowledgeMirrorPathOf(path0(source)));
     if (documents.length + pages.length + 1 > this.maxEntries) throw this.#tooLarge("entries");
 
     /** Names are taken in listing order; a repeat is numbered, and the number is in every link to it. @type {Set<string>} */
@@ -185,10 +251,18 @@ export class KnowledgeVaultExport {
       const text = this.readText ? await this.readText(project, path0(source)).catch(() => null) : null;
       return text === null ? null : { source, text };
     })).filter((item) => item !== null).map((item) => {
-      const relative = path0(item.source).slice(WIKI_FOLDER.length).replace(/\.md$/i, "");
-      const name = relative.split("/").map((segment) => noteName(segment, "页")).join("/");
-      return { ...item, name: claim("wiki", name), title: pageTitle(item.text, name.split("/").pop() ?? name) };
+      const where = /** @type {{ tree: "wiki" | "kg", rel: string }} */ (knowledgeMirrorPathOf(path0(item.source)));
+      // A file keeps its place and its extension; only what a vault cannot hold in a name is taken out of it.
+      const extension = /\.[A-Za-z0-9]+$/.exec(where.rel)?.[0] ?? "";
+      const relative = where.rel.slice(0, where.rel.length - extension.length);
+      const name = claim(where.tree, relative.split("/").map((segment) => noteName(segment, "页")).join("/"));
+      return { ...item, ...where, name, file: `${where.tree}/${name}${extension || ".md"}`, title: pageTitle(item.text, name.split("/").pop() ?? name) };
     });
+    const noteFiles = new Map(entries.map((entry) => [entry.source.id, `sources/${entry.name}.md`]));
+    const pageFiles = new Map(wikiEntries.map((page) => [`${page.tree}/${page.rel}`, page.file]));
+    const engineRoots = this.roots ? this.roots(userId, project.id) : null;
+    /** A compiled file is found by its path, by its path with `.md` (a link that lost it), or by its name alone. @param {"wiki" | "kg"} tree @param {string} rel */
+    const pageOf = (tree, rel) => pageFiles.get(`${tree}/${rel}`) ?? pageFiles.get(`${tree}/${rel}.md`) ?? null;
 
     // Notes that share a keyword point at each other.
     /** @type {Map<string, number[]>} */
@@ -239,7 +313,9 @@ export class KnowledgeVaultExport {
         "---\n[[index|知识库索引]]",
       ].filter(Boolean).join("\n\n") + "\n");
     });
-    for (const page of wikiEntries) add(`wiki/${page.name}.md`, page.text);
+    for (const page of wikiEntries) {
+      add(page.file, rewriteCompiledLinks(page.text, { file: page.file, tree: page.tree, rel: page.rel, roots: engineRoots, noteOf: (sourceId) => noteFiles.get(sourceId) ?? null, pageOf }));
+    }
 
     const meta = (/** @type {typeof entries[number]} */ entry) => {
       const authors = (entry.metadata.authors ?? []).map(clean).filter(Boolean);
@@ -248,7 +324,10 @@ export class KnowledgeVaultExport {
     add("index.md", [frontMatter([["title", clean(project.name) || "知识库"]]),
       `# ${clean(project.name) || "知识库"}`, "",
       entries.length > 0 ? `## 资料\n\n${entries.map((entry) => `- ${link("sources", entry.name, entry.title)}${meta(entry) ? ` — ${meta(entry)}` : ""}`).join("\n")}\n` : "",
-      wikiEntries.length > 0 ? `## 知识页\n\n${wikiEntries.map((page) => `- ${link("wiki", page.name, page.title)}`).join("\n")}\n` : ""].join("\n"));
+      wikiEntries.some((page) => page.tree === "wiki" && page.file.endsWith(".md"))
+        ? `## 知识页\n\n${wikiEntries.filter((page) => page.tree === "wiki" && page.file.endsWith(".md")).map((page) => `- ${link("wiki", page.name, page.title)}`).join("\n")}\n` : "",
+      wikiEntries.some((page) => page.tree === "kg" && page.file.endsWith(".md"))
+        ? `## 知识图谱\n\n${wikiEntries.filter((page) => page.tree === "kg" && page.file.endsWith(".md")).map((page) => `- ${link("kg", page.name, page.title)}`).join("\n")}\n` : ""].join("\n"));
 
     if (Object.keys(files).length > this.maxEntries) throw this.#tooLarge("entries");
     return { bytes: zipSync(files, { level: 6 }), filename: "evimed-knowledge-base.zip", mimeType: "application/zip", notes: entries.length, pages: wikiEntries.length };
