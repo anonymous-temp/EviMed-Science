@@ -297,6 +297,29 @@ test("the platform's own work and a plain answer never teach the researcher's lo
   assert.deepEqual(triggers(learningTriggersFor({ run: answers[2], runs: answers })), ["delivered"]);
 });
 
+test("an ordinary conversation is learned from by what the turn left and by what the researcher corrected, not by which capability it was (GA21)", () => {
+  const general = (extra = {}) => run({ effectiveAgentId: "open-domain-answer", effectiveRouteReason: "unrouted:open-domain", artifacts: [], ...extra });
+  // A weekly report, a script, a deck: the files are in whichever record the ledger kept them in.
+  for (const files of [{ outputFiles: ["reports/周报-10-13.docx"] }, { unverifiedArtifacts: ["scripts/rename.py"] }, { artifacts: ["deck.pptx"] }]) {
+    const turn = general(files);
+    assert.deepEqual(triggers(learningTriggersFor({ run: turn, runs: [turn] })), ["delivered"], JSON.stringify(files));
+  }
+  // A question answered in prose left nothing to learn a procedure from.
+  const answered = general();
+  assert.deepEqual(triggers(learningTriggersFor({ run: answered, runs: [answered] })), []);
+  // The researcher's correction is a lesson with or without a file; with one, both.
+  const corrected = general({ corrections: 1 });
+  assert.deepEqual(triggers(learningTriggersFor({ run: corrected, runs: [corrected] })), ["correction"]);
+  const both = general({ corrections: 1, outputFiles: ["reports/周报-10-13.docx"] });
+  assert.deepEqual(triggers(learningTriggersFor({ run: both, runs: [both] })), ["correction", "delivered"]);
+  // No kind of operation to count a routine over: the Nth conversation is not "the same capability again".
+  const turns = Array.from({ length: METHOD_INDUCTION_MIN_TRAJECTORIES + 1 }, () => general({ outputFiles: ["reports/周报.docx"] }));
+  for (const turn of turns) assert.equal(routineOf(learningTriggersFor({ run: turn, runs: turns })), undefined);
+  // A failed turn that left files is not a delivery.
+  const failed = general({ status: "failed", outputFiles: ["reports/周报.docx"] });
+  assert.deepEqual(triggers(learningTriggersFor({ run: failed, runs: [failed] })), []);
+});
+
 test("researcher-owned GEO and proactive work feed learning while internal evaluations do not", () => {
   for (const [effectiveAgentId, effectiveRouteReason] of [
     ["geo-content", "geo:content"],

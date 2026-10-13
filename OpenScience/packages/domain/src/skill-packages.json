@@ -809,16 +809,16 @@
       "id": "capability/method-distillation",
       "name": "method-distillation",
       "origin": "capability",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "source": {"kind":"release"},
-      "digest": "sha256:d6f0072c82939baf1e94dfa380653633a066456f3d03bc110032ea51290f9b65",
+      "digest": "sha256:245b1801e5a904e101ba42890d7766288f4b05bde26f01f1b0358dbe41b8a480",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"b74830af3305602a2317dc6d33e48f183dae01ac501f31ed97d96f46adbbcf46"}],
+      "references": [{"path":"capability.yaml","sha256":"e6efdb7a8a5b2dc3c1af9ad56162b98785c9412967e6c51e5b7a2d18fa11d65c"}],
       "operations": [
         {
           "name": "method-candidate",
           "kind": "deliverable",
-          "summary": "Induce one reusable method from one run's transcript, feedback and repair rounds, and propose exactly one of create, amend, merge or no change.",
+          "summary": "Induce one reusable method — how this person does this kind of work — from one run's transcript, feedback and repair rounds, and propose exactly one of create, amend, merge or no change.",
           "accepts": ["distillationInput"],
           "produces": ["SKILL.md","method-candidate.json","distillation-notes.md"]
         }

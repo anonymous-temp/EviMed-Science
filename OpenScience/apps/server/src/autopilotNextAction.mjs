@@ -64,12 +64,13 @@ import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
  * @module autopilotNextAction
  */
 
-import { AUTOPILOT_TASK_TYPES } from "@evimed/domain";
+import { AUTOPILOT_TASK_TYPES, ROUTINE_TASK_TYPE } from "@evimed/domain";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { claimCheck } from "./autopilotProgress.mjs";
 
 /** What each task type does, in the words the decision reads. Held equal to the domain's closed vocabulary by a test. */
 export const TASK_TYPE_SUMMARIES = Object.freeze({
+  "routine": "Do what the instruction says on the schedule and hand the result over in the task's conversation, as a reply and as files: a news digest, a status summary, a report built from files, a check of a page, a recurring piece of writing or code. Any subject; it is not literature or evidence work unless the instruction is.",
   "literature-sentinel": "Search for newly published studies and guidance relevant to the question, and report what changed.",
   "evidence-update": "Re-synthesize the evidence on the question across all known sources, including what is new since the last synthesis.",
   "data-prospecting": "Scope datasets the researcher holds or that are publicly available for the question, and profile what could be analysed.",
@@ -121,6 +122,7 @@ const researcherInstructions = Object.freeze({
   materials: "- materials are files the researcher added for this question. Pick the task type that reads a material whose state is ready; one that is reading is not usable yet, and one that needs attention could not be read fully.",
   earlierStop: "- earlierStop is what an earlier decision stopped for. When it asked for input, the material added after it (see materials) is what was asked for.",
   frontierItems: "- frontierItems are what the platform's screened feed of recent medical publications and notices already holds for this question's entities since the last episode: an id, a title, a date, an evidence type and whether it is a safety alert. When they hold something new, prefer literature-sentinel or evidence-update and say in focus which of them the episode should read; do not queue a fresh search for what the feed already lists. They are leads, never evidence: the episode reads the originals and cites those.",
+  routineAvailable: "- routine is the researcher's recurring job done as asked: choose it for any instruction that is not about the scientific literature, clinical evidence or datasets, and every time such a job comes due, because a recurring job is never answered or exhausted. The other types are for instructions that ask for studies, guidance, safety signals, datasets or manuscript text.",
   pauseAllowed: "- pauseAllowed is true: request.trigger is follow-up and the researcher is writing to you now. If the note only asks to pause, hold or stop the research for the time being and asks for nothing to be looked into, choose stop with stopKind paused_by_researcher and say so in reason; this is the one stop allowed when stopAllowed is false. A question, a correction, an added requirement or a request with a condition is never a pause: choose run.",
 });
 
@@ -159,9 +161,14 @@ export function eligibleTaskTypes(payload) {
 /**
  * The rotation the planner replaces and now backs up: the day number modulo
  * the eligible types, so each type is reached within any run of that many days.
+ *
+ * Except that a task which may run `routine` runs it: the rotation exists to reach several research directions in turn, and a
+ * recurring job done as asked (a digest, a summary) is not one of them — on a day the decision could not be had, a news digest
+ * must still be a news digest and not a literature search.
  * @param {string[]} eligible @param {string} date `YYYY-MM-DD` @returns {string}
  */
 export function rotationTaskType(eligible, date) {
+  if (eligible.includes(ROUTINE_TASK_TYPE)) return ROUTINE_TASK_TYPE;
   return eligible[Math.floor(Date.parse(`${date}T00:00:00Z`) / 86_400_000) % eligible.length];
 }
 
@@ -206,6 +213,7 @@ export function buildPlannerContext({ agenda, progress, eligible, date, trigger,
     request: { trigger, ...(note ? { note: cut(note, NOTE_CHARS) } : {}) },
     priority: reducedPriority ? "reduced" : "normal",
     stopAllowed,
+    ...(eligible.includes(ROUTINE_TASK_TYPE) ? { routineAvailable: true } : {}),
     ...(evolutionEnabled ? { evolutionEnabled: true, availableTools: availableTools.slice(0, 30).map((tool) => ({
       id: tool.id, title: cut(tool.title ?? tool.method, 150), capabilityIds: tool.capabilityIds ?? [],
       validationLevel: tool.validationLevel, dataLevel: tool.dataLevel, dataRequirements: tool.dataRequirements,

@@ -34,7 +34,7 @@
  * @module autopilotOutcome
  */
 
-import { AUTOPILOT_TASK_TYPES, directionVerdict } from "@evimed/domain";
+import { AUTOPILOT_TASK_TYPES, ROUTINE_TASK_TYPE, directionVerdict } from "@evimed/domain";
 import { eligibleTaskTypes } from "./autopilotNextAction.mjs";
 
 /**
@@ -65,7 +65,9 @@ export function foldOutcome(payload, { episodeId, taskType, status, gatedClaims,
   const succeeded = status === "succeeded";
   const consecutiveFailures = failed ? Number(payload.consecutiveFailures ?? 0) + 1
     : succeeded ? 0 : Number(payload.consecutiveFailures ?? 0);
-  const without = succeeded ? (gatedClaims === 0 ? Number(payload.episodesWithoutGatedClaim ?? 0) + 1 : 0)
+  // A routine execution makes no claims, so it is no observation about whether a direction is productive: its success neither
+  // adds to the count of episodes without a gated claim nor clears it.
+  const without = succeeded && taskType !== ROUTINE_TASK_TYPE ? (gatedClaims === 0 ? Number(payload.episodesWithoutGatedClaim ?? 0) + 1 : 0)
     : Number(payload.episodesWithoutGatedClaim ?? 0);
 
   const taskTypeState = { ...(payload.taskTypeState ?? {}) };

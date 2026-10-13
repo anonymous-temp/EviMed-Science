@@ -12,7 +12,7 @@
 // Hidden knowledge:
 //
 // - A task made here is the task form's twin: `AutopilotService.create` then `.start`, with the platform's default budgets and
-//   stopping rules (`AGENDA_DEFAULT_BUDGETS`, the task form's own task types), and no step to approve — the owner's rulings of
+//   stopping rules (`AGENDA_DEFAULT_BUDGETS`, `SCHEDULED_TASK_DEFAULT_TYPES`), and no step to approve — the owner's rulings of
 //   2026-09-19 and 2026-09-20. The conversation names a thing to keep doing and a moment; it never names a price. An edit goes
 //   through the same service methods and validation as the PATCH / start / stop routes (`autopilotRoutes.mjs`).
 // - Idempotent by what was asked, not by an id the runtime would have to invent: a task with this instruction and this schedule
@@ -29,7 +29,7 @@
 //   be right. A feature that is off answers `task_tools_disabled`, which the tool turns into a plain sentence to the researcher.
 
 import {
-  AGENDA_DEFAULT_BUDGETS, DISPLAY_TIME_ZONE, TASK_INSTRUCTION_MAX_CHARS, TASK_TITLE_MAX_CHARS, TASK_TOOLS_DEFAULT_MAX_TASKS,
+  AGENDA_DEFAULT_BUDGETS, DISPLAY_TIME_ZONE, SCHEDULED_TASK_DEFAULT_TYPES, TASK_INSTRUCTION_MAX_CHARS, TASK_TITLE_MAX_CHARS, TASK_TOOLS_DEFAULT_MAX_TASKS,
   agendaInstantText, agendaNextOccurrence, agendaZoneName, describeAgendaSchedule, normalizeAgendaSchedule, validateAgendaSchedule,
 } from "@evimed/domain";
 import { HttpError, readJson, sendJson } from "./security.mjs";
@@ -44,8 +44,12 @@ const SCHEDULE_FIELDS = Object.freeze(["kind", "time", "date", "weekdays", "time
 const MAX_BODY_BYTES = 128 * 1024;
 /** What a run does in a minute is a handful of calls; the ceiling is for a loop, not a researcher. */
 const WINDOW_LIMIT = 30;
-/** The task types the task form starts a task with: the planner chooses among them for each execution. */
-const TASK_TYPES = Object.freeze(["literature-sentinel"]);
+/**
+ * The task types a task made from a conversation holds: `routine` (do what the instruction says on the schedule) and the three
+ * research types a literature, evidence or data instruction needs. The next-action decision chooses among them for each execution,
+ * from the instruction itself; a task that is a routine job never becomes a literature search for want of a better label.
+ */
+const TASK_TYPES = SCHEDULED_TASK_DEFAULT_TYPES;
 /** A task is named by its own id (`agenda-…`) or by an execution of it (`episode-…`). */
 const TASK_ID = /^(?:agenda|episode)-[A-Za-z0-9-]{1,160}$/;
 /** How many of a project's tasks a refusal lists beside a wrong id. */

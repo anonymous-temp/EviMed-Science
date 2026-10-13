@@ -342,10 +342,11 @@ export {
   validateDeliveryReceipt,
 } from './src/receipt.mjs'
 
-// capabilityManifest — 12 exports
+// capabilityManifest — 13 exports
 export {
   AUTOPILOT_EPISODE_CAPABILITIES,
   AUTOPILOT_TASK_TYPES,
+  ROUTINE_TASK_TYPE,
   CLAIM_TOOLS,
   COST_CLASSES,
   DELEGATION_BASE_TOOLS,
@@ -687,7 +688,7 @@ export {
   outputBelowFloor,
 } from './src/analysis.mjs'
 
-// agenda — 24 exports
+// agenda — 25 exports
 export {
   AGENDA_ITEM_TYPES,
   ALLOWED_EFFECT_MEASURES,
@@ -696,6 +697,7 @@ export {
   DATASET_PARTITIONS,
   DEFAULT_ENABLED_TASK_TYPES,
   EPISODE_STATES,
+  SCHEDULED_TASK_DEFAULT_TYPES,
   REFUTATION_VERDICTS,
   AGENDA_DEFAULT_BUDGETS,
   AGENDA_MIN_EPISODE_BUDGET_CNY,

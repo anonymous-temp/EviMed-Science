@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgendaRecord, EpisodeRecord } from "@/lib/autopilotClient";
-import { budgetBlocks, executionLabel, executionsOf, inLingdou, lingdou, RUN_STATES, rowLine, runState, scheduleLine, taskGroupOf, whenText } from "./taskPresentation";
+import { budgetBlocks, executionLabel, executionsOf, inLingdou, lingdou, RECOMMENDATIONS, RUN_STATES, rowLine, runState, scheduleLine, TASK_TYPES, taskGroupOf, whenText } from "./taskPresentation";
 
 // Thursday 1 October 2026, 10:00 in Beijing.
 const NOW = new Date("2026-10-01T02:00:00Z");
@@ -106,5 +106,24 @@ describe("when a budget is the researcher's business again", () => {
     expect(budgetBlocks(agenda({ pauseCode: "autopilot_weekly_budget_spent" }), null)).toBe(true);
     expect(budgetBlocks(agenda(), episode("e", { status: "failed", error: { code: "autopilot_daily_budget_spent" } }))).toBe(true);
     expect(budgetBlocks(agenda(), episode("e", { status: "merged", error: { code: "autopilot_daily_budget_spent" } }))).toBe(false);
+  });
+});
+
+describe("an ordinary job is not research", () => {
+  it("is named by its own words, not the research ones, while it runs and when it ends", () => {
+    expect(runState(episode("e", { taskType: "routine", status: "merged" }).payload)).toBe("已完成");
+    expect(runState(episode("e", { taskType: "routine", status: "running" }).payload)).toBe("进行中");
+    expect(runState(episode("e", { taskType: "routine", status: "verifying" }).payload)).toBe("进行中");
+    expect(runState(episode("e", { taskType: "routine", status: "failed" }).payload)).toBe(RUN_STATES.failed);
+    expect(runState(episode("e", { taskType: "literature-sentinel", status: "merged" }).payload)).toBe(RUN_STATES.merged);
+  });
+
+  it("is a task type the form offers, and the templates are general ones first and then the research ones, each with a type that exists", () => {
+    expect(TASK_TYPES[0]).toEqual(["routine", "日常任务"]);
+    const known = TASK_TYPES.map(([value]) => value);
+    for (const item of RECOMMENDATIONS) for (const type of item.taskTypes) expect(known).toContain(type);
+    expect(RECOMMENDATIONS.slice(0, 3).every(item => item.taskTypes.join() === "routine")).toBe(true);
+    expect(RECOMMENDATIONS.slice(3).every(item => !item.taskTypes.includes("routine"))).toBe(true);
+    expect(RECOMMENDATIONS.length).toBe(9);
   });
 });

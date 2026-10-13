@@ -283,7 +283,7 @@ export function shanghaiDay(value) {
  */
 function runLabel(run) {
   const label = [run?.title, run?.question].find((value) => typeof value === "string" && value.trim());
-  if (!label) return "一项研究";
+  if (!label) return "一项任务";
   const characters = [...label.replace(/\s+/g, " ").trim()];
   return characters.length > 24 ? `${characters.slice(0, 23).join("")}…` : characters.join("");
 }
@@ -381,7 +381,7 @@ function routineCompletion(notice) {
  * share one item per project per day
  * (`run-finished:<project>:<YYYY-MM-DD, Asia/Shanghai>`), so an afternoon of
  * ten runs is one line saying ten instead of ten lines (2026-09-18 plan §8.5):
- * 「8 项研究已完成，其中 1 项有 1 处引用待核对」, and the body only names them,
+ * 「8 项任务已完成，其中 1 项有 1 处引用待核对」, and the body only names them,
  * the ones with something to check first. A safety finding and every run that
  * did not finish stand alone: they are the 「需要你」 moment and must not be
  * folded under a count.
@@ -439,7 +439,7 @@ export function runFinishedInboxItem(project, run, { peers = [] } = {}) {
   return {
     ...base,
     groupKey,
-    title: `${members.length} 项研究已完成${checking.length ? `，其中 ${checking.length} 项有 ${pending} 处引用待核对` : ""}`,
+    title: `${members.length} 项任务已完成${checking.length ? `，其中 ${checking.length} 项有 ${pending} 处引用待核对` : ""}`,
     body: `${named.join("、")}${members.length > named.length ? ` 等 ${members.length} 项` : ""}`,
     severity: checking.length ? "attention" : "info",
   };
@@ -549,7 +549,7 @@ export class NotificationService {
         // One row per key. The key carries its own period — a run-finished
         // key names the project and the day — so there is no time window
         // here, and a row the reader already read or opened is brought back
-        // rather than joined by a second one: 「4 项研究已完成」 is one item
+        // rather than joined by a second one: 「4 项任务已完成」 is one item
         // that says four, not a read one saying three beside a new one saying
         // one.
         const existing = await client.query(`SELECT * FROM evimed_inbox.notifications

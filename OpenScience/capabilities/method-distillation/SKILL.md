@@ -1,6 +1,6 @@
 ---
 name: method-distillation
-description: Induce one reusable method from a single run's transcript excerpts, feedback events and repair rounds, then propose exactly one of create, amend, merge or no_change. Use for a distill job carrying a frozen distillation-input.json and the related methods already on file.
+description: Induce one reusable method, how this person does this kind of work, from a single run's transcript excerpts, feedback events and repair rounds, then propose exactly one of create, amend, merge or no_change. Use for a distill job carrying a frozen distillation-input.json and the related methods already on file.
 ---
 
 Read the complete `distillation-input.json` named by the task. It is frozen: the
@@ -47,35 +47,45 @@ write: a method may add a check for an advisory finding as something to weigh,
 never as a defect to clear before submitting, and never "treat every finding as
 a defect" — that rebuilds a gate the platform removed on measured evidence.
 
-**A research method, not the platform's bookkeeping.** A method is a way this
-researcher does research: how they frame a question, plan a search and decide
-what to include and exclude, appraise bias and study quality, choose a
-statistical method and check what it assumes, read a result and say what it
-does not show, and meet a reporting standard as part of the work. These carry
-from one topic to the next, which is what makes a method worth loading into a
-later run. What a method is not: EviMed's own delivery bookkeeping — anchoring a
-claim to a location in a quote, lining up citation numbers with the reference
-list, which fields a delivery package carries, receipts, ledgers, gate codes,
-and how to get a package accepted. The platform delivers a package beside its
-findings instead of withholding it, so none of that is something the researcher
-does or would want a later run to inherit. When what the run did or repaired is
-of that kind, the answer is `no_change` and `reason` says it was platform
-bookkeeping; do not turn it into a research habit by giving it a research-sounding
-name. When a repair does show a slip in the research itself — a comparator that
-did not fit, an outcome defined two ways, designs pooled that should not have
-been — that slip is a method.
+**A way of working, not the platform's bookkeeping.** A method is how this
+person does this kind of work. In an ordinary conversation that is the shape
+they give a weekly report and the order of its sections, the conventions a
+script is held to (typing, tests, layout, how it is run), the look of a deck or
+the register of an e-mail, the format a table or a file is always handed over
+in, and how a summary is cut for the reader they write for. In research and
+clinical work it is how they frame a question, plan a search and decide what to
+include and exclude, appraise bias and study quality, choose a statistical
+method and check what it assumes, read a result and say what it does not show,
+and meet a reporting standard as part of the work. Either kind carries from one
+task to the next, which is what makes a method worth loading into a later run;
+a one-off wish ("shorter, this time") is not one, and the same shaping asked for
+again, or an explicit "always" or "from now on", is. `capabilityId` tells you
+where the work happened: `open-domain-answer` is the ordinary conversation,
+anything else is a specialist package with its own contract. What a method is
+not: EviMed's own delivery bookkeeping — anchoring a claim to a location in a
+quote, lining up citation numbers with the reference list, which fields a
+delivery package carries, receipts, ledgers, gate codes, and how to get a
+package accepted. The platform delivers a package beside its findings instead
+of withholding it, so none of that is something the researcher does or would
+want a later run to inherit. When what the run did or repaired is of that kind,
+the answer is `no_change` and `reason` says it was platform bookkeeping; do not
+turn it into a working habit by giving it a habit-sounding name. When a repair
+does show a slip in the work itself — a comparator that did not fit, an outcome
+defined two ways, designs pooled that should not have been, a script that
+failed on the second run for want of a check — that slip is a method.
 
 You propose one method. You never publish one. Everything you write leaves as a
 candidate; the control plane decides what takes effect and stops a method its
 own runs show making results worse or that no run ever opens. It is not yours
 to anticipate, request or record.
 
-**Method, not medicine.** A method may say how to check an indication against a
+**Method, not answers.** A method may say how to check an indication against a
 population, how to recover from a failed retrieval, how to sweep the claims that
-depend on a number. It may never fix a clinical conclusion, a dose, an effect
-estimate or a drug fact as a rule. Those are answers, computed per question by
-the deterministic engines; a method that hard-codes one is wrong the first time
-the evidence moves.
+depend on a number, how to lay out a report. It may never fix a clinical
+conclusion, a dose, an effect estimate or a drug fact as a rule, and no more a
+figure, a price, a date or a name that belongs to one task. Those are answers,
+computed or looked up per question; a method that hard-codes one is wrong the
+first time the world moves.
 
 ## 1. Induce from the trigger, in the trigger's own shape
 
@@ -154,11 +164,12 @@ scope is the class of situation the error belongs to, never the one document it
 happened in.
 
 **`delivered` — a delivery finished and was accepted on its first submission.**
-A routine success of work already covered is the commonest case, and its answer
+In an ordinary conversation it means the turn produced or changed a file. A
+routine success of work already covered is the commonest case, and its answer
 is `no_change`. Propose something only when the run followed a procedure that
-made the research sound — an ordering of steps, a check, a way of handling the
-evidence — that no method in `relatedMethods` states and that would plausibly
-recur. A step the run took because this one question required it is not a
+made the work sound — an ordering of steps, a check, a way of handling the
+evidence or the file — that no method in `relatedMethods` states and that would
+plausibly recur. A step the run took because this one task required it is not a
 method, and neither is the platform's own choreography of plan, delegate and
 submit.
 

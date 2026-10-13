@@ -13,7 +13,10 @@
  * The owner's ruling (2026-09-19) replaces the clicks with three signals the
  * platform observes for itself:
  *
- *  - **a delivery finished** — a run that delivered. One that needed repairs
+ *  - **a delivery finished** — a run that delivered: a package a capability's contract names, or — in an ordinary conversation, which
+ *    is most of the work people bring (2026-10-13) — a turn that produced or changed a file (`leftFiles`). Until then only a
+ *    capability's runs could be learnt from, so a report shaped the same way three times or a script held to the same conventions
+ *    taught the platform nothing. One that needed repairs
  *    inside its own turn (a deliverable submitted more than once) is the
  *    `repair_accepted` lesson; a clean one is `delivered`, where "no change"
  *    is the expected answer.
@@ -84,8 +87,9 @@ import { endedBeforeReset, memoryPausedFor } from "./researchMemory.mjs";
 import { sampledByHash } from "./runSampling.mjs";
 import { TRANSCRIPT_RETENTION_DAYS } from "./runTranscripts.mjs";
 
-/** The answer line: a plain question answered is not an operation to learn a
- *  procedure from (principle 12). */
+/** The answer line: the ordinary conversation, which no capability took. It has no kind of operation to count a repeated routine
+ *  over (a capability is a closed vocabulary; a conversation is not), so a routine is never induced across its runs; it is learned
+ *  from like any other run, by what the turn left (`leftFiles`) and by what the researcher corrected. */
 const ANSWER_LINE_AGENT_ID = "open-domain-answer";
 
 /** The lessons a finished delivery queues by itself, and the only ones a share of runs chooses: a correction and a routine are explicit signals. */
@@ -144,6 +148,17 @@ export function routinePeriodOf(run, periodMs = routinePeriodMs(ROUTINE_PERIOD_D
 }
 
 /**
+ * Whether the turn produced or changed a file the researcher can open: what a delivery is in an ordinary conversation, where
+ * there is no capability whose contract says what one is. Any of the ledger's three records of it counts — the files a gate
+ * accepted (`artifacts`), the ones it did not grade (`unverifiedArtifacts`) and the ones an ordinary conversation's run recorded
+ * from what changed in the workspace (`outputFiles`) — because which of them a turn's files land in depends on the line it ran on.
+ * @param {any} run
+ */
+export function leftFiles(run) {
+  return ["artifacts", "unverifiedArtifacts", "outputFiles"].some((field) => Array.isArray(run?.[field]) && run[field].length > 0);
+}
+
+/**
  * The capability a finished run could be the Nth run of, or null: it
  * succeeded, it delivered, and it was not a plain answer. The cheap part of
  * the rule, so the researcher's other ledgers are read only when they can
@@ -153,7 +168,7 @@ export function routinePeriodOf(run, periodMs = routinePeriodMs(ROUTINE_PERIOD_D
  */
 export function routineCapability(run) {
   const agentId = String(run?.effectiveAgentId ?? "");
-  if (run?.status !== "succeeded" || (run.artifacts?.length ?? 0) === 0) return null;
+  if (run?.status !== "succeeded" || !leftFiles(run)) return null;
   return agentId && agentId !== ANSWER_LINE_AGENT_ID ? agentId : null;
 }
 
@@ -287,7 +302,9 @@ export function learningTriggersFor({ run, runs, project = null, ledgers = null,
   }
   /** @param {typeof lessons} list */
   const marked = (list) => (guestInfluence ? list.map((lesson) => ({ ...lesson, payload: { ...lesson.payload, guestInfluence: { uncorroborated: true } } })) : list);
-  if (run.status !== "succeeded" || (run.artifacts?.length ?? 0) === 0) return marked(lessons);
+  // The trigger is what the turn left, not which capability it was: a weekly report, a script or a deck made in an ordinary
+  // conversation is as much a delivery as a package a capability's contract names.
+  if (run.status !== "succeeded" || !leftFiles(run)) return marked(lessons);
 
   const attempts = inRunAttempts(projection);
   const serverRounds = (run.repairRounds?.content ?? 0) + (run.repairRounds?.structural ?? 0);
@@ -415,7 +432,7 @@ export class LearningTriggers {
    * The lessons that stand once the samples have been applied: the lesson a finished delivery queues goes only for the share of runs the hash of the
    * run id selects, and is counted either way. A delivery accepted on its first submission (`delivered`) is sampled by `deliveryShare`; one that needed
    * repairs inside its own run (`repair_accepted`) by `repairShare`, none by default: what a run repaired against the gate is the gate's bookkeeping
-   * (a verdict withholds nothing since 2026-09-17), and the loop is to learn the researcher's research methods. Every other lesson is untouched.
+   * (a verdict withholds nothing since 2026-09-17), and the loop is to learn how the researcher works. Every other lesson is untouched.
    * @param {any} run @param {readonly { trigger: string }[]} lessons
    * @returns {{ lessons: readonly any[], sampledOut: string[] }}
    */

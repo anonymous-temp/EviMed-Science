@@ -293,3 +293,25 @@ test("a resource need rides on a stop only when 循证进化 is on, and a need t
   assert.equal(exhausted.stopKind, "exhausted");
   assert.equal("resourceNeed" in exhausted, false);
 });
+
+test("a task that may run routine is told what a routine job is, from its data; one that may not is told nothing of it", () => {
+  const types = ["routine", "literature-sentinel", "evidence-update"];
+  const context = buildPlannerContext({ agenda: agenda({ taskTypes: types }), progress: null, eligible: types, date: "2026-10-13", trigger: "scheduled",
+    reducedPriority: false, stopAllowed: false });
+  assert.equal(context.routineAvailable, true);
+  assert.ok(context.taskTypes.some((item) => item.id === "routine" && /news digest|recurring/.test(item.does)));
+  const text = plannerInstructions(context);
+  assert.match(text, /routine is the researcher's recurring job done as asked/);
+  assert.match(text, /never answered or exhausted/);
+  const research = buildPlannerContext({ agenda: agenda(), progress: null, eligible: ["literature-sentinel"], date: "2026-10-13", trigger: "scheduled",
+    reducedPriority: false, stopAllowed: false });
+  assert.equal("routineAvailable" in research, false);
+  assert.equal(plannerInstructions(research).includes("routine"), false);
+});
+
+test("the rotation that backs the decision up never takes a recurring job to a research direction", () => {
+  const eligible = ["routine", "literature-sentinel", "evidence-update"];
+  for (const date of ["2026-10-04", "2026-10-05", "2026-10-06", "2026-10-07"]) assert.equal(rotationTaskType(eligible, date), "routine");
+  assert.deepEqual(parsePlannerAnswer(JSON.stringify({ action: "run", taskType: "routine", focus: "昨天的要闻", reason: "是一项日常任务" }), { eligible, stopAllowed: false }),
+    { action: "run", taskType: "routine", focus: "昨天的要闻", reason: "是一项日常任务" });
+});

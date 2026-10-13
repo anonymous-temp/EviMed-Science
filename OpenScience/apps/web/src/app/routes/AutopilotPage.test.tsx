@@ -271,7 +271,7 @@ describe("scheduled tasks", () => {
     // Review L-4: with no task the right-hand pane said 「选择一项任务」, there being none to choose, and creating one was a small 「+」.
     it("says in the pane what a scheduled task is and offers 新建任务 there, instead of asking for a task to be chosen", async () => {
       mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
-      const sentence = await screen.findByText("按你定的时间，让 EviMed 自己去跟进一个研究问题，比如每天一份文献简报，结果留在这里。");
+      const sentence = await screen.findByText("按你定的时间，让 EviMed 自己去做一件事，比如每天一份行业要闻、每周一份工作汇总，结果留在这里。");
       expect(screen.queryByText("选择一项任务")).not.toBeInTheDocument();
       expect(layoutOf()).toBe("split");
       const create = within(task()).getByRole("button", { name: "新建任务" });
@@ -298,7 +298,7 @@ describe("scheduled tasks", () => {
     });
     it("puts the same sentence and button in the list itself where the list is the page", async () => {
       identity.width = 800; mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
-      expect(await screen.findByText("按你定的时间，让 EviMed 自己去跟进一个研究问题，比如每天一份文献简报，结果留在这里。")).toBeInTheDocument();
+      expect(await screen.findByText("按你定的时间，让 EviMed 自己去做一件事，比如每天一份行业要闻、每周一份工作汇总，结果留在这里。")).toBeInTheDocument();
       expect(layoutOf()).toBe("single");
       expect(within(list()).getAllByRole("button", { name: "新建任务" })).toHaveLength(1);
       expect(document.querySelector("[data-task-main]")).toBeNull();
@@ -531,6 +531,12 @@ describe("scheduled tasks", () => {
       expect(screen.getByRole("menuitem", { name: "删除" })).toHaveClass("text-danger");
       await userEvent.keyboard("{Escape}");
       expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
+    it("offers an ordinary job no record of what research found, since it has none", async () => {
+      mocks.listAgendas.mockResolvedValue({ items: [{ ...agenda, payload: { ...agenda.payload, title: "行业要闻日报", taskTypes: ["routine"] } }] });
+      render(); await within(await barElement()).findByRole("button", { name: "更多" });
+      await userEvent.click(await barMenu());
+      expect((await screen.findAllByRole("menuitem")).map(item => item.textContent)).toEqual(["编辑", "暂停", "删除"]);
     });
     it("offers a finished one-time task a run and an edit, but not a pause it has no use for", async () => {
       mocks.listAgendas.mockResolvedValue({ items: [{ ...agenda, payload: { ...agenda.payload, scheduleState: "completed", nextRunAt: null, schedule: { kind: "once", date: "2026-09-29", time: "07:30", timeZone: "Asia/Shanghai" } } }] });

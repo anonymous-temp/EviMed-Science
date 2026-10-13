@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { ALLOWED_EFFECT_MEASURES, AUTOPILOT_TASK_TYPES, digestPlacement, directionVerdict, REFUTATION_VERDICTS,
   agendaDueOccurrence, agendaNextOccurrence, agendaLocalDate, normalizeAgendaSchedule, validateAgendaSchedule, validAgendaDate,
   AGENDA_MIN_EPISODE_BUDGET_CNY, MIN_RUN_BUDGET_CNY, STOPPING_RULES, VERIFICATION_CANCELED_BY_STOP, knownErrorCodeMessage,
-  splitEpisodeBudget, standingVerdict, tierRaiseAllowed, userSignalScore, validateAgendaClaim, agendaResultKind } from "@evimed/domain";
+  splitEpisodeBudget, standingVerdict, tierRaiseAllowed, userSignalScore, validateAgendaClaim, agendaResultKind, ROUTINE_TASK_TYPE } from "@evimed/domain";
 import { AUTOPILOT_MATERIALS_MAX, loadAutopilotProgress, projectResearchState, renderAutopilotProgress, safeAutopilotArtifactRefs } from "./autopilotProgress.mjs";
 import { RESEARCHER_PAUSE_KIND, buildPlannerContext, eligibleTaskTypes, plannerFrontierItems, rotationTaskType } from "./autopilotNextAction.mjs";
 import { foldOutcome, reducedPriority } from "./autopilotOutcome.mjs";
@@ -10,6 +10,30 @@ import { AGENDA_WINDOW_MS, agendaAllowance, agendaBudget, budgetFreesAt, taskBud
 import { sourceIdFor } from "./sourceService.mjs";
 import { HttpError } from "./security.mjs";
 import { AUTOPILOT_BUDGET_ERROR_CODES } from "@evimed/domain";
+
+/**
+ * The platform's brief for an execution of a `routine` task: the researcher's instruction, the day, what to hand over, and the
+ * researcher's own words from earlier — and none of the research programme (no agenda delta, no claim tiers, no clinical contract,
+ * no second opinion). It is the ordinary conversation line doing what it was asked on a schedule, so the result is a reply and
+ * the files the instruction asks for.
+ * @param {{ agenda: any, episodeId: string, date: string, originalInstruction: string, selection: any, budgetCny: number, trigger: string,
+ *   note?: string | null, followUps: any[], progress: any }} input
+ */
+function routineBrief({ agenda, episodeId, date, originalInstruction, selection, budgetCny, trigger, note = null, followUps, progress }) {
+  return [
+    `Do the scheduled task "${agenda.payload.title}" now.`,
+    `Episode ID: ${episodeId}. This execution is for ${date}, in the task's own time zone (${normalizeAgendaSchedule(agenda.payload).timeZone}); the instruction's "today" and "yesterday" are read from it.`,
+    "The researcher's instruction (preserve its scope):", originalInstruction,
+    ...(selection?.focus ? [`Planned focus for this execution (the instruction still governs scope): ${selection.focus}`] : []),
+    `Maximum episode budget: CNY ${budgetCny.toFixed(2)}.`,
+    ...(trigger === "follow-up" ? ["Researcher's follow-up for this execution:", note ?? ""] : []),
+    ...(followUps.length ? [`Researcher follow-up questions to answer first: ${followUps.map((item, position) => `(${position + 1}) ${item.note}`).join(" ")}`] : []),
+    ...(progress?.researcherNotes?.length ? ["The researcher has written to this task before (researcherNotes below). A correction there stands until they say otherwise."] : []),
+    ...(progress?.materials?.length ? ["The researcher added material for this task (materials below, in the project's knowledge base). Read the material that is ready first; if one is still being read or could not be read fully, say so instead of assuming what it holds."] : []),
+    ...(progress ? [renderAutopilotProgress(progress, { routine: true })] : []),
+    "Deliver the result as your reply in this conversation, and as a file where the instruction asks for one. Nobody is watching: do not ask a question you could answer by choosing sensibly and saying what you chose. Do not send anything externally. Stop when the budget or two-hour wall clock limit is reached.",
+  ].join("\n");
+}
 
 /** @param {unknown} value @param {string} field @param {number} max */
 function text(value, field, max = 500) {
@@ -1193,7 +1217,8 @@ export class AutopilotService {
         artifactRefs: safeAutopilotArtifactRefs(input.projectId, { id: input.runId, sessionId: input.sessionId ?? episode.payload.sessionId,
           artifactRoles: input.artifactRoles, artifacts: input.artifacts, unverifiedArtifacts: input.unverifiedArtifacts }),
         rejectedClaims,
-        deltaErrorCode: input.deltaErrorCode ?? (succeeded && input.deltaSchemaVersion !== 1 ? "agenda_delta_schema_invalid" : null),
+        // A routine execution writes no agenda delta: its absence is not a defect of the run.
+        deltaErrorCode: input.deltaErrorCode ?? (succeeded && input.deltaSchemaVersion !== 1 && episode.payload.taskType !== ROUTINE_TASK_TYPE ? "agenda_delta_schema_invalid" : null),
         costCny: Number(input.costCny) || 0,
       };
       episode = await this.documents.put(userId, "episode", episode.id, {
@@ -1235,6 +1260,7 @@ export class AutopilotService {
     const digest = await this.createDigest(userId, agenda.id, {
       digestId: completion.digestId, date: completion.date, episodeIds: [episode.id],
       costCny: completion.costCny, claims: completion.claims, artifactRefs: completion.artifactRefs ?? [],
+      ...(episode.payload.taskType === ROUTINE_TASK_TYPE ? { routine: completion.outcomeStatus } : {}),
     });
     // Before the episode leaves `verifying`: an enqueue that fails here leaves
     // the fold replayable, and `reconcileStopWork` runs it again. Enqueueing
@@ -1997,11 +2023,13 @@ export class AutopilotService {
     // Halved, but never to less than a run can be given: half of a small cap would be an episode
     // that dies on its first call.
     const nightBudget = envelopeCny;
-    const { episodeCny: budgetCny, verificationCny, verifications } = splitEpisodeBudget(
-      reduced ? Math.min(nightBudget, Math.max(MIN_RUN_BUDGET_CNY, cny(nightBudget / 2))) : nightBudget);
+    const routine = taskType === ROUTINE_TASK_TYPE;
+    // A routine execution makes no claims, so nothing of its envelope is held back for the independent re-check of one.
+    const { episodeCny: budgetCny, verificationCny, verifications } = routine ? { episodeCny: nightBudget, verificationCny: 0, verifications: 0 }
+      : splitEpisodeBudget(reduced ? Math.min(nightBudget, Math.max(MIN_RUN_BUDGET_CNY, cny(nightBudget / 2))) : nightBudget);
     const followUps = (agenda.payload.followUps ?? []).filter(item => !item.consumedBy).slice(-5);
     const originalInstruction = agenda.payload.prompt ?? agenda.payload.topics.join("\n");
-    const prompt = [
+    const prompt = routine ? routineBrief({ agenda, episodeId, date, originalInstruction, selection, budgetCny, trigger, note: input.note, followUps, progress }) : [
       `Run the ${taskType} proactive research episode for agenda "${agenda.payload.title}".`,
       `Episode ID: ${episodeId}. Use this exact value as provenance.episodeId in agenda-delta.json.`,
       "Researcher's original instruction (preserve its scope):", originalInstruction,
@@ -2132,11 +2160,19 @@ export class AutopilotService {
       try { await this.evolutionSignals?.record({userId,projectId:agenda.projectId,eventId:`planner:${episodeId}`,moduleId:"autopilot",kind:"planner-fallback",operation:"plan",dataShape:"none",capability:"unknown",version:"date-rotation"}); } catch { /* feedback cannot stop research */ }
       return {...base,source:"date-rotation",action:"run",taskType:rotationTaskType(eligible,date),fallbackReason,policyRevisionId:null};
     };
+    // A task that may only run `routine` has nothing to decide: it does what it was asked each time it comes due, and a
+    // decision that could stop it ("answered") would end a recurring job after its first day.
+    if (eligible.length > 0 && eligible.every((/** @type {string} */ type) => type === ROUTINE_TASK_TYPE)) {
+      return { ...base, source: "only-choice", action: "run", taskType: ROUTINE_TASK_TYPE, policyRevisionId: null };
+    }
     if (!this.planner) return rotation("autopilot_planner_unavailable");
     const since = Date.parse(agenda.payload.lastStartedAt);
-    const completedSinceStart = (agenda.payload.outcomes ?? []).some((/** @type {any} */ outcome) => outcome.status === "succeeded"
+    const completed = (agenda.payload.outcomes ?? []).filter((/** @type {any} */ outcome) => outcome.status === "succeeded"
       && (!Number.isFinite(since) || Date.parse(outcome.at) >= since));
-    const stopAllowed = !manual && completedSinceStart;
+    // What the last completed execution was: a recurring job is never answered or exhausted, so after one the decision may
+    // choose what to run but not stop the task.
+    const lastWasRoutine = completed.at(-1)?.taskType === ROUTINE_TASK_TYPE;
+    const stopAllowed = !manual && completed.length > 0 && !lastWasRoutine;
     // A researcher writing to the question may be asking it to hold; that is the
     // one stop their own message can bring, and only the model reads it as such.
     const pauseAllowed = trigger === "follow-up" && typeof note === "string" && note.trim().length > 0;
@@ -2350,13 +2386,24 @@ export class AutopilotService {
         artifactRefs: (Array.isArray(input.artifactRefs) ? input.artifactRefs : []).filter(ref => ref?.projectId === agenda.projectId).slice(0, 24)
           .flatMap(ref => safeAutopilotArtifactRefs(agenda.projectId, { id: ref.runId, sessionId: ref.sessionId, artifacts: [ref.path] })),
         episodeIds: listOfText(input.episodeIds, "episode ids"), costCny: budget(input.costCny, "digest cost", { allowZero: true }),
-        headlines, leads, decisions: [], openedAt: null, createdAt: this.now().toISOString(), updatedAt: this.now().toISOString(),
+        // A routine execution's result is its conversation and a notice in the inbox: there is no briefing to open, and a task
+        // whose briefings nobody opens is paused after a week (`daysSinceDigestOpened`) — which would end a daily digest of the
+        // news for a researcher who reads it in the inbox every morning.
+        headlines, leads, decisions: [], openedAt: input.routine ? this.now().toISOString() : null,
+        createdAt: this.now().toISOString(), updatedAt: this.now().toISOString(),
       }, { expectedRevision: 0, projectId: agenda.projectId });
     } catch (error) {
       if (!isConflict(error)) throw error;
       digest = await this.getDigest(userId, digestId);
       if (digest.projectId !== agenda.projectId || digest.payload.agendaId !== agenda.id) throw new HttpError(409, "autopilot_digest_conflict", "Digest identity belongs to another agenda.");
     }
+    // A routine execution that ran to its end tells the researcher once, in the words every finished task uses; one that did not
+    // run is on the task's page (the run's state) and is not an inbox item of its own.
+    if (this.notifications && input.routine === "succeeded" && !this.programme?.owns(userId, agenda.projectId)) await this.notifications.create(userId, {
+      noticeType: "notify", title: `${agenda.payload.title} 已完成`, body: "结果在这次任务的对话里", projectId: agenda.projectId,
+      source: { type: "digest", id: digest.id }, idempotencyKey: `autopilot-routine:${digest.id}`,
+      actions: [{ id: "open", label: "查看结果" }],
+    });
     // The platform's own agendas have no reader to tell: their conclusions become cards, or stay in the internal project.
     // Nor does a day that found nothing: 「0 条重点发现，0 条待验证线索」 every morning is an inbox item that asks to be
     // opened and says nothing (2026-10-07 review). The digest above and the episode stay recorded — the 简报 is where a

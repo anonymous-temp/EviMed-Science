@@ -2440,3 +2440,101 @@ test('planner fallback emits one closed signal and cannot stop scheduling when s
  assert.equal(decision.source,'date-rotation');assert.equal(signal.kind,'planner-fallback');assert.equal(signal.operation,'plan');
  assert.equal(decision.policyRevisionId,null);
 });
+
+// ── A general task: `routine` (course correction 2026-10-12, GA17) ──────────────
+
+const routineInput = {
+  projectId: "project-one", title: "AI 行业要闻", topics: ["AI 行业要闻"],
+  prompt: "每个工作日早上 9 点给我一份昨天的 AI 行业要闻，五条以内，带链接", taskTypes: ["routine"],
+  dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 16, scheduleHour: 9, timeZone: "Asia/Shanghai",
+};
+
+test("a task that may only run routine asks no decision, briefs the instruction and not a research episode, and owes no agenda delta", async () => {
+  const planner = plannerDouble(() => assert.fail("a routine-only task is never asked about: a decision that could stop it would end a recurring job after its first day"));
+  const { service, notifications } = fixture({ planner });
+  const created = await service.create("user-one", routineInput);
+  const agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const { episode } = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  assert.equal(episode.payload.taskType, "routine");
+  assert.equal(episode.payload.selection.source, "only-choice");
+  assert.equal(planner.calls.length, 0);
+  assert.match(episode.payload.prompt, /每个工作日早上 9 点给我一份昨天的 AI 行业要闻/);
+  assert.match(episode.payload.prompt, /This execution is for 2026-09-06/);
+  assert.doesNotMatch(episode.payload.prompt, /agenda-delta|proactive research|capability contract|delivery gate|evidence tier/i);
+  assert.equal(episode.payload.verificationBudgetCny, 0, "no claims, so nothing is held back for an independent re-check of one");
+  assert.equal(episode.payload.budgetCny, 16, "the whole envelope is the execution's");
+
+  await service.markEpisodeDispatched("user-one", episode.id, { runId: "run-news", sessionId: "session-news" });
+  // A routine execution writes no agenda-delta.json, and says so by not having one.
+  const digest = await service.completeRun("user-one", {
+    projectId: "project-one", runId: "run-news", status: "succeeded", artifacts: ["news/2026-09-05.md"], costCny: 0.4, claims: [],
+  });
+  const done = await service.getEpisode("user-one", episode.id);
+  assert.equal(done.payload.status, "merged");
+  assert.equal(done.payload.resultKind, "result", "an execution that ended is a result, never 「没有新证据」");
+  assert.equal(done.payload.deltaErrorCode, null, "a missing agenda delta is not a defect of a routine execution");
+  assert.equal(digest.payload.openedAt, "2026-09-06T01:00:00.000Z", "its result is its conversation: no briefing waits to be opened, so none can age into a pause");
+  const after = await service.get("user-one", agenda.id);
+  assert.equal(after.payload.episodesWithoutGatedClaim, 0, "no claim is made, so no claim is missing");
+  assert.equal(after.payload.outcomes[0].taskType, "routine");
+  const notice = notifications.created.at(-1).input;
+  assert.equal(notice.title, "AI 行业要闻 已完成");
+  assert.doesNotMatch(`${notice.title}${notice.body}`, /研究|简报|线索/);
+  assert.deepEqual(notice.source, { type: "digest", id: digest.id });
+});
+
+test("routine executions are not research: six in a row neither park the task nor halve its budget", async () => {
+  const { service } = fixture();
+  const created = await service.create("user-one", routineInput);
+  let agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  for (let day = 6; day < 6 + STOPPING_RULES.episodesWithoutGatedClaimBeforeParking + 1; day += 1) {
+    const date = `2026-09-${String(day).padStart(2, "0")}`;
+    const { episode } = await service.schedule("user-one", agenda.id, { date });
+    await service.markEpisodeDispatched("user-one", episode.id, { runId: `run-${day}`, sessionId: "session-news" });
+    await service.completeRun("user-one", { projectId: "project-one", runId: `run-${day}`, status: "succeeded", artifacts: [], costCny: 0.1, claims: [] });
+    agenda = await service.get("user-one", agenda.id);
+  }
+  assert.equal(agenda.payload.status, "active");
+  assert.equal(agenda.payload.enabled, true);
+  assert.equal(agenda.payload.episodesWithoutGatedClaim, 0);
+});
+
+test("a recurring job is never answered: after a routine execution the decision chooses what to run but may not stop the task", async () => {
+  const types = ["routine", "literature-sentinel", "evidence-update", "data-prospecting"];
+  const planner = plannerDouble((input) => choose(input.eligible.includes("routine") ? "routine" : input.eligible[0]));
+  const { service } = fixture({ planner });
+  const created = await service.create("user-one", { ...routineInput, taskTypes: types });
+  let agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const first = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  assert.equal(first.episode.payload.taskType, "routine");
+  assert.equal(planner.calls[0].context.routineAvailable, true, "the decision is told what a routine job is, from the data");
+  assert.equal(planner.calls[0].stopAllowed, false);
+  agenda = await service.get("user-one", agenda.id);
+  await service.recordOutcome("user-one", agenda.id, { expectedRevision: agenda.revision, episodeId: first.episode.id, status: "succeeded", gatedClaims: 0 });
+  await service.schedule("user-one", agenda.id, { date: "2026-09-07" });
+  assert.equal(planner.calls[1].stopAllowed, false, "a routine execution completed, and a routine job is never exhausted");
+
+  // The control: the same task after a research execution may be answered.
+  const researchPlanner = plannerDouble(() => choose("literature-sentinel"));
+  const other = fixture({ planner: researchPlanner });
+  const made = await other.service.create("user-one", { ...routineInput, title: "另一个任务", prompt: "每周跟进二甲双胍的新文献", taskTypes: types });
+  let second = await other.service.start("user-one", made.id, { expectedRevision: made.revision });
+  const run = await other.service.schedule("user-one", second.id, { date: "2026-09-06" });
+  second = await other.service.get("user-one", second.id);
+  await other.service.recordOutcome("user-one", second.id, { expectedRevision: second.revision, episodeId: run.episode.id, status: "succeeded", gatedClaims: 1 });
+  await other.service.schedule("user-one", second.id, { date: "2026-09-07" });
+  assert.equal(researchPlanner.calls[1].stopAllowed, true);
+});
+
+test("a decision that cannot be had still runs a recurring job as a recurring job", async () => {
+  const types = ["routine", "literature-sentinel", "evidence-update", "data-prospecting"];
+  const planner = plannerDouble(() => { throw Object.assign(new Error("down"), { code: "autopilot_planner_circuit_open" }); });
+  const { service } = fixture({ planner });
+  const created = await service.create("user-one", { ...routineInput, taskTypes: types });
+  const agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  for (const date of ["2026-09-06", "2026-09-07", "2026-09-08", "2026-09-09"]) {
+    const { episode } = await service.schedule("user-one", agenda.id, { date });
+    assert.equal(episode.payload.taskType, "routine", `${date}: the rotation reaches research directions in turn; a news digest is not one`);
+    assert.equal(episode.payload.selection.source, "date-rotation");
+  }
+});

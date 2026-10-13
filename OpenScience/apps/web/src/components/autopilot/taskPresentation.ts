@@ -2,16 +2,22 @@ import { AGENDA_MIN_EPISODE_BUDGET_CNY, AUTOPILOT_BUDGET_ERROR_CODES, BALANCE_RE
 import type { AgendaRecord, AgendaSchedule, EpisodePayload, EpisodeRecord, ResearchState } from "@/lib/autopilotClient";
 export const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 export const TASK_TYPES = [
-  ["literature-sentinel", "文献追踪"], ["evidence-update", "证据更新"], ["signal-monitoring", "安全信号监测"],
+  ["routine", "日常任务"], ["literature-sentinel", "文献追踪"], ["evidence-update", "证据更新"], ["signal-monitoring", "安全信号监测"],
   ["data-prospecting", "数据探查"], ["hypothesis-suggestion", "研究假设"], ["writing-pipeline", "研究写作"],
 ];
+/** The task types a template starts a task with: the general templates run as ordinary work, the research ones as the research types they were written for. */
+const GENERAL = ["routine"];
+const RESEARCH = ["literature-sentinel"];
 export const RECOMMENDATIONS = [
-  { title: "每日文献简报", prompt: "每天检索心力衰竭领域新发表的临床研究。说明研究设计、主要结局与局限，附可核对的来源；仅汇报有意义的新变化。", kind: "daily" as const },
-  { title: "指南更新周报", prompt: "每周跟进 2 型糖尿病治疗指南及共识的更新，比较推荐变化、适用人群及证据等级，保留原文出处。", kind: "weekly" as const },
-  { title: "药物安全追踪", prompt: "跟进司美格鲁肽的胰腺炎与胃轻瘫安全性证据，区分自发报告信号与因果证据，说明新增信息及不确定性。", kind: "weekly" as const },
-  { title: "头对头研究更新", prompt: "每周检索替尔泊肽与司美格鲁肽在减重与血糖控制方面的直接比较研究，注明人群、剂量、随访和结局，不以间接比较冒充头对头证据。", kind: "weekly" as const },
-  { title: "临床试验进展", prompt: "每周跟进国内减重药物 III 期临床试验的注册更新、完成时间和结果披露，以登记平台与正式发表为准，注明尚未公布的信息。", kind: "weekly" as const },
-  { title: "特殊人群用药证据", prompt: "每周追踪妊娠期与哺乳期降压药的安全性研究，分别整理两类人群的证据及局限，附来源，不将观察结果直接转成个人用药建议。", kind: "weekly" as const },
+  { title: "行业要闻日报", prompt: "每天早上整理昨天的行业要闻，五条以内，每条一句话概括并附原文链接；没有值得看的就如实说没有。", kind: "daily" as const, taskTypes: GENERAL },
+  { title: "每周工作汇总", prompt: "每周一汇总上周项目里新增和修改的文件，按主题列出变化，并写出本周待办，整理成一页文档。", kind: "weekly" as const, taskTypes: GENERAL },
+  { title: "网页变化提醒", prompt: "每天打开我指定的网页（把网址写在这里），和上一次相比有变化就说明改了什么，没有变化就只回一句“无变化”。", kind: "daily" as const, taskTypes: GENERAL },
+  { title: "每日文献简报", prompt: "每天检索心力衰竭领域新发表的临床研究。说明研究设计、主要结局与局限，附可核对的来源；仅汇报有意义的新变化。", kind: "daily" as const, taskTypes: RESEARCH },
+  { title: "指南更新周报", prompt: "每周跟进 2 型糖尿病治疗指南及共识的更新，比较推荐变化、适用人群及证据等级，保留原文出处。", kind: "weekly" as const, taskTypes: RESEARCH },
+  { title: "药物安全追踪", prompt: "跟进司美格鲁肽的胰腺炎与胃轻瘫安全性证据，区分自发报告信号与因果证据，说明新增信息及不确定性。", kind: "weekly" as const, taskTypes: RESEARCH },
+  { title: "头对头研究更新", prompt: "每周检索替尔泊肽与司美格鲁肽在减重与血糖控制方面的直接比较研究，注明人群、剂量、随访和结局，不以间接比较冒充头对头证据。", kind: "weekly" as const, taskTypes: RESEARCH },
+  { title: "临床试验进展", prompt: "每周跟进国内减重药物 III 期临床试验的注册更新、完成时间和结果披露，以登记平台与正式发表为准，注明尚未公布的信息。", kind: "weekly" as const, taskTypes: RESEARCH },
+  { title: "特殊人群用药证据", prompt: "每周追踪妊娠期与哺乳期降压药的安全性研究，分别整理两类人群的证据及局限，附来源，不将观察结果直接转成个人用药建议。", kind: "weekly" as const, taskTypes: RESEARCH },
 ];
 export type Recommendation = typeof RECOMMENDATIONS[number];
 export function scheduleOf(agenda: AgendaRecord): AgendaSchedule {
@@ -77,6 +83,11 @@ export const RUN_IN_FLIGHT = ["queued", "running", "verifying"];
  */
 export function runState(payload: EpisodePayload | undefined): string {
   if (payload?.status === "merged" && payload.resultKind === "no-new-evidence") return "没有新证据";
+  // An ordinary job is not research: its execution is "进行中" and, when it ends, "已完成".
+  if (payload?.taskType === "routine") {
+    if (payload.status === "merged") return "已完成";
+    if (payload.status === "running" || payload.status === "verifying") return "进行中";
+  }
   const deferrals = Object.values(payload?.resourceDeferrals ?? {}).filter(Boolean);
   const waiting = deferrals.find(value => value?.status === "waiting");
   const exhausted = deferrals.find(value => value?.status === "exhausted");

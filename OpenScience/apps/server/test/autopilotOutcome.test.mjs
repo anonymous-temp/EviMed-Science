@@ -130,3 +130,22 @@ test("the outcome list stays bounded", () => {
   assert.equal(payload.outcomes.length, 100);
   assert.equal(payload.outcomes[0].episodeId, "old-1");
 });
+
+test("a routine execution is no observation about whether a direction produces claims: its success neither counts nor clears", () => {
+  let payload = agenda({ taskTypes: ["routine", "literature-sentinel"] });
+  payload = record(payload, "literature-sentinel", "succeeded", 0);
+  payload = record(payload, "literature-sentinel", "succeeded", 0);
+  assert.equal(payload.episodesWithoutGatedClaim, 2);
+  for (let day = 0; day < 8; day += 1) payload = record(payload, "routine", "succeeded", 0);
+  assert.equal(payload.episodesWithoutGatedClaim, 2, "eight routine executions left the research count where it was");
+  assert.equal(payload.status, "active", "and none of them parked the task");
+  assert.equal(payload.taskTypeState.routine.lastOutcome, "succeeded");
+});
+
+test("a routine type that keeps failing to run is paused alone, like any other type", () => {
+  let payload = agenda({ taskTypes: ["routine", "literature-sentinel"] });
+  payload = record(payload, "routine", "failed");
+  payload = record(payload, "routine", "failed");
+  assert.deepEqual(eligibleTaskTypes(payload), ["literature-sentinel"]);
+  assert.equal(payload.status, "active");
+});
