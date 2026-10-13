@@ -168,6 +168,32 @@ test("an approval on a running run's session reaches that run's stream", async (
   pump.detach(project);
 });
 
+test("a question on a running run's session is handed back to the kernel at once, never held for a reader that does not exist", async () => {
+  // The person reads the conversation in the kernel's own page, and that page
+  // draws the question and answers it. Nothing in the browser reads a run's
+  // stream, so a question held here waited for nobody: on a real kernel with
+  // the ask-user tool on, the first `ask_user_question` of a dispatched run
+  // sat until the run was cancelled (2026-10-12). Declining lets the kernel go
+  // on to its other answerers — the page, or with none the error the model
+  // works from.
+  const { runEvents, pump, muxes, calls } = pumpWithRecordedCalls();
+  const project = { userId: "alice", id: "p-question" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "run-q", sessionId: RECORDED_APPROVAL_FRAME.agentId, status: "running" });
+  await waitFor(() => muxes[0]?.host(), "the host stream");
+
+  const question = { ...RECORDED_APPROVAL_FRAME, event: "user-questions/request", eventId: "question-event-1" };
+  muxes[0].host().push(ready());
+  muxes[0].host().push(question);
+
+  await waitFor(() => repliesFor(calls, "question-event-1").length > 0, "the decline");
+  const [decline] = repliesFor(calls, "question-event-1");
+  assert.deepEqual(decline.args.outcome, { kind: "next" });
+  assert.equal(pump.projects.get("alice:p-question").pending.size, 0, "nothing is left pending for a route nobody calls");
+  assert.ok(!runEvents.channel("run-q").buffer.some((event) => event.type === "question/requested"), "and nothing is published to a stream nobody reads");
+  pump.detach(project);
+});
+
 test("a question for a session belonging to no live run is declined, never dropped", async () => {
   // The kernel holds the tool call open until every client it delivered to
   // replies. Dropping an unroutable question stalls the run for as long as it

@@ -1344,12 +1344,12 @@
         name: '@deepseek-ai/dsh-persona'
         config:
           prefix: >-
-            你是 EviMed 的医学研究助手，基于 {{model}} 模型，工作目录 {{cwd}}。你具备广泛的医学知识。
-            简单问题直接回答；需要交付物的任务，先写下计划（含澄清或假设），然后默认就在这次对话里把它做完——
-            检索、读原文、记证据、写报告、提交，都在这次对话里完成。
+            你是 EviMed 的工作助手，基于 {{model}} 模型，工作目录 {{cwd}}。
+            写作、办公文档、表格、幻灯片、代码与脚本、数据分析、网页调研，以及医学和科研问题，都是你的本职工作。
+            能直接回答的直接回答；要做事的任务，默认就在这次对话里把它做完并交付结果；缺的东西让事情根本没法开始时才问，其余照最合理的理解做并写明假设。
             只有同时有多件互相独立的活可以并行，或者一段附带工作会带回大量你不会再用的内容时，才委派。
             用用户的语言回答，内部名词不对用户说；回答只写对读者有用的内容，不讲自己怎么检索、核对或参考了哪条记忆。
-            所有事实性主张尽量附文献依据；不编造文献；不提供具体诊疗建议。
+            不编造来源、数据或结果。医学与临床问题按循证方法回答，不替具体患者做诊疗决定。
       - id: evimed-core
         name: cordis:group
         group: true
@@ -1362,7 +1362,6 @@
             config:
               enabled: !!js process.env.EVIMED_GUIDANCE_ENABLED !== '0'
               capabilitiesDir: !!js process.env.EVIMED_CAPABILITIES_DIR
-              answerPersonaDir: !!js process.env.EVIMED_ANSWER_PERSONA_DIR
               askUserEnabled: !!js process.env.EVIMED_ASK_USER === '1'
               capsuleActive: !!js process.env.EVIMED_CAPSULE_ACTIVE === '1'
               reviewEnabled: !!js process.env.EVIMED_REVIEW_ENABLED === '1'
@@ -1427,6 +1426,30 @@
           sampleOverCapGlobResults: false
       - id: tool-jobs
         name: '@deepseek-ai/dsh-tool-jobs'
+      - id: tool-todo
+        name: '@deepseek-ai/dsh-tool-todo'
+        config:
+          allowParallelInProgress: true
+      - id: present
+        name: '@deepseek-ai/dsh-tool-present'
+      - id: tool-subagent
+        name: '@deepseek-ai/dsh-tool-subagent'
+        config:
+          provider: spawn
+          toolName: subagent
+          backgroundMode: one-shot
+          enableRunInBackground: false
+          maxDepth: 1
+          toolFilter:
+            deny:
+              - evimed_plan
+              - evimed_delegate
+              - evimed_await
+              - evimed_submit_deliverable
+              - evimed_package_check
+              - evimed_revise_deliverable
+              - evimed_screen_batch
+              - present
       - id: skill-filesystem
         name: '@deepseek-ai/dsh-skill-filesystem'
         config:
@@ -1467,6 +1490,8 @@
               thresholdRatio: !!js Number(process.env.EVIMED_COMPACTION_THRESHOLD_RATIO ?? 0.8)
               retainRatio: !!js Number(process.env.EVIMED_COMPACTION_RETAIN_RATIO ?? 0.16)
               maxTokens: !!js Number(process.env.EVIMED_COMPACTION_MAX_TOKENS ?? 8192)
+          - id: command-compact
+            name: '@deepseek-ai/dsh-command-compact'
           - id: evimed-compaction
             name: '@evimed/dsh-socket/plugins/compaction'
             config:

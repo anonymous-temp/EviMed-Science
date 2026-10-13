@@ -650,9 +650,11 @@ not sufficient containment for those events.
   tracked empty default directory preserves non-PostgreSQL local deployment;
   it is not a production restore receipt. This database dump carries research
   memory, whose notes and structured records are rows in the `evimed_memory`
-  schema. It does not cover separate attachment volumes, the OpenViking recall
-  index or OpenList configuration. The OpenViking volume is derived from
-  PostgreSQL and is deliberately not backed up: rebuild it after a restore with
+  schema. It does not cover separate attachment volumes, the OpenViking engine
+  volume or OpenList configuration. The engine volume has a capture of its own
+  since v0.5.0 (next item): it holds native memory and compiled knowledge that
+  exist nowhere else. The copies of PostgreSQL's records it also holds are
+  rebuilt after a restore of either side with
   `pnpm rebuild:memory-index --all`. A memory's validity (`valid_from`,
   `invalid_since`), what replaced it (`superseded_by`), the statements it
   disagrees with (`record_conflicts`) and the sources it rests on
@@ -748,6 +750,86 @@ not sufficient containment for those events.
   (`docker volume ls -q | grep '^web_evimed-memos-'`, then `docker volume rm`).
   The `memos-api-docker` container belongs to another project (`memos-dev`) on
   this shared host: leave it.
+- **The OpenViking engine volume** (`web_evimed-openviking-data`). Since v0.5.0
+  it is a store of record: an account's native memory and session archives,
+  the documents pushed as resources and the pages and graphs compiled from
+  them exist nowhere else. `scripts/ops/openviking-backup.mjs` copies it after
+  the platform database's dump, as an `ExecStartPost` of the same timer
+  (`deploy/host/evimed-postgres-backup-openviking.conf`). The copy is
+  consistent: the engine is frozen with `docker pause` while a helper container
+  of the pinned engine image (no network, read-only root, `DAC_READ_SEARCH`
+  only) reads the volume, so its two SQLite stores, the vector store and the
+  file tree are all as of one instant — the state each is built to recover
+  from after a power cut — and it resumes with its task queue intact (a stop
+  would fail running extraction commits, which the engine never retries). On
+  2026-10-13 a 275-file, 11 MB volume was frozen for 0.8–1.3 s. A copy that
+  outlasts `OPEN_SCIENCE_OPENVIKING_BACKUP_MAX_PAUSE_SECONDS` (120) is
+  abandoned and the engine resumed; one that cannot resume it fails loudly
+  (`openviking_backup_resume_failed`, and `docker unpause` by hand). Every
+  file's sha256 is taken as it is read and travels inside the archive as its
+  last member; the archive is encrypted with the backup passphrase
+  (`archive-crypto.mjs`), decrypted again and checked file by file before the
+  receipt calls it healthy, the newest `OPEN_SCIENCE_OPENVIKING_BACKUP_MAX_SETS`
+  (14) are kept, and with `OPEN_SCIENCE_OBJECT_BACKUP_URI` set each one is
+  uploaded beside the data archives. The engine's own OVPack export is not used
+  for this: it is not atomic and carries no tags, no user settings, no account
+  registry and no task queue (measured 2026-10-12: tags were lost on import).
+  Not atomic with the PostgreSQL dump minutes earlier; each store comes back as
+  of its own capture.
+
+  Install once, as root:
+
+  ```bash
+  sudo install -d -m 0700 /srv/evimed-science/shared/backups/openviking
+  sudo install -d -m 0755 /srv/evimed-science/shared/openviking-backup-status
+  # deploy/web/.env:
+  #   OPEN_SCIENCE_OPENVIKING_BACKUP_ENABLED=true
+  #   OPEN_SCIENCE_OPENVIKING_BACKUP_DIR=/srv/evimed-science/shared/backups/openviking
+  #   OPEN_SCIENCE_OPENVIKING_BACKUP_STATUS_DIR=/srv/evimed-science/shared/openviking-backup-status
+  sudo install -D -m 0644 deploy/host/evimed-postgres-backup-openviking.conf \
+    /etc/systemd/system/evimed-postgres-backup.service.d/openviking.conf
+  sudo systemctl daemon-reload
+  cd /srv/evimed-science/current/OpenScience
+  sudo node --env-file=deploy/web/.env scripts/ops/openviking-backup.mjs run   # first copy, in the foreground
+  sudo jq '{status, archive, files, pausedMs, lastDrillAt}' /srv/evimed-science/shared/openviking-backup-status/state.json
+  ```
+
+  then recreate `open-science-web` with the backup overlay so it mounts the
+  status directory. `/api/ready` reports the receipt under
+  `checks.backup.openviking` — `healthy`, `ageSeconds`, `lastDrillAt`, or a
+  `code` (`openviking_backup_state_missing|_invalid|_unhealthy|_stale`) — as a
+  notice that never turns the backup check red; the metrics are
+  `open_science_openviking_backup_healthy{code}` and
+  `open_science_openviking_backup_age_seconds`.
+
+  Restore (the engine is down for it; recall falls back to the term matcher
+  and conversations go on meanwhile):
+
+  ```bash
+  cd /srv/evimed-science/current/OpenScience
+  A=/srv/evimed-science/shared/backups/openviking/openviking-data-YYYYMMDDTHHMMSSZ.tar.gz.enc
+  # (from object storage: pnpm restore:object s3://…/openviking-data-….tar.gz.enc /srv/evimed-science/shared/backups/openviking)
+  sudo node --env-file=deploy/web/.env scripts/ops/openviking-backup.mjs verify "$A"
+  sudo node --env-file=deploy/web/.env scripts/ops/openviking-backup.mjs run      # keep the current state too, if it is readable
+  COMPOSE="docker compose --env-file deploy/web/.env -f deploy/web/docker-compose.yml"   # plus the deployment's usual overlays
+  $COMPOSE stop evimed-openviking && $COMPOSE rm -f evimed-openviking evimed-openviking-init
+  docker volume rm web_evimed-openviking-data && docker volume create web_evimed-openviking-data
+  sudo node --env-file=deploy/web/.env scripts/ops/openviking-backup.mjs restore "$A" web_evimed-openviking-data
+  $COMPOSE up -d --no-build --pull never evimed-openviking
+  pnpm rebuild:memory-index --all   # the copies of PostgreSQL's records, which may be older than PostgreSQL
+  ```
+
+  `restore` refuses a volume that holds anything, and checks every file
+  against the archive's manifest as it lands. Wait for
+  `checks.memoryIndex.engine.ok` in `/api/ready` before declaring it done: the
+  engine's own facts (version, templates, skills, the Compile shim) are read
+  again within five minutes. Drilled 2026-10-13 on a check container started
+  from this repository's compose definition: 180 of 180 files of 8 accounts
+  byte-identical, tags and search results unchanged, every engine fact true
+  (`.evimed-local/acceptance/course-correction-20261012/live/ovbase/backup-restore/`).
+  A volume written by v0.5.0 is not readable by v0.4.x: going back below the
+  pin is a restore of a copy taken under the older release, never a downgrade
+  in place.
 - When S3-compatible off-host backup is configured, record the uploaded object
   URI without credentials, download it with `pnpm restore:object`, verify its
   checksum, and run a disposable restore drill. Confirm bucket versioning,
@@ -951,7 +1033,8 @@ matrix there) or answers a reCAPTCHA page.
 
 ### Deleting a project, resetting memory or erasing an account while the memory index is slow
 
-The recall index (OpenViking) owns no record: every hit is re-read from PostgreSQL
+The recall index — the copies of PostgreSQL's records the OpenViking engine holds
+under `memories/evimed/` — owns no record: every hit is re-read from PostgreSQL
 and a copy whose row is gone is dropped there. So none of these actions waits on
 it any more (until 2026-10-05 a project deletion answered 503
 `memory_index_timeout` when the index was slow). The authoritative rows go, and

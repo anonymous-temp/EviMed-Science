@@ -194,8 +194,8 @@ function upstreamReason(parsed) {
 const REQUEST_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 /** `/health`, `/mcp` and everything under `/api/v1/`: a path, never a URL, a query or a traversal. */
 const REQUEST_PATH = /^\/(?:health|ready|mcp|api\/v1\/[A-Za-z0-9_.~@:/-]+)$/;
-/** The engine's own identifier alphabet (`openviking/core/identifiers.py`). */
-const OPENVIKING_IDENTIFIER = /^[A-Za-z0-9_.@-]{1,128}$/;
+/** The engine's own identifier rule (`openviking/core/identifiers.py`): its alphabet, never `.` or `..`, at most one `@`. */
+const OPENVIKING_IDENTIFIER = /^(?!\.{1,2}$)(?!.*@.*@)[A-Za-z0-9_.@-]{1,128}$/;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{16,128}$/;
 
 /**
@@ -450,9 +450,10 @@ export class OpenVikingClient {
    *  - **The deadline.** `timeoutMs`, defaulting to the client's (`OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS`).
    *  - **The error names.** A refusal is an `HttpError` whose `code` is one of `OPENVIKING_REQUEST_ERROR_CODES`
    *    and whose message is `<METHOD> <path> -> <status>: <the engine's own code and sentence>` — the path and the
-   *    upstream status, never the key and never a query string (a query carries URIs). `upstreamStatus` and
-   *    `upstreamCode` (the engine's `error.code`: `NOT_FOUND`, `PERMISSION_DENIED`, `ALREADY_EXISTS`, …) ride on
-   *    the error for a caller that must tell two refusals of one status apart.
+   *    upstream status, never the key and never a query string (a query carries URIs). `upstreamStatus`,
+   *    `upstreamCode` (the engine's `error.code`: `NOT_FOUND`, `PERMISSION_DENIED`, `ALREADY_EXISTS`, …) and
+   *    `upstreamDetails` (its `error.details`, e.g. `{ type: "account", resource }`) ride on the error for a
+   *    caller that must tell two refusals of one status apart.
    *
    * What comes back: for `responseType: "json"` (the default) the parsed body as the engine sent it — the
    * `{ status, result, … }` envelope, not its `result`, because some routes put what matters beside it (`has_more`
@@ -475,8 +476,11 @@ export class OpenVikingClient {
     if (!REQUEST_METHODS.has(verb) || !REQUEST_PATH.test(route) || !["json", "text", "bytes"].includes(responseType)) {
       throw new HttpError(500, "memory_index_request_invalid", "An OpenViking request was built with an invalid method, path or response type.");
     }
-    const actingUser = openVikingUser != null ? String(openVikingUser) : userId != null && userId !== "" ? openVikingUserId(userId) : "";
-    if (actingUser && !OPENVIKING_IDENTIFIER.test(actingUser)) {
+    // An empty user is a caller's defect, never "no user": sent without the identity headers, a data request would be
+    // served as the account's default user — one tree for everybody who hit the same defect.
+    const named = openVikingUser != null || userId != null;
+    const actingUser = openVikingUser != null ? String(openVikingUser) : userId != null && String(userId) !== "" ? openVikingUserId(userId) : "";
+    if (named && !OPENVIKING_IDENTIFIER.test(actingUser)) {
       throw new HttpError(500, "memory_index_request_invalid", "An OpenViking request named an invalid acting user.");
     }
     if (idempotencyKey != null && !IDEMPOTENCY_KEY.test(String(idempotencyKey))) {
@@ -544,9 +548,13 @@ export class OpenVikingClient {
         // upstream explanation was replaced by the generic sentence below — which
         // is the same outage as having no reason at all.
         const failure = new HttpError(status, requestErrorCode(response.status), `${verb} ${route} -> ${response.status}: ${upstreamReason(parsed)}`);
+        const details = parsed?.error?.details;
         throw Object.assign(failure, {
           upstreamStatus: response.status,
           upstreamCode: typeof parsed?.error?.code === "string" ? parsed.error.code : null,
+          // What the refusal was about (`{ type: "account" | "user" | "file" | "directory" | …, resource }`): the one
+          // way to tell "this file is not there" from "this account is not registered yet", both 404 NOT_FOUND.
+          upstreamDetails: details && typeof details === "object" && !Array.isArray(details) ? details : null,
         });
       }
       if (responseType === "bytes") return { status: response.status, contentType, bytes };

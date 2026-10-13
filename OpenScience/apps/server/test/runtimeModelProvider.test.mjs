@@ -550,10 +550,13 @@ test("the two runtime capability settings reach the container, and the default d
   assert.ok(capsuleOff.includes("EVIMED_REVISION_AUTHORIZE_URL="));
   assert.ok(capsuleOff.includes("EVIMED_CAPSULE_ACTIVE=0"));
 
-  // The shipped defaults: clarification as it was hardcoded; review as the
-  // reviewer is, one switch for both ends.
+  // The shipped defaults: clarification on (2026-10-12 — a person is in the
+  // conversation; a turn nobody is watching is told so per dispatch, and a
+  // question with no page attached is answered with an error, not a wait);
+  // review as the reviewer is, one switch for both ends.
   const defaults = loadConfig({});
-  assert.equal(defaults.runtimeAskUserEnabled, false, "clarification stays off by default, as it was hardcoded");
+  assert.equal(defaults.runtimeAskUserEnabled, true, "a conversation may ask for the one input its task turns on, unless the deployment says otherwise");
+  assert.equal(loadConfig({ runtimeAskUserEnabled: false }).runtimeAskUserEnabled, false, "the deployment's switch still turns it off");
   assert.equal(defaults.runtimeReviewEnabled, false, "review follows the reviewer, which is off until a deployment turns it on");
   assert.equal(loadConfig({ reviewEnabled: true }).runtimeReviewEnabled, true, "turning the reviewer on turns the runtime's review on");
 });

@@ -1852,8 +1852,8 @@ test("the reader asks the image about every shipped path, and reports the ones i
 });
 
 test("every agent whose completion requires a loaded skill can actually reach that skill in the DSH image", async () => {
-  // `open-domain-answer` is the default line for an unrouted question. Its
-  // agent.yaml requires `skillsLoaded`, but its skill body lived only in
+  // `open-domain-answer` was the default line for an unrouted question, and
+  // its agent.yaml required `skillsLoaded` while its skill body lived only in
   // `runtime/skills/evimed`, which the DSH Dockerfile did not COPY, and it is
   // not a delegated capability so nothing ever injected it either. The check
   // therefore failed on every DSH open-domain run and the reply was stamped
@@ -1862,6 +1862,16 @@ test("every agent whose completion requires a loaded skill can actually reach th
   //
   // Derived from the manifests rather than a list, so the next agent added with
   // `skillsLoaded` and no delivery route fails here instead of in production.
+  //
+  // Since 2026-10-12 the default conversation no longer requires its skill —
+  // the evidence method is loaded by the model when a question is medical — so
+  // it left the walk below, and its own reachability is asserted by name: the
+  // model can only load what the image ships under a kernel skill root.
+  const answerDockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  assert.match(answerDockerfile, /^COPY runtime\/skills\/evimed\/open-domain-answer \/opt\/evimed\/skills\/evimed\/open-domain-answer$/m,
+    "the evidence method is not in the image, so no conversation could load it");
+  const answerManifest = await readFile(path.join(repoRoot, "runtime/skills/evimed/open-domain-answer/agent.yaml"), "utf8");
+  assert.doesNotMatch(answerManifest, /^\s*-\s*skillsLoaded\s*$/m, "a general answer is not held to having loaded a medical method");
   const { readdir } = await import("node:fs/promises");
   const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
   const copiedSources = dockerfile
@@ -1893,7 +1903,7 @@ test("every agent whose completion requires a loaded skill can actually reach th
       + ` nor COPYed into the runtime image — so the check can never pass on DSH`,
     );
   }
-  assert.ok(checked >= 4, `expected to check several agents, checked ${checked} — the walk found nothing`);
+  assert.ok(checked >= 3, `expected to check several agents, checked ${checked} — the walk found nothing`);
 });
 
 test("the skill's list of artifact-preserving tools matches the tools that actually preserve", async () => {

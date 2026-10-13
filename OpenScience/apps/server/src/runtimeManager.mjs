@@ -10,7 +10,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { GENE_EXPRESSION_LIMITS, RUN_CONTEXT_PROTOCOL, workspaceLayout } from "@evimed/domain";
+import { GENE_EXPRESSION_LIMITS, RUN_CONTEXT_PROTOCOL, isolatedToolRowIsAdmitted, workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv } from "@evimed/harness-port";
 import {
   dockerRuntimeMount,
@@ -2103,7 +2103,6 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
       ? (gateways ? `${String(config.runtimeGatewayPublicUrl).replace(/\/+$/, "")}/tooluniverse/v1/rpc` : String(config.toolUniverseGatewayInternalUrl ?? "")) : "",
     presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
-    answerPersonaDir: RUNTIME_ANSWER_PERSONA_DIR,
     capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,
     // The same rule the launch plan's `--env` list used, applied to the same
     // plan: the methods the container mounts and the methods the profile names
@@ -2727,7 +2726,6 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         ...Object.entries(runtimeEnvironment({
           presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
           capabilitiesDir: "/opt/evimed/capabilities",
-          answerPersonaDir: RUNTIME_ANSWER_PERSONA_DIR,
           capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,
           capsuleMethodsDir: capsuleMethodsRuntimeDir,
           extensionProjectionFile: extensionReference ? "/opt/evimed/extensions/projection.json" : "",
@@ -3068,17 +3066,6 @@ export const RUNTIME_KERNEL_NAME = "dsh";
  * deployment come to disagree with nothing able to notice.
  */
 export const RUNTIME_CAPABILITY_SKILLS_DIR = "/opt/evimed/capability-skills";
-/**
- * Where the image puts the answer line's persona package.
- *
- * The Dockerfile copies exactly this one package out of `runtime/skills/evimed`
- * (the specialists ship as capability bodies instead), and the guidance plugin
- * reads `SKILL.md` from here to put it in the session's own context. A path
- * that does not exist leaves the model to load the skill itself, which is what
- * it did before.
- */
-export const RUNTIME_ANSWER_PERSONA_DIR = "/opt/evimed/skills/evimed/open-domain-answer";
-
 /**
  * The authority the control plane sends as `Host` over the unix transport.
  *
@@ -6099,17 +6086,20 @@ export class RuntimeManager {
       if (canonicalJson(physical) !== canonicalJson(candidate)) throw new HttpError(400, 'extension_contract_invalid', 'The extension manifest changed.');
     } else if (candidate.projection.plugins.some(plugin => plugin.compatibility !== 'legacy-citation-v1')) throw new HttpError(400, 'extension_contract_invalid', 'A baseline cannot select extension tools.');
     const external = candidate.projection.plugins.filter(plugin => plugin.compatibility !== 'legacy-citation-v1');
-    if (external.length > 1) throw new HttpError(400, 'extension_contract_invalid', 'The selected bridge is unsupported.');
-    for (const plugin of external) {
-      const artifact = this.extensionArtifacts.get(plugin.extensionId);
-      if (!artifact || artifact.artifactDigest !== plugin.artifactDigest || artifact.integrity !== plugin.integrity || plugin.executionClass !== 'isolated-tool'
-        || plugin.coordinate?.kind !== 'github' || plugin.coordinate.repository !== 'Jesse-njx/dsh-cowork' || !plugin.settings || Object.keys(plugin.settings).length !== 0 || !Array.isArray(plugin.connectionRefs) || plugin.connectionRefs.length !== 0) throw new HttpError(400, 'extension_contract_invalid', 'The selected bridge is unsupported.');
-    }
+    this.assertSelectedBridge(external);
     const personal = candidate.projection.personal;
     if (personal.reference) { const selected = await verifyPersonalSkillGeneration(this.config, project, personal.reference, candidate.identity.baseRuntimeImageDigest);
       if (canonicalJson(selected.pins) !== canonicalJson(personal.pins)) throw new HttpError(400, 'extension_contract_invalid', 'Personal generation pins changed.');
     } else if (personal.pins.length) throw new HttpError(400, 'extension_contract_invalid', 'Personal generation pins require selected bytes.');
     return { joined: true, manifestDigest: 'sha256:' + createHash('sha256').update(canonicalJson(candidate)).digest('hex') };
+  }
+  /** One native bridge row carries the selected isolated tool, and it must be exactly what the deployment admitted: the
+   * descriptor's artifact digest, package integrity, coordinate and the class's permission profile. Which repository that
+   * is, is the deployment's protected allow-list and not a name written here. @param {any[]} external projection rows that are not the citation baseline */
+  assertSelectedBridge(external) {
+    if (external.length > 1 || external.some(plugin => !isolatedToolRowIsAdmitted(plugin, this.extensionArtifacts.get(plugin.extensionId)))) {
+      throw new HttpError(400, 'extension_contract_invalid', 'The selected bridge is unsupported.');
+    }
   }
   currentGeneration(project) { return this.runtimes.get(this.key(project))?.extensionGeneration ?? null; }
   /** Factual target registry lookup, always bound to the same live runtime epoch. @param {any} project @param {string} sessionId */

@@ -1226,6 +1226,8 @@ What the deployment adds to the service (`deploy/web/docker-compose.yml`, `deplo
 | `OPEN_SCIENCE_KNOWLEDGE_SOURCE_SYNC_RECONCILE_MS` | `900000` | How often every project's readable documents are compared with the engine's copies and repaired. One changed document is pushed at once by its own job; this is the net under that. |
 | `OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED` | `false` | Whether each readable document's summary and key claims are written into the memory capsule's `sources` layer. Off since 2026-10-13; off stops new writes only. |
 | `OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED` | on when the engine is the deployment's index | Sessions, native extraction, the memory plugin behind the memory gateway. |
+| `OPEN_SCIENCE_OPENVIKING_BACKUP_STATE_FILE` | `/run/openviking-backup-status/state.json` (set by the backup overlay) | The host's receipt of the engine volume's last capture ("The OpenViking volume", below). Unset, nothing is reported. |
+| `OPEN_SCIENCE_OPENVIKING_BACKUP_MAX_AGE_SECONDS` | `90000` | How old the last verified capture may be before `checks.backup.openviking` says `openviking_backup_stale` (a notice). |
 
 `/api/ready` reports the engine under `checks.memoryIndex.engine`: `facts.version` (the answering server is the pin),
 `facts.modelKey`, `facts.memoryTemplates` (the template directory is loaded and a user's settings read back the eight types),
@@ -1472,6 +1474,20 @@ When raising upload limits in the Caddy profile, raise
 `OPEN_SCIENCE_PROXY_MAX_BODY_SIZE` with `OPEN_SCIENCE_MAX_FILE_BYTES`; the
 default `73408512` supports the default 50 MiB decoded file limit plus the JSON
 base64 envelope.
+
+### The OpenViking volume
+
+The engine's volume is not under `OPEN_SCIENCE_DATA_DIR` and the backup service above never sees it: since v0.5.0 it holds
+native memory and compiled knowledge that exist nowhere else, and a consistent copy needs the engine frozen for the moment it
+is read, which takes Docker authority no container of this stack holds. So it is captured on the host, by
+`scripts/ops/openviking-backup.mjs` run after the platform database's dump by the same timer
+(`deploy/host/evimed-postgres-backup-openviking.conf`): `docker pause` for the copy (about a second), an archive encrypted
+with the same passphrase and checked file by file against the digests taken while frozen, the newest fourteen kept, each
+uploaded with the others when `OPEN_SCIENCE_OBJECT_BACKUP_URI` is set. The backup overlay mounts only its receipt's
+directory into the web container (`OPEN_SCIENCE_OPENVIKING_BACKUP_STATUS_DIR`, read-only), and `/api/ready` reports it under
+`checks.backup.openviking` as a notice. The host's settings (`OPEN_SCIENCE_OPENVIKING_BACKUP_ENABLED`, `_DIR`, `_MAX_SETS`,
+`_MAX_PAUSE_SECONDS`, `OPEN_SCIENCE_OPENVIKING_DATA_VOLUME`, `OPEN_SCIENCE_OPENVIKING_CONTAINER`) are in `.env.example`; the
+installation, the restore and its drill are in `docs/WEB_OPERATIONS_RUNBOOK.md` under "Evidence and Recovery".
 
 ## Important Boundaries
 

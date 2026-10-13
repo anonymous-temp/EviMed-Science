@@ -233,7 +233,12 @@ function validateManifest(value, directoryName, allowedToolIds, allowedDataSourc
   // A validated capability always receives the native read/write/submit tools.
   // Its external-MCP requirements may honestly be empty; legacy packages keep
   // their existing minimum, and every declared external tool is still checked.
-  const requiredTools = validateTools(manifest.requiredTools, "requiredTools", id, allowedToolIds, { min: nativeCapability ? 0 : 1 });
+  // So may an answer-mode package's (no `requiredOutputsExist`): the default
+  // conversation writes an e-mail or a script with the kernel's own tools, and
+  // a research tool it "requires" would be a statement that every conversation
+  // is research.
+  const answerMode = Array.isArray(manifest.completionChecks) && !manifest.completionChecks.includes("requiredOutputsExist");
+  const requiredTools = validateTools(manifest.requiredTools, "requiredTools", id, allowedToolIds, { min: nativeCapability || answerMode ? 0 : 1 });
   const optionalTools = validateTools(manifest.optionalTools, "optionalTools", id, allowedToolIds, { min: 0 });
   const overlappingTools = requiredTools.filter((tool) => optionalTools.includes(tool));
   if (overlappingTools.length > 0) {

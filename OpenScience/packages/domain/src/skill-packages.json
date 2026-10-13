@@ -14,15 +14,19 @@
       "numpy": "2.2.6",
       "openpyxl": "3.1.5",
       "pandas": "2.2.3",
+      "pdfplumber": "0.11.7",
       "pillow": "10.4.0",
       "playwright": "1.58.0",
       "pypdf": "6.7.0",
+      "python-docx": "1.2.0",
+      "python-pptx": "1.0.2",
       "rdkit": "2026.3.6",
       "scanpy": "1.11.5",
       "scikit-learn": "1.6.1",
       "scipy": "1.15.3",
       "statsmodels": "0.14.6",
-      "xlrd": "2.0.2"
+      "xlrd": "2.0.2",
+      "xlsxwriter": "3.2.9"
     },
     "modules": {
       "anndata": ["anndata","h5py","zarr","numcodecs","natsort"],
@@ -35,15 +39,19 @@
       "numpy": ["numpy"],
       "openpyxl": ["openpyxl","et_xmlfile"],
       "pandas": ["pandas","pytz","tzdata"],
+      "pdfplumber": ["pdfplumber","pdfminer","pypdfium2"],
       "pillow": ["PIL"],
       "playwright": ["playwright","greenlet","pyee"],
       "pypdf": ["pypdf"],
+      "python-docx": ["docx","lxml"],
+      "python-pptx": ["pptx"],
       "rdkit": ["rdkit"],
       "scanpy": ["scanpy","numba","llvmlite","umap","pynndescent","seaborn","networkx","tqdm"],
       "scikit-learn": ["sklearn","joblib","threadpoolctl"],
       "scipy": ["scipy"],
       "statsmodels": ["statsmodels","patsy"],
-      "xlrd": ["xlrd"]
+      "xlrd": ["xlrd"],
+      "xlsxwriter": ["xlsxwriter"]
     },
     "apt": [
       "bash",
@@ -66,7 +74,7 @@
       "xz-utils",
       "zlib1g"
     ],
-    "tools": ["R","Rscript","bash","chromium","curl","git","gzip","node","pandoc","pnpm","python","python3","rg","socat","tar","uv"],
+    "tools": ["R","Rscript","bash","chromium","curl","git","gzip","libreoffice-kit","node","pandoc","pnpm","python","python3","rg","socat","tar","uv"],
     "rPackages": [
       "base",
       "boot",
@@ -1303,16 +1311,16 @@
       "id": "community/dsh-ppt",
       "name": "dsh-ppt",
       "origin": "community",
-      "source": {"kind":"repository","repository":"STARDUSTLC666/dsh-ppt","commit":"0db836e8251a10bf93f26e702534ab9d8b2a1818","path":"skills/dsh-ppt"},
+      "source": {"kind":"repository","repository":"STARDUSTLC666/dsh-ppt","commit":"9ab3c88e8ed8992b1771434f9f59b4f1ae767630","path":"skills/dsh-ppt"},
       "licence": {"id":"MIT","file":{"path":"LICENSE.dsh-ppt","sha256":"abffdf65cf7a8768f8fd31816bd610012ff2cf590781c703719d280245175915"},"basis":"inventory"},
-      "digest": "sha256:05a3404a8c1793e498e45356de9f20318ad43df589252c5f8525a0ca68551f52",
+      "digest": "sha256:eb2ca4a0a2c295b0d186e83084620e0e313cae8d565dd1abea6911022fc98c83",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/build-deck.mjs","sha256":"2a31fdd9b9d2d26ea1c9b13121fdb86f92453e51a5b74db851842d05308044f4"},
-        {"path":"scripts/deck-core.mjs","sha256":"75ea55eedf8b80bcfe5fcb56350a6b16e44c2da571a2583bc5fba86e579bd99d"}
+        {"path":"scripts/deck-core.mjs","sha256":"4c655522aab66e83cf00d1114bf25a54df17a37c2ec5ddb91a64e82101d7c576"}
       ],
       "references": [
-        {"path":"PROVENANCE.md","sha256":"7a5f41cdddf8481813440ee7c054bc866aa23ba5aa149eee29374579f265e18a"},
+        {"path":"PROVENANCE.md","sha256":"6d50e10f5398f8c9d6304705bd318266f61f868c6683340aeda39d3029404cb7"},
         {"path":"references/copywriting.md","sha256":"92ef116e97699f9bfe9e7541bc68db96db2102b19a2ede9db63da16b899dae4c"},
         {"path":"references/themes.md","sha256":"79a4218940b8d56ddce77fae909d05785d452ecb5a352bac95bde7528023df46"}
       ]
@@ -1323,7 +1331,7 @@
       "name": "deep-research",
       "origin": "core",
       "source": {"kind":"release"},
-      "digest": "sha256:f724f36aad77701cf7d1d4cc64a606ec27bbca1cab304de06a2a08d49fc922e2",
+      "digest": "sha256:0a8cc6b4ab3f9f3e8b254931dea08dcaa909d2ae5a207b77391c607a01105ceb",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -3325,11 +3333,11 @@
       "id": "evimed/open-domain-answer",
       "name": "open-domain-answer",
       "origin": "evimed",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:3bc5153c75e3d5af416e52c58b095cd3d065951b288b1b1c82d4a2a16777ed07",
+      "digest": "sha256:7a3fa7a8d623b01ef7f815109c558b58c73bcc9c65ad70cdc9b9013c1bcbe226",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"agent.yaml","sha256":"7cd4e71198958b166f95190cc23e21167d410c36f7ab4a1e92166e9d503526e6"}]
+      "references": [{"path":"agent.yaml","sha256":"e8b2a1b5103af83bbb7a957858c6c0c6fd49e72e77fc5282d876bf64361929ad"}]
     },
     {
       "schemaVersion": 1,
@@ -3398,10 +3406,22 @@
       "origin": "office",
       "source": {"kind":"release"},
       "licence": {"id":"MIT","basis":"inventory"},
-      "digest": "sha256:da8dbc3eefe0c8602ed91cc3007bd87df6eea18f9793732f5a3ca80b737383f4",
+      "digest": "sha256:6b511044e4d1c407b883d8e7d250bc674f39aea8cebc11dab00f954b269826fc",
       "digestAlgorithm": "release-directory-v1",
-      "scripts": [{"path":"scripts/create_docx.py","sha256":"41c84714d99790a78a2842500e6240ab2a72028a2cc078026e94602e22692eb6"}],
+      "scripts": [
+        {"path":"scripts/create_docx.py","sha256":"41c84714d99790a78a2842500e6240ab2a72028a2cc078026e94602e22692eb6"},
+        {"path":"scripts/docx_tool.py","sha256":"edf0b689f22eb3219fe0c9e9cd00b442cccc97290823a336ca1a41034e44fbda"}
+      ],
       "dependencies": [
+        {"kind":"python-package","name":"lxml","supply":"image","basis":"observed","evidence":"scripts/docx_tool.py"},
+        {
+          "kind": "python-package",
+          "name": "python-docx",
+          "constraint": "==1.2.0",
+          "supply": "image",
+          "basis": "declared",
+          "evidence": "inventory.json: delivery contract"
+        },
         {"kind":"system-tool","name":"pandoc","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"system-tool","name":"python","constraint":">=3.11","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"}
       ],
@@ -3409,7 +3429,6 @@
         {
           "name": "create docx",
           "kind": "script",
-          "summary": "Create a standards-based DOCX document from workspace text through the shared offline Pandoc renderer.",
           "entrypoint": "scripts/create_docx.py",
           "params": [{"name":"--input","type":"path"},{"name":"--text","type":"string"},{"name":"--output","type":"path","required":true}],
           "produces": ["document.docx"],
@@ -3424,14 +3443,28 @@
       "origin": "office",
       "source": {"kind":"release"},
       "licence": {"id":"MIT","basis":"inventory"},
-      "digest": "sha256:4807266a0c01a9abd735cc2046cb19c3d10f1b4201abae107d7a0a44305de794",
+      "digest": "sha256:31d8c4288e143b8d843a296ae9f19bf004d9d97212ef3c1c95f4a843bbf84a8a",
       "digestAlgorithm": "release-directory-v1",
-      "scripts": [{"path":"scripts/create_pdf.py","sha256":"fd6a219afbbdd0e012c12ae4ef7b29f0db04c14c7a19eaaef72894381ba72499"}],
+      "scripts": [
+        {"path":"scripts/create_pdf.py","sha256":"fd6a219afbbdd0e012c12ae4ef7b29f0db04c14c7a19eaaef72894381ba72499"},
+        {"path":"scripts/pdf_tool.py","sha256":"9cb0a3e7c64980aa21e1366519beb3cd67a5df45abc6e72da31cca20ab17e596"}
+      ],
       "dependencies": [
+        {
+          "kind": "python-package",
+          "name": "pdfplumber",
+          "constraint": "==0.11.7",
+          "supply": "image",
+          "basis": "declared",
+          "evidence": "inventory.json: delivery contract"
+        },
         {"kind":"python-package","name":"playwright","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
+        {"kind":"python-package","name":"pypdf","constraint":"==6.7.0","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
+        {"kind":"python-package","name":"xlsxwriter","supply":"image","optional":true,"basis":"observed","evidence":"scripts/pdf_tool.py"},
         {"kind":"system-tool","name":"chromium","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"system-tool","name":"fonts-noto-cjk","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"system-tool","name":"fonts-texgyre-math","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
+        {"kind":"system-tool","name":"libreoffice-kit","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"system-tool","name":"pandoc","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"system-tool","name":"python","constraint":">=3.11","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"}
       ],
@@ -3439,7 +3472,7 @@
         {
           "name": "create pdf",
           "kind": "script",
-          "summary": "Create a Unicode PDF from workspace Markdown through the shared offline Pandoc and Chromium renderer.",
+          "summary": "Read PDFs (text by page, find a phrase, extract tables to Excel or CSV, see a page as an image) and create or convert PDFs - from Markdown, or from Word, Excel and PowerPoint files. Use whenever a PDF is an input to summarize or mine, or the deliverable.",
           "entrypoint": "scripts/create_pdf.py",
           "params": [{"name":"--input","type":"path"},{"name":"--text","type":"string"},{"name":"--output","type":"path","required":true}],
           "produces": ["document.pdf"],
@@ -3454,15 +3487,30 @@
       "origin": "office",
       "source": {"kind":"release"},
       "licence": {"id":"MIT","basis":"inventory"},
-      "digest": "sha256:26c765eecd74888d9e9a076255cad01915dcec5e7f7ab9f66f9e67a1f4ae8cd6",
+      "digest": "sha256:f4b74159a03d450f4c7411ff72a3bbc5308181a765e1cfebdcac1d8134907144",
       "digestAlgorithm": "release-directory-v1",
-      "scripts": [{"path":"scripts/create_pptx.py","sha256":"2025a5217bf12f21a8c8e193d5c7c7b9782f43d71f7e3d819b33e8af36ed5683"}],
-      "dependencies": [{"kind":"system-tool","name":"python","constraint":">=3.11","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"}],
+      "scripts": [
+        {"path":"scripts/create_pptx.py","sha256":"2025a5217bf12f21a8c8e193d5c7c7b9782f43d71f7e3d819b33e8af36ed5683"},
+        {"path":"scripts/pptx_tool.py","sha256":"6eb2b4f71ce5d13d18067cff611b09c10c2f97152c1ca8a9b36d715e036b21b3"}
+      ],
+      "dependencies": [
+        {"kind":"python-package","name":"lxml","supply":"image","basis":"observed","evidence":"scripts/pptx_tool.py"},
+        {"kind":"python-package","name":"pptx","supply":"image","basis":"observed","evidence":"scripts/pptx_tool.py"},
+        {
+          "kind": "python-package",
+          "name": "python-pptx",
+          "constraint": "==1.0.2",
+          "supply": "image",
+          "basis": "declared",
+          "evidence": "inventory.json: delivery contract"
+        },
+        {"kind":"system-tool","name":"libreoffice-kit","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
+        {"kind":"system-tool","name":"python","constraint":">=3.11","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"}
+      ],
       "operations": [
         {
           "name": "create pptx",
           "kind": "script",
-          "summary": "Create a simple standards-based PPTX presentation with a first-party dependency-free exporter.",
           "entrypoint": "scripts/create_pptx.py",
           "params": [
             {"name":"--title","type":"string","required":true},
@@ -3482,15 +3530,30 @@
       "origin": "office",
       "source": {"kind":"release"},
       "licence": {"id":"MIT","basis":"inventory"},
-      "digest": "sha256:06343609be7963a430471c0963ecb7ccd4a373526e29bbc6b36e8bcf7fef28ee",
+      "digest": "sha256:d7c303b068330895e9cd55f415b0b5b1f7718522c30fc2fd2c8e7c19f0d22c6e",
       "digestAlgorithm": "release-directory-v1",
-      "scripts": [{"path":"scripts/create_xlsx.py","sha256":"6035b7d828d9efe7c5cd8eee9b473705db449fe2256841a88d98ea7de417107c"}],
-      "dependencies": [{"kind":"system-tool","name":"python","constraint":">=3.11","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"}],
+      "scripts": [
+        {"path":"scripts/create_xlsx.py","sha256":"6035b7d828d9efe7c5cd8eee9b473705db449fe2256841a88d98ea7de417107c"},
+        {"path":"scripts/xlsx_tool.py","sha256":"7825dff50fe5893f60dbb0b8c6fcd1a07c19983921a3d53774d8c31c9fd7adb6"}
+      ],
+      "dependencies": [
+        {
+          "kind": "python-package",
+          "name": "XlsxWriter",
+          "constraint": "==3.2.9",
+          "supply": "image",
+          "basis": "declared",
+          "evidence": "inventory.json: delivery contract"
+        },
+        {"kind":"python-package","name":"openpyxl","constraint":"==3.1.5","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
+        {"kind":"system-tool","name":"libreoffice-kit","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
+        {"kind":"system-tool","name":"python","constraint":">=3.11","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"}
+      ],
       "operations": [
         {
           "name": "create xlsx",
           "kind": "script",
-          "summary": "Export CSV or tabular workspace data to a standards-based XLSX workbook with no external package dependency.",
+          "summary": "Read, edit in place, and create Excel workbooks (.xlsx) and spreadsheet data - budgets, sales tables, reports with real formulas, totals rows, charts and formatting. Use whenever a spreadsheet or CSV is an input or the deliverable, and whenever numbers must be calculated by formulas that stay live.",
           "entrypoint": "scripts/create_xlsx.py",
           "params": [
             {"name":"--input","type":"path","required":true},

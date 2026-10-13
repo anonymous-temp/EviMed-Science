@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import path from "node:path";
 import { SEAMS } from "@evimed/harness-port";
 
-import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, RUNTIME_UI_ANSWERED_HOST_ROUTES, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { assertNoSymlinkPath, HttpError, mimeFor, openScopedFileNoFollow, readBody, readStableFileHandle } from "./security.mjs";
@@ -583,6 +583,17 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     let decodedPath;
     try { decodedPath = decodeURIComponent(pathname); } catch { throw new HttpError(400, "runtime_ui_endpoint_invalid", "A canonical runtime path is required."); }
     const workspaceMedia = pathname === "/api/file" && decodedPath === pathname;
+    // A kernel route this surface answers itself (`RUNTIME_UI_ANSWERED_HOST_ROUTES` in `@evimed/domain`): the page asks
+    // whether the serving host has a desktop before it draws a handed-over file's card, and here it has none. Exact
+    // method and canonical path only; never forwarded.
+    const answeredRoute = pathname === decodedPath
+      ? /** @type {Record<string, unknown>} */ (RUNTIME_UI_ANSWERED_HOST_ROUTES)[`${String(req.method).toUpperCase()} ${pathname}`] : undefined;
+    if (answeredRoute) {
+      const payload = JSON.stringify(answeredRoute);
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": String(Buffer.byteLength(payload)), "Cache-Control": "no-store" });
+      res.end(payload);
+      return;
+    }
     if (!workspaceMedia && (pathname.startsWith("/api/") || decodedPath.startsWith("/api/"))
       && (!method || pathname !== `/api/${method}` || pathname !== decodedPath)) {
       throw new HttpError(400, "runtime_ui_endpoint_invalid", "A canonical native API method is required.");

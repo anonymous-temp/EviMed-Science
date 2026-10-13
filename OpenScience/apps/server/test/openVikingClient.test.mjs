@@ -390,3 +390,177 @@ test("a URI this layout never wrote parses to nothing at all", () => {
   for (const uri of foreign) assert.equal(parseCapsuleFactUri(uri), null, `${uri} was read as a fact of ours`);
   assert.equal(parseCapsuleFactUri(mine)?.factId, "fact");
 });
+
+// --- the request primitive the modules built on the engine are written on -------------------------------------------
+
+/** A fetch that answers with real `Response`s, which is what the primitive reads bytes and content types from. */
+function responseFetch(responses) {
+  const calls = [];
+  const queue = [...responses];
+  const impl = async (url, options) => {
+    calls.push({ url: new URL(url), options });
+    const next = queue.shift() ?? { status: 200, body: {} };
+    const body = Buffer.isBuffer(next.body) || typeof next.body === "string" ? next.body : next.body === undefined ? null : JSON.stringify(next.body);
+    return new Response(next.status === 204 ? null : body, { status: next.status, headers: { "content-type": next.contentType ?? "application/json" } });
+  };
+  impl.calls = calls;
+  return impl;
+}
+
+test("the primitive writes the credential and the identity, and a caller cannot add a header", async () => {
+  const fetchImpl = responseFetch([{ status: 200, body: { status: "ok", result: [] } }, { status: 200, body: { status: "ok" } }, { status: 200, body: { status: "ok" } }]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+
+  // A platform user id is hashed here; nothing of it reaches the engine.
+  await client.request({ path: "/api/v1/fs/tree", query: { uri: "viking://user/x/resources", node_limit: 500, tags: ["a=1", "b=2"], absent: null, missing: undefined }, userId: "usr_alice", headers: { "X-OpenViking-Role": "root" } });
+  const first = fetchImpl.calls[0];
+  assert.equal(first.options.method, "GET");
+  assert.equal(first.options.headers["X-API-Key"], "test-key");
+  assert.equal(first.options.headers["X-OpenViking-Account"], "evimed");
+  assert.equal(first.options.headers["X-OpenViking-User"], openVikingUserId("usr_alice"));
+  assert.ok(!JSON.stringify(first.options.headers).includes("usr_alice"));
+  assert.ok(!Object.keys(first.options.headers).some((name) => name.toLowerCase() === "x-openviking-role"), "a caller's header reached the engine");
+  // The query is built here: arrays repeat the key, null and undefined are dropped, numbers are sent as text.
+  assert.deepEqual(first.url.searchParams.getAll("tags"), ["a=1", "b=2"]);
+  assert.equal(first.url.searchParams.get("node_limit"), "500");
+  assert.ok(!first.url.searchParams.has("absent") && !first.url.searchParams.has("missing"));
+  assert.equal(first.options.body, undefined);
+
+  // An id that is already the engine's is sent as it is.
+  await client.request({ method: "POST", path: "/api/v1/skills", openVikingUser: "evimed-engine", body: { data: "x" } });
+  assert.equal(fetchImpl.calls[1].options.headers["X-OpenViking-User"], "evimed-engine");
+  assert.equal(fetchImpl.calls[1].options.headers["Content-Type"], "application/json");
+  assert.deepEqual(JSON.parse(fetchImpl.calls[1].options.body), { data: "x" });
+
+  // No acting user: the key alone, which is what the admin routes want.
+  await client.request({ method: "DELETE", path: "/api/v1/admin/accounts/evimed/users/u-0f1e2d3c4b5a69788796a5b4" });
+  assert.ok(!("X-OpenViking-User" in fetchImpl.calls[2].options.headers));
+  assert.ok(!("X-OpenViking-Account" in fetchImpl.calls[2].options.headers));
+  assert.equal(fetchImpl.calls[2].options.headers["X-API-Key"], "test-key");
+});
+
+test("the idempotency key is the one header a caller chooses, and only in the engine's own alphabet", async () => {
+  const fetchImpl = responseFetch([{ status: 202, body: { status: "ok", result: { task_id: "cmp_1" } } }]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+  const answer = await client.request({ method: "POST", path: "/api/v1/compile", userId: "usr_alice", idempotencyKey: "evimed-kb-0123456789abcdef", body: { from: [], to: "viking://x" } });
+  assert.equal(answer.result.task_id, "cmp_1");
+  assert.equal(fetchImpl.calls[0].options.headers["Idempotency-Key"], "evimed-kb-0123456789abcdef");
+  for (const key of ["short", "has space 0123456789abcdef", "x".repeat(129), "line\nbreak-0123456789abcdef"]) {
+    await assert.rejects(() => client.request({ method: "POST", path: "/api/v1/compile", userId: "usr_alice", idempotencyKey: key, body: {} }),
+      (error) => error.code === "memory_index_request_invalid" && error.status === 500);
+  }
+  assert.equal(fetchImpl.calls.length, 1, "a refused key reached the wire");
+});
+
+test("a request that is not a path under the engine's API, or names an impossible user, never leaves the process", async () => {
+  const fetchImpl = responseFetch([]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+  for (const request of [
+    { path: "http://elsewhere.example/api/v1/fs/ls" }, { path: "/api/v1/fs/ls?uri=viking://x" }, { path: "/api/v2/anything" }, { path: "/bot/v1/chat" },
+    { path: "api/v1/fs/ls" }, { path: "/api/v1/fs/ls", method: "TRACE" }, { path: "/api/v1/fs/ls", responseType: "stream" },
+    { path: "/api/v1/fs/ls", openVikingUser: "has space" }, { path: "/api/v1/fs/ls", openVikingUser: "a/b" }, { path: "/api/v1/fs/ls", openVikingUser: ".." },
+    { path: "/api/v1/fs/ls", openVikingUser: "a@b@c" },
+    // An empty user is a defect, never "no user": without the identity headers the engine would serve its default user.
+    { path: "/api/v1/fs/ls", openVikingUser: "" }, { path: "/api/v1/fs/ls", userId: "" },
+  ]) {
+    await assert.rejects(() => client.request(request), (error) => error.code === "memory_index_request_invalid", JSON.stringify(request));
+  }
+  assert.equal(fetchImpl.calls.length, 0);
+  // `/health`, `/mcp` and anything under `/api/v1/` are the three shapes there are.
+  const open = responseFetch([{ status: 200, body: { status: "ok" } }, { status: 200, body: "event: message\ndata: {}\n\n", contentType: "text/event-stream" }]);
+  const other = new OpenVikingClient(config, { fetchImpl: open });
+  await other.request({ path: "/health", authenticated: false });
+  assert.ok(!("X-API-Key" in open.calls[0].options.headers), "the health probe carried the key");
+  const stream = await other.request({ method: "POST", path: "/mcp", userId: "usr_alice", body: { jsonrpc: "2.0", id: 1, method: "tools/list" }, responseType: "text" });
+  assert.deepEqual(stream, { status: 200, contentType: "text/event-stream", text: "event: message\ndata: {}\n\n" });
+  assert.equal(open.calls[1].options.headers.Accept, "application/json, text/event-stream");
+});
+
+test("bytes come back as bytes, an empty answer as null, and something that is not JSON is named", async () => {
+  const stored = Buffer.from([0x23, 0x20, 0xe9, 0xa1, 0xb5, 0x0a, 0x00, 0xff]);
+  const fetchImpl = responseFetch([
+    { status: 200, body: stored, contentType: "application/octet-stream" },
+    { status: 204 },
+    { status: 200, body: "<html>not the engine</html>", contentType: "text/html" },
+  ]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+  const file = await client.request({ path: "/api/v1/content/download", query: { uri: "viking://agent/skills/llm-wiki/SKILL.md" }, openVikingUser: "evimed-engine", responseType: "bytes" });
+  assert.equal(file.status, 200);
+  assert.equal(file.contentType, "application/octet-stream");
+  assert.ok(Buffer.isBuffer(file.bytes) && file.bytes.equals(stored), "the stored bytes were decoded on the way through");
+  assert.equal(await client.request({ method: "DELETE", path: "/api/v1/sessions/s1", userId: "usr_alice" }), null);
+  await assert.rejects(() => client.request({ path: "/api/v1/fs/ls", userId: "usr_alice" }), (error) => error.code === "memory_index_response_invalid" && error.status === 502);
+});
+
+test("every refusal has a name, the engine's own status, code and subject, and nothing of the query or the key", async () => {
+  const cases = [
+    [400, "INVALID_ARGUMENT", "memory_index_rejected", 502],
+    [401, "UNAUTHENTICATED", "memory_index_auth_failed", 502],
+    [403, "PERMISSION_DENIED", "memory_index_auth_failed", 502],
+    [404, "NOT_FOUND", "memory_index_not_found", 404],
+    [409, "ALREADY_EXISTS", "memory_index_conflict", 502],
+    [412, "FAILED_PRECONDITION", "memory_index_precondition_failed", 502],
+    [413, "RESOURCE_EXHAUSTED", "memory_index_payload_too_large", 502],
+    [422, "INVALID_ARGUMENT", "memory_index_rejected", 502],
+    [429, "RESOURCE_EXHAUSTED", "memory_index_rate_limited", 502],
+    [500, "INTERNAL", "memory_index_upstream_error", 502],
+    [503, "UNAVAILABLE", "memory_index_unavailable", 502],
+    [504, "DEADLINE_EXCEEDED", "memory_index_timeout", 502],
+  ];
+  const { OPENVIKING_REQUEST_ERROR_CODES } = await import("../src/openVikingClient.mjs");
+  for (const [status, upstreamCode, code, httpStatus] of cases) {
+    const fetchImpl = responseFetch([{ status, body: { status: "error", result: null, error: { code: upstreamCode, message: "Account not found: evimed", details: { type: "account", resource: "evimed" } } } }]);
+    const client = new OpenVikingClient(config, { fetchImpl });
+    await assert.rejects(
+      () => client.request({ path: "/api/v1/admin/accounts/evimed/memory-templates/profile", query: { uri: "viking://user/u-secret-subject/memories" }, openVikingUser: "evimed-engine" }),
+      (error) => {
+        assert.ok(error instanceof HttpError);
+        assert.equal(error.code, code, `HTTP ${status}`);
+        assert.equal(error.status, httpStatus);
+        assert.equal(error.upstreamStatus, status);
+        assert.equal(error.upstreamCode, upstreamCode);
+        // Two 404s that mean different things — this file is not there, this account is not registered yet — are told
+        // apart by what the engine says the refusal was about.
+        assert.deepEqual(error.upstreamDetails, { type: "account", resource: "evimed" });
+        assert.match(error.message, new RegExp(`^GET /api/v1/admin/accounts/evimed/memory-templates/profile -> ${status}: ${upstreamCode}: Account not found: evimed$`));
+        assert.ok(!error.message.includes("u-secret-subject"), "a query's URI reached an error message");
+        assert.ok(!error.message.includes("test-key"));
+        assert.ok(OPENVIKING_REQUEST_ERROR_CODES.includes(error.code), `${error.code} is not a code the primitive declares`);
+        return true;
+      },
+    );
+  }
+  // An error body that is not the engine's envelope still names the call.
+  const bare = new OpenVikingClient(config, { fetchImpl: responseFetch([{ status: 502, body: "Bad Gateway", contentType: "text/plain" }]) });
+  await assert.rejects(() => bare.request({ path: "/api/v1/fs/ls", userId: "usr_alice" }),
+    (error) => error.code === "memory_index_upstream_error" && error.upstreamCode === null && error.upstreamDetails === null && /-> 502: The memory index rejected the request\.$/.test(error.message));
+});
+
+test("a request waits as long as it was told to, and a client that is not configured asks nothing", async () => {
+  const slow = async (_url, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+  });
+  const client = new OpenVikingClient({ ...config, openVikingRequestTimeoutMs: 60_000 }, { fetchImpl: slow });
+  const started = Date.now();
+  await assert.rejects(() => client.request({ method: "POST", path: "/api/v1/skills", openVikingUser: "evimed-engine", body: {}, timeoutMs: 40 }), (error) => error.code === "memory_index_timeout" && error.status === 503);
+  assert.ok(Date.now() - started < 5_000, "the request waited for the client's default instead of its own deadline");
+
+  let asked = 0;
+  const unconfigured = new OpenVikingClient({ openVikingUrl: "", openVikingApiKeyError: "openviking_api_key_file_unavailable" }, { fetchImpl: async () => { asked += 1; return new Response("{}"); } });
+  await assert.rejects(() => unconfigured.request({ path: "/api/v1/fs/ls", userId: "usr_alice" }), (error) => error.status === 503 && error.code === "openviking_api_key_file_unavailable");
+  assert.equal(asked, 0);
+});
+
+test("a delete of something already gone is told from one that deleted, by the count v0.5.0 answers with", async () => {
+  // Until v0.5.0 a missing target was a 404; now it is a 200 with a count of zero, and the callers that count what a
+  // reconciliation removed would have counted every one.
+  const fetchImpl = responseFetch([
+    { status: 200, body: { status: "ok", result: { uri: "viking://x/a.md", estimated_deleted_count: 1 } } },
+    { status: 200, body: { status: "ok", result: { uri: "viking://x/a.md", estimated_deleted_count: 0 } } },
+    { status: 200, body: { status: "ok", result: { uri: "viking://x/a.md" } } },
+  ]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+  assert.equal(await client.remove("usr_alice", "viking://x/a.md"), true);
+  assert.equal(await client.remove("usr_alice", "viking://x/a.md"), false);
+  assert.equal(await client.remove("usr_alice", "viking://x/a.md"), true, "an answer with no count is a delete that happened, as it always was");
+});

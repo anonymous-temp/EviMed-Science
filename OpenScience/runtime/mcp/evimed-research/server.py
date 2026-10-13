@@ -317,7 +317,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "data_source_catalog",
-        "description": "Search the audited EviMed data-source registry, including active connectors, credential requirements, licenses, and explicit blockers.",
+        "description": "Search the audited EviMed registry of biomedical and scientific data sources, including active connectors, credential requirements, licenses, and explicit blockers.",
         "inputSchema": object_schema(
             {
                 "query": STRING,
@@ -358,7 +358,8 @@ TOOL_DEFINITIONS = [
         "name": "web_read",
         "description": (
             "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and "
-            "preserve it in the workspace as a citable snapshot with a sha256 receipt. Long text comes in pages: pass "
+            "preserve it in the workspace as a snapshot with a sha256 receipt. The page itself can be the primary "
+            "source: an official site, documentation, a release note, a policy text. Long text comes in pages: pass "
             "page=N for the next one (nextPage says whether there is one). Pages from regulators, guideline bodies and "
             "trial registries are marked official."
         ),
@@ -372,7 +373,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "web_search",
-        "description": "Search the open web through the platform's self-hosted metasearch aggregator. Use for what bibliographic indexes do not carry - funding calls, conference programmes, society pages, registries, methods described only on a group's own site. Results are unreviewed pages: follow one to its primary record before any claim from it enters a report.",
+        "description": "Search the open web through the platform's search gateway. Use it for current information and anything public: official sites, documentation and release pages, policy and regulatory notices, companies and markets, news, and what bibliographic indexes do not carry. Results are search hits, not the pages themselves: read one with web_read before relying on it, and give the reader the page's own address.",
         "inputSchema": object_schema(
             {
                 "query": {"type": "string", "minLength": 1, "maxLength": 512},
@@ -503,7 +504,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "literature_search",
-        "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+        "description": "Search the biomedical and scientific literature (PubMed and the other configured sources) through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
         "inputSchema": object_schema(
             {
                 "query": STRING,
@@ -2134,7 +2135,7 @@ def _dispatch(name, arguments, execution_context=None):
                 "retry" if error.retryable else "unsupported",
                 [
                     "Retry once the backend recovers." if error.retryable
-                    else "Continue with the bibliographic channels; do not read an unavailable web search as an empty field.",
+                    else "Read a page whose address you know with web_read, or continue with the bibliographic channels; say that search was unavailable, and do not read an unavailable web search as an empty field.",
                 ],
             )
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())

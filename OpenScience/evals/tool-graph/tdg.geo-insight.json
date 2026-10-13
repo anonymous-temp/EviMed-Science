@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:7499c9d64b9e93b5729c20b46f82154204b4c8946201d5ba084ea0d4dfe8db5d",
+  "version": "sha256:21602920fb6d369fe8be9ceb400060c999a644be21690c643ff4b1158aa8e9ca",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 34,
+    "nodes": 38,
     "edges": 10,
     "byVia": {
       "schema": 10,
@@ -35,6 +35,33 @@
         },
         "required": [
           "question"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "ask_user_question",
+      "source": "kernel",
+      "description": "Ask the person in the conversation a question and wait for the answer.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "questions": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "questions"
         ]
       },
       "outputSchema": {
@@ -1174,7 +1201,7 @@
     {
       "name": "mcp__evimed__literature_search",
       "source": "mcp",
-      "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+      "description": "Search the biomedical and scientific literature (PubMed and the other configured sources) through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1604,7 +1631,7 @@
     {
       "name": "mcp__evimed__web_read",
       "source": "mcp",
-      "description": "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and preserve it in the workspace as a citable snapshot with a sha256 receipt. Long text comes in pages: pass page=N for the next one (nextPage says whether there is one). Pages from regulators, guideline bodies and trial registries are marked official.",
+      "description": "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and preserve it in the workspace as a snapshot with a sha256 receipt. The page itself can be the primary source: an official site, documentation, a release note, a policy text. Long text comes in pages: pass page=N for the next one (nextPage says whether there is one). Pages from regulators, guideline bodies and trial registries are marked official.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1645,7 +1672,7 @@
     {
       "name": "mcp__evimed__web_search",
       "source": "mcp",
-      "description": "Search the open web through the platform's self-hosted metasearch aggregator. Use for what bibliographic indexes do not carry - funding calls, conference programmes, society pages, registries, methods described only on a group's own site. Results are unreviewed pages: follow one to its primary record before any claim from it enters a report.",
+      "description": "Search the open web through the platform's search gateway. Use it for current information and anything public: official sites, documentation and release pages, policy and regulatory notices, companies and markets, news, and what bibliographic indexes do not carry. Results are search hits, not the pages themselves: read one with web_read before relying on it, and give the reader the page's own address.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1692,6 +1719,33 @@
         "additionalProperties": false,
         "required": [
           "query"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "present",
+      "source": "kernel",
+      "description": "Declare existing workspace files as the final deliverables for the user.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "files": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "files"
         ]
       },
       "outputSchema": {
@@ -1770,6 +1824,33 @@
       "stateEffect": "none"
     },
     {
+      "name": "subagent",
+      "source": "kernel",
+      "description": "Delegate to a child agent.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "task": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
       "name": "task",
       "source": "kernel",
       "description": "Run a scoped subtask in a fresh context.",
@@ -1786,6 +1867,33 @@
         },
         "required": [
           "prompt"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "todo_write",
+      "source": "kernel",
+      "description": "Record and update the step list of a multi-step task.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "todos": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "todos"
         ]
       },
       "outputSchema": {

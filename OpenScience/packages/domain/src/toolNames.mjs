@@ -218,54 +218,66 @@ export const RETIRED_SOCKET_TOOL_NAMES = Object.freeze({
 
 /**
  * The research tools the root session sees; every other `mcp__evimed__*` tool
- * is visible only to the delegated children whose capability asks for it.
+ * is visible only where a capability asks for it — to a delegated child, or to
+ * the root itself once its plan names that capability.
  *
- * Two sources, because the root does two jobs. §9.7's umbrella tools are what
- * an orchestrator needs. But the root is also the answer line: an open-domain
- * question is answered in the root session under the `open-domain-answer`
- * persona, which requires `biomedical_source_search` and may use a further
- * eight, and the orchestration guidance's retrieval order names
- * `guideline_search` and `clinical_trial_search`. A root that could not call
- * what its own instructions tell it to call would fail exactly the plain
- * questions that should never need a delegation. The rest — the specialist
- * engines, the deterministic compilers, the science connectors — ride every
- * root request today (34 schemas, ~9 K tokens) and are delegated work.
+ * The root is the conversation, and the conversation is a general one: it
+ * writes, builds files, codes, analyses data and looks things up. So the list
+ * starts with what any task may need — the open web, the person's own
+ * documents, exact calculation, scheduling — and then holds the evidence
+ * tools, which the evidence method (`open-domain-answer`, a skill the model
+ * loads when the question is medical or asks what the literature shows) names
+ * and a plain medical question must be able to call without a delegation.
+ * Until 2026-10-12 the comment here read the other way round: the root was
+ * "the answer line", its tools were "the answer persona's declared tools", and
+ * the web search was listed as a research umbrella tool.
  *
- * `socket.test.mjs` holds this list against the persona's `agent.yaml` and the
- * guidance text, so a tool added to either is a red test here rather than a
- * silent refusal in production.
+ * The evidence tools stay mounted rather than appearing with the method. The
+ * kernel can narrow and widen a session's tools between requests (it is how a
+ * planned capability's tools arrive), but a second restriction keyed on the
+ * method would have to be lifted on every path a capability reaches the root
+ * by, and a miss there hides `literature_search` from a clinical run — the
+ * 2026-09-27 class of defect. Their descriptions say what they search.
+ *
+ * The rest — the specialist engines, the deterministic compilers, the science
+ * connectors — would ride every root request (56 schemas, ~95 K characters)
+ * and are a capability's work.
+ *
+ * `socket.test.mjs` holds this list against the conversation's `agent.yaml`,
+ * the guidance text and the evidence method, so a tool added to any of them is
+ * a red test here rather than a silent refusal in production.
  */
 export const ROOT_VISIBLE_MCP_BASE_NAMES = Object.freeze([
-  // §9.7 umbrella tools
-  'literature_search',
+  // What any task may need. The open web: a page can be the primary source for
+  // a software, policy or market question.
   'web_search',
-  'open_access_full_text',
-  'term_normalize',
-  'data_source_catalog',
-  // named by the orchestration guidance's retrieval order
-  'guideline_search',
-  'clinical_trial_search',
-  // the answer persona's declared tools (open-domain-answer/agent.yaml)
-  'biomedical_source_search',
   'web_read',
-  'drug_term_normalize',
-  'evidence_deduplicate',
-  'drug_label_search',
-  'pharmacy_reference_search',
-  // A question about the researcher's own documents is a plain question, and
-  // the answer line must be able to look (plan §3.2; model-chosen, never forced).
+  // The person's own documents (plan §3.2; model-chosen, never forced).
   'kb_search',
-  // So is "what does my knowledge base hold" and a question that spans several documents: the answer line finds its
+  // So is "what does my knowledge base hold" and a question that spans several documents: the conversation finds its
   // way by the wiki's contents, a page, the graph (model-chosen, never forced).
   'kb_browse',
-  // So is "what is new in X": the answer persona's optional feed lookup
-  // (frontier plan 2026-09-21 §4.8; model-chosen, never forced).
-  'frontier_search',
   'research_calculate',
-  // "每周五帮我看看……的新研究" is said in any conversation, to whichever line answers it, and "改到每周一 8 点" in a task's own
+  // "每周五帮我看看……" is said in any conversation, and "改到每周一 8 点" in a task's own
   // conversation: a tool the root is not shown would fail exactly the sentence it exists for (model-chosen, never forced).
   'schedule_task',
   'update_task',
+  // The evidence tools: what the evidence method names, and what a medical or
+  // literature question is answered with.
+  'literature_search',
+  'open_access_full_text',
+  'guideline_search',
+  'clinical_trial_search',
+  'biomedical_source_search',
+  'drug_label_search',
+  'pharmacy_reference_search',
+  'drug_term_normalize',
+  'term_normalize',
+  'evidence_deduplicate',
+  'data_source_catalog',
+  // "what is new in X": the method's optional feed lookup
+  // (frontier plan 2026-09-21 §4.8; model-chosen, never forced).
+  'frontier_search',
 ])
 
 /** @param {string} baseName @returns {string} */
@@ -374,9 +386,13 @@ export const RUNTIME_LEAKAGE_TOOL_TOKENS = Object.freeze([
 export const KERNEL_MOUNTED_TOOL_NAMES = Object.freeze([
   'bash', 'read', 'write', 'edit', 'glob', 'grep', 'list', 'skill', 'task',
   'fs_read', 'fs_write', 'fs_edit', 'fs_search', 'job_run', 'job_status',
-  // `subagent`, `workflow` and the subagent-control tools left with their rows
-  // (2026-09-18): a method telling a run to call one would now degrade it.
+  // `workflow` and the subagent-control tools left with their rows
+  // (2026-09-18): a method telling a run to call one would degrade it.
   'ask_user',
+  // The kernel's own pieces for general multi-step work, mounted 2026-10-12:
+  // the step list, the one-shot sub-agent, the file hand-over, and the
+  // question tool under the name the kernel registers it by.
+  'todo_write', 'subagent', 'present', 'ask_user_question',
 ])
 
 /**

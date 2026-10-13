@@ -43,8 +43,9 @@ def _gateway():
     if not url:
         raise WebSearchError(
             "web_search_unconfigured",
-            "Open-web search is not enabled for this deployment. The bibliographic channels "
-            "(PubMed, Europe PMC, OpenAlex, Semantic Scholar, Crossref, preprints) remain available.",
+            "Open-web search is not enabled for this deployment. A page whose address is known can still be read "
+            "with web_read, and the bibliographic channels (PubMed, Europe PMC, OpenAlex, Semantic Scholar, Crossref, "
+            "preprints) remain available.",
         )
     settings = public_sources._gateway_settings()  # noqa: SLF001 - one token, one owner
     if settings is None:

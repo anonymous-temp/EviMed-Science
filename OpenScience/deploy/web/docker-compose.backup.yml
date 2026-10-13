@@ -6,12 +6,28 @@ services:
       OPEN_SCIENCE_RESTORE_DRILL_ACK: "true"
       OPEN_SCIENCE_POSTGRES_BACKUP_STATE_FILE: /run/postgres-backup-status/state.json
       OPEN_SCIENCE_POSTGRES_BACKUP_MAX_AGE_SECONDS: ${OPEN_SCIENCE_POSTGRES_BACKUP_MAX_AGE_SECONDS:-90000}
+      # The OpenViking engine volume's copy (scripts/ops/openviking-backup.mjs,
+      # run by the same host timer through the drop-in in deploy/host/). Since
+      # v0.5.0 the volume holds native memory and compiled knowledge that exist
+      # nowhere else. Readiness reports the receipt as a notice under
+      # `checks.backup.openviking`, never as a failure.
+      OPEN_SCIENCE_OPENVIKING_BACKUP_STATE_FILE: /run/openviking-backup-status/state.json
+      OPEN_SCIENCE_OPENVIKING_BACKUP_MAX_AGE_SECONDS: ${OPEN_SCIENCE_OPENVIKING_BACKUP_MAX_AGE_SECONDS:-90000}
     volumes:
       # Directory mount follows atomic state-file replacement by the host timer.
       # Only non-secret status is exposed, never the dumps or Docker socket.
       - type: bind
         source: ${OPEN_SCIENCE_POSTGRES_BACKUP_STATUS_DIR:-./postgres-backup-status}
         target: /run/postgres-backup-status
+        read_only: true
+        bind:
+          create_host_path: false
+      # The same for the engine volume's receipt: the status directory only,
+      # never the archives, the passphrase or the Docker authority the capture
+      # needs. The default is an empty directory shipped with the release.
+      - type: bind
+        source: ${OPEN_SCIENCE_OPENVIKING_BACKUP_STATUS_DIR:-./openviking-backup-status}
+        target: /run/openviking-backup-status
         read_only: true
         bind:
           create_host_path: false
