@@ -48,8 +48,10 @@ const NOTHING_ABOVE_THE_FLOOR = "没有达到相关度下限的记忆。可以�
  * `subscriptions` is the project's evidence-zone subscriptions (`evidenceZoneSubscription.mjs`, flywheel F18): one more provider of a
  * recall, read for this project alone, appended after what the capsules and memory returned, never counted in the run's recalled
  * memories (a zone's card is reference context, not a memory) and never read in a conversation that is trying someone's pack.
+ * `memoryEngine` is which engine keeps an account's memory (`ResearchMemoryStore.memoryEngine`): on the native one the
+ * research-memory half of a recall is not read here.
  * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any, evaluationIsolation?: any, handbooks?: any,
- *   recallLimit?: number, recallMaxLimit?: number,
+ *   recallLimit?: number, recallMaxLimit?: number, memoryEngine?: ((userId: string) => Promise<string>) | null,
  *   subscriptions?: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> } | null,
  *   clinicalContext?: ((identity:any,runs:any[])=>Promise<boolean>) | null,
  *   sessions?: { running: (user: any, project: any) => Promise<{ id: string, sessionId: string }[]>,
@@ -58,7 +60,7 @@ const NOTHING_ABOVE_THE_FLOOR = "没有达到相关度下限的记忆。可以�
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null }} dependencies */
 export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null, handbooks = null, evaluationIsolation = null, subscriptions = null, clinicalContext = null,
-  recallLimit = 5, recallMaxLimit = 8 }) {
+  recallLimit = 5, recallMaxLimit = 8, memoryEngine = null }) {
   const maxLimit = Math.max(1, Math.min(30, Math.trunc(Number(recallMaxLimit)) || 8));
   const defaultLimit = Math.max(1, Math.min(maxLimit, Math.trunc(Number(recallLimit)) || 5));
   const windows = new Map();
@@ -158,7 +160,10 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         }
         // `standing: false`: this is the lookup; the researcher's standing profile was handed over up front, and an answer
         // padded with it could never be empty (`ResidentProfiles`).
-        const recalled = pause?.recall ? recallPaused() : await recallAcrossMemory({ capsules: service, memorySubstrate }, currentUser, {
+        // On the native engine the account's memories are the engine's and are recalled through its tools: the PostgreSQL
+        // records a switched account keeps for the fallback window are not read here (one account, one path).
+        const native = Boolean(memoryEngine) && await /** @type {(userId: string) => Promise<string>} */ (memoryEngine)(currentUser.id).catch(() => "legacy") === "native";
+        const recalled = pause?.recall ? recallPaused() : await recallAcrossMemory({ capsules: service, memorySubstrate: native ? null : memorySubstrate }, currentUser, {
           ...body, limit, standing: false, projectId: identity.projectId,
           sessionId: running.length === 1 ? running[0].sessionId : null,
         });

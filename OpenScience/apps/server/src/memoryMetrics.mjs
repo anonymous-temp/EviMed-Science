@@ -23,7 +23,7 @@ const RETIRED_TABLES = Object.freeze(["memory_record", "memo"]);
  * What a dispatch did with the resident profile (review M6): handed it over to a conversation that had none, whose copy had changed or
  * had been compacted away, left it where the conversation already held it, had none to give, or was told not to by a pause.
  */
-export const RESIDENT_PROFILE_OUTCOMES = Object.freeze(["first", "changed", "compacted", "unchanged", "empty", "paused"]);
+export const RESIDENT_PROFILE_OUTCOMES = Object.freeze(["first", "changed", "compacted", "unchanged", "empty", "paused", "native"]);
 /** What the recall tool answered: items found, nothing above the relevance floor, or why it read nothing (a pause, a trial, the deployment switch). */
 export const RECALL_TOOL_OUTCOMES = Object.freeze(["hit", "empty", "paused", "trial", "disabled"]);
 /**
@@ -96,7 +96,7 @@ export function memoryMetricFamilies() {
     { name: "open_science_retired_memos_erased_total", type: "counter", series: series(retiredTables, "table"),
       help: "Rows of the retired usememos tables removed with an erased account, by table." },
     { name: "open_science_memory_resident_profile_total", type: "counter", series: series(residentProfile, "outcome"),
-      help: "What dispatches did with the resident profile: handed it to a conversation that had none (first), whose copy had changed (changed) or had been compacted away (compacted); left it where the conversation already held it (unchanged); had none to give (empty); or were told not to by a pause." },
+      help: "What dispatches did with the resident profile: handed it to a conversation that had none (first), whose copy had changed (changed) or had been compacted away (compacted); left it where the conversation already held it (unchanged); had none to give (empty); were told not to by a pause; or left it to the native engine's memory plugin (native)." },
     { name: "open_science_memory_resident_profile_omitted_total", type: "counter", series: series(residentOmitted, "what"),
       help: "Records of the resident profile left off a block by its record or token cap; the line beside the profile says they can be looked up." },
     { name: "open_science_memory_recall_tool_total", type: "counter", series: series(recallTool, "outcome"),

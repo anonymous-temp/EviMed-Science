@@ -520,6 +520,11 @@ export class MemorySubstrate {
     if (!this.active) {
       return this.jobs.finish(job.userId, job.id, job.leaseToken, { status: "index_disabled", recordId });
     }
+    // An account on the native engine is recalled from the engine's own memories; the copies of its PostgreSQL records
+    // (kept for the fallback window) are not written or rewritten while it is there, and native recall never reads them.
+    if (typeof this.store.memoryEngine === "function" && await this.store.memoryEngine(job.userId) === "native") {
+      return this.jobs.finish(job.userId, job.id, job.leaseToken, { status: "native_engine", recordId });
+    }
     const record = await this.store.getRecord(job.userId, recordId).catch((error) => {
       if (error?.code === "memory_not_found") return null;
       throw error;
@@ -663,6 +668,8 @@ export class MemorySubstrate {
 
   /** One account's half of the sweep. @param {string} userId */
   async sweepAccount(userId) {
+    // Not for an account on the native engine: its record copies are left as they are until it comes back (`indexRecord`).
+    if (typeof this.store.memoryEngine === "function" && await this.store.memoryEngine(userId) === "native") return { removed: 0, enqueued: 0 };
     const leaves = await this.#researchLeaves(userId);
     const records = await this.store.listAllRecords(userId);
     const now = Date.now();

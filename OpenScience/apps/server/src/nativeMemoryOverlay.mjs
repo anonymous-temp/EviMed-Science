@@ -59,7 +59,7 @@ function publicCommit(row) {
     userId: String(row.user_id), archiveUri: String(row.archive_uri), engineSession: String(row.engine_session),
     projectId: row.project_id ?? null, origin: String(row.origin), taskId: row.task_id ?? null, state: String(row.state),
     operations: Number(row.operations) || 0, error: String(row.error ?? ""), attempts: Number(row.attempts) || 0,
-    nextAttemptAt: instant(row.next_attempt_at), replayedAs: row.replayed_as ?? null,
+    nextAttemptAt: instant(row.next_attempt_at), replayedAs: row.replayed_as ?? null, pendingText: row.pending_text ?? null,
     createdAt: instant(row.created_at), updatedAt: instant(row.updated_at), ingestedAt: instant(row.ingested_at),
   };
 }
@@ -131,16 +131,17 @@ export class NativeMemoryOverlay {
   /**
    * One commit the engine accepted. Written once per archive: a second sighting (the scan finding what the gateway
    * recorded) fills what the first did not know and never moves the state back.
-   * @param {{ userId: string, archiveUri: string, engineSession: string, projectId?: string | null, origin: string, taskId?: string | null, state?: string, error?: string }} commit
+   * @param {{ userId: string, archiveUri: string, engineSession: string, projectId?: string | null, origin: string, taskId?: string | null, state?: string, error?: string, pendingText?: string | null }} commit
    */
-  async recordCommit({ userId, archiveUri, engineSession, projectId = null, origin, taskId = null, state = "pending", error = "" }) {
+  async recordCommit({ userId, archiveUri, engineSession, projectId = null, origin, taskId = null, state = "pending", error = "", pendingText = null }) {
     if (!NATIVE_COMMIT_ORIGINS.includes(origin)) throw new HttpError(500, "memory_commit_invalid", "Unknown commit origin.");
-    const result = await this.#query(`INSERT INTO evimed_memory.native_commits AS c (user_id, archive_uri, engine_session, project_id, origin, task_id, state, error, next_attempt_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $7 = 'failed' THEN clock_timestamp() END)
+    const result = await this.#query(`INSERT INTO evimed_memory.native_commits AS c (user_id, archive_uri, engine_session, project_id, origin, task_id, state, error, next_attempt_at, pending_text)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $9)
       ON CONFLICT (user_id, archive_uri) DO UPDATE SET
         task_id = COALESCE(c.task_id, EXCLUDED.task_id), project_id = COALESCE(c.project_id, EXCLUDED.project_id), updated_at = clock_timestamp()
       RETURNING *, (xmax = 0) AS inserted`,
-    [owner(userId), String(archiveUri), String(engineSession), projectId, origin, taskId, state, String(error ?? "").slice(0, 400)]);
+    [owner(userId), String(archiveUri), String(engineSession), projectId, origin, taskId, state, String(error ?? "").slice(0, 400),
+      pendingText == null ? null : String(pendingText).slice(0, 2_000)]);
     return { ...publicCommit(result.rows[0]), inserted: result.rows[0].inserted === true };
   }
 
@@ -177,7 +178,7 @@ export class NativeMemoryOverlay {
 
   /** @param {string} userId @param {string} archiveUri @param {{ operations?: number }} [outcome] */
   async completeCommit(userId, archiveUri, { operations = 0 } = {}) {
-    await this.#query(`UPDATE evimed_memory.native_commits SET state='completed', operations=$3, error='', next_attempt_at=NULL,
+    await this.#query(`UPDATE evimed_memory.native_commits SET state='completed', operations=$3, error='', next_attempt_at=NULL, pending_text=NULL,
       ingested_at=clock_timestamp(), updated_at=clock_timestamp() WHERE user_id=$1 AND archive_uri=$2 AND state IN ('pending', 'failed')`,
     [owner(userId), String(archiveUri), Math.max(0, Math.trunc(Number(operations)) || 0)]);
   }
@@ -199,13 +200,13 @@ export class NativeMemoryOverlay {
 
   /** @param {string} userId @param {string} archiveUri @param {string} replayedAs the archive that carries the same messages now */
   async markReplayed(userId, archiveUri, replayedAs) {
-    await this.#query(`UPDATE evimed_memory.native_commits SET state='replayed', replayed_as=$3, next_attempt_at=NULL, updated_at=clock_timestamp()
+    await this.#query(`UPDATE evimed_memory.native_commits SET state='replayed', replayed_as=$3, next_attempt_at=NULL, pending_text=NULL, updated_at=clock_timestamp()
       WHERE user_id=$1 AND archive_uri=$2`, [owner(userId), String(archiveUri), String(replayedAs)]);
   }
 
   /** @param {string} userId @param {string} archiveUri @param {string} reason */
   async abandonCommit(userId, archiveUri, reason) {
-    await this.#query(`UPDATE evimed_memory.native_commits SET state='abandoned', error=$3, next_attempt_at=NULL, updated_at=clock_timestamp()
+    await this.#query(`UPDATE evimed_memory.native_commits SET state='abandoned', error=$3, next_attempt_at=NULL, pending_text=NULL, updated_at=clock_timestamp()
       WHERE user_id=$1 AND archive_uri=$2`, [owner(userId), String(archiveUri), String(reason ?? "").slice(0, 400)]);
   }
 
@@ -296,6 +297,28 @@ export class NativeMemoryOverlay {
     await this.#query("UPDATE evimed_memory.native_revisions SET before=NULL, after=NULL WHERE user_id=$1 AND uri=$2", [owner(userId), String(uri)]);
   }
 
+  /**
+   * A person deleted some lines of a memory that stays (a line of the profile): those lines leave every revision of the file
+   * the history holds, the rest of each text stays.
+   * @param {string} userId @param {string} uri @param {readonly string[]} lines
+   */
+  async scrubLines(userId, uri, lines) {
+    const prints = new Set(lines.map(lineFingerprint));
+    if (!prints.size) return 0;
+    const scrub = (/** @type {string | null} */ text) => (text === null ? null
+      : text.split("\n").filter((line) => !prints.has(lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")))).join("\n"));
+    const rows = await this.#query("SELECT id, before, after FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri=$2", [owner(userId), String(uri)]);
+    let changed = 0;
+    for (const row of rows.rows) {
+      const before = scrub(row.before);
+      const after = scrub(row.after);
+      if (before === row.before && after === row.after) continue;
+      await this.#query("UPDATE evimed_memory.native_revisions SET before=$3, after=$4 WHERE user_id=$1 AND id=$2", [owner(userId), String(row.id), before, after]);
+      changed += 1;
+    }
+    return changed;
+  }
+
   // ------------------------------------------------------------------- files
 
   /**
@@ -355,6 +378,13 @@ export class NativeMemoryOverlay {
   async projectFiles(userId, projectId) {
     const result = await this.#query("SELECT * FROM evimed_memory.native_files WHERE user_id=$1 AND project_id=$2", [owner(userId), String(projectId)]);
     return result.rows.map(publicFile);
+  }
+
+  /** The project an engine session's earlier commits were made in, or null. @param {string} userId @param {string} engineSession */
+  async projectOfSession(userId, engineSession) {
+    const result = await this.#query(`SELECT project_id FROM evimed_memory.native_commits WHERE user_id=$1 AND engine_session=$2 AND project_id IS NOT NULL
+      ORDER BY created_at DESC LIMIT 1`, [owner(userId), String(engineSession)]);
+    return result.rows[0]?.project_id ?? null;
   }
 
   /** The engine sessions of one project, as the ledger saw them. @param {string} userId @param {string} projectId @returns {Promise<string[]>} */

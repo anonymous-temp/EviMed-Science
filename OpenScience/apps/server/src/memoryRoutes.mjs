@@ -43,9 +43,17 @@ import {
  */
 
 /**
+ * An account on the native memory engine (2026-10-13) is served by `nativeMemory` (`nativeMemoryStore.mjs`) behind the same
+ * routes and, wherever the engine allows, the same response shapes: a record is a memory file (a line, for the profile
+ * document) with `engine: "native"`, `nativeType`, `uri` and `contentHash` added, and `version` a compare-and-swap token
+ * derived from the text. Three things exist only there — `POST /api/memory/remember` (the page's 「记住这一条」, pending until
+ * the engine has written it), `pending` on the profile, and `engine` on the settings — and one only on the legacy path
+ * (settling a disagreement: the engine keeps none).
+ *
  * @param {{
  *   config: any,
  *   researchMemory: any,
+ *   nativeMemory?: import("./nativeMemoryStore.mjs").NativeMemoryStore | null,
  *   memorySubstrate?: any,
  *   memoryIndexWorker?: { drainWithdrawals?: () => Promise<any> } | null,
  *   resetProduct?: ((userId: string) => Promise<{ methods: number, handbooks: number, entries: number, jobs: number, feedback: number }>) | null,
@@ -61,10 +69,28 @@ import {
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createMemoryRoutes({
-  config, researchMemory, memorySubstrate = null, memoryIndexWorker = null, resetProduct = null, releasePausedRuntimes = null, projectWork = null,
+  config, researchMemory, nativeMemory = null, memorySubstrate = null, memoryIndexWorker = null, resetProduct = null, releasePausedRuntimes = null, projectWork = null,
   feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
 }) {
   const enabled = config.memoryEnabled !== false;
+
+  /**
+   * Whether this account's memory is on the native engine. An account that is, in a deployment that cannot reach the engine,
+   * is told the memory service is unavailable — never served the legacy rows as if they were its memory.
+   * @param {string} userId @returns {Promise<boolean>}
+   */
+  async function onNative(userId) {
+    if (typeof researchMemory.memoryEngine !== "function") return false;
+    if (await researchMemory.memoryEngine(userId) !== "native") return false;
+    if (!nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
+    return true;
+  }
+
+  /** The account's engine, for the settings read: `legacy` when it cannot be read. @param {string} userId */
+  async function engineOf(userId) {
+    if (typeof researchMemory.memoryEngine !== "function") return "legacy";
+    return researchMemory.memoryEngine(userId).catch(() => "legacy");
+  }
 
   /**
    * Each record with what the page labels it by — the interval it holds over,
@@ -107,7 +133,7 @@ export function createMemoryRoutes({
     // project only.
     if (pathname === "/api/memory/settings" && req.method === "GET") {
       const ctx = await context(req, res);
-      sendJson(res, 200, { data: await researchMemory.settings(ctx.user.id) });
+      sendJson(res, 200, { data: { ...(await researchMemory.settings(ctx.user.id)), engine: await engineOf(ctx.user.id) } });
       return true;
     }
 
@@ -122,13 +148,21 @@ export function createMemoryRoutes({
       await audit(ctx, "memory.settings.update", "completed", {
         learningPaused: settings.learningPaused, recallPaused: settings.recallPaused, pausedProjects: settings.pausedProjects.length,
       });
+      const engine = await engineOf(ctx.user.id);
+      // On the native engine the account's pause is the engine's own policy too: what reached it before the pause is
+      // archived and not extracted. The gateway already stops forwarding; an engine that cannot be told now is told by the
+      // next change of the switch, and the switch has taken effect either way (the gateway reads it per request).
+      if (engine === "native" && typeof body.learningPaused === "boolean" && nativeMemory?.configured) {
+        await nativeMemory.setLearning(ctx.user.id, !settings.learningPaused)
+          .catch((/** @type {any} */ error) => audit(ctx, "memory.settings.engine", "failed", { code: String(error?.code ?? "memory_engine_unavailable") }));
+      }
       // A pause for recall turned on under a runtime that is already up: the methods it mounted at launch are read from
       // it, so the idle ones are let go and the next launch mounts none (`RuntimeManager.releasePausedMethodRuntimes`).
       // Not waited on, and never a reason the switch did not take.
       if (releasePausedRuntimes && (body.recallPaused === true || (Array.isArray(body.pausedProjects) && body.pausedProjects.length > 0))) {
         void Promise.resolve(releasePausedRuntimes(ctx.user.id)).catch(() => {});
       }
-      sendJson(res, 200, { data: settings });
+      sendJson(res, 200, { data: { ...settings, engine } });
       return true;
     }
 
@@ -154,8 +188,10 @@ export function createMemoryRoutes({
       // is taken again, which can only move it later.
       await researchMemory.noteReset(ctx.user.id);
       const purged = await researchMemory.purgeUserMemory(ctx.user.id);
-      // A reset that fails halfway answers with the failure and is run again: both halves are idempotent.
-      const removed = { ...purged, ...(resetProduct ? await resetProduct(ctx.user.id) : {}) };
+      // A reset that fails halfway answers with the failure and is run again: both halves are idempotent. On the native engine
+      // the engine's memory files and sessions go too, and the overlay's record of them.
+      const native = await onNative(ctx.user.id) ? { native: await /** @type {any} */ (nativeMemory).reset(ctx.user.id) } : {};
+      const removed = { ...purged, ...(resetProduct ? await resetProduct(ctx.user.id) : {}), ...native };
       recordResetRemoved({ jobs: removed.jobs, feedback: removed.feedback });
       if (memorySubstrate?.active && !researchMemory.withdrawals) void memorySubstrate.forgetUser(ctx.user.id).catch(() => false);
       void memoryIndexWorker?.drainWithdrawals?.();
@@ -170,6 +206,23 @@ export function createMemoryRoutes({
     // asked of the researcher for nothing; what they want remembered they say
     // in a conversation.
 
+    // 「记住这一条」 from the page, on the native engine: the person's words go to the engine as a conversation of one message,
+    // and appear when it has written them (about twelve seconds); the answer is what the page shows as pending until then.
+    if (pathname === "/api/memory/remember" && req.method === "POST") {
+      const ctx = await context(req, res);
+      const body = assertObject(await readJson(req, config.maxJsonBytes), "memory to remember");
+      const unknown = Object.keys(body).filter((field) => field !== "text" && field !== "projectId");
+      if (unknown.length > 0) throw new HttpError(400, "memory_payload_invalid", `Unknown field(s): ${unknown.sort().join(", ")}.`);
+      if (!await onNative(ctx.user.id)) throw new HttpError(400, "memory_engine_unsupported", "Remembering from the page needs the native memory engine.");
+      const text = assertString(body.text, "text", { max: 2_000 });
+      const projectId = body.projectId == null || body.projectId === "" ? null
+        : (await store.requireProject(ctx.user, assertString(body.projectId, "projectId", { max: 64 }))).id;
+      const remembered = await /** @type {any} */ (nativeMemory).remember(ctx.user.id, { text, projectId });
+      await audit(ctx, "memory.remember", "completed", { project: projectId ?? "" });
+      sendJson(res, 200, { data: remembered });
+      return true;
+    }
+
     if (pathname === "/api/memory/records" && req.method === "GET") {
       const ctx = await context(req, res);
       const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
@@ -183,14 +236,19 @@ export function createMemoryRoutes({
         .flatMap((value) => value.split(","))
         .map((value) => value.trim())
         .filter((value) => allowed.has(value));
-      const records = await researchMemory.listRecords(ctx.user.id, {
+      const filters = {
         scopes: readFilters("scope", allowedScopes),
         kinds: readFilters("kind", allowedKinds),
         statuses: readFilters("status", allowedStatuses),
         scopeId: url.searchParams.get("scopeId") ?? "",
         query: url.searchParams.get("query") ?? "",
         pageSize: Number(url.searchParams.get("pageSize") ?? 100),
-      });
+      };
+      if (await onNative(ctx.user.id)) {
+        sendJson(res, 200, { data: await /** @type {any} */ (nativeMemory).listRecords(ctx.user.id, filters) });
+        return true;
+      }
+      const records = await researchMemory.listRecords(ctx.user.id, filters);
       sendJson(res, 200, { data: await withRelations(ctx.user.id, records) });
       return true;
     }
@@ -201,6 +259,12 @@ export function createMemoryRoutes({
     if (pathname === "/api/memory/changes" && req.method === "GET") {
       const ctx = await context(req, res);
       const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
+      if (await onNative(ctx.user.id)) {
+        sendJson(res, 200, { data: await /** @type {any} */ (nativeMemory).changes(ctx.user.id, {
+          since: url.searchParams.get("since") ?? null, sessionId: url.searchParams.get("sessionId"), limit: Number(url.searchParams.get("limit") ?? 20),
+        }) });
+        return true;
+      }
       sendJson(res, 200, { data: await researchMemory.recentChanges(ctx.user.id, {
         since: url.searchParams.get("since") ?? "",
         sessionId: url.searchParams.get("sessionId"),
@@ -211,6 +275,12 @@ export function createMemoryRoutes({
 
     if (pathname === "/api/memory/profile" && req.method === "GET") {
       const ctx = await context(req, res);
+      if (await onNative(ctx.user.id)) {
+        sendJson(res, 200, { data: await /** @type {any} */ (nativeMemory).profile(ctx.user.id, {
+          holder: { id: String(ctx.user.id), name: String(ctx.user.name ?? ctx.user.id) },
+        }) });
+        return true;
+      }
       // Every project's memory, not only the one the page was opened from:
       // each row names its project and the page filters by it.
       const stored = await researchMemory.profile(ctx.user.id);
@@ -253,15 +323,18 @@ export function createMemoryRoutes({
       const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
       const timeZone = timeZoneOrDefault(url.searchParams.get("timeZone"));
       const listFilters = { scopes: ["project"], kinds: ["project_fact", "decision"], statuses: ["active"], scopeId: project.id };
+      // On the native engine the card is the project's own project-context memory, read by its sections.
+      const native = await onNative(ctx.user.id);
       const [records, settings, work] = await Promise.all([
-        typeof researchMemory.listAllRecords === "function" ? researchMemory.listAllRecords(ctx.user.id, listFilters) : researchMemory.listRecords(ctx.user.id, listFilters),
+        native ? Promise.resolve([])
+          : typeof researchMemory.listAllRecords === "function" ? researchMemory.listAllRecords(ctx.user.id, listFilters) : researchMemory.listRecords(ctx.user.id, listFilters),
         typeof researchMemory.settings === "function" ? researchMemory.settings(ctx.user.id).catch(() => null) : null,
         projectWork ? Promise.resolve(projectWork(ctx.user, project, { timeZone })).catch(() => null) : null,
       ]);
       sendJson(res, 200, { data: {
         projectId: project.id,
         paused: Array.isArray(settings?.pausedProjects) && settings.pausedProjects.includes(project.id),
-        card: projectCard(records),
+        card: native ? await /** @type {any} */ (nativeMemory).projectCard(ctx.user.id, project.id) : projectCard(records),
         capabilities: work?.capabilities ?? [],
         works: work?.works ?? [],
         timeZone,
@@ -277,6 +350,10 @@ export function createMemoryRoutes({
     if (sourcesOf && req.method === "GET") {
       const ctx = await context(req, res);
       const recordId = decodeRouteComponent(sourcesOf[1], "structured memory id");
+      if (await onNative(ctx.user.id)) {
+        sendJson(res, 200, { data: await /** @type {any} */ (nativeMemory).sourceLinks(ctx.user.id, recordId) });
+        return true;
+      }
       // The record first: a record of another account is a 404, as everywhere in this module.
       await researchMemory.getRecord(ctx.user.id, recordId);
       const links = typeof researchMemory.sourceLinks === "function" ? await researchMemory.sourceLinks(ctx.user.id, recordId) : [];
@@ -307,6 +384,10 @@ export function createMemoryRoutes({
       const ctx = await context(req, res);
       const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
       const query = (url.searchParams.get("q") ?? "").trim();
+      if (await onNative(ctx.user.id)) {
+        sendJson(res, 200, { data: await /** @type {any} */ (nativeMemory).search(ctx.user.id, query) });
+        return true;
+      }
       const found = await researchMemory.searchRecords(ctx.user.id, { query, projectId: ctx.project.id });
       const items = [...found.items];
       const seen = new Set(items.map((/** @type {any} */ record) => record.id));
@@ -346,6 +427,7 @@ export function createMemoryRoutes({
     // (`resolveConflict`, `by: "user"`); nothing else settles a disagreement.
     if (pathname === "/api/memory/conflicts/resolve" && req.method === "POST") {
       const ctx = await context(req, res);
+      if (await onNative(ctx.user.id)) throw new HttpError(400, "memory_engine_unsupported", "The native memory engine keeps no disagreements to settle.");
       const body = assertObject(await readJson(req, config.maxJsonBytes), "memory conflict resolution");
       const unknown = Object.keys(body).filter((field) => field !== "keepId" && field !== "otherId");
       if (unknown.length > 0) {
@@ -377,6 +459,12 @@ export function createMemoryRoutes({
       if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
         throw new HttpError(400, "memory_version_invalid", "expectedVersion must be a positive integer.");
       }
+      if (await onNative(ctx.user.id)) {
+        const undone = await /** @type {any} */ (nativeMemory).undo(ctx.user.id, recordId, { expectedVersion });
+        await audit(ctx, "memory.record.undo", "completed", { target: recordId, undone: undone.undone });
+        sendJson(res, 200, { data: undone });
+        return true;
+      }
       const result = await researchMemory.undo(ctx.user.id, recordId, { expectedVersion });
       await audit(ctx, "memory.record.undo", "completed", { target: recordId, undone: result.undone });
       await recordFeedback(ctx, () => (result.undone === "removed"
@@ -391,6 +479,31 @@ export function createMemoryRoutes({
       if (!rawRecordId || rawRecordId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
       const recordId = decodeRouteComponent(rawRecordId, "structured memory id");
       const ctx = await context(req, res);
+      if ((req.method === "PATCH" || req.method === "DELETE") && await onNative(ctx.user.id)) {
+        const native = /** @type {any} */ (nativeMemory);
+        if (req.method === "DELETE") {
+          await native.remove(ctx.user.id, recordId, { keepText: false, actor: "user" });
+          await audit(ctx, "memory.record.delete", "completed", { target: recordId });
+          sendJson(res, 200, { data: true });
+          return true;
+        }
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "structured memory update");
+        const unknown = Object.keys(body).filter((field) => !["value", "status", "sensitive", "expectedVersion"].includes(field));
+        // A summary and an importance have no place in a memory file: refused by name rather than dropped.
+        if (unknown.length > 0) throw new HttpError(400, unknown.every((field) => field === "summary" || field === "importance") ? "memory_engine_unsupported" : "memory_payload_invalid",
+          `Unsupported memory field(s): ${unknown.sort().join(", ")}.`);
+        const expectedVersion = Number(body.expectedVersion);
+        if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new HttpError(400, "memory_version_invalid", "expectedVersion must be a positive integer.");
+        const updated = await native.update(ctx.user.id, recordId, {
+          ...(Object.hasOwn(body, "value") ? { value: assertString(body.value, "value", { max: 100_000 }) } : {}),
+          ...(Object.hasOwn(body, "sensitive") ? { sensitive: body.sensitive } : {}),
+          ...(Object.hasOwn(body, "status") ? { status: String(body.status) } : {}),
+          expectedVersion,
+        });
+        await audit(ctx, "memory.record.update", "completed", { target: recordId, status: updated.status });
+        sendJson(res, 200, { data: updated });
+        return true;
+      }
       if (req.method === "PATCH") {
         const body = assertObject(await readJson(req, config.maxJsonBytes), "structured memory update");
         const allowed = new Set(["value", "summary", "status", "importance", "sensitive", "expectedVersion"]);

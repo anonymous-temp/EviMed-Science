@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
   attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   next_attempt_at timestamptz(3),
   replayed_as text CHECK (replayed_as IS NULL OR char_length(replayed_as) <= 600),
+  -- What the person asked the page to remember, shown as pending until the engine has written it, then cleared.
+  pending_text text CHECK (pending_text IS NULL OR char_length(pending_text) <= 2000),
   created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   ingested_at timestamptz(3),

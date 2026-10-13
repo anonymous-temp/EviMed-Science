@@ -971,7 +971,7 @@ function skippedResult(source, excluded, runSummary = null) {
  * `automated` is a run a script dispatched (see `recordRun`). `before_reset` is a
  * conversation that was over before the account's last memory reset.
  */
-export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "automated", "paused", "unconfigured", "trial", "clinical_context", "before_reset"]));
+export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "automated", "paused", "unconfigured", "trial", "clinical_context", "before_reset", "native_engine"]));
 
 /**
  * Why a run that was extracted from wrote nothing, as the closed word the operator's counter carries
@@ -1069,6 +1069,11 @@ export class MemoryIntelligence {
     // (`memoryEnabled`) and is deliberately untouched here.
     if (!this.enabled || this.#excludedProject(project)) {
       return skippedResult(this.enabled ? "project_excluded" : "disabled", excluded);
+    }
+    // One account, one path (2026-10-13): an account on the native engine is learned from by the engine, through the memory
+    // plugin; this extraction, its run summary and the review pass after it do not run for it.
+    if (typeof this.memoryStore.memoryEngine === "function" && await this.memoryStore.memoryEngine(project.userId) === "native") {
+      return skippedResult("native_engine", excluded);
     }
     if (this.canReuseRun && !await this.canReuseRun(project, run)) return skippedResult("clinical_context", excluded);
     // An automated run — a probe, an audit, an acceptance or evaluation
