@@ -1,0 +1,446 @@
+{
+ "ranAt": "2026-10-13T04:23:03.173Z",
+ "model": "deepseek-flash",
+ "samples": 3,
+ "note": "4 paper briefs x 3 samples on DeepSeek with the 1.4.0 SKILL.md; quotes re-anchored by code (no tools in the replay); the one remaining issue, economics contents items over 200 characters, is the existing contents bound and not a slot question",
+ "results": [
+  {
+   "id": "paper",
+   "sample": 0,
+   "parseError": null,
+   "notVerbatim": 0,
+   "missingFacts": [],
+   "error": null,
+   "keys": [
+    "question",
+    "method",
+    "dataOrSubjects",
+    "mainResults",
+    "limitations",
+    "doi",
+    "design",
+    "population",
+    "interventionExposure",
+    "outcomes",
+    "effectEstimates"
+   ],
+   "states": {
+    "question": "unknown",
+    "method": "known",
+    "dataOrSubjects": "known",
+    "mainResults": "known",
+    "limitations": "known",
+    "doi": "unknown",
+    "design": "known",
+    "population": "known",
+    "interventionExposure": "known",
+    "outcomes": "known",
+    "effectEstimates": "unknown"
+   },
+   "clinicalPresent": [
+    "design",
+    "population",
+    "interventionExposure",
+    "outcomes",
+    "effectEstimates"
+   ],
+   "neutralMissing": [],
+   "slotIssues": [],
+   "issues": []
+  },
+  {
+   "id": "paper",
+   "sample": 1,
+   "parseError": null,
+   "notVerbatim": 0,
+   "missingFacts": [],
+   "error": null,
+   "keys": [
+    "question",
+    "method",
+    "dataOrSubjects",
+    "mainResults",
+    "limitations",
+    "doi",
+    "design",
+    "population",
+    "interventionExposure",
+    "outcomes",
+    "effectEstimates"
+   ],
+   "states": {
+    "question": "unknown",
+    "method": "known",
+    "dataOrSubjects": "known",
+    "mainResults": "unknown",
+    "limitations": "known",
+    "doi": "unknown",
+    "design": "known",
+    "population": "known",
+    "interventionExposure": "known",
+    "outcomes": "known",
+    "effectEstimates": "unknown"
+   },
+   "clinicalPresent": [
+    "design",
+    "population",
+    "interventionExposure",
+    "outcomes",
+    "effectEstimates"
+   ],
+   "neutralMissing": [],
+   "slotIssues": [],
+   "issues": []
+  },
+  {
+   "id": "paper",
+   "sample": 2,
+   "parseError": null,
+   "notVerbatim": 0,
+   "missingFacts": [],
+   "error": null,
+   "keys": [
+    "question",
+    "method",
+    "dataOrSubjects",
+    "mainResults",
+    "limitations",
+    "doi",
+    "design",
+    "population",
+    "interventionExposure",
+    "outcomes",
+    "effectEstimates"
+   ],
+   "states": {
+    "question": "unknown",
+    "method": "known",
+    "dataOrSubjects": "known",
+    "mainResults": "known",
+    "limitations": "known",
+    "doi": "unknown",
+    "design": "known",
+    "population": "known",
+    "interventionExposure": "known",
+    "outcomes": "known",
+    "effectEstimates": "unknown"
+   },
+   "clinicalPresent": [
+    "design",
+    "population",
+    "interventionExposure",
+    "outcomes",
+    "effectEstimates"
+   ],
+   "neutralMissing": [],
+   "slotIssues": [],
+   "issues": []
+  },
+  {
+   "id": "paper-economics",
+   "sample": 0,
+   "parseError": null,
+   "notVerbatim": 0,
+   "missingFacts": [],
+   "error": null,
+   "keys": [
+    "question",
+    "method",
+    "dataOrSubjects",
+    "mainResults",
+    "limitations",
+    "doi"
+   ],
+   "states": {
+    "question": "known",
+    "method": "known",
+    "dataOrSubjects": "known",
+    "mainResults": "known",
+    "limitations": "known",
+    "doi": "known"
+   },
+   "clinicalPresent": [],
+   "neutralMissing": [],
+   "slotIssues": [],
+   "issues": [
+    "Each contents item must be nonempty text of at most 200 characters."
+   ]
+  },
+  {
+   "id": "paper-economics",
+   "sample": 1,
+   "parseError": null,
+   "notVerbatim": 0,
+   "missingFacts": [],
+   "error": null,
+   "keys": [
+    "question",
+    "method",
+    "dataOrSubjects",
+    "mainResults",
+    "limitations",
+    "doi"
+   ],
+   "states": {
+    "question": "known",
+    "method": "known",
+    "dataOrSubjects": "known",
+    "mainResults": "known",
+    "limitations": "known",
+    "doi": "known"
+   },
+   "clinicalPresent": [],
+   "neutralMissing": [],
+   "slotIssues": [],
+   "issues": [
+    "Each contents item must be nonempty text of at most 200 characters."
+   ]
+  },
+  {
+   "id": "paper-economics",
+   "sample": 2,
+   "parseError": null,
+   "notVerbatim": 0,
+   "missingFacts": [],
+   "error": null,
+   "keys": [
+    "question",
+    "method",
+    "dataOrSubjects",
+    "mainResults",
+    "limitations",
+    "doi"
+   ],
+   "states": {
+    "question": "known",
+    "method": "known",
+    "dataOrSubjects": "known",
+    "mainResults": "known",
+    "limitations": "known",
+    "doi": "known"
+   },
+   "clinicalPresent": [],
+   "neutralMissing": [],
+   "slotIssues": [],
+   "issues": [
+    "Each contents item must be nonempty text of at most 200 characters."
+   ]
+  },
+  {
+   "id": "paper-machine-learning",
+   "sample": 0,
+   "parseError": null,
+   "notVerbatim": 0,
+   "missingFacts": [],
+   "error": null,
+   "keys": [
+    "question",
+    "method",
+    "dataOrSubjects",
+    "mainResults",
+    "limitations",
+    "doi"
+   ],
+   "states": {
+    "question": "known",
+    "method": "known",
+    "dataOrSubjects": "known",
+    "mainResults": "known",
+    "limitations": "known",
+    "doi": "unknown"
+   },
+   "clinicalPresent": [],
+   "neutralMissing": [],
+   "slotIssues": [],
+   "issues": []
+  },
+  {
+   "id": "paper-machine-learning",
+   "sample": 1,
+   "parseError": null,
+   "notVerbatim": 0,
+   "missingFacts": [],
+   "error": null,
+   "keys": [
+    "question",
+    "method",
+    "dataOrSubjects",
+    "mainResults",
+    "limitations",
+    "doi"
+   ],
+   "states": {
+    "question": "known",
+    "method": "known",
+    "dataOrSubjects": "known",
+    "mainResults": "known",
+    "limitations": "known",
+    "doi": "unknown"
+   },
+   "clinicalPresent": [],
+   "neutralMissing": [],
+   "slotIssues": [],
+   "issues": []
+  },
+  {
+   "id": "paper-machine-learning",
+   "sample": 2,
+   "parseError": null,
+   "notVerbatim": 0,
+   "missingFacts": [],
+   "error": null,
+   "keys": [
+    "question",
+    "method",
+    "dataOrSubjects",
+    "mainResults",
+    "limitations",
+    "doi"
+   ],
+   "states": {
+    "question": "known",
+    "method": "known",
+    "dataOrSubjects": "known",
+    "mainResults": "known",
+    "limitations": "known",
+    "doi": "unknown"
+   },
+   "clinicalPresent": [],
+   "neutralMissing": [],
+   "slotIssues": [],
+   "issues": []
+  },
+  {
+   "id": "paper-randomised-trial",
+   "sample": 0,
+   "parseError": null,
+   "notVerbatim": 0,
+   "missingFacts": [],
+   "error": null,
+   "keys": [
+    "question",
+    "method",
+    "dataOrSubjects",
+    "mainResults",
+    "limitations",
+    "doi",
+    "design",
+    "population",
+    "interventionExposure",
+    "outcomes",
+    "effectEstimates"
+   ],
+   "states": {
+    "question": "known",
+    "method": "known",
+    "dataOrSubjects": "known",
+    "mainResults": "known",
+    "limitations": "known",
+    "doi": "known",
+    "design": "known",
+    "population": "known",
+    "interventionExposure": "known",
+    "outcomes": "known",
+    "effectEstimates": "known"
+   },
+   "clinicalPresent": [
+    "design",
+    "population",
+    "interventionExposure",
+    "outcomes",
+    "effectEstimates"
+   ],
+   "neutralMissing": [],
+   "slotIssues": [],
+   "issues": []
+  },
+  {
+   "id": "paper-randomised-trial",
+   "sample": 1,
+   "parseError": null,
+   "notVerbatim": 0,
+   "missingFacts": [],
+   "error": null,
+   "keys": [
+    "question",
+    "method",
+    "dataOrSubjects",
+    "mainResults",
+    "limitations",
+    "doi",
+    "design",
+    "population",
+    "interventionExposure",
+    "outcomes",
+    "effectEstimates"
+   ],
+   "states": {
+    "question": "known",
+    "method": "known",
+    "dataOrSubjects": "known",
+    "mainResults": "known",
+    "limitations": "known",
+    "doi": "known",
+    "design": "known",
+    "population": "known",
+    "interventionExposure": "known",
+    "outcomes": "known",
+    "effectEstimates": "known"
+   },
+   "clinicalPresent": [
+    "design",
+    "population",
+    "interventionExposure",
+    "outcomes",
+    "effectEstimates"
+   ],
+   "neutralMissing": [],
+   "slotIssues": [],
+   "issues": []
+  },
+  {
+   "id": "paper-randomised-trial",
+   "sample": 2,
+   "parseError": null,
+   "notVerbatim": 0,
+   "missingFacts": [],
+   "error": null,
+   "keys": [
+    "question",
+    "method",
+    "dataOrSubjects",
+    "mainResults",
+    "limitations",
+    "doi",
+    "design",
+    "population",
+    "interventionExposure",
+    "outcomes",
+    "effectEstimates"
+   ],
+   "states": {
+    "question": "known",
+    "method": "known",
+    "dataOrSubjects": "known",
+    "mainResults": "known",
+    "limitations": "known",
+    "doi": "known",
+    "design": "known",
+    "population": "known",
+    "interventionExposure": "known",
+    "outcomes": "known",
+    "effectEstimates": "known"
+   },
+   "clinicalPresent": [
+    "design",
+    "population",
+    "interventionExposure",
+    "outcomes",
+    "effectEstimates"
+   ],
+   "neutralMissing": [],
+   "slotIssues": [],
+   "issues": []
+  }
+ ]
+}

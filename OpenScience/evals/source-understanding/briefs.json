@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "acceptanceStatus": "offline fixtures only; real source DSH acceptance pending (2026-10-13: the three paper briefs added with source-understanding 1.4.0 were replayed on DeepSeek, see results/2026-10-13-paper-schema-replay)",
+  "acceptanceStatus": "offline fixtures only; real source DSH acceptance pending (2026-10-13: the paper briefs, three of them added with source-understanding 1.4.0, were replayed on DeepSeek three times each by replay_paper_schema.mjs, slots only and without tools: results/2026-10-13-paper-schema-replay/summary.json)",
   "briefs": [
     {
       "id": "sop",
