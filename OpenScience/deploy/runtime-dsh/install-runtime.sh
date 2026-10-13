@@ -363,13 +363,14 @@ verify_tools() {
   test -x /usr/bin/chromium
   rg --version
   python -m playwright --version
-  # The kit ships in the kernel's closure, so only a host that carries the kernel has it: in the
-  # image `kernel` has already failed the build when the closure lacks it, and this proves it runs.
-  # A CI runner that installs just the renderer and the browser has no kernel and nothing to prove.
-  if [ -d /usr/local/lib/node_modules/@deepseek-ai/dsh ] || [ -e /usr/local/bin/libreoffice-kit ]; then
-    libreoffice-kit capabilities --json > /dev/null
-  fi
   Rscript -e 'stopifnot(getRversion() >= "4.0.0", abs(mean(c(1, 2, 3)) - 2) < 1e-12)'
+  # Last, and only where the kernel is: the kit ships in the kernel's closure. In the image `kernel`
+  # has already failed the build when the closure lacks it, and the line below proves it runs; a CI
+  # runner that installs just the renderer and the browser has no kernel and nothing to prove. The
+  # guard is written with `[` so the skill table, which reads this phase's commands, still lists
+  # exactly the tools the image verifies.
+  [ -d /usr/local/lib/node_modules/@deepseek-ai/dsh ] || return 0
+  libreoffice-kit capabilities --json > /dev/null
 }
 
 # Smoke every shared curated-skill implementation in the production dependency
