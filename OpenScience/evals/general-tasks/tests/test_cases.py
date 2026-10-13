@@ -71,3 +71,26 @@ class CaseFile(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Registration(unittest.TestCase):
+    """The suite is registered in evals/acceptance-ledger.json beside the capability rows, and the row says what the case file says."""
+
+    def test_the_ledger_row_matches_the_case_file(self):
+        ledger = json.loads((SUITE.parent / "acceptance-ledger.json").read_text(encoding="utf-8"))
+        rows = [s for s in ledger.get("suites", []) if s["id"] == "general-tasks"]
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["evalHarness"], "evals/general-tasks")
+        self.assertTrue((SUITE.parents[1] / row["evalHarness"]).is_dir())
+        self.assertEqual(row["caseCount"], len(CASES))
+        self.assertEqual(row["kinds"], {"general": 22, "medical": 6})
+        families = {}
+        for c in CASES:
+            families[c["family"]] = families.get(c["family"], 0) + 1
+        self.assertEqual(row["families"], dict(sorted(families.items())))
+
+    def test_the_capability_rows_are_untouched_by_the_extra_key(self):
+        ledger = json.loads((SUITE.parent / "acceptance-ledger.json").read_text(encoding="utf-8"))
+        self.assertEqual(ledger["schemaVersion"], 1)
+        self.assertGreaterEqual(len(ledger["capabilities"]), 31)

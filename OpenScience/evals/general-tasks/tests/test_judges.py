@@ -5,6 +5,7 @@ records built here, so that a verdict of the suite means the judge looked and no
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import shutil
 import sys
@@ -23,6 +24,12 @@ import textio  # noqa: E402
 FIXTURES = SUITE / "fixtures"
 CASES = {c["id"]: c for c in json.loads((SUITE / "cases.json").read_text(encoding="utf-8"))["cases"]}
 TRUTH = json.loads((FIXTURES / "ground_truth.json").read_text(encoding="utf-8"))
+
+
+def needs(*modules):
+    """The office and data judges need python-docx, openpyxl, pandas, Pillow and pypdf; a CI python without them skips those tests."""
+    missing = [m for m in modules if importlib.util.find_spec(m) is None]
+    return unittest.skipIf(bool(missing), f"missing python modules: {missing}")
 
 
 def turn(reply="", tools=(), agent="open-domain-answer", reason="unrouted:open-domain", status="succeeded", **run):
@@ -188,6 +195,7 @@ def docx_with(paragraphs, headings=(), table=None, path=None):
     doc.save(path)
 
 
+@needs('docx', 'openpyxl', 'pandas', 'pypdf')
 class OfficeChecks(unittest.TestCase):
     def test_docx_structure(self):
         env = Env("G02", [turn("x")])
@@ -358,6 +366,7 @@ class PowerPointChecks(unittest.TestCase):
         env.close()
 
 
+@needs('PIL', 'pandas')
 class CodeChecks(unittest.TestCase):
     GOOD = '''import argparse, os, sys
 from PIL import Image
