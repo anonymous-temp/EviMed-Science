@@ -69,6 +69,19 @@ export const DEFAULT_ENABLED_TASK_TYPES = Object.freeze([
   'signal-monitoring',
 ])
 
+/**
+ * The task types a task made from a conversation (`schedule_task`) and a new task on the task form hold. The general one comes
+ * first: it is what a task is unless its instruction is literature, evidence or data work, and the budgeted next-action decision
+ * (`autopilotNextAction.mjs`) is what tells the two apart — never a keyword. Safety-signal monitoring, hypothesis suggestion and
+ * writing stay a choice made on the task form: they need inputs a conversation does not give.
+ */
+export const SCHEDULED_TASK_DEFAULT_TYPES = Object.freeze([
+  'routine',
+  'literature-sentinel',
+  'evidence-update',
+  'data-prospecting',
+])
+
 /** An episode's lifecycle. */
 export const EPISODE_STATES = Object.freeze(['queued', 'running', 'verifying', 'merged', 'failed', 'canceled'])
 

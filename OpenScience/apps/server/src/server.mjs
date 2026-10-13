@@ -4580,7 +4580,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               query: episode.prompt,
               resident,
               specialists: [],
-              routedSpecialist: {
+              // A routine task's episode is the ordinary conversation line: routed to no capability, as a chat turn that no
+              // capability took is.
+              routedSpecialist: selected.id === OPEN_DOMAIN_ANSWER_AGENT_ID ? null : {
                 agentId: selected.id,
                 agentVersion: selected.version,
                 runtimeAgent: selected.runtimeAgent,

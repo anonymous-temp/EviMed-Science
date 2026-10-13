@@ -15,7 +15,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { AUTOPILOT_EPISODE_CAPABILITIES, AUTOPILOT_TASK_TYPES, autopilotEpisodeCapability } from "@evimed/domain";
+import { AUTOPILOT_EPISODE_CAPABILITIES, AUTOPILOT_TASK_TYPES, ROUTINE_TASK_TYPE, autopilotEpisodeCapability } from "@evimed/domain";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -48,6 +48,14 @@ test("every task type the allocator knows runs a capability the runtime ships an
   for (const type of AUTOPILOT_TASK_TYPES) {
     const id = autopilotEpisodeCapability(type);
     assert.ok(id, `${type} runs nothing`);
+    // The general type runs the ordinary conversation line, which is an agent package and not a capability manifest.
+    if (type === ROUTINE_TASK_TYPE) {
+      assert.equal(id, "open-domain-answer");
+      const agent = await readFile(path.join(repoRoot, "runtime/skills/evimed/open-domain-answer/agent.yaml"), "utf8");
+      assert.match(agent, /^id: open-domain-answer$/m);
+      assert.doesNotMatch(agent, /^visibility: internal$/m, "a routine task cannot run an internal agent");
+      continue;
+    }
     const manifest = manifests.get(id);
     assert.ok(manifest, `${type} runs ${id}, which the runtime does not ship`);
     assert.notEqual(manifest.visibility, "internal", `${type} runs ${id}, an internal capability`);

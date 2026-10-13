@@ -73,7 +73,10 @@ export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepte
 // "6" since 2026-10-12: the input states the text limit of a lesson filed as an account handbook (`authoringLimits.maxHandbookChars`), and the
 // capability learns the researcher's research methods, not the delivery gate's bookkeeping; a lesson re-queued under the new rules is a new
 // dispatch and does not adopt the run that wrote an over-long handbook under the old ones.
-export const DISTILLATION_EXTRACTOR_VERSION = "6";
+// "7" since 2026-10-13: a method is how this person does this kind of work, not only a research method, and a turn of an ordinary
+// conversation that produced or changed a file is a lesson (`learningTriggers.leftFiles`); a lesson re-queued under the old definition
+// is a new dispatch and does not adopt a run that read it.
+export const DISTILLATION_EXTRACTOR_VERSION = "7";
 
 /**
  * How many messages of context each trigger is worth.

@@ -38,9 +38,9 @@ test("a clean completion is the research's name and 已完成, and the body says
   assert.doesNotMatch(`${notice.title}${notice.body}`, /工作区|交付|已准备好|依据|核对/);
 });
 
-test("a run with nothing on disk points at the conversation, and an untitled one says 一项研究", () => {
+test("a run with nothing on disk points at the conversation, and an untitled one says 一项任务", () => {
   const notice = runFinishedNotice({ status: "succeeded", verification: null, artifacts: [] });
-  assert.equal(notice.title, "一项研究 已完成");
+  assert.equal(notice.title, "一项任务 已完成");
   assert.equal(notice.body, "结果已在对话里");
   const asked = runFinishedNotice({ status: "succeeded", question: "  二甲双胍与   乳酸酸中毒风险有多大？这是一个很长很长很长的问题  ", artifacts: [] });
   assert.equal(asked.title, "二甲双胍与 乳酸酸中毒风险有多大？这是一个很长… 已完成", "the question, one line, cut at 24 characters");
@@ -67,7 +67,7 @@ test("what the reader must check is 待核对, counted as the conversation count
   const unchecked = runFinishedNotice({ status: "succeeded", verification: "unchecked", artifacts: ["deliverables/r/report.md"],
     claimSummary: { total: 4, verified: 4, unverified: 0 } });
   assert.equal(unchecked.outcome, "qualified");
-  assert.equal(unchecked.title, "一项研究 已完成");
+  assert.equal(unchecked.title, "一项任务 已完成");
   assert.equal(unchecked.body, "报告和 1 个文件已在对话里");
   assert.equal(unchecked.severity, "info");
 });
@@ -135,7 +135,7 @@ test("every outcome class ends its title with one of the four words, and the wal
       : runFinishedNotice({ status: kind === "delivered" ? "succeeded" : "failed", errorCode: code ?? null });
     assert.equal(notice.outcome, kind);
     assert.ok(RUN_NOTICE_STATUS_WORDS.includes(notice.status), `${kind} ended with ${notice.status}`);
-    assert.equal(notice.title, `一项研究 ${notice.status}`);
+    assert.equal(notice.title, `一项任务 ${notice.status}`);
     words.set(kind, notice.status);
   }
   assert.equal(words.size, RUN_OUTCOME_KINDS.length);
@@ -188,7 +188,7 @@ test("a day's completions in a project are one item: how many, how many to check
   ];
   const item = runFinishedInboxItem(project, finished("run-c", "2026-09-18T03:00:00.000Z", { title: "阿司匹林一级预防" }), { peers });
   assert.equal(item.groupKey, "run-finished:default:2026-09-18");
-  assert.equal(item.title, "3 项研究已完成，其中 1 项有 1 处引用待核对");
+  assert.equal(item.title, "3 项任务已完成，其中 1 项有 1 处引用待核对");
   // The names only, the one with something to check first.
   assert.equal(item.body, "二甲双胍与乳酸酸中毒风险、阿司匹林一级预防、问题 run-b");
   assert.equal(item.idempotencyKey, "run-finished:run-c", "each run is its own event inside the group");
@@ -215,7 +215,7 @@ test("the day is China's, a lone completion keeps its own words, and a long day 
   const many = runFinishedInboxItem(project, finished("run-9", "2026-09-18T09:00:00.000Z"), {
     peers: Array.from({ length: 6 }, (_unused, index) => finished(`run-${index}`, `2026-09-18T0${index}:00:00.000Z`)),
   });
-  assert.equal(many.title, "7 项研究已完成");
+  assert.equal(many.title, "7 项任务已完成");
   assert.equal(many.body, "问题 run-9、问题 run-5、问题 run-4 等 7 项");
   assert.equal(many.severity, "info");
 });

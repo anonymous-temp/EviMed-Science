@@ -99,7 +99,8 @@ test("a task is made and started as the form makes one: default budgets and type
   assert.equal(agenda.status, "active");
   assert.equal(agenda.prompt, said);
   assert.deepEqual([agenda.maxEpisodeCny, agenda.dailyBudgetCny, agenda.weeklyBudgetCny], [AGENDA_DEFAULT_BUDGETS.maxEpisodeCny, AGENDA_DEFAULT_BUDGETS.dailyBudgetCny, AGENDA_DEFAULT_BUDGETS.weeklyBudgetCny]);
-  assert.deepEqual(agenda.taskTypes, ["literature-sentinel"]);
+  assert.deepEqual(agenda.taskTypes, ["routine", "literature-sentinel", "evidence-update", "data-prospecting"],
+    "a task made in a conversation is a routine one unless its instruction is literature, evidence or data work (the next-action decision tells)");
   assert.equal((await real.get("owner", task.taskId)).projectId, "p1", "the project is the token's");
 });
 

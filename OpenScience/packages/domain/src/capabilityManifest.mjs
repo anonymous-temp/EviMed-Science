@@ -82,8 +82,16 @@ export const KERNEL_GLOBAL_TOOL_NAMES = Object.freeze(new Set([
   'ask_user',
 ]))
 
-/** Autopilot task types a capability may declare (§24.3). */
+/**
+ * The general task type: do what the instruction says, on the schedule, and hand the result over as a reply and files in the
+ * task's own conversation. It has no agenda delta, no claim layering and no clinical contract — those belong to the research
+ * types — and it is the default type of a task made from a conversation (`schedule_task`).
+ */
+export const ROUTINE_TASK_TYPE = 'routine'
+
+/** Autopilot task types a capability may declare (§24.3), and the one general type that no capability declares (`routine`). */
 export const AUTOPILOT_TASK_TYPES = Object.freeze([
+  'routine',
   'literature-sentinel',
   'evidence-update',
   'data-prospecting',
@@ -112,6 +120,9 @@ export const AUTOPILOT_TASK_TYPES = Object.freeze([
  * @type {Readonly<Record<typeof AUTOPILOT_TASK_TYPES[number], string>>}
  */
 export const AUTOPILOT_EPISODE_CAPABILITIES = Object.freeze({
+  // The ordinary conversation line (`open-domain-answer`), not a capability package: a routine task is a conversation turn that
+  // happens on a schedule.
+  'routine': 'open-domain-answer',
   'literature-sentinel': 'clinical-evidence-synthesis',
   'evidence-update': 'clinical-evidence-synthesis',
   'data-prospecting': 'dataset-research-scoping',

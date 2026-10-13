@@ -2,8 +2,8 @@
 """Make and change a scheduled task from a conversation, through the control plane's own task service.
 
 Two tools, one responsibility each (`schedule_task` makes a task and starts it, `update_task` changes one), and nothing else: neither
-decides *whether* the researcher wants a task, plans what it should research, or asks the researcher to confirm. A conversation that is
-told "每周五帮我看看……的新研究" calls the first once; "改到每周一 8 点" or "先停一停" calls the second. The model chooses to call them
+decides *whether* the researcher wants a task, plans what it should do, or asks the researcher to confirm. A conversation that is
+told "每个工作日早上 9 点给我一份昨天的行业要闻" calls the first once; "改到每周一 8 点" or "先停一停" calls the second. The model chooses to call them
 (principle 12); no turn is forced into either.
 
 The runtime never says whose task it is. It posts to the server's own route with the same runtime token as every other gateway, and the
@@ -96,11 +96,13 @@ def tool_definitions():
         {
             "name": "schedule_task",
             "description": (
-                "Schedule a task the researcher asks for to repeat or to run once (「每周五帮我看看……的新研究」), as the 定时任务 page would: "
-                "created and started at once with the platform's default budget, nothing to confirm — call it once, for exactly what was asked. "
-                "instruction is what to keep doing, in the researcher's words; schedule.time is the clock in timeZone (default Asia/Shanghai, "
-                "中国标准时间); weekly needs weekdays (1 = Monday … 7 = Sunday), once needs a date. Answers with the task's id, schedule in "
-                "words, time zone, next run and state: tell the researcher those. Not available inside a scheduled execution."
+                "Schedule a task the user asks for to repeat or to run once (「每个工作日早上 9 点给我一份昨天的行业要闻」「每周一汇总上周的销售表」"
+                "「下周五提醒我交周报」), as the 定时任务 page would: created and started at once with the platform's default budget, nothing to "
+                "confirm — call it once, for exactly what was asked. Any kind of work will do: each time it comes due the work is done as the "
+                "instruction says and the result is handed over in the task's own conversation. instruction is what to do each time, in the "
+                "user's words, with whatever it needs to stand alone (the subject, the format, where the files are); schedule.time is the clock "
+                "in timeZone (default Asia/Shanghai, 中国标准时间); weekly needs weekdays (1 = Monday … 7 = Sunday), once needs a date. Answers "
+                "with the task's id, schedule in words, time zone, next run and state: tell the user those. Not available inside a scheduled execution."
             ),
             "inputSchema": {
                 "type": "object",
@@ -116,9 +118,9 @@ def tool_definitions():
         {
             "name": "update_task",
             "description": (
-                "Change a scheduled task the researcher names (「改到每周一 8 点」「只看随机对照试验」「先停一停」): what it does, when it runs, "
+                "Change a scheduled task the user names (「改到每周一 8 点」「只要五条以内」「先停一停」): what it does, when it runs, "
                 "its title, or pause/re-enable it with paused. Pass only what changes; schedule fields left out keep their values. Pausing "
-                "also cancels the task's research in flight (results already made stay). taskId is the id schedule_task answered with, or the "
+                "also cancels the task's work in flight (results already made stay). taskId is the id schedule_task answered with, or the "
                 "Episode ID of a scheduled execution you are in; a wrong id answers with the project's tasks. Answers with the task as it now stands."
             ),
             "inputSchema": {
