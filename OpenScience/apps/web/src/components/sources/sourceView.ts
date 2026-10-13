@@ -23,6 +23,8 @@ export function stateLabel(source: SourceRecord): string {
   const status = source.payload.status;
   if (status === "needs_attention") return "部分无法读取";
   if (isUsable(source)) return "";
+  // A recording, or a file nothing here reads text out of: listed and opened like any other, with no text to search.
+  if (status === "complete" && source.payload.original) return "只保存原件";
   if (status === "queued" || status === "parsing") return "正在读取";
   if (status === "failed") return "没能读取";
   if (status === "missing") return "原件已移除";

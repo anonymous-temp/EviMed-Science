@@ -1039,4 +1039,28 @@ describe("知识库", () => {
     fireEvent.drop(zone, transfer([file]));
     await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith([file], "knowledge-base", "base", "default"));
   });
+
+  it("takes source code, a notebook, a mail, an archive and a recording dropped on it, and turns none of them away", async () => {
+    mocks.uploadFilesToWorkspace.mockResolvedValue(["a", "b", "c", "d", "e"]);
+    const { container } = renderPage();
+    await screen.findByText(guideline.display.title);
+    const files = ["offlineMerge.ts", "stocktake-variance.ipynb", "复盘.eml", "资料.zip", "周会录音.mp3"].map((name) => new File(["x"], name));
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.drop(container.firstElementChild as HTMLElement, { dataTransfer: { types: ["Files"], files } });
+    await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith(files, "knowledge-base", "base", "default"));
+    expect(mocks.toastError).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 5 个文件");
+  });
+
+  it("says in the row that a recording is kept as the original it was, and explains why when asked", async () => {
+    const recording = makeSource("src_recording", { title: "周会录音.mp3", gist: null, docType: "other", typeShort: "音频", kind: "document", format: "mp3", pages: null, size: 3_000_000 },
+      { status: "complete", paths: ["knowledge-base/周会录音.mp3"], original: { generation: 1, code: "source_original_media", at: arrived } }, { readable: false });
+    mocks.listSources.mockResolvedValue(listing([recording]));
+    renderPage();
+    await screen.findByText("周会录音.mp3");
+    const row = rowOf("周会录音.mp3");
+    expect(within(row).getByText("只保存原件")).toBeInTheDocument();
+    expect(within(row).queryByText("没能读取")).toBeNull();
+    expect(within(row).queryByRole("button", { name: /重新读取/ })).toBeNull();
+  });
 });

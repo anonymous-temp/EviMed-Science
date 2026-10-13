@@ -131,6 +131,10 @@ function SourceLine({ source, busy, onRetry }: { source: SourceRecord; busy: boo
       </span>
     );
   }
+  if (label === "只保存原件") {
+    const why = sourceFailureMessage(source.payload.original);
+    return why ? <Tooltip content={why}><span className="block">{label}</span></Tooltip> : <span className="block">{label}</span>;
+  }
   if (label) return <span className="block">{label}</span>;
   if (source.display.gist) return <span className="block truncate text-text-2">{source.display.gist}</span>;
   return null;

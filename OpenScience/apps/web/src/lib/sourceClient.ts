@@ -183,6 +183,8 @@ export interface SourcePayload {
   outputs: { summary?: string; facts?: number; methods?: number; artifactPath?: string };
   /** Set once the document's understanding is in; `outputs.summary` is then its summary. */
   currentUnderstandingId?: string | null;
+  /** Why the document has no text, when it has none (a recording, a file nothing reads): it is kept as the original it was. */
+  original?: { generation: number; code: string; at: string } | null;
   // `message` is the control plane's own English literal — `recordFailure` is
   // called with "Source analysis failed." for every failure, so it carries no
   // information and cannot be shown. `code` is the fact; `@evimed/domain` is
