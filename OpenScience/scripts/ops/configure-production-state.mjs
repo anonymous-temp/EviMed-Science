@@ -5,6 +5,8 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { expectedOpenVikingConfiguration } from "./openviking-configuration.mjs";
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const checkOnly = process.argv.includes("--check");
 const secretsDir = path.resolve(
@@ -24,6 +26,12 @@ const openVikingApiKeyFile = path.resolve(
 );
 const openVikingConfFile = path.resolve(
   process.env.OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE ?? path.join(secretsDir, "openviking-ov.conf"),
+);
+// The bearer the engine's own model calls carry to the control plane's model
+// gateway (v0.5.0). Random bytes like the root key: it buys nothing outside
+// this deployment, and it is rendered into ov.conf below.
+const openVikingModelKeyFile = path.resolve(
+  process.env.OPEN_SCIENCE_OPENVIKING_MODEL_KEY_HOST_FILE ?? path.join(secretsDir, "openviking-model-key.txt"),
 );
 // The one secret here nobody generates: it is bought, not minted. Everything
 // else in this directory is random bytes this script can produce again.
@@ -132,77 +140,13 @@ async function ensureDsn(file, label, expected) {
 }
 
 /**
- * The recall index's whole configuration, rendered rather than hand-written.
- *
- * Every value here was settled against a running v0.4.19 or its source (and
- * re-checked unchanged on v0.4.23, 2026-10-12), and
- * each one is a default that is wrong for this deployment:
- *
- *   storage.workspace   defaults to `./data` = /app/data, outside the volume
- *   server.auth_mode    unset with a root key silently selects `api_key` mode
- *   embedding.dense     unset installs a local embedder the image cannot load
- *   provider            `openai` never sends `dimensions`, so a model whose
- *                       native vector is shorter than the index fails at write
- *   memory.extraction   on; the server would write its own memories beside ours
- *
- * There is no `rerank` section on purpose: `/search/find`, the only endpoint
- * our layout can use, never reranks. The reranker runs in the control plane,
- * over text it has already hydrated from PostgreSQL.
- *
- * Unknown keys abort startup, so this renders exactly the schema's fields.
- *
- * Nothing here is read from the ambient environment. `--check` compares this
- * rendering with the stored file byte for byte, so a value taken from the shell
- * would make the verdict depend on which shell ran it: an operator who
- * generated the file in one environment and checked it in another would be told
- * their credentials had drifted, about a file that was correct.
+ * The engine's configuration file: what `openviking-configuration.mjs` renders, stored once and compared byte for
+ * byte afterwards. A deployment that last ran this before v0.5.0 holds the earlier rendering (no model path, no
+ * extraction, no Compile): it is refused by name, and deleting the file and running again writes the current one.
  */
-function expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, pin }) {
-  const dimension = pin.embedding.dimension;
-  return {
-    // The fallback for a request that names no account. This client names one
-    // on every request — trusted mode requires the header — so these two are
-    // never what decides where a memory is stored, and
-    // `OPEN_SCIENCE_OPENVIKING_ACCOUNT` moves the client without touching this
-    // file.
-    default_account: "evimed",
-    default_user: "evimed",
-    embedding: {
-      dense: {
-        provider: "dashscope",
-        // The text path; the provider's own default is the multimodal endpoint,
-        // which a text embedding model does not answer.
-        input: "text",
-        // The host only: this provider appends `/compatible-mode/v1` itself.
-        api_base: pin.embedding.apiBase,
-        api_key: embeddingApiKey,
-        model: pin.embedding.model,
-        dimension,
-      },
-    },
-    storage: {
-      workspace: "/app/.openviking/data",
-      agfs: { backend: "local" },
-      vectordb: { backend: "local", dimension },
-    },
-    memory: { extraction_enabled: false, session_skill_extraction_enabled: false },
-    server: {
-      host: "0.0.0.0",
-      port: 1933,
-      cors_origins: [],
-      auth_mode: "trusted",
-      root_api_key: rootApiKey,
-    },
-    output_language_override: "zh",
-    // The embedder is a public HTTPS endpoint; nothing on this host's private
-    // ranges is a legitimate target for this server.
-    allow_private_networks: false,
-  };
-}
-
-async function ensureOpenVikingConfiguration(rootApiKey, embeddingApiKey) {
+async function ensureOpenVikingConfiguration(rootApiKey, embeddingApiKey, modelKey) {
   const pin = JSON.parse(await fsp.readFile(path.join(repoRoot, "deps-version.json"), "utf8")).openviking;
-  const expected = JSON.stringify(expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, pin }), null, 2);
+  const expected = JSON.stringify(expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, modelKey, pin }), null, 2);
   const existing = await fsp.lstat(openVikingConfFile).catch((error) => {
     if (error?.code === "ENOENT") return null;
     throw error;
@@ -213,8 +157,8 @@ async function ensureOpenVikingConfiguration(rootApiKey, embeddingApiKey) {
   }
   const value = await readOwnerOnly(openVikingConfFile, "OpenViking configuration", { maxBytes: 16_384 });
   if (value !== expected) {
-    // Named without its content: this file carries two credentials, and the
-    // difference between the rendered and the stored one would show them both.
+    // Named without its content: this file carries four credentials, and the
+    // difference between the rendered and the stored one would show them.
     throw failure(
       "production_state_openviking_conf_mismatch",
       "OpenViking configuration does not match what this deployment renders; delete it and re-run to regenerate.",
@@ -249,7 +193,8 @@ async function main() {
   const postgresPassword = await ensureSecret(postgresPasswordFile, "PostgreSQL password");
   await ensureSecret(openListAdminPasswordFile, "OpenList administrator password");
   const openVikingApiKey = await ensureSecret(openVikingApiKeyFile, "OpenViking API key");
-  await ensureOpenVikingConfiguration(openVikingApiKey, dashScopeApiKey);
+  const openVikingModelKey = await ensureSecret(openVikingModelKeyFile, "OpenViking model key");
+  await ensureOpenVikingConfiguration(openVikingApiKey, dashScopeApiKey, openVikingModelKey);
   const dsn = expectedDatabaseUrl(postgresPassword);
   await ensureDsn(databaseUrlFile, "EviMed database URL", dsn);
   process.stdout.write(`production state ${checkOnly ? "check" : "configuration"} ok: ${secretsDir}\n`);

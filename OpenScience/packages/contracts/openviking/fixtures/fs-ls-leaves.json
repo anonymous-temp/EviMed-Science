@@ -1,0 +1,23 @@
+{
+  "status": "ok",
+  "result": [
+    {
+      "uri": "viking://user/u-68dc43da763fbe7a5b3d6564/memories/evimed/user/preference/rec1.md",
+      "size": 129,
+      "isDir": false,
+      "modTime": "2026-10-13T00:58:53.000Z",
+      "abstract": ""
+    },
+    {
+      "uri": "viking://user/u-68dc43da763fbe7a5b3d6564/memories/evimed/user/preference/rec3.md",
+      "size": 132,
+      "isDir": false,
+      "modTime": "2026-10-13T00:58:54.000Z",
+      "abstract": ""
+    }
+  ],
+  "error": null,
+  "telemetry": null,
+  "profile": null,
+  "has_more": false
+}

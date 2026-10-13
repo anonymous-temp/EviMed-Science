@@ -4,27 +4,27 @@
     "memories": [
       {
         "context_type": "memory",
-        "uri": "viking://user/u-5b971be26b9898915091a2bc/memories/evimed/user/preference/rec1.md",
+        "uri": "viking://user/u-68dc43da763fbe7a5b3d6564/memories/evimed/user/preference/rec1.md",
         "level": 2,
-        "score": 0.86122727394104,
+        "score": 0.8943526744842529,
         "abstract": "偏好 / 报告呈现\n\n用户偏好用表格呈现证据强度，不要大段散文。",
         "tags": [],
         "content": "偏好 / 报告呈现\n\n用户偏好用表格呈现证据强度，不要大段散文。"
       },
       {
         "context_type": "memory",
-        "uri": "viking://user/u-5b971be26b9898915091a2bc/memories/evimed/user/preference/rec3.md",
+        "uri": "viking://user/u-68dc43da763fbe7a5b3d6564/memories/evimed/user/preference/rec3.md",
         "level": 2,
-        "score": 0.7027832269668579,
+        "score": 0.7633533477783203,
         "abstract": "偏好 / 检索顺序\n\n用户习惯先看系统评价，再看单项随机对照试验。",
         "tags": [],
         "content": "偏好 / 检索顺序\n\n用户习惯先看系统评价，再看单项随机对照试验。"
       },
       {
         "context_type": "memory",
-        "uri": "viking://user/u-5b971be26b9898915091a2bc/memories/evimed/user/analysis/rec2.md",
+        "uri": "viking://user/u-68dc43da763fbe7a5b3d6564/memories/evimed/user/analysis/rec2.md",
         "level": 2,
-        "score": 0.6704639792442322,
+        "score": 0.6998540759086609,
         "abstract": "分析 / 心衰\n\n本项目研究 SGLT2 抑制剂在射血分数保留心衰中的证据。",
         "tags": [],
         "content": "分析 / 心衰\n\n本项目研究 SGLT2 抑制剂在射血分数保留心衰中的证据。"

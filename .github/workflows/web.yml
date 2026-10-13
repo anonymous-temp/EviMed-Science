@@ -813,12 +813,14 @@ jobs:
           echo "OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/openlist-admin-password.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/evimed-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/dashscope.api-key" >> "$GITHUB_ENV"
-          # The recall index reads its configuration and its own key from two
-          # bind mounts Compose refuses to interpolate without a path, so both
-          # names have to exist before the first `docker compose` call, not only
-          # before `configure:production-state` writes the files they point at.
+          # The context engine reads its configuration, its own key and the
+          # bearer of its model path from three bind mounts Compose refuses to
+          # interpolate without a path, so the names have to exist before the
+          # first `docker compose` call, not only before
+          # `configure:production-state` writes the files they point at.
           echo "OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/openviking-ov.conf" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/openviking-api-key.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_OPENVIKING_MODEL_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/openviking-model-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/deepseek-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/model-gateway-signing-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/materials-project-api-key.txt" >> "$GITHUB_ENV"
@@ -879,6 +881,7 @@ jobs:
             echo "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE=${OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE}"
             echo "OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE=${OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE}"
             echo "OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE=${OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE}"
+            echo "OPEN_SCIENCE_OPENVIKING_MODEL_KEY_HOST_FILE=${OPEN_SCIENCE_OPENVIKING_MODEL_KEY_HOST_FILE}"
             echo "OPEN_SCIENCE_OPERATOR_METRICS_TOKEN=${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN}"
             echo "OPEN_SCIENCE_BACKUP_MODE=local"
             echo "OPEN_SCIENCE_BACKUP_ENCRYPTION_ACK=true"

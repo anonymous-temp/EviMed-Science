@@ -1,0 +1,34 @@
+{
+  "note": "tools/call remember: a one-off session mcp-store-<id> is created and committed; the answer names its task id.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "POST",
+    "path": "/mcp",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a",
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/event-stream"
+    },
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 6,
+      "method": "tools/call",
+      "params": {
+        "name": "remember",
+        "arguments": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "记住：图纸里的尺寸单位一律用毫米。"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "status": 200,
+  "contentType": "text/event-stream",
+  "response": "event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"id\":6,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"Submitted 1 message(s) for memory extraction (session mcp-store-4f184a402313, task_id=42ae2073-53d8-42e6-a2f7-692e616ffd83). Extraction runs in the background and decides which memories to create or update.\"}],\"structuredContent\":{\"result\":\"Submitted 1 message(s) for memory extraction (session mcp-store-4f184a402313, task_id=42ae2073-53d8-42e6-a2f7-692e616ffd83). Extraction runs in the background and decides which memories to create or update.\"},\"isError\":false}}\r\n\r\n"
+}

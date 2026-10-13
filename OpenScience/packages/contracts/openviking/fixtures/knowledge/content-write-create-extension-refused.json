@@ -1,0 +1,11 @@
+{
+  "status": "error",
+  "result": null,
+  "error": {
+    "code": "INVALID_ARGUMENT",
+    "message": "create mode does not allow extension '.csv': viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/table2.csv",
+    "details": {}
+  },
+  "telemetry": null,
+  "profile": null
+}

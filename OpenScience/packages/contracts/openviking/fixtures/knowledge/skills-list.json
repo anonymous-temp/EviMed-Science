@@ -1,0 +1,65 @@
+{
+  "status": "ok",
+  "result": {
+    "root_uris": [
+      "viking://user/u-0f1e2d3c4b5a69788796a5b4/skills",
+      "viking://agent/skills"
+    ],
+    "skills": [
+      {
+        "type": "skill",
+        "name": "daily-report",
+        "uri": "viking://agent/skills/daily-report",
+        "root_uri": "viking://agent/skills/daily-report",
+        "skill_md_uri": "viking://agent/skills/daily-report/SKILL.md",
+        "description": "Compile timestamped conversation logs, agent sessions, IM messages, collaborative documents, meeting notes, task records, and similar OpenViking materials into concise, evidence-grounded daily reports. Use with ov compile when the user asks for a daily work report, end-of-day digest, 日报, or reports for one or more dates, especially when activities must be reconstructed across heterogeneous sources without treating plans or agent suggestions as completed work.",
+        "tags": [],
+        "allowed_tools": []
+      },
+      {
+        "type": "skill",
+        "name": "knowledge-distillation",
+        "uri": "viking://agent/skills/knowledge-distillation",
+        "root_uri": "viking://agent/skills/knowledge-distillation",
+        "skill_md_uri": "viking://agent/skills/knowledge-distillation/SKILL.md",
+        "description": "Compile one or more OpenViking knowledge bases or document collections into topic-organized, evidence-grounded high-level knowledge, including cross-source findings, trends, changes, drivers, comparisons, implications, and uncertainties. Use with ov compile when the user asks to distill or synthesize a knowledge base, compare multiple collections, or derive higher-order insights such as changes across financial reports; do not use for document-by-document summaries.",
+        "tags": [],
+        "allowed_tools": []
+      },
+      {
+        "type": "skill",
+        "name": "knowledge-graph",
+        "uri": "viking://agent/skills/knowledge-graph",
+        "root_uri": "viking://agent/skills/knowledge-graph",
+        "skill_md_uri": "viking://agent/skills/knowledge-graph/SKILL.md",
+        "description": "Compile documents, notes, web content, transcripts, research materials, or code repositories into an evidence-grounded, visualization-ready knowledge graph with semantically typed entity nodes, statement-level provenance, and typed relationship edges. Use with ov compile to create or incrementally refresh `entities/*.md` node artifacts and a root `relations.jsonl` edge file for people, organizations, groups, animals, places, products, projects, systems, services, modules, datasets, standards, documents, events, and other identifiable things.",
+        "tags": [],
+        "allowed_tools": []
+      },
+      {
+        "type": "skill",
+        "name": "llm-wiki",
+        "uri": "viking://agent/skills/llm-wiki",
+        "root_uri": "viking://agent/skills/llm-wiki",
+        "skill_md_uri": "viking://agent/skills/llm-wiki/SKILL.md",
+        "description": "Compile heterogeneous knowledge sources—including documents, notes, web content, transcripts, research materials, and code repositories—into a Karpathy-style, evidence-grounded LLM Wiki with a maintained index; default entity and concept pages; and selective method, comparison, analysis, or instruction-requested summary pages. Use with ov compile to create or incrementally refresh knowledge that is easy for people and agents to retrieve, navigate, and reuse.",
+        "tags": [],
+        "allowed_tools": []
+      },
+      {
+        "type": "skill",
+        "name": "ov-session-report",
+        "uri": "viking://agent/skills/ov-session-report",
+        "root_uri": "viking://agent/skills/ov-session-report",
+        "skill_md_uri": "viking://agent/skills/ov-session-report/SKILL.md",
+        "description": "Analyze local Q&A session JSONL files and produce a complete, auditable English Markdown weekly report over consecutive time windows, with all data required for downstream Feishu document and whiteboard rendering. Use for requests such as \"analyze the latest week of sessions,\" \"generate a community Q&A weekly report,\" or \"compare with last week.\" This skill does not ingest other message sources or create/upload online documents.",
+        "tags": [],
+        "allowed_tools": []
+      }
+    ],
+    "total": 5
+  },
+  "error": null,
+  "telemetry": null,
+  "profile": null
+}

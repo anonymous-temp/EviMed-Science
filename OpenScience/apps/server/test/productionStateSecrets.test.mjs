@@ -1,12 +1,13 @@
 // What `pnpm configure:production-state` writes, and what `--check` refuses.
 //
-// The recall index reads one JSON file for its entire configuration, and four
-// of its defaults are wrong for this deployment in ways that are silent: the
-// data path lands outside the volume, a root key without an explicit auth mode
-// selects a different mode, the `openai` embedding provider never sends
-// `dimensions`, and the server's own extractor writes memories beside ours.
-// That file is therefore rendered from the pins rather than written by hand,
-// and this test is what keeps the rendering honest.
+// The context engine reads one JSON file for its entire configuration, and its
+// defaults are wrong for this deployment in ways that are silent: the data path
+// lands outside the volume, a root key without an explicit auth mode selects a
+// different mode, the `openai` embedding provider never sends `dimensions`, a
+// new user is given every memory type upstream ships, and a language model
+// reached directly would be a provider key in a third-party container. That
+// file is therefore rendered from the pins rather than written by hand, and
+// this test is what keeps the rendering honest.
 //
 // No real key is used anywhere here: the DashScope credential is a fixture
 // string, and nothing in this file prints the contents of a generated file.
@@ -18,6 +19,9 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+
+import { OPENVIKING_MEMORY_TEMPLATES_DIR, OPENVIKING_MEMORY_TYPES, openVikingKnowledgeModelKey } from "../src/openVikingLayout.mjs";
+import { OPENVIKING_MODEL_GATEWAY_URL } from "../../../scripts/ops/openviking-configuration.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const script = path.join(root, "scripts/ops/configure-production-state.mjs");
@@ -54,12 +58,13 @@ async function run(args, env) {
   return execFileAsync(process.execPath, [script, ...args], { cwd: root, env });
 }
 
-test("the rendered index configuration overrides every default that is wrong here", async () => {
+test("the rendered engine configuration overrides every default that is wrong here", async () => {
   const { directory, keyFile } = await secretsDirectory();
   try {
     await run([], environment(directory, keyFile));
     const confFile = path.join(directory, "openviking-ov.conf");
     const apiKeyFile = path.join(directory, "openviking-api-key.txt");
+    const modelKeyFile = path.join(directory, "openviking-model-key.txt");
     const configuration = JSON.parse(await readFile(confFile, "utf8"));
     const pin = JSON.parse(await readFile(path.join(root, "deps-version.json"), "utf8")).openviking;
 
@@ -89,20 +94,42 @@ test("the rendered index configuration overrides every default that is wrong her
     assert.equal(configuration.embedding.dense.dimension, pin.embedding.dimension);
     assert.equal(configuration.embedding.dense.api_key, DASHSCOPE_FIXTURE_KEY);
 
-    // The server's extractor would write memories our evidence gate never saw.
-    assert.equal(configuration.memory.extraction_enabled, false);
+    // The engine extracts, since v0.5.0, with this deployment's templates and
+    // only the eight types of its allowlist — a user given every registered
+    // type would get upstream's `events`, which copies quoted messages into
+    // memory files.
+    assert.equal(configuration.memory.extraction_enabled, true);
+    assert.equal(configuration.memory.extraction_output_format, "python");
+    assert.equal(configuration.memory.custom_templates_dir, OPENVIKING_MEMORY_TEMPLATES_DIR);
     assert.equal(configuration.memory.session_skill_extraction_enabled, false);
+    assert.equal(configuration.memory.link_enabled, false);
+    assert.deepEqual(configuration.server.user_config_defaults.memory_policy.memory_types, [...OPENVIKING_MEMORY_TYPES]);
     assert.equal(configuration.allow_private_networks, false);
 
+    // The language model is this deployment's own gateway with a bearer this
+    // script generated: no provider key but the embedder's is in the file.
+    const modelKey = (await readFile(modelKeyFile, "utf8")).trim();
+    assert.ok(modelKey.length >= 40, "the generated model key is not a credential");
+    assert.equal(configuration.vlm.provider, "openai");
+    assert.equal(configuration.vlm.api_base, OPENVIKING_MODEL_GATEWAY_URL);
+    assert.equal(configuration.vlm.api_key, modelKey);
+    assert.deepEqual(configuration.vlm.extra_request_body, { thinking: { type: "disabled" } });
+    assert.equal(configuration.bot.agents.api_base, OPENVIKING_MODEL_GATEWAY_URL);
+    assert.equal(configuration.bot.agents.api_key, openVikingKnowledgeModelKey(modelKey));
+    assert.notEqual(modelKey, (await readFile(apiKeyFile, "utf8")).trim(), "one key would open both the engine and the model gateway");
+    const keysInFile = [DASHSCOPE_FIXTURE_KEY, modelKey, openVikingKnowledgeModelKey(modelKey), configuration.server.root_api_key];
+    assert.equal(new Set(keysInFile).size, 4);
+
     // No rerank section at all: `/search/find` is the only endpoint this
-    // layout can use and it never reranks, so a section here would buy nothing
-    // and would put a second credential in this file.
+    // layout can use and it never reranks, so a section here would buy nothing.
     assert.ok(!("rerank" in configuration), "the index must not be configured to rerank");
-    assert.ok(!("vlm" in configuration));
+    // Forcing every memory into one language is not what a general platform does.
+    assert.ok(!("output_language_override" in configuration));
 
     if (process.platform !== "win32") {
       assert.equal((await stat(confFile)).mode & 0o777, 0o600);
       assert.equal((await stat(apiKeyFile)).mode & 0o777, 0o600);
+      assert.equal((await stat(modelKeyFile)).mode & 0o777, 0o600);
     }
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -144,8 +171,35 @@ test("--check passes on what it just wrote and fails when the rendering would di
     );
     assert.ok(rejected, "a configuration rendered from a different key was accepted");
     assert.match(String(rejected.stderr), /production_state_openviking_conf_mismatch/);
-    // Named, never shown: this file holds two credentials.
+    // Named, never shown: this file holds four credentials.
     assert.ok(!String(rejected.stderr).includes("sk-"), "the failure printed key material");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a configuration rendered before the engine had a model path is refused by name, and regenerating it is the remedy", async () => {
+  // A deployment upgrading to v0.5.0 holds the earlier rendering: no model path, extraction off. The server would
+  // start on it and extract nothing; `--check` says so, and deleting the file and running again writes the new one
+  // without touching the root key the stored memories were written under.
+  const { directory, keyFile } = await secretsDirectory();
+  try {
+    await run([], environment(directory, keyFile));
+    const confFile = path.join(directory, "openviking-ov.conf");
+    const rootKey = (await readFile(path.join(directory, "openviking-api-key.txt"), "utf8")).trim();
+    const earlier = JSON.parse(await readFile(confFile, "utf8"));
+    for (const key of ["vlm", "bot", "compile_api", "retrieval"]) delete earlier[key];
+    earlier.memory = { extraction_enabled: false, session_skill_extraction_enabled: false };
+    earlier.output_language_override = "zh";
+    await writeFile(confFile, `${JSON.stringify(earlier, null, 2)}\n`, { mode: 0o600 });
+    const rejected = await run(["--check"], environment(directory, keyFile)).then(() => null, (error) => error);
+    assert.match(String(rejected?.stderr), /production_state_openviking_conf_mismatch/);
+    await rm(confFile);
+    await run([], environment(directory, keyFile));
+    await run(["--check"], environment(directory, keyFile));
+    const regenerated = JSON.parse(await readFile(confFile, "utf8"));
+    assert.equal(regenerated.server.root_api_key, rootKey, "regenerating the configuration rotated the engine's key");
+    assert.equal(regenerated.memory.extraction_enabled, true);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

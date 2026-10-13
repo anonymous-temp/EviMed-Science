@@ -1,0 +1,22 @@
+{
+  "note": "The same file with its MEMORY_FIELDS comment.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/content/read?uri=viking%3A%2F%2Fuser%2Ffx-user-a%2Fmemories%2Fpreferences%2Fself%2F%E5%9B%9E%E7%AD%94%E7%BB%93%E6%9E%84.md&raw=true",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": "- 回答先给结论，再给依据。\n\n\n<!-- MEMORY_FIELDS\n{\n  \"user\": \"self\",\n  \"topic\": \"回答结构\",\n  \"source_extraction_id\": \"875df0a282f645a891e2fa2b3bf29a7e\",\n  \"version\": 1,\n  \"memory_type\": \"preferences\"\n}\n-->",
+    "error": null,
+    "telemetry": null,
+    "profile": null
+  }
+}

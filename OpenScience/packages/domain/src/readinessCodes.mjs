@@ -117,6 +117,24 @@ export const READINESS_ERROR_MESSAGES_ZH = Object.freeze({
   geo_worker_loop_stalled: '循证 GEO 有一个后台循环停住了，对应的步骤暂停推进；请联系管理员。',
   geo_social_unconfigured: '循证 GEO 没有配置社媒采集服务，读不到社媒帖子。',
   geo_market_unconfigured: '循证 GEO 没有配置媒体采买服务，下单这一步暂时用不了；其余步骤照常。',
+  // OpenViking as an engine (`openVikingEngine.mjs`, `memoryIndex.engine`): a fact that does not hold pauses the feature
+  // built on it — native memory or knowledge compile — and never readiness or a conversation.
+  openviking_engine_unchecked: '还没有读到 OpenViking 引擎的状态，稍后会自动再查。',
+  openviking_registration_pending: 'OpenViking 还没有登记平台的账户（新数据卷首次启动后最多约五分钟），稍后会自动再查。',
+  openviking_version_mismatch: '正在运行的 OpenViking 不是本版本固定的那一版，请按发布清单更换镜像。',
+  openviking_model_key_missing: '没有配置 OpenViking 调用模型网关的服务密钥，原生记忆和知识编译暂停；请重新运行 configure:production-state 并重建相关容器。',
+  openviking_memory_templates_missing: 'OpenViking 没有加载平台的记忆模板目录，原生记忆暂停；请检查模板目录的挂载和权限。',
+  openviking_memory_types_mismatch: 'OpenViking 的记忆类型白名单和平台的不一致，原生记忆暂停；请重新生成它的配置文件。',
+  openviking_skill_missing: 'OpenViking 里缺少官方编译技能，自动安装没有成功，知识编译暂停。',
+  openviking_skill_drifted: 'OpenViking 里的官方编译技能和本版本固定的内容不一致，知识编译暂停；请核对后重新安装。',
+  openviking_skill_source_drifted: '随版本发布的官方编译技能文件和固定的摘要对不上，没有安装；请核对发布内容。',
+  openviking_shim_unreachable: 'OpenViking 的编译身份转发程序没有应答，知识编译暂停；请查看该容器。',
+  openviking_shim_absent: 'OpenViking 的编译请求没有经过身份转发程序，知识编译暂停；请检查它的配置和启动入口。',
+  openviking_shim_unprobed: '官方编译技能还没有就绪，所以还没有检查编译身份转发程序。',
+  openviking_shim_probe_unreadable: '检查编译身份转发程序时没有读到任务编号，知识编译暂停。',
+  // The engine's model path (`openVikingModelCaller.mjs`): what the gateway answers the engine, and what readiness shows for it.
+  openviking_model_budget_exhausted: 'OpenViking 这一天的模型预算已经用完，新的记忆提取和知识编译会被拒绝；可以调高预算，或等额度恢复。',
+  openviking_model_owner_unavailable: '记不了 OpenViking 模型调用的账：平台账号或它的内部项目读不到；请查看数据库。',
 })
 
 export const READINESS_ERROR_CODES = Object.freeze(Object.keys(READINESS_ERROR_MESSAGES_ZH))

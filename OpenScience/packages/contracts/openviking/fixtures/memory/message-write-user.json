@@ -1,0 +1,37 @@
+{
+  "note": "A user message as the plugin sends it: parts with one text part, created_at.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/sessions/dsh-session_fixture0000000000000000000000000001/messages",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "role": "user",
+      "parts": [
+        {
+          "type": "text",
+          "text": "我是做结构设计的工程师，在一家设计院工作。以后回答请先给结论再给依据。我们现在的项目是一座三跨预应力混凝土连续梁桥的施工图设计，我们定了主梁用 C55 混凝土。"
+        }
+      ],
+      "created_at": "2026-10-12T08:00:00.000Z"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": {
+      "session_id": "dsh-session_fixture0000000000000000000000000001",
+      "message_count": 1,
+      "pending_tokens": 114
+    },
+    "error": null,
+    "telemetry": null,
+    "profile": null
+  }
+}

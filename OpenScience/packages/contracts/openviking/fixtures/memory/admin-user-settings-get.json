@@ -1,0 +1,46 @@
+{
+  "note": "A registered user's settings (memory_policy only). X-OpenViking-User is the user named in the URL.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/admin/accounts/evimed/users/fx-user-a/settings",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-user-a"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": {
+      "account_id": "evimed",
+      "user_id": "fx-user-a",
+      "memory_policy": {
+        "self": {
+          "enabled": true
+        },
+        "peer": {
+          "enabled": true
+        },
+        "working_memory": {
+          "enabled": false
+        },
+        "memory_types": [
+          "corrections",
+          "decisions",
+          "entities",
+          "follow_ups",
+          "preferences",
+          "profile",
+          "project_context",
+          "project_facts"
+        ]
+      }
+    },
+    "error": null,
+    "telemetry": null,
+    "profile": null
+  }
+}

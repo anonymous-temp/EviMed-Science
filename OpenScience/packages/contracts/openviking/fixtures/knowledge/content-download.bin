@@ -1,0 +1,11 @@
+# Alpha 协议
+
+Source: alpha.md
+SHA-256: 0000
+Extractor: local-read 1.0 (text)
+
+<!-- page 1 -->
+Alpha 协议是一个用于设备间时间同步的轻量协议，由 Lumen 工作组在 2021 年发布。它使用 UDP 端口 4123，默认同步周期为 64 秒。
+
+<!-- page 2 -->
+Alpha 协议的参考实现叫做 alphad，用 Rust 编写。
