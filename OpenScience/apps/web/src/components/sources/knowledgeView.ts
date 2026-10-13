@@ -201,3 +201,33 @@ export function linkIsSource(link: KnowledgePageLink | undefined): link is Extra
 export function rawMarkdown(page: Pick<KnowledgePage, "markdown">): string {
   return withoutEngineAddresses(page.markdown);
 }
+
+/** What the composer is left holding when a page or a mark of the graph is taken into a conversation. */
+export function knowledgeConversationDraft(title: string, noun: "页" | "实体" = "页"): string {
+  return noun === "页"
+    ? `请阅读知识库里的这一页和它引用的资料，并据此回答我的问题，引用时标出处。\n\n页面：${title}\n\n我的问题：`
+    : `请阅读知识库里关于这个实体的文件和它引用的资料，并据此回答我的问题，引用时标出处。\n\n实体：${title}\n\n我的问题：`;
+}
+
+/** The most documents one conversation takes along (the runtime's own bound on `references`). */
+export const MAX_REFERENCES = 50;
+
+/**
+ * The documents a conversation starts with: the file itself, then the documents it cites that can still be read, once
+ * each, at most `MAX_REFERENCES`.
+ */
+export function conversationReferences(
+  primary: { id: string; title: string } | null,
+  cited: ReadonlyArray<{ sourceId: string; title: string | null; available?: boolean }>,
+): Array<{ id: string; title: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ id: string; title: string }> = [];
+  const add = (id: string, title: string | null) => {
+    if (seen.has(id) || out.length >= MAX_REFERENCES) return;
+    seen.add(id);
+    out.push({ id, title: title ?? "资料" });
+  };
+  if (primary) add(primary.id, primary.title);
+  for (const entry of cited) if (entry.available !== false) add(entry.sourceId, entry.title);
+  return out;
+}

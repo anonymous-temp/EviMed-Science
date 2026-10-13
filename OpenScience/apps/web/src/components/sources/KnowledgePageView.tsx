@@ -1,147 +1,177 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
-import { CircleCheck, Pencil, TriangleAlert } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import { Pencil } from "lucide-react";
+import { knowledgePageTypeLabel } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
-import { Disclosure } from "@/components/ui/Disclosure";
 import { Tag } from "@/components/ui/Tag";
+import { Textarea } from "@/components/ui/Input";
 import { LoadError } from "@/components/cards/LoadError";
+import { WebApiError } from "@/lib/apiClient";
+import { readListState, readerPath } from "@/lib/knowledgeNav";
 import { productErrorMessage } from "@/lib/productClient";
 import {
-  getKnowledgePage, locateSourceQuote, type KnowledgePageEvidence, type KnowledgePageItem, type KnowledgePageViewData, type SourceRecord,
+  getKnowledgePage, getKnowledgePageAt, getKnowledgeStatus, requestKnowledgeCompile, saveKnowledgePage,
+  type KnowledgePage, type KnowledgeStatus, type SourceRecord,
 } from "@/lib/sourceClient";
 import { toast } from "@/lib/toast";
-import { NoteEditor } from "./NoteEditor";
-
-/** What a changed document did to a page, in the words the memory drawer already uses for a source that moved. */
-const STALE_LABEL: Record<string, string> = { changed: "来源已更改", retracted: "来源已撤回", removed: "来源已删除" };
-/** How firmly documents back a statement across them: independent documents agreeing, agreeing in direction, or only in part. */
-const CONFIDENCE_LABEL: Record<string, string> = { high: "多方一致", moderate: "方向一致", low: "支持有限" };
-const UNCONFIRMED = "没能在原文里核对到这句引文";
+import { KnowledgeMarkdown } from "./KnowledgeMarkdown";
+import { STALE_LABEL, staleReasons, statusLine } from "./knowledgeView";
 
 /**
- * The position of a quotation in the document it comes from, then the document's page open on it (the reader takes the
- * highlight from its address). A quotation that cannot be found any more opens the document without one.
+ * 「知识页」, opened: the page as the compile wrote it, drawn as a document (`KnowledgeMarkdown`), with what a reader needs
+ * to know first above it — the documents it quotes that have changed since, a quiet 「重新整理」, the paragraphs of the
+ * person's own that a compile dropped and the platform put back — and how many of its quotations the platform found in
+ * the documents. Editing is the whole page's text in one field; saving makes the page's next version (a new document, so
+ * the address follows it), and from then on the person's wording is what a recompile adds to and never rewrites.
  */
-async function openQuotation(evidence: KnowledgePageEvidence, go: (path: string) => void) {
-  const base = `/app/files/${encodeURIComponent(evidence.sourceId)}`;
-  try {
-    const found = await locateSourceQuote(evidence.sourceId, evidence.quote);
-    if (found.status === "verified" && found.start !== null && found.end !== null && found.textSha256) {
-      const params = new URLSearchParams({ tab: "original", start: String(found.start), end: String(found.end), sha: found.textSha256 });
-      if (found.page) params.set("page", String(found.page));
-      go(`${base}?${params}`);
-      return;
-    }
-  } catch { /* the document opens without a highlight */ }
-  go(`${base}?tab=original`);
-}
-
-/**
- * 「知识页」, opened: the page's sentences, each with the document it quotes. A sentence the platform has checked against
- * its document carries a ✓; one whose quotation it cannot find in the document carries a ⚠ and says that of the
- * quotation — nothing is hidden. A quotation opens the document at that place. The researcher's own sentences, which quote
- * nothing, are shown as theirs. The sentences the compile could not confirm are listed apart, under a fold, and are not
- * part of the page's text.
- *
- * Editing is the note editor on the page's whole text; saving makes the next version of this document, and from then on
- * the researcher's wording is what a recompile adds to and never rewrites.
- */
-export function KnowledgePageView({ source, onSaved }: { source: SourceRecord; onSaved: (source: SourceRecord) => void }) {
+export function KnowledgePageView({ source, onPage }: { source: SourceRecord; onPage?: (page: KnowledgePage) => void }) {
   const navigate = useNavigate();
-  const [view, setView] = useState<KnowledgePageViewData | null>(null);
+  const [params] = useSearchParams();
+  const [page, setPage] = useState<KnowledgePage | null>(null);
+  const [status, setStatus] = useState<KnowledgeStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [asking, setAsking] = useState(false);
+  const report = useRef(onPage);
+  report.current = onPage;
   useEffect(() => {
     let active = true;
     setError(null);
     getKnowledgePage(source.id).then(
-      (value) => { if (active) setView(value); },
+      (value) => { if (active) { setPage(value); report.current?.(value); } },
       (failure) => { if (active) setError(`无法打开这页：${productErrorMessage(failure)}`); },
     );
+    getKnowledgeStatus(source.projectId).then((value) => { if (active) setStatus(value); }, () => { /* the page stands without it */ });
     return () => { active = false; };
-  }, [source.id, attempt]);
-  const open = useCallback((evidence: KnowledgePageEvidence) => { void openQuotation(evidence, navigate); }, [navigate]);
+  }, [source.id, source.projectId, attempt]);
 
-  if (error && !view) return <LoadError message={error} onRetry={() => setAttempt((value) => value + 1)} />;
-  if (!view) return <p role="status" className="text-ui text-text-3">正在打开</p>;
+  const follow = useCallback((id: string) => navigate(readerPath(id, readListState(params)), { replace: true }), [navigate, params]);
+  const compile = async () => {
+    setAsking(true);
+    try {
+      setStatus(await requestKnowledgeCompile(source.projectId));
+      toast.success("已开始重新整理，稍后回来即可看到");
+    } catch (failure) { toast.error(productErrorMessage(failure)); }
+    finally { setAsking(false); }
+  };
+
+  if (error && !page) return <LoadError message={error} onRetry={() => setAttempt((value) => value + 1)} />;
+  if (!page) return <p role="status" className="text-ui text-text-3">正在打开</p>;
   if (editing) {
     return (
-      <div className="max-w-read">
-        <NoteEditor source={source} onSaved={(saved) => { setEditing(false); toast.success("已保存"); onSaved(saved); }} />
-        <Button variant="text" className="mt-2" onClick={() => setEditing(false)}>取消</Button>
+      <div className="h-full max-w-read overflow-y-auto pb-8">
+        <PageEditor
+          page={page}
+          projectId={source.projectId}
+          onCancel={() => setEditing(false)}
+          onSaved={(saved) => { setEditing(false); toast.success("已保存"); if (saved.sourceId === source.id) { setPage(saved); report.current?.(saved); } else follow(saved.sourceId); }}
+          onReloaded={(fresh) => { setPage(fresh); report.current?.(fresh); if (fresh.sourceId !== source.id) follow(fresh.sourceId); }}
+        />
       </div>
     );
   }
-  const stale = [...new Set(view.stale.map((entry) => STALE_LABEL[entry.reason] ?? STALE_LABEL.changed))];
+  const reasons = staleReasons(page.stale);
+  const titles = new Map(page.sources.map((entry) => [entry.sourceId, entry.title]));
+  const line = statusLine(status);
+  const canCompile = Boolean(line?.canCompile) && !asking;
+  const counts = page.quotations;
   return (
-    <div className="h-full max-w-read space-y-6 overflow-y-auto pb-8" data-knowledge-page="">
+    <div className="h-full max-w-read space-y-4 overflow-y-auto pb-8" data-knowledge-page="">
       <div className="flex flex-wrap items-center gap-2">
-        {stale.map((label) => <Tag key={label} tone="warn">{label}</Tag>)}
-        <Button variant="secondary" size="sm" className="ml-auto" onClick={() => setEditing(true)}>
-          <Pencil size={16} aria-hidden="true" />编辑
-        </Button>
+        <Tag>{knowledgePageTypeLabel(page.type)}</Tag>
+        {page.tags.slice(0, 4).map((tag) => <Tag key={tag}>{tag}</Tag>)}
+        {page.editable && (
+          <Button variant="secondary" size="sm" className="ml-auto" onClick={() => setEditing(true)}>
+            <Pencil size={16} aria-hidden="true" />编辑
+          </Button>
+        )}
       </div>
-      {view.sections.map((section, index) => (
-        <section key={`${section.heading}-${index}`} aria-label={section.heading || view.title}>
-          {section.heading && <h2 className="mb-2 text-section font-medium text-text">{section.heading}</h2>}
-          <ul className="space-y-3">
-            {section.items.map((item, position) => <PageItem key={position} item={item} onOpen={open} />)}
-          </ul>
-        </section>
-      ))}
-      {view.held.length > 0 && (
-        <Disclosure summary={`未能核对的 ${view.heldCount || view.held.length} 句`}>
-          <ul className="mt-2 space-y-2">
-            {view.held.map((held, index) => (
-              <li key={index} className="flex gap-2 text-ui text-text-2">
-                <TriangleAlert size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-warn" />
-                <span>{held.text}<span className="ml-2 text-caption text-text-3">{UNCONFIRMED}</span></span>
-              </li>
-            ))}
-          </ul>
-        </Disclosure>
+      {page.description && <p className="text-ui text-text-2">{page.description}</p>}
+      {reasons.length > 0 && (
+        <div role="status" data-knowledge-stale="" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card bg-warn-soft px-3 py-2 text-ui text-warn-strong">
+          {reasons.map((reason) => {
+            const named = page.stale.filter((entry) => (entry.reason in STALE_LABEL ? entry.reason : "changed") === reason);
+            return (
+              <span key={reason} className="flex flex-wrap items-center gap-x-2">
+                <span className="font-medium">{STALE_LABEL[reason]}</span>
+                {named.map((entry) => (
+                  <Link key={entry.sourceId} to={`/app/files/${encodeURIComponent(entry.sourceId)}`} className="text-link underline underline-offset-2">
+                    {titles.get(entry.sourceId) ?? "这份资料"}
+                  </Link>
+                ))}
+              </span>
+            );
+          })}
+          {canCompile && <Button variant="text" size="sm" className="ml-auto" onClick={() => void compile()}>重新整理</Button>}
+        </div>
       )}
+      {page.restored && page.restored.count > 0 && (
+        <p role="status" className="text-caption text-text-3">
+          上一次重新整理时丢掉了你写的 {page.restored.count} 处补充，已经放回原处。
+        </p>
+      )}
+      {counts && counts.present + counts.absent > 0 && (
+        <p className="text-caption text-text-3">
+          {counts.present > 0 ? `${counts.present} 处引文已在原文里找到` : ""}
+          {counts.present > 0 && counts.absent > 0 ? " · " : ""}
+          {counts.absent > 0 ? `${counts.absent} 处没能核对` : ""}
+        </p>
+      )}
+      <KnowledgeMarkdown page={page} />
     </div>
   );
 }
 
-function PageItem({ item, onOpen }: { item: KnowledgePageItem; onOpen: (evidence: KnowledgePageEvidence) => void }) {
-  if (item.kind === "nav") {
-    return (
-      <li className="flex flex-wrap gap-x-3 gap-y-1 text-ui">
-        {item.links.map((link) => link.sourceId
-          ? <Link key={link.slug} to={`/app/files/${encodeURIComponent(link.sourceId)}`} className="text-accent hover:underline">{link.title ?? link.slug}</Link>
-          : <span key={link.slug} className="text-text-3">{link.title ?? link.slug}</span>)}
-      </li>
-    );
-  }
-  const standing = item.status === "verified";
-  const unconfirmed = item.status === "unverified";
+/**
+ * The whole page's text in one field. The version it was loaded from goes back with the text; if a compile has rewritten
+ * the page meanwhile the control plane refuses (`knowledge_page_changed`), the editor takes the newer version in and says
+ * so in one sentence — the person's change is theirs to make again, never silently laid over the new one.
+ */
+function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
+  page: KnowledgePage;
+  projectId: string;
+  onCancel: () => void;
+  onSaved: (page: KnowledgePage) => void;
+  onReloaded: (page: KnowledgePage) => void;
+}) {
+  const [base, setBase] = useState(page);
+  const [text, setText] = useState(page.markdown);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const live = useRef(true);
+  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
+  const changed = text !== base.markdown;
+  const save = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const saved = await saveKnowledgePage({ sourceId: base.sourceId, markdown: text, baseSha256: base.sha256 });
+      if (live.current) onSaved(saved.page);
+    } catch (failure) {
+      if (!live.current) return;
+      if (failure instanceof WebApiError && failure.code === "knowledge_page_changed") {
+        try {
+          const fresh = await getKnowledgePageAt(projectId, base.tree, base.path);
+          if (!live.current) return;
+          setBase(fresh);
+          setText(fresh.markdown);
+          onReloaded(fresh);
+          setMessage("这一页刚被重新整理过，已换成最新的版本，请在它的基础上再改一次。");
+        } catch (reloadFailure) { setMessage(productErrorMessage(reloadFailure)); }
+      } else setMessage(productErrorMessage(failure));
+    } finally {
+      if (live.current) setSaving(false);
+    }
+  };
   return (
-    <li className="flex gap-2">
-      <span className="mt-0.5 shrink-0" role="img" aria-label={standing ? "已核对" : unconfirmed ? "未能核对" : "我的补充"}>
-        {standing ? <CircleCheck size={16} aria-hidden="true" className="text-ok" />
-          : unconfirmed ? <TriangleAlert size={16} aria-hidden="true" className="text-warn" /> : <span className="inline-block h-4 w-4" aria-hidden="true" />}
-      </span>
-      <div className="min-w-0 space-y-1">
-        <p className={unconfirmed ? "text-ui text-text-2" : "text-ui text-text"}>{item.text}</p>
-        {item.claimKind === "synthesized" && (
-          <Tag>综合{item.confidence && CONFIDENCE_LABEL[item.confidence] ? ` · ${CONFIDENCE_LABEL[item.confidence]}` : ""}</Tag>
-        )}
-        {item.evidence.length > 0 && (
-          <ul className="flex flex-wrap gap-x-3 gap-y-1">
-            {item.evidence.map((evidence, index) => (
-              <li key={index} className="max-w-measure">
-                <button type="button" onClick={() => onOpen(evidence)}
-                  className={evidence.status === "verified" ? "text-left text-caption text-accent hover:underline" : "text-left text-caption text-text-3 hover:underline"}>
-                  {evidence.title ? `《${evidence.title}》` : "原文"}{evidence.status === "verified" ? "" : ` · ${UNCONFIRMED}`}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+    <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (changed && text.trim() && !saving) void save(); }}>
+      <Textarea label="页面全文" value={text} rows={22} onChange={(event) => setText(event.target.value)} disabled={saving} error={message}
+        className="font-mono" />
+      <div className="flex items-center justify-end gap-2">
+        <Button type="button" variant="text" onClick={onCancel} disabled={saving}>取消</Button>
+        <Button type="submit" loading={saving} disabled={!changed || !text.trim()}>保存</Button>
       </div>
-    </li>
+    </form>
   );
 }
