@@ -136,13 +136,23 @@ test("the gate's verdict on a file deliverable is always ok, and says what it fo
   assert.deepEqual(nothing.issues.map((item) => item.code), ["file_deliverable_missing"]);
 });
 
-test("a text file naming a medicine is told the clinical safety rules apply, and is not asked to change", () => {
-  const verdict = runGate({ contractKind: FILE_DELIVERABLE_KIND, files: new Map([["menu.md", "今晚的加餐是速效救心丸造型的蛋糕。\n"]]) });
+test("a text file naming a medicine is told what is true of it, and is not asked to change", () => {
+  const verdict = runGate({ contractKind: FILE_DELIVERABLE_KIND, files: new Map([["menu.md", "今晚的加餐是速效救心丸造型的蛋糕，旁边放一杯华法林主题的鸡尾酒。\n"]]) });
   assert.equal(verdict.ok, true);
   const trigger = verdict.issues.find((item) => item.code === "clinical_content_without_clinical_contract");
   assert.ok(trigger, "the closed-vocabulary trigger still runs over an ordinary file");
   assert.equal(trigger.severity, "advisory");
   assert.doesNotMatch(trigger.message, /remove the clinical|resubmit|Deliver it as/i);
+  assert.match(trigger.message, /for reference and does not replace a clinician's advice/);
+  // It does not claim a rule was run over a file the rules do not run over.
+  assert.doesNotMatch(trigger.message, /safety rules (apply|were)/i);
+  // The wide notice does not send an ordinary file to a contract it has no way to be delivered under.
+  const wide = verdict.issues.find((item) => item.code === "clinical_high_risk_entity_notice");
+  assert.ok(wide, "a high-alert medicine is named too");
+  assert.doesNotMatch(wide.message, /clinical contract kind/);
+  // A capability's own non-clinical report keeps the sentence it always had.
+  const report = runGate({ contractKind: "bibliometric-analysis-report", files: new Map([["report.md", "本文分析华法林联合用药的文献产出。\n"]]) });
+  assert.match(report.issues.find((item) => item.code === "clinical_high_risk_entity_notice")?.message ?? "", /deliver it as a clinical contract kind/);
 });
 
 test("a plan of ordinary files needs no capability and no clarification; every other plan still does", () => {
@@ -172,6 +182,18 @@ test("a plan of ordinary files needs no capability and no clarification; every o
   assert.equal(validateTaskPlan({ clarifications: ["pick the first sheet"], deliverables: [{ id: "x", contractKind: "file-deliverable", title: "x" }] }).ok, true);
   // The kind is the only one a plan may leave without a capability.
   assert.equal(validateTaskPlan({ clarifications: ["a"], deliverables: [{ id: "x", contractKind: "research-brief", title: "x" }] }).ok, false);
+});
+
+test("the refusal of an unknown kind says what an ordinary file is", () => {
+  // The literal probe of GA02: a general file named `file` was answered with `unknown contract kind "file"` and nothing else.
+  for (const contractKind of ["file", "word", "script", "general-agent"]) {
+    const found = validateTaskPlan({ clarifications: ["x"], deliverables: [{ id: "a", contractKind, capability: "", title: "a" }] });
+    assert.equal(found.ok, false);
+    const issue = found.issues.find((item) => item.code === "contract_kind_unknown");
+    assert.ok(issue, contractKind);
+    assert.match(issue.message, /"file-deliverable"/, "the way out is named");
+    assert.match(issue.message, new RegExp(`"${contractKind}"`), "and what was refused is named too");
+  }
 });
 
 test("a script the conversation was asked for is a draft the reader opens; a capability's scripts stay work", () => {

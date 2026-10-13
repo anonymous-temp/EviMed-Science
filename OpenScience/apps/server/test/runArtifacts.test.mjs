@@ -8,6 +8,7 @@ import test from "node:test";
 
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { KNOWLEDGE_BASE_DIR } from "../src/researchContext.mjs";
+import { RUNTIME_LIBRARY_DIR } from "../src/runtimeManager.mjs";
 import {
   ARTIFACT_KINDS, ORDINARY_OUTPUT_LIMIT, PLATFORM_ROOT_DIRECTORIES, SCRATCH_DIRECTORIES,
   describeRunArtifactRoles, describeRunArtifacts, isOrdinaryConversation, ordinaryOutputPath, ordinaryRole,
@@ -170,8 +171,32 @@ test("the list of a script's hundred pictures is bounded, and the closed lists a
   assert.equal(describeRunArtifacts({ effectiveAgentId: "open-domain-answer", artifacts }, () => [])?.outputFiles?.length, ORDINARY_OUTPUT_LIMIT);
   // `researchContext.mjs` owns the constant and sits in an import cycle with this module, which is why it is spelled out here.
   assert.ok(PLATFORM_ROOT_DIRECTORIES.has(KNOWLEDGE_BASE_DIR));
+  assert.ok(PLATFORM_ROOT_DIRECTORIES.has(RUNTIME_LIBRARY_DIR.replace(/^\/workspace\//, "")), "the account's library is a read-only view, never a conversation's");
   assert.ok(PLATFORM_ROOT_DIRECTORIES.has("data"));
   assert.ok(SCRATCH_DIRECTORIES.has("node_modules") && SCRATCH_DIRECTORIES.has("__pycache__"));
   assert.equal(ordinaryOutputPath("a/../../etc/passwd"), false);
   assert.equal(ordinaryOutputPath(""), false);
+});
+
+test("a run that recorded its outputs is read by its record, and an older one by the registry", () => {
+  const outputs = (/** @type {string} */ id) => (id === "clinical-evidence-synthesis" ? ["clinical-evidence-report.md"] : null);
+  // A turn of a capability-bound conversation that was an answer: its file is the person's, and its scratch is scratch.
+  const recorded = describeRunArtifacts({
+    effectiveAgentId: "clinical-evidence-synthesis", artifacts: ["weekly.md", "scratch.py"], outputFiles: ["weekly.md"],
+  }, outputs);
+  assert.equal(recorded?.artifactKinds["weekly.md"], "deliverable");
+  assert.equal(recorded?.artifactKinds["scratch.py"], "work");
+  assert.deepEqual(recorded?.outputFiles, ["weekly.md"]);
+  assert.deepEqual(recorded?.artifactCounts, { deliverable: 1, revisionNotes: 0, work: 1, superseded: 0 });
+  // A record from before the field existed is classified the way it always was.
+  const older = describeRunArtifacts({ effectiveAgentId: "clinical-evidence-synthesis", artifacts: ["weekly.md", "scratch.py"] }, outputs);
+  assert.deepEqual(older?.artifactKinds, { "weekly.md": "work", "scratch.py": "work" });
+  assert.equal(older?.outputFiles, undefined);
+  // The record is not asked about the registry at all: a capability this build has never heard of changes nothing.
+  const unknown = describeRunArtifacts({ effectiveAgentId: "from-the-future", artifacts: ["a.docx"], outputFiles: ["a.docx"] }, () => null);
+  assert.deepEqual(unknown?.outputFiles, ["a.docx"]);
+  // The roles follow the recorded files, so the script a person asked for is a draft.
+  const roles = describeRunArtifactRoles({ effectiveAgentId: "x", artifacts: ["rename.py", "tmp/a.py"], outputFiles: ["rename.py"] }, () => undefined, ["rename.py"]);
+  assert.equal(roles["rename.py"], "draft");
+  assert.equal(roles["tmp/a.py"], "work");
 });

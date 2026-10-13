@@ -112,7 +112,13 @@ export function validateTaskPlan(value) {
     seen.add(id)
     const contractKind = String(item.contractKind ?? '').trim()
     if (!isContractKind(contractKind)) {
-      issues.push({ code: 'contract_kind_unknown', message: `unknown contract kind "${contractKind}".`, deliverableId: id })
+      // Said with the way out: the refusal an ordinary file used to get (`"file"`, `"word"`, `"script"`) named nothing it could
+      // be, and the run had nowhere to go but a professional kind it did not mean.
+      issues.push({
+        code: 'contract_kind_unknown',
+        message: `unknown contract kind "${contractKind}"; an ordinary file (a document, workbook, deck or script) is "${FILE_DELIVERABLE_KIND}" and names no capability.`,
+        deliverableId: id,
+      })
     }
     const capability = String(item.capability ?? '').trim()
     if (!capability && contractKind !== FILE_DELIVERABLE_KIND) {

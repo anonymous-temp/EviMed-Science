@@ -368,7 +368,7 @@ export function planToolParameters() {
           capability: { type: 'string', description: '专业工作流的能力 id；契约种类为 file-deliverable（普通文件：文档、表格、幻灯片、脚本）时不填。' },
           title: { type: 'string' },
           dependsOn: { type: 'array', items: { type: 'string' } },
-          acceptance: { type: 'array', items: { type: 'string' }, description: '5–10 条验收项：读者在报告正文里能核对到的具体内容（结论、数值、范围、局限）。不写关于文件清单、字段、哈希或检查过程的项——那些是平台自己的记录。' },
+          acceptance: { type: 'array', items: { type: 'string' }, description: '5–10 条验收项：读者在报告正文里能核对到的具体内容（结论、数值、范围、局限）。不写关于文件清单、字段、哈希或检查过程的项——那些是平台自己的记录。普通文件（file-deliverable）可以不写。' },
           studyType: {
             type: 'string',
             enum: [...STUDY_TYPES],
@@ -781,12 +781,12 @@ export function contentTriggerIssues(producedTexts, finalReplyText, items) {
     const owner = segments[0] === 'deliverables' ? (segments[1] ?? '') : ''
     if (clinicalPaths.has(owner)) continue
     if (!owner && clinicalBasenames.has(segments.at(-1))) continue
-    // What happens, not what to do: the file names a medicine, so the clinical safety rules apply to what it says
-    // about taking it. Nothing is removed, withheld or resubmitted for it, which is also why it is advice.
+    // What is true, not what to do: the file names a medicine, and what it says about taking one is for reference and does
+    // not replace a clinician's advice. Nothing is removed, withheld or resubmitted for it, which is also why it is advice.
     issues.push({
       code: 'clinical_content_without_clinical_contract',
       severity: 'advisory',
-      message: `${produced.path} 提到 ${triggers.slice(0, 3).join('、')}，其中涉及用药的内容按临床用药安全规则处理，仅供参考，不替代医嘱；文件不会因此被删减或退回。`,
+      message: `${produced.path} 提到 ${triggers.slice(0, 3).join('、')}：其中涉及用药的内容仅供参考，不替代医生或药师的意见。这只是给读者的提示，文件不会因此被删减或退回。`,
       path: produced.path,
     })
   }

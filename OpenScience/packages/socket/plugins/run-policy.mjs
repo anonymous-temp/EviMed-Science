@@ -660,10 +660,12 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const boundCapability = (entry) => {
     if (entry.routedCapability) return { capabilityId: entry.routedCapability, item: null }
     if (entry.binding) return { capabilityId: entry.binding, item: null }
-    const planned = [...new Set(entry.items.map((/** @type {any} */ item) => String(item.capability ?? '')).filter(Boolean))]
+    // An ordinary file names no capability worth binding, even when the model wrote one beside it.
+    const professional = entry.items.filter((/** @type {any} */ item) => item.contractKind !== FILE_DELIVERABLE_KIND)
+    const planned = [...new Set(professional.map((/** @type {any} */ item) => String(item.capability ?? '')).filter(Boolean))]
     if (planned.length > 1) return null
     if (planned.length === 1) {
-      return { capabilityId: planned[0], item: entry.items.find((/** @type {any} */ candidate) => String(candidate.capability ?? '') === planned[0]) ?? null }
+      return { capabilityId: planned[0], item: professional.find((/** @type {any} */ candidate) => String(candidate.capability ?? '') === planned[0]) ?? null }
     }
     const named = namedCapabilityIds(entry.briefText, ctx.get('evimedCapabilities') ?? [])
     if (named.length === 1) return { capabilityId: named[0], item: null }
@@ -1398,7 +1400,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // on every request, and a plan takes a capability and a contract kind: an apology e-mail was planned with zero
         // deliverables, and a market report as a research-topic package (live control on main).
         '写下或读取本次运行的计划。专业工作流的交付物（指引里「专业工作流」列出的那些）在开始工作前先写计划；普通的文件任务不用计划，直接做。',
-        'action=write：给出 clarifications（问过的问题，或你直接采用的假设——不能为空）与 deliverables（每件含 id、contractKind、capability、title、dependsOn，以及 acceptance：5–10 条按用户要求写的验收项，读者能在交付文件里逐条核对到的东西，独立审查会逐条核对；报告或设计某一项具体研究的交付物再加 studyType）。',
+        'action=write：给出 clarifications（问过的问题，或你直接采用的假设——专业工作流的计划不能为空）与 deliverables（每件含 id、contractKind、capability、title、dependsOn，以及 acceptance：5–10 条按用户要求写的验收项，读者能在交付文件里逐条核对到的东西，独立审查会逐条核对；报告或设计某一项具体研究的交付物再加 studyType）。',
+        // The generic kind, said where the plan is written (GA02 / GA25, 2026-10-12): an ordinary file has no capability behind
+        // it and nothing to clarify, so the three things a professional plan owes are not asked of it.
+        '普通文件（文档、表格、幻灯片、脚本）的 contractKind 是 file-deliverable：不填 capability，clarifications 与 acceptance 都可以不写。',
         'action=status：读回每件交付物当前的状态。',
         '直接回答的问题不需要调用本工具。',
       ].join(' '),

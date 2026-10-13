@@ -41,7 +41,7 @@ test("a file is the run's when it was written inside the run's window, and only 
 test("scratch, dependencies, hidden names and the platform's partitions are not walked", async () => {
   await withWorkspace(async ({ root, put }) => {
     const now = Date.now();
-    for (const relative of ["tmp/a.py", "work/b.md", "venv/lib/c.py", "node_modules/p/d.js", "a/__pycache__/e.pyc", ".hidden/f", ".evimed-run/state.json", "data/g.csv", "knowledge-base/h.md", "task-plan.json", "delivery-receipt.json", ".dotfile"]) await put(relative);
+    for (const relative of ["tmp/a.py", "work/b.md", "venv/lib/c.py", "node_modules/p/d.js", "a/__pycache__/e.pyc", ".hidden/f", ".evimed-run/state.json", "data/g.csv", "knowledge-base/h.md", "library/i.md", "task-plan.json", "delivery-receipt.json", ".dotfile"]) await put(relative);
     await put("report.md");
     await put("a/keep.txt");
     assert.deepEqual(await workspaceChangedFiles(root, { since: now - 5_000 }), ["a/keep.txt", "report.md"]);

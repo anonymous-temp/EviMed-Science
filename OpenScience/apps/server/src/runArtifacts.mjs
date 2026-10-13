@@ -53,6 +53,8 @@ export const ARTIFACT_KINDS = Object.freeze(/** @type {const} */ (["deliverable"
  * @property {(deliverableId: string) => Set<string> | null} declaredIn declared outputs of a deliverable's capability, relative to its directory; null when unknown
  * @property {Set<string> | null} declaredAtRoot declared outputs of the run's own capability, for the pre-directory layout
  * @property {boolean} [ordinary] the run is an ordinary conversation: it has no capability contract, so its files are its outputs
+ * @property {ReadonlySet<string> | null} [recorded] the files the run named as its outputs when it ended, which are then the
+ *   whole of them: what the registry would say about the run today is not asked
  */
 
 /** @param {string} path */
@@ -69,11 +71,12 @@ export const SCRATCH_DIRECTORIES = Object.freeze(new Set([
 ]));
 
 /**
- * The first-level directories that are not the conversation's: the read-only dataset mount and the project's document
- * library (mounted read-only into the runtime and written by the platform's own intake). `knowledge-base` is spelled out
- * because `researchContext.mjs`, which owns the constant, sits in an import cycle with this module; a test holds the two equal.
+ * The first-level directories that are not the conversation's: the read-only dataset mount, the project's document library
+ * (mounted read-only into the runtime and written by the platform's own intake) and the account's personal library (mounted
+ * read-only too). The two names are spelled out because `researchContext.mjs` and `runtimeManager.mjs`, which own the
+ * constants, sit in an import cycle with this module; a test holds them equal.
  */
-export const PLATFORM_ROOT_DIRECTORIES = Object.freeze(new Set([workspaceLayout.dataDir, "knowledge-base"]));
+export const PLATFORM_ROOT_DIRECTORIES = Object.freeze(new Set([workspaceLayout.dataDir, "knowledge-base", "library"]));
 
 /** The platform's own files at the workspace root: the plan, the receipt and the summary a run's gate writes. */
 const PLATFORM_ROOT_FILES = Object.freeze(/** @type {Set<string>} */ (new Set([workspaceLayout.planFile, workspaceLayout.receiptFile, workspaceLayout.deliverySummaryFile])));
@@ -129,6 +132,16 @@ export function artifactKindOf(value, context) {
 }
 
 /**
+ * One file's kind for a run that recorded its own outputs: they are deliverables, and nothing else it left is.
+ * @param {string} value @param {ReadonlySet<string>} recorded
+ * @returns {ArtifactKind}
+ */
+function recordedKindOf(value, recorded) {
+  const path = normalizeWorkspacePath(value) ?? String(value ?? "");
+  return recorded.has(path) || recorded.has(String(value)) ? "deliverable" : "work";
+}
+
+/**
  * The kinds of every file on a run record, and how many of each.
  *
  * @param {Record<string, any>} run a folded run record
@@ -156,7 +169,10 @@ export function describeRunArtifacts(run, declaredOutputsOf) {
     return byCapability.get(id) ?? null;
   };
   const capabilityOf = new Map(plan.map((item) => [String(item?.id ?? ""), item?.capability]));
-  const ordinary = isOrdinaryConversation(run, declared(run?.effectiveAgentId), plan);
+  // What the run recorded of itself outranks what is inferred: it was decided once, with the transcript and the workspace
+  // in hand, at the moment the run ended.
+  const recorded = Array.isArray(run?.outputFiles) && run.outputFiles.length > 0 ? new Set(run.outputFiles.map(String)) : null;
+  const ordinary = recorded !== null || isOrdinaryConversation(run, declared(run?.effectiveAgentId), plan);
   /** @type {ArtifactContext} */
   const context = {
     planIds,
@@ -172,7 +188,7 @@ export function describeRunArtifacts(run, declaredOutputsOf) {
   const artifactKinds = {};
   const artifactCounts = { deliverable: 0, revisionNotes: 0, work: 0, superseded: 0 };
   for (const path of paths) {
-    const kind = artifactKindOf(path, context);
+    const kind = recorded ? recordedKindOf(path, recorded) : artifactKindOf(path, context);
     artifactKinds[path] = kind;
     if (kind === "revision-notes") artifactCounts.revisionNotes += 1;
     else artifactCounts[kind] += 1;

@@ -1027,7 +1027,9 @@ test("a root copy of a clinical deliverable's own file is its transitional locat
   const held = completionCheck({ plan: { clarifications: ["x"] }, items: accepted, producedTexts: strayTexts, finalReplyText: "", partial: false });
   const heldNotice = held.issues.find((issue) => issue.code === "clinical_content_without_clinical_contract");
   assert.equal(heldNotice?.severity, "advisory");
-  assert.doesNotMatch(String(heldNotice?.message), /重新提交|移除|请把它作为/);
+  assert.doesNotMatch(String(heldNotice?.message), /重新提交|移除临床内容|请把它作为/);
+  assert.match(String(heldNotice?.message), /仅供参考，不替代医生或药师的意见/, "what is true of the file, and nothing it did not do");
+  assert.doesNotMatch(String(heldNotice?.message), /按临床用药安全规则处理|安全规则/, "it does not say rules were run over a file they do not run over");
   assert.match(String(heldNotice?.message), /自行建议\.md/);
   const stray = completionCheck({ plan: { clarifications: ["x"] }, items, producedTexts: strayTexts, finalReplyText: "", partial: true });
   assert.equal(stray.ok, true, "the partial exit is never barred");
@@ -1066,8 +1068,8 @@ test("what counts as a clinical contract is the domain's list, not a substring o
   assert.equal(brief.length, 1);
   assert.equal(brief[0].code, "clinical_content_without_clinical_contract");
   assert.match(brief[0].message, /速效救心丸/);
-  assert.match(brief[0].message, /按临床用药安全规则处理/);
-  assert.doesNotMatch(brief[0].message, /请把它作为|重新提交|移除临床内容/);
+  assert.match(brief[0].message, /仅供参考，不替代医生或药师的意见/);
+  assert.doesNotMatch(brief[0].message, /请把它作为|重新提交|移除临床内容|安全规则/);
 });
 
 test("an ordinary file in the plan names no capability and is not held to one", () => {

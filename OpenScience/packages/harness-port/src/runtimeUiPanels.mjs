@@ -344,7 +344,7 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
   /**
    * The run's files, two to a row: its readable files first, at most four;
    * the rest behind one control, as the kernel's own delivery cards do.
-   * @param {{ model: { runId: string, files: any[] }, sessionId: string | null, useResource?: any }} props
+   * @param {{ model: { runId: string, files: any[], deferred?: boolean }, sessionId: string | null, useResource?: any }} props
    */
   const FileCards = ({ model, sessionId, useResource }) => {
     const [all, setAll] = React.useState(false);

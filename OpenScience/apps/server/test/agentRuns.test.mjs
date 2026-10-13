@@ -8820,3 +8820,99 @@ test("a conversation that wrote nothing has no outputs, and says so by saying no
     assert.equal(run.presentedFiles, undefined);
   });
 });
+
+test("a runtime that stopped after its answer keeps the file the conversation wrote, and a conversation stopped halfway keeps what it had", async () => {
+  // GA16 (2026-10-12): the durable path and the stop path never read the transcript for files, and the only workspace read
+  // they did was `deliverables/`. A person who asked for a rename script and whose container was reaped a moment after the
+  // answer was told the run left nothing; one who stopped a long task saw an empty card over a file on the disk.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-ordinary-stop-"));
+  try {
+    const project = { id: "project-1", userId: "user-1", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+    await mkdir(path.join(project.workspaceDir, workspaceLayout.runStateDir), { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_ordinary_stop", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const owing = { id: "note-writer", version: "1.0.0", runtimeAgent: "evimed-note-writer", skill: "note-writer", companionSkills: [],
+      outputs: [{ path: "note.md", required: true }], completionChecks: ["requiredOutputsExist"] };
+    const makeStore = () => new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro", readSessionHistory: async () => [], monitorIntervalMs: 60_000,
+      agentRegistry: { get: (id) => (id === "note-writer" ? owing : undefined) },
+    });
+    const turn = { type: "turn/start", turn: 1 };
+    const answer = { type: "message/assistant", text: "脚本写好了。", reasoning: "", usage: null, interrupted: false };
+    const completed = { type: "turn/end", turn: 1, endKind: "completed" };
+
+    /** One run that writes `files` after it started, and ends the way `end` says. */
+    const run = async (end, { files = {}, dispatched = null } = {}) => {
+      const store = makeStore();
+      store.scheduleMonitor = () => {};
+      const started = dispatched
+        ? await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: `d_${Math.random().toString(16).slice(2, 10)}`, ...dispatched }, async () => ({ accepted: true }))
+        : await store.start(project, { sessionId: binding.sessionId });
+      await relabelReceipt(project, started.id);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      for (const [name, text] of Object.entries(files)) {
+        await mkdir(path.dirname(path.join(project.workspaceDir, name)), { recursive: true });
+        await writeFile(path.join(project.workspaceDir, name), text);
+      }
+      await end(store, started);
+      const finished = (await store.list(project)).find((item) => item.id === started.id);
+      await store.closeAll();
+      return { finished, store };
+    };
+    const runtimeStopsAfterAnswer = async (store, started) => {
+      let seq = 1;
+      for (const event of [turn, answer, completed]) store.noteRunEvent(project, started.id, { sessionId: binding.sessionId, child: false, replay: false, event: { seq: (seq += 1), ...event } });
+      await store.closeProject(project, "failed");
+    };
+
+    // The runtime is gone after the answer: the files are the run's, and the answer is still unchecked.
+    const gone = await run(runtimeStopsAfterAnswer, { files: { "rename.py": "print(1)\n", "tmp/scratch.py": "x = 1\n" } });
+    assert.equal(gone.finished?.status, "succeeded");
+    assert.deepEqual(gone.finished?.artifacts, ["rename.py"]);
+    assert.deepEqual(gone.finished?.outputFiles, ["rename.py"], "recorded on the run, so the reader does not depend on the registry of the day");
+    assert.equal(gone.finished?.verification, "unchecked");
+
+    // Stopped by the person halfway: what it had written stays, as unchecked files, with no 「未经核验」 said about it.
+    const stopped = await run(async (store, started) => {
+      await store.finishInternal(project, started.id, { status: "canceled", errorCode: "runtime_canceled", artifacts: [], canceledBy: "user" });
+    }, { files: { "budget.xlsx": "not read", "notes/part-1.md": "# 一\n" } });
+    assert.equal(stopped.finished?.status, "canceled");
+    assert.deepEqual(stopped.finished?.artifacts, []);
+    assert.deepEqual(stopped.finished?.unverifiedArtifacts, ["budget.xlsx", "notes/part-1.md"]);
+    assert.deepEqual([...(stopped.finished?.outputFiles ?? [])].sort(), ["budget.xlsx", "notes/part-1.md"]);
+    assert.ok(!(stopped.finished?.qualityNotices ?? []).some((notice) => notice.code === "run_unverified_delivery"), "an ordinary file is not a package no gate accepted");
+    // …and it is not a work of the project: a run that did not finish delivered nothing.
+    const described = stopped.store.withArtifactKinds(stopped.finished);
+    assert.deepEqual(described.artifactCounts.deliverable, 2);
+
+    // A run that owes a capability's files keeps its scratch to itself, however it ends.
+    const owed = await run(async (store, started) => {
+      await store.finishInternal(project, started.id, { status: "canceled", errorCode: "runtime_canceled", artifacts: [], canceledBy: "user" });
+    }, { files: { "scratch.py": "x = 1\n" }, dispatched: { effectiveAgentId: "note-writer", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-note-writer" } });
+    assert.deepEqual(owed.finished?.unverifiedArtifacts, [], "a capability's turn is judged by its contract, and its scratch is not a file of the person's");
+    assert.equal(owed.finished?.outputFiles, undefined);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("what a run recorded as its outputs is what a reader is shown, whatever the registry says on the day it is read", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    await dispatch("turn_recorded_outputs");
+    await wait(25);
+    await writeFile(path.join(project.workspaceDir, "weekly.docx"), wordPackageBytes());
+    await writeFile(path.join(project.workspaceDir, "helper.py"), "print(1)\n");
+    appendHistory([skillLoadedPart, bashPart("python3 make.py"), { type: "text", text: "周报做好了。" }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.deepEqual(run.outputFiles?.slice().sort(), ["helper.py", "weekly.docx"]);
+    // The capability's manifest grows an output list later: the run's own record still decides.
+    const later = { get: () => ({ id: "open-domain-answer", outputs: [{ path: "answer.md", required: true }] }) };
+    const described = store.withArtifactKinds(run, later);
+    assert.equal(described.artifactKinds["weekly.docx"], "deliverable");
+    assert.deepEqual(described.outputFiles, ["weekly.docx", "helper.py"]);
+    // An older record that never named its outputs is classified as it always was: by the registry.
+    const { outputFiles: _recorded, ...old } = run;
+    assert.equal(store.withArtifactKinds(old, later).artifactKinds["weekly.docx"], "work");
+    assert.equal(store.withArtifactKinds(old).artifactKinds["weekly.docx"], "deliverable", "and as an answer-line run it was ordinary");
+  });
+});

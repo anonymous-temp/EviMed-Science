@@ -301,22 +301,26 @@ function proseHygieneIssues(input, proseFiles) {
  * (`highRiskEntities`: a hundred). Both are for the reader, and neither asks anything of them: until 2026-10-13 the first
  * was `required` and told the run to "deliver it as a clinical contract kind, or remove the clinical content" — a
  * sentence no run could act on for an e-mail that merely names a medicine, and a wrong one for a capability whose whole
- * subject is that medicine. What it says now is what happens: the file mentions a medicine, the clinical safety rules
- * apply to what it says about taking it, and nothing is withheld or removed.
+ * subject is that medicine. What it says now is only what is true: the file mentions a medicine, what it says about taking
+ * one is for reference and does not replace a clinician's advice, and nothing is withheld or removed. (It does not say that
+ * the clinical safety rules were run over the file: they run on a clinical contract's files, and this is not one.)
  *
  * A bibliometric study of metformin literature is legitimately about metformin and must not be withheld for saying so — but
  * how often a non-clinical deliverable talks about a high-alert medicine is exactly the distribution principle 4 wants
  * before any of those names is promoted into the blocking list.
- * @param {string} path @param {string} body @returns {GateIssue[]}
+ *
+ * `ordinaryFile` is a file nobody planned under a capability (`file-deliverable`): there is no clinical contract it could
+ * "be delivered as", so the second notice does not point at one.
+ * @param {string} path @param {string} body @param {{ ordinaryFile?: boolean }} [options] @returns {GateIssue[]}
  */
-function clinicalContentIssues(path, body) {
+function clinicalContentIssues(path, body, { ordinaryFile = false } = {}) {
   /** @type {GateIssue[]} */
   const issues = []
   const triggers = matchedClinicalTriggers(body)
   if (triggers.length) {
     issues.push(issue(
       'clinical_content_without_clinical_contract',
-      `${path} mentions ${triggers.slice(0, 3).join('、')}: the clinical safety rules apply to what it says about taking it. This is a notice for the reader; no change to the file is asked for.`,
+      `${path} mentions ${triggers.slice(0, 3).join('、')}; what it says about taking a medicine is for reference and does not replace a clinician's advice. This is a notice for the reader, and no change to the file is asked for.`,
       { path, severity: 'advisory', check: 'clinical-content-trigger' },
     ))
   }
@@ -324,7 +328,9 @@ function clinicalContentIssues(path, body) {
   if (highRisk.length) {
     issues.push(issue(
       'clinical_high_risk_entity_notice',
-      `${path} names ${highRisk.slice(0, 3).join('、')}, a high-alert medicine, under a non-clinical contract. No action is required; if the file carries advice about taking it, deliver it as a clinical contract kind so the safety rules apply.`,
+      ordinaryFile
+        ? `${path} names ${highRisk.slice(0, 3).join('、')}, a high-alert medicine. No action is required; what it says about taking one is for reference and does not replace a clinician's advice.`
+        : `${path} names ${highRisk.slice(0, 3).join('、')}, a high-alert medicine, under a non-clinical contract. No action is required; if the file carries advice about taking it, deliver it as a clinical contract kind so the safety rules apply.`,
       { path, severity: 'advisory', check: 'clinical-high-risk-entity' },
     ))
   }
@@ -434,7 +440,7 @@ function validateFileDeliverable(input) {
     unreadable += found.length
     for (const item of found) issues.push(issue(item.code, item.message, { severity: 'advisory', path, check: 'file-format' }))
     const body = input.files.get(path)
-    if (body && fileFormatOf(path).kind === 'text') issues.push(...clinicalContentIssues(path, body))
+    if (body && fileFormatOf(path).kind === 'text') issues.push(...clinicalContentIssues(path, body, { ordinaryFile: true }))
   }
   return { ok: true, contractKind: input.contractKind, issues, metrics: { files: entries.size, unreadableFiles: unreadable }, errorCode: null }
 }
