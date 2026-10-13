@@ -23,12 +23,18 @@ const KEY_POINTS = 8;
 /** How many tables and figures are listed before 「显示全部」. */
 const MATERIALS_SHOWN = 6;
 
-/** The study slots of a paper, as a researcher names them. Only a paper has them, and only the ones it states are shown. */
+/**
+ * The slots of a paper, as a researcher names them, in the order they are shown. A paper is read the same way in any discipline
+ * (its question, method, data or subjects, main results); the clinical elements are there only when the reading judged it a
+ * clinical study. An understanding stored before the discipline-neutral slots has only the clinical ones and is shown with them:
+ * a slot a record does not carry is not drawn. Only the ones a paper states are shown.
+ */
 const SLOT_LABELS: Record<string, string> = {
+  question: "研究问题", method: "方法", dataOrSubjects: "数据或对象", mainResults: "主要结果",
   design: "研究设计", population: "研究人群", interventionExposure: "干预或暴露", outcomes: "研究终点",
   effectEstimates: "效应估计", doi: "DOI", limitations: "局限",
 };
-const PAPER_SLOTS = ["design", "population", "interventionExposure", "outcomes", "effectEstimates", "doi"];
+const PAPER_SLOTS = ["question", "method", "dataOrSubjects", "mainResults", "design", "population", "interventionExposure", "outcomes", "effectEstimates", "doi"];
 
 /** The pages a claim rests on, in order, from where its anchors fall in the text. */
 function pagesOf(anchors: readonly SourceAnchor[], pageMap: SourceUnderstandingResult["pageMap"]): number[] {
@@ -43,7 +49,8 @@ const flat = (text: string) => text.replace(/\s+/g, " ").trim();
  * reference §13.1, 「要点栏的顺序」), and only from what the control plane already holds:
  *
  *  1. the one-line gist — the same sentence the list row has (the summary's first);
- *  2. for a paper, what it is (who wrote it, where, and the study's design, people, intervention, endpoints, effect, DOI) —
+ *  2. for a paper, what it is (who wrote it, where, and its question, method, data, results, DOI — for a clinical study also its design,
+ *     people, intervention, endpoints and effect) —
  *     only what it states;
  *  3. what it contains (「包含什么」) and what limits it (「局限」), each only when the reading has some — the reading
  *     writes them from the document, for every type, and an understanding from before they existed has neither (N-17);

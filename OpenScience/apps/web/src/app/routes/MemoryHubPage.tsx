@@ -295,7 +295,7 @@ export function MemoryHubPage() {
               onOpen={(recordId) => setOpenKey(`record:${recordId}`)}
             />
           )}
-          {projectFacts.length === 0 ? empty("这个项目还没有记忆", "项目里的研究范围、数据来源和已定的决策会出现在这里。")
+          {projectFacts.length === 0 ? empty("这个项目还没有记忆", "你在对话里说过的目标、资料和已定的事会出现在这里。")
             // Under the card, the ranking and the works, the list needs its own name; alone, the tab names it.
             : above ? <section><GroupHeader>记忆</GroupHeader>{factRows(projectFacts, "项目的记忆")}</section>
               : factRows(projectFacts, "项目的记忆")}

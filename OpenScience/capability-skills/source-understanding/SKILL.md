@@ -12,13 +12,24 @@ a new task. Do not retrieve external evidence, execute source snippets or publis
 methods.
 
 `docType` is what the platform believes the document is, and its schema lists the slots that belong to that type: a
-paper or a preprint carries study slots (design, population, intervention or exposure, outcomes, effect estimates,
-DOI); a protocol or a proposal carries procedure slots; a note carries topic and decision slots; every other document
-— a guideline, a policy, a drug label, a contract, a web page, a table, a form, slides, minutes — carries `purpose`,
-`key information` and `limitations`. Before anyone read the text the type came from the file's format alone, so a PDF
-or a Word file starts as a plain document. When the document is not what `docType` says, do not bend it to the slots:
-`summary` says what the document is and what it holds, `claims` carry its substance, and a slot it has nothing for
-stays unknown. Never read a document as a research paper because it is a PDF.
+paper or a preprint is read the way a paper in any discipline is — `question`, `method`, `dataOrSubjects`
+(the data, corpus, sample or subjects it works on), `mainResults`, `limitations` and `doi`; a protocol or a proposal
+carries procedure slots; a note carries topic and decision slots; every other document — a guideline, a policy, a drug
+label, a contract, a web page, a table, a form, slides, minutes — carries `purpose`, `key information` and
+`limitations`. Before anyone read the text the type came from the file's format alone, so a PDF or a Word file starts
+as a plain document. When the document is not what `docType` says, do not bend it to the slots: `summary` says what
+the document is and what it holds, `claims` carry its substance, and a slot it has nothing for stays unknown. Never
+read a document as a research paper because it is a PDF.
+
+A paper's schema also lists `optionalSlots`: `design`, `population`, `interventionExposure`, `outcomes` and
+`effectEstimates`. They are the clinical elements, and you carry them when — and only when — the paper is a clinical
+or epidemiological study of people: a trial, a cohort or case-control study, a registry or database study, a
+systematic review or meta-analysis of such studies. Then every one of the five is `known` with its anchor or `unknown`
+with a reason, as any slot is. For every other paper — machine learning, economics, physics, history, software —
+leave the five keys out of `slots` altogether. Leaving them out is the right answer, not an incomplete one; writing
+them as `unknown` would present an empty clinical form for a paper that has none. What such a paper compares, finds and
+measures goes in `method`, `dataOrSubjects` and `mainResults`, in its own terms (an architecture and a benchmark, an
+estimator and a panel, a derivation and a dataset).
 
 Write `source-understanding.json` with:
 
@@ -50,7 +61,8 @@ Write `source-understanding.json` with:
   restatement of an unknown slot. Where the schema also has a `limitations` slot,
   the slot carries the one anchored statement and this list carries each
   limitation as its own item; the two do not disagree.
-- `slots`: exactly the keys in `input.schema.slots`. Each is either
+- `slots`: exactly the keys in `input.schema.slots`, plus — for a clinical or epidemiological study — the keys of
+  `input.schema.optionalSlots` (see above). Each is either
   `{"state":"known","value":"...","evidence":[anchor]}` or
   `{"state":"unknown","reason":"..."}`. A known value is something the document
   states. When the document has no such thing — no study design, no effect

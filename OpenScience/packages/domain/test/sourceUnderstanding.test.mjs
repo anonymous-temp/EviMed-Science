@@ -43,6 +43,47 @@ test('typed schemas share one validator; known slots need exact source evidence 
   }
 })
 
+test('a paper is read with discipline-neutral slots; the clinical elements are optional and only a study carries them', () => {
+  const schema = sourceUnderstandingSchema('published-paper')
+  assert.deepEqual([...schema.slots], ['question', 'method', 'dataOrSubjects', 'mainResults', 'limitations', 'doi'])
+  assert.deepEqual([...schema.optionalSlots], ['design', 'population', 'interventionExposure', 'outcomes', 'effectEstimates'])
+  const input = normalizeSourceText({ sourceId: 's', generation: 1, docType: 'preprint-manuscript', depth: 'structured', text: 'We train a transformer on ImageNet and reach 84.2% top-1 accuracy.' })
+  const anchor = { sourceId: 's', generation: 1, unitId: input.units[0].id, start: 3, end: 8, quote: 'train' }
+  /** @type {Record<string, any>} */
+  const slots = Object.fromEntries(schema.slots.map(key => [key, { state: 'unknown', reason: 'Not stated in the source.' }]))
+  slots.method = { state: 'known', value: 'A transformer trained on ImageNet.', evidence: [anchor] }
+  const output = { schemaVersion: 1, sourceId: 's', generation: 1, docType: 'preprint-manuscript', depth: 'structured', summary: 'A vision paper', slots, claims: [], methods: [],
+    omissionAudit: { status: 'not_run', reason: 'Not audited.', omissionRate: null } }
+  // A machine-learning paper carries none of the clinical elements, and that is a complete answer.
+  assert.deepEqual(validateSourceUnderstanding(output, input), [])
+  // A clinical study carries them like any other slot: known with an anchor, or unknown with a reason.
+  slots.design = { state: 'known', value: 'Randomised trial', evidence: [anchor] }
+  slots.population = { state: 'unknown', reason: 'Not stated in the source.' }
+  assert.deepEqual(validateSourceUnderstanding(output, input), [])
+  slots.outcomes = { state: 'unknown', reason: '' }
+  assert.ok(validateSourceUnderstanding(output, input).some(issue => issue.includes('slots.outcomes')))
+  delete slots.outcomes
+  // A required slot is still required, and a slot of no schema is still unknown.
+  delete slots.question
+  assert.ok(validateSourceUnderstanding(output, input).some(issue => issue.includes('slots.question')))
+  slots.question = { state: 'unknown', reason: 'Not stated in the source.' }
+  slots.keyInformation = { state: 'unknown', reason: 'Not stated in the source.' }
+  assert.ok(validateSourceUnderstanding(output, input).some(issue => issue.includes('Unknown slot: keyInformation')))
+  // No other type is offered the clinical elements, as optional or otherwise.
+  for (const docType of ['research-protocol', 'note-memo', 'policy-document']) assert.deepEqual([...sourceUnderstandingSchema(docType).optionalSlots], [])
+})
+
+test('an understanding stored with the earlier clinical slots still projects and reads by its own keys', () => {
+  const stored = { schemaVersion: 1, sourceId: 's', generation: 1, docType: 'published-paper', depth: 'structured', summary: 'An older reading',
+    slots: { doi: { state: 'unknown', reason: '原文未涉及' }, design: { state: 'known', value: '随机对照试验', evidence: [{ sourceId: 's', generation: 1, unitId: 'u', start: 0, end: 2, quote: 'RC' }] },
+      population: { state: 'unknown', reason: '原文未涉及' }, interventionExposure: { state: 'unknown', reason: '原文未涉及' }, outcomes: { state: 'unknown', reason: '原文未涉及' },
+      effectEstimates: { state: 'unknown', reason: '原文未涉及' }, limitations: { state: 'unknown', reason: '原文未涉及' } },
+    claims: [], methods: [], omissionAudit: { status: 'not_run', reason: 'old', omissionRate: null } }
+  const projected = projectSourceUnderstandingOutput(stored)
+  assert.deepEqual(Object.keys(projected.slots).sort(), Object.keys(stored.slots).sort())
+  assert.equal(projected.slots.design.state, 'known')
+})
+
 test('depth and source generation cannot be fabricated and absent audit never means zero omissions', () => {
   const input = normalizeSourceText({ sourceId: 's', generation: 2, docType: 'note-memo', depth: 'structured', text: 'A note.' })
   const output = { schemaVersion: 1, sourceId: 's', generation: 3, docType: 'note-memo', depth: 'deep', summary: 'Note', slots: {}, claims: [], methods: [], omissionAudit: { status: 'not_run', omissionRate: 0 } }

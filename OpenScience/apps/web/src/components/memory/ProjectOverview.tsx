@@ -12,9 +12,10 @@ import { GroupHeader } from "./MemoryRows";
  * above the project's own list of memories. Nothing here is a page of its own and nothing is the account's — it is the selected
  * project's, and it changes with the dropdown.
  *
- *  - **the card** — one row per thing the researcher said about the study (人群, 干预或暴露, 对照, 结局 …), only the ones they
- *    said; a row opens the memory it was written from, in the drawer, like every row on this page. Nothing is asked of the
- *    researcher to fill a slot: an empty slot is not drawn.
+ *  - **the card** — one row per thing the researcher said about the work (领域, 目标, 范围或对象, 材料与数据, 阶段, 约束; and for a
+ *    clinical study the elements they stated, 人群, 干预或暴露 …), only the ones they said; a row opens the memory it was written
+ *    from, in the drawer, like every row on this page. Nothing is asked of the researcher to fill a slot: an empty slot is not
+ *    drawn, and a project with nothing stated draws no card at all.
  *  - **这个项目做过** — the capabilities that answered its conversations, the most used first: a ranking is a table with a bar
  *    in the row, never a pie (design reference, appendix E §4.1).
  *  - **作品** — the files its conversations delivered, by month, each a link to the file.
@@ -49,6 +50,11 @@ export function workPath(runId: string, path: string): string {
 }
 
 const WORKS_FIRST = 6;
+
+/** The researcher's word for a card row: the one the control plane sent, else the slot's own; an extra with none states itself. */
+function cardLabel(slot: ProjectOverviewData["card"][number]): string {
+  return slot.label ?? (PROJECT_CARD_SLOT_LABELS_ZH as Record<string, string>)[slot.slot] ?? "";
+}
 
 function Works({ works, timeZone }: { works: ProjectOverviewData["works"]; timeZone: string }) {
   const rows = works.flatMap((group) => group.items.map((item) => ({ ...item, month: group.month })));
@@ -105,7 +111,7 @@ export function ProjectOverview({ overview, canOpen, onOpen }: {
           {overview.card.map((slot) => (
             <ListRow
               key={slot.slot}
-              leading={<span className="w-20 text-caption text-text-3">{(PROJECT_CARD_SLOT_LABELS_ZH as Record<string, string>)[slot.slot] ?? slot.slot}</span>}
+              leading={<span className="w-24 text-caption text-text-3">{cardLabel(slot)}</span>}
               title={<span className="line-clamp-2 max-w-measure">{memoryExcerpt(slot.text, 200)}</span>}
               onOpen={canOpen(slot.recordId) ? () => onOpen(slot.recordId) : undefined}
             />

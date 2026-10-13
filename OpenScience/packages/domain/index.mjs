@@ -1262,16 +1262,27 @@ export {
   FRONTIER_NOTICE_KINDS,
   frontierUpdateKind,
 } from './src/frontierVocabulary.mjs'
-// projectCard — the slots a project's memory is read in (population, intervention,
-// comparator, outcome, design, data source, stage, and the specialty drawn from the
-// frontier feed's closed list) and the one check on a value: a project's field.
+// projectCard — the slots a project's memory is read in: six general ones for any kind of
+// work, the clinical elements as an extension written only when a study was described,
+// `project.ext.<name>` for the extras of other kinds of work, and the one check on a
+// value that has a shape: a project's field, an open vocabulary of up to three phrases.
 export {
+  PROJECT_CARD_CLINICAL_SLOTS,
+  PROJECT_CARD_EXTENSION_LABELS_ZH,
+  PROJECT_CARD_EXTENSION_NAME_MAX,
+  PROJECT_CARD_EXTENSION_PREFIX,
+  PROJECT_CARD_EXTENSION_ROWS_MAX,
+  PROJECT_CARD_EXTENSION_VALUE_MAX,
+  PROJECT_CARD_GENERAL_SLOTS,
   PROJECT_CARD_KEY_PREFIX,
   PROJECT_CARD_SLOTS,
   PROJECT_CARD_SLOT_LABELS_ZH,
-  PROJECT_FIELD_LABELS_ZH,
   PROJECT_FIELD_MAX,
+  PROJECT_FIELD_PHRASE_MAX,
   canonicalProjectField,
+  isProjectCardKey,
+  projectCardExtensionOfKey,
+  projectCardExtensionValueFits,
   projectCardKey,
   projectCardSlotOfKey,
 } from './src/projectCard.mjs'

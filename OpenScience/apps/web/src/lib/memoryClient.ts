@@ -192,8 +192,12 @@ export interface ProjectOverview {
   projectId: string;
   /** This project's own switch (「本项目不使用记忆」). */
   paused: boolean;
-  /** The slots the project holds, in the order the card reads (`PROJECT_CARD_SLOTS`); a slot nobody stated is absent. */
-  card: Array<{ slot: string; recordId: string; text: string; updatedAt: string | null }>;
+  /**
+   * The slots the project holds, in the order the card reads (`PROJECT_CARD_SLOTS`, then the extras of other kinds of work); a
+   * slot nobody stated is absent. `label` is the researcher's word for the slot, or null for an extra that has none (its text
+   * is then the sentence the memory states).
+   */
+  card: Array<{ slot: string; label?: string | null; recordId: string; text: string; updatedAt: string | null }>;
   /** The capabilities that answered the researcher's own conversations in it, the most used first, by their product name. */
   capabilities: Array<{ id: string; title: string; count: number }>;
   /** Delivered files, newest month first (`month` is YYYY-MM in the researcher's zone). */
