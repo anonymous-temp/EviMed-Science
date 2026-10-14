@@ -46,6 +46,7 @@
  */
 
 import {
+  GEO_ACTION_KINDS, GEO_ACTION_PROMISES, GEO_ARTICLE_CHANNELS, GEO_PROMISE_CEILINGS, geoActionNotices,
   GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_AUDIENCES, GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_COMPARISON_EVIDENCE_TYPES, GEO_ENGINE_LABELS_ZH, GEO_ENGINES,
   GEO_GAP_CLASSES, GEO_GAP_CLASS_LABELS_ZH,
   GEO_GROUP_SIGNALS, GEO_IDENTITY_STATUSES, GEO_OWNED_LINK_PLATFORMS, GEO_OWNED_LINK_STATUSES, GEO_POOLS, GEO_QUESTION_KINDS, GEO_QUESTION_PLATFORMS,
@@ -61,7 +62,7 @@ const DELIVERABLE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/;
 
 export const GEO_WRITE_LIMITS = Object.freeze({
   claims: 200, sources: 200, articles: 50, targets: 60, groups: 80, questionsPerGroup: 60, questions: 400, competitors: 20,
-  journeyEntries: 60, planEntries: 60, ownedLinks: 50, jsonBytes: 256 * 1024,
+  journeyEntries: 60, planEntries: 60, ownedLinks: 50, actions: 60, jsonBytes: 256 * 1024,
 });
 /** Measured questions a locked set holds: the full program, and a single step's minimal set (the owner's table has its floor). */
 export const GEO_MEASURED_RANGE = Object.freeze({ full: Object.freeze([40, 120]), minimal: Object.freeze([Number(geoConstant("SINGLE_STEP_MIN_QUESTIONS")), 120]) });
@@ -149,12 +150,15 @@ const stripControls = (value) => [...value].map((character) => {
 
 /**
  * A field reader that records what it refuses, for one item.
- * @param {Record<string, any>} source @param {GeoIssue[]} issues @param {{ index?: number, group?: number }} where
+ * @param {Record<string, any>} source @param {GeoIssue[]} issues @param {{ index?: number, group?: number, path?: string }} where
  */
 function fields(source, issues, where) {
   let refused = false;
+  // `path` names the object inside the item (`expectedPoints[1]`); it prefixes the field an issue names and is not part of the issue.
+  const { path = "", ...place } = /** @type {Record<string, any>} */ (where);
+  const named = (/** @type {string} */ field) => (path ? `${path}.${field}` : field);
   /** @param {string} field @param {string} code @param {string} message */
-  const refuse = (field, code, message) => { refused = true; issues.push({ ...where, field, code, message }); return undefined; };
+  const refuse = (field, code, message) => { refused = true; issues.push({ ...place, field: named(field), code, message }); return undefined; };
   return {
     get refused() { return refused; },
     refuse,
@@ -231,12 +235,21 @@ function fields(source, issues, where) {
      * screens …), and refusing the whole item for them lost 77 of 80 claims
      * on the first production run (2026-09-25). The full record stays in the
      * deliverable's own files.
-     * @param {readonly string[]} allowed
+     *
+     * `declined` are the fields the platform has said, once and with a reason
+     * (`GEO_NOT_STORED`), it does not keep: they are left out without a notice
+     * and counted (`declined_fields`, which the write answers as a number and
+     * never as an issue). A field in neither list is a drop nobody decided, and
+     * is the notice.
+     * @param {readonly string[]} allowed @param {readonly string[]} [declined]
      */
-    unknown(allowed) {
-      const ignored = Object.keys(source).filter((key) => !allowed.includes(key));
+    unknown(allowed, declined = []) {
+      const extra = Object.keys(source).filter((key) => !allowed.includes(key));
+      const ignored = extra.filter((key) => !declined.includes(key));
+      const left = extra.filter((key) => declined.includes(key));
+      if (left.length) issues.push({ ...place, field: named(left.slice(0, 20).join(",")), code: "declined_fields", message: `Declined: ${left.join(", ")}.` });
       if (ignored.length) {
-        issues.push({ ...where, field: ignored.slice(0, 20).join(","), code: "ignored_fields",
+        issues.push({ ...place, field: named(ignored.slice(0, 20).join(",")), code: "ignored_fields",
           message: `Not stored by the platform (kept only in the files): ${ignored.slice(0, 20).join(", ")}${ignored.length > 20 ? " …" : ""}.` });
       }
     },
@@ -443,7 +456,7 @@ function validatedClaims(items, issues) {
 
 // --- the question map -----------------------------------------------------------------------
 
-const GROUP_FIELDS = Object.freeze(["valueContext", "pool", "name", "typicalQuestion", "journeyStage", "audience", "bridge", "weight", "isControl", "signal", "questions"]);
+const GROUP_FIELDS = Object.freeze(["valueContext", "pool", "name", "typicalQuestion", "journeyStage", "journeyStageNo", "audience", "bridge", "weight", "isControl", "signal", "questions"]);
 const QUESTION_FIELDS = Object.freeze(["text", "kind", "pool", "platform", "sourceUrl", "collectedAt", "isMeasured"]);
 
 /**
@@ -487,6 +500,9 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
       valueContext: isObject(item.valueContext) ? item.valueContext : {},
       typicalQuestion: group.text("typicalQuestion", 300),
       journeyStage: group.text("journeyStage", 60),
+      // The stage's number in the journey's own list (1…): the run that wrote the journey knows it; a group written without one reads
+      // its stage word.
+      journeyStageNo: group.number("journeyStageNo", 1, 60, { integer: true }),
       audience: group.word("audience", GEO_AUDIENCES),
       bridge: group.text("bridge", 300),
       weight: group.number("weight", 0, 1_000_000),
@@ -652,9 +668,126 @@ const PROMISE_WORDS = Object.freeze({
 /** The method's layout (`source_table.json` `layout`): its parts, by their names on the wire. */
 const LAYOUT_PARTS = Object.freeze({ layers: "layers", byEngine: "byEngine", by_engine: "byEngine", constraints: "constraints",
   excluded: "excluded", clientActions: "clientActions", client_actions: "clientActions" });
-/** The measured parts of the method's per-engine record: the platform's own rows (M-10, the citations), never stored twice. */
-const MEASURED_EXPECTATION_PARTS = Object.freeze(["retrieval", "citationMix", "citation_mix", "citationDisplay", "citation_display", "bodyUse",
-  "body_use", "ownEcosystem", "own_ecosystem", "priors", "surface", "clusterLeverage", "cluster_leverage"]);
+
+/**
+ * What the platform does not keep of what a run writes, and why — one line a field (build to delete: a line goes when the platform
+ * keeps the field). A field in a run's file is stored, mapped onto a stored one, or here; a field in none of them is a drop nobody
+ * decided, and `ignored_fields` says so to the run and `/metrics` counts it. `evals/geo-strategy` walks a stored strategy through
+ * this list and fails on a field outside it.
+ *
+ * The reasons repeat three: the number is the platform's own (a run's copy could disagree with the table it is measured in), the
+ * field is derived from a row the platform holds, or it belongs to the run's own file (its report, which a reader opens as a file).
+ */
+export const GEO_NOT_STORED = Object.freeze({
+  "strategy.json": Object.freeze({
+    schema: "the file's own format tag",
+    deliverableId: "the deliverable's id is the run ledger's",
+    contractKind: "the contract is the run ledger's",
+    generatedAt: "the platform stamps its own version time (strategy.created_at)",
+    roundId: "the round a strategy was read from is the platform's own record (rounds); a run's copy of an id could name another",
+    minimal: "whether a step is minimal is the step's status, set by the platform from what exists (steps.sources)",
+    chosenTier: "the tier is a person's setting on the project (projects.tier); a run never changes it",
+    platformWrite: "the run's own report of what it wrote — the platform has the write's answer",
+    tiersAsWritten: "the flat copy of the tiers that geo_write targets takes; the targets table is the record",
+    sourceTable: "counts and an index of the source table; the sources table is the record",
+    measurementNote: "the dates each engine was last measured are the rounds' own (rounds.sample_date)",
+  }),
+  "strategy.json:sources": Object.freeze({
+    citedDomains: "the platform's own tally of the answers' citations (sources.cited, geoSourceAnswers)",
+    citedDomainsWithAttribution: "the platform's own tally of the answers' citations",
+    citationEntries: "the platform's own tally of the answers' citations",
+    byEngine: "the platform's own tally of the answers' citations",
+    checkedOn: "each source carries its own checkedAt; a table-level day is a second one",
+    conditionsNote: "how the three conditions were checked is the report's; each source keeps its verdicts and the day",
+    index: "every cited domain with its counts is the platform's own tally",
+    unitLegend: "a legend of the file's units",
+    checks: "the counts of the checks are derived from the sources table; the notes about what could not be checked are the report's",
+  }),
+  "gaps[]": Object.freeze({
+    pool: "derived from the group (question_groups.pool)",
+    measuredQuestions: "derived from the group (its measured questions)",
+    groupWeight: "derived from the group (question_groups.weight)",
+    weightBand: "derived from the group's weight",
+  }),
+  "expectations[]": Object.freeze({
+    engineName: "derived from the engine id",
+    retrieval: "measured: the platform's own M-10 row; a run's copy of a measured number could disagree with it",
+    sample: "measured: the answers behind the engine's cells are the platform's own rows",
+    citationMix: "measured: the platform's own citation tally",
+    citation_mix: "measured: the platform's own citation tally",
+    citationDisplay: "measured: how an engine shows its citations is a property the platform's engine table records",
+    citation_display: "measured: how an engine shows its citations is a property the platform's engine table records",
+    bodyUse: "measured: the platform's own parse of the answers",
+    body_use: "measured: the platform's own parse of the answers",
+    ownEcosystem: "measured: the platform's own citation tally",
+    own_ecosystem: "measured: the platform's own citation tally",
+    priors: "a prior from published research is a reading of the literature, kept in the report; a prior is never a measurement",
+    surface: "the probe surface is the round's own record (rounds.surface)",
+  }),
+  "sources[]": Object.freeze({
+    sourceKey: "the platform's own id for the source; the domain is the key",
+    ownership: "whether a domain is ours is the project's registry (layer owned), not a run's reading",
+    placeability: "the market's own records (media) decide whether a site can be placed into",
+    price: "the market's own catalogue price (media.price_cny)",
+    role: "a narrative about a source's part, kept in the report; an action's reason for a source is actions[].sources[].why",
+    cited: "measured: the platform's own tally",
+    mentionsOurs: "measured: the platform's own tally",
+    errorsAboutUs: "measured: the platform's own tally",
+    layerNote: "why a layer was chosen is the report's; the layout keeps the layers' lists and the constraints",
+  }),
+  "tiers[]": Object.freeze({
+    placements: "read from the targets rows (the maximum over the tier), never typed twice",
+    budgetCny: "read from the targets rows (the maximum over the tier), never typed twice",
+  }),
+  "tiers[].targets[]": Object.freeze({
+    baseline: "the number is the targets table's (geo_write targets), validated there; a second typed copy could disagree",
+    target: "the number is the targets table's (geo_write targets), validated there; a second typed copy could disagree",
+    dataType: "the targets table's (a target is a forecast or a commercial figure, never measured)",
+    name: "derived from the metric id",
+  }),
+  "actions[]": Object.freeze({
+    target: "the target is the chosen tier's row for the group's pool (the targets table); a number typed here would be a second one",
+  }),
+  "articles.json": Object.freeze({
+    minimal: "whether a step is minimal is the step's status",
+    assumptions: "the run's assumptions about the batch are in its report; an assumption of the strategy is stored with the strategy",
+  }),
+  "articles[]": Object.freeze({
+    id: "the platform mints its own id at registration; the file's path is the key",
+    question: "the question is the group's typical question; an article is bound by its group",
+    groupKey: "the method's own numbering of a group; an article is bound by the platform's group id",
+    questionId: "an article answers a group, not one question; a correction is bound to its errors",
+    engine: "a correction's engine is its error's own",
+    recordPath: "the work record is a file of the deliverable, opened from it",
+    author: "who speaks for the product is the project's producer settings; an author is never typed per article",
+    reviewer: "who reviews is a project member with the reviewer role; a reviewer is never typed per article",
+    updatedAt: "the platform keeps its own updated_at",
+    "safety.findings": "the finding stays in the article's work record, which the release dialog opens; the platform keeps the stop itself (safety)",
+    "safety.note": "the finding stays in the article's work record; the platform keeps the stop itself (safety)",
+  }),
+});
+
+/** The fields each validated object keeps, once: the validators and the file walker read the same lists. */
+export const GEO_STORED_FIELDS = Object.freeze({
+  strategy: Object.freeze(["battlefield", "expectations", "gaps", "layout", "summary", "sources", "secondary", "noGo", "no_go", "tiers", "assumptions", "actions"]),
+  battlefield: Object.freeze(["id", "name", "why", "action", "groups", "measuredOn", "reason", "secondary"]),
+  secondary: Object.freeze(["id", "name", "why", "action", "groups", "measuredOn"]),
+  expectation: Object.freeze(["engine", "provider", "promise", "promiseCeiling", "promise_ceiling", "ceiling", "ceilingBasis", "layers", "layersNeeded", "layers_needed",
+    "cites", "leverage", "clusterLeverage", "cluster_leverage", "evidence"]),
+  gap: Object.freeze(["class", "category", "groupId", "group", "groupName", "text", "judgment", "priority", "priorityBand", "rank", "gapId", "consequence",
+    "evidence", "expectedPoints", "handoff", "handoffTo", "safetyPinned", "ecErrorRefs"]),
+  expectedPoint: Object.freeze(["pointId", "kind", "statement", "refs"]),
+  tier: Object.freeze(["tier", "name", "summary", "buys", "notPromised", "contentUnits", "targets"]),
+  tierTarget: Object.freeze(["metricId", "pool", "note", "level", "hardLine", "engineScope"]),
+  assumption: Object.freeze(["field", "value", "basis", "reason", "howToChange", "affects"]),
+  noGo: Object.freeze(["item", "reason"]),
+  action: Object.freeze(["gapId", "groupId", "group", "gapClass", "class", "errorIds", "kind", "what", "engines", "sources", "promise", "basis", "reason", "metricId"]),
+  actionWhat: Object.freeze(["layer", "title", "channel"]),
+  actionSource: Object.freeze(["domain", "why"]),
+});
+
+/** The measured parts of the method's per-engine record: the platform's own rows, never stored twice (the measured lines of `GEO_NOT_STORED`). */
+const MEASURED_EXPECTATION_PARTS = Object.freeze(Object.keys(GEO_NOT_STORED["expectations[]"]));
 
 /** @param {unknown} value */
 function engineId(value) {
@@ -678,59 +811,306 @@ function promiseText(value) {
 }
 
 /**
+ * A list of objects, each read by `parse`, none of which is refused for what is wrong with its neighbour. Entries beyond `max` are
+ * a notice, and the ones within it are kept.
+ * @template T
+ * @param {Record<string, any>} data @param {string} field @param {number} max @param {GeoIssue[]} issues
+ * @param {(entry: Record<string, any>, index: number) => T | null} parse
+ * @returns {T[] | undefined} undefined when the write does not carry the field
+ */
+function objectList(data, field, max, issues, parse) {
+  const value = data[field];
+  if (value == null) return undefined;
+  if (!Array.isArray(value)) {
+    issues.push({ field, code: "invalid", message: `${field} is a list.` });
+    return undefined;
+  }
+  if (value.length > max) issues.push({ field, code: "too_many", message: `${field} holds at most ${max}; the rest were left out.` });
+  /** @type {T[]} */
+  const out = [];
+  value.slice(0, max).forEach((entry, index) => {
+    if (!isObject(entry)) { issues.push({ field, index, code: "invalid", message: `${field} entries are objects.` }); return; }
+    const parsed = parse(/** @type {Record<string, any>} */ (entry), index);
+    if (parsed) out.push(parsed);
+  });
+  return out;
+}
+
+/**
+ * A closed word a run wrote, or nothing: a word outside the list is a notice and the entry keeps the rest. A mistake in one word of
+ * a plan's detail never costs the entry (principle 19).
+ * @param {Record<string, any>} source @param {string} field @param {readonly string[]} allowed @param {GeoIssue[]} issues
+ * @param {{ index?: number, path?: string }} where
+ */
+function softWord(source, field, allowed, issues, where) {
+  const value = source[field];
+  if (value == null || value === "") return null;
+  if (typeof value === "string" && allowed.includes(value.trim())) return value.trim();
+  const { path = "", ...place } = where;
+  issues.push({ ...place, field: path ? `${path}.${field}` : field, code: "notice",
+    message: `${field} is one of: ${allowed.join(", ")}; “${String(value).slice(0, 40)}” was left out.` });
+  return null;
+}
+
+/** @param {unknown} value @param {number} max @returns {string[]} */
+function textList(value, max) {
+  const list = typeof value === "string" ? [value] : Array.isArray(value) ? value : [];
+  return list.filter((entry) => typeof entry === "string" && entry.trim()).map((entry) => stripControls(entry).replace(/\s+/g, " ").trim()).slice(0, max);
+}
+
+/**
+ * The battlefield a strategy names: `{ id, name, why[], action, groups[], reason, secondary }`, the groups also by the method's
+ * `measuredOn`, and `secondary` as the method's objects (or plain names).
+ * @param {unknown} given @param {unknown} secondaryGiven @param {GeoIssue[]} issues @param {{ refuse: Function }} parent
+ */
+function validatedBattlefield(given, secondaryGiven, issues, parent) {
+  /** @type {Record<string, any> | null} */
+  const source = isObject(given) ? { ...(/** @type {Record<string, any>} */ (given)) } : Array.isArray(given) ? { groups: given } : null;
+  if (!source) {
+    parent.refuse("battlefield", "invalid", "battlefield is an object { groups, reason }.");
+    return undefined;
+  }
+  if (secondaryGiven != null && source.secondary == null) source.secondary = secondaryGiven;
+  const read = fields(source, issues, { path: "battlefield" });
+  read.unknown(GEO_STORED_FIELDS.battlefield);
+  const groups = textList(source.groups ?? source.measuredOn, 30).map((entry) => entry.slice(0, 120));
+  /** @type {Array<string | Record<string, any>>} */
+  const secondary = [];
+  if (source.secondary != null) {
+    if (!Array.isArray(source.secondary)) issues.push({ field: "battlefield.secondary", code: "invalid", message: "secondary is a list." });
+    else {
+      source.secondary.slice(0, 10).forEach((entry, index) => {
+        // A plain name stays a name (what a run wrote before it wrote objects); an object keeps its parts. The read model says both as objects.
+        if (typeof entry === "string" && entry.trim()) { secondary.push(entry.trim().slice(0, 200)); return; }
+        if (!isObject(entry)) { issues.push({ field: "battlefield.secondary", index, code: "invalid", message: "secondary entries are names or objects." }); return; }
+        const item = fields(/** @type {Record<string, any>} */ (entry), issues, { index, path: "battlefield.secondary" });
+        item.unknown(GEO_STORED_FIELDS.secondary);
+        const value = { id: item.text("id", 40), name: item.text("name", 200), why: textList(entry.why, 10).map((line) => line.slice(0, 500)),
+          action: item.text("action", 800, { multiline: true }), groups: textList(entry.groups ?? entry.measuredOn, 30).map((line) => line.slice(0, 120)) };
+        if (!item.refused && (value.name || value.action || value.why.length)) {
+          secondary.push(Object.fromEntries(Object.entries(value).filter(([, entryValue]) => entryValue != null && !(Array.isArray(entryValue) && !entryValue.length))));
+        }
+      });
+    }
+  }
+  const value = { id: read.text("id", 40), name: read.text("name", 200), why: textList(source.why, 10).map((line) => line.slice(0, 500)),
+    action: read.text("action", 800, { multiline: true }), groups, reason: read.text("reason", 1000, { multiline: true }), secondary };
+  if (read.refused) return undefined;
+  // The groups are always there (the orchestrator reads them); the rest only when the run wrote it.
+  return Object.fromEntries(Object.entries(value).filter(([key, entryValue]) => key === "groups"
+    || (entryValue != null && !(Array.isArray(entryValue) && entryValue.length === 0))));
+}
+
+/**
+ * One expectation entry of a strategy write (an engine's promise): the method's names are read, the measured parts it carries are
+ * the platform's own rows and are declined, and what the run said about where each cluster leans is kept.
+ * @param {Record<string, any>} raw @param {number} index @param {GeoIssue[]} issues
+ */
+function validatedExpectation(raw, index, issues) {
+  const ceilingObject = isObject(raw.promiseCeiling) ? raw.promiseCeiling : isObject(raw.promise_ceiling) ? raw.promise_ceiling : null;
+  /** @type {Record<string, any>} */
+  const given = {
+    ...raw,
+    engine: engineId(raw.engine ?? raw.provider),
+    promise: promiseText(raw.promise ?? raw.promiseCeiling ?? raw.promise_ceiling),
+    layers: raw.layers ?? raw.layersNeeded ?? raw.layers_needed,
+    ceiling: raw.ceiling ?? ceilingObject?.value,
+    ceilingBasis: raw.ceilingBasis ?? ceilingObject?.basis,
+    clusterLeverage: raw.clusterLeverage ?? raw.cluster_leverage,
+  };
+  for (const alias of ["provider", "promiseCeiling", "promise_ceiling", "layersNeeded", "layers_needed", "cluster_leverage"]) delete given[alias];
+  const item = fields(given, issues, { index, path: "expectations" });
+  item.unknown(["engine", "promise", "ceiling", "ceilingBasis", "layers", "cites", "leverage", "clusterLeverage", "evidence"], MEASURED_EXPECTATION_PARTS);
+  const listed = item.texts("layers", 10, 40);
+  const layers = listed ? listed.filter((layer) => GEO_SOURCE_LAYERS.includes(layer)) : listed;
+  if (listed && layers && layers.length < listed.length) {
+    issues.push({ index, field: "layers", code: "notice", message: `Only ${GEO_SOURCE_LAYERS.join(", ")} are placement layers; the others were left out.` });
+  }
+  const ceiling = softWord(given, "ceiling", GEO_PROMISE_CEILINGS, issues, { index, path: "expectations" });
+  const leverage = Array.isArray(given.clusterLeverage) ? given.clusterLeverage.filter(isObject).slice(0, 10).map((entry) => ({
+    track: typeof entry.track === "string" ? stripControls(entry.track).trim().slice(0, 40) : null,
+    note: typeof entry.note === "string" ? stripControls(entry.note).trim().slice(0, 300) : null,
+  })).filter((entry) => entry.track || entry.note) : undefined;
+  const value = { engine: item.word("engine", GEO_ENGINES, { required: true }), promise: item.text("promise", 500), ceiling,
+    ceilingBasis: item.text("ceilingBasis", 500), layers, cites: item.texts("cites", 20, 200), leverage: item.text("leverage", 500),
+    evidence: item.text("evidence", 500), clusterLeverage: leverage };
+  return item.refused ? null : Object.fromEntries(Object.entries(value).filter(([key, entryValue]) => key === "engine" || entryValue != null));
+}
+
+/**
+ * One gap of a strategy write, in the platform's words: the class (the method writes it in Chinese too), its group, its sentence, and
+ * what the run found behind it — rank, consequence, evidence, the points an answer should have made with the claims that back them,
+ * where it goes next.
+ * @param {Record<string, any>} raw @param {number} index @param {GeoIssue[]} issues
+ */
+function validatedGap(raw, index, issues) {
+  const label = raw.class ?? raw.category;
+  /** @type {Record<string, any>} */
+  const given = { ...raw, class: typeof label === "string" ? /** @type {Record<string, string>} */ (GAP_CLASS_BY_LABEL)[label.trim()] ?? label.trim() : label };
+  delete given.category;
+  if (given.group == null && given.groupName != null) given.group = given.groupName;
+  delete given.groupName;
+  if (given.handoff == null && given.handoffTo != null) given.handoff = given.handoffTo;
+  delete given.handoffTo;
+  const item = fields(given, issues, { index, path: "gaps" });
+  item.unknown(GEO_STORED_FIELDS.gap.filter((field) => !["category", "groupName", "handoffTo"].includes(field)), Object.keys(GEO_NOT_STORED["gaps[]"]));
+  const judgment = item.text("judgment", 1000, { multiline: true });
+  const sentence = item.text("text", 1000);
+  const consequence = isObject(given.consequence)
+    ? { band: typeof given.consequence.band === "string" ? stripControls(given.consequence.band).trim().slice(0, 20) : null,
+      basis: typeof given.consequence.basis === "string" ? stripControls(given.consequence.basis).trim().slice(0, 500) : null } : null;
+  const evidence = isObject(given.evidence)
+    ? { metric: typeof given.evidence.metric === "string" ? stripControls(given.evidence.metric).trim().slice(0, 300) : null,
+      errors: textList(given.evidence.errors, 20).map((id) => id.slice(0, 80)) } : null;
+  const expected = objectList(given, "expectedPoints", 12, issues, (point, pointIndex) => {
+    const reader = fields(point, issues, { index, path: `gaps.expectedPoints[${pointIndex}]` });
+    reader.unknown(GEO_STORED_FIELDS.expectedPoint);
+    const refs = Array.isArray(point.refs) ? point.refs.filter(isObject).slice(0, 10).map((ref) => ({
+      type: typeof ref.type === "string" ? stripControls(ref.type).trim().slice(0, 30) : "claim_id",
+      id: typeof ref.id === "string" ? stripControls(ref.id).trim().slice(0, 80) : null,
+    })).filter((ref) => ref.id) : [];
+    const value = { pointId: reader.text("pointId", 60), kind: reader.text("kind", 30), statement: reader.text("statement", 500, { required: true }), refs };
+    return reader.refused ? null : value;
+  });
+  const value = {
+    gapId: item.text("gapId", 40),
+    class: item.word("class", GEO_GAP_CLASSES, { required: true }),
+    groupId: item.text("groupId", 80),
+    group: item.text("group", 120),
+    // The headline sentence: the run's `text`, or its judgment where it wrote only that.
+    text: sentence ?? judgment,
+    judgment,
+    priority: item.number("priority", 0, 1000),
+    priorityBand: item.text("priorityBand", 20),
+    rank: item.number("rank", 0, 1000),
+    consequence,
+    safetyPinned: item.flag("safetyPinned"),
+    handoff: item.text("handoff", 30),
+    evidence,
+    expectedPoints: expected,
+    ecErrorRefs: textList(given.ecErrorRefs, 20).map((id) => id.slice(0, 80)),
+  };
+  if (!value.text && !item.refused) item.refuse("text", "missing", "text (or judgment) is required.");
+  if (item.refused) return null;
+  return Object.fromEntries(Object.entries(value).filter(([key, entryValue]) => key === "class" || key === "text"
+    || (entryValue != null && !(Array.isArray(entryValue) && entryValue.length === 0))));
+}
+
+/**
+ * The model-written actions of a strategy (`actions[]`, G5): what to do for a gap, where, on which engines, with what reason, in
+ * words the platform checks against its own rows and annotates, never refuses.
+ * @param {Record<string, any>} raw @param {number} index @param {GeoIssue[]} issues
+ */
+function validatedAction(raw, index, issues) {
+  const label = raw.gapClass ?? raw.class;
+  /** @type {Record<string, any>} */
+  const given = { ...raw, gapClass: typeof label === "string" ? /** @type {Record<string, string>} */ (GAP_CLASS_BY_LABEL)[label.trim()] ?? label.trim() : label };
+  delete given.class;
+  const item = fields(given, issues, { index, path: "actions" });
+  item.unknown(GEO_STORED_FIELDS.action.filter((field) => field !== "class"), Object.keys(GEO_NOT_STORED["actions[]"]));
+  const where = { index, path: "actions" };
+  const what = isObject(given.what)
+    ? (() => {
+      const reader = fields(/** @type {Record<string, any>} */ (given.what), issues, { index, path: "actions.what" });
+      reader.unknown(GEO_STORED_FIELDS.actionWhat);
+      const value = {
+        layer: softWord(given.what, "layer", GEO_ARTICLE_LAYERS, issues, { index, path: "actions.what" }),
+        title: reader.text("title", 200),
+        channel: softWord(given.what, "channel", GEO_ARTICLE_CHANNELS, issues, { index, path: "actions.what" }),
+      };
+      return Object.fromEntries(Object.entries(value).filter(([, entryValue]) => entryValue != null));
+    })() : null;
+  const engines = textList(given.engines, GEO_ENGINES.length).map((engine) => String(engineId(engine)));
+  const known = engines.filter((engine) => GEO_ENGINES.includes(engine));
+  if (known.length < engines.length) issues.push({ ...where, field: "actions.engines", code: "notice", message: `engines are ${GEO_ENGINES.join(", ")}; the others were left out.` });
+  const sources = Array.isArray(given.sources) ? given.sources.filter(isObject).slice(0, 8).map((source, position) => {
+    const reader = fields(/** @type {Record<string, any>} */ (source), issues, { index, path: `actions.sources[${position}]` });
+    reader.unknown(GEO_STORED_FIELDS.actionSource);
+    const domain = reader.text("domain", 253);
+    const value = { domain: domain ? domain.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "") : null, why: reader.text("why", 300) };
+    return value.domain && HOSTNAME.test(value.domain) ? value : null;
+  }).filter((source) => source !== null) : [];
+  const value = {
+    gapId: item.text("gapId", 40),
+    groupId: item.text("groupId", 80),
+    group: item.text("group", 120),
+    gapClass: softWord(given, "gapClass", GEO_GAP_CLASSES, issues, where),
+    errorIds: textList(given.errorIds, 20).map((id) => id.slice(0, 80)),
+    kind: softWord(given, "kind", GEO_ACTION_KINDS, issues, where),
+    what,
+    engines: known,
+    sources,
+    promise: softWord(given, "promise", GEO_ACTION_PROMISES, issues, where),
+    basis: item.text("basis", 500),
+    reason: item.text("reason", 500),
+    metricId: (() => {
+      const id = item.text("metricId", 24);
+      return id && METRIC_ID.test(id) ? id : null;
+    })(),
+  };
+  const empty = !value.gapId && !value.groupId && !value.group && !value.errorIds.length;
+  if (empty && !item.refused) item.refuse("gapId", "missing", "An action names the gap (gapId, or groupId with gapClass) or the errors (errorIds) it answers.");
+  if (item.refused) return null;
+  return Object.fromEntries(Object.entries(value).filter(([, entryValue]) => entryValue != null && !(Array.isArray(entryValue) && !entryValue.length)));
+}
+
+/**
+ * One tier of a strategy write in words — what it buys, what it does not promise, how many content units — beside the numbers
+ * `geo_write targets` holds. The numbers a tier restates are declined.
+ * @param {Record<string, any>} raw @param {number} index @param {GeoIssue[]} issues
+ */
+function validatedTier(raw, index, issues) {
+  const item = fields(raw, issues, { index, path: "tiers" });
+  item.unknown(GEO_STORED_FIELDS.tier, Object.keys(GEO_NOT_STORED["tiers[]"]));
+  const tier = String(raw.tier ?? "");
+  if (!GEO_TIERS.includes(tier)) {
+    issues.push({ index, field: "tiers.tier", code: "notice", message: `tier is one of: ${GEO_TIERS.join(", ")}; this entry was left out.` });
+    return null;
+  }
+  const targets = objectList(raw, "targets", 40, issues, (entry, position) => {
+    const reader = fields(entry, issues, { index, path: `tiers.targets[${position}]` });
+    reader.unknown(GEO_STORED_FIELDS.tierTarget, Object.keys(GEO_NOT_STORED["tiers[].targets[]"]));
+    const value = { metricId: reader.text("metricId", 24), pool: reader.text("pool", 40), note: reader.text("note", 500),
+      level: reader.text("level", 30), hardLine: reader.flag("hardLine"), engineScope: reader.texts("engineScope", 10, 20) };
+    return reader.refused || !value.metricId ? null : Object.fromEntries(Object.entries(value).filter(([, entryValue]) => entryValue != null && !(Array.isArray(entryValue) && !entryValue.length)));
+  });
+  const value = { tier, name: item.text("name", 120), summary: item.text("summary", 600, { multiline: true }), buys: item.text("buys", 800, { multiline: true }),
+    notPromised: textList(raw.notPromised, 12).map((line) => line.slice(0, 300)), contentUnits: item.number("contentUnits", 0, 1000), targets };
+  if (item.refused) return null;
+  return Object.fromEntries(Object.entries(value).filter(([key, entryValue]) => key === "tier" || (entryValue != null && !(Array.isArray(entryValue) && entryValue.length === 0))));
+}
+
+/**
  * What a `strategy` write says, field by field: only what it carries is
  * returned, so a write of one field leaves the rest of the strategy as it
  * was (`GeoStore.writeStrategy` merges forward). The method pack's names are
  * read too (G3/G4, 2026-09-26: the run wrote `provider`, `promiseCeiling`,
  * `layersNeeded` and the method's layout, all were dropped, and the page's
- * 「投哪一层」「这个周期能做到」 stayed empty).
+ * 「投哪一层」「这个周期能做到」 stayed empty). Nothing the run wrote is left out
+ * without being named: stored, mapped onto a stored field, or in `GEO_NOT_STORED`.
  * @param {Record<string, any>} data @param {GeoIssue[]} issues
  */
 function validatedStrategy(data, issues) {
   const read = fields(data, issues, {});
-  read.unknown(["battlefield", "expectations", "gaps", "layout", "summary", "sources", "secondary"]);
+  read.unknown(GEO_STORED_FIELDS.strategy);
   /** @type {Record<string, any>} */
   const strategy = {};
   const summary = read.text("summary", 4000, { multiline: true });
   if (summary) strategy.summary = summary;
-  const battlefieldData = isObject(data.battlefield) ? { ...data.battlefield }
-    : Array.isArray(data.battlefield) ? { groups: data.battlefield } : data.battlefield;
-  if (isObject(battlefieldData) && data.secondary != null && battlefieldData.secondary == null) battlefieldData.secondary = data.secondary;
-  if (battlefieldData != null) {
-    const battlefield = isObject(battlefieldData) ? fields(battlefieldData, issues, { }) : null;
-    if (!battlefield) read.refuse("battlefield", "invalid", "battlefield is an object { groups, reason }.");
-    else {
-      battlefield.unknown(["groups", "reason", "secondary"]);
-      const value = { groups: battlefield.texts("groups", 30, 120), reason: battlefield.text("reason", 1000), secondary: battlefield.texts("secondary", 30, 120) };
-      if (!battlefield.refused) strategy.battlefield = value;
-    }
+  if (data.battlefield != null) {
+    const battlefield = validatedBattlefield(data.battlefield, data.secondary, issues, read);
+    if (battlefield) strategy.battlefield = battlefield;
   }
-  if (data.expectations != null) {
-    if (!Array.isArray(data.expectations) || data.expectations.length > GEO_ENGINES.length) {
+  const expectations = data.expectations;
+  if (expectations != null) {
+    if (!Array.isArray(expectations) || expectations.length > GEO_ENGINES.length) {
       read.refuse("expectations", "invalid", "expectations is a list with one entry per engine.");
     } else {
       strategy.expectations = [];
-      data.expectations.forEach((/** @type {unknown} */ entry, /** @type {number} */ index) => {
+      expectations.forEach((/** @type {unknown} */ entry, /** @type {number} */ index) => {
         if (!isObject(entry)) { issues.push({ field: "expectations", index, code: "invalid", message: "An expectation is an object." }); return; }
-        const raw = /** @type {Record<string, any>} */ (entry);
-        /** @type {Record<string, any>} */
-        const given = {
-          ...raw,
-          engine: engineId(raw.engine ?? raw.provider),
-          promise: promiseText(raw.promise ?? raw.promiseCeiling ?? raw.promise_ceiling),
-          layers: raw.layers ?? raw.layersNeeded ?? raw.layers_needed,
-        };
-        for (const alias of ["provider", "promiseCeiling", "promise_ceiling", "layersNeeded", "layers_needed", ...MEASURED_EXPECTATION_PARTS]) delete given[alias];
-        const item = fields(given, issues, { index });
-        item.unknown(["engine", "promise", "layers", "cites", "leverage"]);
-        const listed = item.texts("layers", 10, 40);
-        const layers = listed ? listed.filter((layer) => GEO_SOURCE_LAYERS.includes(layer)) : listed;
-        if (listed && layers && layers.length < listed.length) {
-          issues.push({ index, field: "layers", code: "notice", message: `Only ${GEO_SOURCE_LAYERS.join(", ")} are placement layers; the others were left out.` });
-        }
-        const value = { engine: item.word("engine", GEO_ENGINES, { required: true }), promise: item.text("promise", 500), layers,
-          cites: item.texts("cites", 20, 200), leverage: item.text("leverage", 500) };
-        if (!item.refused) strategy.expectations.push(value);
+        const value = validatedExpectation(/** @type {Record<string, any>} */ (entry), index, issues);
+        if (value) strategy.expectations.push(value);
       });
     }
   }
@@ -741,16 +1121,8 @@ function validatedStrategy(data, issues) {
       strategy.gaps = [];
       data.gaps.forEach((/** @type {unknown} */ entry, /** @type {number} */ index) => {
         if (!isObject(entry)) { issues.push({ field: "gaps", index, code: "invalid", message: "A gap is an object." }); return; }
-        const raw = /** @type {Record<string, any>} */ (entry);
-        const label = raw.class ?? raw.category;
-        /** @type {Record<string, any>} */
-        const given = { ...raw, class: typeof label === "string" ? /** @type {Record<string, string>} */ (GAP_CLASS_BY_LABEL)[label.trim()] ?? label.trim() : label };
-        delete given.category;
-        const item = fields(given, issues, { index });
-        item.unknown(["class", "groupId", "group", "text", "priority"]);
-        const value = { class: item.word("class", GEO_GAP_CLASSES, { required: true }), groupId: item.text("groupId", 80), group: item.text("group", 120),
-          text: item.text("text", 1000, { required: true }), priority: item.number("priority", 0, 1000) };
-        if (!item.refused) strategy.gaps.push(value);
+        const value = validatedGap(/** @type {Record<string, any>} */ (entry), index, issues);
+        if (value) strategy.gaps.push(value);
       });
     }
   }
@@ -783,6 +1155,28 @@ function validatedStrategy(data, issues) {
       }
     }
   }
+  const noGo = objectList({ noGo: data.noGo ?? data.no_go }, "noGo", 20, issues, (entry, index) => {
+    const item = fields(entry, issues, { index, path: "noGo" });
+    item.unknown(GEO_STORED_FIELDS.noGo);
+    const value = { item: item.text("item", 300, { required: true }), reason: item.text("reason", 500) };
+    return item.refused ? null : Object.fromEntries(Object.entries(value).filter(([, entryValue]) => entryValue != null));
+  });
+  if (noGo) strategy.noGo = noGo;
+  const tiers = objectList(data, "tiers", 3, issues, (entry, index) => validatedTier(entry, index, issues));
+  if (tiers) strategy.tiers = tiers;
+  const assumptions = objectList(data, "assumptions", 30, issues, (entry, index) => {
+    const item = fields(entry, issues, { index, path: "assumptions" });
+    item.unknown(GEO_STORED_FIELDS.assumption);
+    const raw = entry.value;
+    const value = raw == null ? null : typeof raw === "string" ? stripControls(raw).trim().slice(0, 500)
+      : typeof raw === "number" || typeof raw === "boolean" ? raw : (withinSize(raw, 1024) ? raw : JSON.stringify(raw).slice(0, 500));
+    const record = { field: item.text("field", 120, { required: true }), value, basis: item.text("basis", 120), reason: item.text("reason", 500),
+      howToChange: item.text("howToChange", 500), affects: item.text("affects", 500) };
+    return item.refused ? null : Object.fromEntries(Object.entries(record).filter(([, entryValue]) => entryValue != null));
+  });
+  if (assumptions) strategy.assumptions = assumptions;
+  const actions = objectList(data, "actions", GEO_WRITE_LIMITS.actions, issues, (entry, index) => validatedAction(entry, index, issues));
+  if (actions) strategy.actions = actions;
   return strategy;
 }
 
@@ -801,10 +1195,164 @@ export function geoStrategyDraft(data) {
   return { strategy, sources, issues: [...issues, ...sourceIssues.map((issue) => ({ ...issue, field: `sources.${issue.field ?? ""}`.replace(/\.$/, "") }))] };
 }
 
+/**
+ * The identity an action entry is merged by: the gap it answers, else its group with the class, else the errors.
+ * @param {Record<string, any>} entry
+ */
+function actionIdentity(entry) {
+  if (entry.gapId) return `gap:${entry.gapId}`;
+  return `${entry.groupId ?? entry.group ?? ""}|${entry.gapClass ?? ""}|${[...(Array.isArray(entry.errorIds) ? entry.errorIds : [])].sort().join(",")}`;
+}
+
+/**
+ * The actions a strategy holds after a write of some: an entry replaces the one with its identity in the place it held, and the
+ * others stay (`geo_write actions` adds or amends one without losing the rest).
+ * @param {unknown} previous @param {Array<Record<string, any>>} given
+ */
+export function mergedActions(previous, given) {
+  const before = Array.isArray(previous) ? previous.filter(isObject) : [];
+  const byIdentity = new Map(given.map((entry) => [actionIdentity(entry), entry]));
+  const kept = before.map((entry) => byIdentity.get(actionIdentity(entry)) ?? entry);
+  const present = new Set(before.map(actionIdentity));
+  return [...kept, ...given.filter((entry) => !present.has(actionIdentity(entry)))].slice(0, GEO_WRITE_LIMITS.actions);
+}
+
+/**
+ * A `strategy.json` as the write `geo_write strategy` takes: the parts the file carries under the names the validators read — the
+ * layout and the source table sit under the file's `sources` object — and nothing else. What the file holds beyond them is
+ * `GEO_NOT_STORED["strategy.json"]` or a field nobody decided on (`geoStrategyFileCoverage`).
+ * @param {unknown} file
+ * @returns {Record<string, any>}
+ */
+export function geoStrategyWriteOfFile(file) {
+  const source = isObject(file) ? /** @type {Record<string, any>} */ (file) : {};
+  /** @type {Record<string, any>} */
+  const data = {};
+  for (const key of ["summary", "battlefield", "secondary", "noGo", "no_go", "expectations", "gaps", "tiers", "assumptions", "actions"]) {
+    if (source[key] != null) data[key] = source[key];
+  }
+  const sources = isObject(source.sources) ? /** @type {Record<string, any>} */ (source.sources) : null;
+  const layout = sources && isObject(sources.layout) ? sources.layout : source.layout;
+  if (layout != null) data.layout = layout;
+  const table = sources && Array.isArray(sources.table) ? sources.table : Array.isArray(source.sources) ? source.sources : null;
+  if (table) data.sources = table;
+  return data;
+}
+
+/**
+ * What a strategy file holds that the platform neither stores nor has said it declines: the evaluation's question (a dropped field
+ * is a defect), and what the run-end import reports. `declined` lists each declined field with its reason.
+ * @param {unknown} file
+ * @returns {{ dropped: string[], declined: Record<string, string> }}
+ */
+export function geoStrategyFileCoverage(file) {
+  const source = isObject(file) ? /** @type {Record<string, any>} */ (file) : {};
+  /** @type {string[]} */
+  const dropped = [];
+  /** @type {Record<string, string>} */
+  const declined = {};
+  /** @param {string} path @param {unknown} value @param {readonly string[]} stored @param {Record<string, string>} reasons */
+  const walk = (path, value, stored, reasons) => {
+    if (!isObject(value)) return;
+    for (const key of Object.keys(/** @type {Record<string, any>} */ (value))) {
+      if (stored.includes(key)) continue;
+      if (Object.hasOwn(reasons, key)) declined[`${path}.${key}`] = reasons[key];
+      else dropped.push(`${path}.${key}`);
+    }
+  };
+  const sourcesObject = isObject(source.sources) ? /** @type {Record<string, any>} */ (source.sources) : null;
+  walk("strategy", source, GEO_STORED_FIELDS.strategy, GEO_NOT_STORED["strategy.json"]);
+  if (sourcesObject) walk("sources", sourcesObject, ["table", "layout"], GEO_NOT_STORED["strategy.json:sources"]);
+  const table = sourcesObject && Array.isArray(sourcesObject.table) ? sourcesObject.table : Array.isArray(source.sources) ? source.sources : [];
+  const sourceStored = [...SOURCE_FIELDS, ...Object.keys(SOURCE_ALIASES), "threeConditions", "three_conditions"];
+  table.forEach((/** @type {unknown} */ entry, /** @type {number} */ index) => walk(`sources.table[${index}]`, entry, sourceStored, GEO_NOT_STORED["sources[]"]));
+  const each = (/** @type {string} */ path, /** @type {unknown} */ list, /** @type {readonly string[]} */ stored, /** @type {Record<string, string>} */ reasons) => {
+    (Array.isArray(list) ? list : []).forEach((/** @type {unknown} */ entry, /** @type {number} */ index) => walk(`${path}[${index}]`, entry, stored, reasons));
+  };
+  each("gaps", source.gaps, GEO_STORED_FIELDS.gap, GEO_NOT_STORED["gaps[]"]);
+  (Array.isArray(source.gaps) ? source.gaps : []).forEach((/** @type {any} */ gap, /** @type {number} */ index) => {
+    each(`gaps[${index}].expectedPoints`, gap?.expectedPoints, GEO_STORED_FIELDS.expectedPoint, {});
+  });
+  each("expectations", source.expectations, GEO_STORED_FIELDS.expectation, GEO_NOT_STORED["expectations[]"]);
+  each("tiers", source.tiers, GEO_STORED_FIELDS.tier, GEO_NOT_STORED["tiers[]"]);
+  (Array.isArray(source.tiers) ? source.tiers : []).forEach((/** @type {any} */ tier, /** @type {number} */ index) => {
+    each(`tiers[${index}].targets`, tier?.targets, GEO_STORED_FIELDS.tierTarget, GEO_NOT_STORED["tiers[].targets[]"]);
+  });
+  each("assumptions", source.assumptions, GEO_STORED_FIELDS.assumption, {});
+  each("noGo", source.noGo ?? source.no_go, GEO_STORED_FIELDS.noGo, {});
+  each("secondary", source.secondary, GEO_STORED_FIELDS.secondary, {});
+  each("actions", source.actions, GEO_STORED_FIELDS.action, GEO_NOT_STORED["actions[]"]);
+  walk("battlefield", source.battlefield, GEO_STORED_FIELDS.battlefield, {});
+  return { dropped: [...new Set(dropped)], declined };
+}
+
+/**
+ * One entry of an `articles.json` as the item `geo_write articles` takes: the file's path is relative to its deliverable, the run's
+ * group is `groupId`, its claims are ids or the method's keys (mapped by the caller's `claimIdByKey`), and a correction names its
+ * error by `errorId` as often as by `errorIds`. The validators judge the item as they judge a run's own registration.
+ * @param {unknown} entry
+ * @param {{ deliverableId: string | null, runId?: string | null, claimIdByKey?: ReadonlyMap<string, string>, contentSha256?: string | null }} context
+ */
+export function geoArticleItemOfFile(entry, { deliverableId, runId = null, claimIdByKey = new Map(), contentSha256 = null }) {
+  const source = isObject(entry) ? /** @type {Record<string, any>} */ (entry) : {};
+  const keys = Array.isArray(source.claimKeys) ? source.claimKeys.filter((key) => typeof key === "string") : [];
+  const claimIds = Array.isArray(source.claimIds) && source.claimIds.length ? source.claimIds
+    : keys.map((key) => claimIdByKey.get(key)).filter((id) => typeof id === "string");
+  const safety = isObject(source.safety) ? source.safety.status : source.safety;
+  const errorIds = [...(Array.isArray(source.errorIds) ? source.errorIds : []), ...(typeof source.errorId === "string" ? [source.errorId] : [])];
+  return {
+    path: source.path, ...(deliverableId ? { deliverableId } : {}), ...(runId ? { runId } : {}), layer: source.layer, title: source.title,
+    ...(source.groupId ? { groupId: source.groupId } : {}), claimIds, safety: safety === "open" ? "open" : "clear",
+    contentSha256: source.contentSha256 ?? contentSha256, ...(errorIds.length ? { errorIds } : {}),
+    ...(source.channel != null ? { channel: source.channel } : {}), ...(source.audience != null ? { audience: source.audience } : {}),
+  };
+}
+
+/**
+ * What an articles file holds that the platform neither stores nor declines.
+ * @param {unknown} file
+ * @returns {{ dropped: string[], declined: Record<string, string> }}
+ */
+export function geoArticlesFileCoverage(file) {
+  const source = isObject(file) ? /** @type {Record<string, any>} */ (file) : {};
+  /** @type {string[]} */
+  const dropped = [];
+  /** @type {Record<string, string>} */
+  const declined = {};
+  const topStored = ["articles"];
+  for (const key of Object.keys(source)) {
+    if (topStored.includes(key)) continue;
+    if (Object.hasOwn(GEO_NOT_STORED["articles.json"], key)) declined[`articles.json.${key}`] = /** @type {Record<string, string>} */ (GEO_NOT_STORED["articles.json"])[key];
+    else dropped.push(`articles.json.${key}`);
+  }
+  const stored = [...ARTICLE_FIELDS, "claimKeys", "errorId", "id"];
+  (Array.isArray(source.articles) ? source.articles : []).forEach((/** @type {any} */ entry, /** @type {number} */ index) => {
+    if (!isObject(entry)) return;
+    for (const key of Object.keys(entry)) {
+      if (key === "safety") {
+        if (isObject(entry.safety)) {
+          for (const inner of Object.keys(entry.safety)) {
+            if (inner === "status") continue;
+            const reason = /** @type {Record<string, string>} */ (GEO_NOT_STORED["articles[]"])[`safety.${inner}`];
+            if (reason) declined[`articles[${index}].safety.${inner}`] = reason;
+            else dropped.push(`articles[${index}].safety.${inner}`);
+          }
+        }
+        continue;
+      }
+      if (stored.includes(key) && key !== "id") continue;
+      const reason = /** @type {Record<string, string>} */ (GEO_NOT_STORED["articles[]"])[key];
+      if (reason) declined[`articles[${index}].${key}`] = reason;
+      else dropped.push(`articles[${index}].${key}`);
+    }
+  });
+  return { dropped: [...new Set(dropped)], declined };
+}
+
 // --- sources, targets, articles, placement plan, step ---------------------------------------------
 
 const SOURCE_FIELDS = Object.freeze(["valueContext", "domain", "name", "kind", "layer", "icpOwner", "icpMatches", "newsIndexed", "medicalVertical", "impostor",
-  "blacklistReason", "checkedAt"]);
+  "blacklistReason", "checkedAt", "checkEvidence"]);
 
 /**
  * The method pack's words for a source (`source_table.json`, owner geo-skills
@@ -818,7 +1366,7 @@ const SOURCE_ALIASES = Object.freeze({
   displayName: "name", display_name: "name", sourceType: "kind", source_type: "kind",
   icpOwnerMatch: "icpMatches", icp_owner_match: "icpMatches", icp_matches: "icpMatches",
   news_indexed: "newsIndexed", medical_vertical: "medicalVertical", checkedOn: "checkedAt", checked_on: "checkedAt", checked_at: "checkedAt",
-  blacklist_reason: "blacklistReason", icp_owner: "icpOwner",
+  blacklist_reason: "blacklistReason", icp_owner: "icpOwner", evidence: "checkEvidence", check_evidence: "checkEvidence",
 });
 /** The condition object the method nests the three checks in, and its key for each. */
 const CONDITION_ALIASES = Object.freeze({
@@ -890,7 +1438,7 @@ function validatedSources(items, issues) {
   items.forEach((entry, index) => {
     if (notAnObject(entry, index, issues)) return;
     const read = fields(sourceInPlatformWords(/** @type {Record<string, any>} */ (entry), issues, index), issues, { index });
-    read.unknown(SOURCE_FIELDS);
+    read.unknown(SOURCE_FIELDS, Object.keys(GEO_NOT_STORED["sources[]"]));
     const rawDomain = read.text("domain", 253, { required: true });
     const domain = rawDomain ? rawDomain.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "") : rawDomain;
     if (domain && !HOSTNAME.test(domain)) read.refuse("domain", "invalid", "domain must be a host name, e.g. example.com.");
@@ -900,7 +1448,7 @@ function validatedSources(items, issues) {
       domain, name: read.text("name", 120), kind: read.word("kind", GEO_SOURCE_KINDS), layer: read.word("layer", GEO_SOURCE_LAYERS),
       icpOwner: read.text("icpOwner", 120), icpMatches: read.flag("icpMatches"), newsIndexed: read.flag("newsIndexed"),
       medicalVertical: read.flag("medicalVertical"), impostor: read.flag("impostor") ?? false, blacklistReason: read.text("blacklistReason", 300),
-      checkedAt: read.instant("checkedAt"),
+      checkedAt: read.instant("checkedAt"), checkEvidence: read.text("checkEvidence", 600, { multiline: true }),
     };
     if (read.refused) return;
     // A verdict on the three conditions is dated: a condition written true or
@@ -956,7 +1504,20 @@ function validatedTargets(items, issues) {
 }
 
 const ARTICLE_FIELDS = Object.freeze(["valueContext", "path", "layer", "title", "groupId", "claimIds", "gate", "safety", "contentSha256", "protectedSha256",
-  "deliverableId", "runId", "errorIds"]);
+  "deliverableId", "runId", "errorIds", "channel", "audience"]);
+
+/**
+ * A word a run gave for a closed field, or — when it wrote it in its own words — those words as a note: `articles.json` says an
+ * article's channel and audience in prose as often as in an id, and an article is never refused for how it said them.
+ * @param {unknown} value @param {readonly string[]} words @param {number} noteMax
+ * @returns {{ word: string | null, note: string | null }}
+ */
+function wordOrNote(value, words, noteMax) {
+  const parts = (Array.isArray(value) ? value : [value]).filter((part) => typeof part === "string" && part.trim()).map((part) => stripControls(part).replace(/\s+/g, " ").trim());
+  const word = parts.find((part) => words.includes(part)) ?? null;
+  const rest = parts.filter((part) => part !== word);
+  return { word, note: rest.length ? rest.join("；").slice(0, noteMax) : null };
+}
 
 /**
  * @param {unknown[]} items @param {GeoIssue[]} issues
@@ -1008,11 +1569,14 @@ function validatedArticles(items, issues, known) {
     if (layer === "correction" && !errorIds.length && !read.refused) {
       issues.push({ index, field: "errorIds", code: "notice", message: "A correction names the errors it corrects (errorIds, from geo_read errors); without them the error does not move to 处置中." });
     }
+    const channel = wordOrNote(item.channel, GEO_ARTICLE_CHANNELS, 300);
+    const audience = wordOrNote(item.audience, GEO_AUDIENCES, 300);
     const article = {
       valueContext: isObject(item.valueContext) ? item.valueContext : {},
       path: pathValue, layer, title: read.text("title", 200), groupId, claimIds,
       safety: read.word("safety", RUN_ARTICLE_SAFETY, { required: true }),
       contentSha256, protectedSha256, deliverableId, runId: read.text("runId", 120), errorIds,
+      channel: channel.word, channelNote: channel.note, audience: audience.word, audienceNote: audience.note,
     };
     if (read.refused) return;
     seen.add(pathValue);
@@ -1177,7 +1741,14 @@ async function writeToProject({ store, project, what, body, renameProject = null
   /** @type {GeoIssue[]} */
   const issues = [];
   const userId = project.userId;
-  const done = (/** @type {string[]} */ ids, extra = {}) => ({ ok: ids.length > 0, ids, issues, ...extra });
+  const done = (/** @type {string[]} */ ids, extra = {}) => {
+    // The fields the platform has said it does not keep (`GEO_NOT_STORED`) are counted, never listed as issues: the run is told what
+    // is kept once, in its capability's text, and an operator reads the count.
+    const declined = issues.filter((issue) => issue.code === "declined_fields")
+      .reduce((total, issue) => total + String(issue.field ?? "").split(",").filter(Boolean).length, 0);
+    for (let index = issues.length - 1; index >= 0; index -= 1) if (issues[index].code === "declined_fields") issues.splice(index, 1);
+    return { ok: ids.length > 0, ids, issues, ...(declined ? { declined } : {}), ...extra };
+  };
   switch (what) {
     case "value": {
       const written = await store.writeValue(userId, project.id, dataOf(body));
@@ -1290,8 +1861,29 @@ async function writeToProject({ store, project, what, body, renameProject = null
         const latest = await store.latestStrategy(project.id);
         return done(sourceIds, { version: latest?.version ?? null, sourceIds });
       }
+      // What the strategy's own gaps and actions say about each other, said to the run that wrote them while it is in its turn: a
+      // gap nobody answers, a number without its basis. Notices, never a refusal.
+      if (strategy.gaps !== undefined || strategy.actions !== undefined) {
+        const held = strategy.gaps !== undefined && strategy.actions !== undefined ? null : await store.latestStrategy(project.id);
+        for (const notice of geoActionNotices({ gaps: strategy.gaps ?? held?.gaps ?? [], actions: strategy.actions ?? held?.actions ?? [] })) {
+          issues.push({ field: notice.index != null ? `actions[${notice.index}]` : "gaps", ...(notice.gapId ? { gapId: notice.gapId } : {}), code: "notice", message: notice.message });
+        }
+      }
       const written = await store.writeStrategy(userId, project.id, strategy);
-      return done([String(written.version)], { version: written.version, sourceIds });
+      return done([String(written.version)], { version: written.version, sourceIds, ...(written.unchanged ? { unchanged: true } : {}) });
+    }
+    case "actions": {
+      if (!(await baselineMeasured(store, project.id))) { itemsOf(body, GEO_WRITE_LIMITS.actions); issues.push({ ...BASELINE_MISSING }); return done([]); }
+      const given = objectList({ actions: itemsOf(body, GEO_WRITE_LIMITS.actions) }, "actions", GEO_WRITE_LIMITS.actions, issues,
+        (entry, index) => validatedAction(entry, index, issues)) ?? [];
+      if (!given.length) return done([]);
+      const held = await store.latestStrategy(project.id);
+      const merged = mergedActions(held?.actions ?? [], given);
+      for (const notice of geoActionNotices({ gaps: held?.gaps ?? [], actions: merged })) {
+        issues.push({ field: notice.index != null ? `actions[${notice.index}]` : "gaps", ...(notice.gapId ? { gapId: notice.gapId } : {}), code: "notice", message: notice.message });
+      }
+      const written = await store.writeStrategy(userId, project.id, { actions: merged });
+      return done([String(written.version)], { version: written.version, actions: merged.length, ...(written.unchanged ? { unchanged: true } : {}) });
     }
     case "sources": {
       const sources = validatedSources(itemsOf(body, GEO_WRITE_LIMITS.sources), issues);
@@ -1400,6 +1992,18 @@ async function writeToProject({ store, project, what, body, renameProject = null
     default:
       throw failure(400, "geo_write_what_invalid", "Unknown write.");
   }
+}
+
+/**
+ * Where an article is to be published and for whom, as a run said it (`articles.json`): each is a closed word, or the run's own words
+ * as a note. What the registration and the run-end import both store.
+ * @param {{ channel?: unknown, audience?: unknown }} source
+ * @returns {{ channel: string | null, channelNote: string | null, audience: string | null, audienceNote: string | null }}
+ */
+export function geoArticleReader({ channel, audience }) {
+  const where = wordOrNote(channel, GEO_ARTICLE_CHANNELS, 300);
+  const who = wordOrNote(audience, GEO_AUDIENCES, 300);
+  return { channel: where.word, channelNote: where.note, audience: who.word, audienceNote: who.note };
 }
 
 /** Whether a row id a filter names has the shape of one. @param {unknown} value */

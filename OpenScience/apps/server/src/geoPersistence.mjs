@@ -60,7 +60,7 @@
  */
 
 import {
-  GEO_ARMS, GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_ARTICLE_REFERENCE_STATUSES, GEO_ARTICLE_SAFETY, GEO_ARTICLE_STATUSES, GEO_MEMBER_ROLES, GEO_PLACEMENT_LABELS, GEO_AUDIENCES, GEO_CELL_STATUSES,
+  GEO_ARMS, GEO_ARTICLE_CHANNELS, GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_ARTICLE_REFERENCE_STATUSES, GEO_ARTICLE_SAFETY, GEO_ARTICLE_STATUSES, GEO_MEMBER_ROLES, GEO_PLACEMENT_LABELS, GEO_AUDIENCES, GEO_CELL_STATUSES,
   GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_DATA_TYPES, GEO_ERROR_ACTIONS, GEO_ERROR_STATUSES, GEO_ERROR_TYPES,
   GEO_FAILURE_MODES, GEO_GROUP_SIGNALS, GEO_LEDGER_KINDS, GEO_MEDIA_TYPES, GEO_METRIC_ROW_SCOPES, GEO_ORDER_STATES,
   GEO_OWNED_LINK_PLATFORMS, GEO_OWNED_LINK_STATUSES, GEO_POOLS,
@@ -82,6 +82,7 @@ export const GEO_TABLES = Object.freeze([
   "projects", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
   "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles",
   "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links", "members", "value_profiles",
+  "action_choices",
 ]);
 
 /**
@@ -728,6 +729,43 @@ CREATE TABLE IF NOT EXISTS evimed_geo.owned_links (
   UNIQUE (geo_project_id, url_key)
 );
 CREATE INDEX IF NOT EXISTS geo_owned_links_project_idx ON evimed_geo.owned_links (geo_project_id, status, published_at DESC);
+
+-- What a strategy run writes beyond the first cut's four parts (rectification 2026-10-14, G2): the tiers' words (what each buys, what
+-- it does not promise), the things not to do, the assumptions with how to change each, and the actions the run wrote by gap. Versioned
+-- with the rest of the strategy and carried forward by a write that does not name them. The numbers of a tier stay in \`targets\`.
+ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS tiers jsonb;
+ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS no_go jsonb;
+ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS assumptions jsonb;
+ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS actions jsonb;
+
+-- What a run read to decide a source's three conditions (the footer's record number, the about page): the market places only into
+-- sites whose conditions were checked and hold, and a person who asks why a site is placeable is shown what was read.
+ALTER TABLE evimed_geo.sources ADD COLUMN IF NOT EXISTS check_evidence text;
+
+-- Where an article is to be published and for whom, as the run said it (articles.json): a closed word when it is one, else the run's
+-- own words kept as a note. Nullable: an article written before this has neither.
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS channel text CHECK (channel IN ${inList(GEO_ARTICLE_CHANNELS)});
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS channel_note text;
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS audience text CHECK (audience IN ${inList(GEO_AUDIENCES)});
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS audience_note text;
+
+-- The patient-journey stage a question group belongs to, by its number in the journey's stage list (the journey's own order). The two
+-- free-text stage words never matched (D4); a group written before this has none and the page reads its stage word.
+ALTER TABLE evimed_geo.question_groups ADD COLUMN IF NOT EXISTS journey_stage_no integer CHECK (journey_stage_no IS NULL OR (journey_stage_no >= 1 AND journey_stage_no <= 60));
+
+-- What a person decided about an action: skip it, or send it to another source. Only these two, both reversible (a row set back to
+-- skipped = false and no source is "nothing decided"). One row per project and action key; \`user_id\` is the project's owner, as in every
+-- tenant table, and \`decided_by\` the account that decided.
+CREATE TABLE IF NOT EXISTS evimed_geo.action_choices (
+  geo_project_id text NOT NULL REFERENCES evimed_geo.projects(id) ON DELETE CASCADE,
+  action_key     text NOT NULL,
+  user_id        text NOT NULL,
+  decided_by     text,
+  skipped        boolean NOT NULL DEFAULT false,
+  source_domain  text,
+  updated_at     timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (geo_project_id, action_key)
+);
 `;
 }
 

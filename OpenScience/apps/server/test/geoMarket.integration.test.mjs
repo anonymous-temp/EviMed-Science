@@ -76,10 +76,10 @@ async function fixture() {
           [row.id, row.userId, row.geoProjectId, row.setVersion ?? 1, row.pool ?? "P2", row.name ?? "", Boolean(row.isControl)]);
       },
       article: async (/** @type {any} */ row) => {
-        await db.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, layer, title, group_id, gate, safety, content_sha256, status, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
+        await db.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, layer, title, group_id, gate, safety, content_sha256, status, created_at, updated_at, channel)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, $12)`,
         [row.id, row.userId, row.geoProjectId, row.layer ?? "popular", row.title ?? "", row.groupId ?? null, row.gate ?? "passed", row.safety ?? "clear",
-          row.contentSha256 ?? null, row.status ?? "publishable", row.createdAt ?? now()]);
+          row.contentSha256 ?? null, row.status ?? "publishable", row.createdAt ?? now(), row.channel ?? null]);
       },
       source: async (/** @type {any} */ row) => {
         await db.query(`INSERT INTO evimed_geo.sources (id, user_id, geo_project_id, domain, name, layer, icp_matches, news_indexed, medical_vertical,
@@ -91,6 +91,10 @@ async function fixture() {
       target: async (/** @type {any} */ row) => {
         await db.query(`INSERT INTO evimed_geo.targets (geo_project_id, version, tier, metric_id, pool, budget_cny) VALUES ($1, $2, $3, $4, $5, $6)`,
           [row.geoProjectId, row.version, row.tier, row.metricId ?? "M-01", row.pool ?? "P2", row.budgetCny ?? null]);
+      },
+      placementPlan: async (/** @type {string} */ geoProjectId, /** @type {Record<string, any>} */ data) => {
+        const version = Number((await db.query(`SELECT coalesce(max(version), 0) + 1 AS next FROM evimed_geo.placement_plans WHERE geo_project_id = $1`, [geoProjectId])).rows[0].next);
+        await db.query(`INSERT INTO evimed_geo.placement_plans (geo_project_id, version, user_id, data) VALUES ($1, $2, 'seed', $3::jsonb)`, [geoProjectId, version, JSON.stringify(data)]);
       },
     },
     async tamperLedger(/** @type {any} */ row) {

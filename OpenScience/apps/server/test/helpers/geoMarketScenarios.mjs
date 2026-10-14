@@ -13,6 +13,7 @@ import {
   markOrderLost,
   marketStatus,
   noteCitation,
+  previewOutlets,
   projectIdentityBreaks,
   projectMoney,
   resolveUnknownOrder,
@@ -112,7 +113,7 @@ export function standardCatalogue() {
  * @typedef {object} MarketFixture
  * @property {any} store
  * @property {{ project: (row: any) => Promise<void>, group: (row: any) => Promise<void>, article: (row: any) => Promise<void>,
- *   source: (row: any) => Promise<void>, target: (row: any) => Promise<void> }} seed
+ *   source: (row: any) => Promise<void>, target: (row: any) => Promise<void>, placementPlan: (geoProjectId: string, data: Record<string, any>) => Promise<void> }} seed
  * @property {(row: { geoProjectId: string, orderId: string, kind: string, amountCny: number }) => Promise<void>} tamperLedger
  * @property {{ article: (id: string, patch: Record<string, any>) => Promise<void>, project: (id: string, patch: Record<string, any>) => Promise<void> }} [alter]
  *   what a second writer does to a row meanwhile: an article's status, safety, gate or hash, a project's status
@@ -183,6 +184,7 @@ export async function world(makeFixture, { catalogue = standardCatalogue(), bala
         id: articleId, userId, geoProjectId: id, layer: spec.layer ?? "popular", title: spec.title ?? `稿件 ${index + 1}`,
         groupId: spec.control ? `${id}_gc` : `${id}_g1`, gate: "passed", safety: spec.safety ?? "clear",
         contentSha256: sha256Hex(markdown), status: spec.status ?? "publishable", createdAt: new Date(clock.now().getTime() + index).toISOString(),
+        channel: spec.channel ?? null,
       });
       ids.push(articleId);
     }
@@ -299,6 +301,166 @@ export function defineGeoMarketScenarios(test, makeFixture, options = {}) {
       assert.equal(cappedOrders.length, 2);
       assert.ok(cappedOrders.every((order) => ["101", "107"].includes(order.resourceId)), "both on jksb.com.cn");
       assert.equal(cappedTick.skipped.no_admitted_outlet, 1);
+    } finally { await w.close(); }
+  });
+
+  test("a person's choices reach the plan: an article of a skipped action is not planned, the outlet its action was sent to ranks first among the admitted, and a read that fails stops the spending", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const choose = (/** @type {{ skipped?: string[], preferred?: Record<string, string[]> }} */ { skipped = [], preferred = {} }) => ({
+        ...w.deps,
+        placementChoices: async () => ({ skippedArticleIds: new Set(skipped), preferredByArticle: new Map(Object.entries(preferred)) }),
+      });
+      const domainOf = async (/** @type {string} */ geoProjectId, /** @type {string} */ articleId) => {
+        const order = (await orders(store, geoProjectId)).find((entry) => entry.articleId === articleId);
+        if (!order) return null;
+        return (await store.getMediaRows(order.mediaType, [order.resourceId]))[0]?.domain ?? null;
+      };
+
+      // Without a word from the person the cited domain wins, as it always did.
+      const plain = await w.project({ id: "geo_plain", articles: [{}] });
+      await tickOrders(choose({}));
+      assert.equal(await domainOf(plain.id, plain.articleIds[0]), "jksb.com.cn");
+
+      // The outlet they sent the action to comes first among the admitted ones.
+      const swapped = await w.project({ id: "geo_swap", userId: "u2", articles: [{}] });
+      await tickOrders(choose({ preferred: { [swapped.articleIds[0]]: ["WWW.smjk.cn"] } }));
+      assert.equal(await domainOf(swapped.id, swapped.articleIds[0]), "smjk.cn");
+
+      // A preference never passes an admission rule: an outlet whose conditions nobody checked is not placed at, however it is asked for.
+      const unadmitted = await w.project({ id: "geo_unadmitted", userId: "u3", articles: [{}] });
+      await tickOrders(choose({ preferred: { [unadmitted.articleIds[0]]: ["caijing-x.cn", "shibao-fake.cn"] } }));
+      assert.equal(await domainOf(unadmitted.id, unadmitted.articleIds[0]), "jksb.com.cn");
+
+      // A skipped action's article is not planned, and the count says why.
+      const aside = await w.project({ id: "geo_aside", userId: "u4", articles: [{}, {}] });
+      const skippedTick = await tickOrders(choose({ skipped: [aside.articleIds[0]] }));
+      assert.equal(await domainOf(aside.id, aside.articleIds[0]), null);
+      assert.notEqual(await domainOf(aside.id, aside.articleIds[1]), null);
+      assert.equal(skippedTick.skipped.action_skipped, 1);
+
+      // A plan made before the person set the action aside is withdrawn: nothing is held for it, and it is not sent.
+      const planned = await w.project({ id: "geo_withdrawn", userId: "u5", articles: [{}] });
+      await tickOrders(choose({}));
+      const [order] = await orders(store, planned.id);
+      assert.equal(order.state, "planned");
+      const withdrawn = await tickOrders(choose({ skipped: [planned.articleIds[0]] }));
+      assert.equal(withdrawn.withdrawn, 1);
+      const after = (await orders(store, planned.id)).find((entry) => entry.id === order.id);
+      assert.equal(after?.state, "cancelled");
+      const events = await store.listOrderEvents(order.id, 50);
+      assert.ok(events.some((event) => event.detail?.reason === "plan_withdrawn:action_skipped"), JSON.stringify(events.map((event) => event.detail)));
+      // The person takes the skip back: the article is planned again.
+      await tickOrders(choose({}));
+      assert.ok((await orders(store, planned.id)).some((entry) => entry.articleId === planned.articleIds[0] && entry.state === "planned"));
+
+      // A read of the choices that fails is no permission to spend: the project waits for the next tick.
+      const waiting = await w.project({ id: "geo_waiting", userId: "u6", articles: [{}] });
+      const failing = await tickOrders({ ...w.deps, placementChoices: async () => { throw new Error("spine down"); } });
+      assert.ok(failing.skipped.choices_unavailable >= 1);
+      assert.equal((await orders(store, waiting.id)).length, 0);
+    } finally { await w.close(); }
+  });
+
+  test("the run's placement plan weighs in: an outlet it prefers ranks first and one it avoids is never used; an article for the brand's own channel is not bought a placement", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const domainOf = async (/** @type {string} */ geoProjectId, /** @type {string} */ articleId) => {
+        const order = (await orders(store, geoProjectId)).find((entry) => entry.articleId === articleId);
+        if (!order) return null;
+        return (await store.getMediaRows(order.mediaType, [order.resourceId]))[0]?.domain ?? null;
+      };
+      const preferring = await w.project({ id: "geo_prefers", articles: [{}] });
+      await w.fixture.seed.placementPlan(preferring.id, { preferred: [{ outlets: ["smjk.cn"], reason: "客户指定" }] });
+      const avoiding = await w.project({ id: "geo_avoids", userId: "u2", articles: [{}] });
+      await w.fixture.seed.placementPlan(avoiding.id, { avoid: ["jksb.com.cn"] });
+      // A preference scoped to another article does not apply here.
+      const scoped = await w.project({ id: "geo_scoped", userId: "u3", articles: [{}] });
+      await w.fixture.seed.placementPlan(scoped.id, { preferred: [{ outlets: ["smjk.cn"], articleIds: ["some_other_article"] }] });
+      const channels = await w.project({ id: "geo_channels", userId: "u4", articles: [{ channel: "zhihu" }, { channel: "media_market" }, {}] });
+      const tick = await tickOrders(w.deps);
+      assert.equal(await domainOf(preferring.id, preferring.articleIds[0]), "smjk.cn");
+      assert.notEqual(await domainOf(avoiding.id, avoiding.articleIds[0]), "jksb.com.cn");
+      assert.notEqual(await domainOf(avoiding.id, avoiding.articleIds[0]), null, "an outlet avoided is another outlet used, not no placement");
+      assert.equal(await domainOf(scoped.id, scoped.articleIds[0]), "jksb.com.cn");
+      assert.equal(await domainOf(channels.id, channels.articleIds[0]), null, "the brand's own channel is published by the brand");
+      assert.notEqual(await domainOf(channels.id, channels.articleIds[1]), null);
+      assert.notEqual(await domainOf(channels.id, channels.articleIds[2]), null, "no channel said: the market places it, as before");
+      assert.equal(tick.skipped.owned_channel_article, 1);
+    } finally { await w.close(); }
+  });
+
+  test("the recommendation shown beside an action is the ranking the market places by, and looking orders nothing", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project({ id: "geo_preview", articles: [{ layer: "deep" }] });
+      const project = await store.getProject({ geoProjectId: p.id });
+      const articles = await store.getArticles(p.articleIds);
+      const groups = [{ id: `${p.id}_g1`, aliasIds: [] }, { id: `${p.id}_gc`, isControl: true }];
+      // What the group's answers cite and the strategy's layout names, before the market has its word on them.
+      const candidates = new Map([[`${p.id}_g1`, [
+        { domain: "dxy.cn", name: "丁香园", kind: "medical_portal", layer: "coverage", citedFor: { deepseek: 4 }, conditions: {}, price: null, available: null, origin: "cited", cited: 4 },
+        { domain: "smjk.cn", name: null, kind: null, layer: "coverage", citedFor: {}, conditions: {}, price: null, available: null, origin: "layout", cited: 0 },
+        { domain: null, channel: "wechat_mp", name: "微信公众号", kind: "own_channel", layer: "owned", route: "own", citedFor: {}, conditions: {}, price: null, available: true, origin: "own_channel", cited: 0 },
+      ]]]);
+      const before = await orders(store, p.id);
+      const shown = await previewOutlets(w.deps, { project, groups, candidates, choices: [], articles });
+      assert.equal((await orders(store, p.id)).length, before.length, "no order is created by looking");
+      assert.equal(w.fake.requestsTo("/api/media/send").length, 0);
+      const rows = shown.get(`${p.id}_g1`) ?? [];
+      assert.equal(shown.has(`${p.id}_gc`), false, "a control group has nothing to place");
+      assert.equal(rows[0].origin, "market");
+      assert.equal(rows[0].route, "market");
+      assert.equal(rows[0].available, true);
+      assert.equal(typeof rows[0].price, "number");
+      // A cited domain the catalogue does not list cannot be placed by the platform, and says so; a listed one carries its price.
+      const dxy = rows.find((row) => row.domain === "dxy.cn");
+      assert.equal(dxy?.route, "not_in_market");
+      assert.equal(dxy?.available, false);
+      assert.ok(dxy?.unavailableBecause.includes("not_in_catalogue"));
+      assert.equal(dxy?.citedFor.deepseek, 4, "what the engines cite stays");
+      const smjk = rows.find((row) => row.domain === "smjk.cn");
+      assert.equal(smjk?.route, "market");
+      assert.equal(smjk?.price, 120);
+      assert.equal(rows.find((row) => row.channel === "wechat_mp")?.route, "own", "an own channel is the person's to publish");
+
+      // The same ranking places: the first thing shown is the outlet and the price the plan then orders.
+      const tick = await tickOrders(w.deps);
+      assert.equal(tick.planned, 1);
+      const [placed] = await orders(store, p.id);
+      const [media] = await store.getMediaRows(placed.mediaType, [placed.resourceId]);
+      assert.equal(media.domain, rows[0].domain);
+      assert.equal(placed.priceCny, rows[0].price);
+
+      // Another outlet the person asked for is shown first among the admitted ones, as the plan would take it. (The placement above
+      // used a domain once, which counts against it: the ranking moved on, and the plain one is read again.)
+      const plain = (await previewOutlets(w.deps, { project, groups, candidates, articles, choices: [] })).get(`${p.id}_g1`) ?? [];
+      const other = plain.find((row) => row.origin === "market" && row.domain !== plain[0].domain)?.domain;
+      assert.ok(other, "a second admitted outlet to ask for");
+      const swapped = await previewOutlets(w.deps, { project, groups, candidates, articles,
+        choices: [{ key: `fill_gap:${p.id}_g1:dropped_condition`, skipped: false, sourceDomain: other }] });
+      assert.equal((swapped.get(`${p.id}_g1`) ?? [])[0].domain, other);
+      // A correction's source is not the content's, and a source of an action that was skipped is not asked for.
+      const correction = await previewOutlets(w.deps, { project, groups, candidates, articles,
+        choices: [{ key: `correct_error:${p.id}_g1:e1`, skipped: false, sourceDomain: other }] });
+      assert.equal((correction.get(`${p.id}_g1`) ?? [])[0].domain, plain[0].domain);
+      const dropped = await previewOutlets(w.deps, { project, groups, candidates, articles,
+        choices: [{ key: `fill_gap:${p.id}_g1:dropped_condition`, skipped: true, sourceDomain: other }] });
+      assert.equal((dropped.get(`${p.id}_g1`) ?? [])[0].domain, plain[0].domain);
+    } finally { await w.close(); }
+  });
+
+  test("without a market the preview hands the candidates back as they were", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const p = await w.project({ id: "geo_nomarket" });
+      const project = await w.fixture.store.getProject({ geoProjectId: p.id });
+      const candidates = new Map([[`${p.id}_g1`, [{ domain: "dxy.cn", origin: "cited", available: null }]]]);
+      const shown = await previewOutlets(w.deps, { project, groups: [{ id: `${p.id}_g1` }], candidates, choices: [], articles: [] });
+      assert.deepEqual([...shown.entries()], [...candidates.entries()]);
     } finally { await w.close(); }
   });
 

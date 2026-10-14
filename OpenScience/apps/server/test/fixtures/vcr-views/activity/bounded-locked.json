@@ -1,0 +1,20 @@
+{
+  "run": {
+    "id": "run_def",
+    "step": "definition",
+    "steps": [
+      "definition"
+    ],
+    "label": "整理研究定义",
+    "phase": "search",
+    "counts": {
+      "search": 1
+    },
+    "startedAt": "2026-10-14T09:59:40.000Z",
+    "placement": "bounded",
+    "locked": true
+  },
+  "queue": [],
+  "jobs": [],
+  "last": null
+}

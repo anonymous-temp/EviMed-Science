@@ -1,0 +1,18 @@
+{
+  "run": {
+    "id": null,
+    "step": "evidence",
+    "steps": [
+      "evidence"
+    ],
+    "label": "找证据、整理假设卡",
+    "phase": null,
+    "counts": {},
+    "startedAt": "2026-10-14T09:59:00.000Z",
+    "placement": null,
+    "locked": false
+  },
+  "queue": [],
+  "jobs": [],
+  "last": null
+}

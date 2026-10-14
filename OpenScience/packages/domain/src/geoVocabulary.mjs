@@ -187,10 +187,65 @@ export const GEO_OVERVIEW_METRICS = Object.freeze([
 export const GEO_ARM_METRIC_ID = GEO_VIEW_METRIC_IDS.gvi
 /** The minimum valid answers behind a rate (团体标准: every smallest cell ≥ 30). */
 export const GEO_MIN_CELL_SAMPLES = 30
+/**
+ * The reader's name of every metric id, once: the server's pages and the weekly report, the runtime's tools and the web all read it
+ * (the web used to keep two tables of its own, one keyed by id and one by the overview's four keys, and they named M-01S two ways —
+ * 「品牌提及率 目标 12%」 beside 「品牌提及率（增量）目标 20%」 read as a contradiction). A metric id has one name and a name one id
+ * (`geoVocabulary.test.mjs` walks both ways); M-01S is 「品类问题可见率」 — mention over the pools whose questions name no brand —
+ * and never 「品牌提及率」, which is M-01 over a pool.
+ */
 export const GEO_METRIC_LABELS_ZH = Object.freeze({
-  'M-19': '综合可见度指数', 'M-01': '品牌提及率', 'M-01S': '品牌提及率', 'M-06': '事实准确率', 'M-08': '引用命中率', 'M-10': '检索触发率',
+  'M-01': '品牌提及率', 'M-01S': '品类问题可见率', 'M-02': '首位提及率', 'M-03': '推荐位提及率', 'M-04': '品牌声量份额',
+  'M-04C': '品牌登记覆盖率', 'M-05': '平均出现位序', 'M-06': '事实准确率', 'M-07': '错误陈述条数', 'M-08': '引用命中率',
+  'M-08B': '正文引用命中率', 'M-08S': '信源问题引用率', 'M-09': '自有内容被引条数', 'M-09S': '信源数量引用率', 'M-10': '检索触发率',
+  'M-11': '就医红旗覆盖率', 'M-12': '禁忌与特殊人群提示率', 'M-13': '通用名到厂牌转化率', 'M-14': '泛症状可见度',
+  'M-15': '风险问句被推荐率', 'M-16': '竞品提及率', 'M-17': '竞品声量份额', 'M-18': '与头部竞品的差距档位', 'M-19': '综合可见度指数',
+  'M-20': '回答有效率', 'M-21': '发布稿件被引篇数',
   NET: '净效应', NOISE: '噪声区间',
 })
+/** The scale a metric is read on: a percentage, a 0–100 index, or a count (a position or a ratio reads as an index). */
+export const GEO_METRIC_UNITS = Object.freeze({
+  'M-01': 'percent', 'M-01S': 'percent', 'M-02': 'percent', 'M-03': 'percent', 'M-04': 'percent', 'M-04C': 'percent', 'M-05': 'index',
+  'M-06': 'percent', 'M-07': 'count', 'M-08': 'percent', 'M-08B': 'percent', 'M-08S': 'percent', 'M-09': 'count', 'M-09S': 'percent',
+  'M-10': 'percent', 'M-11': 'percent', 'M-12': 'percent', 'M-13': 'index', 'M-14': 'percent', 'M-15': 'percent', 'M-16': 'percent',
+  'M-17': 'percent', 'M-18': 'index', 'M-19': 'index', 'M-20': 'percent', 'M-21': 'count', NET: 'index', NOISE: 'index',
+})
+/** The overview's four keys and the 检索 key a series may name a metric by, as the metric ids they are. */
+const GEO_METRIC_KEY_IDS = Object.freeze({
+  gvi: 'M-19', mention: 'M-01S', accuracy: 'M-06', citation: 'M-08', retrieval: 'M-10',
+})
+
+/**
+ * A metric's reader name, from its id or from one of the overview's keys (`gvi`, `mention` …, which name M-01S, M-06 and M-08 — the
+ * monitoring series and the tier targets may name a metric either way). Null for a word this table does not know: an id nobody
+ * named is never printed.
+ * @param {string | null | undefined} idOrKey
+ * @returns {string | null}
+ */
+export function geoMetricName(idOrKey) {
+  const id = geoMetricId(idOrKey)
+  return id ? /** @type {Record<string, string>} */ (GEO_METRIC_LABELS_ZH)[id] ?? null : null
+}
+
+/**
+ * A metric's scale (`percent` when the word is not known: a rate is the common case).
+ * @param {string | null | undefined} idOrKey
+ * @returns {'percent' | 'index' | 'count'}
+ */
+export function geoMetricUnit(idOrKey) {
+  const id = geoMetricId(idOrKey)
+  return /** @type {'percent' | 'index' | 'count'} */ ((id && /** @type {Record<string, string>} */ (GEO_METRIC_UNITS)[id]) || 'percent')
+}
+
+/**
+ * The metric id an id or an overview key stands for, or null.
+ * @param {string | null | undefined} idOrKey
+ */
+export function geoMetricId(idOrKey) {
+  if (typeof idOrKey !== 'string') return null
+  if (Object.hasOwn(GEO_METRIC_LABELS_ZH, idOrKey)) return idOrKey
+  return Object.hasOwn(GEO_METRIC_KEY_IDS, idOrKey) ? /** @type {Record<string, string>} */ (GEO_METRIC_KEY_IDS)[idOrKey] : null
+}
 
 /** Sources (信源). `kind` is checked in code, not by CHECK, so a kind is added without a migration. */
 export const GEO_SOURCE_KINDS = frozen(['news', 'vertical', 'wemedia', 'brand', 'government', 'encyclopedia', 'academic', 'qa', 'video', 'ecommerce', 'other'])
@@ -297,24 +352,73 @@ export const GEO_OWNED_LINK_PLATFORM_LABELS_ZH = Object.freeze({
 /** `retired`: taken down or no longer the brand's; kept for its history, no longer checked. */
 export const GEO_OWNED_LINK_STATUSES = frozen(['active', 'retired'])
 
+/**
+ * Where an article is to be published, as the run says it (`articles.json` `channel`): an owned platform of the brand (the ids a
+ * registered link names) or the media market, which places it in an outlet. A channel the run wrote in its own words is kept as a
+ * note beside the article, never as a word here.
+ */
+export const GEO_ARTICLE_CHANNELS = frozen([...GEO_OWNED_LINK_PLATFORMS, 'media_market'])
+export const GEO_ARTICLE_CHANNEL_LABELS_ZH = Object.freeze({ ...GEO_OWNED_LINK_PLATFORM_LABELS_ZH, media_market: '媒介集市（专业媒体）' })
+
 /** The runtime tools' words (`geo_read` / `geo_write`, spec §4). */
 export const GEO_READ_WHATS = frozen(['project', 'claims', 'questions', 'journey', 'diagnosis', 'metrics', 'snapshots', 'errors', 'sources',
-  'strategy', 'targets', 'articles', 'orders', 'owned_links', 'monitoring', 'cards', 'value', 'research'])
+  'strategy', 'targets', 'articles', 'orders', 'owned_links', 'monitoring', 'cards', 'value', 'research', 'clusters', 'actions'])
 export const GEO_WRITE_WHATS = frozen(['product', 'claims', 'questions', 'lock_questions', 'journey', 'strategy', 'sources', 'targets',
-  'articles', 'placement_plan', 'owned_links', 'step', 'value', 'research'])
+  'articles', 'placement_plan', 'owned_links', 'step', 'value', 'research', 'actions'])
 /** How a read or a write narrates in the conversation (`narration.mjs`). */
 export const GEO_READ_WHAT_LABELS_ZH = Object.freeze({
   project: '项目概况', claims: '结论库', questions: '问题地图', journey: '旅程', diagnosis: '诊断', metrics: '指标', snapshots: '回答快照',
   errors: '讲错记录', sources: '信源', strategy: '信源布局', targets: '三档目标', articles: '稿件', orders: '投放订单', owned_links: '自有发布',
-  monitoring: '监测', cards: '证据卡片', value: '药品价值分析', research: '相关研究',
+  monitoring: '监测', cards: '证据卡片', value: '药品价值分析', research: '相关研究', clusters: '问句群', actions: '行动',
 })
 export const GEO_WRITE_WHAT_LABELS_ZH = Object.freeze({
   product: '产品身份', claims: '结论库', questions: '问题地图', lock_questions: '锁定测量问句', journey: '旅程', strategy: '信源分析',
   sources: '信源表', targets: '三档目标', articles: '稿件', placement_plan: '投放偏好', owned_links: '自有发布', step: '进度',
-  value: '药品价值分析', research: '研究任务',
+  value: '药品价值分析', research: '研究任务', actions: '行动',
 })
 /** The export runs 「⋯」 offers. */
 export const GEO_EXPORT_KINDS = frozen(['weekly', 'proposal'])
+
+/**
+ * The action read model (`geoActions.mjs`): what the platform is doing, or is about to do, for one question group. The words are the
+ * model's and the code's alike — a run writes a kind and a promise, and the page reads the status the code derives.
+ *
+ * - `correct_error` — a statement an engine tells about the product is wrong and a correction is the work; `fill_gap` — an
+ *   answer-gap class a group has (missing evidence, a dropped condition …) and an article is the work; `win_cluster` — a group
+ *   below its pool's target with no named gap; `maintain` — a group that is at its target and has live articles: keep it.
+ * - The status is the furthest stage the action has reached, derived from the articles, orders, links and citations behind it —
+ *   `skipped` is a person's reversible word and `stale` is eight weeks published and never cited.
+ * - A promise is how far the platform says the action can move the pool's metric: enter the mentions, raise them, bring accuracy to
+ *   its target, complete what the answers leave out, or hold what is already there. Never a rank, never a percentage for a group.
+ */
+export const GEO_ACTION_KINDS = frozen(['correct_error', 'fill_gap', 'win_cluster', 'maintain'])
+export const GEO_ACTION_KIND_LABELS_ZH = Object.freeze({
+  correct_error: '纠正讲错', fill_gap: '补上缺口', win_cluster: '拿下这一群', maintain: '保持',
+})
+export const GEO_ACTION_STATUSES = frozen(['proposed', 'writing', 'ready', 'placed', 'live', 'cited', 'verified', 'stale', 'skipped'])
+export const GEO_ACTION_STATUS_LABELS_ZH = Object.freeze({
+  proposed: '待写', writing: '在写', ready: '可发布', placed: '已投放', live: '已发布', cited: '已被引用', verified: '已验证', stale: '陈旧', skipped: '已跳过',
+})
+export const GEO_ACTION_PROMISES = frozen(['enter_mention', 'raise_mention', 'accuracy_to_target', 'coverage_complete', 'hold'])
+export const GEO_ACTION_PROMISE_LABELS_ZH = Object.freeze({
+  enter_mention: '进入被提及', raise_mention: '提高被提及', accuracy_to_target: '讲准到目标', coverage_complete: '补齐该有的提示', hold: '保持现状',
+})
+/** Where a recommended source stands for an action: the platform's recommendation, the person's swap, or the outlet it was placed in. */
+/**
+ * What an engine's measured retrieval lets a strategy promise there (the method's `promise_ceiling`): mention and accuracy, accuracy
+ * only (the engine rarely searches the web), or nothing yet. The strategy run writes the word; the platform reads it back when it
+ * decides which engines an action may name.
+ */
+export const GEO_PROMISE_CEILINGS = frozen(['mention_and_accuracy', 'accuracy_only', 'undetermined'])
+export const GEO_ACTION_SOURCE_CHOICES = frozen(['recommended', 'swapped', 'placed'])
+/**
+ * What the code notes beside an action (annotations, never a refusal): a run's word the platform's own rows do not support, so the
+ * reader and the next run see it. `promise_above_ceiling` — mention was promised on an engine that rarely searches the web.
+ */
+export const GEO_ACTION_CHECKS = frozen(['promise_above_ceiling', 'engine_not_in_project', 'metric_not_in_pool', 'accuracy_below_hard_line',
+  'target_without_basis', 'group_is_control', 'group_unknown', 'promise_unknown'])
+/** What a project asks of its person, as the overview lists it: a real to-do each, never a log of what is done. */
+export const GEO_NEEDS_YOU_KINDS = frozen(['set_budget', 'release_articles', 'correct_severe_error', 'client_action', 'credits_waiting', 'step_failed'])
 
 /**
  * Whether an article may be placed: its gate passed and no clinical-safety
@@ -375,6 +479,14 @@ export const GEO_VOCABULARIES = Object.freeze({
   articleSafety: GEO_ARTICLE_SAFETY,
   articleStatus: GEO_ARTICLE_STATUSES,
   articleReferenceStatus: GEO_ARTICLE_REFERENCE_STATUSES,
+  articleChannel: GEO_ARTICLE_CHANNELS,
+  actionKind: GEO_ACTION_KINDS,
+  actionStatus: GEO_ACTION_STATUSES,
+  actionPromise: GEO_ACTION_PROMISES,
+  promiseCeiling: GEO_PROMISE_CEILINGS,
+  actionSourceChoice: GEO_ACTION_SOURCE_CHOICES,
+  actionCheck: GEO_ACTION_CHECKS,
+  needsYouKind: GEO_NEEDS_YOU_KINDS,
   memberRole: GEO_MEMBER_ROLES,
   ability: GEO_ABILITIES,
   placementLabel: GEO_PLACEMENT_LABELS,

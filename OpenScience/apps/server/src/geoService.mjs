@@ -40,7 +40,8 @@
  */
 
 import path from "node:path";
-import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoSpecifiedInfoAccuracy, geoValueActive, geoValueContext, geoValueImpacts, geoValueList, hardLines, summarizeGeoValueCoverageCounts } from "@evimed/domain";
+import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoErrorsByClaim, geoSpecifiedInfoAccuracy, geoValueActive, geoValueContext, geoValueImpacts, geoValueList, hardLines,
+  parseGeoActionKey, summarizeGeoValueCoverageCounts } from "@evimed/domain";
 
 /** A failure mode as the page says it. @param {string | null} code */
 const failureModeWord = (code) => (code ? /** @type {Record<string, string>} */ (GEO_FAILURE_MODE_LABELS_ZH)[code] ?? null : null);
@@ -49,6 +50,7 @@ import {
   GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoCellRows,
 } from "@evimed/domain";
 import { geoLockCheck, geoProgramMinimal } from "./geoWrites.mjs";
+import { GeoSpine } from "./geoSpine.mjs";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tallySources } from "./geoSourceAnswers.mjs";
 import { geoSourceFromRow } from "./geoStore.mjs";
@@ -223,6 +225,8 @@ function errorView(row) {
     // words only move `last_snapshot_id`): this is the answer whose text holds it word for word.
     firstSnapshotId: text(row.first_snapshot_id),
     questionId: text(row.question_id),
+    // The claim the statement contradicts, stable across the engines that say it: what the errors are grouped by (`byClaim`).
+    fingerprint: text(row.fingerprint),
     // What the statement contradicts: the claim and its quote (对的是什么 / 依据哪份说明书).
     claimId: text(row.claim_id),
     evidenceQuote: text(row.evidence_quote),
@@ -304,6 +308,28 @@ function metricView(row, name) {
 /** The plain cell of a metric: not a top1/top3 variant, not one rival's row, not a group's. */
 const PLAIN_ROW = "m.variant IS NULL AND m.rival IS NULL AND m.group_id IS NULL";
 
+/**
+ * An action as the runtime reads it: every number the page's action holds (k of n, the target, the status, the counts of what stands
+ * behind it) and the run's own words clipped — the same function's output, shorter.
+ * @param {Record<string, any>} action
+ */
+export function compactAction(action) {
+  return {
+    key: action.key, kind: action.kind, status: action.status,
+    group: action.group ? { id: action.group.id, name: action.group.name, pool: action.group.pool } : null,
+    gapId: action.need.gapId, gapClass: action.need.gapClass, errorIds: action.need.errorIds, judgment: action.need.judgment ? clip(action.need.judgment, 300) : null,
+    expectedPoints: action.need.expectedPoints.slice(0, 5).map((/** @type {any} */ point) => ({ statement: clip(point.statement, 160), claimIds: point.claimIds })),
+    what: action.what, engines: action.engines,
+    sources: action.sources.map((/** @type {any} */ source) => ({ domain: source.domain, chosen: source.chosen, available: source.available, why: source.why ? clip(source.why, 160) : null })),
+    expected: { metricId: action.expected.primaryMetricId, promise: action.expected.promise, from: action.expected.from, baseline: action.expected.baseline,
+      target: action.expected.target, reached: action.expected.reached, horizonWeeks: action.expected.horizonWeeks, tier: action.expected.tier,
+      closes: action.expected.closes },
+    articleIds: action.articleIds, orderIds: action.orderIds, ownedLinkIds: action.ownedLinkIds,
+    observed: { citedBy: action.observed.citedBy.length, series: action.observed.series.length, arm: action.observed.arm },
+    choice: action.choice, checks: action.checks.map((/** @type {any} */ check) => check.code), reason: action.reason,
+  };
+}
+
 export class GeoService {
   /**
    * @param {{ store: import("./geoStore.mjs").GeoStore, config: Record<string, any>, social?: any, now?: () => Date,
@@ -326,7 +352,12 @@ export class GeoService {
     this.errorListLimit = Number.isSafeInteger(config.geoDiagnosisErrorLimit) && config.geoDiagnosisErrorLimit > 0 ? config.geoDiagnosisErrorLimit : 300;
     /** @param {string} metricId */
     this.metricName = (metricId) => metricName?.(metricId) ?? /** @type {Record<string, string>} */ (GEO_METRIC_LABELS_ZH)[metricId] ?? null;
-    this.counters = { projectsCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, forbidden: 0, researchCapped: 0 };
+    this.counters = { projectsCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, forbidden: 0, researchCapped: 0, declinedFields: 0, ignoredFields: 0 };
+    /**
+     * The question group as the spine of the project: clusters, actions, the strategy read and what is asked of a person. The
+     * composition gives it the market's read-only ranking (`spine.placementPreview`) when there is a market.
+     */
+    this.spine = new GeoSpine({ store, now: () => this.now(), marketConfigured: () => geoMarketConfigured(config) });
   }
 
   ready() { return this.store.ready(); }
@@ -608,7 +639,7 @@ export class GeoService {
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
   async projectViewOf(project) {
     const metricIds = GEO_OVERVIEW_METRICS.map((entry) => entry.metricId);
-    const [latest, series, targets, week, names, started, cardsBlockedBy] = await Promise.all([
+    const [latest, series, targets, week, names, started, cardsBlockedBy, needsYou, summaries] = await Promise.all([
       this.#latestProjectMetrics([project.id], metricIds),
       this.#series([project.id], metricIds, "project", "", { coverage: true }),
       this.store.latestTargets(project.id),
@@ -616,7 +647,12 @@ export class GeoService {
       this.#controlProjectNames([{ userId: project.userId, projectId: project.projectId }]),
       this.#startedAt([project]),
       this.#cardsBlockedBy(project),
+      this.#needsYou(project),
+      this.spine.stepSummaries(project.id).catch(() => ({})),
     ]);
+    // One short count per programme step, for the rail: what the step produced (「86 条结论」「25 个群」).
+    const steps = Object.fromEntries(Object.entries(project.steps ?? {}).map(([step, state]) => [step,
+      { ...state, summary: /** @type {Record<string, any>} */ (summaries)[step] ?? null }]));
     const rows = latest.get(project.id) ?? new Map();
     const points = series.get(project.id) ?? new Map();
     const metrics = GEO_OVERVIEW_METRICS.map(({ key, metricId }) => ({
@@ -639,12 +675,29 @@ export class GeoService {
       // Why the verified claims are not becoming evidence cards: `producer` (nobody named as speaking for the product) or `reviewer`
       // (no reviewing doctor), null when nothing is in the way. The run-end import used to refuse in a log and the page said nothing (D-28).
       cards: { blockedBy: cardsBlockedBy },
+      steps,
+      // What the project really asks of its person — a budget not decided, articles to look at, the worst errors with their way to a
+      // correction, the strategy's to-dos for the client, a step waiting on credits or one that failed. A to-do list, never a log.
+      needsYou,
       overview: {
         metrics,
         week,
-        steps: project.steps,
+        steps,
       },
     };
+  }
+
+  /**
+   * The project's to-dos (`geoNeedsYou`), or none where they cannot be read: it decorates the page, it is not the page.
+   * @param {Awaited<ReturnType<GeoService["requireProject"]>>} project
+   */
+  async #needsYou(project) {
+    try {
+      const spine = await this.spine.load(project);
+      return this.spine.needsYou(spine, { canReview: project.access ? project.access.abilities.includes("review") : true });
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -1031,6 +1084,9 @@ export class GeoService {
       byPool,
       failureModes,
       errors,
+      // The same errors one row per claim, with the engines that say it (a claim told by five engines is one row, not five); the rows
+      // above keep their shape.
+      byClaim: geoErrorsByClaim(errors),
       // Counted over every error of the project, not over the page of rows above: the list is capped, the counts are not.
       errorCounts,
       // The two hard lines (Q-5): accuracy (M-06) at or above the owner's line, read from the round's project cell only when it is a
@@ -1362,6 +1418,8 @@ export class GeoService {
     return {
       articles: articles.map((article) => ({
         valueContext: article.valueContext, id: article.id, layer: article.layer, title: article.title, groupId: article.groupId,
+        // Where it is to be published and for whom, as the run said it: a closed word, or the run's own words as a note.
+        channel: article.channel, channelNote: article.channelNote, audience: article.audience, audienceNote: article.audienceNote,
         question: article.groupId ? questions.get(article.groupId) ?? null : null, status: article.status, gate: article.gate,
         safety: article.safety, path: article.path, runId: article.runId, claimCount: article.claimIds.length,
         placements: counts.get(article.id) ?? 0, cited: citedIds.has(article.id),
@@ -1562,6 +1620,115 @@ export class GeoService {
     return (await this.store.query(`SELECT 1 FROM evimed_geo.topups WHERE id = $1`, [topupId])).rows.length > 0;
   }
 
+  // --- the question group as the spine: clusters, actions, the strategy ----------------------------
+
+  /**
+   * One read of the project and what is derived from it, shared by every view of the spine.
+   * @param {Awaited<ReturnType<GeoService["requireProject"]>>} project
+   */
+  async #spineOf(project) {
+    const spine = await this.spine.load(project);
+    const derived = await this.spine.actions(spine);
+    return { spine, derived };
+  }
+
+  /** `GET …/:id/clusters`. @param {{ id: string }} user @param {string} id */
+  async clusters(user, id) { return this.clustersOf(await this.requireProject(user, id)); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
+  async clustersOf(project) {
+    const { spine, derived } = await this.#spineOf(project);
+    return this.spine.clusters(spine, derived);
+  }
+
+  /** `GET …/:id/clusters/:groupId`. @param {{ id: string }} user @param {string} id @param {string} groupId */
+  async cluster(user, id, groupId) { return this.clusterOf(await this.requireProject(user, id), groupId); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {string} groupId */
+  async clusterOf(project, groupId) {
+    const { spine, derived } = await this.#spineOf(project);
+    const view = await this.spine.cluster(spine, derived, groupId, {
+      answersOf: (texts) => this.#latestAnswers(project, texts),
+      claimsOf: async (ids) => (await this.store.query(`SELECT id, claim_key, statement, source_label, source_kind, status FROM evimed_geo.claims
+        WHERE geo_project_id = $1 AND id = ANY($2::text[])`, [project.id, ids])).rows.map((/** @type {any} */ row) => ({
+        id: String(row.id), claimKey: String(row.claim_key), statement: String(row.statement), sourceLabel: text(row.source_label), sourceKind: text(row.source_kind),
+        status: String(row.status) })),
+      answerFacts: async (snapshotIds) => {
+        const rows = snapshotIds.length ? (await this.store.query(`SELECT s.id, s.status, s.asked_at, f.mentions_ours, f.cites_ours, f.failure_mode
+          FROM evimed_geo.snapshots s LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id WHERE s.geo_project_id = $1 AND s.id = ANY($2::text[])`,
+        [project.id, snapshotIds])).rows : [];
+        return new Map(rows.map((/** @type {any} */ row) => [String(row.id), {
+          status: text(row.status), askedAt: iso(row.asked_at), mentionsOurs: row.mentions_ours == null ? null : Boolean(row.mentions_ours),
+          wrongOurs: row.failure_mode == null ? null : row.failure_mode === "wrong_ours", citesOurs: row.cites_ours == null ? null : Boolean(row.cites_ours) }]));
+      },
+    });
+    if (!view) throw failure(404, "geo_cluster_not_found", "Question group not found.");
+    return view;
+  }
+
+  /** `GET …/:id/actions`. @param {{ id: string }} user @param {string} id */
+  async actions(user, id) { return this.actionsOf(await this.requireProject(user, id)); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
+  async actionsOf(project) {
+    const { spine, derived } = await this.#spineOf(project);
+    return {
+      version: spine.strategy?.version ?? null,
+      tier: project.tier,
+      round: spine.rounds.latest,
+      floor: 30,
+      headline: derived.headline,
+      counts: derived.counts,
+      actions: derived.actions,
+      control: derived.control,
+      noAction: derived.noAction,
+      unmatched: derived.unmatched,
+    };
+  }
+
+  /** `GET …/:id/actions/:key`. @param {{ id: string }} user @param {string} id @param {string} key */
+  async action(user, id, key) { return this.actionOf(await this.requireProject(user, id), key); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {string} key */
+  async actionOf(project, key) {
+    const { spine, derived } = await this.#spineOf(project);
+    const action = derived.actions.find((entry) => entry.key === key);
+    if (!action) throw failure(404, "geo_action_not_found", "Action not found.");
+    const clusters = this.spine.clusters(spine, derived);
+    return { action, group: clusters.groups.find((group) => group.id === action.group?.id) ?? null, floor: 30, round: spine.rounds.latest };
+  }
+
+  /**
+   * `POST …/:id/actions/:key/skip` and `…/source`: a person's two reversible words about an action. Nothing else is written, and an
+   * action that does not exist (or a to-do the strategy does not hold) is not a key a choice may be made for.
+   * @param {{ id: string }} user @param {string} id @param {string} key @param {{ skipped?: boolean, sourceDomain?: string | null }} change
+   */
+  async chooseAction(user, id, key, change) {
+    const project = await this.requireProject(user, id, "edit");
+    if (!parseGeoActionKey(key) && !/^client:[0-9a-f]{8}$/.test(key)) throw failure(404, "geo_action_not_found", "Action not found.");
+    let sourceDomain = change.sourceDomain;
+    if (typeof sourceDomain === "string") {
+      sourceDomain = sourceDomain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "");
+      if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/.test(sourceDomain)) {
+        throw failure(400, "geo_action_choice_invalid", "A source is named by its website's domain.");
+      }
+    }
+    const { spine, derived } = await this.#spineOf(project);
+    if (!this.spine.knowsKey(spine, derived, key)) throw failure(404, "geo_action_not_found", "Action not found.");
+    const stored = await this.store.setActionChoice({ geoId: project.id, ownerId: project.userId, key, decidedBy: String(user.id),
+      ...(change.skipped === undefined ? {} : { skipped: change.skipped }), ...(sourceDomain === undefined ? {} : { sourceDomain }) });
+    return { key, skipped: stored?.skipped ?? false, sourceDomain: stored?.sourceDomain ?? null, updatedAt: stored?.updatedAt ?? null, cleared: stored === null };
+  }
+
+  /** `GET …/:id/strategy`. @param {{ id: string }} user @param {string} id */
+  async strategy(user, id) { return this.strategyOf(await this.requireProject(user, id)); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
+  async strategyOf(project) {
+    const { spine, derived } = await this.#spineOf(project);
+    return this.spine.strategy(spine, derived);
+  }
+
   // --- the runtime's reads (geo_read) -----------------------------------------------------
 
   /**
@@ -1703,6 +1870,20 @@ export class GeoService {
         return { links: links.items, total: links.total, more: links.more };
       }
       case "monitoring": return this.monitoringOf(project);
+      // The question group as the spine: what the engines say about each, and what is being done for it and what came of it. The same
+      // methods the page reads (`clustersOf`, `actionsOf`), so a number quoted from here is the page's.
+      case "clusters": {
+        const view = await this.clustersOf(project);
+        const groups = page(view.groups.filter((group) => (!filter.pool || group.pool === filter.pool) && (!filter.groupId || group.id === filter.groupId)));
+        return { version: view.version, round: view.round, floor: view.floor, engines: view.engines, groups: groups.items, total: groups.total, more: groups.more };
+      }
+      case "actions": {
+        const view = await this.actionsOf(project);
+        const items = page(view.actions.filter((action) => (!filter.pool || action.group?.pool === filter.pool) && (!filter.groupId || action.group?.id === filter.groupId)
+          && (!filter.engine || action.engines.includes(filter.engine))));
+        return { tier: view.tier, round: view.round, floor: view.floor, headline: view.headline, counts: view.counts,
+          actions: items.items.map(compactAction), total: items.total, more: items.more, control: view.control.map((group) => group.name) };
+      }
       default:
         throw failure(400, "geo_read_what_invalid", "Unknown read.");
     }

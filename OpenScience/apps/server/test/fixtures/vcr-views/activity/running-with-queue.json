@@ -1,0 +1,31 @@
+{
+  "run": {
+    "id": "run_ev",
+    "step": "evidence",
+    "steps": [
+      "evidence"
+    ],
+    "label": "找证据、整理假设卡",
+    "phase": "claims",
+    "counts": {
+      "search": 4,
+      "included": 3,
+      "fullText": 2,
+      "claims": 5,
+      "claimsVerified": 3,
+      "deliverables": 1,
+      "deliverablesDone": 0
+    },
+    "startedAt": "2026-10-14T09:58:30.000Z",
+    "placement": "open-runtime",
+    "locked": false
+  },
+  "queue": [
+    {
+      "step": "population",
+      "waitingFor": "evidence"
+    }
+  ],
+  "jobs": [],
+  "last": null
+}
