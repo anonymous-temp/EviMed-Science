@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/memoryMapClient";
 import { LAYOUT_HEIGHT, LAYOUT_WIDTH, layoutGraph, unitHash } from "./layout";
 import { TEST_PALETTE } from "./palette";
-import { LABELS_PER_HUB, chainOption, edgeTooltip, edgeWords, graphOption, isHideableEdge, labelPosition, symbolOf, tooltipOf } from "./graphOption";
+import { LABELS_PER_HUB, chainOption, edgeTooltip, edgeWords, fittedBox, graphOption, isHideableEdge, labelPosition, symbolOf, tooltipOf } from "./graphOption";
 
 const memory = (id: string, over: Partial<MapNode> = {}): MapNode => ({ id: `memory:${id}`, type: "memory", subtype: "preference", group: "偏好", label: `记忆 ${id}`, weight: 0.4, state: "current", ...over });
 const you: MapNode = { id: "you:account", type: "you", label: "你", state: "current" };
@@ -134,8 +134,20 @@ describe("the graph option", () => {
     expect(labelPosition([LAYOUT_WIDTH - 250, 300], hubAt)).toBe("top");
     expect(labelPosition([LAYOUT_WIDTH - 40, 452], hubAt)).toBe("left");
     expect(labelPosition([40, 452], hubAt)).toBe("right");
+    // The canvas ends where the picture's own extent does, not where the layout's box does: below its lowest mark (and above its highest)
+    // a name is put beside the mark instead.
+    const box = fittedBox([[100, 100], [1500, 700]]);
+    expect(box).toEqual([50, 50, 1550, 750]);
+    expect(labelPosition([905, 690], [900, 560], { box })).toBe("right");
+    expect(labelPosition([905, 110], [900, 240], { box })).toBe("right");
+    expect(labelPosition([905, 500], [900, 360], { box })).toBe("bottom");
     // A mark with no hub hangs from the account in the middle.
     expect(labelPosition([1200, 450], undefined)).toBe("right");
+    // On a phone's width a name is more of the picture, so the room it needs is more: the same mark is named below it, or to its left where even that would run off.
+    expect(labelPosition([1450, 452], hubAt)).toBe("right");
+    expect(labelPosition([1450, 452], hubAt, { compact: true })).toBe("bottom");
+    expect(labelPosition([1650, 452], hubAt)).toBe("bottom");
+    expect(labelPosition([1650, 452], hubAt, { compact: true })).toBe("left");
   });
 
   it("names a mark on the right of the picture to its left, so no label runs off the canvas", () => {

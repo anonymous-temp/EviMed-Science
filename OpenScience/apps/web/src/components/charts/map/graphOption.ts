@@ -44,28 +44,46 @@ export const LABELS_PER_HUB = 2;
 /** The longest a name is on the canvas; the hover, the selection and the list say it whole. */
 const CANVAS_LABEL_CHARS = 14;
 
-/** How much room, in the layout's units, a name needs beside its mark (a name is about 160 wide) and, centred above or below, on each side of it. */
-const ROOM_BESIDE = 260;
-const ROOM_CENTRED = 100;
+/**
+ * How much room, in the layout's units, a name needs beside its mark and, centred above or below, on each side of it. The picture is
+ * fitted to the canvas, so a name of the same length is more of the layout on a phone's width than on a desk's.
+ */
+const ROOM_BESIDE = { desk: 260, phone: 420 };
+const ROOM_CENTRED = { desk: 100, phone: 210 };
+/** And above or below it: a name may run to a few lines when it is pointed at. */
+const ROOM_LINES = { desk: 90, phone: 150 };
+
+/** The extent the picture is fitted to: the marks' own, with a margin. */
+export function fittedBox(positions: Iterable<readonly [number, number]>, margin = 50): [number, number, number, number] {
+  const every = [...positions];
+  return every.length === 0 ? [0, 0, LAYOUT_WIDTH, LAYOUT_HEIGHT]
+    : [Math.min(...every.map(([x]) => x)) - margin, Math.min(...every.map(([, y]) => y)) - margin, Math.max(...every.map(([x]) => x)) + margin, Math.max(...every.map(([, y]) => y)) + margin];
+}
 
 /**
  * Where a mark's name stands: away from the hub it hangs from, so it neither covers the hub nor the marks between the two, and
- * never towards an edge it would run off — then the other way across, and, last, the side that has the room. A mark with no hub of
- * its own hangs from the account in the middle.
+ * never towards an edge of the picture it would run off — then the other way across, and, last, the side that has the room. A mark
+ * with no hub of its own hangs from the account in the middle. `box` is the extent the picture is fitted to (`fittedBox`): the
+ * canvas ends there, whatever the layout's own size is.
  */
-export function labelPosition(at: readonly [number, number], hub: readonly [number, number] | undefined): "left" | "right" | "top" | "bottom" {
+export function labelPosition(at: readonly [number, number], hub: readonly [number, number] | undefined, { compact = false, box = [0, 0, LAYOUT_WIDTH, LAYOUT_HEIGHT] as readonly number[] } = {}): "left" | "right" | "top" | "bottom" {
   const [x, y] = at;
+  const [left, top, right, bottom] = box;
+  const beside = compact ? ROOM_BESIDE.phone : ROOM_BESIDE.desk;
+  const centred = compact ? ROOM_CENTRED.phone : ROOM_CENTRED.desk;
+  const lines = compact ? ROOM_LINES.phone : ROOM_LINES.desk;
   const [hubX, hubY] = hub ?? [LAYOUT_WIDTH / 2, LAYOUT_HEIGHT / 2];
   const dx = x - hubX;
   const dy = y - hubY;
   const horizontal = dx >= 0 ? "right" : "left";
   const vertical = dy >= 0 ? "bottom" : "top";
-  const room = (side: string) => (side === "right" ? x < LAYOUT_WIDTH - ROOM_BESIDE : side === "left" ? x > ROOM_BESIDE : x > ROOM_CENTRED && x < LAYOUT_WIDTH - ROOM_CENTRED);
   const across = (side: string) => (side === "right" ? "left" : side === "left" ? "right" : side === "top" ? "bottom" : "top");
+  const room = (side: string) => (side === "right" ? right - x >= beside : side === "left" ? x - left >= beside
+    : x - left >= centred && right - x >= centred && (side === "bottom" ? bottom - y >= lines : y - top >= lines));
   // A mark lies more beside its hub than above or below it when the run is the longer, with a little allowance for a wide name.
   const order = Math.abs(dx) * 0.7 >= Math.abs(dy) ? [horizontal, vertical, across(horizontal)] : [vertical, horizontal, across(vertical)];
   const chosen = order.find(room);
-  return (chosen ?? (x < LAYOUT_WIDTH / 2 ? "right" : "left")) as "left" | "right" | "top" | "bottom";
+  return (chosen ?? (x - left < right - x ? "right" : "left")) as "left" | "right" | "top" | "bottom";
 }
 
 /** The shape of a mark and its size, in the library's pixels. */
@@ -160,6 +178,8 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
   const ordered = input.nodes.map((node, position) => ({ node, position })).sort((left, right) => rank(left.node) - rank(right.node) || left.position - right.position).map((entry) => entry.node);
   const index = new Map(ordered.map((node, position) => [node.id, position]));
 
+  // The picture is fitted to the marks' extent, and a name must not run past it.
+  const box = fittedBox(input.positions.values());
   const data = ordered.map((node) => {
     const { symbol, size } = symbolOf(node);
     const structure = node.type === "you" || node.type === "project" || node.type === "cluster";
@@ -185,7 +205,7 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
       label: {
         show: labelled,
         position: node.type === "you" ? "inside" : structure ? "bottom"
-          : labelPosition([x, y], input.positions.get(node.projectId ? `project:${node.projectId}` : "you:account")),
+          : labelPosition([x, y], input.positions.get(node.projectId ? `project:${node.projectId}` : "you:account"), { compact: input.compact, box }),
         // The mark in front of the reader is named whole, over a few lines; the others are cut to a short name.
         formatter: named(chosen),
         ...(chosen && !structure ? { width: 200, overflow: "break" as const, lineHeight: 16 } : {}),
@@ -201,12 +221,8 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
     };
   });
 
-  // The picture is fitted to the marks' extent. Two invisible anchors at the corners of the whole document's marks (not of what a
-  // replay or a narrowing shows) keep that extent, and so the scale, the same while marks come and go.
-  const every = [...input.positions.values()];
-  const margin = 50;
-  const box = every.length === 0 ? [0, 0, LAYOUT_WIDTH, LAYOUT_HEIGHT]
-    : [Math.min(...every.map(([x]) => x)) - margin, Math.min(...every.map(([, y]) => y)) - margin, Math.max(...every.map(([x]) => x)) + margin, Math.max(...every.map(([, y]) => y)) + margin];
+  // Two invisible anchors at the corners of the whole document's marks (not of what a replay or a narrowing shows) keep that extent,
+  // and so the scale, the same while marks come and go.
   const anchors = [[box[0], box[1]], [box[2], box[3]]].map(([x, y], position) => ({
     name: `anchor:${position}`, x, y, symbolSize: 0, silent: true, label: { show: false }, itemStyle: { opacity: 0 }, tooltip: { show: false },
   }));

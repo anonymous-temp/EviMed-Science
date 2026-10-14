@@ -23,7 +23,7 @@ function Radar({ dimension, selected, onAxis }: { dimension: MapDimension; selec
       <figcaption className="text-ui font-medium text-text">{dimension.title}</figcaption>
       {state.drawable ? (
         <MapChart
-          kind={`radar-${dimension.id}`} option={option} height={300}
+          kind={`radar-${dimension.id}`} option={option} height={330}
           on={{ click: (params: { componentType?: string; name?: string }) => { const axis = axisOf(params?.name); if (axis) onAxis(selected === axis.id ? null : axis.id); } }}
           label={`${dimension.title}：${dimension.axes.map((axis) => `${axis.label} ${radarValue(dimension.scale, axis.value)}`).join("，")}。`}
           unpainted={dimension.axes.map((axis) => `${axis.label} ${radarValue(dimension.scale, axis.value)}`).join(" · ")}
