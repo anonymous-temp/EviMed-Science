@@ -223,6 +223,14 @@ describe("a step with nothing yet", () => {
     expect(screen.queryByText("已安排，开始后这里会显示进度。")).toBeNull();
   });
 
+  // A cancel holds the programme: a held step is not in line — it was stopped, and only a person's press starts it again.
+  it("offers a step a cancel held its start like one never asked for, and does not call it queued", () => {
+    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("patients", { status: "none", requested: true, held: true })} step="patients" />);
+    expect(document.querySelector("[data-step-state='queued']")).toBeNull();
+    expect(document.querySelector("[data-step-state='empty']")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "生成虚拟患者" })).toBeInTheDocument();
+  });
+
   it("says what a queued step waits for, from the study's own account of its queue", () => {
     const raw = fixture("ev201/study.json");
     raw.steps.patients = { ...raw.steps.patients, status: "queued", requested: true };

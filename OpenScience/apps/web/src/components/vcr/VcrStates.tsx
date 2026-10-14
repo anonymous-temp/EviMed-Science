@@ -182,8 +182,9 @@ export function VcrStepPending({ studyId, study, step, hint, start }: {
   if (state?.status === "failed") return <VcrStepFailed studyId={studyId} study={study} step={step} />;
   // Nothing waits in a queue for a study nobody has described: the one thing missing is the first sentence, and it is said that way.
   if (!hasDefinition(study)) return <VcrNoDefinition study={study} />;
-  // Asked for and not started by the programme yet: it is in line, whatever the strip has not heard of.
-  if (state?.status === "none" && state.requested === true) {
+  // Asked for and not started by the programme yet: it is in line, whatever the strip has not heard of. A step a cancel held is not in
+  // line — it was stopped, and nothing starts it but a person's press — so it offers its start like a step never asked for.
+  if (state?.status === "none" && state.requested === true && state.held !== true) {
     return (
       <div data-vcr-step-waiting={step}>
         <StepState phase="queued" step={action} />

@@ -330,7 +330,7 @@ describe("what the study is doing, in the strip under the header", () => {
     const line = strip()!;
     expect(line).toHaveAttribute("data-activity-state", "queued");
     expect(line).toHaveTextContent("生成虚拟患者 · 排队中");
-    expect(line).toHaveTextContent("等「证据」做完");
+    expect(line).toHaveTextContent("等“证据”做完");
     // Nothing to stop: no run holds the slot.
     expect(within(line).queryByRole("button", { name: "取消" })).toBeNull();
   });

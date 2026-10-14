@@ -206,6 +206,11 @@ export interface VcrCounts {
 export interface VcrStep {
   status: VcrStepStatus;
   requested?: boolean;
+  /**
+   * A person's cancel holds the programme: a step held is not taken up again until a person asks for it (`POST …/run`), whatever
+   * `requested` says — it is not in line, and an empty step that is held offers its start like one never asked for.
+   */
+  held?: boolean;
   /** What it produced, in the reader's words: 「12 张假设卡」「人群 v3」. */
   note?: string | null;
   /** What a queued step is waiting on when the allowance refused its start; it starts by itself once that is put right. */
@@ -480,8 +485,8 @@ export interface VcrActivityRun {
   /** Counts of what happened: `search`, `included`, `fullText`, `claims`, `claimsVerified`, `deliverables`, `deliverablesDone`. Odometers, never a share. */
   counts: Partial<Record<"search" | "included" | "fullText" | "claims" | "claimsVerified" | "deliverables" | "deliverablesDone", number>>;
   startedAt: string | null;
-  /** `open-runtime`: in the project's own runtime, the conversation is free; `bounded`: it holds the project's runtime. */
-  placement: "open-runtime" | "bounded";
+  /** `open-runtime`: in the project's own runtime, the conversation is free; `bounded`: it holds the project's runtime; null: not known yet (a run being sent). */
+  placement: "open-runtime" | "bounded" | null;
   /** The study's conversation cannot take a prompt until this ends. */
   locked: boolean;
 }
@@ -1613,7 +1618,7 @@ function readActivityRun(raw: unknown): VcrActivityRun | null {
     phase: text(value.phase),
     counts,
     startedAt: text(value.startedAt),
-    placement: value.placement === "open-runtime" ? "open-runtime" : "bounded",
+    placement: value.placement === "open-runtime" ? "open-runtime" : value.placement === "bounded" ? "bounded" : null,
     locked: value.locked === true,
   };
 }
@@ -2317,11 +2322,12 @@ export function runVcrStep(studyId: string, step: VcrStepKey) {
 }
 
 /**
- * 「取消」: stop what the study is doing — the run its one slot holds and every engine job that is open. A run a person stopped is not
- * sent again by the programme until they ask for the step. Idempotent; nothing out answers `{ runId: null, jobs: 0 }`.
+ * 「取消」: stop what the study is doing — the run its one slot holds and every engine job that is open, and **hold the programme**: a
+ * cancel is not followed by the next step, and nothing starts by itself until a person asks for a step. The steps not done come back
+ * as `held`. Idempotent; nothing out answers `{ runId: null, jobs: 0, held }`.
  */
 export function cancelVcrStudy(studyId: string) {
-  return productRequest<{ canceled: { runId: string | null; jobs: number } }>(`${study(studyId)}/cancel`, "POST", {});
+  return productRequest<{ canceled: { runId: string | null; jobs: number; held?: string[] } }>(`${study(studyId)}/cancel`, "POST", {});
 }
 
 /** A deterministic computation, queued directly (contract §3.1, §4). */

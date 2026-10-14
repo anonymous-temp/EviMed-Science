@@ -263,6 +263,37 @@ describe("what the strip says", () => {
   });
 });
 
+describe("the server's eight states of activity, drawn", () => {
+  const state = (name: string) => fixture(`activity/${name}.json`);
+  const stripOf = (name: string) => activityStripOf(study((raw) => { raw.activity = state(name); }), { onCancel: () => undefined });
+
+  it("a run with a step behind it: its sentence, what it has counted, and how many wait", () => {
+    expect(stripOf("running-with-queue")).toMatchObject({
+      label: "找证据、整理假设卡", phase: "核对 · 检索 4 次 · 纳入 3 篇 · 全文 2 篇 · 结论 3/5 已核对 · 交付物 0/1", queued: 1,
+    });
+  });
+
+  it("a run that is only being sent: drawn at once, with no clock of its own before it has started and nothing said of where it went", () => {
+    expect(stripOf("being-sent")).toMatchObject({ label: "找证据、整理假设卡", startedAt: "2026-10-14T09:59:00.000Z" });
+    const { container } = draw({ study: study((raw) => { raw.activity = state("being-sent"); }), view: "chat" });
+    // The conversation is not said to be held for it: `locked` is false and nothing in the frame disables it.
+    expect(container.querySelector("[data-activity='strip']")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "对话" })).not.toBeDisabled();
+  });
+
+  it("a run that holds the project's runtime is drawn like any other: the pane, not the strip, says the conversation is held", () => {
+    expect(stripOf("bounded-locked")).toMatchObject({ label: "整理研究定义", phase: "检索 · 检索 1 次" });
+  });
+
+  it("engine jobs: the one that runs, its done of total, and how many wait behind it", () => {
+    expect(stripOf("jobs-only")).toMatchObject({ label: "生成虚拟患者", phase: "计算", counts: { done: 1200, total: 2000 }, queued: 1 });
+  });
+
+  it("the tail of a run that ended — succeeded, canceled or failed — draws no strip: the page has updated itself, and the dot says the rest", () => {
+    for (const name of ["tail-succeeded", "tail-canceled", "tail-failed", "idle"]) expect(stripOf(name), name).toBeNull();
+  });
+});
+
 describe("what a study's frame offers a tab alone", () => {
   it("is nothing, and a tab that asks for it must keep working: the hooks do no harm outside a frame", async () => {
     function Lone() {

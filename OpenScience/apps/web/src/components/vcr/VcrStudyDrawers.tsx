@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { sourceCitationProse } from "@evimed/domain";
 import { getVcrBackgroundRuns, type VcrBackgroundRun, type VcrStudy } from "@/lib/vcrClient";
 import { getWebConversationHistory, type PreservedConversationHistory } from "@/lib/apiClient";
+import { withoutPlatformText } from "@/lib/platformText";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { Tag } from "@/components/ui/Tag";
@@ -104,7 +105,7 @@ function VcrRunRecord({ run, projectId, onBack }: { run: VcrBackgroundRun; proje
       {history === null ? <VcrTabSkeleton rows={2} />
         : history === "error" ? <p className="py-6 text-ui text-text-3">这次运行的记录暂时读不到。</p>
           : history.messages.length === 0 ? <p className="py-6 text-ui text-text-3">这次运行还没有留下文字记录。</p>
-            : history.messages.map((message) => (
+            : history.messages.map((message) => ({ ...message, text: withoutPlatformText(message.text) })).filter((message) => message.text).map((message) => (
               <article key={message.seq} aria-label={message.role === "user" ? "要求" : "结果"}>
                 {message.role === "user"
                   ? <p className="whitespace-pre-wrap text-ui font-medium text-text">{message.text}</p>

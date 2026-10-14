@@ -65,7 +65,7 @@ describe("layout rules (counts may fall, never rise)", () => {
     // Prove the walk walked before trusting what it did not find.
     expect(sources.length).toBeGreaterThan(250);
     const names = sources.map((entry) => entry.relative);
-    for (const name of ["app/routes/GeoProjectPage.tsx", "components/vcr/VcrJobLine.tsx", "components/memory/map/MapFilters.tsx", "components/ui/Toolbar.tsx"]) {
+    for (const name of ["app/routes/GeoProjectPage.tsx", "components/vcr/VcrStates.tsx", "components/memory/map/MapFilters.tsx", "components/ui/Toolbar.tsx"]) {
       expect(names).toContain(name);
     }
     expect(isPageFile("components/vcr/VcrStates.tsx")).toBe(true);
