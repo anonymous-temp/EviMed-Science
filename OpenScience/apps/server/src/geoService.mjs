@@ -1418,6 +1418,8 @@ export class GeoService {
     return {
       articles: articles.map((article) => ({
         valueContext: article.valueContext, id: article.id, layer: article.layer, title: article.title, groupId: article.groupId,
+        // Where it is to be published and for whom, as the run said it: a closed word, or the run's own words as a note.
+        channel: article.channel, channelNote: article.channelNote, audience: article.audience, audienceNote: article.audienceNote,
         question: article.groupId ? questions.get(article.groupId) ?? null : null, status: article.status, gate: article.gate,
         safety: article.safety, path: article.path, runId: article.runId, claimCount: article.claimIds.length,
         placements: counts.get(article.id) ?? 0, cited: citedIds.has(article.id),
