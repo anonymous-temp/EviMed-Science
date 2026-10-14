@@ -39,6 +39,35 @@ hashed id per account (it reaches the model provider inside extraction prompts, 
 no published port; uid 10001, no capabilities, `no-new-privileges`, 3 GB; egress only to the embedding API; the model
 reached through the gateway on the internal network; the readiness facts below.
 
+## Who commits a native conversation, and when
+
+Extraction runs on a commit: the engine archives the session's pending messages and extracts from them. The unmodified
+plugin (`@openviking/dsh-memory-plugin@0.5.20`, `runtime.mjs`) commits in exactly two cases: at the end of a turn when
+the session reports `pending_tokens >= commitTokenThreshold` (the upstream default 20000, minimum 1000, which the engine
+counts about twice DeepSeek's tokens for Chinese), and when its session is disposed — the kernel's shutdown or a release
+of the container. `commitTurnThreshold` and `autoCommitOnCompact` are in its schema and no code of the DSH runtime reads
+them. An ordinary conversation is a few hundred to a few thousand tokens in a runtime that lives for hours, so on
+production (2026-10-14) a stated profession and city and three project facts were not in memory after twenty minutes and
+`native_commits` held no row of the session; the engine's own idle commit (`auto_commit_policy.idle_timeout_seconds: 900`,
+scanned every 300 s) was the only net, 15 to 20 minutes after the last message.
+
+So the control plane commits (`apps/server/src/nativeTurnCommit.mjs`). When an attended run of a native account ends it
+arms a timer for the conversation; after the quiet (`OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_DEBOUNCE_MS`, 8 s) it reads the
+engine session until two reads agree and something is pending (the plugin's writes are asynchronous), then commits through
+`commitSession` of the memory gateway — the function the HTTP commit route uses — so the admission rule, the hourly bound
+and the ledger row are the plugin's own commit's. Two turns inside the quiet are one commit; a turn the platform started (an
+automated run, a scheduled task, a LoopX continuation) starts none; a legacy account is not touched; an engine that does not
+answer is a counted failure and the messages stay pending for the next commit, the plugin's disposal commit or the idle
+commit. The plugin's threshold stays at 20000 and is not lowered: a token count would still leave a one-line statement
+waiting, and a second trigger would make two paths race for the same messages. The plugin's disposal commit that follows a
+release finds nothing pending and extracts nothing again (asserted against the pinned plugin through the real bridge).
+
+Cost: one extraction call per attended turn that left something pending — about 6.8 K input tokens, most of it the cached
+system prompt, and 0.15 K output with thinking off, as this deployment runs it (lab measurement: ¥0.003; ¥0.013 with
+thinking on) — under purpose `memory-extraction`, booked to `evimed-openviking` within
+`OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY`, bounded by the gateway's 120 commits an hour per account. Counted in
+`open_science_native_memory_turn_commits_total{outcome}`.
+
 ## The identity shim, and when it is deleted
 
 In trusted mode v0.5.0 forwards only the root key to its Compile runtime, and the bot refuses a request that names no
