@@ -53,9 +53,12 @@ test("the run that is out is described by its step, its sentence, its place and 
     startedAt: at(40), placement: "open-runtime", locked: false,
   });
   assert.doesNotMatch(JSON.stringify(activity), /percent|progress":\s*\d/);
-  // A bounded run holds the project's conversation; so does one whose mark has no placement yet (the safer reading).
-  assert.deepEqual([flight, mark({ detail: { scope: [{ step: "trial" }], placement: "bounded" } }), mark({ detail: { scope: [{ step: "trial" }] } })]
-    .map((entry) => buildVcrActivity({ now: NOW, steps: {}, flight: entry })?.run?.locked), [false, true, true]);
+  // A bounded run holds the project's conversation. A run that is only being sent (claimed: nothing recorded of where it went, found
+  // live on the local kernel, where it read "held" for the two seconds before it was sent into the open runtime) says nothing of
+  // the project: not held, no place.
+  const placed = [flight, mark({ detail: { scope: [{ step: "trial" }], placement: "bounded" } }), mark({ state: "claimed", run_id: null, detail: { scope: [{ step: "trial" }] } })]
+    .map((entry) => buildVcrActivity({ now: NOW, steps: {}, flight: entry })?.run);
+  assert.deepEqual(placed.map((run) => [run?.placement, run?.locked]), [["open-runtime", false], ["bounded", true], [null, false]]);
   // An older mark with no sentence is told in the person's words from what it covered.
   assert.equal(buildVcrActivity({ now: NOW, steps: {}, flight: mark({ detail: { scope: [{ step: "trial" }] } }) })?.run?.label, "模拟试验方案");
   assert.equal(buildVcrActivity({ now: NOW, steps: {}, flight: mark({ run_id: null, detail: { purpose: "export", kind: "study_package" } }) })?.run?.label, "生成研究包");
