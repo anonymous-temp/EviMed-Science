@@ -87,7 +87,7 @@ import {
 // Pharmacist-authored cautions, shown to the reader as SAFETY notices (S5,
 // 2026-09-18). Imported on a line of its own so the ledger's own import list
 // stays as it is.
-import { clinicalSafetyCautionHits, isResearcherOwnedWork, usagePurposeOfRun } from "@evimed/domain";
+import { clinicalSafetyCautionHits, isResearcherOwnedWork, isVerificationRun, usagePurposeOfRun } from "@evimed/domain";
 // The evidence type stamped beside each preserved capture (C8), which a
 // claim's structured GRADE certainty is read against (S6, 2026-09-18). A line
 // of its own for the same reason as the one above.
@@ -4230,6 +4230,9 @@ function runSideActivitySignature(projection) {
  */
 export function isResearcherRun(run) {
   if (!run || run.automated === true || String(run.effectiveRouteReason ?? "").startsWith("autopilot:")) return false;
+  // The independent re-check of a scheduled execution's claim is not an `autopilot:` reason and carries no `automated`, so it used to
+  // be the researcher's "last open" conversation and a question of theirs.
+  if (isVerificationRun(run)) return false;
   return usagePurposeOfRun(run) === "kernel";
 }
 

@@ -1006,7 +1006,7 @@ export {
   summarizeGateNotices,
 } from './src/gateIssueText.mjs'
 
-// usagePurpose — 14 exports: what a metered model request was for (X1)
+// usagePurpose — 19 exports: what a metered model request was for (X1), and which runs are the platform's own back office
 export {
   USAGE_PURPOSES,
   USAGE_PURPOSE_LABELS_ZH,
@@ -1019,8 +1019,13 @@ export {
   PLATFORM_ROUTE_PURPOSES,
   EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX,
   EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON,
+  AUTOPILOT_VERIFICATION_ROUTE_REASON,
+  RUN_ROLES,
   evidenceProgrammeRouteReason,
   isEvidenceProgrammeRouteReason,
+  isVerificationRouteReason,
+  isVerificationRun,
+  runRoleOf,
 } from './src/usagePurpose.mjs'
 // platformAccount — the platform's own publishing account: its id, name and auth type (evidence-flywheel B2, 2026-10-05)
 export {

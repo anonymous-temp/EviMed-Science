@@ -198,6 +198,9 @@ export function isChargeableResearchRun(run) {
  */
 export function isResearcherOwnedWork(run) {
   if (!run || usagePurposeOfRun(run) !== 'kernel') return false
+  // The independent re-check of a scheduled task's claim is the platform's own work on the researcher's behalf, paid from the
+  // task's budget but never something they asked or did: it teaches nothing and is no interest of theirs.
+  if (isVerificationRun(run)) return false
   const route = String(run.effectiveRouteReason ?? '')
   const managedResearch = route.startsWith('geo:') || route.startsWith('autopilot:') || route.startsWith('vcr:')
   return run.automated !== true || managedResearch
@@ -235,6 +238,48 @@ export const PLATFORM_ROUTE_PURPOSES = Object.freeze(/** @type {Record<string, U
  */
 export const EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX = 'autopilot:evidence:'
 export const EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON = 'autopilot-verify:evidence'
+
+/**
+ * What the control plane stamps on the independent re-check of one claim of a scheduled execution (`dispatchVerification` in
+ * `server.mjs`): a run of its own in a scratch workspace and a bounded runtime, with the claim and its sources as its whole
+ * question. Deliberately not an `autopilot:` reason (the completion fold reads that prefix as an episode). The platform's own
+ * programme stamps `EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON` on its own. Both are written by the control plane alone.
+ */
+export const AUTOPILOT_VERIFICATION_ROUTE_REASON = 'autopilot-verify'
+
+/**
+ * Whether a route reason is that of a verification run, of either kind.
+ * @param {unknown} reason @returns {boolean}
+ */
+export function isVerificationRouteReason(reason) {
+  const text = String(reason ?? '')
+  return text === AUTOPILOT_VERIFICATION_ROUTE_REASON || text === EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON
+}
+
+/**
+ * Whether a run is a verification run, decided by the route reason the control plane wrote and never by its title or its text.
+ * @param {{ effectiveRouteReason?: string | null } | null | undefined} run @returns {boolean}
+ */
+export function isVerificationRun(run) {
+  return isVerificationRouteReason(run?.effectiveRouteReason)
+}
+
+/**
+ * The closed set of roles a run can have in the platform's own bookkeeping, which a list of the person's conversations reads to
+ * leave the platform's back office out. A run with none is an ordinary one.
+ *  - `verification`: the independent re-check of a claim (`isVerificationRun`).
+ */
+export const RUN_ROLES = Object.freeze(['verification'])
+
+/**
+ * The role of a run, derived from what the control plane wrote at dispatch, or null for an ordinary run. One mark, computed once
+ * on the server and carried by the run list (`role`), so no list matches route-reason strings of its own.
+ * @param {{ effectiveRouteReason?: string | null } | null | undefined} run
+ * @returns {'verification' | null}
+ */
+export function runRoleOf(run) {
+  return isVerificationRun(run) ? 'verification' : null
+}
 
 /** The route reason of one programme episode of `taskType`. @param {string} taskType @returns {string} */
 export function evidenceProgrammeRouteReason(taskType) {
