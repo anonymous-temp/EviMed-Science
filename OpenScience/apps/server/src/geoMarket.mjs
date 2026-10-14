@@ -1377,13 +1377,19 @@ export async function tickOrders(deps) {
   /** Plan, then send, for one project — under its lock. @param {any} project */
   const work = async (project) => {
     // What the person chose reads before anything is withdrawn, planned or sent: a read that fails stops the project's spending for
-    // this tick (the choice may be a skip), and the next tick reads again.
-    let choices;
-    try {
-      choices = await placementChoicesOf(ctx, project);
-    } catch {
-      skip("choices_unavailable");
-      return;
+    // this tick (the choice may be a skip), and the next tick reads again. Only a project with something to plan or send reads it:
+    // the derivation is the page's own and not cheap, and most projects most ticks have nothing.
+    /** @type {Awaited<ReturnType<typeof placementChoicesOf>>} */
+    let choices = { skippedArticleIds: new Set(), preferredByArticle: new Map() };
+    const somethingToDo = (await ctx.store.listPlaceableArticles(project.id, 1, { withoutOrderIn: LIVE_STATES })).length > 0
+      || (await ctx.store.listOrders({ geoProjectId: project.id, states: ["planned"], limit: 1 })).length > 0;
+    if (somethingToDo) {
+      try {
+        choices = await placementChoicesOf(ctx, project);
+      } catch {
+        skip("choices_unavailable");
+        return;
+      }
     }
     await withdrawStalePlans(ctx, project, candidatesByKey, counts, choices);
     // A budget of zero is a stop (G10h): nothing is planned, reserved or sent for the project; a plan made before it waits, and what is
