@@ -472,5 +472,5 @@ test("a person's two words reach the choosers as the derived actions' verdicts: 
   // the verdict is the action's own: a skipped action's status is "skipped", and the effects hold nothing but what the page shows
   assert.equal(derive(skip("fill_gap:g-p2:benefit_only")).actions.find((action) => action.key === "fill_gap:g-p2:benefit_only")?.status, "skipped");
   assert.deepEqual(geoChoiceEffects(null).skippedGroupIds.size, 0);
-  assert.deepEqual(geoChoiceEffects([{ nonsense: true }, null]).preferredByArticle.size, 0);
+  assert.deepEqual(geoChoiceEffects(/** @type {any} */ ([{ nonsense: true }, null])).preferredByArticle.size, 0);
 });
