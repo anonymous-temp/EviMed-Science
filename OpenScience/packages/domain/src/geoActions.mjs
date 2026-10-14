@@ -301,6 +301,8 @@ export function geoChoiceEffects(actions, { groups = null } = {}) {
  * @property {ReadonlyArray<{ key: string, state: string, groups?: string[], errors?: string[] }>} [batches] content batches the orchestrator dispatched
  * @property {ReadonlyArray<{ key: string, skipped?: boolean, sourceDomain?: string | null, updatedAt?: string | null }>} [choices]
  * @property {Record<string, ReadonlyArray<Record<string, any>>>} [candidates] sources the group could go to, by group id
+ * @property {Record<string, Record<string, any>>} [sourceInfo] what the project knows of a website by bare domain (its source table:
+ *   name, kind, layer, conditions, available, route) — for a source an action names that no candidate list holds
  * @property {Record<string, { netEffect: number | null, verdict: string | null, noiseBand: number | null, comparable: boolean, roundId?: string | null }>} [arms]
  *   the net effect rows by `<pool>|<metric>` (`all|M-19` for the index)
  */
@@ -359,9 +361,9 @@ export function geoActionEntry(entry) {
  *
  * @param {ReadonlyArray<Record<string, any>>} candidates @param {{ swapped: string | null,
  *   placed: ReadonlyArray<{ domain: string, orderId: string | null, name?: string | null, price?: number | null }>,
- *   modelSources: ReadonlyArray<{ domain: string | null, why: string | null }> }} choice
+ *   modelSources: ReadonlyArray<{ domain: string | null, why: string | null }>, info?: Record<string, Record<string, any>> }} choice
  */
-function rankedSources(candidates, { swapped, placed, modelSources }) {
+function rankedSources(candidates, { swapped, placed, modelSources, info = {} }) {
   /** @type {Map<string, Record<string, any>>} */
   const byKey = new Map()
   for (const candidate of candidates) {
@@ -382,7 +384,8 @@ function rankedSources(candidates, { swapped, placed, modelSources }) {
     const domain = key.startsWith('channel:') ? null : key
     const placedAs = domain ? placed.find((entry) => entry.domain === domain) : undefined
     // An outlet the platform placed at is a placement whatever else is known of it: its own name and price fill what the lists lack.
-    const known = byKey.get(key) ?? { domain: key }
+    // A source no candidate list holds (the run's own pick, an outlet it was placed at) is described from the project's source table.
+    const known = byKey.get(key) ?? (domain && info[domain] ? { ...info[domain], domain } : { domain: key })
     const candidate = placedAs
       ? { ...known, name: known.name ?? placedAs.name, price: known.price ?? placedAs.price, route: 'market', origin: known.origin ?? 'placed' }
       : known
@@ -435,6 +438,7 @@ export function deriveGeoActions(input) {
   const batches = rowsOf(input.batches)
   const choices = rowsOf(input.choices)
   const candidates = record(input.candidates)
+  const sourceInfo = Object.fromEntries(Object.entries(record(input.sourceInfo)).map(([domain, value]) => [bareDomain(domain), record(value)]))
   const arms = record(input.arms)
   const poolReadings = list(input.poolReadings)
 
@@ -627,7 +631,8 @@ export function deriveGeoActions(input) {
     const placed = facts.orders.filter((order) => [...PLACED_ORDER_STATES, ...PUBLISHED_ORDER_STATES].includes(String(order.state)) && text(order.domain))
       .map((order) => ({ domain: bareDomain(String(order.domain)), orderId: String(order.id), name: text(order.mediaName),
         price: finite(order.settledCny) ?? finite(order.priceCny) }))
-    const sources = rankedSources(list(group ? candidates[group.id] : null), { swapped: text(choice?.sourceDomain), placed, modelSources: entry?.sources ?? [] })
+    const sources = rankedSources(list(group ? candidates[group.id] : null), { swapped: text(choice?.sourceDomain), placed, modelSources: entry?.sources ?? [],
+      info: sourceInfo })
     // ---- what happened
     const citedBy = facts.citations.map((item) => ({ engine: text(item.engine), questionId: text(item.questionId), askedAt: text(item.firstSeen), articleId: text(item.articleId) }))
       .sort((left, right) => String(left.askedAt ?? '').localeCompare(String(right.askedAt ?? '')))

@@ -311,6 +311,28 @@ export class GeoSpine {
   }
 
   /**
+   * What the project's source table says of each website: how an action that names one the lists above do not hold describes it.
+   * @param {Awaited<ReturnType<GeoSpine["load"]>>} spine
+   * @returns {Record<string, Record<string, any>>}
+   */
+  sourceInfo(spine) {
+    const marketOn = this.marketConfigured();
+    /** @type {Record<string, Record<string, any>>} */
+    const out = {};
+    for (const source of spine.sources) {
+      const domain = String(source.domain ?? "").toLowerCase().replace(/^www\./, "");
+      if (!domain || source.impostor) continue;
+      const flags = [source.icpMatches, source.newsIndexed, source.medicalVertical];
+      const available = source.blacklistReason ? false : flags.some((flag) => flag === false) ? false : flags.every((flag) => flag === true) ? true : null;
+      out[domain] = { name: source.name ?? null, kind: source.kind ?? null, layer: source.layer ?? null,
+        conditions: { icp: source.icpMatches, newsIndexed: source.newsIndexed, medical: source.medicalVertical }, available, unavailableBecause: [],
+        // With a market connected the catalogue has not been asked about this domain: no route is claimed.
+        route: source.layer === "owned" ? "own" : marketOn ? null : "waiting_market", origin: "layout" };
+    }
+    return out;
+  }
+
+  /**
    * What a person's choices do to the platform's choosers (the orchestrator's batches, the market's plans): the verdicts of the
    * project's derived actions — the page's own — through the domain's `geoChoiceEffects`, so a chooser can never disagree with what
    * the page says is skipped. Read without the answers of the latest round, which only the lists of sources need.
@@ -345,6 +367,7 @@ export class GeoSpine {
       batches: spine.batches,
       choices: spine.choices,
       candidates: Object.fromEntries(ranked),
+      sourceInfo: this.sourceInfo(spine),
       arms: spine.arms,
     });
   }
