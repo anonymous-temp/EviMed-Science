@@ -28,6 +28,7 @@ const handbookVersions = vi.fn();
 const rollbackHandbook = vi.fn();
 const geo = vi.hoisted(() => ({ feature: "off" as "on" | "off", projects: [] as { projectId: string }[] }));
 const vcr = vi.hoisted(() => ({ feature: "off" as "on" | "off", studies: [] as { projectId: string }[] }));
+const map = vi.hoisted(() => ({ feature: "off" as "on" | "off" }));
 
 vi.mock("@/lib/apiClient", async () => {
   const actual = await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient");
@@ -86,6 +87,7 @@ vi.mock("@/lib/vcrClient", async () => ({
   useVcrFeature: () => vcr.feature,
   getVcrHome: () => Promise.resolve({ studies: vcr.studies }),
 }));
+vi.mock("@/lib/memoryMapFeature", () => ({ useMemoryMapFeature: () => map.feature }));
 vi.mock("@/components/memory/useMemoryWritePrompt", () => ({ useMemoryWritePrompt: () => {} }));
 vi.mock("./CapsuleTransferPanel", () => ({ ShareDrawer: ({ onClose }: { onClose: () => void }) => <div role="dialog" aria-label="分享与导入"><button onClick={onClose}>关闭</button></div> }));
 vi.mock("@/components/markdown-viewer/MarkdownViewer", () => ({ MarkdownViewer: ({ children }: { children: string }) => <div>{children}</div> }));
@@ -156,7 +158,7 @@ const where = () => screen.getByTestId("where").textContent;
 
 describe("记忆胶囊", () => {
   beforeEach(() => {
-    geo.feature = "off"; geo.projects = []; vcr.feature = "off"; vcr.studies = [];
+    geo.feature = "off"; geo.projects = []; vcr.feature = "off"; vcr.studies = []; map.feature = "off";
     useProjectStore.setState({ projects: [{ id: "prj_1", name: "疳证 Meta 文献检索" }, { id: "prj_2", name: "信尔美" }], currentId: "prj_1" });
     fetchMemoryProfile.mockResolvedValue({
       records: [
@@ -219,21 +221,22 @@ describe("记忆胶囊", () => {
     }
   });
 
-  it("keeps the map, sharing, forgotten content, this project and the reset in the header's 「⋯」, in that order, and the map opens on its own page", async () => {
+  it("keeps sharing, forgotten content, this project and the reset in the header's 「⋯」, in that order — the map is a tab, not a menu item", async () => {
     const user = userEvent.setup();
     open();
     await screen.findByRole("switch", { name: "记忆" });
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     const menu = await screen.findByRole("menu", { name: "记忆设置" });
-    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["记忆地图", "分享与导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
+    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
     const project = within(menu).getByRole("menuitemcheckbox", { name: "本项目不使用记忆" });
     expect(project).toHaveAttribute("aria-checked", "false");
     await user.click(project);
     await waitFor(() => expect(updateMemorySettings).toHaveBeenCalledWith({ pausedProjects: ["prj_1"] }));
   });
 
-  it("opens the memory map from the header's 「⋯」", async () => {
+  it("offers 地图 as the last tab where the deployment draws the map, and it opens the map's own page", async () => {
     const user = userEvent.setup();
+    map.feature = "on";
     render(
       <MemoryRouter initialEntries={["/app/memory"]}>
         <Routes>
@@ -243,9 +246,18 @@ describe("记忆胶囊", () => {
       </MemoryRouter>,
     );
     await screen.findByRole("switch", { name: "记忆" });
-    await user.click(screen.getByRole("button", { name: "记忆设置" }));
-    await user.click(await screen.findByRole("menuitem", { name: "记忆地图" }));
+    const tabs = screen.getByRole("tablist", { name: "记忆" });
+    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["关于你", "项目", "做法", "成长", "地图"]);
+    expect(within(tabs).getByRole("tab", { name: "地图" })).toHaveAttribute("aria-selected", "false");
+    await user.click(within(tabs).getByRole("tab", { name: "地图" }));
     expect(await screen.findByText("地图页")).toBeInTheDocument();
+  });
+
+  it("draws no 地图 tab where the deployment does not draw the map", async () => {
+    map.feature = "off";
+    open();
+    await screen.findByRole("switch", { name: "记忆" });
+    expect(screen.queryByRole("tab", { name: "地图" })).toBeNull();
   });
 
   it("asks before the reset deletes anything, and says exactly what it clears and what it leaves", async () => {

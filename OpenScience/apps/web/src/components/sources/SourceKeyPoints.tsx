@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { sourcePageForOffset } from "@evimed/domain";
+import { sourcePageForOffset, sourceUnderstandingSchema } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -27,7 +27,9 @@ const MATERIALS_SHOWN = 6;
  * The slots of a paper, as a researcher names them, in the order they are shown. A paper is read the same way in any discipline
  * (its question, method, data or subjects, main results); the clinical elements are there only when the reading judged it a
  * clinical study. An understanding stored before the discipline-neutral slots has only the clinical ones and is shown with them:
- * a slot a record does not carry is not drawn. Only the ones a paper states are shown.
+ * a slot a record does not carry is not drawn. Only the ones a paper states are shown — and only for a paper: an understanding read
+ * before 2026-10-07, when every PDF was read as one, keeps the paper's slots on its record for a product test, a policy or a
+ * contract, and none of them is drawn for it (its type is on the record) until 「重新读取」 reads it with the slots that fit it.
  */
 const SLOT_LABELS: Record<string, string> = {
   question: "研究问题", method: "方法", dataOrSubjects: "数据或对象", mainResults: "主要结果",
@@ -50,8 +52,8 @@ const flat = (text: string) => text.replace(/\s+/g, " ").trim();
  *
  *  1. the one-line gist — the same sentence the list row has (the summary's first);
  *  2. for a paper, what it is (who wrote it, where, and its question, method, data, results, DOI — for a clinical study also its design,
- *     people, intervention, endpoints and effect) —
- *     only what it states;
+ *     people, intervention, endpoints and effect) — only what it states; for any other literature, who wrote it and where, under
+ *     「文献信息」 (「研究信息」 is a paper's);
  *  3. what it contains (「包含什么」) and what limits it (「局限」), each only when the reading has some — the reading
  *     writes them from the document, for every type, and an understanding from before they existed has neither (N-17);
  *  4. up to eight key points, each with the page it rests on — a page of a PDF opens that page of the original;
@@ -183,9 +185,12 @@ function Understood({ source, understanding, pageMap, meaning, entries, versions
     const published = [metadata?.source?.trim(), year].filter(Boolean).join(" ");
     if (published) rows.push(["发表", published]);
   }
-  for (const key of PAPER_SLOTS) {
-    const slot = understanding.slots[key];
-    if (slot?.state === "known") rows.push([labelFor(SLOT_LABELS, key, "其他"), slot.value]);
+  const paper = sourceUnderstandingSchema(source.display.docType || source.payload.docType).id === "paper";
+  if (paper) {
+    for (const key of PAPER_SLOTS) {
+      const slot = understanding.slots[key];
+      if (slot?.state === "known") rows.push([labelFor(SLOT_LABELS, key, "其他"), slot.value]);
+    }
   }
   const openable = source.display.format === "pdf";
   const gist = source.display.gist;
@@ -197,7 +202,7 @@ function Understood({ source, understanding, pageMap, meaning, entries, versions
         : summary ? <Section title="讲了什么"><p className="max-w-measure-body whitespace-pre-wrap">{summary}</p></Section> : null}
       {table && gap && <Gap>{gap}</Gap>}
       {rows.length > 0 && (
-        <Section title="研究信息">
+        <Section title={paper ? "研究信息" : "文献信息"}>
           <dl className="space-y-2">
             {rows.map(([name, value]) => (
               <div key={name} className="flex gap-3">

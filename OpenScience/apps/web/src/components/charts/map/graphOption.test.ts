@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/memoryMapClient";
 import { LAYOUT_HEIGHT, LAYOUT_WIDTH, layoutGraph, unitHash } from "./layout";
 import { TEST_PALETTE } from "./palette";
-import { chainOption, edgeTooltip, edgeWords, graphOption, isHideableEdge, symbolOf, tooltipOf } from "./graphOption";
+import { LABELS_PER_HUB, chainOption, edgeTooltip, edgeWords, fittedBox, graphOption, isHideableEdge, labelPosition, symbolOf, tooltipOf } from "./graphOption";
 
 const memory = (id: string, over: Partial<MapNode> = {}): MapNode => ({ id: `memory:${id}`, type: "memory", subtype: "preference", group: "偏好", label: `记忆 ${id}`, weight: 0.4, state: "current", ...over });
 const you: MapNode = { id: "you:account", type: "you", label: "你", state: "current" };
@@ -99,6 +99,55 @@ describe("the graph option", () => {
     const names = series(option).data.filter((entry: any) => !String(entry.name).startsWith("anchor:")).map((entry: any) => entry.name);
     expect(names.indexOf("you:account")).toBeLessThan(names.indexOf("memory:a"));
     expect(names.indexOf("memory:a")).toBeLessThan(names.indexOf("memory:l0"));
+  });
+
+  it("spends the label budget across the projects: a hub that holds most of what is remembered is named at two marks, not at all of them", () => {
+    const hub = (id: string): MapNode => ({ id: `project:${id}`, type: "project", label: `项目 ${id}`, state: "current", projectId: id });
+    const heavy = (project: string, index: number): MapNode => memory(`${project}${index}`, { projectId: project, weight: 0.95 - index / 100, label: `${project} 的第 ${index} 条` });
+    const crowd = [you, hub("a"), hub("b"), ...[0, 1, 2, 3, 4].map((index) => heavy("a", index)), heavy("b", 0)];
+    const where = layoutGraph(crowd.map((node) => ({ id: node.id, type: node.type, home: node.projectId ?? null, weight: node.weight ?? 0 })), []);
+    const option: any = graphOption({ ...base, nodes: crowd, edges: [], positions: where, labelBudget: 6 });
+    const named = series(option).data.filter((entry: any) => entry.label?.show && String(entry.name).startsWith("memory:")).map((entry: any) => entry.name).sort();
+    expect(LABELS_PER_HUB).toBe(2);
+    expect(named).toEqual(["memory:a0", "memory:a1", "memory:b0"]);
+  });
+
+  it("says a mark's whole name when it is pointed at or chosen, and cuts it short on the canvas", () => {
+    const long = memory("long", { weight: 0.9, label: "待设计的注册双盲试验方案：主要终点用复合终点，随访二十四周" });
+    const option: any = graphOption({ ...base, nodes: [long], edges: [], positions: new Map([["memory:long", [900, 450]]]), labelBudget: 3 });
+    const entry = series(option).data.find((item: any) => item.name === "memory:long");
+    expect(entry.label.formatter).toBe("待设计的注册双盲试验方案：…");
+    expect(entry.emphasis.label).toMatchObject({ show: true, formatter: long.label, overflow: "break" });
+    const chosen: any = graphOption({ ...base, nodes: [long], edges: [], positions: new Map([["memory:long", [900, 450]]]), selected: "memory:long" });
+    const held = series(chosen).data.find((item: any) => item.name === "memory:long");
+    expect(held.label).toMatchObject({ show: true, formatter: long.label, overflow: "break" });
+  });
+
+  it("puts a mark's name on the side away from its hub, and never towards an edge it would run off", () => {
+    const hubAt: [number, number] = [900, 450];
+    expect(labelPosition([1000, 460], hubAt)).toBe("right");
+    expect(labelPosition([800, 440], hubAt)).toBe("left");
+    expect(labelPosition([905, 560], hubAt)).toBe("bottom");
+    expect(labelPosition([895, 330], hubAt)).toBe("top");
+    // Away from the hub would be off the right edge, and a name centred above or below would be half off it too: it is named to its left.
+    expect(labelPosition([LAYOUT_WIDTH - 40, 300], hubAt)).toBe("left");
+    expect(labelPosition([LAYOUT_WIDTH - 250, 300], hubAt)).toBe("top");
+    expect(labelPosition([LAYOUT_WIDTH - 40, 452], hubAt)).toBe("left");
+    expect(labelPosition([40, 452], hubAt)).toBe("right");
+    // The canvas ends where the picture's own extent does, not where the layout's box does: below its lowest mark (and above its highest)
+    // a name is put beside the mark instead.
+    const box = fittedBox([[100, 100], [1500, 700]]);
+    expect(box).toEqual([50, 50, 1550, 750]);
+    expect(labelPosition([905, 690], [900, 560], { box })).toBe("right");
+    expect(labelPosition([905, 110], [900, 240], { box })).toBe("right");
+    expect(labelPosition([905, 500], [900, 360], { box })).toBe("bottom");
+    // A mark with no hub hangs from the account in the middle.
+    expect(labelPosition([1200, 450], undefined)).toBe("right");
+    // On a phone's width a name is more of the picture, so the room it needs is more: the same mark is named below it, or to its left where even that would run off.
+    expect(labelPosition([1450, 452], hubAt)).toBe("right");
+    expect(labelPosition([1450, 452], hubAt, { compact: true })).toBe("bottom");
+    expect(labelPosition([1650, 452], hubAt)).toBe("bottom");
+    expect(labelPosition([1650, 452], hubAt, { compact: true })).toBe("left");
   });
 
   it("names a mark on the right of the picture to its left, so no label runs off the canvas", () => {

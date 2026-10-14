@@ -320,6 +320,58 @@ export class KnowledgePageService {
     return this.schedule(userId, projectId, { immediate: true });
   }
 
+  /**
+   * A project whose documents are readable and that has never produced a page gets its first round without anything having to
+   * change. A round is otherwise asked for by a document turning readable or changing (`noteSourceReady`,
+   * `noteSourcesChanged`) or by a person; a document that was already there when the compile was switched on, one whose round
+   * was closed below the threshold (a threshold that has since been lowered), or one whose announcement was lost between the
+   * ledger write and the queue write has neither, and a project with one document never gets a second one to ask. This is the
+   * periodic pass's read of them (`catchUpAll`), by the ledger alone: a project that has compiled, is compiling, has pages, or
+   * failed (its next change or 「重新整理」 asks again, and a pass that re-asked every quarter hour would pay for the same
+   * failure every quarter hour) is left alone. Idempotent — a project already queued gets the same job back.
+   * @param {string} userId @param {string} projectId
+   * @returns {Promise<"scheduled" | "waiting" | "skipped">} `waiting`: a round is already queued or running for it
+   */
+  async catchUp(userId, projectId) {
+    if (!this.enabled) return "skipped";
+    const { value } = await this.#state(userId, projectId);
+    if (value.compiledAt || value.lastRound || value.lastError || value.pages?.wiki || value.pages?.kg) return "skipped";
+    if (value.run) return "waiting";
+    const readable = await this.#readableSources(userId, projectId);
+    if (readable.length === 0 || readable.length < this.config.knowledgePagesMinSources) return "skipped";
+    if ((await this.#pageRecords(userId, projectId)).length > 0) return "skipped";
+    const queued = Object.keys(value.pending).length > 0;
+    if (!queued) {
+      // Quiet is counted from now: the round that follows runs after the usual period and not in the middle of an upload.
+      await this.#updateState(userId, projectId, (state) => {
+        if (Object.keys(state.pending).length) return null;
+        state.pending.catchUp = "added";
+        state.lastChangeAt = this.now().toISOString();
+        return state;
+      });
+    }
+    await this.schedule(userId, projectId);
+    return queued ? "waiting" : "scheduled";
+  }
+
+  /**
+   * The periodic pass of `catchUp` over every project that holds documents, a bounded number per pass. One project failing is
+   * its own and leaves the rest.
+   * @param {{ projects: () => Promise<Array<{ userId: string, projectId: string }>>, limit?: number }} options
+   */
+  async catchUpAll({ projects, limit = 200 }) {
+    const summary = { at: this.now().toISOString(), projects: 0, scheduled: 0, error: /** @type {string | null} */ (null) };
+    if (!this.enabled) return summary;
+    try {
+      for (const { userId, projectId } of (await projects()).slice(0, limit)) {
+        summary.projects += 1;
+        try { if ((await this.catchUp(userId, projectId)) === "scheduled") summary.scheduled += 1; }
+        catch (error) { this.report(codeOf(error)); }
+      }
+    } catch (error) { summary.error = codeOf(error); this.report(summary.error); }
+    return summary;
+  }
+
   /** The language the project's pages are written in, stated once. @param {string} userId @param {string} projectId @param {string | null} language @param {{ replace?: boolean }} [options] */
   async noteLanguage(userId, projectId, language, { replace = false } = {}) {
     if (!language) return;

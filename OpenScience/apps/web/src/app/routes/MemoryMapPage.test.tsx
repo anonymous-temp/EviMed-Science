@@ -238,12 +238,16 @@ describe("记忆地图", () => {
     expect(refreshTopics).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the memory page from the header's menu", async () => {
+  it("is the last tab of 记忆胶囊: the memory page's own tab bar, 地图 selected, and the other four lead back to their lists", async () => {
     const user = userEvent.setup();
     open();
     await screen.findByText(/EviMed 记住了你的/u);
-    await user.click(screen.getByRole("button", { name: "记忆地图的更多操作" }));
-    await user.click(await screen.findByRole("menuitem", { name: "回到记忆页" }));
+    expect(screen.getByRole("heading", { name: "记忆胶囊" })).toBeInTheDocument();
+    const tabs = screen.getByRole("tablist", { name: "记忆" });
+    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["关于你", "项目", "做法", "成长", "地图"]);
+    expect(within(tabs).getByRole("tab", { name: "地图" })).toHaveAttribute("aria-selected", "true");
+    await user.click(within(tabs).getByRole("tab", { name: "做法" }));
+    expect(where()).toBe("/app/memory?tab=methods");
     expect(await screen.findByText("记忆页")).toBeInTheDocument();
   });
 });

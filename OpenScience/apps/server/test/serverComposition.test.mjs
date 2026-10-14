@@ -1863,7 +1863,7 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
   const off = await composedApp(t);
   // `openList` is false here because this composition configures no OpenList
   // (openListReadiness.test.mjs covers the probe that turns it on).
-  assert.deepEqual((await me(off)).features, { frontier: false, review: false, knowledgePages: false, capsuleShare: false, zoneSubscription: false, geo: false, vcr: false, openList: false });
+  assert.deepEqual((await me(off)).features, { frontier: false, review: false, knowledgePages: false, capsuleShare: false, zoneSubscription: false, geo: false, vcr: false, memoryMap: true, openList: false });
   assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
   const offStatus = await status(off);
   assert.equal(offStatus.status, 404);
@@ -1880,6 +1880,13 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
 
   const open = await frontierComposition(t);
   assert.equal((await me(open)).features.frontier, true);
+
+  // The memory page's 地图 tab is drawn only where the map's routes answer: the subsystem's switch and the map's own.
+  assert.equal((await me(off)).features.memoryMap, true);
+  const mapOff = await composedApp(t, { memoryMapEnabled: false });
+  assert.equal((await me(mapOff)).features.memoryMap, false, "the map's own switch hides the tab");
+  const memoryOff = await composedApp(t, { memoryEnabled: false });
+  assert.equal((await me(memoryOff)).features.memoryMap, false, "the map follows the memory subsystem's switch");
 });
 
 // The feed's second wave (build spec D): the composer is built with the worker

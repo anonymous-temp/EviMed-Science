@@ -59,7 +59,7 @@ export function radarOption(dimension: MapDimension, palette: MapPalette): EChar
       formatter: () => dimension.axes.map((axis) => `<div>${escapeTooltip(axis.label)} ${escapeTooltip(printed(axis.value))} <span>${escapeTooltip(dimension.previous)} ${escapeTooltip(printed(axis.previousValue))}</span></div>`).join(""),
     },
     radar: {
-      center: ["50%", "54%"], radius: "62%", shape: "polygon", splitNumber: 4, triggerEvent: true,
+      center: ["50%", "53%"], radius: "70%", shape: "polygon", splitNumber: 4, triggerEvent: true,
       // The number is at the end of every axis, in its name, where nothing can cover it; the polygon prints it again at its vertex
       // where the vertex is far enough from the middle to have room.
       indicator: dimension.axes.map((axis) => ({ name: `${axis.label}\n${printed(axis.value)}`, max })),

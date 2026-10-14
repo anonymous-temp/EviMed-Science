@@ -6,13 +6,13 @@ import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
 import { FilterChip } from "@/components/ui/FilterChips";
-import { Menu } from "@/components/ui/Menu";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { ActivityView } from "@/components/memory/map/ActivityView";
 import { DimsView } from "@/components/memory/map/DimsView";
 import { GraphView } from "@/components/memory/map/GraphView";
 import { MapDrawer } from "@/components/memory/map/MapDrawer";
 import { MapFilters } from "@/components/memory/map/MapFilters";
+import { memoryTabAddress, MemoryTabs } from "@/components/memory/MemoryTabs";
 import { MarkList, type MarkLine } from "@/components/memory/map/MarkList";
 import { TimeView } from "@/components/memory/map/TimeView";
 import { TopicsView } from "@/components/memory/map/TopicsView";
@@ -55,7 +55,8 @@ function eventLine(event: MapEvent, node: MapNode | undefined, open: (node: MapN
 /**
  * 「记忆地图」 (2026-10-12): what EviMed remembers and knows about the researcher, drawn so it can be explored, understood and
  * corrected — a formal product requirement, and a data page (DESIGN.md 「页面结构」: one view at a time over one selection, and a
- * mark opens the record's own drawer).
+ * mark opens the record's own drawer). It is the last tab of 记忆胶囊 (2026-10-14): the page is titled as that page and carries its tab
+ * bar, which is how a person who looks for their memory finds the map.
  *
  * One sentence says what the picture proves, with a number that opens what it counts; one row switches among five views — 关系,
  * 主题, 维度, 时间, 活跃 — over one selection kept in the address; one row of filters narrows them all. Under the canvas the same
@@ -175,11 +176,9 @@ export function MemoryMapPage() {
 
   const empty = doc !== null && doc.summary.memories === 0 && doc.nodes.length === 0 && !selection.project && selection.range === "all" && !loading;
   return (
-    <PageShell
-      title="记忆地图"
-      width="wide"
-      actions={<Menu label="记忆地图的更多操作" items={[{ label: "回到记忆页", onSelect: () => navigate("/app/memory") }]} />}
-    >
+    <PageShell title="记忆胶囊" documentTitle="记忆地图" width="wide">
+      {/* The memory page's own tab bar, with 地图 selected: this page is that page's last tab, and the other four lead back to it. */}
+      <MemoryTabs value="map" map onChange={(tab) => navigate(memoryTabAddress(tab))} className="mb-5" />
       {failed && !doc && <LoadError message="暂时读不到记忆地图。" onRetry={reload} />}
       {!doc && !failed && <RunsSkeleton filter={false} />}
       {doc && narrowed && (
