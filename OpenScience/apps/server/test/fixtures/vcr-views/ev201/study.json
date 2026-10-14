@@ -80,6 +80,42 @@
       "waiting": null
     }
   },
+  "next": {
+    "step": "patients",
+    "label": "生成虚拟患者",
+    "reason": "retry",
+    "reasonText": "上次没有做完"
+  },
+  "stepSummaries": {
+    "definition": {
+      "note": "v1",
+      "stale": false
+    },
+    "evidence": {
+      "note": "4 张假设卡",
+      "stale": false
+    },
+    "population": {
+      "note": "3,412 名",
+      "stale": false
+    },
+    "patients": {
+      "note": "2,000 名",
+      "stale": false
+    },
+    "comparator": {
+      "note": "1 条可估计",
+      "stale": false
+    },
+    "trial": {
+      "note": "成功把握 58–74%",
+      "stale": false
+    },
+    "matching": {
+      "note": "6 条入排标准",
+      "stale": false
+    }
+  },
   "sessionId": null,
   "abilities": [
     "read",
@@ -1509,6 +1545,32 @@
   },
   "updatedAt": "今天 09:09",
   "createdAt": "2026-09-27T01:07:00.000Z",
-  "conversationSessionId": null,
+  "activity": {
+    "run": null,
+    "queue": [],
+    "jobs": [
+      {
+        "id": "job_seed_17",
+        "kind": "design_grid",
+        "state": "awaiting_budget",
+        "step": "trial",
+        "done": null,
+        "total": null
+      },
+      {
+        "id": "job_seed_16",
+        "kind": "design_simulation",
+        "state": "running",
+        "step": "trial",
+        "done": 3,
+        "total": 10
+      }
+    ],
+    "last": null
+  },
+  "conversation": {
+    "sessionId": null,
+    "exists": false
+  },
   "engine": "missing"
 }

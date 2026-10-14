@@ -54,10 +54,11 @@ import {
 import {
   presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab,
 } from "./vcrViewsTabs.mjs";
-import { dominatedScenarioMap, numeric, withReviewState } from "./vcrViewsKit.mjs";
+import { dominatedScenarioMap, numeric, withReviewState, zhUnit } from "./vcrViewsKit.mjs";
 import { vcrReportModel } from "./vcrRender.mjs";
 import { readSchedule } from "./vcrScheduleView.mjs";
 import { buildModelAnalysis, isModelDocumentKind, readModelAnalysisInputs } from "./vcrModelDocuments.mjs";
+import { buildVcrActivity, readRunMarks } from "./vcrStudyStatus.mjs";
 
 export { VCR_DEFAULT_STUDY_NAME };
 
@@ -461,7 +462,10 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, patientTrials, erasure: null, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null) };
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, patientTrials, erasure: null, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null),
+      // The run ledger's record of one run (`{ startedAt, progress }`) and the study's conversation (`{ sessionId, exists }`, created for the owner
+      // when a study has none): both are the control plane's, attached by the composition root (R3, 2026-10-14).
+      runLedger: /** @type {any} */ (null), conversations: /** @type {any} */ (null) };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -741,8 +745,43 @@ export class VcrService {
    */
   async studyView(user, id) {
     const study = await this.requireStudy(user, id);
-    // `conversationSessionId` is the route's to resolve into `sessionId`; `engine` is what the page's one line at the top says.
-    return { ...presentStudy(await this.#bundle(study, user)), conversationSessionId: study.conversationSessionId ?? null, engine: this.engineState() };
+    const bundle = await this.#bundle(study, user);
+    const [activity, conversation] = await Promise.all([this.#activity(study, bundle.jobs), this.#conversation(study, user)]);
+    // `activity`: what is going on now, `null` when nothing is; `conversation`: the study's own conversation, which is never one of the
+    // programme's runs; `sessionId` is the same id for the readers that predate `conversation`; `engine` is what the page's one line at
+    // the top says.
+    return { ...presentStudy(bundle), activity, conversation, sessionId: conversation.sessionId, engine: this.engineState() };
+  }
+
+  /**
+   * What the study's work is doing now (`buildVcrActivity`): the run that is out with its phase and counts read from the run ledger,
+   * what waits and for what, the engine jobs under way, and — for a few seconds — what just ended. A ledger that cannot be read leaves
+   * the run without its counts and never the page without its activity.
+   * @param {any} study @param {readonly any[]} jobs
+   */
+  async #activity(study, jobs) {
+    const marks = await readRunMarks(this.store, study.id).catch(() => ({ flight: null, last: null }));
+    const runId = marks.flight?.run_id ? String(marks.flight.run_id) : null;
+    const ledger = runId && this.packages.runLedger?.read
+      ? await this.packages.runLedger.read({ userId: study.userId, projectId: study.projectId, runId }).catch(() => null) : null;
+    return buildVcrActivity({ now: this.now(), steps: study.steps, flight: marks.flight, last: marks.last, ledger, jobs });
+  }
+
+  /**
+   * The study's own conversation: the one recorded when it was made, or — for a study made before that — a stable conversation that
+   * no programme run opened, made on first open for its owner. Never "the oldest session of the project": that is where a background
+   * run of the programme lives (B §2.2b).
+   * @param {any} study @param {{ id: string }} user
+   * @returns {Promise<{ sessionId: string | null, exists: boolean }>}
+   */
+  async #conversation(study, user) {
+    const resolver = this.packages.conversations;
+    if (resolver?.resolve) {
+      const found = await resolver.resolve(study, { create: String(study.userId) === String(user.id) }).catch(() => null);
+      if (found?.sessionId) return { sessionId: String(found.sessionId), exists: found.exists === true };
+    }
+    const recorded = study.conversationSessionId ?? null;
+    return { sessionId: recorded, exists: Boolean(recorded) };
   }
 
   /**
@@ -959,6 +998,26 @@ export class VcrService {
       const [assessments, plans] = await Promise.all([this.store.modelAssessments(study.id), this.store.modelPlanVersions(study.id)]);
       bundle.assessments = assessments;
       bundle.modelPlan = plans[0] ?? null;
+    }
+    // What the generated table holds, read from the table itself: how many people, how each variable is distributed and — for the
+    // patients — what was generated beside what the study declared. A table that may not be read (a real cohort, nothing kept, no
+    // plane) leaves the page as it was: a tab without a list.
+    const records = this.packages.records;
+    if (records?.describe && (tab === "patients" || tab === "population")) {
+      const current = tab === "patients" ? patientSets[0] : populations[0];
+      const wasGenerated = tab === "patients" || (current && current.kind !== "real");
+      // What the study calls each variable is the population's own profile's word for it (the patients' columns are the population's).
+      /** @type {Record<string, string>} */
+      const labels = {};
+      if (tab === "patients" && current?.populationId) {
+        const source = populations.find((/** @type {any} */ row) => row.id === current.populationId);
+        const sourceResult = source?.resultId ? allResults.find((/** @type {any} */ row) => row.id === source.resultId) : null;
+        for (const entry of list(sourceResult?.diagnostics?.profile)) {
+          if (typeof entry?.variable === "string" && typeof entry?.label === "string" && entry.label) labels[entry.variable] = entry.label;
+        }
+      }
+      bundle.table = current?.resultId && wasGenerated
+        ? await records.describe(study, String(current.resultId), { cards: assumptions, labels, unitWord: (/** @type {any} */ card) => zhUnit(card?.unit ?? null) }).catch(() => null) : null;
     }
     // The people a page names are shown by name: resolved once for the page, through the one join the module has.
     if (tab === "data") bundle.people = await this.#people(dataPeopleOf(bundle.dataPlane));

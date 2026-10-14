@@ -369,7 +369,7 @@ import { availabilityMetricFamilies } from "./availabilityService.mjs";
 import { evolutionOpsMetricFamilies, evolutionOpsSnapshot } from "./evolutionOpsMetrics.mjs";
 import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
-import { VcrOrchestrator, vcrRunId } from "./vcrOrchestrator.mjs";
+import { VcrOrchestrator, vcrBriefBlock, vcrRunId } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
 import { createVcrDraftSweeper } from "./vcrDrafts.mjs";
 import { createVcrNotifier } from "./vcrNotify.mjs";
@@ -2717,6 +2717,56 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const removeStudyProject = (user, projectId) => store.deleteProject(user, projectId, {
     beforeDelete: async (client) => { await managedBrowser.closeProject(user.id, projectId); if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await resultReplays?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
   });
+  /**
+   * A conversation for a study: an id and, when the module's first capability is installed, its binding in the project — the
+   * binding is what puts the module's chip on the composer and what makes the router honour the choice. The kernel makes its side of
+   * the session on first open, as it does for every conversation.
+   * @param {any} project @param {string | null | undefined} capabilityId
+   * @returns {Promise<{ sessionId: string, bound: boolean }>}
+   */
+  async function mintStudyConversation(project, capabilityId = VCR_STEP_CAPABILITIES.definition) {
+    const sessionId = randomId("vcr-");
+    const agent = (await agentRegistry)?.get?.(capabilityId ?? VCR_STEP_CAPABILITIES.definition) ?? null;
+    if (!agent) return { sessionId, bound: false };
+    await researchSessions.put(project, sessionId, { mode: "specialist", agentId: agent.id, agentVersion: agent.version });
+    return { sessionId, bound: true };
+  }
+  /**
+   * The study's own conversation (R3, 2026-10-14): the one recorded when it was made; for a study made before that, the oldest
+   * conversation of its project that no programme run opened — the programme's runs are where "the oldest session" used to land —
+   * and, for the owner, one made on the spot when the project has none. Recorded once it is found, so it stays that one.
+   * @param {any} study @param {{ create: boolean }} options
+   * @returns {Promise<{ sessionId: string | null, exists: boolean } | null>}
+   */
+  async function resolveStudyConversation(study, { create }) {
+    const owner = await store.userById(String(study.userId));
+    if (!owner) return null;
+    const project = await store.requireProject(owner, study.projectId);
+    const recorded = typeof study.conversationSessionId === "string" && study.conversationSessionId ? study.conversationSessionId : null;
+    if (recorded) {
+      if (await researchSessions.get(project, recorded).catch(() => null)) return { sessionId: recorded, exists: true };
+      // Recorded and not bound (a project whose session rows were cleaned): the same id is bound again, for the owner.
+      if (!create) return { sessionId: recorded, exists: false };
+      const agent = (await agentRegistry)?.get?.(VCR_STEP_CAPABILITIES.definition) ?? null;
+      if (!agent) return { sessionId: recorded, exists: false };
+      await researchSessions.put(project, recorded, { mode: "specialist", agentId: agent.id, agentVersion: agent.version });
+      return { sessionId: recorded, exists: true };
+    }
+    const [sessions, runs] = await Promise.all([researchSessions.list(project), agentRuns.list(project)]);
+    const programme = new Set(runs.filter((run) => run.automated === true || runRoleOf(run) === "programme").map((run) => run.sessionId));
+    const oldest = [...sessions].filter((entry) => !programme.has(entry.sessionId))
+      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))[0] ?? null;
+    if (oldest) {
+      if (create) await vcr.store.setConversationSession(study.id, oldest.sessionId);
+      return { sessionId: oldest.sessionId, exists: true };
+    }
+    if (!create) return { sessionId: null, exists: false };
+    const minted = await mintStudyConversation(project);
+    await vcr.store.setConversationSession(study.id, minted.sessionId);
+    // Two readers racing: the first write stands, and both answer with it.
+    const winner = (await vcr.store.studyById(study.id))?.conversationSessionId ?? minted.sessionId;
+    return { sessionId: winner, exists: winner === minted.sessionId ? minted.bound : true };
+  }
   const vcrRoutes = createVcrRoutes({
     // The platform's store answers the session and the CSRF check; every
     // question about a study goes to the module's own (review CS-1).
@@ -2737,21 +2787,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const current = (await store.listProjects(owner)).find((project) => project.id === projectId);
         if (current && current.name === previousName) await store.renameProject(owner, projectId, [...String(name)].slice(0, 40).join(""));
       },
-      // The conversation a study made before it recorded its own was opened with: the oldest one bound to its first capability, which
-      // is made at creation and before any programme step runs in the project.
-      conversationSessionId: async (user, projectId) => {
-        const project = await store.requireProject(user, projectId);
-        const sessions = await researchSessions.list(project);
-        const oldest = (/** @type {any[]} */ rows) => [...rows].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))[0]?.sessionId ?? null;
-        return oldest(sessions.filter((entry) => entry.agentId === VCR_STEP_CAPABILITIES.definition)) ?? oldest(sessions);
-      },
-      // What the programme did in the background: the project's automated runs, each with the conversation it ran in.
+      // What the programme did in the background: the project's programme runs, each with the conversation it ran in — a read-only
+      // record, never a destination (the study's own conversation is not among them).
       backgroundRuns: async (userId, projectId, conversationSessionId) => {
         const owner = await store.userById(userId);
         if (!owner) return [];
         const runs = await agentRuns.list(await store.requireProject(owner, projectId));
         return runs
-          .filter((run) => run.automated === true && run.sessionId && run.sessionId !== conversationSessionId)
+          .filter((run) => (run.automated === true || runRoleOf(run) === "programme") && run.sessionId && run.sessionId !== conversationSessionId)
           .sort((a, b) => String(b.startedAt ?? b.createdAt ?? "").localeCompare(String(a.startedAt ?? a.createdAt ?? "")))
           .map((run) => ({ sessionId: run.sessionId, capabilityId: run.effectiveAgentId ?? null, status: run.status, startedAt: run.startedAt ?? run.createdAt ?? null }));
       },
@@ -2759,16 +2802,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // the study has a step to run: the binding is what puts the module's
       // chip on the composer and what makes the router honour the choice.
       bindSession: async (user, projectId, capabilityId) => {
-        const sessionId = randomId("vcr-");
-        const agent = (await agentRegistry)?.get?.(capabilityId ?? "vcr-protocol") ?? null;
-        if (!agent) return { sessionId, bound: false };
         const project = await store.requireProject(user, projectId);
-        await researchSessions.put(project, sessionId, { mode: "specialist", agentId: agent.id, agentVersion: agent.version });
-        return { sessionId, bound: true };
+        return mintStudyConversation(project, capabilityId);
       },
-      latestSessionId: async (user, projectId) => {
-        const project = await store.requireProject(user, projectId);
-        return (await researchSessions.list(project))[0]?.sessionId ?? null;
+      // Stops the run a study's step is in (the same stop the run's own page has): the kernel first, then the ledger.
+      cancelRun: async (userId, projectId, runId) => {
+        const owner = await store.userById(userId);
+        if (!owner) return { root: "not-running" };
+        const project = await store.requireProject(owner, projectId);
+        const run = (await agentRuns.list(project)).find((item) => item.id === runId);
+        if (!run || run.status !== "running") return { root: "not-running" };
+        return { root: (await stopRunForUser(project, run)).root };
       },
     },
     get orchestrator() { return vcr?.orchestrator ?? null; },
@@ -4469,7 +4513,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       let cleanupTarget = null;
       try {
         const session = await runtimeManager.reserveBoundedRuntimeSession(scoped, {
-          runId: verification.verificationId, dailyLimit, weeklyLimit, runLimit,
+          runId: verification.verificationId, dailyLimit, weeklyLimit, runLimit, reason: "scheduled-task",
         });
         cleanupTarget = runtimeManager.boundedRuntimeCleanupTarget(scoped);
         await researchSessions.put(scoped, session.id, {
@@ -4597,6 +4641,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           dailyLimit,
           weeklyLimit,
           runLimit,
+          reason: "scheduled-task",
         });
         const session = { id: sessionId };
         noteEpisodePlacement(interactive ? "interactive" : "bounded");
@@ -5218,6 +5263,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     vcr.orchestrator = orchestrator;
     vcr.exporter = { requestExport: (user, study, kind) => orchestrator.requestExport(user, study, kind) };
     vcr.service.attach({ jobs: vcr.jobs, seal: vcr.seal });
+    // What the study page says of its work: the run ledger's record of the run that is out (its phase and counts), and the study's own
+    // conversation (`resolveStudyConversation`).
+    vcr.service.attach({
+      runLedger: {
+        read: async ({ userId, projectId, runId }) => {
+          const owner = await store.userById(userId);
+          if (!owner) return null;
+          const project = await store.requireProject(owner, projectId);
+          const run = (await agentRuns.withPlanProgress(project, await agentRuns.list(project))).find((item) => item.id === runId);
+          return run ? { startedAt: run.startedAt ?? null, status: run.status, progress: run.progress ?? null } : null;
+        },
+      },
+      conversations: { resolve: (study, options) => resolveStudyConversation(study, options) },
+    });
     // A study nobody described (「新建研究」 made it before the first word) is deleted with its project an hour after it was made,
     // unless somebody spoke in it: the run ledger holds every message a person sent, so a project with any run is kept.
     /** Whether anybody has sent a message in a draft's conversation: the run ledger holds every one. @param {any} study */
@@ -5283,15 +5342,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * `products` are the contract kinds the run is sent for, when its capability produces several: the delivery gate holds the run to
    * those products' files and checks (`agentRegistry.get(id, { products })`) rather than to everything the capability can produce.
    * @param {{ userId: string, projectId: string, studyId: string, capabilityId: string, dispatchId: string, reason: string, brief: string,
-   *   products?: string[] }} input
+   *   question?: string | null, attended?: boolean, products?: string[] }} input `question`: what a person reads of the run (the step's
+   *   sentence); `brief`: what the model works from. `attended`: a person asked for this just now, so the project's runtime is opened for
+   *   them and the run takes place in it
    */
-  async function dispatchVcrRun({ userId, projectId, capabilityId, dispatchId, reason, brief, products = [] }) {
+  async function dispatchVcrRun({ userId, projectId, capabilityId, dispatchId, reason, brief, question = null, attended = false, products = [] }) {
     const user = await store.userById(userId);
     if (!user) throw new HttpError(404, "vcr_study_not_found", "The study's account is unavailable.");
     const project = await store.requireProject(user, projectId);
     const ledger = await agentRuns.list(project);
     const replay = ledger.find((run) => run.dispatchId === dispatchId);
-    if (replay) return { runId: replay.id, sessionId: replay.sessionId ?? null, status: replay.status };
+    /** Where a run of this dispatch took place: a runtime reserved for it alone, or the project's open one. */
+    const placementOf = () => (runtimeManager.boundedRuntimeScope(project)?.runId === dispatchId ? "bounded" : "open-runtime");
+    if (replay) return { runId: replay.id, sessionId: replay.sessionId ?? null, status: replay.status, placement: placementOf() };
     if (ledger.some((run) => run.status === "running")) throw new HttpError(409, "runtime_busy", "The project has a run in progress; the step waits.");
     if (config.runtimeMode === "kernel" && !config.deepseekProviderEnabled) {
       throw new HttpError(503, "model_provider_not_configured", "The research model provider is not configured on this EviMed server.");
@@ -5306,17 +5369,30 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // again on its next tick, so a top-up releases it. Nobody is watching a worker-started
     // step, so it needs its P90 and not only its P50.
     if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId, { unattended: true });
+    // A step a person asked for is a step they are present for: their project's runtime is opened first (the start the shell's own
+    // frame makes), so the step runs in the runtime they are looking at and the project's conversation is not refused for it. A step
+    // nobody asked for just now — the worker's pass — finds the runtime as it is and keeps the bounded one it has always reserved. A
+    // runtime that cannot be opened for the person (no room, a quota) is no reason to refuse the step: the bounded path below is the
+    // same start with the same refusals, and a step that waits for room waits there.
+    if (attended && !runtimeManager.runtimes.has(runtimeManager.key(project))) {
+      await runtimeManager.start(project, { opening: true }).catch(() => null);
+    }
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
-    const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope });
+    const session = interactive ? { id: randomId("session_") }
+      : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope, reason: "module-step" });
+    const placement = interactive ? "open-runtime" : "bounded";
+    // What a person is shown of the run is the sentence of the step; the instruction the model works from is the brief, and it
+    // reaches the model in the run's context (as a scheduled execution's does), never as the first thing anybody "said".
+    const visible = typeof question === "string" && question.trim() ? question : brief;
     try {
       await researchSessions.put(project, session.id, { mode: "specialist", agentId: selected.id, agentVersion: selected.version });
       const run = await agentRuns.dispatch(project, {
-        sessionId: session.id, dispatchId, automated: true, question: brief,
+        sessionId: session.id, dispatchId, automated: true, question: visible, brief,
         effectiveAgentId: selected.id, effectiveAgentVersion: selected.version, effectiveRuntimeAgent: selected.runtimeAgent, effectiveRouteReason: reason,
         ...(products.length ? { effectiveProducts: products } : {}),
         ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
       }, async (binding, dispatchedRun, repairText = null) => {
-        const promptText = typeof repairText === "string" && repairText.trim() ? repairText : brief;
+        const promptText = typeof repairText === "string" && repairText.trim() ? repairText : visible;
         let resident;
         try { resident = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId: session.id }); }
         catch (error) { throw memoryRecallRejection(error); }
@@ -5335,21 +5411,24 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // The mark always, open runtime or not: a brief the orchestrator
           // wrote is never the researcher's words.
           text: `${promptText}\n\n<evimed-vcr-run>${vcrRunId(dispatchId)}</evimed-vcr-run>${marker ? `\n\n${marker}` : ""}`,
-          system: prepared.system, routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
+          // The instruction in the run's own context, beside the study's facts the socket injects: the model works from it, and
+          // the first message of the session is the step's sentence.
+          system: `${prepared.system}${vcrBriefBlock(brief)}`,
+          routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
           model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
         });
         await resident.delivered();
       });
-      return { runId: run.id, sessionId: session.id, status: run.status };
+      return { runId: run.id, sessionId: session.id, status: run.status, placement };
     } catch (error) {
       const recorded = (await agentRuns.list(project).catch(() => [])).find((run) => run.dispatchId === dispatchId);
-      if (recorded?.status === "running") return { runId: recorded.id, sessionId: recorded.sessionId ?? session.id, status: recorded.status };
+      if (recorded?.status === "running") return { runId: recorded.id, sessionId: recorded.sessionId ?? session.id, status: recorded.status, placement };
       // The run did not start, so nothing will ever finish it and release the
       // bounded runtime reserved for it: let it go here, as a GEO step does,
       // or the project's one runtime slot stays held until the idle sweep.
       if (!interactive) await runtimeManager.endBoundedRuntime(project, dispatchId).catch(() => {});
-      if (recorded) return { runId: recorded.id, sessionId: recorded.sessionId ?? session.id, status: recorded.status };
+      if (recorded) return { runId: recorded.id, sessionId: recorded.sessionId ?? session.id, status: recorded.status, placement };
       throw error;
     }
   }
@@ -5391,7 +5470,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // 虚拟临床研究 step's: charged at its end, and a refusal leaves the step pending.
     if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId, { unattended: true });
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
-    const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope });
+    const session = interactive ? { id: randomId("session_") }
+      : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope, reason: "module-step" });
     try {
       await researchSessions.put(project, session.id, { mode: "specialist", agentId: selected.id, agentVersion: selected.version });
       const run = await agentRuns.dispatch(project, {
@@ -5842,6 +5922,27 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await resident.delivered();
     });
     return pluginService ? pluginService.withAdmission(project, dispatch) : dispatch();
+  }
+
+  /**
+   * A project as the sidebar lists it, with how much it has been used (runs, the last moment anything happened in one) and when it
+   * was last active (`lastActiveAt`): the latest of that, its conversations' own last moments and the moment it was made, so a
+   * project made a minute ago sorts above one worked in last week. A ledger that cannot be read is reported as unknown activity for
+   * that row, never as a failed list.
+   * @param {any} user @param {{ id: string, createdAt?: string | null }} item
+   */
+  async function withProjectActivity(user, item) {
+    const made = typeof item.createdAt === "string" ? item.createdAt : null;
+    try {
+      const project = await store.requireProject(user, item.id);
+      const [summary, sessions] = await Promise.all([agentRuns.activitySummary(project), researchSessions.list(project).catch(() => [])]);
+      const moments = [summary.lastActivityAt, made, ...sessions.map((entry) => entry.updatedAt)]
+        .filter((at) => typeof at === "string" && Number.isFinite(Date.parse(at)));
+      const latest = moments.reduce((best, at) => (best === null || Date.parse(at) > Date.parse(best) ? at : best), /** @type {string | null} */ (null));
+      return { ...item, ...summary, lastActiveAt: latest === null ? null : new Date(latest).toISOString() };
+    } catch {
+      return { ...item, runCount: 0, lastActivityAt: null, lastActiveAt: made };
+    }
   }
 
   /**
@@ -7269,13 +7370,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // The platform's own background projects are not the researcher's
         // (`internalProjects.mjs`).
         const projects = (await store.listProjects(user)).filter((item) => !internalFor(user.id, item.id));
-        const data = await Promise.all(projects.map(async (item) => {
-          try {
-            return { ...item, ...(await agentRuns.activitySummary(await store.requireProject(user, item.id))) };
-          } catch {
-            return { ...item, runCount: 0, lastActivityAt: null };
-          }
-        }));
+        const data = await Promise.all(projects.map((item) => withProjectActivity(user, item)));
         sendJson(res, 200, { data });
         return;
       }
@@ -7286,7 +7381,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const unknown = Object.keys(body).filter((field) => field !== "id" && field !== "name");
         if (unknown.length > 0) throw new HttpError(400, "invalid_payload", `Unknown project field(s): ${unknown.sort().join(", ")}.`);
         const data = await createResearcherProject(user, body);
-        sendJson(res, 200, { data: { ...data, runCount: 0, lastActivityAt: null } });
+        sendJson(res, 200, { data: { ...data, runCount: 0, lastActivityAt: null, lastActiveAt: data.createdAt ?? new Date().toISOString() } });
         return;
       }
 
@@ -7303,7 +7398,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const data = await store.renameProject(user, projectId, body.name);
           const project = await store.requireProject(user, projectId);
           await audit({ config, user, project }, "project.rename", "completed", { target: projectId });
-          sendJson(res, 200, { data: { ...data, ...(await agentRuns.activitySummary(project).catch(() => ({ runCount: 0, lastActivityAt: null }))) } });
+          sendJson(res, 200, { data: await withProjectActivity(user, data) });
           return;
         }
         // Archived rather than deleted: out of the way, still whole and
@@ -7317,7 +7412,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const data = await store.archiveProject(user, projectId, body.archived !== false);
           const project = await store.requireProject(user, projectId);
           await audit({ config, user, project }, data.archivedAt ? "project.archive" : "project.unarchive", "completed", { target: projectId });
-          sendJson(res, 200, { data: { ...data, ...(await agentRuns.activitySummary(project).catch(() => ({ runCount: 0, lastActivityAt: null }))) } });
+          sendJson(res, 200, { data: await withProjectActivity(user, data) });
           return;
         }
         if (action === "export" && req.method === "GET") {

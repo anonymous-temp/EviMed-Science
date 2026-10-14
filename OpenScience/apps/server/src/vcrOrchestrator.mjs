@@ -65,7 +65,7 @@ import {
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS,
   VCR_DEFAULT_TIME_UNIT, allowanceWaitingNote, knownErrorCodeMessage, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, validateLongitudinalScenario,
   vcrCommonTimeUnit, vcrConvertTime, vcrEventHistoryScopeIssues, vcrModelCardIssues, vcrModelInterfaceOf, vcrScenarioChildKeys, vcrScenarioParentOf, vcrTimeUnitOf,
-  whenHolds,
+  vcrVisibleQuestion, whenHolds,
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
@@ -81,6 +81,7 @@ import { vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { vcrCurrentNodes, vcrInputDigest, vcrReviewIsCurrent } from "./vcrViews.mjs";
 import { vcrExportHoldsDocument, vcrReportReviewRevision } from "./vcrRender.mjs";
+import { vcrQueueOf } from "./vcrStudyStatus.mjs";
 
 export { vcrModelApplicabilityIssues, vcrPopulationVariables };
 
@@ -198,6 +199,16 @@ export function vcrDispatchId(key, attempt) {
  */
 export function vcrRunPrompt(brief, dispatchId) {
   return `${brief}\n\n<evimed-vcr-run>${vcrRunId(dispatchId)}</evimed-vcr-run>`;
+}
+
+/**
+ * The instruction of a dispatched run, as the run's own context carries it. The first message of the run's session is the step's
+ * sentence (`vcrVisibleQuestion`) and the model works from this: the tools to use, the data tier, the steps by key. The block is
+ * platform context the socket injects and the page does not draw as anything a person said (`memoryVocabulary`).
+ * @param {string} brief
+ */
+export function vcrBriefBlock(brief) {
+  return `\n\n<evimed-vcr-brief>\n${brief}\n</evimed-vcr-brief>`;
 }
 
 /**
@@ -423,7 +434,7 @@ export function vcrIdleStepStatus(stored, inFlight) {
  * (`seen`, null where it has no word), checked against the runs out for the
  * study (`flying`) and against what the programme wants. Pure — `#observe`
  * reads the data and writes what this returns.
- * @param {{ steps: Record<string, any>, seen: ReadonlyArray<[string, { status: string, note: string | null } | null]>,
+ * @param {{ steps: Record<string, any>, seen: ReadonlyArray<[string, { status: string, note: string | null, holds?: boolean } | null]>,
  *   flying: ReadonlySet<string>, plan: { want: ReadonlySet<string> } }} input
  * @returns {Array<{ step: string, fields: { status: string, note?: string | null } }>}
  */
@@ -443,8 +454,10 @@ export function vcrStepUpdates({ steps, seen, flying, plan }) {
     // Nothing is queued for a step nobody asks for: a design that waits for a job nobody will enqueue is not 「排队中」.
     if (orphan && read && read.status === "queued" && !plan.want.has(step)) found = { status: "none", note: null };
     // A step a person has not asked for and which nothing has produced stays
-    // where it is: observation never invents progress.
-    if (!idle && !orphan && !plan.want.has(step) && !FINISHED.has(found.status) && found.status !== "stale") continue;
+    // where it is: observation never invents progress. A step that holds something does not stay: a conversation wrote four
+    // designs and simulated them, and a step bar that reads 「未开始」 over a table of four is the page contradicting itself
+    // (2026-10-14, B §2.5 #10). What exists — a result, a job under way, a failure on record — is what the step reads.
+    if (!idle && !orphan && !plan.want.has(step) && !FINISHED.has(found.status) && found.status !== "stale" && read?.holds !== true) continue;
     // Only a failure note is this pass's to write, and only a failed step's to clear.
     const note = found.status === "failed" || found.status === "none" ? found.note : (stored === "failed" ? null : undefined);
     if (stored === found.status && (note === undefined || (steps?.[step]?.note ?? null) === note)) continue;
@@ -1520,7 +1533,8 @@ export class VcrOrchestrator {
    * @param {{ store: import("./vcrStore.mjs").VcrStore, jobs: import("./vcrJobs.mjs").VcrJobs, config?: Record<string, any>,
    *   notifier?: any, seal?: any, queueExport?: any, queueReviews?: ((studyId:string, options?:Record<string,any>) => Promise<unknown>) | null,
    *   dispatchRun?: ((input: { userId: string, projectId: string, studyId: string, capabilityId: string, dispatchId: string,
-   *     reason: string, brief: string, products?: string[] }) => Promise<{ runId: string, sessionId: string | null, status?: string | null }>) | null,
+   *     reason: string, brief: string, question?: string, attended?: boolean, products?: string[] }) =>
+   *     Promise<{ runId: string, sessionId: string | null, status?: string | null, placement?: string | null }>) | null,
    *   latestSessionId?: ((input: { userId: string, projectId: string }) => Promise<string | null>) | null,
    *   briefFor?: ((input: { study: any, key: string, scope: string[], detail: Record<string, any>,
    *     fidelity: (step: string) => string }) => string | Promise<string>) | null,
@@ -1782,6 +1796,8 @@ export class VcrOrchestrator {
     if (!VCR_STEPS.includes(step)) throw new HttpError(400, "vcr_step_invalid", `step must be one of: ${VCR_STEPS.join(", ")}.`);
     const study = await this.store.getStudy(String(user.id), String(input.id));
     if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
+    // A draft is a study nobody has described, not a paused one: what it waits for is the first sentence.
+    if (study.status === "draft") throw new HttpError(409, "vcr_definition_missing", VCR_DEFINITION_FIRST_SENTENCE);
     if (study.status !== "active") throw new HttpError(409, "vcr_study_paused", "This study is paused.");
     // 「让 AI 做」 on a study nobody has said anything about used to answer 「已排队」 for a run that could not go out: every step
     // reads the research definition, and the definition is written from the question (or the conversation's first words). With
@@ -1798,8 +1814,8 @@ export class VcrOrchestrator {
     // because a person asked: its mark is what says it was already tried.
     await this.store.query(`DELETE FROM ${VCR_SCHEMA}.schedule_marks
       WHERE study_id = $1 AND kind = 'job' AND step = $2 AND state IN ('failed', 'skipped')`, [study.id, step]);
-    const result = await this.advance(study.id);
-    return this.#answer(study, result);
+    const result = await this.advance(study.id, { attended: true });
+    return this.#answer(study, result, { step });
   }
 
   /**
@@ -1825,13 +1841,13 @@ export class VcrOrchestrator {
         && (row.cover?.longitudinalDigest ?? null) === (cover.longitudinalDigest ?? null) : row.cover?.inputDigest === cover.inputDigest));
     if (previous && this.queueExport) {
       const conversion = await this.queueExport(user, study, previous);
-      return { export: previous, conversion, sessionId: null, runId: previous.runId ?? null };
+      return { export: previous, conversion, accepted: true, runId: previous.runId ?? null, step: null, queuedBehind: [] };
     }
     const row = await this.store.createExport({ studyId: study.id, userId: study.userId, kind, cover });
     await this.#claim(study, `run:export:${row.id}`, "run", "pending",
       { detail: { purpose: "export", kind, exportId: row.id, requestedBy: String(user.id) } });
-    const result = await this.advance(study.id);
-    return { export: row, ...this.#answerShape(result) };
+    const result = await this.advance(study.id, { attended: true });
+    return { export: row, ...(await this.#answer(study, result, { step: null })) };
   }
 
   /**
@@ -1854,7 +1870,7 @@ export class VcrOrchestrator {
       const key = `${prefix}${this.now().getTime().toString(36)}`;
       await this.#claim(study, key, "run", "pending", { detail: { purpose: "trial_search", subjectKey: String(subjectKey), brief: vcrTrialSearchBrief({ study, subjectKey: String(subjectKey) }) } });
     }
-    return this.#answer(study, await this.advance(study.id));
+    return this.#answer(study, await this.advance(study.id, { attended: true }), { step: null });
   }
 
   /**
@@ -1969,21 +1985,38 @@ export class VcrOrchestrator {
     };
   }
 
-  /** @param {any} study @param {any} result */
-  #answer(study, result) {
-    return this.#answerShape(result, study);
+  /**
+   * What a press of a button answers: that the request was taken, the run it started now (none when it waits), and what is queued
+   * behind what. There is no session in it, on purpose: starting work does not take the person to a conversation — the study page
+   * shows what is under way (`activity`), and the run's session is the AI-run record's and not a destination.
+   * @param {any} study @param {any} result @param {{ step?: string | null }} [asked]
+   * @returns {Promise<{ accepted: true, runId: string | null, step: string | null, queuedBehind: Array<{ step: string, waitingFor: string | null }> }>}
+   */
+  async #answer(study, result, { step = null } = {}) {
+    const dispatched = object(result).dispatched;
+    const current = (await this.store.studyById(study.id)) ?? study;
+    const flight = await this.#flightOf(study.id);
+    return {
+      accepted: true,
+      runId: dispatched?.runId ? String(dispatched.runId) : null,
+      step,
+      queuedBehind: vcrQueueOf({ steps: current.steps, flight }),
+    };
   }
 
-  /** @param {any} result @param {any} [study] */
-  #answerShape(result, study) {
-    const dispatched = object(result).dispatched;
-    if (dispatched?.runId) return { sessionId: dispatched.sessionId ?? null, runId: dispatched.runId, deferred: null };
-    return {
-      sessionId: null, runId: null,
-      deferred: object(result).deferred ?? null,
-      ...(study ? { studyId: study.id } : {}),
-      enqueued: list(object(result).enqueued),
-    };
+  /**
+   * The run this study's one run slot holds right now — claimed and not stale, or running — as the steps it covers and what it is
+   * for, or null when the slot is free.
+   * @param {string} studyId
+   * @returns {Promise<{ steps: string[], purpose: string | null } | null>}
+   */
+  async #flightOf(studyId) {
+    const mark = await this.store.one(`SELECT detail FROM ${VCR_SCHEMA}.schedule_marks
+      WHERE study_id = $1 AND kind = 'run' AND (state = 'running' OR (state = 'claimed' AND updated_at > now() - make_interval(mins => $2)))
+      ORDER BY updated_at DESC LIMIT 1`, [studyId, VCR_RUN_RULES.staleClaimMinutes]);
+    if (!mark) return null;
+    const detail = object(mark.detail);
+    return { steps: [...vcrStepsInFlight([{ detail }])], purpose: typeof detail.purpose === "string" ? detail.purpose : null };
   }
 
   /** A person asking again gives the runs that serve the step two more tries. @param {any} study @param {string} step */
@@ -2020,8 +2053,10 @@ export class VcrOrchestrator {
    * deterministic work whose configuration is ready, dispatch at most one run,
    * and send whatever notices are due.
    * @param {string} studyId
+   * @param {{ attended?: boolean }} [options] `attended`: a person asked for something in this pass (a press of a button), so a run
+   *   it dispatches opens the project's runtime for them and does not reserve a bounded one — the worker's own passes are unattended
    */
-  async advance(studyId) {
+  async advance(studyId, { attended = false } = {}) {
     return this.#exclusive(studyId, async () => {
       let study = await this.store.studyById(studyId);
       if (!study || study.status !== "active") return { skipped: study ? "paused" : "gone" };
@@ -2039,7 +2074,7 @@ export class VcrOrchestrator {
       study = await this.#observe(study, plan);
       await this.#enqueueWork(study, plan, result);
       study = await this.#observe(study, plan);
-      await this.#nextRun(study, plan, result);
+      await this.#nextRun(study, plan, result, { attended });
       await this.#notices(study);
       await this.#reviewSettled(study);
       return result;
@@ -2188,8 +2223,8 @@ export class VcrOrchestrator {
       if (!states.length) return null;
       const has = (/** @type {string} */ name) => states.filter((entry) => entry.state === name);
       if (has("stale").length) return { status: "stale", note: null };
-      if (has("running").length || has("queued").length) return { status: has("running").length ? "running" : "queued", note: null };
-      if (has("failed").length) return { status: "failed", note: has("failed")[0].note };
+      if (has("running").length || has("queued").length) return { status: has("running").length ? "running" : "queued", note: null, holds: true };
+      if (has("failed").length) return { status: "failed", note: has("failed")[0].note, holds: true };
       const done = has("done");
       const unavailable = has("unavailable");
       if (done.length && done.length + unavailable.length === states.length) {
@@ -2197,13 +2232,21 @@ export class VcrOrchestrator {
       }
       if (unavailable.length && !done.length) return { status: "failed", note: unavailable[0].note };
       if (has("cancelled").length) return { status: "none", note: has("cancelled")[0].note };
+      // Some of it is computed and the rest is not on its way: where the programme wants the step the platform computes the
+      // rest and the step waits; where nobody asked, what is there is all there will be, and the step reads 未完成 with 续算
+      // offered, which is what it is (`holds`: `vcrStepUpdates` reflects it, a step with nothing in it stays where it is).
+      if (done.length && !plan.want.has(step)) return { status: "failed", note: null, holds: true };
       return { status: "queued", note: null };
     };
     /** @param {string} step @param {{ complete: boolean, kinds?: readonly string[] }} facts */
-    const simple = (step, facts) => vcrSimpleStepStatus({
-      complete: facts.complete, jobOpen: (facts.kinds ?? []).some((kind) => read.openKinds.has(kind)),
-      minimal: plan.fidelity(step) === "minimal" && !plan.requested.has(step),
-    });
+    const simple = (step, facts) => {
+      const status = vcrSimpleStepStatus({
+        complete: facts.complete, jobOpen: (facts.kinds ?? []).some((kind) => read.openKinds.has(kind)),
+        minimal: plan.fidelity(step) === "minimal" && !plan.requested.has(step),
+      });
+      // A job of the step's own under way is something that exists, whoever asked for it (`vcrStepUpdates`).
+      return status?.status === "running" ? { ...status, holds: true } : status;
+    };
 
     // Each simple step is done by what only it produces. The evidence step is
     // done when a parameter cites its evidence (`vcrEvidenceProduct`) — never
@@ -2874,8 +2917,8 @@ export class VcrOrchestrator {
 
   // --- the thinking half: one run ---------------------------------------------------------
 
-  /** @param {any} study @param {ReturnType<typeof wantedVcrSteps>} plan @param {{ dispatched: any, deferred: string | null }} result */
-  async #nextRun(study, plan, result) {
+  /** @param {any} study @param {ReturnType<typeof wantedVcrSteps>} plan @param {{ dispatched: any, deferred: string | null }} result @param {{ attended: boolean }} options */
+  async #nextRun(study, plan, result, { attended }) {
     if (!this.dispatchRun) return;
     const active = (await this.store.rows(`SELECT 1 FROM ${VCR_SCHEMA}.schedule_marks
       WHERE study_id = $1 AND kind = 'run' AND state IN ('claimed', 'running') LIMIT 1`, [study.id])).length > 0;
@@ -2899,15 +2942,16 @@ export class VcrOrchestrator {
     for (const candidate of candidates) {
       const spec = await candidate();
       if (!spec) continue;
-      const outcome = await this.#dispatch(study, spec);
+      const outcome = await this.#dispatch(study, spec, { attended });
       if (outcome.dispatched) result.dispatched = outcome.dispatched;
       if (outcome.deferred) result.deferred = outcome.deferred;
       if (outcome.dispatched || outcome.deferred || outcome.busy) return;
     }
   }
 
-  /** @typedef {{ key: string, purpose: string, capabilityId: string, reason: string, brief: string, steps: string[], detail?: Record<string, any>,
-   *   products?: string[] }} VcrRunSpec */
+  /** @typedef {{ key: string, purpose: string, capabilityId: string, reason: string, brief: string, question: string, steps: string[],
+   *   detail?: Record<string, any>, products?: string[] }} VcrRunSpec
+   *   `question` is what a person reads as the run's question (`vcrVisibleQuestion`); `brief` is the model's instruction. */
 
   /** Whether a run key may be tried again. @param {any} mark */
   #allowed(mark) {
@@ -2938,7 +2982,8 @@ export class VcrOrchestrator {
       return null;
     }
     return { key: String(mark.key), purpose: "export", capabilityId: "vcr-package", reason: "vcr:review-repair",
-      brief: String(detail.brief), steps: [], detail };
+      brief: String(detail.brief), steps: [], detail,
+      question: vcrVisibleQuestion({ purpose: "export", exportKind: String(detail.kind ?? ""), revision: true }) };
   }
 
   /** @param {any} study @returns {Promise<VcrRunSpec | null>} */
@@ -2950,6 +2995,7 @@ export class VcrOrchestrator {
     return {
       key: String(mark.key), purpose: "export", capabilityId: "vcr-package", reason: `vcr:export-${detail.kind ?? "study_package"}`,
       brief: await this.#brief(study, String(mark.key), [], { kind: detail.kind, exportId: detail.exportId }),
+      question: vcrVisibleQuestion({ purpose: "export", exportKind: String(detail.kind ?? "") }),
       steps: [], detail: { kind: detail.kind, exportId: detail.exportId },
     };
   }
@@ -2967,6 +3013,7 @@ export class VcrOrchestrator {
     return {
       key: String(mark.key), purpose: "trial_search", capabilityId: /** @type {Record<string, string>} */ (VCR_STEP_CAPABILITIES).matching,
       reason: "vcr:trial-search", brief: String(detail.brief ?? ""), steps: [], detail: { subjectKey: String(detail.subjectKey ?? "") },
+      question: vcrVisibleQuestion({ purpose: "trial_search", subjectKey: String(detail.subjectKey ?? "") }),
     };
   }
 
@@ -2986,6 +3033,7 @@ export class VcrOrchestrator {
       key: String(mark.key), purpose: "evidence_refresh", capabilityId: /** @type {Record<string, string>} */ (VCR_STEP_CAPABILITIES).evidence,
       reason: "vcr:evidence-refresh", brief: String(detail.brief ?? ""), steps: [],
       detail: { keys: list(detail.keys), items: list(detail.items) },
+      question: vcrVisibleQuestion({ purpose: "evidence_refresh" }),
     };
   }
 
@@ -3010,6 +3058,7 @@ export class VcrOrchestrator {
       key, purpose: step, capabilityId: /** @type {Record<string, string>} */ (VCR_STEP_CAPABILITIES)[step],
       reason: `vcr:${step}`,
       brief: await this.#brief(study, key, [step], { fidelity: plan.fidelity(step) }),
+      question: vcrVisibleQuestion({ purpose: step, steps: [step] }),
       steps: [step], detail: { scope: [{ step, fidelity: plan.fidelity(step) }] },
     };
   }
@@ -3046,6 +3095,7 @@ export class VcrOrchestrator {
     return {
       key, purpose: "analysis", capabilityId: VCR_STEP_CAPABILITIES.population, reason: `vcr:${scope[0].step}`,
       brief: await this.#brief(study, key, scope.map((entry) => entry.step), { scope }),
+      question: vcrVisibleQuestion({ purpose: "analysis", steps: scope.map((entry) => entry.step) }),
       steps: scope.map((entry) => entry.step), detail: { scope }, products: vcrProductsOfSteps(scope.map((entry) => entry.step)),
     };
   }
@@ -3070,9 +3120,9 @@ export class VcrOrchestrator {
    * Claim the run slot and the key, dispatch, record. A refusal that waiting
    * can clear leaves the key pending; one that cannot fails the steps it would
    * have served.
-   * @param {any} study @param {VcrRunSpec} spec
+   * @param {any} study @param {VcrRunSpec} spec @param {{ attended?: boolean }} [options]
    */
-  async #dispatch(study, spec) {
+  async #dispatch(study, spec, { attended = false } = {}) {
     const claim = await this.store.transaction(async (/** @type {any} */ client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-vcr-run:' || $1))", [study.id]);
       const status = await client.query(`SELECT status FROM ${VCR_SCHEMA}.studies WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, [study.id]);
@@ -3087,7 +3137,8 @@ export class VcrOrchestrator {
       const attempts = Number(existing?.attempts ?? 0);
       const reuse = existing && ["pending", "claimed"].includes(String(existing.state)) && existing.dispatch_id;
       const dispatchId = reuse ? String(existing.dispatch_id) : vcrDispatchId(spec.key, attempts + 1);
-      const detail = { ...object(spec.detail), purpose: spec.purpose, capabilityId: spec.capabilityId };
+      // What the page says about this run is read back from its mark: the sentence a person was told, kept with the run.
+      const detail = { ...object(spec.detail), purpose: spec.purpose, capabilityId: spec.capabilityId, question: spec.question };
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.schedule_marks (study_id, key, user_id, kind, state, dispatch_id, detail)
         VALUES ($1, $2, $3, 'run', 'claimed', $4, $5::jsonb)
         ON CONFLICT (study_id, key) DO UPDATE SET state = 'claimed', dispatch_id = EXCLUDED.dispatch_id,
@@ -3104,11 +3155,13 @@ export class VcrOrchestrator {
     try {
       const out = await /** @type {NonNullable<VcrOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({
         userId: study.userId, projectId: study.projectId, studyId: study.id, capabilityId: spec.capabilityId,
-        dispatchId: String(mark.dispatch_id), reason: spec.reason, brief: spec.brief,
+        dispatchId: String(mark.dispatch_id), reason: spec.reason, brief: spec.brief, question: spec.question, attended,
         ...(spec.products?.length ? { products: spec.products } : {}),
       });
       const running = await this.#update(study.id, spec.key, {
         state: "running", runId: String(out.runId), sessionId: out.sessionId ?? null, attempts: Number(mark.attempts ?? 0) + 1,
+        // Where it runs: the researcher's open runtime, or one reserved for it alone — which is what holds the conversation back.
+        detail: { placement: out.placement === "open-runtime" ? "open-runtime" : "bounded" },
       }, ["claimed"]);
       for (const step of spec.steps) current = await this.#step(current, step, { status: "running", runId: String(out.runId), ...unwaiting(current, step) });
       this.counters.dispatched += 1;
@@ -3162,8 +3215,12 @@ export class VcrOrchestrator {
 
   /** @param {any} study @param {any} mark @param {string} status */
   async #finishRun(study, mark, status) {
+    // A run a person stopped is their decision, not a failure the programme tries again: its key is not asked again until they ask for
+    // the step (`runStep` raises the allowance), and the steps it covered read as not started, not as failed.
+    const canceled = status === "canceled" || status === "cancelled";
     const moved = await this.#update(study.id, String(mark.key), {
-      state: status === "succeeded" ? "done" : "failed", detail: { runStatus: status },
+      state: status === "succeeded" ? "done" : "failed",
+      detail: { runStatus: status, ...(canceled ? { canceled: true, allowed: Number(mark.attempts ?? 0) } : {}) },
     }, ["claimed", "running", "pending"]);
     if (!moved) return;
     this.counters.runsFinished += 1;
@@ -3205,7 +3262,7 @@ export class VcrOrchestrator {
       if (!VCR_STEPS.includes(step)) continue;
       const now = observed.steps[step]?.status ?? "none";
       if (FINISHED.has(now) || now === "running") continue;
-      if (status !== "succeeded") await this.#step(observed, step, { status: "failed" });
+      if (status !== "succeeded") await this.#step(observed, step, { status: canceled ? "none" : "failed" });
     }
     await this.#queueReview(study.id, { runId: mark.run_id ?? undefined, reason: "research_finished" });
   }

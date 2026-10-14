@@ -1,0 +1,69 @@
+{
+  "result": "res_pop",
+  "kind": "population",
+  "columns": [
+    {
+      "key": "age",
+      "label": null,
+      "kind": "number"
+    },
+    {
+      "key": "ecog",
+      "label": null,
+      "kind": "number"
+    },
+    {
+      "key": "bmi",
+      "label": null,
+      "kind": "number"
+    }
+  ],
+  "rows": [
+    {
+      "age": 54.4,
+      "ecog": 0,
+      "bmi": null
+    },
+    {
+      "age": 61,
+      "ecog": 1,
+      "bmi": 27.6
+    },
+    {
+      "age": 52.7,
+      "ecog": 1,
+      "bmi": 23.5
+    },
+    {
+      "age": 64.3,
+      "ecog": 0,
+      "bmi": 27.9
+    },
+    {
+      "age": 59.2,
+      "ecog": 1,
+      "bmi": 23.4
+    },
+    {
+      "age": 62.1,
+      "ecog": 1,
+      "bmi": 26
+    },
+    {
+      "age": 59.6,
+      "ecog": 0,
+      "bmi": 29.4
+    },
+    {
+      "age": 65.7,
+      "ecog": 1,
+      "bmi": 22.1
+    }
+  ],
+  "total": 60,
+  "all": 60,
+  "offset": 0,
+  "limit": 8,
+  "sort": null,
+  "arms": []
+}

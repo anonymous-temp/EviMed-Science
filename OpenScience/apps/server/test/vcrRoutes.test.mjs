@@ -452,6 +452,10 @@ const REQUESTS = {
   "PATCH /studies/:id dataTier,intendedUse,status": ["PATCH", "/api/vcr/studies/std_1", { status: "paused" }],
   "DELETE /studies/:id": ["DELETE", "/api/vcr/studies/std_1", undefined],
   "POST /studies/:id/run": ["POST", "/api/vcr/studies/std_1/run", { step: "definition" }],
+  "POST /studies/:id/cancel": ["POST", "/api/vcr/studies/std_1/cancel", {}],
+  "GET /studies/:id/patients/rows": ["GET", "/api/vcr/studies/std_1/patients/rows?result=res_1", undefined],
+  "GET /studies/:id/patients/:patient": ["GET", "/api/vcr/studies/std_1/patients/vp_1?result=res_1", undefined],
+  "GET /studies/:id/population/rows": ["GET", "/api/vcr/studies/std_1/population/rows?result=res_1", undefined],
   "POST /studies/:id/trial-search": ["POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-0192" }],
   "GET /studies/:id/jobs": ["GET", "/api/vcr/studies/std_1/jobs", undefined],
   "GET /studies/:id/jobs/:job": ["GET", "/api/vcr/studies/std_1/jobs/job_1", undefined],
@@ -522,7 +526,9 @@ function composedHooks() {
     exporter: { requestExport: ok },
     // The generated records as a file: a header and a table to stream, and the audit line (`vcrRecords.mjs` has its own tests).
     records: { csv: async () => ({ filename: "synthetic-population", header: "# 合成数据，不是真实患者。\n", file: RECORDS_FILE, bytes: 4, method: "population.scenario", qualityFile: null }),
-      quality: async () => ({ filename: "synthetic-population.quality.json", body: "{}\n" }), audit: async () => {} },
+      quality: async () => ({ filename: "synthetic-population.quality.json", body: "{}\n" }), audit: async () => {},
+      rows: async () => ({ result: "res_1", rows: [], total: 0, all: 0, columns: [], offset: 0, limit: 100, sort: null, arms: [] }),
+      record: async () => ({ result: "res_1", id: "vp_1", baseline: [], outcome: [] }) },
     // The page's own edits of the numbers a study rests on: what the form is built from, and the next version.
     cards: { read: async () => ({ kind: "population", objectId: "pop_1", title: "人群设定", settings: [] }), apply: async () => ({ kind: "population", id: "pop_2", version: 2, changed: 1 }) },
     // The public 「模拟研究」 column: the lead's publish and withdraw.
@@ -879,8 +885,9 @@ test("every code these routes emit is one this module declares", async () => {
     "vcr_prediction_number_refused", "vcr_prediction_scenario_not_found", "vcr_prediction_not_from_engine", "vcr_prediction_unreadable",
     // raised by the orchestrator's 「让 AI 做」 on a study nothing has been said about, and by the subject resolver of a computation
     "vcr_definition_missing", "vcr_simulate_subject_required", "vcr_simulate_subject_unknown",
-    // raised by the generated-records module behind the file route (`vcrRecords.mjs`)
-    "vcr_records_not_found", "vcr_records_not_synthetic", "vcr_records_quality_missing", "vcr_records_unavailable"];
+    // raised by the generated-records module behind the file route (`vcrRecords.mjs`), and behind the rows routes
+    "vcr_records_not_found", "vcr_records_not_synthetic", "vcr_records_quality_missing", "vcr_records_unavailable",
+    "vcr_patient_not_found", "vcr_rows_query_invalid", "vcr_rows_too_large"];
   for (const code of fromElsewhere) assert.ok(VCR_ROUTE_ERROR_CODES.includes(code), code);
   const neverEmitted = VCR_ROUTE_ERROR_CODES.filter((code) => !literals.has(code) && !fromElsewhere.includes(code));
   assert.deepEqual(neverEmitted, [], `declared but never emitted: ${neverEmitted.join(", ")}`);

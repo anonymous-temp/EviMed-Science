@@ -12,6 +12,8 @@ import {
   AUTOPILOT_VERIFICATION_ROUTE_REASON,
   EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON,
   RUN_ROLES,
+  PROGRAMME_ROUTE_REASON_PREFIXES,
+  isProgrammeRun,
   isVerificationRouteReason,
   isVerificationRun,
   runRoleOf,
@@ -149,7 +151,7 @@ test('a verification run is the platform\'s work, whichever kind, and the execut
   // The money is untouched: the task's budget pays for it, as the ruling that held a share back for it says.
   assert.equal(isChargeableResearchRun({ effectiveRouteReason: AUTOPILOT_VERIFICATION_ROUTE_REASON, effectiveAgentId: 'open-domain-answer' }), true)
   // The episode itself, and every other reason, is as it was.
-  for (const effectiveRouteReason of ['autopilot:literature-sentinel', 'autopilot:routine', 'geo:content', 'vcr:analysis', 'unrouted:open-domain', 'session-binding', 'choice:literature-search', 'autopilot-verifyx', 'autopilot-verify:', '']) {
+  for (const effectiveRouteReason of ['autopilot:literature-sentinel', 'autopilot:routine', 'geo:content', 'unrouted:open-domain', 'session-binding', 'choice:literature-search', 'autopilot-verifyx', 'autopilot-verify:', '']) {
     const run = { effectiveRouteReason, effectiveAgentId: 'open-domain-answer' }
     assert.equal(isVerificationRun(run), false, effectiveRouteReason)
     assert.equal(runRoleOf(run), null, effectiveRouteReason)
@@ -158,5 +160,27 @@ test('a verification run is the platform\'s work, whichever kind, and the execut
   assert.equal(isResearcherOwnedWork({ effectiveRouteReason: 'unrouted:open-domain', effectiveAgentId: 'open-domain-answer' }), true)
   assert.equal(isVerificationRouteReason(null), false)
   assert.equal(runRoleOf(null), null)
-  assert.deepEqual([...RUN_ROLES], ['verification'])
+  assert.deepEqual([...RUN_ROLES], ['verification', 'programme'])
+})
+
+// 2026-10-14 (R3): every step the 虚拟临床研究 orchestrator dispatches into a study's project opened as a conversation of its own, titled by the
+// machine instruction it was briefed with, in the study's group of the sidebar. A run's role is the one mark lists read.
+test('a 虚拟临床研究 programme step is a programme run, by the route reason the control plane wrote, and no conversation list draws it', () => {
+  for (const effectiveRouteReason of ['vcr:definition', 'vcr:analysis', 'vcr:patients', 'vcr:export-study_package', 'vcr:review-repair', 'vcr:trial-search', 'vcr:evidence-refresh']) {
+    const run = { effectiveRouteReason, effectiveAgentId: 'vcr-analysis', automated: true }
+    assert.equal(isProgrammeRun(run), true, effectiveRouteReason)
+    assert.equal(runRoleOf(run), 'programme', effectiveRouteReason)
+    // Researcher-owned and charged as before: only the lists change.
+    assert.equal(isResearcherOwnedWork(run), true, effectiveRouteReason)
+  }
+  // Not by a title or a text, not by another word that merely contains the prefix, and a person's own turn in the study is none.
+  for (const run of [
+    { effectiveRouteReason: 'session-binding', effectiveAgentId: 'vcr-protocol', question: 'vcr: 生成虚拟患者' },
+    { effectiveRouteReason: 'unrouted:open-domain', effectiveAgentId: 'open-domain-answer' },
+    { effectiveRouteReason: 'xvcr:analysis' }, { effectiveRouteReason: '' }, { effectiveRouteReason: null }, {},
+  ]) assert.equal(isProgrammeRun(run), false, JSON.stringify(run))
+  assert.equal(isProgrammeRun(null), false)
+  assert.deepEqual([...PROGRAMME_ROUTE_REASON_PREFIXES], ['vcr:'])
+  // A verification stays a verification.
+  assert.equal(runRoleOf({ effectiveRouteReason: AUTOPILOT_VERIFICATION_ROUTE_REASON }), 'verification')
 })

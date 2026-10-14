@@ -153,6 +153,25 @@ test("a step stored as running whose run is gone follows the data — a partial 
   assert.deepEqual(vcrStepUpdates({ steps: quiet, seen: [["trial", partial]], flying: new Set(), plan }), []);
 });
 
+test("a step nobody asked for that holds something is read as what it holds; one that holds nothing stays where it is (R3, B §2.5 #10)", () => {
+  const plan = wantedVcrSteps(vcrProgramSteps(steps(["population"])));
+  assert.equal(plan.want.has("trial"), false);
+  const none = steps(["population"]);
+  /** @param {Record<string, any>} read */
+  const reading = (read) => vcrStepUpdates({ steps: none, seen: [["trial", read]], flying: new Set(), plan });
+  // Four designs a conversation computed and one that was not: the data has a word on the step, and the bar says it.
+  assert.deepEqual(reading({ status: "failed", note: null, holds: true }), [{ step: "trial", fields: { status: "failed", note: null } }]);
+  // A job of its own under way is something that exists, whoever asked for it.
+  assert.deepEqual(reading({ status: "running", note: null, holds: true }), [{ step: "trial", fields: { status: "running" } }]);
+  assert.deepEqual(reading({ status: "queued", note: null, holds: true }), [{ step: "trial", fields: { status: "queued" } }]);
+  // Objects that exist with nothing computed and nothing on its way are not progress: the step stays not started.
+  assert.deepEqual(reading({ status: "queued", note: null }), []);
+  assert.deepEqual(reading({ status: "failed", note: "x" }), []);
+  // An answer that is the same as what is stored writes nothing, holding or not.
+  assert.deepEqual(vcrStepUpdates({ steps: { ...none, trial: { status: "running", requested: false } }, seen: [["trial", { status: "running", note: null, holds: true }]],
+    flying: new Set(["trial"]), plan }), []);
+});
+
 test("which engine job a research object needs is deterministic, and is the one the engine runs for that method", () => {
   assert.equal(vcrJobKindFor("population", { kind: "real" }), "build_cohort");
   assert.equal(vcrJobKindFor("population", { kind: "empirical_synthetic" }), "synthesize_population");

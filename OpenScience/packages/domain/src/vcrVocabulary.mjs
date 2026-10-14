@@ -457,6 +457,71 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
   matching: '匹配与招募', data: '定义与证据',
 })
 
+/**
+ * What each step's run is called to a person: one verb and one object. The button that starts the step says it, the run's own
+ * question in the conversation list and in the AI-run record says it, and the study's own "next" says it — one table, so the three
+ * cannot drift. The instruction a run is briefed with (`vcrDefaultBrief`: the tools, the data tier, the steps by key) is the model's
+ * and is never what a person reads.
+ */
+export const VCR_STEP_ACTION_LABELS_ZH = Object.freeze({
+  definition: '整理研究定义',
+  evidence: '找证据、整理假设卡',
+  population: '构建人群',
+  patients: '生成虚拟患者',
+  comparator: '设计对照',
+  trial: '模拟试验方案',
+  matching: '匹配患者',
+})
+
+/** What a person asked of a run that is not a step: the sentence of the export, the review's repair, one patient's trials, new evidence. */
+const VCR_RUN_PURPOSE_PHRASES_ZH = Object.freeze({
+  evidence_refresh: '把新证据纳入假设卡',
+  review_repair: '按复核意见修订',
+  trial_search: '找试验',
+})
+
+/**
+ * The visible question of one programme run, as a sentence of the person's words: the step's verb and object, the document that is
+ * written, the patient whose trials are looked for. Pure, and total: whatever is missing reads as the study's generic work, never as a
+ * machine instruction.
+ *
+ * @param {{ purpose?: string | null, steps?: readonly string[], exportKind?: string | null, revision?: boolean, subjectKey?: string | null }} input
+ *   `purpose` is the dispatch's own (`definition`, `evidence`, `matching`, `analysis`, `export`, `trial_search`, `evidence_refresh`);
+ *   `steps` the steps a run covers; `revision` a review's repair of an export
+ * @returns {string}
+ */
+export function vcrVisibleQuestion({ purpose = null, steps = [], exportKind = null, revision = false, subjectKey = null } = {}) {
+  const actions = /** @type {Record<string, string>} */ (VCR_STEP_ACTION_LABELS_ZH)
+  const kinds = /** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH)
+  if (purpose === 'export') {
+    const label = (exportKind && kinds[exportKind]) || '研究包'
+    return revision ? `${VCR_RUN_PURPOSE_PHRASES_ZH.review_repair}${label}` : `生成${label}`
+  }
+  if (purpose === 'trial_search') return subjectKey ? `为 ${subjectKey} ${VCR_RUN_PURPOSE_PHRASES_ZH.trial_search}` : '为患者找试验'
+  if (purpose === 'evidence_refresh') return VCR_RUN_PURPOSE_PHRASES_ZH.evidence_refresh
+  const named = VCR_STEPS.filter((step) => steps.includes(step)).map((step) => actions[step])
+  if (named.length) return named.join('、')
+  const own = purpose ? actions[purpose] : null
+  return own ?? '推进研究'
+}
+
+/**
+ * Why a step is the study's next one: `start` (never done), `retry` (the last attempt left it unfinished) or `refresh` (what it was
+ * computed from changed). The server says which; the words are here, once.
+ */
+export const VCR_NEXT_REASONS = frozen(['start', 'retry', 'refresh'])
+export const VCR_NEXT_REASON_LABELS_ZH = Object.freeze({ start: '', retry: '上次没有做完', refresh: '输入已变更，结果已过期' })
+
+/**
+ * What a step of the activity strip is waiting for, when it is queued: another step's run (the step's key), the research allowance
+ * (`allowance`, or `simulated_allowance` for the simulated wallet), or a run that covers no step — an export, a patient's trial search
+ * (`run`).
+ */
+export const VCR_WAITING_FOR_KINDS = frozen(['allowance', 'simulated_allowance', 'run'])
+
+/** Where a programme run took place: the researcher's open runtime, or a bounded one reserved for it alone (which holds the project's conversation). */
+export const VCR_RUN_PLACEMENTS = frozen(['open-runtime', 'bounded'])
+
 /** The four action cards on the module's home page (§9.2), and where each starts. */
 export const VCR_ACTIONS = frozen(['cohort', 'patients', 'comparator', 'trial'])
 export const VCR_ACTION_LABELS_ZH = Object.freeze({
@@ -716,6 +781,24 @@ export const VCR_JOB_KINDS = frozen([
   // --- end longitudinal ---
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
 ])
+/**
+ * Which of the seven steps an engine job belongs to, by its kind: the step bar's dot and the activity strip say "the patients are
+ * being generated", not "generate_patients_continuous". A kind with no step of its own (a forecast, a benchmark, an E-value that a
+ * conversation asked for) is absent, and the strip lists it by its kind.
+ */
+export const VCR_JOB_KIND_STEPS = Object.freeze({
+  pool_evidence: 'evidence', reconstruct_km: 'evidence', map_prior: 'evidence',
+  profile_snapshot: 'population', build_cohort: 'population', generate_population: 'population', literature_population: 'population',
+  synthesize_population: 'population', population_quality: 'population',
+  generate_patients: 'patients', generate_patients_continuous: 'patients', generate_patients_binary: 'patients',
+  generate_patients_longitudinal: 'patients',
+  weight_comparator: 'comparator', propensity_weight_comparator: 'comparator', maic_comparator: 'comparator', evalue: 'comparator',
+  rmst: 'comparator', weighted_cox_comparator: 'comparator', maic_time_to_event_comparator: 'comparator', aipw_comparator: 'comparator',
+  covariate_set_comparator: 'comparator', negative_control_comparator: 'comparator', tipping_point: 'comparator',
+  prognostic_adjustment_comparator: 'comparator',
+  design_analytic: 'trial', design_simulation: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
+  match_criteria: 'matching',
+})
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({
   queued: '排队中', running: '进行中', succeeded: '已完成', failed: '未完成', canceled: '已取消', awaiting_budget: '待确认预算',

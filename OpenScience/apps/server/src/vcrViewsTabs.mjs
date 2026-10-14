@@ -38,12 +38,12 @@ import {
   VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
   VCR_QUALITY_CATEGORY_LABELS_ZH, VCR_TIME_KINDS, VCR_TIME_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_PROGNOSTIC_QUALIFICATION, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_ROBUSTNESS_STAGES, VCR_ROBUSTNESS_STAGE_LABELS_ZH,
-  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, VCR_SYNTHETIC_USE_LABELS_ZH, knownErrorCodeMessage, vcrAssessmentIssues, vcrAssessmentRows,
+  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, knownErrorCodeMessage, vcrAssessmentIssues, vcrAssessmentRows,
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
-import { POPULATION_METHOD_WORDS, PROFILE_MISSING_SENTENCE, constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
+import { constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
 import {
@@ -303,9 +303,12 @@ export function presentPopulationTab(bundle) {
       ineligible: numeric(outcomeCounts.ineligible ?? outcomeCounts.excluded),
     } : (strict !== null && lenient !== null && looked !== null ? { eligible: strict, insufficient: lenient - strict, ineligible: looked - lenient } : null);
   const profile = object(current?.profile);
-  // A generated population is described variable by variable by the engine (`diagnostics.profile`); a real cohort is compared with the
-  // published one, row by row.
-  const generated = current && current.kind !== "real" ? generatedProfileRows(diagnostics.profile) : null;
+  // A generated population is described variable by variable by the engine (`diagnostics.profile`) and, for one the engine wrote no
+  // profile for, from its stored table on read — deterministic, the same shape, never a request to generate it again. A real cohort
+  // is compared with the published one, row by row.
+  const violations = diagnostics.constraintViolations;
+  const generated = current && current.kind !== "real"
+    ? generatedProfileRows(diagnostics.profile, violations) ?? generatedProfileRows(bundle.table?.profile, violations) : null;
   const profileView = generated ?? profileRows(profile).map((entry, index) => {
     const row = object(entry);
     const smd = finite(row.smd ?? row.smdAdjusted);
@@ -365,17 +368,15 @@ export function presentPopulationTab(bundle) {
     })),
     outcome,
     profile: profileView,
-    // `generated`: one row per variable, set beside what came out of it; `comparison`: ours against the published cohort.
+    // `generated`: one row per variable, set beside what came out of it (what it declared and how many records broke it);
+    // `comparison`: ours against the published cohort.
     profileKind: generated ? "generated" : profileView.length ? "comparison" : null,
-    profileNote: generated ? null : profileView.length ? "标准化差异 |SMD| 超过 0.1 的特征已标出，它只说明两个人群不同，不说明谁对。"
-      // A generated population whose result has no profile was generated before the engine wrote one: one sentence, and the way to get it.
-      : current && current.kind !== "real" && result ? PROFILE_MISSING_SENTENCE : null,
-    profileMissing: Boolean(current && current.kind !== "real" && result && !generated),
-    // How it was made and what it may be used for: the two things a reader needs before using a synthetic table.
-    method: current ? (POPULATION_METHOD_WORDS[String(current.kind)] ?? null) : null,
-    allowedUses: current && current.kind !== "real"
-      ? list(current.allowedUses).map(String).map((use) => ({ key: use, label: (/** @type {Record<string, string>} */ (VCR_SYNTHETIC_USE_LABELS_ZH))[use] ?? use })) : [],
-    constraints: current && current.kind !== "real" ? constraintRows(diagnostics.constraintViolations) : [],
+    // The generated records as a list: how many, and the result the rows route reads (`GET …/population/rows?result=`). Absent
+    // where the table is a real cohort's or is not kept.
+    records: bundle.table && current && current.kind !== "real" ? { result: bundle.table.result, rows: bundle.table.rows } : null,
+    // Only the rules no variable carries: a variable's own constraints are on its row (`violations`).
+    constraints: current && current.kind !== "real" ? constraintRows(diagnostics.constraintViolations)
+      .filter((row) => !profileView.some((entry) => list(object(entry.declared).constraints).some((constraint) => object(constraint).name === row.label))) : [],
     unknownReasons: [...reasons.values()].map((reason) => ({ key: reason.key, label: reason.label, detail: reason.detail, count: reason.count })),
     blockers,
     quality: current ? qualityReportView(Object.keys(object(current.quality)).length ? current.quality : diagnostics.quality) : null,
@@ -492,8 +493,16 @@ export function presentPatientsTab(bundle) {
   if (measureRows.length) {
     panels.unshift({ key: "run_measures", title: "这次运行的结果", kind: "binary", note: "模型预测，非观察", rows: measureRows, series: [], footnote: null });
   }
+  // The generated people: how many and in which arms, how each variable is distributed, and what was generated beside what the study
+  // declared — all read from the table itself (`bundle.table`), so the page has patients and not one example.
+  const table = bundle.table ?? null;
+  const described = table ? generatedProfileRows(table.profile) : null;
   return {
     model,
+    records: table ? { result: table.result, rows: table.rows, arms: list(table.calibration?.arms) } : null,
+    profile: described ?? [],
+    profileKind: described ? "generated" : null,
+    calibration: table?.calibration ? { endpoint: table.calibration.endpoint, rows: table.calibration.rows } : null,
     assessments: presentModelAssessments(bundle),
     twin: modelRow || current?.twinLabel ? {
       label: (/** @type {Record<string, string>} */ (VCR_TWIN_LABELS_ZH))[String(current?.twinLabel ?? model?.twin ?? "baseline_conditioned_prediction")],

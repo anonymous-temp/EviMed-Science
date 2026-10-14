@@ -191,6 +191,12 @@ function requests(target, ids) {
     "PATCH /studies/:id dataTier,intendedUse,status": async () => ["PATCH", S, { status: "active" }],
     "DELETE /studies/:id": async () => ["DELETE", `/api/vcr/studies/${await ids.disposable()}`, undefined],
     "POST /studies/:id/run": async () => ["POST", `${S}/run`, { step: "definition" }],
+    // Stop what the study is doing: the run its slot holds and its open jobs (nothing is out here, so nothing is stopped).
+    "POST /studies/:id/cancel": async () => ["POST", `${S}/cancel`, {}],
+    // The rows of a generated table as a list: a study with nothing generated answers 404 by name to every role that may read.
+    "GET /studies/:id/patients/rows": async () => ["GET", `${S}/patients/rows`, undefined],
+    "GET /studies/:id/patients/:patient": async () => ["GET", `${S}/patients/vp_none`, undefined],
+    "GET /studies/:id/population/rows": async () => ["GET", `${S}/population/rows`, undefined],
     // 「为该患者找试验」: a role that may run reaches the roster check, which answers 404 for a patient this study does not hold.
     "POST /studies/:id/trial-search": async () => ["POST", `${S}/trial-search`, { subjectKey: "P-0192" }],
     "GET /studies/:id/jobs": async () => ["GET", `${S}/jobs`, undefined],

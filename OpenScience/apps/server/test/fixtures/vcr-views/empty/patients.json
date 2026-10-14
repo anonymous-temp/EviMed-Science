@@ -1,5 +1,9 @@
 {
   "model": null,
+  "records": null,
+  "profile": [],
+  "profileKind": null,
+  "calibration": null,
   "assessments": {
     "records": [],
     "plan": null

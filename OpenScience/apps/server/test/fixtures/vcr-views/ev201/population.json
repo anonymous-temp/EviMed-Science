@@ -269,10 +269,7 @@
     }
   ],
   "profileKind": "comparison",
-  "profileNote": "标准化差异 |SMD| 超过 0.1 的特征已标出，它只说明两个人群不同，不说明谁对。",
-  "profileMissing": false,
-  "method": null,
-  "allowedUses": [],
+  "records": null,
   "constraints": [],
   "unknownReasons": [
     {

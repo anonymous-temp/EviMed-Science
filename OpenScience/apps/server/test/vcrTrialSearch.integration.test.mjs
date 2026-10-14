@@ -53,8 +53,11 @@ test("the request is dispatched as a run of the matching capability, and the run
   const study = await studyOf("dispatch");
   const stepsBefore = JSON.stringify((await vcr.store.studyById(study.id)).steps);
   const answer = await orchestrator.requestTrialSearch({ id: USER }, study, { subjectKey: "P-0192" });
-  assert.deepEqual([answer.runId, answer.sessionId, answer.deferred], [`run-${dispatches.length}`, `session-${dispatches.length}`, null]);
+  // Starting work answers that it was taken and which run it started — and no session to go to: the person stays on the study's page.
+  assert.deepEqual(answer, { accepted: true, runId: `run-${dispatches.length}`, step: null, queuedBehind: [] });
   const sent = dispatches.at(-1);
+  assert.equal(sent.question, "为 P-0192 找试验", "what a person reads of the run is a sentence of theirs, never the brief");
+  assert.equal(sent.attended, true, "a person asked, so the run opens the project's runtime for them");
   assert.equal(sent.capabilityId, "vcr-matching");
   assert.equal(sent.reason, "vcr:trial-search");
   assert.equal(sent.studyId, study.id);
@@ -75,7 +78,7 @@ test("a second press for the same patient while one request is out is the same r
   assert.ok(first.runId);
   const dispatched = dispatches.length;
   const again = await orchestrator.requestTrialSearch({ id: USER }, study, { subjectKey: "P-0192" });
-  assert.deepEqual([again.runId, again.sessionId], [null, null], "the study's one run slot is held");
+  assert.deepEqual([again.accepted, again.runId, "sessionId" in again], [true, null, false], "the study's one run slot is held: taken, not started, no session");
   assert.equal(dispatches.length, dispatched, "and nothing is sent twice");
   assert.equal((await marks(study.id)).length, 1, "one request, one mark");
   // Another patient is another request: it waits for the slot.

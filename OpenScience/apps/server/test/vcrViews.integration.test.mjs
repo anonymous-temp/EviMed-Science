@@ -15,7 +15,8 @@
 // and the diff of the fixtures is the review.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import pg from "pg";
@@ -28,6 +29,7 @@ import { VcrJobs } from "../src/vcrJobs.mjs";
 import { VcrCandidateTrialStore } from "../src/vcrCandidateTrialStore.mjs";
 import { VcrMatchStore } from "../src/vcrMatchStore.mjs";
 import { createPatientTrials } from "../src/vcrPatientTrials.mjs";
+import { createVcrRecords } from "../src/vcrRecords.mjs";
 import { VcrService } from "../src/vcrService.mjs";
 import { VcrStore } from "../src/vcrStore.mjs";
 import { FIXTURE_DIR } from "./vcrViewsFixtures.mjs";
@@ -57,6 +59,8 @@ let trialsStudy;
 /** @type {pg.Client | null} */
 let admin = null;
 let isolatedName = "";
+/** The data plane the patient set's table is written in: a directory of this run's own. */
+let plane = "";
 
 before(async () => {
   if (!databaseUrl) return;
@@ -73,15 +77,19 @@ before(async () => {
   const matchStore = new VcrMatchStore({ database });
   const evidenceStore = new VcrEvidenceStore({ database });
   const jobs = new VcrJobs({ store, config });
-  seeded = await seedEv201({ store, matchStore, evidenceStore });
+  plane = mkdtempSync(join(tmpdir(), "vcr-views-plane-"));
+  chmodSync(plane, 0o700);
+  seeded = await seedEv201({ store, matchStore, evidenceStore, plane });
   const patientTrials = createPatientTrials({ candidateStore: new VcrCandidateTrialStore({ database }), matchStore, config: { vcrCandidateTrialsMax: 20 }, now: () => SEED_NOW });
   service = new VcrService({ store, config, jobs, matchStore, evidenceStore, patientTrials, now: () => SEED_NOW });
+  service.attach({ records: createVcrRecords({ store, config: { vcrDataPlaneDir: plane } }) });
   number(seeded.study.id);
   number(seeded.empty.id);
   trialsStudy = await seedPatientTrials({ store, matchStore, patientTrials });
 });
 
 after(async () => {
+  if (plane) rmSync(plane, { recursive: true, force: true });
   await database?.close().catch(() => {});
   if (admin) {
     await admin.query(`DROP DATABASE IF EXISTS "${isolatedName}" WITH (FORCE)`).catch(() => {});

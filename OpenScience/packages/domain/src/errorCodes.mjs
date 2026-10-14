@@ -1372,6 +1372,11 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_records_not_synthetic',
   'vcr_records_quality_missing',
   'vcr_records_unavailable',
+  // The rows of a generated table as a page (2026-10-14): a patient the table does not hold, a sort or filter the table has no column
+  // for, a table too long to be sorted whole.
+  'vcr_patient_not_found',
+  'vcr_rows_query_invalid',
+  'vcr_rows_too_large',
   'vcr_card_edit_refused',
   'vcr_card_edit_empty',
   'vcr_card_edit_unchanged',
@@ -2120,6 +2125,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_records_not_synthetic: '这是真实患者的记录，不能下载：真实患者的行不离开数据平面。',
   vcr_records_quality_missing: '这份经验合成的记录还没有质量报告和泄露检查，不能下载：先生成质量报告。',
   vcr_records_unavailable: '本部署没有接入数据平面，生成的记录暂时不能下载。',
+  vcr_patient_not_found: '这一批记录里没有这位虚拟患者；回到名单重新选。',
+  vcr_rows_query_invalid: '这张表没有这一列，不能按它排序或筛选；换一列再试。',
+  vcr_rows_too_large: '这张表太长，不能整表排序；先用筛选缩小范围，或下载后在本地处理。',
   vcr_card_edit_refused: '这样改不成立，没有保存；按提示改正后再试。',
   vcr_card_edit_empty: '没有要改的设定。',
   vcr_card_edit_unchanged: '设定没有变化，没有生成新版本。',
@@ -3141,6 +3149,30 @@ export function runOutcomeKind(run) {
 }
 
 /**
+ * Why a project's runtime is held back from the person's conversation while one run works in it (the 423
+ * `runtime_reserved_for_autopilot`): a scheduled task's execution, a step of a module's programme (虚拟临床研究, 循证 GEO), or
+ * the platform's own background job. The code stays one — it is what every client already knows — and the reason rides in its
+ * declared detail, so the sentence a person reads says what is actually running.
+ */
+export const RUNTIME_LOCK_REASONS = Object.freeze(['scheduled-task', 'module-step', 'platform-task'])
+
+/** The sentence of each reason, in the words of the person who is refused (the first is what the code's own sentence has always said). */
+export const RUNTIME_LOCK_MESSAGES_ZH = Object.freeze({
+  'scheduled-task': '这个项目的运行环境正在执行你设定的定时任务，暂时不接受提问。等这次执行结束后即可继续，或在“定时任务”里先停止这次执行。',
+  'module-step': '这个项目的运行环境正在做研究里的一个步骤，暂时不接受提问。这一步做完后即可继续，也可以在研究页里先取消它。',
+  'platform-task': '这个项目的运行环境正被平台的后台任务占用，暂时不接受提问。稍后即可继续。',
+})
+
+/**
+ * The sentence for a held runtime's reason; an unknown or missing reason reads as the code's own sentence.
+ * @param {unknown} reason @returns {string}
+ */
+export function runtimeLockMessage(reason) {
+  const table = /** @type {Record<string, string>} */ (RUNTIME_LOCK_MESSAGES_ZH)
+  return typeof reason === 'string' && Object.hasOwn(table, reason) ? table[reason] : table['scheduled-task']
+}
+
+/**
  * What a refusal is allowed to tell the client beyond its code and sentence.
  *
  * Declared here, in the domain, because both ends need the same list: the
@@ -3160,6 +3192,11 @@ export function runOutcomeKind(run) {
  * @type {Readonly<Record<string, Readonly<Record<string, 'number' | readonly string[]>>>>}
  */
 export const ERROR_DETAIL_FIELDS = Object.freeze({
+  // Why a project's runtime does not take a question now (`RUNTIME_LOCK_REASONS`): the browser says the sentence of the reason it was
+  // given, not the one every holder used to share.
+  runtime_reserved_for_autopilot: Object.freeze({
+    reason: RUNTIME_LOCK_REASONS,
+  }),
   usage_budget_exceeded: Object.freeze({
     window: Object.freeze(['day', 'week', 'run', 'mission']),
     limit: 'number',

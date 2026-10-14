@@ -32,6 +32,27 @@ test("scheduled work takes over a disconnected idle warm runtime without losing 
   await assert.rejects(manager.dispatchPrompt(project, session.id, { text: "unbudgeted prompt" }), { code: "runtime_reserved_for_autopilot" });
 });
 
+// 2026-10-14 (R3): the one 423 said 「定时任务」 to a person who had just pressed a step of a study. The code stays what every client knows;
+// the reason the project is held rides in its declared detail, and the sentence is picked by it.
+for (const [said, expected] of [["module-step", "module-step"], ["scheduled-task", "scheduled-task"], [undefined, "platform-task"], ["something-new", "platform-task"]]) {
+  test(`a project held for ${said ?? "an unnamed reason"} refuses the person's prompt with the reason ${expected}`, async t => {
+    const { manager, project } = await fixture(t);
+    const session = await manager.reserveBoundedRuntimeSession(project, { ...budget, ...(said === undefined ? {} : { reason: said }) });
+    for (const refuse of [
+      () => manager.dispatchPrompt(project, session.id, { text: "interactive" }),
+      () => manager.createRuntimeSession(project),
+    ]) {
+      await assert.rejects(refuse(), (error) => {
+        assert.equal(error.status, 423);
+        assert.equal(error.code, "runtime_reserved_for_autopilot");
+        assert.deepEqual(error.details, { reason: expected });
+        return true;
+      });
+    }
+    assert.equal(manager.boundedLockReason(project), expected);
+  });
+}
+
 for (const state of ["kernel-working", "ledger-working", "kernel-unknown", "ledger-unknown", "browser-connected"]) {
   test(`scheduled work preserves a warm runtime that is ${state}`, async t => {
     const { manager, project, warm } = await fixture(t);
