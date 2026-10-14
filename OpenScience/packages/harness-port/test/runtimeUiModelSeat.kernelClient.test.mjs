@@ -74,7 +74,8 @@ async function mountWithKernelClient(t, { operator = false, bodyFirst = false } 
   ctx.provide('commandUi', { register: () => () => {} });
   ctx.provide('sessions', {
     scope: () => ({ effect: (/** @type {() => void} */ run) => { run(); } }),
-    binding: () => ({ session: { projections: { faceOf: () => ({ getSnapshot: () => projection.getSnapshot(), subscribe: (/** @type {() => void} */ listener) => projection.subscribe(listener) }) } } }),
+    // `getSnapshot().blank` is what the directory asks of the session ("no first message yet"); a conversation with messages is not blank.
+    binding: () => ({ session: { getSnapshot: () => ({ blank: false }), projections: { faceOf: () => ({ getSnapshot: () => projection.getSnapshot(), subscribe: (/** @type {() => void} */ listener) => projection.subscribe(listener) }) } } }),
     subagentAddress: () => undefined,
   });
   ctx.provide('remote', { $on: () => () => {}, session: remoteSession });
@@ -90,7 +91,14 @@ async function mountWithKernelClient(t, { operator = false, bodyFirst = false } 
   });
   const menuSurface = React.forwardRef((/** @type {any} */ props, /** @type {any} */ ref) => React.createElement('div',
     { ref, id: props.id, role: props.role, 'aria-label': props['aria-label'], 'aria-busy': props['aria-busy'], style: props.style }, props.children));
-  const primitives = new Proxy({ MenuSurface: menuSurface, StateDot: () => React.createElement('span', { 'data-dot': '' }), Toast: () => null },
+  // `rankByName` is a pure function of the primitives package that the picker reads on every render (the first 0.2 candidate
+  // moved the picker's own filter there; against the earlier stand-in, which answered null for it, the operator's seat threw
+  // "Cannot read properties of null"). An empty query returns the list as it is, which is all this test asks of it.
+  const rankByName = (/** @type {any[]} */ items, /** @type {string} */ rawQuery) => {
+    const query = String(rawQuery).toLowerCase();
+    return query === '' ? items : items.filter(item => String(item.name).toLowerCase().includes(query));
+  };
+  const primitives = new Proxy({ MenuSurface: menuSurface, StateDot: () => React.createElement('span', { 'data-dot': '' }), Toast: () => null, rankByName },
     { get: (target, key) => (Object.hasOwn(target, key) ? /** @type {any} */ (target)[key] : () => null) });
   const modules = { '@deepseek-ai/dsh-client-ui-primitives': primitives, '@deepseek-ai/cordis': cordis, '@deepseek-ai/dsh-client-store': { createSnapshotStore },
     'react/jsx-runtime': require('react/jsx-runtime'), 'react-dom': require('react-dom'), react: React };
