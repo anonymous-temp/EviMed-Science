@@ -312,8 +312,11 @@ export function vcrReviewRepairBrief({ revisionId, originalId, kind, templates, 
 
 /**
  * What the program wants from its steps: every requested step and, as a
- * minimal version, whatever it needs upstream (`VCR_STEP_NEEDS`).
- * @param {Record<string, { status: string, requested: boolean }>} steps
+ * minimal version, whatever it needs upstream (`VCR_STEP_NEEDS`). A step a
+ * person stopped (`held`, written by `holdProgramme`) is not taken up again
+ * on the programme's own: it is still requested — what its result reads as
+ * does not change — and it is not wanted until they ask for it.
+ * @param {Record<string, { status: string, requested: boolean, held?: boolean }>} steps
  */
 export function wantedVcrSteps(steps) {
   const requested = new Set(VCR_STEPS.filter((step) => steps?.[step]?.requested === true));
@@ -326,7 +329,7 @@ export function wantedVcrSteps(steps) {
     want.add(step);
     for (const need of /** @type {Record<string, readonly string[]>} */ (VCR_STEP_NEEDS)[step] ?? []) add(need);
   };
-  for (const step of requested) add(step);
+  for (const step of requested) if (steps?.[step]?.held !== true) add(step);
   return {
     want, requested, full,
     /** @param {string} step @returns {"full" | "minimal"} */
@@ -335,14 +338,31 @@ export function wantedVcrSteps(steps) {
 }
 
 /**
+ * A step and everything it needs upstream, transitively: what a person's press of one step takes out of a hold.
+ * @param {string} step @returns {string[]}
+ */
+export function vcrStepClosure(step) {
+  /** @type {Set<string>} */
+  const found = new Set();
+  /** @param {string} name */
+  const visit = (name) => {
+    if (found.has(name)) return;
+    found.add(name);
+    for (const need of /** @type {Record<string, readonly string[]>} */ (VCR_STEP_NEEDS)[name] ?? []) visit(need);
+  };
+  visit(step);
+  return VCR_STEPS.filter((entry) => found.has(entry));
+}
+
+/**
  * The steps as the program will read them on its next tick. A study whose
  * definition exists and which nobody asked anything of is running the whole
  * programme: 「一句话到研究包」 is the default path (plan §10.3), so a study
  * created from the home page's action cards does not sit still.
- * @param {Record<string, { status: string, requested: boolean }>} steps
+ * @param {Record<string, { status: string, requested: boolean, held?: boolean }>} steps
  */
 export function vcrProgramSteps(steps) {
-  /** @type {Record<string, { status: string, requested: boolean }>} */
+  /** @type {Record<string, { status: string, requested: boolean, held?: boolean }>} */
   const out = Object.fromEntries(VCR_STEPS.map((step) => {
     const entry = steps?.[step] ?? { status: "none", requested: false };
     return [step, { ...entry, requested: entry.requested === true || entry.status === "queued" }];
@@ -1808,14 +1828,44 @@ export class VcrOrchestrator {
     }
     const status = study.steps[step]?.status ?? "none";
     const again = ["none", "failed", "stale"].includes(status);
+    // A person asking for the step takes it, and what it needs upstream, out of a hold their 「取消」 put it in (`holdProgramme`).
+    const closure = vcrStepClosure(step);
+    for (const name of closure) {
+      if (study.steps[name]?.held === true) await this.store.setStep(study.id, name, { held: false });
+    }
     await this.store.setStep(study.id, step, { requested: true, askedAt: this.now().toISOString(), ...(again ? { status: "queued" } : {}) });
-    await this.#allowRetries(study, step);
+    for (const name of closure) await this.#allowRetries(study, name);
     // A job that failed, was cancelled or could not be queued is tried again
     // because a person asked: its mark is what says it was already tried.
     await this.store.query(`DELETE FROM ${VCR_SCHEMA}.schedule_marks
       WHERE study_id = $1 AND kind = 'job' AND step = $2 AND state IN ('failed', 'skipped')`, [study.id, step]);
     const result = await this.advance(study.id, { attended: true });
     return this.#answer(study, result, { step });
+  }
+
+  /**
+   * 「取消」: the programme stops going on by itself. Every step that is not done — the one that was out, what waited behind it and what
+   * the programme would have taken up next — is held: not wanted again until a person asks for it (`runStep`) or re-asks which steps
+   * run (`updateStudy`'s action). Without it a stopped run was followed at once by the next step of the programme, which is a cancel that
+   * starts something else. A step that is done is not held — a result that goes stale because its inputs changed is still recomputed —
+   * and what the stopped run had already written stays where it is.
+   * @param {string} studyId
+   * @returns {Promise<{ held: string[] }>}
+   */
+  async holdProgramme(studyId) {
+    return this.#exclusive(studyId, async () => {
+      const study = await this.store.studyById(studyId);
+      if (!study) return { held: [] };
+      /** @type {string[]} */
+      const held = [];
+      for (const step of VCR_STEPS) {
+        const entry = study.steps[step];
+        if (entry?.status === "done") continue;
+        await this.store.setStep(study.id, step, { held: true, ...(entry?.status === "queued" ? { status: "none" } : {}) });
+        held.push(step);
+      }
+      return { held };
+    });
   }
 
   /**

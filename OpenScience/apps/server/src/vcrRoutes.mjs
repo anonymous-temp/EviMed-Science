@@ -811,12 +811,16 @@ export function createVcrRoutes(dependencies) {
     }
 
     // --- 「取消」: stop what the study is doing now ----------------------------------------------------------------------------
-    // The run the study's one slot holds and every engine job that is open: the activity strip's one button. A run a person stopped
-    // is not tried again by the programme until they ask for the step (`#finishRun`), and the steps it covered read as not started.
+    // The run the study's one slot holds and every engine job that is open: the activity strip's one button. What was out, and what
+    // the programme would have gone on to, is not taken up again until a person asks for it (`holdProgramme`): a cancel that is
+    // followed at once by the next step of the programme is not one. The steps the run covered read as not started.
     if (parts.length === 3 && method === "POST" && section === "cancel") {
       await bodyOf(req, maxJsonBytes, []);
       const { study } = await authorize(id, "run");
       return reply(await audited("vcr.step.cancel", (result) => ({ code: id, detail: `${result.canceled.runId ? "run" : "no-run"}+${result.canceled.jobs}` }), { code: id }, async () => {
+        // First: the run's own end advances the programme, and by then there must be nothing left for it to take up.
+        const held = hooks.orchestrator?.holdProgramme
+          ? (await hooks.orchestrator.holdProgramme(study.id).catch(() => ({ held: [] }))).held : [];
         const { flight } = await readRunMarks(data(), study.id).catch(() => ({ flight: null }));
         /** @type {string | null} */
         let runId = null;
@@ -830,7 +834,7 @@ export function createVcrRoutes(dependencies) {
         for (const job of open) {
           try { await hooks.jobs.cancel(study.id, job.id, { actor: String(user.id) }); jobs += 1; } catch { /* one job that ended in between is not a failed cancel */ }
         }
-        return { canceled: { runId, jobs } };
+        return { canceled: { runId, jobs, held } };
       }));
     }
 

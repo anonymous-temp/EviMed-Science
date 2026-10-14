@@ -179,6 +179,38 @@ test("a person re-judges a criterion and countersigns an assessment as themselve
   assert.deepEqual(calls.find((call) => call[0] === "assessment.review")?.slice(1), [OWNER, "std_1", "asm_1"]);
 });
 
+test("a cancel holds the programme before it stops the run — the run's end advances the programme — then stops every open job, and says what it did", async () => {
+  /** @type {any[]} */
+  const order = [];
+  const base = fixture();
+  const { routes, audits } = fixture({
+    overrides: {
+      // The study's one slot holds a run.
+      vcrStore: Object.assign(Object.create(base.vcrStore), { async one() { return { run_id: "run_9", state: "running", step: "evidence", detail: {} }; } }),
+      orchestrator: { async holdProgramme(/** @type {string} */ id) { order.push(["hold", id]); return { held: ["evidence", "population"] }; } },
+      projects: { async cancelRun(/** @type {string} */ userId, /** @type {string} */ projectId, /** @type {string} */ runId) { order.push(["stop", userId, projectId, runId]); return { root: "stopped" }; } },
+      jobs: {
+        async listForStudy() { return [{ id: "job_a", state: "running" }, { id: "job_b", state: "succeeded" }, { id: "job_c", state: "awaiting_budget" }]; },
+        async cancel(/** @type {string} */ _studyId, /** @type {string} */ jobId) { order.push(["job", jobId]); return {}; },
+      },
+    },
+  });
+  const res = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/cancel", {}), res);
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.json().data, { canceled: { runId: "run_9", jobs: 2, held: ["evidence", "population"] } });
+  assert.deepEqual(order, [["hold", "std_1"], ["stop", OWNER, "prj_1", "run_9"], ["job", "job_a"], ["job", "job_c"]]);
+  assert.deepEqual(audits.find((line) => line[0] === "vcr.step.cancel"), ["vcr.step.cancel", "completed", "std_1"]);
+});
+
+test("a cancel with nothing out is not an error: no run, no jobs, and a failed hold does not keep the run from being stopped", async () => {
+  const idle = fixture({ overrides: { orchestrator: { async holdProgramme() { throw new Error("hold failed"); } } } });
+  const res = response();
+  await idle.routes(request("POST", "/api/vcr/studies/std_1/cancel", {}), res);
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.json().data, { canceled: { runId: null, jobs: 0, held: [] } });
+});
+
 test("a 虚拟临床研究 path's metric label folds every id, so a dashboard row is a route", () => {
   for (const [path, label] of [
     ["/api/vcr", "/api/vcr"],
