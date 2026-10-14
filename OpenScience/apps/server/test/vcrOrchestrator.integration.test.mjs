@@ -1549,6 +1549,23 @@ test("R3 re-asking which steps run ends a hold: the programme goes on with what 
   assert.ok(module.dispatched.length > 1, "and the programme goes on");
 });
 
+test("R3 a held step that comes to read finished is not held any more: what changes under it is recomputed like any finished step's", options, async () => {
+  const module = compose();
+  const study = await makeStudy("holdreleased");
+  for (const step of VCR_STEPS) await store.setStep(study.id, step, { requested: true });
+  await module.orchestrator.advance(study.id);
+  const stopped = await module.orchestrator.holdProgramme(study.id);
+  assert.ok(stopped.held.includes("definition"), "the definition had not been written when the person stopped the programme");
+  assert.equal((await store.studyById(study.id)).steps.definition.held, true);
+  // A conversation writes the definition meanwhile: the step reads finished on the next pass, and the hold goes with it.
+  await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "definition", items: null, data: definition });
+  await module.orchestrator.advance(study.id);
+  const after = await store.studyById(study.id);
+  assert.ok(["done", "minimal"].includes(after.steps.definition.status));
+  assert.equal(after.steps.definition.held, false);
+  assert.equal(after.steps.evidence.held, true, "the steps nobody has produced stay held");
+});
+
 test("a study that is paused dispatches nothing and queues nothing", options, async () => {
   const module = compose();
   const study = await makeStudy("paused");

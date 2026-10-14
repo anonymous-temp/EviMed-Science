@@ -1703,9 +1703,12 @@ export class VcrOrchestrator {
   /** @param {any} study @param {string} step @param {Record<string, any>} fields */
   async #step(study, step, fields) {
     const current = object(study.steps?.[step]);
-    const changed = Object.entries(fields).some(([key, value]) => (current[key] ?? null) !== (value ?? null));
+    // A step a person stopped that comes to read finished (a conversation wrote what it needed) is not one that is held any more:
+    // what changes under it afterwards is recomputed like any finished step's.
+    const next = current.held === true && FINISHED.has(String(fields.status ?? "")) ? { ...fields, held: false } : fields;
+    const changed = Object.entries(next).some(([key, value]) => (current[key] ?? null) !== (value ?? null));
     if (!changed) return study;
-    return (await this.store.setStep(study.id, step, fields)) ?? study;
+    return (await this.store.setStep(study.id, step, next)) ?? study;
   }
 
   // --- the route hooks ---------------------------------------------------------------
