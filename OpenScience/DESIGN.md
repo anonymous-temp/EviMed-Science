@@ -625,6 +625,9 @@ and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
   `StepPending`, `VcrStepPending`, `FilterRow`, `VcrToolbar`, `TabSection`, `VcrSection` and `KnowledgeScopeMenu` are
   still in place. Each migration batch deletes what it replaces; the last turns the counts into zero and the rules into
   errors.
+  The framework's components are drawn by `src/test/compositionFixtures.tsx` (one sample per template, in tests), not
+  in `/__gallery`: adding rows re-records both reference images, which CI re-diffs on its own environment, so the first
+  batch that re-records the gallery adds them.
 - `text-ui-sm` is an alias, not an error, until the page rewrites drop its call sites. The
   `max-w-content` family has none left (ESLint refuses it) but the preset still carries the names:
   removing a published name is a major release of the token package, for the Vue shell to adopt.
