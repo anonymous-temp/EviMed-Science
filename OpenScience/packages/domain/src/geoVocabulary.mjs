@@ -404,6 +404,12 @@ export const GEO_ACTION_PROMISE_LABELS_ZH = Object.freeze({
   enter_mention: '进入被提及', raise_mention: '提高被提及', accuracy_to_target: '讲准到目标', coverage_complete: '补齐该有的提示', hold: '保持现状',
 })
 /** Where a recommended source stands for an action: the platform's recommendation, the person's swap, or the outlet it was placed in. */
+/**
+ * What an engine's measured retrieval lets a strategy promise there (the method's `promise_ceiling`): mention and accuracy, accuracy
+ * only (the engine rarely searches the web), or nothing yet. The strategy run writes the word; the platform reads it back when it
+ * decides which engines an action may name.
+ */
+export const GEO_PROMISE_CEILINGS = frozen(['mention_and_accuracy', 'accuracy_only', 'undetermined'])
 export const GEO_ACTION_SOURCE_CHOICES = frozen(['recommended', 'swapped', 'placed'])
 /**
  * What the code notes beside an action (annotations, never a refusal): a run's word the platform's own rows do not support, so the
@@ -477,6 +483,7 @@ export const GEO_VOCABULARIES = Object.freeze({
   actionKind: GEO_ACTION_KINDS,
   actionStatus: GEO_ACTION_STATUSES,
   actionPromise: GEO_ACTION_PROMISES,
+  promiseCeiling: GEO_PROMISE_CEILINGS,
   actionSourceChoice: GEO_ACTION_SOURCE_CHOICES,
   actionCheck: GEO_ACTION_CHECKS,
   needsYouKind: GEO_NEEDS_YOU_KINDS,

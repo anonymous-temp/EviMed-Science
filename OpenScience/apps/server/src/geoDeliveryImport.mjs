@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import { GEO_CITING_LAYERS, deliverableDir, deliverableIdOfPath } from "@evimed/domain";
-import { geoRuntimeWrite, GEO_WRITE_LIMITS } from "./geoWrites.mjs";
+import { geoArticleItemOfFile, geoArticleReader, geoArticlesFileCoverage, geoRuntimeWrite, geoStrategyFileCoverage, geoStrategyWriteOfFile,
+  GEO_WRITE_LIMITS } from "./geoWrites.mjs";
 import { readFileNoFollow, resolveScopedPath } from "./security.mjs";
 import { importGeoValue } from "./geoValueImport.mjs";
 
@@ -28,6 +29,13 @@ import { importGeoValue } from "./geoValueImport.mjs";
  * Build to delete: once runs register every claim themselves (the write now
  * ignores extra fields instead of refusing the item), this import only
  * confirms what is already there.
+ *
+ * The same holds for what a strategy run and a content run wrote (rectification 2026-10-14, G2): their `strategy.json` and
+ * `articles.json` are read at the end of the run and written through the same validators as the tools' own writes, so nothing the
+ * run said is dropped at the boundary — a gap's evidence and expected points, the battlefield's reasons, each tier's words, an
+ * article's channel and audience. Only the run's own deliverables are read (a strategy is versioned: an older file must never
+ * be laid over a newer one), the writes are idempotent (an unchanged strategy is not a version, a source is an upsert, an
+ * article's channel is set once), and every field that is not stored is one of `GEO_NOT_STORED` with its reason.
  *
  * Asked twice for a run, and the second ask is the one that matters (D-24): the
  * ledger's state change starts it and moves on, and the orchestrator asks again
@@ -132,6 +140,33 @@ async function insightFolders(workspaceDir) {
 export const readWorkspaceFile = async (workspaceDir, relative) => readFileNoFollow(workspaceDir, resolveScopedPath(workspaceDir, relative));
 
 /**
+ * Pages of items for one write: at most `max` items and `CHUNK_BYTES` of JSON each.
+ * @param {unknown[]} items @param {number} max
+ * @returns {unknown[][]}
+ */
+function pagesOf(items, max) {
+  /** @type {unknown[][]} */
+  const pages = [];
+  let current = /** @type {unknown[]} */ ([]);
+  let bytes = 0;
+  for (const item of items) {
+    const size = Buffer.byteLength(JSON.stringify(item ?? null), "utf8");
+    if (current.length && (bytes + size > CHUNK_BYTES || current.length >= max)) {
+      pages.push(current);
+      current = [];
+      bytes = 0;
+    }
+    current.push(item);
+    bytes += size;
+  }
+  if (current.length) pages.push(current);
+  return pages;
+}
+
+/** @param {unknown} error @param {string} fallback */
+const codeOf = (error, fallback) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : fallback);
+
+/**
  * @param {{ store: import("./geoStore.mjs").GeoStore, report?: (code: string) => void,
  *   audit?: ((event: string, status: string, details: Record<string, any>) => Promise<unknown> | unknown) | null,
  *   readFile?: (rootDir: string, file: string) => Promise<Buffer | string>,
@@ -225,6 +260,8 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
         report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_cards_refresh_failed");
       }
     }
+    // This run's strategy and article files (G2): read at the run's end, written through the validators, idempotent.
+    const files = await importRunFiles({ project, run, geoProject, deliverables, failed });
     // Articles registered by their path inside the deliverable folder, as the
     // skill used to say (`articles/<id>.md`): with no workspace path and no
     // run, the gate could not be read, the page could not open them and the
@@ -299,7 +336,97 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       }
       if (gated) report(`article gates refreshed ${gated}`);
     }
-    return { imported, issues, located, gated, ...(refreshCards ? { carded } : {}) };
+    return { imported, issues, located, gated, ...(refreshCards ? { carded } : {}), ...(files.strategies || files.articles ? { files } : {}) };
+  };
+
+  /**
+   * The strategy file and the article files of one run, written. A file that does not parse, or a deliverable that holds none, is
+   * passed over; a write that throws is reported and fails the attempt like a claims write does (the next ask tries once more).
+   * @param {{ project: { id: string, userId: string, workspaceDir: string }, run: Record<string, any>, geoProject: any, deliverables: any[], failed: string[] }} input
+   */
+  const importRunFiles = async ({ project, run, geoProject, deliverables, failed }) => {
+    const out = { strategies: 0, gaps: 0, actions: 0, sources: 0, refused: 0, declined: 0, dropped: /** @type {string[]} */ ([]),
+      articles: 0, enriched: 0, registered: 0, skipped: 0 };
+    /** @param {string} id @param {string} file */
+    const parsedFile = async (id, file) => {
+      try { return JSON.parse(String(await readFile(project.workspaceDir, `${deliverableDir(id)}/${file}`))); } catch { return null; }
+    };
+    const idsOf = (/** @type {string} */ capability) => [...new Set(deliverables
+      .filter((deliverable) => typeof deliverable?.id === "string" && (!deliverable.capability || deliverable.capability === capability))
+      .map((deliverable) => String(deliverable.id)))];
+    // ---- the strategy
+    for (const id of idsOf("geo-strategy")) {
+      const file = await parsedFile(id, "strategy.json");
+      if (!file || typeof file !== "object") continue;
+      const { sources, ...data } = geoStrategyWriteOfFile(file);
+      const coverage = geoStrategyFileCoverage(file);
+      out.declined += Object.keys(coverage.declined).length;
+      out.dropped.push(...coverage.dropped.map((path) => `${id}:${path}`));
+      try {
+        if (Object.keys(data).length) {
+          const written = await geoRuntimeWrite({ store, project: geoProject, what: "strategy", body: { data } });
+          out.refused += written.issues.filter((issue) => issue.code !== "notice" && issue.code !== "ignored_fields").length;
+          out.gaps += Array.isArray(data.gaps) ? data.gaps.length : 0;
+          out.actions += Array.isArray(data.actions) ? data.actions.length : 0;
+          out.strategies += 1;
+        }
+        for (const page of pagesOf(Array.isArray(sources) ? sources : [], GEO_WRITE_LIMITS.sources)) {
+          const written = await geoRuntimeWrite({ store, project: geoProject, what: "sources", body: { items: page } });
+          out.sources += written.ids.length;
+          out.refused += written.issues.filter((issue) => issue.code !== "notice" && issue.code !== "ignored_fields").length;
+        }
+      } catch (error) {
+        const code = codeOf(error, "geo_strategy_import_failed");
+        failed.push(code);
+        report(code);
+      }
+    }
+    // ---- the articles
+    const contentIds = idsOf("geo-content");
+    if (contentIds.length) {
+      const claimIdByKey = new Map((await store.listClaims(geoProject.id)).map((claim) => [claim.claimKey, claim.id]));
+      for (const id of contentIds) {
+        const file = await parsedFile(id, "articles.json");
+        if (!file || typeof file !== "object") continue;
+        const coverage = geoArticlesFileCoverage(file);
+        out.declined += Object.keys(coverage.declined).length;
+        out.dropped.push(...coverage.dropped.map((path) => `${id}:${path}`));
+        const entries = Array.isArray(file.articles) ? file.articles : Array.isArray(file) ? file : [];
+        const held = await store.listArticles(geoProject.id);
+        for (const entry of entries) {
+          if (!entry || typeof entry !== "object" || typeof entry.path !== "string") { out.skipped += 1; continue; }
+          out.articles += 1;
+          const fullPath = entry.path.startsWith("deliverables/") ? entry.path : `${deliverableDir(id)}/${entry.path}`;
+          const known = held.find((article) => article.path === fullPath
+            || (article.path === entry.path && (article.deliverableId == null || article.deliverableId === id)));
+          try {
+            if (known) {
+              const changed = await store.setArticleReader(geoProject.id, known.id, geoArticleReader(entry));
+              if (changed) out.enriched += 1;
+              continue;
+            }
+            let contentSha256 = typeof entry.contentSha256 === "string" ? entry.contentSha256 : null;
+            if (!contentSha256) {
+              try { contentSha256 = createHash("sha256").update(await readFile(project.workspaceDir, fullPath)).digest("hex"); } catch { out.skipped += 1; continue; }
+            }
+            const item = geoArticleItemOfFile(entry, { deliverableId: id, runId: String(run.id), claimIdByKey, contentSha256 });
+            const written = await geoRuntimeWrite({ store, project: geoProject, what: "articles", body: { items: [item] }, articleGate,
+              articleExists: async (_geo, path) => { try { await readFile(project.workspaceDir, path); return true; } catch { return false; } } });
+            if (written.ids.length) out.registered += 1;
+            else out.skipped += 1;
+          } catch (error) {
+            const code = codeOf(error, "geo_articles_import_failed");
+            failed.push(code);
+            report(code);
+          }
+        }
+      }
+    }
+    if (out.strategies || out.articles) {
+      report(`run files imported: strategy ${out.strategies} (gaps ${out.gaps}, actions ${out.actions}, sources ${out.sources}, refused ${out.refused}), `
+        + `articles ${out.articles} (enriched ${out.enriched}, registered ${out.registered}, skipped ${out.skipped}), declined ${out.declined}, dropped ${out.dropped.length}`);
+    }
+    return out;
   };
 
   /** An attempt that lost a write or threw: counted and put on the audit record, where an operator reads it (stderr is nobody's). */

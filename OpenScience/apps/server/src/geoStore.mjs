@@ -161,6 +161,8 @@ export function questionGroupFromRow(row) {
     name: text(row.name),
     typicalQuestion: text(row.typical_question),
     journeyStage: text(row.journey_stage),
+    // The stage's number in the journey's own list, when the run wrote it; null for a group written before it was asked for.
+    journeyStageNo: row.journey_stage_no == null ? null : Number(row.journey_stage_no),
     audience: text(row.audience),
     bridge: text(row.bridge),
     weight: num(row.weight),
@@ -203,6 +205,8 @@ export function geoSourceFromRow(row) {
     impostor: row.impostor === true,
     blacklistReason: text(row.blacklist_reason),
     checkedAt: iso(row.checked_at),
+    // What the run read to decide the three conditions.
+    checkEvidence: text(row.check_evidence),
     cited: row.cited && typeof row.cited === "object" ? row.cited : {},
     mentionsOurs: Number(row.mentions_ours ?? 0),
     wrongOurs: Number(row.wrong_ours ?? 0),
@@ -223,6 +227,11 @@ export function geoArticleFromRow(row) {
     groupId: text(row.group_id),
     valueContext: row.value_context ?? {},
     claimIds: Array.isArray(row.claim_ids) ? row.claim_ids.map(String) : [],
+    // Where it is to be published and for whom, as the run said it: a closed word, or the run's own words as a note.
+    channel: text(row.channel),
+    channelNote: text(row.channel_note),
+    audience: text(row.audience),
+    audienceNote: text(row.audience_note),
     gate: text(row.gate),
     safety: String(row.safety),
     contentSha256: text(row.content_sha256),
@@ -300,7 +309,8 @@ const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
 const OWNED_TABLES = Object.freeze(["facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
-  "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "articles", "owned_links", "members", "value_profiles"]);
+  "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "articles", "owned_links", "members", "value_profiles",
+  "action_choices"]);
 
 /** Whether this database has the GEO schema at all. @param {any} client */
 async function geoSchemaExists(client) {
@@ -384,15 +394,54 @@ export async function removeGeoScreenshotFiles(dataDir, shas, report = () => {})
 }
 
 /**
- * The expectations of a new strategy version: the previous ones, each
- * engine's replaced by the write's entry for it when it has one.
+ * The expectations of a new strategy version: the previous ones, each engine's replaced by the write's entry for it when it has one
+ * (in the place it held, so the same write again is the same list), and the engines the write adds after them.
  * @param {unknown} previous @param {unknown} given @returns {any[] | null}
  */
 export function mergedExpectations(previous, given) {
   const before = Array.isArray(previous) ? previous.filter((entry) => entry && typeof entry === "object") : [];
   if (!Array.isArray(given)) return before.length ? before : null;
-  const engines = new Set(given.map((entry) => entry?.engine));
-  return [...before.filter((entry) => !engines.has(entry.engine)), ...given];
+  /** @type {Map<unknown, any>} */
+  const byEngine = new Map(given.map((entry) => [entry?.engine, entry]));
+  const kept = before.map((entry) => (byEngine.has(entry.engine) ? byEngine.get(entry.engine) : entry));
+  const present = new Set(before.map((entry) => entry.engine));
+  return [...kept, ...given.filter((entry) => !present.has(entry?.engine))];
+}
+
+/**
+ * A strategy row as the pages, the orchestrator and the runtime read it.
+ * @param {any} row
+ */
+export function strategyFromRow(row) {
+  return {
+    version: Number(row.version),
+    battlefield: row.battlefield ?? null,
+    expectations: row.expectations ?? null,
+    gaps: row.gaps ?? null,
+    layout: row.layout ?? null,
+    summary: text(row.summary),
+    // What the run said beyond those four: each tier in words, what not to do, the assumptions and the actions by gap.
+    tiers: row.tiers ?? null,
+    noGo: row.no_go ?? null,
+    assumptions: row.assumptions ?? null,
+    actions: row.actions ?? null,
+    runId: text(row.run_id),
+    createdAt: iso(row.created_at),
+  };
+}
+
+/**
+ * A value as text with its keys in order, so what was written compares equal to what a jsonb column reads back.
+ * @param {unknown} value @returns {string}
+ */
+export function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const object = /** @type {Record<string, unknown>} */ (value);
+    return `{${Object.keys(object).sort().filter((key) => object[key] !== undefined)
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(object[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
 }
 
 /** Whitespace-folded text, for deciding whether a claim changed. @param {unknown} value */
@@ -830,8 +879,9 @@ export class GeoStore {
       const id = randomId("ggr_");
       groupIds.push(id);
       groupRows.push({ id, pool: group.pool ?? null, name: group.name ?? null, typical_question: group.typicalQuestion ?? null,
-        journey_stage: group.journeyStage ?? null, audience: group.audience ?? null, bridge: group.bridge ?? null,
-        weight: group.weight ?? null, is_control: group.isControl === true, signal: group.signal ?? null, value_context: group.valueContext ?? {}, position });
+        journey_stage: group.journeyStage ?? null, journey_stage_no: group.journeyStageNo ?? null, audience: group.audience ?? null,
+        bridge: group.bridge ?? null, weight: group.weight ?? null, is_control: group.isControl === true, signal: group.signal ?? null,
+        value_context: group.valueContext ?? {}, position });
       /** @type {string[]} */
       const ids = [];
       for (const question of group.questions ?? []) {
@@ -846,10 +896,11 @@ export class GeoStore {
     }
     if (groupRows.length) {
       await client.query(`INSERT INTO evimed_geo.question_groups (id, user_id, geo_project_id, set_version, pool, name, typical_question,
-          journey_stage, audience, bridge, weight, is_control, signal, value_context, position)
-        SELECT g.id, $2, $3, $4, g.pool, g.name, g.typical_question, g.journey_stage, g.audience, g.bridge, g.weight, g.is_control, g.signal, g.value_context, g.position
-        FROM jsonb_to_recordset($1::jsonb) AS g(id text, pool text, name text, typical_question text, journey_stage text, audience text,
-          bridge text, weight numeric, is_control boolean, signal text, value_context jsonb, position integer)`, [JSON.stringify(groupRows), userId, geoId, version]);
+          journey_stage, journey_stage_no, audience, bridge, weight, is_control, signal, value_context, position)
+        SELECT g.id, $2, $3, $4, g.pool, g.name, g.typical_question, g.journey_stage, g.journey_stage_no, g.audience, g.bridge, g.weight, g.is_control,
+          g.signal, g.value_context, g.position
+        FROM jsonb_to_recordset($1::jsonb) AS g(id text, pool text, name text, typical_question text, journey_stage text, journey_stage_no integer,
+          audience text, bridge text, weight numeric, is_control boolean, signal text, value_context jsonb, position integer)`, [JSON.stringify(groupRows), userId, geoId, version]);
     }
     if (questionRows.length) {
       await client.query(`INSERT INTO evimed_geo.questions (id, user_id, geo_project_id, group_id, set_version, text, kind, pool, platform,
@@ -937,10 +988,7 @@ export class GeoStore {
   /** @param {string} geoId */
   async latestStrategy(geoId) {
     const row = (await this.query(`SELECT * FROM evimed_geo.strategy WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [geoId])).rows[0];
-    return row ? {
-      version: Number(row.version), battlefield: row.battlefield ?? null, expectations: row.expectations ?? null, gaps: row.gaps ?? null,
-      layout: row.layout ?? null, summary: text(row.summary), runId: text(row.run_id), createdAt: iso(row.created_at),
-    } : null;
+    return row ? strategyFromRow(row) : null;
   }
 
   /**
@@ -951,21 +999,43 @@ export class GeoStore {
    * expectations — and the page and the program read only the latest).
    * Expectations are laid over per engine: a write about two engines leaves
    * the others' as they were.
+   *
+   * A write that changes nothing is not a version (the run-end import asks again for a run it has read, and a run writes the same
+   * strategy twice): the answer is the latest version with `unchanged: true`.
    * @param {string} userId @param {string} geoId
-   * @param {{ battlefield?: any, expectations?: any, gaps?: any, layout?: any, summary?: string | null, runId?: string | null }} fields
+   * @param {{ battlefield?: any, expectations?: any, gaps?: any, layout?: any, summary?: string | null, tiers?: any, noGo?: any,
+   *   assumptions?: any, actions?: any, runId?: string | null }} fields
+   * @returns {Promise<{ version: number, unchanged?: boolean }>}
    */
   async writeStrategy(userId, geoId, fields) {
     return this.transaction(async (client) => {
       await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-doc:strategy:' || $1))`, [geoId]);
       const latest = (await client.query(`SELECT * FROM evimed_geo.strategy WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [geoId])).rows[0] ?? null;
+      const before = latest ? strategyFromRow(latest) : null;
+      const carried = (/** @type {"battlefield" | "gaps" | "layout" | "tiers" | "noGo" | "assumptions" | "actions"} */ key) =>
+        (fields[key] !== undefined ? fields[key] : before?.[key] ?? null);
+      const next = {
+        battlefield: carried("battlefield"),
+        expectations: mergedExpectations(before?.expectations ?? null, fields.expectations),
+        gaps: carried("gaps"),
+        layout: carried("layout"),
+        tiers: carried("tiers"),
+        noGo: carried("noGo"),
+        assumptions: carried("assumptions"),
+        actions: carried("actions"),
+        summary: fields.summary !== undefined ? fields.summary : before?.summary ?? null,
+      };
+      if (before && canonicalJson(next) === canonicalJson({ battlefield: before.battlefield, expectations: before.expectations, gaps: before.gaps,
+        layout: before.layout, tiers: before.tiers, noGo: before.noGo, assumptions: before.assumptions, actions: before.actions, summary: before.summary })) {
+        return { version: before.version, unchanged: true };
+      }
       const version = Number(latest?.version ?? 0) + 1;
       const json = (/** @type {unknown} */ value) => (value === undefined || value === null ? null : JSON.stringify(value));
-      const carried = (/** @type {"battlefield" | "gaps" | "layout"} */ key) => (fields[key] !== undefined ? fields[key] : latest?.[key] ?? null);
-      const expectations = mergedExpectations(latest?.expectations ?? null, fields.expectations);
-      await client.query(`INSERT INTO evimed_geo.strategy (geo_project_id, version, user_id, battlefield, expectations, gaps, layout, summary, run_id)
-        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9)`,
-      [geoId, version, userId, json(carried("battlefield")), json(expectations), json(carried("gaps")), json(carried("layout")),
-        fields.summary !== undefined ? fields.summary : text(latest?.summary), fields.runId ?? null]);
+      await client.query(`INSERT INTO evimed_geo.strategy (geo_project_id, version, user_id, battlefield, expectations, gaps, layout, summary, run_id,
+          tiers, no_go, assumptions, actions)
+        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb)`,
+      [geoId, version, userId, json(next.battlefield), json(next.expectations), json(next.gaps), json(next.layout), next.summary, fields.runId ?? null,
+        json(next.tiers), json(next.noGo), json(next.assumptions), json(next.actions)]);
       return { version };
     });
   }
@@ -1024,7 +1094,7 @@ export class GeoStore {
    * @param {string} userId @param {string} geoId
    * @param {Array<{ domain: string, valueContext?: Record<string, any>, name?: string | null, kind?: string | null, layer?: string | null, icpOwner?: string | null,
    *   icpMatches?: boolean | null, newsIndexed?: boolean | null, medicalVertical?: boolean | null, impostor?: boolean,
-   *   blacklistReason?: string | null, checkedAt?: string | null }>} items
+   *   blacklistReason?: string | null, checkedAt?: string | null, checkEvidence?: string | null }>} items
    */
   async upsertSources(userId, geoId, items) {
     return this.transaction(async (client) => {
@@ -1032,19 +1102,20 @@ export class GeoStore {
       const ids = [];
       for (const item of items) {
         const result = await client.query(`INSERT INTO evimed_geo.sources (id, user_id, geo_project_id, domain, name, kind, layer, icp_owner,
-            icp_matches, news_indexed, medical_vertical, impostor, blacklist_reason, checked_at, value_context)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb)
+            icp_matches, news_indexed, medical_vertical, impostor, blacklist_reason, checked_at, value_context, check_evidence)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16)
           ON CONFLICT (geo_project_id, domain) DO UPDATE SET name = coalesce(EXCLUDED.name, sources.name),
             kind = coalesce(EXCLUDED.kind, sources.kind), layer = coalesce(EXCLUDED.layer, sources.layer),
             icp_owner = coalesce(EXCLUDED.icp_owner, sources.icp_owner), icp_matches = coalesce(EXCLUDED.icp_matches, sources.icp_matches),
             news_indexed = coalesce(EXCLUDED.news_indexed, sources.news_indexed),
             medical_vertical = coalesce(EXCLUDED.medical_vertical, sources.medical_vertical), impostor = EXCLUDED.impostor,
             value_context = sources.value_context || EXCLUDED.value_context,
+            check_evidence = coalesce(EXCLUDED.check_evidence, sources.check_evidence),
             blacklist_reason = EXCLUDED.blacklist_reason, checked_at = coalesce(EXCLUDED.checked_at, sources.checked_at), updated_at = now()
           RETURNING id`,
         [randomId("gsrc_"), userId, geoId, item.domain, item.name ?? null, item.kind ?? null, item.layer ?? null, item.icpOwner ?? null,
           item.icpMatches ?? null, item.newsIndexed ?? null, item.medicalVertical ?? null, item.impostor === true, item.blacklistReason ?? null,
-          item.checkedAt ?? null, JSON.stringify(item.valueContext ?? {})]);
+          item.checkedAt ?? null, JSON.stringify(item.valueContext ?? {}), item.checkEvidence ?? null]);
         ids.push(String(result.rows[0].id));
       }
       return ids;
@@ -1075,7 +1146,8 @@ export class GeoStore {
    * ledger's verdict on the deliverable), never the run's own claim.
    * @param {string} userId @param {string} geoId
    * @param {Array<{ path: string, layer: string, title?: string | null, groupId?: string | null, claimIds: string[], gate: string, safety: string,
-   *   valueContext?: Record<string, any>, contentSha256?: string | null, protectedSha256?: string | null, deliverableId?: string | null, runId?: string | null }>} items
+   *   valueContext?: Record<string, any>, contentSha256?: string | null, protectedSha256?: string | null, deliverableId?: string | null, runId?: string | null,
+   *   channel?: string | null, channelNote?: string | null, audience?: string | null, audienceNote?: string | null }>} items
    */
   async registerArticles(userId, geoId, items) {
     return this.transaction(async (client) => {
@@ -1089,12 +1161,15 @@ export class GeoStore {
           ? suppliedVersion : valueVersion;
         const status = geoArticlePublishable(item) ? "publishable" : "draft";
         const result = await client.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, run_id, deliverable_id, path, layer, title,
-            group_id, claim_ids, gate, safety, content_sha256, protected_sha256, status, value_context, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13, $14, $15, $16::jsonb, clock_timestamp(), clock_timestamp())
+            group_id, claim_ids, gate, safety, content_sha256, protected_sha256, status, value_context, channel, channel_note, audience, audience_note,
+            created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13, $14, $15, $16::jsonb, $17, $18, $19, $20, clock_timestamp(), clock_timestamp())
           ON CONFLICT (geo_project_id, path) WHERE path IS NOT NULL DO UPDATE SET run_id = coalesce(EXCLUDED.run_id, articles.run_id),
             deliverable_id = coalesce(EXCLUDED.deliverable_id, articles.deliverable_id), layer = EXCLUDED.layer, title = EXCLUDED.title,
             group_id = EXCLUDED.group_id, claim_ids = EXCLUDED.claim_ids, gate = EXCLUDED.gate,
             value_context = articles.value_context || EXCLUDED.value_context,
+            channel = coalesce(EXCLUDED.channel, articles.channel), channel_note = coalesce(EXCLUDED.channel_note, articles.channel_note),
+            audience = coalesce(EXCLUDED.audience, articles.audience), audience_note = coalesce(EXCLUDED.audience_note, articles.audience_note),
             safety = CASE WHEN articles.safety = 'open' THEN 'open' ELSE EXCLUDED.safety END,
             content_sha256 = EXCLUDED.content_sha256, protected_sha256 = EXCLUDED.protected_sha256,
             status = CASE WHEN articles.status NOT IN ('draft', 'publishable') THEN articles.status
@@ -1103,11 +1178,38 @@ export class GeoStore {
             updated_at = now()
           RETURNING id`,
         [randomId("gart_"), userId, geoId, item.runId ?? null, item.deliverableId ?? null, item.path, item.layer, item.title ?? null,
-          item.groupId ?? null, item.claimIds, item.gate, item.safety, item.contentSha256 ?? null, item.protectedSha256 ?? null, status, JSON.stringify({ ...item.valueContext, basisVersion })]);
+          item.groupId ?? null, item.claimIds, item.gate, item.safety, item.contentSha256 ?? null, item.protectedSha256 ?? null, status,
+          JSON.stringify({ ...item.valueContext, basisVersion }), item.channel ?? null, item.channelNote ?? null, item.audience ?? null, item.audienceNote ?? null]);
         ids.push(String(result.rows[0].id));
       }
       return ids;
     });
+  }
+
+  /**
+   * Where an article is to be published and for whom, as the run said it (articles.json): only what the call names is set, and a
+   * value the article already holds is not written again.
+   * @param {string} geoId @param {string} articleId
+   * @param {{ channel?: string | null, channelNote?: string | null, audience?: string | null, audienceNote?: string | null }} reader
+   * @returns {Promise<boolean>} whether anything changed
+   */
+  async setArticleReader(geoId, articleId, reader) {
+    /** @type {string[]} */
+    const sets = [];
+    /** @type {string[]} */
+    const differs = [];
+    /** @type {unknown[]} */
+    const values = [geoId, articleId];
+    for (const [key, column] of /** @type {const} */ ([["channel", "channel"], ["channelNote", "channel_note"], ["audience", "audience"], ["audienceNote", "audience_note"]])) {
+      if (reader[key] === undefined) continue;
+      values.push(reader[key]);
+      sets.push(`${column} = $${values.length}`);
+      differs.push(`${column} IS DISTINCT FROM $${values.length}`);
+    }
+    if (!sets.length) return false;
+    const result = await this.query(`UPDATE evimed_geo.articles SET ${sets.join(", ")}, updated_at = now()
+      WHERE geo_project_id = $1 AND id = $2 AND (${differs.join(" OR ")}) RETURNING id`, values);
+    return (result.rowCount ?? 0) > 0;
   }
 
   /**
@@ -1335,6 +1437,45 @@ export class GeoStore {
       groupIds: new Set(groups.rows.map((/** @type {any} */ row) => String(row.id))),
       liveKeys: new Set(live.rows.map((/** @type {any} */ row) => String(row.url_key))),
     };
+  }
+
+  // --- what a person decided about an action ----------------------------------------------
+
+  /**
+   * Every choice of the project: the actions a person skipped and the sources they swapped to.
+   * @param {string} geoId
+   * @returns {Promise<Array<{ key: string, skipped: boolean, sourceDomain: string | null, decidedBy: string | null, updatedAt: string | null }>>}
+   */
+  async actionChoices(geoId) {
+    const result = await this.query(`SELECT action_key, skipped, source_domain, decided_by, updated_at FROM evimed_geo.action_choices
+      WHERE geo_project_id = $1 ORDER BY updated_at DESC LIMIT 2000`, [geoId]);
+    return result.rows.map((/** @type {any} */ row) => ({ key: String(row.action_key), skipped: row.skipped === true, sourceDomain: text(row.source_domain),
+      decidedBy: text(row.decided_by), updatedAt: iso(row.updated_at) }));
+  }
+
+  /**
+   * A person's choice about one action, reversible: `skipped` and/or `sourceDomain` are set when the call names them (null clears
+   * the source). A choice that says nothing (not skipped, no source) is no row. The row's owner is the project's.
+   * @param {{ geoId: string, ownerId: string, key: string, decidedBy: string, skipped?: boolean, sourceDomain?: string | null }} input
+   * @returns {Promise<{ key: string, skipped: boolean, sourceDomain: string | null, updatedAt: string | null } | null>} null when nothing is decided any more
+   */
+  async setActionChoice({ geoId, ownerId, key, decidedBy, skipped, sourceDomain }) {
+    return this.transaction(async (client) => {
+      const held = (await client.query(`SELECT skipped, source_domain FROM evimed_geo.action_choices WHERE geo_project_id = $1 AND action_key = $2 FOR UPDATE`,
+        [geoId, key])).rows[0];
+      const nextSkipped = skipped === undefined ? held?.skipped === true : skipped;
+      const nextSource = sourceDomain === undefined ? text(held?.source_domain) : sourceDomain;
+      if (!nextSkipped && !nextSource) {
+        if (held) await client.query(`DELETE FROM evimed_geo.action_choices WHERE geo_project_id = $1 AND action_key = $2`, [geoId, key]);
+        return null;
+      }
+      const row = (await client.query(`INSERT INTO evimed_geo.action_choices (geo_project_id, action_key, user_id, decided_by, skipped, source_domain)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (geo_project_id, action_key) DO UPDATE SET decided_by = EXCLUDED.decided_by, skipped = EXCLUDED.skipped,
+          source_domain = EXCLUDED.source_domain, updated_at = now()
+        RETURNING action_key, skipped, source_domain, updated_at`, [geoId, key, ownerId, decidedBy, nextSkipped, nextSource])).rows[0];
+      return { key: String(row.action_key), skipped: row.skipped === true, sourceDomain: text(row.source_domain), updatedAt: iso(row.updated_at) };
+    });
   }
 
   /**
