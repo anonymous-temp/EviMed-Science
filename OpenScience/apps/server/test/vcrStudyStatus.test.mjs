@@ -1,9 +1,12 @@
 // What is going on in a study, what waits for what, and what each step found (R3, 2026-10-14): pure over the marks, the jobs and the
 // rows the service gathers, so the read model and the answer of a press cannot disagree.
 import assert from "node:assert/strict";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import { VCR_ACTIVITY_TAIL_MS, VCR_STEP_NOTE_MAX, buildVcrActivity, vcrQueueOf, vcrStepSummaries } from "../src/vcrStudyStatus.mjs";
+import { FIXTURE_DIR } from "./vcrViewsFixtures.mjs";
 
 const NOW = new Date("2026-10-14T10:00:00.000Z");
 const at = (/** @type {number} */ secondsAgo) => new Date(NOW.getTime() - secondsAgo * 1000).toISOString();
@@ -121,4 +124,52 @@ test("each step has at most one short finding with its one number, from what the
   // A step with nothing to say is absent — and so is one whose note would not fit a step bar.
   assert.deepEqual(vcrStepSummaries({ study: { steps: {} }, assumptions: [] }, []), {});
   assert.equal(vcrStepSummaries({ study: { steps: {} }, populations: [{ resultId: "r", counts: { generatedRecords: 123456789012 } }], allResults: [] }, []).population, undefined);
+});
+
+// The `activity` payloads the activity strip is drawn from, one per state it has — written beside the page fixtures
+// (`VCR_VIEWS_WRITE_FIXTURES=1`), so the web's tests draw the strip from exactly what the server sends.
+const WRITE = process.env.VCR_VIEWS_WRITE_FIXTURES === "1";
+/** @param {string} name @param {unknown} value */
+function check(name, value) {
+  const file = path.join(FIXTURE_DIR, "activity", `${name}.json`);
+  const text = `${JSON.stringify(value, null, 2)}\n`;
+  if (WRITE) {
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, text);
+    return;
+  }
+  assert.equal(text, readFileSync(file, "utf8"), `activity/${name}.json differs from what the read model now sends; regenerate with VCR_VIEWS_WRITE_FIXTURES=1 and read the diff`);
+}
+
+test("the activity payloads of each state the strip has are fixtures the web draws from", () => {
+  const progress = {
+    currentPhase: "claims", phaseCounts: { search: 4, claims: 2 }, sources: { searched: 4, included: 3, fullText: 2 }, claims: { total: 5, verified: 3 },
+    deliverables: [{ status: "delegated" }],
+  };
+  const allSteps = (/** @type {Record<string, string>} */ status) => Object.fromEntries(
+    ["definition", "evidence", "population", "patients", "comparator", "trial", "matching"].map((step) => [step, { status: status[step] ?? "none" }]));
+  const evidenceRun = mark({ key: "run:evidence", run_id: "run_ev", detail: { scope: [{ step: "evidence" }], purpose: "evidence", question: "找证据、整理假设卡", placement: "open-runtime" } });
+  // A run in the open runtime, with what its tool calls added up to, and a step waiting behind it.
+  check("running-with-queue", buildVcrActivity({ now: NOW, steps: allSteps({ definition: "done", evidence: "running", population: "queued" }),
+    flight: evidenceRun, ledger: { startedAt: at(90), progress } }));
+  // A run a worker pass sent with nobody present: it holds the project's own conversation.
+  check("bounded-locked", buildVcrActivity({ now: NOW, steps: allSteps({ definition: "running" }),
+    flight: mark({ key: "run:definition", run_id: "run_def", detail: { scope: [{ step: "definition" }], purpose: "definition", question: "整理研究定义", placement: "bounded" } }),
+    ledger: { startedAt: at(20), progress: { currentPhase: "search", phaseCounts: { search: 1 } } } }));
+  // The two seconds in which a run is being sent: it says nothing of where it went.
+  check("being-sent", buildVcrActivity({ now: NOW, steps: allSteps({ definition: "done", evidence: "queued" }),
+    flight: mark({ key: "run:evidence", state: "claimed", run_id: null, detail: { scope: [{ step: "evidence" }], purpose: "evidence", question: "找证据、整理假设卡" } }) }));
+  // Engine work under way with no run out: the jobs and their step.
+  check("jobs-only", buildVcrActivity({ now: NOW, steps: allSteps({ definition: "done", patients: "running" }), jobs: [
+    { id: "job_a", kind: "generate_patients_time_to_event", state: "running", progress: { done: 1200, total: 2000 }, checkpoint: { node: "patient_set:set_1@1" } },
+    { id: "job_b", kind: "design_simulation", state: "queued", progress: {}, checkpoint: { node: "trial_scenario:scn_1@1" } },
+  ] }));
+  // What just ended, for the seconds the strip says so — and the three outcomes.
+  for (const [name, detail] of /** @type {Array<[string, Record<string, any>]>} */ ([
+    ["tail-succeeded", { runStatus: "succeeded" }], ["tail-canceled", { runStatus: "canceled", canceled: true }], ["tail-failed", { runStatus: "failed" }],
+  ])) {
+    check(name, buildVcrActivity({ now: NOW, steps: allSteps({ definition: "done" }),
+      last: mark({ state: detail.runStatus === "succeeded" ? "done" : "failed", done_at: at(6), detail: { scope: [{ step: "evidence" }], ...detail } }) }));
+  }
+  check("idle", buildVcrActivity({ now: NOW, steps: allSteps({ definition: "done" }) }));
 });
