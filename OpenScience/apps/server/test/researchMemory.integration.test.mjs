@@ -742,6 +742,14 @@ test("a review reads only what the platform wrote and nobody has touched, once p
   assert.deepEqual(first.sort(), [platform.id, inferred.id].sort());
   assert.ok(!first.includes(stated.id) && !first.includes(touched.id) && !first.includes(summary.id));
   assert.deepEqual(await store.unreviewedRecords(beta, rules), [], "another account's memories are never read");
+  // The review also asks for what the platform read as the researcher's own words, which code checks against who wrote the quoted
+  // message; the edited one is theirs still, and an origin the store does not know asks for nothing.
+  const wide = await store.unreviewedRecords(alpha, rules, { origins: ["system", "inferred", "explicit"], limit: 100 });
+  assert.ok([platform.id, inferred.id, stated.id].every((id) => wide.some((item) => item.id === id)));
+  assert.ok(!wide.some((item) => item.id === touched.id || item.id === summary.id));
+  const explicit = await store.unreviewedRecords(alpha, rules, { origins: ["explicit"], limit: 100 });
+  assert.ok(explicit.some((item) => item.id === stated.id) && explicit.every((item) => item.origin === "explicit"));
+  assert.deepEqual(await store.unreviewedRecords(alpha, rules, { origins: ["manual", "bogus"] }), []);
 
   assert.equal(await store.noteReviewed(alpha, rules, [{ id: platform.id, kept: false, reason: "platform" }, { id: inferred.id, kept: true },
     { id: "rec_gone", kept: true }]), 2, "a memory deleted in between is skipped, not an error");

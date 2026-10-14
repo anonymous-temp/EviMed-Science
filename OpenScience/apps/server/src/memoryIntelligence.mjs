@@ -1000,10 +1000,11 @@ export function extractionEmptyCause(result) {
 
 export class MemoryIntelligence {
   /** @param {any} config @param {any} memoryStore
-   *  @param {{fetchImpl?:any,notifications?:any,audit?:any,usageLedger?:any,feedbackEvents?:any,canReuseRun?:any,dispatchedRequests?:any}} dependencies
+   *  @param {{fetchImpl?:any,notifications?:any,audit?:any,usageLedger?:any,feedbackEvents?:any,canReuseRun?:any,dispatchedRequests?:any,evidenceProvenance?:any}} dependencies
    *  `dispatchedRequests(project, run)`: the kernel requests the platform itself sent into the run's conversation, across every
-   *  execution of it (`dispatchedRequestIdsOf` over the ledger's runs of that conversation). */
-  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, notifications = null, audit = null, usageLedger = null, feedbackEvents = null, canReuseRun = null, dispatchedRequests = null } = {}) {
+   *  execution of it (`dispatchedRequestIdsOf` over the ledger's runs of that conversation). `evidenceProvenance()`: a reader of
+   *  whose words a stored memory's evidence is, for reading older memories again (`createEvidenceProvenance`). */
+  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, notifications = null, audit = null, usageLedger = null, feedbackEvents = null, canReuseRun = null, dispatchedRequests = null, evidenceProvenance = null } = {}) {
     this.config = config;
     this.dispatchedRequests = typeof dispatchedRequests === "function" ? dispatchedRequests : null;
     this.memoryStore = memoryStore;
@@ -1036,7 +1037,7 @@ export class MemoryIntelligence {
     this.model = String(config.memoryExtractionModel || config.deepseekModel || "");
     this.runSummaryTtlMs = Math.max(0, Number(config.memoryRunSummaryTtlDays ?? 90)) * 24 * 60 * 60 * 1_000;
     // What older rules let the platform write, read again under today's after each run (`memoryReview.mjs`).
-    this.review = new MemoryReview(config, memoryStore, { fetchImpl, usageLedger, audit: (event, error) => this.audit(event, error) });
+    this.review = new MemoryReview(config, memoryStore, { fetchImpl, usageLedger, audit: (event, error) => this.audit(event, error), evidenceProvenance });
     // How long an inference lives after it was last observed (see recordRun).
     this.inferredTtlMs = Math.max(0, Number(config.memoryInferredTtlDays ?? 90)) * 24 * 60 * 60 * 1_000;
     this.excludedProjectPrefixes = Array.isArray(config.memoryExtractionExcludedProjectPrefixes)

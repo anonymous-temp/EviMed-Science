@@ -4602,6 +4602,23 @@ export class AgentRunStore {
   }
 
   /**
+   * Every conversation of a project with its runs, newest first: one read of the ledger for what `conversationRuns` answers one
+   * conversation at a time. What reading older memories against the conversations they came from asks (`memoryEvidenceProvenance.mjs`).
+   * @param {any} project @returns {Promise<Map<string, Record<string, any>[]>>}
+   */
+  async conversationIndex(project) {
+    /** @type {Map<string, Record<string, any>[]>} */
+    const index = new Map();
+    for (const run of foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()) {
+      if (typeof run.sessionId !== "string" || !run.sessionId) continue;
+      const runs = index.get(run.sessionId);
+      if (runs) runs.push(run); else index.set(run.sessionId, [run]);
+    }
+    for (const runs of index.values()) runs.sort((left, right) => String(right.startedAt ?? "").localeCompare(String(left.startedAt ?? "")));
+    return index;
+  }
+
+  /**
    * Which of these runs a kernel session belongs to.
    *
    * A run's own conversation is on its record; a subagent's session is not,
