@@ -123,7 +123,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import { preservedConversationHistory } from "./conversationHistory.mjs";
@@ -1021,6 +1021,7 @@ export function runUsageFrom(summaries, run) {
 export function automatedRun(run) {
   return run?.automated === true
     || String(run?.effectiveRouteReason ?? "").startsWith("autopilot:")
+    || isVerificationRun(run)
     || Boolean(verificationEpisodeId(run?.dispatchId));
 }
 

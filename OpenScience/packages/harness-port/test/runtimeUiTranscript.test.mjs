@@ -4,9 +4,10 @@
 // backstage rows hidden for a researcher and kept for an operator.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import vm from 'node:vm';
 
 import { PLATFORM_CONTEXT_TAGS } from '@evimed/domain';
-import { FRAME_VOCABULARY, renderFrameClient } from '../src/runtimeUiFrame.mjs';
+import { FRAME_VOCABULARY, partsSource, renderFrameClient } from '../src/runtimeUiFrame.mjs';
 import { apply, BODY, historyWanted, withoutPlatformBlocks } from '../src/runtimeUiTranscript.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, realReact, renderStatic } from './helpers/frameFakes.mjs';
 
@@ -301,4 +302,11 @@ test('the shipped bundle is built from the closed list', () => {
   const bundle = renderFrameClient();
   assert.match(bundle, /"platformTags":\{"injected":\[[^\]]*"evimed-budget-scope"/);
   assert.match(bundle, /function withoutPlatformText\(/);
+});
+
+test('the function the browser receives, as emitted text in a page with no module and no Node global, strips the same blocks', () => {
+  const shipped = vm.runInNewContext(partsSource(BODY.parts, 'withoutPlatformBlocks'), {});
+  const text = `核对这条主张。\n\n<evimed-autopilot-verification>episode-0123456789abcdef0123456789abcdef-v1</evimed-autopilot-verification>\n${MARKER}`;
+  const stripped = shipped([{ type: 'text', text }, { type: 'image', attachment: { id: 'a' } }], FRAME_VOCABULARY.platformTags);
+  assert.deepEqual(JSON.parse(JSON.stringify(stripped)), [{ type: 'text', text: '核对这条主张。' }, { type: 'image', attachment: { id: 'a' } }]);
 });
