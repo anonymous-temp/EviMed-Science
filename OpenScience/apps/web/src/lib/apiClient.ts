@@ -7,7 +7,7 @@
  * false and a code path nothing can reach.
  */
 import { formatDuration } from "./format";
-import { ERROR_DETAIL_FIELDS, knownErrorCodeMessage, safeAppReturnPath } from "@evimed/domain";
+import { ERROR_DETAIL_FIELDS, knownErrorCodeMessage, personAvailability, safeAppReturnPath } from "@evimed/domain";
 import { rememberConversationTitles } from "./conversationTitles";
 
 const rawWebApiBase = import.meta.env.VITE_OPEN_SCIENCE_API_URL?.trim() ?? "";
@@ -454,14 +454,27 @@ export interface WebResearchAgentOutput {
 export type WebAvailabilityState = "source-planned" | "installed" | "executable" | "limited" | "unavailable" | "unverified";
 
 /**
- * The states a reader can act on, and so the only ones drawn — a label and its sentence. The rest (installed, executable,
- * unverified) are operational history: how often something ran on this deployment, or that nothing could be proven about
- * it, which opens the same conversation either way and which a researcher could not change — the system explaining itself
- * (AGENTS.md, 「The interface never explains the system」). They are not drawn to the eye and they are not read out to
- * assistive technology; the label stays in the API for operators. Still a label, never a gate.
+ * What a card or a panel may say about an availability: decided by the REASON, not by the state (R19, plan §5.6 / S4).
+ *
+ * It was decided by state — 「受限」, 「不可用」 and 「规划中」 were drawn — and a state is not a reason: a tool is `limited` for
+ * nine reasons and one of them is the reader's to mend. A deployment whose last run of Meta analysis failed stamped
+ * 「受限」 and the sentence of that run (gate, workspace and all) on the card every account opened. Now only a reason a reader
+ * can act on is drawn (`personAvailability`: a connector they have not given their own key for, a catalogue item they have
+ * not installed, a module their account is not offered, and for a skill they brought the software its own package needs),
+ * with the sentence of a small table written for them; everything else stays in the API for operators and in nobody's page.
+ * Still a label, never a gate: a card opens the same conversation whatever it says.
  */
-export const availabilityIsDrawn = (state: WebAvailabilityState | undefined): boolean =>
-  state === "limited" || state === "unavailable" || state === "source-planned";
+export function drawnAvailability(
+  availability: Pick<WebCapabilityAvailability, "state" | "reason" | "label" | "text"> | null | undefined,
+  surface: "capability" | "skill" = "capability",
+): { label: string; text: string } | null {
+  return availability ? personAvailability({ ...availability, kind: surface }, surface) : null;
+}
+
+export const availabilityIsDrawn = (
+  availability: Pick<WebCapabilityAvailability, "state" | "reason" | "label" | "text"> | null | undefined,
+  surface: "capability" | "skill" = "capability",
+): boolean => drawnAvailability(availability, surface) !== null;
 
 export interface WebCapabilityAvailability {
   kind: "capability" | "tool" | "skill" | "extension";

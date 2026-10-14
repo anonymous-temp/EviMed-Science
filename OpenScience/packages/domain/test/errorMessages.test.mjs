@@ -15,6 +15,7 @@ import test from "node:test";
 import {
   ALL_ERROR_CODES,
   CONTROL_PLANE_ERROR_CODES,
+  ERROR_CODE_AUDIENCES,
   ERROR_CODE_FAMILIES,
   ERROR_CODE_MESSAGES,
   ERROR_DETAIL_FIELDS,
@@ -22,9 +23,11 @@ import {
   RUNTIME_START_RECOVERY,
   RUN_OUTCOME_KINDS,
   RUN_VERDICT_ERROR_CODES,
+  errorCodeAudience,
   errorCodeMessage,
   errorCodeOutcome,
   knownErrorCodeMessage,
+  personErrorCodeMessage,
   runOutcomeKind,
   runtimeStartRecovery,
 } from "../index.mjs";
@@ -236,4 +239,43 @@ test("every refusal a runtime start can meet says what the reader is to do, by c
   assert.equal(runtimeStartRecovery("runtime_start_timeout", 504), "retry");
   assert.equal(runtimeStartRecovery(null, 500), "retry");
   assert.equal(runtimeStartRecovery(undefined), "retry");
+});
+
+// Who a sentence is for (R19, plan §3 S4). The card of a tool is the same for every account; it said 「受限」 and the
+// sentence of the last failed run of anybody's because nothing said that sentence was a run's. Now every code names its
+// reader, and a surface that lists things for everyone reads `person` only.
+test("every known code names its reader, and a code nobody classified is read by nobody", () => {
+  const counts = { run: 0, person: 0, operator: 0 };
+  for (const code of ALL_ERROR_CODES) {
+    const audience = errorCodeAudience(code);
+    assert.ok(audience && ERROR_CODE_AUDIENCES.includes(audience), `${code} names no audience: add it to a group errorCodes.mjs classifies`);
+    counts[/** @type {"run" | "person" | "operator"} */ (audience)] += 1;
+  }
+  // A walk that matches nothing passes for ever: all three readers have codes.
+  assert.ok(counts.run > 100 && counts.person > 100 && counts.operator > 20, JSON.stringify(counts));
+  // The vocabulary is open (a runtime forwards whatever code it raised), so one nobody classified is not a person's.
+  assert.equal(errorCodeAudience("a_code_from_the_future"), null);
+  assert.equal(personErrorCodeMessage("a_code_from_the_future"), null);
+  assert.equal(errorCodeAudience(""), null);
+});
+
+test("the sentence of a run's failure is never handed to a surface that lists things for everyone", () => {
+  // The owner's own card: 自动化 Meta 分析 stamped with this, for every account (2026-10-14).
+  assert.equal(errorCodeAudience("specialist_required_output_missing"), "run");
+  assert.match(errorCodeMessage("specialist_required_output_missing"), /质量门|能力约定|工作区/, "the sentence is the run's, and this is what it says");
+  assert.equal(personErrorCodeMessage("specialist_required_output_missing"), null);
+  // Every code of a run's verdict, a gate repair and a tool boundary is a run's.
+  for (const code of RUN_VERDICT_ERROR_CODES) assert.notEqual(errorCodeAudience(code), "person", `${code} is a run's verdict`);
+  // What a person did or can do about is theirs, and has its sentence.
+  for (const code of ["credits_exhausted", "capsule_share_link_expired", "runtime_reserved_for_autopilot", "memory_engine_unavailable"]) {
+    assert.equal(errorCodeAudience(code), "person", code);
+    assert.equal(personErrorCodeMessage(code), knownErrorCodeMessage(code));
+  }
+  // A tool boundary the run meets (a gateway code) is the run's, not the page's.
+  assert.equal(errorCodeAudience("vcr_split_invalid"), "run");
+  // The deployment's own configuration is the operator's.
+  for (const code of ["operator_metrics_token_placeholder", "usage_metering_unavailable", "runtime_seam_missing"]) {
+    assert.equal(errorCodeAudience(code), "operator", code);
+    assert.equal(personErrorCodeMessage(code), null);
+  }
 });

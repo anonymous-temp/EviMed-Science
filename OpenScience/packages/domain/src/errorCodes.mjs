@@ -3157,6 +3157,93 @@ export function runOutcomeKind(run) {
 }
 
 /**
+ * Who each code's sentence is written for (R19, plan §3 S4).
+ *
+ * Hidden knowledge: a sentence is true for one reader and a stranger's for the next. 「这项能力约定必须产出的文件里，有一个
+ * 没有写出来，因此这份成果不完整、没有通过质量门」 is what the run that wrote it is told (it repairs in place) and what the
+ * person who started it reads on that run's card. On the card of a tool — which every account sees and nobody can change —
+ * it was a stranger's sentence about somebody else's run, stamped on the tool as 「受限」. The registry said what every
+ * code means and not whom it is for, so each page that drew one decided by hand, and one decided wrong.
+ *
+ *   run       about a run's own work or one of its tools: the gate's verdicts and repairs, a source or a tool that did not
+ *             answer, a platform stop. Read where that run is the subject — its card, its notices, the model repairing it.
+ *   person    what happened to the reader's own action or object, and what they can do: a refusal, a ceiling, a link that
+ *             expired, a file that could not be read. Written to be said on whichever page they acted on.
+ *   operator  about the deployment: its configuration, its wiring and the platform's own programmes. The operations view.
+ *
+ * A surface that lists things for everyone — a card, an inventory row, a drawer — reads `person` only
+ * (`personErrorCodeMessage`), and says nothing where the code is not. Total by construction, like `errorCodeOutcome`: a
+ * code no rule claims is `null`, never a guess, and a test holds `ALL_ERROR_CODES` to have none — a code added without a
+ * home fails there instead of reaching a page as somebody's sentence.
+ */
+export const ERROR_CODE_AUDIENCES = Object.freeze(['run', 'person', 'operator'])
+
+/**
+ * The audience of every code in `ALL_ERROR_CODES`, built once from the groups that list them. First claim wins, so the
+ * narrow exceptions come before the groups they cut out of.
+ * @type {ReadonlyMap<string, typeof ERROR_CODE_AUDIENCES[number]>}
+ */
+const ERROR_CODE_AUDIENCE_TABLE = (() => {
+  /** @type {Map<string, typeof ERROR_CODE_AUDIENCES[number]>} */
+  const table = new Map()
+  /** @param {typeof ERROR_CODE_AUDIENCES[number]} audience @param {Iterable<string>} codes */
+  const claim = (audience, codes) => { for (const code of codes) if (!table.has(code)) table.set(code, audience) }
+  const keys = (/** @type {object} */ record) => Object.keys(record)
+  const memoryGateway = CONTROL_PLANE_ERROR_CODES.filter((code) => code.startsWith('memory_gateway_'))
+  const verification = CONTROL_PLANE_ERROR_CODES.filter((code) => code.startsWith('verification_'))
+
+  // The deployment's own wiring: a run that stops on one of these says nothing about anyone's work, and nobody who reads
+  // it can mend it. Cut out of the runtime group they sit in.
+  claim('operator', [
+    'runtime_wire_protocol_mismatch', 'runtime_seam_missing', 'runtime_sandbox_unavailable', 'runtime_preset_unavailable',
+    'runtime_bundle_version_mismatch', 'runtime_domain_version_mismatch',
+    // Usage is recorded late: nothing was refused and there is nothing for the reader to do.
+    'usage_metering_unavailable', 'illegal_state_transition',
+    // The publisher account's own protections (「EviMed 证据中心」 cannot sign in).
+    'platform_account_protected', 'platform_account_reserved', 'evidence_upkeep_no_allowance',
+  ])
+  // A ceiling the reader can raise or wait out: shown to them, on the run it stopped.
+  claim('person', ['runtime_spend_limit_reached'])
+  claim('operator', [...keys(READINESS_ERROR_MESSAGES_ZH), ...keys(EVOLUTION_ERROR_MESSAGES), ...EVIDENCE_PROGRAMME_ERROR_CODES])
+  claim('run', [
+    ...RUNTIME_ERROR_CODES, ...RUN_VERDICT_ERROR_CODES, ...SOCKET_TOOL_ERROR_CODES,
+    ...repairableEvidencePackageErrorCodes, ...recoverableEvidenceSourceErrorCodes, ...terminalEvidenceSourceErrorCodes,
+    ...VCR_GATEWAY_ERROR_CODES, ...VCR_WRITE_ISSUE_CODES, ...VCR_PROTOCOL_ISSUE_CODES, ...VCR_ENGINE_ISSUE_CODES,
+    ...MANAGED_BROWSER_ERROR_CODES, ...memoryGateway, ...verification,
+  ])
+  claim('person', [
+    ...CREDIT_ERROR_CODES, ...ANALYSIS_ERROR_CODES, ...sourceIntakeErrorCodes, ...autopilotMaterialErrorCodes, ...AUTOPILOT_BUDGET_ERROR_CODES,
+    ...libraryErrorCodes, ...capsuleTransferErrorCodes, ...CAPSULE_SHARE_ERROR_CODES, ...EXTENSION_ERROR_CODES,
+    ...GEO_ROUTE_ERROR_CODES, ...GEO_MEDIA_MARKET_ERROR_CODES, ...VCR_ROUTE_ERROR_CODES, ...VCR_MODULE_ERROR_CODES,
+    ...EVIMED_CREDITS_ROUTE_ERROR_CODES, ...EVIDENCE_PUBLIC_ERROR_CODES, ...EVIDENCE_FLYWHEEL_ERROR_CODES,
+    ...keys(DOCUMENT_EXPORT_ERROR_MESSAGES), ...keys(SOURCE_CHANGE_ERROR_MESSAGES), ...keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
+    ...keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH), ...keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH),
+    // What the control plane refused on a page or a ceiling the reader meets: the engine and the map of memory, the holds on
+    // a project's runtime, the limits of an account (the gateway's and the independent check's own codes are the run's).
+    ...CONTROL_PLANE_ERROR_CODES,
+  ])
+  return table
+})()
+
+/**
+ * The audience of a code, or `null` for one no rule claims (an open code a runtime forwarded).
+ * @param {string} code @returns {typeof ERROR_CODE_AUDIENCES[number] | null}
+ */
+export function errorCodeAudience(code) {
+  return ERROR_CODE_AUDIENCE_TABLE.get(String(code ?? '')) ?? null
+}
+
+/**
+ * The sentence for a code, only where it is written for the person reading: what a card, an inventory row or a drawer
+ * may say. `null` for a run's or an operator's code — and for one nobody has classified — so the caller says nothing, or
+ * says its own plain word, never somebody else's sentence.
+ * @param {string} code @returns {string | null}
+ */
+export function personErrorCodeMessage(code) {
+  return errorCodeAudience(code) === 'person' ? knownErrorCodeMessage(code) : null
+}
+
+/**
  * Why a project's runtime is held back from the person's conversation while one run works in it (the 423
  * `runtime_reserved_for_autopilot`): a scheduled task's execution, a step of a module's programme (虚拟临床研究, 循证 GEO), or
  * the platform's own background job. The code stays one — it is what every client already knows — and the reason rides in its
