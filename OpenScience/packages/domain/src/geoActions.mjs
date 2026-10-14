@@ -56,6 +56,8 @@ export const GEO_ACTION_SERIES_POINTS = 12
 const WEEK_MS = 7 * 86_400_000
 /** The rounds that measure the whole question set: a group's reading now is read from these only. */
 const HEADLINE_KINDS = Object.freeze(['baseline', 'weekly', 'single_step'])
+/** What an action that belongs to no group (a project-wide gap) is judged on: the index and mention over P2 and P3, the headline targets. */
+const PROJECT_ACTION_METRICS = Object.freeze(['M-19', 'M-01S'])
 /** The error states that still ask for work. */
 const OPEN_ERROR_STATUSES = Object.freeze(['open', 'acting', 'awaiting_remeasure'])
 /** Order states in which an article is being placed, and in which it is published. */
@@ -421,15 +423,17 @@ export function deriveGeoActions(input) {
   const expectations = list(strategy.expectations)
   const modelEntries = list(strategy.actions).filter((entry) => entry && typeof entry === 'object').map(geoActionEntry)
   const targetRows = list(input.targets?.rows)
-  const readings = list(input.readings).slice().sort((left, right) => String(left.date ?? '').localeCompare(String(right.date ?? ''))
+  /** The rows that are rows: the derivation reads the platform's tables and a hand-written input alike, and never throws on the odd one. @param {unknown} rows */
+  const rowsOf = (rows) => list(rows).filter((row) => row && typeof row === 'object')
+  const readings = rowsOf(input.readings).slice().sort((left, right) => String(left.date ?? '').localeCompare(String(right.date ?? ''))
     || String(left.roundId ?? '').localeCompare(String(right.roundId ?? '')))
-  const errors = list(input.errors)
-  const articles = list(input.articles).filter((article) => article && article.status !== 'withdrawn')
-  const orders = list(input.orders)
-  const ownedLinks = list(input.ownedLinks).filter((link) => link && link.status !== 'retired')
-  const cited = list(input.cited)
-  const batches = list(input.batches)
-  const choices = list(input.choices)
+  const errors = rowsOf(input.errors)
+  const articles = rowsOf(input.articles).filter((article) => article.status !== 'withdrawn')
+  const orders = rowsOf(input.orders)
+  const ownedLinks = rowsOf(input.ownedLinks).filter((link) => link.status !== 'retired')
+  const cited = rowsOf(input.cited)
+  const batches = rowsOf(input.batches)
+  const choices = rowsOf(input.choices)
   const candidates = record(input.candidates)
   const arms = record(input.arms)
   const poolReadings = list(input.poolReadings)
@@ -544,14 +548,15 @@ export function deriveGeoActions(input) {
   /**
    * One action of a group.
    * @param {{ born: string, group: GeoActionGroup | null, ref: string, gap?: Record<string, any> | null, errorRows?: Array<Record<string, any>>,
-   *   entry?: ReturnType<typeof geoActionEntry> | null, extraMetricIds?: string[] }} spec
+   *   entry?: ReturnType<typeof geoActionEntry> | null, extraMetricIds?: string[], extraChecks?: Array<Record<string, any>> }} spec
    */
-  const build = ({ born, group, ref, gap = null, errorRows = [], entry = null, extraMetricIds = [] }) => {
+  const build = ({ born, group, ref, gap = null, errorRows = [], entry = null, extraMetricIds = [], extraChecks = [] }) => {
     const key = uniqueKey(geoActionKey({ kind: born, groupId: group?.id ?? null, ref }))
     const pool = text(group?.pool)
-    const metricIds = geoExpectedMetrics(pool)
+    // An action of no group is the project's: judged on the headline metrics, against the tier's project-wide row.
+    const metricIds = group ? geoExpectedMetrics(pool) : [...PROJECT_ACTION_METRICS]
     /** @type {Array<Record<string, any>>} */
-    const checks = []
+    const checks = [...extraChecks]
     // ---- the metric and the target (the owner's table and the chosen tier's row, never a run's number)
     const wantedMetric = entry?.metricId ?? null
     if (wantedMetric && !metricIds.includes(wantedMetric)) checks.push({ code: 'metric_not_in_pool', metricId: wantedMetric, pool })
@@ -748,7 +753,26 @@ export function deriveGeoActions(input) {
     const handoff = text(gap.handoff ?? gap.handoffTo)
     const gapClass = text(gap.class)
     if (!group) {
-      issues.push({ code: 'group_unknown', gapId, message: 'The gap names a group the latest question set does not have.' })
+      // A gap that names no group (a project-wide one: no authoritative source anywhere) or one the latest question set does not
+      // have is the project's: listed with no group and noted, so nothing a run wrote is out of sight.
+      const written = text(gap.groupId) ?? text(gap.group ?? gap.groupName)
+      if (handoff === 'monitor_only') {
+        noAction.push({ gapId, groupId: null, reason: 'monitor_only' })
+        continue
+      }
+      const wrongGap = gapClass === 'wrong' || handoff === 'EC'
+      const named = gapErrorIds(gap)
+      const rowsOfNamed = errors.filter((row) => row && typeof row === 'object' && named.has(String(row.id)))
+      for (const row of rowsOfNamed) claimedErrors.add(String(row.id))
+      const projectEntry = entryFor({ gapId, group: null, gapClass, errorIds: rowsOfNamed.map((row) => String(row.id)) })
+      if (projectEntry && projectEntry.what === null && projectEntry.reason && !projectEntry.promise && !projectEntry.engines.length) {
+        noAction.push({ gapId, groupId: null, reason: projectEntry.reason })
+        continue
+      }
+      if (!projectEntry) gapsWithoutEntry += 1
+      build({ born: wrongGap ? 'correct_error' : 'fill_gap', group: null,
+        ref: (gapId ?? gapClass ?? 'gap').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 100) || 'gap',
+        gap, errorRows: rowsOfNamed, entry: projectEntry, extraChecks: written ? [{ code: 'group_unknown', group: written }] : [] })
       continue
     }
     if (group.isControl === true || handoff === 'monitor_only') {

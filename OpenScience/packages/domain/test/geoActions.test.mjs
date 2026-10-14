@@ -315,6 +315,38 @@ test("the net effect is the arms', stated with its band, and only when comparabl
   assert.deepEqual(action.observed.arm, { netEffect: 4.2, verdict: "up", noiseBand: 3, comparable: true, scope: "project", pool: null });
 });
 
+test("a gap that names no group is the project's: an action with no group, judged on the headline metrics; nothing a run wrote is out of sight", () => {
+  const projectGaps = [
+    { gapId: "gap-01", class: "weak_source", rank: 1, judgment: "引擎没有一个自有或权威来源可引" },
+    { gapId: "gap-02", class: "wrong", rank: 2, judgment: "给药频次被讲错", evidence: { errors: ["e-9"] } },
+    { gapId: "gap-03", class: "outdated", group: "已经不存在的语义群", judgment: "引用的页面过时" },
+    { gapId: "gap-04", class: "audience_mismatch", handoff: "monitor_only", judgment: "只监测" },
+    { gapId: "gap-05", class: "dropped_condition", judgment: "不做" },
+  ];
+  const targetsWithIndex = { version: 3, rows: [...targets.rows, { tier: "2", metricId: "M-19", pool: "all", target: 35, horizonWeeks: 12, dataType: "forecast" }] };
+  const result = deriveGeoActions({ ...base(), targets: targetsWithIndex, strategy: { ...base().strategy, gaps: projectGaps, actions: [
+    { gapId: "gap-01", what: { layer: "card", channel: "brand_site" }, metricId: "M-19", promise: "enter_mention", basis: "144 条回答的引用全是第三方" },
+    { gapId: "gap-05", reason: "已由 gap-01 的锚点覆盖" },
+  ] }, errors: [{ id: "e-9", fingerprint: "f9", engine: "doubao", groupId: "g-p1", severity: "S3", status: "open", statement: "错", createdAt: ago(3) }] });
+  const actions = byKey(result);
+  assert.deepEqual(Object.keys(actions).filter((key) => key.includes(":-:")).sort(), ["correct_error:-:gap-02", "fill_gap:-:gap-01", "fill_gap:-:gap-03"]);
+  const weak = actions["fill_gap:-:gap-01"];
+  assert.equal(weak.group, null);
+  assert.deepEqual(weak.expected.metricIds, ["M-19", "M-01S"]);
+  assert.equal(weak.expected.primaryMetricId, "M-19");
+  assert.equal(weak.expected.target, 35, "the tier's project-wide row");
+  assert.equal(weak.checks.length, 0);
+  assert.equal(weak.what.channel, "brand_site");
+  assert.equal(weak.status, "proposed");
+  assert.ok(actions["fill_gap:-:gap-03"].checks.some((/** @type {any} */ check) => check.code === "group_unknown" && check.group === "已经不存在的语义群"));
+  // the error the wrong gap names is that gap's: it is not also an action of its own
+  assert.deepEqual(actions["correct_error:-:gap-02"].need.errorIds, ["e-9"]);
+  assert.equal(Object.keys(actions).some((key) => key.startsWith("correct_error:g-p1:")), false);
+  // a monitor-only gap and a gap answered with a reason alone are listed as having none, never silently gone
+  assert.deepEqual(result.noAction.filter((entry) => entry.groupId === null).map((entry) => [entry.gapId, entry.reason]).sort(),
+    [["gap-04", "monitor_only"], ["gap-05", "已由 gap-01 的锚点覆盖"]]);
+});
+
 test("the derivation never throws on odd rows, and an empty project has no actions", () => {
   assert.deepEqual(deriveGeoActions({ now: NOW, tier: "2", engines: [], groups: [] }).actions, []);
   const odd = deriveGeoActions(/** @type {any} */ ({ now: "not a date", tier: "2", engines: ["doubao"], groups, strategy: { gaps: [null, 5, { class: "benefit_only" }], actions: [null, "x"] },
