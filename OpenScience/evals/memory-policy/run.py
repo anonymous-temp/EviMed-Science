@@ -28,6 +28,8 @@ import secrets
 import ssl
 import sys
 import time
+
+THROWAWAY_ACCOUNT = re.compile(r"mempol-[0-9a-f]{8}")
 import unicodedata
 import urllib.error
 import urllib.request
@@ -474,6 +476,10 @@ def parse(argv):
     parser.add_argument("--task-wait", type=int, default=900)
     parser.add_argument("--insecure", action="store_true", help="accept a self-signed certificate (a local stack)")
     args = parser.parse_args(argv)
+    # The runner speaks as a person (memory learns only from attended turns), so it may only ever speak as an account it made
+    # for itself: an existing account is accepted when it has this runner's throwaway name, never anyone's own.
+    if args.account and not THROWAWAY_ACCOUNT.fullmatch(args.account):
+        parser.error("--account must be a throwaway account this runner registered (mempol-<8 hex digits>)")
     if not args.cases_only and not args.base_url:
         parser.error("--base-url is required")
     if args.account and not args.password_file:

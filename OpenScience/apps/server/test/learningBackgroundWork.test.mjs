@@ -66,6 +66,16 @@ test("every harness in the repository that dispatches a run says it is automated
     assert.match(text, /const base = `http:\/\/127\.0\.0\.1:\$\{args\.port\}`/, `${starter} must only ever address the control plane it starts`);
     assert.doesNotMatch(text, /--base\b|OPEN_SCIENCE_PUBLIC_URL|https:\/\//, `${starter} gained a way to address a deployment: its dispatches must then be marked automated`);
   }
+  // The memory-policy runner speaks as a person on purpose — memory learns only from attended turns — and against a live
+  // deployment, so its exception is narrower: it registers its own throwaway account, refuses any other name, and deletes it.
+  const throwawayByDesign = new Set(["evals/memory-policy/run.py"]);
+  for (const runner of throwawayByDesign) {
+    const text = await readFile(path.join(openScience, runner), "utf8");
+    assert.match(text, /THROWAWAY_ACCOUNT = re\.compile\(r"mempol-\[0-9a-f\]\{8\}"\)/, `${runner} must name the throwaway accounts it may speak as`);
+    assert.match(text, /if args\.account and not THROWAWAY_ACCOUNT\.fullmatch\(args\.account\):\s*\n\s*parser\.error\(/, `${runner} must refuse an account that is not its own throwaway`);
+    assert.match(text, /username = args\.account or "mempol-" \+ secrets\.token_hex\(4\)/, `${runner} must register its own throwaway account by default`);
+    assert.match(text, /\/api\/account", \{"confirm": user_id, "password": password\}, "DELETE"/, `${runner} must delete the account it made`);
+  }
   for (const tree of ["scripts", "evals"]) {
     for await (const file of files(path.join(openScience, tree))) {
       scanned += 1;
@@ -81,7 +91,7 @@ test("every harness in the repository that dispatches a run says it is automated
         const statement = statementEnd > 0 ? call.slice(0, statementEnd) : call;
         dispatching.push(`${relative}@${match.index}`);
         if (marked.test(statement)) continue;
-        if (attendedByDesign.has(relative)) continue;
+        if (attendedByDesign.has(relative) || throwawayByDesign.has(relative)) continue;
         // A helper that posts whatever payload it is handed is marked by its
         // callers: every `.dispatch({...})` in the file must carry the mark.
         const helperCalls = [...text.matchAll(/\.dispatch\(\{[^}]*\}/g)].map((found) => found[0]);
