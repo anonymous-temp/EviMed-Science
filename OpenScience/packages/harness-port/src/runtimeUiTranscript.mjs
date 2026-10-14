@@ -83,27 +83,71 @@ export function historyWanted(snapshot) {
 }
 
 /**
- * A researcher's own message without the blocks the platform appended for the
- * model: `<evimed_result_selection>…</evimed_result_selection>` (a result
- * revision's frozen selection, `resultRevision.bind`). A closed tag, not a
- * pattern over prose; a block whose closing tag is missing is taken to the end of
- * its part. A part left empty is dropped, and a message without the block comes
- * back as the same array, so an ordinary message is never copied.
+ * The platform's blocks in one text, by the domain's closed list of tags (`PLATFORM_CONTEXT_TAGS`, handed in as
+ * `vocabulary.platformTags`): an `injected` tag is removed with everything it holds, up to its closing tag (nested ones
+ * counted) or, when it is never closed, to the end of the text; a `wrappers` tag (the researcher's own words, wrapped by the
+ * platform so a compaction keeps them) loses its tags and keeps the words. Structural, not prose: only a name on the list is
+ * ever matched, and a text without one comes back as the same string.
+ * @param {string} text
+ * @param {{ injected: readonly string[], wrappers: readonly string[] }} tags
+ * @returns {string}
+ */
+function withoutPlatformText(text, tags) {
+  const injected = new Set(tags.injected);
+  const names = [...tags.injected, ...tags.wrappers];
+  if (!text.includes('<') || !names.some((name) => text.includes(`<${name}`) || text.includes(`</${name}`))) return text;
+  // Longest first, so `evimed-claim-source` is never read as `evimed-claim`; an opening tag may carry attributes.
+  const alternatives = [...names].sort((left, right) => right.length - left.length).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const tag = new RegExp(`<(/?)(${alternatives.join('|')})(?=[\\s>/])[^>]*>`, 'g');
+  let kept = '';
+  let from = 0;
+  /** @type {{ name: string, depth: number } | null} */
+  let skipping = null;
+  let matched = false;
+  let found;
+  while ((found = tag.exec(text)) !== null) {
+    matched = true;
+    const closing = found[1] === '/';
+    const name = found[2];
+    if (skipping) {
+      if (name !== skipping.name) continue;
+      skipping.depth += closing ? -1 : (found[0].endsWith('/>') ? 0 : 1);
+      if (skipping.depth === 0) { skipping = null; from = tag.lastIndex; }
+      continue;
+    }
+    kept += text.slice(from, found.index);
+    from = tag.lastIndex;
+    if (injected.has(name) && !closing && !found[0].endsWith('/>')) skipping = { name, depth: 1 };
+  }
+  if (!matched) return text;
+  // A block never closed is taken to the end of its text.
+  if (!skipping) kept += text.slice(from);
+  return kept.trim();
+}
+
+/**
+ * A researcher's own message without the blocks the platform wrote into it for the model: every tag of the domain's closed
+ * list (a scheduled execution's brief and its signed budget marker, a verification's tag, a repair round, a recalled profile,
+ * a recalled memory) and `<evimed_result_selection>…</evimed_result_selection>` (a result revision's frozen selection,
+ * `resultRevision.bind`, which is the vocabulary's one underscore name). A part left empty is dropped, and a message without
+ * a block comes back as the same array, so an ordinary message is never copied.
  * @param {any} content a message's content parts
+ * @param {{ injected: readonly string[], wrappers: readonly string[] }} [tags] the frame's vocabulary; the result selection alone when omitted
  * @returns {any}
  */
-export function withoutPlatformBlocks(content) {
+export function withoutPlatformBlocks(content, tags = { injected: ['evimed_result_selection'], wrappers: [] }) {
   if (!Array.isArray(content)) return content;
-  const block = /\s*<evimed_result_selection>[\s\S]*?(?:<\/evimed_result_selection>|$)/g;
   let changed = false;
   /** @type {any[]} */
   const kept = [];
   for (const part of content) {
-    if (part && part.type === 'text' && typeof part.text === 'string' && part.text.includes('<evimed_result_selection>')) {
-      changed = true;
-      const text = part.text.replace(block, '');
-      if (text.trim() !== '') kept.push({ ...part, text });
-      continue;
+    if (part && part.type === 'text' && typeof part.text === 'string') {
+      const text = withoutPlatformText(part.text, tags);
+      if (text !== part.text) {
+        changed = true;
+        if (text !== '') kept.push({ ...part, text });
+        continue;
+      }
     }
     kept.push(part);
   }
@@ -165,6 +209,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   if (kit.operator || !kit.h) return;
   const h = kit.h;
   const slot = 'conversation.chat.node';
+  // The domain's closed list of the tags the platform writes into a conversation, inlined into the frame at build time.
+  const platformTags = kit.vocabulary.platformTags;
 
   function HiddenRow() { return null; }
 
@@ -196,7 +242,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const Shipped = kit.shadowed(slot, kind, UserRow);
     if (!Shipped) return null;
     const data = props?.node?.data;
-    const content = withoutPlatformBlocks(data?.content);
+    const content = withoutPlatformBlocks(data?.content, platformTags);
     return h(Shipped, content === data?.content ? props : { ...props, node: { ...props.node, data: { ...data, content } } });
   }
 
@@ -211,4 +257,4 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 }
 
 /** The body as the socket's build composes it. */
-export const BODY = Object.freeze({ name: 'transcript', inject, parts: Object.freeze([mainViewSession, historyWanted, withoutPlatformBlocks, apply]) });
+export const BODY = Object.freeze({ name: 'transcript', inject, parts: Object.freeze([mainViewSession, historyWanted, withoutPlatformText, withoutPlatformBlocks, apply]) });

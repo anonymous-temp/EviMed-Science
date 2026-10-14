@@ -39,6 +39,7 @@ import {
   EVIDENCE_SOURCE_TYPES,
   GEO_DEFAULT_ENGINES,
   KNOWLEDGE_DIR,
+  PLATFORM_CONTEXT_TAGS,
   RUN_ACTIVITY_PHASE_LABELS_ZH,
   RUN_ACTIVITY_PHASES,
   SOCKET_TOOL_NAMES,
@@ -104,6 +105,14 @@ export const FRAME_VOCABULARY = Object.freeze({
   // (tokens 2.1): the frame is another document, so without its `@font-face`
   // the name was skipped and Chinese quotes fell to Inter's Latin shapes.
   fontFaces: cjkPunctFontFaceCss(),
+  // Every tag the platform writes into a conversation (the domain's closed list that a memory write is checked against), so the
+  // researcher's own message is drawn without its model-only blocks: `injected` tags go with what they hold, `wrappers` lose only
+  // the tags. `evimed_result_selection` is a result revision's frozen selection (`resultRevision.bind`), the one name in the
+  // underscore form.
+  platformTags: Object.freeze({
+    injected: Object.freeze([...PLATFORM_CONTEXT_TAGS.filter((entry) => entry.role === 'injected').map((entry) => entry.tag), 'evimed_result_selection']),
+    wrappers: Object.freeze(PLATFORM_CONTEXT_TAGS.filter((entry) => entry.role === 'user-wrapper').map((entry) => entry.tag)),
+  }),
   phases: RUN_ACTIVITY_PHASES,
   phaseLabels: RUN_ACTIVITY_PHASE_LABELS_ZH,
   sourceTypes: EVIDENCE_SOURCE_TYPES,
