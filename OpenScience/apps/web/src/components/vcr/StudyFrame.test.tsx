@@ -243,7 +243,7 @@ describe("what the strip says", () => {
       raw.activity = { run: { id: "r", step: "population", steps: ["population"], label: "构建人群", phase: "search", counts: { search: 6, claims: 10, claimsVerified: 4 }, startedAt: "2026-10-14T01:00:00.000Z", placement: "bounded", locked: true },
         queue: [{ step: "patients", waitingFor: "population" }, { step: "comparator", waitingFor: "population" }], jobs: [], last: null };
     }), { onCancel });
-    expect(strip).toMatchObject({ label: "构建人群", phase: "检索 · 检索 6 次 · 结论 4/10 已核对", queued: 2, startedAt: "2026-10-14T01:00:00.000Z" });
+    expect(strip).toMatchObject({ label: "构建人群", phase: "检索 6 次 · 结论 4/10 已核对", queued: 2, startedAt: "2026-10-14T01:00:00.000Z" });
     strip?.onCancel?.();
     expect(onCancel).toHaveBeenCalled();
   });
@@ -282,7 +282,7 @@ describe("the server's eight states of activity, drawn", () => {
   });
 
   it("a run that holds the project's runtime is drawn like any other: the pane, not the strip, says the conversation is held", () => {
-    expect(stripOf("bounded-locked")).toMatchObject({ label: "整理研究定义", phase: "检索 · 检索 1 次" });
+    expect(stripOf("bounded-locked")).toMatchObject({ label: "整理研究定义", phase: "检索 1 次" });
   });
 
   it("engine jobs: the one that runs, its done of total, and how many wait behind it", () => {

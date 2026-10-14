@@ -189,7 +189,7 @@ describe("a step with nothing yet", () => {
     draw(<VcrStepPending studyId={STUDY_ID} study={readVcrStudy(raw)} step="trial" />);
     const state = document.querySelector("[data-step-state='running']") as HTMLElement;
     expect(state).toHaveTextContent("正在模拟试验方案");
-    expect(state).toHaveTextContent("检索 · 检索 6 次 · 纳入 23 篇");
+    expect(state).toHaveTextContent("检索 6 次 · 纳入 23 篇");
     await userEvent.click(screen.getByRole("button", { name: "停止" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cancel`, "POST", {}));
   });

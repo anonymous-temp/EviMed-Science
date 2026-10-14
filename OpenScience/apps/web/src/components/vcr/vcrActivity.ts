@@ -61,13 +61,16 @@ export function studyVersion(study: VcrStudy): string {
   return [study.updatedAt ?? "", study.status, steps, jobs, study.activity?.last?.endedAt ?? "", study.activity?.run?.id ?? ""].join("|");
 }
 
-/** What a queued step waits for, as one short phrase (「等「证据」做完」). */
+/**
+ * What a queued step waits for, as one short phrase, for example 等“证据”做完. A wait the server does not name (`waitingFor` null: no run is
+ * out and nothing it needs is open) is said as what is known of it — it has not started — and never as a guess at a cause.
+ */
 export function waitingSentence(waitingFor: VcrWaitingFor | null | undefined, engine = false): string {
   if (engine) return "等计算引擎恢复";
   if (waitingFor === "allowance" || waitingFor === "simulated_allowance") return "等研究额度";
   if (waitingFor === "run") return "等这次运行做完";
   if (waitingFor) return `等“${stepName(waitingFor)}”做完`;
-  return "等前面的步骤做完";
+  return "等待开始";
 }
 
 /** The odometer of a run: 「检索 6 次 · 纳入 23 篇 · 结论 41/72 已核对」. Only what has happened is named. */
@@ -85,6 +88,17 @@ export function runCountsLine(counts: Partial<Record<string, number>>): string {
 export function phaseWord(phase: string | null | undefined): string | null {
   if (!phase) return null;
   return (RUN_ACTIVITY_PHASE_LABELS_ZH as Record<string, string>)[phase] ?? null;
+}
+
+/**
+ * What a run is doing, as one line: the phase it is in and what it has counted (「筛选 · 检索 6 次 · 纳入 3 篇」). A phase the counts
+ * already begin with is not said twice — 「检索 1 次」, never 「检索 · 检索 1 次」 (found live, R19).
+ */
+export function runDetailLine(run: Pick<NonNullable<VcrActivity["run"]>, "phase" | "counts">): string {
+  const phase = phaseWord(run.phase);
+  const counted = runCountsLine(run.counts);
+  const echoed = phase !== null && counted.split(" · ").some((part) => part.startsWith(phase));
+  return (echoed ? [counted] : [phase, counted]).filter(Boolean).join(" · ");
 }
 
 /** The lead of the open engine jobs: the one under way, else the first in line. A job waiting for a budget is not a lead. */

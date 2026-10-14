@@ -79,7 +79,7 @@ describe("the study's conversation view", () => {
     expect(pane).toHaveAttribute("data-study-pane", "progress");
     expect(shell.requests).toHaveLength(0);
     expect(pane).toHaveTextContent("正在设计对照");
-    expect(pane).toHaveTextContent("检索 · 检索 4 次");
+    expect(pane).toHaveTextContent("检索 4 次");
     expect(pane).toHaveTextContent("结束后可以在这里继续");
     await userEvent.click(within(pane).getByRole("button", { name: "停止" }));
     expect(onStop).toHaveBeenCalledTimes(1);

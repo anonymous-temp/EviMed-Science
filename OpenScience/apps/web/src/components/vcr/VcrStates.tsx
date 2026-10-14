@@ -13,7 +13,7 @@ import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
 import { useStudyFrame } from "./studyFrameContext";
 import { useVcrRun } from "./useVcrRun";
-import { leadJob, phaseWord, runCountsLine, stepAction, stepName } from "./vcrActivity";
+import { leadJob, runDetailLine, stepAction, stepName } from "./vcrActivity";
 import { staleSentence, stepLabel, VCR_NO_DEFINITION, VCR_STEP_GIVES, VCR_STEP_NOUNS } from "./vcrText";
 import { hasDefinition, VCR_STEP_TABS, vcrTabPath } from "./vcrTabs";
 
@@ -158,7 +158,7 @@ export function VcrStepPending({ studyId, study, step, hint, start }: {
     );
   }
   if (state?.status === "running") {
-    const detail = here.run ? [phaseWord(here.run.phase), runCountsLine(here.run.counts)].filter(Boolean).join(" · ") : here.job?.total ? "计算" : "";
+    const detail = here.run ? runDetailLine(here.run) : here.job?.total ? "计算" : "";
     return (
       <div data-vcr-step-running={step}>
         <StepState

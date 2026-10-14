@@ -301,7 +301,7 @@ describe("what the study is doing, in the strip under the header", () => {
     await heading();
     const line = strip()!;
     expect(line).toHaveTextContent("正在构建人群、生成虚拟患者");
-    expect(line).toHaveTextContent("检索 · 检索 6 次 · 纳入 23 篇");
+    expect(line).toHaveTextContent("检索 6 次 · 纳入 23 篇");
     expect(line).toHaveTextContent("另有 1 项排队");
     expect(within(line).getByRole("button", { name: "取消" })).toBeInTheDocument();
     // The strip is in the band, above the row of tabs — and says no percentage and no instruction the model was briefed with.

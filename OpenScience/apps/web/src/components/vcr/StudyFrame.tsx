@@ -16,7 +16,7 @@ import type { ToolbarProps } from "@/components/ui/Toolbar";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { StudyFrameContext, type StudyFrameApi, type StudyPanelKey } from "./studyFrameContext";
 import { useVcrRun } from "./useVcrRun";
-import { leadJob, isMoving, jobLabel, phaseWord, runCountsLine, stepAction, studyVersion, waitingSentence } from "./vcrActivity";
+import { leadJob, isMoving, jobLabel, runDetailLine, stepAction, studyVersion, waitingSentence } from "./vcrActivity";
 import { stepsOfTab, tabDot, VCR_HOME_PATH, VCR_TAB_ITEMS } from "./vcrTabs";
 import { intendedUseLabel, tierLabel } from "./vcrText";
 
@@ -111,7 +111,7 @@ export function activityStripOf(study: VcrStudy, handlers: { onCancel?: () => vo
   const cancel = { onCancel: handlers.onCancel, cancelling: handlers.cancelling };
   const open = activity.queue.length;
   if (activity.run) {
-    const detail = [phaseWord(activity.run.phase), runCountsLine(activity.run.counts)].filter(Boolean).join(" · ");
+    const detail = runDetailLine(activity.run);
     return { label: activity.run.label || "推进研究", phase: detail || undefined, startedAt: activity.run.startedAt, queued: open || undefined, ...cancel };
   }
   const job = leadJob(activity);

@@ -6,7 +6,7 @@ import { StepState } from "@/components/ui/StepState";
 import { useProjectStore } from "@/lib/projects";
 import { registerTaskPane } from "@/lib/taskPane";
 import type { VcrStudy } from "@/lib/vcrClient";
-import { phaseWord, runCountsLine } from "./vcrActivity";
+import { runDetailLine } from "./vcrActivity";
 
 /** The least a conversation is given: below it the page scrolls rather than squeezing the kernel's composer. */
 const MIN_PANE_PX = 360;
@@ -125,7 +125,7 @@ export function StudyPane({ study, unreachable, onRetry, onStop }: {
   }
 
   if (locked && run) {
-    const detail = [phaseWord(run.phase), runCountsLine(run.counts)].filter(Boolean).join(" · ");
+    const detail = runDetailLine(run);
     return (
       <div role="region" aria-label="研究对话" data-study-pane="progress" className="mx-auto flex max-w-measure flex-col items-center gap-1 py-10">
         <StepState phase="running" step={run.label || "推进研究"} phaseName={detail || undefined} startedAt={run.startedAt} onStop={onStop} />
