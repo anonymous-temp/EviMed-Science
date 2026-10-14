@@ -535,7 +535,8 @@ export function deriveGeoActions(input) {
     const armKey = pool && primaryMetricId ? `${pool}|${primaryMetricId}` : null
     const poolArm = armKey ? arms[armKey] ?? null : null
     const arm = poolArm ?? arms[`all|${GEO_VIEW_METRIC_IDS.gvi}`] ?? null
-    const armUp = Boolean(arm && arm.comparable && arm.verdict === 'up')
+    // A verdict needs the pool's own net effect: the index of the whole project moving says nothing of this action.
+    const armUp = Boolean(poolArm && poolArm.comparable && poolArm.verdict === 'up')
     const choice = choiceOf(key, group)
     const status = statusOf({ articles: forArticles, orders: facts.orders, links: facts.links, citations: facts.citations, inBatch,
       errorsClosed, reached, armUp, skipped: choice?.skipped === true })
@@ -681,8 +682,10 @@ export function deriveGeoActions(input) {
     const isErrorGap = gapClass === 'wrong' || handoff === 'EC'
     const named = [...gapErrorIds(gap)]
     const groupErrors = errorsOfGroup(group)
-    const rows = isErrorGap ? (groupErrors.some((row) => named.includes(String(row.id))) ? groupErrors.filter((row) => named.includes(String(row.id))) : groupErrors)
-      : groupErrors.filter((row) => named.includes(String(row.id)))
+    // An error the gap names stands for its claim: every engine that tells it is the gap's.
+    const namedClaims = new Set(groupErrors.filter((row) => named.includes(String(row.id))).map((row) => text(row.fingerprint) ?? String(row.id)))
+    const ofNamed = groupErrors.filter((row) => named.includes(String(row.id)) || namedClaims.has(text(row.fingerprint) ?? String(row.id)))
+    const rows = isErrorGap ? (ofNamed.length ? ofNamed : groupErrors) : ofNamed
     for (const row of rows) claimedErrors.add(String(row.id))
     const entry = entryFor({ gapId, group, gapClass, errorIds: rows.map((row) => String(row.id)) })
     if (entry && entry.what === null && entry.reason && !entry.promise && !entry.engines.length) {

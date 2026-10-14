@@ -1284,17 +1284,17 @@ export class GeoStore {
    * Every citation in the project's answers on one of `hosts`, prefiltered by
    * host in SQL; the caller compares each by its own key.
    * @param {string} geoId @param {Iterable<string>} hosts
-   * @returns {Promise<Array<{ url: string, engine: string | null, askedAt: string | null }>>}
+   * @returns {Promise<Array<{ url: string, engine: string | null, askedAt: string | null, questionId: string | null }>>}
    */
   async #citationsOn(geoId, hosts) {
     const wanted = [...new Set([...hosts].filter(Boolean))];
     if (!wanted.length) return [];
-    const rows = (await this.query(`SELECT s.engine, s.asked_at, c.value ->> 'url' AS url
+    const rows = (await this.query(`SELECT s.engine, s.asked_at, s.question_id, c.value ->> 'url' AS url
       FROM evimed_geo.snapshots s
         CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(s.citations) = 'array' THEN s.citations ELSE '[]'::jsonb END) AS c(value)
       WHERE s.geo_project_id = $1 AND lower(c.value ->> 'url') LIKE ANY($2::text[])`,
     [geoId, wanted.map((host) => `%${host.replace(/[\\%_]/g, (character) => `\\${character}`)}%`)])).rows;
-    return rows.map((/** @type {any} */ row) => ({ url: String(row.url ?? ""), engine: text(row.engine), askedAt: iso(row.asked_at) }));
+    return rows.map((/** @type {any} */ row) => ({ url: String(row.url ?? ""), engine: text(row.engine), askedAt: iso(row.asked_at), questionId: text(row.question_id) }));
   }
 
   /**
@@ -1305,7 +1305,8 @@ export class GeoStore {
    * the outlet returned), or a link the brand published it at itself
    * (`owned_links` naming the article), matched by the link's own key.
    * @param {string} geoId
-   * @returns {Promise<Array<{ articleId: string, title: string | null, engine: string | null, firstSeen: string | null }>>}
+   * @returns {Promise<Array<{ articleId: string, title: string | null, engine: string | null, firstSeen: string | null, questionId: string | null }>>}
+   *   `questionId`: the question whose answer cited it first — direct evidence that reaches the question, not only the group
    */
   async citedArticles(geoId) {
     const [published, owned] = await Promise.all([
@@ -1330,7 +1331,7 @@ export class GeoStore {
     const byOwnedKey = new Map();
     for (const row of owned.rows) add(byOwnedKey, String(row.url_key), row);
     const hosts = [...byKey.keys(), ...byOwnedKey.keys()].map((key) => key.split("/")[0]);
-    /** @type {Map<string, { articleId: string, title: string | null, engine: string | null, firstSeen: string | null }>} */
+    /** @type {Map<string, { articleId: string, title: string | null, engine: string | null, firstSeen: string | null, questionId: string | null }>} */
     const first = new Map();
     for (const citation of await this.#citationsOn(geoId, hosts)) {
       const articles = [...(byKey.get(canonicalGeoUrl(citation.url)) ?? []), ...(byOwnedKey.get(geoOwnedLinkKey(citation.url).key) ?? [])];
@@ -1338,7 +1339,7 @@ export class GeoStore {
         const at = citation.askedAt;
         const id = `${article.articleId}\u0000${citation.engine ?? ""}`;
         const seen = first.get(id);
-        if (!seen || (at && (!seen.firstSeen || at < seen.firstSeen))) first.set(id, { ...article, engine: citation.engine, firstSeen: at });
+        if (!seen || (at && (!seen.firstSeen || at < seen.firstSeen))) first.set(id, { ...article, engine: citation.engine, firstSeen: at, questionId: citation.questionId });
       }
     }
     return [...first.values()].sort((left, right) => String(left.firstSeen).localeCompare(String(right.firstSeen)));

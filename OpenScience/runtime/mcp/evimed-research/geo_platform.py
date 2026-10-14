@@ -46,10 +46,11 @@ import public_sources
 READ_WHATS = (
     "project", "claims", "questions", "journey", "diagnosis", "metrics", "snapshots", "errors", "sources",
     "strategy", "targets", "articles", "orders", "owned_links", "monitoring", "cards", "value", "research",
+    "clusters", "actions",
 )
 WRITE_WHATS = (
     "product", "claims", "questions", "lock_questions", "journey", "strategy", "sources", "targets",
-    "articles", "placement_plan", "owned_links", "step", "value", "research",
+    "articles", "placement_plan", "owned_links", "step", "value", "research", "actions",
 )
 ENGINES = ("doubao", "qianwen", "deepseek", "yuanbao", "kimi", "baidu")
 POOLS = ("P1", "P2", "P3", "P4")
@@ -84,6 +85,8 @@ def tool_definitions():
                 "Read this 循证 GEO project's product, claims, questions, journey, diagnosis, metrics, answers, errors, "
                 "sources, strategy, targets, articles, orders and monitoring. Cards carry quote-checked evidence and "
                 "citation ids. Value holds scoped findings, research and coverage; research lists specialist tasks. "
+                "clusters is every question group with what each engine says (k of n); actions is what is being done for each "
+                "group, its target and its status — read it before planning more work. "
                 "filter.version reads a prior value basis. Numeric cells retain denominators and status; unknown is never zero."
             ),
             "inputSchema": {
@@ -117,7 +120,9 @@ def tool_definitions():
                 "value merges findings; reuse ids to amend. "
                 "questions: groups[].questions[].isMeasured:true selects probes before lock_questions; existing answers are not required. "
                 "research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. "
-                "owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}."
+                "owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}. "
+                "actions amends the strategy's action per gap: items[{gapId, what:{layer,title,channel}, engines, sources:[{domain,why}], "
+                "promise, basis, reason}]; an entry with only a reason says why a gap needs none."
             ),
             "inputSchema": {
                 "type": "object",

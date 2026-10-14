@@ -40,6 +40,8 @@ const UNAVAILABLE = () => new HttpError(503, "geo_unavailable", "This GEO action
 const BRAND_NAME_MAX = 40;
 const BUDGET_MAX_CNY = 10_000_000;
 const ID = /^[A-Za-z0-9_-]{1,80}$/;
+/** An action's key (`fill_gap:<group>:<gap class>`) or a strategy to-do's (`client:<8 hex>`): letters, digits, `_`, `-` and `:`. */
+const ACTION_KEY = /^[A-Za-z0-9_:-]{1,240}$/;
 
 /**
  * The bounded metric label of a GEO path: ids are folded so a dashboard row is
@@ -60,7 +62,7 @@ export function geoRoutePattern(pathname) {
   if (parts.length === 1) return "/api/geo/projects";
   if (parts.length === 2) return "/api/geo/projects/:id";
   const tab = ["evidence", "journey", "questions", "diagnosis", "answers", "screenshots", "sources", "tier", "articles", "distribution", "budget",
-    "orders", "monitoring", "run", "export", "cards", "members"].includes(parts[2]) ? parts[2] : ":route";
+    "orders", "monitoring", "run", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
   if (parts.length === 3) return `/api/geo/projects/:id/${tab}`;
   if (parts.length === 4) return `/api/geo/projects/:id/${tab}/:item`;
   return `/api/geo/projects/:id/${tab}/:item/:action`;
@@ -204,7 +206,7 @@ export function createGeoRoutes(dependencies) {
     let parts;
     try { parts = url.pathname.slice("/api/geo".length).split("/").filter(Boolean).map(decodeURIComponent); }
     catch { throw new HttpError(400, "geo_path_invalid", "Invalid GEO path."); }
-    if (parts.some((part) => !ID.test(part))) throw new HttpError(404, "not_found", "GEO route not found.");
+    if (parts.some((part, index) => !(parts[2] === "actions" && index === 3 ? ACTION_KEY : ID).test(part))) throw new HttpError(404, "not_found", "GEO route not found.");
     const method = req.method ?? "GET";
     const reply = (/** @type {any} */ value, status = 200) => { sendJson(res, status, { data: value }); return true; };
     // Read at request time: the orchestration and market packages attach to
@@ -378,6 +380,11 @@ export function createGeoRoutes(dependencies) {
         return reply(await service.diagnosis(user, id, round || null));
       }
       if (tab === "sources") return reply(await service.sources(user, id));
+      // The question group as the spine (rectification 2026-10-14): the groups with what the engines say, the actions by group, and the
+      // strategy page's one read.
+      if (tab === "clusters") return reply(await service.clusters(user, id));
+      if (tab === "actions") return reply(await service.actions(user, id));
+      if (tab === "strategy") return reply(await service.strategy(user, id));
       if (tab === "articles") return reply(await service.articles(user, id));
       if (tab === "distribution") {
         const configured = typeof hooks.market?.configured === "function" ? Boolean(hooks.market.configured()) : undefined;
@@ -401,6 +408,26 @@ export function createGeoRoutes(dependencies) {
       return reply(result);
     }
     if (parts.length === 4 && method === "GET" && tab === "answers") return reply(await service.answer(user, id, parts[3]));
+    if (parts.length === 4 && method === "GET" && tab === "clusters") return reply(await service.cluster(user, id, parts[3]));
+    if (parts.length === 4 && method === "GET" && tab === "actions") return reply(await service.action(user, id, parts[3]));
+    // A person's two reversible words about an action: skip it, or send it to another source. Nothing else is written, and neither is
+    // an approval — the platform goes on by itself.
+    if (parts.length === 5 && method === "POST" && tab === "actions" && parts[4] === "skip") {
+      const body = await bodyOf(req, maxJsonBytes, ["skipped"]);
+      if (body.skipped !== undefined && typeof body.skipped !== "boolean") throw new HttpError(400, "geo_action_choice_invalid", "skipped is true or false.");
+      const result = await service.chooseAction(user, id, parts[3], { skipped: body.skipped ?? true });
+      await audit("geo.action.skip", "completed", { userId: user.id, code: id, detail: result.skipped ? "skipped" : "restored" });
+      return reply(result);
+    }
+    if (parts.length === 5 && method === "POST" && tab === "actions" && parts[4] === "source") {
+      const body = await bodyOf(req, maxJsonBytes, ["domain"]);
+      if (!("domain" in body) || (body.domain !== null && typeof body.domain !== "string")) {
+        throw new HttpError(400, "geo_action_choice_invalid", "domain is the source's website domain, or null to go back to the recommendation.");
+      }
+      const result = await service.chooseAction(user, id, parts[3], { sourceDomain: body.domain });
+      await audit("geo.action.source", "completed", { userId: user.id, code: id, detail: result.sourceDomain ? "swapped" : "recommended" });
+      return reply(result);
+    }
     // What a source row stands for: the answers of the latest round that cite the site, one engine's when the page's filter names it.
     if (parts.length === 4 && method === "GET" && tab === "sources") {
       if (!ID.test(parts[3])) throw new HttpError(404, "geo_source_not_found", "Source not found.");
