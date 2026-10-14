@@ -2718,14 +2718,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     beforeDelete: async (client) => { await managedBrowser.closeProject(user.id, projectId); if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await resultReplays?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
   });
   /**
-   * A conversation for a study: an id and, when the module's first capability is installed, its binding in the project — the
-   * binding is what puts the module's chip on the composer and what makes the router honour the choice. The kernel makes its side of
-   * the session on first open, as it does for every conversation.
+   * A conversation for a study, made the way every conversation is: the kernel mints the session (`POST /api/runtime/sessions`,
+   * `createRuntimeSession`), so the id is one the kernel knows — it opens with its history, and is listed with the project's own —
+   * and, when the module's first capability is installed, it is bound in the project: the binding is what puts the module's chip on the
+   * composer and what makes the router honour the choice. An id made up here, which the kernel has never seen, opened as an empty
+   * conversation of its own that nothing listed (B §2.2b). A runtime that cannot be opened now (no room, a held project, a quota)
+   * leaves the study without one — `sessionId: null` — and the owner's next read of the study tries again.
    * @param {any} project @param {string | null | undefined} capabilityId
-   * @returns {Promise<{ sessionId: string, bound: boolean }>}
+   * @returns {Promise<{ sessionId: string | null, bound: boolean }>}
    */
   async function mintStudyConversation(project, capabilityId = VCR_STEP_CAPABILITIES.definition) {
-    const sessionId = randomId("vcr-");
+    /** @type {string | null} */
+    let sessionId = null;
+    try { sessionId = (await runtimeManager.createRuntimeSession(project)).id || null; } catch { /* made on the owner's next read */ }
+    if (!sessionId) return { sessionId: null, bound: false };
     const agent = (await agentRegistry)?.get?.(capabilityId ?? VCR_STEP_CAPABILITIES.definition) ?? null;
     if (!agent) return { sessionId, bound: false };
     await researchSessions.put(project, sessionId, { mode: "specialist", agentId: agent.id, agentVersion: agent.version });
@@ -2762,6 +2768,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     }
     if (!create) return { sessionId: null, exists: false };
     const minted = await mintStudyConversation(project);
+    if (!minted.sessionId) return { sessionId: null, exists: false };
     await vcr.store.setConversationSession(study.id, minted.sessionId);
     // Two readers racing: the first write stands, and both answer with it.
     const winner = (await vcr.store.studyById(study.id))?.conversationSessionId ?? minted.sessionId;

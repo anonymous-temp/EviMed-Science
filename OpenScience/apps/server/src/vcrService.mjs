@@ -639,7 +639,8 @@ export class VcrService {
     }
     const session = await hooks.bindSession(user, control.id, VCR_STEP_CAPABILITIES.definition)
       .catch(() => ({ sessionId: "", bound: false }));
-    // The conversation the study was opened with is the one its 「对话」 opens, whatever background runs follow.
+    // The conversation the study was opened with is the one its 「对话」 opens, whatever background runs follow. A study whose
+    // conversation could not be made now (no runtime could be opened) has none yet, and its owner's next read makes one.
     if (session.sessionId) await this.store.setConversationSession(study.id, session.sessionId);
     this.counters.studiesCreated += 1;
     return {

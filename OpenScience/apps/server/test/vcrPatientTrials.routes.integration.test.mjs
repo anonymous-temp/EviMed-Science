@@ -235,7 +235,9 @@ test("the page's action dispatches a run of the matching capability for the pati
 
   const asked = await call("owner", "POST", `${S}/trial-search`, { subjectKey: "P-0192" });
   assert.equal(asked.status, 200, asked.text);
-  assert.ok(asked.body.data.runId && asked.body.data.sessionId);
+  assert.ok(asked.body.data.runId, "the run is started");
+  assert.equal("sessionId" in asked.body.data, false, "and there is no session to go to: the page stays where it is");
+  assert.deepEqual([asked.body.data.accepted, asked.body.data.queuedBehind], [true, []]);
   assert.equal(asked.body.data.evaluated, 2, "the two trials the study holds now have a verdict about her");
   const sent = dispatches.at(-1);
   assert.deepEqual([sent.capabilityId, sent.reason, sent.studyId], ["vcr-matching", "vcr:trial-search", study.id]);

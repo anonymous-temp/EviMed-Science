@@ -31,7 +31,8 @@ const OWNER = `own${suffix}`;
 /** @type {any} */ let context = null;
 /** @type {Awaited<ReturnType<typeof createGeoTestDatabase>> | null} */ let isolated = null;
 /** What the runtime was asked, in order. */
-const record = { starts: /** @type {any[]} */ ([]), reserved: /** @type {any[]} */ ([]), prompts: /** @type {any[]} */ ([]), dispatches: /** @type {any[]} */ ([]) };
+const record = { starts: /** @type {any[]} */ ([]), reserved: /** @type {any[]} */ ([]), prompts: /** @type {any[]} */ ([]), dispatches: /** @type {any[]} */ ([]),
+  minted: /** @type {string[]} */ ([]), noRoom: false };
 
 before(async () => {
   if (!databaseUrl) return;
@@ -63,6 +64,12 @@ before(async () => {
     return { id: `session_reserved_${record.reserved.length}`, kernel: "dsh" };
   };
   app.runtimeManager.endBoundedRuntime = async () => true;
+  // The kernel mints a conversation's id (`session/create`): a stand-in that numbers them, and can be made to find no room.
+  app.runtimeManager.createRuntimeSession = async () => {
+    if (record.noRoom) throw Object.assign(new Error("full"), { status: 429, code: "runtime_capacity_full" });
+    record.minted.push(`kernel-session-${record.minted.length + 1}`);
+    return { id: record.minted.at(-1), kernel: "dsh" };
+  };
   app.runtimeManager.dispatchPrompt = async (/** @type {any} */ _project, /** @type {string} */ session, /** @type {any} */ request) => {
     record.prompts.push({ session, ...request });
     return { accepted: true };
@@ -110,7 +117,8 @@ async function newStudy(name = "EV-201 虚拟患者") {
 /** Forget everything the runtime was asked, and the stand-in runtimes of an earlier test. */
 function reset() {
   context.app.runtimeManager.runtimes.clear();
-  for (const list of Object.values(record)) list.length = 0;
+  for (const list of [record.starts, record.reserved, record.prompts, record.dispatches]) list.length = 0;
+  record.noRoom = false;
 }
 
 test("a press answers that the step was taken and which run it started — and carries no session to go to", options, async () => {
@@ -222,18 +230,20 @@ test("a study with nothing said about it refuses a press by name, and the page r
   assert.equal(record.dispatches.length, 0);
 });
 
-test("the study's conversation exists from its creation, and the project list says when each project was last used", options, async () => {
+test("the study's conversation exists from its creation: the id is the kernel's, as every conversation's is, and it is the same one for good", options, async () => {
   reset();
+  const minted = record.minted.length;
   const study = await newStudy("会话");
+  assert.equal(record.minted.length, minted + 1, "made when the study was made, by the path a conversation takes");
   const view = (await call("GET", `/api/vcr/studies/${study.id}`)).body.data;
-  assert.equal(typeof view.conversation.sessionId, "string");
-  assert.match(view.conversation.sessionId, /^vcr-/);
+  assert.deepEqual(view.conversation, { sessionId: record.minted.at(-1), exists: true });
   assert.equal(view.sessionId, view.conversation.sessionId);
   // The conversation is stable: read again, and after a step has run in the project, it is the same one.
   await call("POST", `/api/vcr/studies/${study.id}/run`, { step: "definition" });
   const again = (await call("GET", `/api/vcr/studies/${study.id}`)).body.data;
   assert.deepEqual(again.conversation, view.conversation);
   assert.notEqual(record.dispatches[0].sessionId, view.conversation.sessionId, "the step's own session is not the study's conversation");
+  assert.equal(record.minted.length, minted + 1, "and nothing made another");
 
   const projects = (await call("GET", "/api/projects")).body.data;
   const mine = projects.find((/** @type {any} */ project) => project.id === study.projectId);
@@ -242,4 +252,18 @@ test("the study's conversation exists from its creation, and the project list sa
   assert.ok(Date.parse(mine.lastActiveAt) >= Date.now() - 60_000, "a project made a moment ago was last active a moment ago");
   const named = projects.filter((/** @type {any} */ project) => project.lastActiveAt !== null);
   assert.ok(named.length >= 1);
+});
+
+test("a study made while no runtime can be opened has no conversation yet — never an id nobody made — and its owner's next read makes it", options, async () => {
+  reset();
+  record.noRoom = true;
+  const study = await newStudy("没有位置");
+  const before = (await call("GET", `/api/vcr/studies/${study.id}`)).body.data;
+  assert.deepEqual(before.conversation, { sessionId: null, exists: false }, "the read that finds no room says so, and the study is still a study");
+  assert.equal(before.sessionId, null);
+  record.noRoom = false;
+  const after = (await call("GET", `/api/vcr/studies/${study.id}`)).body.data;
+  assert.deepEqual(after.conversation, { sessionId: record.minted.at(-1), exists: true });
+  const again = (await call("GET", `/api/vcr/studies/${study.id}`)).body.data;
+  assert.deepEqual(again.conversation, after.conversation, "and it stays that one");
 });
