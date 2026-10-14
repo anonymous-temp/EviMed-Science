@@ -167,9 +167,11 @@ Inside this deliverable's `deliverables/<id>/` directory:
   exactly `1`, `2`, `3`, each with `targets` (`metricId`, `pool`, `baseline`,
   `target`, `dataType: "forecast"`), `placements` and `budgetCny`.
   The platform reads this file again when the run ends, through the same checks as
-  `mcp__evimed__geo_write`, and keeps what the fields above carry. Numbers it holds itself — a
-  cited-domain tally, retrieval cells, sample sizes, counts per source — stay in
-  the report and the file; they are not stored a second time.
+  `mcp__evimed__geo_write`: give `gaps`, `actions`, `battlefield`, `sources` and `layout` the
+  field names `mcp__evimed__geo_write` takes (above) — a name of your own is a field
+  the page does not show. Numbers it holds itself — a cited-domain tally,
+  retrieval cells, sample sizes, counts per source — stay in the report and the
+  file; they are not stored a second time.
 
 ## Registers do not mix
 

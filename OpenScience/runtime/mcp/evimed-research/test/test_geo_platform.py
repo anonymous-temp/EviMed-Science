@@ -157,6 +157,19 @@ class GeoWriteTests(_GatewayCase):
         self.assertEqual(result["warnings"], ["item 1, quote: quote is required."])
         self.assertEqual(_Gateway.seen[0]["body"], {"what": "claims", "items": [{"claimKey": "a"}, {"claimKey": "b"}]})
 
+    def test_fields_the_page_does_not_keep_are_notices_that_name_what_it_keeps_not_refusals(self):
+        message = ("Not stored by the platform (kept only in the files): title, impact. "
+                   "This object keeps: gapId, class, groupId, judgment, rank.")
+        _Gateway.answers["write"] = (200, {"data": {"what": "strategy", "ok": True, "ids": ["1"], "issues": [
+            {"indexes": [0, 1, 2], "count": 3, "path": "gaps", "field": "title,impact", "code": "ignored_fields", "message": message}]}})
+        result = self.server.call_tool("geo_write", {"what": "strategy", "data": {"gaps": [{}]}})
+        self.assertEqual(result["status"], "warning")
+        self.assertEqual(result["summary"], "Wrote strategy: 1 written, 1 field name(s) not kept.")
+        self.assertNotIn("refused", result["summary"])
+        self.assertEqual(result["warnings"], ["title,impact: " + message])
+        self.assertEqual(len(result["next_actions"]), 1)
+        self.assertIn("names each notice lists", result["next_actions"][0])
+
     def test_a_write_that_wrote_nothing_says_so_and_a_clean_one_succeeds(self):
         _Gateway.answers["write"] = (200, {"data": {"what": "lock_questions", "ok": False, "ids": [], "issues": [
             {"field": "pools", "code": "pools_missing", "message": "Every pool needs a measured question; missing: P4."}]}})

@@ -562,6 +562,22 @@ test("journey, strategy and placement preferences are versions, and each refused
   assert.deepEqual((await store.latestPlacementPlan(project.id))?.data.avoid, ["fake-times.cn"]);
 });
 
+test("a field the platform does not know is one notice for the items that carry it, and it names what the object keeps", options, async () => {
+  const project = await measured(await freshProject());
+  const gap = (/** @type {string} */ id) => ({ gapId: id, class: "benefit_only", groupId: "g", judgment: "只讲获益", title: "自拟的名字", impact: "后果" });
+  const result = await write(project, "strategy", { data: { gaps: [gap("A"), gap("B"), gap("C")] } });
+  assert.equal(result.ok, true);
+  const ignored = result.issues.filter((/** @type {any} */ issue) => issue.code === "ignored_fields");
+  assert.equal(ignored.length, 1, "three items, one notice");
+  assert.deepEqual([ignored[0].field, ignored[0].count, ignored[0].indexes, ignored[0].index], ["gaps.title,impact", 3, [0, 1, 2], 0]);
+  assert.match(ignored[0].message, /This object keeps: /);
+  assert.ok(ignored[0].message.includes("gapId") && ignored[0].message.includes("judgment") && ignored[0].message.includes("expectedPoints"), ignored[0].message);
+  // a single item's notice is the plain one
+  const one = await write(project, "strategy", { data: { gaps: [gap("D")] } });
+  const single = one.issues.find((/** @type {any} */ issue) => issue.code === "ignored_fields");
+  assert.deepEqual([single.count, single.indexes, single.index], [undefined, undefined, 0]);
+});
+
 test("a claim keeps the reader's name for its source, from the method's sourceRefLabel", options, async () => {
   const project = await freshProject();
   await write(project, "claims", { items: [{ claimKey: "id", statement: "s", quote: "q", sourceRef: "web-page:e1edc04a1ac28750",

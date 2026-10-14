@@ -1757,7 +1757,7 @@ export class GeoService {
    */
   noteWriteFields(what, result) {
     const ignored = (result.issues ?? []).filter((issue) => issue.code === "ignored_fields")
-      .reduce((total, issue) => total + String(issue.field ?? "").split(",").filter(Boolean).length, 0);
+      .reduce((total, issue) => total + String(issue.field ?? "").split(",").filter(Boolean).length * Math.max(1, Number(/** @type {any} */ (issue).count) || 1), 0);
     const declined = Number(result.declined ?? 0) || 0;
     if (ignored) this.fieldTotals.set(`${what}\u0000ignored`, (this.fieldTotals.get(`${what}\u0000ignored`) ?? 0) + ignored);
     if (declined) this.fieldTotals.set(`${what}\u0000declined`, (this.fieldTotals.get(`${what}\u0000declined`) ?? 0) + declined);

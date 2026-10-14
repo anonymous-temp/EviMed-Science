@@ -55,7 +55,7 @@ import {
 import { GEO_OWNED_LINKS_MAX, geoOwnedLinkKey } from "./geoStore.mjs";
 import { HttpError } from "./security.mjs";
 
-/** @typedef {{ index?: number, group?: number, field?: string, code: string, message: string }} GeoIssue */
+/** @typedef {{ index?: number, indexes?: number[], count?: number, path?: string, group?: number, field?: string, code: string, message: string }} GeoIssue */
 
 /** A deliverable id: one path segment. */
 const DELIVERABLE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/;
@@ -249,8 +249,12 @@ function fields(source, issues, where) {
       const left = extra.filter((key) => declined.includes(key));
       if (left.length) issues.push({ ...place, field: named(left.slice(0, 20).join(",")), code: "declined_fields", message: `Declined: ${left.join(", ")}.` });
       if (ignored.length) {
+        // The names the object does keep are said with the notice: a run that wrote a field under a name of its own has nothing else to
+        // go on, and went to read the platform's source for the answer (the real-kernel check of 2026-10-14).
+        const kept = allowed.filter((key) => !declined.includes(key));
         issues.push({ ...place, field: named(ignored.slice(0, 20).join(",")), code: "ignored_fields",
-          message: `Not stored by the platform (kept only in the files): ${ignored.slice(0, 20).join(", ")}${ignored.length > 20 ? " …" : ""}.` });
+          message: `Not stored by the platform (kept only in the files): ${ignored.slice(0, 20).join(", ")}${ignored.length > 20 ? " …" : ""}. `
+            + `This object keeps: ${kept.slice(0, 30).join(", ")}${kept.length > 30 ? " …" : ""}.` });
       }
     },
   };
@@ -1755,6 +1759,28 @@ async function writeToProject({ store, project, what, body, renameProject = null
     const declined = issues.filter((issue) => issue.code === "declined_fields")
       .reduce((total, issue) => total + String(issue.field ?? "").split(",").filter(Boolean).length, 0);
     for (let index = issues.length - 1; index >= 0; index -= 1) if (issues[index].code === "declined_fields") issues.splice(index, 1);
+    // The same fields ignored in each of twenty items is one notice naming the items, not twenty: a write answer is read by a run in
+    // its turn, and repetition buried the names it needed (the check of 2026-10-14: 72 notices, 23,000 characters). `count` keeps the tally.
+    /** @type {Map<string, GeoIssue>} */
+    const merged = new Map();
+    /** @type {GeoIssue[]} */
+    const compact = [];
+    for (const issue of issues) {
+      if (issue.code !== "ignored_fields") { compact.push(issue); continue; }
+      const key = `${issue.path ?? ""}\u0000${issue.field ?? ""}\u0000${issue.message}`;
+      const seen = merged.get(key);
+      if (!seen) {
+        /** @type {GeoIssue} */
+        const first = { ...issue };
+        merged.set(key, first);
+        compact.push(first);
+      } else {
+        // A repeat is told in the first one's own words: `index` stays the first item's, `indexes` lists every item, `count` is how many.
+        seen.count = (seen.count ?? 1) + 1;
+        if (typeof issue.index === "number") (seen.indexes ??= typeof seen.index === "number" ? [seen.index] : []).push(issue.index);
+      }
+    }
+    issues.splice(0, issues.length, ...compact);
     return { ok: ids.length > 0, ids, issues, ...(declined ? { declined } : {}), ...extra };
   };
   switch (what) {

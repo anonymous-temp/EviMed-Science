@@ -192,9 +192,9 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
   /** How often a run's import has been tried in this process. */
   const tries = new Map();
   /** What the imports did since this process started: runs imported whole, and attempts that lost a write or threw. */
-  /** How many fields a write's issues say it did not keep: each `ignored_fields` issue names them in one comma-separated list. @param {Array<{ code?: string, field?: string }>} issues */
+  /** How many fields a write's issues say it did not keep: each `ignored_fields` issue names them in one comma-separated list. @param {Array<{ code?: string, field?: string, count?: number }>} issues */
   const ignoredIn = (issues) => issues.filter((issue) => issue.code === "ignored_fields")
-    .reduce((total, issue) => total + String(issue.field ?? "").split(",").filter(Boolean).length, 0);
+    .reduce((total, issue) => total + String(issue.field ?? "").split(",").filter(Boolean).length * Math.max(1, Number(/** @type {any} */ (issue).count) || 1), 0);
   // `ignored` / `declined`: fields of a run's files the platform does not keep (`GEO_NOT_STORED`, and a key it does not know), counted
   // for /metrics — what a run keeps writing that is never read is the evidence for storing it, or for telling the capability not to.
   const counters = { imported: 0, failed: 0, ignoredFields: 0, declinedFields: 0 };
