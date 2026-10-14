@@ -6,6 +6,14 @@ import test from "node:test";
 
 import {
   ALL_ERROR_CODES,
+  GEO_METRICS,
+  GEO_METRIC_IDS,
+  GEO_METRIC_LABELS_ZH,
+  GEO_METRIC_UNITS,
+  GEO_ARTICLE_CHANNELS,
+  geoMetricId,
+  geoMetricName,
+  geoMetricUnit,
   ERROR_CODE_FAMILIES,
   GEO_ARTICLE_LAYERS,
   GEO_ARTICLE_LAYER_LABELS_ZH,
@@ -155,3 +163,43 @@ test('members: the owner may do everything, each member role only what it names,
   assert.equal(geoRoleAllows('intruder', 'read'), false)
   assert.deepEqual(geoAbilitiesOf([]), [])
 })
+
+test("a metric id has one reader name and a name one id: the table every page, report and tool reads", () => {
+  // The web kept two tables (by id, and by the overview's four keys) and named M-01S two ways, so 「品牌提及率 目标 12%」 stood beside
+  // 「品牌提及率（增量）目标 20%」 and read as a contradiction. There is one table now, and this walks it both ways.
+  const ids = [...GEO_METRIC_IDS, "NET", "NOISE"];
+  const labels = /** @type {Record<string, string>} */ (GEO_METRIC_LABELS_ZH);
+  const units = /** @type {Record<string, string>} */ (GEO_METRIC_UNITS);
+  for (const id of ids) {
+    assert.ok(typeof labels[id] === "string" && labels[id].length > 0, `${id} has no reader name`);
+    assert.ok(["percent", "index", "count"].includes(units[id]), `${id} has no unit`);
+  }
+  assert.deepEqual(Object.keys(GEO_METRIC_LABELS_ZH).sort(), [...ids].sort(), "the table names exactly the metrics there are");
+  const names = Object.values(GEO_METRIC_LABELS_ZH);
+  assert.equal(new Set(names).size, names.length, "no name stands for two ids");
+  assert.equal(GEO_METRIC_LABELS_ZH["M-01"], "品牌提及率");
+  assert.equal(GEO_METRIC_LABELS_ZH["M-01S"], "品类问题可见率");
+  assert.notEqual(GEO_METRIC_LABELS_ZH["M-01S"], GEO_METRIC_LABELS_ZH["M-01"], "mention over a pool and mention over the category questions are not one name");
+  // a reader asking by the overview's key gets the id's name
+  for (const { key, metricId } of GEO_OVERVIEW_METRICS) {
+    assert.equal(geoMetricName(key), labels[metricId], key);
+    assert.equal(geoMetricId(key), metricId);
+  }
+  assert.equal(geoMetricName("retrieval"), labels["M-10"]);
+  assert.equal(geoMetricName("M-06"), "事实准确率");
+  assert.equal(geoMetricName("constructor"), null, "a word that is not a metric is never printed");
+  assert.equal(geoMetricName(null), null);
+  assert.equal(geoMetricUnit("M-19"), "index");
+  assert.equal(geoMetricUnit("M-07"), "count");
+  assert.equal(geoMetricUnit("gvi"), "index");
+  assert.equal(geoMetricUnit("nope"), "percent");
+  // the unit agrees with the catalogue where the catalogue has one that is a rate or a count
+  for (const metric of GEO_METRICS.metrics) {
+    if (metric.unit === "percent") assert.equal(units[metric.id], "percent", metric.id);
+    if (metric.unit === "count") assert.equal(units[metric.id], "count", metric.id);
+  }
+});
+
+test("an article's channel is an owned platform of the brand or the media market, never free text", () => {
+  assert.deepEqual(GEO_ARTICLE_CHANNELS, [...GEO_OWNED_LINK_PLATFORMS, "media_market"]);
+});
