@@ -42,7 +42,7 @@ const EvidenceZonePage = lazy(() => import("./routes/EvidenceZonePage").then((m)
 const EvidenceReadingPage = lazy(() => import("./routes/EvidenceReadingPage").then((m) => ({ default: m.EvidenceReadingPage })));
 const EvidenceAuthorPage = lazy(() => import("./routes/EvidenceAuthorPage").then((m) => ({ default: m.EvidenceAuthorPage })));
 const GeoHomePage = lazy(() => import("./routes/GeoHomePage").then((m) => ({ default: m.GeoHomePage })));
-const GeoProjectPage = lazy(() => import("./routes/GeoProjectPage").then((m) => ({ default: m.GeoProjectPage })));
+const GeoProjectLayout = lazy(() => import("./routes/GeoProjectPage").then((m) => ({ default: m.GeoProjectLayout })));
 const GeoAnswerPage = lazy(() => import("./routes/GeoAnswerPage").then((m) => ({ default: m.GeoAnswerPage })));
 const HandoffRoute = lazy(() => import("./routes/HandoffRoute").then((m) => ({ default: m.HandoffRoute })));
 const ExtensionsPage = lazy(() => import("./extensions/ExtensionsPage").then((m) => ({ default: m.ExtensionsPage })));
@@ -97,12 +97,21 @@ export const routes: RouteObject[] = [
         { path: "frontier/zones/:zoneId", element: <EvidenceZonePage /> },
         { path: "frontier/zones/:zoneId/evidence/:cardId", element: <EvidenceReadingPage /> },
         { path: "frontier/authors/:authorId", element: <EvidenceAuthorPage /> },
-        // 「循证 GEO」: the projects, one project's tabs (概览 when none is
-        // named), and one AI answer. Like the frontier feed, each answers for
-        // itself when the module is off here.
+        // 「循证 GEO」: the projects, and one project as a layout — the header, the fixed band of steps and tabs, and below it the
+        // project's eight tabs (总览 when none is named) or one AI answer, which is read inside the band under 问题与回答. The tab
+        // routes have no element of their own: the layout draws the tab the address names in the body of the band, so a tab switch is
+        // never a chunk to wait for and never takes the band away. Like the frontier feed, each answers for itself when the module is
+        // off here.
         { path: "geo", element: <GeoHomePage /> },
-        { path: "geo/:geoId/answers/:snapshotId", element: <GeoAnswerPage /> },
-        { path: "geo/:geoId/:tab?", element: <GeoProjectPage /> },
+        {
+          path: "geo/:geoId",
+          element: <GeoProjectLayout />,
+          children: [
+            { index: true, element: null },
+            { path: "answers/:snapshotId", element: <GeoAnswerPage /> },
+            { path: ":tab", element: null },
+          ],
+        },
         // The run ledger page was deleted on 2026-09-20: a run is read in the
         // conversation it happened in. Its address survives because it is in
         // notification mail, in Feishu cards and in people's bookmarks.

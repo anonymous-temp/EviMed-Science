@@ -1,4 +1,3 @@
-import { ValueSection } from "./ValueSection";
 import { getGeoDistribution, type GeoProject } from "@/lib/geoClient";
 import { ContentTab } from "./ContentTab";
 import { Distribution, hasDistribution } from "./DistributionTab";
@@ -46,7 +45,6 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
       <TabSection title="效果">
         <EffectSection project={project} />
       </TabSection>
-      <ValueSection geoId={geoId} project={project} mode="actions" />
     </div>
   );
 }

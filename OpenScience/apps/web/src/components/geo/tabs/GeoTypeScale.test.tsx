@@ -142,7 +142,7 @@ const props = { geoId: "geo_1", project: geoProject({ evidence: "done", question
 
 describe("每个页签至多四种字号 × 字重 (ratchet)", () => {
   it.each([
-    ["总览", () => <OverviewTab {...props} />, "下一步"],
+    ["总览", () => <OverviewTab {...props} />, "综合可见度指数"],
     ["可见度", () => <VisibilityTab {...props} />, "哪一类问题里最容易被提到"],
     ["准确与安全", () => <AccuracyTab {...props} />, "事实准确率"],
     ["问题与回答", () => <QuestionsTab {...props} />, "恶心呕吐与胃肠反应"],

@@ -15,14 +15,14 @@ import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { StatBand, StatTile } from "@/components/ui/StatTile";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
+import type { FilterOption } from "@/components/ui/FilterChips";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
-import { SearchInput } from "@/components/ui/SearchInput";
 import { Tag } from "@/components/ui/Tag";
 import { ArticleTextDialog } from "../ArticleTextDialog";
+import { useGeoToolbar } from "../geoFrame";
 import { GEO_ARTICLE_SAFETY_OPEN, GEO_ARTICLE_STALE_NOTE, GEO_ARTICLE_STATUS_WORDS, GEO_ARTICLE_UNRESOLVED_NOTE, GEO_LAYER_NAMES, GEO_PLACEMENT_LABEL_WORDS, layerName } from "../geoText";
-import { FilterRow, StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
+import { StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 import { ShowMore, useShowMore } from "./showMore";
 
 /** Articles listed before 「显示更多」, and how many each press adds. */
@@ -79,6 +79,11 @@ function Articles({ geoId, project, articles, notice, onChanged }: { geoId: stri
     .filter((article) => current === "all" || article.layer === current)
     .filter((article) => !needle || `${article.title ?? ""} ${article.question ?? ""}`.toLowerCase().includes(needle));
   const { visible, remaining, more } = useShowMore(matching, { first: ARTICLES_SHOWN, step: ARTICLES_STEP, resetKey: `${current}|${needle}` });
+  useGeoToolbar({
+    filters: [{ kind: "chips", label: "稿件层级", options, value: current, onChange: (value) => setLayer(value as LayerFilter) }],
+    search: { label: "搜索稿件", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
+    summary: `${needle ? "匹配 " : ""}${matching.length} 篇`,
+  });
 
   /** The article is a file in the run that wrote it: the shell moves to the GEO project, then opens the reader. */
   const open = (article: GeoArticle) => {
@@ -111,12 +116,6 @@ function Articles({ geoId, project, articles, notice, onChanged }: { geoId: stri
         {project.cards?.blockedBy && <p className="mt-3 max-w-measure text-ui text-text-2">{CARDS_WAIT[project.cards.blockedBy]}</p>}
       </div>
       <div>
-        <FilterRow summary={`${needle ? "匹配 " : ""}${matching.length} 篇`}>
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 max-sm:w-full">
-            <FilterChips label="稿件层级" options={options} value={current} onChange={setLayer} />
-            <SearchInput label="搜索稿件" size="sm" value={query} maxLength={80} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-52 max-sm:w-full" />
-          </div>
-        </FilterRow>
         {matching.length === 0 ? (
           <p className="py-10 text-center text-ui text-text-3">{needle ? `没有包含“${query.trim()}”的稿件。` : "没有符合的稿件。"}</p>
         ) : (

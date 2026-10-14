@@ -1,20 +1,24 @@
+import { useState } from "react";
 import { Link } from "react-router";
 import { geoValueText, GEO_VALUE_DOMAINS } from "@evimed/domain";
-import { getGeoValue, type GeoProject, type GeoValue } from "@/lib/geoClient";
+import type { GeoProject, GeoValue } from "@/lib/geoClient";
 import { CLAIM_TYPE_LABEL } from "@/lib/claimCitations";
 import { formatDay } from "@/lib/format";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { StepState } from "@/components/ui/StepState";
 import { safeWebHref } from "@/lib/readPages";
-import { AskAi } from "../AskAi";
+import { useGeoValue } from "../geoProjectData";
+import { geoDestinationPath } from "../geoTabs";
+import { useOpenGeoConversation } from "../useOpenGeoConversation";
 import { engineName } from "../geoText";
-import { TabError, TabSection, useGeoLoad } from "./geoTabKit";
+import { TabError, TabSection } from "./geoTabKit";
 import { tabPath } from "./geoTabText";
 import { readableSourceRef } from "./EvidenceTab";
 import { ShowMore, useShowMore } from "./showMore";
 
-export type ValueMode = "summary" | "profile" | "safety" | "decisions" | "actions" | "sources" | "coverage";
+export type ValueMode = "profile" | "decisions" | "actions" | "sources" | "coverage";
 const TITLES: Record<ValueMode, string> = {
-  summary: "药品价值与机会", profile: "药品价值分析", safety: "获益与风险", decisions: "问题背后的决策",
+  profile: "药品价值分析", decisions: "问题背后的决策",
   actions: "下一步研究与内容", sources: "依据与传播", coverage: "AI 如何表达药品价值",
 };
 const text = (value: unknown): string => geoValueText(value);
@@ -24,10 +28,10 @@ const STATUS: Record<string, string> = { represented: "表达完整", partial: "
 const TASK: Record<string, string> = { pending: "等待研究", claimed: "正在研究", running: "正在研究", done: "可查看研究结果", failed: "查看已有结果与待补问题" };
 
 /**
- * Rows listed before 「显示更多」: three in the excerpt on 总览, which links to the whole list on 方案, and three on 行动, where the
- * next work is a footnote to the articles and the placements and not a page of its own; twelve anywhere else.
+ * Rows listed before 「显示更多」: three in the next-work list, where it is a footnote to the findings and not a page of its own;
+ * twelve anywhere else.
  */
-const firstOf = (mode: ValueMode): number => (mode === "summary" || mode === "actions" ? 3 : 12);
+const firstOf = (mode: ValueMode): number => (mode === "actions" ? 3 : 12);
 /** How many each press of 「显示更多」 adds, and how many of the answers a round was judged on 可见度 lists to begin with. */
 const STEP = 20;
 const OBSERVATIONS_SHOWN = 20;
@@ -41,7 +45,6 @@ function entriesOf(value: GeoValue, mode: ValueMode): unknown[] {
   const findings = rows(data.findings).filter(standing);
   const entries = mode === "decisions" ? rows(data.decisions)
     : mode === "actions" ? rows(data.opportunities)
-    : mode === "safety" ? findings.filter(entry => ["safety", "effectiveness"].includes(String(record(entry).dimension)))
     : mode === "sources" ? rows(data.sourceChanges).filter(standing)
     : mode === "coverage" ? [] : findings;
   return entries.filter(entry => text(entry));
@@ -50,7 +53,7 @@ function entriesOf(value: GeoValue, mode: ValueMode): unknown[] {
 /** Whether the mode has anything of its own to say. A section with nothing in it is not drawn. */
 function hasContent(value: GeoValue, mode: ValueMode): boolean {
   if (entriesOf(value, mode).length) return true;
-  if (mode === "summary" || mode === "profile") return Boolean(text(value.data?.summary)) || hasScope(value.data?.scope);
+  if (mode === "profile") return Boolean(text(value.data?.summary)) || hasScope(value.data?.scope);
   if (mode === "actions") return !!value.research?.length;
   if (mode === "coverage") return !!(value.coverage?.assessed || value.coverage?.notAddressed || value.coverage?.uncertain || value.coverage?.notApplicable || value.observations?.length);
   return false;
@@ -63,18 +66,34 @@ function begun(value: GeoValue): boolean {
 }
 
 /**
- * The drug-value analysis as one tab sees it. Findings first; applicability and provenance are optional detail, never a form.
+ * The drug-value analysis, whole — 依据's second view and the only page it is drawn on (R19 audit C A.6). Its parts follow one
+ * another as the reader asks: the findings, the decisions they bear on, what to research and write next, what changed in the sources
+ * they stand on, and how the AI answers express them. A part with nothing in it is not drawn; a project that has no analysis gets one
+ * recipe, with the button that starts it.
+ */
+export function ValueAnalysis({ geoId, project }: { geoId: string; project: GeoProject }) {
+  return (
+    <div data-geo-value="" className="flex flex-col gap-6">
+      {(["profile", "decisions", "actions", "sources", "coverage"] as const).map((mode) => (
+        <ValueSection key={mode} geoId={geoId} project={project} mode={mode} className="mt-0" />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One part of the drug-value analysis. Findings first; applicability and provenance are optional detail, never a form.
  *
- * It is drawn only when the analysis has something for this tab: no box with nothing in it, and nothing at all while it is read,
- * so a tab does not jump when the answer arrives. On 方案, where the analysis is started, a project that has none gets the one
- * way to start it; everywhere else the conversation (「对话」 in the header) is the way in.
+ * It is drawn only when the analysis has something for this part: no box with nothing in it, and nothing at all while it is read,
+ * so the page does not jump when the answer arrives. A project that has none gets the one way to start it (`profile`), and nothing
+ * else says the analysis is missing.
  */
 export function ValueSection({ geoId, project, mode = "profile", className }: { geoId: string; project: GeoProject; mode?: ValueMode; className?: string }) {
-  const { state, reload } = useGeoLoad(`value:${geoId}`, () => getGeoValue(geoId));
+  const { state, reload } = useGeoValue(geoId);
   if (state.kind === "loading") return null;
   if (state.kind === "error") return <TabError message="药品价值分析暂时无法读取。" onRetry={reload} />;
   const value = state.data;
-  if (!value || !hasContent(value, mode)) return mode === "profile" && (!value || !begun(value)) ? <StartAnalysis project={project} className={className} /> : null;
+  if (!value || !hasContent(value, mode)) return mode === "profile" && (!value || !begun(value)) ? <StartAnalysis geoId={geoId} project={project} className={className} /> : null;
   return <ValueBody geoId={geoId} value={value} mode={mode} className={className} />;
 }
 
@@ -83,15 +102,12 @@ function ValueBody({ geoId, value, mode, className }: { geoId: string; value: Ge
   const entries = entriesOf(value, mode);
   const listed = useShowMore(entries, { first: firstOf(mode), step: STEP, resetKey: `${geoId}:${mode}` });
   const observed = useShowMore(value.observations ?? [], { first: OBSERVATIONS_SHOWN, step: STEP, resetKey: geoId });
-  const excerpt = mode === "summary";
-  // What is not listed is counted: the heading says how many there are, and the rest is one press away — on the excerpt, one link.
-  const meta = entries.length > firstOf(mode)
-    ? excerpt ? <Link to={tabPath(geoId, "plan")} className="text-link hover:underline">{`查看全部 ${entries.length} 条`}</Link> : `共 ${entries.length} 条`
-    : undefined;
+  // What is not listed is counted: the heading says how many there are, and the rest is one press away.
+  const meta = entries.length > firstOf(mode) ? `共 ${entries.length} 条` : undefined;
   return (
-    <TabSection title={TITLES[mode]} meta={meta} level={["decisions", "sources"].includes(mode) ? "compact" : mode === "profile" ? "ui" : "section"} className={className}>
-      {["summary", "profile"].includes(mode) && <ScopeDetail scope={data.scope} />}
-      {text(data.summary) && ["summary", "profile"].includes(mode) && <p className="mb-3 max-w-measure text-ui leading-relaxed text-text-2">{text(data.summary)}</p>}
+    <TabSection title={TITLES[mode]} meta={meta} level="ui" className={className}>
+      {mode === "profile" && <ScopeDetail scope={data.scope} />}
+      {text(data.summary) && mode === "profile" && <p className="mb-3 max-w-measure text-ui leading-relaxed text-text-2">{text(data.summary)}</p>}
       {mode === "coverage" ? <>
         <p className="text-ui text-text-2">{coverageSentence(value.coverage)}</p>
         {Boolean(value.coverage?.uncertain || value.coverage?.notApplicable) && <p className="mt-2 text-caption text-text-3">尚不能判断 {value.coverage.uncertain} 条，不适用 {value.coverage.notApplicable} 条。</p>}
@@ -113,7 +129,7 @@ function ValueBody({ geoId, value, mode, className }: { geoId: string; value: Ge
             <FindingDetail entry={record(entry)} />
           </li>)}
         </ul>}
-        {!excerpt && <ShowMore remaining={listed.remaining} unit="条" onMore={listed.more} />}
+        <ShowMore remaining={listed.remaining} unit="条" onMore={listed.more} />
         {mode === "actions" && !!value.research?.length && <Disclosure summary="查看相关研究" className="mt-3">
           <ul className="space-y-3">{value.research.map(task => <li key={task.id} className="text-ui">
             <p className="max-w-measure text-text">{task.question}</p><span className="text-caption text-text-3">{TASK[task.status] ?? "研究中"}</span>
@@ -159,13 +175,30 @@ function coverageSentence(coverage: GeoValue["coverage"] | undefined): string {
 
 const START_DRAFT = "请结合现有资料开始药品价值分析，说明与本项目决策相关的获益、风险、适用性、费用与可及性；资料不足的部分保留未知。";
 
-/** The one way to begin a value analysis, for a project that has none: it opens the project's conversation with the brief, unsent. */
-function StartAnalysis({ project, className }: { project: GeoProject; className?: string }) {
+/**
+ * The one way to begin a value analysis, for a project that has none: a recipe — what it uses, what it gives — and the button that
+ * names the work. The analysis is written in the project's conversation, so the button opens it with the brief waiting, unsent.
+ */
+function StartAnalysis({ geoId, project, className }: { geoId: string; project: GeoProject; className?: string }) {
+  const open = useOpenGeoConversation();
+  const [busy, setBusy] = useState(false);
+  const mayRun = !project.access || project.access.abilities.includes("run");
   return (
-    <TabSection title={TITLES.profile} level="ui" className={className}>
-      <p className="max-w-measure text-ui text-text-2">从已有资料开始，整理这个药的获益、风险、适用性、费用与可及性。</p>
-      <AskAi project={project} label="开始药品价值分析" draft={START_DRAFT} className="mt-2" />
-    </TabSection>
+    <div className={className}>
+      <StepState
+        phase="empty"
+        step="开始药品价值分析"
+        noun="药品价值分析"
+        uses={[{ label: "结论库", to: geoDestinationPath(geoId, { tab: "evidence" }) }]}
+        gives="这个药的获益、风险、适用性、费用与可及性"
+        onStart={mayRun ? () => {
+          setBusy(true);
+          void open({ projectId: project.projectId, sessionId: project.sessionId }, START_DRAFT).finally(() => setBusy(false));
+        } : undefined}
+        starting={busy}
+        reason={mayRun ? undefined : "你在这个项目里只有查看权限。"}
+      />
+    </div>
   );
 }
 

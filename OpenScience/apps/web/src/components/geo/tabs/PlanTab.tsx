@@ -1,10 +1,7 @@
-import { ValueSection } from "./ValueSection";
 import { getGeoSources, type GeoProject, type GeoTier } from "@/lib/geoClient";
 import { Panel, PanelRow } from "@/components/ui/Panel";
-import { EvidenceTab } from "./EvidenceTab";
-import { JourneyTab } from "./JourneyTab";
 import { Layout, Targets } from "./PlanStrategy";
-import { TabError, TabSection, TabSkeleton, useGeoLoad } from "./geoTabKit";
+import { TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 import { marketConnected } from "../geoOverviewModel";
 import { coverageText, engineName } from "../geoText";
 import { yuan } from "./geoTabText";
@@ -32,14 +29,7 @@ export function PlanTab({ geoId, project }: { geoId: string; project: GeoProject
             : marketConnected(project) ? "还没有设" : "等媒介集市接通"}
         />
       </Panel>
-      <ValueSection geoId={geoId} project={project} mode="profile" />
       <Strategy geoId={geoId} project={project} />
-      <TabSection title="患者与医生的旅程" level="ui">
-        <JourneyTab geoId={geoId} project={project} />
-      </TabSection>
-      <TabSection title="产品与依据" level="ui">
-        <EvidenceTab geoId={geoId} project={project} />
-      </TabSection>
     </div>
   );
 }

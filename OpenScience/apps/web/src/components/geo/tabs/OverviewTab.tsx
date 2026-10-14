@@ -1,29 +1,24 @@
-import { ValueSection } from "./ValueSection";
 import { useMemo } from "react";
 import { Radar } from "lucide-react";
-import { Link } from "react-router";
-import { getGeoDiagnosis, getGeoMonitoring, type GeoDiagnosis, type GeoMonitoring, type GeoProject } from "@/lib/geoClient";
-import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
+import type { GeoMonitoring, GeoProject } from "@/lib/geoClient";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { DataTable, InlineBar } from "@/components/ui/DataTable";
 import { Delta } from "@/components/ui/Delta";
 import { BulletBar, StatBand, StatTile } from "@/components/ui/StatTile";
-import { HeatGrid } from "@/components/charts/HeatGrid";
+import { Section } from "@/components/ui/Section";
 import { TrendChart } from "@/components/charts/TrendChart";
-import { GeoErrorCard } from "../GeoErrorCard";
 import { GeoSparkline } from "../GeoSparkline";
 import { formatGeoValue } from "../GeoCellText";
+import { NeedsYou } from "../NeedsYou";
+import { useGeoDiagnosis, useGeoMonitoring, useGeoStrategy, type GeoLoadResult } from "../geoProjectData";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Tag } from "@/components/ui/Tag";
 import {
   actionMarkers,
   dayWord,
   denominatorLine,
-  engineConclusion,
-  engineMatrix,
   chartDates,
   headlineSentence,
-  nextSteps,
   overviewCoverageNotice,
   overviewTiles,
   readingChange,
@@ -33,46 +28,37 @@ import {
   weekTarget,
   withCoverageMarker,
   GEO_ALERT_KINDS,
-  type NextStep,
+  type MetricTriple,
 } from "../geoOverviewModel";
 import { GEO_METRIC_NAMES, monthDay } from "../geoText";
-import { roundKindWord, tabPath } from "./geoTabText";
-import { useGeoLoad, type GeoLoadResult } from "./geoTabKit";
+import { geoTabPath } from "../geoTabs";
+import { roundKindWord } from "./geoTabText";
 
 /**
- * 总览 — the first screen, and the only one most readers will look at
- * (fusion plan §4.8, mockup m10).
+ * 总览 — the first screen, and the only one most readers will look at (fusion plan §4.8, mockup m10; R19 audit C §2.3).
  *
- * It answers three questions, in this order: **where do we stand** (one
- * sentence, then six numbers each with its target and a noise-aware change),
- * **did it move** (the trend, with what we did marked on it), and **what next**
- * (the wrong statements that need handling, and the step waiting on the
- * reader). Nothing on it is a process page: the eight steps are the rail in
- * the header, and 监测 is the horizontal axis of the chart.
+ * It answers four questions, in this order: **where do we stand** (one sentence, then the numbers, each as where it began, where it
+ * is and where it is meant to be, with the dates), **what is asked of me** (「需要你」: a to-do list, never a log of what is done),
+ * **did it move** (the trend, with what we did marked on it) and **how do we compare** (the same-class ranking). Nothing here is a
+ * page of its own: the eight steps are the band above every tab, the engine matrix and the value analysis are 可见度's and 依据's, and
+ * every figure opens the tab that holds what it counts.
  *
- * Every number is still drillable to the answer it came from, every rate still
- * carries its denominator — declared once under the band, not in each cell —
- * and 未测 is still a hatched row with a reason rather than a zero. The drug-value
- * analysis, where a project has one, is the last block: an excerpt after the page,
- * not a section above the result.
+ * Every number is still drillable to the answer it came from, every rate still carries its denominator — declared once under the
+ * band, not in each cell — and 未测 is still a word with a reason rather than a zero.
  */
 export function OverviewTab({ geoId, project }: { geoId: string; project: GeoProject }) {
-  const diagnosis = useGeoLoad<GeoDiagnosis>(`overview:diagnosis:${geoId}`, () => getGeoDiagnosis(geoId));
-  const monitoring = useGeoLoad<GeoMonitoring>(`overview:monitoring:${geoId}`, () => getGeoMonitoring(geoId));
+  const diagnosis = useGeoDiagnosis(geoId);
+  const monitoring = useGeoMonitoring(geoId);
+  // The plan gives each target the day it falls due; without it the band still reads, just without that date.
+  const strategy = useGeoStrategy(geoId);
   const diag = diagnosis.state.kind === "ready" ? diagnosis.state.data : null;
   const watch = monitoring.state.kind === "ready" ? monitoring.state.data : null;
+  const plan = strategy.state.kind === "ready" ? strategy.state.data : null;
 
-  const tiles = useMemo(() => overviewTiles(project, diag), [project, diag]);
+  const tiles = useMemo(() => overviewTiles(project, diag, plan), [project, diag, plan]);
   const denominator = denominatorLine(project, diag);
   const ranking = useMemo(() => rivalRanking(project, diag), [project, diag]);
-  const matrix = useMemo(() => engineMatrix(project, diag), [project, diag]);
-  const errors = (Array.isArray(diag?.errors) ? diag.errors : [])
-    .filter((error) => error && error.id && error.status !== "closed")
-    .sort((left, right) => (right.severity ?? "").localeCompare(left.severity ?? ""));
-  const steps = nextSteps(project);
   const gvi = project.overview.metrics.find((metric) => metric.key === "gvi") ?? null;
-  // What is still wrong is counted over every error of the project; the cards are the worst few.
-  const live = diag?.errorCounts ? diag.errorCounts.total - diag.errorCounts.closed : errors.length;
   // The index has no measured band of its own: its change is stated as a change.
   const gviChange = readingChange(gvi?.trend);
   // The index takes two cells (fusion plan §4.8), so the band is one column
@@ -81,7 +67,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
   const ranked = ranking.length > 0;
 
   return (
-    <div data-geo-tab="overview" className="flex flex-col gap-4">
+    <div data-geo-tab="overview" className="flex flex-col gap-6">
       {/* The sentence names the open errors, so it is written once they are counted: a 「没有待办」 that turns into
           「还有 11 条严重讲错」 a moment later is worse than a held line. */}
       {diagnosis.state.kind === "loading" ? (
@@ -112,55 +98,37 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
             rank={tile.rank ?? undefined}
             tone={tile.tone}
             placeholder={tile.placeholder}
+            to={tile.tab ? geoTabPath(geoId, tile.tab) : undefined}
             loading={diagnosis.state.kind === "loading" && tile.key === "safety"}
             delta={<Delta value={tile.delta} unit={tile.key === "gvi" ? "index" : "point"} polarity={tile.polarity} />}
-            note={tile.note}
+            note={tile.triple ? undefined : tile.note}
             className={tile.lead ? "sm:col-span-2" : undefined}
-            chart={tile.lead
-              ? (
-                <BulletBar
-                  label={tile.label}
-                  value={Number(tile.value) || null}
-                  target={tile.target}
-                  targetLabel={tile.target === null ? undefined : `目标 ${formatGeoValue(tile.target, "index")}`}
-                  // The rival's reading is a mention rate, not an index: it is
-                  // named under the bar, never placed on its scale.
-                  rivalLabel={tile.rival ?? undefined}
-                />
-              )
-              // A tile that reads 「样本不足」 draws no line: the words and a falling line would say two things.
-              : !tile.placeholder && tile.trend.some((value) => value !== null)
-                ? <GeoSparkline values={tile.trend} target={tile.target} width={140} height={28} className="w-full" />
-                : undefined}
+            chart={(
+              <>
+                {tile.lead
+                  ? (
+                    <BulletBar
+                      label={tile.label}
+                      value={Number(tile.value) || null}
+                      target={tile.target}
+                      targetLabel={tile.target === null ? undefined : `目标 ${formatGeoValue(tile.target, "index")}`}
+                      // The rival's reading is a mention rate, not an index: it is
+                      // named under the bar, never placed on its scale.
+                      rivalLabel={tile.rival ?? undefined}
+                    />
+                  )
+                  // A tile that reads 「样本不足」 draws no line: the words and a falling line would say two things.
+                  : !tile.placeholder && tile.trend.some((value) => value !== null)
+                    ? <GeoSparkline values={tile.trend} target={tile.target} width={140} height={28} className="w-full" />
+                    : null}
+                {tile.triple && !tile.placeholder && <TripleLine triple={tile.triple} unit={tile.key === "gvi" ? "index" : "percent"} />}
+              </>
+            )}
           />
         ))}
       </StatBand>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <ChartCard
-          title={live > 0 ? `${live} 条讲错还没处理` : "没有待处理的讲错"}
-          meta={live > 3 ? <Link to={tabPath(geoId, "accuracy")} className="text-link hover:underline">{`查看全部 ${live} 条`}</Link> : undefined}
-          state={diagnosis.state.kind === "loading" ? "loading"
-            : diagnosis.state.kind === "error" ? "error"
-              : live === 0 ? "empty" : "content"}
-          emptyText="这一轮没有测到讲错我方的说法。"
-          errorMessage={diagnosis.state.kind === "error" ? diagnosis.state.message : undefined}
-          onRetry={diagnosis.reload}
-          height={200}
-          className="lg:col-span-2"
-        >
-          <div>
-            {errors.slice(0, 3).map((error) => (
-              <GeoErrorCard key={error.id} geoId={geoId} project={project} error={error} />
-            ))}
-          </div>
-        </ChartCard>
-        <ChartCard title="下一步" state={steps.length === 0 ? "empty" : "content"} emptyText="还没有排上的下一步。" height={200}>
-          <ol className="flex flex-col">
-            {steps.map((step) => <NextRow key={step.key} step={step} />)}
-          </ol>
-        </ChartCard>
-      </div>
+      <NeedsYou geoId={geoId} project={project} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <TrendCard
@@ -176,23 +144,30 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
         {(ranked || diagnosis.state.kind === "loading") && <RankCard ranking={ranking} loading={diagnosis.state.kind === "loading"} />}
       </div>
 
-      <ChartCard
-        title={engineConclusion(project, diag)}
-        state={diagnosis.state.kind === "loading" ? "loading"
-          : diagnosis.state.kind === "error" ? "error"
-            : matrix.rows.length === 0 ? "empty" : "content"}
-        emptyText="还没有问过各家 AI。"
-        errorMessage={diagnosis.state.kind === "error" ? diagnosis.state.message : undefined}
-        onRetry={diagnosis.reload}
-        footnote={matrix.note}
-        height={220}
-      >
-        <HeatGrid label="各引擎的提及、准确与引用" columns={matrix.columns} rows={matrix.rows} legend={{ low: "低", high: "高" }} />
-      </ChartCard>
-
       <Week geoId={geoId} project={project} />
-      <ValueSection geoId={geoId} project={project} mode="summary" />
     </div>
+  );
+}
+
+/* ----------------------------------------------------------------- triple */
+
+/**
+ * 「基线 31 · 9月29日 → 目标 55 · 12月29日前」: where it began and where it is meant to be, under the figure that says where it is.
+ * A target the reading has passed reads 「已达到目标 12」 — a number beside a figure above it was read as the page contradicting
+ * itself (R19 audit C class 4.3).
+ */
+function TripleLine({ triple, unit }: { triple: MetricTriple; unit: "index" | "percent" }) {
+  const base = triple.baseline ? `基线 ${formatGeoValue(triple.baseline.value, unit)}${triple.baseline.date ? ` · ${monthDay(triple.baseline.date)}` : ""}` : null;
+  const target = triple.target === null ? null
+    : triple.reached ? `已达到目标 ${formatGeoValue(triple.target, unit)}`
+      : `目标 ${formatGeoValue(triple.target, unit)}${triple.dueAt ? ` · ${monthDay(triple.dueAt)}前` : ""}`;
+  if (!base && !target) return null;
+  return (
+    <p data-geo-triple="" className="mt-2 flex flex-wrap items-baseline gap-x-1.5 text-caption tabular-nums text-text-3">
+      {base && <span>{base}</span>}
+      {base && target && <span aria-hidden="true">→</span>}
+      {target && <span className={triple.reached ? "text-accent-strong" : undefined}>{target}</span>}
+    </p>
   );
 }
 
@@ -203,8 +178,7 @@ function Week({ geoId, project }: { geoId: string; project: GeoProject }) {
   const items = project.overview.week ?? [];
   if (items.length === 0) return null;
   return (
-    <section aria-labelledby="geo-week">
-      <h2 id="geo-week" className="mb-1 text-section font-semibold text-text">本周</h2>
+    <Section title="本周">
       <List divided label="本周">
         {items.slice(0, 5).map((item, index) => {
           const to = weekTarget(geoId, item);
@@ -219,7 +193,7 @@ function Week({ geoId, project }: { geoId: string; project: GeoProject }) {
           );
         })}
       </List>
-    </section>
+    </Section>
   );
 }
 
@@ -258,7 +232,6 @@ function TrendCard({
     nextLabel: watch?.next?.date ? `${monthDay(watch.next.date)} ${roundKindWord(watch.next.kind) ?? "复测"}` : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [watch, metric?.target, project.name]);
-
 
   return (
     <ChartCard
@@ -311,35 +284,5 @@ function RankCard({ ranking, loading }: { ranking: ReturnType<typeof rivalRankin
         ]}
       />
     </ChartCard>
-  );
-}
-
-/* -------------------------------------------------------------- next step */
-
-const NEXT_WORDS: Record<NextStep["state"], string> = { waiting: "等你", active: "进行中", done: "已完成", held: "未接通" };
-
-function NextRow({ step }: { step: NextStep }) {
-  return (
-    <li
-      data-next-step={step.key}
-      data-next-state={step.state}
-      className={step.state === "waiting"
-        ? "-mx-2 flex items-center gap-2.5 rounded bg-accent-soft px-2 py-2.5 text-ui text-text"
-        : "flex items-center gap-2.5 border-b border-faint py-2.5 text-ui text-text last:border-b-0"}
-    >
-      <span
-        aria-hidden="true"
-        data-status-mark=""
-        className={step.state === "done" ? "h-2 w-2 shrink-0 rounded-full bg-accent"
-          : step.state === "active" ? "h-2 w-2 shrink-0 animate-pulse rounded-full bg-dot-running"
-            : step.state === "held" ? "h-2.5 w-2.5 shrink-0 rounded-full border-2 border-border-control"
-              : "h-2.5 w-2.5 shrink-0 rounded-full border-2 border-accent"}
-      />
-      <span className="min-w-0 flex-1 truncate">{step.text}</span>
-      {step.allowance && <AllowanceTopUp waiting={step.allowance} className="shrink-0 text-caption text-link hover:underline" />}
-      <span className={step.state === "waiting" ? "shrink-0 text-caption text-accent-strong" : "shrink-0 text-caption text-text-3"}>
-        {step.when ?? NEXT_WORDS[step.state]}
-      </span>
-    </li>
   );
 }

@@ -45,6 +45,7 @@ export function geoProject(steps: Partial<Record<GeoStepKey, GeoStepStatus>> = {
     status: "active",
     steps: stepRows,
     sessionId: "ses_geo_1",
+    needsYou: [],
     overview: {
       metrics: [
         { key: "gvi", cell: cell(38, null, 310), target: 55, trend: [] },
@@ -433,4 +434,4 @@ export const valueFilled: GeoValue = {
 };
 
 /** The headings the drug-value analysis can draw, one for each tab it appears on. */
-export const VALUE_TITLES = ["药品价值分析", "药品价值与机会", "AI 如何表达药品价值", "获益与风险", "问题背后的决策", "依据与传播", "下一步研究与内容"] as const;
+export const VALUE_TITLES = ["药品价值分析", "AI 如何表达药品价值", "问题背后的决策", "依据与传播", "下一步研究与内容"] as const;

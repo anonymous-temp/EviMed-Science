@@ -96,6 +96,7 @@ export const GEO_PROJECT: GeoProject = {
   status: "active",
   steps: GEO_SUMMARIES[0].steps,
   sessionId: "ses_geo_masi",
+  needsYou: [],
   startedAt: "2026-10-01",
   overview: {
     steps: GEO_SUMMARIES[0].steps,

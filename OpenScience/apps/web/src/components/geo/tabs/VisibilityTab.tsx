@@ -1,8 +1,5 @@
-import { ValueSection } from "./ValueSection";
 import { useMemo, useState } from "react";
 import {
-  getGeoDiagnosis,
-  getGeoMonitoring,
   readGeoCell,
   type GeoDiagnosis,
   type GeoMonitoring,
@@ -12,10 +9,12 @@ import {
 import { ChartCard, LegendMark } from "@/components/ui/ChartCard";
 import { DataTable, InlineBar } from "@/components/ui/DataTable";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
+import type { FilterOption } from "@/components/ui/FilterChips";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { OWN_COLOR, TARGET_COLOR } from "@/components/charts/trendModel";
 import { GeoSparkline } from "../GeoSparkline";
+import { useGeoToolbar } from "../geoFrame";
+import { useGeoDiagnosis, useGeoMonitoring } from "../geoProjectData";
 import { formatGeoValue, GeoCellText, geoCellWord } from "../GeoCellText";
 import {
   actionMarkers,
@@ -32,7 +31,7 @@ import {
 } from "../geoOverviewModel";
 import { absentWord, engineName, GEO_METRIC_NAMES, GEO_POOL_KINDS, monthDay, type GeoUnit } from "../geoText";
 import { metricName, metricUnit, roundKindWord } from "./geoTabText";
-import { CellLink, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
+import { CellLink, TabError, TabSkeleton } from "./geoTabKit";
 
 /**
  * 可见度 — where we stand in the answers, over time.
@@ -44,13 +43,15 @@ import { CellLink, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
  * engine and each question pool.
  */
 export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoProject }) {
-  const monitoring = useGeoLoad<GeoMonitoring>(`visibility:monitoring:${geoId}`, () => getGeoMonitoring(geoId));
-  const diagnosis = useGeoLoad<GeoDiagnosis>(`visibility:diagnosis:${geoId}`, () => getGeoDiagnosis(geoId));
+  const monitoring = useGeoMonitoring(geoId);
+  const diagnosis = useGeoDiagnosis(geoId);
   const watch = monitoring.state.kind === "ready" ? monitoring.state.data : null;
   const diag = diagnosis.state.kind === "ready" ? diagnosis.state.data : null;
   const series = (Array.isArray(watch?.series) ? watch.series : []).filter((line) => line && metricName(line.key) && Array.isArray(line.points) && line.points.length > 0);
   const [key, setKey] = useState<string | null>(null);
   const line = series.find((item) => item.key === key) ?? series[0] ?? null;
+  const options: FilterOption<string>[] = series.map((item) => ({ value: item.key, label: metricName(item.key) ?? "" }));
+  useGeoToolbar(options.length > 1 ? { filters: [{ kind: "chips", label: "指标", options, value: line ? line.key : options[0].value, onChange: setKey }] } : null);
 
   if (monitoring.state.kind === "loading" && diagnosis.state.kind === "loading") return <TabSkeleton />;
   if (monitoring.state.kind === "error" && diagnosis.state.kind === "error") {
@@ -58,14 +59,10 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
   }
 
   const denominator = denominatorLine(project, diag);
-  const options: FilterOption<string>[] = series.map((item) => ({ value: item.key, label: metricName(item.key) ?? "" }));
   const ranking = rivalRanking(project, diag);
 
   return (
     <div data-geo-tab="visibility" className="flex flex-col gap-6">
-      {options.length > 1 && (
-        <FilterChips label="指标" options={options} value={line ? line.key : options[0].value} onChange={setKey} />
-      )}
       <MetricTrend
         project={project}
         watch={watch}
@@ -79,7 +76,6 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
       <ByPool geoId={geoId} diagnosis={diag} loading={diagnosis.state.kind === "loading"} />
       <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} />
       <MoreMetrics geoId={geoId} diagnosis={diag} />
-      <ValueSection geoId={geoId} project={project} mode="coverage" />
     </div>
   );
 }

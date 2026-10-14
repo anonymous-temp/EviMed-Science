@@ -33,10 +33,12 @@ beforeEach(() => {
 });
 
 describe("方案", () => {
-  it("reads measurement, target, layout, journey, then the product and its claims", async () => {
+  it("reads measurement, target, then layout — the journey is 问题与回答's and the claims are 依据's", async () => {
     renderPlan();
     await screen.findByText("证据最硬、竞品最弱。");
-    const order = ["测量方案", "目标", "布局", "患者与医生的旅程", "产品与依据"].map((name) => screen.getByRole("heading", { name }));
+    expect(screen.queryByRole("heading", { name: "患者与医生的旅程" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "产品与依据" })).not.toBeInTheDocument();
+    const order = ["测量方案", "目标", "布局"].map((name) => screen.getByRole("heading", { name }));
     order.slice(1).forEach((heading, index) => {
       expect(order[index].compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING, `${heading.textContent} follows ${order[index].textContent}`).toBeTruthy();
     });
@@ -85,21 +87,11 @@ describe("方案", () => {
     expect(document.body.textContent).not.toMatch(/ggr_/);
   });
 
-  it("lists 8 of 108 claims and finds one by a word of it", async () => {
-    const claims = Array.from({ length: 108 }, (_, index) => ({ ...evidenceFilled.claims[0], id: `clm_${index}`, statement: `第 ${index} 条：${index === 50 ? "饭后服用" : "按说明书使用"}。` }));
-    client.getGeoEvidence.mockResolvedValue({ ...evidenceFilled, claims });
-    renderPlan();
-    const list = await screen.findByRole("list", { name: undefined });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(8);
-    expect(screen.getByRole("button", { name: "显示更多 · 还有 100 条" })).toBeInTheDocument();
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索结论" }), "饭后");
-    expect(screen.getByText("匹配 1 条结论")).toBeInTheDocument();
-  });
-
   it("draws no target and no layout where the sources analysis produced none, and no tier word", async () => {
     client.getGeoSources.mockResolvedValue({ sources: [], expectations: [], battlefield: null, tiers: [], chosenTier: null });
     renderPlan();
-    await screen.findByRole("heading", { name: "产品与依据" });
+    await screen.findByText("测量的 AI 引擎");
+    await waitFor(() => expect(client.getGeoSources).toHaveBeenCalled());
     expect(screen.queryByRole("heading", { name: "目标" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "布局" })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/档[一二三]/);
@@ -108,36 +100,21 @@ describe("方案", () => {
   it("a failed strategy read is said in its place with 重试, and the rest of the plan stays", async () => {
     client.getGeoSources.mockRejectedValueOnce(new Error("offline")).mockResolvedValue(sourcesFilled);
     renderPlan();
-    expect(await screen.findByRole("heading", { name: "产品与依据" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "测量方案" })).toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: /重试/ }));
     expect(await screen.findByText("档二：综合可见度指数 55")).toBeInTheDocument();
   });
 });
 
 describe("方案: the drug-value analysis", () => {
-  const FOLLOWS = Node.DOCUMENT_POSITION_FOLLOWING;
-
-  it("offers the one way to start it where the project has none, after the measurement settings and before the target", async () => {
-    renderPlan();
-    const start = await screen.findByRole("button", { name: "开始药品价值分析" });
-    expect(screen.getAllByRole("button", { name: "开始药品价值分析" })).toHaveLength(1);
-    expect(document.querySelectorAll("[data-geo-ask-ai]")).toHaveLength(1);
-    await screen.findByText("档二：综合可见度指数 55");
-    const settings = screen.getByRole("heading", { name: "测量方案" });
-    const heading = screen.getByRole("heading", { name: "药品价值分析" });
-    const target = screen.getByRole("heading", { name: "目标" });
-    expect(settings.compareDocumentPosition(heading) & FOLLOWS).toBeTruthy();
-    expect(heading.compareDocumentPosition(start) & FOLLOWS).toBeTruthy();
-    expect(start.compareDocumentPosition(target) & FOLLOWS).toBeTruthy();
-  });
-
-  it("shows the analysis itself where there is one, and then offers no start and no 问 AI", async () => {
+  it("is 依据's: the plan draws none of it, with or without an analysis, and does not read it", async () => {
     client.getGeoValue.mockResolvedValue(valueFilled);
     renderPlan();
-    expect(await screen.findByText("减重获益证据较充分，长期安全性数据仍有限。")).toBeInTheDocument();
-    expect(screen.getByText("12 周体重下降幅度明显大于安慰剂")).toBeInTheDocument();
+    await screen.findByText("档二：综合可见度指数 55");
+    expect(screen.queryByRole("heading", { name: "药品价值分析" })).not.toBeInTheDocument();
+    expect(screen.queryByText("减重获益证据较充分，长期安全性数据仍有限。")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "开始药品价值分析" })).not.toBeInTheDocument();
-    expect(document.querySelector("[data-geo-ask-ai]")).toBeNull();
+    expect(client.getGeoValue).not.toHaveBeenCalled();
   });
 });
 

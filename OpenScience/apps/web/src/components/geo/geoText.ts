@@ -7,7 +7,7 @@
  * rather than printed (a code on screen is a code the reader has to learn),
  * except an engine, whose id is the only name there is.
  */
-import { GEO_OWNED_LINK_PLATFORM_LABELS_ZH, GEO_SOCIAL_PLATFORM_LABELS_ZH } from "@evimed/domain";
+import { GEO_OWNED_LINK_PLATFORM_LABELS_ZH, GEO_SOCIAL_PLATFORM_LABELS_ZH, geoMetricName, geoMetricUnit } from "@evimed/domain";
 import type {
   GeoAbsentReason,
   GeoArticleLayer,
@@ -221,21 +221,25 @@ export const GEO_STEP_WAITING: Readonly<Record<GeoStepKey, string>> = Object.fre
 
 /* ------------------------------------------------------------------ metrics */
 
-/** The overview's four numbers (metrics package mapping, M report). */
+/**
+ * The overview's four numbers, by the reader name the domain gives their metric id — once, for every page (R19, audit C class 4.1):
+ * `mention` is M-01S, 「品类问题可见率」, and never 「品牌提及率」, which is M-01 over a pool. Read from `@evimed/domain`; a name
+ * written here would be a second table.
+ */
 export const GEO_METRIC_NAMES: Readonly<Record<GeoOverviewMetricKey, string>> = Object.freeze({
-  gvi: "综合可见度指数",
-  mention: "品牌提及率",
-  accuracy: "事实准确率",
-  citation: "引用命中率",
+  gvi: geoMetricName("gvi") ?? "综合可见度指数",
+  mention: geoMetricName("mention") ?? "品类问题可见率",
+  accuracy: geoMetricName("accuracy") ?? "事实准确率",
+  citation: geoMetricName("citation") ?? "引用命中率",
 });
 
 /** A GVI is an index 0–100; the other three are percentages. */
 export type GeoUnit = "percent" | "index" | "count";
 export const GEO_METRIC_UNITS: Readonly<Record<GeoOverviewMetricKey, GeoUnit>> = Object.freeze({
-  gvi: "index",
-  mention: "percent",
-  accuracy: "percent",
-  citation: "percent",
+  gvi: geoMetricUnit("gvi"),
+  mention: geoMetricUnit("mention"),
+  accuracy: geoMetricUnit("accuracy"),
+  citation: geoMetricUnit("citation"),
 });
 
 /** The coverage windows the composer offers, in days; 90 is the default. */

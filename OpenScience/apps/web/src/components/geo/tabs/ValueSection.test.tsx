@@ -200,7 +200,7 @@ describe("the version the section stands on (G10a)", () => {
   it("says it once in every section that draws — the profile's version and the day it was written, in the app's day form", async () => {
     today("2026-10-10T12:00:00.000Z");
     client.getGeoValue.mockResolvedValue({ ...valueFilled, version: 3, updatedAt: "2026-10-08T12:00:00.000Z" });
-    const modes: ValueMode[] = ["summary", "profile", "safety", "decisions", "actions", "sources", "coverage"];
+    const modes: ValueMode[] = ["profile", "decisions", "actions", "sources", "coverage"];
     for (const mode of modes) {
       const view = show(mode);
       expect(await screen.findByText("依据版本 3 · 更新于 10月8日"), mode).toBeInTheDocument();
@@ -231,30 +231,31 @@ describe("the version the section stands on (G10a)", () => {
   });
 });
 
-const OTHER_MODES = ["summary", "safety", "decisions", "actions", "sources", "coverage"] as const;
+const OTHER_MODES = ["decisions", "actions", "sources", "coverage"] as const;
 
 describe("a project with no value analysis", () => {
   it.each(OTHER_MODES)("%s: draws nothing — no box, no heading, no sentence, no button", async (mode) => {
     client.getGeoValue.mockResolvedValue(empty());
-    // 方案 beside it proves the read finished: it is the one place an empty analysis draws something.
+    // The profile beside it proves the read finished: it is the one part where an empty analysis draws something, the recipe.
     const view = render(<MemoryRouter><ValueSection geoId="geo_1" project={geoProject()} mode={mode} /><ValueSection geoId="geo_1" project={geoProject()} mode="profile" /></MemoryRouter>);
     await screen.findByRole("button", { name: "开始药品价值分析" });
     await settle();
-    expect(view.container.querySelectorAll("section")).toHaveLength(1);
-    expect(screen.getAllByRole("heading")).toHaveLength(1);
+    expect(view.container.querySelectorAll("[data-step-state]")).toHaveLength(1);
+    expect(view.container.querySelectorAll("section")).toHaveLength(0);
   });
 
   it("draws nothing at all while the answer is on its way: no skeleton to jump away from", async () => {
     client.getGeoValue.mockReturnValue(new Promise(() => undefined));
-    const view = show("summary");
+    const view = show("decisions");
     await settle();
     expect(view.container).toBeEmptyDOMElement();
   });
 
-  it("offers exactly one way to start on 方案, and it opens the conversation with the brief, unsent", async () => {
+  it("offers exactly one way to start, as a recipe, and it opens the conversation with the brief, unsent", async () => {
     client.getGeoValue.mockResolvedValue(empty());
     show("profile");
-    expect(await screen.findByRole("heading", { name: "药品价值分析" })).toBeInTheDocument();
+    expect(await screen.findByText("还没有药品价值分析")).toBeInTheDocument();
+    expect(screen.getByText("得到 这个药的获益、风险、适用性、费用与可及性")).toBeInTheDocument();
     const start = screen.getAllByRole("button");
     expect(start.map((button) => button.textContent)).toEqual(["开始药品价值分析"]);
     await userEvent.click(start[0]);
@@ -280,7 +281,7 @@ describe("a project that has an analysis", () => {
 
   it("draws no 问 AI button on any row or section, whichever tab it is on", async () => {
     client.getGeoValue.mockResolvedValue(valueFilled);
-    const modes: ValueMode[] = ["summary", "profile", "safety", "decisions", "actions", "sources", "coverage"];
+    const modes: ValueMode[] = ["profile", "decisions", "actions", "sources", "coverage"];
     const view = render(<MemoryRouter>{modes.map((mode) => <ValueSection key={mode} geoId="geo_1" project={geoProject()} mode={mode} />)}</MemoryRouter>);
     // Every section has something here, so every heading is drawn; the research list is folded, so open it.
     for (const title of VALUE_TITLES) expect(await screen.findByRole("heading", { name: title })).toBeInTheDocument();
@@ -317,15 +318,6 @@ describe("a long list is not cut without a word", () => {
     expect(screen.queryByRole("button", { name: /显示更多/ })).not.toBeInTheDocument();
   });
 
-  it("the excerpt on 总览 shows three and links the whole list on 方案, with how many there are", async () => {
-    client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { findings: findings(5) } });
-    show("summary");
-    const heading = await screen.findByRole("heading", { name: "药品价值与机会" });
-    expect(rowsIn(heading)).toHaveLength(3);
-    expect(within(heading.parentElement as HTMLElement).getByRole("link", { name: "查看全部 5 条" })).toHaveAttribute("href", "/app/geo/geo_1/plan");
-    expect(screen.queryByRole("button", { name: /显示更多/ })).not.toBeInTheDocument();
-  });
-
   it("行动 lists three of twelve next steps, says there are twelve, and 显示更多 brings the rest", async () => {
     const opportunities = Array.from({ length: 12 }, (_, index) => ({ id: `o${index + 1}`, statement: `第 ${index + 1} 项下一步` }));
     client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { opportunities } });
@@ -337,13 +329,6 @@ describe("a long list is not cut without a word", () => {
     await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 9 条" }));
     expect(rowsIn(heading)).toHaveLength(12);
     expect(screen.getByText("第 12 项下一步")).toBeInTheDocument();
-  });
-
-  it("an excerpt of three or fewer needs no link", async () => {
-    client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { findings: findings(3) } });
-    show("summary");
-    await screen.findByRole("heading", { name: "药品价值与机会" });
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("lists twenty of the answers a round was judged on, counts them all, and shows the rest on request", async () => {
