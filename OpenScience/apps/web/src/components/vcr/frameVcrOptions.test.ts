@@ -6,7 +6,8 @@ import { frameVcrOptions, isIntendedUse, isStart, startOf, VCR_STARTERS, VCR_STA
 const requested = (...steps: string[]) => Object.fromEntries(VCR_STEPS.map((step) => [step, { status: "none", requested: steps.includes(step) }])) as VcrStudy["steps"];
 const study = (abilities: string[], steps: VcrStudy["steps"] = requested(...VCR_STEPS)): VcrStudy => ({
   id: "std_1", projectId: "p", name: "EV-201", question: null, tier: "T0", intendedUse: "design_support", status: "active",
-  steps, sessionId: null, definition: null, abilities, budget: null, jobs: [], ceiling: null,
+  steps, sessionId: null, conversation: { sessionId: null, exists: false }, activity: null, next: null, stepSummaries: {},
+  definition: null, abilities, budget: null, jobs: [], ceiling: null,
   overview: { headline: null, metrics: [], counts: null, designs: [], attention: [], changes: [], reviews: [], deliverables: [] },
 });
 

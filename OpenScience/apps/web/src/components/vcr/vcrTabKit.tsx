@@ -1,8 +1,9 @@
-import { Component, useCallback, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useCallback, useContext, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { isVcrMissing, isVcrOff } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
 import { LoadError } from "@/components/cards/LoadError";
+import { StudyFrameContext } from "./studyFrameContext";
 
 /**
  * What every study tab shares: reading its route once, the four states, and a
@@ -11,6 +12,11 @@ import { LoadError } from "@/components/cards/LoadError";
  * A reload keeps the last answer on screen rather than flashing a skeleton —
  * a tab that re-reads after an action (a new assumption version, a confirmed
  * contact) should not look as if it had lost the page.
+ *
+ * **A study's own reads follow the study.** A key that begins with the study's id (`std_1:patients`) is read again, in place,
+ * whenever the frame says the study moved (`StudyFrameApi.version`: a step's state, an engine job's state, the end of a run), so a
+ * result that arrives while the reader is on the tab appears without a button — the page used to promise 「做完会显示在这里」 and
+ * keep its word only on a reload. A key that is not the study's (the method library, the precedent register) is never re-read for it.
  */
 
 export type VcrLoad<T> =
@@ -37,6 +43,9 @@ export function useVcrLoad<T>(key: string, load: () => Promise<T>): VcrLoadResul
   const loader = useRef(load);
   loader.current = load;
   const shownKey = useRef(key);
+  const frame = useContext(StudyFrameContext);
+  const following = frame && key.startsWith(`${frame.studyId}:`) ? frame.version : null;
+  const seenVersion = useRef(following);
 
   useEffect(() => {
     let live = true;
@@ -62,6 +71,11 @@ export function useVcrLoad<T>(key: string, load: () => Promise<T>): VcrLoadResul
   }, [key, round]);
 
   const reload = useCallback(() => setRound((value) => value + 1), []);
+  useEffect(() => {
+    if (seenVersion.current === following) return;
+    seenVersion.current = following;
+    if (following !== null) setRound((value) => value + 1);
+  }, [following]);
   return { state, reload, last };
 }
 

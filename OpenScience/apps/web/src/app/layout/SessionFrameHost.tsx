@@ -6,8 +6,7 @@ import { isConversationRun } from "@/lib/conversations";
 import { conversationTitle } from "@/lib/conversationTitles";
 import { useProjectStore } from "@/lib/projects";
 import { chatPath, chatSessionId, isChatPath } from "@/lib/runLocation";
-import { isTaskPath } from "@/lib/taskLocation";
-import { useTaskPane } from "@/lib/taskPane";
+import { isPanePath, useTaskPane } from "@/lib/taskPane";
 
 import { Button } from "@/components/ui/Button";
 import { FrameSkeleton, RuntimeUiFrame } from "@/app/routes/RuntimeUiFrame";
@@ -62,12 +61,13 @@ function releasesSettled(pending: readonly Promise<void>[], ms: number): Promise
  * The chat route (`SessionRoute`) is therefore a placeholder: this decides
  * which conversation is open, from the address alone.
  *
- * THE OTHER PLACE IT SHOWS (2026-10-08, 定时任务). A task's page (`/app/autopilot/:taskId`) is a conversation too: the task bar over
- * the kernel's conversation of one execution. The page cannot render the frame — moving an iframe in the tree reloads it, the
- * cost this component exists to avoid — so it renders an empty pane and registers it (`registerTaskPane`), and this places the
- * same resident frame over that pane: positioned and sized to the pane's rectangle, kept in step as the pane, the window, the
- * scroll or the sidebar changes it. Switching pages, switching projects and collapsing the sidebar are all moves of the pane, never
- * of the frame's place in the tree.
+ * THE OTHER PLACES IT SHOWS (2026-10-08, 定时任务; 2026-10-14, 虚拟临床研究). A task's page (`/app/autopilot/:taskId`) is a
+ * conversation too: the task bar over the kernel's conversation of one execution. So is a study's conversation view
+ * (`/app/virtual-research/:studyId/chat`): the study's step bar over its one conversation. The page cannot render the frame —
+ * moving an iframe in the tree reloads it, the cost this component exists to avoid — so it renders an empty pane and registers it
+ * (`registerTaskPane`), and this places the same resident frame over that pane: positioned and sized to the pane's rectangle, kept
+ * in step as the pane, the window, the scroll or the sidebar changes it. Switching pages, switching between a study's tabs and its
+ * conversation, switching projects and collapsing the sidebar are all moves of the pane, never of the frame's place in the tree.
  *
  * What `/app/chat` shows after the frame was on an execution's conversation. The frame follows the address, never the other way
  * round: on the chat surface the conversation is the one the address names, and a bare `/app/chat` resumes the one the researcher
@@ -80,10 +80,10 @@ export function SessionFrameHost() {
   const navigate = useNavigate();
   const currentProjectId = useProjectStore((state) => state.currentId);
   const onChat = isChatPath(location.pathname);
-  // A task's page asking for the frame over its pane: the execution's conversation, in this project.
+  // A page asking for the frame over its pane — a task's execution, a study's own conversation — in this project.
   const taskPane = useTaskPane();
-  const onTask = isTaskPath(location.pathname);
-  const taskSession = onTask && taskPane && taskPane.projectId === currentProjectId ? taskPane.sessionId : null;
+  const onPane = isPanePath(location.pathname);
+  const taskSession = onPane && taskPane && taskPane.projectId === currentProjectId ? taskPane.sessionId : null;
   // The frame is on screen: as the chat surface, or placed over a task's pane.
   const onSurface = onChat || taskSession !== null;
   const sessionId = onChat ? chatSessionId(location.pathname) : taskSession;
