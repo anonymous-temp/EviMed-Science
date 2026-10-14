@@ -10,7 +10,7 @@ import { ExtensionQualification } from "../src/extensionQualification.mjs";
 const hash = text => createHash("sha256").update(text).digest("hex"), digest = text => `sha256:${hash(text)}`;
 const entry = { id: "fixture-documents" };
 const original = { packageIntegrity: digest("fixture-package"), sourceCommit: "a".repeat(40), adapterRevision: digest("fixture-adapter"),
-  runtimeImageDigest: digest("fixture-runtime"), permissionProfileRevision: digest("fixture-policy"), suiteRevision: digest("fixture-suite"), dshVersion: "0.1.7-rc.2", executionClass: "isolated-tool" };
+  runtimeImageDigest: digest("fixture-runtime"), permissionProfileRevision: digest("fixture-policy"), suiteRevision: digest("fixture-suite"), dshVersion: "0.2.0-rc.2", executionClass: "isolated-tool" };
 // Synthetic contract outcomes below test the reader only. They qualify no
 // actual artifact/runtime and must never become a deployment receipt.
 const outcomes = () => EXTENSION_SAAS_CASE_IDS.map(caseId => ({ caseId, status: "pass", observationDigests: [digest(caseId)], artifactDigests: [digest("fixture-" + caseId)] }));

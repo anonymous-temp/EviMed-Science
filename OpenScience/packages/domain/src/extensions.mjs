@@ -11,7 +11,7 @@ export const EXTENSION_EXECUTION_CLASSES = Object.freeze(['isolated-tool', 'rest
  * (`dsh.version`); every other source file that needs it imports this name instead of restating it, and a test holds
  * this equal to the pin, so moving the pin fails here first. A package a deployment admitted was measured on that
  * kernel, not on the next one -- that is why the version is checked at all. */
-export const EXTENSION_SUPPORTED_DSH_VERSION = '0.1.7-rc.2'
+export const EXTENSION_SUPPORTED_DSH_VERSION = '0.2.0-rc.2'
 /** What the platform's own record says about an extension. A LABEL: no state here gates enabling, running or
  * listing an admitted extension (owner ruling 2026-10-04). `qualified` is a signed, complete record for exactly the
  * current identity; `stale` a signed record for an earlier identity (the code, image, kernel or permission profile

@@ -1,0 +1,298 @@
+{
+  "$comment": "Which host namespaces each browser package the composition mounts reaches through its own client bundle (lib/client.js), recorded by record-panel-remotes.mjs; re-record on every DSH pin change. `configForms` marks a package that goes through the generic form client, which reaches `settings`. A package with no entry has no client bundle.",
+  "pin": "0.2.0-rc.2",
+  "configFormsProvider": "@deepseek-ai/dsh-client-ui-settings",
+  "packages": {
+    "@deepseek-ai/dsh-client-connection": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-file-upload": {
+      "remotes": [
+        "fileUploads"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-hmr": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-locale": {
+      "remotes": [],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-modules": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-product-analytics": {
+      "remotes": [
+        "productAnalytics"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-resources": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-shortcuts": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-agent-preset": {
+      "remotes": [
+        "agentPresets",
+        "settings"
+      ],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-approval": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-attachment": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-brand-official": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-chat": {
+      "remotes": [
+        "session"
+      ],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-commands": {
+      "remotes": [
+        "commands"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-conversation": {
+      "remotes": [],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-cordis": {
+      "remotes": [
+        "dynamicCordisRunner"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-deliverables": {
+      "remotes": [
+        "session"
+      ],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-goal": {
+      "remotes": [
+        "goals"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-input-trigger": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-jobs": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-layout": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-message-feedback": {
+      "remotes": [
+        "messageFeedback",
+        "sessionFeedback"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-model-selection": {
+      "remotes": [
+        "session"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-open-in-app": {
+      "remotes": [
+        "session"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-permission-presets": {
+      "remotes": [
+        "permissionPresets",
+        "settings"
+      ],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-plan": {
+      "remotes": [
+        "commands",
+        "session"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-plugin-manager": {
+      "remotes": [
+        "pluginInventory",
+        "pluginManager",
+        "pluginRegistryProbe"
+      ],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-reference": {
+      "remotes": [
+        "fileReferences",
+        "sessionReferenceResolver"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-renderer": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-session": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-settings": {
+      "remotes": [
+        "settings"
+      ],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings-account": {
+      "remotes": [
+        "account",
+        "session"
+      ],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings-agent-loop": {
+      "remotes": [],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings-general": {
+      "remotes": [
+        "settings"
+      ],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings-models": {
+      "remotes": [
+        "credentials",
+        "llm",
+        "session",
+        "settings"
+      ],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings-plugin-inventory": {
+      "remotes": [
+        "pluginInventory"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-settings-plugins": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-settings-session-log": {
+      "remotes": [],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings-shell": {
+      "remotes": [],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings-subagent": {
+      "remotes": [
+        "session"
+      ],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings-web-search": {
+      "remotes": [
+        "credentials"
+      ],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-shortcuts": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-sidebar": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-sidebar-browser": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-sidebar-documentpreview": {
+      "remotes": [
+        "officeToPdf",
+        "workspaceFiles"
+      ],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-sidebar-files": {
+      "remotes": [
+        "workspaceFiles"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-sidebar-right": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-sidebar-terminal": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-skill": {
+      "remotes": [
+        "skills"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-subagent": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-theme": {
+      "remotes": [],
+      "configForms": true
+    },
+    "@deepseek-ai/dsh-client-ui-tool": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-trajectory": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-user-questions": {
+      "remotes": [
+        "userQuestions"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-workflow-run": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-workspace": {
+      "remotes": [
+        "directoryPicker"
+      ],
+      "configForms": false
+    }
+  },
+  "noClientBundle": []
+}

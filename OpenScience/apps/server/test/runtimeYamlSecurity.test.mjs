@@ -28,7 +28,7 @@ test('complete replacement preserves provider/native bytes, works and is idempot
     const value = JSON.parse(fs.readFileSync(path.join(target, 'package.json')));value.version = '4.3.0';fs.writeFileSync(path.join(target, 'package.json'), JSON.stringify(value));
   }
   put(path.join(modules, 'argparse'), { name: 'argparse', version: '2.0.1' });
-  put(path.join(modules, '@deepseek-ai/fixture-consumer'), { name: '@deepseek-ai/fixture-consumer', version: '0.1.7-rc.2', dependencies: { 'js-yaml': '^4.0.0' } });
+  put(path.join(modules, '@deepseek-ai/fixture-consumer'), { name: '@deepseek-ai/fixture-consumer', version: '0.2.0-rc.2', dependencies: { 'js-yaml': '^4.0.0' } });
   const before = fs.readFileSync(path.join(modules, '@deepseek-ai/fixture-consumer/package.json'));
   const result = patchYamlInstallation(modules, official, pin);assert.equal(result.copies, 2);assert.equal(result.consumers, 1);
   assert.deepEqual(fs.readFileSync(path.join(modules, '@deepseek-ai/fixture-consumer/package.json')), before);

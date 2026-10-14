@@ -9,6 +9,7 @@ import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
 import { REGISTER_JUDGE_MAX_LINES } from "./reportRegisterJudge.mjs";
+import { PINNED } from "./pinnedVersions.mjs";
 
 /**
  * How much of the caller's window a gateway leaves itself to answer in.
@@ -55,12 +56,8 @@ function environmentJsonList(name, check = (value) => value) {
 // manifest, a peer dependency and a release manifest that each carried their
 // own copy meant "bump the pin" was four edits and one was always missed.
 //
-// Read rather than imported as a JSON module: the control plane already reads
-// files, and an import attribute is a parse error on the linter this repo pins.
-// The domain package uses the import form because it must not touch `node:fs`.
-const depsVersions = JSON.parse(
-  fs.readFileSync(new URL("../../../deps-version.json", import.meta.url), "utf8"),
-);
+// Read by `pinnedVersions.mjs`, the control plane's one reader of the file.
+const depsVersions = PINNED;
 
 const defaultSessionTtlMs = 7 * 24 * 60 * 60 * 1000;
 const bundledExamplesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../examples");
@@ -2261,7 +2258,7 @@ export function loadConfig(overrides = {}) {
       process.env.OPEN_SCIENCE_DSH_VERSION ??
       release.manifest?.runtime?.dshVersion ??
       depsVersions.dsh?.version ??
-      "0.1.7-rc.2",
+      "0.2.0-rc.2",
     socketBundleVersion:
       overrides.socketBundleVersion ??
       process.env.OPEN_SCIENCE_SOCKET_BUNDLE_VERSION ??

@@ -162,6 +162,28 @@
 - id: session-telemetry-otel
   disabled: true
 
+# 0.2.0 split the telemetry transport from its adapters. The shared OTLP channel
+# factory both adapters ride on is a service row of its own: mounting it sends
+# nothing, and nothing in this composition has a use for it, so a service with no
+# consumer stays off rather than one edit from having one.
+- id: otel
+  disabled: true
+
+# The host half of product-usage analytics, new in 0.2.0: it sends named usage
+# events to DeepSeek's collector. Upstream switches it off with a profile-name
+# expression (`ctx.get('profileContext')?.name !== 'desktop'`), which is true here
+# only while this profile is not called `desktop`. A hosted runtime that patient
+# material passes through does not rest its egress guarantee on a name, so the
+# row is off by value, as `session-telemetry-otel` above is.
+- id: desktop-product-telemetry
+  disabled: true
+
+# The page's reporter for the pair above: it calls `productAnalytics/report`, a
+# method the hosted proxy denies, behind the same profile-name expression upstream.
+# Held off by value for the same reason, so the page never has a reporter to call.
+- id: product-analytics
+  disabled: true
+
 # Keep the native browser alongside Files and document previews in hosted web.
 # It loads pages in the client iframe; it does not add a server-side URL proxy.
 - id: ui-sidebar-browser

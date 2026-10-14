@@ -5,6 +5,7 @@ import { realpathSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import test from 'node:test';
+import {CITE_VERSION} from './fixtures/pins.mjs';
 const root=fileURLToPath(new URL('../../../',import.meta.url));
 const require=createRequire(new URL('../../../packages/socket/package.json',import.meta.url));
 
@@ -19,5 +20,5 @@ test('fixed proof uses an authenticated rc.1 host, complete shipped preset and s
   const result=JSON.parse(output);
   assert.deepEqual(result.map(x=>({enabled:x.enabled,timeoutMs:x.timeoutMs,tools:x.tools.length})),[
     {enabled:true,timeoutMs:2000,tools:5},{enabled:true,timeoutMs:4000,tools:5},{enabled:false,timeoutMs:4000,tools:0}]);
-  assert.ok(result.every(x=>x.binaryVersion==='0.3.2'));
+  assert.ok(result.every(x=>x.binaryVersion===CITE_VERSION));
 });

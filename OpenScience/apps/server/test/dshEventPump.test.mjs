@@ -976,7 +976,7 @@ test("a title the kernel wrote is a title event on the run's stream, with who wr
 });
 
 test("a conversation recorded from the pinned kernel puts bookkeeping nowhere on the stream and leaves nothing unclassified", async (t) => {
-  // Frames recorded from a live 0.1.7-rc.2 kernel, not written here: the first
+  // Frames recorded from a live kernel (the pinned one, see the fixture's `dsh`), not written here: the first
   // turn of the golden recording, as its session/follow stream delivered it.
   const golden = JSON.parse(await readFile(new URL("./fixtures/dsh/golden-frames.json", import.meta.url), "utf8"));
   const sessionId = golden.unary.find((entry) => entry.method === "session/create").response.result.value.sessionId;
@@ -1002,6 +1002,10 @@ test("a conversation recorded from the pinned kernel puts bookkeeping nowhere on
   const bookkeeping = golden.session
     .filter((frame) => frame?.type === "event" && frame.event.seq <= firstTurnEnd && KERNEL_PLUMBING_EVENT_TYPES.has(frame.event.type))
     .map((frame) => frame.event.seq);
-  assert.ok(bookkeeping.length >= 10, "the first turn of the recording carries bookkeeping");
+  // A floor on the fixture, so the loop below cannot pass over an empty list; it is not a property of the kernel. The
+  // scripted-model recording of 0.1.7-rc.2 delegated an evidence appraisal and the run policy nudged the parent on
+  // every step (18 records); a real model's conversation, which is what 0.2.0-rc.2's was recorded with, writes the
+  // kernel's own bookkeeping only (7: header, context, system message, two titles, two inbox splices).
+  assert.ok(bookkeeping.length >= 5, "the first turn of the recording carries bookkeeping");
   for (const seq of bookkeeping) assert.ok(activity.includes(seq), `record ${seq} was a heartbeat`);
 });

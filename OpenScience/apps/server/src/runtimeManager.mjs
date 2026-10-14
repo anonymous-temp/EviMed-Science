@@ -29,6 +29,7 @@ import { PLUGIN_ID, pluginEntry } from "./pluginService.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 import { canonicalJson } from "@evimed/domain";
+import { CITE_VERSION } from "./pinnedVersions.mjs";
 import { extensionGenerationRoot, validateExtensionGenerationReference, verifyExtensionGeneration } from "./extensionGenerationService.mjs";
 import { PERSONAL_SKILLS_RUNTIME_DIR, personalGenerationRoot, samePersonalPackages, validatePersonalGenerationReference, verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 // Knowledge-base search reaches the MCP server by this one variable (2026-09-20).
@@ -426,8 +427,18 @@ export function isImmutableRuntimeUiAsset(suffix) {
   const pathname = cut < 0 ? target : target.slice(0, cut);
   const query = cut < 0 ? "" : target.slice(cut + 1);
   if (/^\/assets\/[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|woff2?|ttf|otf|svg|png|jpe?g|gif|webp|avif|ico|wasm)$/.test(pathname)) return true;
+  if (ROOT_PLUGIN_RUNTIME_ASSET.test(target)) return true;
   return pathname.startsWith("/plugins/") && /(?:^|[?&])rev=[A-Za-z0-9._-]{6,}(?:&|$)/.test(query);
 }
+
+/**
+ * A plugin's renderer that its client imports from a ROOT path of the application's origin, outside every frame's prefix:
+ * the Mermaid bundle's `import("/dsh-mermaid/mermaid-runtime.js?rev=<content hash>")`, about 3.4 MB. The path has no frame
+ * to resolve, so it was answered 401 and a reply drew the diagram's code and never the diagram. It is served by the same
+ * route as the application's build files (`SHARED_UI_ASSET_PREFIX`): login alone, GET and HEAD, one exact path, a
+ * revision that names the content. Exact paths only — a new one is a line here and a test, never a pattern.
+ */
+export const ROOT_PLUGIN_RUNTIME_ASSET = /^\/dsh-mermaid\/mermaid-runtime\.js\?rev=[A-Za-z0-9._-]{6,64}$/;
 
 /** What a browser may keep of an immutable kernel file: this account's copy, for a year. */
 export const IMMUTABLE_UI_CACHE = "private, max-age=31536000, immutable";
@@ -6227,7 +6238,7 @@ export class RuntimeManager {
     if (!runtime || !generation || canonicalJson(runtime.extensionGeneration?.reference ?? null) !== canonicalJson(expected.reference ?? null)) throw new HttpError(409, 'extension_contract_invalid', 'The runtime generation changed.');
     const native = await this.callKernel(runtime, project, 'evimedPlugins/verifyExtensions', {}, AbortSignal.timeout(45000));
     const legacy = expected.projection.plugins.find(plugin => plugin.compatibility === 'legacy-citation-v1');
-    if (legacy && (native.citation?.binaryVersion !== '0.3.2' || native.citation.enabled !== legacy.enabled || native.citation.revision !== legacy.configRevision || native.citation.timeoutMs !== legacy.settings.timeoutMs)) throw new HttpError(502, 'plugin_apply_failed', 'Native citation configuration did not match.');
+    if (legacy && (native.citation?.binaryVersion !== CITE_VERSION || native.citation.enabled !== legacy.enabled || native.citation.revision !== legacy.configRevision || native.citation.timeoutMs !== legacy.settings.timeoutMs)) throw new HttpError(502, 'plugin_apply_failed', 'Native citation configuration did not match.');
     let inventory = native.inventory;
     if (!expected.reference && legacy && Array.isArray(inventory) && inventory.length === 0) inventory = [{ extensionId: legacy.extensionId, artifactDigest: legacy.artifactDigest, configRevision: native.citation.revision, configDigest: legacy.configDigest, enabled: native.citation.enabled }];
     const personal = expected.projection.personal;

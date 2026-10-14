@@ -12,13 +12,16 @@ FROM ${RUNTIME_BASE_IMAGE}
 ARG TARGETARCH
 # Every version below is derived from OpenScience/deps-version.json. A test
 # asserts they are equal, so a pin bump is one edit in one file.
-ARG DSH_VERSION=0.1.7-rc.2
+ARG DSH_VERSION=0.2.0-rc.2
 ARG DSH_CORDIS_VERSION=4.0.4
-# Registry cutoff adopted by the 0.1.7-rc.2 upgrade; CI verifies that every
-# required subpackage is available and resolves to the exact same version.
-# npm's cutoff bounds dependency resolution; the whole-tree version assertion
-# below verifies the resulting kernel closure rather than trusting the date.
-ARG DSH_PUBLISHED_BEFORE=2026-09-24T15:18:11.337Z
+# Registry cutoff of the pinned closure: the latest publish instant of its
+# `@deepseek-ai/dsh*` packages plus a minute, computed by
+# `node scripts/ops/kernel-install.mjs cutoff` and written once in
+# deps-version.json. CI verifies that every required subpackage is available and
+# resolves to the exact same version. npm's cutoff bounds dependency resolution;
+# the whole-tree version assertion below verifies the resulting kernel closure
+# rather than trusting the date.
+ARG DSH_PUBLISHED_BEFORE=2026-09-29T11:18:03.848Z
 ARG SOCKET_VERSION=0.1.0
 ARG NODE_VERSION=22.22.3
 # Where to fetch the Node tarball. The default is upstream; a deployment behind
@@ -250,12 +253,13 @@ COPY deploy/runtime-dsh/dump-config.baseline.json /opt/evimed/committed-dump-con
 # the seed four ways — a loadable native binding, a --dump-config equal to the
 # committed baseline, a relocated copy that still composes, and (the `smoke`
 # phase below) a boot.
-ARG DSH_CITE_BUNDLE="dsh-cite@0.3.2"
-ARG DSH_ANNOTATION_BUNDLE="@changfenhuang/dsh-annotation@1.4.10"
-ARG DSH_MERMAID_BUNDLE="dsh-mermaid@0.4.0"
+ARG DSH_CITE_BUNDLE="dsh-cite@0.3.5"
+ARG DSH_ANNOTATION_BUNDLE="@changfenhuang/dsh-annotation@1.4.11"
+ARG DSH_MERMAID_BUNDLE="dsh-mermaid@0.4.1"
 ARG DSH_COMMUNITY_PEER_PINS="cordis@4.0.0-rc.10"
 COPY deploy/runtime-dsh/install-loopx.mjs /usr/local/lib/evimed/install-loopx.mjs
 COPY deploy/runtime-dsh/loopx-compat.mjs /usr/local/lib/evimed/loopx-compat.mjs
+COPY deploy/runtime-dsh/annotation-compat.mjs /usr/local/lib/evimed/annotation-compat.mjs
 ENV LOOPX_USAGE_PING=0 DO_NOT_TRACK=1 LOOPX_BIN=/opt/evimed/venv/bin/loopx
 RUN bash /usr/local/lib/evimed/install-runtime.sh loopx
 COPY deploy/runtime-dsh/install-openviking-plugin.mjs /usr/local/lib/evimed/install-openviking-plugin.mjs

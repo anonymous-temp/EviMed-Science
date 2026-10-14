@@ -97,6 +97,13 @@ export const RULES = [
     why: "a response recorded verbatim off a live upstream, named with its time in the directory's provenance.json; rewriting a version in it claims a recording that never happened",
   },
   {
+    // What the registry said about the closure of the kernel pin, kept so the cutoff's arithmetic is replayed without a
+    // network (`kernel-install.mjs cutoff --record`). It names the version it was recorded for in every member.
+    kind: "provenance",
+    where: /^OpenScience\/scripts\/ops\/test\/fixtures\/kernel-closure-times-[^/]+\.json$/,
+    why: "a recording of the registry's publish instants for one pin's closure; it is re-recorded for the next pin, never re-dated, and the test beside it holds its version equal to the pin",
+  },
+  {
     kind: "provenance",
     where: /^OpenScience\/apps\/server\/src\/(dshMux|dshRuntimeAdapter|mockDshRuntime)\.mjs$/,
     why: "the wire these modules implement was read off the running kernel named here",
@@ -125,6 +132,11 @@ export const RULES = [
     kind: "provenance",
     where: /^OpenScience\/packages\/contracts\/dsh\/client-locale\.json$/,
     why: "the kernel client's Chinese dictionaries recorded from the published packages of this release; a test holds the recorded version equal to the pin, so moving the pin fails until `record-client-locale.mjs` is run again — the record is re-taken, never re-dated",
+  },
+  {
+    kind: "provenance",
+    where: /^OpenScience\/packages\/contracts\/dsh\/panel-remotes\.json$/,
+    why: "the host namespaces each browser package's bundle reaches, recorded from the published packages of this release; a test holds the recorded version equal to the pin and `verify-harness-seams` compares it with a fresh install, so moving the pin fails until `record-panel-remotes.mjs` is run again — the record is re-taken, never re-dated",
   },
   {
     kind: "provenance",

@@ -11,6 +11,7 @@ import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { withAccountExportSnapshot } from "../src/accountExport.mjs";
 import { migrateCapsuleShare } from "../src/capsuleShareLinks.mjs";
 import { ResultProvenanceService } from "../src/resultProvenanceService.mjs";
+import { CITE_VERSION } from "./fixtures/pins.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -317,7 +318,7 @@ test("account export includes only approved plugin config history and excludes r
   assert.equal(response.status, 200);
   const state = JSON.parse(tarEntries(Buffer.from(await response.arrayBuffer())).get("account/customer-state.json").toString());
   assert.deepEqual(state.documents.find(row => row.kind === "plugin").payload, {
-    schemaVersion: 1, pluginId: "dsh-cite", binaryVersion: "0.3.2", enabled: false, settings: { timeoutMs: 5000 },
+    schemaVersion: 1, pluginId: "dsh-cite", binaryVersion: CITE_VERSION, enabled: false, settings: { timeoutMs: 5000 },
   });
   assert.deepEqual(state.revisions.filter(row => row.kind === "plugin").map(row => row.payload.settings.timeoutMs), [4000, 5000]);
   assert.ok(!JSON.stringify(state).includes("runtime_generation"));

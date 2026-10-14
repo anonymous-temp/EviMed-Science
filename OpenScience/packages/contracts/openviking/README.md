@@ -9,7 +9,8 @@ Run: `pnpm test:contracts` (this directory), and in `apps/server`: `openVikingEn
 ## Pinned: v0.5.0 (2026-10-13)
 
 `ghcr.io/volcengine/openviking:v0.5.0`, index digest `sha256:c60a83cd…251ccf`, linux/amd64 `sha256:2c104187…af38`.
-Beside it in the pin: the official DSH memory plugin `@openviking/dsh-memory-plugin@0.5.20` (tarball and sha256) and the
+Beside it in the pin: the official DSH memory plugin `@openviking/dsh-memory-plugin` (the version, tarball and sha256 are `openviking.plugin` in
+`deps-version.json`; read at the tag's source, like the engine) and the
 two official Compile skills `llm-wiki` and `knowledge-graph` (upstream sha256, and the sha256 the server stores after it
 re-wraps the frontmatter — the one the control plane compares). The server is AGPL-3.0 and runs unmodified as its own
 service; the plugin, the skills and the examples are Apache-2.0.
@@ -42,11 +43,14 @@ reached through the gateway on the internal network; the readiness facts below.
 ## Who commits a native conversation, and when
 
 Extraction runs on a commit: the engine archives the session's pending messages and extracts from them. The unmodified
-plugin (`@openviking/dsh-memory-plugin@0.5.20`, `runtime.mjs`) commits in exactly two cases: at the end of a turn when
+plugin (`@openviking/dsh-memory-plugin`, `runtime.mjs`) commits in exactly three cases: at the end of a turn when
 the session reports `pending_tokens >= commitTokenThreshold` (the upstream default 20000, minimum 1000, which the engine
-counts about twice DeepSeek's tokens for Chinese), and when its session is disposed — the kernel's shutdown or a release
-of the container. `commitTurnThreshold` and `autoCommitOnCompact` are in its schema and no code of the DSH runtime reads
-them. An ordinary conversation is a few hundred to a few thousand tokens in a runtime that lives for hours, so on
+counts about twice DeepSeek's tokens for Chinese); when the kernel appends `compaction/start`, whatever the threshold (new in
+0.5.25: it commits before the history is summarized, so a conversation long enough to compact is committed by its first
+compaction, and `/compact` does the same); and when its session is disposed — the kernel's shutdown or a release of the
+container. `commitTurnThreshold` and `autoCommitOnCompact` are in its schema and no code of the DSH runtime reads them (the
+compaction commit is not the latter's switch: it is unconditional). Every one of the three reaches the engine through the
+memory gateway's commit path, so the admission rule below applies to a compaction commit exactly as to a turn's. An ordinary conversation is a few hundred to a few thousand tokens in a runtime that lives for hours, so on
 production (2026-10-14) a stated profession and city and three project facts were not in memory after twenty minutes and
 `native_commits` held no row of the session; the engine's own idle commit (`auto_commit_policy.idle_timeout_seconds: 900`,
 scanned every 300 s) was the only net, 15 to 20 minutes after the last message.

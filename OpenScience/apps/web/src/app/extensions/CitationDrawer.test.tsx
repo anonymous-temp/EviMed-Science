@@ -9,7 +9,7 @@ const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), saveWebPlugin: vi.fn(),
 vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), ...api }));
 
 const plugin = (over: object = {}) => ({
-  id: "dsh-cite", binaryVersion: "0.3.2", tools: ["cite_lookup", "cite_bibtex", "cite_health"], settingsSchema: { timeoutMs: { min: 2000, max: 15000 } },
+  id: "dsh-cite", binaryVersion: "0.0.1", tools: ["cite_lookup", "cite_bibtex", "cite_health"], settingsSchema: { timeoutMs: { min: 2000, max: 15000 } },
   desired: { revision: 2, enabled: true, settings: { timeoutMs: 15000 } }, effective: { revision: 2, enabled: true, settings: { timeoutMs: 15000 } },
   phase: "effective", error: null, removed: false, limits: { minTimeoutMs: 2000, maxTimeoutMs: 15000 }, ...over,
 });

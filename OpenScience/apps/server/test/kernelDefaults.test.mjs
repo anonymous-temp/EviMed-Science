@@ -89,7 +89,9 @@ test("every setting the runtime depends on still holds in the composition the im
   // 192 on 2026-09-30: the request-scoped engine execution-context plugin.
   // 193 on 2026-10-02: the scoped native skill catalogue host plugin.
   // 200 on 2026-10-13: the official OpenViking memory plugin's row and the loopback bridge that serves it.
-  assert.equal(report.counts.baselineRows, 200, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue, LoopX and the OpenViking memory plugin with its bridge");
+  // 201 on 2026-10-14 (0.2.0-rc.2): four rows in (the OTLP service, the product-usage pair, the session-log settings
+  // leaf) and three out (the schedule rows that left the web app's own patch).
+  assert.equal(report.counts.baselineRows, 201, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue, LoopX and the OpenViking memory plugin with its bridge");
   assert.equal(parseCordisDocument(await readFile(source("baseline"), "utf8")).rows.filter((row) => ["dsh-annotation", "ui-mermaid"].includes(row.id)).length, 2);
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.byId.get("evimed-engine-context").name, "@evimed/dsh-socket/plugins/engine-context");
@@ -159,6 +161,8 @@ test("the invariant list is read out of the composition, not retyped beside it",
       // 0.1.7's DeepSeek account sign-in and its model route: a provider
       // credential in the runtime, which holds none by design.
       "deepseek-account.disabled=true",
+      // 0.2.0's product-usage pair: upstream disables it with a profile-name expression, held off by value here.
+      "desktop-product-telemetry.disabled=true",
       "hmr.disabled=true",
       "llm-deepseek-account.disabled=true",
       "loopx-driver.disabled=!!js process.env.EVIMED_LOOPX_ENABLED === '0'",
@@ -180,6 +184,8 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "openviking-memory-runtime.config.workspacePeer=false",
       "openviking-memory-runtime.disabled=!!js (process.env.EVIMED_MEMORY_GATEWAY_URL || '') === ''",
       "openviking-memory-runtime.inject[0]=evimedMemoryBridge",
+      // 0.2.0's shared OTLP channel factory, under both telemetry adapters.
+      "otel.disabled=true",
       "plugin-manager.disabled=true",
       "plugin-package-inventory-deepseek.disabled=true",
       // The four upstream presets the web bundle declares beside ours: a
@@ -189,6 +195,7 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "preset-minimal.disabled=true",
       "preset-ptc.disabled=true",
       "preset-standard.disabled=true",
+      "product-analytics.disabled=true",
       // 0.1.7 flipped its default on: the whole session log with every request.
       "session-log-deepseek.disabled=true",
       "session-telemetry-otel.disabled=true",

@@ -10,6 +10,7 @@ import {
   projectPluginId, removalConfiguration, validatePluginConfig,
 } from '../src/pluginService.mjs';
 import { pluginAvailabilityRecord, pluginCompatibilityRow } from '../../../scripts/ops/upstream-compat-matrix.mjs';
+import { CITE_VERSION } from './fixtures/pins.mjs';
 
 const supportFile = new URL('../../../runtime/skills/community/plugin-support.json', import.meta.url);
 const support = JSON.parse(readFileSync(supportFile, 'utf8'));
@@ -36,7 +37,7 @@ test('project document identities cannot alias another project', () => {
 });
 
 test('account export projects only the exact supported configuration shape', () => {
-  const payload = { schemaVersion: 1, pluginId: 'dsh-cite', binaryVersion: '0.3.2', enabled: false, settings: { timeoutMs: 4000 } };
+  const payload = { schemaVersion: 1, pluginId: 'dsh-cite', binaryVersion: CITE_VERSION, enabled: false, settings: { timeoutMs: 4000 } };
   assert.deepEqual(exportPluginPayload(payload), payload);
   for (const value of [{ ...payload, token: 'private' }, { ...payload, binaryVersion: '0.3.3' },
     { ...payload, settings: { timeoutMs: 4000, gatewayUrl: 'https://private' } }, { enabled: true }]) {

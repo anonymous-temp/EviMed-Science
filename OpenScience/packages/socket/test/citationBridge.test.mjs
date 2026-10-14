@@ -23,7 +23,7 @@ test('the bridge registers the five original tools once in the pinned native too
 test('the citation package, image install and support inventory agree on the exact upstream pin', async () => {
   const json = async (/** @type {string} */ relative) => JSON.parse(await readFile(new URL(relative, import.meta.url), 'utf8'))
   const version = (await json('../../../deps-version.json')).dsh.citeVersion
-  assert.equal(version, '0.3.2')
+  assert.match(version, /^\d+\.\d+\.\d+$/, 'deps-version.json names one exact dsh-cite release')
   assert.equal((await json('../package.json')).dependencies['dsh-cite'], version)
   const dockerfile = await readFile(new URL('../../../deploy/runtime-dsh/Dockerfile', import.meta.url), 'utf8')
   assert.ok(dockerfile.includes(`"dsh-cite@${version}"`))

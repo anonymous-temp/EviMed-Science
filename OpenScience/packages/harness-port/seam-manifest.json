@@ -1,7 +1,10 @@
 {
-  "dsh": "0.1.7-rc.2",
+  "dsh": "0.2.0-rc.2",
   "cordis": "4.0.4",
   "pnpm": "11.7.0",
+  "plugins": {
+    "dsh-cite": "0.3.5"
+  },
   "services": {
     "required": [
       "tools",
@@ -170,7 +173,7 @@
       },
       "read": "unauthenticated hint",
       "fallback": "the project's single active run, as before",
-      "verifiedAgainst": "0.1.7-rc.2, read in the installed closure at @deepseek-ai/dsh-llm-deepseek@0.1.7-rc.2/lib/index.js (the shared Messages transport the `llm-deepseek` row's `dsh-llm-deepseek-api-key` plugin registers onto)"
+      "verifiedAgainst": "0.2.0-rc.2, read in the installed closure at @deepseek-ai/dsh-llm-deepseek@0.2.0-rc.2/lib/index.js (the shared Messages transport the `llm-deepseek` row's `dsh-llm-deepseek-api-key` plugin registers onto)"
     },
     "personalSkills": {
       "package": "@deepseek-ai/dsh-skill-filesystem",
@@ -343,6 +346,9 @@
       "pluginManager/setVersionExemption",
       "pluginManager/waitForInstall",
       "pluginRegistryProbe/fastest",
+      "productAnalytics/enabled",
+      "productAnalytics/report",
+      "productAnalytics/watchPolicy",
       "schedule/catalog",
       "schedule/delete",
       "schedule/history",
@@ -384,6 +390,8 @@
       "terminal/retain",
       "terminal/shells",
       "terminal/write",
+      "userQuestions/answer",
+      "userQuestions/attachWait",
       "workspace/archiveSession",
       "workspace/create",
       "workspace/delete",

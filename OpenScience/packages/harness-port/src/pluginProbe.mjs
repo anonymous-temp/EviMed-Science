@@ -4,12 +4,15 @@ import { readFile, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { loadHarnessModule } from '../index.mjs'
+import SEAMS from '../seam-manifest.json' with { type: 'json' }
+/** The citation bundle this runtime is built with: the seam manifest names it, and a test holds the name equal to `deps-version.json`. */
+const CITE_VERSION = SEAMS.plugins['dsh-cite']
 export const CITATION_TOOLS = Object.freeze(['cite_lookup', 'cite_format', 'cite_bibtex', 'cite_check', 'cite_health'])
 /** Read the installed package selected by the bundle's own module resolver.
  * @param {string} manifestUrl */
 export async function installedCitationVersion(manifestUrl) {
   const manifest = JSON.parse(await readFile(new URL(manifestUrl), 'utf8'))
-  if (manifest.name !== 'dsh-cite' || manifest.version !== '0.3.2') throw new Error('citation_binary_unapproved')
+  if (manifest.name !== 'dsh-cite' || manifest.version !== CITE_VERSION) throw new Error('citation_binary_unapproved')
   return manifest.version
 }
 
@@ -168,9 +171,10 @@ const GATEWAY_REFUSALS = Object.freeze({
  * own codes (`citation_gateway_timeout`, `citation_response_too_large`), or
  * `cite_health_failed` for anything else.
  *
- * `cite_health` reports its checks as dsh-cite 0.3.2 writes them -- the
- * version this probe is pinned to above: `HTTP <status>` for an answer, the
- * thrown error's message for a transport failure.
+ * `cite_health` reports its checks as the pinned dsh-cite writes them (the
+ * version this probe approves, `CITE_VERSION` above; its health code is the
+ * same in 0.3.2 and 0.3.5): `HTTP <status>` for an answer, the thrown error's
+ * message for a transport failure.
  * @param {any} health the `cite_health` result
  * @returns {{ ok: boolean, code: string | null }}
  */
@@ -204,7 +208,7 @@ export function citationUpstreamHealth(health) {
  * @param {any} ctx @param {any} agent */
 export async function verifyCitationAgent(ctx, agent) {
   const config = liveCitationConfiguration()
-  if (config.binaryVersion !== '0.3.2' || !Number.isSafeInteger(config.timeoutMs)
+  if (config.binaryVersion !== CITE_VERSION || !Number.isSafeInteger(config.timeoutMs)
     || config.timeoutMs < 2000 || config.timeoutMs > 15000 || !Number.isSafeInteger(config.revision)
     || config.revision < 0 || typeof config.enabled !== 'boolean') {
     throw probeFailure('citation_probe_config_invalid', `binaryVersion=${config.binaryVersion} timeoutMs=${config.timeoutMs} revision=${config.revision} enabled=${config.enabled}`)

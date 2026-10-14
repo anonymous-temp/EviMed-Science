@@ -64,10 +64,15 @@ if [ ! -d "$PROFILE/node_modules/@evimed/dsh-socket" ]; then
     mkdir -p "$PROFILE"
     cp "$OS/deploy/runtime-dsh/profile-pnpm-workspace.yaml" "$PROFILE/pnpm-workspace.yaml"
     DSH_HOME="$SEED" "$DSH_BIN" plugin --profile evimed-runtime list --depth 0 >&2
-    node "$T/build/profile-kernel-pins.mjs" "$(dirname "$DSH_BIN")/../@deepseek-ai/dsh/package.json" "$PROFILE" "$OS/deploy/runtime-dsh/profile-pnpm-workspace.yaml" 0.1.7-rc.2 4.0.4 cordis@4.0.0-rc.10
+    # Every version is read from deps-version.json, the one place they are written; a literal here is a copy that goes
+    # stale in silence the day the pin moves (it did: the kernel, the citation bundle and the two client bundles).
+    pin() { node -e 'const p=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); const v=process.argv[2].split(".").reduce((a,k)=>a?.[k],p); if(v===undefined) process.exit(3); console.log(typeof v==="object"?Object.entries(v).map(([k,x])=>k+"@"+x).join(" "):v)' "$OS/deps-version.json" "$1"; }
+    DSH_VERSION=$(pin dsh.version)
+    # shellcheck disable=SC2046
+    node "$T/build/profile-kernel-pins.mjs" "$(dirname "$DSH_BIN")/../@deepseek-ai/dsh/package.json" "$PROFILE" "$OS/deploy/runtime-dsh/profile-pnpm-workspace.yaml" "$DSH_VERSION" "$(pin dsh.cordis)" $(pin dsh.communityPeerPins)
     DSH_HOME="$SEED" "$DSH_BIN" plugin --profile evimed-runtime add --save-prod --save-exact \
-      "@deepseek-ai/dsh-base@0.1.7-rc.2" "@deepseek-ai/dsh-web-app@0.1.7-rc.2" "dsh-cite@0.3.2" \
-      "@changfenhuang/dsh-annotation@1.4.10" "dsh-mermaid@0.4.0" "$LOOPX_TGZ" "file:$SOCK" >&2
+      "@deepseek-ai/dsh-base@$DSH_VERSION" "@deepseek-ai/dsh-web-app@$DSH_VERSION" "dsh-cite@$(pin dsh.citeVersion)" \
+      "@changfenhuang/dsh-annotation@$(pin dsh.annotationVersion)" "dsh-mermaid@$(pin dsh.mermaidVersion)" "$LOOPX_TGZ" "file:$SOCK" >&2
     node "$T/build/loopx-compat.mjs" --order-profile "$PROFILE/package.json"
     node "$T/build/loopx-compat.mjs" "$PROFILE/node_modules/dsh-loopx-plugin" "$OS/deps-version.json" "$SOCK/node_modules/@evimed/harness-port/src/loopxEvents.mjs"
   fi

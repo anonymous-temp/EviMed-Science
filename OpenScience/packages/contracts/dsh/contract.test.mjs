@@ -24,8 +24,10 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import test from "node:test";
 
+import { RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
 import { SEAMS, toArgs, toSessionRef, toToolCall, toToolOutcome, toTurnEnd, toUsage } from "@evimed/harness-port";
 
+import { reachedNamespaces, referencesIn, rowPackages } from "./panelRemotes.mjs";
 import { wireSplitIssues } from "./wireSplit.mjs";
 
 const require = createRequire(import.meta.url);
@@ -43,6 +45,8 @@ function resolveInstalled(specifier) {
 test("the pin is defined once, and every derived copy equals it", async () => {
   assert.equal(SEAMS.dsh, depsVersions.dsh.version, "seam-manifest.dsh drifted from deps-version.json");
   assert.equal(SEAMS.cordis, depsVersions.dsh.cordis, "seam-manifest.cordis drifted from deps-version.json");
+  // The citation bundle the port's probe approves is the one the image installs (`pluginProbe.mjs` reads it from here).
+  assert.equal(SEAMS.plugins["dsh-cite"], depsVersions.dsh.citeVersion, "seam-manifest.plugins.dsh-cite drifted from deps-version.json");
 
   const port = JSON.parse(await readFile(new URL("../../harness-port/package.json", import.meta.url), "utf8"));
   assert.equal(port.peerDependencies["@deepseek-ai/cordis"], depsVersions.dsh.cordis, "the port's peer range drifted");
@@ -291,4 +295,46 @@ test("the pnpm the runtime image installs is the one the DSH pin decides", async
   assert.match(pins.dsh.pnpm, /^\d+\.\d+\.\d+$/);
   assert.equal(dockerfile.match(/^ARG PNPM_VERSION=(\S+)/m)?.[1], pins.dsh.pnpm);
   assert.equal(compose.match(/PNPM_VERSION: \$\{OPEN_SCIENCE_PNPM_VERSION:-(\S+?)\}/)?.[1], pins.dsh.pnpm);
+});
+
+test("the namespaces a browser package reaches are read from its bundle, not written beside it", async () => {
+  // A bundle reaches a host namespace through `ctx.remote.<ns>` or its inject list's `"remote.<ns>"`, and through the
+  // generic form client (`configForms`) it reaches `settings` without naming it.
+  const inventory = `inject = ["slots", "remote.pluginInventory"]; const r = await ctx.remote.pluginInventory.list();`;
+  assert.deepEqual(referencesIn(inventory), { remotes: ["pluginInventory"], configForms: false });
+  assert.deepEqual(reachedNamespaces(referencesIn(inventory)), ["pluginInventory"]);
+  // A local variable that happens to be called `remote` is not a namespace.
+  assert.deepEqual(referencesIn("const carried = await this.remote.put({}); remote.delete(1)"), { remotes: [], configForms: false });
+  const form = `inject = ["slots", "locale", "configForms"]; ctx.configForms.get("session-log-deepseek");`;
+  assert.deepEqual(referencesIn(form), { remotes: [], configForms: true });
+  assert.deepEqual(reachedNamespaces(referencesIn(form)), ["settings"]);
+  assert.equal(rowPackages("# == a\n- id: ui-x\n  name: '@deepseek-ai/dsh-client-ui-x'\n- id: tool-y\n  name: '@deepseek-ai/dsh-tool-y/sub'\n").get("tool-y"), "@deepseek-ai/dsh-tool-y");
+
+  const recorded = JSON.parse(await readFile(new URL("./panel-remotes.json", import.meta.url), "utf8"));
+  assert.equal(recorded.pin, depsVersions.dsh.version, "panel-remotes.json is recorded from another kernel; run record-panel-remotes.mjs");
+  assert.deepEqual(reachedNamespaces(recorded.packages["@deepseek-ai/dsh-client-ui-settings-plugin-inventory"]), ["pluginInventory"],
+    "the plugin inventory panel is what put pluginInventory on the proxy's deny list");
+  // Every namespace that a panel the hosted profile hides reaches is denied or the conversation's own.
+  const open = new Set(["session"]);
+  for (const name of ["settings-general", "settings-models", "settings-shell", "settings-agent-loop", "settings-subagent", "settings-web-search",
+    "settings-plugin-inventory", "settings-session-log", "agent-preset", "message-feedback", "goal", "cordis", "permission-presets"]) {
+    const entry = recorded.packages[`@deepseek-ai/dsh-client-ui-${name}`];
+    assert.ok(entry, `${name} is not in the recording`);
+    for (const namespace of reachedNamespaces(entry)) {
+      if (name === "agent-preset" && namespace === "agentPresets") continue; // open as a whole; its three writers are denied by method
+      assert.ok(open.has(namespace) || RUNTIME_UI_DENIED_NAMESPACES.includes(namespace), `${name} reaches ${namespace}, which the proxy does not deny`);
+    }
+  }
+});
+
+test("the methods 0.2.0 added to the wire are classified, and the proxy's own deny list is what says which are open", () => {
+  const classified = new Set([...SEAMS.wire.unary, ...SEAMS.wire.denied]);
+  for (const method of ["productAnalytics/enabled", "productAnalytics/report", "productAnalytics/watchPolicy", "userQuestions/answer", "userQuestions/attachWait"]) {
+    assert.ok(classified.has(method), `${method} is shipped by the pinned kernel and unclassified`);
+    // The control plane's adapter never calls any of them: it answers a question through `$events/result`.
+    assert.ok(!SEAMS.wire.unary.includes(method), `${method} would be callable by the control plane's adapter`);
+  }
+  for (const namespace of ["productAnalytics", "pluginInventory"]) assert.ok(RUNTIME_UI_DENIED_NAMESPACES.includes(namespace), `${namespace} is open on the proxy`);
+  // Open on purpose: the page's own question dialog answers through it, and it is the one write a browser is meant to make.
+  assert.ok(!RUNTIME_UI_DENIED_NAMESPACES.includes("userQuestions"));
 });

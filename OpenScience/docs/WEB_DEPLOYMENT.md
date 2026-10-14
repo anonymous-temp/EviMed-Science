@@ -501,7 +501,7 @@ OPEN_SCIENCE_BUILD_CREATED=replace-with-rfc3339-build-time
 OPEN_SCIENCE_WEB_CONTAINER_IMAGE=open-science-web:0.1.3
 OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE=./release-manifest.json
 OPEN_SCIENCE_DATA_VOLUME=open-science-data
-OPEN_SCIENCE_DSH_VERSION=0.1.7-rc.2
+OPEN_SCIENCE_DSH_VERSION=0.2.0-rc.2
 OPEN_SCIENCE_DSH_CORDIS_VERSION=4.0.4
 OPEN_SCIENCE_SOCKET_VERSION=0.1.0
 OPEN_SCIENCE_NODE_VERSION=22.22.3
@@ -519,7 +519,7 @@ OPEN_SCIENCE_RUNTIME_CONTROLLER_SOCKET=/run/open-science-controller/controller.s
 OPEN_SCIENCE_RUNTIME_CONTROLLER_TIMEOUT_MS=10000
 OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS=500
 OPEN_SCIENCE_ALLOW_DIRECT_DOCKER_CONTROL=false
-OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-runtime:dsh-0.1.7-rc.2-uv-0.11.26
+OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-runtime:dsh-0.2.0-rc.2-uv-0.11.26
 OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=true
 OPEN_SCIENCE_RUNTIME_TRANSPORT=unix
 OPEN_SCIENCE_RUNTIME_NETWORK_MODE=none
@@ -846,7 +846,7 @@ export OPEN_SCIENCE_RELEASE_ID="2026.07.10-release.1"
 export OPEN_SCIENCE_SOURCE_REVISION="$(git rev-parse HEAD)"
 export OPEN_SCIENCE_BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
 export OPEN_SCIENCE_WEB_CONTAINER_IMAGE="open-science-web:0.1.3"
-export OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE="open-science-runtime:dsh-0.1.7-rc.2-uv-0.11.26"
+export OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE="open-science-runtime:dsh-0.2.0-rc.2-uv-0.11.26"
 pnpm release:manifest
 pnpm verify:release-manifest
 # Verify the deployment backup and restore-drill evidence before recreation.
@@ -1060,7 +1060,12 @@ subpackages exactly, but cordis, its loader plugins and schemastery are still
 ranges, so naming an exact version still floats part of the tree — asking the
 registry for the tree as it stood at that instant is the only way to install
 what the pin was tested against. The cutoff is written once, as `dsh.publishedBefore`
-in `deps-version.json`; both runtime Dockerfiles and the nightly seam check
+in `deps-version.json`, and it is computed, never typed: `node scripts/ops/kernel-install.mjs
+cutoff --write` resolves the closure with npm, reads each member's publish instant from the
+registry and records the latest plus one minute (the rule it replaced, the CLI's own instant plus
+an hour, fenced a re-published subpackage out of the first 0.2 candidate's closure).
+`cutoff --check` — the `kernel-seams` workflow and `pnpm check:kernel-cutoff` — fails when the
+recorded instant is not the computed one. Both runtime Dockerfiles and the nightly seam check
 (`scripts/ops/kernel-install.mjs`) read the same instant. When changing any version, update every matching
 archive and license digest in the same reviewed release change; a mismatched
 asset fails the image build. For a production release, prepare it on the verified
@@ -1085,6 +1090,15 @@ and Reward Memory commands are installed; they do not provision another model
 provider or another research-memory store. Pause prevents later continuations;
 the current turn may finish its checkpoint. The normal conversation Stop action
 cancels the running turn.
+
+The annotation bundle chooses its interface language by an exact match of the kernel's
+locale id (`zh`, `en`, `ru`; anything else is English), and the product's locale id is
+`zh-x-evimed`. One byte-verified, build-time edit of the pinned bundle's `client.js`
+(`deploy/runtime-dsh/annotation-compat.mjs`, recorded with its digest, reason and end
+date as `dsh.annotationCompatibility` in `deps-version.json`) makes it choose by the
+primary language subtag, so the toolbar, the editor and the block written into the
+prompt stay Chinese. A changed upstream byte fails the image build by name; the edit is
+re-applied over its own output without change and leaves a receipt next to the file.
 
 Prepare and verify the image before marking the service healthy, or set
 `OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=false` if your deployment policy

@@ -550,6 +550,9 @@ profile_seed() {
   node /usr/local/lib/evimed/install-openviking-plugin.mjs verify "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@openviking/dsh-memory-plugin"
   node -e 'const fs=require("node:fs"); const pin=JSON.parse(fs.readFileSync("/opt/evimed/runtime-deps-version.json")).loopx.plugin; const pkg=JSON.parse(fs.readFileSync(process.argv[1])); if(pkg.version!==pin.version)throw Error("LoopX profile pin mismatch");' "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/dsh-loopx-plugin/package.json"
   node /usr/local/lib/evimed/loopx-compat.mjs "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/dsh-loopx-plugin"
+  # The annotation bundle reads the product's locale id (zh-x-evimed) as an unknown language and turns English; one
+  # byte-verified edit makes it choose by the primary language subtag (deps-version.json dsh.annotationCompatibility).
+  node /usr/local/lib/evimed/annotation-compat.mjs "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@changfenhuang/dsh-annotation"
   node -e 'const fs=require("node:fs"),path=require("node:path"); const [root,want]=process.argv.slice(1),seen=new Set(); for(const entry of fs.readdirSync(root,{recursive:true})){const match=entry.match(/(?:^|\/)@deepseek-ai\/(dsh(?:-[^/]+)?)\/package\.json$/); if(!match)continue; const pkg=JSON.parse(fs.readFileSync(path.join(root,entry),"utf8")); if(pkg.name!=="@deepseek-ai/"+match[1]||pkg.version!==want)throw Error("Profile kernel package differs from the pinned CLI: "+pkg.name); seen.add(pkg.name);} if(seen.size<100)throw Error("Profile kernel inventory is incomplete"); console.log("Verified profile kernel packages:",seen.size,want);' "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" "${DSH_VERSION}"
   # Each community bundle at exactly its recorded version, read back from what
   # pnpm installed rather than from what was asked for.
