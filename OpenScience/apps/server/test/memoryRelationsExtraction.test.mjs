@@ -121,21 +121,22 @@ test("a re-observation keeps the interval a source stated and adopts one for a f
   assert.equal(writeOf(store, "project.guideline.dose").input.validFrom, "2024-02-01T00:00:00Z", "what was recorded first stands");
 });
 
-test("sources the fact rests on are recorded only when they are well-formed and appear in the source it quotes", async () => {
+test("sources the fact rests on are recorded only when they are well-formed and appear in the message it quotes", async () => {
+  // The fact rests on the person's own sentence (2026-10-14); the identifiers it names must be in that sentence, whatever a tool returned.
   const output = { summary: "found", data: { hits: [{ sourceId: SOURCE, text: "利伐沙班 15 mg qd" }, { doi: "10.1056/NEJMoa1009638" }] } };
   const store = new Store();
   const { fetchImpl } = proposing((sources) => {
-    const tool = sources.find((source) => source.role === "tool");
+    const user = sources.find((source) => source.role === "user");
     return {
       scope: "project", kind: "project_fact", key: "project.cites", value: "试验结果支持利伐沙班 15 mg qd", summary: "引用",
-      origin: "system", importance: 0.6, sensitive: false, sourceRef: tool.sourceRef, evidenceQuote: "利伐沙班 15 mg qd",
-      // one real id, one DOI in another letter case, one id the result never showed, one that is no id at all
+      origin: "explicit", importance: 0.6, sensitive: false, sourceRef: user.sourceRef, evidenceQuote: "我们按利伐沙班 15 mg qd",
+      // one real id, one DOI in another letter case, one id the message never named, one that is no id at all
       sources: [SOURCE, "10.1056/nejmoa1009638", `src_${"e".repeat(32)}`, "the 2024 guideline", SOURCE],
     };
   });
   const result = await new MemoryIntelligence(config, store, { fetchImpl })
-    .recordRun(project(), run(), [userMessage("m1", "继续"), toolMessage("m2", output)]);
-  assert.equal(result.extracted, 1);
+    .recordRun(project(), run(), [userMessage("m1", `我们按利伐沙班 15 mg qd 做，依据是 ${SOURCE} 和 10.1056/NEJMoa1009638。`), toolMessage("m2", output)]);
+  assert.equal(result.extracted, 1, result.rejectionReasons.join(" | "));
   assert.deepEqual(writeOf(store, "project.cites").options.sourceLinks, [
     { type: "knowledge_source", id: SOURCE, version: null },
     { type: "doi", id: "10.1056/nejmoa1009638", version: null },

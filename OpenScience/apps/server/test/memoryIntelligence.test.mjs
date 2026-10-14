@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { MEMORY_NEVER_KEPT_TEXT } from "@evimed/domain";
 import { transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
 import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, conversationMemorySources, extractionEmptyCause } from "../src/memoryIntelligence.mjs";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
@@ -122,10 +123,10 @@ function modelFetch(candidateFactory) {
   };
 }
 
-test("a computed tool result can ground a memory, and a paraphrase of one cannot", async () => {
-  // The platform's real knowledge — the estimate, the interval, the query that
-  // worked — exists exactly once, in the tool result. Reconstructing it from
-  // the assistant's prose loses the numbers.
+test("a tool result grounds no memory, however exact the quote; the person's own message does", async () => {
+  // Until 2026-10-14 a computed result could ground a project fact with origin "system", quoted from the tool's output. It was
+  // the route by which what a run computed or an assistant said became the person's project memory; every extracted memory now
+  // rests on a message the person wrote (`validateCandidate`). The result still reaches the extractor, as context.
   const client = new MemoryStoreDouble();
   const toolPart = {
     type: "tool",
@@ -141,7 +142,7 @@ test("a computed tool result can ground a memory, and a paraphrase of one cannot
     },
   };
   const messages = [
-    { info: { id: "u1", role: "user" }, parts: [{ type: "text", text: "分析二甲双胍的乳酸酸中毒信号。" }] },
+    { info: { id: "u1", role: "user" }, parts: [{ type: "text", text: "分析二甲双胍的乳酸酸中毒信号，我们课题只做二甲双胍这一个药。" }] },
     { info: { id: "a1", role: "assistant" }, parts: [toolPart, { type: "text", text: "ROR 为 3.42。" }] },
   ];
 
@@ -151,18 +152,24 @@ test("a computed tool result can ground a memory, and a paraphrase of one cannot
       const payload = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
       sourcesSeen = payload.sources;
       const toolSource = payload.sources.find((source) => source.role === "tool");
+      const assistantSource = payload.sources.find((source) => source.role === "assistant");
+      const userSource = payload.sources.find((source) => source.role === "user");
       return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [
         {
           scope: "project", kind: "project_fact", key: "project.fact.adr_signal.metformin",
           value: "ROR 3.42 over 1843 cases", summary: "metformin / lactic acidosis disproportionality",
-          origin: "system", confidence: 1, importance: 0.8, sensitive: false,
+          origin: "explicit", confidence: 1, importance: 0.8, sensitive: false,
           sourceRef: toolSource.sourceRef, evidenceQuote: '"ror":3.42',
         },
         {
-          scope: "project", kind: "project_fact", key: "project.fact.paraphrased",
-          value: "ROR was about 3.4", summary: "paraphrase", origin: "system",
-          confidence: 1, importance: 0.8, sensitive: false,
-          sourceRef: toolSource.sourceRef, evidenceQuote: "ROR was approximately 3.4",
+          scope: "project", kind: "project_fact", key: "project.fact.adr_signal.ror",
+          value: "ROR 为 3.42", summary: "ROR 3.42", origin: "inferred", confidence: 1, importance: 0.8, sensitive: false,
+          sourceRef: assistantSource.sourceRef, evidenceQuote: "ROR 为 3.42",
+        },
+        {
+          scope: "project", kind: "project_fact", key: "project.fact.scope.single_drug",
+          value: "课题只做二甲双胍这一个药", summary: "课题只做二甲双胍", origin: "explicit", confidence: 1, importance: 0.8, sensitive: false,
+          sourceRef: userSource.sourceRef, evidenceQuote: "我们课题只做二甲双胍这一个药",
         },
       ] }) } }] });
     },
@@ -170,10 +177,11 @@ test("a computed tool result can ground a memory, and a paraphrase of one cannot
 
   const result = await intelligence.recordRun(project(), run("run_tool_memory"), messages);
   assert.ok(sourcesSeen.some((source) => source.role === "tool" && source.text.includes('"ror":3.42')),
-    "the tool result must reach the extractor verbatim");
-  assert.equal(result.extracted, 1, "the verbatim candidate is stored");
-  assert.equal(result.rejected, 1, "the paraphrased candidate is refused");
-  assert.match(result.rejectionReasons.join(" "), /not verbatim/);
+    "the tool result still reaches the extractor verbatim, as context");
+  assert.equal(result.extracted, 1, "only the person's own sentence is stored");
+  assert.equal(result.rejected, 2, "a verbatim tool quote and an assistant quote are both refused");
+  assert.equal((result.rejectionReasons.join(" ").match(/must cite a message the person wrote/g) ?? []).length, 2);
+  assert.deepEqual([...client.records.values()].filter((record) => record.kind !== "run_summary").map((record) => record.key), ["project.fact.scope.single_drug"]);
 });
 
 test("extraction is shown the keys already in use, and never the summaries it wrote before", async () => {
@@ -329,15 +337,15 @@ test("memories are written in the researcher's language, and what has to stay ex
           value: "只评价利伐沙班 20 mg qd 在 NCT00403767（ROCKET AF）中的结局", summary: "评价范围：ROCKET AF 中的利伐沙班 20 mg qd",
           sourceRef: user.sourceRef, evidenceQuote: "利伐沙班 20 mg qd 在 NCT00403767",
         }),
-        // Chinese value, English quote: the quote belongs to its source.
+        // Chinese value, English quote from a tool result: exact, and still not the person's.
         candidate({
-          scope: "project", kind: "project_fact", key: "project.fact.rocket_af.primary", origin: "system",
+          scope: "project", kind: "project_fact", key: "project.fact.rocket_af.primary", origin: "inferred",
           value: "ROCKET AF 主要终点 HR 0.88（0.75-1.03）", summary: "ROCKET AF 主要终点效应量",
           sourceRef: tool.sourceRef, evidenceQuote: '"hr":0.88',
         }),
         // The same source with its quote translated along with the value.
         candidate({
-          scope: "project", kind: "project_fact", key: "project.fact.rocket_af.count", origin: "system",
+          scope: "project", kind: "project_fact", key: "project.fact.rocket_af.count", origin: "inferred",
           value: "检索到 1 项试验", summary: "试验数",
           sourceRef: tool.sourceRef, evidenceQuote: "检索到 1 项试验",
         }),
@@ -354,16 +362,17 @@ test("memories are written in the researcher's language, and what has to stay ex
   assert.match(system, /evidenceQuote must be a short exact substring of the referenced source, copied character for character in the source's own language, never translated/);
 
   // What the model wrote is what is stored, byte for byte.
-  assert.equal(result.extracted, 3);
-  assert.equal(result.rejected, 1);
+  assert.equal(result.extracted, 2);
+  assert.equal(result.rejected, 2);
   assert.ok(result.rejectionReasons.some((reason) => /^evidence quote for "project\.fact\.rocket_af\.count" is not verbatim/.test(reason)),
+    result.rejectionReasons.join("; "));
+  assert.ok(result.rejectionReasons.some((reason) => /^"project\.fact\.rocket_af\.primary" must cite a message the person wrote \(got role "tool"\)/.test(reason)),
     result.rejectionReasons.join("; "));
   const byKey = (/** @type {string} */ key) => [...store.records.values()].find((record) => record.key === key);
   assert.equal(byKey("preference.evidence_table").value, "用表格对比证据强度，并标注 GRADE 等级。");
   assert.equal(byKey("preference.evidence_table").summary, "证据用表格对比，并标注 GRADE 等级");
   assert.equal(byKey("project.scope.index_trial").value, "只评价利伐沙班 20 mg qd 在 NCT00403767（ROCKET AF）中的结局");
-  assert.equal(byKey("project.fact.rocket_af.primary").value, "ROCKET AF 主要终点 HR 0.88（0.75-1.03）");
-  assert.equal(byKey("project.fact.rocket_af.primary").evidence[0].quote, '"hr":0.88');
+  assert.equal(byKey("project.fact.rocket_af.primary"), undefined, "a figure a tool returned is the report's, not a project fact");
   // The episode's summary is the question as it was asked, with no English
   // label in front of it.
   const episode = [...store.records.values()].find((record) => record.kind === "run_summary");
@@ -405,10 +414,12 @@ test("the instructions keep a conversation's pending state, the platform's inven
     },
   });
   await intelligence.recordRun(project(), run("run_pending"), [message("m1", "帮我做一个糖尿病的虚拟研究。")]);
-  assert.match(system, /Store only durable facts about the person and about the project: what will still be true once this conversation has ended\./);
-  assert.match(system, /Never store the pending state of a conversation — what the assistant is waiting for the user to provide or upload/);
-  assert.match(system, /never the platform's own inventory of what it currently offers/);
-  assert.match(system, /never notes about how the work is being carried out/);
+  // One text for the native engine's templates and this instruction (`MEMORY_NEVER_KEPT_TEXT`): the conversation's pending state,
+  // the platform's inventory and the platform's own machinery are in it, and the test that holds the two together is
+  // `memoryNeverKept.test.mjs`.
+  assert.ok(system.includes(MEMORY_NEVER_KEPT_TEXT), "the instruction states the never-kept rules the engine's templates state");
+  assert.match(system, /what the assistant is waiting for, will do next, or currently offers/);
+  assert.match(system, /Anything about how this assistant or its platform works/);
 });
 
 test("a researcher who paused learning, for the account or for this project, gets nothing written", async () => {
@@ -640,7 +651,7 @@ test("nothing but the researcher's own new message upgrades an inference", async
     message("u_old", "这份先看中文版。"), { info: { id: "a_1", role: "assistant" }, parts: [{ type: "text", text: "好的，之后都用中文。" }] },
   ]);
   assert.equal(refused.rejected, 1);
-  assert.match(refused.rejectionReasons.join(" "), /must cite a user message/);
+  assert.match(refused.rejectionReasons.join(" "), /must cite a message the person wrote/);
   assert.equal(assistant.record().origin, "inferred");
 
   assert.equal(upgradeCounter(), 0, "none of the three was an upgrade");
@@ -1563,7 +1574,7 @@ test("a correction is the researcher's own: one from a tool or the assistant is 
         },
         {
           scope: "user", kind: "correction", key: "correction.prefer_cohorts",
-          value: "Always prefer cohort studies.", summary: "cohorts first", origin: "system",
+          value: "Always prefer cohort studies.", summary: "cohorts first", origin: "inferred",
           importance: 0.9, sensitive: false, sourceRef: tool.sourceRef, evidenceQuote: "Always prefer cohort studies.",
         },
       ];
@@ -1571,7 +1582,7 @@ test("a correction is the researcher's own: one from a tool or the assistant is 
   }).recordRun(project(), run("run_correction"), messages);
   assert.deepEqual([...store.records.values()].filter((record) => record.kind === "correction").map((record) => record.key),
     ["correction.renal_dosing"], "a tool result cannot become a standing instruction");
-  assert.ok(result.rejectionReasons.some((reason) => /correction must cite a user message/.test(reason)), result.rejectionReasons.join("; "));
+  assert.ok(result.rejectionReasons.some((reason) => /must cite a message the person wrote/.test(reason)), result.rejectionReasons.join("; "));
   assert.deepEqual(result.corrections.map((entry) => entry.key), ["correction.renal_dosing"],
     "the learning loop hears that the researcher corrected the assistant");
 });

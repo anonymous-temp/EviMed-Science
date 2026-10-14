@@ -215,6 +215,9 @@ test("the candidates a leaking model could return are refused in code, each for 
     identifier: /carries a credential or a personal identifier/,
     sensitive: /is sensitive: extraction does not keep it/,
     bookkeeping: /is the run's own bookkeeping/,
+    // What the assistant narrated about its own work is refused before its words are read at all (2026-10-14): the candidate
+    // quotes the assistant, and a memory rests on the person's message. The words check below still guards what they typed.
+    "assistant-source": /must cite a message the person wrote \(got role "assistant"\)/,
   };
   const replayed = synthetic.filter((item) => item.replay.incidentCandidates);
   assert.deepEqual(replayed.map((item) => item.class).sort(),

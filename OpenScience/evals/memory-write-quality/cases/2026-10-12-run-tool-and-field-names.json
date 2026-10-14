@@ -15,7 +15,7 @@
       { "id": "a1", "role": "assistant", "text": "本轮已调用 pubmed_search 检索，共 214 条；coverage-ledger.md 里的 referenceNumber 字段已按规范编号重建，门禁检查通过，交付物已写入 workspace。" }
     ],
     "incidentCandidates": [
-      { "scope": "project", "kind": "project_fact", "key": "project.af_rwe.reference_numbering", "origin": "system", "value": "coverage-ledger.md 里的 referenceNumber 字段已按规范编号重建", "summary": "参考文献编号已按规范重建，写在 coverage-ledger.md 的 referenceNumber 字段。", "sourceRef": "a1", "evidenceQuote": "coverage-ledger.md 里的 referenceNumber 字段已按规范编号重建", "refusedBecause": "bookkeeping" }
+      { "scope": "project", "kind": "project_fact", "key": "project.af_rwe.reference_numbering", "origin": "inferred", "value": "coverage-ledger.md 里的 referenceNumber 字段已按规范编号重建", "summary": "参考文献编号已按规范重建，写在 coverage-ledger.md 的 referenceNumber 字段。", "sourceRef": "a1", "evidenceQuote": "coverage-ledger.md 里的 referenceNumber 字段已按规范编号重建", "refusedBecause": "assistant-source" }
     ]
   },
   "expect": {

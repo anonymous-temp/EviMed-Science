@@ -20,7 +20,7 @@
       { "id": "a1", "role": "assistant", "text": "CRMA-1001 证据链缺少停药后随访数据，是待补的断点。后续治愈研究终点设计需加入 HBsAg 来源特异性标志物。" }
     ],
     "incidentCandidates": [
-      { "scope": "project", "kind": "follow_up", "key": "project.follow_up.crma_offtreatment", "origin": "system",
+      { "scope": "project", "kind": "follow_up", "key": "project.follow_up.crma_offtreatment", "origin": "inferred",
         "value": "CRMA-1001 证据链缺少停药后随访数据，是待补的断点。", "summary": "CRMA-1001 证据链缺少停药后随访数据，是待补的断点。",
         "sourceRef": "a1", "evidenceQuote": "CRMA-1001 证据链缺少停药后随访数据" }
     ]
