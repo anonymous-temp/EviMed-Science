@@ -3,7 +3,8 @@ import { formatDuration } from "@/lib/format";
 
 /**
  * How long ago `startedAt` was, in the product's two-unit duration (「2 分 30 秒」), re-read every 15 seconds while `live`.
- * Empty before the start is known or when it is not a date: a strip shows no elapsed time rather than 「0 秒」.
+ * Empty before the start is known, when it is not a date, and in the first second: a strip shows no elapsed time rather than
+ * 「0 秒」.
  */
 export function useElapsed(startedAt: string | number | Date | null | undefined, live = true): string {
   const [now, setNow] = useState(() => Date.now());
@@ -15,5 +16,5 @@ export function useElapsed(startedAt: string | number | Date | null | undefined,
   }, [live, startedAt]);
   if (startedAt == null) return "";
   const since = new Date(startedAt).getTime();
-  return Number.isFinite(since) ? formatDuration(Math.max(0, now - since)) : "";
+  return Number.isFinite(since) && now - since >= 1000 ? formatDuration(now - since) : "";
 }

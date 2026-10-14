@@ -158,14 +158,16 @@ describe("PageShell slots", () => {
     it("is drawn once the header has scrolled away, when the band's last row has none of its own", () => {
       stub();
       const { container } = render(<PageShell title="页" tabs={tabs} toolbar={toolbar}><p>x</p></PageShell>);
-      expect(container.querySelector("[data-page-chrome]")).toHaveClass("border-transparent");
-      expect(scrollPast(container)).toHaveClass("border-b", "border-border");
+      const band = container.querySelector("[data-page-chrome]") as HTMLElement;
+      expect(band).not.toHaveAttribute("data-stuck");
+      expect(band.className).toContain("after:opacity-0");
+      expect(scrollPast(container)).toHaveAttribute("data-stuck");
     });
 
     it("is left to the tab row when that is the band's last row", () => {
       stub();
       const { container } = render(<PageShell title="页" tabs={tabs}><p>x</p></PageShell>);
-      expect(scrollPast(container)).not.toHaveClass("border-b");
+      expect(scrollPast(container).className).not.toContain("after:opacity-0");
     });
   });
 

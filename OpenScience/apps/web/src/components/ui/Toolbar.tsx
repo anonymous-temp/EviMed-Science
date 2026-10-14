@@ -1,4 +1,5 @@
 import type { InputHTMLAttributes, ReactNode } from "react";
+import { cn } from "@/lib/cn";
 import type { LucideIcon } from "lucide-react";
 import { FilterChip, FilterChips, FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
@@ -147,11 +148,13 @@ export function Toolbar({ label = "筛选与操作", views, filters = [], onClea
   const narrow = useNarrow();
   const active = filters.filter(isActive).length;
   const searching = Boolean(search?.value);
+  // Under the tabs (a phone) the folded chip is the row's first thing, and its text is 12 px in from its ground: it steps out so the
+  // text stands on the page's left edge. Without views the whole row does (below).
   const controls = (
     <>
       {narrow && filters.length > 0 ? (
         <Menu label="筛选" align="start" items={foldedEntries(filters)}>
-          <FilterChip menu pressed={active > 0} aria-label={active > 0 ? `筛选，已选 ${active} 项` : "筛选"}>
+          <FilterChip menu className={views ? "-ml-3" : undefined} pressed={active > 0} aria-label={active > 0 ? `筛选，已选 ${active} 项` : "筛选"}>
             {active > 0 ? `筛选 · ${active}` : "筛选"}
           </FilterChip>
         </Menu>
@@ -160,7 +163,7 @@ export function Toolbar({ label = "筛选与操作", views, filters = [], onClea
     </>
   );
   const end = (search || summary != null || actions) && (
-    <div className="ml-auto flex min-w-0 max-sm:basis-full items-center gap-2">
+    <div className={cn("ml-auto flex min-w-0 items-center gap-2", search && "max-sm:basis-full")}>
       {search && (
         <SearchInput
           size="sm"
@@ -188,7 +191,8 @@ export function Toolbar({ label = "筛选与操作", views, filters = [], onClea
           </>
         )} />
       ) : (
-        <div className="flex min-h-sm flex-wrap items-center gap-x-1 gap-y-2">
+        // A chip's text is 12 px in from its ground: the row steps out by that much so the text stands on the page's left edge.
+        <div className="-ml-3 flex min-h-sm flex-wrap items-center gap-x-1 gap-y-2">
           {controls}
           {end}
         </div>

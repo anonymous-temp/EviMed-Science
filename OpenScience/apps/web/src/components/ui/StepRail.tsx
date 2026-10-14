@@ -62,7 +62,7 @@ export function StepRail({ label, steps, activeSteps = [], trailing, className }
     return (
       <nav data-step-rail="" aria-label={label} className={cn("flex h-10 items-center", className)}>
         <Menu label={label} align="start" items={entries}>
-          <FilterChip menu aria-label={`${label}：已完成 ${done}/${steps.length} 步`}>{`已完成 ${done}/${steps.length} 步`}</FilterChip>
+          <FilterChip menu className="-ml-3" aria-label={`${label}：已完成 ${done}/${steps.length} 步`}>{`已完成 ${done}/${steps.length} 步`}</FilterChip>
         </Menu>
       </nav>
     );

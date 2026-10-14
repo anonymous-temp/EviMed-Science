@@ -17,6 +17,7 @@ import { StatBand, StatTile } from "@/components/ui/StatTile";
 import { Switch } from "@/components/ui/Switch";
 import { Tag } from "@/components/ui/Tag";
 import { Toolbar } from "@/components/ui/Toolbar";
+import { useWide } from "@/lib/useMediaQuery";
 
 /**
  * One representative page per template of the page framework (R19, plan §2.1; audit D §3.1), built from the real components with
@@ -258,9 +259,10 @@ export function DataPageSample() {
 
 const READER_SECTIONS = ["摘要", "方法", "结果", "局限性", "参考来源"];
 
-/** T5: a document — title, the one action, a contents column, and the text. */
+/** T5: a document — title, the one action, a contents column (folded above the text on a narrow page), and the text. */
 export function ReaderPageSample() {
   const body = useRef<HTMLDivElement>(null);
+  const wide = useWide();
   const { entries, active, select } = useOutline(body, { idPrefix: "reader" });
   return (
     <PageShell
@@ -270,6 +272,7 @@ export function ReaderPageSample() {
       back={<Link to="/app/frontier" className="inline-flex items-center gap-1 text-ui text-text-3"><ArrowLeft size={16} aria-hidden="true" />前沿动态</Link>}
       actions={<Button>问这条证据</Button>}
     >
+      {!wide && <Outline layout="folded" entries={entries} active={active} onSelect={select} className="mb-6" />}
       <div className="flex gap-8">
         <div ref={body} className="min-w-0 flex-1">
           {READER_SECTIONS.map((name) => (
@@ -279,7 +282,7 @@ export function ReaderPageSample() {
             </section>
           ))}
         </div>
-        <Outline layout="column" entries={entries} active={active} onSelect={select} />
+        {wide && <Outline layout="column" entries={entries} active={active} onSelect={select} />}
       </div>
     </PageShell>
   );

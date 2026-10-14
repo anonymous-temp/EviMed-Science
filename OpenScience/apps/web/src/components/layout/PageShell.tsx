@@ -73,7 +73,8 @@ import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
  *
  * The band is sticky at `top-0` of the page's scroll container, covers the
  * gutters (`-mx-4 px-4 md:-mx-6 md:px-6`) so content does not show at its sides,
- * and draws a hairline under itself once the header has scrolled away. Its
+ * and draws a hairline under itself, as wide as the content, once the header has
+ * scrolled away (`data-stuck`; a tab list that is the band's last row has its own). Its
  * height is published as `--page-chrome-h` on the column, so a sticky element in
  * the body (the `Outline` column, a table header) keeps below it.
  *
@@ -250,10 +251,11 @@ export function PageShell<V extends string = string>({
             <div
               ref={band}
               data-page-chrome=""
+              data-stuck={stuck ? "" : undefined}
               className={cn(
                 "sticky top-0 z-sticky -mx-4 bg-bg px-4 md:-mx-6 md:px-6",
-                !lastRowRuled && "border-b",
-                !lastRowRuled && (stuck ? "border-border" : "border-transparent"),
+                // The hairline is as wide as the content, not the band: it is drawn only once the header has gone from over it.
+                !lastRowRuled && "after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:opacity-0 after:transition-opacity after:duration-fast data-[stuck]:after:opacity-100 md:after:inset-x-6",
               )}
             >
               {steps && <StepRail {...steps} />}
