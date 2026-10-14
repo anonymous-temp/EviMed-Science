@@ -16,7 +16,10 @@ import type { MapPalette } from "./palette";
  * reader zoom, pan and drag.
  *
  * Labels are a budget, not a rule: the account, the projects, the clusters, whatever needs a look, the hits of a search, the
- * mark in focus and the few that weigh most; the rest appear on hover, and the library hides a label that would cover another.
+ * mark in focus and the few that weigh most — at most two of them to a project, so a hub that holds most of what is remembered does
+ * not spend the whole budget on one corner of the picture. Every other mark is named when pointed at, and in full: a label on the
+ * canvas is cut short, the hover and the selected mark say all of it. Where two labels would still cover each other the library
+ * hides the one of the smaller mark (`labelLayout.hideOverlap`, which needs the `LabelLayout` feature registered — `register.ts`).
  */
 
 const HEXAGON = "path://M50,0 L93,25 L93,75 L50,100 L7,75 L7,25 Z";
@@ -30,10 +33,39 @@ export interface GraphInput {
   /** The mark in focus or open in the drawer. */
   selected: string | null;
   palette: MapPalette;
-  /** How many of the marks tied to the most carry a label of their own (6 by default, none on a phone). */
+  /** How many of the marks tied to the most carry a label of their own (6 by default, none on a phone), at most `LABELS_PER_HUB` of one project. */
   labelBudget?: number;
   /** A canvas a phone's width: the same picture in smaller marks, with a label for the structure and what needs a look only. */
   compact?: boolean;
+}
+
+/** The most marks of one project (or of the account itself) that are named without being pointed at. */
+export const LABELS_PER_HUB = 2;
+/** The longest a name is on the canvas; the hover, the selection and the list say it whole. */
+const CANVAS_LABEL_CHARS = 14;
+
+/** How much room, in the layout's units, a name needs beside its mark (a name is about 160 wide) and, centred above or below, on each side of it. */
+const ROOM_BESIDE = 260;
+const ROOM_CENTRED = 100;
+
+/**
+ * Where a mark's name stands: away from the hub it hangs from, so it neither covers the hub nor the marks between the two, and
+ * never towards an edge it would run off — then the other way across, and, last, the side that has the room. A mark with no hub of
+ * its own hangs from the account in the middle.
+ */
+export function labelPosition(at: readonly [number, number], hub: readonly [number, number] | undefined): "left" | "right" | "top" | "bottom" {
+  const [x, y] = at;
+  const [hubX, hubY] = hub ?? [LAYOUT_WIDTH / 2, LAYOUT_HEIGHT / 2];
+  const dx = x - hubX;
+  const dy = y - hubY;
+  const horizontal = dx >= 0 ? "right" : "left";
+  const vertical = dy >= 0 ? "bottom" : "top";
+  const room = (side: string) => (side === "right" ? x < LAYOUT_WIDTH - ROOM_BESIDE : side === "left" ? x > ROOM_BESIDE : x > ROOM_CENTRED && x < LAYOUT_WIDTH - ROOM_CENTRED);
+  const across = (side: string) => (side === "right" ? "left" : side === "left" ? "right" : side === "top" ? "bottom" : "top");
+  // A mark lies more beside its hub than above or below it when the run is the longer, with a little allowance for a wide name.
+  const order = Math.abs(dx) * 0.7 >= Math.abs(dy) ? [horizontal, vertical, across(horizontal)] : [vertical, horizontal, across(vertical)];
+  const chosen = order.find(room);
+  return (chosen ?? (x < LAYOUT_WIDTH / 2 ? "right" : "left")) as "left" | "right" | "top" | "bottom";
 }
 
 /** The shape of a mark and its size, in the library's pixels. */
@@ -103,17 +135,26 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
     ties.set(edge.to, (ties.get(edge.to) ?? 0) + 1);
   }
   const budget = input.labelBudget ?? (input.compact ? 0 : 6);
+  const perHub = new Map<string, number>();
   const heavy = new Set([...input.nodes].filter((node) => node.type === "memory" || node.type === "document" || node.type === "entity")
     // What was replaced is history, named when pointed at; what is current and tied to something is named now.
     .filter((node) => node.state !== "replaced" && ((ties.get(node.id) ?? 0) > 0 || (node.weight ?? 0) >= 0.8))
     .sort((left, right) => (ties.get(right.id) ?? 0) - (ties.get(left.id) ?? 0) || (right.weight ?? 0) - (left.weight ?? 0) || left.id.localeCompare(right.id))
+    // The hub a mark hangs from is a budget of its own: the best of each project first, and no project more than `LABELS_PER_HUB`.
+    .filter((node) => {
+      const hub = node.projectId ?? "";
+      const held = perHub.get(hub) ?? 0;
+      if (held >= LABELS_PER_HUB) return false;
+      perHub.set(hub, held + 1);
+      return true;
+    })
     .slice(0, budget).map((node) => node.id));
   // What needs a look is always worth a name — on a phone, the four of them tied to the most, since eight names in a hand's width are a smear.
   const looked = new Set([...input.nodes].filter((node) => node.state === "check")
     .sort((left, right) => (ties.get(right.id) ?? 0) - (ties.get(left.id) ?? 0) || (right.weight ?? 0) - (left.weight ?? 0) || left.id.localeCompare(right.id))
     .slice(0, input.compact ? 4 : Infinity).map((node) => node.id));
-  // Where two labels would overlap the library keeps the first it meets, so the marks that matter most come first: the structure, then
-  // what needs a look, is searched for or is chosen, then the heavy ones, then the rest. The lines point at these positions.
+  // The marks that matter most come first — the structure, then what needs a look, is searched for or is chosen, then the heavy ones,
+  // then the rest — which is the order they are drawn in (a later mark is on top). The lines point at these positions.
   const rank = (node: MapNode) => (node.type === "you" || node.type === "project" || node.type === "cluster" ? 0
     : node.state === "check" || input.hits.has(node.id) || input.selected === node.id ? 1 : heavy.has(node.id) ? 2 : 3);
   const ordered = input.nodes.map((node, position) => ({ node, position })).sort((left, right) => rank(left.node) - rank(right.node) || left.position - right.position).map((entry) => entry.node);
@@ -128,6 +169,8 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
     const dimmed = searching && !input.hits.has(node.id) && !structure;
     const chosen = input.selected === node.id;
     const labelled = structure || looked.has(node.id) || chosen || input.hits.has(node.id) || heavy.has(node.id);
+    const named = (full: boolean) => (node.type === "cluster" ? `${groupWord(node)}\n${node.count ?? 0}`
+      : !full && [...node.label].length > CANVAS_LABEL_CHARS ? `${[...node.label].slice(0, CANVAS_LABEL_CHARS - 1).join("")}…` : node.label);
     const [x, y] = input.positions.get(node.id) ?? [LAYOUT_WIDTH / 2, LAYOUT_HEIGHT / 2];
     return {
       name: node.id, x, y, symbol, symbolSize: Math.max(4, size * shrink),
@@ -141,16 +184,20 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
       },
       label: {
         show: labelled,
-        // A mark on the right of the picture is named to its left: the label of the rightmost marks ran off the canvas.
-        position: node.type === "you" ? "inside" : structure ? "bottom" : x > LAYOUT_WIDTH / 2 + 120 ? "left" : "right",
-        formatter: node.type === "cluster" ? `${groupWord(node)}\n${node.count ?? 0}` : [...node.label].length > 14 ? `${[...node.label].slice(0, 13).join("")}…` : node.label,
-        color: structure && node.type !== "cluster" ? palette.text : palette.text,
+        position: node.type === "you" ? "inside" : structure ? "bottom"
+          : labelPosition([x, y], input.positions.get(node.projectId ? `project:${node.projectId}` : "you:account")),
+        // The mark in front of the reader is named whole, over a few lines; the others are cut to a short name.
+        formatter: named(chosen),
+        ...(chosen && !structure ? { width: 200, overflow: "break" as const, lineHeight: 16 } : {}),
+        color: palette.text,
         fontSize: input.compact ? 10 : structure ? 11 : 12,
         fontWeight: structure || node.state === "check" ? 600 : 400,
         distance: 6,
         // A label over a line or a neighbour stays legible on the page's own ground.
         backgroundColor: palette.surface, padding: [1, 3], borderRadius: 3,
       },
+      // Pointed at, a mark says its whole name (over a few lines, so a long one does not run across the picture).
+      emphasis: { label: { show: true, formatter: named(true), ...(structure ? {} : { width: 220, overflow: "break" as const, lineHeight: 16 }) } },
     };
   });
 
