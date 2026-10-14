@@ -208,6 +208,68 @@ export function geoTextKey(value) {
   return hash.toString(16).padStart(8, '0')
 }
 
+/**
+ * What a person's two words — set an action aside, send it to another source — do to the platform's choosers, read from the derived
+ * actions so that the page and the choosers cannot differ: the orchestrator's batches and the market's plans take their verdicts from
+ * here and decide nothing of their own. A person's word is a preference and a stop for new work; it never touches an engineering
+ * check (the gate, the budget, the outlet's conditions).
+ *
+ * - `skippedGroupIds`: groups that have at least one content action (`fill_gap`, `win_cluster`, `maintain`) and every one of them is
+ *   skipped — no new batch is written for them. A group whose other actions are open is not set aside; a skipped `correct_error`
+ *   never sets a group aside (its errors are the errors').
+ * - `skippedArticleIds`: articles that at least one action lists and every action that lists them is skipped for — not planned for
+ *   a placement, and a plan already made for them is withdrawn.
+ * - `skippedErrorIds`: errors named by `correct_error` actions of which every one is skipped — not given to a correction batch.
+ * - `preferredByArticle`: article id → the domains the person sent an open (not skipped) action that lists the article to.
+ *
+ * @param {ReadonlyArray<Record<string, any>> | null | undefined} actions the `actions` of {@link deriveGeoActions}
+ * @param {{ groups?: ReadonlyArray<{ id: string, aliasIds?: readonly string[] }> | null }} [options]
+ *   `groups`: the ids a group had in earlier set versions are added to `skippedGroupIds`, so a chooser reading an older set finds it
+ */
+export function geoChoiceEffects(actions, { groups = null } = {}) {
+  /** @param {Map<string, { total: number, skipped: number }>} map @param {string} id @param {boolean} skipped */
+  const count = (map, id, skipped) => {
+    const entry = map.get(id) ?? { total: 0, skipped: 0 }
+    entry.total += 1
+    if (skipped) entry.skipped += 1
+    map.set(id, entry)
+  }
+  /** @type {Map<string, { total: number, skipped: number }>} */
+  const contentByGroup = new Map()
+  /** @type {Map<string, { total: number, skipped: number }>} */
+  const byArticle = new Map()
+  /** @type {Map<string, { total: number, skipped: number }>} */
+  const byError = new Map()
+  /** @type {Map<string, Set<string>>} */
+  const preferred = new Map()
+  for (const action of list(actions)) {
+    if (!action || typeof action !== 'object') continue
+    const skipped = action.status === 'skipped'
+    const born = parseGeoActionKey(action.key)?.kind ?? text(action.kind)
+    const groupId = text(action.group?.id)
+    if (groupId && born !== 'correct_error') count(contentByGroup, groupId, skipped)
+    const articleIds = list(action.articleIds).map(String).filter(Boolean)
+    for (const id of articleIds) count(byArticle, id, skipped)
+    if (born === 'correct_error') for (const id of list(action.need?.errorIds).map(String).filter(Boolean)) count(byError, id, skipped)
+    const swapped = text(action.choice?.sourceDomain)
+    if (swapped && !skipped) {
+      for (const id of articleIds) preferred.set(id, (preferred.get(id) ?? new Set()).add(bareDomain(swapped)))
+    }
+  }
+  /** @param {Map<string, { total: number, skipped: number }>} map */
+  const wholly = (map) => new Set([...map].filter(([, entry]) => entry.total > 0 && entry.skipped === entry.total).map(([id]) => id))
+  const skippedGroupIds = wholly(contentByGroup)
+  for (const group of list(groups)) {
+    if (group && skippedGroupIds.has(String(group.id))) for (const id of list(group.aliasIds)) skippedGroupIds.add(String(id))
+  }
+  return {
+    skippedGroupIds,
+    skippedArticleIds: wholly(byArticle),
+    skippedErrorIds: wholly(byError),
+    preferredByArticle: new Map([...preferred].map(([id, domains]) => [id, [...domains]])),
+  }
+}
+
 // ------------------------------------------------------------------ the read model
 
 /**

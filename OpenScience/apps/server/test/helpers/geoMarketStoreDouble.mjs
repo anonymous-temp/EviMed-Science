@@ -45,6 +45,7 @@ export class GeoMarketStoreDouble {
     /** @type {Map<string, any>} */ this.articles = new Map();
     /** @type {any[]} */ this.sources = [];
     /** @type {any[]} */ this.targets = [];
+    /** @type {Map<string, { version: number, data: Record<string, any> }>} */ this.placementPlans = new Map();
     /** @type {Map<string, any>} */ this.media = new Map();
     /** @type {Map<string, any>} */ this.outcomes = new Map();
     /** @type {Map<string, any>} */ this.orders = new Map();
@@ -81,6 +82,7 @@ export class GeoMarketStoreDouble {
       layer: article.layer ?? "popular", title: article.title ?? "", groupId: article.groupId ?? null, claimIds: [],
       gate: article.gate ?? "passed", safety: article.safety ?? "clear", contentSha256: article.contentSha256 ?? null, protectedSha256: null,
       status: article.status ?? "publishable", createdAt: article.createdAt ?? new Date().toISOString(),
+      channel: article.channel ?? null,
     });
   }
 
@@ -96,6 +98,12 @@ export class GeoMarketStoreDouble {
   /** @param {Record<string, any>} target */
   async seedTarget(target) {
     this.targets.push({ ...target });
+  }
+
+  /** The run's placement plan. @param {string} geoProjectId @param {Record<string, any>} data */
+  async seedPlacementPlan(geoProjectId, data) {
+    const version = (this.placementPlans.get(geoProjectId)?.version ?? 0) + 1;
+    this.placementPlans.set(geoProjectId, { version, data: clone(data) });
   }
 
   // --------------------------------------------------------------- media
@@ -292,6 +300,12 @@ export class GeoMarketStoreDouble {
     const unique = new Set(domains.map(String));
     if (unique.size > GEO_MARKET_STORE_LIMITS.mediaKeysMax) throw storeError("Too many domains in one lookup.");
     return this.sources.filter((source) => source.geoProjectId === geoProjectId && unique.has(source.domain)).map(clone);
+  }
+
+  /** @param {string} geoProjectId */
+  async latestPlacementPlan(geoProjectId) {
+    const plan = this.placementPlans.get(geoProjectId);
+    return plan ? { version: plan.version, data: clone(plan.data) } : null;
   }
 
   /** @param {string} geoProjectId @param {string} tier */

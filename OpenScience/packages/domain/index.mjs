@@ -1504,6 +1504,7 @@ export {
   geoErrorsByClaim,
   geoExpectedMetrics,
   geoGroupReading,
+  geoChoiceEffects,
   geoGroupShort,
   geoNeedsYou,
   geoPlacementStale,

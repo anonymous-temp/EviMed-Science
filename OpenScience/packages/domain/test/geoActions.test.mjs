@@ -20,6 +20,7 @@ import {
   geoErrorsByClaim,
   geoExpectedMetrics,
   geoGroupReading,
+  geoChoiceEffects,
   geoGroupShort,
   geoNeedsYou,
   geoPlacementStale,
@@ -392,4 +393,52 @@ test("the rail's count is one short count per step, and nothing where there is n
   assert.deepEqual(geoStepSummary("questions", { groups: 25 }), { text: "25 个群", count: 25, unit: "groups" });
   assert.equal(geoStepSummary("content", { articles: 0 }), null);
   assert.equal(geoStepSummary("nope", { articles: 3 }), null);
+});
+
+test("a person's two words reach the choosers as the derived actions' verdicts: groups set aside, articles not placed, a source preferred", () => {
+  const twoGaps = [
+    { gapId: "A", groupId: "g-p2", group: "停药与反弹", pool: "P2", class: "benefit_only", rank: 1, handoff: "content", judgment: "只讲获益" },
+    { gapId: "B", groupId: "g-p2", group: "停药与反弹", pool: "P2", class: "dropped_condition", rank: 2, handoff: "content", judgment: "丢了限定条件" },
+    { gapId: "W", groupId: "g-p1", group: "品牌身份", pool: "P1", class: "wrong", rank: 3, handoff: "EC", judgment: "讲错", evidence: { errors: ["e-1"] } },
+  ];
+  const articles = [
+    { id: "a-p2", groupId: "g-p2", layer: "coverage", status: "publishable", title: "停药", createdAt: ago(5) },
+    { id: "a-fix", groupId: "g-p1", layer: "correction", status: "publishable", title: "更正", createdAt: ago(4) },
+  ];
+  const errors = [{ id: "e-1", fingerprint: "f1", engine: "doubao", groupId: "g-p1", severity: "S3", status: "open", statement: "错", materials: [{ articleId: "a-fix" }], createdAt: ago(9) }];
+  const derive = (/** @type {Array<Record<string, any>>} */ choices) => deriveGeoActions({ ...base(), strategy: { ...base().strategy, gaps: twoGaps }, articles, errors, choices });
+  const skip = (/** @type {string[]} */ ...keys) => keys.map((key) => ({ key, skipped: true }));
+
+  const none = geoChoiceEffects(derive([]).actions);
+  assert.deepEqual([...none.skippedGroupIds, ...none.skippedArticleIds, ...none.skippedErrorIds, ...none.preferredByArticle.keys()], [], "nothing chosen, nothing changes");
+
+  // one gap of two skipped: the group's other action is open, so the group and its article stay
+  const one = geoChoiceEffects(derive(skip("fill_gap:g-p2:benefit_only")).actions);
+  assert.equal(one.skippedGroupIds.has("g-p2"), false);
+  assert.equal(one.skippedArticleIds.has("a-p2"), false);
+
+  // both skipped: the group is set aside and so is the article they both list
+  const both = geoChoiceEffects(derive(skip("fill_gap:g-p2:benefit_only", "fill_gap:g-p2:dropped_condition")).actions, { groups: [{ id: "g-p2", aliasIds: ["g-p2-v1"] }] });
+  assert.equal(both.skippedGroupIds.has("g-p2"), true);
+  assert.equal(both.skippedGroupIds.has("g-p2-v1"), true, "the id the group had in an earlier set is set aside with it");
+  assert.equal(both.skippedArticleIds.has("a-p2"), true);
+  assert.equal(both.skippedErrorIds.size, 0);
+
+  // a skipped correction names its errors and its articles, and never sets the group aside
+  const fix = derive(skip("correct_error:g-p1:wrong"));
+  const fixed = geoChoiceEffects(fix.actions);
+  assert.deepEqual([...fixed.skippedErrorIds], ["e-1"]);
+  assert.equal(fixed.skippedArticleIds.has("a-fix"), true);
+  assert.equal(fixed.skippedGroupIds.has("g-p1"), false);
+
+  // a swapped source is a preference for the articles of the open action, and a skipped action prefers nothing
+  const swapped = geoChoiceEffects(derive([{ key: "fill_gap:g-p2:benefit_only", sourceDomain: "WWW.Dxy.cn" }]).actions);
+  assert.deepEqual(swapped.preferredByArticle.get("a-p2"), ["dxy.cn"]);
+  const swappedAndSkipped = geoChoiceEffects(derive([{ key: "fill_gap:g-p2:benefit_only", sourceDomain: "dxy.cn", skipped: true }]).actions);
+  assert.equal(swappedAndSkipped.preferredByArticle.has("a-p2"), false);
+
+  // the verdict is the action's own: a skipped action's status is "skipped", and the effects hold nothing but what the page shows
+  assert.equal(derive(skip("fill_gap:g-p2:benefit_only")).actions.find((action) => action.key === "fill_gap:g-p2:benefit_only")?.status, "skipped");
+  assert.deepEqual(geoChoiceEffects(null).skippedGroupIds.size, 0);
+  assert.deepEqual(geoChoiceEffects([{ nonsense: true }, null]).preferredByArticle.size, 0);
 });

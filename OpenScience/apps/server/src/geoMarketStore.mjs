@@ -398,6 +398,8 @@ export function mapArticle(row) {
     path: row.path ?? null, layer: row.layer ?? null, title: row.title ?? "", groupId: row.group_id ?? null, claimIds: row.claim_ids ?? [],
     gate: row.gate ?? null, safety: row.safety ?? null, contentSha256: row.content_sha256 ?? null, protectedSha256: row.protected_sha256 ?? null,
     status: row.status ?? null, isControl: Boolean(row.is_control), placementLabel: row.placement_label ?? null, createdAt: iso(row.created_at),
+    // Where the run said the article is to be published: an owned platform (the brand publishes it) or `media_market`; null = not said.
+    channel: row.channel ?? null,
   };
 }
 
@@ -698,6 +700,18 @@ export class GeoMarketStore {
     const result = await this.#query(`SELECT * FROM evimed_geo.sources WHERE geo_project_id = $1 AND domain = ANY($2::text[])`,
       [String(geoProjectId), unique]);
     return result.rows.map(mapSource);
+  }
+
+  /**
+   * The run's placement plan (`geo_write placement_plan`): the outlets it prefers and the ones to avoid, as the run wrote them. The
+   * market reads it as a preference, never as a gate. Null when no run wrote one.
+   * @param {string} geoProjectId
+   * @returns {Promise<{ version: number, data: Record<string, any> } | null>}
+   */
+  async latestPlacementPlan(geoProjectId) {
+    const result = await this.#query(`SELECT version, data FROM evimed_geo.placement_plans WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [String(geoProjectId)]);
+    const row = result.rows[0];
+    return row ? { version: Number(row.version), data: row.data && typeof row.data === "object" ? row.data : {} } : null;
   }
 
   /** The chosen tier's budget in the latest targets version, or null. @param {string} geoProjectId @param {string} tier */
