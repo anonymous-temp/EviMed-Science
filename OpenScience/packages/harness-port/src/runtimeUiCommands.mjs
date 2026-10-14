@@ -449,7 +449,9 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     // and the send button, which the kernel shrinks to icons when the line is
     // short, so about 194 px of the row's width is not the chip's (measured on
     // 0.1.7-rc.2 at 390 px: 70 for `+` and the paperclip, 8 and 12 of gaps, 96
-    // for the collapsed model and the send button, and 4 to spare). Past that
+    // for the collapsed model and the send button, and 4 to spare; measured
+    // again on 0.2.0-rc.2 with a chip in the row: model 44 + send 34 + the
+    // gaps, the row 351 wide and nothing overflowing). Past that
     // the label gives way with an ellipsis instead of wrapping the toolbar.
     const barChipBudget = 'max(56px, calc(100cqw - 194px))';
     // A starter: a 32 px capsule with the one hairline, in the secondary ink.

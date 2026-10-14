@@ -47,8 +47,15 @@ export const inject = ['slots'];
  * promises. A test holds this pin to the kernel pin in `deps-version.json`, so
  * moving the kernel forces someone to re-read the layout before the rules ship
  * against markup they were not written for.
+ *
+ * Re-read at 0.2.0-rc.2 (2026-10-14): every CSS-module class suffix below
+ * (`_sidebarCol`, `_centerCol`, `_rightbarCol`, `_overlayLayer`, `_handle`,
+ * `_dock`, `_hero`, `_embeddedBody`, `_scroll`, `_previewBadge`) is in the new
+ * client bundles under the same hashed name, and the composer was measured at
+ * 1512 and 390 px in a real frame (room under the card, one toolbar line, no
+ * statistics for a researcher).
  */
-export const GEOMETRY_KERNEL_PIN = '0.1.7-rc.2';
+export const GEOMETRY_KERNEL_PIN = '0.2.0-rc.2';
 
 /**
  * The product's mark as a data URL, for the document's icon.

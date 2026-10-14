@@ -84,6 +84,9 @@ export function evimedDictionaries() {
       'input.send.queue': '排队发送 · Ctrl/⌘+Enter 插话',
       // The wait-for-agents tool and its detail panel (0.1.7).
       'tool.title.waitAgent': '等待子任务',
+      // The delegation tool's row and the sub-agent listing's: 「创建代理」 / 「查看代理」 until 0.2.0-rc.2, which says 「子智能体」.
+      'tool.title.subagent': '创建子任务',
+      'tool.title.listAgents': '查看子任务',
       'detail.wait.title': '子任务状态',
       'detail.wait.noProgress': '没有正在运行的子任务',
     },
@@ -92,9 +95,10 @@ export function evimedDictionaries() {
       // vendor's Chinese name plus 中; the product's own name goes there, as
       // 正在 + a verb with no ellipsis (design reference §7.3, E-13).
       'chat.deepDiving': 'EviMed 正在思考',
-      // 0.1.7 draws the running turn's header from this key, with the time so far; the old key above stopped
-      // covering it and 「深度求索中，用时 N 秒」 came back on every live conversation (live walk 2026-10-10).
-      'message.turnProcess.deepDivingFor': 'EviMed 正在思考，用时 {duration}',
+      // The running turn's header, with the time so far, has its own key and has moved twice: `message.turnProcess.deepDivingFor`
+      // at 0.1.7, which the old key above stopped covering (「深度求索中，用时 N 秒」 came back on every live conversation,
+      // live walk 2026-10-10), and `chat.deepDivingFor` at 0.2.0-rc.2, which carries a trailing 「···」 in the kernel's copy.
+      'chat.deepDivingFor': 'EviMed 正在思考，用时 {duration}',
       // A step that delegates: the same sub-task, said as status copy.
       'message.stepProcess.prepare.subagents': '正在准备子任务',
       'message.stepProcess.subagents': '正在协调子任务',

@@ -6,7 +6,11 @@
  * client (the packages the production runtime image serves), not inferred
  * from names — first at 0.1.5-rc.2, re-read at 0.1.7-rc.2 (every slot below is
  * declared by the same package with the same kind; `conversation.hero.agentPreset`
- * widened to `session-maybe`, the chat node and tool-view slots gained hooks). Three rules of that registry decide whether an occupant
+ * widened to `session-maybe`, the chat node and tool-view slots gained hooks), and
+ * again at 0.2.0-rc.2 (2026-10-14: every line of the client bundles that names one of
+ * these slots is the same text as at 0.1.7-rc.2, and the one registration the new
+ * kernel adds on a slot we occupy is `ui-user-questions`' `question-reply` chat node
+ * kind, which is a new kind and not a takeover of one listed below). Three rules of that registry decide whether an occupant
  * appears at all, and each has already cost this codebase a shipped no-op:
  *
  *  - A list slot takes `options.id`; a keyed slot takes `options.key`; a chain
@@ -40,7 +44,7 @@
  */
 
 /** The kernel client version these contracts were read from. */
-export const RUNTIME_UI_KERNEL_PIN = '0.1.7-rc.2';
+export const RUNTIME_UI_KERNEL_PIN = '0.2.0-rc.2';
 
 /** Public keyed body/title cell registered by the pinned sidebar-browser client. */
 export const RUNTIME_UI_NATIVE_BROWSER_KEY = '@deepseek-ai/dsh-client-ui-sidebar-browser';
