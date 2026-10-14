@@ -624,6 +624,16 @@ services:
       OPEN_SCIENCE_MEMORY_GATEWAY_TIMEOUT_MS:
       OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS:
       OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS:
+      # The turn committer: the control plane commits a conversation's engine session a few
+      # seconds after an attended turn (the plugin's own threshold is never reached by an
+      # ordinary conversation). Value-less so the code defaults (on; 8 s, 2 s, 4 reads, 2 at
+      # once, 1000 waiting) apply when unset.
+      OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ENABLED:
+      OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_DEBOUNCE_MS:
+      OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_SETTLE_MS:
+      OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ATTEMPTS:
+      OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_CONCURRENCY:
+      OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_MAX_SCHEDULED:
       # Autopilot's levers belong to the base stack, not to an overlay. Compose
       # passes environment item by item, and these were listed only in
       # `docker-compose.ingestion.yml` — so on a deployment without that overlay

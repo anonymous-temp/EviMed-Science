@@ -25,6 +25,12 @@ export const MEMORY_GATEWAY_REFUSALS = Object.freeze([
   "memory_gateway_body_invalid", "memory_gateway_payload_too_large", "memory_gateway_rate_limited", "memory_gateway_tool_refused",
   "memory_gateway_disabled",
 ]);
+/** What became of the end of an attended turn (`nativeTurnCommit.mjs`): armed, folded into a later one (debounced), turned away
+ *  (dropped at the bound, a platform-started turn, an attended turn already running again), or what the commit did. */
+export const NATIVE_TURN_COMMIT_OUTCOMES = Object.freeze([
+  "scheduled", "debounced", "dropped", "platform_started", "conversation_running",
+  "committed", "nothing_pending", "not_learning", "rate_limited", "failed",
+]);
 /** What the worker did with a commit. */
 export const NATIVE_COMMIT_OUTCOMES = Object.freeze(["ingested", "empty", "failed", "replayed", "abandoned", "found_by_scan"]);
 /** What the deterministic after-the-fact checks did, by why. */
@@ -45,6 +51,7 @@ const withheld = table(MEMORY_ADMISSION_REASONS);
 const refusals = table(MEMORY_GATEWAY_REFUSALS);
 const upstreamFailures = table(["timeout", "unavailable", "other"]);
 const ledgerFailures = table(["commit_not_recorded"]);
+const turnCommits = table(NATIVE_TURN_COMMIT_OUTCOMES);
 const workerCommits = table(NATIVE_COMMIT_OUTCOMES);
 const workerOperations = table(["added", "updated", "deleted"]);
 const checkActions = table(NATIVE_CHECK_ACTIONS);
@@ -72,6 +79,8 @@ export function recordGatewayUpstreamFailure(code) {
 }
 /** A commit the engine accepted and the ledger could not record (the scan finds its archive). */
 export function recordLedgerFailure() { bump(ledgerFailures, "commit_not_recorded"); }
+/** One end of an attended turn at the turn committer. @param {string} outcome */
+export function recordTurnCommit(outcome) { bump(turnCommits, outcome); }
 /** What the worker did with a commit. @param {string} outcome */
 export function recordNativeCommit(outcome) { bump(workerCommits, outcome); }
 /** Operations of ingested diffs. @param {{ added?: number, updated?: number, deleted?: number }} operations */
@@ -87,7 +96,7 @@ export function recordNativePass(ok) { bump(workerPasses, ok ? "completed" : "fa
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, workerCommits, workerOperations, checkActions, workerWrites, workerPasses]) {
+  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, checkActions, workerWrites, workerPasses]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -98,7 +107,7 @@ export function nativeMemoryCounters() {
   return {
     requests: Object.fromEntries([...requests].map(([key, value]) => [key.replace("\u0000", ":"), value])),
     messages: plain(messages), masked: plain(masked), commits: plain(commits), withheld: plain(withheld), refusals: plain(refusals),
-    upstreamFailures: plain(upstreamFailures), ledgerFailures: plain(ledgerFailures), workerCommits: plain(workerCommits),
+    upstreamFailures: plain(upstreamFailures), ledgerFailures: plain(ledgerFailures), turnCommits: plain(turnCommits), workerCommits: plain(workerCommits),
     workerOperations: plain(workerOperations), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
   };
 }
@@ -128,6 +137,8 @@ export function nativeMemoryMetricFamilies() {
       help: "Engine calls of the memory gateway that got no answer in time (timeout), no connection (unavailable) or another failure. The gateway answers 5xx at once: a memory service that hangs delays a new conversation's first prompt." },
     { name: "open_science_memory_gateway_ledger_failures_total", type: "counter", series: series(ledgerFailures, "what"),
       help: "Commits the engine accepted that the commit ledger could not record at the gateway; the archive scan finds them." },
+    { name: "open_science_native_memory_turn_commits_total", type: "counter", series: series(turnCommits, "outcome"),
+      help: "Ends of an attended turn at the turn committer, which commits the conversation's engine session a few seconds after the turn so that a short conversation is learned from without waiting for the plugin's token threshold: scheduled, folded into a later turn (debounced), dropped at the bound, ignored because the platform started the turn or the person is already typing again, and what the commit did (committed, nothing pending, not learning, held by the hourly limit, failed). committed is one extraction call." },
     { name: "open_science_native_memory_commits_total", type: "counter", series: series(workerCommits, "outcome"),
       help: "What the native memory worker did with commits: ingested a diff, read an empty diff, found a failed extraction, replayed one, abandoned one after the replay cap, or found an archive only the scan could see." },
     { name: "open_science_native_memory_operations_total", type: "counter", series: series(workerOperations, "change"),

@@ -202,6 +202,11 @@ export function parseEventStream(text) {
   return messages;
 }
 
+/**
+ * @typedef {(request: { user: any, project: any, engineSessionId: string, admitted?: import("./memoryAdmission.mjs").MemoryAdmission | null, keepRecentCount?: number }) =>
+ *   Promise<{ status: number, json: any, outcome: string, commit: "accepted" | "nothing_pending" | "not_learning" | "rate_limited" }>} MemoryGatewayCommitSession
+ */
+
 const toolText = (/** @type {unknown} */ id, /** @type {string} */ text) => ({ jsonrpc: "2.0", id: id ?? null, result: { content: [{ type: "text", text }], isError: false } });
 const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @type {string} */ message) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
 
@@ -218,7 +223,8 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  * }} dependencies
  *   `memoryTool.forget` is the memory page's own deletion (the file, its revision, the rejection that keeps it from coming
  *   back); absent, `forget` is forwarded to the engine and only the file goes.
- * @returns {(req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>}
+ * @returns {((req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>) & { commitSession: MemoryGatewayCommitSession }}
+ *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
 export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, overlay = null, memoryTool = null, now = () => Date.now() }) {
   const enabled = config.ovNativeMemoryEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
@@ -310,6 +316,50 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     return { status: unavailable ? 503 : 502, json: refusal("memory_gateway_upstream_unavailable", "The memory service is not reachable."), outcome: "failed", failure: code || "memory_gateway_upstream_unavailable" };
   }
 
+  /**
+   * One commit of one engine session, for whoever asks: the plugin's own (`POST …/commit`, at its token threshold and when
+   * its session is disposed) and the control plane's after an attended turn (`commitSession` below). One path, so that the
+   * admission rule, the hourly bound, the ledger row and the counters are the same for both.
+   *
+   * A commit sends nothing new: it archives what was forwarded. So it follows the account's switches, not the turn in
+   * progress — a platform-started turn's messages never reached the session it would archive. Each commit is one extraction
+   * call. Over the hourly bound it is answered as "nothing pending": the messages stay in the session and the next commit,
+   * or the engine's own idle commit, archives them.
+   * @param {{ user: any, project: any, sessionId: string, admitted: import("./memoryAdmission.mjs").MemoryAdmission, keepRecentCount?: number }} request
+   * @returns {Promise<{ status: number, json: any, outcome: string, commit: "accepted" | "nothing_pending" | "not_learning" | "rate_limited" }>}
+   */
+  async function commitEngineSession({ user, project, sessionId, admitted, keepRecentCount = 0 }) {
+    const nothing = { status: 200, json: ok({ session_id: sessionId, status: "skipped", task_id: null, archive_uri: null, archived: false, reason: "no_messages" }) };
+    if (!admitted.native || (!admitted.learn && admitted.learnReason !== "automated_run")) {
+      recordGatewayCommit("not_learning");
+      recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
+      if (admitted.learnReason === "clinical_context") dropClinicalSession(user.id, sessionId);
+      return { ...nothing, outcome: "withheld", commit: "not_learning" };
+    }
+    if (overLimit(commitWindows, String(user.id), 3_600_000, commitsPerHour)) {
+      recordGatewayCommit("rate_limited");
+      return { ...nothing, outcome: "local", commit: "rate_limited" };
+    }
+    let answer;
+    try {
+      answer = await /** @type {any} */ (sessions).commit(user.id, sessionId, { keepRecentCount });
+    } catch (error) {
+      if (/** @type {any} */ (error)?.code === "memory_index_not_found") { recordGatewayCommit("nothing_pending"); return { ...nothing, outcome: "local", commit: "nothing_pending" }; }
+      recordGatewayCommit("failed");
+      throw error;
+    }
+    const result = answer?.result ?? {};
+    if (result.status === "accepted" && typeof result.archive_uri === "string" && result.archive_uri) {
+      recordGatewayCommit("accepted");
+      try {
+        await overlay?.recordCommit({ userId: user.id, archiveUri: result.archive_uri, engineSession: sessionId, projectId: project.id, origin: "gateway", taskId: typeof result.task_id === "string" ? result.task_id : null });
+      } catch { recordLedgerFailure(); }
+      return { status: 200, json: answer, outcome: "forwarded", commit: "accepted" };
+    }
+    recordGatewayCommit("nothing_pending");
+    return { status: 200, json: answer, outcome: "forwarded", commit: "nothing_pending" };
+  }
+
   /** @type {Record<string, (ctx: any) => Promise<{ status: number, json?: unknown, text?: string, contentType?: string, outcome: string }>>} */
   const handlers = {
     // Liveness and version only: the engine's own body also names its auth mode and the identity it saw.
@@ -381,41 +431,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     },
     async commit(ctx) {
       const sessionId = ctx.match[1];
-      const nothing = { status: 200, json: ok({ session_id: sessionId, status: "skipped", task_id: null, archive_uri: null, archived: false, reason: "no_messages" }) };
-      // A commit sends nothing new: it archives what was forwarded. So it follows the account's switches, not the turn in
-      // progress — a platform-started turn's messages never reached the session it would archive.
-      const admitted = await ctx.admit(sessionId);
-      if (!admitted.native || (!admitted.learn && admitted.learnReason !== "automated_run")) {
-        recordGatewayCommit("not_learning");
-        recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
-        if (admitted.learnReason === "clinical_context") dropClinicalSession(ctx.user.id, sessionId);
-        return { ...nothing, outcome: "withheld" };
-      }
-      // Each commit is one extraction call. Over the hourly bound it is answered as "nothing pending": the messages stay
-      // in the session and the next commit, or the engine's own idle commit, archives them.
-      if (overLimit(commitWindows, String(ctx.user.id), 3_600_000, commitsPerHour)) {
-        recordGatewayCommit("rate_limited");
-        return { ...nothing, outcome: "local" };
-      }
       const keep = Number.isInteger(ctx.json?.keep_recent_count) && ctx.json.keep_recent_count >= 0 && ctx.json.keep_recent_count <= 1_000 ? ctx.json.keep_recent_count : 0;
-      let answer;
-      try {
-        answer = await /** @type {any} */ (sessions).commit(ctx.user.id, sessionId, { keepRecentCount: keep });
-      } catch (error) {
-        if (/** @type {any} */ (error)?.code === "memory_index_not_found") { recordGatewayCommit("nothing_pending"); return { ...nothing, outcome: "local" }; }
-        recordGatewayCommit("failed");
-        throw error;
-      }
-      const result = answer?.result ?? {};
-      if (result.status === "accepted" && typeof result.archive_uri === "string" && result.archive_uri) {
-        recordGatewayCommit("accepted");
-        try {
-          await overlay?.recordCommit({ userId: ctx.user.id, archiveUri: result.archive_uri, engineSession: sessionId, projectId: ctx.project.id, origin: "gateway", taskId: typeof result.task_id === "string" ? result.task_id : null });
-        } catch { recordLedgerFailure(); }
-      } else {
-        recordGatewayCommit("nothing_pending");
-      }
-      return { status: 200, json: answer, outcome: "forwarded" };
+      const { status, json, outcome } = await commitEngineSession({ user: ctx.user, project: ctx.project, sessionId, admitted: await ctx.admit(sessionId), keepRecentCount: keep });
+      return { status, json, outcome };
     },
     async search(ctx) {
       const given = ctx.json && typeof ctx.json === "object" && !Array.isArray(ctx.json) ? ctx.json : {};
@@ -620,7 +638,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     },
   };
 
-  return async (req, res, onFailure) => {
+  const handle = async (/** @type {any} */ req, /** @type {any} */ res, /** @type {((failure: any) => void) | undefined} */ onFailure) => {
     let route = "unknown";
     const send = (/** @type {{ status: number, json?: unknown, text?: string, contentType?: string }} */ answer) => {
       const body = answer.json !== undefined ? JSON.stringify(answer.json) : (answer.text ?? "");
@@ -707,4 +725,21 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (!res.headersSent) send({ status, json: refusal(code || "memory_gateway_failed", "The memory gateway could not answer.") });
     }
   };
+
+  /**
+   * The control plane commits a conversation of its own accord (`nativeTurnCommit.mjs`): the plugin commits at a token
+   * threshold no ordinary conversation reaches, and when its session is disposed, which for a running runtime is hours away.
+   * It goes through the same function as the route above, so the commit follows the same admission, the same hourly
+   * bound and lands in the same ledger. Nothing is faked: an engine that does not answer throws.
+   * `admitted` is the decision the caller already has; without it the admission is asked here.
+   * @type {MemoryGatewayCommitSession}
+   */
+  const commitSession = async ({ user, project, engineSessionId, admitted = null, keepRecentCount = 0 }) => {
+    if (!enabled) return { status: 404, json: null, outcome: "refused", commit: /** @type {const} */ ("not_learning") };
+    if (!new RegExp(`^${SESSION}$`).test(String(engineSessionId))) throw new HttpError(400, "memory_gateway_body_invalid", "A session id is required.");
+    const decision = admitted ?? await admission.admit({ user, project, engineSessionId });
+    return commitEngineSession({ user, project, sessionId: engineSessionId, admitted: decision, keepRecentCount });
+  };
+
+  return Object.assign(handle, { commitSession });
 }

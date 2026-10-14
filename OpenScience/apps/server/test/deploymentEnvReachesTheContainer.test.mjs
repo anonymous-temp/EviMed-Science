@@ -154,6 +154,14 @@ const operatorLevers = {
   OPEN_SCIENCE_MEMORY_GATEWAY_TIMEOUT_MS: ["open-science-web"],
   OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS: ["open-science-web"],
   OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS: ["open-science-web"],
+  // The turn committer (2026-10-14): when the control plane commits a conversation to the engine, and how many commits and waiting
+  // conversations it holds. Each commit that finds something pending is one extraction call on the platform's budget.
+  OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_DEBOUNCE_MS: ["open-science-web"],
+  OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_SETTLE_MS: ["open-science-web"],
+  OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ATTEMPTS: ["open-science-web"],
+  OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_CONCURRENCY: ["open-science-web"],
+  OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_MAX_SCHEDULED: ["open-science-web"],
   // The two delegation limits that replaced `maxParallelChildren` (2026-09-18).
   // The controller builds the hosted launch plan and so is the service that
   // actually writes them into a runtime container; the web API builds it when
