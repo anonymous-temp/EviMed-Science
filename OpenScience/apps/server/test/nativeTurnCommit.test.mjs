@@ -385,7 +385,11 @@ async function pinnedPlugin(t) {
   t.after(() => rmSync(scratch, { recursive: true, force: true }));
   try {
     let archive = process.env.OPENVIKING_PLUGIN_ARCHIVE ?? "";
-    if (!archive || !existsSync(archive)) archive = installer.fetchOpenVikingPlugin({ pins: { openviking: { plugin: { ...pin } } }, root: path.join(scratch, "archive") });
+    // Without a local copy the pinned archive is fetched from the registry (digest-checked) where there is a network to count on.
+    if (!archive || !existsSync(archive)) {
+      if (!process.env.CI) throw new Error("no OPENVIKING_PLUGIN_ARCHIVE, and the registry is fetched only under CI");
+      archive = installer.fetchOpenVikingPlugin({ pins: { openviking: { plugin: { ...pin } } }, root: path.join(scratch, "archive") });
+    }
     installer.verifyOpenVikingPluginArchive(archive, pin.sha256);
     const dir = path.join(scratch, "node_modules", "@openviking", "dsh-memory-plugin");
     mkdirSync(dir, { recursive: true });
@@ -403,7 +407,7 @@ async function pinnedPlugin(t) {
 
 test("the real plugin, through the real bridge and gateway: it does not commit a short turn, the turn committer does, and its disposal then extracts nothing again", async (t) => {
   const plugin = await pinnedPlugin(t);
-  if (!plugin) { t.skip("the pinned plugin archive is not available (set OPENVIKING_PLUGIN_ARCHIVE or allow the registry)"); return; }
+  if (!plugin) { t.skip("the pinned plugin archive is not available (set OPENVIKING_PLUGIN_ARCHIVE to a local copy; CI fetches it)"); return; }
   const { stub, ledger, finishTurn, gatewayBase } = await gatewayFixture(t);
   const { OpenVikingRuntime } = await import(pathToFileURL(path.join(plugin.dir, "runtime.mjs")).href);
   const { OpenVikingClient: PluginClient } = await import(pathToFileURL(path.join(plugin.dir, "client.mjs")).href);
