@@ -30,6 +30,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { panelRemotes } from "../../packages/contracts/dsh/panelRemotes.mjs";
 import { closureDrift, installKernel } from "./kernel-install.mjs";
 import { ownWireNamespaces, wireSurfaceFindings } from "./wire-surface.mjs";
 
@@ -385,6 +386,23 @@ if (methods.size) {
     phantom.length === 0,
     phantom.length ? `${phantom.length} phantom method(s) — retired upstream, still in seam-manifest.json wire.unary or wire.denied: ${phantom.join(", ")}` : "",
   );
+}
+
+// What each browser package of the composition reaches, as the hidden-panel pairing test reads it
+// (`packages/contracts/dsh/panel-remotes.json`). The recording is of the pinned closure; a closure that says anything else
+// means the pairing was made against a client that is not the one the image ships.
+{
+  const baselineText = readFileSync(path.join(repoRoot, "deploy/runtime-dsh/dump-config.baseline.json"), "utf8");
+  const recorded = JSON.parse(readFileSync(path.join(repoRoot, "packages/contracts/dsh/panel-remotes.json"), "utf8"));
+  const { packages, unreadable } = panelRemotes((name) => installed.get(name)?.dir ?? null, baselineText);
+  const names = [...new Set([...Object.keys(recorded.packages), ...Object.keys(packages)])].sort();
+  const changed = names.filter((name) => JSON.stringify(recorded.packages[name]) !== JSON.stringify(packages[name]));
+  report(`browser packages' host namespaces equal packages/contracts/dsh/panel-remotes.json (${Object.keys(packages).length} read)`,
+    Object.keys(packages).length >= 40 && changed.length === 0 && recorded.pin === pins.dsh.version,
+    Object.keys(packages).length < 40 ? `only ${Object.keys(packages).length} client bundles read; the reader, not the kernel, is wrong`
+      : [recorded.pin === pins.dsh.version ? "" : `recorded at ${recorded.pin}, pin is ${pins.dsh.version}`,
+        changed.length ? `changed: ${changed.join(", ")} — re-record with packages/contracts/dsh/record-panel-remotes.mjs and re-read the hidden-panel pairing` : "",
+        unreadable.length ? `no client bundle: ${unreadable.join(", ")}` : ""].filter(Boolean).join("; "));
 }
 
 process.stdout.write(`\n${failures.length ? `${failures.length} seam check(s) failed` : "every seam in the manifest matches the shipped harness"}\n`);

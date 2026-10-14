@@ -224,6 +224,17 @@ export function renderProfilePatch(input) {
     "- id: session-telemetry-otel",
     "  disabled: true",
     "",
+    "# The 0.2.0 product-usage pair and the OTLP service under both telemetry",
+    "# adapters. Upstream disables the pair with a profile-name expression; here they",
+    "# are off by value, so nothing about the hosted runtime's egress rests on what the",
+    "# profile is called.",
+    "- id: otel",
+    "  disabled: true",
+    "- id: desktop-product-telemetry",
+    "  disabled: true",
+    "- id: product-analytics",
+    "  disabled: true",
+    "",
     "# Open-in-app launches a locally installed application on the machine running",
     "# the kernel, which here is this project's container, and it does so over three",
     "# routes under /open-in-app/ rather than as an /api/ method -- so the method",
@@ -388,6 +399,12 @@ export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
   "ui-settings-web-search",
   "ui-settings-plugin-inventory",
   "ui-settings-plugins",
+  // 0.2.0: the "upload the session log with API requests" switch, a general-settings
+  // item and a shell notice over the `session-log-deepseek` configuration form. That
+  // row is disabled and the gateway refuses the field, so nothing serves the form and
+  // the item never draws; hidden anyway, because the preference it would write is the
+  // one a hosted runtime must not have a button for.
+  "ui-settings-session-log",
   // The composition names this row `ui-permission`, not
   // `ui-permission-presets` after its package. Written from the package name it
   // addressed nothing, and the check that reads the recorded composition is

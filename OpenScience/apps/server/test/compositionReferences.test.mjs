@@ -344,11 +344,12 @@ test("the patch's override rows are collected as host-row references, not lost",
   // underneath, it is configured to name our own provider.
   // `mcp-resources` and the four upstream preset rows joined them on
   // 2026-09-28, disabled so `evimed-universal` is the only preset and no agent
-  // is offered resource tools no configured server serves.
+  // is offered resource tools no configured server serves. The OTLP service and
+  // the product-usage pair joined on 2026-10-14 (0.2.0), disabled by value.
   assert.deepEqual(hostRows.sort(), [
-    "account-controller", "agent-preset-registry", "deepseek-account", "hmr", "llm-deepseek-account", "loopx-driver", "loopx-goalbar", "loopx-init-command", "mcp-resources",
-    "open-in-app", "openviking-memory-runtime", "plugin-manager", "plugin-package-inventory-deepseek",
-    "preset-cordis", "preset-minimal", "preset-ptc", "preset-standard", "session-log-deepseek", "session-telemetry-otel",
+    "account-controller", "agent-preset-registry", "deepseek-account", "desktop-product-telemetry", "hmr", "llm-deepseek-account", "loopx-driver", "loopx-goalbar", "loopx-init-command", "mcp-resources",
+    "open-in-app", "openviking-memory-runtime", "otel", "plugin-manager", "plugin-package-inventory-deepseek",
+    "preset-cordis", "preset-minimal", "preset-ptc", "preset-standard", "product-analytics", "session-log-deepseek", "session-telemetry-otel",
     "terminal-controller", "tool-web", "ui-open-in-app", "ui-plugin-manager", "ui-settings-account", "ui-sidebar-browser", "ui-sidebar-terminal",
     "web", "web-fetch-http", "web-runtime", "webserver",
   ]);

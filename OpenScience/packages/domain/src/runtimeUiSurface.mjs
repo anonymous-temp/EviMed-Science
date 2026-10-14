@@ -132,6 +132,27 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   "schedule",
   "speech",
   "permissionPresets",
+  // Arrived in 0.2.0, classified the day the pin moved rather than found open later
+  // (`scripts/ops/verify-harness-seams.mjs` reports a shipped method nobody classified):
+  //
+  // - `productAnalytics`  the page's usage reporter and its policy watch; the host half
+  //               sends to DeepSeek's collector, and both rows are disabled by value in
+  //               the composition, so nothing of it is exported on a hosted runtime
+  // - `pluginInventory`   the read-only snapshot of every mounted plugin and each
+  //               preset's flattened rows (with their `!!js` disable expressions): only
+  //               names of environment variables, never values, but a deployment's own
+  //               composition is not a browser's to read. It was open since 0.1.7: the
+  //               hidden panel behind it was paired with our own `evimedPlugins`
+  //               namespace, which is not the one that panel's client calls.
+  //
+  // `userQuestions` is deliberately not here: its two methods (`answer`, `attachWait`)
+  // are what the kernel's own page uses to answer a question after the turn moved on,
+  // which is ask-user's timed mode (off in this deployment), and a person's answer is
+  // the one write a browser is meant to make. The seam manifest lists both under
+  // `wire.denied` because the control plane's own adapter never calls them (it answers
+  // through `$events/result`); that list is the adapter's, not this proxy's.
+  "productAnalytics",
+  "pluginInventory",
 ]);
 
 /**

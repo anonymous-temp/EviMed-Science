@@ -98,12 +98,11 @@ export const SOURCES = {
  * ship.
  */
 export const BASELINE_PROVENANCE = {
-  dshVersion: "0.1.7-rc.2",
-  sha256: "25adc63dad6ab279c0dece9b8c5d723c706326ae091219e50cf9375808c03ffd",
-  recordedBy: "Pinned DSH --profile evimed-runtime --dump-config from the isolated seeded native profile on 2026-10-13 (DSH 0.1.7-rc.2), with the official LoopX bundle, then the official OpenViking memory plugin, then EviMed (the plugin's bundle before the socket's, so the socket's patch reaches its row; the dump's stderr names no unmatched patch row); the 2026-10-12 record was reproduced byte for byte before the plugin and the memory rows were added; the same seeding reproduced the 2026-10-11 record byte for byte before the preset changed (general persona, tool-todo, present, tool-subagent, command-compact). Real sessions booted this profile. The runtime image build compares its own fresh dump byte for byte before sealing.",
+  dshVersion: "0.2.0-rc.2",
+  sha256: "ec6158f44c012a52fca1cfe7d375c9933dc1cb8343763d11c7591bba9811f906",
+  recordedBy: "Pinned DSH --profile evimed-runtime --dump-config from the isolated seeded native profile on 2026-10-14 (DSH 0.2.0-rc.2, @openviking/dsh-memory-plugin 0.5.25, dsh-cite 0.3.5, annotation 1.4.11, mermaid 0.4.1), with the official LoopX bundle, then the official OpenViking memory plugin, then EviMed (the plugin's bundle before the socket's, so the socket's patch reaches its row; the dump's stderr names no unmatched patch row). The seeding was calibrated before anything moved: at the 0.1.7-rc.2 pins it reproduced the 2026-10-13 record byte for byte, and that same procedure produced this record. The rows that moved with the kernel are the 0.2.0 telemetry service and product-usage pair (disabled by value in the socket's patch), the session-log settings leaf, and the schedule rows that left the web app's own patch. The runtime image build compares its own fresh dump byte for byte before sealing.",
   // The complete recipe booted its seeded composition and an evimed-universal
-  // session. A second read-only, network-isolated UID65534 boot passed after
-  // import; image-owned profile sync then produced this byte-identical dump.
+  // session. Image-owned profile sync then produced a byte-identical dump.
   // Native catalogue, immutable personal roots and the optional bridge are
   // represented here; this is not qualification of an installed extension.
 };

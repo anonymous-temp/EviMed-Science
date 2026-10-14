@@ -65,6 +65,15 @@
 - id: session-telemetry-otel
   disabled: true
 
+# The 0.2.0 product-usage pair and the OTLP service under both telemetry adapters,
+# off by value as the control plane's patch has them.
+- id: otel
+  disabled: true
+- id: desktop-product-telemetry
+  disabled: true
+- id: product-analytics
+  disabled: true
+
 # Open-in-app launches a locally installed application on the machine running
 # the kernel, over three routes under /open-in-app/ that are not /api/ methods
 # and so are invisible to the method deny list. Mirrors the control plane's
@@ -178,6 +187,8 @@
 - id: ui-settings-plugin-inventory
   disabled: true
 - id: ui-settings-plugins
+  disabled: true
+- id: ui-settings-session-log
   disabled: true
 - id: ui-permission
   disabled: true
