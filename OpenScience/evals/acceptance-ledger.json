@@ -273,7 +273,7 @@
       "id": "geo-strategy",
       "visibility": "public",
       "evalHarness": "evals/geo-strategy",
-      "briefCount": 4,
+      "briefCount": 8,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/geo-strategy/results/2026-09-28-geo-strategy-004-mazdutide-conditions-written/run.json",

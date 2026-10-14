@@ -98,6 +98,94 @@
         "Count lillymedical.cn or any rival holder's domain as an owned source."
       ],
       "gradedOn": "Whether every coverage candidate carries a dated verdict on all three conditions in the platform's record, and the strategy the page reads is complete."
+    },
+    {
+      "id": "geo-strategy-005-every-gap-answered",
+      "title": "信尔美：每个答案缺口都有对应的行动，或一句不做的理由",
+      "why": "A strategy that ranks twenty gaps and then plans nothing for them leaves the reader to guess which gap an article is for. The platform lists the actions by gap; a gap with neither an action nor a stated reason is a gap nobody answered.",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "generic": "玛仕度肽注射液",
+          "holder": "信达生物"
+        },
+        "tier": "2",
+        "note": "基线已测完的项目；缺口里既有可写稿的，也有交纠错流程的。"
+      },
+      "mustDo": [
+        "Write one actions[] entry for every gap, or an entry with only gapId and a reason where nothing is to be written for it (a correction of a traced 讲错我方 error, a gap only to be watched).",
+        "Name, for each action, the article layer and the channel (an owned platform's id or media_market), the engines the promise holds on, and why each source (sources[].why).",
+        "Give each action a promise from the platform's list and the basis it rests on, in a sentence."
+      ],
+      "mustNotDo": [
+        "Leave a gap with neither an action nor a reason.",
+        "Write the same action twice for one gap, or an action for a control group."
+      ],
+      "gradedOn": "`node evals/geo-strategy/check-actions.mjs <strategy.json>` — case everyGapAnswered holds (no gap_without_action notice)."
+    },
+    {
+      "id": "geo-strategy-006-metric-in-the-pools-table",
+      "title": "信尔美：行动的预期指标是该语义群所在池的指标",
+      "why": "The expected metric of an action is read against the group's own pool: mention for a pool that is about brand identity or accuracy would be judged on a number that cannot move with the work. The owner's table (metrics_by_pool) names what each pool is judged on.",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "generic": "玛仕度肽注射液",
+          "holder": "信达生物"
+        },
+        "tier": "2"
+      },
+      "mustDo": [
+        "Choose each action's metricId from its group's pool: P1 M-06 or M-03; P2 M-01, M-02, M-06 or M-08; P3 M-01 or M-08; P4 M-15.",
+        "Leave the target number to the platform (the chosen tier's row for the pool) and say what the move rests on in basis."
+      ],
+      "mustNotDo": [
+        "Name a metric the group's pool is not judged on, or the project index as an action's metric."
+      ],
+      "gradedOn": "`node evals/geo-strategy/check-actions.mjs <strategy.json>` — case metricInPool holds (no metric_not_in_pool notice)."
+    },
+    {
+      "id": "geo-strategy-007-no-target-without-basis",
+      "title": "信尔美：行动里不写没有依据的目标数字",
+      "why": "A target typed into an action is a second number beside the targets table's, and a number without its basis reads as a promise the platform cannot stand behind. What an action promises is the tier's target for the pool, and the platform computes it.",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "generic": "玛仕度肽注射液",
+          "holder": "信达生物"
+        },
+        "tier": "2"
+      },
+      "mustDo": [
+        "State what each action expects in words (promise) and why (basis); where a number is given, say what it comes from — a measured rate with its sample, a prior marked as a prior.",
+        "Keep every target number in the tiers' targets, labelled forecast."
+      ],
+      "mustNotDo": [
+        "Write a numeric target in an action without its basis.",
+        "Promise a mention on an engine that rarely searches the web, or a rank for a group no engine mentions."
+      ],
+      "gradedOn": "`node evals/geo-strategy/check-actions.mjs <strategy.json>` — case noTargetWithoutBasis holds (no target_without_basis notice), and the report's promises are no stronger than the engines' measured behaviour."
+    },
+    {
+      "id": "geo-strategy-008-nothing-the-run-wrote-is-dropped",
+      "title": "信尔美：运行写的每个字段，要么平台存了，要么平台说明了不存的理由",
+      "why": "Fields a run writes that the platform neither keeps nor has said it does not keep are a drop nobody decided: the work is in the file and invisible on the page. The platform keeps the fields of its own list, maps the method's names onto them, and lists what it does not keep with a reason each (a number it holds itself, a field derived from a row).",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "generic": "玛仕度肽注射液",
+          "holder": "信达生物"
+        },
+        "tier": "2"
+      },
+      "mustDo": [
+        "Write gaps, battlefield, layout and tiers in the platform's field names, with the rich fields the page shows (judgment, rank, consequence, evidence, expectedPoints, handoff).",
+        "Keep numbers the platform measures itself (retrieval cells, sample sizes, per-source counts) in the report rather than in new keys of the file."
+      ],
+      "mustNotDo": [
+        "Invent keys for what the page already carries under another name."
+      ],
+      "gradedOn": "`node evals/geo-strategy/check-actions.mjs <strategy.json>` — case nothingDroppedUndecided holds (no path in `dropped`)."
     }
   ]
 }
