@@ -712,6 +712,7 @@ export const GEO_NOT_STORED = Object.freeze({
     measuredQuestions: "derived from the group (its measured questions)",
     groupWeight: "derived from the group (question_groups.weight)",
     weightBand: "derived from the group's weight",
+    classId: "the class word is the platform's id (class); a second copy of it is derived",
   }),
   "expectations[]": Object.freeze({
     engineName: "derived from the engine id",
@@ -735,6 +736,8 @@ export const GEO_NOT_STORED = Object.freeze({
     price: "the market's own catalogue price (media.price_cny)",
     role: "a narrative about a source's part, kept in the report; an action's reason for a source is actions[].sources[].why",
     cited: "measured: the platform's own tally",
+    citedByEngine: "measured: the platform's own tally",
+    citedTotal: "measured: the platform's own tally",
     mentionsOurs: "measured: the platform's own tally",
     errorsAboutUs: "measured: the platform's own tally",
     layerNote: "why a layer was chosen is the report's; the layout keeps the layers' lists and the constraints",
