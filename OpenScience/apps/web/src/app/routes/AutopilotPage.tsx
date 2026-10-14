@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import { CalendarClock } from "lucide-react";
 import { AUTOPILOT_BUDGET_ERROR_CODES } from "@evimed/domain";
@@ -13,10 +13,10 @@ import { useProjectStore } from "@/lib/projects";
 import { snapshotHref } from "@/lib/readPages";
 import { splitArtifacts } from "@/lib/artifactNames";
 import { taskPath } from "@/lib/taskLocation";
-import { cn } from "@/lib/cn";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Drawer } from "@/components/ui/Drawer";
+import { MasterDetail, type MasterDetailState } from "@/components/ui/MasterDetail";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -96,7 +96,6 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   // The task a spent budget refused: its caps are the one thing the edit dialog then offers beside the rest (`budgetBlocks`).
   const [budgetRefused, setBudgetRefused] = useState<string | null>(null);
   const [refreshCycle, setRefreshCycle] = useState(0);
-  const [width, setWidth] = useState(0);
   const live = useRef(true);
   const generation = useRef(0);
   const historyGeneration = useRef(0);
@@ -104,24 +103,6 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const operating = useRef(false);
   const selection = useRef(selectedId); selection.current = selectedId;
   const searchNow = useRef(search); searchNow.current = search;
-  const layout = useRef<HTMLDivElement>(null);
-
-  // Beside the list or instead of it, by what the page itself has room for.
-  useLayoutEffect(() => {
-    const element = layout.current;
-    if (!element) return undefined;
-    setWidth(element.getBoundingClientRect().width);
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(entries => {
-      const next = entries[entries.length - 1]?.contentRect.width;
-      if (typeof next === "number") setWidth(next);
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  const split = width >= LIST_COLUMN + PANE_MIN;
-  const showList = split || !selectedId;
-  const showMain = split || Boolean(selectedId);
 
   // The search is the address's `q`; Back and Forward bring the earlier text back.
   useEffect(() => { setSearch(urlSearch); }, [urlSearch]);
@@ -362,13 +343,13 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const none = known && !agendas.some(agenda => !agenda.payload.archivedAt);
   const firstRun = <EmptyState icon={CalendarClock} title="还没有定时任务" description={FIRST_RUN_SENTENCE}
     action={<Button onClick={() => setEditor({})}>新建任务</Button>} className="min-h-0 flex-1" />;
-  const main = !selectedId
+  // Beside the list the way on is the list; without it the list is a link away — so the detail is a function of the split.
+  const detail = ({ split }: MasterDetailState) => !selectedId
     ? !known ? null
       : none ? firstRun
         : <EmptyState icon={CalendarClock} title="选择一项任务" description="任务的对话在这里打开。" className="min-h-0 flex-1" />
     : agendas === null ? <div className="px-6 py-6"><FilesSkeleton /></div>
       : !selected ? <EmptyState icon={CalendarClock} title="未找到这个任务" description="它可能已经删除。从列表选择其他任务。" className="min-h-0 flex-1"
-        // Beside the list the way on is the list; without it the list is a link away.
         action={split ? undefined : <Link to={taskPath(null, { search })} className={buttonClasses({ variant: "secondary" })}>回到定时任务</Link>} />
         : <>
           <TaskBar agenda={selected} executions={executions} selected={execution} running={running} stopping={Boolean(running && stopping === running.id)} busy={busy} backTo={split ? undefined : taskPath(null, { search })}
@@ -390,14 +371,14 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
               : <TaskPane agenda={selected} execution={execution} lock={lock} ledgerRun={ledgerRun} projectId={projectId} />}
         </>;
 
-  return <div ref={layout} className="flex h-full min-h-0 bg-bg" data-autopilot-layout={split ? "split" : "single"}>
+  const list = ({ split }: MasterDetailState) => <TaskList agendas={agendas} episodes={episodes} selectedId={selectedId} search={search} onSearch={onSearch} projectName={projectName} error={error}
+    onRetry={() => void load()} onCreate={() => setEditor({})} busy={busy} actions={rowActions} singleColumn={!split}
+    firstRun={none ? (split ? null : firstRun) : undefined} />;
+
+  return <MasterDetail list={list} detail={detail} selected={Boolean(selectedId)} listLabel="任务列表" detailLabel="任务"
+    listWidth={LIST_COLUMN} detailMin={PANE_MIN} narrow="swap" modeAttribute="data-autopilot-layout"
+    listAttributes={{ "data-task-list": "" }} detailAttributes={{ "data-task-main": "" }}>
     <PageTitle page={selected?.payload.title ?? "定时任务"} section={selected ? "定时任务" : undefined} />
-    {showList && <section key="list" aria-label="任务列表" data-task-list="" className={cn("flex min-h-0 flex-col", split ? "shrink-0 border-r border-border" : "min-w-0 flex-1")} style={split ? { width: LIST_COLUMN } : undefined}>
-      <TaskList agendas={agendas} episodes={episodes} selectedId={selectedId} search={search} onSearch={onSearch} projectName={projectName} error={error}
-        onRetry={() => void load()} onCreate={() => setEditor({})} busy={busy} actions={rowActions} singleColumn={!split}
-        firstRun={none ? (split ? null : firstRun) : undefined} />
-    </section>}
-    {showMain && <section key="main" aria-label="任务" data-task-main="" className="flex min-h-0 min-w-0 flex-1 flex-col">{main}</section>}
     {progressOpen && selected && <Drawer title="研究进展" onClose={() => setProgressOpen(false)}>
       <ResearchProgress agenda={selected} state={researchState} error={progressError} busy={busy} lastRun={lastRunLine(selected, selectedEpisodes ?? episodes, { withTime: true })}
         onAdd={() => void addMaterial()} onPick={() => setPicking(true)} onRemove={sourceId => void operate({ kind: "material", agenda: selected, remove: sourceId })} onRetry={() => void loadProgress()} />
@@ -410,5 +391,5 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
     {picking && selected && <FormDialog title="从知识库添加资料" busy={busy} onClose={() => { if (!busy) setPicking(false); }}><MaterialPicker projectId={projectId} taken={(selected.payload.materials ?? []).map(item => item.sourceId)} busy={busy}
       onCancel={() => setPicking(false)} onChoose={sourceIds => { const target = selected; setPicking(false); void operate({ kind: "material", agenda: target, sourceIds }); }} /></FormDialog>}
     {confirm && <ConfirmDialog title={confirm.kind === "pause" ? "暂停任务？" : "删除任务？"} body={confirm.kind === "pause" ? "暂停后将取消正在进行和排队中的研究，已产生的结果会保留。" : "删除后停止后续计划，取消正在进行和排队中的研究，并保留历史研究结果。"} tone="danger" confirmLabel={confirm.kind === "pause" ? "暂停任务" : "删除任务"} onCancel={() => setConfirm(null)} onConfirm={() => { const action = confirm; setConfirm(null); void operate(action); }} />}
-  </div>;
+  </MasterDetail>;
 }
