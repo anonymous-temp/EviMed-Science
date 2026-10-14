@@ -9,7 +9,7 @@ import { foldOutcome, reducedPriority } from "./autopilotOutcome.mjs";
 import { AGENDA_WINDOW_MS, agendaAllowance, agendaBudget, budgetFreesAt, taskBudgetRefusal } from "./agendaBudget.mjs";
 import { sourceIdFor } from "./sourceService.mjs";
 import { HttpError } from "./security.mjs";
-import { AUTOPILOT_BUDGET_ERROR_CODES } from "@evimed/domain";
+import { AUTOPILOT_BUDGET_ERROR_CODES, AUTOPILOT_VERIFICATION_ROUTE_REASON } from "@evimed/domain";
 
 /**
  * The platform's brief for an execution of a `routine` task: the researcher's instruction, the day, what to hand over, and the
@@ -99,8 +99,9 @@ function daysWithoutActivity(agenda, now) {
 /** The researcher's verdict on a direction, from the decisions they made since they last started it. */
 function userRejected(agenda) { return agenda.payload.userSignal?.rejected === true; }
 
-/** What a verification run is marked with, in the one field a completion callback reads. */
-export const VERIFICATION_ROUTE_REASON = "autopilot-verify";
+/** What a verification run is marked with, in the one field a completion callback reads. The domain's: the lists, the learning loop and the
+ *  researcher's own activity read the same reason there (`runRoleOf`, `isResearcherOwnedWork`). */
+export const VERIFICATION_ROUTE_REASON = AUTOPILOT_VERIFICATION_ROUTE_REASON;
 /** The one file a verification writes. Its body is the verdict; nothing else is read. */
 export const VERIFICATION_ARTIFACT = "verification.json";
 // `episode-<32 hex>-v<n>`: an episode id plus the claim's position among the

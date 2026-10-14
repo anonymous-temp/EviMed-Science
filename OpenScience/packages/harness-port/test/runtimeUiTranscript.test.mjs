@@ -4,7 +4,10 @@
 // backstage rows hidden for a researcher and kept for an operator.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import vm from 'node:vm';
 
+import { PLATFORM_CONTEXT_TAGS } from '@evimed/domain';
+import { FRAME_VOCABULARY, partsSource, renderFrameClient } from '../src/runtimeUiFrame.mjs';
 import { apply, BODY, historyWanted, withoutPlatformBlocks } from '../src/runtimeUiTranscript.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, realReact, renderStatic } from './helpers/frameFakes.mjs';
 
@@ -234,4 +237,76 @@ test("an operator's transcript keeps the block, as it keeps every other backstag
   const target = fakeTarget({ frame: { operator: true } });
   apply(ctx, {}, target, undefined, kitFor(ctx, target));
   assert.equal(ctx.slots.registrations.filter((/** @type {any} */ entry) => ['user', 'steering'].includes(entry.options.key) && entry.options.priority === -1).length, 0);
+});
+
+// 2026-10-14: the owner's walk opened a verification run's conversation and read the signed budget marker, in plain text, in the
+// user bubble (`<evimed-budget-scope>eyJ2…</evimed-budget-scope>`). The body now draws the researcher's message without any tag of
+// the domain's closed list, whichever the platform wrote.
+const MARKER = '<evimed-budget-scope>eyJ2IjoxLCJ1c2VySWQiOiJjZHNzLWFjY2VzcyJ9.w6jCg41oIRUJZxanRM2CpBU9sSutrXI9N2xYOBf3-nw</evimed-budget-scope>';
+
+/** @param {any} content */
+function drawnUser(content, kind = 'user') {
+  const ctx = fakeCtx({ slots: kernel(), sessions: sessionsFake({}).service });
+  const target = fakeTarget();
+  apply(ctx, {}, target, undefined, kitFor(ctx, target));
+  const row = ctx.slots.registrations.find((/** @type {any} */ entry) => entry.options.key === kind && entry.options.priority === -1).component;
+  assert.deepEqual(target.warnings, []);
+  return renderStatic(row, { node: userNode(kind, content), t });
+}
+
+test("a verification run's message is drawn without its tag or its signed budget marker", () => {
+  const prompt = '独立核验另一研究：主张“2 年死亡率 5.0%”是否与来源一致。';
+  const dispatched = `${prompt}\n\n<evimed-autopilot-verification>episode-0123456789abcdef0123456789abcdef-v1</evimed-autopilot-verification>\n${MARKER}`;
+  const bubble = drawnUser([{ type: 'text', text: dispatched }]);
+  assert.equal(bubble, `<div data-kernel-user="user">${prompt}</div>`);
+  assert.doesNotMatch(bubble, /evimed|eyJ2|episode-/);
+  // A bounded run whose marker rides in a part of its own, and a message the researcher steered with.
+  assert.equal(drawnUser([{ type: 'text', text: prompt }, { type: 'text', text: MARKER }], 'steering'), `<div data-kernel-user="steering">${prompt}</div>`);
+});
+
+test('every tag of the domain list goes with what it holds, and the researcher\'s words around it stay', () => {
+  for (const { tag, role } of PLATFORM_CONTEXT_TAGS) {
+    const text = `开头 <${tag} id="x">内部内容 ${tag}</${tag}> 结尾`;
+    const bubble = drawnUser([{ type: 'text', text }]);
+    if (role === 'injected') assert.equal(bubble, '<div data-kernel-user="user">开头  结尾</div>', tag);
+    else assert.equal(bubble, `<div data-kernel-user="user">开头 内部内容 ${tag} 结尾</div>`, `${tag}: the researcher's own words are kept, only the wrapper goes`);
+    assert.doesNotMatch(bubble, new RegExp(`<\\/?${tag}[\\s&>]`), tag);
+  }
+});
+
+test('a block is taken whole: nested tags, attributes, a missing close, a stray close, a lookalike', () => {
+  /** @param {string} text */
+  const drawn = (text) => withoutPlatformBlocks([{ type: 'text', text }], FRAME_VOCABULARY.platformTags);
+  // A block that holds other platform tags, and one with the same name inside it.
+  assert.deepEqual(drawn('问题\n<evimed-brief><evimed-claim>甲</evimed-claim><evimed-brief>内层</evimed-brief>尾</evimed-brief>\n后文'), [{ type: 'text', text: '问题\n\n后文' }]);
+  // Never closed: to the end of its text. A part left empty is dropped.
+  assert.deepEqual(drawn('问题 <evimed-memory index="2">未关闭的内容'), [{ type: 'text', text: '问题' }]);
+  assert.deepEqual(drawn('<evimed-repair>只有平台的话</evimed-repair>'), []);
+  // A stray closing tag and a self-closing one carry nothing.
+  assert.deepEqual(drawn('甲</evimed-brief>乙<evimed-run/>丙'), [{ type: 'text', text: '甲乙丙' }]);
+  // A longer name is not read as a shorter one, and a name that is not on the list is the researcher's own text.
+  assert.deepEqual(drawn('<evimed-claim-source>来源</evimed-claim-source>留下'), [{ type: 'text', text: '留下' }]);
+  const plain = [{ type: 'text', text: '比较 <evimed-claimant> 与 <evimed-briefing>x</evimed-briefing> 的写法' }];
+  assert.equal(withoutPlatformBlocks(plain, FRAME_VOCABULARY.platformTags), plain, 'a lookalike is not on the list, so the message is returned as it is');
+  // Called without a vocabulary, the result selection is the one block it knows.
+  const brief = [{ type: 'text', text: '<evimed-brief>x</evimed-brief>' }];
+  assert.equal(withoutPlatformBlocks(brief), brief);
+});
+
+test('the shipped bundle is built from the closed list', () => {
+  const { injected, wrappers } = FRAME_VOCABULARY.platformTags;
+  assert.deepEqual([...injected, ...wrappers].filter((name) => name.startsWith('evimed-')).sort(),
+    PLATFORM_CONTEXT_TAGS.map((entry) => entry.tag).filter((name) => name.startsWith('evimed-')).sort(), 'the frame is built from the domain list, not a copy of it');
+  assert.ok(injected.includes('openviking-context') && injected.includes('evimed-budget-scope') && injected.includes('evimed_result_selection'));
+  assert.deepEqual([...wrappers], ['evimed-correction']);
+  const bundle = renderFrameClient();
+  assert.match(bundle, /"platformTags":\{"injected":\[[^\]]*"evimed-budget-scope"/);
+  assert.match(bundle, /function withoutPlatformText\(/);
+});
+
+test('the function the browser receives, as emitted text in a page with no module and no Node global, strips the same blocks', () => {
+  const shipped = vm.runInNewContext(partsSource(BODY.parts, 'withoutPlatformBlocks'), {});
+  const text = `核对这条主张。\n\n<evimed-autopilot-verification>episode-0123456789abcdef0123456789abcdef-v1</evimed-autopilot-verification>\n${MARKER}`;
+  const stripped = shipped([{ type: 'text', text }, { type: 'image', attachment: { id: 'a' } }], FRAME_VOCABULARY.platformTags);
+  assert.deepEqual(JSON.parse(JSON.stringify(stripped)), [{ type: 'text', text: '核对这条主张。' }, { type: 'image', attachment: { id: 'a' } }]);
 });

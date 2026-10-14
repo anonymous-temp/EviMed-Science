@@ -75,7 +75,12 @@
  * see. There is no spending window or budget in the default configuration
  * (owner ruling of 2026-09-21); an operator can still set both.
  * Researcher-owned GEO and proactive episodes participate by owner decision
- * of 2026-09-29; their completion does not count as a new human visit.
+ * of 2026-09-29; their completion does not count as a new human visit. The
+ * independent re-check of such an episode's claim (a verification run, route
+ * reason `autopilot-verify`, the programme's `autopilot-verify:evidence`) is the
+ * platform's own work on the task's behalf and is refused here (2026-10-14: it
+ * carries no `automated` and no `autopilot:` prefix, so it read as a turn of the
+ * researcher's; `isResearcherOwnedWork` in the domain is the one place that says so).
  *
  * @module learningTriggers
  */

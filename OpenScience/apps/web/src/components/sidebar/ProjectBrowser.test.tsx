@@ -645,6 +645,68 @@ describe("ProjectBrowser — search", () => {
   });
 });
 
+// 2026-10-14: a scheduled task's claims are re-checked by runs of their own in the project's ledger, and the owner's 「我的研究」 listed 14 of
+// them as 「独立核验另一研究…」 with 45 more behind 「展开其余」. The server marks such a run (`role`); no list of conversations draws it.
+describe("ProjectBrowser — the platform's own re-checks are not conversations", () => {
+  const recheck = (id: string, overrides: Partial<WebAgentRun> = {}) => run({
+    id, question: `独立核验另一研究：主张 ${id}`, role: "verification", agentId: "open-domain-answer", ...overrides,
+  });
+  let release: (() => void) | null = null;
+  afterEach(() => {
+    release?.();
+    release = null;
+  });
+
+  it("leaves them out of the rows and out of the count behind 「展开其余」, whatever their title says", async () => {
+    mocks.runs.default = [
+      ...Array.from({ length: 6 }, (_, index) => run({ id: `own${index}`, question: `我的任务 ${index}` })),
+      ...Array.from({ length: 20 }, (_, index) => recheck(`check${index}`)),
+      // A person's conversation that happens to be titled alike is still theirs: the mark decides, never the words.
+      run({ id: "alike", question: "独立核验另一研究：我自己写的" }),
+    ];
+    renderBrowser();
+    await screen.findByRole("link", { name: /我的任务 0/ });
+    expect(screen.queryByText(/主张 check/)).toBeNull();
+    // 7 conversations of the person's, five shown, two behind the button — not 27 and 22.
+    expect(screen.getByRole("button", { name: "展开其余 2 条对话" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "展开其余 2 条对话" }));
+    expect(screen.getByRole("link", { name: /独立核验另一研究：我自己写的/ })).toBeInTheDocument();
+    expect(screen.queryByText(/主张 check/)).toBeNull();
+  });
+
+  it("does not make a project look busy while one is running, and says none when only they are there", async () => {
+    mocks.runs.default = [run({ id: "own", question: "做完的任务" }), recheck("check0", { status: "running", finishedAt: null })];
+    renderBrowser();
+    expect(await screen.findByRole("button", { name: /^我的研究\s*（当前项目）$/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /有对话正在运行/ })).toBeNull();
+
+    mocks.runs.default = [recheck("check1"), recheck("check2")];
+    window.dispatchEvent(new Event(RUNS_CHANGED_EVENT));
+    expect(await screen.findByText("还没有对话")).toBeInTheDocument();
+  });
+
+  it("does not find them by search, nor offer them as a match of the kernel's own index", async () => {
+    release = provideFrameSessionSearch(async () => ({
+      ok: true,
+      hasMore: false,
+      items: [
+        { sessionId: "ses-check0", title: "独立核验另一研究：主张 ASPREE", snippet: "ASPREE" },
+        { sessionId: "sess-x", title: "引用了 ASPREE 的对话", snippet: "ASPREE 研究显示…" },
+      ],
+    }));
+    mocks.runs.default = [run({ id: "own", question: "阿司匹林 ASPREE 的任务" }), recheck("check0", { question: "独立核验另一研究：主张 ASPREE" })];
+    renderBrowser();
+    await screen.findByRole("link", { name: /阿司匹林 ASPREE 的任务/ });
+    await userEvent.click(screen.getByRole("button", { name: "搜索对话" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索对话" }), "ASPREE");
+
+    expect(await screen.findByRole("link", { name: /引用了 ASPREE 的对话/ })).toBeInTheDocument();
+    expect(screen.queryByText(/独立核验另一研究/)).toBeNull();
+    const results = screen.getByRole("list", { name: "搜索结果" });
+    expect(within(results).getAllByRole("listitem")).toHaveLength(1);
+  });
+});
+
 describe("ProjectBrowser — creating and renaming", () => {
   // The field said 「新项目名」 and refused every Chinese name, because it was
   // the server's id (review B §2). It takes a name; the server keys it. And a

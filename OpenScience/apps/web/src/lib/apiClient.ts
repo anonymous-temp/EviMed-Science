@@ -814,6 +814,12 @@ export interface WebAgentRun {
    */
   connectorNeeds?: string[];
   dispatchStatus: "dispatching" | "accepted" | "unknown" | "rejected";
+  /**
+   * What the platform's own bookkeeping calls this run, when it is not the person's conversation (`runRoleOf` in the domain, derived by the
+   * server from the route reason it wrote at dispatch): `verification` is the independent re-check of a scheduled task's claim. A list of
+   * conversations leaves such a run out (`isConversationRun`); the ledger and the task's page still hold it. Absent on an ordinary run.
+   */
+  role?: "verification";
   /** Put away by the researcher; the lists leave it out. */
   archived?: boolean;
   /** Removed by the researcher; nothing lists it again. */

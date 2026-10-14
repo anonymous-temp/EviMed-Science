@@ -9,6 +9,12 @@ import {
   isResearcherOwnedWork,
   isChargeableResearchRun,
   PLATFORM_ROUTE_PURPOSES,
+  AUTOPILOT_VERIFICATION_ROUTE_REASON,
+  EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON,
+  RUN_ROLES,
+  isVerificationRouteReason,
+  isVerificationRun,
+  runRoleOf,
 } from "../index.mjs";
 
 test('managed research belongs to its researcher, but platform self-measurement does not', () => {
@@ -128,3 +134,29 @@ test("the evidence programme's overhead and an account's own zone upkeep are two
   assert.equal(charge.billableCny, "0.50000000", "only the upkeep row is the owner's");
   assert.equal(charge.platformCostCny, "0.50000000", "the programme row stays overhead");
 });
+
+// 2026-10-14: the independent re-check of a scheduled task's claim was read as the researcher's own work (its route reason is not an
+// `autopilot:` one and its `automated` is unset), so it reached the learning loop and the lists of what the person did.
+test('a verification run is the platform\'s work, whichever kind, and the execution it checks stays the researcher\'s', () => {
+  assert.equal(AUTOPILOT_VERIFICATION_ROUTE_REASON, 'autopilot-verify')
+  for (const effectiveRouteReason of [AUTOPILOT_VERIFICATION_ROUTE_REASON, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON]) {
+    const run = { effectiveRouteReason, effectiveAgentId: 'open-domain-answer' }
+    assert.equal(isVerificationRun(run), true, effectiveRouteReason)
+    assert.equal(isResearcherOwnedWork(run), false, effectiveRouteReason)
+    assert.equal(isResearcherOwnedWork({ ...run, automated: false }), false, effectiveRouteReason)
+    assert.equal(runRoleOf(run), 'verification', effectiveRouteReason)
+  }
+  // The money is untouched: the task's budget pays for it, as the ruling that held a share back for it says.
+  assert.equal(isChargeableResearchRun({ effectiveRouteReason: AUTOPILOT_VERIFICATION_ROUTE_REASON, effectiveAgentId: 'open-domain-answer' }), true)
+  // The episode itself, and every other reason, is as it was.
+  for (const effectiveRouteReason of ['autopilot:literature-sentinel', 'autopilot:routine', 'geo:content', 'vcr:analysis', 'unrouted:open-domain', 'session-binding', 'choice:literature-search', 'autopilot-verifyx', 'autopilot-verify:', '']) {
+    const run = { effectiveRouteReason, effectiveAgentId: 'open-domain-answer' }
+    assert.equal(isVerificationRun(run), false, effectiveRouteReason)
+    assert.equal(runRoleOf(run), null, effectiveRouteReason)
+  }
+  assert.equal(isResearcherOwnedWork({ effectiveRouteReason: 'autopilot:literature-sentinel', effectiveAgentId: 'clinical-evidence-synthesis' }), true)
+  assert.equal(isResearcherOwnedWork({ effectiveRouteReason: 'unrouted:open-domain', effectiveAgentId: 'open-domain-answer' }), true)
+  assert.equal(isVerificationRouteReason(null), false)
+  assert.equal(runRoleOf(null), null)
+  assert.deepEqual([...RUN_ROLES], ['verification'])
+})

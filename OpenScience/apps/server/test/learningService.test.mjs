@@ -634,7 +634,7 @@ test("each earlier version of a method can be read, and the runs that taught eac
   const created = await f.learning.createCandidate("alice", { ...base, projectId: "meta", display: { title: "引用标记对齐", summary: "每个标记对应一条。" },
     steps: "1. 对应标记", scope: { applicability: "写需要参考文献的报告时", counterexamples: ["没有引用时"] } });
   await f.learning.amendMethod("alice", created.id, { expectedRevision: created.revision, ...base,
-    body: `${base.body}\n## Notes\nSecond body.`, provenance: { origin: "inferred", runId: "run_2", sourceProjectId: "meta" }, display: { title: "引用标记对齐", summary: "更新后。" } });
+    body: `${base.body}\n## Notes\nSecond body.`, provenance: { origin: "inferred", runId: "run_2", sourceProjectId: "meta", trigger: "correction" }, display: { title: "引用标记对齐", summary: "更新后。" } });
   const versions = await f.learning.history("alice", created.id);
   assert.deepEqual(versions.map((item) => [item.version, item.summary]), [[2, "更新后。"], [1, "每个标记对应一条。"]]);
   assert.equal(versions[1].steps, "1. 对应标记");
@@ -642,6 +642,10 @@ test("each earlier version of a method can be read, and the runs that taught eac
   assert.equal("body" in versions[1], false, "steps are what is read when there are any");
   assert.ok(versions[0].body.includes("Second body."), "and the text when there are none");
   assert.deepEqual(await f.learning.sourceRuns("alice", created.id), [{ projectId: "meta", runId: "run_2" }, { projectId: "meta", runId: "run_1" }]);
+  // The lessons carry the trigger that queued each one, for the report of what a method was learnt from (`learned-method-sources.mjs`).
+  assert.deepEqual(await f.learning.sourceLessons("alice", created.id), [
+    { projectId: "meta", runId: "run_2", trigger: "correction" }, { projectId: "meta", runId: "run_1", trigger: null },
+  ]);
 });
 
 /* ----------------------------------------------- carried and never opened */

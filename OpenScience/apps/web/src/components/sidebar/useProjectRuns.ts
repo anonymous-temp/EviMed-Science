@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
+import { isConversationRun } from "@/lib/conversations";
 import { RUNS_CHANGED_EVENT, runState } from "@/lib/runPresentation";
 
 /** How often the watched ledgers are read again while the tab is visible. */
@@ -11,8 +12,10 @@ export type ProjectRuns =
   | { status: "failed" }
   | { status: "ready"; runs: WebAgentRun[] };
 
+/** Whether a conversation of the person's is working: the platform's own re-check running behind a task is not a conversation, and
+ *  neither pulses a project's mark nor keeps its ledger watched. */
 export function isRunning(run: WebAgentRun): boolean {
-  return runState(run).key === "running";
+  return isConversationRun(run) && runState(run).key === "running";
 }
 
 /**

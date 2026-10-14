@@ -8,10 +8,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { METHOD_INDUCTION_MIN_TRAJECTORIES } from "@evimed/domain";
+import { EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, METHOD_INDUCTION_MIN_TRAJECTORIES } from "@evimed/domain";
+import { VERIFICATION_ROUTE_REASON } from "../src/autopilotService.mjs";
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
-  DELIVERY_SAMPLE_PURPOSE, LearningTriggers, REPAIR_SAMPLE_PURPOSE, ROUTINE_PERIOD_DAYS, correctionLessonFor, learningTriggersFor, lessonPeers, routinePeriodMs,
+  DELIVERY_SAMPLE_PURPOSE, LearningTriggers, REPAIR_SAMPLE_PURPOSE, ROUTINE_PERIOD_DAYS, correctionLessonFor, learningTriggersFor, lessonPeers, routineFamily, routinePeriodMs,
 } from "../src/learningTriggers.mjs";
 import { sampledByHash } from "../src/runSampling.mjs";
 import { DISTILLATION_TRIGGERS, buildDistillationInput, distillationDispatchId, lessonSignal } from "../src/methodDistillationRuns.mjs";
@@ -331,6 +332,27 @@ test("researcher-owned GEO and proactive work feed learning while internal evalu
     const evaluating = { ...subject, dispatchId: "methodeval_a1b2c3", effectiveRouteReason: "platform-learning" };
     assert.deepEqual(learningTriggersFor({ run: evaluating, runs: [evaluating], project: projectOf("research") }), []);
   }
+});
+
+// 2026-10-14: the independent re-check of a scheduled execution's claim (`autopilot-verify`, and the programme's `autopilot-verify:evidence`) carries no
+// `automated` and no `autopilot:` prefix, so it read as the researcher's own turn; 14 of them stood in the owner's ledger beside 5 executions. The owner's
+// ruling of 2026-09-29 keeps the *execution* (researcher-owned proactive work); the platform's re-check of it is not the researcher's work.
+test("a verification run is not a lesson, whichever reason it carries, while the execution it checks still is", () => {
+  for (const effectiveRouteReason of [VERIFICATION_ROUTE_REASON, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON]) {
+    for (const extra of [{}, { automated: true }, { automated: false }]) {
+      const verification = run({ effectiveAgentId: "open-domain-answer", effectiveRouteReason, outputFiles: ["verification.json"], corrections: 1, ...extra });
+      assert.deepEqual(learningTriggersFor({ run: verification, runs: [verification], project: projectOf("research") }), [], `${effectiveRouteReason} ${JSON.stringify(extra)}`);
+    }
+  }
+  const episode = run({ effectiveAgentId: "open-domain-answer", effectiveRouteReason: "autopilot:routine", outputFiles: ["briefs/今日.md"] });
+  assert.deepEqual(triggers(learningTriggersFor({ run: episode, runs: [episode], project: projectOf("research") })), ["delivered"]);
+  // And a verification is no peer of a routine: it is never counted into the family an induction reads.
+  const capability = "clinical-evidence-synthesis";
+  const executions = Array.from({ length: METHOD_INDUCTION_MIN_TRAJECTORIES }, () => run({ automated: true, effectiveAgentId: capability, effectiveRouteReason: "autopilot:literature-sentinel" }));
+  const checks = Array.from({ length: 3 }, () => run({ effectiveAgentId: capability, effectiveRouteReason: VERIFICATION_ROUTE_REASON }));
+  const ledger = { project: projectOf("research"), runs: [...checks, ...executions] };
+  const members = routineFamily({ run: executions.at(-1), owner: "user_1", capabilityId: capability, ledgers: [ledger] });
+  assert.deepEqual(members.map((member) => member.run.id), executions.map((item) => item.id));
 });
 
 test("managed research completes the same cross-project routine as interactive work", () => {
