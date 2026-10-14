@@ -438,7 +438,7 @@ test("a person's two words reach the choosers as the derived actions' verdicts: 
     { id: "a-fix", groupId: "g-p1", layer: "correction", status: "publishable", title: "更正", createdAt: ago(4) },
   ];
   const errors = [{ id: "e-1", fingerprint: "f1", engine: "doubao", groupId: "g-p1", severity: "S3", status: "open", statement: "错", materials: [{ articleId: "a-fix" }], createdAt: ago(9) }];
-  const derive = (/** @type {Array<Record<string, any>>} */ choices) => deriveGeoActions({ ...base(), strategy: { ...base().strategy, gaps: twoGaps }, articles, errors, choices });
+  const derive = (/** @type {Array<{ key: string, skipped?: boolean, sourceDomain?: string | null }>} */ choices) => deriveGeoActions({ ...base(), strategy: { ...base().strategy, gaps: twoGaps }, articles, errors, choices });
   const skip = (/** @type {string[]} */ ...keys) => keys.map((key) => ({ key, skipped: true }));
 
   const none = geoChoiceEffects(derive([]).actions);
