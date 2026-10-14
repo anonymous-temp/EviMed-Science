@@ -84,7 +84,8 @@ function StepList({ study, studyId }: { study: VcrStudy; studyId: string }) {
           const status = record?.status ?? "none";
           const state = RAIL[status] ?? "todo";
           const note = study.stepSummaries[step]?.note ?? null;
-          const moved = record?.updatedAt ? Date.parse(record.updatedAt) : Number.NaN;
+          // A step nobody has started or that is only in line has no time of its own: the row of the study's creation would read as news.
+          const moved = record?.updatedAt && status !== "none" && status !== "queued" ? Date.parse(record.updatedAt) : Number.NaN;
           return (
             <ListRow
               key={step}

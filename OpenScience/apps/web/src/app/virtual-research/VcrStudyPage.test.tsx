@@ -190,6 +190,20 @@ describe("the seven tabs", () => {
     expect(screen.getByRole("tab", { name: /^匹配与招募/ }).querySelector("[data-tab-dot]")).toHaveAttribute("data-tab-dot", "todo");
   });
 
+  it("tells when a step moved in the overview's list, and says nothing of time for a step nobody has started", async () => {
+    const recent = new Date(Date.now() - 5 * 60_000).toISOString();
+    const study = fixture("ev201/study.json");
+    study.steps.trial = { ...study.steps.trial, status: "done", updatedAt: recent };
+    study.steps.matching = { ...study.steps.matching, status: "none", updatedAt: recent };
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+    draw();
+    await heading();
+    const rowOf = (step: string) => document.querySelector(`[data-vcr-step-row="${step}"]`)!.closest("li") as HTMLElement;
+    await waitFor(() => expect(rowOf("trial")).toHaveTextContent("5 分钟前"));
+    expect(rowOf("matching")).toHaveTextContent("未开始");
+    expect(rowOf("matching")).not.toHaveTextContent("分钟前");
+  });
+
   // Contract §5: every tab renders from what the server sends, and none of
   // them takes the page down.
   it.each(["overview", "population", "patients", "comparator", "trial", "matching", "data"])("renders %s from the server's own payload", async (tab) => {
