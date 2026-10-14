@@ -837,6 +837,9 @@ function objectList(data, field, max, issues, parse) {
     const parsed = parse(/** @type {Record<string, any>} */ (entry), index);
     if (parsed) out.push(parsed);
   });
+  // A list every entry of which was refused is not a list to replace what the project holds with: the write is told what was refused,
+  // and what was stored stays (a run's file written under names of its own once emptied the stored plan). An empty list given is a clear.
+  if (value.length > 0 && out.length === 0) return undefined;
   return out;
 }
 
@@ -901,8 +904,11 @@ function validatedBattlefield(given, secondaryGiven, issues, parent) {
     action: read.text("action", 800, { multiline: true }), groups, reason: read.text("reason", 1000, { multiline: true }), secondary };
   if (read.refused) return undefined;
   // The groups are always there (the orchestrator reads them); the rest only when the run wrote it.
-  return Object.fromEntries(Object.entries(value).filter(([key, entryValue]) => key === "groups"
+  const kept = Object.fromEntries(Object.entries(value).filter(([key, entryValue]) => key === "groups"
     || (entryValue != null && !(Array.isArray(entryValue) && entryValue.length === 0))));
+  // Nothing of it recognised (the names were a run's own): not a battlefield to replace the stored one with.
+  if (Object.keys(kept).length === 1 && groups.length === 0) return undefined;
+  return kept;
 }
 
 /**
@@ -1116,6 +1122,8 @@ function validatedStrategy(data, issues) {
         const value = validatedExpectation(/** @type {Record<string, any>} */ (entry), index, issues);
         if (value) strategy.expectations.push(value);
       });
+      // Every entry refused is not a replacement (see objectList).
+      if (expectations.length > 0 && strategy.expectations.length === 0) delete strategy.expectations;
     }
   }
   if (data.gaps != null) {
@@ -1128,6 +1136,7 @@ function validatedStrategy(data, issues) {
         const value = validatedGap(/** @type {Record<string, any>} */ (entry), index, issues);
         if (value) strategy.gaps.push(value);
       });
+      if (data.gaps.length > 0 && strategy.gaps.length === 0) delete strategy.gaps;
     }
   }
   if (data.layout != null) {
@@ -1157,6 +1166,7 @@ function validatedStrategy(data, issues) {
         const value = Object.fromEntries(GEO_SOURCE_LAYERS.map((layer) => [layer, item.texts(layer, 50, 200)]));
         if (!item.refused) strategy.layout[engine] = value;
       }
+      if (Object.keys(strategy.layout).length === 0) delete strategy.layout;
     }
   }
   const noGo = objectList({ noGo: data.noGo ?? data.no_go }, "noGo", 20, issues, (entry, index) => {

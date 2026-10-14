@@ -562,6 +562,30 @@ test("journey, strategy and placement preferences are versions, and each refused
   assert.deepEqual((await store.latestPlacementPlan(project.id))?.data.avoid, ["fake-times.cn"]);
 });
 
+test("a write whose every entry is refused leaves what the project holds as it was; an empty list given is a clear", options, async () => {
+  const project = await measured(await freshProject());
+  const good = await write(project, "strategy", { data: {
+    gaps: [{ gapId: "A", class: "benefit_only", groupId: "g", judgment: "只讲获益" }],
+    battlefield: { id: "BF-01", name: "主战场", groups: ["品牌身份"] },
+    expectations: [{ engine: "deepseek", promise: "可以承诺被提及" }],
+    noGo: [{ item: "不承诺位次", reason: "无依据" }],
+  } });
+  assert.equal(good.ok, true, JSON.stringify(good.issues));
+  const held = (await store.latestStrategy(project.id));
+  // The same plan under names of the run's own: every entry refused, nothing replaced, no new version.
+  const own = await write(project, "strategy", { data: {
+    gaps: [{ title: "自拟", impact: "后果" }], battlefield: { primary: "某群" }, expectations: [{ label: "豆包" }], noGo: [{ what: "x" }],
+  } });
+  assert.equal(own.ok, false, "nothing was written, and it says so");
+  const after = await store.latestStrategy(project.id);
+  assert.equal(after.version, held.version);
+  assert.deepEqual([after.gaps.length, after.battlefield.groups, after.expectations.length, after.noGo.length], [1, ["品牌身份"], 1, 1]);
+  // An explicit empty list is the run clearing it.
+  const cleared = await write(project, "strategy", { data: { noGo: [] } });
+  assert.equal(cleared.ok, true);
+  assert.deepEqual((await store.latestStrategy(project.id)).noGo, []);
+});
+
 test("a field the platform does not know is one notice for the items that carry it, and it names what the object keeps", options, async () => {
   const project = await measured(await freshProject());
   const gap = (/** @type {string} */ id) => ({ gapId: id, class: "benefit_only", groupId: "g", judgment: "只讲获益", title: "自拟的名字", impact: "后果" });
