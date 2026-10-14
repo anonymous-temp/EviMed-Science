@@ -28,7 +28,7 @@
  "held": 0,
  "pending": 0,
  "readable": 13,
- "minSources": 3,
+ "minSources": 1,
  "round": 3,
  "language": "zh-cn",
  "compiledAt": "2026-10-13T04:29:03.209Z",

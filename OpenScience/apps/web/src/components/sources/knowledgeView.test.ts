@@ -30,6 +30,14 @@ describe("statusLine", () => {
     expect(statusLine(status({ state: "below_threshold", readable: 0, pages: 0 }), NOW)).toBeNull();
   });
 
+  it("starts from one document (the default threshold is one): a lone document is ready or queued, and only an empty project is below it", () => {
+    const lone = { readable: 1, minSources: 1, pages: 0, typedPages: { wiki: 0, kg: 0 } };
+    expect(statusLine(status({ ...lone, state: "idle" }), NOW)).toMatchObject({ text: "资料已就绪，随时可以整理成知识页", canCompile: true, busy: false });
+    expect(statusLine(status({ ...lone, state: "queued" }), NOW)).toMatchObject({ text: "资料有更新，稍后会自动整理", busy: true, canCompile: false });
+    // An empty project says nothing, however low the threshold: there is nothing for a line to be about.
+    expect(statusLine(status({ ...lone, readable: 0, state: "below_threshold" }), NOW)).toBeNull();
+  });
+
   it("says the page limit as one sentence with no number in it", () => {
     const line = statusLine(status({ state: "page_limit" }), NOW)!;
     expect(line.text).toMatch(/^页数已到上限，不再整理新的内容/u);

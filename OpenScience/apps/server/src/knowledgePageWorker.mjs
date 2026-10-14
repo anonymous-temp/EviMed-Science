@@ -9,14 +9,26 @@ import { randomUUID } from "node:crypto";
  * backoff; when the job's attempts are spent the round is closed (`recordFailure`), what is mirrored stays, and the next
  * change asks for a new round.
  *
+ * It also makes the periodic pass of `KnowledgePageService.catchUpAll`, when it is given the projects to look at: the first
+ * round of a project whose documents were there before anything asked for one. The first pass is a minute after start (the
+ * engine and the ledger are up by then), the rest every `catchUpMs`.
+ *
  * @module knowledgePageWorker
  */
 
 export class KnowledgePageWorker {
-  /** @param {{ jobs: any, service: any, pollMs?: number, leaseMs?: number }} dependencies */
-  constructor({ jobs, service, pollMs = 5000, leaseMs = 900_000 }) {
+  /**
+   * @param {{ jobs: any, service: any, pollMs?: number, leaseMs?: number, projects?: (() => Promise<Array<{ userId: string, projectId: string }>>) | null,
+   *   catchUpMs?: number, firstCatchUpMs?: number }} dependencies
+   */
+  constructor({ jobs, service, pollMs = 5000, leaseMs = 900_000, projects = null, catchUpMs = 900_000, firstCatchUpMs = 60_000 }) {
     if (!jobs || !service) throw new TypeError("KnowledgePageWorker dependencies are required.");
     this.jobs = jobs; this.service = service; this.pollMs = pollMs; this.leaseMs = leaseMs;
+    this.projects = projects; this.catchUpMs = catchUpMs; this.firstCatchUpMs = firstCatchUpMs;
+    /** @type {any} */ this.catchUpTimer = null;
+    /** @type {any} */ this.firstCatchUp = null;
+    /** @type {Promise<any> | null} */ this.catchingUp = null;
+    /** @type {{ at: string, projects: number, scheduled: number, error: string | null } | null} */ this.lastCatchUp = null;
     this.workerId = `knowledge-pages-${randomUUID()}`;
     /** @type {any} */ this.timer = null;
     /** @type {Promise<any> | null} */ this.running = null;
@@ -28,7 +40,23 @@ export class KnowledgePageWorker {
     if (this.timer) return;
     this.timer = setInterval(() => { void this.tick(); }, this.pollMs);
     this.timer.unref();
+    if (this.projects) {
+      this.catchUpTimer = setInterval(() => { void this.catchUp(); }, this.catchUpMs);
+      this.catchUpTimer.unref();
+      this.firstCatchUp = setTimeout(() => { void this.catchUp(); }, this.firstCatchUpMs);
+      this.firstCatchUp.unref();
+    }
     void this.tick();
+  }
+
+  /** One periodic pass over the projects that hold documents; a pass already under way is the answer to a second ask. */
+  catchUp() {
+    if (this.catchingUp || !this.projects || !this.service.enabled) return this.catchingUp;
+    this.catchingUp = this.service.catchUpAll({ projects: this.projects })
+      .then((/** @type {any} */ summary) => { this.lastCatchUp = summary; return summary; })
+      .catch(() => null)
+      .finally(() => { this.catchingUp = null; });
+    return this.catchingUp;
   }
 
   async tick() {
@@ -90,12 +118,15 @@ export class KnowledgePageWorker {
   }
 
   status() {
-    return { running: Boolean(this.running), lastError: this.lastError, lastCompletedAt: this.lastCompletedAt };
+    return { running: Boolean(this.running), lastError: this.lastError, lastCompletedAt: this.lastCompletedAt, lastCatchUp: this.lastCatchUp };
   }
 
   async close() {
     if (this.timer) clearInterval(this.timer);
-    this.timer = null;
+    if (this.catchUpTimer) clearInterval(this.catchUpTimer);
+    if (this.firstCatchUp) clearTimeout(this.firstCatchUp);
+    this.timer = null; this.catchUpTimer = null; this.firstCatchUp = null;
     await this.running;
+    await this.catchingUp;
   }
 }

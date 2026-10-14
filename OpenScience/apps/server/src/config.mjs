@@ -3419,11 +3419,12 @@ export function loadConfig(overrides = {}) {
     // `OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED` (`ovKnowledgeEnabled` above, on when the engine is this deployment's index); the
     // self-built compiler it replaced, and its `OPEN_SCIENCE_KNOWLEDGE_PAGES_ENABLED`, were removed on 2026-10-13 without
     // ever having been switched on. What is here is when to compile: per project, driven by changes to its documents, after
-    // `knowledgePagesDebounceMs` of quiet and not before `knowledgePagesMinSources` documents are readable (below that
-    // `kb_search` reads the whole library anyway). The caps count what this account's compile tasks used, as the engine
+    // `knowledgePagesDebounceMs` of quiet and not before `knowledgePagesMinSources` documents are readable — one by default
+    // (2026-10-14: a threshold of five left a researcher with one document, and a small library, with an empty graph and a line
+    // asking for four more; a gate of ours, and the account's own caps already bound the cost). The caps count what this account's compile tasks used, as the engine
     // reports it when each ends (CNY; 0 = no cap): a round is not started past them, and a task is asked to stop after
     // `knowledgePagesTaskTimeoutMs`. `knowledgeGraphEnabled` off compiles the wiki only.
-    knowledgePagesMinSources: Math.max(1, Math.min(200, Math.trunc(Number(overrides.knowledgePagesMinSources ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_MIN_SOURCES ?? 5)) || 5)),
+    knowledgePagesMinSources: Math.max(1, Math.min(200, Math.trunc(Number(overrides.knowledgePagesMinSources ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_MIN_SOURCES ?? 1)) || 1)),
     knowledgePagesDebounceMs: Math.max(0, Math.min(86_400_000, Math.trunc(Number(overrides.knowledgePagesDebounceMs ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_DEBOUNCE_MS ?? 600_000)) || 0)),
     knowledgePagesDailyLimitCny: Number(overrides.knowledgePagesDailyLimitCny ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_DAILY_LIMIT_CNY ?? 10),
     knowledgePagesWeeklyLimitCny: Number(overrides.knowledgePagesWeeklyLimitCny ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_WEEKLY_LIMIT_CNY ?? 40),

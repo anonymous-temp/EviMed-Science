@@ -4128,7 +4128,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     knowledgePageRoutes = createKnowledgePageRoutes({ store, service: knowledgePages, sources: sourceService, maxJsonBytes: config.maxJsonBytes });
     if (knowledgeActive) {
-      knowledgePagesWorker = new KnowledgePageWorker({ jobs: productJobs, service: knowledgePages, pollMs: config.knowledgePagesPollMs, leaseMs: config.knowledgePagesLeaseMs });
+      knowledgePagesWorker = new KnowledgePageWorker({ jobs: productJobs, service: knowledgePages, pollMs: config.knowledgePagesPollMs, leaseMs: config.knowledgePagesLeaseMs,
+        // The first round of a project whose documents were there before anything asked for one: the same projects and the same cadence as the engine's copy.
+        projects: () => readableSourceProjects(productDatabase), catchUpMs: config.knowledgeSourceSyncReconcileMs });
     }
   }
   if (learningService && productJobs && config.learningEnabled) {
