@@ -3587,8 +3587,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
       };
       // The person's turn is over: the conversation's engine session is committed once its quiet has passed, so a short
-      // conversation reaches extraction while the runtime lives. Arms a timer; never waits for the commit.
-      await step("memory.native_turn_commit", () => nativeTurnCommit.noteRunFinished(project, run));
+      // conversation reaches extraction while the runtime lives. Arms a timer and is not waited for (it never throws, and
+      // its one settings read is not a reason for the rest of this completion to wait).
+      await step("memory.native_turn_commit", () => { void nativeTurnCommit.noteRunFinished(project, run); });
       try {
       await step("evolution.runtime", () => completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork }));
       const gapCode = evolution && !internalFor(project.userId, project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
