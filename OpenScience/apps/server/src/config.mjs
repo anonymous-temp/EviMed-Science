@@ -2722,6 +2722,21 @@ export function loadConfig(overrides = {}) {
     // given up (the engine never retries one; each replay is one extraction call, backed off from one minute).
     nativeMemoryScanMs: boundedInteger(overrides.nativeMemoryScanMs ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS, 60_000, 5_000, 3_600_000, "OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS"),
     nativeMemoryReplayAttempts: boundedInteger(overrides.nativeMemoryReplayAttempts ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS, 5, 0, 20, "OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS"),
+    // The turn committer (`nativeTurnCommit.mjs`): the plugin commits a conversation only at a token threshold no ordinary
+    // conversation reaches and when its session is disposed (hours away while the runtime lives), so the control plane
+    // commits the engine session itself after an attended turn. Each limit protects a resource and has a counter
+    // (`open_science_native_memory_turn_commits_total`):
+    //  - the quiet before the commit: the plugin's own writes of the turn are asynchronous, and a person who writes again
+    //    within it makes one commit of two turns;
+    //  - two reads of the engine's session this far apart must agree before it is committed, for at most this many reads;
+    //  - commits in flight at once, and conversations waiting for their quiet (a bound on memory, not an opinion).
+    // Each commit that finds something pending is one extraction call, paid by the platform.
+    nativeMemoryTurnCommitEnabled: overrides.nativeMemoryTurnCommitEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ENABLED", true),
+    nativeMemoryTurnCommitDebounceMs: boundedInteger(overrides.nativeMemoryTurnCommitDebounceMs ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_DEBOUNCE_MS, 8_000, 500, 600_000, "OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_DEBOUNCE_MS"),
+    nativeMemoryTurnCommitSettleMs: boundedInteger(overrides.nativeMemoryTurnCommitSettleMs ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_SETTLE_MS, 2_000, 100, 30_000, "OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_SETTLE_MS"),
+    nativeMemoryTurnCommitAttempts: boundedInteger(overrides.nativeMemoryTurnCommitAttempts ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ATTEMPTS, 4, 1, 10, "OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ATTEMPTS"),
+    nativeMemoryTurnCommitConcurrency: boundedInteger(overrides.nativeMemoryTurnCommitConcurrency ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_CONCURRENCY, 2, 1, 16, "OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_CONCURRENCY"),
+    nativeMemoryTurnCommitMaxScheduled: boundedInteger(overrides.nativeMemoryTurnCommitMaxScheduled ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_MAX_SCHEDULED, 1_000, 10, 100_000, "OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_MAX_SCHEDULED"),
     // The similarity below which an index hit is not offered: by the memory
     // page's search (2026-09-26 audit, M-4: 「信尔美」 also listed five unrelated
     // memories of another project) and, since 2026-10-10 (review M-3), by the

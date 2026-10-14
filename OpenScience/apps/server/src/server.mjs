@@ -398,6 +398,7 @@ import { OpenVikingSessions } from "./openVikingSessions.mjs";
 import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
 import { NativeMemoryStore } from "./nativeMemoryStore.mjs";
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
+import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { nativeMemoryMetricFamilies } from "./nativeMemoryMetrics.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
 import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, extractionEmptyCause } from "./memoryIntelligence.mjs";
@@ -3585,6 +3586,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           return undefined;
         }
       };
+      // The person's turn is over: the conversation's engine session is committed once its quiet has passed, so a short
+      // conversation reaches extraction while the runtime lives. Arms a timer; never waits for the commit.
+      await step("memory.native_turn_commit", () => nativeTurnCommit.noteRunFinished(project, run));
       try {
       await step("evolution.runtime", () => completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork }));
       const gapCode = evolution && !internalFor(project.userId, project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
@@ -4755,6 +4759,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     overlay: nativeMemoryOverlay.configured ? nativeMemoryOverlay : null,
     // The conversation's `forget` tool is the page's own deletion, by URI: the file, its revision, the rejection that keeps it away.
     memoryTool: nativeMemory,
+  });
+  // An attended turn of a native account is committed to the engine a few seconds after it ends (`nativeTurnCommit.mjs`):
+  // the plugin commits only at a token threshold an ordinary conversation never reaches and when its session is disposed.
+  // It goes through the gateway's own commit path, so the admission rule, the hourly bound and the ledger are the same.
+  const nativeTurnCommit = new NativeTurnCommit({
+    config, researchMemory, sessions: openVikingSessions, admission: memoryAdmission,
+    conversations: { runsOf: (project, sessionId) => agentRuns.conversationRuns(project, sessionId) },
+    commit: memoryGatewayHandler.commitSession,
+    report: (line) => process.stderr.write(`${line}\n`),
   });
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext, evaluationIsolation,
     memoryEngine: (/** @type {string} */ userId) => researchMemory.memoryEngine(userId),
@@ -8139,6 +8152,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     memoryIndexWorker,
     nativeMemory,
     nativeMemoryWorker,
+    nativeTurnCommit,
     sourceService,
     sourceWorker,
     knowledgePages,
@@ -8275,6 +8289,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await hostedExtensions?.worker.close();
       await memoryIndexWorker?.close();
       nativeMemoryWorker.close();
+      nativeTurnCommit.close();
       openVikingEngine?.close();
       await sourceWorker?.close();
       await knowledgePagesWorker?.close();
