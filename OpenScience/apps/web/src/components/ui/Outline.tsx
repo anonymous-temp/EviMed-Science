@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { ArrowUp, ListTree } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { STICKY_BELOW_BAND, STICKY_COLUMN_MAX_HEIGHT } from "@/components/layout/chrome";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Tooltip } from "@/components/ui/Tooltip";
 
@@ -92,9 +93,6 @@ export function useOutline(
   return { entries, active, select };
 }
 
-/** The offset the column keeps from the top: the page's band (if it has one) and a rem. */
-const COLUMN_STICKY = "top-[calc(var(--page-chrome-h,0px)+1rem)] max-h-[calc(100vh-var(--page-chrome-h,0px)-6rem)]";
-
 export function Outline({ entries, active, onSelect, layout, onTop, label = "目录", className }: {
   entries: readonly OutlineEntry[];
   /** The id of the section being read. */
@@ -146,7 +144,7 @@ export function Outline({ entries, active, onSelect, layout, onTop, label = "目
     else column.current?.parentElement?.closest(".overflow-y-auto")?.scrollTo({ top: 0 });
   };
   return (
-    <aside ref={column} data-outline="" data-print-hide="" className={cn("sticky w-56 shrink-0 self-start overflow-y-auto", COLUMN_STICKY, className)}>
+    <aside ref={column} data-outline="" data-print-hide="" className={cn("sticky w-56 shrink-0 self-start overflow-y-auto", STICKY_BELOW_BAND, STICKY_COLUMN_MAX_HEIGHT, className)}>
       <p className="mb-2 flex items-center gap-1.5 px-2 text-caption font-medium text-muted"><ListTree size={16} aria-hidden="true" />{label}</p>
       {contents}
       {/* A 60 KB report needs a way back up (appendix D §4.5). */}

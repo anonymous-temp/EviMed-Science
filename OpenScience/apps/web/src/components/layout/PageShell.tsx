@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PAGE_CHROME_VAR } from "@/components/layout/chrome";
 import { cn } from "@/lib/cn";
 import { ActivityStrip, type ActivityStripProps } from "@/components/ui/ActivityStrip";
 import { Headline, type HeadlineProps } from "@/components/ui/Headline";
@@ -198,13 +199,13 @@ export function PageShell<V extends string = string>({
     const element = band.current;
     const holder = column.current;
     if (!hasBand || !element || !holder) return undefined;
-    const publish = () => holder.style.setProperty("--page-chrome-h", `${element.offsetHeight}px`);
+    const publish = () => holder.style.setProperty(PAGE_CHROME_VAR, `${element.offsetHeight}px`);
     publish();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(publish);
     observer?.observe(element);
     return () => {
       observer?.disconnect();
-      holder.style.removeProperty("--page-chrome-h");
+      holder.style.removeProperty(PAGE_CHROME_VAR);
     };
   }, [hasBand]);
 
