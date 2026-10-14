@@ -149,9 +149,10 @@ describe("PageShell slots", () => {
         unobserve() {}
       });
     };
+    // Held at the top of the scroll container: the band is no longer wholly inside the root shrunk by a pixel.
     const scrollPast = (container: HTMLElement) => {
       act(() => {
-        callback?.([{ isIntersecting: false, boundingClientRect: { top: -20 }, rootBounds: { top: 0 } } as unknown as IntersectionObserverEntry], {} as IntersectionObserver);
+        callback?.([{ intersectionRatio: 0.97, boundingClientRect: { top: 0 }, rootBounds: { top: 1 } } as unknown as IntersectionObserverEntry], {} as IntersectionObserver);
       });
       return container.querySelector("[data-page-chrome]") as HTMLElement;
     };

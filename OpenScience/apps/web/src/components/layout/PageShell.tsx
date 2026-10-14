@@ -192,7 +192,6 @@ export function PageShell<V extends string = string>({
 }: PageShellProps<V>) {
   const scroller = useRef<HTMLDivElement>(null);
   const band = useRef<HTMLDivElement>(null);
-  const sentinel = useRef<HTMLDivElement>(null);
   // The band has a hairline under it once the header has scrolled out from over it.
   const [stuck, setStuck] = useState(false);
   const hasBand = Boolean(steps || activity || tabs || toolbar !== undefined);
@@ -211,16 +210,18 @@ export function PageShell<V extends string = string>({
     };
   }, [hasBand]);
 
+  // Stuck: the band is held at the top of the scroll container, which is when a 1 px shrunken root no longer holds all of it.
+  // (The band itself is observed, so the page has no marker element between its header and the band.)
   useEffect(() => {
-    const marker = sentinel.current;
-    if (!hasBand || !marker || typeof IntersectionObserver === "undefined") return undefined;
+    const element = band.current;
+    if (!hasBand || !element || typeof IntersectionObserver === "undefined") return undefined;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry) setStuck(!entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0));
+        if (entry) setStuck(entry.intersectionRatio < 1 && entry.boundingClientRect.top <= (entry.rootBounds?.top ?? 0));
       },
-      { root: scroller.current, threshold: 0 },
+      { root: scroller.current, rootMargin: "-1px 0px 0px 0px", threshold: [1] },
     );
-    observer.observe(marker);
+    observer.observe(element);
     return () => observer.disconnect();
   }, [hasBand]);
 
@@ -248,25 +249,22 @@ export function PageShell<V extends string = string>({
           documentTitle={documentTitle}
         />
         {hasBand && (
-          <>
-            <div ref={sentinel} aria-hidden="true" className="h-px" />
-            <div
-              ref={band}
-              data-page-chrome=""
-              data-stuck={stuck ? "" : undefined}
-              className={cn(
-                "sticky top-0 z-sticky -mx-4 bg-bg px-4 md:-mx-6 md:px-6",
-                // The hairline is as wide as the content, not the band: it is drawn only once the header has gone from over it.
-                !lastRowRuled && "after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:opacity-0 after:transition-opacity after:duration-fast data-[stuck]:after:opacity-100 md:after:inset-x-6",
-              )}
-            >
-              {steps && <StepRail {...steps} />}
-              {activity && <div className="pb-2"><ActivityStrip {...activity} /></div>}
-              {tabs && <Tabs label={tabs.label} items={tabs.items} value={tabs.value} onChange={tabs.onChange} panelId={tabs.panelId} />}
-              {toolbar === null && <div aria-hidden="true" className={TOOLBAR_ROW} />}
-              {toolbar && <div className={toolbar.views ? undefined : cn(TOOLBAR_ROW, "py-2")}><Toolbar {...toolbar} /></div>}
-            </div>
-          </>
+          <div
+            ref={band}
+            data-page-chrome=""
+            data-stuck={stuck ? "" : undefined}
+            className={cn(
+              "sticky top-0 z-sticky -mx-4 bg-bg px-4 md:-mx-6 md:px-6",
+              // The hairline is as wide as the content, not the band: it is drawn only once the header has gone from over it.
+              !lastRowRuled && "after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:opacity-0 after:transition-opacity after:duration-fast data-[stuck]:after:opacity-100 md:after:inset-x-6",
+            )}
+          >
+            {steps && <StepRail {...steps} />}
+            {activity && <div className="pb-2"><ActivityStrip {...activity} /></div>}
+            {tabs && <Tabs label={tabs.label} items={tabs.items} value={tabs.value} onChange={tabs.onChange} panelId={tabs.panelId} />}
+            {toolbar === null && <div aria-hidden="true" className={TOOLBAR_ROW} />}
+            {toolbar && <div className={toolbar.views ? undefined : cn(TOOLBAR_ROW, "py-2")}><Toolbar {...toolbar} /></div>}
+          </div>
         )}
         {headline && <Headline {...headline} className={cn("mt-4", headline.className)} />}
         <div
