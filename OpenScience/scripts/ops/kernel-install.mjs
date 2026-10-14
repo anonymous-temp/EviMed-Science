@@ -12,8 +12,8 @@
  * the pin. One cutoff, read from `deps-version.json`, for both.
  *
  * Where that cutoff comes from. It was "the CLI's publish instant plus one
- * hour", written by hand. That rule gave ETARGET for 0.2.0-rc.2: one of its
- * subpackages (`dsh-client-ui-settings-account`) was re-published an hour and
+ * hour", written by hand. That rule gave ETARGET for the 0.2 line's first
+ * release candidate: one of its subpackages (`dsh-client-ui-settings-account`) was re-published an hour and
  * twenty minutes after the CLI, so a cutoff an hour after the CLI excluded a
  * member of the closure it was meant to fence. The cutoff is a property of the
  * closure, not of the CLI, so it is computed from the closure: the latest

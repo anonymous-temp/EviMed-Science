@@ -1,11 +1,12 @@
 // The registry cutoff of the pinned kernel is computed from the closure, never typed.
 //
-// 2026-10-14: the rule written beside the pin was "the CLI's publish instant plus one hour". For 0.2.0-rc.2 it gave
-// ETARGET: a subpackage (`dsh-client-ui-settings-account`) was re-published an hour and twenty minutes after the CLI, so
-// the cutoff fenced out a member of the very closure it exists to fence. The cutoff is a property of the closure.
+// 2026-10-14: the rule written beside the pin was "the CLI's publish instant plus one hour". For the first release
+// candidate of the 0.2 line it gave ETARGET: a subpackage (`dsh-client-ui-settings-account`) was re-published an hour
+// and twenty minutes after the CLI, so the cutoff fenced out a member of the very closure it exists to fence. The
+// cutoff is a property of the closure.
 //
-// The fixture is a recording of the registry's publish times for the 278 `@deepseek-ai/dsh*` packages the pin resolved
-// to (`node scripts/ops/kernel-install.mjs cutoff --record <file>`), so the computation is replayed here without a
+// The fixture is a recording of the registry's publish times for the `@deepseek-ai/dsh*` packages the pin resolved to
+// (`node scripts/ops/kernel-install.mjs cutoff --record <file>`), so the computation is replayed here without a
 // network, and the committed cutoff is held equal to what the recording computes.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -45,9 +46,9 @@ test("the rule this replaced, the CLI's instant plus an hour, fences a member ou
   const fixture = recording();
   const oldRule = Date.parse(fixture.root.time) + 3_600_000;
   const straggler = fixture.members.find((member) => Date.parse(member.time) > oldRule);
-  if (pins.dsh.version === "0.2.0-rc.2") assert.equal(straggler?.name, "@deepseek-ai/dsh-client-ui-settings-account");
-  // For another pin the property still reads: the computed cutoff is never earlier than the old rule's when a straggler exists.
+  // The recording that taught this rule has a straggler; a pin whose closure has none still passes the second half.
   if (straggler) assert.ok(Date.parse(cutoffFor(fixture.members).publishedBefore) > oldRule);
+  assert.ok(Date.parse(cutoffFor(fixture.members).publishedBefore) >= oldRule - 3_600_000, "the computed cutoff is not earlier than the CLI itself");
 });
 
 test("a cutoff is refused where the resolution is not credible", () => {
@@ -60,21 +61,22 @@ test("a cutoff is refused where the resolution is not credible", () => {
 });
 
 test("a lock file's kernel members are read from every nesting, once each", () => {
+  const v = pins.dsh.version;
   const lock = {
     packages: {
       "": { name: "scratch" },
-      "node_modules/@deepseek-ai/dsh": { version: "0.2.0-rc.2" },
-      "node_modules/@deepseek-ai/dsh-agent": { version: "0.2.0-rc.2" },
-      "node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-session": { version: "0.2.0-rc.2" },
+      "node_modules/@deepseek-ai/dsh": { version: v },
+      "node_modules/@deepseek-ai/dsh-agent": { version: v },
+      "node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-session": { version: v },
       "node_modules/@deepseek-ai/cordis": { version: "4.0.4" },
       "node_modules/js-yaml": { version: "4.3.2" },
-      "node_modules/other/node_modules/@deepseek-ai/dsh-agent": { version: "0.2.0-rc.2" },
+      "node_modules/other/node_modules/@deepseek-ai/dsh-agent": { version: v },
     },
   };
   assert.deepEqual(closureFromLock(lock), [
-    { name: "@deepseek-ai/dsh", version: "0.2.0-rc.2" },
-    { name: "@deepseek-ai/dsh-agent", version: "0.2.0-rc.2" },
-    { name: "@deepseek-ai/dsh-session", version: "0.2.0-rc.2" },
+    { name: "@deepseek-ai/dsh", version: v },
+    { name: "@deepseek-ai/dsh-agent", version: v },
+    { name: "@deepseek-ai/dsh-session", version: v },
   ]);
   assert.deepEqual(closureFromLock({}), []);
 });

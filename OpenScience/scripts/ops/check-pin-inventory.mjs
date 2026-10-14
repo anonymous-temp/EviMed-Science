@@ -97,6 +97,13 @@ export const RULES = [
     why: "a response recorded verbatim off a live upstream, named with its time in the directory's provenance.json; rewriting a version in it claims a recording that never happened",
   },
   {
+    // What the registry said about the closure of the kernel pin, kept so the cutoff's arithmetic is replayed without a
+    // network (`kernel-install.mjs cutoff --record`). It names the version it was recorded for in every member.
+    kind: "provenance",
+    where: /^OpenScience\/scripts\/ops\/test\/fixtures\/kernel-closure-times-[^/]+\.json$/,
+    why: "a recording of the registry's publish instants for one pin's closure; it is re-recorded for the next pin, never re-dated, and the test beside it holds its version equal to the pin",
+  },
+  {
     kind: "provenance",
     where: /^OpenScience\/apps\/server\/src\/(dshMux|dshRuntimeAdapter|mockDshRuntime)\.mjs$/,
     why: "the wire these modules implement was read off the running kernel named here",

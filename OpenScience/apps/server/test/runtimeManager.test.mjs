@@ -3527,7 +3527,7 @@ function probeManager(proof, registry = null) {
   manager.callKernel = async (/** @type {any} */ _r, /** @type {any} */ _p, /** @type {string} */ method) => { asked.push(method); return proof; };
   return { manager, asked };
 }
-const citeProof = { binaryVersion: "0.3.2", enabled: true, revision: 7, timeoutMs: 4000, tools: [...recordedCite.tools].reverse() };
+const citeProof = { binaryVersion: recordedCite.version, enabled: true, revision: 7, timeoutMs: 4000, tools: [...recordedCite.tools].reverse() };
 const citeExpected = { revision: 7, enabled: true, settings: { timeoutMs: 4000 } };
 
 test("dsh-cite's probe verdict is the verdict it always was", async () => {
@@ -3540,7 +3540,7 @@ test("dsh-cite's probe verdict is the verdict it always was", async () => {
   // production apply (2026-09-27) could not tell whether a comparison had
   // failed at all.
   for (const [broken, reason] of [
-    [{ ...citeProof, binaryVersion: "0.3.3" }, 'binaryVersion "0.3.3", expected "0.3.2"'],
+    [{ ...citeProof, binaryVersion: "0.0.0" }, `binaryVersion "0.0.0", expected "${recordedCite.version}"`],
     [{ ...citeProof, revision: 6 }, "revision 6, expected 7"],
     [{ ...citeProof, timeoutMs: 5000 }, "timeoutMs 5000, expected 4000"],
     [{ ...citeProof, tools: recordedCite.tools.slice(1) }, "tools ["],
@@ -3552,7 +3552,7 @@ test("dsh-cite's probe verdict is the verdict it always was", async () => {
     await assert.rejects(probeManager(broken).manager.probePlugin(project, citeExpected),
       (/** @type {any} */ error) => error.status === 502 && error.code === "plugin_probe_invalid" && error.message.includes(reason));
   }
-  assert.equal(pluginProofMismatch(citeProof, citeExpected, "0.3.2", ["timeoutMs"], [...recordedCite.tools]), null);
+  assert.equal(pluginProofMismatch(citeProof, citeExpected, recordedCite.version, ["timeoutMs"], [...recordedCite.tools]), null);
   // The source's health rides beside the proof and is never part of its
   // verdict: Crossref answering 429 (or timing out, as a quarter of requests
   // from the production host did on 2026-09-26) is a proved configuration with

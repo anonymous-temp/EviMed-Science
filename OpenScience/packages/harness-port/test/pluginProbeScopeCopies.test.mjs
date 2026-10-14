@@ -17,6 +17,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { __setHarnessModule, loadHarnessModule } from '../index.mjs'
 import { registerCitationConfiguration, registerPluginProbe } from '../src/pluginProbe.mjs'
+import { CITE_VERSION } from './helpers/pins.mjs'
 
 const scopeUrl = import.meta.resolve('@deepseek-ai/dsh-scope')
 const kernelScope = await import(scopeUrl)
@@ -86,7 +87,7 @@ test('a probe proves the configuration of a real standing composition, with a se
   __setHarnessModule('@deepseek-ai/dsh-scope', secondScope)
   // A minimal typert: the class and the decorator only; the wire is not under test.
   __setHarnessModule('@deepseek-ai/dsh-typert-protocol', { TypertRemoteService: class {}, Remote: () => {} })
-  const { kernel, root, agents, setups } = kernelWithStandingPreset({ binaryVersion: '0.3.2', enabled: false, timeoutMs: 10000, revision: 1 })
+  const { kernel, root, agents, setups } = kernelWithStandingPreset({ binaryVersion: CITE_VERSION, enabled: false, timeoutMs: 10000, revision: 1 })
   // A researcher's session already running on the same standing composition.
   const user = kernelAgent(root, 'user-session')
   await kernel.agentPresets.mount(user.ctx, 'evimed-universal')
@@ -94,7 +95,7 @@ test('a probe proves the configuration of a real standing composition, with a se
 
   const probe = await registerPluginProbe(kernel)
   const proof = await probe.verify()
-  assert.deepEqual(proof, { binaryVersion: '0.3.2', enabled: false, revision: 1, timeoutMs: 10000, tools: [], upstream: null })
+  assert.deepEqual(proof, { binaryVersion: CITE_VERSION, enabled: false, revision: 1, timeoutMs: 10000, tools: [], upstream: null })
   // Its agent was the one the kernel handed setup, hidden from host listeners
   // before publication.
   assert.equal(setups.length, 1)

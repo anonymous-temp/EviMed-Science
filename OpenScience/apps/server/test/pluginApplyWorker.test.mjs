@@ -4,6 +4,7 @@ import { PLUGIN_ID, PLUGIN_SUPPORT_SNAPSHOT, pluginRegistryFrom } from '../src/p
 import { HttpError } from '../src/security.mjs';
 import { PluginApplyWorker, applyPluginCandidate, jobPluginId, pluginFailure } from '../src/pluginApplyWorker.mjs';
 import { RuntimeManager } from '../src/runtimeManager.mjs';
+import { CITE_VERSION } from './fixtures/pins.mjs';
 const candidate={revision:2,enabled:false,settings:{timeoutMs:5000}};
 const previous={revision:1,enabled:true,settings:{timeoutMs:4000}};
 test('candidate failure restores and independently verifies the previous configuration',async()=>{
@@ -107,7 +108,7 @@ function managerWithKernel(proofFor) {
   return { manager, project, running: () => running };
 }
 const proofOf = (/** @type {any} */ config, /** @type {any} */ upstream) => ({
-  binaryVersion: '0.3.2', revision: config.revision, enabled: config.enabled, timeoutMs: config.settings.timeoutMs,
+  binaryVersion: CITE_VERSION, revision: config.revision, enabled: config.enabled, timeoutMs: config.settings.timeoutMs,
   tools: config.enabled ? citeTools : [], upstream,
 });
 
@@ -206,7 +207,7 @@ function workerHarness({ pluginId, registry, busy = false, runtimeThrows = false
   const job = { userId: 'owner', id: 'job-1', projectId: project.id, leaseToken: 'lease-1', payload };
   const document = {
     revision: 3, last_good: null,
-    payload: { schemaVersion: 1, pluginId: pluginId ?? PLUGIN_ID, binaryVersion: (registry ?? new Map()).get(pluginId ?? PLUGIN_ID)?.version ?? '0.3.2', enabled: true, settings: pluginId ? {} : { timeoutMs: 4000 } },
+    payload: { schemaVersion: 1, pluginId: pluginId ?? PLUGIN_ID, binaryVersion: (registry ?? new Map()).get(pluginId ?? PLUGIN_ID)?.version ?? CITE_VERSION, enabled: true, settings: pluginId ? {} : { timeoutMs: 4000 } },
   };
   /** @type {{text:string,values:any[]}[]} */ const statements = [];
   /** @type {any[]} */ const probed = [];

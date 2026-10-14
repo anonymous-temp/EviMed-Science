@@ -23,13 +23,13 @@ test("the extension contracts state the kernel they are written for once, and ev
   for (const file of [
     "OpenScience/packages/domain/src/extensions.mjs",
     "OpenScience/scripts/ops/test/prepareExtensionAcceptance.test.mjs",
-  ]) assert.equal(classify({ file, line: 1, text: "dshVersion: '0.1.7-rc.2'" }, { pin: "0.1.7-rc.2" })?.kind, "pin", file);
+  ]) assert.equal(classify({ file, line: 1, text: "dshVersion: '0.2.0-rc.2'" }, { pin: "0.2.0-rc.2" })?.kind, "pin", file);
   // The three modules that used to carry their own copy no longer have a rule that would classify one.
   for (const file of [
     "OpenScience/apps/server/src/extensionDeployment.mjs", "OpenScience/apps/server/src/extensionGenerationService.mjs",
     "OpenScience/packages/harness-port/src/extensionPreparation.mjs",
-  ]) assert.equal(classify({ file, line: 1, text: "dshVersion: '0.1.7-rc.2'" }, { pin: "0.1.7-rc.2" }), null, file);
-  assert.equal(classify({ file: "OpenScience/packages/harness-port/src/unreviewedPreparation.mjs", line: 1, text: "0.1.7-rc.2" }), null);
+  ]) assert.equal(classify({ file, line: 1, text: "dshVersion: '0.2.0-rc.2'" }, { pin: "0.2.0-rc.2" }), null, file);
+  assert.equal(classify({ file: "OpenScience/packages/harness-port/src/unreviewedPreparation.mjs", line: 1, text: "0.2.0-rc.2" }), null);
 
   // And they really do derive it: no prerelease literal, and a read of the one definition.
   const root = new URL("../../../", import.meta.url);
@@ -128,19 +128,19 @@ test("a contract fixture recorded off a live upstream is provenance, whatever th
   // any prerelease string would make that version "the kernel's" to the sweep,
   // and the whole recorded page an occurrence to classify. It is what a
   // service answered at a recorded time: a batch replace must never reach it.
-  const line = '{"entries":[{"title":"DeepSeek harness 0.1.7-rc.2 notes","seq":7}]}';
+  const line = '{"entries":[{"title":"DeepSeek harness 0.2.0-rc.2 notes","seq":7}]}';
   for (const file of [
     "OpenScience/packages/contracts/knowledge-plugin/fixtures/entries-page-1.json",
     "OpenScience/packages/contracts/knowledge-plugin/fixtures/provenance.json",
     "OpenScience/packages/contracts/evimed-extract/fixtures/health.json",
     "OpenScience/evals/acceptance/local-integration-20261010/skills-native/community/transcript.json",
   ]) {
-    assert.equal(classify({ file, line: 1, text: line }, { pin: "0.1.7-rc.2" })?.kind, "provenance", file);
+    assert.equal(classify({ file, line: 1, text: line }, { pin: "0.2.0-rc.2" })?.kind, "provenance", file);
   }
   // Narrow on purpose: the recorder and the test beside the fixtures are this
   // repository's own code and are classified by what their lines say.
-  assert.equal(classify({ file: "OpenScience/packages/contracts/knowledge-plugin/fixtures/record.mjs", line: 1, text: "const pin = \"0.1.7-rc.2\";" }, { pin: "0.1.7-rc.2" }), null);
-  assert.equal(classify({ file: "OpenScience/packages/contracts/knowledge-plugin/contract.test.mjs", line: 1, text: "const pin = \"0.1.7-rc.2\";" }, { pin: "0.1.7-rc.2" }), null);
+  assert.equal(classify({ file: "OpenScience/packages/contracts/knowledge-plugin/fixtures/record.mjs", line: 1, text: "const pin = \"0.2.0-rc.2\";" }, { pin: "0.2.0-rc.2" }), null);
+  assert.equal(classify({ file: "OpenScience/packages/contracts/knowledge-plugin/contract.test.mjs", line: 1, text: "const pin = \"0.2.0-rc.2\";" }, { pin: "0.2.0-rc.2" }), null);
 });
 
 test("the escaped spelling is swept, which is what the rewriter missed", async () => {
@@ -168,11 +168,11 @@ test("a file no rule claims is reported rather than absorbed", () => {
     "OpenScience/runtime/mcp/evimed-research/server.py",
     "OpenScience/capabilities/clinical-evidence-synthesis/capability.yaml",
   ]) {
-    assert.equal(classify({ file, line: 1, text: "0.1.7-rc.2" }), null, `${file} must be reported, not defaulted`);
+    assert.equal(classify({ file, line: 1, text: "0.2.0-rc.2" }), null, `${file} must be reported, not defaulted`);
   }
   // And a rule cannot claim everything: the catch-all that would make this
   // test pass forever is the failure mode, so assert a real path still lands
   // where it should.
-  assert.equal(classify({ file: "OpenScience/deps-version.json", line: 4, text: '"version": "0.1.7-rc.2"' })?.kind, "pin");
+  assert.equal(classify({ file: "OpenScience/deps-version.json", line: 4, text: '"version": "0.2.0-rc.2"' })?.kind, "pin");
   assert.ok(RULES.every((rule) => rule.why && rule.why.length > 20), "every rule states why its kind is the right one");
 });

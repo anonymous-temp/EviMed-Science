@@ -20,18 +20,18 @@
     }
   },
   "dsh": {
-    "version": "0.1.7-rc.2",
+    "version": "0.2.0-rc.2",
     "cordis": "4.0.4",
-    "publishedBefore": "2026-09-24T15:18:11.337Z",
+    "publishedBefore": "2026-09-29T11:18:03.848Z",
     "npmPackage": "@deepseek-ai/dsh",
     "contractDir": "packages/contracts/dsh",
     "notes": "The 0.1.7 line's second release candidate (published 2026-09-24T14:18:11Z; npm's `latest` and `next` at adoption), adopted on 2026-09-28 on the criterion in decision #25 -- this version's running binary probed on the wire plus our own battery -- not on the tag. The survey and the evidence are in outputs/2026-09-28-dsh-upgrade/ (diff.md, evidence/). The closure: 240 -> 283 packages (+49, -6). The 73 kernel subpackages are now declared exact, but cordis (~4.0.4), its loader plugins and schemastery (~3.18.4) are still tilde ranges, so `publishedBefore` -- written once here, equal to both images' DSH_PUBLISHED_BEFORE, the publish instant plus one hour -- still decides the tree; installed through it: 273 dsh* packages, 0 drifted, cordis 4.0.4. The nightly seam check installs through the same cutoff (scripts/ops/kernel-install.mjs); installing without it is why that job was red from 2026-09-22. What moved, and what we changed for it: (1) the DeepSeek adapter speaks Anthropic Messages only (`POST /v1/messages`, x-api-key), so the model gateway grew a Messages route whose usage receipt reads message_start/message_delta, and the release receipt is its first real-provider check; (2) session format 4 -- a tool result is its own `tool` message, every message source names its producer (`plugin:<name>`; a bare `plugin` is refused), and a v3 file is read in memory and replaced by a v4 successor on its first write-open, which 0.1.5 cannot read: going back below 0.1.7 loses the sessions touched since; (3) `agent/session-start` is gone and `agent/created` is serial, so a handler that throws vetoes the agent -- ours never throws; (4) presets are rows (`dsh-agent-preset` + `agent-preset-registry.default`), with no preset roots; (5) `subagents/list` is retired and a session's children are its `subagentCatalog` projection; (6) the browser's session facade lost `open`, `openSubagent` and the list's `current` -- the frame opens through `uiWorkspace.openSession` and reads the current session off the main view's retention, and an ineligible `workspace/initializeDefault` is answered by the control plane; (7) new host surfaces -- plugin manager, terminal, DeepSeek-account sign-in -- are disabled as rows and denied on the wire (124 of 135 methods denied), and the session-log upload, whose default flipped to on, is a disabled row the gateway also refuses; (8) the dump-config baseline was re-recorded (191 rows) after the seeding was calibrated by reproducing the committed 0.1.5 baseline byte for byte. `dsh plugin` manages a profile with pnpm and writes a pnpm-workspace.yaml listing the profile itself, which pnpm 9 refuses to add into without -w; this pin tracks DSH's own packageManager, not the workspace's. Upstream also tags prereleases on GitHub that npm never receives, so the matrix reports the GitHub tag as `upstreamTag` beside the npm `latest`: npm is what is installable and what `behind` means, the tag is the early warning.",
     "pnpm": "11.7.0",
     "githubRepo": "deepseek-ai/deepseek-harness",
     "releaseTagPattern": "^dsh-v\\d+\\.\\d+",
-    "citeVersion": "0.3.2",
-    "annotationVersion": "1.4.10",
-    "mermaidVersion": "0.4.0",
+    "citeVersion": "0.3.5",
+    "annotationVersion": "1.4.11",
+    "mermaidVersion": "0.4.1",
     "communityPeerPins": {
       "cordis": "4.0.0-rc.10"
     }
@@ -62,11 +62,11 @@
     "npmPackage": "@openviking/dsh-memory-plugin",
     "plugin": {
       "name": "@openviking/dsh-memory-plugin",
-      "version": "0.5.20",
-      "filename": "dsh-memory-plugin-0.5.20.tgz",
-      "url": "https://registry.npmjs.org/@openviking/dsh-memory-plugin/-/dsh-memory-plugin-0.5.20.tgz",
-      "sha256": "2e41606123456d32b16bf1d7db69bcd137da1e1357498b1be47813cdb5e42618",
-      "npmIntegrity": "sha512-7TFfADd+8ZuSLNxEs1qg/OzR+ZHalE1XZLBLuCSHx4UGgbCVEte6uolRx0GippXSpsYYhlGGeDBhNPn/zjCWGQ==",
+      "version": "0.5.25",
+      "filename": "dsh-memory-plugin-0.5.25.tgz",
+      "url": "https://registry.npmjs.org/@openviking/dsh-memory-plugin/-/dsh-memory-plugin-0.5.25.tgz",
+      "sha256": "86a061434c12cdb3d70c252e32b437c9db429a5a8afdd298948260a0310a69da",
+      "npmIntegrity": "sha512-e3oU7zo7gALNrP25spPBrBoiKZyNa4+tXjKbrn/Ge1a4NLxqbozWsUmK2ydpVbtd2mxuROXviDMGuZ4UueA/SA==",
       "license": "Apache-2.0",
       "bundleRow": "openviking-memory-runtime"
     },

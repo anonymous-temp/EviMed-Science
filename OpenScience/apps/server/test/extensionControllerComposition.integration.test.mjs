@@ -96,7 +96,7 @@ test('default controller composition independently validates actual ledger/grant
     await fs.writeFile(path.join(parent, 'extensions-deployment.json'), JSON.stringify({
       schemaVersion: 1,
       generatedAt: '2026-10-02T00:00:00.000Z',
-      dshVersion: '0.1.7-rc.2',
+      dshVersion: '0.2.0-rc.2',
       policy: currentExtensionSourcePolicy(),
       catalogue: [entry],
       admittedArtifacts: [artifact],

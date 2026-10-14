@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { HttpError } from "./security.mjs";
 import { migrateProductStore, productId, productInteger } from "./productPersistence.mjs";
 import { ProductDocuments, ProductJobs } from "./productStore.mjs";
+import { CITE_VERSION } from "./pinnedVersions.mjs";
 
 export const PLUGIN_ID = "dsh-cite";
 
@@ -46,7 +47,7 @@ const PLUGIN_SETTINGS_SCHEMAS = Object.freeze({
 export const PLUGIN_SUPPORT_SNAPSHOT = Object.freeze({
   communityToolBundles: [Object.freeze({
     name: "dsh-cite",
-    version: "0.3.2",
+    version: CITE_VERSION,
     status: "installed",
     // The tools the card lists. Omitting them here did not fail anything: the
     // record carries them in a checkout, so dev and every test saw the list,

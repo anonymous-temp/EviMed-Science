@@ -4,13 +4,14 @@ import test from 'node:test';
 import {createPluginRoutes} from '../src/pluginRoutes.mjs';
 import {PluginService,pluginEntry,pluginRegistryFrom,pluginState,validatePluginConfig} from '../src/pluginService.mjs';
 import {HttpError,sendError} from '../src/security.mjs';
+import {CITE_VERSION} from './fixtures/pins.mjs';
 
 // Two registered plugins, so every route is exercised against a registry that
 // is a set rather than one hard-coded id. The widened apply-path set is what
 // landing a second bundle looks like; the shipped registry stays capped, and
 // `pluginService.test.mjs` is where that cap is asserted.
 const registry=pluginRegistryFrom({communityToolBundles:[
-  {name:'dsh-cite',version:'0.3.2',status:'installed',tools:['cite_lookup']},
+  {name:'dsh-cite',version:CITE_VERSION,status:'installed',tools:['cite_lookup']},
   {name:'dsh-notes',version:'1.0.0',status:'installed'},
 ],},new Set(['dsh-cite','dsh-notes']));
 

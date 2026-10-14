@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadHarnessModule } from '../index.mjs'
 import { pluginRuntimeBusy, verifyCitationAgent, registerCitationConfiguration } from '../src/pluginProbe.mjs'
+import { CITE_VERSION } from './helpers/pins.mjs'
 
 /** Every live registration a test made, disposed after it: the registry is
  *  runtime-wide, as the configuration it holds is. */
@@ -26,7 +27,7 @@ test('a queued native input or maintenance task is busy even when status says id
 })
 test('proof observes actual agent registrations and asks the source one fixed health call', async () => {
   /** @type {any[]} */ const calls=[]
-  const config={revision:2,enabled:true,timeoutMs:4000,binaryVersion:'0.3.2'}
+  const config={revision:2,enabled:true,timeoutMs:4000,binaryVersion:CITE_VERSION}
   const { agent, mount } = kernelAgent()
   const names=['cite_lookup','cite_format','cite_bibtex','cite_check','cite_health']
   const { defineTool } = await loadHarnessModule('@deepseek-ai/dsh-tools')
@@ -43,7 +44,7 @@ test('proof observes actual agent registrations and asks the source one fixed he
   const scope=mount()
   await registerCitationConfiguration(scope,config)
   const result=await verifyCitationAgent(ctx,agent)
-  assert.equal(result.timeoutMs,4000);assert.equal(result.binaryVersion,'0.3.2');assert.deepEqual(result.tools,names)
+  assert.equal(result.timeoutMs,4000);assert.equal(result.binaryVersion,CITE_VERSION);assert.deepEqual(result.tools,names)
   assert.deepEqual(result.upstream,{ok:true,code:null})
   assert.deepEqual(calls.map(x=>[x.name,x.arguments]),[['cite_health',{}]],'one source request per proof')
   // A remount with the tools switched off, the old mount disposed as a reload would.
@@ -57,7 +58,7 @@ test('proof observes actual agent registrations and asks the source one fixed he
   assert.equal(calls.length,1)
 })
 
-/** A proof whose `cite_health` answers as dsh-cite 0.3.2 does: `HTTP <status>`
+/** A proof whose `cite_health` answers as the pinned dsh-cite does: `HTTP <status>`
  *  for an answer, the thrown message plus its proxy hint for a transport error.
  *  @param {() => any} health */
 async function proofWith(health) {
@@ -70,7 +71,7 @@ async function proofWith(health) {
     execute: async () => (name === 'cite_health' ? health() : {}),
   })]))
   await registerCitationConfiguration(mount(),
-    { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: '0.3.2' })
+    { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: CITE_VERSION })
   return verifyCitationAgent({ tools: { get: (/** @type {string} */ name) => definitions.get(name) } }, agent)
 }
 /** @param {string} detail */
@@ -92,7 +93,7 @@ test('the source being down is reported beside the proof, never as a failed proo
   ]) {
     const proof = await proofWith(/** @type {() => any} */ (health))
     assert.deepEqual(proof.upstream, { ok: false, code }, String(code))
-    assert.deepEqual([proof.binaryVersion, proof.revision, proof.enabled, proof.timeoutMs, proof.tools.length], ['0.3.2', 1, true, 4000, 5])
+    assert.deepEqual([proof.binaryVersion, proof.revision, proof.enabled, proof.timeoutMs, proof.tools.length], [CITE_VERSION, 1, true, 4000, 5])
   }
 })
 
@@ -118,11 +119,11 @@ test('a failed proof says which check failed and why', async () => {
     (/** @type {any} */ error) => !/\n/.test(error.message) && error.message.length <= 'citation_probe_gateway_failed: '.length + 240)
   // And the registrations a proof found, when they are not the ones it needs.
   const { agent, mount } = kernelAgent()
-  await registerCitationConfiguration(mount(), { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: '0.3.2' })
+  await registerCitationConfiguration(mount(), { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: CITE_VERSION })
   await assert.rejects(verifyCitationAgent({ tools: { get: (/** @type {string} */ name) => name === 'cite_health' ? {} : undefined } }, agent),
     { message: 'citation_probe_registrations_invalid: enabled=true, registered cite_health' })
   // Two different configurations live in one runtime is not a configuration.
-  await registerCitationConfiguration(mount(), { revision: 2, enabled: true, timeoutMs: 4000, binaryVersion: '0.3.2' })
+  await registerCitationConfiguration(mount(), { revision: 2, enabled: true, timeoutMs: 4000, binaryVersion: CITE_VERSION })
   await assert.rejects(verifyCitationAgent({ tools: { get: () => undefined } }, agent),
     { message: 'citation_probe_config_invalid: 2 different citation configurations are live in this runtime' })
   while (mounted.length) mounted.pop()?.()
@@ -141,7 +142,7 @@ test('the isolated native pipeline still validates registered input and output s
       output: { schema: name === 'cite_health' && invalid === 'output' ? { type: 'string' } : { type: 'object', additionalProperties: true }, render: () => [] },
       execute: async () => { executed.push(name); return { ok: true } },
     })]))
-    await registerCitationConfiguration(mount(), { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: '0.3.2' })
+    await registerCitationConfiguration(mount(), { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: CITE_VERSION })
     await assert.rejects(verifyCitationAgent({ tools: { get: (/** @type {string} */ name) => definitions.get(name) } }, agent), /citation_probe_gateway_failed/)
     assert.deepEqual(executed, invalid === 'input' ? [] : ['cite_health'])
   }
@@ -151,7 +152,7 @@ test('extension proof and target facts inspect exact registered definitions and 
   const {registerExtensionConfiguration,verifyExtensionAgent,extensionInvocationFacts}=await import('../src/pluginProbe.mjs');
   const {agent,mount}=kernelAgent({id:'actual-session',status:'idle',session:{header:{id:'actual-session'}}});
   const definitions=new Map([['doc_read',{}],['doc_write',{}]]),plugins=[{extensionId:'dsh-cite',compatibility:'legacy-citation-v1',enabled:false,configRevision:3,settings:{timeoutMs:4000},artifactDigest:'citation',configDigest:'cite-config'},{extensionId:'cowork-portable',enabled:true,configRevision:7,artifactDigest:'cowork',configDigest:'cowork-config'}];
-  await registerCitationConfiguration(mount(),{binaryVersion:'0.3.2',enabled:false,revision:3,timeoutMs:4000});await registerExtensionConfiguration(mount(),{plugins,definitions});
+  await registerCitationConfiguration(mount(),{binaryVersion:CITE_VERSION,enabled:false,revision:3,timeoutMs:4000});await registerExtensionConfiguration(mount(),{plugins,definitions});
   const ctx={agents:{get:(/** @type {string} */ id)=>id===agent.id?agent:null},tools:{get:(/** @type {string} */ name)=>definitions.get(name)}};
   assert.deepEqual((await verifyExtensionAgent(ctx,agent)).tools,['doc_read','doc_write']);assert.deepEqual(extensionInvocationFacts(ctx,agent.id),{sessionId:agent.id,agentId:agent.id,tools:['doc_read','doc_write'],running:false,origin:'root'});
   assert.throws(()=>extensionInvocationFacts(ctx,'foreign-session'));
