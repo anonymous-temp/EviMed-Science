@@ -16,7 +16,7 @@
  * @module memoryTimeline
  */
 
-import { cleanMethodDisplay } from "@evimed/domain";
+import { cleanMethodDisplay, isVerificationRun } from "@evimed/domain";
 
 import { DOCUMENT_MEMORY_LAYER } from "./derivedMemory.mjs";
 import { LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
@@ -125,7 +125,8 @@ export function recordEvents(record, byId = new Map()) {
  */
 export function runEvents(run) {
   const at = instant(run.finishedAt) ?? instant(run.startedAt);
-  if (!at || run.automated === true) return [];
+  // The platform's own re-check of a claim is not something the person did (`isVerificationRun`, 2026-10-14).
+  if (!at || run.automated === true || isVerificationRun(run)) return [];
   return [{
     type: "run", id: `run:${run.id}`, at, change: String(run.status ?? ""), runId: run.id,
     title: excerpt(run.title || run.question, 80),

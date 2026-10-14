@@ -64,6 +64,11 @@ test("runs, methods and the researcher's own acts are events; the platform's own
     recalledMemories: [{ id: "a" }, { id: "b" }, { id: "c" }], methodsLoaded: [{ name: "m" }] }).map((event) => [event.title, event.recalled, event.methods]),
   [["阿司匹林一级预防", 3, 1]]);
   assert.deepEqual(runEvents({ id: "run_2", status: "succeeded", automated: true, finishedAt: "2026-09-18T02:00:00Z" }), []);
+  // A claim's independent re-check is the platform's, whichever programme dispatched it.
+  for (const effectiveRouteReason of ["autopilot-verify", "autopilot-verify:evidence"]) {
+    assert.deepEqual(runEvents({ id: "run_3", status: "succeeded", effectiveRouteReason, finishedAt: "2026-09-18T02:00:00Z" }), []);
+  }
+  assert.equal(runEvents({ id: "run_4", status: "succeeded", effectiveRouteReason: "autopilot:literature-sentinel", finishedAt: "2026-09-18T02:00:00Z" }).length, 1);
 
   const method = { id: "mth_1", createdAt: "2026-09-10T00:00:00Z",
     payload: { status: "approved", statusChangedAt: "2026-09-16T00:00:00Z", frontmatter: { name: "证据矩阵先行" }, origin: "inferred" } };
