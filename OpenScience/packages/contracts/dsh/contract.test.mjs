@@ -45,6 +45,8 @@ function resolveInstalled(specifier) {
 test("the pin is defined once, and every derived copy equals it", async () => {
   assert.equal(SEAMS.dsh, depsVersions.dsh.version, "seam-manifest.dsh drifted from deps-version.json");
   assert.equal(SEAMS.cordis, depsVersions.dsh.cordis, "seam-manifest.cordis drifted from deps-version.json");
+  // The citation bundle the port's probe approves is the one the image installs (`pluginProbe.mjs` reads it from here).
+  assert.equal(SEAMS.plugins["dsh-cite"], depsVersions.dsh.citeVersion, "seam-manifest.plugins.dsh-cite drifted from deps-version.json");
 
   const port = JSON.parse(await readFile(new URL("../../harness-port/package.json", import.meta.url), "utf8"));
   assert.equal(port.peerDependencies["@deepseek-ai/cordis"], depsVersions.dsh.cordis, "the port's peer range drifted");

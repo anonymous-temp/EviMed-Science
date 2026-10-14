@@ -4,7 +4,7 @@
     {
       "name": "dsh-cite",
       "repo": "STARDUSTLC666/dsh-cite",
-      "version": "0.3.2",
+      "version": "0.3.5",
       "registers": [
         "cite_lookup",
         "cite_format",
@@ -45,14 +45,14 @@
     {
       "name": "@changfenhuang/dsh-annotation",
       "repo": "omdsh-dev/dsh-annotation",
-      "version": "1.4.10",
+      "version": "1.4.11",
       "registers": [],
       "why": "Select a passage in a reply, annotate it, send the annotations with the next message as plain text prepended to the user turn. The manuscript-review interaction we lack; the Node half is empty and nothing leaves the container. Risk to watch: its peer is the bare `cordis` package, not `@deepseek-ai/cordis`, which is the exact failure the two 2026-09-06 rejections had. Queued 2026-09-15."
     },
     {
       "name": "dsh-mermaid",
       "repo": "MrmoLabs/dsh-mermaid",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "registers": [],
       "why": "Client-only Mermaid renderer for fenced diagrams in replies (PRISMA flow, study-selection trees). No peers, no network. The counts in a diagram still have to come from the screening ledger, not be typed by the model. Queued 2026-09-15."
     },
@@ -208,9 +208,9 @@
     "recordedFrom": "docs/superpowers/plans/2026-08-24-dsh-ecosystem-adoption-shortlist.md, execution results of 2026-09-15"
   },
   "installed": [
-    "dsh-cite@0.3.2",
-    "@changfenhuang/dsh-annotation@1.4.10",
-    "dsh-mermaid@0.4.0"
+    "dsh-cite@0.3.5",
+    "@changfenhuang/dsh-annotation@1.4.11",
+    "dsh-mermaid@0.4.1"
   ],
   "notInstalledYet": "dsh-data-quality booted and is not installed: its value is `data_verify`, which needs a real run to measure. academic-writing, translation and writing-guard remain outside the runtime image. dsh-cite is pinned whole; its public tool builder uses the managed source gateway. Boot compatibility does not certify runtime connectivity, which requires cite_health and a successful DOI lookup with the current model token. The two client bundles are installed with a deployment switch each (plugin-support.json communityClientBundles).",
   "officeClassTest": {
