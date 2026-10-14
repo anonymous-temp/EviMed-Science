@@ -118,7 +118,7 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   tile, legend or metric rung, and it is not drawn until the history spans two weeks. No peer's
   memory page has a chart, so a second chart there, or a first on another list page, needs the same
   argument. The explorable picture of the same memories is a data page of its own, 记忆地图 (see 「页面结构」
-  rule 1), reached from the memory page's 「⋯」; it draws in the brand blue, the warn amber and one grey, tells a
+  rule 1), reached from the memory page's last tab, 「地图」 (its page carries the same tab bar with that tab selected, so the two read as one page: a map behind a menu item was not found, 2026-10-14); it draws in the brand blue, the warn amber and one grey, tells a
   mark's kind by shape and words, and prints a radar's numbers at its axes; the knowledge base's graph follows the same grammar.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
@@ -373,9 +373,9 @@ pages after every release.
    its switch and filters, the canvas, the list) are its budget; the memory page and the knowledge base page
    themselves stay lists with one line, and a compiled wiki page opens as a document under rule 2. A data
    page is also held to the data-page budget of controls — 10 kinds and 7 text colours, against a reading
-   page's 8 and 5 (`DATA_BUDGET` in the walk): the 记忆地图 measures 9, which are the shell's three, the view
-   switch's two (the chosen view is a second kind), the chips, the search, the mark rows and the timeline
-   scrubber; the count in its sentence and its replay button wear the chips' look and are not kinds of their own.
+   page's 8 and 5 (`DATA_BUDGET` in the walk): the 记忆地图 measures 9 and, with the memory page's tab bar above it, 10 — at the budget: the shell's three, the view
+   switch's two (the chosen view is a second kind), the chips, the search, the mark rows, the timeline
+   scrubber and the tabs; the count in its sentence and its replay button wear the chips' look and are not kinds of their own.
 2. **A row opens by the nature of what it is** (adopted 2026-10-08 with release 13, from the owner's
    screenshots of the scheduled-task and knowledge-base pages):
    - a **record** — a memory entry, an inbox message, a frontier item, an evidence-matrix row, a GEO
