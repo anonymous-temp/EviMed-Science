@@ -57,11 +57,14 @@ with this page.
 
 - `mcp__evimed__geo_read` — `project`, `claims`, `questions`, `metrics`, `snapshots`
   (answer text is truncated per item; ask by engine, pool or group), `errors`,
-  `sources`, `targets`, `strategy`. This is the only source of measured numbers.
+  `sources`, `targets`, `strategy`, `clusters` (each question group with what it is
+  measured at, as k of n) and `actions` (what is being done for each gap, and what
+  came of it). This is the only source of measured numbers.
 - `mcp__evimed__geo_write` — `strategy` (battlefield, expectations, gaps, layout, and the
-  source table as `sources`), `targets` (three tiers; a target is a forecast or
-  a commercial figure, never "measured"), `step`. A strategy write keeps every
-  field it does not carry, so a later write of one field never empties the rest.
+  source table as `sources`), `actions` (what to do for each gap, below), `targets`
+  (three tiers; a target is a forecast or a commercial figure, never "measured"),
+  `step`. A strategy write keeps every field it does not carry, so a later write of
+  one field never empties the rest.
   Write in the platform's field names (the method's snake-case names are read
   too, but these are the ones the page shows):
   - each source: `domain`, `name`, `kind` (`news`, `vertical`, `wemedia`,
@@ -73,9 +76,17 @@ with this page.
   - each engine's expectation: `engine`, `promise` (what this cycle can
     promise, in a sentence), `layers` (which layers to place into),
     `leverage`;
-  - `battlefield`: `{ groups, reason, secondary }`; `gaps`: `{ class, groupId,
-    text, priority }`; `layout`: the method's `{ layers, byEngine,
-    constraints }`.
+  - `battlefield`: `{ id, name, why[], action, groups, secondary }`; `gaps`:
+    `{ gapId, class, groupId, judgment, rank, consequence: { band, basis },
+    evidence: { metric, errors[] }, expectedPoints: [{ pointId, kind,
+    statement, refs: [{ type: "claim_id", id }] }], handoff, safetyPinned }` —
+    `judgment` is what the answers should have said and did not, `rank` orders
+    the gaps by consequence × question weight, `handoff` is where it goes next
+    (`content`: an article answers it; `EC`: a correction of a traced 讲错我方
+    error; `monitor_only`: nothing to write, the platform goes on measuring);
+    `layout`: the method's `{ layers, byEngine, constraints, clientActions }`
+    (`clientActions`: what the client has to do themselves, one sentence each);
+    `noGo`: `[{ item, reason }]`.
   - targets: every tier carries a project-wide (`pool: "all"`) target for
     `M-19` (the index) and `M-01S` (mention over P2 and P3) — the two numbers
     the page states a target beside — besides the per-pool ones.
@@ -93,6 +104,30 @@ with this page.
 - Measurement is the platform's. Never batch-probe inside a run.
   `mcp__evimed__geo_visibility_probe` is only for one question the user asks about in the
   conversation.
+
+## What to do for each gap
+
+Write `actions[]` with the strategy: one entry for each gap, or, where nothing is
+to be written for it, `{ gapId, reason }` — a gap with neither is a gap nobody
+answered, and the write says so. An action is `{ gapId, what: { layer, title,
+channel }, engines[], sources: [{ domain, why }], promise, basis, reason,
+metricId }`:
+
+- `what.layer` is the article layer, `what.channel` where it is to be published:
+  an owned platform's id (`wechat_mp`, `zhihu`, `xiaohongshu`, `toutiao`,
+  `bilibili`, …) when the brand publishes it itself, `media_market` when it is
+  to be placed in a professional outlet.
+- `engines` are the engines the promise holds on; an engine that rarely
+  searches the web is not one for a mention.
+- `sources[].why` says why this source for this group — what the engines cite
+  for it, or which layer of the layout it is.
+- `promise` is one of `enter_mention`, `raise_mention`, `accuracy_to_target`,
+  `coverage_complete`, `hold`; `basis` says what it rests on, in a sentence — a
+  measured rate with its sample, a prior marked as a prior, or the method.
+- `metricId` is one of the group's pool's metrics: P1 `M-06`, `M-03`; P2 `M-01`,
+  `M-02`, `M-06`, `M-08`; P3 `M-01`, `M-08`; P4 `M-15`. The platform shows the
+  measured baseline and the chosen tier's target for that pool itself: never
+  type a target number into an action.
 
 ## What you decide without asking
 
@@ -123,14 +158,18 @@ Inside this deliverable's `deliverables/<id>/` directory:
   expectation and promise ceiling, the battlefield and why, the layout, and the
   three tiers with what each buys. Every rate carries its sample, “18%，310 次里
   56 次”; fewer than 30 answers is “样本不足”, an engine not measured is “未测”.
-- `strategy.json` — `{ minimal, sources, gaps, expectations, battlefield,
-  secondary, layout, tiers, chosenTier, assumptions }`. `gaps[].class` is one of
-  缺证据、丢条件、过时、信源弱、只讲获益不讲安全、讲错、受众看不懂.
+- `strategy.json` — `{ minimal, sources, gaps, actions, expectations,
+  battlefield, secondary, layout, tiers, chosenTier, assumptions, noGo }`.
+  `gaps[].class` is one of 缺证据、丢条件、过时、信源弱、只讲获益不讲安全、讲错、受众看不懂.
   `expectations[].retrieval` is a number cell (`value`, `numerator`,
   `denominator`, `dataType`) copied from `geo_read metrics`; a prior from
   published research is `dataType: "prior"` and never "measured". `tiers` are
   exactly `1`, `2`, `3`, each with `targets` (`metricId`, `pool`, `baseline`,
   `target`, `dataType: "forecast"`), `placements` and `budgetCny`.
+  The platform reads this file again when the run ends, through the same checks as
+  `mcp__evimed__geo_write`, and keeps what the fields above carry. Numbers it holds itself — a
+  cited-domain tally, retrieval cells, sample sizes, counts per source — stay in
+  the report and the file; they are not stored a second time.
 
 ## Registers do not mix
 

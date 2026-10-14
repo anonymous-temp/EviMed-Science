@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:9373be71a75c11be5d03550db29578a44d29ad8a89368fab12355c7d2a0d26c0",
+  "version": "sha256:acab61e4db3e2db41cc6f3899bec3d27b2262637c4107c4f232546f2540cde65",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 38,
@@ -781,7 +781,7 @@
     {
       "name": "mcp__evimed__geo_read",
       "source": "mcp",
-      "description": "Read this 循证 GEO project's product, claims, questions, journey, diagnosis, metrics, answers, errors, sources, strategy, targets, articles, orders and monitoring. Cards carry quote-checked evidence and citation ids. Value holds scoped findings, research and coverage; research lists specialist tasks. clusters is every question group with what each engine says (k of n); actions is what is being done for each group, its target and its status — read it before planning more work. filter.version reads a prior value basis. Numeric cells retain denominators and status; unknown is never zero.",
+      "description": "Read this 循证 GEO project's product, claims, questions, journey, diagnosis, metrics, answers, errors, sources, strategy, targets, articles, orders and monitoring. Cards carry checked quotes and citation ids. Value holds scoped findings, research and coverage; research lists specialist tasks. clusters: groups, k of n; actions: per-gap work. filter.version reads a prior value basis. Numeric cells keep denominators and status; unknown is never zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -964,7 +964,7 @@
     {
       "name": "mcp__evimed__geo_write",
       "source": "mcp",
-      "description": "Write this 循证 GEO project; valid items survive individual refusals. value merges findings; reuse ids to amend. questions: groups[].questions[].isMeasured:true selects probes before lock_questions; existing answers are not required. research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}. actions amends the strategy's action per gap: items[{gapId, what:{layer,title,channel}, engines, sources:[{domain,why}], promise, basis, reason}]; an entry with only a reason says why a gap needs none.",
+      "description": "Write this 循证 GEO project; valid items survive individual refusals. value merges findings; reuse ids to amend. questions: groups[].questions[].isMeasured:true selects probes before lock_questions; no answers needed. research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}. actions: per-gap strategy actions.",
       "inputSchema": {
         "type": "object",
         "properties": {

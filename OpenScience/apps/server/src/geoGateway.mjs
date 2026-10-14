@@ -270,7 +270,7 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
           geo.service.counters.writes += 1;
           geo.service.counters.writeIssues += result.issues.length;
           // Counting what a write did not keep is not the write: a failure to count never fails it.
-          try { geo.service.noteWriteFields(request.what, result); } catch { report("geo_write_fields_uncounted"); }
+          try { geo.service.noteWriteFields(request.what, result); } catch { report("write_fields_uncounted"); }
           if (result.capped) geo.service.counters.researchCapped = (geo.service.counters.researchCapped ?? 0) + 1;
           return { what: request.what, ...result };
         };

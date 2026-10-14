@@ -165,7 +165,13 @@ default with its reason in `assumptions[]`.
   `groupId` (the id of the question group it
   answers, from `geo_read questions` — required for every layer but `correction`), `claimIds`
   (ids from `geo_read claims`), `contentSha256` (of the file as written) and `safety`
-  (`clear` or `open`). A correction also carries `errorIds`: the ids (from
+  (`clear` or `open`). Say where it is to be published and for whom: `channel`
+  is the owned platform's id from the channel table above when the brand
+  publishes it itself, or `media_market` when it is to be placed in a
+  professional outlet (left out, the market places it as before); `audience` is
+  one of `patient`, `physician`, `caregiver`, `pharmacist`, `institution`,
+  `other`. Words of your own go in the work record, not in these two. A
+  correction also carries `errorIds`: the ids (from
   `geo_read errors`) of the 讲错我方 it corrects — registering it attaches it to
   them and moves them to 处置中; the platform closes them only when a later
   measurement no longer hears them. Do not send a gate verdict: the platform takes it from this

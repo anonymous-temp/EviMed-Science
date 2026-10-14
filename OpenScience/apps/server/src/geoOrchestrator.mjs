@@ -420,11 +420,11 @@ export function strategyBrief(project, { minimal, freshness = null }) {
     productLine(project), scopeLine(project),
     `诊断已经测完${minimal ? "（最小版：数字只代表实际测量的问句，报告里写明样本与缺口）" : "（基线）"}。先用 geo_read 读 diagnosis、metrics、snapshots、sources、errors。`,
     ...(freshness ? [freshness] : []),
-    "这次要做：信源表、七类缺口、每个引擎本周期能做到什么、主战场与布局、三档目标（每档写目标、稿件数和预算）。",
+    "这次要做：信源表、七类缺口、每个缺口怎么做（actions：写什么、发到哪、信源和理由）、每个引擎本周期能做到什么、主战场与布局、三档目标（每档写目标、稿件数和预算）。",
     // G3: every coverage candidate is checked, and a site no one checked is
     // never placed into — the market admits only all three conditions true.
     "覆盖层候选（通常 10–20 个）每个都要核三条件：备案主体一致、被新闻源收录、主营医疗健康，写 icpMatches、newsIndexed、medicalVertical（核不了写 null）和 checkedAt；冒名站写 impostor: true。三条件没核过或不全满足的站，平台不会下单。",
-    "写回：geo_write strategy（battlefield、expectations、gaps、layout，信源放在 sources 里；每个引擎的 expectations 写 promise 和 layers）"
+    "写回：geo_write strategy（battlefield、expectations、gaps、actions、layout，信源放在 sources 里；每个引擎的 expectations 写 promise 和 layers）"
       + "和 targets（档一、档二、档三，dataType 为 forecast；每档都写 M-19 综合可见度和 M-01S 品牌提及率，pool 为 all）。",
     DATA_LINE,
   ].join("\n");
