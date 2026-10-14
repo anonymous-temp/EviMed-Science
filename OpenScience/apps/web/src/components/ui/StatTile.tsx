@@ -204,6 +204,9 @@ export function BulletBar({
   targetLabel,
   rival = null,
   rivalLabel,
+  baseline = null,
+  baselineLabel,
+  scale = true,
   label,
 }: {
   value: number | null;
@@ -214,6 +217,11 @@ export function BulletBar({
   /** The leading rival's value on the same scale. */
   rival?: number | null;
   rivalLabel?: string;
+  /** Where it began, on the same scale: a short quiet tick under the target's, so 「基线 → 现在 → 目标」 is one picture. */
+  baseline?: number | null;
+  baselineLabel?: string;
+  /** The line of 0, the labels and the maximum under the bar. A bar in a column of its own words (a plan's tier) leaves it out. */
+  scale?: boolean;
   /** The bar's accessible name. */
   label: string;
 }) {
@@ -226,6 +234,7 @@ export function BulletBar({
         role="img"
         aria-label={[
           `${label} ${Math.round(value)}`,
+          has(baseline) ? baselineLabel ?? `基线 ${Math.round(baseline)}` : null,
           has(target) ? targetLabel ?? `目标 ${Math.round(target)}` : null,
           has(rival) ? rivalLabel ?? `对手 ${Math.round(rival)}` : null,
         ].filter(Boolean).join("，")}
@@ -233,6 +242,9 @@ export function BulletBar({
         className="relative h-2 rounded-full bg-surface-2"
       >
         <span className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: share(value) }} />
+        {has(baseline) && (
+          <span data-bullet-baseline="" className="absolute -top-0.5 h-3 w-0.5 rounded-full bg-text-3" style={{ left: share(baseline) }} />
+        )}
         {has(target) && (
           <span data-bullet-target="" className="absolute -top-1 h-4 w-0.5 rounded-full bg-chart-target" style={{ left: share(target) }} />
         )}
@@ -240,13 +252,15 @@ export function BulletBar({
           <span data-bullet-rival="" className="absolute -top-0.5 h-3 w-2 rounded-tag border border-border-control bg-surface" style={{ left: share(rival) }} />
         )}
       </div>
-      <div className="mt-1.5 flex items-baseline justify-between gap-2 text-meta tabular-nums text-text-3">
-        <span>0</span>
-        <span className="truncate">
-          {[targetLabel, rivalLabel].filter(Boolean).join(" · ")}
-        </span>
-        <span>{max}</span>
-      </div>
+      {scale && (
+        <div className="mt-1.5 flex items-baseline justify-between gap-2 text-meta tabular-nums text-text-3">
+          <span>0</span>
+          <span className="truncate">
+            {[targetLabel, rivalLabel].filter(Boolean).join(" · ")}
+          </span>
+          <span>{max}</span>
+        </div>
+      )}
     </div>
   );
 }

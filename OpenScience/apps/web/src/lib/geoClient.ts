@@ -204,6 +204,8 @@ export interface GeoProject {
   overview: GeoOverview;
   /** Whether this deployment can place orders at all; without a market no page asks for a budget. */
   market?: { configured: boolean };
+  /** Engines the probe host can measure beyond the default five (e.g. `baidu`), when the server lists them. */
+  availableEngines?: GeoEngine[];
   startedAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -940,7 +942,8 @@ export interface GeoStrategyView {
     constraints: string[];
     clientActions: Array<{ key: string; text: string; done: boolean }>;
   };
-  assumptions: Array<{ field: string; value: string | null; basis: string | null; reason: string | null; howToChange: string | null; affects?: string | null }>;
+  /** What the plan took as given. `value` is whatever the run wrote (a number, a word, a list, a record): a page says the reason. */
+  assumptions: Array<{ field: string; value: unknown; basis: string | null; reason: string | null; howToChange: string | null; affects?: string | null }>;
   gaps: { total: number; withoutAction: number };
   actions: { total: number; byStatus: Partial<Record<GeoActionStatus, number>> };
 }

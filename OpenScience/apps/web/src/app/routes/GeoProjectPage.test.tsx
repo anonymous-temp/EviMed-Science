@@ -397,12 +397,21 @@ describe("a GEO project's page", () => {
     expect(client.getGeoProject).toHaveBeenCalledTimes(1);
   });
 
-  it("offers a member only what their roles allow in the ⋯ menu: a viewer sees 成员 and nothing that changes the project", async () => {
+  it("offers a member only what their roles allow in the ⋯ menu: a viewer sees 项目设置 and nothing that changes the project", async () => {
     client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, access: { roles: ["viewer"], abilities: ["read"], owner: false } });
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
-    expect(screen.getByRole("menuitem", { name: "成员" })).toBeInTheDocument();
-    for (const hidden of ["重命名", "出品方", "导出提案资料包", "暂停", "删除"]) expect(screen.queryByRole("menuitem", { name: hidden })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "项目设置" })).toBeInTheDocument();
+    for (const hidden of ["重命名", "导出提案资料包", "暂停", "删除"]) expect(screen.queryByRole("menuitem", { name: hidden })).not.toBeInTheDocument();
+  });
+
+  it("opens the project's settings in a drawer from ⋯: the engines, the window, the budget, who speaks for the product, the members", async () => {
+    renderProject();
+    await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "项目设置" }));
+    const drawer = await screen.findByRole("dialog", { name: "项目设置" });
+    for (const row of ["测量的 AI 引擎", "覆盖周期", "投放预算", "出品方", "成员"]) expect(within(drawer).getByRole("region", { name: row })).toBeInTheDocument();
+    expect(within(drawer).getByText("8,000 灵豆 · 每天最多 800 灵豆")).toBeInTheDocument();
   });
 
   it("a viewer has no button that continues a step", async () => {
@@ -426,7 +435,7 @@ describe("a GEO project's page", () => {
     client.exportGeo.mockResolvedValue({ sessionId: "ses_export", runId: "run_1" });
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
-    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["重命名", "成员", "出品方", "导出提案资料包", "暂停", "删除"]);
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["重命名", "项目设置", "导出提案资料包", "暂停", "删除"]);
     await userEvent.click(screen.getByRole("menuitem", { name: "导出提案资料包" }));
     await waitFor(() => expect(client.exportGeo).toHaveBeenCalledWith("geo_masi", "proposal"));
 

@@ -15,7 +15,16 @@ import { compositionFacts, precedes, type CompositionFacts } from "./composition
  * A module's rail on every tab is stated by rendering each tab: `for (const tab of tabs) expectComposed(…, { stepRail: true })`
  * and comparing the rails' steps (see `pageComposition.test.tsx`). Returns the facts for any assertion of the page's own.
  */
-export function expectComposed(root: ParentNode, expected: { tablists?: number; stepRail?: boolean; toolbar?: boolean } = {}): CompositionFacts {
+export function expectComposed(
+  root: ParentNode,
+  expected: {
+    tablists?: number;
+    stepRail?: boolean;
+    toolbar?: boolean;
+    /** How many tags a page is **known** to wear as controls — a baseline that may only fall, never a licence; absent means none. */
+    clickableTags?: number;
+  } = {},
+): CompositionFacts {
   const facts = compositionFacts(root);
   expect(facts.header, "the page has a header").not.toBeNull();
   expect(facts.body, "the page has a body").not.toBeNull();
@@ -31,6 +40,7 @@ export function expectComposed(root: ParentNode, expected: { tablists?: number; 
   expect(facts.headerPrimaryActions.length, "at most one primary action in the header").toBeLessThanOrEqual(1);
   if (expected.stepRail !== undefined) expect(facts.stepRails.length > 0, "a step rail").toBe(expected.stepRail);
   for (const rail of facts.stepRails) expect(facts.chrome?.contains(rail), "the step rail is in the sticky band").toBe(true);
-  expect(facts.clickableTags, "no tag is a control").toEqual([]);
+  if (expected.clickableTags === undefined) expect(facts.clickableTags, "no tag is a control").toEqual([]);
+  else expect(facts.clickableTags.length, "no more tags are controls than the baseline says").toBeLessThanOrEqual(expected.clickableTags);
   return facts;
 }

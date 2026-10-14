@@ -335,6 +335,25 @@ export const GEO_STABILITY_WORDS: Readonly<Record<string, string>> = Object.free
   unconfirmed: "待复核",
 });
 
+/**
+ * What an engine's measured retrieval lets the strategy promise there (the method's `promise_ceiling`, `GEO_PROMISE_CEILINGS`): an
+ * engine that searches the web for most questions can be promised to mention and to get the product right; one that rarely does can
+ * only be promised accuracy.
+ */
+export const GEO_PROMISE_CEILING_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  mention_and_accuracy: "能承诺被提及，也能承诺讲对",
+  accuracy_only: "只承诺讲对，不承诺被提及",
+  undetermined: "还不能承诺",
+});
+
+/** Where a plan's assumption comes from (`strategy.assumptions[].basis`): what a person said, a default, an inference, a measurement. */
+export const GEO_ASSUMPTION_BASIS_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  user: "你给的",
+  default: "默认",
+  inferred: "推断",
+  upstream: "来自前面的步骤",
+});
+
 export const GEO_SOURCE_LAYER_WORDS: Readonly<Record<GeoSourceLayer, string>> = Object.freeze({
   anchor: "锚点",
   coverage: "覆盖",

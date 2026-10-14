@@ -27,6 +27,7 @@ import { Tag } from "@/components/ui/Tag";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
 import { GeoOffPage, GeoProjectSkeleton } from "@/components/geo/GeoStates";
 import { TabSkeleton } from "@/components/geo/tabs/geoTabKit";
+import { GeoSettingsDrawer } from "@/components/geo/GeoSettingsDrawer";
 import { MembersDialog } from "@/components/geo/MembersDialog";
 import { ProducerDialog } from "@/components/geo/ProducerDialog";
 import { RenameDialog } from "@/components/geo/RenameDialog";
@@ -291,8 +292,8 @@ function GeoBand({
   const can = (ability: string) => !abilities || abilities.includes(ability);
   const menu: MenuEntry[] = [
     ...(can("edit") ? [{ label: "重命名", onSelect: () => onPanel("rename") }] : []),
-    { label: "成员", onSelect: () => onPanel("members") },
-    ...(can("edit") ? [{ label: "出品方", onSelect: () => onPanel("producer") }] : []),
+    // The engines, the window, the budget, who speaks for the product and the members: one drawer, not four entries.
+    { label: "项目设置", onSelect: () => onPanel("settings") },
     ...(can("run") ? [{ label: "导出提案资料包", onSelect: () => act("proposal", () => exportGeo(geoId, "proposal"), "提案资料包无法导出，请稍后重试。") }] : []),
     ...(can("edit") ? [{
       label: paused ? "继续" : "暂停",
@@ -385,6 +386,15 @@ function GeoBand({
         <Suspense fallback={<TabSkeleton rows={4} />}><Outlet context={api} /></Suspense>
       ) : (
         <GeoTab api={api} />
+      )}
+      {panel === "settings" && (
+        <GeoSettingsDrawer
+          geoId={geoId}
+          project={project}
+          onClose={() => onPanel(null)}
+          onOpen={(next) => api.openPanel(next)}
+          onChanged={() => { reload(); api.data.invalidate(); }}
+        />
       )}
       {panel === "members" && <MembersDialog geoId={geoId} onClose={() => onPanel(null)} />}
       {panel === "rename" && (

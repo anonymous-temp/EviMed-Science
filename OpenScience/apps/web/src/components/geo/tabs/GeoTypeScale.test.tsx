@@ -12,6 +12,7 @@ import {
   monitoringFilled,
   questionsFilled,
   sourcesFilled,
+  strategyFilled,
 } from "../__fixtures__/geoTabs";
 import { AccuracyTab } from "./AccuracyTab";
 import { ActionsTab } from "./ActionsTab";
@@ -40,6 +41,7 @@ const client = vi.hoisted(() => ({
   getGeoArticles: vi.fn(),
   getGeoDistribution: vi.fn(),
   getGeoMonitoring: vi.fn(),
+  getGeoStrategy: vi.fn(),
 }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
@@ -101,7 +103,8 @@ function typeCombos(root: Element): string[] {
  * 2026-09-27 after the GEO files were moved onto the named levels (metric-lg
  * 40/600 once a page, the title 18/600, body 14/400, meta 12/400): 总览 13 → 11,
  * 可见度 7 → 6, 准确与安全 10 → 10, 问题与回答 4 → 4, 信源 6 → 5 → 4 (R11: a list of rows, no section title), 行动 8 → 7,
- * 方案 6 → 5. Every pair above four comes from a shared primitive the GEO
+ * 方案 6 → 5 → 6 (R19: the plan's five blocks are titled at 18/600 again, and a tier's name is 14/600: 12/400, 14/400, 14/600 and
+ * 18/600 are the page's own, the 13s are the buttons' and the chips') Every pair above four comes from a shared primitive the GEO
  * files do not own: `StatTile` (unit 14/500, a non-lead number 32/600, a
  * placeholder word 20/600), `Delta` (12/500), `Rank` and `SeverityBadge`
  * (12/600), `FilterChips`' selected chip and a small `Button` (13/500),
@@ -115,7 +118,7 @@ const CEILING: Readonly<Record<string, readonly string[]>> = Object.freeze({
   问题与回答: ["12/400", "13/400", "13/500", "14/400"],
   信源: ["12/400", "13/400", "13/500", "14/400"],
   行动: ["12/400", "13/400", "13/500", "14/400", "14/500", "18/600", "32/600"],
-  方案: ["12/400", "13/400", "13/500", "14/400", "14/600"],
+  方案: ["12/400", "13/400", "13/500", "14/400", "14/600", "18/600"],
 });
 
 beforeEach(() => {
@@ -129,6 +132,7 @@ beforeEach(() => {
   client.getGeoArticles.mockResolvedValue(articlesFilled);
   client.getGeoDistribution.mockResolvedValue(distributionFilled);
   client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+  client.getGeoStrategy.mockResolvedValue(strategyFilled);
 });
 
 async function measured(tab: ReactElement, ready: string): Promise<string[]> {

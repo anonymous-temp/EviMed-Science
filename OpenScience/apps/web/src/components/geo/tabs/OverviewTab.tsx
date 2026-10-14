@@ -73,7 +73,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
       {diagnosis.state.kind === "loading" ? (
         <div role="status" aria-label="正在读取" className="flex h-7 items-center"><div className="h-7 w-2/3 animate-pulse rounded bg-surface-1" /></div>
       ) : (
-        <p className="flex items-start gap-2 text-section font-semibold text-text">
+        <p data-headline="" className="flex items-start gap-2 text-section font-semibold text-text">
           <Radar size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-accent" />
           <span className="min-w-0">{headlineSentence(project, diag)}</span>
         </p>

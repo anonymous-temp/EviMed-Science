@@ -1,8 +1,42 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, Route, Routes } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GEO_PROJECT } from "@/components/geo/__fixtures__/geoProjects";
+import {
+  articlesFilled,
+  diagnosisFilled,
+  distributionFilled,
+  evidenceFilled,
+  journeyFilled,
+  monitoringFilled,
+  questionsFilled,
+  sourcesFilled,
+  strategyFilled,
+  valueFilled,
+} from "@/components/geo/__fixtures__/geoTabs";
+import { GEO_TABS } from "@/components/geo/geoTabs";
+import { GeoProjectLayout } from "@/app/routes/GeoProjectPage";
 import { brokenPage, compositionFacts, MODULE_TABS, modulePageAt, PAGES, precedes } from "./compositionFixtures";
 import { expectComposed } from "./expectComposed";
+
+// The real GEO project page (below): its reads are the fixtures the tab tests use.
+const geo = vi.hoisted(() => ({
+  useGeoFeature: vi.fn(),
+  getGeoProject: vi.fn(),
+  getGeoDiagnosis: vi.fn(),
+  getGeoMonitoring: vi.fn(),
+  getGeoStrategy: vi.fn(),
+  getGeoEvidence: vi.fn(),
+  getGeoValue: vi.fn(),
+  getGeoQuestions: vi.fn(),
+  getGeoJourney: vi.fn(),
+  getGeoSources: vi.fn(),
+  getGeoArticles: vi.fn(),
+  getGeoDistribution: vi.fn(),
+}));
+vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/geoClient")>()), ...geo }));
+vi.mock("@/components/geo/useOpenGeoConversation", () => ({ useOpenGeoConversation: () => vi.fn() }));
 
 /**
  * The pages of the framework, composed (R19, plan §3 S10; audit D §4 S9): one representative page per template, rendered from
@@ -150,5 +184,74 @@ describe("the assertions can fail", () => {
   it("sees a tag that is inside a control", () => {
     const { container } = render(brokenPage("tag-in-control"));
     expect(compositionFacts(container).clickableTags).toHaveLength(1);
+  });
+});
+
+/**
+ * The real 循证 GEO project page (R19, plan §3 S10): the layout over each of its eight tabs, rendered from the fixtures the tab tests
+ * use. T3 holds for every one — the rail in the sticky band, the tab row, the toolbar's row before the body — and 总览 is a T4 data
+ * page: the sentence, then the numbers, then the body, in that order.
+ */
+describe("the GEO project page, as a module page (T3) and its overview as a data page (T4)", () => {
+  beforeEach(() => {
+    geo.useGeoFeature.mockReturnValue("on");
+    geo.getGeoProject.mockResolvedValue(GEO_PROJECT);
+    geo.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    geo.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    geo.getGeoStrategy.mockResolvedValue(strategyFilled);
+    geo.getGeoEvidence.mockResolvedValue(evidenceFilled);
+    geo.getGeoValue.mockResolvedValue(valueFilled);
+    geo.getGeoQuestions.mockResolvedValue(questionsFilled);
+    geo.getGeoJourney.mockResolvedValue(journeyFilled);
+    geo.getGeoSources.mockResolvedValue(sourcesFilled);
+    geo.getGeoArticles.mockResolvedValue(articlesFilled);
+    geo.getGeoDistribution.mockResolvedValue(distributionFilled);
+  });
+
+  function renderGeo(path: string) {
+    return render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/app/geo/:geoId" element={<GeoProjectLayout />}>
+            <Route index element={null} />
+            <Route path=":tab" element={null} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  // `SourcesTab`'s row title wraps the site's kind in a Tag, inside the row's own button: three of them in the fixture (rule 5: a tag
+  // is not a control). r19-geob restructures that tab; the baseline falls to 0 with it.
+  const KNOWN_CLICKABLE_TAGS: Partial<Record<string, number>> = { sources: 3 };
+
+  it.each(GEO_TABS)("$label: the rail is in the sticky band, the tab row is the page's one row of views, and nothing stands under what it controls", async ({ key, label }) => {
+    const { container } = renderGeo(key === "overview" ? "/app/geo/geo_masi" : `/app/geo/geo_masi/${key}`);
+    await waitFor(() => expect(container.querySelector("[data-geo-tab]")).not.toBeNull(), { timeout: 4000 });
+    // The tab's own read has landed when its page-level toolbar (where it has one) is drawn; settle the layout effects.
+    await waitFor(() => expect(screen.getByRole("tab", { name: label })).toHaveAttribute("aria-selected", "true"));
+    const facts = expectComposed(container, { stepRail: true, tablists: 1, clickableTags: KNOWN_CLICKABLE_TAGS[key] });
+    expect(facts.stepRails).toHaveLength(1);
+    expect([...facts.stepRails[0].querySelectorAll("[data-rail-step]")]).toHaveLength(8);
+    expect(facts.chrome).toHaveClass("sticky", "top-0");
+    // The band's rows: the rail, the tabs and the toolbar's row (drawn, or reserved and empty).
+    expect(facts.chrome!.children).toHaveLength(3);
+  });
+
+  it("总览 reads sentence → the numbers → what is asked → the trend, in that order, with the band above all of it", async () => {
+    geo.getGeoProject.mockResolvedValue({
+      ...GEO_PROJECT,
+      needsYou: [{ kind: "client_action", key: "client:0a1b2c3d", verb: "do", object: { type: "client_action" }, text: "开通并认证自有微信公众号", target: { tab: "plan", section: "client_actions" } }],
+    });
+    const { container } = renderGeo("/app/geo/geo_masi");
+    await waitFor(() => expect(container.querySelector("[data-headline]")).not.toBeNull(), { timeout: 4000 });
+    await screen.findByRole("heading", { name: "需要你" });
+    const facts = compositionFacts(container);
+    const headline = container.querySelector("[data-headline]") as HTMLElement;
+    const stats = screen.getByRole("region", { name: "本轮指标" });
+    const asked = screen.getByRole("heading", { name: "需要你" });
+    const trend = container.querySelector("[data-chart='trend']") ?? screen.getByRole("heading", { name: /综合可见度指数/ });
+    expect(precedes(facts.chrome!, headline)).toBe(true);
+    for (const [earlier, later] of [[headline, stats], [stats, asked], [asked, trend]] as const) expect(precedes(earlier, later)).toBe(true);
   });
 });

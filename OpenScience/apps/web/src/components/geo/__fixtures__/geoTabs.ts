@@ -22,6 +22,7 @@ import type {
   GeoSources,
   GeoStepKey,
   GeoStepStatus,
+  GeoStrategyView,
   GeoValue,
 } from "@/lib/geoClient";
 
@@ -435,3 +436,78 @@ export const valueFilled: GeoValue = {
 
 /** The headings the drug-value analysis can draw, one for each tab it appears on. */
 export const VALUE_TITLES = ["药品价值分析", "AI 如何表达药品价值", "问题背后的决策", "依据与传播", "下一步研究与内容"] as const;
+
+/** The plan page's one read: three tiers, the battlefield with a secondary one, five engines, a client to-do and a few assumptions. */
+export const strategyFilled: GeoStrategyView = {
+  version: 13,
+  createdAt: "2026-10-12T02:00:00.000Z",
+  runId: "run_strategy_1",
+  summary: "先把说错的按住，再谈被提到。",
+  chosenTier: "2",
+  targets: {
+    tier: "2",
+    baselineRound: { id: "round_b", kind: "baseline", sampleDate: "2026-09-25" },
+    latestRound: { id: "round_w", kind: "weekly", sampleDate: "2026-10-12" },
+    targetsVersion: 4,
+    rows: [
+      {
+        metricId: "M-19", name: "综合可见度指数", unit: "index", pool: "all",
+        tiers: { "1": { target: 48, written: 42, horizonWeeks: 8, placements: 12, budgetCny: 3000, dataType: "forecast" }, "2": { target: 55, written: 42, horizonWeeks: 12, placements: 24, budgetCny: 8000, dataType: "forecast" }, "3": { target: 62, written: 42, horizonWeeks: 12, placements: 40, budgetCny: 15000, dataType: "forecast" } },
+        target: 55, horizonWeeks: 12, dueAt: "2026-12-18",
+        baseline: { ...cell(38, null, 310), date: "2026-09-25", roundId: "round_b" }, latest: { ...cell(44, null, 310), date: "2026-10-12", roundId: "round_w" },
+      },
+      {
+        metricId: "M-01S", name: "品类问题可见率", unit: "percent", pool: "all",
+        tiers: { "1": { target: 9, written: 7, horizonWeeks: 8, placements: null, budgetCny: null, dataType: "forecast" }, "2": { target: 12, written: 7, horizonWeeks: 12, placements: null, budgetCny: null, dataType: "forecast" }, "3": { target: 20, written: 7, horizonWeeks: 12, placements: null, budgetCny: null, dataType: "forecast" } },
+        target: 12, horizonWeeks: 12, dueAt: "2026-12-18",
+        baseline: { ...cell(7, 12, 164), date: "2026-09-25", roundId: "round_b" }, latest: { ...cell(21, 65, 310), date: "2026-10-12", roundId: "round_w" },
+      },
+      {
+        metricId: "M-06", name: "事实准确率", unit: "percent", pool: "all",
+        tiers: { "1": { target: 98, written: 62, horizonWeeks: 12, placements: null, budgetCny: null, dataType: "forecast" }, "2": { target: 98, written: 62, horizonWeeks: 12, placements: null, budgetCny: null, dataType: "forecast" }, "3": { target: 98, written: 62, horizonWeeks: 12, placements: null, budgetCny: null, dataType: "forecast" } },
+        target: 98, horizonWeeks: 12, dueAt: "2026-12-18",
+        baseline: { ...cell(62, 34, 55), date: "2026-09-25", roundId: "round_b" }, latest: { ...cell(88, 270, 310), date: "2026-10-12", roundId: "round_w" },
+      },
+      {
+        metricId: "M-01", name: "品牌提及率", unit: "percent", pool: "P2",
+        tiers: { "1": { target: 28, written: 21, horizonWeeks: 8, placements: null, budgetCny: null, dataType: "forecast" }, "2": { target: 35, written: 21, horizonWeeks: 12, placements: null, budgetCny: null, dataType: "forecast" }, "3": { target: 40, written: 21, horizonWeeks: 12, placements: null, budgetCny: null, dataType: "forecast" } },
+        target: 35, horizonWeeks: 12, dueAt: "2026-12-18",
+        baseline: { ...cell(21, 20, 96), date: "2026-09-25", roundId: "round_b" }, latest: null,
+      },
+    ],
+  },
+  tiers: [
+    { tier: "1", chosen: false, name: "档一：讲准为先", summary: "先把说错的按住，再谈被提到。", buys: "6 个覆盖位次 + 8 篇稿件", notPromised: ["不承诺 Kimi 提及上升"], contentUnits: 8, placements: 12, budgetCny: 3000, targetCount: 2 },
+    { tier: "2", chosen: true, name: "讲准 + 进入被提及", summary: "主战场四组一起推。", buys: "12 个位次 + 16 篇稿件", notPromised: ["不承诺 P3 泛症状池被提及", "不承诺豆包任何变化（未测）"], contentUnits: 16, placements: 24, budgetCny: 8000, targetCount: 4 },
+    { tier: "3", chosen: false, name: "全面铺开", summary: "覆盖次要战场。", buys: "25 个位次 + 30 篇稿件", notPromised: [], contentUnits: 30, placements: 40, budgetCny: 15000, targetCount: 2 },
+  ],
+  battlefield: {
+    id: "bf_1",
+    name: "说明书级事实讲准",
+    why: ["证据最硬、竞品最弱：品牌身份组事实准确率 36%（4/11）。", "检索触发率的 Wilson 下限都在 71% 以上，内容位能改变回答。"],
+    action: "先写事实与安全稿，再补纠错稿。",
+    reason: "证据最硬、竞品最弱。",
+    groups: [{ id: "gq_1", name: "恶心呕吐与胃肠反应" }, { id: null, name: "说明书安全题组" }],
+    secondary: [{ id: "bf_2", name: "停药与反弹", why: ["提及率 6%（1/16），可动但证据偏弱。"], action: null, groups: [{ id: "gq_2", name: "停药后体重反弹" }] }],
+  },
+  noGo: [{ item: "泛症状池的抢排名", reason: "品牌不在检索结果里，写了也不会被引" }],
+  engines: [
+    { engine: "deepseek", retrieval: { ...cell(96, 60, 62), reason: null }, promise: "进入引用：锚点层 + 覆盖层", ceiling: "mention_and_accuracy", ceilingBasis: "Wilson 下限 85%", evidence: "检索触发率 96%（60/62）", layers: ["anchor", "coverage"], cites: [], leverage: "重点投入", clusterLeverage: [], layout: { account: "认证自有公众号", state: "还没有", evidence: "元宝把公众号当第一信源" } },
+    { engine: "kimi", retrieval: { ...cell(10, 6, 60), reason: null }, promise: "只承诺讲对", ceiling: "accuracy_only", ceilingBasis: "Wilson 下限 2%", evidence: null, layers: ["owned"], cites: [], leverage: "维持", clusterLeverage: [], layout: null },
+    { engine: "baidu", retrieval: { ...cell(null, null, null), status: "absent", reason: null }, promise: "只承诺收录", ceiling: null, ceilingBasis: null, evidence: null, layers: [], cites: [], leverage: null, clusterLeverage: [], layout: null },
+  ],
+  layout: {
+    layers: { anchor: ["dxy.com"], coverage: ["39.net"], owned: ["mp.weixin.qq.com"] },
+    constraints: [],
+    clientActions: [
+      { key: "client:0a1b2c3d", text: "开通并认证自有微信公众号", done: false },
+      { key: "client:4e5f6a7b", text: "提供说明书最新版 PDF", done: true },
+    ],
+  },
+  assumptions: [
+    { field: "tier", value: 2, basis: "default", reason: "没有指定档位，三档都给出，默认按档二执行", howToChange: "在方案里选一档" },
+    { field: "engine_scope", value: ["deepseek", "kimi"], basis: "upstream", reason: "豆包没有有效回答，本周期只写“未测”", howToChange: "补测豆包后并回目标" },
+  ],
+  gaps: { total: 20, withoutAction: 2 },
+  actions: { total: 18, byStatus: { proposed: 10, writing: 4, live: 2, cited: 2 } },
+};
