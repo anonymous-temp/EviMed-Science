@@ -10,6 +10,7 @@ import { after, before, test } from "node:test";
 import { GEO_AUDIENCES } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { brandRegistry } from "../src/geoParse.mjs";
+import { GeoService } from "../src/geoService.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
 import { GEO_MEASURED_RANGE, geoArticleGateBound, geoArticleGateOf, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
@@ -430,6 +431,28 @@ test("every article but a correction names its question group", options, async (
   assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [[0, "groupId", "missing"], [1, "groupId", "missing"],
     [2, "errorIds", "notice"]], "a group-less article could be placed into a control group unseen; a correction names what it corrects");
   assert.deepEqual((await store.listArticles(project.id)).map((row) => row.layer), ["correction"]);
+});
+
+test("an article written for a control group is registered with a notice: the group leaves the control arm, nothing is refused", options, async () => {
+  const project = await freshProject();
+  await write(project, "questions", { data: { groups: [
+    { pool: "P2", name: "试点群", questions: [{ text: "q1", isMeasured: true }] },
+    { pool: "P2", name: "对照群", isControl: true, questions: [{ text: "q2", isMeasured: true }] },
+  ] } });
+  const [pilot, control] = [...(await store.questionMap(project.id, 1))].sort((left, right) => Number(left.isControl) - Number(right.isControl));
+  const item = (/** @type {string} */ name, /** @type {string} */ groupId) => ({ path: `deliverables/geo-content/${name}.md`, layer: "popular", claimIds: [], groupId,
+    safety: "clear", contentSha256: "c".repeat(64) });
+  const result = await write(project, "articles", { items: [item("pilot", pilot.id), item("control", control.id)] }, null, ledgerPassed);
+  assert.equal(result.ok, true);
+  assert.equal(result.ids.length, 2, "both are registered: nothing is blocked");
+  const notices = result.issues.filter((/** @type {any} */ issue) => issue.code === "notice");
+  assert.deepEqual(notices.map((/** @type {any} */ issue) => [issue.index, issue.field]), [[1, "groupId"]], "one notice, for the article of the control group");
+  assert.match(notices[0].message, /control group \(对照群\)/);
+  assert.match(notices[0].message, /control arm/);
+  // What the page reads says the same, so a person is told where they look.
+  const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all", operatorUsers: [], geoPreviewUsers: [] } });
+  const view = await service.articlesOf(project);
+  assert.deepEqual(view.articles.map((/** @type {any} */ article) => [article.groupId === control.id, article.groupIsControl]).sort(), [[false, false], [true, true]]);
 });
 
 test("an article's gate is the run ledger's verdict, never the run's own claim", options, async () => {

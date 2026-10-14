@@ -1521,7 +1521,7 @@ function wordOrNote(value, words, noteMax) {
 
 /**
  * @param {unknown[]} items @param {GeoIssue[]} issues
- * @param {{ claimIds: Set<string>, groupIds: Set<string>, errorIds: Set<string> }} known
+ * @param {{ claimIds: Set<string>, groupIds: Set<string>, errorIds: Set<string>, controlGroups?: Map<string, string> }} known
  */
 function validatedArticles(items, issues, known) {
   const seen = new Set();
@@ -1553,6 +1553,14 @@ function validatedArticles(items, issues, known) {
     if (groupId && !known.groupIds.has(groupId)) read.refuse("groupId", "not_found", "groupId is not a question group of this project.");
     if (!groupId && layer && layer !== "correction") {
       read.refuse("groupId", "missing", "Every article but a correction names the question group it answers.");
+    }
+    // A control group is the comparison the net effect stands on, measured and never written for: an article for it is registered all
+    // the same (nothing is refused), and said so once — the group is no longer a clean control, and the market never places for it.
+    if (groupId && known.controlGroups?.has(groupId)) {
+      issues.push({ index, field: "groupId", code: "notice",
+        message: `This article is written for a control group${known.controlGroups.get(groupId) ? ` (${known.controlGroups.get(groupId)})` : ""}. `
+          + "The group is measured, never written for: an article for it takes it out of the control arm, and the platform does not place articles for it. "
+          + "If it was meant for a pilot group, register it with that group's id." });
     }
     // The platform reads the gate from its own record; the run's word is not asked for.
     if (item.gate != null && (typeof item.gate !== "string" || !GEO_ARTICLE_GATES.includes(item.gate))) {
@@ -1910,10 +1918,11 @@ async function writeToProject({ store, project, what, body, renameProject = null
       const items = itemsOf(body, GEO_WRITE_LIMITS.articles);
       const [claimIds, groups, errors] = await Promise.all([
         store.claimIds(project.id),
-        store.query(`SELECT id FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
+        store.query(`SELECT id, name, is_control FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
         store.query(`SELECT id FROM evimed_geo.errors WHERE geo_project_id = $1`, [project.id]),
       ]);
       const candidates = validatedArticles(items, issues, { claimIds, groupIds: new Set(groups.rows.map((/** @type {any} */ row) => String(row.id))),
+        controlGroups: new Map(groups.rows.filter((/** @type {any} */ row) => row.is_control === true).map((/** @type {any} */ row) => [String(row.id), String(row.name ?? "")])),
         errorIds: new Set(errors.rows.map((/** @type {any} */ row) => String(row.id))) });
       const articles = [];
       for (const article of candidates) {

@@ -1406,12 +1406,13 @@ export class GeoService {
   async articlesOf(project) {
     const articles = await this.store.listArticles(project.id);
     const [groups, placements, cited] = await Promise.all([
-      this.store.query(`SELECT id, typical_question FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
+      this.store.query(`SELECT id, typical_question, is_control FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
       this.store.query(`SELECT article_id, count(*)::integer AS n FROM evimed_geo.orders WHERE geo_project_id = $1
         AND state NOT IN ('planned', 'cancelled', 'rejected', 'refunded', 'lost') GROUP BY article_id`, [project.id]),
       this.store.citedArticles(project.id),
     ]);
     const questions = new Map(groups.rows.map((/** @type {any} */ row) => [String(row.id), text(row.typical_question)]));
+    const controlGroups = new Set(groups.rows.filter((/** @type {any} */ row) => row.is_control === true).map((/** @type {any} */ row) => String(row.id)));
     const counts = new Map(placements.rows.map((/** @type {any} */ row) => [String(row.article_id), Number(row.n)]));
     const citedIds = new Set(cited.map((row) => row.articleId));
     // The articles that cite a claim of a card revision since corrected or withdrawn: a notice on the page (「被引结论已更新」),
@@ -1422,7 +1423,10 @@ export class GeoService {
         valueContext: article.valueContext, id: article.id, layer: article.layer, title: article.title, groupId: article.groupId,
         // Where it is to be published and for whom, as the run said it: a closed word, or the run's own words as a note.
         channel: article.channel, channelNote: article.channelNote, audience: article.audience, audienceNote: article.audienceNote,
-        question: article.groupId ? questions.get(article.groupId) ?? null : null, status: article.status, gate: article.gate,
+        question: article.groupId ? questions.get(article.groupId) ?? null : null,
+        // Written for a control group: it is out of the control arm, and the platform never places for it (said once when registered).
+        groupIsControl: Boolean(article.groupId && controlGroups.has(article.groupId)),
+        status: article.status, gate: article.gate,
         safety: article.safety, path: article.path, runId: article.runId, claimCount: article.claimIds.length,
         placements: counts.get(article.id) ?? 0, cited: citedIds.has(article.id),
         // The evidence chain: the card a card-layer article is made from, whether the claim references the platform read in the
