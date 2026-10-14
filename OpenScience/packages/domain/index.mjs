@@ -365,22 +365,18 @@ export {
   validateCapabilityManifest,
 } from './src/capabilityManifest.mjs'
 
-// capabilityDisplay — 5 exports
+// capabilityDisplay — 6 exports
 export {
   CAPABILITY_DISPLAY,
+  RESEARCH_TOOLS_NAME,
   capabilityBrief,
   capabilityBriefTask,
   capabilityListed,
   capabilityTitle,
 } from './src/capabilityDisplay.mjs'
 
-// generalTools — 4 exports: the tools page's general group and the blank conversation's example prompts
-export {
-  BLANK_EXAMPLES,
-  GENERAL_TOOL_GROUP,
-  GENERAL_TOOLS,
-  PROFESSIONAL_TOOL_GROUP,
-} from './src/generalTools.mjs'
+// blankExamples — 1 export: the pills on a blank conversation
+export { BLANK_EXAMPLES } from './src/blankExamples.mjs'
 
 // retiredNames — 4 exports: the two module names replaced on 2026-10-07, and the search alias that reads them as the
 // new names until 2027-01-07

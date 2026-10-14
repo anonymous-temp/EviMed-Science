@@ -1,12 +1,9 @@
 import {
-  BarChart3,
   BookOpenCheck,
   ClipboardCheck,
-  Code2,
   Database,
   Dna,
   FileSearch,
-  FileText,
   FlaskConical,
   Globe,
   Landmark,
@@ -16,10 +13,8 @@ import {
   Network,
   PenLine,
   Pill,
-  Presentation,
   Scale,
   Stethoscope,
-  Table2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -50,18 +45,4 @@ const ICONS: Record<string, LucideIcon> = {
 
 export function capabilityIcon(id: string): LucideIcon {
   return ICONS[id] ?? FlaskConical;
-}
-
-/** The general tools of the tools page, by their id in `@evimed/domain`'s `GENERAL_TOOLS`. */
-const GENERAL_ICONS: Record<string, LucideIcon> = {
-  documents: FileText,
-  spreadsheets: Table2,
-  slides: Presentation,
-  "data-analysis": BarChart3,
-  "web-research": Globe,
-  code: Code2,
-};
-
-export function generalToolIcon(id: string): LucideIcon {
-  return GENERAL_ICONS[id] ?? Lightbulb;
 }

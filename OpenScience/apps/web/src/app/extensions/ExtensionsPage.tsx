@@ -62,7 +62,7 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
   const [open, setOpen] = useState<Open | null>(null), [importBusy, setImportBusy] = useState(false);
 
   const platform = useLoad(listPlatformSkills);
-  // The curated research tools: the catalogue 工具 reads, through the same filter and names — no second source.
+  // The curated research tools: the catalogue 科研工具 reads, through the same filter and names — no second source.
   const tools = useLoad(listWebResearchAgents);
   const curatedTools = useMemo<CapabilityUi[] | null>(() => tools.state.status === "ready"
     ? tools.state.data.filter(agent => capabilityListed(agent.id)).map(researchAgentUi) : null, [tools.state]);
@@ -117,7 +117,7 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
   };
   const openSkill = (id: string) => { setOpen(null); navigate(`/app/extensions/skills/${encodeURIComponent(id)}`); };
 
-  // A tool is chosen by opening the conversation that runs it, bound before the conversation exists — what the 工具 card does.
+  // A tool is chosen by opening the conversation that runs it, bound before the conversation exists — what the 科研工具 card does.
   const [opening, setOpening] = useState<string | null>(null);
   const openTool = (agent: CapabilityUi) => {
     if (opening) return;

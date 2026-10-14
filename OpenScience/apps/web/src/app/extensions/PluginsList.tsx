@@ -108,7 +108,7 @@ export function PluginsList({ inventory, citation, extensions, allCatalogue, que
         </Group>
       )}
       {engines.length > 0 && (
-        <Group name="计算引擎" aside="工具在后台调用">
+        <Group name="计算引擎" aside="科研工具在后台调用">
           <List label="计算引擎" divided>
             {shownEngines.map(({ copy, available }) => {
               const Icon = copy.icon;

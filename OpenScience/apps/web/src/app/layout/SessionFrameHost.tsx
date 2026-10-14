@@ -221,7 +221,7 @@ export function SessionFrameHost() {
 
   // The runtime a conversation needs, started ahead of it — on whatever page
   // the shell loads, not only the conversation: someone who opens 知识库 or
-  // 工具 first finds the conversation already running when they get there
+  // 科研工具 first finds the conversation already running when they get there
   // (2026-09-22; a cold start is six to eight seconds, a warm one under half
   // a second). Only once the project is admitted, so never against a surface
   // still being released. On the conversation surface itself the frame starts

@@ -161,7 +161,7 @@ describe("Sidebar navigation", () => {
   it("lists the workbench destinations in order and navigates to each", async () => {
     renderSidebar();
 
-    const order = ["新对话", "工具", "知识库", "记忆胶囊", "定时任务"];
+    const order = ["新对话", "科研工具", "知识库", "记忆胶囊", "定时任务"];
     const buttons = order.map((label) => screen.getByRole("link", { name: label }));
     for (let i = 1; i < buttons.length; i += 1) {
       expect(
@@ -172,7 +172,7 @@ describe("Sidebar navigation", () => {
     await userEvent.click(screen.getByRole("link", { name: "知识库" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/files");
 
-    await userEvent.click(screen.getByRole("link", { name: "工具" }));
+    await userEvent.click(screen.getByRole("link", { name: "科研工具" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/capabilities");
 
     await userEvent.click(screen.getByRole("link", { name: "设置" }));
@@ -209,7 +209,7 @@ describe("Sidebar navigation", () => {
     expect(row).toHaveAttribute("aria-current", "page");
   });
 
-  // 「循证 GEO」 is a row directly below 「工具」, and only where `/api/me`
+  // 「循证 GEO」 is a row directly below 「科研工具」, and only where `/api/me`
   // offers the module to this account (`features.geo`).
   it("has no 循证 GEO row unless the account is offered the module", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, geo: false } });
@@ -218,20 +218,20 @@ describe("Sidebar navigation", () => {
     expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
-  it("puts 循证 GEO directly below 工具 when the account is offered it", async () => {
+  it("puts 循证 GEO directly below 科研工具 when the account is offered it", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, geo: true } });
     renderSidebar();
     const row = await screen.findByRole("link", { name: "循证 GEO" });
     expect(row).toHaveAttribute("href", "/app/geo");
     await screen.findByRole("link", { name: "前沿动态" });
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 7)).toEqual(["新对话", "前沿动态", "工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 7)).toEqual(["新对话", "前沿动态", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo");
     expect(row).toHaveAttribute("aria-current", "page");
   });
 
-  // 「虚拟临床研究」 sits between 「工具」 and 「循证 GEO」, and only where
+  // 「虚拟临床研究」 sits between 「科研工具」 and 「循证 GEO」, and only where
   // `/api/me` offers it (`features.vcr`).
   it("has no 虚拟临床研究 row unless the account is offered the module", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
@@ -240,13 +240,13 @@ describe("Sidebar navigation", () => {
     expect(screen.queryByRole("link", { name: "虚拟临床研究" })).not.toBeInTheDocument();
   });
 
-  it("puts 虚拟临床研究 between 工具 and 循证 GEO when the account is offered both", async () => {
+  it("puts 虚拟临床研究 between 科研工具 and 循证 GEO when the account is offered both", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, vcr: true, geo: true } });
     renderSidebar();
     const row = await screen.findByRole("link", { name: "虚拟临床研究" });
     expect(row).toHaveAttribute("href", "/app/virtual-research");
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "工具", "虚拟临床研究", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "虚拟临床研究", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research");
     expect(row).toHaveAttribute("aria-current", "page");
@@ -292,22 +292,22 @@ describe("Sidebar navigation", () => {
   });
 
   // One board offered and the other not: the one that is there keeps its place
-  // under 工具 rather than inheriting the missing one's.
-  it("puts 虚拟临床研究 under 工具 with no 循证 GEO beside it", async () => {
+  // under 科研工具 rather than inheriting the missing one's.
+  it("puts 虚拟临床研究 under 科研工具 with no 循证 GEO beside it", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true } });
     renderSidebar();
     await screen.findByRole("link", { name: "虚拟临床研究" });
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 6)).toEqual(["新对话", "工具", "虚拟临床研究", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "虚拟临床研究", "知识库", "记忆胶囊", "定时任务"]);
     expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
-  it("puts 循证 GEO below 工具 without the frontier feed too", async () => {
+  it("puts 循证 GEO below 科研工具 without the frontier feed too", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
     renderSidebar();
     await screen.findByRole("link", { name: "循证 GEO" });
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 6)).toEqual(["新对话", "工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
   });
 
   // The people icon on a study in 「最近」: the project list is told which
@@ -405,7 +405,7 @@ describe("Sidebar navigation", () => {
   // the release walk counted as kinds of control on every page.
   it("draws the destinations as 36 px navigation items and the bell as the sidebar's icon button", async () => {
     renderSidebar("/app/capabilities");
-    const current = screen.getByRole("link", { name: "工具" });
+    const current = screen.getByRole("link", { name: "科研工具" });
     expect(current).toHaveAttribute("aria-current", "page");
     expect(current).toHaveClass("h-control", "rounded", "px-2", "gap-2", "text-ui", "bg-accent-soft", "font-medium");
     const other = screen.getByRole("link", { name: "知识库" });
@@ -439,7 +439,7 @@ describe("Sidebar chrome", () => {
   it("has no quick-jump palette: the five destinations are the navigation", async () => {
     // Removed 2026-09-22 (「快速跳转有必要吗，就这几个板块」).
     renderSidebar();
-    await screen.findByRole("link", { name: "工具" });
+    await screen.findByRole("link", { name: "科研工具" });
     expect(screen.queryByRole("button", { name: /快速跳转/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Ctrl K|⌘K/)).not.toBeInTheDocument();
   });

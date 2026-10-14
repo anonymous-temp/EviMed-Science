@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Search } from "lucide-react";
-import { capabilityListed, GENERAL_TOOL_GROUP, GENERAL_TOOLS, PROFESSIONAL_TOOL_GROUP, searchMatches } from "@evimed/domain";
-import { availabilityIsDrawn, fetchWebResearchEstimates, webErrorMessage, listWebResearchAgents, type WebResearchAgent, type WebResearchEstimate } from "@/lib/apiClient";
+import { capabilityListed, RESEARCH_TOOLS_NAME, searchMatches } from "@evimed/domain";
+import { drawnAvailability, fetchWebResearchEstimates, webErrorMessage, listWebResearchAgents, type WebResearchAgent, type WebResearchEstimate } from "@/lib/apiClient";
 import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
-import { capabilityIcon, generalToolIcon } from "@/lib/capabilityIcons";
+import { capabilityIcon } from "@/lib/capabilityIcons";
 import { bindConversationCapability } from "@/lib/dispatch";
 import { formatNumber, formatRange } from "@/lib/format";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
@@ -12,16 +12,17 @@ import { useResearchBilling } from "@/lib/useResearchBilling";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
-import { SimulatedAllowanceNotice, SimulatedMark } from "@/components/settings/SimulatedAllowance";
-import { FilterChips } from "@/components/ui/FilterChips";
-import { SearchInput } from "@/components/ui/SearchInput";
+import { SimulatedAllowanceNotice } from "@/components/settings/SimulatedAllowance";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { List, ListRow } from "@/components/ui/ListRow";
+import { Section } from "@/components/ui/Section";
 import { Tag } from "@/components/ui/Tag";
 
 /**
- * The order the professional tools follow within their one group — evidence,
- * pharmacy, study design and data, writing (2026-09-23 plan §5.4) — rather than
- * by the sort order of their categories' names, which put 写作与传播 second. A
- * category the display table gains later follows these, by name.
+ * The groups in the product's order — evidence, pharmacy, study design and
+ * data, writing (2026-09-23 plan §5.4) — rather than by the sort order of their
+ * names, which put 写作与传播 second. A group the display table gains later
+ * follows these, by name.
  */
 const CATEGORY_ORDER = ["临床证据", "药学评价", "研究设计与数据", "写作与传播"];
 
@@ -29,11 +30,6 @@ function categoryRank(name: string): number {
   const at = CATEGORY_ORDER.indexOf(name);
   return at < 0 ? CATEGORY_ORDER.length : at;
 }
-
-type GeneralTool = (typeof GENERAL_TOOLS)[number];
-
-/** The groups of the page, in the order it lists them: what anyone does first, then the medical capabilities. */
-const GROUPS = [GENERAL_TOOL_GROUP, PROFESSIONAL_TOOL_GROUP] as const;
 
 /**
  * How long a tool usually takes: 「约 30～70 分钟」. This page is the one place a
@@ -48,7 +44,7 @@ function durationText([min, max]: [number, number]): string | null {
 /**
  * What a tool usually takes out of the allowance: 「约 4～8 灵豆」, in whole
  * credits (one credit is one CNY) — the low end floored, the high end rounded
- * up, because it is an 「约」 figure and `4.05～7.02` only wraps the card. A
+ * up, because it is an 「约」 figure and `4.05～7.02` only wraps the row. A
  * range that stays under one credit keeps its cents. Null when the estimate
  * names no range — nothing supports one (`basis: "none"`), or the two ends are
  * not a range — so a price nobody estimated is left out, never shown as zero.
@@ -62,38 +58,33 @@ function allowanceText(estimate: WebResearchEstimate | undefined): string | null
 }
 
 /**
- * 工具 — what the platform does, as a grid in two groups.
+ * 科研工具 — the medical professional workflows, one list per category.
  *
- * 通用 first: documents, spreadsheets, slides, data analysis, web research and
- * code, which anyone does and which are not capability packages — a card opens
- * an ordinary conversation with a sentence in the composer to change before it
- * is sent. 医学专业 after: the capability packages, each with its own contract.
- * The first group is the page's own table (`@evimed/domain`'s `GENERAL_TOOLS`),
- * so it is there whether or not the catalogue could be read.
+ * What is here is a workflow with a contract and a deliverable, and a category to
+ * choose it by (临床证据 · 药学评价 · 研究设计与数据 · 写作与传播). Documents, spreadsheets, slides, data,
+ * the open web and code are what the assistant does in any conversation; they are not tools to pick and
+ * have no row here (owner, 2026-10-14). The page is the product's list page: one toolbar over the list —
+ * the categories as one row of chips, the search and the count — and a row per tool: its icon and name, one
+ * complete sentence, how long it usually takes.
  *
- * A capability is unlike its neighbours (each does a different job), so it is a
- * card — a quiet grey ground, no border — and not a row. A card says what the
- * tool does in one complete sentence and how long it usually takes; nothing
- * else. The sentence is the capability's `display.description`, kept short
- * enough for two lines at the source rather than cut off here with an ellipsis.
- * What a tool needs from the researcher is said by the composer once the tool
- * is chosen, not on the card.
+ * Choosing a tool opens a new conversation with that tool on: the reader types into the composer they were
+ * going to use anyway, and the tool rides along as a chip above it.
  *
- * Choosing a capability opens a new conversation with that tool on: the reader
- * types into the composer they were going to use anyway, and the tool rides
- * along as a chip above it.
+ * What the row says about the tool's state is a reason the reader can act on, and only that
+ * (`drawnAvailability`): a connector they have not given their own key for — with the way to the page
+ * where it is added — or a module their account is not offered. A deployment whose last run of a tool
+ * failed says nothing here: that is a fact about somebody's run, and every account opens this page.
  *
- * Where research is billed from a simulated wallet (`useResearchBilling`), this
- * is also where the next task's cost is met before it starts: a card adds what
- * the tool usually takes out of the allowance, marked as simulated, and a low
- * or used-up allowance is prompted above the grid. Every other deployment gets
- * the page as it was, and asks for no estimate.
+ * Where research is billed from a simulated wallet (`useResearchBilling`), this is also where the next
+ * task's cost is met before it starts: a row adds what the tool usually takes out of the allowance, and a
+ * low or used-up allowance is prompted above the list. Every other deployment gets the page as it was, and
+ * asks for no estimate.
  */
 export function CapabilitiesPage() {
   const navigate = useNavigate();
   const [agents, setAgents] = useState<WebResearchAgent[]>([]);
   const [query, setQuery] = useState("");
-  const [group, setGroup] = useState("all");
+  const [category, setCategory] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
@@ -120,8 +111,8 @@ export function CapabilitiesPage() {
 
   // What each listed tool usually costs, in one read for all of them — asked
   // only where the allowance is simulated, and again only when the list of
-  // tools itself changes (a search or a group filters what is already here).
-  // A read that fails costs the page nothing: the cards stay as they are.
+  // tools itself changes (a search or a category filters what is already here).
+  // A read that fails costs the page nothing: the rows stay as they are.
   const listed = useMemo(() => catalogue.map((ui) => ui.id).join(","), [catalogue]);
   useEffect(() => {
     if (!billing.simulated || !listed) return;
@@ -132,23 +123,23 @@ export function CapabilitiesPage() {
     return () => { active = false; };
   }, [billing.simulated, listed]);
 
-  // A retired module name still finds the module's tools until 2027-01-07 (`searchMatches`).
-  const generalTools = useMemo(
-    () => GENERAL_TOOLS.filter((tool) => searchMatches(query, [tool.title, tool.description, ...tool.starterPrompts])),
-    [query],
+  const categories = useMemo(
+    () => [...new Set(catalogue.map((ui) => ui.category))]
+      .sort((left, right) => categoryRank(left) - categoryRank(right) || left.localeCompare(right, "zh")),
+    [catalogue],
   );
-  const professionalTools = useMemo(
-    () => catalogue.filter((ui) => searchMatches(query, [ui.title, ui.description, ...ui.starterPrompts]))
-      .sort((left, right) => categoryRank(left.category) - categoryRank(right.category)),
-    [catalogue, query],
-  );
-  const showGeneral = (group === "all" || group === GENERAL_TOOL_GROUP) && generalTools.length > 0;
-  const showProfessional = group === "all" || group === PROFESSIONAL_TOOL_GROUP;
+  const groups = useMemo(() => categories
+    .filter((name) => category === "all" || name === category)
+    .map((name) => [name, catalogue.filter((ui) => ui.category === name
+      // A retired module name still finds the module's tools until 2027-01-07 (`searchMatches`).
+      && searchMatches(query, [ui.title, ui.description, ...ui.starterPrompts]))] as const)
+    .filter(([, items]) => items.length > 0), [catalogue, categories, category, query]);
+  const shown = groups.reduce((sum, [, items]) => sum + items.length, 0);
 
   /**
-   * A capability is chosen by opening a conversation that runs it — bound
-   * before the conversation exists, because a binding is what makes the router
-   * honour the choice rather than re-decide it with a classifier.
+   * A tool is chosen by opening a conversation that runs it — bound before the
+   * conversation exists, because a binding is what makes the router honour the
+   * choice rather than re-decide it with a classifier.
    */
   const [opening, setOpening] = useState<string | null>(null);
   const open = (agent: CapabilityUi) => {
@@ -157,141 +148,112 @@ export function CapabilitiesPage() {
     void bindConversationCapability(null, { agentId: agent.id, agentVersion: agent.version })
       .then((bound) => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(undefined, bound.sessionId), capabilityId: agent.id } }))
       // A binding the control plane refused must not strand the reader on a
-      // dead card: the conversation opens, and the router decides as it did
+      // dead row: the conversation opens, and the router decides as it did
       // before there were tools.
       .catch(() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }))
       .finally(() => setOpening(null));
   };
-  // A general tool binds nothing: a new conversation with its first sentence in the composer, never sent.
-  const openGeneral = (tool: GeneralTool) => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(tool.starterPrompts[0]) } });
 
-  const professionalEmpty = !loading && !error && professionalTools.length === 0;
-  const nothing = !showGeneral && (!showProfessional || professionalEmpty);
+  const filtering = category !== "all" || query.trim() !== "";
+  const clear = () => { setCategory("all"); setQuery(""); };
 
   return (
     <PageShell
-      title="工具"
-      actions={<SearchInput label="搜索工具" value={query} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-72" />}
+      title={RESEARCH_TOOLS_NAME}
+      // One row, above the list it controls: the categories, the search and what is listed.
+      toolbar={{
+        label: "科研工具筛选",
+        filters: categories.length > 1
+          ? [{ kind: "chips", label: "分类", options: [{ value: "all", label: "全部" }, ...categories.map((name) => ({ value: name, label: name }))], value: category, onChange: setCategory }]
+          : [],
+        onClear: clear,
+        search: { label: "搜索工具", value: query, onChange: setQuery, onClear: () => setQuery("") },
+        summary: loading || error ? undefined : `${shown} 个`,
+      }}
     >
       {/* Only a balance just read: while it is being read again, or could not be, the one held is not drawn. */}
       {!billing.loading && !billing.error && <SimulatedAllowanceNotice allowance={billing.allowance} className="mb-6" />}
-      <FilterChips
-        label="分类"
-        className="mb-6"
-        options={[{ value: "all", label: "全部" }, ...GROUPS.map((name) => ({ value: name, label: name }))]}
-        value={group}
-        onChange={setGroup}
-      />
-      <div className="space-y-8">
-        {showGeneral && (
-          <section aria-labelledby="capability-group-general">
-            <h2 id="capability-group-general" className="mb-2 text-ui font-semibold text-text">{GENERAL_TOOL_GROUP}</h2>
-            <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {generalTools.map((tool) => (
-                <li key={tool.id} className="flex">
-                  <GeneralToolCard tool={tool} onOpen={() => openGeneral(tool)} />
-                </li>
+      {loading ? <ToolListSkeleton />
+        // Error with a way out, not a dead end: a catalogue that failed to
+        // load once is usually a control plane that was briefly away.
+        : error ? <LoadError message={`无法加载工具目录：${error}`} onRetry={() => setReloads((value) => value + 1)} />
+          : groups.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title={`没有符合条件的${RESEARCH_TOOLS_NAME}`}
+              action={filtering ? <Button variant="secondary" onClick={clear}>清除筛选</Button> : undefined}
+            />
+          ) : (
+            <div>
+              {groups.map(([name, items]) => (
+                <Section key={name} title={name} count={items.length}>
+                  <List label={name} divided>
+                    {items.map((agent) => (
+                      <ToolRow key={agent.id} agent={agent} estimate={billing.simulated ? estimates.get(agent.id) : undefined} busy={opening === agent.id} onOpen={() => open(agent)} />
+                    ))}
+                  </List>
+                </Section>
               ))}
-            </ul>
-          </section>
-        )}
-        {showProfessional && (loading ? <ToolGridSkeleton />
-          // Error with a way out, not a dead end: a catalogue that failed to
-          // load once is usually a control plane that was briefly away. The
-          // general tools above do not wait for it.
-          : error ? <LoadError message={`无法加载工具目录：${error}`} onRetry={() => setReloads((value) => value + 1)} />
-            : professionalTools.length > 0 && (
-              <section aria-labelledby="capability-group-professional">
-                <h2 id="capability-group-professional" className="mb-2 text-ui font-semibold text-text">{PROFESSIONAL_TOOL_GROUP}</h2>
-                <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {professionalTools.map((agent) => (
-                    <li key={agent.id} className="flex">
-                      <ToolCard agent={agent} estimate={billing.simulated ? estimates.get(agent.id) : undefined} busy={opening === agent.id} onOpen={() => open(agent)} />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
-        {nothing && <EmptyState icon={Search} title="没有符合条件的工具" />}
-      </div>
+            </div>
+          )}
     </PageShell>
   );
 }
 
-/** One general tool: its icon and name and one sentence. It opens a conversation with a sentence to start from, bound to nothing. */
-function GeneralToolCard({ tool, onOpen }: { tool: GeneralTool; onOpen: () => void }) {
-  const Icon = generalToolIcon(tool.id);
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label={`用“${tool.title}”开始一次对话`}
-      className="flex min-h-32 w-full flex-col gap-1.5 rounded-card bg-surface-1 p-4 text-left transition-colors duration-fast hover:bg-surface-2"
-    >
-      <span className="flex items-center gap-2 text-ui font-semibold text-text">
-        <Icon size={16} className="shrink-0 text-accent" aria-hidden="true" />
-        {tool.title}
-      </span>
-      <span className="text-ui text-text-2">{tool.description}</span>
-    </button>
-  );
-}
+/** Where the reader adds what a tool is missing, by the reason that is drawn: their own key for a data source. */
+const FIX_PATH = "/app/account?tab=connectors";
 
 /**
- * One tool: its icon and name, one sentence, how long it usually takes, what
- * this deployment can truthfully say about it when that is something to act on
- * — and, where the allowance is simulated, what it usually takes out of it,
- * with the mark every simulated amount carries. The label is a label: the card
- * opens the same conversation whatever it says (an unavailable tool reports
- * "blocked" by its own mechanism when asked).
+ * One tool: its icon and name, one sentence, and under it how long it usually
+ * takes — and, where the allowance is simulated, what it usually takes out of it. A state is said only when
+ * it is a reason the reader can act on, as a word and, where there is one, its sentence with the way to
+ * mend it. The row opens the same conversation whatever it says (an unavailable tool reports "blocked" by its
+ * own mechanism when asked).
  */
-function ToolCard({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; estimate?: WebResearchEstimate; busy: boolean; onOpen: () => void }) {
+function ToolRow({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; estimate?: WebResearchEstimate; busy: boolean; onOpen: () => void }) {
   const Icon = capabilityIcon(agent.id);
   const duration = durationText(agent.estimatedMinutes);
   const allowance = allowanceText(estimate);
-  const availability = agent.availability ?? null;
-  const sentenceId = `availability-${agent.id}`;
-  // Only a state the reader can act on is drawn (`availabilityIsDrawn`); the rest is neither seen nor read out. No tool is hidden
-  // or disabled for what its state says.
-  const shown = availability !== null && availabilityIsDrawn(availability.state);
+  const drawn = drawnAvailability(agent.availability ?? null);
+  const facts = [duration, allowance].filter(Boolean).join(" · ");
+  const connector = agent.availability?.reason.code === "data-source-not-configured";
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      disabled={busy}
-      aria-label={`用“${agent.title}”开始一次对话`}
-      aria-describedby={shown ? sentenceId : undefined}
-      className="flex min-h-32 w-full flex-col gap-1.5 rounded-card bg-surface-1 p-4 text-left transition-colors duration-fast hover:bg-surface-2 disabled:cursor-wait disabled:opacity-40"
-    >
-      <span className="flex items-center gap-2 text-ui font-semibold text-text">
-        <Icon size={16} className="shrink-0 text-accent" aria-hidden="true" />
-        {agent.title}
-      </span>
-      <span className="text-ui text-text-2">{agent.description}</span>
-      {shown && (
-        <span id={sentenceId} className="text-caption text-text-3">
-          {availability.text}
-        </span>
+    <ListRow
+      leading={<Icon size={20} className="text-accent" aria-hidden="true" />}
+      title={agent.title}
+      muted={busy}
+      meta={(
+        <>
+          <span className="block">{agent.description}</span>
+          {(facts || drawn) && (
+            <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+              {drawn && <Tag>{drawn.label}</Tag>}
+              {drawn?.text && <span>{drawn.text}</span>}
+              {facts && <span className="tabular-nums">{facts}</span>}
+            </span>
+          )}
+        </>
       )}
-      {(duration || allowance || shown) && (
-        <span className="mt-auto flex flex-wrap items-center gap-x-1.5 gap-y-1 pt-1 text-caption text-text-3">
-          {shown && <Tag>{availability.label}</Tag>}
-          {[duration, allowance].filter(Boolean).join(" · ")}
-          {allowance && <SimulatedMark />}
-        </span>
-      )}
-    </button>
+      actions={connector ? <Link to={FIX_PATH} className={buttonClasses({ variant: "text", size: "sm" })}>去添加</Link> : undefined}
+      onOpen={onOpen}
+    />
   );
 }
 
-/** The grid's shape while the catalogue loads: a heading and six grey cards. */
-function ToolGridSkeleton() {
+/** The list's shape while the catalogue loads: a heading and six grey rows. */
+function ToolListSkeleton() {
   return (
     <div className="animate-pulse" aria-hidden="true">
-      <div className="mb-2 h-4 w-20 rounded bg-surface-2" />
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 6 }, (_, index) => <div key={index} className="h-32 rounded-card bg-surface-1" />)}
-      </div>
+      <div className="mb-3 h-5 w-24 rounded bg-surface-2" />
+      {Array.from({ length: 6 }, (_, index) => (
+        <div key={index} className="flex items-start gap-3 px-2 py-3">
+          <div className="mt-0.5 h-5 w-5 rounded bg-surface-2" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 w-1/3 rounded bg-surface-2" />
+            <div className="h-3 w-2/3 rounded bg-surface-1" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

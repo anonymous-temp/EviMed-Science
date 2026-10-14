@@ -119,7 +119,7 @@ export function simulatedAllowanceLevel(allowance: WebResearchAllowance | null):
 /**
  * The prompt a reader sees when their simulated allowance is running low or is
  * used up, with the way to the simulated recharge page — at the top of the
- * allowance page, and of 工具, where the next task would be started. Draws
+ * allowance page, and of 科研工具, where the next task would be started. Draws
  * nothing above the threshold, and nothing at all for an allowance that is not
  * simulated.
  */

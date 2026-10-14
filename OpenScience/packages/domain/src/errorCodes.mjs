@@ -2444,7 +2444,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // EviMed's billing shows no balance at all, so the first of these is normally
   // read by a client that asked anyway rather than by a person.
   evimed_credits_not_enabled: '这个部署还没有接入灵豆计费，因此没有余额和预计消耗可看。',
-  evimed_credits_request_invalid: '这次查询的参数不对，没有得到预计消耗。换一个工具再看即可。',
+  evimed_credits_request_invalid: '这次查询的参数不对，没有得到预计消耗。换一个科研工具再看即可。',
   evimed_credits_unreachable: '额度的记录暂时读不出来，稍后再试。',
   simulated_wallet_not_enabled: '这个部署没有开启模拟额度，没有可以充值的内容。',
   simulated_wallet_request_invalid: '这次模拟充值的内容不对，没有入账。换一个充值额度再试。',
