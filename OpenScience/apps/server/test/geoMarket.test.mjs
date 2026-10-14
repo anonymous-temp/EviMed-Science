@@ -221,6 +221,7 @@ async function doubleFixture() {
       article: (row) => store.seedArticle(row),
       source: (row) => store.seedSource(row),
       target: (row) => store.seedTarget(row),
+      placementPlan: (geoProjectId, data) => store.seedPlacementPlan(geoProjectId, data),
     },
     async tamperLedger(row) {
       store.ledger.push(assertLedgerRow({ ...row, userId: null }, new Date().toISOString()));

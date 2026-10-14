@@ -1,4 +1,4 @@
-import { GEO_PLACEMENT_LABELS_ZH, stripGeoClaimReferences } from "@evimed/domain";
+import { GEO_PLACEMENT_LABELS_ZH, parseGeoActionKey, stripGeoClaimReferences } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { APPEAL_REASONS, MEDIA_FIELD_TYPES, MEDIA_TYPES, mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { compareProtectedSpans, extractProtectedSpans, htmlToText, markdownToHtml, sha256Hex, splitLeadingTitle } from "./geoMarketText.mjs";
@@ -289,6 +289,9 @@ const DAY = 24 * HOUR;
  *   null = the owner is gone and nothing more is placed for the project
  * @property {() => Date} [now]
  * @property {string} [timeZone] default Asia/Shanghai
+ * @property {(project: any) => Promise<{ skippedArticleIds?: Set<string>, preferredByArticle?: Map<string, string[]> }>} [placementChoices]
+ *   what a person's choices do to the plan, as the project's derived actions say it (`geoChoiceEffects`): the articles of actions
+ *   they set aside are not planned for, and the outlet they sent an action to ranks first among the admitted. Absent, nothing is chosen.
  */
 
 /** @param {MarketDeps} deps */
@@ -303,6 +306,7 @@ function context(deps) {
     articleBody: deps.articleBody ?? null,
     gradedSha256: deps.gradedSha256 ?? null,
     userById: deps.userById ?? null,
+    placementChoices: deps.placementChoices ?? null,
     notify: deps.notify ?? null,
     alertOperator: deps.alertOperator ?? null,
     config: deps.config ?? {},
@@ -465,6 +469,9 @@ export function articleProblems(article) {
   if (article.gate === "failed") problems.push("gate_failed");
   if (!/^[a-f0-9]{64}$/.test(String(article.contentSha256 ?? ""))) problems.push("article_unhashed");
   if (article.layer === "card") problems.push("owned_layer_only");
+  // The run said the brand publishes it itself (an owned platform): it is not bought a placement in somebody else's outlet. An
+  // article with no channel, or `media_market`, is what the market places, as before.
+  if (article.channel && article.channel !== "media_market") problems.push("owned_channel_article");
   return problems;
 }
 
@@ -543,6 +550,75 @@ export function scoreOutlet(media, { article, engines, outcomes, source = null }
   const penalty = 0.15 * Number(media.flags?.editIncidents ?? 0) + (media.flags?.silentEdits ? 0.05 : 0);
   return round2(1000 * (0.40 * citedScore + 0.20 * layerFit(article?.layer ?? null, price) + 0.15 * priceScore
     + 0.15 * publishRate + 0.10 * speed - penalty)) / 1000;
+}
+
+// ------------------------------------------------------------ the ranking
+
+/** A name or an address as it is compared: lower case, no `www.`. @param {unknown} value */
+const bareName = (value) => String(value ?? "").trim().toLowerCase().replace(/^www\./, "");
+
+/** Whether an outlet is one of the named ones: by its domain, its page host or its name. @param {Set<string>} names @param {any} media */
+function outletNamed(names, media) {
+  if (!names.size) return false;
+  return [media.domain, media.flags?.host, media.name].some((value) => value && names.has(bareName(value)));
+}
+
+/**
+ * The outlets the plan may place from: on offer, not blacklisted, not refusing medical text, a verified domain, priced at most the
+ * automatic cap. The rest of the admission (the three conditions, the same-domain cap, an unknown order on the outlet) is
+ * {@link outletProblems}, which needs the article's project.
+ * @param {any[]} candidates
+ */
+export function placeableOutlets(candidates) {
+  return candidates.filter((media) => media.available && !media.blacklisted && !media.flags?.medicalRefused
+    && media.domainVerified === true && media.priceCny != null && media.priceCny <= MARKET_RULES.autoSelectMaxPriceCny);
+}
+
+/**
+ * The admitted outlets for one article, best first: the one ranking the plan places by and the page shows beside an action — a
+ * function, so what is recommended and what is ordered cannot differ. A second article on a domain the project already used counts
+ * about half (the owner's reference: 第二篇只算半篇效果), so reuse is discounted.
+ *
+ * A preference — the domains a person sent the article's action to, the run's placement plan — puts an outlet first among the
+ * admitted ones and never past an admission rule; `avoid` takes an outlet out. Neither is a gate on the article.
+ * @param {{ hard: any[], article: any, engines: string[], outcomes: Map<string, any[]>, sources: Map<string, any>, usage: Map<string, number>,
+ *   blocked: Set<string>, excluded?: Set<string>, preferred?: Set<string>, avoid?: Set<string> }} input
+ * @returns {Array<{ media: any, score: number, preferred: boolean }>}
+ */
+export function rankOutlets({ hard, article, engines, outcomes, sources, usage, blocked, excluded = new Set(), preferred = new Set(), avoid = new Set() }) {
+  return hard
+    .filter((media) => !excluded.has(mediaKey(media.mediaType, media.resourceId)))
+    .filter((media) => !outletNamed(avoid, media))
+    .filter((media) => outletProblems(media, {
+      source: sourceFor(sources, media),
+      domainCount: usage.get(media.domain) ?? 0,
+      outletBlocked: blocked.has(mediaKey(media.mediaType, media.resourceId)),
+    }).length === 0)
+    .map((media) => ({ media, preferred: outletNamed(preferred, media), score: scoreOutlet(media, {
+      article, engines, outcomes: outcomes.get(mediaKey(media.mediaType, media.resourceId)) ?? [], source: sourceFor(sources, media),
+    }) / (1 + (usage.get(media.domain) ?? 0)) }))
+    .sort((a, b) => Number(b.preferred) - Number(a.preferred) || b.score - a.score || (a.media.priceCny ?? 0) - (b.media.priceCny ?? 0));
+}
+
+/**
+ * What the run's placement plan (`geo_write placement_plan`) says about one article: the outlets it prefers for it (an entry with no
+ * scope is the project's; with `articleIds`, `groupIds` or `layer` only the articles it names) and the outlets to avoid.
+ * @param {{ data?: Record<string, any> } | null | undefined} plan @param {any} article
+ */
+export function placementPlanFor(plan, article) {
+  const data = plan?.data && typeof plan.data === "object" ? plan.data : {};
+  const list = (/** @type {unknown} */ value) => (Array.isArray(value) ? value.filter((entry) => typeof entry === "string" && entry.trim()).map(bareName) : []);
+  const preferred = new Set();
+  for (const entry of Array.isArray(data.preferred) ? data.preferred : []) {
+    if (!entry || typeof entry !== "object") continue;
+    const articleIds = list(entry.articleIds).length ? new Set(entry.articleIds.map(String)) : null;
+    const groupIds = list(entry.groupIds).length ? new Set(entry.groupIds.map(String)) : null;
+    if (articleIds && !articleIds.has(String(article?.id ?? ""))) continue;
+    if (groupIds && !groupIds.has(String(article?.groupId ?? ""))) continue;
+    if (entry.layer && article?.layer && entry.layer !== article.layer) continue;
+    for (const name of list(entry.outlets)) preferred.add(name);
+  }
+  return { preferred, avoid: new Set(list(data.avoid)) };
 }
 
 /** The project's registered drug names: the spans a published page must keep. @param {any} project */
@@ -829,28 +905,16 @@ async function reservedToday(ctx, geoProjectId) {
 }
 
 /**
- * Plan placements for one project's publishable articles: one outlet per
- * article that has no live order, the best-scoring admitted outlet whose
- * reserve fits what the budget has left.
+ * What a ranking reads about a project, once: the outlets that may be placed from, what our own placements taught about each, the
+ * project's source table for them, and how often a domain was used lately.
  * @param {ReturnType<typeof context>} ctx @param {any} project @param {any[]} candidates
- * @param {Set<string>} blocked @param {Record<string, any>} counts
  */
-async function planProject(ctx, project, candidates, blocked, counts) {
-  // The articles that can take a placement: not the ones that already hold an order (placed, being placed or planned), which are
-  // the oldest and, in a project that has placed a good many, all of the first two hundred (M-4).
-  const articles = await ctx.store.listPlaceableArticles(project.id, 200, { withoutOrderIn: LIVE_STATES });
-  if (!articles.length) return;
+async function rankingFacts(ctx, project, candidates) {
   const mediaByKey = new Map(candidates.map((media) => [mediaKey(media.mediaType, media.resourceId), media]));
   const { usage, orders: recent } = await domainUsage(ctx, project.id, mediaByKey);
-  const articleOrders = await listAllOrders(ctx.store, { geoProjectId: project.id, articleIds: articles.map((article) => article.id) }, 2_000);
-  const money = projectMoney(project, await ctx.store.ledgerSums({ geoProjectId: project.id }));
-  // What the plans already made hold back from the budget is every planned order of the project, not those of the articles listed above.
-  const plannedReserve = (await listAllOrders(ctx.store, { geoProjectId: project.id, states: ["planned"] }, 2_000))
-    .reduce((total, order) => total + (order.reserveCny ?? 0), 0);
-  let room = round2((money.availableCny ?? 0) - plannedReserve);
-  const hard = candidates.filter((media) => media.available && !media.blacklisted && !media.flags?.medicalRefused
-    && media.domainVerified === true && media.priceCny != null && media.priceCny <= MARKET_RULES.autoSelectMaxPriceCny);
+  const hard = placeableOutlets(candidates);
   const sources = await sourcesByDomain(ctx, project.id, hard.flatMap((media) => [media.domain, media.flags?.host]));
+  /** @type {Map<string, any[]>} */
   const outcomes = new Map();
   for (let index = 0; index < hard.length; index += 1_000) {
     for (const row of await ctx.store.getMediaOutcomes(hard.slice(index, index + 1_000).map((media) => ({ mediaType: media.mediaType, resourceId: media.resourceId })))) {
@@ -858,6 +922,44 @@ async function planProject(ctx, project, candidates, blocked, counts) {
       outcomes.set(key, [...(outcomes.get(key) ?? []), row]);
     }
   }
+  return { usage, recent, hard, sources, outcomes };
+}
+
+/**
+ * What a person's choices do to this tick's plan, as the derived actions say it (`placementChoices` of the deps; none = nothing is
+ * chosen). A failed read is the caller's to stop on: spending waits for it.
+ * @param {ReturnType<typeof context>} ctx @param {any} project
+ * @returns {Promise<{ skippedArticleIds: Set<string>, preferredByArticle: Map<string, string[]> }>}
+ */
+async function placementChoicesOf(ctx, project) {
+  const none = { skippedArticleIds: new Set(), preferredByArticle: new Map() };
+  if (!ctx.placementChoices) return none;
+  const read = await ctx.placementChoices(project);
+  return { skippedArticleIds: read?.skippedArticleIds ?? none.skippedArticleIds, preferredByArticle: read?.preferredByArticle ?? none.preferredByArticle };
+}
+
+/**
+ * Plan placements for one project's publishable articles: one outlet per
+ * article that has no live order, the best-scoring admitted outlet whose
+ * reserve fits what the budget has left. An article a person set aside is not
+ * planned; the outlet they sent its action to ranks first among the admitted.
+ * @param {ReturnType<typeof context>} ctx @param {any} project @param {any[]} candidates
+ * @param {Set<string>} blocked @param {Record<string, any>} counts
+ * @param {{ skippedArticleIds: Set<string>, preferredByArticle: Map<string, string[]> }} choices
+ */
+async function planProject(ctx, project, candidates, blocked, counts, choices) {
+  // The articles that can take a placement: not the ones that already hold an order (placed, being placed or planned), which are
+  // the oldest and, in a project that has placed a good many, all of the first two hundred (M-4).
+  const articles = await ctx.store.listPlaceableArticles(project.id, 200, { withoutOrderIn: LIVE_STATES });
+  if (!articles.length) return;
+  const { usage, recent, hard, sources, outcomes } = await rankingFacts(ctx, project, candidates);
+  const articleOrders = await listAllOrders(ctx.store, { geoProjectId: project.id, articleIds: articles.map((article) => article.id) }, 2_000);
+  const money = projectMoney(project, await ctx.store.ledgerSums({ geoProjectId: project.id }));
+  // What the plans already made hold back from the budget is every planned order of the project, not those of the articles listed above.
+  const plannedReserve = (await listAllOrders(ctx.store, { geoProjectId: project.id, states: ["planned"] }, 2_000))
+    .reduce((total, order) => total + (order.reserveCny ?? 0), 0);
+  let room = round2((money.availableCny ?? 0) - plannedReserve);
+  const plan = ctx.store.latestPlacementPlan ? await ctx.store.latestPlacementPlan(project.id) : null;
   const plans = [];
   const ordered = [...articles].sort((a, b) => Number(b.layer === "correction") - Number(a.layer === "correction"));
   for (const article of ordered) {
@@ -868,20 +970,11 @@ async function planProject(ctx, project, candidates, blocked, counts) {
     if (failed.length >= MARKET_RULES.maxFailedPlacementsPerArticle) { counts.skipped.article_attempts_exhausted = (counts.skipped.article_attempts_exhausted ?? 0) + 1; continue; }
     const problems = articleProblems(article);
     if (problems.length) { for (const problem of problems) counts.skipped[problem] = (counts.skipped[problem] ?? 0) + 1; continue; }
+    if (choices.skippedArticleIds.has(String(article.id))) { counts.skipped.action_skipped = (counts.skipped.action_skipped ?? 0) + 1; continue; }
     const excluded = new Set(mine.map((order) => mediaKey(order.mediaType, order.resourceId)));
-    const ranked = hard
-      .filter((media) => !excluded.has(mediaKey(media.mediaType, media.resourceId)))
-      .filter((media) => outletProblems(media, {
-        source: sourceFor(sources, media),
-        domainCount: usage.get(media.domain) ?? 0,
-        outletBlocked: blocked.has(mediaKey(media.mediaType, media.resourceId)),
-      }).length === 0)
-      // A second article on a domain the project already used counts about
-      // half (the owner's reference: 第二篇只算半篇效果), so reuse is discounted.
-      .map((media) => ({ media, score: scoreOutlet(media, {
-        article, engines: project.engines ?? [], outcomes: outcomes.get(mediaKey(media.mediaType, media.resourceId)) ?? [], source: sourceFor(sources, media),
-      }) / (1 + (usage.get(media.domain) ?? 0)) }))
-      .sort((a, b) => b.score - a.score || (a.media.priceCny ?? 0) - (b.media.priceCny ?? 0));
+    const wanted = placementPlanFor(plan, article);
+    for (const domain of choices.preferredByArticle.get(String(article.id)) ?? []) wanted.preferred.add(bareName(domain));
+    const ranked = rankOutlets({ hard, article, engines: project.engines ?? [], outcomes, sources, usage, blocked, excluded, preferred: wanted.preferred, avoid: wanted.avoid });
     const pick = ranked.find(({ media }) => reserveFor(media.priceCny) <= room + MARKET_RULES.epsilonCny);
     if (!pick) { counts.skipped[ranked.length ? "budget_exhausted" : "no_admitted_outlet"] = (counts.skipped[ranked.length ? "budget_exhausted" : "no_admitted_outlet"] ?? 0) + 1; continue; }
     const reserve = reserveFor(pick.media.priceCny);
@@ -890,14 +983,14 @@ async function planProject(ctx, project, candidates, blocked, counts) {
     plans.push({
       userId: project.userId, geoProjectId: project.id, articleId: article.id, mediaType: pick.media.mediaType, resourceId: pick.media.resourceId,
       priceCny: pick.media.priceCny, reserveCny: reserve,
-      detail: { score: pick.score, domain: pick.media.domain, layer: article.layer, recentOrders: recent.length },
+      detail: { score: pick.score, domain: pick.media.domain, layer: article.layer, recentOrders: recent.length, ...(pick.preferred ? { preferred: true } : {}) },
     });
   }
   // One at a time: the store holds an article to one live order, and a plan a
   // concurrent writer beat to its article is skipped without losing the rest.
-  for (const plan of plans) {
+  for (const made of plans) {
     try {
-      counts.planned += (await ctx.store.insertOrders([plan], ctx.now().toISOString())).length;
+      counts.planned += (await ctx.store.insertOrders([made], ctx.now().toISOString())).length;
     } catch (error) {
       if (/** @type {any} */ (error)?.code !== "geo_order_article_live") throw error;
       counts.skipped.article_already_live = (counts.skipped.article_already_live ?? 0) + 1;
@@ -905,19 +998,136 @@ async function planProject(ctx, project, candidates, blocked, counts) {
   }
 }
 
+/** How long the catalogue a page's preview ranks over is reused. */
+const PREVIEW_CATALOGUE_MS = 60_000;
+/** The most market outlets one group's preview adds in front of what the engines cite. */
+const PREVIEW_OUTLETS = 3;
+/** @type {WeakMap<object, { at: number, rows: any[] }>} */
+const previewCatalogues = new WeakMap();
+
+/**
+ * The platform's read-only recommendation of where each group's article would go: {@link rankOutlets} over the same catalogue, the
+ * same outcomes and the same project sources as {@link planProject} — and nothing is ordered by asking. The candidates a group
+ * already has (what its answers cite, the strategy's layout, the brand's own channels) come back with what the market says of them
+ * (price, whether it would place there and why not), and the market's best outlets come first.
+ *
+ * Without a configured market there is no ranking to show and the candidates come back as they were.
+ *
+ * @param {MarketDeps} deps
+ * @param {{ project: any, groups: Array<{ id: string, aliasIds?: string[], isControl?: boolean }>, candidates: Map<string, Array<Record<string, any>>>,
+ *   choices?: Array<{ key: string, skipped?: boolean, sourceDomain?: string | null }>, articles?: any[] }} input
+ * @returns {Promise<Map<string, Array<Record<string, any>>>>}
+ */
+export async function previewOutlets(deps, { project, groups, candidates, choices = [], articles = [] }) {
+  const ctx = context(deps);
+  /** @type {Map<string, Array<Record<string, any>>>} */
+  const out = new Map(candidates);
+  if (!ctx.configured) return out;
+  const cached = previewCatalogues.get(ctx.store);
+  const nowMs = ctx.now().getTime();
+  let catalogue = cached && nowMs - cached.at < PREVIEW_CATALOGUE_MS ? cached.rows : null;
+  if (!catalogue) {
+    catalogue = await ctx.store.listCandidateMedia({ maxPriceCny: MARKET_RULES.autoSelectMaxPriceCny, limit: 5_000 });
+    previewCatalogues.set(ctx.store, { at: nowMs, rows: catalogue });
+  }
+  const blocked = await blockedOutlets(ctx);
+  const facts = await rankingFacts(ctx, project, catalogue);
+  const plan = ctx.store.latestPlacementPlan ? await ctx.store.latestPlacementPlan(project.id) : null;
+  // The sources a person sent a content action of a group to; a correction's source is not the content's.
+  /** @type {Array<{ groupId: string, domain: string }>} */
+  const swapped = [];
+  for (const choice of choices) {
+    const parsed = choice.sourceDomain && choice.skipped !== true ? parseGeoActionKey(choice.key) : null;
+    if (parsed?.groupId && parsed.kind !== "correct_error") swapped.push({ groupId: parsed.groupId, domain: bareName(choice.sourceDomain) });
+  }
+  const byDomain = new Map();
+  for (const media of catalogue) if (media.domain) byDomain.set(bareName(media.domain), media);
+
+  /** @param {any} source */
+  const conditionsOf = (source) => (source ? { icp: source.icpMatches, newsIndexed: source.newsIndexed, medical: source.medicalVertical } : {});
+  /** A row for an outlet, as an action lists a source. @param {any} media @param {Array<string>} problems @param {Record<string, any> | null} existing */
+  const rowOf = (media, problems, existing) => {
+    const source = sourceFor(facts.sources, media);
+    return {
+      citedFor: {}, mentionsOurs: null, wrongOurs: null, cited: 0, ...(existing ?? {}),
+      domain: bareName(media.domain), name: existing?.name ?? (media.name || null), kind: existing?.kind ?? "media", layer: existing?.layer ?? null,
+      conditions: conditionsOf(source), price: media.priceCny, available: problems.length === 0, unavailableBecause: problems,
+      route: "market", origin: existing?.origin ?? "market",
+    };
+  };
+
+  for (const group of groups) {
+    if (group.isControl) continue;
+    const ids = new Set([group.id, ...(group.aliasIds ?? [])]);
+    const mine = articles.filter((article) => article.groupId && ids.has(String(article.groupId)) && article.layer !== "correction" && article.status !== "withdrawn");
+    const latest = [...mine].sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")))[0] ?? null;
+    const article = { id: latest?.id ?? null, groupId: group.id, layer: latest?.layer ?? null };
+    const wanted = placementPlanFor(plan, article);
+    for (const entry of swapped) if (ids.has(entry.groupId)) wanted.preferred.add(entry.domain);
+    const ranked = rankOutlets({ hard: facts.hard, article, engines: project.engines ?? [], outcomes: facts.outcomes, sources: facts.sources, usage: facts.usage,
+      blocked, preferred: wanted.preferred, avoid: wanted.avoid });
+    const existing = candidates.get(group.id) ?? [];
+    /** @type {Map<string, Record<string, any>>} */
+    const listed = new Map();
+    /** @type {Array<Record<string, any>>} */
+    const front = [];
+    // The market's best outlets, in the plan's own order.
+    for (const { media, score } of ranked) {
+      if (front.length >= PREVIEW_OUTLETS) break;
+      const known = existing.find((candidate) => candidate.domain && bareName(candidate.domain) === bareName(media.domain)) ?? null;
+      const row = { ...rowOf(media, [], known), score };
+      front.push(row);
+      listed.set(row.domain, row);
+    }
+    // What was already listed: the market's word on it when it is an outlet of the catalogue.
+    const rest = [];
+    for (const candidate of existing) {
+      const domain = candidate.domain ? bareName(candidate.domain) : null;
+      if (domain && listed.has(domain)) continue;
+      const media = domain ? byDomain.get(domain) : null;
+      if (!media) {
+        // An own channel is placed by its person; another outlet the catalogue does not list cannot be placed by the platform.
+        rest.push(candidate.route === "own" ? candidate : { ...candidate, route: "not_in_market", unavailableBecause: [...(candidate.unavailableBecause ?? []), "not_in_catalogue"], available: false });
+        continue;
+      }
+      const problems = outletProblems(media, {
+        source: sourceFor(facts.sources, media), domainCount: facts.usage.get(media.domain) ?? 0, outletBlocked: blocked.has(mediaKey(media.mediaType, media.resourceId)),
+      });
+      const avoided = outletNamed(wanted.avoid, media) ? ["avoided_by_plan"] : [];
+      const row = candidate.route === "own" ? candidate : rowOf(media, [...problems, ...avoided], candidate);
+      listed.set(row.domain, row);
+      rest.push(row);
+    }
+    // A swapped source the group's lists did not name still has to be shown with the market's word on it.
+    for (const domain of wanted.preferred) {
+      if (listed.has(domain) || rest.some((row) => row.domain && bareName(row.domain) === domain)) continue;
+      const media = byDomain.get(domain);
+      if (!media) continue;
+      const problems = outletProblems(media, {
+        source: sourceFor(facts.sources, media), domainCount: facts.usage.get(media.domain) ?? 0, outletBlocked: blocked.has(mediaKey(media.mediaType, media.resourceId)),
+      });
+      rest.push(rowOf(media, problems, null));
+    }
+    out.set(group.id, [...front, ...rest]);
+  }
+  return out;
+}
+
 /**
  * Plans whose article stopped being placeable, or whose outlet stopped being
  * admissible, are withdrawn before anything is reserved for them.
  * @param {ReturnType<typeof context>} ctx @param {any} project @param {Map<string, any>} candidatesByKey @param {Record<string, any>} counts
+ * @param {{ skippedArticleIds: Set<string> }} choices a plan for an article a person set aside is withdrawn: nothing is held for it
  */
-async function withdrawStalePlans(ctx, project, candidatesByKey, counts) {
+async function withdrawStalePlans(ctx, project, candidatesByKey, counts, choices) {
   const planned = await listAllOrders(ctx.store, { geoProjectId: project.id, states: ["planned"] }, 2_000);
   if (!planned.length) return;
   const articles = new Map((await ctx.store.getArticles(planned.map((order) => order.articleId))).map((article) => [article.id, article]));
   for (const order of planned) {
     const media = candidatesByKey.get(mediaKey(order.mediaType, order.resourceId));
     const articleIssues = articleProblems(articles.get(order.articleId));
-    const reason = articleIssues[0] ?? (!media ? "outlet_withdrawn" : media.priceCny !== order.priceCny ? "price_changed" : null);
+    const reason = articleIssues[0] ?? (choices.skippedArticleIds.has(String(order.articleId)) ? "action_skipped" : null)
+      ?? (!media ? "outlet_withdrawn" : media.priceCny !== order.priceCny ? "price_changed" : null);
     if (!reason) continue;
     if (await transition(ctx, order, "cancelled", { detail: { reason: `plan_withdrawn:${reason}` } })) counts.withdrawn += 1;
   }
@@ -1166,11 +1376,20 @@ export async function tickOrders(deps) {
   let sends = 0;
   /** Plan, then send, for one project — under its lock. @param {any} project */
   const work = async (project) => {
-    await withdrawStalePlans(ctx, project, candidatesByKey, counts);
+    // What the person chose reads before anything is withdrawn, planned or sent: a read that fails stops the project's spending for
+    // this tick (the choice may be a skip), and the next tick reads again.
+    let choices;
+    try {
+      choices = await placementChoicesOf(ctx, project);
+    } catch {
+      skip("choices_unavailable");
+      return;
+    }
+    await withdrawStalePlans(ctx, project, candidatesByKey, counts, choices);
     // A budget of zero is a stop (G10h): nothing is planned, reserved or sent for the project; a plan made before it waits, and what is
     // already placed runs its course (`setBudget`).
     if (budgetStopped(project)) { skip("budget_stopped"); return; }
-    await planProject(ctx, project, candidates, blocked, counts);
+    await planProject(ctx, project, candidates, blocked, counts, choices);
     if (!ctx.configured) { skip("market_unconfigured"); return; }
     if (stop.stopped) { skip("orders_stopped"); return; }
     const planned = await ctx.store.listOrders({ geoProjectId: project.id, states: ["planned"], limit: MARKET_RULES.sendsPerTick });

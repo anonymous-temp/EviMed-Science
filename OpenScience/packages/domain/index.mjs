@@ -1383,7 +1383,23 @@ export {
   GEO_LEDGER_KINDS,
   GEO_MEDIA_TYPES,
   GEO_METRIC_LABELS_ZH,
+  GEO_METRIC_UNITS,
   GEO_METRIC_ROW_SCOPES,
+  geoMetricId,
+  geoMetricName,
+  geoMetricUnit,
+  GEO_ARTICLE_CHANNELS,
+  GEO_ARTICLE_CHANNEL_LABELS_ZH,
+  GEO_ACTION_KINDS,
+  GEO_ACTION_KIND_LABELS_ZH,
+  GEO_ACTION_STATUSES,
+  GEO_ACTION_STATUS_LABELS_ZH,
+  GEO_ACTION_PROMISES,
+  GEO_ACTION_PROMISE_LABELS_ZH,
+  GEO_ACTION_SOURCE_CHOICES,
+  GEO_ACTION_CHECKS,
+  GEO_PROMISE_CEILINGS,
+  GEO_NEEDS_YOU_KINDS,
   GEO_MIN_CELL_SAMPLES,
   GEO_ORDER_CANCELLABLE_STATES,
   GEO_ORDER_OPEN_STATES,
@@ -1474,6 +1490,34 @@ export {
   geoSurfaceKey,
   parseGeoCoverageKey,
 } from './src/geoCoverage.mjs'
+// geoActions — the action read model of 「循证 GEO」, once: what is being done for each question group and what came of it, derived
+// from rows the caller read (no I/O). A group's reading is k of n and a state — no rate below the platform's floor of 30 answers —
+// the target is the chosen tier's row for the group's pool, "did it work" is the arms' net effect, and the status is the furthest
+// stage reached (the 8-week stale rule the orchestrator also reads). The page, `geo_read actions`, the weekly report and the
+// scheduler share these functions.
+export {
+  GEO_ACTION_QUESTIONS,
+  GEO_ACTION_READ_METRICS,
+  GEO_ACTION_SERIES_POINTS,
+  GEO_ACTION_SOURCES,
+  GEO_STALE_PLACEMENT_WEEKS,
+  deriveGeoActions,
+  geoActionEntry,
+  geoActionKey,
+  geoActionNotices,
+  geoActionSentence,
+  geoErrorsByClaim,
+  geoExpectedMetrics,
+  geoGroupReading,
+  geoChoiceEffects,
+  geoGroupShort,
+  geoNeedsYou,
+  geoPlacementStale,
+  geoPoolTarget,
+  geoStepSummary,
+  geoTextKey,
+  parseGeoActionKey,
+} from './src/geoActions.mjs'
 export { frontierNoticeTarget, frontierNoticeHref } from './src/frontierPresentation.mjs';
 export { shareNoticeHref } from './src/shareNotice.mjs';
 

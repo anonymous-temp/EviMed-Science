@@ -366,8 +366,9 @@ test("targets are forecasts or commercial, three tiers, no duplicates; sources a
     { domain: "39.net", kind: "news" },
     { domain: "fake-times.cn", impostor: true, blacklistReason: "冒名站", layer: "anchor", cited: { deepseek: 9 } },
   ] });
-  assert.deepEqual(sources.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]), [[0, "notice"], [1, "invalid"], [2, "duplicate"], [3, "ignored_fields"]],
-    "a condition checked without its day is noted; measured counts are the platform's, not the run's: dropped, the rest of the source kept");
+  assert.deepEqual(sources.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]), [[0, "notice"], [1, "invalid"], [2, "duplicate"]],
+    "a condition checked without its day is noted; measured counts are the platform's, not the run's: declined by name (GEO_NOT_STORED), counted, the rest of the source kept");
+  assert.equal(sources.declined, 1, "the one measured field the run typed is counted, not listed");
   const listed = await store.listSources(project.id);
   assert.deepEqual(listed.map((source) => source.domain).sort(), ["39.net", "fake-times.cn"]);
   assert.deepEqual(listed.find((source) => source.domain === "fake-times.cn")?.cited ?? {}, {}, "no count came from the run");
@@ -515,7 +516,9 @@ test("journey, strategy and placement preferences are versions, and each refused
   } });
   assert.equal(strategy.version, 1);
   assert.equal(strategy.sourceIds.length, 1);
-  assert.deepEqual(strategy.issues.map((/** @type {any} */ issue) => issue.code), ["unknown_value", "unknown_value", "unknown_value", "invalid"]);
+  assert.deepEqual(strategy.issues.map((/** @type {any} */ issue) => issue.code), ["unknown_value", "unknown_value", "unknown_value", "invalid", "notice"],
+    "the entries the words refuse, then the platform's own note that the one gap that was kept has no action");
+  assert.equal(strategy.issues.at(-1).gapId, undefined);
   const latest = await store.latestStrategy(project.id);
   assert.deepEqual(latest?.expectations.map((/** @type {any} */ entry) => entry.engine), ["deepseek"]);
   assert.deepEqual(Object.keys(latest?.layout ?? {}), ["doubao"]);

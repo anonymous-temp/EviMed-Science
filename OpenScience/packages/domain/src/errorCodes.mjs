@@ -1698,6 +1698,11 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_member_user_unknown',
   'geo_member_owner_fixed',
   'geo_member_detail_invalid',
+  // The question-group spine (rectification 2026-10-14): a group, an action or a to-do the project does not have, and a choice that
+  // is not one of the two a person may make.
+  'geo_cluster_not_found',
+  'geo_action_not_found',
+  'geo_action_choice_invalid',
 ])
 
 /**
@@ -2090,6 +2095,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_member_user_unknown: '没有这个账号，请核对账号后再添加。',
   geo_member_owner_fixed: '项目负责人就是创建项目的账号，不能在成员里增减。',
   geo_member_detail_invalid: '成员的补充信息只能写医院、科室、专业、职称、所属机构和备注，每项不超过 120 个字。',
+  geo_cluster_not_found: '找不到这个问题群，它可能已经随问题地图的新版本换掉了。',
+  geo_action_not_found: '找不到这条行动，它可能已经完成或被新一版策略取代。',
+  geo_action_choice_invalid: '这一步只能“跳过”或“换信源”，换信源要写明一个信源的网站域名。',
   // 「虚拟临床研究」's page refusals. Every one of these is permanent for the request
   // that caused it — retrying the same thing gets the same answer — so none of
   // them says 「稍后再试」, which is what the family sentence for an unknown

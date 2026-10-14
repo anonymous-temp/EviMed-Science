@@ -38,12 +38,10 @@ import { GeoMeasureStore } from "./geoMeasureStore.mjs";
 import { migrateGeo } from "./geoPersistence.mjs";
 import { GEO_METRIC_ROUND_KINDS, measureRound } from "./geoMetricsJob.mjs";
 import { GeoStore, geoProjectFromRow, mergedExpectations } from "./geoStore.mjs";
-import { GEO_WRITE_LIMITS, geoRuntimeWrite, geoStrategyDraft } from "./geoWrites.mjs";
+import { GEO_WRITE_LIMITS, geoRuntimeWrite, geoStrategyDraft, geoStrategyWriteOfFile } from "./geoWrites.mjs";
 
 /** The two domains ruled not ours on 2026-09-26 (the owner: Lilly holds a competitor). */
 export const GEO_NOT_OWNED_DOMAINS = Object.freeze(["lillymedical.cn", "lm.qa.lilly.cn"]);
-/** What a strategy write carries, out of the run's `strategy.json`. */
-const STRATEGY_FIELDS = Object.freeze(["battlefield", "secondary", "expectations", "gaps", "layout", "summary"]);
 /** The numbers the report states before and after, per full measurement. */
 const HEADLINE = Object.freeze(["M-19", "M-01S", "M-06", "M-08", "M-08S"]);
 
@@ -205,8 +203,9 @@ export async function runGeoDataFixes({ database, geoProjectId, apply = false, d
 
     // 3. The strategy the run wrote in its own file.
     if (strategy && typeof strategy === "object") {
-      const data = Object.fromEntries(STRATEGY_FIELDS.filter((field) => strategy[field] != null).map((field) => [field, strategy[field]]));
-      const sources = Array.isArray(strategy.sources) ? strategy.sources : [];
+      // The file's parts under the names the write reads (`geoStrategyWriteOfFile`: the layout and the source table sit under `sources`).
+      const { sources: fileSources, ...data } = geoStrategyWriteOfFile(strategy);
+      const sources = Array.isArray(fileSources) ? fileSources : [];
       const draft = geoStrategyDraft({ ...data, sources });
       // Idempotent: a strategy the latest version already says is not written again.
       const latest = await store.latestStrategy(project.id);
