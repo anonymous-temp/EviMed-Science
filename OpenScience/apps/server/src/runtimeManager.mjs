@@ -427,8 +427,18 @@ export function isImmutableRuntimeUiAsset(suffix) {
   const pathname = cut < 0 ? target : target.slice(0, cut);
   const query = cut < 0 ? "" : target.slice(cut + 1);
   if (/^\/assets\/[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|woff2?|ttf|otf|svg|png|jpe?g|gif|webp|avif|ico|wasm)$/.test(pathname)) return true;
+  if (ROOT_PLUGIN_RUNTIME_ASSET.test(target)) return true;
   return pathname.startsWith("/plugins/") && /(?:^|[?&])rev=[A-Za-z0-9._-]{6,}(?:&|$)/.test(query);
 }
+
+/**
+ * A plugin's renderer that its client imports from a ROOT path of the application's origin, outside every frame's prefix:
+ * the Mermaid bundle's `import("/dsh-mermaid/mermaid-runtime.js?rev=<content hash>")`, about 3.4 MB. The path has no frame
+ * to resolve, so it was answered 401 and a reply drew the diagram's code and never the diagram. It is served by the same
+ * route as the application's build files (`SHARED_UI_ASSET_PREFIX`): login alone, GET and HEAD, one exact path, a
+ * revision that names the content. Exact paths only — a new one is a line here and a test, never a pattern.
+ */
+export const ROOT_PLUGIN_RUNTIME_ASSET = /^\/dsh-mermaid\/mermaid-runtime\.js\?rev=[A-Za-z0-9._-]{6,64}$/;
 
 /** What a browser may keep of an immutable kernel file: this account's copy, for a year. */
 export const IMMUTABLE_UI_CACHE = "private, max-age=31536000, immutable";

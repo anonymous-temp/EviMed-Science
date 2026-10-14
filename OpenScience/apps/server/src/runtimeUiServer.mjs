@@ -11,7 +11,7 @@ import { assertSpendWithinLimits } from "./usageMetering.mjs";
 import { assertNoSymlinkPath, HttpError, mimeFor, openScopedFileNoFollow, readBody, readStableFileHandle } from "./security.mjs";
 import { RUNTIME_UI_FRAME_COOKIE, parseRuntimeUiFramePath, runtimeUiCookie, runtimeUiOrigins, validateRuntimeUiFrame } from "./runtimeUiFrames.mjs";
 import { runtimeUiBootstrapSource } from "./runtimeUiDocument.mjs";
-import { IMMUTABLE_UI_CACHE, SHARED_UI_ASSET_PREFIX, isImmutableRuntimeUiAsset } from "./runtimeManager.mjs";
+import { IMMUTABLE_UI_CACHE, ROOT_PLUGIN_RUNTIME_ASSET, SHARED_UI_ASSET_PREFIX, isImmutableRuntimeUiAsset } from "./runtimeManager.mjs";
 
 /**
  * The methods that make the deployment spend money.
@@ -495,6 +495,11 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       await serveSharedAsset(req, res, target.slice(SHARED_UI_ASSET_PREFIX.length - 1));
       return true;
     }
+    // A plugin renderer imported from a root path of this origin, with no frame in it (`ROOT_PLUGIN_RUNTIME_ASSET`).
+    if (ROOT_PLUGIN_RUNTIME_ASSET.test(target)) {
+      await serveSharedAsset(req, res, target);
+      return true;
+    }
     const match = /^\/__evimed\/a\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})\/(assets\/[A-Za-z0-9._-]+)$/.exec(target.split("?")[0]);
     if (!target.startsWith("/__evimed/a/")) return false;
     if (!match || !["GET", "HEAD"].includes(String(req.method).toUpperCase())) {
@@ -524,7 +529,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
    */
   async function serveSharedAsset(req, res, suffix) {
     const asset = /^\/assets\/[A-Za-z0-9._-]+$/.test(suffix)
-      || /^\/plugins\/\?\?[A-Za-z0-9@/._,-]{1,8192}&rev=[A-Za-z0-9._-]{6,64}$/.test(suffix);
+      || /^\/plugins\/\?\?[A-Za-z0-9@/._,-]{1,8192}&rev=[A-Za-z0-9._-]{6,64}$/.test(suffix)
+      || ROOT_PLUGIN_RUNTIME_ASSET.test(suffix);
     if (!asset || suffix.includes("..") || !["GET", "HEAD"].includes(String(req.method).toUpperCase())) {
       throw new HttpError(404, "runtime_ui_asset_not_found", "No such application file.");
     }
