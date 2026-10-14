@@ -998,6 +998,33 @@ test("OpenViking as an engine: the two switches follow whether the engine is the
   }
 });
 
+test("the turn committer: on by default with bounded levers, and a value outside a bound is refused by name", () => {
+  const saved = process.env;
+  try {
+    process.env = { ...HOSTED_ENV };
+    const base = loadConfig({ rootDir: repoRoot });
+    assert.deepEqual(
+      [base.nativeMemoryTurnCommitEnabled, base.nativeMemoryTurnCommitDebounceMs, base.nativeMemoryTurnCommitSettleMs, base.nativeMemoryTurnCommitAttempts, base.nativeMemoryTurnCommitConcurrency, base.nativeMemoryTurnCommitMaxScheduled],
+      [true, 8_000, 2_000, 4, 2, 1_000]);
+    process.env = { ...HOSTED_ENV, OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ENABLED: "false", OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_DEBOUNCE_MS: "30000", OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_CONCURRENCY: "1" };
+    const set = loadConfig({ rootDir: repoRoot });
+    assert.deepEqual([set.nativeMemoryTurnCommitEnabled, set.nativeMemoryTurnCommitDebounceMs, set.nativeMemoryTurnCommitConcurrency], [false, 30_000, 1]);
+    // Empty reads as unset: the compose file passes a value-less key through as nothing.
+    process.env = { ...HOSTED_ENV, OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_DEBOUNCE_MS: "", OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ENABLED: "" };
+    assert.deepEqual([loadConfig({ rootDir: repoRoot }).nativeMemoryTurnCommitDebounceMs, loadConfig({ rootDir: repoRoot }).nativeMemoryTurnCommitEnabled], [8_000, true]);
+    for (const [name, value] of [
+      ["OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_DEBOUNCE_MS", "10"], ["OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_SETTLE_MS", "soon"],
+      ["OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ATTEMPTS", "0"], ["OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_CONCURRENCY", "99"],
+      ["OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_MAX_SCHEDULED", "1"],
+    ]) {
+      process.env = { ...HOSTED_ENV, [name]: value };
+      assert.throws(() => loadConfig({ rootDir: repoRoot }), new RegExp(name), `${name}=${value} was accepted`);
+    }
+  } finally {
+    process.env = saved;
+  }
+});
+
 test("the engine's service key is read from its file and never from a value that is not there", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "evimed-ov-model-key-"));
   try {
