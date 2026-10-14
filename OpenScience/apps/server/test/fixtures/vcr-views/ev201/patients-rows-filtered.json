@@ -1,0 +1,116 @@
+{
+  "result": "res_vp",
+  "kind": "patient_set",
+  "columns": [
+    {
+      "key": "patientId",
+      "label": "编号",
+      "kind": "id"
+    },
+    {
+      "key": "age",
+      "label": null,
+      "kind": "number"
+    },
+    {
+      "key": "ecog",
+      "label": null,
+      "kind": "number"
+    },
+    {
+      "key": "arm",
+      "label": "分组",
+      "kind": "number",
+      "values": {
+        "0": "对照",
+        "1": "试验"
+      }
+    },
+    {
+      "key": "time",
+      "label": "时间",
+      "kind": "number"
+    },
+    {
+      "key": "status",
+      "label": "结局事件",
+      "kind": "number",
+      "values": {
+        "0": "删失",
+        "1": "发生事件"
+      }
+    },
+    {
+      "key": "entry",
+      "label": "入组时间",
+      "kind": "number"
+    }
+  ],
+  "rows": [
+    {
+      "patientId": "vp_6fc64718fd8b",
+      "age": 62.9,
+      "ecog": 1,
+      "arm": 1,
+      "time": 14,
+      "status": 0,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_cfe11f8dbfcd",
+      "age": 65.8,
+      "ecog": 0,
+      "arm": 1,
+      "time": 14,
+      "status": 0,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_e8c38ea84fa6",
+      "age": 64.7,
+      "ecog": 1,
+      "arm": 1,
+      "time": 14,
+      "status": 0,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_2bea8379f91c",
+      "age": 62.6,
+      "ecog": 0,
+      "arm": 1,
+      "time": 14,
+      "status": 0,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_00917d3d80ed",
+      "age": 64.4,
+      "ecog": 0,
+      "arm": 1,
+      "time": 14,
+      "status": 0,
+      "entry": 0
+    }
+  ],
+  "total": 425,
+  "all": 2000,
+  "offset": 0,
+  "limit": 5,
+  "sort": {
+    "column": "time",
+    "descending": true
+  },
+  "arms": [
+    {
+      "value": "1",
+      "label": "试验",
+      "n": 1000
+    },
+    {
+      "value": "0",
+      "label": "对照",
+      "n": 1000
+    }
+  ]
+}

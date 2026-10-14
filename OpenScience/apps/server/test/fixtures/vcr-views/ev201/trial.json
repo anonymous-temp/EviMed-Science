@@ -255,8 +255,20 @@
         "analytic": 80,
         "simulated": 81,
         "differencePoints": 0.4,
-        "agrees": true,
-        "text": "解析功效 80%，与模拟相差 0.4 个百分点，在容许范围内"
+        "agrees": true
+      },
+      "record": {
+        "method": "方案的模拟运行",
+        "replicates": 16000,
+        "seed": 5,
+        "check": {
+          "analytic": 80,
+          "simulated": 81,
+          "differencePoints": 0.4,
+          "allowedPoints": null,
+          "approximate": false,
+          "agrees": true
+        }
       }
     },
     {
@@ -536,8 +548,20 @@
         "analytic": 80,
         "simulated": 81,
         "differencePoints": 0.4,
-        "agrees": true,
-        "text": "解析功效 80%，与模拟相差 0.4 个百分点，在容许范围内"
+        "agrees": true
+      },
+      "record": {
+        "method": "方案的模拟运行",
+        "replicates": 16000,
+        "seed": 5,
+        "check": {
+          "analytic": 80,
+          "simulated": 81,
+          "differencePoints": 0.4,
+          "allowedPoints": null,
+          "approximate": false,
+          "agrees": true
+        }
       }
     },
     {
@@ -817,8 +841,20 @@
         "analytic": 80,
         "simulated": 81,
         "differencePoints": 0.4,
-        "agrees": true,
-        "text": "解析功效 80%，与模拟相差 0.4 个百分点，在容许范围内"
+        "agrees": true
+      },
+      "record": {
+        "method": "方案的模拟运行",
+        "replicates": 16000,
+        "seed": 5,
+        "check": {
+          "analytic": 80,
+          "simulated": 81,
+          "differencePoints": 0.4,
+          "allowedPoints": null,
+          "approximate": false,
+          "agrees": true
+        }
       }
     },
     {
@@ -832,7 +868,20 @@
       "measures": {},
       "method": null,
       "replicates": null,
-      "crossCheck": null
+      "crossCheck": null,
+      "record": {
+        "method": "方案的模拟运行",
+        "replicates": 16000,
+        "seed": 5,
+        "check": {
+          "analytic": 80,
+          "simulated": 81,
+          "differencePoints": 0.4,
+          "allowedPoints": null,
+          "approximate": false,
+          "agrees": true
+        }
+      }
     }
   ],
   "columns": [
@@ -1078,32 +1127,6 @@
       }
     ]
   },
-  "runRecord": [
-    {
-      "key": "run_A",
-      "title": "方案 A：方案的模拟运行，16,000 次重复",
-      "detail": "种子 5 · 解析值与仿真值一致（差 0.4 个百分点，在 3 倍蒙特卡洛标准误内）",
-      "ok": true
-    },
-    {
-      "key": "run_B",
-      "title": "方案 B：方案的模拟运行，16,000 次重复",
-      "detail": "种子 5 · 解析值与仿真值一致（差 0.4 个百分点，在 3 倍蒙特卡洛标准误内）",
-      "ok": true
-    },
-    {
-      "key": "run_C",
-      "title": "方案 C：方案的模拟运行，16,000 次重复",
-      "detail": "种子 5 · 解析值与仿真值一致（差 0.4 个百分点，在 3 倍蒙特卡洛标准误内）",
-      "ok": true
-    },
-    {
-      "key": "run_D",
-      "title": "方案 D：方案的模拟运行，16,000 次重复",
-      "detail": "种子 5 · 解析值与仿真值一致（差 0.4 个百分点，在 3 倍蒙特卡洛标准误内）",
-      "ok": true
-    }
-  ],
   "forecasts": [
     {
       "id": "fct_1",
@@ -1264,14 +1287,7 @@
   "schedule": null,
   "regulatory": [],
   "counts": {
-    "realPatients": 0,
-    "events": 138,
-    "effectiveSampleSize": null,
     "generatedRecords": 6480000,
-    "note": "设计阶段：尚无真实患者",
-    "notes": {
-      "generatedRecords": "模拟生成的记录，不是患者"
-    },
     "scope": "方案 B"
   },
   "stale": null,

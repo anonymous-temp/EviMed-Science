@@ -96,6 +96,9 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   // module's orchestrator is never the researcher's words, and the mark is
   // what the run ledger and the delivery import read it by.
   { tag: 'evimed-vcr-run', role: 'injected', emitters: ['apps/server/src/vcrOrchestrator.mjs', 'apps/server/src/server.mjs'] },
+  // The instruction of a step's run, in the run's own context (2026-10-14): the first message of its session is the step's sentence
+  // (「生成虚拟患者」) and the model's brief arrives here, never as anything a person said.
+  { tag: 'evimed-vcr-brief', role: 'injected', emitters: ['apps/server/src/vcrOrchestrator.mjs'] },
   { tag: 'evimed-budget-scope', role: 'injected', emitters: ['apps/server/src/modelGateway.mjs'] },
   { tag: 'evimed-claim', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
   { tag: 'evimed-claim-source', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },

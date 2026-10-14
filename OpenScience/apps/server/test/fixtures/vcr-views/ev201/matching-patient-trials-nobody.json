@@ -270,12 +270,6 @@
   },
   "counts": {
     "realPatients": 1,
-    "events": null,
-    "effectiveSampleSize": null,
-    "generatedRecords": null,
-    "notes": {
-      "events": "T1 无结局记录"
-    },
     "scope": null
   }
 }

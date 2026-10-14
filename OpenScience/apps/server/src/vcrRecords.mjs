@@ -22,6 +22,9 @@
  *   no longer matches (a restore, a hand edit) is refused rather than handed over under the result's name.
  * - **Every download is audited** — who, which result, which format, how many bytes — in the module's own audit table; a refusal is
  *   a line too, with the reason.
+ * - **The page of rows goes through the same doors** (`rows`, `record`, `describe`): the person-level rows of a synthetic table are
+ *   what a list shows, and a table that may not be downloaded may not be paged either. The hash is checked once per file (name, size
+ *   and modification time), not once per page.
  *
  * @module vcrRecords
  */
@@ -39,6 +42,8 @@ import { VCR_DERIVED_SOURCES } from "./vcrJobs.mjs";
 import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
 import { POPULATION_METHOD_WORDS } from "./vcrPopulationProfileView.mjs";
 import { qualityReportView } from "./vcrViewsTabs.mjs";
+import { loadRowTable, outcomeStatistics, pageOfFile, pageOfTable, patientRecord, profileOfTable } from "./vcrRows.mjs";
+import { vcrCalibration } from "./vcrCalibration.mjs";
 
 /** @param {unknown} value @returns {Record<string, any>} */
 const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
@@ -67,10 +72,21 @@ const REFUSALS = Object.freeze(/** @type {Record<string, [number, string]>} */ (
   vcr_records_not_synthetic: [403, "这是真实患者的记录，不能下载：真实患者的行不离开数据平面。"],
   vcr_records_quality_missing: [409, "这份经验合成的记录还没有质量报告和泄露检查，不能下载：先生成质量报告。"],
   vcr_records_unavailable: [503, "本部署没有接入数据平面，生成的记录暂时不能下载。"],
+  // The rows as a page (2026-10-14): a patient the table does not hold, a column it does not have, a table too long to sort whole.
+  vcr_patient_not_found: [404, "这一批记录里没有这位虚拟患者；回到名单重新选。"],
+  vcr_rows_query_invalid: [400, "这张表没有这一列，不能按它排序或筛选；换一列再试。"],
+  vcr_rows_too_large: [422, "这张表太长，不能整表排序；先用筛选缩小范围，或下载后在本地处理。"],
 }));
 
 /** @param {string} code */
 const refusal = (code) => new HttpError(REFUSALS[code][0], code, REFUSALS[code][1]);
+
+/**
+ * The files whose bytes were checked against the hash their result recorded, by name, size and modification time: a page of rows is
+ * a lookup, not a pass over the file with a digest at the start of it. A file that changes in any of the three is read again.
+ * @type {Map<string, string>}
+ */
+const verified = new Map();
 
 /**
  * @param {{ store: any, config?: Record<string, any> }} dependencies `store` is the module's own (results, executions, audit)
@@ -112,10 +128,28 @@ export function createVcrRecords({ store, config = {} }) {
     if (!file.startsWith(`${root}${path.sep}`)) throw refusal("vcr_records_not_found");
     const stat = await fs.stat(file).catch(() => null);
     if (!stat?.isFile()) throw refusal("vcr_records_not_found");
-    const hash = createHash("sha256");
-    await new Promise((resolve, reject) => { createReadStream(file).on("data", (chunk) => hash.update(chunk)).on("end", resolve).on("error", reject); });
-    if (hash.digest("hex") !== String(table.sha256)) throw refusal("vcr_records_not_found");
+    const key = `${file}\u0000${stat.size}\u0000${stat.mtimeMs}`;
+    if (verified.get(key) !== String(table.sha256)) {
+      const hash = createHash("sha256");
+      await new Promise((resolve, reject) => { createReadStream(file).on("data", (chunk) => hash.update(chunk)).on("end", resolve).on("error", reject); });
+      if (hash.digest("hex") !== String(table.sha256)) throw refusal("vcr_records_not_found");
+      verified.set(key, String(table.sha256));
+      if (verified.size > 64) verified.delete(/** @type {string} */ (verified.keys().next().value));
+    }
     return { file, bytes: stat.size };
+  }
+
+  /**
+   * A result's table, through every door the download goes through (`locate`, `open`): the rows of a synthetic table, whole or — when
+   * it is longer than memory holds — as the file to be streamed. Nothing about a real person's table is readable here.
+   * @param {{ id: string, name?: string }} study @param {string} resultId @param {string | null} [kind] the result kind the caller reads
+   */
+  async function readable(study, resultId, kind = null) {
+    const found = await locate(study, resultId);
+    // A list of patients is a patient set's table, a list of the population a population's: another kind is not the table asked for.
+    if (kind && found.result.kind !== kind) throw refusal("vcr_records_not_found");
+    const opened = await open(found.table);
+    return { ...found, file: opened.file, bytes: opened.bytes };
   }
 
   return {
@@ -139,6 +173,64 @@ export function createVcrRecords({ store, config = {} }) {
     },
 
     /**
+     * One page of the rows of a result's table: filtered, sorted and cut by the server (`vcrRows.pageOfTable`). The same refusals as
+     * the download; a table too long to sort answers `vcr_rows_too_large` and pages unsorted.
+     * @param {{ id: string }} study @param {string} resultId @param {import("./vcrRows.mjs").VcrRowsQuery & { kind?: string | null }} query
+     */
+    async rows(study, resultId, query) {
+      const found = await readable(study, resultId, query.kind ?? null);
+      const table = await loadRowTable(found.file);
+      const page = table.complete ? pageOfTable(table, query) : await pageOfFile(found.file, query);
+      if ("issue" in page) {
+        if (page.issue.error === "too_large") throw refusal("vcr_rows_too_large");
+        throw refusal("vcr_rows_query_invalid");
+      }
+      const { ok: _ok, ...rest } = page;
+      return { result: found.result.id, kind: found.result.kind, ...rest };
+    },
+
+    /**
+     * One patient's record from a patient set's table.
+     * @param {{ id: string }} study @param {string} resultId @param {string} patientId @param {string | null} [kind]
+     */
+    async record(study, resultId, patientId, kind = null) {
+      const found = await readable(study, resultId, kind);
+      const table = await loadRowTable(found.file);
+      const record = table.complete ? patientRecord(table, patientId) : null;
+      if (!record) throw refusal("vcr_patient_not_found");
+      return { result: found.result.id, ...record };
+    },
+
+    /**
+     * What a generated table is, from the table: the number of rows, the distribution of every variable (in the engine's own profile
+     * shape) and, for a two-arm outcome table, the numbers the page sets beside what the study declared. `null` for a table that
+     * cannot be read (not synthetic, not kept, no plane): the page then says what it holds without the rows.
+     * @param {{ id: string }} study @param {string} resultId
+     * @param {{ cards?: readonly Record<string, any>[], unitWord?: ((card: Record<string, any> | null) => string | null) | null,
+     *   labels?: Record<string, string> }} [context] `labels`: what the study calls a variable, by column (the population's own profile)
+     */
+    async describe(study, resultId, { cards = [], unitWord = null, labels = {} } = {}) {
+      /** @type {Awaited<ReturnType<typeof readable>>} */
+      let found;
+      try { found = await readable(study, resultId); } catch (error) {
+        if (error instanceof HttpError) return null;
+        throw error;
+      }
+      const table = await loadRowTable(found.file);
+      const statistics = table.complete ? outcomeStatistics(table) : null;
+      const executionJob = found.result.executionId
+        ? await store.one(`SELECT j.scenario FROM ${VCR_SCHEMA}.executions e JOIN ${VCR_SCHEMA}.jobs j ON j.id = e.job_id
+            WHERE e.id = $1 AND e.study_id = $2`, [found.result.executionId, study.id]).catch(() => null) : null;
+      return {
+        result: found.result.id,
+        rows: table.rows.length,
+        complete: table.complete,
+        profile: profileOfTable(table, { labels }),
+        calibration: vcrCalibration({ statistics, scenario: executionJob?.scenario ?? null, cards, unitWord }),
+      };
+    },
+
+    /**
      * The quality and leakage report of an empirical synthetic table, as the file that travels beside it.
      * @param {{ id: string }} study @param {string} resultId
      * @returns {Promise<{ filename: string, body: string }>}
@@ -157,7 +249,7 @@ export function createVcrRecords({ store, config = {} }) {
 
     /** The one line of the audit table a download leaves. @param {{ id: string }} study @param {string} userId @param {Record<string, any>} entry */
     async audit(study, userId, entry) {
-      await store.audit({ studyId: study.id, userId, action: "vcr.records.download", object: String(entry.resultId ?? ""),
+      await store.audit({ studyId: study.id, userId, action: entry.format === "page" ? "vcr.records.page" : "vcr.records.download", object: String(entry.resultId ?? ""),
         outcome: entry.outcome === "ok" ? "ok" : "refused", reason: String(entry.reason ?? ""), detail: { format: entry.format, bytes: entry.bytes ?? null, method: entry.method ?? null } });
     },
   };

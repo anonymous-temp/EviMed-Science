@@ -610,10 +610,6 @@
     "contact": true
   },
   "counts": {
-    "realPatients": 6,
-    "events": null,
-    "effectiveSampleSize": null,
-    "generatedRecords": null,
     "scope": null
   }
 }

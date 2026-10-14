@@ -548,12 +548,8 @@
     "rule": "加权后有效样本量低于下限"
   },
   "counts": {
-    "realPatients": 0,
-    "events": 812,
-    "effectiveSampleSize": null,
     "generatedRecords": 0,
     "reconstructedPseudoPatients": 801,
-    "note": "设计阶段：尚无真实患者",
     "scope": null
   },
   "verdict": {

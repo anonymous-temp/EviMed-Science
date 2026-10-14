@@ -265,20 +265,40 @@ export function isVerificationRun(run) {
 }
 
 /**
+ * The route-reason prefixes of a module's own programme steps: a run the module's orchestrator dispatched into the study's project
+ * (`vcr:definition`, `vcr:export-study_package`, …). Written by the control plane's dispatcher alone — the public dispatch route
+ * computes its own reasons and never takes one from a caller — so a prefix is a fact about who started the run, never about its text.
+ * 「循证 GEO」's steps (`geo:`) are the same kind of run and are not listed until its own pages stop presenting them as conversations.
+ */
+export const PROGRAMME_ROUTE_REASON_PREFIXES = Object.freeze(['vcr:'])
+
+/**
+ * Whether a run is one of a module's programme steps, decided by the route reason the control plane wrote at dispatch.
+ * @param {{ effectiveRouteReason?: string | null } | null | undefined} run @returns {boolean}
+ */
+export function isProgrammeRun(run) {
+  const reason = String(run?.effectiveRouteReason ?? '')
+  return PROGRAMME_ROUTE_REASON_PREFIXES.some((prefix) => reason.startsWith(prefix))
+}
+
+/**
  * The closed set of roles a run can have in the platform's own bookkeeping, which a list of the person's conversations reads to
  * leave the platform's back office out. A run with none is an ordinary one.
  *  - `verification`: the independent re-check of a claim (`isVerificationRun`).
+ *  - `programme`: a step of a module's programme, run in the study's project for the study (`isProgrammeRun`): the study's page
+ *    says what it is doing and what it made, and its conversation is the study's own, never one of these.
  */
-export const RUN_ROLES = Object.freeze(['verification'])
+export const RUN_ROLES = Object.freeze(['verification', 'programme'])
 
 /**
  * The role of a run, derived from what the control plane wrote at dispatch, or null for an ordinary run. One mark, computed once
  * on the server and carried by the run list (`role`), so no list matches route-reason strings of its own.
  * @param {{ effectiveRouteReason?: string | null } | null | undefined} run
- * @returns {'verification' | null}
+ * @returns {'verification' | 'programme' | null}
  */
 export function runRoleOf(run) {
-  return isVerificationRun(run) ? 'verification' : null
+  if (isVerificationRun(run)) return 'verification'
+  return isProgrammeRun(run) ? 'programme' : null
 }
 
 /** The route reason of one programme episode of `taskType`. @param {string} taskType @returns {string} */

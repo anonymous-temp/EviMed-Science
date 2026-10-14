@@ -10,7 +10,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { GENE_EXPRESSION_LIMITS, RUN_CONTEXT_PROTOCOL, isolatedToolRowIsAdmitted, workspaceLayout } from "@evimed/domain";
+import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, isolatedToolRowIsAdmitted, workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv } from "@evimed/harness-port";
 import {
   dockerRuntimeMount,
@@ -4025,21 +4025,35 @@ export class RuntimeManager {
     return this.runtimes.get(key)?.modelGatewayScope ?? this.pendingModelGatewayScopes.get(key) ?? null;
   }
 
+  /**
+   * What holds a project's runtime back from the person while a bounded run works in it: one of `RUNTIME_LOCK_REASONS`, said by
+   * whoever reserved it (`reserveBoundedRuntimeSession`'s `reason`). A reservation that said nothing is the platform's own.
+   * @param {Record<string, any>} project
+   */
+  boundedLockReason(project) {
+    const key = this.key(project);
+    const live = this.runtimes.get(key);
+    const said = live?.modelGatewayScope ? (live.boundedReason ?? live.modelGatewayScope.reason) : this.pendingModelGatewayScopes.get(key)?.reason;
+    return RUNTIME_LOCK_REASONS.includes(said) ? said : "platform-task";
+  }
+
+  /** The 423 a held runtime answers with: the one code every client knows, and the reason it is held in its declared detail. */
+  lockedRuntimeError(project) {
+    return new HttpError(423, "runtime_reserved_for_autopilot", "This project runtime is completing bounded proactive research.",
+      { reason: this.boundedLockReason(project) });
+  }
+
   assertBoundedStartOwnership(project, ownedScope = null) {
     // Ownership fences creation/adoption, not reads of an already running
     // runtime in the same workspace (including dispatch baseline capture).
     const scope = this.pendingModelGatewayScopes.get(this.key(project));
-    if (scope && scope !== ownedScope) {
-      throw new HttpError(423, "runtime_reserved_for_autopilot", "This project runtime is completing bounded proactive research.");
-    }
+    if (scope && scope !== ownedScope) throw this.lockedRuntimeError(project);
   }
 
   assertInteractiveRuntimeAvailable(project) {
     if (this.runtimeStops.has(this.key(project))) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
     if (this.failedRuntimeStops.has(this.key(project))) throw this.cleanupRequired();
-    if (this.boundedRuntimeScope(project)) {
-      throw new HttpError(423, "runtime_reserved_for_autopilot", "This project runtime is completing bounded proactive research.");
-    }
+    if (this.boundedRuntimeScope(project)) throw this.lockedRuntimeError(project);
   }
 
   async reserveBoundedRuntimeSession(project, budgetScope) {
@@ -4049,6 +4063,8 @@ export class RuntimeManager {
     const scope = {
       runId: safeId(budgetScope?.runId, "bounded run id"),
       dailyLimit: Number(budgetScope?.dailyLimit), weeklyLimit: Number(budgetScope?.weeklyLimit), runLimit: Number(budgetScope?.runLimit),
+      // Why the project's conversation is refused while this works: what the person is told (`RUNTIME_LOCK_REASONS`).
+      reason: RUNTIME_LOCK_REASONS.includes(budgetScope?.reason) ? budgetScope.reason : "platform-task",
     };
     if ([scope.dailyLimit, scope.weeklyLimit, scope.runLimit].some((value) => !Number.isFinite(value) || value <= 0)) {
       throw new HttpError(400, "runtime_model_gateway_scope_invalid", "A bounded runtime needs positive spending limits.");
@@ -4552,6 +4568,8 @@ export class RuntimeManager {
         weeklyLimit: modelGatewaySync.payload.weeklyLimit,
         runLimit: modelGatewaySync.payload.runLimit,
       } : null,
+      // The reason the reservation gave (the signed scope carries no such word): read by `boundedLockReason`.
+      boundedReason: modelGatewayScope?.reason ?? null,
       exitedAt: null,
       spawnError: null,
       project,

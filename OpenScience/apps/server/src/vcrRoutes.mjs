@@ -77,6 +77,8 @@ import { resolveJobSubject } from "./vcrSubjects.mjs";
 import { VCR_CARD_KINDS, createVcrCardEdits } from "./vcrCardEdits.mjs";
 import { zhTime } from "./vcrViewsKit.mjs";
 import { checkRegulatoryContact } from "./vcrScheduleView.mjs";
+import { VCR_ROWS_PAGE_MAX } from "./vcrRows.mjs";
+import { readRunMarks } from "./vcrStudyStatus.mjs";
 
 /**
  * Every code these routes answer with — or that a module behind them answers
@@ -108,6 +110,10 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_records_not_synthetic",
   "vcr_records_quality_missing",
   "vcr_records_unavailable",
+  // The rows of a generated table as a page: a patient it does not hold, a column it does not have, a table too long to sort whole.
+  "vcr_patient_not_found",
+  "vcr_rows_query_invalid",
+  "vcr_rows_too_large",
   "vcr_tab_not_found",
   "vcr_job_kind_invalid",
   "vcr_job_scenario_invalid",
@@ -166,6 +172,10 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "PATCH /studies/:id dataTier,intendedUse,status": ["manage_study"],
   "DELETE /studies/:id": ["manage_study"],
   "POST /studies/:id/run": ["run"],
+  "POST /studies/:id/cancel": ["run"],
+  "GET /studies/:id/patients/rows": ["read"],
+  "GET /studies/:id/patients/:patient": ["read"],
+  "GET /studies/:id/population/rows": ["read"],
   "POST /studies/:id/trial-search": ["run"],
   "GET /studies/:id/jobs": ["read"],
   "GET /studies/:id/jobs/:job": ["read"],
@@ -258,7 +268,7 @@ export function vcrRoutePattern(pathname) {
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
   if (parts[1] === "of-project" && parts.length === 3) return "/api/vcr/studies/of-project/:project";
-  const known = [...VCR_TABS, "run", "trial-search", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "cards"];
+  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "cards"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -376,9 +386,8 @@ function wholeNumber(value, field, max) {
  *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<unknown>,
  *   projects?: { create: (user: any, name: string) => Promise<{ id: string, name: string }>,
  *     bindSession: (user: any, projectId: string, capabilityId: string) => Promise<{ sessionId: string, bound: boolean }>,
- *     latestSessionId?: (user: any, projectId: string) => Promise<string | null>,
- *     conversationSessionId?: (user: any, projectId: string) => Promise<string | null>,
  *     backgroundRuns?: (userId: string, projectId: string, conversationSessionId: string | null) => Promise<Array<Record<string, any>>>,
+ *     cancelRun?: (userId: string, projectId: string, runId: string) => Promise<{ root: string } | null>,
  *     rename?: (ownerId: string, projectId: string, name: string, previousName: string) => Promise<unknown>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
  *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
@@ -681,17 +690,14 @@ export function createVcrRoutes(dependencies) {
     if (parts.length === 2) {
       if (method === "GET") {
         const { study, roles } = await authorize(id, "read");
-        const { conversationSessionId, ...view } = await service.studyView(user, study.id);
-        // 「对话」 is the conversation the study was opened with, never whichever background run's is newest: the one recorded at
-        // creation, else (a study made before it was recorded) the oldest one bound to the study's first capability, else the newest.
-        const sessionId = conversationSessionId
-          ?? await dependencies.projects?.conversationSessionId?.(user, view.projectId).catch(() => null)
-          ?? await dependencies.projects?.latestSessionId?.(user, view.projectId).catch(() => null) ?? null;
+        // The view carries `conversation` — the study's own conversation, never a background run's — and `activity`, `next` and
+        // `stepSummaries` (`VcrService.studyView`).
+        const view = await service.studyView(user, study.id);
         // What this caller may do, from the roles it holds now: the page reads it to show only the actions that will not be refused.
         // What this deployment offers on the page besides the module's own: each is a switch the page reads to show or hide one action.
         const features = { simulations: Boolean(config.vcrPublicSimulationsEnabled && hooks.publications), predictions: Boolean(hooks.predictions),
           platformPacks: Boolean(config.vcrPlatformPacksEnabled && hooks.knowledge) };
-        return reply({ ...view, sessionId, roles, abilities: abilitiesFor(roles), features });
+        return reply({ ...view, roles, abilities: abilitiesFor(roles), features });
       }
       if (method === "PATCH") {
         const body = await bodyOf(req, maxJsonBytes, ["name", "question", "action", "dataTier", "intendedUse", "status"]);
@@ -756,13 +762,85 @@ export function createVcrRoutes(dependencies) {
       return reply(await service.tab(user, id, section, url.searchParams));
     }
 
+    // --- the rows of a generated table, as a list (R3, 2026-10-14) -----------------------------------------------------------
+    // `GET …/patients/rows` is the virtual patients, `GET …/population/rows` the generated population, `GET …/patients/:patient` one
+    // patient's record. A page of at most 5,000 rows, filtered and sorted by the server; every door the download goes through
+    // (synthetic rows only, the recorded bytes, an empirical table's leakage check) is the one these go through.
+    if (method === "GET" && parts.length === 4 && ((section === "patients" || section === "population") && parts[3] === "rows"
+      || (section === "patients" && parts[3] !== "rows"))) {
+      const { study } = await authorize(id, "read");
+      const records_ = dependencies.records ?? service.packages?.records ?? null;
+      if (!records_?.rows) throw UNAVAILABLE();
+      const kind = section === "population" ? "population" : "patient_set";
+      const asked = url.searchParams.get("result");
+      if (asked !== null && !ID.test(asked)) throw new HttpError(400, "vcr_payload_invalid", "result is the id of a result of this study.");
+      // The study's current table of this kind, when none is named.
+      const current = asked ?? String((kind === "population" ? (await data().populations(study.id, 1))[0] : (await data().patientSets(study.id, 1))[0])?.resultId ?? "");
+      if (!current) throw new HttpError(404, "vcr_records_not_found", "这次计算没有可下载的记录：重新生成一次，再下载。");
+      /** @param {Record<string, any>} entry */
+      const noted = (entry) => records_.audit?.(study, String(user.id), { resultId: current, format: "page", ...entry })?.catch?.(() => null);
+      try {
+        if (parts[3] === "rows") {
+          const number = (/** @type {string} */ name) => { const raw = url.searchParams.get(name); return raw === null || raw === "" ? undefined : Number(raw); };
+          const offset = number("offset");
+          const limit = number("limit");
+          if ((offset !== undefined && !(Number.isInteger(offset) && offset >= 0)) || (limit !== undefined && !(Number.isInteger(limit) && limit >= 1 && limit <= VCR_ROWS_PAGE_MAX))) {
+            throw new HttpError(400, "vcr_payload_invalid", `offset is a whole number from 0, limit one from 1 to ${VCR_ROWS_PAGE_MAX}.`);
+          }
+          /** @type {Record<string, string>} */
+          const filters = {};
+          for (const [name, value] of url.searchParams) {
+            const column = /^filter\[([A-Za-z0-9_.-]{1,64})\]$/.exec(name)?.[1];
+            if (column) filters[column] = String(value).slice(0, 200);
+          }
+          if (Object.keys(filters).length > 8) throw new HttpError(400, "vcr_payload_invalid", "A list takes at most eight filters.");
+          const page = await records_.rows(study, current, {
+            offset, limit, sort: url.searchParams.get("sort"), arm: url.searchParams.get("arm"), filters, kind,
+          });
+          // One line per time a list is opened, not one per page of it.
+          if (!offset) await noted({ outcome: "ok" });
+          return reply(page);
+        }
+        const record = await records_.record(study, current, parts[3], kind);
+        await noted({ outcome: "ok", method: "record" });
+        return reply(record);
+      } catch (error) {
+        if (error instanceof HttpError && error.status !== 400) await noted({ outcome: "refused", reason: error.code });
+        throw error;
+      }
+    }
+
+    // --- 「取消」: stop what the study is doing now ----------------------------------------------------------------------------
+    // The run the study's one slot holds and every engine job that is open: the activity strip's one button. A run a person stopped
+    // is not tried again by the programme until they ask for the step (`#finishRun`), and the steps it covered read as not started.
+    if (parts.length === 3 && method === "POST" && section === "cancel") {
+      await bodyOf(req, maxJsonBytes, []);
+      const { study } = await authorize(id, "run");
+      return reply(await audited("vcr.step.cancel", (result) => ({ code: id, detail: `${result.canceled.runId ? "run" : "no-run"}+${result.canceled.jobs}` }), { code: id }, async () => {
+        const { flight } = await readRunMarks(data(), study.id).catch(() => ({ flight: null }));
+        /** @type {string | null} */
+        let runId = null;
+        if (flight?.run_id && dependencies.projects?.cancelRun) {
+          const stopped = await dependencies.projects.cancelRun(study.userId, study.projectId, String(flight.run_id));
+          if (stopped && stopped.root !== "not-running") runId = String(flight.run_id);
+        }
+        const open = hooks.jobs?.cancel && hooks.jobs.listForStudy
+          ? (await hooks.jobs.listForStudy(study.id, 50)).filter((/** @type {any} */ job) => ["queued", "running", "awaiting_budget"].includes(String(job.state))) : [];
+        let jobs = 0;
+        for (const job of open) {
+          try { await hooks.jobs.cancel(study.id, job.id, { actor: String(user.id) }); jobs += 1; } catch { /* one job that ended in between is not a failed cancel */ }
+        }
+        return { canceled: { runId, jobs } };
+      }));
+    }
+
     // --- 「AI 运行」: the conversations the programme opened in the study's project ------------------------------------------
     // Apart from the conversation the study was opened with (its 「对话」): what the platform did in the background, each row a
     // place to read it. Capability titles and a state word, never ids.
     if (parts.length === 3 && method === "GET" && section === "runs") {
       const { study } = await authorize(id, "read");
       const projects = dependencies.projects;
-      const own = study.conversationSessionId ?? await projects?.conversationSessionId?.(user, study.projectId).catch(() => null) ?? null;
+      const own = study.conversationSessionId ?? null;
       const runs = projects?.backgroundRuns ? await projects.backgroundRuns(study.userId, study.projectId, own).catch(() => []) : [];
       const now = typeof service.now === "function" ? service.now() : new Date();
       return reply({

@@ -38,12 +38,12 @@ import {
   VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
   VCR_QUALITY_CATEGORY_LABELS_ZH, VCR_TIME_KINDS, VCR_TIME_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_PROGNOSTIC_QUALIFICATION, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_ROBUSTNESS_STAGES, VCR_ROBUSTNESS_STAGE_LABELS_ZH,
-  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, VCR_SYNTHETIC_USE_LABELS_ZH, knownErrorCodeMessage, vcrAssessmentIssues, vcrAssessmentRows,
+  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, knownErrorCodeMessage, vcrAssessmentIssues, vcrAssessmentRows,
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
-import { POPULATION_METHOD_WORDS, PROFILE_MISSING_SENTENCE, constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
+import { constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
 import {
@@ -303,9 +303,12 @@ export function presentPopulationTab(bundle) {
       ineligible: numeric(outcomeCounts.ineligible ?? outcomeCounts.excluded),
     } : (strict !== null && lenient !== null && looked !== null ? { eligible: strict, insufficient: lenient - strict, ineligible: looked - lenient } : null);
   const profile = object(current?.profile);
-  // A generated population is described variable by variable by the engine (`diagnostics.profile`); a real cohort is compared with the
-  // published one, row by row.
-  const generated = current && current.kind !== "real" ? generatedProfileRows(diagnostics.profile) : null;
+  // A generated population is described variable by variable by the engine (`diagnostics.profile`) and, for one the engine wrote no
+  // profile for, from its stored table on read — deterministic, the same shape, never a request to generate it again. A real cohort
+  // is compared with the published one, row by row.
+  const violations = diagnostics.constraintViolations;
+  const generated = current && current.kind !== "real"
+    ? generatedProfileRows(diagnostics.profile, violations) ?? generatedProfileRows(bundle.table?.profile, violations) : null;
   const profileView = generated ?? profileRows(profile).map((entry, index) => {
     const row = object(entry);
     const smd = finite(row.smd ?? row.smdAdjusted);
@@ -365,17 +368,15 @@ export function presentPopulationTab(bundle) {
     })),
     outcome,
     profile: profileView,
-    // `generated`: one row per variable, set beside what came out of it; `comparison`: ours against the published cohort.
+    // `generated`: one row per variable, set beside what came out of it (what it declared and how many records broke it);
+    // `comparison`: ours against the published cohort.
     profileKind: generated ? "generated" : profileView.length ? "comparison" : null,
-    profileNote: generated ? null : profileView.length ? "标准化差异 |SMD| 超过 0.1 的特征已标出，它只说明两个人群不同，不说明谁对。"
-      // A generated population whose result has no profile was generated before the engine wrote one: one sentence, and the way to get it.
-      : current && current.kind !== "real" && result ? PROFILE_MISSING_SENTENCE : null,
-    profileMissing: Boolean(current && current.kind !== "real" && result && !generated),
-    // How it was made and what it may be used for: the two things a reader needs before using a synthetic table.
-    method: current ? (POPULATION_METHOD_WORDS[String(current.kind)] ?? null) : null,
-    allowedUses: current && current.kind !== "real"
-      ? list(current.allowedUses).map(String).map((use) => ({ key: use, label: (/** @type {Record<string, string>} */ (VCR_SYNTHETIC_USE_LABELS_ZH))[use] ?? use })) : [],
-    constraints: current && current.kind !== "real" ? constraintRows(diagnostics.constraintViolations) : [],
+    // The generated records as a list: how many, and the result the rows route reads (`GET …/population/rows?result=`). Absent
+    // where the table is a real cohort's or is not kept.
+    records: bundle.table && current && current.kind !== "real" ? { result: bundle.table.result, rows: bundle.table.rows } : null,
+    // Only the rules no variable carries: a variable's own constraints are on its row (`violations`).
+    constraints: current && current.kind !== "real" ? constraintRows(diagnostics.constraintViolations)
+      .filter((row) => !profileView.some((entry) => list(object(entry.declared).constraints).some((constraint) => object(constraint).name === row.label))) : [],
     unknownReasons: [...reasons.values()].map((reason) => ({ key: reason.key, label: reason.label, detail: reason.detail, count: reason.count })),
     blockers,
     quality: current ? qualityReportView(Object.keys(object(current.quality)).length ? current.quality : diagnostics.quality) : null,
@@ -492,8 +493,16 @@ export function presentPatientsTab(bundle) {
   if (measureRows.length) {
     panels.unshift({ key: "run_measures", title: "这次运行的结果", kind: "binary", note: "模型预测，非观察", rows: measureRows, series: [], footnote: null });
   }
+  // The generated people: how many and in which arms, how each variable is distributed, and what was generated beside what the study
+  // declared — all read from the table itself (`bundle.table`), so the page has patients and not one example.
+  const table = bundle.table ?? null;
+  const described = table ? generatedProfileRows(table.profile) : null;
   return {
     model,
+    records: table ? { result: table.result, rows: table.rows, arms: list(table.calibration?.arms) } : null,
+    profile: described ?? [],
+    profileKind: described ? "generated" : null,
+    calibration: table?.calibration ? { endpoint: table.calibration.endpoint, rows: table.calibration.rows } : null,
     assessments: presentModelAssessments(bundle),
     twin: modelRow || current?.twinLabel ? {
       label: (/** @type {Record<string, string>} */ (VCR_TWIN_LABELS_ZH))[String(current?.twinLabel ?? model?.twin ?? "baseline_conditioned_prediction")],
@@ -504,8 +513,15 @@ export function presentPatientsTab(bundle) {
       xLabel: text(trajectories.xLabel), yLabel: text(trajectories.yLabel), ticks: list(trajectories.ticks).map(String), series: trajectorySeries,
     } : null,
     example: text(example.id) ? {
-      id: String(example.id), source: (/** @type {readonly string[]} */ (VCR_VALUE_SOURCES)).includes(String(example.source)) ? String(example.source) : "synthetic",
-      origin: text(example.origin),
+      // 「示例患者 · 年龄 62 岁 · ECOG 1」: the person is told who they are, not an identifier; the engine's own id and the line of how
+      // it was made are the record's (`record`, read by the drawer) and are not a line of the page.
+      title: ["示例患者", ...list(example.baseline).slice(0, 2).map((row) => [text(object(row).label), String(object(row).value ?? "")].filter(Boolean).join(" "))]
+        .filter(Boolean).join(" · "),
+      record: {
+        id: String(example.id),
+        source: (/** @type {readonly string[]} */ (VCR_VALUE_SOURCES)).includes(String(example.source)) ? String(example.source) : "synthetic",
+        origin: text(example.origin),
+      },
       baseline: list(example.baseline).map((row) => ({
         label: text(object(row).label) ?? "", value: String(object(row).value ?? ""),
         source: (/** @type {readonly string[]} */ (VCR_VALUE_SOURCES)).includes(String(object(row).source)) ? String(object(row).source) : "synthetic",
@@ -851,35 +867,33 @@ export function presentTrialTab(bundle) {
   // The curve's axis is a probability the page shows as a percentage, like every design measure.
   const powerSeries = (seriesList(powerRaw.series).length ? seriesList(powerRaw.series) : grids.powerSeries).map((series) => scaledSeries(series, 100));
   const marks = designRows.map((row) => row._stale).filter(Boolean);
-  const runRecord = designRows.filter((row) => row._result).map((row) => {
+  // What each design's last run was, as facts a record drawer reads — the method and its replicates, the seed, and the closed form held
+  // against the simulation — and not as a card's sentences. A closed-form value is exact for some methods and a first-order
+  // approximation for others (the log-rank power): the engine says which, and the tolerance it holds the simulation to — three
+  // Monte-Carlo errors plus the approximation's documented bias.
+  /** @param {Record<string, any>} row */
+  const recordOf = (row) => {
     const execution = executionOf(bundle, row._result);
-    const diagnostics = object(row._result.diagnostics);
-    const check = object(diagnostics.analyticCheck);
-    const differencePoints = numeric(check.difference) !== null ? roundTo(Math.abs(Number(check.difference)) * 100, 1) : null;
-    // A closed-form value is exact for some methods and a first-order approximation for others (the
-    // log-rank power): the engine says which, and the tolerance it holds the simulation to — three
-    // Monte-Carlo errors plus the approximation's documented bias. A run with many replicates has a
-    // tiny error, and comparing an approximation to it with the error alone reads 「不一致」 for a
-    // difference the approximation itself explains.
+    const check = object(object(row._result.diagnostics).analyticCheck);
+    const difference = numeric(check.difference);
     const within = check.withinTolerance ?? check.withinThreeMcse;
-    const approximate = numeric(check.approximationBias) !== null && Number(check.approximationBias) > 0;
-    const allowedPoints = numeric(check.tolerance) !== null ? roundTo(Number(check.tolerance) * 100, 1) : null;
     return {
-      key: `run_${row.code}`,
-      title: `方案 ${row.code}：${execution ? `${METHOD_LABELS[String(execution.method)] ?? "已运行"}${execution.replicates != null ? `，${Number(execution.replicates).toLocaleString("en-US")} 次重复` : ""}` : "已运行"}`,
-      detail: [
-        execution?.seed != null ? `种子 ${execution.seed}` : null,
-        within === true && differencePoints !== null
-          ? (approximate
-            ? `解析值是一阶近似，与仿真值相差 ${differencePoints} 个百分点，在容许的 ${allowedPoints} 个百分点内（3 倍蒙特卡洛标准误加近似本身的偏差）`
-            : `解析值与仿真值一致（差 ${differencePoints} 个百分点，在 3 倍蒙特卡洛标准误内）`)
-          : within === false && differencePoints !== null
-            ? (approximate
-              ? `解析值与仿真值相差 ${differencePoints} 个百分点，超出容许的 ${allowedPoints} 个百分点（3 倍蒙特卡洛标准误加近似本身的偏差）`
-              : `解析值与仿真值相差 ${differencePoints} 个百分点，超出 3 倍蒙特卡洛标准误`) : null,
-      ].filter(Boolean).join(" · ") || null,
-      ok: within === true,
+      method: execution ? METHOD_LABELS[String(execution.method)] ?? null : null,
+      replicates: execution?.replicates != null ? Number(execution.replicates) : null,
+      seed: execution?.seed != null ? Number(execution.seed) : null,
+      check: difference === null ? null : {
+        analytic: numeric(check.value) !== null ? roundTo(Number(check.value) * 100, 1) : null,
+        simulated: numeric(check.simulated) !== null ? roundTo(Number(check.simulated) * 100, 1) : null,
+        differencePoints: roundTo(Math.abs(difference) * 100, 1),
+        allowedPoints: numeric(check.tolerance) !== null ? roundTo(Number(check.tolerance) * 100, 1) : null,
+        approximate: numeric(check.approximationBias) !== null && Number(check.approximationBias) > 0,
+        agrees: typeof within === "boolean" ? within : null,
+      },
     };
+  };
+  const recorded = designs.map((design) => {
+    const row = designRows.find((entry) => entry.id === design.id);
+    return { ...design, record: row?._result ? recordOf(row) : null };
   });
   const forecastRows = forecasts.map((forecast) => forecastView(forecast, now));
   const milestones = designRows.filter((row) => !row.dominated && row.measures.duration_months).map((row) => ({
@@ -889,7 +903,7 @@ export function presentTrialTab(bundle) {
   return {
     headline: trialHeadline(designs),
     ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null, object(headlineRow?._result?.diagnostics)),
-    designs,
+    designs: recorded,
     columns,
     grid: grids.heat,
     footnotes: notRerunNotes(designRows),
@@ -905,7 +919,6 @@ export function presentTrialTab(bundle) {
       recordedAt: decision ? zhTime(decision.createdAt, now) : null,
       options: designs.map((design) => ({ id: design.id, label: design.code, name: design.name, disabled: design.dominated })),
     } : null,
-    runRecord,
     forecasts: forecastRows,
     milestones,
     // The protocol's visit schedule (「访视日程」) and the study's regulatory contacts (「监管沟通记录」): records, not results.

@@ -1,0 +1,158 @@
+{
+  "result": "res_vp",
+  "kind": "patient_set",
+  "columns": [
+    {
+      "key": "patientId",
+      "label": "编号",
+      "kind": "id"
+    },
+    {
+      "key": "age",
+      "label": null,
+      "kind": "number"
+    },
+    {
+      "key": "ecog",
+      "label": null,
+      "kind": "number"
+    },
+    {
+      "key": "arm",
+      "label": "分组",
+      "kind": "number",
+      "values": {
+        "0": "对照",
+        "1": "试验"
+      }
+    },
+    {
+      "key": "time",
+      "label": "时间",
+      "kind": "number"
+    },
+    {
+      "key": "status",
+      "label": "结局事件",
+      "kind": "number",
+      "values": {
+        "0": "删失",
+        "1": "发生事件"
+      }
+    },
+    {
+      "key": "entry",
+      "label": "入组时间",
+      "kind": "number"
+    }
+  ],
+  "rows": [
+    {
+      "patientId": "vp_86b1ffc01a46",
+      "age": 74.5,
+      "ecog": 1,
+      "arm": 1,
+      "time": 5.83,
+      "status": 1,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_651225b91ae8",
+      "age": 53.4,
+      "ecog": 0,
+      "arm": 0,
+      "time": 12.16,
+      "status": 1,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_92d90414dbc3",
+      "age": 67.1,
+      "ecog": 1,
+      "arm": 1,
+      "time": 5.24,
+      "status": 1,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_63f1c42d4ec4",
+      "age": 61.6,
+      "ecog": 1,
+      "arm": 0,
+      "time": 3.2,
+      "status": 1,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_6408f547ca06",
+      "age": 74,
+      "ecog": 1,
+      "arm": 1,
+      "time": 14,
+      "status": 0,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_5b5a688b6c00",
+      "age": 71.6,
+      "ecog": 0,
+      "arm": 0,
+      "time": 6.75,
+      "status": 1,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_c5d5ac980850",
+      "age": 65,
+      "ecog": 0,
+      "arm": 1,
+      "time": 0.82,
+      "status": 1,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_328a9b21c328",
+      "age": 47.2,
+      "ecog": 1,
+      "arm": 0,
+      "time": 5.58,
+      "status": 1,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_73814076c796",
+      "age": 57.3,
+      "ecog": 1,
+      "arm": 1,
+      "time": 8.14,
+      "status": 1,
+      "entry": 0
+    },
+    {
+      "patientId": "vp_1ede6f9a991d",
+      "age": 53,
+      "ecog": 1,
+      "arm": 0,
+      "time": 14,
+      "status": 0,
+      "entry": 0
+    }
+  ],
+  "total": 2000,
+  "all": 2000,
+  "offset": 0,
+  "limit": 10,
+  "sort": null,
+  "arms": [
+    {
+      "value": "1",
+      "label": "试验",
+      "n": 1000
+    },
+    {
+      "value": "0",
+      "label": "对照",
+      "n": 1000
+    }
+  ]
+}

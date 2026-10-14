@@ -12,6 +12,8 @@
 // fixed instant after seeding (`fixClock`), so the fixture the web renders is
 // byte-stable.
 import { createHash } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 
 import { lineageNode } from "@evimed/domain";
 
@@ -74,12 +76,39 @@ const simulated = (name, value, mcse) => ({
 });
 
 /**
+ * The virtual patients of the study as the engine writes them (`vcr_job_generate_patients`: `write.csv` of the patient id, the
+ * population's columns, the arm, the outcome, and the two labels), from a fixed generator so the table — and every page read from it —
+ * is byte-stable: 2,000 people in two arms of 1,000, an exponential control arm with the study's stated median, and a hazard ratio of
+ * 0.6 on the treated.
+ * @returns {string}
+ */
+export function seedVirtualPatientsCsv() {
+  let state = 20261008;
+  const uniform = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return (state + 0.5) / 2 ** 32; };
+  const normal = () => Math.sqrt(-2 * Math.log(uniform())) * Math.cos(2 * Math.PI * uniform());
+  const lines = ['"patientId","age","ecog","arm","time","status","entry","source","modelTier"'];
+  const median = 4.1;
+  for (let index = 0; index < 2000; index += 1) {
+    const arm = index % 2 === 0 ? 1 : 0;
+    const age = Math.round((63 + 9 * normal()) * 10) / 10;
+    const ecog = uniform() < 0.35 ? 0 : 1;
+    const event = -Math.log(uniform()) / ((Math.LN2 / median) * (arm === 1 ? 0.6 : 1));
+    const followUp = 14;
+    const time = Math.round(Math.min(event, followUp) * 100) / 100;
+    const id = `vp_${createHash("sha256").update(`ev201:${index}`).digest("hex").slice(0, 12)}`;
+    lines.push(`"${id}",${age},${ecog},${arm},${time},${event <= followUp ? 1 : 0},0,"synthetic","scenario"`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+/**
  * Seed the EV-201 study and a second, empty one, and return what the test needs
  * to address them.
  *
- * @param {{ store: any, matchStore: any, evidenceStore: any }} stores
+ * @param {{ store: any, matchStore: any, evidenceStore: any, plane?: string }} stores `plane`: a data plane's directory (mode 0700);
+ *   with it, the patient set's table is written there and recorded on its result, so its rows can be read
  */
-export async function seedEv201({ store, matchStore, evidenceStore }) {
+export async function seedEv201({ store, matchStore, evidenceStore, plane = "" }) {
   await seedVcrCatalogue({ store });
   for (const [method, endpoints, passed, total] of [
     ["comparator.entropy_balance", ["continuous", "binary", "time_to_event"], 7, 7],
@@ -342,9 +371,22 @@ export async function seedEv201({ store, matchStore, evidenceStore }) {
   await store.attachResult("populations", population.id, populationResult.id);
 
   // 虚拟患者（模型预测；这一次运行只完成了一部分重复）
-  const patientsExecution = await execution(await job("generate_patients", "patients.time_to_event", { replicates: 2000 }), "patients.time_to_event", 2000);
+  const patientsJob = await job("generate_patients", "patients.time_to_event", { replicates: 2000 });
+  const patientsExecution = await execution(patientsJob, "patients.time_to_event", 2000);
+  // The frozen scenario the engine was told (what the page's 「设定 vs 生成」 sets beside the table).
+  await store.query("UPDATE evimed_vcr.jobs SET scenario = $2::jsonb WHERE id = $1",
+    [patientsJob, JSON.stringify({ endpoint: { type: "time_to_event" }, truth: { controlMedian: 4.1, hazardRatio: 0.6 }, design: { nTreat: 1000, nControl: 1000 } })]);
+  /** @type {Array<Record<string, any>>} */
+  const patientTables = [];
+  if (plane) {
+    const location = `derived/${studyId}/${patientsJob}/virtual-patients.csv`;
+    const csv = seedVirtualPatientsCsv();
+    mkdirSync(path.join(plane, path.dirname(location)), { recursive: true });
+    writeFileSync(path.join(plane, location), csv);
+    patientTables.push({ name: "virtual-patients", location, sha256: createHash("sha256").update(csv).digest("hex"), rows: 2000 });
+  }
   const patientsResult = await record({
-    kind: "patient_set", executionId: patientsExecution.id, conclusion: "limited", models: modelUsed,
+    kind: "patient_set", executionId: patientsExecution.id, conclusion: "limited", models: modelUsed, tables: patientTables,
     counts: { realPatients: 0, events: 1210, effectiveSampleSize: null, generatedRecords: 2000 },
     measures: [measure("generated_records", 2000, { source: "synthetic" }), simulated("median_pfs_control", 4.1, 0.06)],
     diagnostics: {

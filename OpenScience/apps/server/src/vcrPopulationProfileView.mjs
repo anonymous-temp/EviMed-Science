@@ -148,25 +148,57 @@ function entryView(raw, index) {
 }
 
 /**
- * The rows of a generated population's profile, or null when the result carries none the page can read.
+ * What a variable's declared constraints say of the table: how many generated records break them, as a number a row can carry.
+ * A named constraint is the count the engine made of it (`counts`); a bound is read off the variable's own minimum and maximum —
+ * kept inside, it broke nothing (0); passed, it broke some (`violations` stays null: the count is the table's, and `outOfBounds` says
+ * it was). A variable that declared no constraint has none.
+ * @param {Record<string, any>} row @param {ReadonlyMap<string, number>} counts
+ * @returns {{ violations: number | null, outOfBounds: boolean }}
+ */
+function constraintFacts(row, counts) {
+  const constraints = list(object(row.declared).constraints).map(object);
+  if (!constraints.length) return { violations: null, outOfBounds: false };
+  let total = 0;
+  let known = false;
+  let outOfBounds = false;
+  for (const constraint of constraints) {
+    if (constraint.kind === "bounds") {
+      const low = finite(constraint.min);
+      const high = finite(constraint.max);
+      const min = finite(row.min);
+      const max = finite(row.max);
+      if (min === null || max === null) continue;
+      known = true;
+      if ((low !== null && min < low) || (high !== null && max > high)) outOfBounds = true;
+      continue;
+    }
+    const counted = typeof constraint.name === "string" ? counts.get(constraint.name) : undefined;
+    if (counted !== undefined) { total += counted; known = true; }
+  }
+  return { violations: known && !outOfBounds ? total : null, outOfBounds };
+}
+
+/**
+ * The rows of a generated population's profile, or null when the result carries none the page can read. A row carries, beside what
+ * the scenario declared and what came out, how many records broke the constraints the variable declared (`violations`).
  * @param {unknown} profile `diagnostics.profile` of a population result
+ * @param {unknown} [violations] `diagnostics.constraintViolations`, a table of rule and count
  * @returns {Array<Record<string, any>> | null}
  */
-export function generatedProfileRows(profile) {
+export function generatedProfileRows(profile, violations = []) {
   if (!Array.isArray(profile) || !profile.length) return null;
   // The contract of the block is the domain's (the engine writes it, the page reads it): a profile that fails it is no profile.
   if (validatePopulationProfile(profile).length) return null;
   const rows = profile.map(entryView).filter((row) => row !== null);
-  return rows.length === profile.length ? /** @type {Array<Record<string, any>>} */ (rows) : null;
+  if (rows.length !== profile.length) return null;
+  const counts = new Map(constraintRows(violations).map((row) => [row.label, row.violations]));
+  return /** @type {Array<Record<string, any>>} */ (rows).map((row) => ({ ...row, ...constraintFacts(row, counts) }));
 }
 
-/** How a population was generated, in the reader's words. */
+/** How a population was generated, in the reader's words: the library download's own header says it, and no page does. */
 export const POPULATION_METHOD_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
   scenario: "按设定的分布和相关性抽样", literature: "按文献基线表生成", empirical_synthetic: "按真实数据经验合成",
 }));
-
-/** What a population whose result carries no profile says, with the way to get one. */
-export const PROFILE_MISSING_SENTENCE = "这个人群生成时还没有画像：点“重新生成”，按同样的设定再生成一次，就能看到每个变量的分布。";
 
 /**
  * The constraint checks of a generated population, as rows: what each rule is called and how many generated records broke it.

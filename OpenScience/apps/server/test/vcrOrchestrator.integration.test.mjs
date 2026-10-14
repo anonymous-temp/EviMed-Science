@@ -796,6 +796,35 @@ test("R11 a step stored as running whose run is gone follows the data: three des
   assert.notEqual(after.status, "running");
 });
 
+test("R3 a step nobody asked for that holds results reads what it holds: two designs, one computed by a conversation, never 未开始 over a table of results", options, async () => {
+  const module = compose({ dispatch: false });
+  const study = await makeStudy("holds");
+  const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+    study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+  await write("definition", { ...definition, title: "二线肺癌 EV 的样本量", question: "单臂 II 期能不能用外部对照？" });
+  await write("assumption", [{ key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" },
+    { key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, sourceKind: "expert_set", valueSource: "assumed" }]);
+  const written = await write("trial_scenario", conversationDesigns.slice(0, 2));
+  assert.equal(written.ids.length, 2);
+  const gateway = conversationGateway(module, study);
+  // The conversation computes the first design only; the population is what somebody asked for, so the trial step is not wanted.
+  const first = await gateway("simulate", { action: "start", kind: "design_simulation", subjectId: written.ids[0], scenario: engineScenario(0, "design_simulation") });
+  assert.equal(first.status, 200, JSON.stringify(first));
+  await store.setStep(study.id, "population", { requested: true, status: "none" });
+  await drainJobs(module, study);
+  await module.orchestrator.advance(study.id);
+  const partial = (await store.studyById(study.id)).steps.trial;
+  assert.equal(partial.status, "failed", "one design holds a result and the other was never computed: the page's step bar says 未完成, not 未开始");
+  assert.equal(partial.note ?? null, null, "nothing failed, so there is nothing to say about a failure");
+  const view = await module.service.studyView({ id: study.userId }, study.id);
+  assert.deepEqual([view.steps.trial.status, view.stepSummaries.trial?.note !== undefined], ["failed", true]);
+  // Computing the rest finishes the step as the minimal version it is.
+  const second = await gateway("simulate", { action: "start", kind: "design_simulation", subjectId: written.ids[1], scenario: engineScenario(1, "design_simulation") });
+  assert.equal(second.status, 200, JSON.stringify(second));
+  await drainJobs(module, study);
+  assert.equal((await store.studyById(study.id)).steps.trial.status, "minimal");
+});
+
 /** The notices the inbox double took from a composed module that are about a finished computation. @param {any} module */
 function notices_of(module) {
   return module.notices.filter((/** @type {any} */ notice) => /完成/.test(String(notice.title)) && notice.source?.type === "vcr");

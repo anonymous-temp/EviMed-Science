@@ -208,25 +208,20 @@ test("a number is printed to the precision it deserves, on the server as in the 
 
 // --- counts ------------------------------------------------------------------------------------------
 
-test("the four counts stay four: missing is null, a real zero is a zero, and a design-stage note is said once", () => {
-  const counts = countsView({ realPatients: 0, events: null, generatedRecords: 6_480_000 }, { tier: "T0", scope: "方案 B" });
-  assert.equal(counts.realPatients, 0);
-  assert.equal(counts.events, null);
-  assert.equal(counts.effectiveSampleSize, null);
-  assert.equal(counts.note, "设计阶段：尚无真实患者");
-  assert.equal(counts.scope, "方案 B");
+test("the counts are the ones that have a value: absent is absent, a real zero is a zero, and nothing on the band is a sentence (2026-10-14)", () => {
+  // T0 has no patient to count: the band is the generated records and nothing else, and says no sentence about it.
+  const t0 = countsView({ realPatients: 0, events: null, generatedRecords: 6_480_000 }, { tier: "T0", scope: "方案 B" });
+  assert.deepEqual(t0, { generatedRecords: 6_480_000, scope: "方案 B" });
+  assert.deepEqual(countsView({ realPatients: 0, events: 138, generatedRecords: 0 }, { tier: "T0" }), { generatedRecords: 0, scope: null });
+  // From T1 on the four are read apart: a count nobody has is not drawn, a count that is zero is.
+  assert.deepEqual(countsView({ realPatients: 0, events: null, effectiveSampleSize: null, generatedRecords: 2000 }, { tier: "T1" }),
+    { realPatients: 0, generatedRecords: 2000, scope: null });
+  assert.deepEqual(countsView({ realPatients: 3412 }, { tier: "T1" }), { realPatients: 3412, scope: null });
   assert.equal("reconstructedPseudoPatients" in countsView({}), false, "the optional two appear only when their route was used");
   assert.equal(countsView({ reconstructedPseudoPatients: 801 }).reconstructedPseudoPatients, 801);
-  assert.equal(countsView({ realPatients: 3412 }, { tier: "T1" }).notes?.events, "T1 无结局记录");
-});
-
-test("a simulation's records are said to be records, not patients — once, under the number, whenever there are any", () => {
-  assert.equal(countsView({ realPatients: 0, generatedRecords: 212_382_000 }, { tier: "T0" }).notes?.generatedRecords, "模拟生成的记录，不是患者");
-  assert.equal(countsView({ generatedRecords: 1000 }).notes?.generatedRecords, "模拟生成的记录，不是患者");
-  // Nothing generated says nothing about it; the other notes are not touched.
-  assert.equal(countsView({ generatedRecords: 0 }).notes, undefined);
-  assert.equal(countsView({ generatedRecords: null }).notes, undefined);
-  assert.deepEqual(countsView({ generatedRecords: 5, realPatients: 3412 }, { tier: "T1" }).notes, { events: "T1 无结局记录", generatedRecords: "模拟生成的记录，不是患者" });
+  for (const counts of [countsView({ generatedRecords: 5, realPatients: 3412 }, { tier: "T1" }), t0]) {
+    assert.equal("note" in counts || "notes" in counts, false, "no sentence rides on the counts");
+  }
 });
 
 // --- intervals and stale ---------------------------------------------------------------------------------
@@ -367,14 +362,15 @@ test("a design's numbers are its analytic size and its simulated power, merged f
     assert.equal(a.replicates, 5000);
     assert.equal(b.crossCheck.agrees, true);
     assert.equal(b.crossCheck.differencePoints, 0.3);
-    assert.match(b.crossCheck.text, /解析功效 91.2%，与模拟相差 0.3 个百分点，在容许范围内/);
+    assert.deepEqual([b.crossCheck.analytic, b.crossCheck.simulated, "text" in b.crossCheck], [91.2, 91.5, false], "the closed form beside the simulation, as numbers");
     assert.equal(c.note, "期中界值 z = 2.96", "a group-sequential design says where it stops at the first look");
     assert.equal(a.note, null);
     assert.deepEqual(tab.columns.map((column) => column.key).slice(0, 2), ["required_events", "sample_size"]);
     assert.equal(tab.headline, "方案 A 需要 950 例事件、13,764 名患者；方案 B 需要 845 例事件、11,799 名患者；方案 C 需要 847 例事件、11,840 名患者；已模拟 3 个方案，功效 90%～92%。");
-    // nothing of the run's own record on the page: no method id, no hash, no result id
-    assert.doesNotMatch(JSON.stringify(tab.runRecord), /design\.|f{12}|res_/);
-    assert.match(tab.runRecord[0].title, /方案 A：方案的模拟运行，5,000 次重复/);
+    // the run's own record is the design's, structured: no card of sentences, no method id, no hash, no result id
+    assert.equal("runRecord" in tab, false);
+    assert.doesNotMatch(JSON.stringify(tab.designs.map((design) => design.record)), /design\.|f{12}|res_/);
+    assert.deepEqual([a.record.method, a.record.replicates], ["方案的模拟运行", 5000]);
   }
 });
 
@@ -436,12 +432,13 @@ const populationResult = (/** @type {Record<string, any>} */ diagnostics) => ({ 
 test("a generated population's tab says what the study set and what came out, variable by variable, from the profile the engine wrote", () => {
   const tab = presentPopulationTab(populationBundle({}, populationResult({ profile: scenarioProfile, constraintViolations: [{ name: "adult", violations: 0 }, { name: "bounded", violations: 3 }] })));
   assert.equal(tab.profileKind, "generated");
-  assert.equal(tab.profileNote, null);
-  assert.equal(tab.profileMissing, false);
-  assert.equal(tab.method, "按设定的分布和相关性抽样");
-  assert.deepEqual(tab.allowedUses, [{ key: "design", label: "设计" }, { key: "feasibility", label: "可行性" }]);
-  assert.deepEqual(tab.constraints, [{ label: "adult", violations: 0 }, { label: "bounded", violations: 3 }]);
+  // How it was made and what it may be used for are not a page's to say (2026-10-14): the keys are gone, not emptied.
+  for (const key of ["method", "allowedUses", "profileNote", "profileMissing"]) assert.equal(key in tab, false, `${key} is not in the payload`);
+  // A variable's own constraints are on its row; the list keeps only the rules no variable carries.
+  assert.deepEqual(tab.constraints, [{ label: "bounded", violations: 3 }]);
   const [age, female, stage, bmi] = tab.profile;
+  assert.deepEqual([age.violations, age.outOfBounds], [0, false], "the named rule counted none and the bounds hold the observed minimum and maximum");
+  assert.deepEqual([female.violations, stage.violations], [null, null], "a variable that declared no constraint has no count");
   assert.equal(age.label, "年龄");
   assert.equal(age.declaredText, "正态分布，均数 63、标准差 9；限定在 18–95；满足「adult」");
   assert.equal(age.generatedText, "均数 63.01，标准差 8.935，中位 63.05（四分位 56.97–68.57），范围 35.92–91.06");
@@ -458,27 +455,34 @@ test("a generated population's tab says what the study set and what came out, va
   assert.equal(tab.counts.generatedRecords, 1000);
 });
 
-test("a generated population's small cells stay withheld on the page, and one without a profile offers to be generated again — it computes nothing in the control plane", () => {
+test("a generated population's small cells stay withheld on the page, and one the engine wrote no profile for is described from its stored table on read, with no sentence and no button", () => {
   const empirical = presentPopulationTab(populationBundle({ kind: "empirical_synthetic", allowedUses: ["design"] }, populationResult({ profile: empiricalProfile })));
-  assert.equal(empirical.method, "按真实数据经验合成");
   const [age, group] = empirical.profile;
   assert.equal(age.declaredText, null, "an empirical table declares nothing");
   assert.deepEqual(age.histogram.counts, [null, 28, 60, 108, 88, 25, null], "a hidden bin is still hidden");
   assert.deepEqual(group.levels.filter((level) => level.suppressed).map((level) => [level.level, level.n, level.percent]), [["d", null, null], ["other", null, null]]);
   assert.match(group.generatedText, /a 46.3%，b 34.1%，c 15.3%，其余小样本已隐藏/);
-  // a result from before the engine wrote a profile (the owner's population): one sentence, no rows, nothing worked out here
+  // a result from before the engine wrote a profile (the owner's population) with nothing stored to read it from: no rows, and
+  // nothing said about it — no sentence, no request to generate it again
   const before = presentPopulationTab(populationBundle({}, populationResult({ valueSource: "synthetic" })));
   assert.deepEqual(before.profile, []);
-  assert.equal(before.profileMissing, true);
-  assert.match(String(before.profileNote), /点“重新生成”/);
   assert.equal(before.profileKind, null);
-  // a population that has not been computed has nothing to apologise for
+  assert.equal(JSON.stringify(before).includes("重新生成"), false);
+  assert.equal(before.records, null);
+  // the same result, its table read on request (`bundle.table`, which the service fills from the stored rows): the profile is there
+  const stored = { ...populationBundle({}, populationResult({ valueSource: "synthetic" })),
+    table: { result: "res_pop", rows: 1000, profile: scenarioProfile.map((entry) => ({ ...entry, declared: null })) } };
+  const described = presentPopulationTab(stored);
+  assert.equal(described.profileKind, "generated");
+  assert.deepEqual(described.profile.map((entry) => entry.variable), ["age", "female", "stage", "bmi"]);
+  assert.deepEqual(described.records, { result: "res_pop", rows: 1000 });
+  // a population that has not been computed has nothing to say
   const waiting = presentPopulationTab(populationBundle({ resultId: null }, null));
-  assert.equal(waiting.profileMissing, false);
-  assert.equal(waiting.profileNote, null);
+  assert.deepEqual(waiting.profile, []);
+  assert.equal(waiting.records, null);
   // a profile with an entry the page cannot read is no profile
   const broken = presentPopulationTab(populationBundle({}, populationResult({ profile: [scenarioProfile[0], { variable: "x", kind: "made_up" }] })));
-  assert.equal(broken.profileMissing, true);
+  assert.deepEqual(broken.profile, []);
 });
 
 test("a cohort the engine built is read from its result: the waterfall, the three outcomes and the rules that limit it on their own", () => {
@@ -496,14 +500,14 @@ test("a cohort the engine built is read from its result: the waterfall, the thre
   assert.deepEqual(tab.criteria.map((criterion) => [criterion.code, criterion.kept, criterion.excluded, criterion.unknown]), [["I1", 900, 100, 0], ["I2", 600, 100, 200], ["E1", 580, 20, 0]]);
   assert.deepEqual(tab.blockers.map((blocker) => [blocker.code, blocker.text, blocker.quote]), [["I2", "无法判断 260", "EGFR 阳性"], ["I1", "排除 100", "确诊 NSCLC"], ["E1", "排除 30", "无活动性脑转移"]],
     "ranked by what each rule does alone — I2 would drop 410 on its own — not by what is left for it after the rules before it");
-  assert.equal(tab.method, null, "a real cohort is not generated");
+  assert.equal("method" in tab, false, "how a population was made is not a page's to say");
+  assert.equal(tab.records, null, "a real cohort's rows never leave the data plane");
   // criteria the check could not put to the data are not in the count, and the table says so beside them
   const covered = presentPopulationTab({ ...bundle, populations: [{ ...bundle.populations[0], name: "按方案条件查覆盖",
     profile: { coverage: { notEvaluated: [{ code: "E1", why: "要看有没有这类事件或诊断的记录，受试者级的列判断不了" }] } } }] });
   assert.equal(covered.name, "按方案条件查覆盖");
   assert.deepEqual(covered.criteria.map((criterion) => [criterion.code, criterion.notEvaluated]), [["I1", null], ["I2", null], ["E1", "要看有没有这类事件或诊断的记录，受试者级的列判断不了"]]);
   assert.deepEqual(covered.profile, [], "a coverage cohort has no profile of its own rows");
-  assert.deepEqual(tab.allowedUses, []);
 });
 
 test("a comparator somebody wrote for the unsupported route is still shown as what it found; the library lists what this version does not do, as 暂不支持", () => {
@@ -1181,21 +1185,21 @@ test("C2-4 an older result's assurance is not read back once the newest result d
   assert.equal(measures.assurance, undefined, "no prior to integrate over any more: the old assurance is not left beside the new numbers");
 });
 
-test("C3-11 the run record says an analytic value is an approximation and what tolerance the simulation was held to", () => {
+test("C3-11 the design's record says an analytic value is an approximation and what tolerance the simulation was held to, as facts the drawer reads", () => {
   const design = scenario("a", 1, "A", { resultId: "res_a" });
   /** @param {Record<string, any>} check */
   const withCheck = (check) => presentTrialTab({ ...emptyBundle(), scenarios: [design], results: [{ ...result("a", [measure("power", 0.5)]), diagnostics: { analyticCheck: check } }],
-    allResults: [{ ...result("a", [measure("power", 0.5)]), diagnostics: { analyticCheck: check } }] }).runRecord[0];
+    allResults: [{ ...result("a", [measure("power", 0.5)]), diagnostics: { analyticCheck: check } }] }).designs[0].record.check;
   const approximate = withCheck({ difference: -0.011, mcse: 0.0004, withinThreeMcse: false, withinTolerance: true, approximationBias: 0.015, tolerance: 0.0162 });
-  assert.equal(approximate.ok, true, "1.1 points against an approximation documented to 1.5 is agreement");
-  assert.match(approximate.detail, /一阶近似.*相差 1\.1 个百分点.*容许的 1\.6 个百分点/);
+  assert.deepEqual([approximate.agrees, approximate.approximate, approximate.differencePoints, approximate.allowedPoints], [true, true, 1.1, 1.6],
+    "1.1 points against an approximation documented to 1.5 is agreement");
   const exact = withCheck({ difference: 0.0003, withinThreeMcse: true, approximationBias: 0, tolerance: 0.0012, withinTolerance: true });
-  assert.match(exact.detail, /解析值与仿真值一致/);
+  assert.deepEqual([exact.agrees, exact.approximate], [true, false]);
   const off = withCheck({ difference: 0.03, withinThreeMcse: false, withinTolerance: false, approximationBias: 0.015, tolerance: 0.0162 });
-  assert.equal(off.ok, false);
-  assert.match(off.detail, /超出容许/);
+  assert.equal(off.agrees, false);
   const older = withCheck({ difference: 0.001, withinThreeMcse: true });
-  assert.equal(older.ok, true, "a result written before the tolerance existed still reads");
+  assert.equal(older.agrees, true, "a result written before the tolerance existed still reads");
+  assert.equal(JSON.stringify(approximate).includes("近似"), false, "the words are the drawer's, not the payload's");
 });
 
 test("C2-8 the comparator page reads a two-arm reconstruction: both arms' quality checks, both medians, the RMST interval to the decimals it supports", () => {

@@ -239,6 +239,9 @@ export {
   ERROR_CODE_FAMILIES,
   ERROR_CODE_MESSAGES,
   ERROR_DETAIL_FIELDS,
+  RUNTIME_LOCK_REASONS,
+  RUNTIME_LOCK_MESSAGES_ZH,
+  runtimeLockMessage,
   EVIDENCE_FLYWHEEL_ERROR_CODES,
   EXTENSION_ERROR_CODES,
   EVIMED_CREDITS_ROUTE_ERROR_CODES,
@@ -1021,6 +1024,8 @@ export {
   EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON,
   AUTOPILOT_VERIFICATION_ROUTE_REASON,
   RUN_ROLES,
+  PROGRAMME_ROUTE_REASON_PREFIXES,
+  isProgrammeRun,
   evidenceProgrammeRouteReason,
   isEvidenceProgrammeRouteReason,
   isVerificationRouteReason,
@@ -1635,7 +1640,16 @@ export {
   useWithin,
   vcrKnown,
   vcrWeakestSource,
+  VCR_STEP_ACTION_LABELS_ZH,
+  VCR_NEXT_REASONS,
+  VCR_NEXT_REASON_LABELS_ZH,
+  VCR_WAITING_FOR_KINDS,
+  VCR_RUN_PLACEMENTS,
+  VCR_JOB_KIND_STEPS,
+  vcrVisibleQuestion,
 } from './src/vcrVocabulary.mjs'
+// vcrNext — which step of a study is the next one: one pure function for the page, the route and every sentence that names "next"
+export { vcrNext } from './src/vcrNext.mjs'
 
 // vcrModelAssessment — 「虚拟临床研究」's model assessment record (ICH M15 Appendix 1: question of interest, context
 // of use, model influence, consequence of a wrong decision, the model risk derived from the two, model impact,

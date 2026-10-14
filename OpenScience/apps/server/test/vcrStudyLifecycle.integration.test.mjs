@@ -298,8 +298,6 @@ function routeFor(user, extra = {}) {
     projects: {
       create: async () => ({ id: "unused", name: "unused" }),
       bindSession: async () => ({ sessionId: "bound", bound: true }),
-      latestSessionId: async () => "newest-run-session",
-      conversationSessionId: async () => "oldest-vcr-protocol-session",
       backgroundRuns: async (_userId, _projectId, own) => [
         { sessionId: "run-evidence", capabilityId: "vcr-evidence", status: "succeeded", startedAt: "2026-10-07T01:00:00.000Z" },
         { sessionId: "run-analysis", capabilityId: "vcr-analysis", status: "running", startedAt: "2026-10-07T02:00:00.000Z" },
@@ -324,21 +322,37 @@ function routeFor(user, extra = {}) {
   return { call, projectCalls };
 }
 
-test("the page's 对话 is the conversation the study was opened with, not the newest background run's", options, async () => {
+test("the page's 对话 is the study's own conversation: the one recorded when it was made, and never whichever session happens to be oldest or newest", options, async () => {
   const user = { id: `u_${randomUUID().slice(0, 8)}` };
   const created = await service.createStudy(user, { question: "有对话的研究" }, hooksFor("vcr-own", "prj_conv"));
   const { call } = routeFor(user);
   const view = await call("GET", `/api/vcr/studies/${created.id}`);
   assert.equal(view.status, 200);
-  assert.equal(view.body.sessionId, "vcr-own");
-  assert.equal(view.body.conversationSessionId, undefined, "the route resolves it; the page reads sessionId");
+  assert.deepEqual(view.body.conversation, { sessionId: "vcr-own", exists: true }, "the conversation, addressable from the moment the study exists");
+  assert.equal(view.body.sessionId, "vcr-own", "the readers that predate `conversation` read the same id");
+  assert.equal(view.body.conversationSessionId, undefined, "the row's own column is not a page field");
   assert.ok(["missing", "wired", "answering", "not_answering"].includes(view.body.engine), "the page's one line at the top reads this");
+  // The read model says what is going on and what is next, and a fresh study is doing nothing.
+  assert.equal(view.body.activity, null);
+  assert.deepEqual(view.body.next && [view.body.next.step, view.body.next.label], ["definition", "整理研究定义"]);
+  assert.deepEqual(Object.keys(view.body.stepSummaries), [], "nothing has been found yet");
 
-  // A study made before the conversation was recorded: the oldest one bound to its first capability, then the newest.
+  // A study made before the conversation was recorded, and nothing to resolve it from: no id — never "the oldest session of the
+  // project", which is where a background run of the programme lives.
   const legacy = await store.createStudy({ userId: user.id, projectId: "prj_legacy", name: "旧研究" });
-  assert.equal((await call("GET", `/api/vcr/studies/${legacy.id}`)).body.sessionId, "oldest-vcr-protocol-session");
-  const { call: noOldest } = routeFor(user, { conversationSessionId: async () => null });
-  assert.equal((await noOldest("GET", `/api/vcr/studies/${legacy.id}`)).body.sessionId, "newest-run-session");
+  assert.deepEqual((await call("GET", `/api/vcr/studies/${legacy.id}`)).body.conversation, { sessionId: null, exists: false });
+  // With the control plane's resolver attached: the owner's first read makes the conversation; another reader's does not.
+  /** @type {any[]} */
+  const asked = [];
+  service.packages.conversations = { resolve: async (/** @type {any} */ study, /** @type {any} */ options) => {
+    asked.push([study.id, options.create]);
+    return options.create ? { sessionId: "made-on-open", exists: true } : { sessionId: null, exists: false };
+  } };
+  try {
+    const owner = await call("GET", `/api/vcr/studies/${legacy.id}`);
+    assert.deepEqual(owner.body.conversation, { sessionId: "made-on-open", exists: true });
+    assert.deepEqual(asked, [[legacy.id, true]], "only the owner's read asks for it to be made");
+  } finally { service.packages.conversations = null; }
 });
 
 test("AI 运行 lists the background runs by capability title and state, never by id", options, async () => {

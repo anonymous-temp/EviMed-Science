@@ -40,7 +40,7 @@ import {
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH,
-  allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
+  allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf, vcrNext,
 } from "@evimed/domain";
 
 import { VCR_ENGINE_RETRYABLE_CODES } from "./vcrEngineClient.mjs";
@@ -48,6 +48,7 @@ import { vcrExportHoldsDocument, vcrReportModel, vcrReportReviewRevision } from 
 import { modelDocumentReaderSections, renderModelDocument } from "./vcrModelDocuments.mjs";
 import { contactsTable, scheduleTable } from "./vcrScheduleView.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
+import { vcrStepSummaries } from "./vcrStudyStatus.mjs";
 import {
   allResultsOf, countsView, dominatedScenarioMap, evidenceLabel, finite, MODEL_TYPE_LABELS, VALIDATION_LABELS, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
   text, cpuText, zhUnit, zhTime, vcrFailureSentence, vcrPageSentence,
@@ -668,6 +669,10 @@ export function presentStudy(bundle) {
     intendedUse: study.intendedUse,
     status: study.status,
     steps: publicSteps(study.steps),
+    // The step the study should do next, from the one function every sentence that names "next" reads (`vcrNext`), and one short
+    // finding per step with its one number (`vcrStepSummaries`): the step bar and the primary action are drawn from these.
+    next: vcrNext({ steps: study.steps, described: Boolean(text(study.question) || bundle.definition) }),
+    stepSummaries: vcrStepSummaries(bundle, designs),
     sessionId: null,
     abilities: abilitiesOf(roles ?? []),
     // What the study's frozen data would let it claim above its own tier, for a lead who may move it (`#tierOffer`); one confirmation.
@@ -954,10 +959,8 @@ function crossCheckOf(stages) {
   const name = String(check.name ?? "power");
   const agrees = typeof check.withinTolerance === "boolean" ? check.withinTolerance : typeof check.withinThreeMcse === "boolean" ? check.withinThreeMcse : null;
   const points = roundTo(Math.abs(difference) * 100, 1);
-  const word = measureLabel(name);
   return {
     name, analytic: roundTo(analytic * 100, 1), simulated: roundTo(simulated * 100, 1), differencePoints: points, agrees,
-    text: `解析${word} ${roundTo(analytic * 100, 1)}%，与模拟相差 ${points} 个百分点${agrees === true ? "，在容许范围内" : agrees === false ? "，超出容许范围" : ""}`,
   };
 }
 

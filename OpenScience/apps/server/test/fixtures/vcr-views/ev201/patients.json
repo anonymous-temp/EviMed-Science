@@ -59,6 +59,253 @@
     "numeric": null,
     "uncertainty": null
   },
+  "records": {
+    "result": "res_10",
+    "rows": 2000,
+    "arms": [
+      {
+        "value": "1",
+        "label": "试验",
+        "n": 1000,
+        "events": 766
+      },
+      {
+        "value": "0",
+        "label": "对照",
+        "n": 1000,
+        "events": 921
+      }
+    ]
+  },
+  "profile": [
+    {
+      "key": "age",
+      "variable": "age",
+      "label": "age",
+      "kind": "continuous",
+      "declared": null,
+      "declaredText": null,
+      "n": 2000,
+      "missing": 0,
+      "missingText": null,
+      "suppressed": [],
+      "mean": 63.24,
+      "sd": 8.935,
+      "median": 63.4,
+      "q1": 57.3,
+      "q3": 69.43,
+      "min": 30.9,
+      "max": 87.7,
+      "histogram": {
+        "breaks": [
+          30.9,
+          39.01,
+          47.13,
+          55.24,
+          63.36,
+          71.47,
+          79.59,
+          87.7
+        ],
+        "counts": [
+          9,
+          59,
+          300,
+          630,
+          637,
+          299,
+          66
+        ]
+      },
+      "generatedText": "均数 63.24，标准差 8.935，中位 63.4（四分位 57.3–69.43），范围 30.9–87.7",
+      "levels": null,
+      "violations": null,
+      "outOfBounds": false
+    },
+    {
+      "key": "ecog",
+      "variable": "ecog",
+      "label": "ecog",
+      "kind": "binary",
+      "declared": null,
+      "declaredText": null,
+      "n": 2000,
+      "missing": 0,
+      "missingText": null,
+      "suppressed": [],
+      "levels": [
+        {
+          "level": "0",
+          "label": "否",
+          "n": 684,
+          "percent": 34.2,
+          "suppressed": false
+        },
+        {
+          "level": "1",
+          "label": "是",
+          "n": 1316,
+          "percent": 65.8,
+          "suppressed": false
+        }
+      ],
+      "histogram": null,
+      "generatedText": "ecog 65.8%",
+      "withheld": null,
+      "violations": null,
+      "outOfBounds": false
+    },
+    {
+      "key": "arm",
+      "variable": "arm",
+      "label": "分组",
+      "kind": "categorical",
+      "declared": null,
+      "declaredText": null,
+      "n": 2000,
+      "missing": 0,
+      "missingText": null,
+      "suppressed": [],
+      "levels": [
+        {
+          "level": "0",
+          "label": "0",
+          "n": 1000,
+          "percent": 50,
+          "suppressed": false
+        },
+        {
+          "level": "1",
+          "label": "1",
+          "n": 1000,
+          "percent": 50,
+          "suppressed": false
+        }
+      ],
+      "histogram": null,
+      "generatedText": "0 50%，1 50%",
+      "withheld": null,
+      "violations": null,
+      "outOfBounds": false
+    },
+    {
+      "key": "time",
+      "variable": "time",
+      "label": "时间",
+      "kind": "continuous",
+      "declared": null,
+      "declaredText": null,
+      "n": 2000,
+      "missing": 0,
+      "missingText": null,
+      "suppressed": [],
+      "mean": 6.314,
+      "sd": 4.753,
+      "median": 5.19,
+      "q1": 2.17,
+      "q3": 10.3,
+      "min": 0,
+      "max": 14,
+      "histogram": {
+        "breaks": [
+          0,
+          2,
+          4,
+          6,
+          8,
+          10,
+          12,
+          14
+        ],
+        "counts": [
+          471,
+          371,
+          259,
+          214,
+          157,
+          123,
+          405
+        ]
+      },
+      "generatedText": "均数 6.314，标准差 4.753，中位 5.19（四分位 2.17–10.3），范围 0–14",
+      "levels": null,
+      "violations": null,
+      "outOfBounds": false
+    },
+    {
+      "key": "status",
+      "variable": "status",
+      "label": "结局事件",
+      "kind": "binary",
+      "declared": null,
+      "declaredText": null,
+      "n": 2000,
+      "missing": 0,
+      "missingText": null,
+      "suppressed": [],
+      "levels": [
+        {
+          "level": "0",
+          "label": "否",
+          "n": 313,
+          "percent": 15.7,
+          "suppressed": false
+        },
+        {
+          "level": "1",
+          "label": "是",
+          "n": 1687,
+          "percent": 84.4,
+          "suppressed": false
+        }
+      ],
+      "histogram": null,
+      "generatedText": "结局事件 84.4%",
+      "withheld": null,
+      "violations": null,
+      "outOfBounds": false
+    }
+  ],
+  "profileKind": "generated",
+  "calibration": {
+    "endpoint": "time_to_event",
+    "rows": [
+      {
+        "key": "control_median",
+        "label": "对照组中位时间",
+        "unit": "个月",
+        "declared": 4.1,
+        "generated": 3.9,
+        "difference": -0.2,
+        "interval": {
+          "low": 3,
+          "high": 5.6,
+          "kind": "prediction"
+        },
+        "status": "within"
+      },
+      {
+        "key": "hazard_ratio",
+        "label": "风险比",
+        "unit": null,
+        "declared": 0.6,
+        "generated": 0.5744,
+        "difference": -0.0256,
+        "interval": null,
+        "status": "unknown"
+      },
+      {
+        "key": "event_rate",
+        "label": "事件发生率",
+        "unit": null,
+        "declared": null,
+        "generated": 0.8435,
+        "difference": null,
+        "interval": null,
+        "status": "unknown"
+      }
+    ]
+  },
   "assessments": {
     "records": [
       {
@@ -290,9 +537,12 @@
     ]
   },
   "example": {
-    "id": "VP-0412",
-    "source": "synthetic",
-    "origin": "批量合成（人群 v2）· 种子已记录",
+    "title": "示例患者 · 年龄 62 岁 · ECOG 1",
+    "record": {
+      "id": "VP-0412",
+      "source": "synthetic",
+      "origin": "批量合成（人群 v2）· 种子已记录"
+    },
     "baseline": [
       {
         "label": "年龄",
@@ -558,14 +808,7 @@
     ]
   },
   "counts": {
-    "realPatients": 0,
-    "events": 1210,
-    "effectiveSampleSize": null,
     "generatedRecords": 2000,
-    "note": "设计阶段：尚无真实患者",
-    "notes": {
-      "generatedRecords": "模拟生成的记录，不是患者"
-    },
     "scope": "2000 名虚拟患者"
   },
   "stale": null,
