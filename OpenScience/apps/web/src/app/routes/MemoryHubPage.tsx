@@ -12,6 +12,7 @@ import { listAllMethods } from "@/lib/methodsClient";
 import { useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { useGeoFeature } from "@/lib/geoClient";
+import { useMemoryMapFeature } from "@/lib/memoryMapFeature";
 import { useVcrFeature } from "@/lib/vcrClient";
 import { useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
 import { useVcrProjectIds } from "@/components/vcr/useVcrProjectIds";
@@ -21,12 +22,12 @@ import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
 import { List } from "@/components/ui/ListRow";
 import { SearchInput } from "@/components/ui/SearchInput";
-import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { useCapsuleData } from "@/components/capsule/useCapsuleData";
 import { FactDrawer } from "@/components/memory/FactDrawer";
 import { ForgottenDrawer } from "@/components/memory/ForgottenDrawer";
 import { GrowthPanel } from "@/components/memory/GrowthPanel";
 import { MemoryControls } from "@/components/memory/MemoryControls";
+import { memoryTabAddress, MemoryTabs, type MemoryPageTab, type MemoryTab } from "@/components/memory/MemoryTabs";
 import { GroupSection, MemoryListRow, PendingMemoryRows } from "@/components/memory/MemoryRows";
 import { HandbookDrawer, MethodDrawer } from "@/components/memory/PracticeDrawer";
 import { ProjectOverview } from "@/components/memory/ProjectOverview";
@@ -38,11 +39,6 @@ import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
 import { useProjectOverview } from "@/components/memory/useProjectOverview";
 import { ShareDrawer } from "./CapsuleTransferPanel";
 import { knownErrorCodeMessage } from "@evimed/domain";
-
-/** The four tabs: each is one list, or — 成长 — the line and the days under it. */
-export type MemoryTab = "self" | "project" | "methods" | "growth";
-
-const TAB_NAMES: Record<MemoryTab, string> = { self: "关于你", project: "项目", methods: "做法", growth: "成长" };
 
 /**
  * Which tab an address asks for. `?tab=methods` is the link the skills page
@@ -86,7 +82,8 @@ const SOURCES_OF: Record<MemoryTab, readonly ("profile" | "mine" | "methods" | "
  * with and without it under the learning budget); 「推断」 sat on every row of
  * a page where nearly every row is learned, and then once in every drawer: whose
  * words a memory is, is not said on the page at all (owner ruling of 2026-10-10).
- * The header is the title, the 「记忆」 switch and one 「⋯」 (分享与导入 ·
+ * 「地图」, the fifth tab, is the memory map (`/app/memory/map`), drawn on its own page with this tab bar so that it reads as part of
+ * this page; it is offered where the deployment draws the map. The header is the title, the 「记忆」 switch and one 「⋯」 (分享与导入 ·
  * 已忘记的内容 · 本项目不使用记忆 · 重置记忆); the page asks nothing of the
  * server to be read — making the capsule on first use moved to opening 分享与导入.
  *
@@ -240,20 +237,25 @@ export function MemoryHubPage() {
     }
   }, [data, records, entries, everyPractice, choices, scope, knownProjects]);
 
+  // A tab with nothing in it carries no number: 「做法 0」 is a statistic about an empty list, which its empty state already says.
   const counts: Record<MemoryTab, number | undefined> = {
     self: loading ? undefined : self.length,
     project: loading ? undefined : projectFacts.length,
     methods: loading ? undefined : practices.methods.length + practices.handbooks.length,
     growth: undefined,
   };
-  // A tab with nothing in it carries no number: 「做法 0」 is a statistic about an empty list, which its empty state already says.
-  const tabs: TabItem<MemoryTab>[] = (Object.keys(TAB_NAMES) as MemoryTab[]).map((value) => ({ value, label: TAB_NAMES[value], count: counts[value] || undefined }));
+  const mapOn = useMemoryMapFeature() === "on";
 
   const opened: FactItem | PracticeItem | null = openKey
     ? [...facts, ...everyFact, ...everyPractice.methods, ...everyPractice.handbooks].find((item) => item.key === openKey) ?? null
     : null;
   const setProjectChoice = (id: string) => setParams((current) => withParam(current, "project", id), { replace: true });
-  const chooseTab = (next: MemoryTab) => { landed.current = true; setParams((current) => withParam(current, "tab", next)); };
+  const chooseTab = (next: MemoryPageTab) => {
+    // 地图 is a page of its own that reads as this page's last tab.
+    if (next === "map") { navigate(memoryTabAddress("map")); return; }
+    landed.current = true;
+    setParams((current) => withParam(current, "tab", next));
+  };
 
   const factRows = (rows: readonly FactItem[], label: string) => (
     <List label={label}>
@@ -357,7 +359,6 @@ export function MemoryHubPage() {
           onSettingsChanged={reloadOverview}
           onShare={() => setDrawer("share")}
           onForgotten={() => setDrawer("forgotten")}
-          onMap={() => navigate("/app/memory/map")}
           onRemember={native ? () => setDrawer("remember") : undefined}
         />
       )}
@@ -365,7 +366,7 @@ export function MemoryHubPage() {
       <span ref={scrollAnchor} hidden />
       {/* One row: the tabs, and the search box at its end; on a phone the box takes its own line. */}
       <div className="flex flex-wrap items-end gap-x-4 gap-y-2 border-b border-border">
-        <Tabs label="记忆" items={tabs} value={tab} onChange={chooseTab} className="min-w-0 flex-1 border-b-0" />
+        <MemoryTabs value={tab} counts={counts} map={mapOn} onChange={chooseTab} className="min-w-0 flex-1 border-b-0" />
         {tab !== "growth"
           ? <SearchInput label="搜索记忆" value={query} maxLength={80} onChange={(event) => search.setDraft(event.target.value)} onClear={search.clear} {...search.composition} className="mb-1.5 w-full sm:w-60" />
           // 成长 has nothing to search, and the row keeps its height so the rule under the tabs does not jump between tabs.

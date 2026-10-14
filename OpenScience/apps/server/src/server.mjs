@@ -6376,6 +6376,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               zoneSubscription: Boolean(zoneSubscriptions?.enabled) && Boolean(frontier) && frontierAudienceAllows(config, user),
               geo: Boolean(geo) && geoAudienceAllows(config, user),
               vcr: Boolean(vcr) && vcrAudienceAllows(config, user),
+              // 「记忆地图」 (the memory page's 地图 tab): with the memory subsystem and its own switch, as the map's routes decide (memoryMap.mjs).
+              memoryMap: config.memoryEnabled !== false && config.memoryMapEnabled !== false,
               openList: openListConnector
                 ? await openListConnector.storageStatus({ allowStale: true }).then((status) => status.storage === "mounted", () => false)
                 : false },
