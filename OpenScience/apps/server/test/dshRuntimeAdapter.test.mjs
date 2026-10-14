@@ -181,10 +181,12 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // the other. Disjointness is asserted beside it, because a method that is
   // both allowed and denied would keep the total right.
   // Nine kernel calls, four EviMed probe calls and three scoped skill calls,
-  // 124 refused methods and the gateway acknowledgement. Browser model
+  // 129 refused methods and the gateway acknowledgement. Browser model
   // selection has its own validated proxy policy; the run's wire still
-  // classifies these methods as denied.
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 141);
+  // classifies these methods as denied. 0.2.0 added five: the product-usage
+  // reporter's three (denied on the proxy as well) and the two the page's
+  // question dialog answers with.
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 146);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }
@@ -428,7 +430,9 @@ test("the live session/page records normalize into a transcript the gate can rea
   assert.deepEqual(tools.map((part) => part.tool),
     golden.history.filter((record) => record?.event?.type === "tool/call").map((record) => record.event.data.name),
     "every recorded call, once, in order");
-  assert.ok(tools.some((part) => part.tool === "write") && tools.some((part) => part.tool === "evimed_delegate"),
+  // The delegation is whichever tool the preset offers a conversation: the native one-shot `subagent` since the
+  // general conversation line, `evimed_delegate` for a professional workflow. Both decode as one call and one result.
+  assert.ok(tools.some((part) => part.tool === "write") && tools.some((part) => ["subagent", "evimed_delegate"].includes(part.tool)),
     "one run, both shapes: a file write and a delegation");
   assert.ok(tools.every((part) => part.status === "completed"), "every call's format-4 result paired with its call");
   assert.equal(tools[0].callId, RECORDED_WRITE.callId);
@@ -940,19 +944,22 @@ test("running state comes from the $events stream, and 'we were not told' is not
 
   // A removal forgets the session rather than pinning it to a stale answer.
   // Until 0.1.5 the recorded run's delegated child was added, ran and was
-  // removed inside the recording. 0.1.7 keeps a finished one-shot child
-  // resident (`agentAvailable: true`, recorded 2026-09-28), so no live removal
-  // is in a run's recording any more: the child is the live one the recording
-  // added, and the removal is the synthesized section's frame — the kernel's
-  // declared signature, `api-session/removed(sessionId)`, positional — pointed
-  // at it.
+  // removed inside the recording; 0.1.7 kept a finished one-shot child resident
+  // (`agentAvailable: true`, recorded 2026-09-28), so for that pin the removal
+  // was the synthesized section's frame pointed at the live child. 0.2.0-rc.2
+  // removes it again: the recording carries `api-session/removed(childId)`
+  // itself, positional as the kernel declares it, right after the child's last
+  // `api-session/added` (`agentAvailable: false`). The live frame is what is
+  // replayed.
   const liveChild = golden.events.find((frame) => frame.event === "api-session/added" && frame.args[0]?.origin === "subagent");
   assert.ok(liveChild, "the recording must contain the delegated child this asserts about");
   const removedSession = String(liveChild.args[0].sessionId);
+  const liveRemoval = golden.events.find((frame) => frame.event === "api-session/removed" && String(frame.args[0]) === removedSession);
+  assert.ok(liveRemoval, "a finished one-shot child is removed live on 0.2.0-rc.2, and the recording must carry that frame");
   const synthesizedRemoval = golden.synthesized.events.find((frame) => frame.event === "api-session/removed");
-  assert.ok(synthesizedRemoval, "the synthesized section must keep its removal frame");
-  const throughRemoval = [...golden.events, { ...synthesizedRemoval, args: [removedSession] }];
-  const removedIndex = throughRemoval.length - 1;
+  assert.ok(synthesizedRemoval, "the synthesized section keeps its removal frame for pins that keep a finished child resident");
+  const removedIndex = golden.events.indexOf(liveRemoval);
+  const throughRemoval = golden.events.slice(0, removedIndex + 1);
   const removedAdapter = new DshRuntimeAdapter(scriptedTransport({ $events: throughRemoval }));
   await removedAdapter.watchHost({ signal: AbortSignal.timeout(2_000) });
   // The control, and it has to be a replay: an adapter that was never told

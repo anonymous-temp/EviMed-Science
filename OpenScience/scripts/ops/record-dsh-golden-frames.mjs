@@ -142,10 +142,19 @@ function parseArgs(argv) {
  * `parentSessionId`) now that `subagent/descriptor` never reaches the parent.
  * Recording them separately would mean two fixtures that no run ever produced
  * together.
+ *
+ * It reads, writes and runs a command as well, so one recording carries every
+ * tool shape a researcher's conversation uses (file read, file write, shell,
+ * delegation) rather than the one pair a shorter prompt happened to touch.
+ * Against a real model the run is a handful of steps either way; the kernel's
+ * bookkeeping in it is what the kernel writes for that many steps, which is
+ * what the replay tests check, and no more is pretended.
  */
 const DEFAULT_PROMPT = [
   "Create a file named recorded.txt containing exactly the word: recorded.",
+  "Read it back with a tool call and confirm what it holds.",
   "Then delegate one short task to a subagent: reply with the single word OK.",
+  "Then create a second file named second.txt containing exactly the word: second.",
   "Then reply with only the word done.",
 ].join(" ");
 
