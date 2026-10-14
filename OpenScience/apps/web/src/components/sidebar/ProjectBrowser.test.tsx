@@ -978,9 +978,6 @@ describe("ProjectBrowser — the order of use", () => {
       return found ? { ...project, lastActiveAt: found[1] } : project;
     });
   };
-  const names = () => within(document.querySelector("section") as HTMLElement).getAllByRole("button", { expanded: false })
-    .map((button) => button.textContent?.replace(/（.*）/, "").trim());
-
   it("lists the projects by what moved last, not by pinyin — the account's default project is not pinned above one used since", async () => {
     withActivity(["default", "2026-09-01T00:00:00.000Z"], ["paper1", "2026-10-01T00:00:00.000Z"], ["p-heart", "2026-10-10T00:00:00.000Z"]);
     mocks.projects = mocks.projects.map((project) => ({ ...project }));

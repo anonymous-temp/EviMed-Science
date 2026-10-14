@@ -66,7 +66,7 @@ export function waitingSentence(waitingFor: VcrWaitingFor | null | undefined, en
   if (engine) return "等计算引擎恢复";
   if (waitingFor === "allowance" || waitingFor === "simulated_allowance") return "等研究额度";
   if (waitingFor === "run") return "等这次运行做完";
-  if (waitingFor) return `等「${stepName(waitingFor)}」做完`;
+  if (waitingFor) return `等“${stepName(waitingFor)}”做完`;
   return "等前面的步骤做完";
 }
 

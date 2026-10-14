@@ -26,7 +26,7 @@ export function VcrChangeLogDrawer({ study, onClose }: { study: Pick<VcrStudy, "
         {changes.length === 0
           ? <p className="py-6 text-ui text-text-3">还没有变化记录。</p>
           : (
-            <ol className="divide-y divide-faint">
+            <List label="变化记录" divided>
               {changes.map((change) => (
                 <li key={change.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5">
                   <span className="w-28 shrink-0 text-caption tabular-nums text-text-3">{change.at}</span>
@@ -37,7 +37,7 @@ export function VcrChangeLogDrawer({ study, onClose }: { study: Pick<VcrStudy, "
                   {change.state === "stale" ? <Tag>已过期</Tag> : null}
                 </li>
               ))}
-            </ol>
+            </List>
           )}
         <VcrReviews reviews={reviews} studyId={study.id} onNavigate={onClose} />
       </div>
